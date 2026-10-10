@@ -34,7 +34,7 @@
     irm https://github.com/8007342/tillandsias/releases/latest/download/install-windows.ps1 | iex
     irm https://.../install-windows.ps1 | iex  # (same URL, short form)
 
-# @trace spec:windows-native-tray, spec:vm-provisioning-lifecycle
+# @trace spec:windows-native-tray, spec:vm-provisioning-lifecycle, spec:host-state-lifecycle
 #>
 [CmdletBinding()]
 param(
@@ -890,86 +890,66 @@ try {
     # bare call does not wait and records no exit status (see the OUTPUT NOTE
     # in `tillandsias-tray.exe --help`).
     Write-Host ""
-    # CAPABILITY PROBE BEFORE THE CALL, and it is not belt-and-braces. This
-    # installer always DOWNLOADS the tray, and TILLANDSIAS_VERSION can pin an
-    # older tag -- which is exactly what the release smoke does. A tray from
-    # before 1286-4437 does not know --reset-state and exits 2 with
-    # "unknown flag", so an unconditional call would turn every pinned-older
-    # install into a hard failure at a step that did not exist when that tag
-    # shipped.
+    # THE RESET IS ITS OWN CAPABILITY PROBE (order 1565-qtuk). This installer
+    # always DOWNLOADS the tray, and TILLANDSIAS_VERSION can pin an older tag --
+    # which is exactly what the release smoke does. A tray from before
+    # 1286-4437 does not know --reset-state and exits 2 with "unknown flag",
+    # so an exit 2 here means "installed, but this tray cannot reset": say so
+    # and do not Die. Every tray that knows the flag exits 0 (Ready) or 1
+    # (failed), and a 1 is a real failure of the reset that RAN.
     #
-    # PROBE BY ATTEMPT, NOT BY ADVERTISEMENT (order 1323-5taw). This asked
-    # `--help` whether the flag existed, which is defeated by exactly the
-    # defect it was written to survive: a binary whose --help MENTIONS a flag
-    # its parser REJECTS. That binary is not hypothetical -- v56.9.20.1's
-    # published Linux headless does precisely this (its allow-list at
-    # crates/tillandsias-headless/src/main.rs:612-651 carries no entry, and
-    # pirria's install died on `Unsupported option: --reset-state`,
-    # install_exit=2). Against such a tray the --help probe answers YES, the
-    # installer proceeds, and it Dies on the exit 2 the probe existed to avoid.
+    # PROBE BY ATTEMPT, NOT BY ADVERTISEMENT (1323-5taw) still holds: the call
+    # below IS the attempt. A --help that mentions a flag its parser rejects
+    # (v56.9.20.1's Linux headless did) gets the same exit 2 and the same
+    # outcome, and a refusing parser has done nothing at all.
     #
-    # So attempt the flag and read the OUTCOME. The attempt is non-destructive
-    # BY CONSTRUCTION: TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 is the flag's own
-    # documented opt-out, honoured inside the binary, so a supporting tray
-    # announces the skip and provisions the existing state (exit 0) while a
-    # tray that does not know the flag refuses with "unknown flag" (exit 2).
-    # That distinguishes a parser that honours the flag from a --help that
-    # merely mentions it, which is the fleet's standing rule for stale
-    # binaries: probe a refusal by asking for the refusal.
-    #
-    # NOT a version comparison: that would have to know which tag first
-    # carried the flag and would be wrong for any build off that line.
+    # WHY THERE IS NO SEPARATE PROBE ANY MORE. Until 1565-qtuk the installer
+    # first ran --reset-state with TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 and read
+    # its outcome (1323-5taw; 1449-4qqu added the skip line). But that opt-out
+    # skips only the WIPE: the tray still provisions the existing state to
+    # Ready, so every install provisioned the guest TWICE. Measured on yolanda
+    # 2026-10-09, two v56.10.9.1 SOFT installs: tray.log carried two
+    # "reset-state (SOFT): VM Ready" cycles per install (17:18:13Z and
+    # 17:18:59Z; 17:42:52Z and 17:43:28Z), ~35 s of the install each time. The
+    # probe never guarded against destruction, only against Dying on exit 2,
+    # and the real call answers that question itself. 1449-4qqu's case (the
+    # flag accepted, the re-init of a broken state failed) is gone with the
+    # probe: the SOFT reset that was the repair now runs first.
 # BEGIN-RESET-PROBE
-    $ProbeLog = Join-Path $env:TEMP "tillandsias-reset-probe.log"
-    & cmd.exe /c "set TILLANDSIAS_DESTRUCTIVE_RESET_OK=0&& `"$InstalledExe`" --reset-state > `"$ProbeLog`" 2>&1"
-    $ProbeExit = $LASTEXITCODE
-    $ProbeOut = if (Test-Path $ProbeLog) { (Get-Content $ProbeLog -Raw) } else { "" }
-    Remove-Item $ProbeLog -Force -ErrorAction SilentlyContinue
-    # Exit 0 means the parser accepted it. An unknown-flag refusal is exit 2
-    # and names itself; anything else is treated as unsupported too, because a
-    # probe that cannot get a clean acceptance must not authorise a
-    # destructive call.
-    #
-    # ORDER 1449-4qqu: EXCEPT when the binary SAYS it accepted the flag. With
-    # the opt-out set, a supporting tray prints the skip line (the phrase
-    # tillandsias-core pins byte-exact in reset_state::RESET_SKIPPED_LINE) and
-    # then re-inits the EXISTING state. When that state is broken the re-init
-    # fails (exit 1), and reading the exit code alone called it "predates
-    # --reset-state" and skipped the one repair the guest needed (measured on
-    # yolanda 2026-09-27, v56.9.27.2). The skip line proves the parser took the
-    # flag, so the flag ran and failed: proceed to the full reset.
-    $ProbeAccepted = $ProbeOut -match [regex]::Escape('reset skipped by TILLANDSIAS_DESTRUCTIVE_RESET_OK=0')
-    $HasResetState = ($ProbeExit -eq 0) -or $ProbeAccepted
-    if ($HasResetState -and $ProbeExit -ne 0) {
-        SayWn "  probe: this tray knows --reset-state; its re-init of the existing state failed (exit $ProbeExit)."
-        SayWn "  proceeding to the full reset, which is the repair for exactly that."
-    }
-    if (-not $HasResetState) {
-        SayWn "  probe: --reset-state not usable on this tray (exit $ProbeExit)."
-        if ($ProbeOut) { SayWn ("  probe said: " + (($ProbeOut -split "`n")[0]).Trim()) }
-    }
+    # @trace spec:host-state-lifecycle, order:1559-sqzp, order:1437-3iux, order:1565-qtuk
+    # SOFT, ALWAYS, AND QUIET. Operator ruling 2026-10-08, verbatim: "we do not
+    # ask end users to do power user stuff. That's our guideline. An install
+    # prompt asking for destructive cases should not be an acceptable case. End
+    # user is NOT a power user. No prompts like those, we make all the decisions
+    # for them, on their behalf, for their best interests. So SOFT reset is the
+    # default only and forever. A power user wanting to do a hard reset should be
+    # capable of figuring out where to place a flag and which flag, we do not
+    # need to print any power user messages during install, at all. Install
+    # should be for END USER (NOT POWER USER) and be a pretty installer, rather
+    # than an informational/debugging installer. As frictionless as possible for
+    # end users." So: the SOFT reset (it keeps the distro, the Vault store, the
+    # sign-ins and the downloads), no reset kind, no prompt, no flag names, and
+    # the tray's own reset log stays in a file, shown by path only on failure.
+    # stdin is NUL so the GUI-subsystem tray can never wait on a prompt nobody
+    # can see. scripts/test-installer-reset-kind.sh pins all of it, and
+    # scripts/test-installer-provisions-once.sh pins ONE provisioning per
+    # install, through the SOFT reset.
+    Say "Getting Tillandsias ready..."
+    $ResetLog = Join-Path $env:TEMP "tillandsias-setup.log"
+    & cmd.exe /c "`"$InstalledExe`" --reset-state < NUL > `"$ResetLog`" 2>&1"
+    $ResetExit = $LASTEXITCODE
+    # Exit 2 is the parser's refusal and nothing ran; everything else is the
+    # reset's own verdict.
+    $HasResetState = ($ResetExit -ne 2)
 # END-RESET-PROBE
     if (-not $HasResetState) {
-        SayWn "this tray predates --reset-state (order 1286-4437); skipping the state reset."
-        SayWn "  the install is complete, but a broken local state was NOT repaired."
-        SayWn "  install a release that carries --reset-state to get the repair."
-    }
-    if ($HasResetState) {
-    Say "Resetting local state and reprovisioning (--reset-state)..."
-    Say "  preserved: tillandsias-vm-uuid (the installation identity)"
-    Say "  destroyed: the WSL2 distro and its disk, the two host vault credentials, the download cache"
-    Say "  set TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 to skip the destructive half"
-    $ResetLog = Join-Path $env:TEMP "tillandsias-reset-state.log"
-    & cmd.exe /c "`"$InstalledExe`" --reset-state > `"$ResetLog`" 2>&1"
-    $ResetExit = $LASTEXITCODE
-    if (Test-Path $ResetLog) {
-        Get-Content $ResetLog | ForEach-Object { Write-Host "  $_" }
         Remove-Item $ResetLog -Force -ErrorAction SilentlyContinue
-    }
-    if ($ResetExit -ne 0) {
-        Die "tillandsias-tray --reset-state failed (exit $ResetExit); the local state was not reprovisioned."
-    }
-    SayOk "reset-state: provisioned and ready (exit $ResetExit)"
+        SayWn "Tillandsias is installed. Restart it from the Start menu to finish setting up."
+    } elseif ($ResetExit -ne 0) {
+        Die "Tillandsias could not finish setting up (exit $ResetExit). Details: $ResetLog"
+    } else {
+        Remove-Item $ResetLog -Force -ErrorAction SilentlyContinue
+        SayOk "Tillandsias is ready."
     }
 
     # -- Installed-Software registration (windows-260722-3) -------------------

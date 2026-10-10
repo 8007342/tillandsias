@@ -5,8 +5,10 @@
 #
 # ONE LINE ON STDOUT, exit 0 either way. This is a PRESENCE PROBE, not a gate:
 # it answers a question and never refuses. The gate's teeth for the thing that
-# needs rg live in check-cheatsheet-refs.sh; duplicating a refusal here would
-# give one condition two verdicts.
+# needed rg lived in check-cheatsheet-refs.sh; duplicating a refusal here would
+# give one condition two verdicts. SINCE 1570-k4fx that checker is
+# scripts/lua/check-cheatsheet-refs.lua and uses no rg at all; whether this
+# probe (and its check-host-tools.sh SPEC row) is still needed is 1578-7s8h.
 #
 #   ok:rg:<version>   ripgrep resolves on PATH
 #   missing:rg        it does not

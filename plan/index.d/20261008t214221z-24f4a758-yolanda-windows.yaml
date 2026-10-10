@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: an-argv-entry-with-an-embedded-newline-reaches-an-msys-child-on-native-windows-split-into-several-arguments-breaking-the-one-argv-entry-arrives-unaltered-contract
+    field: status
+    value: in_progress
+    ts: "2026-10-08T21:42:21Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: an-argv-entry-with-an-embedded-newline-reaches-an-msys-child-on-native-windows-split-into-several-arguments-breaking-the-one-argv-entry-arrives-unaltered-contract
+    event:
+      type: note
+      ts: "2026-10-08T21:42:21Z"
+      host: yolanda-windows
+      summary: |-
+        yolanda-windows: Windows newline-argv quoting in tillandsias-exec, red-first, on work/1553-q3wi
+  - packet_id: an-argv-entry-with-an-embedded-newline-reaches-an-msys-child-on-native-windows-split-into-several-arguments-breaking-the-one-argv-entry-arrives-unaltered-contract
+    event:
+      type: note
+      ts: "2026-10-08T21:42:21Z"
+      host: yolanda-windows
+      summary: |-
+        wip-override by yolanda-windows: held packets are draft/READY PRs in the coordinator's post-cut queue; coordinator ruled PROCEED on 1553-q3wi (2026-10-08) — admitted past: refused:set-field:wip-limit:12/3 — yolanda-windows already holds 12 in_progress packet(s) outside a story: 798-vxj5, 1437-3iux, 1553-gsp2, 1553-5x9x, 1553-6e3q, 1554-prxf, 1556-b2tq, 1559-9uvb, 1559-sqzp, 1559-2uw3, 1560-g5d9, 1561-47a8 (1367-2sbc; the limit is 3, from methodology/distributed-work.yaml packet_discipline.wip_limit).

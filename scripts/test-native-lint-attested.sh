@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace order:1235-rfub, spec:ci-release
+# @trace order:1235-rfub, order:1563-ms7e, spec:ci-release
 #
 # Fixture for scripts/check-native-lint-attested.sh and scripts/attest-native-lint.sh
 # (order 1235-rfub), over scratch repos whose origin/linux-next is the base.
@@ -17,12 +17,14 @@
 #   7. land-on-platform-branch.sh runs the check after its integrate (wired);
 #   8. NO HOST AVAILABLE: a named TILLANDSIAS_NATIVE_LINT_UNATTESTED reason
 #      admits as override:… carrying the reason; an EMPTY one does not.
+#   9. hostname -s FAILS (Git Bash, the WSL builder): uname -n names the host;
+#  10. NO host name at all: REFUSED (rc 2), no trailer written.
 #
 # PRE-FIX RESULT: FAILS — neither script existed, and the relay landed
 # d44909353 with the clippy error (trunk red for macOS for hours).
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-pass=0; total=8
+pass=0; total=10
 ok()  { echo "ok:   $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1"; }
 
@@ -142,6 +144,31 @@ if [ "$RC" -eq 0 ] && grep -q '^override:native-lint:unattested:tillandsias-maco
     ok "arm 8: a named override lands as recorded debt; an empty one waits"
 else
     bad "arm 8: rc=$RC [$OUT] / empty rc=$RC2"
+fi
+
+# 9, 10 — the host name (Windows smoke 2026-10-08: Git Bash rejects `hostname -s`
+# and the WSL builder has no hostname, so the trailer led with the platform and
+# arms 3-4 never matched). Stubs fail the way those hosts do.
+mkdir -p "$W/nohost" "$W/noname"
+printf '#!/bin/bash\necho "hostname: unknown option -- s" >&2\nexit 1\n' > "$W/nohost/hostname"
+printf '#!/bin/bash\nexit 1\n' > "$W/noname/uname"
+chmod +x "$W/nohost/hostname" "$W/noname/uname"
+R="$(repo e)"; incident "$R"
+OLDPATH="$PATH"; PATH="$W/nohost:$PATH"; attest "$R" 0; PATH="$OLDPATH"; check "$R"
+want="$(uname -n | cut -d. -f1 | tr '[:upper:]' '[:lower:]')"
+if [ "$ARC" -eq 0 ] && [ "$RC" -eq 0 ] && [ -n "$want" ] \
+   && grep -q "^ok:native-lint:attested:tillandsias-macos-tray@$want\$" <<<"$OUT"; then
+    ok "arm 9: hostname -s fails, uname -n names the host, and the check admits it"
+else
+    bad "arm 9: arc=$ARC rc=$RC want=[$want] [$AOUT] [$OUT]"
+fi
+R="$(repo f)"; incident "$R"; n0="$(commits "$R")"
+OLDPATH="$PATH"; PATH="$W/nohost:$W/noname:$PATH"; attest "$R" 0; PATH="$OLDPATH"
+if [ "$ARC" -eq 2 ] && grep -q "^refused:attest-native-lint:no-host$" <<<"$AOUT" \
+   && grep -q '  remedy: ' <<<"$AOUT" && [ "$(commits "$R")" = "$n0" ]; then
+    ok "arm 10: no host name at all is refused (rc 2) and writes no trailer"
+else
+    bad "arm 10: arc=$ARC commits $n0->$(commits "$R") [$AOUT]"
 fi
 
 if [ "$pass" -eq "$total" ]; then

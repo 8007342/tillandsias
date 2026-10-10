@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# 1255-s4im S1 (coordinator-ruled shape, 2026-10-09), plus the S3 decision row the ruling asked for.
+status:
+  - packet_id: every-push-guard-including-the-release-freeze-is-enforced-only-by-a-client-side-hook-that-build-sh-installs-so-a-host-with-no-rust-toolchain-runs-with-zero-enforcement-and-nothing-anywhere-reports-it
+    field: status
+    value: in_progress
+    ts: "2026-10-09T01:30:55Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: every-push-guard-including-the-release-freeze-is-enforced-only-by-a-client-side-hook-that-build-sh-installs-so-a-host-with-no-rust-toolchain-runs-with-zero-enforcement-and-nothing-anywhere-reports-it
+    event:
+      type: note
+      ts: "2026-10-09T01:30:55Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        S1 of the coordinator-ruled shape (work/1255-s4im-b). S2, a server-visible freeze audit, follows as its own PR. S3 is filed below as a decision row.
+        RED, measured 2026-10-09 on darwin with scratch remotes only (the coordinator confirmed origin holds 0 freeze refs): a fresh clone had core.hooksPath unset and 0 non-sample hooks. `release-freeze.sh set linux-next` gave ok:freeze-set, and a CODE push to linux-next was ACCEPTED (0953ee672..80145ac21). After install-hooks.sh with PATH=/usr/bin:/bin (no cargo), the same push was REFUSED.
+        S1:
+        - scripts/ensure-hooks.sh is bash-only. It reads the hook git RUNS (--git-path hooks), and takes the current marker from install-hooks.sh. Absent means it installs; our older marker means it upgrades. It REFUSES a foreign pre-push (one with no tillandsias-pre-push marker) and never overwrites it. It refuses a global/system hooksPath. It re-reads the hook after installing, so "installed" means the marker is on disk.
+        - --prelude in push-plan-fragments-to-trunk.sh, claim-ledger-node.sh, salvage-dirty-worktree.sh and drain-queue.sh: silent on ok, verdicts on stderr only, always exit 0. It acts only when origin is the GitHub repo, so fixtures stay hookless. TILLANDSIAS_ENSURE_HOOKS=0 disables it and =1 forces it.
+        - join-the-fleet step 2 names ensure-hooks. The no-plan-binary refusal in pre-push-main-branch-affordance.sh now names the container route on a host with no cargo (toolbox run --container tillandsias-builder cargo build --release -p tillandsias-plan, or the salvage hand-off). The stub is still 14 lines.
+        FIXTURE scripts/test-ensure-hooks.sh, wired into build.sh: 13/13. It covers red->green with no cargo on PATH, idempotent byte-identical, v7->v8 upgrade, foreign refused and byte-identical, local hooksPath honoured with no false gap, global hooksPath refused, and prelude silent/inert/stderr-only/exit-0/disable. A mutation that removed the foreign-hook refusal reds arms 4 and 7d. The existing fixtures of every touched script are green (16 suites).
+
+packets:
+  - packet_id: should-a-release-freeze-be-enforced-by-github-itself-a-ruleset-toggled-by-release-freeze-sh-and-what-may-it-cost
+    order: 1564-frzr
+    status: ready
+    kind: decision
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [release-freeze, github, git-hooks, decision, needs-operator]
+    estimated_hours: 2
+    owned_files:
+      - scripts/release-freeze.sh
+    depends_on: [every-push-guard-including-the-release-freeze-is-enforced-only-by-a-client-side-hook-that-build-sh-installs-so-a-host-with-no-rust-toolchain-runs-with-zero-enforcement-and-nothing-anywhere-reports-it]
+    title: Should a release freeze be enforced by GitHub itself (a branch ruleset toggled by release-freeze.sh set/clear)? It is real prevention, but it has two named costs
+    context: >
+      S3 of the coordinator-ruled 1255-s4im shape, filed as a decision and NOT
+      implemented. After 1255-s4im S1 (hooks armed without a toolchain) and S2
+      (a server-visible freeze audit that refuses the cut), a breach is still
+      possible: `git push --no-verify`, `-c core.hooksPath=`, or a host whose
+      hook was never armed can still MOVE a frozen branch. S2 detects it and
+      stops the cut, but does not prevent it. GitHub can prevent it: a
+      ruleset restricting updates to the branch, created by
+      `release-freeze.sh set` and removed by `clear`.
+      COST 1: the freeze host needs an ADMIN-scoped GitHub credential to
+      create/delete rulesets. Today the freeze needs only push access (it is a
+      ref under refs/tillandsias/freeze/).
+      COST 2: a branch ruleset cannot filter by path on this repository's plan,
+      so it would ALSO block the plan-only lane. The freeze design deliberately
+      admits that lane ("Plan-only pushes are exempt and still work — that is
+      how coordination keeps moving during a cut"). The alternative is a
+      bypass list naming every host's identity, which is a second
+      administrative surface to keep current.
+    exit_criteria:
+      - The operator decides whether GitHub-side freeze enforcement is wanted, given both costs. If yes, the decision names who holds the admin credential and whether plan-only pushes may pause during a cut or go through a bypass list.
+    unscoreable: |
+      decision-pending: needs-operator. The costs are an admin credential on the freeze host, and blocking the plan-only lane during a cut. Both are policy, not implementation.
+    next_action: The operator rules. Until then, S2's audit (release-preflight refuses a breached cut) is the server-visible signal.
+    events:
+      - type: filed
+        ts: "2026-10-09T01:30:55Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Filed as a decision at the coordinator's ruling on 1255-s4im (S3: "file it as a DECISION row (needs-operator) with the two costs ... do not implement").

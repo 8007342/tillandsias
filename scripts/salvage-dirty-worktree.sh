@@ -66,6 +66,10 @@
 #                                 that does not exist
 set -uo pipefail
 
+# ORDER 1255-s4im: a floor host's first plan-lane action arms its push guards
+# (bash-only, silent when they already are, never fails this script).
+bash "$(dirname "${BASH_SOURCE[0]}")/ensure-hooks.sh" --prelude || true
+
 # TILLANDSIAS_SALVAGE_ROOT: test seam (874-w2gc) so the fixture can salvage a
 # scratch repo instead of this checkout. Unset in production.
 ROOT="${TILLANDSIAS_SALVAGE_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"

@@ -77,7 +77,7 @@ fi
 
 native_scratch_fstype() {
     local dir="$1" t=""
-    t="$(stat -f -c %T "$dir" 2>/dev/null)" || t=""
+    t="$(stat -f -c %T "$dir" 2>/dev/null)" || t=""  # stat-c: ok (GNU file-system mode probe; BSD fails it to empty and the df -T fallback below answers)
     if [ -z "$t" ]; then
         t="$(df -T "$dir" 2>/dev/null | tail -1 | awk '{print $2}')" || t=""
     fi

@@ -1,0 +1,61 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed 2026-10-10 on yoga at the coordinator's direction, found while adding
+# the stale-floor arm for 1577-57u3.
+packets:
+  - packet_id: test-shell-ratchet-sh-is-an-orphan-fixture-no-gate-runs-it-and-it-is-red-on-trunk-so-port-it-to-a-lua-fixture-wired-into-check-and-fix-or-justify-its-three-red-arms
+    order: 1580-8hra
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, ratchet, shell-ratchet, fixture, orphan-fixture, carried-obligation]
+    estimated_hours: 3
+    owned_files:
+      - scripts/test-shell-ratchet.sh
+      - scripts/lua/test-shell-ratchet.lua
+      - build.sh
+      - scripts/portability/pipe-site-floor.txt
+    depends_on:
+      - the-shell-to-lua-counter-is-honest-a-floor-line-naming-a-deleted-file-is-refused-and-a-burndown-line-prints-the-window-paid-waived-silent-and-whether-the-stall-trigger-fired
+    title: |
+      scripts/test-shell-ratchet.sh, the only fixture of check-shell-ratchet.lua (the shell-to-lua refusal floor and new-decider gate), is run by nothing — not build.sh, not local-ci.sh, not a gate step — and on a clean linux-next it scores 5/8 with ARM 3, ARM 4 and ARM 6 red; port it to scripts/lua/test-shell-ratchet.lua, wire it into ./build.sh --check through _run_lua_decider, and fix or justify each red arm
+    context: |
+      Measured on yoga 2026-10-10, linux-next 7ec920a1c:
+      `grep -rn test-shell-ratchet build.sh scripts/local-ci.sh
+      scripts/gate-steps.d scripts/gate-divergence-declared.txt` finds nothing,
+      and `bash scripts/test-shell-ratchet.sh </dev/null` prints
+      "shell-ratchet: 5 passed, 3 failed". The red arms:
+        ARM 3 and ARM 6 — both add a `steps:` litmus to a scratch copy, which
+        arms the dormant piped-litmus-command refusal, and the refusal then
+        fires on a REAL tree file: violation:shell-ratchet:new-piped-command:
+        openspec/litmus-tests/litmus-reset-state-contract.yaml, whose piped
+        `command:` has no `litmus` line in pipe-site-floor.txt (it was edited
+        after the floor was seeded, last by 34d5c8804). So the arms are right
+        and the floor is short: a real gap that only surfaces once steps: lands.
+        ARM 4 — the raise half is refused as expected
+        (floor-raised:...:scripts scripts/agent-identity.sh); the honest-lower
+        half does not reach ok: or a lower floor. Cause not yet measured.
+      1577-57u3 added ARM 9 (stale-floor) to this file because that row named
+      it; it is not evidence until this row wires the fixture. A Lua fixture
+      does not add an item to the shell-to-lua counter, and porting this .sh
+      retires one (scripts/test-*.sh is in the population), so this row pays
+      its own carried item.
+    exit_criteria:
+      - './build.sh --check runs scripts/lua/test-shell-ratchet.lua via _run_lua_decider and it passes on linux-next; pre-fix: no gate runs any ratchet fixture (grep finds no caller of test-shell-ratchet)'
+      - 'the Lua fixture carries arms 1-9 of the .sh (COUNTS, DECIDER, LITMUS, FLOORS, EMPTY, STRINGS, FIXTURE, PIPES, STALE), each in a scratch repo under target/plan-scratch; scripts/test-shell-ratchet.sh is deleted and its floor line dropped'
+      - 'ARM 3/6: litmus-reset-state-contract.yaml either gets its piped command un-piped or a measured `litmus` floor line with the reason recorded on this row; pre-fix: violation:shell-ratchet:new-piped-command for it whenever steps: exists'
+      - 'ARM 4: the cause of the lowering half''s failure is recorded and fixed; NEGATIVE CONTROL: the raise half is still refused as floor-raised'
+    unscoreable: "unpinnable-until-the-guard-exists: the Lua fixture and its build.sh wiring are the deliverable; pre-fix result: 5/8 on clean trunk, run by nothing."
+    next_action: >
+      After 1577-57u3 lands, port the nine arms to scripts/lua/test-shell-ratchet.lua
+      (scratch repos via proc.run cwd/env, as test-carried-obligations.lua
+      does), wire it after the shell-ratchet step in build.sh, and resolve the
+      litmus floor gap and ARM 4 before deleting the .sh.
+    events:
+      - type: filed
+        ts: "2026-10-10T20:12:00Z"
+        agent_id: forge-forge-tillandsias-claude-20261009t193211z
+        host: yoga
+        summary: |-
+          Filed at the coordinator's direction: the ratchet's only fixture is run by nothing and is 5/8 on clean trunk; yoga takes it after 1577-57u3.

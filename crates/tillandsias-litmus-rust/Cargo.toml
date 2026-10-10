@@ -21,3 +21,6 @@ syn = { version = "2.0.117", features = ["full"] }
 tree-sitter = "0.25"
 tree-sitter-rust = "0.24"
 tree-sitter-bash = "0.25"
+
+[lints]
+workspace = true

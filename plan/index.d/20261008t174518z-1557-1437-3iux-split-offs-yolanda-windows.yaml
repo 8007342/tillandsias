@@ -1,0 +1,84 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Scope cut of 1437-3iux (coordinator-approved plan, 2026-10-08): 1437-3iux
+# keeps the SOFT/HARD reset split (slices S1-S4); these two parts become rows.
+packets:
+  - packet_id: windows-models-live-host-side-under-tillandsias-home-shared-into-the-distro-so-a-hard-reset-does-not-re-pull-them-measured-over-drvfs
+    order: 1557-vhdk
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [windows, wsl, inference, models, drvfs, measurement]
+    estimated_hours: 4
+    depends_on: []
+    title: |
+      Windows: measure ollama pull + load of the model directory over a drvfs/9p share from %USERPROFILE%\.tillandsias\downloads into the tillandsias distro; if fast enough, move the models host-side so a HARD reset (wsl --unregister) keeps them; if not, keep them in-distro and state in host-state-lifecycle that HARD costs a re-pull
+    context: |
+      Split off from 1437-3iux (2026-10-08) by its re-scope under 1438-pk9j: the
+      Vault store stays inside the distro because SOFT keeps the distro, so the
+      only host-side question left is the MODELS, and that question is a
+      measurement. Folds 1182-2vaz (models inside the distro, so wsl --unregister
+      cannot spare them): close 1182-2vaz superseded_by this row when the models
+      share lands, or with the measured "keep in-distro" decision.
+      Host note (yolanda-windows, 2026-10-08): the WSL guest sees the Windows
+      checkout over v9fs at /mnt/c, where a guard workload ran far past its 5 s
+      deadlines (1462-trch baseline). That makes model load time over the share
+      a real question, not a formality.
+    exit_criteria:
+      - 'a dated record on this row: ollama pull time and model load time for one named model, from in-distro ext4 and from the drvfs/9p share, on the same host'
+      - 'either the models directory is host-side and a HARD reset keeps it (sentinel model present after --reset-guest without re-pull), or host-state-lifecycle states that HARD re-pulls models on Windows, with the measurement as the reason'
+      - '1182-2vaz is closed with a pointer to this row'
+    verifiable_closure: |
+      The measurement record plus either a passing HARD-keeps-models arm in
+      scripts/test-windows-reset-keeps-vault-store.sh, or the spec sentence
+      quoting the measurement.
+      unscoreable: measurement-then-decision — the deliverable is a measured
+      choice; any code it leads to carries the fixture arm named above.
+    events:
+      - type: filed
+        ts: "2026-10-08T17:45:18Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Split off from 1437-3iux at the coordinator's request (approved plan
+          2026-10-08), so 1437-3iux carries only the SOFT/HARD reset slices.
+  - packet_id: windows-legacy-roots-under-localappdata-and-appdata-migrate-once-into-tillandsias-home
+    order: 1557-exxy
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [windows, migration, host-state, filesystem]
+    estimated_hours: 3
+    depends_on:
+      - everything-tillandsias-owns-on-a-host-lives-under-tillandsias-home-and-a-first-launch-migrates-the-legacy-roots
+    title: |
+      Windows legacy-root migration on top of 1438-pk9j's resolver: %LOCALAPPDATA%\tillandsias\{cache,state,logs} -> %USERPROFILE%\.tillandsias\{downloads,state}, wsl and wsl-swap.vhdx -> vm\, %APPDATA%\tillandsias\config.toml -> config\, once and convergent
+    context: |
+      Split off from 1437-3iux (2026-10-08): its re-scope (1438-pk9j) listed this
+      migration as deliverable (5), with depends_on 1438-pk9j "for the migration
+      slice only". 1438-pk9j is still READY, so the slice cannot land before it,
+      while the SOFT/HARD split does not wait for it. Spec: host-state-lifecycle
+      "Everything Tillandsias owns on a host lives under ~/.tillandsias/, and a
+      first launch migrates the legacy roots there" (fresh / legacy / mixed /
+      TILLANDSIAS_HOME scenarios).
+    exit_criteria:
+      - 'a legacy Windows layout is migrated once into %USERPROFILE%\.tillandsias and a second launch changes nothing (pre-fix: no migration on Windows)'
+      - 'a mixed layout converges without prompting; TILLANDSIAS_HOME redirects every root'
+    verifiable_closure: |
+      The host-state-lifecycle migration scenarios pass for the Windows body in
+      1438-pk9j's fixture once it exists.
+      unscoreable: unpinnable-until-the-guard-exists — 1438-pk9j delivers the
+      fixture this row's Windows arm extends.
+    events:
+      - type: filed
+        ts: "2026-10-08T17:45:18Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Split off from 1437-3iux at the coordinator's request (approved plan
+          2026-10-08); waits on 1438-pk9j's resolver.

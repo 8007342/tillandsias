@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # @trace order:660-ryhn, spec:ci-release
 #
-# Hermetic fixture for scripts/check-litmus-bindings.sh. The negative controls
+# Hermetic fixture for scripts/lua/check-litmus-bindings.lua (the .sh until
+# 1570-qutp), run on `tillandsias-plan script run`. The negative controls
 # are the point — the failure mode this gate closes is SILENCE, so a checker
 # that cannot go red on an unbound file is the defect wearing a gate's name.
 #
@@ -12,9 +13,25 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GATE="$ROOT/scripts/check-litmus-bindings.sh"
+GATE="$ROOT/scripts/lua/check-litmus-bindings.lua"
 fail() { echo "FAIL: $*" >&2; exit 1; }
 [ -f "$GATE" ] || fail "gate not found"
+# shellcheck source=scripts/plan-binary-probe.sh
+. "$ROOT/scripts/plan-binary-probe.sh"
+plan_from_checkout() {
+    local p
+    p="$(cd "$ROOT" && resolve_plan_binary)" || return 1
+    case "$p" in
+        /*) printf '%s\n' "$p" ;;
+        *)  printf '%s/%s\n' "$ROOT" "${p#./}" ;;
+    esac
+}
+PLAN="$(plan_from_checkout)" || PLAN=""
+if [ -z "$PLAN" ] || ! grep -qx script <<<"$("$PLAN" capabilities 2>/dev/null)"; then
+    echo "skip:litmus-bindings-fixture:no-script-runner"
+    exit 0
+fi
+run_gate() { env -u TILLANDSIAS_REPO_ROOT "$PLAN" script run "$GATE"; }
 
 LP="litmus"   # composed prefix; never written literally next to a fixture name
 WORK="$(mktemp -d)"
@@ -39,7 +56,7 @@ scaffold() {
 
 # --- case 1: the ok-verdict grammar, on a THROWAWAY CORPUS ----------------
 # THIS CASE USED TO RUN THE GATE OVER THE LIVE TREE, and that is why it is a
-# corpus case now. check-litmus-bindings.sh has two costs: it skips its advisory
+# corpus case now. check-litmus-bindings (now Lua) has two costs: it skips its advisory
 # runnability sweep when no litmus file changed against the base, and runs it
 # when one did. MEASURED — macneo (workstation) 3.2s skipped / 36.6s swept;
 # esmeraldinha (floor tier) 83s cold and 95s/93s warm skipped, 693s swept. The
@@ -64,7 +81,7 @@ scaffold() {
 # fixture therefore does not exercise either. scripts/test-bound-litmus-is-
 # runnable.sh and the gate step own that.
 d="$WORK/grammar"; scaffold "$d"
-out="$(LITMUS_BINDINGS_ROOT="$d" bash "$GATE")" || fail "case 1: corpus must reconcile, got '$out'"
+out="$(LITMUS_BINDINGS_ROOT="$d" run_gate)" || fail "case 1: corpus must reconcile, got '$out'"
 case "$out" in
     ok:${LP}-bindings:files=[0-9]*\ bound=[0-9]*\ retired=[0-9]*\ grandfathered=[0-9]*\ spec_ids=[0-9]*\ resolved=[0-9]*\ spec-grandfathered=[0-9]*) ;;
     *) fail "case 1: verdict grammar wrong, got '$out'" ;;
@@ -73,7 +90,7 @@ echo "ok: case 1 — the ok verdict carries all four counts, on a bounded corpus
 
 # --- case 2: a clean fixture tree passes with the right counts --------------
 d="$WORK/clean"; scaffold "$d"
-out="$(LITMUS_BINDINGS_ROOT="$d" bash "$GATE")" || fail "case 2: clean fixture must pass, got '$out'"
+out="$(LITMUS_BINDINGS_ROOT="$d" run_gate)" || fail "case 2: clean fixture must pass, got '$out'"
 [ "$out" = "ok:litmus-bindings:files=3 bound=1 retired=1 grandfathered=1 spec_ids=1 resolved=1 spec-grandfathered=0" ] \
     || fail "case 2: wrong counts: '$out'"
 echo "ok: case 2 — bound, retired, and grandfathered each counted once"
@@ -83,7 +100,7 @@ echo "ok: case 2 — bound, retired, and grandfathered each counted once"
 # green, assertions never executed.
 d="$WORK/stray"; scaffold "$d"
 printf 'name: %s:fix-new-stray\nspec: fix\n' "$LP" > "$d/openspec/litmus-tests/litmus-fix-new-stray.yaml"
-out="$(LITMUS_BINDINGS_ROOT="$d" bash "$GATE" 2>/dev/null)"
+out="$(LITMUS_BINDINGS_ROOT="$d" run_gate 2>/dev/null)"
 rc=$?
 [ "$rc" -eq 1 ] || fail "case 3: a new unbound file must exit 1, got rc=$rc '$out'"
 [ "$out" = "violation:unbound-${LP}:${LP}:fix-new-stray" ] \
@@ -93,7 +110,7 @@ echo "ok: case 3 — a new unbound litmus file is refused by name"
 # --- case 4 (NEGATIVE CONTROL): a dangling binding refuses ------------------
 d="$WORK/dangling"; scaffold "$d"
 printf '  - %s:fix-ghost\n' "$LP" >> "$d/openspec/litmus-bindings.yaml"
-out="$(LITMUS_BINDINGS_ROOT="$d" bash "$GATE" 2>/dev/null)"
+out="$(LITMUS_BINDINGS_ROOT="$d" run_gate 2>/dev/null)"
 rc=$?
 [ "$rc" -eq 1 ] || fail "case 4: a dangling binding must exit 1, got rc=$rc '$out'"
 [ "$out" = "violation:dangling-binding:${LP}:fix-ghost" ] \
@@ -103,7 +120,7 @@ echo "ok: case 4 — a binding with no file behind it is refused by name"
 # --- case 5: retirement is honored even when unlisted -----------------------
 d="$WORK/retired"; scaffold "$d"
 printf 'name: %s:fix-shelved\nphase: retired\n' "$LP" > "$d/openspec/litmus-tests/litmus-fix-shelved.yaml"
-out="$(LITMUS_BINDINGS_ROOT="$d" bash "$GATE")" || fail "case 5: retired file must not refuse, got '$out'"
+out="$(LITMUS_BINDINGS_ROOT="$d" run_gate)" || fail "case 5: retired file must not refuse, got '$out'"
 [ "$out" = "ok:litmus-bindings:files=4 bound=1 retired=2 grandfathered=1 spec_ids=1 resolved=1 spec-grandfathered=0" ] \
     || fail "case 5: wrong counts: '$out'"
 echo "ok: case 5 — phase: retired is the sanctioned unbound state"
@@ -117,7 +134,7 @@ echo "ok: case 5 — phase: retired is the sanctioned unbound state"
 # a spec_id a binding NAMES resolves to anything.
 d="$WORK/absent-spec"; scaffold "$d"
 rm -rf "$d/openspec/specs/fix"
-out="$(LITMUS_BINDINGS_ROOT="$d" bash "$GATE" 2>&1)"; rc=$?
+out="$(LITMUS_BINDINGS_ROOT="$d" run_gate 2>&1)"; rc=$?
 [ "$rc" -ne 0 ] || fail "case 6: a binding naming an absent spec must REFUSE, got '$out'"
 case "$out" in
     *"violation:binding-names-absent-spec:fix"*) ;;
@@ -131,7 +148,7 @@ echo "ok: case 6 — a binding whose spec_id resolves to nothing is refused by n
 # down, and the one a careless fix would make.
 d="$WORK/empty-specdir"; scaffold "$d"
 rm -f "$d/openspec/specs/fix/spec.md"
-out="$(LITMUS_BINDINGS_ROOT="$d" bash "$GATE" 2>&1)"; rc=$?
+out="$(LITMUS_BINDINGS_ROOT="$d" run_gate 2>&1)"; rc=$?
 [ "$rc" -ne 0 ] || fail "case 7: an empty spec directory must not satisfy resolution, got '$out'"
 echo "ok: case 7 — an empty spec directory does not count as a resolved spec"
 
@@ -153,7 +170,7 @@ printf 'name: %s:fix-retired\nphase: retired\n' "$LP" > "$d/openspec/litmus-test
 printf 'name: %s:fix-grand\nspec: fix\n' "$LP" > "$d/openspec/litmus-tests/litmus-fix-grand.yaml"
 printf '# ratchet\n%s:fix-grand\n' "$LP" > "$d/openspec/litmus-tests/unbound-grandfathered.txt"
 printf 'specs:\n' > "$d/openspec/litmus-bindings.yaml"
-out="$(LITMUS_BINDINGS_ROOT="$d" bash "$GATE" 2>&1)"; rc=$?
+out="$(LITMUS_BINDINGS_ROOT="$d" run_gate 2>&1)"; rc=$?
 [ "$rc" -ne 0 ] || fail "case 8: ZERO parsed spec_ids must REFUSE, not print ok:0, got '$out'"
 case "$out" in
     *"litmus-bindings-spec-population-empty"*) ;;
@@ -169,12 +186,23 @@ echo "ok: case 8 — zero parsed spec_ids is refused, not reported as clean"
 d="$WORK/gf-spec"; scaffold "$d"
 rm -rf "$d/openspec/specs/fix"
 printf '# known stray\nfix\n' > "$d/openspec/litmus-tests/unresolved-grandfathered.txt"
-out="$(LITMUS_BINDINGS_ROOT="$d" bash "$GATE")" || fail "case 9: a declared unresolved spec_id must pass, got '$out'"
+out="$(LITMUS_BINDINGS_ROOT="$d" run_gate)" || fail "case 9: a declared unresolved spec_id must pass, got '$out'"
 case "$out" in
     *"spec_ids=1 resolved=0 spec-grandfathered=1"*) ;;
     *) fail "case 9: the verdict must count the declared exception separately, got '$out'" ;;
 esac
 echo "ok: case 9 — a declared unresolved spec_id is exempt and counted as such"
+
+# --- case 10 (1570-qutp): a missing base ref is a NAMED skip, never silence --
+# The diff-scoped checks (misbound spec 1304-wbb2, newly-bound unrunnable
+# 958-b36m) need a base ref. Outside a git checkout there is none; the .sh then
+# skipped both without a word. The verdict stays ok (they are diff-scoped, so
+# nothing new can be judged), but stderr must SAY they did not run.
+d="$WORK/no-base"; scaffold "$d"
+LITMUS_BINDINGS_ROOT="$d" run_gate > "$WORK/c10.out" 2> "$WORK/c10.err" || fail "case 10: a tree with no base ref must still pass, got '$(cat "$WORK/c10.out")'"
+grep -q '^  skip:litmus-bindings:no-base-ref:' "$WORK/c10.err" \
+    || fail "case 10: the skipped diff-scoped checks were not named on stderr: '$(cat "$WORK/c10.err")'"
+echo "ok: case 10 — no base ref names the skipped diff-scoped checks instead of silence"
 
 # ORDER 1356-vv5m. DERIVED, not a literal. This printed "(5/5)" while NINE cases
 # ran — the four added by this row passed and were reported as five. A

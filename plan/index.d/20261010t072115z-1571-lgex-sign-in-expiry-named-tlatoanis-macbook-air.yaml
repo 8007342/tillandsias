@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# 1571-lgex fix on work/1571-lgex.
+status:
+  - packet_id: macos-claude-launch-hangs-silently-when-the-claude-login-window-expires-and-the-tray-stays-on-building-forge
+    field: status
+    value: in_progress
+    ts: "2026-10-10T07:21:15Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: macos-claude-launch-hangs-silently-when-the-claude-login-window-expires-and-the-tray-stays-on-building-forge
+    event:
+      type: note
+      ts: "2026-10-10T07:21:15Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        WHERE THE 300 s IS (source read): no Tillandsias timer. The attach runs tillandsias-headless with --cloud <project> --claude; run_forge_agent_cli_mode then calls ensure_provider_auth, then run_provider_login, which execs /usr/local/bin/provider-device-auth claude (images/default/provider-device-auth.sh:33, `claude auth login --claudeai`) in the tillandsias-claude-login-<pid> container. The Claude CLI holds its own device window and exits non-zero when it closes. On 2026-10-09 it closed at 300.2 s, and LoginContainerCleanup then removed the container.
+        WHY IT READ AS A WEDGE (source read + log):
+        - The exec error propagated raw with `?` (crates/tillandsias-headless/src/main.rs run_provider_login), so the terminal got a podman-exec error.
+        - The tray's status label is the guest daemon's last_event. The forge and login containers belong to the CLI's rootless podman, which the daemon's `podman events` stream does not see, so the ONLY writer was the CLI's own UDP push, last called by the forge image build ("Building Forge"). Nothing replaced it.
+        - The tray logged vm-status only on PHASE change, so the 170 s inside Ready left no line.
+        FIX:
+        - run_provider_login maps a failed interactive sign-in step (the Claude/Antigravity exec and the Codex QR lane) to SignInUnfinished. It prints ONE end-user line, "<Provider> sign-in did not finish (it may have timed out). Choose it again in the Tillandsias menu to try again.", with no flag, variable or podman text (the raw detail is printed only with debug). It pushes the status event "Sign-in did not finish" BEFORE the container is removed, so the tray's label leaves "Building Forge" at once. Then the CLI exits 1 and the attach ends through the existing "session ended" path.
+        - The guest daemon logs every pushed status ("[tillandsias] status event: ...").
+        - The tray logs each distinct event change once (event_change_line).
+        MEASURED (darwin, rustc 1.99.0):
+        - PRE-FIX EMULATION (the raw `?` restored and event logging removed, tests unchanged): an_unfinished_sign_in_step_is_named_and_pushed_not_propagated_raw FAILED, and an_event_change_inside_one_phase_is_logged_once FAILED. The source-scan arm compiles against the pre-fix tree.
+        - POST-FIX: both ok, plus the_sign_in_unfinished_line_is_plain_and_actionable.
+        - tillandsias-headless is 741 passed, 0 failed; tillandsias-macos-tray is green.
+        - github_login_identity_cannot_discard_a_collected_token now anchors on the exec call without `?`; its ordering assertion is unchanged.
+        - cargo zigbuild --tests for aarch64-unknown-linux-musl is clean.
+        - clippy -D warnings is clean for the tray (all targets) and the headless bin. Headless test-target clippy fails only on the pre-existing TWO_ROUTERS (#224).
+        NOT MEASURED: a live expired Claude login on a Mac. That needs a human to let a device window run out, so it is the next release smoke's job.
+        NOT FIXED here: after a SUCCESSFUL forge launch the label can still stay on the last build label for the same reason (rootless events are not observed). That is a separate row if wanted.

@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: 1437-3iux-s3-install-windows-ps1-runs-the-soft-reset-by-default-and-hard-only-on-request-with-the-approval-passed-through
+    field: context
+    value: |-
+      Slice of 1437-3iux (host-state-lifecycle "The installer runs SOFT for an
+      update and HARD only when asked"). Exit criteria MOVED here from
+      1437-3iux's installer arm.
+
+
+      [2026-10-08T19:46:46Z yolanda-windows] COORDINATOR RULING 2026-10-08 (PR #247): the Windows interpretation is APPROVED. The spec says the HARD prompt "is shown by the reset itself", but the Windows tray is GUI-subsystem with no console. So install-windows.ps1 shows core's exact prompt and forwards a typed HARD as --approve-hard-reset to that one invocation, and NEVER sets TILLANDSIAS_HARD_RESET_APPROVED. Rationale (coordinator): the spec's intent is a human at a console typing HARD for THIS invocation; requiring the env var at a console would be a standing approval where the spec wants a per-run one. Made explicit as OpenSpec change windows-installer-asks-the-hard-question (ADDED requirement in host-state-lifecycle) on the same PR.
+
+      [2026-10-08T20:46:16Z yolanda-windows] OPERATOR RULING 2026-10-08, verbatim (relayed by the coordinator; it supersedes the coordinator's earlier approval of an installer HARD prompt): "we do not ask end users to do power user stuff. That's our guideline. An install prompt asking for destructive cases should not be an acceptable case. End user is NOT a power user. No prompts like those, we make all the decisions for them, on their behalf, for their best interests. So SOFT reset is the default only and forever. A power user wanting to do a hard reset should be capable of figuring out where to place a flag and which flag, we do not need to print any power user messages during install, at all. Install should be for END USER (NOT POWER USER) and be a pretty installer, rather than an informational/debugging installer. As frictionless as possible for end users."
+      REWORK on this row (1559-sqzp): the installer runs SOFT (--reset-state < NUL) on every install, ALWAYS; no -HardReset, no TILLANDSIAS_INSTALL_RESET, no Read-Host, no reset-kind line, no flag names or diagnostic reset text in the output, and the tray reset log is not echoed (shown by path only on failure). The coordinator's earlier approval of an installer HARD prompt (recorded above) is WITHDRAWN, and so is the OpenSpec change windows-installer-asks-the-hard-question. Exit criteria amended to match.
+    ts: "2026-10-08T20:46:16Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: 1437-3iux-s3-install-windows-ps1-runs-the-soft-reset-by-default-and-hard-only-on-request-with-the-approval-passed-through
+    event:
+      type: note
+      ts: "2026-10-08T20:46:16Z"
+      host: yolanda-windows
+      summary: |-
+        operator ruling 2026-10-08: installers are SOFT only and never prompt; S3 reworked

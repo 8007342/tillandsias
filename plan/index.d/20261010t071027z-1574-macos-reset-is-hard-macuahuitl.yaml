@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found 2026-10-10 by the tillandsias.org level-2 re-verification against stable v56.10.9.1; confirmed by reading the tag.
+packets:
+  - packet_id: the-macos-hard-reset-reset-guest-has-no-per-run-approval-and-does-not-clear-the-vault-keychain-items-so-it-lacks-parity-with-the-windows-hard-reset
+    order: 1574-mrst
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: macos
+    capability_tags: [macos, reset-guest, vault, keychain, parity]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-macos-tray/src/reset_state.rs
+    title: |
+      After #281 (1437-8c6p) makes the macOS --reset-state SOFT, the macOS HARD path --reset-guest still has neither the per-run approval nor the vault Keychain clearing that the Windows hard reset has (1437-3iux s2/s3). Only an explicit request may reach it; the installer never does.
+    context: |
+      Filed first as "every Mac install is a hard reset", from the tillandsias.org v56.10.9.1 re-verification. At stable v56.10.9.1 the macOS reset body loops over CLEARED_CREDENTIALS, deletes each one and removes vault-data. The Mac session showed that #281 (open, in the landing queue) already rewrites that body SOFT; checked on origin/work/1437-8c6p, the clearer references drop from 8 to one, and that one is a test string. So the soft half is #281's, and this row keeps only the gap #281 declares out of scope.
+      Parity target: the Windows hard reset asks on every run, refuses when the keyring is unreachable, and announces before it destroys anything (1437-3iux s2). Operator rulings: installers are SOFT only, and only uninstall gets the big red destructive confirm. A hard reset is a power-user path that runs only on explicit request.
+    exit_criteria:
+      - 'macOS --reset-guest requires an explicit per-run approval and refuses without one; pre-fix: no approval step'
+      - 'macOS --reset-guest clears the vault Keychain items, their fallbacks and vault-data, and says so before destroying anything'
+      - 'a darwin test drives --reset-guest against a scratch HOME and scratch Keychain service names (never the real Keychain): refused without approval; with approval the scratch items are gone'
+      - 'install-macos.sh cannot reach --reset-guest (checked by a source scan)'
+    verifiable_closure: |
+      cargo test -p tillandsias-macos-tray reset_state on darwin, with the new hard-reset tests red before the fix and green after.
+      unscoreable: unpinnable-until-the-guard-exists — the darwin tests are the deliverable, written in the same commit as the fix.
+    depends_on: []
+    events:
+      - type: filed
+        ts: "2026-10-10T07:10:27Z"
+        agent_id: macuahuitl-fedora-claude
+        host: macuahuitl
+        summary: |-
+          Re-scoped before push after macbookair-macos showed that #281 (1437-8c6p) already makes the macOS soft reset soft. Only the --reset-guest parity gap remains. Start this after #281 lands.
+    next_action: >
+      Wait for #281 to land, then add the per-run approval and the Keychain clearing to macOS --reset-guest, with scratch-Keychain darwin tests.

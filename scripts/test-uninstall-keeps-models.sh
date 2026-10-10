@@ -111,7 +111,7 @@ run_uninstall() {
     TILLANDSIAS_UNINSTALL_TRAY_PROC="nonce-tray-1401" \
     TILLANDSIAS_UNINSTALL_FAKE_UNAME="Linux" \
     TILLANDSIAS_UNINSTALL_INSTALL_DIR="$_home/fixture-bin" \
-        bash "$_uninstall" "$@" 2>&1
+        bash "$_uninstall" "$@" --yes 2>&1  # 1437-evzi: uninstall now asks first; --yes answers for the fixture
 }
 
 # ── Arm 1: flag set + --wipe -> models spared, everything else gone ──────────

@@ -51,6 +51,7 @@ description: >
 preconditions:
   - workspace contains crates/tillandsias-core/src/reset_state.rs
   - workspace contains scripts/test-reset-state-contract.sh
+  - workspace contains scripts/test-install-macos-setup-is-quiet.sh
 
 critical_path:
   - step: "the --reset-state contract holds across every platform arm that exists (1286-4437)"
@@ -71,9 +72,18 @@ critical_path:
   # reprovision uses the new binary) and before the tray is launched (so the
   # live-tray guard can pass). Ordering by line number, both directions.
   - step: "the installer resets after the swap and before it launches the tray"
-    command: "awk '/mv \\\"\\$NEW_APP\\\" \\\"\\$DEST\\\"/{sw=NR} /--reset-state$/{rs=NR} /open -a \\\"\\$DEST\\\"/{op=NR} END{ if (sw && rs && op && rs > sw && rs < op) print \"ok: reset between swap and launch\"; else print \"FAIL: swap=\" sw \" reset=\" rs \" open=\" op }' scripts/install-macos.sh"
+    command: "awk '/mv \\\"\\$NEW_APP\\\" \\\"\\$DEST\\\"/{sw=NR} /--reset-state( |$)/{rs=NR} /open -a \\\"\\$DEST\\\"/{op=NR} END{ if (sw && rs && op && rs > sw && rs < op) print \"ok: reset between swap and launch\"; else print \"FAIL: swap=\" sw \" reset=\" rs \" open=\" op }' scripts/install-macos.sh"
     timeout_ms: 3000
     expected_behavior: "ok: reset between swap and launch"
+
+  # ORDER 1437-8c6p. The macOS installer runs the SOFT reset and keeps the
+  # tray's reset output in its setup log (operator ruling 2026-10-08: no
+  # power-user text during install). The fixture RUNS the installer's own
+  # reset block against a scratch HOME and a stub tray.
+  - step: "install-macos.sh runs the SOFT reset quietly and logs the banner (1437-8c6p)"
+    command: "bash scripts/test-install-macos-setup-is-quiet.sh | tail -1"
+    timeout_ms: 30000
+    expected_behavior: "ok:install-macos-setup-is-quiet:7 arms"
 
   # ORDER 1315-d4qd. A destructive path has no silent default. Kept in THIS
   # fixture rather than a new one because it is the same contract: the flag

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-windows-installer-prints-only-end-user-lines
+    event:
+      type: note
+      ts: "2026-10-08T23:47:24Z"
+      agent_id: windows-yolanda-claude-20261008t155217z
+      host: yolanda-windows
+      summary: |
+        FIXTURE INPUT (coordinator ruling 2026-10-08): the v56.10.8.1 Windows smoke printed 561 install lines, almost all technical; the categorised inventory with line numbers is in plan/issues/smoke-e2e-findings-v56.10.8.1-2026-10-08-windows-yolanda.md (Leg 3). #247 and #252 remove the reset-plan, flag, channel, self-check and reset-log echo lines; NOT yet covered by any row: the 101 rootfs per-percent progress lines, the ~369 guest package-manager lines, "The operation completed successfully." x3, and the paths block (Install path / Extracting / capability probe binary / Start Menu shortcut). Cosign not attempted is filed separately as 1562-hsa8.

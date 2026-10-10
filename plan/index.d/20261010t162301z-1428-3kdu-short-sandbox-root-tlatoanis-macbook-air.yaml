@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# 1428-3kdu repair on work/1428-3kdu (re-scoped 2026-10-10, see the 1576 fragment).
+status:
+  - packet_id: the-podman-preflight-diagnosis-fixture-requires-python3-which-on-a-stock-mac-is-the-xcode-clt-shim
+    field: status
+    value: in_progress
+    ts: "2026-10-10T16:23:01Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-podman-preflight-diagnosis-fixture-requires-python3-which-on-a-stock-mac-is-the-xcode-clt-shim
+    event:
+      type: note
+      ts: "2026-10-10T16:23:01Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        Repair on work/1428-3kdu (scripts/test-gate-podman-mode-configuration.sh): the sandbox root is now mktemp -d /tmp/tgpm.XXXXXX (with the existing EXIT trap cleanup) instead of $TMPDIR. A guard runs BEFORE any interpreter is asked and names an over-long socket path (>= 104 bytes, the macOS sun_path limit).
+        MEASURED on darwin 2026-10-10, with a working python3 (/opt/homebrew/bin/python3):
+        - POST-FIX: "PASS: gate podman mode is configuration, not inference (797-r6tc)".
+        - The guard on the OLD root: "FAIL: fixture socket path is 108 bytes, over the 103 that macOS sun_path allows: /var/folders/.../T//tillandsias-gate-podman-mode.WDEA9F/run/podman/podman.sock".
+        - The pre-fix file unchanged: "OSError: AF_UNIX path too long" then "FAIL: could not create the AF_UNIX fixture socket (python3 required)".
+        - The CLT-shim case stays the 1462-ruq9 named skip.
+        It stays in shell, as a repair per the coordinator. No shell check was ported, because the fixture needs a real listening AF_UNIX socket and the Lua runtime has none (1576-luas).

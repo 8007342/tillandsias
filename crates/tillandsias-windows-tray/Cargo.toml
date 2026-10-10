@@ -109,3 +109,9 @@ tiny-skia = "0.11"
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# 1562-bqcg: the fake guest frames through control_frame_codec, not by hand (framing ratchet).
+tokio-util = { workspace = true }
+futures-util = { workspace = true }
+
+[lints]
+workspace = true

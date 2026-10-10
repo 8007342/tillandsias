@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found 2026-10-09 on yoga during the Lua runtime audit, filed at the
+# coordinator's direction (p3, pickup linux).
+packets:
+  - packet_id: plan-answer-returns-an-unbounded-envelope-so-a-ready-for-linux-question-yields-441-kb-with-702-citations-that-an-agent-cannot-consume-through-mcp
+    order: 1572-5msz
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [plan-expert, mcp, agent-ux, answer-envelope]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/answer.rs
+    title: |
+      plan_answer has no size bound: "what is ready for linux" returns a 441,713-byte envelope with 702 citations (the yoga audit agent hit a 508 KB one and had to abandon the expert for grep), which defeats the MCP-first read path methodology mandates — the agent's tool-result budget truncates or persists it and the cited answer is never read
+    context: |
+      Measured on yoga 2026-10-09T22:44Z, linux-next 76d121cd0, via the CLI the
+      MCP server wraps:
+        tillandsias-plan answer "what is ready for linux"
+        -> 441,713 bytes, 702 "path" citations, confidence "exact"
+      The answer field is a TSV of every ready linux row and each row carries
+      its own citation; nothing in answer.rs limits, pages or summarises
+      (truncate() is used only for log lines). The Fable audit agent in this
+      forge asked a ratchet/Lua dedup question the same evening and received
+      a ~508 KB envelope it could not consume, so it fell back to plan_query +
+      grep — exactly the fallback CLAUDE.md's "ask, don't read" rule
+      (methodology/distributed-work.yaml mcp_first_read_path) is meant to
+      make unnecessary. Distinct from 1390-j8kf (keyword/tag questions are
+      refused outright — still true: "lua" and "ratchet" return 311-315 byte
+      "unsupported" envelopes); this row is about the answers that DO resolve
+      being too large to use.
+    exit_criteria:
+      - 'plan_answer bounds its envelope (a documented byte or row cap, e.g. <= 32 KB / <= 50 rows) and when it truncates says so in the answer with the total count and how to narrow or page (e.g. "showing 50 of 702; ask with priority/release/tag, or use plan_query"); pre-fix: "what is ready for linux" -> 441,713 bytes, 702 citations, no truncation notice (yoga 2026-10-09T22:44Z)'
+      - 'every citation kept still verifies with tillandsias-plan verify-answer; truncation never drops a citation for a row that remains in the answer'
+      - 'NEGATIVE CONTROL: a small exact answer (status of one order) is byte-for-byte unchanged'
+    unscoreable: "unpinnable-until-the-guard-exists: future #[test] in crates/tillandsias-plan answer.rs over a fixture ledger with > cap ready rows asserting the envelope size is under the cap and the answer names the total; pre-fix result: unbounded (441,713 bytes on the real ledger). NEGATIVE CONTROL: a single-order status answer is unchanged."
+    depends_on: []
+    next_action: >
+      Cap list-shaped intents in answer.rs (ready/burndown/blocked-by) with a
+      total-count line and a narrowing hint; keep citations one-to-one with the
+      rows shown.
+    events:
+      - type: filed
+        ts: "2026-10-09T22:44:26Z"
+        agent_id: forge-forge-tillandsias-claude-20261009t193211z
+        host: yoga
+        summary: |-
+          Filed at the coordinator's direction (p3, pickup linux) from the yoga forge Lua runtime audit; reproduced by the parent session.

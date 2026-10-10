@@ -1,0 +1,21 @@
+# Gate step 1559-sqzp — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. install-windows.ps1 runs the SOFT reset and ONLY the SOFT
+# reset, never prompts about it, and prints no power-user text (1437-3iux S3;
+# host-state-lifecycle "Installers run SOFT only, never prompt, and print no
+# power-user text"). Operator ruling 2026-10-08: "we do not ask end users to do
+# power user stuff ... So SOFT reset is the default only and forever ... a
+# pretty installer, rather than an informational/debugging installer."
+#
+# The fixture asserts over the installer's code and its reset path: no HARD
+# anywhere, exactly one `--reset-state < NUL`, no Read-Host on the reset path,
+# no flag/variable/reset-kind text in its output, and the tray's reset log not
+# echoed. Pre-fix (#247 at 0d1c6a852): FAILS — a HARD kind, a prompt, a
+# reset-kind first line. Pure source assertions, so it runs on every regime.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the installer resets SOFT only, never prompts, and prints no power-user text (1559-sqzp)"
+STEP_SCRIPT="scripts/test-installer-reset-kind.sh"
+STEP_ERROR="the installer offers a HARD reset, prompts, or prints power-user reset text again (1559-sqzp); see which arm failed above"
+STEP_OK="the installer resets SOFT only, quietly, with no prompt"
+STEP_SECOND_REGIME="yolanda 2026-10-08 msys ok:installer-reset-kind:5 arms"

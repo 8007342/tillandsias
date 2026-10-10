@@ -92,6 +92,21 @@ pub const GUEST_BIN_SHARE_TAG: &str = "guest-bin";
 /// GUEST path `fetch-headless.sh` installs from.
 pub const GUEST_STAGED_BINARY: &str = "/var/lib/tillandsias/guest-bin/tillandsias-headless";
 
+/// ORDER 1437-8c6p / 1437-av8u. The macOS SOFT reset's request, written by the
+/// host tray into the guest-bin share beside the staged binary. macOS has no
+/// host-to-guest shell (order 272), so the host cannot run the in-guest half of
+/// a SOFT reset itself; it leaves a request with a fresh nonce here, and the
+/// guest daemon runs the derived-state wipe once per nonce at its next start.
+pub const SOFT_RESET_REQUEST_FILE: &str = "soft-reset.request";
+
+/// GUEST path of [`SOFT_RESET_REQUEST_FILE`] (the share is mounted read-only).
+pub const GUEST_SOFT_RESET_REQUEST: &str = "/var/lib/tillandsias/guest-bin/soft-reset.request";
+
+/// GUEST path recording the last request nonce the guest acted on. Outside the
+/// read-only share, on the guest disk, so it survives reboots of the same guest
+/// and dies with a HARD reset's rootfs.
+pub const GUEST_SOFT_RESET_HANDLED: &str = "/var/lib/tillandsias/soft-reset.handled";
+
 #[cfg(test)]
 mod tests {
     use super::*;

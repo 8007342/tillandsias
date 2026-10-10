@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: 1437-3iux-s3-install-windows-ps1-runs-the-soft-reset-by-default-and-hard-only-on-request-with-the-approval-passed-through
+    field: context
+    value: |-
+      Slice of 1437-3iux (host-state-lifecycle "The installer runs SOFT for an
+      update and HARD only when asked"). Exit criteria MOVED here from
+      1437-3iux's installer arm.
+
+
+      [2026-10-08T19:46:46Z yolanda-windows] COORDINATOR RULING 2026-10-08 (PR #247): the Windows interpretation is APPROVED. The spec says the HARD prompt "is shown by the reset itself", but the Windows tray is GUI-subsystem with no console. So install-windows.ps1 shows core's exact prompt and forwards a typed HARD as --approve-hard-reset to that one invocation, and NEVER sets TILLANDSIAS_HARD_RESET_APPROVED. Rationale (coordinator): the spec's intent is a human at a console typing HARD for THIS invocation; requiring the env var at a console would be a standing approval where the spec wants a per-run one. Made explicit as OpenSpec change windows-installer-asks-the-hard-question (ADDED requirement in host-state-lifecycle) on the same PR.
+    ts: "2026-10-08T19:46:46Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: 1437-3iux-s3-install-windows-ps1-runs-the-soft-reset-by-default-and-hard-only-on-request-with-the-approval-passed-through
+    event:
+      type: note
+      ts: "2026-10-08T19:46:46Z"
+      host: yolanda-windows
+      summary: |-
+        record the coordinator's 2026-10-08 ruling on the Windows HARD-prompt interpretation

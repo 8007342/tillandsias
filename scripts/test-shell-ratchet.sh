@@ -104,7 +104,12 @@ run "$S"; up_rc=$RC; up_out="$OUT"
 git -C "$S" "${GC[@]}" revert --no-edit HEAD >/dev/null
 # LOWER honestly: remove one real pipe site from the victim and lower its floor by one
 lnum="$(grep -nE '[^|]\|[^|]' "$S/$victim" | grep -vE "^[0-9]+:[[:space:]]*#" | grep -vE "'[^']*\|[^']*'|\"[^\"]*\|[^\"]*\"" | head -1 | cut -d: -f1)"
-sed -i "${lnum}d" "$S/$victim"
+# 1553-x8js: portable delete (BSD sed -i took "${lnum}d" as a backup suffix),
+# and the mutation is checked applied: one line fewer, and non-empty.
+_v_before="$(wc -l < "$S/$victim" | tr -d ' ')"
+awk -v n="${lnum:?no pipe line found in the victim}" 'NR != n' "$S/$victim" > "$S/$victim.tmp" && mv "$S/$victim.tmp" "$S/$victim"
+[ -s "$S/$victim" ] && [ "$(wc -l < "$S/$victim" | tr -d ' ')" -eq $((_v_before - 1)) ] \
+    || bad "ARM 4 SETUP: deleting line $lnum of $victim did not apply — ARM 4's verdict proves nothing"
 awk -v p="$victim" -v n="$vn" '$1=="scripts" && $2==p {$3=n-1} {print}' "$F" > "$F.new" && mv "$F.new" "$F"
 run "$S" --dump-floors; actual="$(grep -E "^scripts $victim " <<<"$OUT" | awk '{print $3}')"
 awk -v p="$victim" -v n="${actual:-0}" '$1=="scripts" && $2==p {$3=n} {print}' "$F" > "$F.new" && mv "$F.new" "$F"

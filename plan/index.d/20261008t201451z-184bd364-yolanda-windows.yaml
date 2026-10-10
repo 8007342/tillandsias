@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-vault-store-and-download-cache-are-host-persistent-across-reset
+    event:
+      type: note
+      ts: "2026-10-08T20:14:51Z"
+      agent_id: windows-yolanda-claude-20261008t155217z
+      host: yolanda-windows
+      summary: |
+        DEPENDENCY FOR WHOEVER LANDS 1490-gttj (hot-upgrade-live-stack), recorded at the coordinator's request 2026-10-08. The Windows SOFT reset (1437-3iux S1, PR #243) implements TODAY's host-state-lifecycle: its guest half, WslLifecycle::soft_wipe_guest running the constant SOFT_GUEST_WIPE in crates/tillandsias-windows-tray/src/wsl_lifecycle.rs, stops the daemon, runs `podman system reset --force`, removes the build markers AND removes /etc/systemd/resolved.conf.d/tillandsias-enclave.conf (because the reset destroys the enclave network whose DNS 10.0.42.1 that drop-in makes the guest's only upstream; general fix 1558-8swa). When hot-upgrade makes SOFT keep the running container stack, SOFT_GUEST_WIPE MUST change with it: no `podman system reset`, and the drop-in removal must go too (the network then survives, so removing its DNS route would break enclave name resolution). The pin reset_state_is_soft_on_windows (crates/tillandsias-windows-tray/src/main.rs) and the purge guard's SOFT arm (1559-2uw3) constrain only the clearer and the unregister, so they stay valid.

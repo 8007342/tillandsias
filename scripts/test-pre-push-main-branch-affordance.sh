@@ -57,7 +57,14 @@ fi
 
 # 2 — the stub is small, runs the Lua, and fails closed without a binary.
 lines="$(wc -l < "$HOOK" | tr -d ' ')"
-: > "$W/not-runnable"
+# NON-RUNNABLE ON EVERY FILESYSTEM (1556-b2tq). This used to be an EMPTY file.
+# On a Windows host the WSL2 guest sees the checkout over 9p (/mnt/c), where
+# every new file is mode 777, and bash runs an empty executable as an empty
+# script that exits 0 (measured on yolanda 2026-10-08: mode=777 fs=v9fs exec
+# rc=0, against 644 / rc=126 on ext4). So the hook's capabilities call passed,
+# the Lua printed nothing, and the arm read no-verdict. A shebang naming an
+# interpreter that does not exist fails to execute (126/127) whatever the mode.
+printf '#!/nonexistent/tillandsias-not-an-interpreter\n' > "$W/not-runnable"
 hook "$ROOT" "refs/heads/x 1 refs/heads/linux-next 2" TILLANDSIAS_PLAN_BIN="$W/not-runnable"
 if [ "$lines" -le 15 ] && grep -q '"\$PLAN" lua "\$ROOT/scripts/lua/pre-push-main-branch-affordance.lua"' "$HOOK" \
    && [ "$RC" -eq 1 ] && [ "$(first "$OUT")" = "blocked:main-branch-affordance:no-plan-binary" ]; then

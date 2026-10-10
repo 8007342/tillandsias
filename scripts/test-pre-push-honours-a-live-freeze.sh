@@ -63,7 +63,8 @@ git config core.autocrlf false
 mkdir -p scripts/hooks plan/index.d crates/demo
 cp "$GUARD" scripts/hooks/pre-push-local-gate.sh
 cp "$FREEZE" scripts/release-freeze.sh
-for f in gate-stamp.sh plan-binary-probe.sh common.sh; do cp "$ROOT/scripts/$f" "scripts/$f" 2>/dev/null || true; done
+# lib-freeze-paths.sh: the shared freeze predicate both scripts source (1255-s4im).
+for f in gate-stamp.sh plan-binary-probe.sh common.sh lib-freeze-paths.sh; do cp "$ROOT/scripts/$f" "scripts/$f" 2>/dev/null || true; done
 chmod +x scripts/*.sh scripts/hooks/*.sh 2>/dev/null || true
 printf 'packets: []\n' > plan/index.yaml
 printf 'fn main() {}\n' > crates/demo/main.rs

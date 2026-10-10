@@ -60,7 +60,11 @@ esac
 # EVERY ./build.sh --check red. The window now reaches back to the newest
 # shared-provider commit plus an hour, and an arm with no such commit in
 # all of history is a named skip, not a pass and not a red.
-_shared_ct="$(git -C "$ROOT" log -1 --format=%ct --author='@gmail\.com' 2>/dev/null)"
+# THE WINDOW AND THE CHECK READ ONE REF (v56.10.9.1 bump gate, 2026-10-09):
+# deriving it from HEAD made a release/version-bump branch on main red,
+# because GitHub's merge commit there is a fresh @gmail.com author that
+# origin/linux-next, the ref fleet-activity.sh reads, does not carry.
+_shared_ct="$(git -C "$ROOT" log -1 --format=%ct --author='@gmail\.com' origin/linux-next 2>/dev/null)"
 case "$_shared_ct" in
     ''|*[!0-9]*)
         echo "skip: ARM 2 — no shared-provider (@gmail.com) author anywhere in this checkout's history"

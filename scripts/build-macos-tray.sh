@@ -54,6 +54,16 @@ command -v shasum   >/dev/null || die "shasum not in PATH"
 command -v zig      >/dev/null || die "zig not in PATH (install via brew install zig)"
 command -v cargo-zigbuild >/dev/null || die "cargo-zigbuild not in PATH (install via cargo install cargo-zigbuild)"
 
+# ORDER 1562-tc7p: build with the PINNED toolchain or not at all. rustup applies
+# rust-toolchain.toml by itself; this refuses the cases where it would not (a
+# non-rustup cargo first on PATH, or a RUSTUP_TOOLCHAIN override), because a
+# bundle built on another rustc is the one no gate measured.
+PINNED_RUST="$(sed -n 's/^channel *= *"\([^"]*\)".*/\1/p' rust-toolchain.toml)"
+ACTIVE_RUST="$(rustc --version | awk '{print $2}')"
+[[ -n "$PINNED_RUST" ]] || die "rust-toolchain.toml names no channel — the pin is the single source of the build toolchain (1562-tc7p)"
+[[ "$ACTIVE_RUST" == "$PINNED_RUST" ]] || die "rustc $ACTIVE_RUST is active but rust-toolchain.toml pins $PINNED_RUST (1562-tc7p). Use a rustup-managed cargo and unset RUSTUP_TOOLCHAIN"
+say "rustc $ACTIVE_RUST (pinned by rust-toolchain.toml)"
+
 # Apple Silicon is the host triple, so 'cargo build --release' is enough; an
 # explicit --target aarch64-apple-darwin produces the same binary but adds
 # a different output path. We use --release without --target.

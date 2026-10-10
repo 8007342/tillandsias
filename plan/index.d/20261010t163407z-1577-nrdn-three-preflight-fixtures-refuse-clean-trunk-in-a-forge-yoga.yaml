@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found 2026-10-10 on yoga (forge, v56.10.9.1) while preflighting 1570-mxcg
+# and 1570-g4rx; filed as ONE forge-env row at the coordinator's direction
+# (p2, pickup linux).
+packets:
+  - packet_id: three-preflight-fixtures-refuse-a-clean-linux-next-inside-a-forge-so-every-forge-preflight-reads-refused-3-whatever-the-branch-changes
+    order: 1577-nrdn
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, preflight, fixture-hygiene, branch-discipline, homebrew]
+    estimated_hours: 3
+    owned_files:
+      - scripts/test-branch-discipline-verb.sh
+      - scripts/test-discipline-derive.sh
+      - scripts/test-mirror-discipline.sh
+    title: |
+      Inside a forge, `./build.sh --preflight` on a CLEAN origin/linux-next refuses three fixtures — test-branch-discipline-verb (arm 2), test-discipline-derive (arms 3, 4) and test-mirror-discipline (ARM1/3/4/14) — so every forge preflight reads refused=3 whatever the branch changes, and a port's own refusals are indistinguishable from the environment's
+    context: |
+      Measured on yoga 2026-10-10 (forge on v56.10.9.1, CARGO_TARGET_DIR set,
+      no ~/.gitconfig identity per 1569-citv): preflight of work/1570-mxcg and
+      work/1570-g4rx both ended `refused:preflight:ran=199 ... refused=3`;
+      each of the three was then run on a `git worktree` of clean
+      origin/linux-next (22143e8e1 era) and failed identically there.
+        - test-branch-discipline-verb: "FAIL: arm 2: main rc=1
+          [refused:discipline:default-branch-protected:enforced" — the derive
+          reads LIVE history: distinct_committer_hosts=["yoga"],
+          pull_request_merges_on_default=0, installed_hooks=[]. 1535-enjy
+          (completed) made this fixture build its own multi-host history; in a
+          forge clone it still reads the live repo for at least one arm.
+        - test-discipline-derive: arm 3 "derive=[derived=1 seed=none
+          effective=0", arm 4 "scratch derive=[derived=1 seed=2 effective=1]
+          check-ref rc=1 ... live main rc=1".
+        - test-mirror-discipline: "tillandsias: Homebrew bootstrap failed
+          recently (network/proxy?); backing off. / 'ruby' is not installed."
+          then ARM1/3/4/14 FAIL — the fixture reaches for ruby through the
+          on-demand brew shim, which the forge cannot bootstrap.
+    exit_criteria:
+      - 'a forge preflight of clean origin/linux-next refuses none of the three (each passes, or skips BY NAME with the missing precondition — e.g. skip:...:no-ruby — never refuses for the environment); pre-fix: refused=3 on yoga 2026-10-10'
+      - 'the two discipline fixtures derive only from history they construct (the 1535-enjy rule), with no arm reading the live clone''s committer hosts, PR merges or installed hooks'
+      - 'NEGATIVE CONTROL: on a bare-metal host where they pass today, all three still pass and still refuse a seeded violation'
+    unscoreable: "unpinnable-until-the-guard-exists: future preflight run inside a forge on clean linux-next asserting refused=0 for these three; pre-fix result: refused=3 (yoga 2026-10-10). NEGATIVE CONTROL: bare-metal behaviour unchanged."
+    depends_on: []
+    next_action: >
+      For the discipline pair, find the arm(s) still reading live `git log`
+      / hooks and seed them in the scratch repo; for mirror-discipline, probe
+      `ruby` once and skip by name when absent instead of failing four arms.
+    events:
+      - type: filed
+        ts: "2026-10-10T16:34:07Z"
+        agent_id: forge-forge-tillandsias-claude-20261009t193211z
+        host: yoga
+        summary: |-
+          Filed at the coordinator's direction (one forge-env row, p2 linux): all three reproduced on a clean origin/linux-next worktree in the yoga forge.

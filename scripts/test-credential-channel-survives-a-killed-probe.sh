@@ -58,7 +58,7 @@ _verdict_lines() {
 # STEP, so it runs on every host, and a Linux-only bound would red the macOS
 # gate for a reason that has nothing to do with the credential guard.
 #
-# It is not caught by check-portability-idioms.sh, which scans sed -i and
+# It is not caught by check-portability-idioms.lua, which scans sed -i and
 # friends but not `timeout` — verified, not assumed, so this comment is the only
 # thing standing between the next author and the same break.
 #

@@ -13,13 +13,14 @@ inputs:
   - Cargo.lock
   - plan/index.yaml
   - plan/index.d/**
-  - scripts/check-fragment-status-loss.sh
+  - scripts/lua/check-fragment-status-loss.lua
   - scripts/test-fragment-status-loss.sh
   - scripts/plan-binary-probe.sh
   - scripts/with-wsl2-builder.sh
   - images/default/lib-common.sh
 
-# ORDER 752-pst5. check-fragment-status-loss.sh's second pass used a line-grep
+# ORDER 752-pst5. The status-loss gate's second pass (then a .sh, since
+# 1570-mxcg scripts/lua/check-fragment-status-loss.lua) used a line-grep
 # with ad-hoc resets: it cleared its packet_id on a two-space-indent key, but
 # fragment fields are indented four, so the id stayed live across the packet
 # body and any PROSE quoting the closure marker read as an event declaration.
@@ -61,7 +62,7 @@ critical_path:
     expected_behavior: "ok: file boundary isolated"
 
   - step: "the wrapper reports its grammar over the real ledger"
-    command: "mf_stage prod 0 OUT -- scripts/check-fragment-status-loss.sh && mf_holds_ere OUT '^(ok:no-fragment-status-loss:[0-9]+ checked|violation:fragment-status-loss:[0-9]+)$' && echo 'ok: wrapper grammar holds'"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; mf_stage prod 0 OUT -- \"$MFPLAN\" script run scripts/lua/check-fragment-status-loss.lua -- --plan \"$MFPLAN\" && mf_holds_ere OUT '^(ok:no-fragment-status-loss:[0-9]+ checked|violation:fragment-status-loss:[0-9]+)$' && echo 'ok: wrapper grammar holds'"
     timeout_ms: 30000
     expected_behavior: "ok: wrapper grammar holds"
 
@@ -71,7 +72,7 @@ critical_path:
   # completions is worse than no checker), and the skip must not read as a
   # violation.
   - step: "a plan binary predating the rule skips the closure-event pass loudly, not as a violation"
-    command: "T=$(mktemp -d); mkdir -p \"$T/target/release\" \"$T/scripts\" \"$T/plan/index.d\"; printf '#!/bin/sh\\n[ \"$1\" = capabilities ] && { printf \"status\\\\ncheck\\\\nquery\\\\n\"; exit 0; }\\n[ \"$1\" = status ] && { printf \\\"751-i9mb\\\\tready\\\\tprose-quotes-marker\\\\n\\\"; exit 0; }\\nexit 1\\n' > \"$T/target/release/tillandsias-plan.exe\"; chmod +x \"$T/target/release/tillandsias-plan.exe\"; cp scripts/check-fragment-status-loss.sh scripts/plan-binary-probe.sh \"$T/scripts/\"; printf 'packets:\\n  - packet_id: prose-quotes-marker\\n    order: 752-t\\n    status: ready\\n    title: \"x\"\\n    context: |\\n      quotes `type: completed`\\n    events:\\n      - type: filed\\n        ts: \"2026-08-15T03:20:00Z\"\\n        host: h\\n' > \"$T/plan/index.d/f.yaml\"; out=$(cd \"$T\" && bash scripts/check-fragment-status-loss.sh 2>&1); rc=$?; rm -rf \"$T\"; if [ $rc -ne 0 ]; then echo \"FAIL: stale binary refused as violation: rc=$rc out=$out\"; exit 1; fi; echo \"$out\" | grep -q 'predates fragment-terminal-events' && echo 'ok: stale binary skips loudly' || { echo \"FAIL: no skip note: $out\"; exit 1; }"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; R=$PWD; T=$(mktemp -d); mkdir -p \"$T/target/release\" \"$T/scripts\" \"$T/plan/index.d\"; printf '#!/bin/sh\\n[ \"$1\" = capabilities ] && { printf \"status\\\\ncheck\\\\nquery\\\\n\"; exit 0; }\\n[ \"$1\" = status ] && { printf \\\"751-i9mb\\\\tready\\\\tprose-quotes-marker\\\\n\\\"; exit 0; }\\nexit 1\\n' > \"$T/target/release/tillandsias-plan.exe\"; chmod +x \"$T/target/release/tillandsias-plan.exe\"; printf 'packets: []\\n' > \"$T/plan/index.yaml\"; printf 'packets:\\n  - packet_id: prose-quotes-marker\\n    order: 752-t\\n    status: ready\\n    title: \"x\"\\n    context: |\\n      quotes `type: completed`\\n    events:\\n      - type: filed\\n        ts: \"2026-08-15T03:20:00Z\"\\n        host: h\\n' > \"$T/plan/index.d/f.yaml\"; out=$(cd \"$T\" && env -u TILLANDSIAS_REPO_ROOT \"$MFPLAN\" script run \"$R/scripts/lua/check-fragment-status-loss.lua\" -- --plan \"$T/target/release/tillandsias-plan.exe\" 2>&1); rc=$?; rm -rf \"$T\"; if [ $rc -ne 0 ]; then echo \"FAIL: stale binary refused as violation: rc=$rc out=$out\"; exit 1; fi; echo \"$out\" | grep -q 'predates fragment-terminal-events' && echo 'ok: stale binary skips loudly' || { echo \"FAIL: no skip note: $out\"; exit 1; }"
     timeout_ms: 15000
     expected_behavior: "ok: stale binary skips loudly"
 
@@ -88,7 +89,7 @@ critical_path:
     # gate as an unexpected verdict. The guard's contract is one verdict line on
     # stdout with detail on stderr; this now honours it, and still needs stderr
     # because the stale-binary skip note is written there.
-    command: "_e=$(mktemp); out=$(scripts/check-fragment-status-loss.sh 2>\"$_e\"); err=$(cat \"$_e\"); rm -f \"$_e\"; printf '%s' \"$err\" | grep -q 'predates fragment-terminal-events' && { echo \"FAIL: current binary skipped the gate: $err\"; exit 1; }; case \"$out\" in ok:no-fragment-status-loss:*|violation:fragment-status-loss:*) echo 'ok: current binary enforces';; *) echo \"FAIL: unexpected verdict: $out\"; exit 1;; esac"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; _e=$(mktemp); out=$(\"$MFPLAN\" script run scripts/lua/check-fragment-status-loss.lua -- --plan \"$MFPLAN\" 2>\"$_e\"); err=$(cat \"$_e\"); rm -f \"$_e\"; printf '%s' \"$err\" | grep -q 'predates fragment-terminal-events' && { echo \"FAIL: current binary skipped the gate: $err\"; exit 1; }; case \"$out\" in ok:no-fragment-status-loss:*|violation:fragment-status-loss:*) echo 'ok: current binary enforces';; *) echo \"FAIL: unexpected verdict: $out\"; exit 1;; esac"
     timeout_ms: 30000
     expected_behavior: "ok: current binary enforces"
 
@@ -110,7 +111,7 @@ critical_path:
   # rather than yield an empty map that silently passes every packet — which is
   # precisely the failure this gate exists to catch.
   - step: "the batched fold is fail-safe, not fail-open"
-    command: "grep -q 'query --json --limit 0' scripts/check-fragment-status-loss.sh && grep -q 'batched fold unavailable' scripts/check-fragment-status-loss.sh && echo 'ok: batch has a loud fallback'"
+    command: "grep -qF '\"query\", \"--json\", \"--limit\", \"0\"' scripts/lua/check-fragment-status-loss.lua && grep -q 'batched fold unavailable' scripts/lua/check-fragment-status-loss.lua && echo 'ok: batch has a loud fallback'"
     timeout_ms: 5000
     expected_behavior: "ok: batch has a loud fallback"
 
@@ -123,7 +124,7 @@ critical_path:
   # a hermetic sandbox (not as a source grep) so the property survives any
   # future rewrite of how the two passes are sequenced.
   - step: "the closure-event pass runs on a fragment that declares no status at all"
-    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; T=$(mktemp -d); mkdir -p \"$T/scripts\" \"$T/plan/index.d\" \"$T/target/release\"; cp scripts/check-fragment-status-loss.sh scripts/plan-binary-probe.sh \"$T/scripts/\"; cp \"$MFPLAN\" \"$T/target/release/\"; printf 'plan_index:\\n  version: v1\\n  root: plan/\\n  steps:\\n    - packet_id: alpha-packet\\n      order: 900\\n      title: \"alpha\"\\n      status: ready\\n      kind: fix\\n      depends_on: []\\n' > \"$T/plan/index.yaml\"; printf 'events:\\n  - packet_id: alpha-packet\\n    event:\\n      type: completed\\n      ts: \"2026-08-17T03:10:00Z\"\\n      host: fixture\\n      summary: closed with no packets block\\n' > \"$T/plan/index.d/a.yaml\"; out=$(cd \"$T\" && bash scripts/check-fragment-status-loss.sh 2>&1); rc=$?; rm -rf \"$T\"; if [ $rc -ne 1 ]; then echo \"FAIL: events-only fragment was not examined: rc=$rc out=$out\"; exit 1; fi; echo \"$out\" | grep -q \"has a 'completed' EVENT but folds as 'ready'\" && echo 'ok: events-only fragment is examined' || { echo \"FAIL: wrong verdict: $out\"; exit 1; }"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; R=$PWD; T=$(mktemp -d); mkdir -p \"$T/scripts\" \"$T/plan/index.d\" \"$T/target/release\"; cp \"$MFPLAN\" \"$T/target/release/\"; printf 'plan_index:\\n  version: v1\\n  root: plan/\\n  steps:\\n    - packet_id: alpha-packet\\n      order: 900\\n      title: \"alpha\"\\n      status: ready\\n      kind: fix\\n      depends_on: []\\n' > \"$T/plan/index.yaml\"; printf 'events:\\n  - packet_id: alpha-packet\\n    event:\\n      type: completed\\n      ts: \"2026-08-17T03:10:00Z\"\\n      host: fixture\\n      summary: closed with no packets block\\n' > \"$T/plan/index.d/a.yaml\"; out=$(cd \"$T\" && env -u TILLANDSIAS_REPO_ROOT \"$MFPLAN\" script run \"$R/scripts/lua/check-fragment-status-loss.lua\" -- --plan \"$MFPLAN\" 2>&1); rc=$?; rm -rf \"$T\"; if [ $rc -ne 1 ]; then echo \"FAIL: events-only fragment was not examined: rc=$rc out=$out\"; exit 1; fi; echo \"$out\" | grep -q \"has a 'completed' EVENT but folds as 'ready'\" && echo 'ok: events-only fragment is examined' || { echo \"FAIL: wrong verdict: $out\"; exit 1; }"
     timeout_ms: 30000
     expected_behavior: "ok: events-only fragment is examined"
 
@@ -132,7 +133,7 @@ critical_path:
   # `declared`; a gate that refused every events-only fragment on sight would
   # satisfy the step above while being useless.
   - step: "a fragment set with neither declarations nor closure events still passes as 0 checked"
-    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; T=$(mktemp -d); mkdir -p \"$T/scripts\" \"$T/plan/index.d\" \"$T/target/release\"; cp scripts/check-fragment-status-loss.sh scripts/plan-binary-probe.sh \"$T/scripts/\"; cp \"$MFPLAN\" \"$T/target/release/\"; printf 'plan_index:\\n  version: v1\\n  root: plan/\\n  steps:\\n    - packet_id: alpha-packet\\n      order: 900\\n      title: \"alpha\"\\n      status: ready\\n      kind: fix\\n      depends_on: []\\n' > \"$T/plan/index.yaml\"; printf 'events:\\n  - packet_id: alpha-packet\\n    event:\\n      type: progress\\n      ts: \"2026-08-17T03:12:00Z\"\\n      host: fixture\\n      summary: progress is not a closure\\n' > \"$T/plan/index.d/a.yaml\"; out=$(cd \"$T\" && bash scripts/check-fragment-status-loss.sh 2>&1); rc=$?; rm -rf \"$T\"; if [ $rc -ne 0 ]; then echo \"FAIL: nothing-to-examine refused: rc=$rc out=$out\"; exit 1; fi; case \"$out\" in 'ok:no-fragment-status-loss:0 checked') echo 'ok: nothing to examine stays quiet';; *) echo \"FAIL: unexpected verdict: $out\"; exit 1;; esac"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; R=$PWD; T=$(mktemp -d); mkdir -p \"$T/scripts\" \"$T/plan/index.d\" \"$T/target/release\"; cp \"$MFPLAN\" \"$T/target/release/\"; printf 'plan_index:\\n  version: v1\\n  root: plan/\\n  steps:\\n    - packet_id: alpha-packet\\n      order: 900\\n      title: \"alpha\"\\n      status: ready\\n      kind: fix\\n      depends_on: []\\n' > \"$T/plan/index.yaml\"; printf 'events:\\n  - packet_id: alpha-packet\\n    event:\\n      type: progress\\n      ts: \"2026-08-17T03:12:00Z\"\\n      host: fixture\\n      summary: progress is not a closure\\n' > \"$T/plan/index.d/a.yaml\"; out=$(cd \"$T\" && env -u TILLANDSIAS_REPO_ROOT \"$MFPLAN\" script run \"$R/scripts/lua/check-fragment-status-loss.lua\" -- --plan \"$MFPLAN\" 2>&1); rc=$?; rm -rf \"$T\"; if [ $rc -ne 0 ]; then echo \"FAIL: nothing-to-examine refused: rc=$rc out=$out\"; exit 1; fi; case \"$out\" in 'ok:no-fragment-status-loss:0 checked') echo 'ok: nothing to examine stays quiet';; *) echo \"FAIL: unexpected verdict: $out\"; exit 1;; esac"
     timeout_ms: 30000
     expected_behavior: "ok: nothing to examine stays quiet"
 
@@ -145,7 +146,7 @@ critical_path:
   # diff-scoped, so a malformed fragment arriving by merge, hand edit, or
   # sibling branch never reaches it. Pinned here at the point of use.
   - step: "MUTATION CONTROL: an UNPARSEABLE fragment refuses instead of passing as 'no events'"
-    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; T=$(mktemp -d); mkdir -p \"$T/scripts\" \"$T/plan/index.d\" \"$T/target/release\"; cp scripts/check-fragment-status-loss.sh scripts/plan-binary-probe.sh \"$T/scripts/\"; cp \"$MFPLAN\" \"$T/target/release/\"; printf 'plan_index:\\n  version: v1\\n  root: plan/\\n  steps:\\n    - packet_id: alpha-packet\\n      order: 900\\n      title: \"alpha\"\\n      status: ready\\n      kind: fix\\n      depends_on: []\\n' > \"$T/plan/index.yaml\"; printf 'packets:\\n  - packet_id: alpha-packet\\n    order: 900\\n    status: ready\\n    title: carries a closure the parser never reaches\\n    events:\\n      - type: completed\\n        ts: 2026-08-17T03:12:00Z\\n        host: fixture\\n        summary: broke the parse: an unquoted colon-space does it\\n' > \"$T/plan/index.d/a.yaml\"; out=$(cd \"$T\" && bash scripts/check-fragment-status-loss.sh 2>&1); rc=$?; rm -rf \"$T\"; if [ $rc -ne 1 ]; then echo \"FAIL: unparseable fragment passed the event pass: rc=$rc out=$out\"; exit 1; fi; case \"$out\" in *violation:fragment-status-loss:1*) ;; *) echo \"FAIL: wrong verdict: $out\"; exit 1;; esac; case \"$out\" in *UNPARSEABLE*) echo 'ok: an unreadable fragment refuses loudly';; *) echo \"FAIL: the refusal never said the fragment was unreadable: $out\"; exit 1;; esac"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; R=$PWD; T=$(mktemp -d); mkdir -p \"$T/scripts\" \"$T/plan/index.d\" \"$T/target/release\"; cp \"$MFPLAN\" \"$T/target/release/\"; printf 'plan_index:\\n  version: v1\\n  root: plan/\\n  steps:\\n    - packet_id: alpha-packet\\n      order: 900\\n      title: \"alpha\"\\n      status: ready\\n      kind: fix\\n      depends_on: []\\n' > \"$T/plan/index.yaml\"; printf 'packets:\\n  - packet_id: alpha-packet\\n    order: 900\\n    status: ready\\n    title: carries a closure the parser never reaches\\n    events:\\n      - type: completed\\n        ts: 2026-08-17T03:12:00Z\\n        host: fixture\\n        summary: broke the parse: an unquoted colon-space does it\\n' > \"$T/plan/index.d/a.yaml\"; out=$(cd \"$T\" && env -u TILLANDSIAS_REPO_ROOT \"$MFPLAN\" script run \"$R/scripts/lua/check-fragment-status-loss.lua\" -- --plan \"$MFPLAN\" 2>&1); rc=$?; rm -rf \"$T\"; if [ $rc -ne 1 ]; then echo \"FAIL: unparseable fragment passed the event pass: rc=$rc out=$out\"; exit 1; fi; case \"$out\" in *violation:fragment-status-loss:1*) ;; *) echo \"FAIL: wrong verdict: $out\"; exit 1;; esac; case \"$out\" in *UNPARSEABLE*) echo 'ok: an unreadable fragment refuses loudly';; *) echo \"FAIL: the refusal never said the fragment was unreadable: $out\"; exit 1;; esac"
     timeout_ms: 30000
     expected_behavior: "ok: an unreadable fragment refuses loudly"
 
@@ -155,7 +156,7 @@ critical_path:
   # the closure is real and readable, so the correct answer is the ordinary
   # attribution refusal naming the packet — never an unparseable verdict.
   - step: "NEGATIVE CONTROL: the parseable twin is read and judged on its merits"
-    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; T=$(mktemp -d); mkdir -p \"$T/scripts\" \"$T/plan/index.d\" \"$T/target/release\"; cp scripts/check-fragment-status-loss.sh scripts/plan-binary-probe.sh \"$T/scripts/\"; cp \"$MFPLAN\" \"$T/target/release/\"; printf 'plan_index:\\n  version: v1\\n  root: plan/\\n  steps:\\n    - packet_id: alpha-packet\\n      order: 900\\n      title: \"alpha\"\\n      status: ready\\n      kind: fix\\n      depends_on: []\\n' > \"$T/plan/index.yaml\"; printf 'packets:\\n  - packet_id: alpha-packet\\n    order: 900\\n    status: ready\\n    title: same fragment with the summary quoted\\n    events:\\n      - type: completed\\n        ts: 2026-08-17T03:12:00Z\\n        host: fixture\\n        summary: \\\"broke the parse: an unquoted colon-space does it\\\"\\n' > \"$T/plan/index.d/a.yaml\"; out=$(cd \"$T\" && bash scripts/check-fragment-status-loss.sh 2>&1); rc=$?; rm -rf \"$T\"; if [ $rc -ne 1 ]; then echo \"FAIL: the parseable twin was not judged: rc=$rc out=$out\"; exit 1; fi; case \"$out\" in *UNPARSEABLE*) echo \"FAIL: a valid fragment was reported unparseable: $out\"; exit 1;; esac; case \"$out\" in *alpha-packet*) echo 'ok: the parseable twin is judged on its merits';; *) echo \"FAIL: wrong verdict: $out\"; exit 1;; esac"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; R=$PWD; T=$(mktemp -d); mkdir -p \"$T/scripts\" \"$T/plan/index.d\" \"$T/target/release\"; cp \"$MFPLAN\" \"$T/target/release/\"; printf 'plan_index:\\n  version: v1\\n  root: plan/\\n  steps:\\n    - packet_id: alpha-packet\\n      order: 900\\n      title: \"alpha\"\\n      status: ready\\n      kind: fix\\n      depends_on: []\\n' > \"$T/plan/index.yaml\"; printf 'packets:\\n  - packet_id: alpha-packet\\n    order: 900\\n    status: ready\\n    title: same fragment with the summary quoted\\n    events:\\n      - type: completed\\n        ts: 2026-08-17T03:12:00Z\\n        host: fixture\\n        summary: \\\"broke the parse: an unquoted colon-space does it\\\"\\n' > \"$T/plan/index.d/a.yaml\"; out=$(cd \"$T\" && env -u TILLANDSIAS_REPO_ROOT \"$MFPLAN\" script run \"$R/scripts/lua/check-fragment-status-loss.lua\" -- --plan \"$MFPLAN\" 2>&1); rc=$?; rm -rf \"$T\"; if [ $rc -ne 1 ]; then echo \"FAIL: the parseable twin was not judged: rc=$rc out=$out\"; exit 1; fi; case \"$out\" in *UNPARSEABLE*) echo \"FAIL: a valid fragment was reported unparseable: $out\"; exit 1;; esac; case \"$out\" in *alpha-packet*) echo 'ok: the parseable twin is judged on its merits';; *) echo \"FAIL: wrong verdict: $out\"; exit 1;; esac"
     timeout_ms: 30000
     expected_behavior: "ok: the parseable twin is judged on its merits"
 
@@ -168,4 +169,4 @@ observability:
     test: "fragment-status-loss-attribution-shape"
 
 rollback:
-  on_failure: "restore scripts/check-fragment-status-loss.sh, the fragment-terminal-events subcommand, and the capabilities manifest from git history"
+  on_failure: "restore scripts/lua/check-fragment-status-loss.lua (before 1570-mxcg: scripts/check-fragment-status-loss.sh), the fragment-terminal-events subcommand, and the capabilities manifest from git history"

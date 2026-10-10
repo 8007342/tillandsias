@@ -81,3 +81,6 @@ tempfile = "3"
 # test-util: paused-clock tests for the tick-loop wait (SC-16 slice 3);
 # precedent: tillandsias-metrics.
 tokio = { workspace = true, features = ["full", "test-util"] }
+
+[lints]
+workspace = true

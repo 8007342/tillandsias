@@ -1,0 +1,94 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: windows-tray-tests-write-scratch-targets-into-the-operators-real-credential-manager-and-a-killed-test-process-leaks-them
+    order: 1562-uxhc
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [windows, tests, credential-manager, hygiene, guard]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-windows-tray/src/installation_uuid.rs
+    title: |
+      The windows-tray tests write tillandsias-vm-uuid-test-* / vault-*-test-* targets into the operator's REAL Credential Manager and rely on a Drop guard to remove them, so any abnormal end of the test process (kill, timeout, a process exit, an abort) leaks them; at least three are in yolanda's real store now
+    context: |
+      Found in the v56.10.8.1 Windows smoke (yolanda-windows 2026-10-08,
+      plan/issues/smoke-e2e-findings-v56.10.8.1-2026-10-08-windows-yolanda.md):
+      the operator's real Credential Manager holds
+        tillandsias-vm-uuid-test-1119fd3d-31a6-4c4b-8616-f2fdf5746d74
+      and, after a day of test runs on this host, also
+        vault-shamir-share-v1-test-9a1e115f-6ed9-407f-9964-2e3aca3e6d80
+        vault-root-token-v1-test-9a1e115f-6ed9-407f-9964-2e3aca3e6d80
+      None was touched; the operator decides about deletion.
+      WRITERS, read from the code (crates/tillandsias-windows-tray/src/
+      installation_uuid.rs, mod tests): credential_manager_persists_uuid_across_calls
+      writes tillandsias-vm-uuid-test-<uuid>; a_guest_wipe_clears_the_host_side_vault_credentials
+      writes vault-shamir-share-v1-test-<run> and vault-root-token-v1-test-<run>;
+      1562-bqcg's fake-guest tests write all three. All of them write through
+      the REAL CredWriteW (CRED_PERSIST_LOCAL_MACHINE) and clean up only in a
+      CredCleanup Drop guard (`let _ = delete...`), which never runs when the
+      process is killed or exits, and swallows a failed delete.
+      MEASURED: each of the four tests, run alone, leaves nothing behind (count
+      of -test- targets 3 before and 3 after each), so the leaks come from runs
+      that ended abnormally, which is exactly what a Drop guard cannot cover.
+    exit_criteria:
+      - 'every windows-tray test that needs a credential store uses a scratch backend (an in-memory store behind the same read/write/delete seam, or a per-run namespace the FIXTURE removes before and after, even after an abnormal end), so no test writes the real store'
+      - 'a guard refuses a test that calls the real CredWriteW / write_credential_string / write_installation_uuid_to outside the scratch seam (pre-fix: four tests do)'
+      - 'the real-store round-trip coverage (credential_manager_persists_uuid_across_calls) moves to an opt-in integration test that a person runs deliberately, and it removes stale -test- targets from earlier aborted runs by name'
+    verifiable_closure: |
+      The guard refuses a sabotaged test that writes the real store; the
+      windows-tray suite leaves the -test- count unchanged even when killed
+      mid-run (measured).
+      unscoreable: unpinnable-until-the-guard-exists — the guard is the deliverable.
+    events:
+      - type: filed
+        ts: "2026-10-08T23:45:34Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Filed at the coordinator's request after the v56.10.8.1 smoke; writers found by reading the code, not by re-running against the real store.
+  - packet_id: install-windows-ps1-verifies-only-the-sha256-manifest-and-never-checks-the-cosign-bundles-the-release-ships
+    order: 1562-hsa8
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [windows, installer, supply-chain, cosign, signing]
+    estimated_hours: 3
+    owned_files:
+      - scripts/install-windows.ps1
+    title: |
+      install-windows.ps1 checks the downloaded zip against SHA256SUMS-windows but never verifies a cosign signature, although the release ships a .cosign.bundle for the zip, the exe, the installer and the manifest; the SHA-256 manifest comes from the same place as the zip, so it only proves the download was not truncated
+    context: |
+      Measured in the v56.10.8.1 Windows smoke (yolanda-windows 2026-10-08):
+      the installer printed "Fetching SHA256SUMS-windows...", "Verifying
+      SHA-256..." and "sha256: ok (54836fc8...)" and NO cosign or signature line
+      at all. The release assets include install-windows.ps1.cosign.bundle,
+      SHA256SUMS-windows.cosign.bundle, tillandsias-tray.exe.cosign.bundle and a
+      bundle per zip. Distinct from 1273-4mak, which is about the release SMOKE
+      verifying signatures; this row is the END-USER installer. Constraint:
+      operator ruling 2026-10-08, the installer is for end users and prints no
+      power-user text, so a verification is silent on success and a failure is
+      one plain line plus the log path (1561-9f4x). Where cosign itself comes
+      from on an end user's Windows host (bundled verifier vs a pinned
+      download) is part of the design and an operator question if it adds a
+      download.
+    exit_criteria:
+      - 'the installer verifies SHA256SUMS-windows (and through it the zip) against its cosign bundle before trusting the manifest, and refuses to install on a bad signature, with one end-user line and the log path (pre-fix: no attempt at all)'
+      - 'a fixture tampers the manifest or the bundle and the installer refuses; an untampered release passes silently'
+    verifiable_closure: |
+      The tamper fixture plus one recorded curl install of a signed tag showing
+      the verification in the install log.
+      unscoreable: unpinnable-until-the-guard-exists — the fixture is the deliverable.
+    events:
+      - type: filed
+        ts: "2026-10-08T23:45:34Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Filed at the coordinator's request from the v56.10.8.1 smoke (cosign not attempted on Windows).

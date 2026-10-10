@@ -23,6 +23,7 @@
 
 use sha2::{Digest, Sha256};
 use std::io::Read;
+#[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 
 #[path = "support/qcow2_fixture.rs"]
@@ -199,6 +200,10 @@ fn final_size_grows_the_image_without_changing_its_content() {
         );
     }
 
+    // Allocated blocks are a unix metadata field (st_blocks); Windows has no
+    // equivalent on Metadata, so the sparseness half runs on unix only and
+    // the rest of this test still runs everywhere (958-w4kq).
+    #[cfg(unix)]
     assert!(
         meta.blocks() * 512 < grown / 2,
         "grown image must stay sparse (allocated {} of {grown})",

@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-enclave-resolver-drop-in-makes-the-podman-enclave-dns-the-guests-only-upstream-so-any-state-without-that-network-has-no-dns-and-cannot-pull-the-images-that-would-recreate-it
+    order: 1558-8swa
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [enclave, dns, systemd-resolved, wsl, podman, vault]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      headless's /etc/systemd/resolved.conf.d/tillandsias-enclave.conf sets DNS=10.0.42.1 (the enclave network's own DNS) with Domains=~vault, which makes it systemd-resolved's ONLY global upstream; whenever that network is absent (after podman system reset, or after a guest restart before the enclave is re-ensured on WSL, where eth0 DNS is set only at runtime) every lookup fails, and the on-demand Vault image pull cannot run, a deadlock
+    context: |
+      MEASURED on yolanda-windows 2026-10-08 during 1437-3iux's live SOFT arm.
+      After `podman system reset --force` in the tillandsias distro:
+        resolvectl dns   ->  Global: 10.0.42.1   Link 2 (eth0): (empty)
+        curl registry    ->  Resolving timed out after 15001 ms
+        vault bootstrap  ->  "vault image missing - building on demand", then
+                             pinging registry-1.docker.io failed (3/3), exit 125
+      The build distro on the same host resolved fine (HTTP 401), so this is the
+      drop-in, not WSL. Mechanism, from crates/tillandsias-headless/src/main.rs
+      ensure_enclave_host_dns: the drop-in names the enclave gateway as DNS for
+      ALL names (a Domains=~vault routing domain does not stop a Global DNS= from
+      being the default upstream), and on WSL the eth0 tunnel DNS is set only at
+      runtime by `resolvectl dns eth0 <ns>` inside the same function. So the
+      guest's DNS works only while the enclave network exists AND ensure ran
+      since the last resolved restart. The vault on-demand bootstrap pulls its
+      image BEFORE the enclave network is ensured, so a guest without the
+      network cannot get it back.
+      WORKED AROUND for the Windows SOFT reset in 1437-3iux (work/1437-3iux
+      4db3fbfd8): the SOFT guest wipe removes the drop-in with the network.
+      That does not cover a plain guest restart or a Linux host whose network
+      was removed some other way.
+    exit_criteria:
+      - 'the enclave name is routed WITHOUT making the enclave DNS the global upstream: e.g. DNS= on a per-link basis for the enclave bridge (resolvectl dns <bridge> 10.0.42.1; domain <bridge> ~vault), or a drop-in that cannot capture non-vault names; pre-fix: Global 10.0.42.1 captures every lookup'
+      - 'with the enclave network absent, the guest still resolves registry-1.docker.io (a fixture or a measured guest run); pre-fix: "Resolving timed out" on yolanda-windows 2026-10-08'
+      - 'the WSL eth0 tunnel DNS survives a systemd-resolved restart, or is re-applied before any image pull; pre-fix: set only inside ensure_enclave_host_dns'
+    verifiable_closure: |
+      A guest run (or fixture) with the enclave network removed resolves a public
+      name and pulls the vault image; plus a pin that the drop-in does not set a
+      global DNS= upstream. Pre-fix evidence: yolanda-windows 2026-10-08 above.
+      unscoreable: unpinnable-until-the-guard-exists — the pin is the deliverable
+      and lands with the fix.
+    events:
+      - type: filed
+        ts: "2026-10-08T18:41:26Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Found on 1437-3iux's live SOFT arm; the Windows SOFT reset works around
+          it by removing the drop-in, and this row is the general fix.

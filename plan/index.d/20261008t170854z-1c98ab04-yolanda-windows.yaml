@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-probe-usage-guard-takes-22-minutes-per-run-on-windows-msys-so-its-15-run-corpus-arm-takes-5-hours-there
+    field: status
+    value: completed
+    ts: "2026-10-08T17:08:54Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: the-probe-usage-guard-takes-22-minutes-per-run-on-windows-msys-so-its-15-run-corpus-arm-takes-5-hours-there
+    event:
+      type: completed
+      ts: "2026-10-08T17:08:54Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: 6649cf50d (1500-gu5r) + 5e7e1ea07: ok:plan-binary-probe-usage:27 eligible of 1596 scanned wall=15s (pre 1303s); ok:plan-binary-probe-usage-determinism-corpus:1 15 runs agree wall=215s (native yolanda-windows)
+  - packet_id: the-probe-usage-guard-takes-22-minutes-per-run-on-windows-msys-so-its-15-run-corpus-arm-takes-5-hours-there
+    event:
+      type: note
+      ts: "2026-10-08T17:08:54Z"
+      host: yolanda-windows
+      summary: |-
+        Re-measured on yolanda-windows (Git Bash, MINGW64_NT-10.0-26300) 2026-10-08, trunk origin/linux-next 5e7e1ea07, single guard run, no preflight around it:   bash scripts/check-plan-binary-probe-usage.sh   -> ok:plan-binary-probe-usage:27 eligible of 1596 scanned [scripts=13/904 litmus=14/525 entry=0/167]      rc=0 wall=15s   (pre-fix 1303 s, rc=0, 25 eligible of 1390 scanned, 2026-09-27)   bash scripts/test-plan-binary-probe-usage-determinism-corpus.sh   -> ok:plan-binary-probe-usage-determinism-corpus:1 — 15 runs agree in 214492ms, rc=0 wall=215s      (pre-fix estimate about 5.4 h; a run was stopped unfinished after about 2.5 h) CAUSE AND FIX: 6649cf50d (1500-gu5r, 2026-09-29), "prefilters both loops with one bulk grep". The per-file loops now run only on files the bulk grep names, so the MSYS per-file process-spawn cost (the suspected cause in this row's context) is paid for about 27 files, not 1596. That is an 87x speedup on this host, on a larger population. STATED BUDGET for the Windows/MSYS regime: one whole-repo run of the guard at 30 s or less (measured 15 s, 2x headroom; the same order as Linux, 6.6 s on pirria pre-1500). The corpus arm (15 runs) at 6 min or less (measured 215 s). No exemption is needed; the corpus arm needs no Windows skip. The pre-commit decider cost on this host drops from about 22 min to about 15 s per commit.

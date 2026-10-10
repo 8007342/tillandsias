@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: windows-vault-store-and-download-cache-are-host-persistent-across-reset
+    field: status
+    value: in_progress
+    ts: "2026-10-08T17:46:49Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: windows-vault-store-and-download-cache-are-host-persistent-across-reset
+    event:
+      type: note
+      ts: "2026-10-08T17:46:49Z"
+      host: yolanda-windows
+      summary: |-
+        yolanda-windows: S1 SOFT reset body, test-first (coordinator-approved plan 2026-10-08)
+  - packet_id: windows-vault-store-and-download-cache-are-host-persistent-across-reset
+    event:
+      type: note
+      ts: "2026-10-08T17:46:49Z"
+      host: yolanda-windows
+      summary: |-
+        wip-override by yolanda-windows: held packets are READY PRs awaiting the coordinator's post-cut queue (#226 #228 #229 #233 #236) plus 798-vxj5/1553-gsp2 in review; coordinator approved the 1437-3iux plan and assigned S1 (2026-10-08) — admitted past: refused:set-field:wip-limit:5/3 — yolanda-windows already holds 5 in_progress packet(s) outside a story: 798-vxj5, 1553-gsp2, 1553-5x9x, 1553-6e3q, 1554-prxf (1367-2sbc; the limit is 3, from methodology/distributed-work.yaml packet_discipline.wip_limit).

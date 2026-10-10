@@ -1,0 +1,36 @@
+# Found 2026-10-07 while baselining trunk litmus reds on macuahuitl.
+packets:
+  - packet_id: opencode-2x-has-no-opencode-auth-content-path-so-the-vault-derived-forge-login-breaks-when-npm-latest-moves-to-2x-and-the-litmus-reads-host-path-binaries
+    order: 1553-7uge
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [opencode, vault, auth, default-image, litmus, version-pin]
+    estimated_hours: 3
+    title: |
+      litmus:opencode-vault-auth-content is red on macuahuitl because Homebrew's opencode 2.0.20 is first on PATH and contains no OPENCODE_AUTH_CONTENT support (0 occurrences in the binary; 1.18.35 has 2); with npm opencode-ai 1.18.35 first on PATH the same litmus passes 3/3 — the fixture judges a host binary the forge does not ship, and the forge's Vault-derived login will break once npm latest moves to 2.x
+    context: |
+      Measured 2026-10-07 on trunk 95350b0c8: opencode on PATH is
+      /home/linuxbrew/.linuxbrew/bin/opencode (opencode/2.0.20, linked
+      2026-10-01). opencode auth list under OPENCODE_AUTH_CONTENT prints "No
+      authenticated integrations". npm opencode-ai latest is 1.18.35, the
+      only channel the forge installs from; with it first on PATH the
+      litmus reports version=1.18.35 provider=google count=1 and passes.
+      Two problems: (1) the installed-binary arm reads whatever opencode is
+      on the host PATH instead of the version line the forge ships; (2) the
+      2.x line has apparently dropped the env-var credential path, which the
+      forge's Vault-derived login depends on.
+    exit_criteria:
+      - 'the installed-binary arm accepts evidence only from the version line the forge installs and reports a named skip for any other opencode on PATH; pre-fix: red on a host with opencode 2.0.20 first on PATH'
+      - 'the forge image pins the opencode-ai version it installs, or the row records the 2.x credential mechanism that replaces OPENCODE_AUTH_CONTENT and the forge login uses it'
+    verifiable_closure: |
+      litmus:opencode-vault-auth-content passes on macuahuitl with Homebrew
+      opencode 2.0.20 first on PATH (named skip of the host arm) and with
+      1.18.35 first on PATH (full pass).
+    depends_on: []
+    next_action: >
+      Read the installed-binary arm of the opencode-vault-auth-content
+      fixture and how images/default installs opencode-ai; check the 2.x
+      changelog for the credential mechanism that replaced the env var.

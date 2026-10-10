@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: attest-native-lint-falls-back-to-uname-n-and-refuses-an-empty-host-instead-of-writing-a-trailer-whose-fields-shift
+    field: status
+    value: in_progress
+    ts: "2026-10-09T02:05:30Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: attest-native-lint-falls-back-to-uname-n-and-refuses-an-empty-host-instead-of-writing-a-trailer-whose-fields-shift
+    event:
+      type: progress
+      ts: "2026-10-09T02:05:30Z"
+      host: yolanda-windows
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: https://github.com/8007342/tillandsias/pull/259
+  - packet_id: attest-native-lint-falls-back-to-uname-n-and-refuses-an-empty-host-instead-of-writing-a-trailer-whose-fields-shift
+    event:
+      type: note
+      ts: "2026-10-09T02:05:30Z"
+      host: yolanda-windows
+      summary: |-
+        claimed 2026-10-09T01:34Z; the claim event alone left status ready; PR 259 READY
+  - packet_id: attest-native-lint-falls-back-to-uname-n-and-refuses-an-empty-host-instead-of-writing-a-trailer-whose-fields-shift
+    event:
+      type: note
+      ts: "2026-10-09T02:05:30Z"
+      host: yolanda-windows
+      summary: |-
+        wip-override by yolanda-windows: coordinator-directed (mecuahuitl-fedora 2026-10-09); the held orders are READY PRs (#243 #245 #247 #249 #250 #251 #253 #252 #255) awaiting the coordinator's land, which waits on the operator unlocking its keyring - none is idle work — admitted past: refused:set-field:wip-limit:13/3 — yolanda-windows already holds 13 in_progress packet(s) outside a story: 798-vxj5, 1437-3iux, 1553-gsp2, 1553-5x9x, 1553-6e3q, 1553-q3wi, 1554-prxf, 1556-b2tq, 1559-9uvb, 1559-sqzp, 1559-2uw3, 1560-g5d9, 1561-47a8 (1367-2sbc; the limit is 3, from methodology/distributed-work.yaml packet_discipline.wip_limit).

@@ -12,3 +12,6 @@ description = "Tillandsia-palette terminal progress rendering with truecolor/256
 # golden tests need no terminal.
 indicatif = "0.17"
 console = "0.15"
+
+[lints]
+workspace = true

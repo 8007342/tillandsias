@@ -100,7 +100,7 @@ expect "mixed-corpus-counts-fragments" "$T" "advisory:carry-forward:2 of 3 fragm
 
 # ── An UNREADABLE fragment is not an empty one (787-f7dh) ───────────────────
 # It must not be counted as checked, and it must not be counted as clean. The
-# hard refusal for this class is check-fragment-status-loss.sh's; here it is
+# hard refusal for this class is check-fragment-status-loss.lua's; here it is
 # excluded from the denominator so the ratio never flatters itself.
 T="$(new_root)"
 printf 'packets:\n  - packet_id: x\n    events:\n      - type: note\n        summary: broke the parse: an unquoted colon-space does it\n' > "$T/plan/index.d/a.yaml"

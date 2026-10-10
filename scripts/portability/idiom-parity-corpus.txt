@@ -1,0 +1,51 @@
+# idiom-parity-corpus.txt — DATA for scripts/test-portability-idioms.sh's
+# PARITY arm (1570-g4rx). Not a script: the advisory scans *.sh only, so the
+# idioms below are never counted against the live tree. The fixture splits this
+# file on its `=== <path>` headers into a scratch tree, runs the pre-port .sh
+# (pinned from git) and the Lua port over it, and requires identical entries.
+# One instance of every flagged class, in a SILENT file (a hook) and a LOUD one
+# (a fixture), plus every false-positive control the .sh's comments name.
+=== scripts/hooks/pre-push-corpus.sh
+#!/usr/bin/env bash
+sed -i "s/a/b/" "$1"
+sed -i '' 's/a/b/' "$1"
+grep -Rl foo .claude/skills
+hits=$(rg -n foo)
+find . -name x -printf '%p\n'
+touch -d '1 hour ago' "$1"
+touch -t 209901010000 "$1"
+touch -t 200001010000 "$1"
+[ "$(wc -l < "$1")" = 1 ] && echo one
+readlink -f "$1"
+date -d "2026-01-01" +%s
+stat -c %s "$1"
+# --- controls below: none of these may be flagged
+# sed -i in a comment is not code
+img_bytes=$(stat -f%z "$1" 2>/dev/null || stat -c%s "$1" 2>/dev/null || echo 0)
+touch -d '+1 hour' "$1" 2>/dev/null \
+    || touch -t 202001010000 "$1"
+d=$(date -d "$x" +%s 2>/dev/null || date -jf '%Y' "$x" +%s)
+n=$(wc -l < "$1" | tr -d '[:space:]'); [ "$n" = 1 ] && echo one
+r=$(cd "$(dirname "$1")" && pwd); readlink -f "$1" || r=$(cd x && pwd)
+grep -r foo skills/
+podman run img sh -c "readlink -f /x"
+_SNIP="readlink -f /y"
+_script="echo; $_SNIP"
+podman run img sh -c "$_script"
+=== scripts/test-corpus.sh
+#!/usr/bin/env bash
+sed -i "s/a/b/" "$1"
+find . -printf '%f\n'
+stat -c %Y "$1"
+date -d yesterday
+if sed --version 2>/dev/null | grep -q GNU; then
+    sed -i "0,/a/s//b/" "$1"
+else
+    awk '{print}' "$1" > "$1.t" && mv "$1.t" "$1"
+fi
+  rg <muster>   Ripgrep
+x=$(rg -n foo "$ROOT")
+y=$(rg -n foo < /dev/null)
+=== build.sh
+#!/usr/bin/env bash
+readlink -f "$0"

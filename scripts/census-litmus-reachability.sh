@@ -25,14 +25,14 @@
 # Three found without looking is the signal that counting is worth doing.
 #
 # WHAT A MISMATCH COSTS, in the words of the guard that already refuses NEW ones
-# (check-litmus-bindings.sh, 1304-wbb2): "It will RUN and be credited to the
+# (check-litmus-bindings, 1304-wbb2): "It will RUN and be credited to the
 # wrong spec, while the spec it names reads covered with nothing behind it."
 # That guard is DIFF-SCOPED — it fires only on newly ADDED bindings — so every
 # pre-existing mismatch is inherited and silent. Correct construction, and it
 # means nothing counts the standing set. This does.
 #
 # Multi-spec declarations are honoured: `spec: a, b, c` matches a binding under
-# any of a, b or c, exactly as check-litmus-bindings.sh splits them. Counting
+# any of a, b or c, exactly as check-litmus-bindings.lua splits them. Counting
 # them as mismatches inflates the number by 7 on this corpus, which is how the
 # first version of this script was wrong.
 #

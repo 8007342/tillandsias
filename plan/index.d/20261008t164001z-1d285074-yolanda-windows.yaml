@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: on-native-windows-a-timed-out-command-whose-grandchild-holds-the-pipe-leaks-a-blocking-reader-thread-and-the-orphan-so-a-400ms-timeout-test-takes-120s-to-finish
+    field: context
+    value: |-
+      MEASURED on yolanda-windows 2026-10-08, native:
+        cargo test -p tillandsias-exec --test executor_contract timeout_on_a_sigterm
+        -> ok, finished in 120.09s   (child: sh -c "trap '' TERM; sleep 120")
+      With a probe around the call: "run returned after 429.729ms". The deadline
+      works. The remaining time is runtime shutdown waiting on the stdout/stderr
+      reader. On Windows that reader is a blocking-pool thread, and dropping the
+      future does not cancel it. The reader holds a pipe the orphaned sleep keeps
+      open, because an UNGROUPED deadline kills only the child. That is the
+      documented 1384-aixy contract on both OSes, pinned by group_kill's
+      control_an_ungrouped_deadline_leaves_the_grandchild_running.
+      TEST FIRST: a_timeout_does_not_leave_the_pipe_held_past_the_run builds and
+      drops its own runtime so the bound covers shutdown. Pre-fix: red, "held the
+      run for 60.0478867s" (sleep 60).
+      COORDINATOR RULING 2026-10-08, option (A): keep 1384-aixy. Fix only the
+      Windows-specific part: a timed-out run's pipe readers must not hold the
+      runtime.
+      REJECTED (B), recorded so the measurement is not lost: giving every TIMED
+      Windows run a terminate-only job object (no KILL_ON_JOB_CLOSE) took
+      executor_contract from 120 s to 5.79 s and greened the new test. But it
+      turned the 1384-aixy ungrouped control red, and Windows would then diverge
+      from Unix.
+      RESIDUAL, stated rather than claimed fixed: with (A), the detached reader
+      thread for an UNGROUPED orphan stays parked in its read until that orphan
+      exits or writes. That is one thread per such orphan. It is unbounded in a
+      long-lived process (the tray, the plan binary's script host) that keeps
+      timing out ungrouped commands whose descendants never exit. .group(true)
+      ends the tree, and with it the thread.
+    ts: "2026-10-08T16:40:01Z"
+    host: yolanda-windows
+    replaces_sha256: "4dcdcd04c953b4a4fe7c36e7fff41e14e66b973264b59e1ab9d006d57e6d5659"
+
+events:
+  - packet_id: on-native-windows-a-timed-out-command-whose-grandchild-holds-the-pipe-leaks-a-blocking-reader-thread-and-the-orphan-so-a-400ms-timeout-test-takes-120s-to-finish
+    event:
+      type: note
+      ts: "2026-10-08T16:40:01Z"
+      host: yolanda-windows
+      summary: |-
+        coordinator ruling 2026-10-08 option A: the 1384-aixy contract (an ungrouped deadline kills only the child) stays on both OSes; context records the rejected option B measurement and the parked-reader residual

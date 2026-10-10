@@ -1,0 +1,153 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed 2026-10-10 on macuahuitl with 1570-k5yt: the tooling the carried_obligations
+# pattern (methodology/convergence.yaml) names and does not yet have.
+packets:
+  - packet_id: a-lua-guard-prints-what-a-change-owes-each-carried-obligation-backlog-not-due-paid-waived-or-due-with-the-smallest-item-and-the-waiver-line-to-paste
+    order: 1577-g96z
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, ci-gate, carried-obligation, ratchet, preflight]
+    estimated_hours: 4
+    owned_files:
+      - scripts/lua/check-carried-obligations.lua
+      - methodology/convergence.yaml
+      - build.sh
+    title: |
+      Nothing tells an agent what its change owes the shell-to-lua backlog: methodology carried_obligations defines due / paid / waived and the Carried-Waiver trailer, but no tool reads the backlog table, the change's diff or its trailers, so the obligation lives only in prose. Write scripts/lua/check-carried-obligations.lua and run it from ./build.sh --preflight, scripts/relay-preflight.sh and the work-ref pre-push warn lane
+    context: |
+      Rule: methodology/convergence.yaml carried_obligations (1570-k5yt), first
+      instance openspec/specs/ci-release req-id ec267f02. The guard reads
+      carried_obligations.backlogs with yaml.parse, computes the change's paths
+      from `git diff --name-only BASE...HEAD` (BASE default origin/linux-next,
+      as the -added deciders do) through proc.run argv, reads trailers with
+      `git log --format=%(trailers:key=Carried-Waiver,valueonly) BASE..HEAD`
+      (the Native-Lint precedent, scripts/check-native-lint-attested.sh), and
+      for shell-to-lua compares the `sh=` value of check-shell-ratchet.lua at
+      BASE and HEAD. Verdicts, one stdout line per backlog:
+        carried:<backlog>:not-due
+        carried:<backlog>:paid:<path>
+        carried:<backlog>:waived:<reason>
+        carried:<backlog>:due:<path> (<n> lines)      exit 0 on a work push
+        violation:carried:<backlog>:silent            exit 1 at landing, gentle stage
+      with up to five candidates (the five smallest existing items at or under
+      item_ceiling_lines, the suggestion picked by the work ref's order modulo
+      five) and the exact trailer line on stderr. Candidates on 2026-10-10:
+      check-no-python-scripts.sh 17 lines, check-no-end-user-brew-instruction.sh
+      27, check-macos-only-sources-verified.sh 32, check-vault-cli-gate-coverage.sh
+      34, check-ripgrep-available.sh 40. This guard is itself a new Lua decider
+      in the area, so its own change is due: it carries one of those ports or
+      a waiver.
+    exit_criteria:
+      - 'on a scratch repo whose change edits scripts/check-x.sh with no port and no trailer, the guard prints carried:shell-to-lua:due:<path> (<n> lines) and on stderr the line `Carried-Waiver: shell-to-lua <reason>`; pre-fix: no such script, no line'
+      - 'the same change plus a commit trailer `Carried-Waiver: shell-to-lua too-big:scripts/check-y.sh:200` prints carried:shell-to-lua:waived:too-big:scripts/check-y.sh:200'
+      - 'a change that deletes one scripts/check-*.sh and adds its Lua port, floors lowered by --dump-floors, prints carried:shell-to-lua:paid:<path>; a change that only deletes a stale floor line (file already gone) does NOT print paid'
+      - 'NEGATIVE CONTROL: a change touching only crates/ prints carried:shell-to-lua:not-due and exit 0'
+      - './build.sh --preflight lists the guard; a work-ref push with a due, silent change prints one warn:pre-push line naming it and still pushes'
+    unscoreable: "unpinnable-until-the-guard-exists: future scripts/lua/check-carried-obligations.lua and its Lua fixture, written in the same commit; pre-fix result: no tool prints a carried: line for any diff."
+    depends_on: []
+    events:
+      - type: filed
+        ts: "2026-10-10T16:25:06Z"
+        agent_id: macuahuitl-fedora-claude
+        host: macuahuitl
+        summary: |-
+          Filed with 1570-k5yt when the operator reworded the 2026-10-09 port-one-per-Lua-decider ad-lib as a carried obligation; the discovery half of the pattern has no tool.
+    next_action: >
+      Write the Lua guard over yaml.parse of carried_obligations.backlogs and
+      proc.run git argv; fixture arms for not-due, due, waived, paid and the
+      stale-floor-line non-payment; add it to the --preflight roster and the
+      work-ref pre-push warn lane; carry one 17-40 line port in the same change.
+  - packet_id: the-land-queue-stamps-each-landing-with-a-carried-trailer-per-backlog-so-paid-waived-and-silent-integrations-are-counted-from-git-history
+    order: 1577-568c
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [land-queue, carried-obligation, ratchet, evidence]
+    estimated_hours: 2
+    owned_files:
+      - scripts/land-queue.sh
+      - scripts/test-land-queue.sh
+    title: |
+      A carried obligation escalates only on a measured stall, but no landing records whether it paid, waived or stayed silent: scripts/land-queue.sh reads only number, headRefName and isDraft and writes `land(<n>): work/<order> into linux-next` with no trailers. Make the queue run the carried-obligation guard on the gated tree and add one `Carried: <backlog> <paid|waived|not-due|silent> <item-or-reason>` trailer per backlog to the land commit
+    context: |
+      Rule: methodology/convergence.yaml carried_obligations.triggers (window of
+      10 due integrations, counted by first parent like
+      scripts/check-landing-provenance.sh). The waiver itself is a commit
+      trailer on the work ref, not a PR-body line: the queue never reads a
+      body and a forge cannot see one. Copying the guard's verdict onto the
+      land commit makes the tally one `git log --first-parent
+      --format=%(trailers:key=Carried,valueonly)` with no gh call. Measured
+      2026-10-10: 23 integrations since the shell floor last moved on
+      2026-10-02, 11 of them touching gate scripts, 0 ports; that number had
+      to be reconstructed by diffing each merge.
+    exit_criteria:
+      - 'a test-land-queue arm with a fake gate and a work ref whose change is due and carries a Carried-Waiver trailer produces a land commit whose trailers include `Carried: shell-to-lua waived <reason>`; pre-fix: the land commit has no Carried trailer'
+      - 'a not-due work ref lands with `Carried: shell-to-lua not-due`'
+      - 'at the gentle stage a due, silent ref is evicted with evict:land-queue:<n>:carried-silent:shell-to-lua and the trailer line to add appears in the PR comment and on stdout'
+    unscoreable: "unpinnable-until-the-guard-exists: the new scripts/test-land-queue.sh arms are the deliverable, written with the change; pre-fix result: land commits carry no Carried trailer."
+    depends_on:
+      - a-lua-guard-prints-what-a-change-owes-each-carried-obligation-backlog-not-due-paid-waived-or-due-with-the-smallest-item-and-the-waiver-line-to-paste
+    events:
+      - type: filed
+        ts: "2026-10-10T16:25:06Z"
+        agent_id: macuahuitl-fedora-claude
+        host: macuahuitl
+        summary: |-
+          Filed with 1570-k5yt: the stall trigger of carried_obligations needs paid/waived/silent counts per landing, and nothing records them.
+    next_action: >
+      After the guard lands, call it from land-queue.sh on the gated tree and
+      pass its verdicts to the merge commit with --trailer; add the arms.
+  - packet_id: the-shell-to-lua-counter-is-honest-a-floor-line-naming-a-deleted-file-is-refused-and-a-burndown-line-prints-the-window-paid-waived-silent-and-whether-the-stall-trigger-fired
+    order: 1577-57u3
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, ratchet, carried-obligation, shell-ratchet, coordination]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/check-shell-ratchet.lua
+      - scripts/portability/shell-decider-floor.txt
+      - scripts/lua/carried-obligation-burndown.lua
+      - .claude/skills/coordinate-multihost-work/SKILL.md
+    title: |
+      scripts/portability/shell-decider-floor.txt holds 664 lines, 9 of which name .sh files already ported to scripts/lua/ and deleted (check-ca-path-literals.sh, check-no-base64-script-injection.sh and 7 more); check-shell-ratchet.lua never refuses a floor line whose file is gone, so the floor overstates the backlog by 9 and a deleted decider can be re-added under its old name without a new-decider refusal. And no tool prints whether the carried_obligations stall trigger has fired
+    context: |
+      Measured 2026-10-10 on macuahuitl, linux-next 1b1d0ea0c:
+      `tillandsias-plan script run scripts/lua/check-shell-ratchet.lua` prints
+      ok:shell-ratchet:sh=671:floor:664; 655 floor lines name existing files;
+      the 9 dangling ones are check-backgrounded-jobs-redirect-stderr,
+      check-ca-path-literals, check-cheatsheet-source-anchors,
+      check-no-base64-script-injection, check-no-spawn-in-if-not,
+      check-oom-postmortem, check-secure-wire-single-reader,
+      check-spec-registry-status, check-wsl-exe-single-constructor (all now
+      .lua). The spec already says a port MUST lower the floors in the same
+      commit; nothing checks it. The burndown half: a script prints, per
+      backlog, `burndown:<backlog>:count=<n>:stage=<s>:window=<w>:paid=<p>:waived=<v>:silent=<q>:trigger=<fired|clear>`
+      from the land-commit Carried trailers (1577-568c) and the counter at
+      each end of the window; the coordinate-multihost-work skill runs it each
+      pass and, when trigger=fired, puts one plain ask to the operator.
+    exit_criteria:
+      - 'check-shell-ratchet.lua on a scratch tree whose decider floor names a missing scripts/check-gone.sh prints violation:shell-ratchet:stale-floor:scripts/check-gone.sh with --dump-floors as the remedy; pre-fix: ok:, the stale line is silent (9 such lines on 1b1d0ea0c)'
+      - 'after the fix the live floor has 0 stale lines and its line count equals the number of existing floor files (pre-fix 664 lines, 655 existing)'
+      - 'the burndown script on a scratch history with 10 due land commits all trailered waived and a flat counter prints trigger=fired; with one paid among them prints trigger=clear'
+    unscoreable: "unpinnable-until-the-guard-exists: the stale-floor arm of scripts/test-shell-ratchet.sh (or its Lua successor) and the burndown fixture are written with the change; pre-fix result: ok:shell-ratchet with 9 stale floor lines, and no burndown verdict exists."
+    depends_on: []
+    events:
+      - type: filed
+        ts: "2026-10-10T16:25:06Z"
+        agent_id: macuahuitl-fedora-claude
+        host: macuahuitl
+        summary: |-
+          Filed with 1570-k5yt: the carried-obligation counter must be monotonic and honest; 9 of 664 shell floor lines are slack from ports that did not lower the floor, and the stall trigger has no instrument.
+    next_action: >
+      Add the stale-floor arm to check-shell-ratchet.lua and its fixture, run
+      --dump-floors to drop the 9 lines, then write the burndown script over
+      the land-commit trailers once 1577-568c lands (the stale-floor half does
+      not wait for it).

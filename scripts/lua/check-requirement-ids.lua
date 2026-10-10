@@ -6,8 +6,33 @@
 -- byte. Every `### Requirement:` heading (and the numbered pre-976-suab
 -- `### Requirement <n>:` dialect, order 1396-35we) is followed by a
 -- `<!-- req-id: ... -->` comment, and no identifier appears twice anywhere in
--- the corpus. Tombstoned specs are checked too — see the .sh's header for why
--- exempting them would shrink the very denominator this guard protects.
+-- the corpus.
+--
+-- WHY A GUARD AND NOT JUST THE GENERATOR (976-suab). methodology/proximity.yaml
+-- pays `requirement_has_stable_id` and, before 976-suab, zero of 177 spec files
+-- carried an identifier. The generator made the property true once; only a
+-- guard keeps it true, because the next requirement written by hand will not
+-- have one.
+--
+-- UNIQUENESS is the half that matters. Identifiers are copied by hand when a
+-- requirement is split, and a duplicate is WORSE than a missing one: a missing
+-- id is visibly absent, while a duplicate silently merges two obligations into
+-- one row in every cross-release comparison, and the comparison still reports
+-- a number.
+--
+-- TOMBSTONED SPECS ARE CHECKED TOO, deliberately: exempting them would leave
+-- the requirements still living in a tombstoned file unidentifiable, so a
+-- non-regression check would stop counting them and get EASIER to pass as
+-- requirements are retired — a check that narrows its own denominator.
+--
+-- WHAT IT CANNOT CHECK (also methodology/proximity.yaml, why_no_validator).
+-- The operator's rule (2026-09-03) is that a REFINEMENT keeps its identifier
+-- while a CHANGED OBLIGATION gets a tombstone and a new one. Whether an edit
+-- refines or replaces is a judgement about MEANING that no validator can see.
+-- This guard enforces that identifiers EXIST and are UNIQUE, never that the
+-- right one was kept: a refinement that should have been a new obligation
+-- passes exactly as a correct one does. (Restored from the deleted
+-- check-requirement-ids.sh header, a9a61de58^, at the coordinator's request.)
 --
 -- TILLANDSIAS_SPEC_ROOT is a TEST SEAM (scripts/test-requirement-ids.sh points
 -- it at a fake openspec tree, outside the repo, exactly like

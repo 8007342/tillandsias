@@ -17,6 +17,7 @@
 #   ok:attest-native-lint:<pkg>=<tree>[ ...]           commit added with trailers
 #   ok:attest-native-lint:nothing-to-attest            no gated crate for this platform
 #   refused:attest-native-lint:dirty-tree              (rc 2) lint what is committed
+#   refused:attest-native-lint:no-host                 (rc 2) no host name; NO commit
 #   failed:attest-native-lint:<pkg>:rc=<n>             (rc 1) clippy failed; NO commit
 #
 # CARGO overrides the cargo binary (the fixture stubs it).
@@ -42,6 +43,18 @@ fi
 
 host="$(bash scripts/agent-identity.sh node-name 2>/dev/null)" || host=""
 [ -n "$host" ] || host="$(hostname -s 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+# Git Bash rejects `hostname -s` and the WSL builder has no hostname at all;
+# uname -n is POSIX. An empty host shifts every trailer field and the check
+# can never match it, so refuse rather than write one.
+[ -n "$host" ] || host="$(uname -n 2>/dev/null | cut -d. -f1 | tr '[:upper:]' '[:lower:]')"
+case "$host" in
+    "" | *[[:space:]]*)
+        echo "refused:attest-native-lint:no-host"
+        echo "  why: no host name from agent-identity.sh, hostname -s or uname -n, and a trailer with an empty or split host field never matches its check" >&2
+        echo "  remedy: make scripts/agent-identity.sh node-name answer on this host, then re-run scripts/attest-native-lint.sh" >&2
+        exit 2
+        ;;
+esac
 
 trailers=(); done_list=""
 for entry in $(bash scripts/check-native-lint-attested.sh --list); do

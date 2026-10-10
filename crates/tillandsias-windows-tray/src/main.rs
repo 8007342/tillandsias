@@ -80,6 +80,7 @@ const KNOWN_FLAGS: &[&str] = &[
     "--logs",
     "--forge",
     // mode modifiers
+    "--approve-hard-reset",
     "--json",
     "--tail",
     "--bak",
@@ -163,7 +164,14 @@ fn main() {
     // Destructive by design, and TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 is the one
     // documented opt-out; the BINARY owns that decision, so the installer
     // calls this unconditionally and never reads the variable itself.
-    if std::env::args().any(|a| a == "--reset-state" || a == "--reset-guest") {
+    // ORDER 1437-3iux: the two flags are two bodies now. --reset-guest is
+    // checked FIRST so a command line carrying both gets the stronger reset
+    // (which asks for its own approval) rather than silently the weaker one.
+    if std::env::args().any(|a| a == "--reset-guest") {
+        let approve_arg = std::env::args().any(|a| a == "--approve-hard-reset");
+        std::process::exit(notify_icon::reset_guest_once(approve_arg));
+    }
+    if std::env::args().any(|a| a == "--reset-state") {
         std::process::exit(notify_icon::reset_state_once());
     }
     // 945-vpg3: headless forge launch. Until this existed, the ONLY way to
@@ -565,7 +573,8 @@ mod tests {
         );
         // 6. The CLI verb exists and main dispatches it.
         assert!(
-            notify.contains("pub fn reset_guest_once()"),
+            // source-pin-ok: the verb's entry point must exist by name (its args changed in 1559-9uvb); what it does is pinned by reset_guest_never_asks
+            notify.contains("pub fn reset_guest_once("),
             "--reset-guest CLI mode must exist"
         );
         let main_src = include_str!("main.rs");
@@ -806,6 +815,183 @@ fn ",
                 "the {which} must name tillandsias-vm-uuid as preserved"
             );
         }
+    }
+
+    /// The body of one `pub fn` in notify_icon.rs, with `//` comments stripped
+    /// so a comment quoting a forbidden call can neither satisfy nor fail a pin.
+    fn notify_fn_body(sig: &str, next_sig: &str) -> String {
+        let src = include_str!("notify_icon.rs");
+        let body = src
+            .split(sig)
+            .nth(1)
+            .unwrap_or_else(|| panic!("{sig} present"))
+            .split(next_sig)
+            .next()
+            .unwrap();
+        body.lines()
+            .map(|l| l.split("//").next().unwrap_or(""))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// ORDER 1437-3iux S1 (host-state-lifecycle "Windows SOFT reset keeps the
+    /// distro, the store and the downloads"). `--reset-state` is SOFT: it does
+    /// not unregister the distro, calls no credential clearer, keeps the
+    /// download cache, wipes only derived state inside the guest, and says
+    /// `reset: SOFT`. Pre-fix: FAILS, because reset_state_once unregisters,
+    /// clears Credential Manager and removes the cache.
+    #[test]
+    fn reset_state_is_soft_on_windows() {
+        let soft = notify_fn_body(
+            "pub fn reset_state_once() -> i32 {",
+            "pub fn reset_guest_once(",
+        );
+        // `soft_wipe_guest(` contains `wipe_guest(`; take the allowed call out
+        // before looking for the forbidden one, or the pin reds on its own fix.
+        let without_soft = soft.replace("soft_wipe_guest(", "");
+        for forbidden in [
+            "wipe_guest(",
+            "clear_guest_vault_credentials(",
+            "remove_dir_all(",
+        ] {
+            assert!(
+                !without_soft.contains(forbidden),
+                "SOFT reset must not call {forbidden}: it destroys operator data"
+            );
+        }
+        assert!(
+            soft.contains("soft_wipe_guest("),
+            "SOFT wipes derived state inside the guest"
+        );
+        assert!(soft.contains("reset: SOFT"), "SOFT must announce its kind");
+    }
+
+    /// ORDER 1437-3iux S1. `--reset-guest` stays HARD in its OWN body: it
+    /// unregisters the distro and clears the dead store's share, as today.
+    /// Pre-fix: FAILS, because reset_guest_once only delegates to
+    /// reset_state_once, so SOFT could not exist without taking HARD with it.
+    #[test]
+    fn reset_guest_stays_hard_in_its_own_body() {
+        let hard = notify_fn_body(
+            "pub fn reset_guest_once(approve_arg: bool) -> i32 {",
+            "\n}\n",
+        );
+        assert!(hard.contains("wipe_guest()"), "HARD unregisters the distro");
+        assert!(
+            hard.contains("clear_guest_vault_credentials("),
+            "HARD clears the share of the store it destroys (803-49re)"
+        );
+        assert!(
+            !hard.trim().starts_with("reset_state_once()"),
+            "HARD must not delegate to the SOFT body"
+        );
+    }
+
+    /// ORDER 1437-3iux S1. Each flag reaches its OWN body. Read from main.rs's
+    /// NON-TEST code with comments stripped: the older pin
+    /// `main_src.contains("notify_icon::reset_guest_once()")` was satisfied by
+    /// its own assertion string in this very file, while the real dispatch
+    /// sent `--reset-guest` to `reset_state_once()`, harmless while the two
+    /// were one body and wrong once SOFT and HARD split. Pre-fix: FAILS.
+    #[test]
+    fn each_reset_flag_dispatches_to_its_own_body() {
+        let src = include_str!("main.rs");
+        let code: String = src
+            .split("#[cfg(test)]\nmod tests {")
+            .next()
+            .unwrap()
+            .lines()
+            .map(|l| l.split("//").next().unwrap_or(""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let hard_branch = code
+            .split("a == \"--reset-guest\"")
+            .nth(1)
+            .expect("main must test for --reset-guest on its own");
+        let hard_call = hard_branch.split('}').next().unwrap();
+        // WHICH body a flag dispatches to is the contract, and the behavioural
+        // alternative spawns the tray with --reset-guest, which destroys the
+        // distro; this pin was red before the dispatch fix (076c5773d).
+        assert!(
+            // source-pin-ok: the dispatch target text is the contract (see above)
+            hard_call.contains("notify_icon::reset_guest_once(approve_arg)"),
+            "--reset-guest must reach the HARD body: {hard_call}"
+        );
+        assert!(
+            !code.contains("a == \"--reset-state\" || a == \"--reset-guest\""),
+            "the two flags must not share one dispatch"
+        );
+    }
+
+    /// ORDER 1437-3iux S2. main reads the approval flag by its literal (the
+    /// KNOWN_FLAGS pin wants it consumed here); that literal must be core's.
+    #[test]
+    fn the_approval_flag_main_reads_is_cores() {
+        assert_eq!(
+            "--approve-hard-reset",
+            tillandsias_core::reset_state::HARD_APPROVAL_ARG
+        );
+        assert!(KNOWN_FLAGS.contains(&tillandsias_core::reset_state::HARD_APPROVAL_ARG));
+    }
+
+    /// ORDER 1559-9uvb, operator ruling 2026-10-08 ("we do not ask end users
+    /// to do power user stuff ... No prompts like those"): HARD NEVER ASKS.
+    /// The body reads no stdin, checks no TTY and prints no prompt; it runs
+    /// only on the non-interactive approval (`--approve-hard-reset` or
+    /// TILLANDSIAS_HARD_RESET_APPROVED=1). Pre-fix: FAILS, because the body
+    /// read a typed HARD from a TTY.
+    #[test]
+    fn reset_guest_never_asks() {
+        let hard = notify_fn_body(
+            "pub fn reset_guest_once(approve_arg: bool) -> i32 {",
+            "\n}\n",
+        );
+        for prompt in ["read_line(", "is_terminal(", "HARD_PROMPT", "stdin()"] {
+            assert!(
+                !hard.contains(prompt),
+                "HARD must never ask: found {prompt}"
+            );
+        }
+        let core = include_str!("../../tillandsias-core/src/reset_state.rs");
+        assert!(
+            !core.contains("pub const HARD_PROMPT"),
+            "no prompt string may exist to show"
+        );
+    }
+
+    /// ORDER 1437-3iux S2 (host-state-lifecycle "SOFT reset is pre-authorised
+    /// everywhere"; 1443-bs9z, as amended 2026-10-08). The HARD body checks
+    /// its per-run approval, refuses when Credential Manager is unreachable
+    /// (named reason, spec open question), and announces `reset: HARD`, all
+    /// BEFORE it destroys anything; and it keeps the download cache. Pre-fix:
+    /// FAILS, because today's --reset-guest destroys with no approval of any
+    /// kind, says nothing about HARD and removes the cache.
+    #[test]
+    fn reset_guest_asks_refuses_and_announces_before_destroying() {
+        let hard = notify_fn_body(
+            "pub fn reset_guest_once(approve_arg: bool) -> i32 {",
+            "\n}\n",
+        );
+        let destroy_at = hard
+            .find("wipe_guest()")
+            .expect("HARD unregisters the distro");
+        for (what, needle) in [
+            ("the per-run approval", "hard_reset_approval("),
+            (
+                "the unreachable-keyring refusal",
+                "HARD_REFUSED_KEYRING_UNREACHABLE",
+            ),
+            ("the HARD announcement", "reset: HARD"),
+        ] {
+            let at = hard
+                .find(needle)
+                .unwrap_or_else(|| panic!("HARD must carry {what} ({needle})"));
+            assert!(at < destroy_at, "{what} must come BEFORE the wipe");
+        }
+        assert!(
+            !hard.contains("remove_dir_all("),
+            "HARD keeps the download cache (host-state-lifecycle)"
+        );
     }
 
     /// windows-260723-1: the registered-distro integrity probe's Windows

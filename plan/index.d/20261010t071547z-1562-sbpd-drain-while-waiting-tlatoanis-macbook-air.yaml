@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# 1562-sbpd fix on work/1562-sbpd (coordinator queue item 2, 2026-10-10).
+status:
+  - packet_id: the-macos-trays-bounded-security-spawn-deadlocks-on-output-larger-than-a-pipe-buffer-and-the-bound-kills-a-call-that-was-only-waiting-to-be-read
+    field: status
+    value: in_progress
+    ts: "2026-10-10T07:15:47Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-macos-trays-bounded-security-spawn-deadlocks-on-output-larger-than-a-pipe-buffer-and-the-bound-kills-a-call-that-was-only-waiting-to-be-read
+    event:
+      type: note
+      ts: "2026-10-10T07:15:47Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        Fix on work/1562-sbpd (crates/tillandsias-macos-tray/src/installation_uuid.rs): spawn_bounded takes both pipes and drains each on a reader thread WHILE it waits on try_wait(). On exit it joins the readers and returns the full Output. On the bound it still kills and reaps the child (690-w94k), and the readers are not joined, so a straggler cannot hold the return.
+        MEASURED, darwin, rustc 1.99.0, cargo test -p tillandsias-macos-tray --bin tillandsias-tray -- installation_uuid:
+        - PRE-FIX (the origin/linux-next spawn_bounded plus the new test, test unchanged): output_larger_than_a_pipe_buffer_is_returned_whole FAILED with TimedOut "/bin/sh -c exceeded 5s and was killed — a LOCKED LOGIN KEYCHAIN is the usual cause" (the misreport the row names). 8 passed, 1 failed.
+        - POST-FIX: 9 passed, 0 failed. The new test returns 200 KiB stdout plus 80 KiB stderr whole, well inside the bound. a_bound_that_fires_leaves_no_surviving_child is green both times.

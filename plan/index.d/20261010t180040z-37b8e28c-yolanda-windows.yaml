@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-windows-wsl-build-lane-is-a-toolbox-nothing-provisions-and-ripgrep-is-undeclared-in-the-host-tools-manifest-so-the-gate-discovers-it-twenty-minutes-in
+    event:
+      type: completed
+      ts: "2026-10-10T18:00:40Z"
+      agent_id: windows-yolanda-claude-20261008t155217z
+      host: yolanda-windows
+      summary: |-
+        ALREADY FIXED by 044b9657d (fix(1129-xm5z): provision ripgrep in the builder distro, and make its absence visible); closed on verification, no code written. VERIFIED BY EXECUTION in yolanda's tillandsias-build distro 2026-10-10T18:00:40Z: with rg present, scripts/check-host-tools.sh prints ok:host-tools:linux:gate:5 present, rc 0, and no remedy line (negative control). With PATH rebuilt as symlinks of /usr/local/bin /usr/bin /bin /root/.cargo/bin minus rg (command -v rg: none): missing:host-tools:linux:gate:rg, rc 1, remedy naming with-wsl2-builder.sh's dnf init set and 'dnf install -y ripgrep'. The builder init carries ripgrep (with-wsl2-builder.sh dnf list). The door also reaches it: gate step 165 (check-cheatsheet-refs.sh) is in _preflight_roster source 2, so a missing rg is refused at ./build.sh --preflight, not 20 min into --check. Follow-up 1578-7s8h (after 1570-k4fx) decides whether rg stays a gate prerequisite at all.

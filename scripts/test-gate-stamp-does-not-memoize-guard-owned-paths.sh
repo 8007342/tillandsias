@@ -9,7 +9,7 @@
 # plan/loop_status.d/*.md and plan/mo-full-attestations.d/*.md (930-i6x4 — a
 # sound optimisation: without it every sibling landing staled a stamp that
 # remained true of every byte of code). Its side effect is that those are
-# EXACTLY the paths check-fragment-status-loss.sh and
+# EXACTLY the paths check-fragment-status-loss.lua and
 # `tillandsias-plan check --strict-fragments` exist to read. The exclusion and
 # the guards cover the same paths in opposite directions and nothing reconciled
 # them, so a commit touching only them could not stale the stamp, the memo
@@ -224,7 +224,7 @@ fi
 _arm="$(awk '/"ok:gate-fresh-except-plan "\*\)/,/;;/' "$ROOT/build.sh")"
 if [ -z "$_arm" ]; then
     bad "arm5: build.sh has no ok:gate-fresh-except-plan arm — the verdict goes nowhere"
-elif grep -q 'check-fragment-status-loss.sh' <<<"$_arm" && grep -q 'strict-fragments' <<<"$_arm"; then
+elif grep -q 'check-fragment-status-loss.lua' <<<"$_arm" && grep -q 'strict-fragments' <<<"$_arm"; then
     ok "arm5: build.sh's partial-memo arm runs BOTH ledger guards"
 else
     bad "arm5: build.sh's partial-memo arm does not run both ledger guards"

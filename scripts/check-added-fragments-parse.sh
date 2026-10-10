@@ -20,7 +20,7 @@
 # nested mapping — and that is the point: trivial to produce, red nowhere, and
 # the loss is total and silent. The sibling failure (the fold DISCARDING a
 # declared status) already earns a hard failure via
-# check-fragment-status-loss.sh; a fragment the fold cannot read at all was
+# check-fragment-status-loss.lua; a fragment the fold cannot read at all was
 # strictly weaker.
 #
 # DIFF-SCOPED BY CONSTRUCTION, deliberately. Failing on ANY malformed fragment

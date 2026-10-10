@@ -28,7 +28,11 @@
         pkgs = import nixpkgs {
           inherit system overlays;
         };
-        rustToolchain = pkgs.rust-bin.stable.latest.default.override {
+        # ORDER 1562-tc7p: the PINNED toolchain, read from rust-toolchain.toml
+        # (its single source), never `stable.latest`: a floating toolchain let
+        # a rustc release break a cut that every local gate had passed.
+        rustPin = (builtins.fromTOML (builtins.readFile ./rust-toolchain.toml)).toolchain.channel;
+        rustToolchain = pkgs.rust-bin.stable.${rustPin}.default.override {
           extensions = [ "rust-src" "clippy" "rustfmt" "rust-analyzer" ];
           targets = [ "x86_64-unknown-linux-musl" "aarch64-unknown-linux-musl" ];
         };

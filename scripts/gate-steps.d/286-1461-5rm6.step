@@ -13,4 +13,9 @@ STEP_DESC="Checking the land queue orders, evicts and re-queues, resolving its p
 STEP_SCRIPT="scripts/test-land-queue.sh"
 STEP_ERROR="the land queue fixture failed; if every arm reads no-plan-binary, land-queue.sh again resolves tillandsias-plan from the caller's cwd (1461-5rm6)"
 STEP_OK="land queue behaves, with its plan binary resolved from its own checkout"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:land-queue:16/16"
+# 1553-x8js: the previous darwin record, "tlatoanis-macbook-air 2026-09-28
+# darwin ok:land-queue:16/16", was INVALID for ARM 9 — BSD sed never built the
+# stdin-hungry gh stub, so ARM 9 passed vacuously (it passed even against a
+# land-queue.sh with the fd-3 read reverted). Re-measured 2026-10-08 with the
+# stub built and checked; ARM 9 now reds against that revert.
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-08 darwin ok:land-queue:16/16"

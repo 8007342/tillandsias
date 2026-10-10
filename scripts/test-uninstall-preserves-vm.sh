@@ -67,7 +67,7 @@ run_uninstall() {
     TILLANDSIAS_UNINSTALL_TRAY_PROC="nonce-tray-1401" \
     TILLANDSIAS_UNINSTALL_FAKE_UNAME="$_fake" \
     TILLANDSIAS_UNINSTALL_INSTALL_DIR="$_home/fixture-bin" \
-        bash "$UNINSTALL" "$@" 2>&1
+        bash "$UNINSTALL" "$@" --yes 2>&1  # 1437-evzi: uninstall now asks first; --yes answers for the fixture
 }
 
 check() {

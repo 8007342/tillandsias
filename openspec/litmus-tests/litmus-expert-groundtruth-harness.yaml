@@ -220,7 +220,7 @@ critical_path:
     # expected confidence to `exact` — i.e. asserting the engine SHOULD guess —
     # must go red, which is what proves the refusal is really being checked and
     # not merely unasserted.
-    command: "PB=$(cat /tmp/.litmus-394d-bin); Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; sed '/^  - id: methodology-near-miss-does-not-leak-the-answer$/,/^  - id: /{s/^      confidence: unsupported$/      confidence: exact/}' \"$Q\" > /tmp/.litmus-394d-w4.yaml; \"$PB\" grade --root . /tmp/.litmus-394d-w4.yaml > /tmp/.litmus-394d-w4.txt 2>&1 && { echo 'FAIL: expecting a guess where the engine refuses was graded GREEN'; exit 1; }; grep -q '^FAIL  methodology-near-miss-does-not-leak-the-answer' /tmp/.litmus-394d-w4.txt && grep -q 'confidence: expected Exact, got Unsupported' /tmp/.litmus-394d-w4.txt && echo 'ok: wrong-refusal-expectation-is-red'"
+    command: "PB=$(cat /tmp/.litmus-394d-bin); Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; sed '/^  - id: methodology-near-miss-does-not-leak-the-answer$/,/^  - id: /{s/^      confidence: unsupported$/      confidence: exact/;}' \"$Q\" > /tmp/.litmus-394d-w4.yaml; \"$PB\" grade --root . /tmp/.litmus-394d-w4.yaml > /tmp/.litmus-394d-w4.txt 2>&1 && { echo 'FAIL: expecting a guess where the engine refuses was graded GREEN'; exit 1; }; grep -q '^FAIL  methodology-near-miss-does-not-leak-the-answer' /tmp/.litmus-394d-w4.txt && grep -q 'confidence: expected Exact, got Unsupported' /tmp/.litmus-394d-w4.txt && echo 'ok: wrong-refusal-expectation-is-red'"
     timeout_ms: 120000
     expected_behavior: "ok: wrong-refusal-expectation-is-red"
 

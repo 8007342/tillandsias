@@ -1,0 +1,170 @@
+# Operator request 2026-10-07: what Tillandsias learns from microsoft/mxc
+# (Microsoft eXecution Container, v1.0.0). Research note:
+# plan/issues/microsoft-mxc-learnings-2026-10-07.md
+# Verdict: nothing to adopt wholesale now; four rows filed, four existing
+# rows annotated.
+packets:
+  - packet_id: one-substrate-capability-probe-answers-what-this-host-can-run-and-names-each-missing-capability-once-instead-of-every-guard-refusing-on-its-own
+    order: 1553-hqrr
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [preflight, probe, fail-loud, macos, windows, linux, substrate]
+    estimated_hours: 6
+    title: |
+      A single substrate capability probe (backend, capabilities, warnings) answers what this host can run — learned from MXC's available_backends()/platform_support(); today a Mac without setsid makes every preflight guard refuse separately and the WSL preflight detects without naming the remedy
+    context: |
+      microsoft/mxc lists a backend when it runs at all and reports each
+      missing optional capability ONCE in warnings[], and asks the substrate
+      (WslcGetMissingComponents) instead of an OS version floor. Our shape is
+      the inverse: 1353-ryhq / 1375-amye measured every preflight guard
+      refusing on a Mac without setsid/timeout, and 756-dwkm records a WSL
+      preflight that detects but does not fix. Research note §4 items 1-2.
+      OpenSpec change: openspec/changes/substrate-capability-probe.
+    exit_criteria:
+      - 'the probe prints one machine-readable answer naming the substrate, its capabilities and a warnings list, each warning carrying why and remedy; on a host with a capability hidden from PATH (setsid in the fixture) that capability appears exactly once in warnings; pre-fix: no such probe exists'
+      - 'preflight consults the probe, and a guard whose required capability is in warnings reports skip naming the probe warning instead of its own refusal; pre-fix: each guard refuses independently'
+    verifiable_closure: |
+      bash scripts/test-substrate-capability-probe.sh passes on the fixed tree
+      (fixture hides setsid from PATH and asserts one warning, one skip per
+      dependent guard); the script does not exist on the tree that files this row.
+    depends_on: []
+    next_action: >
+      Read openspec/changes/substrate-capability-probe, decide where the probe
+      lives (tillandsias-plan or headless), write the fixture first.
+  - packet_id: tillandsias-proxy-denials-lists-each-destination-the-egress-proxy-refused-with-a-count-so-allowlist-growth-is-read-from-a-command-not-grepped-from-squid-logs
+    order: 1553-jq6p
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [proxy, squid, allowlist, diagnostics, linux]
+    estimated_hours: 4
+    title: |
+      A proxy-denials command lists each destination the Squid egress proxy refused, with a count and the requesting container — learned from MXC's audit/captureDenials mode; today operators grep podman logs tillandsias-proxy for TCP_DENIED
+    context: |
+      MXC's Windows --audit mode captures denials and turns them into a
+      least-privilege policy draft (mxc docs/logging-access-denied.md). Our
+      allowlist (images/proxy/allowlist.txt) grows by hand-grepping
+      TCP_DENIED in the proxy log (see the provider-auth rows that require
+      "zero TCP_DENIED"). Research note §4 item 5. OpenSpec change:
+      openspec/changes/substrate-capability-probe (proxy-container delta).
+    exit_criteria:
+      - 'a forge that requests a host absent from the allowlist leaves that host listed by the command with count >= 1 and the source container named; pre-fix: no command, only raw squid logs'
+      - 'an allowed request does not appear in the list'
+    verifiable_closure: |
+      bash scripts/test-proxy-denials.sh passes on the fixed tree against a
+      recorded squid access-log fixture with one denied and one allowed line;
+      the script does not exist on the tree that files this row.
+    depends_on: []
+    next_action: >
+      Find where the squid access log is reachable from the host (podman logs
+      vs a mounted log), then write the fixture over a recorded log first.
+  - packet_id: a-measured-record-says-whether-wsl-containers-wslc-could-host-the-forge-on-the-windows-fleet-host
+    order: 1553-gsp2
+    status: ready
+    kind: research
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, wsl, wslc, substrate, research, measurement]
+    estimated_hours: 2
+    title: |
+      Measure, on the Windows fleet host, whether MXC's wslc backend (WSL Container SDK, WSL >= 2.9.9) could host forge containers — WSL version, missing components, and whether a WSLC container can reach a proxy on the distro loopback — so the option is measured, not argued
+    context: |
+      Research note §3: WSLC is the only MXC piece that could replace part of
+      our Windows substrate (owned Fedora distro + Podman-in-guest), but its
+      docs say networking is all-allow or all-deny bridged with no internal
+      networks and a loopback proxy is unreachable, which would break the
+      enclave. Those are doc claims; nobody has measured them here. Do not
+      adopt anything from this row — record facts.
+    exit_criteria:
+      - 'plan/issues carries a dated record with wsl --version, the WslcGetMissingComponents result (or why it could not be run), and a yes/no with the command used for: a WSLC container reaching a TCP listener on the distro loopback, and two WSLC containers on an internal-only network'
+    unscoreable: |
+      A measurement record: its output is a dated plan/issues note, judged by
+      reading, with no code change to test.
+    depends_on: []
+    next_action: >
+      On the Windows host, check wsl --version against 2.9.9 first; if older,
+      record that and stop.
+  - packet_id: research-whether-host-side-helpers-the-tray-launches-should-run-under-bubblewrap-on-linux-and-seatbelt-on-macos
+    order: 1553-zyki
+    status: ready
+    kind: research
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [security, sandbox, bubblewrap, seatbelt, host, research]
+    estimated_hours: 3
+    title: |
+      Research: the tray launches some helpers on the host outside any container (host Chromium, agent attach); MXC shows bubblewrap (Linux, unprivileged) and Seatbelt (macOS, no root or daemon) can confine a single process cheaply — list those helpers and decide which, if any, should be confined
+    context: |
+      Research note §3. This is a NEW boundary, not a simplification: today
+      those helpers run with the operator's full user rights. Consider
+      vendoring nothing — bwrap is a distro package and sandbox_init is a
+      macOS API; MXC (MIT) shows working profiles (mxc
+      docs/backends/seatbelt/seatbelt-backend.md, docs/backends/bwrap/).
+    exit_criteria:
+      - 'plan/issues lists every process the tray starts on the host outside a container, with its required filesystem and network access, and a per-helper decision (confine / not worth it) with the reason; follow-up rows filed for each confine decision'
+    unscoreable: |
+      A design decision recorded as prose; implementation rows it files carry
+      their own closures.
+    depends_on: []
+    next_action: >
+      Enumerate host-side spawns in the tray crates (grep Command::new outside
+      the podman and vm-layer paths) and start the table.
+
+events:
+  - packet_id: the-shell-launchers-never-create-or-attach-the-egress-network-so-the-proxy-the-one-member-the-spec-requires-to-be-dual-homed-sits-on-an-internal-network-with-no-way-out
+    event:
+      type: note
+      ts: "2026-10-08T07:00:00Z"
+      host: macuahuitl
+      summary: |-
+        Learning from microsoft/mxc
+        (plan/issues/microsoft-mxc-learnings-2026-10-07.md section 4 item 3):
+        MXC rejects a policy its backend cannot enforce in a validate pass
+        BEFORE starting anything, and never falls back to the host network.
+        Apply the same shape here: the launcher validates the enclave topology
+        the spec requires (egress network present, proxy dual-homed) and
+        refuses by name before starting the proxy, rather than starting a proxy
+        with no way out.
+  - packet_id: guest-daemon-binds-vsock-before-provisioning-work
+    event:
+      type: note
+      ts: "2026-10-08T07:00:00Z"
+      host: macuahuitl
+      summary: |-
+        Learning from microsoft/mxc
+        (plan/issues/microsoft-mxc-learnings-2026-10-07.md section 4 item 4):
+        MXC nests deadline budgets - a 540 s pull is held 60 s inside its 600 s
+        daemon call so a slow step surfaces as a named failed provision, not as
+        an outer timeout. Bind-before-provision plus a bind budget nested
+        inside the provision budget is the same shape.
+  - packet_id: readiness-deadline-900s-is-3500x-the-measured-bind
+    event:
+      type: note
+      ts: "2026-10-08T07:00:00Z"
+      host: macuahuitl
+      summary: |-
+        Learning from microsoft/mxc
+        (plan/issues/microsoft-mxc-learnings-2026-10-07.md section 4 item 4):
+        replace the flat 900 s readiness deadline with nested budgets (bind
+        budget measured, provision budget measured, each named on expiry), as
+        MXC does for pull-inside-daemon-call.
+  - packet_id: every-tray-quit-ends-in-a-force-stop-because-the-guest-never-shuts-itself-down-cleanly
+    event:
+      type: note
+      ts: "2026-10-08T07:00:00Z"
+      host: macuahuitl
+      summary: |-
+        Learning from microsoft/mxc
+        (plan/issues/microsoft-mxc-learnings-2026-10-07.md section 4 item 6):
+        MXC daemons carry an idle watchdog that tears the session down on their
+        own side, so a host that stops asking does not depend on a stop request
+        being honoured. A guest-side shutdown watchdog keyed to the tray's
+        heartbeat is the same shape.

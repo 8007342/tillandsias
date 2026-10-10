@@ -379,8 +379,25 @@ impl Command {
         // Take both pipes BEFORE awaiting anything, then drain them together.
         // Reading one to EOF and then the other is the deadlock this crate
         // exists to make unconstructible.
-        let mut out_pipe = child.stdout.take().expect("stdout piped above");
-        let mut err_pipe = child.stderr.take().expect("stderr piped above");
+        let out_pipe = child.stdout.take().expect("stdout piped above");
+        let err_pipe = child.stderr.take().expect("stderr piped above");
+        #[cfg(not(windows))]
+        let (mut out_pipe, mut err_pipe) = (out_pipe, err_pipe);
+        // Windows: the readers must not belong to the runtime (order 1553-6e3q).
+        #[cfg(windows)]
+        let (mut out_pipe, mut err_pipe) = {
+            let pumped = |p: std::io::Result<std::os::windows::io::OwnedHandle>| {
+                p.map(win_pump::Pumped::spawn)
+                    .map_err(|source| ExecError::Io {
+                        argv: self.argv.clone(),
+                        source,
+                    })
+            };
+            (
+                pumped(out_pipe.into_owned_handle())?,
+                pumped(err_pipe.into_owned_handle())?,
+            )
+        };
         let in_pipe = child.stdin.take();
         let to_write = self.stdin.clone();
         let cap = self.capture_bytes;
@@ -739,6 +756,89 @@ impl Command {
             run: RunId::new(),
             argv: self.argv,
         })
+    }
+}
+
+/// A child's stdout or stderr read by a DETACHED thread (order 1553-6e3q).
+///
+/// A tokio pipe reader on Windows is a blocking-pool thread, and dropping the
+/// read future does not cancel it. After a deadline killed only the child (an
+/// ungrouped run, 1384-aixy), a grandchild that kept the pipe open held that
+/// thread, and dropping the runtime waited for it: MEASURED 120.09 s for a
+/// 400 ms deadline on yolanda-windows. A std thread the runtime does not own
+/// cannot hold its shutdown. The thread ends at EOF, or after its next read
+/// once the receiver is gone.
+///
+/// RESIDUAL, stated rather than claimed fixed: for an ungrouped deadline whose
+/// grandchild never exits and never writes, the thread stays blocked in its
+/// read for that grandchild's life. One parked thread per such orphan; it is
+/// unbounded only if a long-lived process keeps timing out ungrouped commands
+/// whose descendants live forever. `.group(true)` ends the tree, and with it
+/// the thread.
+#[cfg(windows)]
+mod win_pump {
+    use std::io::Read;
+    use std::pin::Pin;
+    use std::task::{Context, Poll};
+    use tokio::sync::mpsc;
+
+    pub struct Pumped {
+        rx: mpsc::Receiver<std::io::Result<Vec<u8>>>,
+        pending: Vec<u8>,
+        pos: usize,
+    }
+
+    impl Pumped {
+        pub fn spawn(handle: std::os::windows::io::OwnedHandle) -> Self {
+            let (tx, rx) = mpsc::channel(8);
+            let mut pipe = std::fs::File::from(handle);
+            std::thread::spawn(move || {
+                let mut buf = vec![0u8; 64 * 1024];
+                loop {
+                    let msg = match pipe.read(&mut buf) {
+                        Ok(0) => break,
+                        Ok(n) => Ok(buf[..n].to_vec()),
+                        // A closed pipe is EOF, not an error of the child's.
+                        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => break,
+                        Err(e) => Err(e),
+                    };
+                    let failed = msg.is_err();
+                    if tx.blocking_send(msg).is_err() || failed {
+                        break;
+                    }
+                }
+            });
+            Pumped {
+                rx,
+                pending: Vec::new(),
+                pos: 0,
+            }
+        }
+    }
+
+    impl tokio::io::AsyncRead for Pumped {
+        fn poll_read(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            out: &mut tokio::io::ReadBuf<'_>,
+        ) -> Poll<std::io::Result<()>> {
+            if self.pos == self.pending.len() {
+                match self.rx.poll_recv(cx) {
+                    Poll::Ready(Some(Ok(chunk))) => {
+                        self.pending = chunk;
+                        self.pos = 0;
+                    }
+                    Poll::Ready(Some(Err(e))) => return Poll::Ready(Err(e)),
+                    Poll::Ready(None) => return Poll::Ready(Ok(())),
+                    Poll::Pending => return Poll::Pending,
+                }
+            }
+            let n = out.remaining().min(self.pending.len() - self.pos);
+            let start = self.pos;
+            out.put_slice(&self.pending[start..start + n]);
+            self.pos += n;
+            Poll::Ready(Ok(()))
+        }
     }
 }
 

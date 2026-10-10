@@ -553,6 +553,170 @@ bar_raise_governance:
       CONTINUOUSLY; a bar that steps at discrete operator-gated release
       boundaries keeps every intra-release convergence point well defined.
 
+carried_obligations:
+  # Order 1570-k5yt. Replaces the 2026-10-09 ad-lib in openspec/specs/ci-release
+  # ("each new lua requires to retroactively update 1+ of old ones"), which the
+  # operator withdrew on 2026-10-10 as wording, not as intent.
+  authority: >
+    The Tlatoāni, 2026-10-10: "I just want to automatically do backlog to LUA
+    migration as agents do progress"; "our whole methodology just needs a way
+    to do backlog from suggestions/advisory into 'gentle enforcement'"; the
+    obligation is to be TAILGATED onto agents doing other work, "migrate +1
+    with your PR". Earlier ruling it generalises, 2026-10-09: "new gates in
+    lua only, and each new lua requires to retroactively update 1+ of old
+    ones".
+  description: >
+    A carried obligation is a named, counted migration backlog that ordinary
+    work burns down one small item at a time. It is the middle rung between a
+    ratchet that only stops growth (check-shell-ratchet.lua,
+    check-jq-callsite-ratchet.sh: standing debt is never reddened, 1130-i6xj)
+    and a gate that refuses the debt outright. Neither end retires a backlog of
+    hundreds of items: the first leaves it flat (the shell-decider floor stood
+    at 664 from 2026-10-02 across 23 integrations, 11 of which edited gate
+    scripts), the second reds the trunk on day one and gets switched off
+    (check-scorable-obligation-added.sh header, 977-448j). The pattern takes its
+    parts from mechanisms the fleet already runs: the floor that only descends
+    (1384-bxhk), the stated reason that a gate accepts in place of silence
+    (`unscoreable:`, 977-448j), the commit trailer read over BASE..HEAD
+    (`Native-Lint:`, 1235-rfub), and the trigger that is a number rather than a
+    preference (work_ref_lane, check-landing-provenance.sh).
+  stages:
+    advisory: >
+      The counter prints on every --check and the ratchet refuses growth.
+      Nothing asks a change to pay down the backlog. This is where every
+      backlog starts, and where shell-to-lua sat from 1384-bxhk until
+      2026-10-10.
+    gentle: >
+      A change that touches the backlog's area is DUE. A due change carries
+      one item (the counter at its head is below the counter at its base) or
+      one waiver line. Silence is the only thing refused, and refused only at
+      landing; a work-ref push warns. A change outside the area owes nothing
+      and is never shown the obligation.
+    enforced: >
+      A due change carries one item, or a waiver whose reason is
+      `blocked-by:<order>` naming a live ledger row that makes every in-reach
+      item unportable (1576-luas is the shape: no AF_UNIX socket in the Lua
+      std). A free-text waiver is refused. Growth stays refused as before.
+  due: >
+    Due is decided by the change's own diff (BASE...HEAD, BASE defaulting to
+    origin/linux-next as in the -added deciders), against the backlog's AREA,
+    a fixed set of path globs declared on the backlog. "Any PR" is never an
+    area: a toll on unrelated work is a tax, and the operator's
+    "migrate +1 with your PR" is addressed to agents already working in the
+    corpus being migrated. A change that is itself a port is due and paid.
+  waiver: >
+    One commit trailer on any commit in the change,
+    `Carried-Waiver: <backlog> <reason>`, one line, reason free text at the
+    gentle stage. Conventional reasons, so the tally can group them:
+    `too-big:<item>:<lines>` (budget rule below), `blocked-by:<order>`,
+    `no-item-in-reach`, `conflict:<work-ref>` (another open ref already ports
+    it), `uncounted-item:<path>` (the change DID port or retire a shell decider,
+    but one outside the counter's population, e.g. an `audit-` script, so the
+    counter cannot see the payment; 1577-57u3 is the counter fix). Waivers are
+    COUNTED, NOT JUDGED: no reviewer weighs a reason, the
+    landing records it, and the stall trigger reads the counts. A PR-body line
+    is not the record: the land queue reads only number, headRefName and
+    isDraft, and a forge cannot see a PR body at all; a trailer travels with
+    the merge commit's second parent into every clone. The trailer goes in the
+    message's LAST paragraph, beside Co-Authored-By: git reads trailers only
+    from there, so a Carried-Waiver line written higher up is not a waiver at
+    all; the guard names it ("waiver present but not a trailer") and refuses
+    it at landing as waiver-not-a-trailer (measured on 1570-25iq, 2026-10-10).
+  discovery: >
+    An agent learns what it owes from a guard's output, never from this
+    prose. The guard runs the backlog table below against the change's diff
+    and prints one line per backlog:
+    `carried:<backlog>:not-due`, `carried:<backlog>:paid:<item>`,
+    `carried:<backlog>:waived:<reason>`, or
+    `carried:<backlog>:due:<item> (<n> lines)` followed on stderr by up to
+    five candidates and the exact waiver line to paste. It runs in
+    `./build.sh --preflight` (the pre-ready step every work ref already
+    takes, join-the-fleet step 4), in scripts/relay-preflight.sh, and in the
+    work-ref pre-push warn lane (`warn:pre-push:...`). The guard is
+    1577-g96z; until it lands the rule is binding convention and an agent
+    reads its due item from the backlog's own counter (shell-to-lua:
+    `tillandsias-plan script run scripts/lua/check-shell-ratchet.lua`).
+  counter: >
+    One integer a script prints on every --check, judged against a floor file
+    that may only descend over that file's OWN git history (check-shell-
+    ratchet.lua floor-raised arm; a fixture must not encode a moment). A
+    backlog whose counter can still rise through an advisory arm says so and
+    reports the excess as its own number rather than folding it in; a floor
+    line whose file no longer exists is slack, not debt, and must be refused,
+    because it overstates the backlog and readmits the deleted file by name.
+    Paid means the counter of EXISTING items fell, not that a floor line was
+    removed.
+  budget: >
+    A carried item is small by construction: the guard offers only items at
+    or under the backlog's item ceiling, smallest first, and spreads its
+    suggestion over the five smallest by the work ref's order so two
+    concurrent changes do not port the same file. When the offered item is
+    larger than the change's own diff (lines added plus deleted, excluding the
+    port), the agent writes `Carried-Waiver: <backlog> too-big:<item>:<lines>`
+    instead of growing the change. An item over the ceiling is never carried;
+    it is a packet of its own (1570-mxcg, 652 lines, 8 h, is that shape).
+  triggers:
+    window: >
+      W = the last 10 DUE integrations of the backlog, counted by first parent
+      on linux-next as check-landing-provenance.sh counts landings. Measured
+      2026-10-02..10-10: 23 integrations, 11 due for shell-to-lua, so W is
+      about one week of fleet work.
+    advisory_to_gentle: >
+      The counter did not descend across W while advisory. A ratchet that
+      stops growth without retiring anything has shown the backlog will not
+      move on its own.
+    gentle_to_enforced: >
+      The counter did not descend across W while gentle: every due change in
+      the window waived. If most of those waivers cite `blocked-by:`, the
+      remedy is the blocking rows, not a stricter stage, and the coordinator
+      promotes those rows instead.
+    retire: >
+      The counter reaches the backlog's floor of things that stay (for
+      shell-to-lua, scripts/portability/bootstrap-shell-allowlist.txt). The
+      obligation is removed from the table; the ratchet stays as the growth
+      refusal, and check-decider-retirement.sh says when its deciders retire.
+  governance: >
+    A trigger obliges the coordinator to PROPOSE the move, as one plain ask in
+    the operator queue carrying the window's numbers (paid, waived, silent,
+    counter at both ends). Moving a backlog to a stricter stage is a bar raise
+    under bar_raise_governance: it takes effect when The Tlatoāni approves it
+    and the approval is recorded in approved_bar_raises. Recurring automation
+    never moves a stage on its own.
+  backlogs:
+    - name: shell-to-lua
+      stage: gentle
+      since: "2026-10-10"
+      area:
+        - scripts/check-*.sh
+        - scripts/test-*.sh
+        - scripts/verify-*.sh
+        - scripts/guard-*.sh
+        - scripts/lua/**
+        - scripts/gate-steps.d/**
+      counter: >
+        `sh=` on the ok: line of scripts/lua/check-shell-ratchet.lua (existing
+        top-level check-/test-/verify-/guard- .sh outside the bootstrap
+        allowlist), floor scripts/portability/shell-decider-floor.txt.
+        2026-10-10 on linux-next 1b1d0ea0c: sh=671, floor 664. Of the 664
+        floor lines 9 name files already ported to Lua and deleted (slack);
+        sh exceeds the floor by 16 because the new-shell-fixture arm is
+        advisory until native macOS/Windows process conformance (1543-ffhg,
+        1544-cnae).
+      item: >
+        One file from the counter's population ported to scripts/lua/ on
+        `tillandsias-plan script run` with the same verdict grammar, or
+        retired; the .sh deleted and both floor files lowered through
+        `check-shell-ratchet.lua --dump-floors` in the same commit.
+      item_ceiling_lines: 150
+      item_ceiling_measured: >
+        2026-10-10, existing floor files by wc -l: 38 at or under 60 lines,
+        320 at 61-150, 297 over 150. The ceiling leaves 358 carriable items;
+        the rest are packets.
+      spec: openspec/specs/ci-release/spec.md (req-id ec267f02)
+      guard: 1577-g96z
+      tally: 1577-568c
+      honest_counter: 1577-57u3
+
 approved_bar_raises:
   - id: ci-full-all-features-clippy
     approved_by: "The Tlatoāni"
@@ -566,3 +730,14 @@ approved_bar_raises:
       254 landed). Slice 3 (promotion into `--check`) remains unapproved and
       requires its own recorded decision.
     recorded_by: "linux-macuahuitl-fable5-20260710T0009Z (plan order 266)"
+  - id: carried-obligation-shell-to-lua-gentle
+    approved_by: "The Tlatoāni"
+    approved_at: "2026-10-10"
+    proposal: "operator rulings in chat 2026-10-09 and 2026-10-10, quoted under carried_obligations.authority"
+    scope: >
+      The shell-to-lua backlog of carried_obligations moves from advisory to
+      gentle: a change touching its area carries one port or one
+      `Carried-Waiver:` trailer. Free-text waivers are accepted. Promotion to
+      enforced is NOT approved by this entry; it needs the gentle_to_enforced
+      trigger to fire and its own recorded decision.
+    recorded_by: "macuahuitl coordinator session 2026-10-10 (plan order 1570-k5yt)"

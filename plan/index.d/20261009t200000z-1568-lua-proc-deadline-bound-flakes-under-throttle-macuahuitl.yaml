@@ -1,0 +1,30 @@
+# Found 2026-10-09 on macuahuitl: the landing queue evicted PR #272 (shell-only) on this Rust test.
+packets:
+  - packet_id: lua-proc-arm3-deadline-wall-clock-bound-fails-under-a-throttled-gate-and-evicts-unrelated-candidates
+    order: 1568-wclk
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [flaky-test, lua-runtime, land-queue, gate]
+    estimated_hours: 2
+    title: |
+      crates/tillandsias-plan/tests/lua_proc.rs arm3_a_deadline_kills_the_whole_group asserts a 500 ms proc.run deadline returns in under 2 s of WALL CLOCK; under the landing queue's throttled scope (CPUWeight=20) it took 2.270 s and the queue evicted #272, a shell-only PR that cannot affect it
+    context: |
+      land-queue-11 on macuahuitl 2026-10-09: "evict:land-queue:272:gate-failed:rc=1",
+      new-red lua_proc::arm3_a_deadline_kills_the_whole_group, "deadline took
+      2.270420387s" (transcript target/test-transcript-workspace-gate.log).
+      #272's diff touches only scripts/ and build.sh. The property under test
+      is that the deadline kills the whole process group (the marker survives
+      only when group=false); the 2 s wall-clock assert measures host load,
+      not that property.
+    exit_criteria:
+      - 'the arm asserts the kill PROPERTY (status timed_out, no exit code, grandchild marker absent when group=true and present when group=false) without a wall-clock bound that host load can exceed; pre-fix: the arm fails when run under `systemd-run --user --scope -p CPUWeight=1` with a CPU hog beside it'
+      - 'post-fix: the same throttled run passes 10 times in a row'
+      - 'NEGATIVE CONTROL: a proc.run whose deadline is ignored (timeout never fires) still fails the arm, via the status/marker asserts or a generous upper bound (e.g. 30 s) that only a missing deadline can exceed'
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is the corrected arm itself in crates/tillandsias-plan/tests/lua_proc.rs; pre-fix result: 2.270 s > 2 s under CPUWeight=20 on macuahuitl 2026-10-09; NEGATIVE CONTROL: a never-firing deadline still fails."
+    depends_on: []
+    next_action: >
+      Replace the 2 s wall-clock assert with the group-kill property asserts
+      plus a 30 s ceiling; reproduce the red first under a CPUWeight=1 scope.

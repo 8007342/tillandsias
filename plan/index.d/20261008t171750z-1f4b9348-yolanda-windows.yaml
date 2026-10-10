@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: readiness-deadline-900s-is-3500x-the-measured-bind
+    field: status
+    value: in_progress
+    ts: "2026-10-08T17:17:50Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: readiness-deadline-900s-is-3500x-the-measured-bind
+    event:
+      type: note
+      ts: "2026-10-08T17:17:50Z"
+      host: yolanda-windows
+      summary: |-
+        yolanda-windows: 3 cold-boot budget measurement then test-first nested budgets (coordinator ruling 2026-10-08)
+  - packet_id: readiness-deadline-900s-is-3500x-the-measured-bind
+    event:
+      type: note
+      ts: "2026-10-08T17:17:50Z"
+      host: yolanda-windows
+      summary: |-
+        wip-override by yolanda-windows: held: 1554-prxf #226, 1553-5x9x #228, 1553-6e3q #229, 1553-gsp2 #233 are READY PRs awaiting the coordinator's post-cut queue; coordinator assigned 798-vxj5 next (2026-10-08) — admitted past: refused:set-field:wip-limit:4/3 — yolanda-windows already holds 4 in_progress packet(s) outside a story: 1553-gsp2, 1553-5x9x, 1553-6e3q, 1554-prxf (1367-2sbc; the limit is 3, from methodology/distributed-work.yaml packet_discipline.wip_limit).

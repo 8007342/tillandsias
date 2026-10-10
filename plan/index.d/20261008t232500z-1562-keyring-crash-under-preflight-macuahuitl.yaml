@@ -1,0 +1,45 @@
+# Found 2026-10-08 on macuahuitl while bulk-preflighting landing candidates after the v56.10.8.1 cut.
+packets:
+  - packet_id: gnome-keyring-daemon-aborts-when-a-preflight-guard-is-killed-mid-secret-service-read-locking-gh-and-pushes-on-the-coordinator
+    order: 1562-kr7c
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [keyring, preflight, credential-channel, deadline, coordinator-host]
+    estimated_hours: 4
+    title: |
+      gnome-keyring-daemon SIGABRTs (gkd_secret_service_get_pkcs11_session: assertion 'client' failed -> invoke_get_property_in_idle_cb) when a Secret Service client vanishes mid-GetProperty; the 2026-10-08 15:53:36 PDT instance fell inside a ./build.sh --preflight run, which kills guards at a 5 s deadline; the login collection comes back locked and gh plus authenticated pushes stop until the operator unlocks it
+    context: |
+      Evidence (macuahuitl, gnome-keyring 50.0-1.fc44): coredumpctl lists
+      SIGABRT gnome-keyring-daemon at 2026-09-30 23:33:52, 2026-10-01
+      12:40:24 and 2026-10-08 15:53:36 PDT (and the two 2026-09-21
+      instances in memory notes). Same journal signature every time. The
+      2026-10-08 crash is 27 s into the preflight of work/1553-a9n6
+      (agent-target/pf-post-1553-a9n6.log, written 15:54:10, one of 28
+      sequential throttled preflights 15:42-16:12); that run killed 14 guards
+      at the deadline. The 2026-09-21 notes suspected a timeout-wrapped gh;
+      no gh was being killed at 15:53. Candidates: any guard or fixture in
+      the preflight set that talks to the REAL session bus (busctl, gh, git
+      credential helpers, check-credential-channel.sh) and can be killed by
+      the deadline or by its own timeout. The killed-probe fixture mocks
+      busctl, so it is not obviously the one.
+      Impact: the coordinator cannot use gh or authenticated pushes, so
+      landings and release watching stop until the operator unlocks the
+      keyring.
+    exit_criteria:
+      - 'the guard (or helper) whose killed D-Bus read aborts the daemon is named, with a reproduction that does NOT run against the operator''s real keyring (a private dbus-run-session + a throwaway gnome-keyring-daemon)'
+      - 'no preflight or gate step can kill a process mid-Secret-Service call on the real session bus: either the step never touches the real bus (mocked, or a private session bus), or it is exempt from deadline kills and bounded another way; pre-fix: the reproduction aborts the throwaway daemon'
+      - 'a preflight set run 30 times back-to-back against a private session bus leaves the throwaway daemon alive'
+    verifiable_closure: |
+      The reproduction aborts a throwaway gnome-keyring-daemon on the
+      pre-fix tree and not on the fixed one; coredumpctl on macuahuitl
+      shows no new gnome-keyring SIGABRT over a day of normal gating.
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is the private-bus reproduction itself. Future litmus scripts/test-preflight-survives-killed-secret-service-read.sh, written in the same commit as the fix: runs the preflight set 30 times against a private dbus-run-session with a throwaway gnome-keyring-daemon and asserts the daemon is still alive (pre-fix result: the daemon aborts with gkd_secret_service_get_pkcs11_session assertion client failed, as on macuahuitl 2026-10-08 15:53Z); NEGATIVE CONTROL: the real session bus is never contacted."
+    depends_on: []
+    next_action: >
+      List every preflight step that can reach the real session bus (grep
+      busctl, gh, secret-tool, git credential in the steps build.sh
+      --preflight runs) and build a private-bus reproduction. Never test
+      against the operator's real keyring.

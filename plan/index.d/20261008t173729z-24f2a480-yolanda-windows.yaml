@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: readiness-deadline-900s-is-3500x-the-measured-bind
+    field: notes
+    value: 'MEASUREMENT TRAP (yolanda-windows 2026-10-08): `wsl --terminate <distro>` is NOT a cold boot. It restarts the distro inside a still-running WSL VM, so `journalctl -b` and the monotonic clock span every restart, and a first-match grep for the bind line reads an earlier boot (two such runs gave negative bind latencies and were discarded). A cold boot is `wsl --shutdown` (stops every distro); take the LAST matching journal line, and sanity-check that kernel timestamps start near 1-2 s.'
+    ts: "2026-10-08T17:37:29Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: readiness-deadline-900s-is-3500x-the-measured-bind
+    event:
+      type: note
+      ts: "2026-10-08T17:37:29Z"
+      host: yolanda-windows
+      summary: |-
+        record the cold-boot measurement trap found while setting the budgets (PR #236)

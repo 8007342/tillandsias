@@ -1,6 +1,6 @@
 [package]
 name = "tillandsias-podman"
-version = "56.9.27"
+version = "56.10.9"
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
@@ -21,3 +21,6 @@ wait-timeout = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[lints]
+workspace = true

@@ -168,7 +168,8 @@ pub async fn deliver_credentials_and_check_handover(
             outcome,
             ..
         } => {
-            if !outcome.is_accepted() {
+            // ORDER 1562-bqcg: Superseded goes on to read the handover.
+            if !outcome.proceeds_to_handover() {
                 return Err(format!(
                     "DeliverCredentials was received but not accepted: {}",
                     outcome.describe()

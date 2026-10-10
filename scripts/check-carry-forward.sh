@@ -63,7 +63,7 @@ cd "$ROOT" || exit 2
 FRAG_DIR="plan/index.d"
 [ -d "$FRAG_DIR" ] || { echo "ok:carry-forward:0 of 0 fragments"; exit 0; }
 
-# FAST PATH, matching check-fragment-status-loss.sh: a freshly-compacted
+# FAST PATH, matching check-fragment-status-loss.lua: a freshly-compacted
 # checkout has no fragments and must cost no subprocess at all.
 frag_present=0
 for _f in "$FRAG_DIR"/*.yaml; do
@@ -136,7 +136,7 @@ for f in "$FRAG_DIR"/*.yaml; do
     rc=$?
     if [ "$rc" -ne 0 ]; then
         # 3 is the typed unparseable verdict; anything else non-zero is equally
-        # an unread fragment. NOT a refusal here: check-fragment-status-loss.sh
+        # an unread fragment. NOT a refusal here: check-fragment-status-loss.lua
         # already hard-refuses this exact class (exit 1, `UNPARSEABLE`), and a
         # second red for one typo tells the author nothing new. Counted and
         # named so it is never silent.

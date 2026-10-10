@@ -54,7 +54,7 @@ if PATH="$TMP/bin:$PATH" HOME="$TMP/home" TILLANDSIAS_OAUTH_PROVIDER=claude \
      bash "$IMG/provider-oauth-vault.sh" restore; then
     [ -s "$TMP/home/.claude/.credentials.json" ] \
         && ok "restore materializes credential file" || bad "credential file missing"
-    [ "$(stat -c %a "$TMP/home/.claude/.credentials.json")" = "600" ] \
+    [ "$(stat -c %a "$TMP/home/.claude/.credentials.json" 2>/dev/null || stat -f %Lp "$TMP/home/.claude/.credentials.json")" = "600" ] \
         && ok "credential file is 0600" || bad "credential file mode wrong"
     diff <(printf '%s' "$DOC") "$TMP/home/.claude/.credentials.json" >/dev/null \
         && ok "opaque document byte-identical" || bad "document corrupted"

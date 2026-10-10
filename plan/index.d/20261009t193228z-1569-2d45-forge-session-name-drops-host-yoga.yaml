@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found 2026-10-09 on yoga (first forge on stable v56.10.9.1), filed at the
+# coordinator's direction (p3, pickup linux).
+packets:
+  - packet_id: check-fleet-membership-derives-a-forge-session-name-from-the-container-hostname-so-it-prints-forge-tillandsias-tillandsias-forge-with-no-host-although-tillandsias-git-host-names-it
+    order: 1569-2d45
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, fleet-membership, agent-identity, naming]
+    estimated_hours: 1
+    owned_files:
+      - scripts/agent-identity.sh
+      - scripts/check-fleet-membership.sh
+    title: |
+      In a forge, scripts/check-fleet-membership.sh prints session-name "forge-tillandsias-tillandsias-forge": it takes HOST from agent-identity.sh node-name, which resolves to the container hostname (forge-tillandsias), so the <host>-tillandsias-forge rule loses the real host even though the forge env carries TILLANDSIAS_GIT_HOST=yoga and TILLANDSIAS_MSG_HOST=yoga
+    context: |
+      Measured on yoga 2026-10-09T19:20Z, and again at 19:31Z after
+      cycle-preflight, forge on v56.10.9.1:
+        note:join-the-fleet:session-name:forge-tillandsias-tillandsias-forge
+      The same root shows in the agent id: "agent-identity.sh id claude" ->
+      forge-forge-tillandsias-claude-20261009t193211z (no yoga). Naming rule
+      per coordinator: <host>-<os> for bare metal, <host>-tillandsias-forge
+      for forges. Prior fix in the same family: 1337-3tk6 (salvage refs from
+      a forge attributed to "unknown").
+    exit_criteria:
+      - 'check-fleet-membership in a forge on yoga prints session-name "yoga-tillandsias-forge"; pre-fix: "forge-tillandsias-tillandsias-forge" (yoga 2026-10-09T19:20Z)'
+      - 'bare-metal derivation unchanged (<host>-<os>), and a forge with no host env still prints a named fallback, never an empty host'
+    unscoreable: "unpinnable-until-the-guard-exists: future fixture arm that runs check-fleet-membership with TILLANDSIAS_HOST_KIND=forge, HOSTNAME=forge-tillandsias, TILLANDSIAS_GIT_HOST=yoga and asserts session-name:yoga-tillandsias-forge; pre-fix result: forge-tillandsias-tillandsias-forge. NEGATIVE CONTROL: without TILLANDSIAS_HOST_KIND the bare-metal name is unchanged."
+    depends_on: []
+    next_action: >
+      In the forge regime, prefer the launcher-provided host (TILLANDSIAS_MSG_HOST
+      or TILLANDSIAS_GIT_HOST) over the container hostname, in node-name or in
+      check-fleet-membership's HOST; decide whether agent ids follow.
+    events:
+      - type: filed
+        ts: "2026-10-09T19:32:28Z"
+        agent_id: forge-forge-tillandsias-claude-20261009t193211z
+        host: yoga
+        summary: |-
+          Filed at the coordinator's direction (p3, pickup linux) from the first forge on stable v56.10.9.1 (yoga).

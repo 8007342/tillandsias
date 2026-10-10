@@ -1,0 +1,17 @@
+# Gate step 1559-2uw3 — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. check-purge-clears-vault-credentials.sh's NEGATIVE arm
+# (1437-3iux S4): the Windows SOFT reset body (`reset_state_once`) calls no
+# credential clearer and does not unregister the distro, because SOFT keeps the
+# Vault store (host-state-lifecycle). The fixture runs the REAL guard against
+# the real tree and three scratch copies: the clearer called in the SOFT body
+# (refused), the same call only in a comment (passes: comments are stripped),
+# and a source with no SOFT body (refused by name). Each sabotage asserts its
+# own edit landed once. Pre-fix: the clearer arm and the missing-body arm FAIL.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the Windows SOFT reset calls no Vault credential clearer (1559-2uw3)"
+STEP_SCRIPT="scripts/test-purge-guard-soft-arm.sh"
+STEP_ERROR="the purge guard's SOFT arm no longer refuses a clearer in --reset-state (1559-2uw3); see which arm failed above"
+STEP_OK="the Windows SOFT reset calls no Vault credential clearer"
+STEP_SECOND_REGIME="yolanda 2026-10-08 msys ok:purge-guard-soft-arm:4 arms"

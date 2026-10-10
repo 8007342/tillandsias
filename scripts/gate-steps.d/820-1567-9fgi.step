@@ -1,0 +1,23 @@
+# Gate step 1567-9fgi — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. Killing the host side of the WSL2 builder hop must end the
+# guest tree. Measured on yolanda-windows 2026-10-09: a stopped, then reaped,
+# Windows ./build.sh --preflight left the guest build running in
+# tillandsias-build. The pty hangup ends the foreground group, but build.sh
+# runs every preflight guard under setsid, out of its reach; and a hard-killed
+# capture-path host shell leaves wsl.exe alive, so the guest hears nothing.
+# scripts/with-wsl2-builder.sh now runs every build command through
+# scripts/wsl-guest-session.sh, which keeps the run in a cgroup of its own and
+# tears it down on the hangup, on the session Relay exiting, or on the host
+# shell's winpid vanishing.
+#
+# The fixture runs the REAL hop against the real build distro, kills the host
+# side (TERM, INT, HUP, KILL; exec and capture paths; cgroup and fallback) and
+# counts guest survivors. Pre-fix: 8/8 FAIL. Off Windows it skips by name.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking a killed Windows build leaves nothing running in the WSL2 build distro (1567-9fgi)"
+STEP_SCRIPT="scripts/test-wsl-builder-kill-reaches-guest.sh"
+STEP_ERROR="killing the host side of the WSL2 builder hop again leaves guest processes running in the build distro (1567-9fgi); see which arm failed above"
+STEP_OK="a killed host side ends the whole guest run"
+STEP_SECOND_REGIME="yolanda-windows 2026-10-09 msys ok:wsl-builder-kill-fixture:10"

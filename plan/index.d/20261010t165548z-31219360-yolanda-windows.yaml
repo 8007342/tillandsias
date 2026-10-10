@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: host-capability-probe-has-no-windows-writer-label-so-every-windows-capability-row-ever-written-claims-host-linux-mutable-while-its-own-document-says-windows
+    field: status
+    value: completed
+    ts: "2026-10-10T16:55:48Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: host-capability-probe-has-no-windows-writer-label-so-every-windows-capability-row-ever-written-claims-host-linux-mutable-while-its-own-document-says-windows
+    event:
+      type: completed
+      ts: "2026-10-10T16:55:48Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: e357f3f87 + exit check on yolanda-windows: host-capability-probe.sh --fragment | grep -q '^    host: windows$' passes (host: windows, locus: windows-host)

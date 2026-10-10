@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-windows-tray-treats-a-superseded-credential-delivery-as-a-failure-and-never-reads-the-guests-handover-so-the-first-launch-after-a-reset-fails-and-credential-manager-is-never-repopulated
+    order: 1562-bqcg
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [windows, tray, vault, credential-manager, control-wire, release-blocker]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-windows-tray/src/installation_uuid.rs
+      - crates/tillandsias-windows-tray/src/stubs/installation_uuid.rs
+    title: |
+      deliver_credentials_and_check_handover returns Err on ANY non-Accepted DeliverCredentialsOutcome, Superseded included, BEFORE GetVaultHandover, so after a reset that cleared the host credentials the tray never reads the guest's newer handover: the first launch fails provisioning ("superseded by a newer in-guest handover"), retries with back-off, and Credential Manager never gets the share back
+    context: |
+      MEASURED in the v56.10.8.1 Windows smoke (yolanda-windows 2026-10-08,
+      plan/issues/smoke-e2e-findings-v56.10.8.1-2026-10-08-windows-yolanda.md):
+      the curl install's --reset-state (HARD in this release) cleared the host
+      vault credentials and re-provisioned (VM Ready, Vault unsealed). The tray
+      the installer launched then logged, 18 times with back-off:
+        credentials delivery failed: DeliverCredentials was received but not
+        accepted: superseded by a newer in-guest handover
+      and finally "WSL recipe provisioning failed: control-wire handshake did
+      not succeed within budget" with a launch-failure diagnostics bundle.
+      Credential Manager kept only tillandsias-vm-uuid.
+      Mechanism (crates/tillandsias-windows-tray/src/installation_uuid.rs,
+      deliver_credentials_and_check_handover): `if !outcome.is_accepted() {
+      return Err(...) }` runs before the GetVaultHandover request. 890-y72v
+      defines Superseded as "the guest declined the delivery because its own
+      state is strictly NEWER ... the remedy is for the host to re-read, not
+      re-deliver". The host re-delivers instead and never re-reads.
+      Exposure: every install over an existing install runs a reset that
+      clears the host credentials in this release, so every such first launch
+      hits it. With S1 (#243) SOFT does not clear them, which narrows but does
+      not remove the path (HARD, a wiped guest, or a first install with a stale
+      handover all reach Superseded).
+    exit_criteria:
+      - 'on Superseded the tray proceeds to GetVaultHandover and writes the returned share and root token to Credential Manager; Rejected and Unstated still fail closed'
+      - 'a test pins the three outcomes against a fake client: Accepted -> handover read; Superseded -> handover read, no error; Rejected -> error, handover not trusted (pre-fix: Superseded errors before the handover)'
+      - 'a live Windows run: after a reset that clears the credentials, the first tray launch reaches Ready and Credential Manager holds vault-shamir-share-v1 again (pre-fix: launch failure, share absent)'
+    verifiable_closure: |
+      The outcome test in the windows-tray crate, plus one live Windows run
+      recorded on this row.
+      unscoreable: unpinnable-until-the-guard-exists — the outcome test is the deliverable.
+    events:
+      - type: filed
+        ts: "2026-10-08T23:32:36Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Found in the v56.10.8.1 Windows smoke; the first tray launch after the
+          installer's reset fails. Root cause read from the source.

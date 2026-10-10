@@ -36,6 +36,10 @@
 
 set -euo pipefail
 
+# ORDER 1255-s4im: a floor host's first plan-lane action arms its push guards
+# (bash-only, silent when they already are, never fails this script).
+bash "$(dirname "${BASH_SOURCE[0]}")/ensure-hooks.sh" --prelude || true
+
 show_help() {
   cat >&2 <<'EOF'
 drain-queue.sh — Local sequential agent queue drain.

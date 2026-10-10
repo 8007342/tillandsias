@@ -95,6 +95,35 @@ retirement, Lua land rewrite or draft-spec activation is implied.
       902-5bf9 litmus `steps:`; 1384-j3cv build.sh launcher.
       <!-- Runner/ratchet/narrowed pilot landed; split preflight 1520-z95v,
            litmus steps and build.sh launcher remain open. -->
+      <!-- 2026-10-09 (1570-k5yt, yoga audit): the durable rule the ratchet
+           enforces is now a requirement of openspec/specs/ci-release
+           (req-id: ec267f02, "A new gate decider or gate fixture runs on
+           the Lua runner"); the audit's port candidates are 1570-g4rx,
+           1570-mxcg, 1570-25iq, 1570-k4fx, 1570-qutp. -->
+      <!-- 2026-10-10 (1570-k5yt): the 2026-10-09 ruling "each new lua
+           requires to retroactively update 1+ of old ones" is reworded by
+           the operator as a carried obligation (methodology/convergence.yaml
+           carried_obligations, backlog shell-to-lua, stage gentle): a change
+           touching scripts/{check,test,verify,guard}-*.sh, scripts/lua/ or
+           scripts/gate-steps.d/ carries one port or one
+           `Carried-Waiver: shell-to-lua <reason>` trailer. ENFORCED TODAY:
+           only what check-shell-ratchet.lua already refuses (a new shell
+           decider, a raised floor). NOT ENFORCED: the carried item. Nothing
+           reads the trailer or the due set until 1577-g96z (guard),
+           1577-568c (land tally) and 1577-57u3 (honest counter) land. The
+           earlier plan, an arm comparing the floor's LENGTH to the base,
+           is dropped: 9 floor lines name .sh files already ported and
+           deleted, so a shorter floor can mean no port; paid is measured on
+           the ratchet's sh= count. -->
+      <!-- First carried items, smallest first (wc -l, 2026-10-10):
+           check-no-python-scripts.sh 17, check-no-end-user-brew-instruction.sh
+           27, check-macos-only-sources-verified.sh 32,
+           check-vault-cli-gate-coverage.sh 34, check-ripgrep-available.sh 40.
+           The audit rows 1570-g4rx/mxcg/25iq/k4fx/qutp exceed the 150-line
+           item ceiling and stay packets of their own. -->
+      <!-- Note: the "proc.spawn is unlanded" premise behind the ratchet's
+           fixture arm is stale since 1534-puyz / 1538-pwdr; what remains
+           open is native macOS/Windows conformance (1543-ffhg, 1544-cnae). -->
       (Streaming/lifetime child `1534-puyz` subsequently landed in PR #207
       after independent parent controls and a forced integration gate.
       Runtime parent `1384-aixy` remains open for composition `1538-pwdr`,

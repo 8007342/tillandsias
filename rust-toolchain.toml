@@ -1,0 +1,18 @@
+# ORDER 1562-tc7p — THE one Rust toolchain every build uses, and its single
+# source. rustup reads this file for every cargo/rustc run under this tree;
+# flake.nix reads `channel` for the Nix (Linux release) toolchain; release.yml
+# reads it for both dtolnay steps; scripts/build-macos-tray.sh and
+# scripts/build-windows-tray.ps1 refuse to build on any other rustc.
+#
+# WHY. v56.10.8.1's macOS release job ran on `toolchain: stable`, which had
+# moved to rustc 1.99.0 (2026-09-28). 1.99 denies a declaration every local
+# gate had compiled for months (rustc 1.96.1 on the darwin host, 1.98.0 in the
+# Nix release build), so the cut failed after every gate passed (PR #256).
+#
+# MOVING THE PIN IS A DELIBERATE PR: change `channel`, bump the rust-overlay
+# lock if it does not know the version yet, and gate it on every platform.
+# scripts/lua/check-toolchain-pinned.lua refuses a channel that floats.
+[toolchain]
+channel = "1.99.0"
+profile = "minimal"
+components = ["rustfmt", "clippy"]

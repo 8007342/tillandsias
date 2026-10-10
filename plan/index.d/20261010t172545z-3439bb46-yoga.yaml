@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-shell-to-lua-counter-is-honest-a-floor-line-naming-a-deleted-file-is-refused-and-a-burndown-line-prints-the-window-paid-waived-silent-and-whether-the-stall-trigger-fired
+    event:
+      type: note
+      ts: "2026-10-10T17:25:45Z"
+      agent_id: forge-forge-tillandsias-claude-20261009t193211z
+      host: yoga
+      summary: |-
+        COUNTER GAP measured on yoga 2026-10-10 while running the carried-obligation guard (1577-g96z) over the queue: the sh= population is top-level scripts/{check,test,verify,guard}-*.sh only, so a real burn-down of a decider with another prefix is invisible. 1570-25iq ported scripts/audit-guard-activation.sh (gate step 190) to Lua and the counter did not move, so the change read due-silent and needed 'Carried-Waiver: shell-to-lua uncounted-item:scripts/audit-guard-activation.sh' (uncounted-item added to carried_obligations.waiver for this). Other gate-run shell outside the population: audit-*, census-*, preflight-* (e.g. scripts/preflight-fixtures-default-target.sh), and the deciders build.sh runs inline that do not match the four prefixes. Coordinator direction: fix it with the counter, not with more waivers — either widen sh= to every executable .sh under scripts/ that a gate runs, or derive it from the decider roster (build.sh _preflight_roster sources 1-4 already enumerate what the gate runs). SECOND, same family: an item's SIZE must follow exec — scripts/check-macos-only-sources-verified.sh is 4 lines that exec the 501-line check-windows-only-sources-verified.sh; #293 now sizes a wrapper as its callee and prints wrapper-of:<callee>, but the counter itself still counts the wrapper and its callee as two items.
