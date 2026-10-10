@@ -1821,8 +1821,15 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # running is not a guard. Fails loud if any check-*.sh has no invoker.
     # ============================================================================
     log_section "Guard Activation Audit (599-4wzr)"
-    if [[ -f "scripts/audit-guard-activation.sh" ]]; then
-        if bash scripts/audit-guard-activation.sh 2>&1 | tee /tmp/guard-activation.log; then
+    # ORDER 1570-25iq: the auditor is Lua on the one runner. No runnable plan
+    # binary is a failed audit (a guard that cannot run is not a guard), not a pass.
+    _ga_plan="$( . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null )" || _ga_plan=""
+    if [[ -f "scripts/lua/audit-guard-activation.lua" && -n "$_ga_plan" ]]; then
+        # Captured, then shown: no pipe, so the auditor's own status is the one tested.
+        _ga_rc=0
+        "$_ga_plan" script run scripts/lua/audit-guard-activation.lua > /tmp/guard-activation.log 2>&1 || _ga_rc=$?
+        cat /tmp/guard-activation.log
+        if [[ "$_ga_rc" -eq 0 ]]; then
             log_pass "Every shipped guard is invoked by an activation surface"
             archive_check_log "guard-activation" "pass" /tmp/guard-activation.log
         else
@@ -1831,8 +1838,17 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "guard-activation" "fail" /tmp/guard-activation.log
         fi
     else
-        log_fail_missing_guard "guard-activation" "scripts/audit-guard-activation.sh"
+        log_fail_missing_guard "guard-activation" "scripts/lua/audit-guard-activation.lua (or no runnable tillandsias-plan)"
         archive_check_log "guard-activation" "skipped"
+    fi
+    # ORDER 1570-25iq: the auditor's own fixture — parity with the pre-port .sh,
+    # an orphan that must refuse, the symlink-farm shape, an empty population.
+    if bash scripts/test-audit-guard-activation.sh > /tmp/guard-activation-fixture.log 2>&1; then
+        log_pass "Guard activation auditor fixture passed"
+        archive_check_log "guard-activation-fixture" "pass" /tmp/guard-activation-fixture.log
+    else
+        log_fail_tracked "guard-activation-fixture" "The guard activation auditor's fixture failed (see /tmp/guard-activation-fixture.log)"
+        archive_check_log "guard-activation-fixture" "fail" /tmp/guard-activation-fixture.log
     fi
 
     # Markdown distillation policy (order 599-4wzr activation): was orphaned.

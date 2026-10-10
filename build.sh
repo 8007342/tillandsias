@@ -3087,7 +3087,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # `grep -Rl` saw the name and nothing ever ran the file. A negative control
     # nobody executes cannot protect the hole it names (calmecacpilli).
     #
-    # scripts/audit-guard-activation.sh did not catch it for two reasons, both
+    # The guard-activation audit (then scripts/audit-guard-activation.sh, now
+    # scripts/lua/audit-guard-activation.lua) did not catch it for two reasons, both
     # worth knowing: its population is the 76 `check-*` guards, so `test-*`
     # fixtures are not audited at all; and its own source (line ~74) records that
     # it decides activation by `grep -Rl <basename>`, which cannot tell an

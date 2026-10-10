@@ -326,7 +326,6 @@ scripts scripts/allocate-gate-step-prefix.sh 6
 scripts scripts/archive-plan-packets.sh 13
 scripts scripts/archiver-check-memo.sh 2
 scripts scripts/attest-native-lint.sh 2
-scripts scripts/audit-guard-activation.sh 3
 scripts scripts/bench-accel-lane.sh 13
 scripts scripts/bench-hot-path-placement.sh 3
 scripts scripts/bench-inference-floor.sh 21
