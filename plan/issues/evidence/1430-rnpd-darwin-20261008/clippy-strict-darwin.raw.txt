@@ -1,0 +1,4 @@
+warning: tillandsias-headless@56.9.27: router sidecar absent: not embedded for target_os=macos (a Linux container-lane artifact; only Linux targets require it; 1269-6fcn)
+   Compiling tillandsias-macos-tray v0.1.0 (/Users/tlatoani/claudia/wt-rnpd/crates/tillandsias-macos-tray)
+    Checking tillandsias-headless v56.9.27 (/Users/tlatoani/claudia/wt-rnpd/crates/tillandsias-headless)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 11.75s

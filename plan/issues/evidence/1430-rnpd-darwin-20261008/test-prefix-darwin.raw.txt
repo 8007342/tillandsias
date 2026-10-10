@@ -1,0 +1,74 @@
+   Compiling tillandsias-core v56.9.27 (/Users/tlatoani/claudia/wt-rnpd/crates/tillandsias-core)
+   Compiling tillandsias-logging v0.1.260513 (/Users/tlatoani/claudia/wt-rnpd/crates/tillandsias-logging)
+   Compiling tillandsias-control-wire v0.1.170 (/Users/tlatoani/claudia/wt-rnpd/crates/tillandsias-control-wire)
+   Compiling tillandsias-host-shell v0.1.0 (/Users/tlatoani/claudia/wt-rnpd/crates/tillandsias-host-shell)
+   Compiling tillandsias-browser-mcp v0.1.170 (/Users/tlatoani/claudia/wt-rnpd/crates/tillandsias-browser-mcp)
+   Compiling tillandsias-secure-channel v0.1.0 (/Users/tlatoani/claudia/wt-rnpd/crates/tillandsias-secure-channel)
+   Compiling tillandsias-headless v56.9.27 (/Users/tlatoani/claudia/wt-rnpd/crates/tillandsias-headless)
+   Compiling tillandsias-otp v0.1.170 (/Users/tlatoani/claudia/wt-rnpd/crates/tillandsias-otp)
+   Compiling tillandsias-progress-tty v0.1.0 (/Users/tlatoani/claudia/wt-rnpd/crates/tillandsias-progress-tty)
+   Compiling tillandsias-msg v0.1.0 (/Users/tlatoani/claudia/wt-rnpd/crates/tillandsias-msg)
+warning: tillandsias-headless@56.9.27: router sidecar absent: not embedded for target_os=macos (a Linux container-lane artifact; only Linux targets require it; 1269-6fcn)
+   Compiling tillandsias-scanner v56.9.27 (/Users/tlatoani/claudia/wt-rnpd/crates/tillandsias-scanner)
+   Compiling tillandsias-podman v56.9.27 (/Users/tlatoani/claudia/wt-rnpd/crates/tillandsias-podman)
+   Compiling tillandsias-vm-layer v0.1.0 (/Users/tlatoani/claudia/wt-rnpd/crates/tillandsias-vm-layer)
+   Compiling tillandsias-vault-client v0.1.1 (/Users/tlatoani/claudia/wt-rnpd/crates/tillandsias-vault-client)
+   Compiling tillandsias-metrics v0.1.260513 (/Users/tlatoani/claudia/wt-rnpd/crates/tillandsias-metrics)
+warning: constant `GUEST_POWEROFF_ENV` is never used
+  --> crates/tillandsias-headless/src/guest_poweroff.rs:18:11 <!-- cite-ok: raw compiler/test output, the location is part of the receipt -->
+   |
+18 | pub const GUEST_POWEROFF_ENV: &str = "TILLANDSIAS_GUEST_POWEROFF";
+   |           ^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `poweroff_allowed` is never used
+  --> crates/tillandsias-headless/src/guest_poweroff.rs:21:8 <!-- cite-ok: raw compiler/test output, the location is part of the receipt -->
+   |
+21 | pub fn poweroff_allowed(opt_in: Option<&str>, is_linux: bool) -> Result<(), String> {
+   |        ^^^^^^^^^^^^^^^^
+
+warning: function `request_poweroff` is never used
+  --> crates/tillandsias-headless/src/guest_poweroff.rs:38:8 <!-- cite-ok: raw compiler/test output, the location is part of the receipt -->
+   |
+38 | pub fn request_poweroff() -> Result<(), String> {
+   |        ^^^^^^^^^^^^^^^^
+
+warning: function `request_poweroff` is never used
+  --> crates/tillandsias-headless/src/guest_poweroff.rs:60:8 <!-- cite-ok: raw compiler/test output, the location is part of the receipt -->
+   |
+60 | pub fn request_poweroff() -> Result<(), String> {
+   |        ^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `TWO_ROUTERS` is never used
+     --> crates/tillandsias-headless/src/main.rs:23536:11 <!-- cite-ok: raw compiler/test output, the location is part of the receipt -->
+      |
+23536 |     const TWO_ROUTERS: &str = "default proto ra metric 20600 pref medium\n\
+      |           ^^^^^^^^^^^
+
+warning: `tillandsias-headless` (bin "tillandsias") generated 3 warnings
+warning: `tillandsias-headless` (bin "tillandsias" test) generated 2 warnings
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 18s
+     Running unittests src/main.rs (/Users/tlatoani/claudia/tillandsias/target/debug/deps/tillandsias-3b0dbe52e4676fca)
+
+running 2 tests
+test guest_poweroff::tests::only_a_linux_guest_that_opted_in_may_power_off ... ok
+test vsock_server::tests::vm_shutdown_request_is_acked_and_starts_the_guest_poweroff ... FAILED
+
+failures:
+
+---- vsock_server::tests::vm_shutdown_request_is_acked_and_starts_the_guest_poweroff stdout ----
+
+thread 'vsock_server::tests::vm_shutdown_request_is_acked_and_starts_the_guest_poweroff' (7102400) panicked at crates/tillandsias-headless/src/vsock_server.rs:2647:9: <!-- cite-ok: raw compiler/test output, the location is part of the receipt -->
+VmShutdownRequest must be answered with IssueAck { seq_acked: 2 }; got Err("no frame within 2s")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    vsock_server::tests::vm_shutdown_request_is_acked_and_starts_the_guest_poweroff
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 840 filtered out; finished in 2.02s
+
+error: test failed, to rerun pass `-p tillandsias-headless --bin tillandsias`
