@@ -111,6 +111,20 @@ if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
     throw "cargo not found on PATH. Install Rust (https://rustup.rs) or add %USERPROFILE%\.cargo\bin."
 }
 
+# ORDER 1562-tc7p: build with the PINNED toolchain or not at all. rustup applies
+# rust-toolchain.toml by itself; this refuses the cases where it would not (a
+# non-rustup cargo first on PATH, or a RUSTUP_TOOLCHAIN override).
+$pinMatch = Select-String -Path (Join-Path $RepoRoot 'rust-toolchain.toml') -Pattern '^channel\s*=\s*"([^"]+)"'
+if (-not $pinMatch) {
+    throw "rust-toolchain.toml names no channel; the pin is the single source of the build toolchain (1562-tc7p)."
+}
+$pinnedRust = $pinMatch.Matches[0].Groups[1].Value
+$activeRust = ((& rustc --version) -split '\s+')[1]
+if ($activeRust -ne $pinnedRust) {
+    throw "rustc $activeRust is active but rust-toolchain.toml pins $pinnedRust (1562-tc7p). Use a rustup-managed cargo and unset RUSTUP_TOOLCHAIN."
+}
+Write-Host "rustc $activeRust (pinned by rust-toolchain.toml)"
+
 # --- Stage guest headless binaries into assets/ (order 190 windows half) ------
 # Embed per HOST arch (order 282): a WSL2 guest always matches the Windows
 # host architecture, so only that one staged binary from target-guest/ (the

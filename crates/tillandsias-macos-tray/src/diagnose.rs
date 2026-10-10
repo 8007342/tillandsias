@@ -1911,22 +1911,79 @@ fn prompt_line(label: &str, hidden: bool) -> String {
         Err(_) => {
             restore_echo();
             eprintln!(
-                "[github-login] stdin is not a terminal and sent no line for \"{label}\" \
-                 within {}s — refusing to wait longer.\n\
-                 A VM is already booted and the guest is waiting at its prompt, so an \
-                 unbounded wait here holds a live VM open indefinitely (663-69kp).\n\
-                 On macOS the host drives the guest login over the control wire, so pipe \
-                 the answers in — one full line each, in this order (token, author name, \
-                 author email), with the producer closing its end:\n\
-                 \x20 printf '%s\\n%s\\n%s\\n' \"$TOKEN\" \"$NAME\" \"$EMAIL\" \
-                 | tillandsias-tray --github-login\n\
-                 (`--with-token` is a tillandsias-headless GUEST flag and is NOT accepted \
-                 here — see 663-acdw.)",
-                PROMPT_LINE_PIPED_TIMEOUT.as_secs()
+                "{}",
+                piped_timeout_remedy(label, PROMPT_LINE_PIPED_TIMEOUT.as_secs())
             );
             String::new()
         }
     }
+}
+
+/// The refusal `prompt_line` prints when a piped stdin sent no line in time.
+///
+/// ORDER 1566-tkan. This used to tell the operator to pipe "token, author
+/// name, author email". Since 1383-dkxi the credential step is a device flow
+/// with NO expect for it, so the host reads exactly two lines and the FIRST is
+/// the author name: anyone following the old remedy put their token into
+/// user.name, and from there into every pushed commit. List only the lines the
+/// host reads, and never mention a token.
+fn piped_timeout_remedy(label: &str, secs: u64) -> String {
+    format!(
+        "[github-login] stdin is not a terminal and sent no line for \"{label}\" \
+         within {secs}s — refusing to wait longer.\n\
+         A VM is already booted and the guest is waiting at its prompt, so an \
+         unbounded wait here holds a live VM open indefinitely (663-69kp).\n\
+         The GitHub sign-in itself is a device flow: approve the one-time code \
+         printed above on your phone or in a browser. Nothing else is read for it.\n\
+         The host then reads exactly two lines from stdin — the git author name, \
+         then the git author email — with the producer closing its end:\n\
+         \x20 printf '%s\\n%s\\n' \"$NAME\" \"$EMAIL\" | tillandsias-tray --github-login\n\
+         (`--with-token` is a tillandsias-headless GUEST flag and is NOT accepted \
+         here — see 663-acdw.)"
+    )
+}
+
+/// GitHub credential prefixes (classic, OAuth, user-to-server, server-to-server,
+/// refresh, fine-grained). ORDER 1566-tkan.
+const GITHUB_CREDENTIAL_PREFIXES: [&str; 6] =
+    ["ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_"];
+
+/// True when `answer` carries something shaped like a GitHub credential: one of
+/// [`GITHUB_CREDENTIAL_PREFIXES`] at the start or after a non-alphanumeric
+/// character, so `ghp_…`, `<ghp_…>` and `x ghp_…` all match but a name that
+/// merely contains the letters does not.
+fn looks_like_github_credential(answer: &str) -> bool {
+    let lower = answer.to_ascii_lowercase();
+    GITHUB_CREDENTIAL_PREFIXES.iter().any(|p| {
+        lower
+            .match_indices(p)
+            .any(|(i, _)| i == 0 || !lower.as_bytes()[i - 1].is_ascii_alphanumeric())
+    })
+}
+
+/// Validate one git-identity answer before it is sent to the guest.
+///
+/// ORDER 1566-tkan. An answer shaped like a GitHub credential is REFUSED here,
+/// before anything reaches the guest: a token written to user.name or
+/// user.email is public the moment a commit is pushed, and cannot be revoked
+/// from history. The refusal never echoes the answer.
+fn identity_answer(field: &str, answer: &str) -> Result<Vec<u8>, String> {
+    if answer.is_empty() {
+        return Err("--github-login: git author name and email are both required".to_string());
+    }
+    if looks_like_github_credential(answer) {
+        return Err(format!(
+            "--github-login: REFUSED — the git author {field} looks like a GitHub \
+             credential (it carries a ghp_/gho_/ghu_/ghs_/ghr_/github_pat_ prefix), so \
+             nothing was sent to the guest.\n\
+             why: the author {field} is written into every commit you push, where a \
+             token is public and cannot be removed from history.\n\
+             remedy: answer with your name and a (noreply) email only — the GitHub \
+             sign-in is the device code shown above and reads nothing from stdin. If \
+             you piped a token, revoke it at https://github.com/settings/tokens."
+        ));
+    }
+    Ok(format!("{answer}\n").into_bytes())
 }
 
 /// `--transport-conformance`: run the shared GuestTransport conformance
@@ -2156,28 +2213,14 @@ pub fn github_login_main() -> i32 {
                 needle: b"author name".to_vec(),
                 label: "git author name".to_string(),
                 response: Box::new(|| {
-                    let name = prompt_line("Git author name", false);
-                    if name.is_empty() {
-                        return Err(
-                            "--github-login: git author name and email are both required"
-                                .to_string(),
-                        );
-                    }
-                    Ok(format!("{name}\n").into_bytes())
+                    identity_answer("name", &prompt_line("Git author name", false))
                 }),
             },
             DynamicExpect {
                 needle: b"author email".to_vec(),
                 label: "git author email".to_string(),
                 response: Box::new(|| {
-                    let email = prompt_line("Git author email", false);
-                    if email.is_empty() {
-                        return Err(
-                            "--github-login: git author name and email are both required"
-                                .to_string(),
-                        );
-                    }
-                    Ok(format!("{email}\n").into_bytes())
+                    identity_answer("email", &prompt_line("Git author email", false))
                 }),
             },
         ];
@@ -2774,7 +2817,9 @@ fn parse_aarch64_qcow2_sha(manifest_toml: &str) -> Option<String> {
 mod tests {
     use tillandsias_control_wire::secure_wire_mode::{SecureWireMode, parse_secure_wire_mode};
 
-    use super::headless_service_line;
+    use super::{
+        GITHUB_CREDENTIAL_PREFIXES, headless_service_line, identity_answer, piped_timeout_remedy,
+    };
 
     /// ORDER 1084-x8ya, CRITERION 4 — a guest that is STILL COMING UP must not
     /// be reported as this defect, and must not be called failed.
@@ -3171,6 +3216,91 @@ mod tests {
     /// A behavioural test would have to boot a VM, which is far too heavy for a
     /// unit test and is why the property is pinned this way rather than not at
     /// all. Treat a green result here as "the shape is right", not as "measured".
+    /// ORDER 1566-tkan. The piped-stdin remedy must list only the lines the host
+    /// reads (author name, author email). Pre-fix it printed
+    /// `printf … "$TOKEN" "$NAME" "$EMAIL"`, and the device-flow host reads the
+    /// FIRST piped line as the author name. Scanned in the SOURCE so this arm
+    /// compiles, and fails, against the pre-fix tree too.
+    #[test]
+    fn the_piped_remedy_never_asks_for_a_token() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/diagnose.rs"));
+        let production = source
+            .split("\nmod tests {")
+            .next()
+            .expect("production half");
+        // Built from parts so this test's own text cannot match itself.
+        let piped_token = concat!("\\\"$", "TOKEN");
+        assert!(
+            !production.contains(piped_token),
+            "the --github-login remedy still tells the operator to pipe a token, which \
+             the device-flow host reads as the git author NAME (1566-tkan)"
+        );
+        let token_first = concat!("(token, ", "author name");
+        assert!(
+            !production.contains(token_first),
+            "the --github-login remedy still orders the piped lines token-first (1566-tkan)"
+        );
+    }
+
+    /// ORDER 1566-tkan. The remedy's own text: two lines, name then email.
+    #[test]
+    fn the_piped_remedy_pipes_exactly_name_then_email() {
+        let r = piped_timeout_remedy("Git author name", 30);
+        assert!(
+            r.contains(r#"printf '%s\n%s\n' "$NAME" "$EMAIL" | tillandsias-tray --github-login"#),
+            "{r}"
+        );
+        assert!(!r.to_ascii_lowercase().contains("$token"), "{r}");
+        assert!(
+            r.contains("device flow"),
+            "the remedy must say how the sign-in itself happens: {r}"
+        );
+    }
+
+    /// ORDER 1566-tkan. A credential-shaped author name or email is refused
+    /// before anything is sent, and the refusal never echoes it.
+    #[test]
+    fn a_credential_shaped_identity_answer_is_refused_unsent() {
+        for prefix in GITHUB_CREDENTIAL_PREFIXES {
+            let fake = format!("{prefix}AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+            for (field, answer) in [
+                ("name", fake.clone()),
+                ("name", fake.to_ascii_uppercase()),
+                ("name", format!("Ana <{fake}>")),
+                ("email", format!("{fake}@users.noreply.github.com")),
+            ] {
+                let got = identity_answer(field, &answer);
+                let err = got.expect_err(&format!("{field} answer {prefix}… must be refused"));
+                assert!(err.contains("REFUSED"), "{err}");
+                assert!(
+                    !err.contains(&fake),
+                    "the refusal must never echo the credential: {err}"
+                );
+            }
+        }
+    }
+
+    /// ORDER 1566-tkan NEGATIVE CONTROL: ordinary identities still pass, byte
+    /// for byte, including names that merely contain the letters of a prefix.
+    #[test]
+    fn an_ordinary_identity_answer_still_passes() {
+        for (field, answer) in [
+            ("name", "Tlatoāni"),
+            ("name", "Ana María García-López"),
+            ("name", "Ghpaul Ghosh"),
+            ("name", "laughs_out"),
+            ("email", "12345+tlatoani@users.noreply.github.com"),
+            ("email", "ghost@example.org"),
+        ] {
+            assert_eq!(
+                identity_answer(field, answer),
+                Ok(format!("{answer}\n").into_bytes()),
+                "{field} {answer:?} must pass unchanged"
+            );
+        }
+        assert!(identity_answer("name", "").is_err(), "empty stays refused");
+    }
+
     #[test]
     fn prompt_line_is_bounded_for_non_interactive_stdin() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/diagnose.rs"));

@@ -395,7 +395,10 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, 
     # ORDER 1384-bqhy: a .lua guard runs through `tillandsias-plan script run`,
     # the one runner, never `bash`; every other guard is unchanged.
     local -a _runner=(bash "$_p")
-    case "$_p" in *.lua) _runner=("${_pf_plan_bin:-tillandsias-plan}" script run "$_p") ;; esac
+    # ORDER 1570-mxcg: and it is told which binary runs it (the same contract as
+    # _run_lua_decider), for a decider that must ask the fold.
+    case "$_p" in *.lua) _runner=(env "TILLANDSIAS_SCRIPT_RUNNER_BIN=${_pf_plan_bin:-tillandsias-plan}"
+                                  "${_pf_plan_bin:-tillandsias-plan}" script run "$_p") ;; esac
     # POLL IN TENTHS, NOT SECONDS. A one-second poll puts a ONE-SECOND FLOOR
     # under every guard, including the 54 that finish in under 250ms: measured
     # here, that floor alone took the run from 148s to 196s — the deadline
@@ -1980,7 +1983,11 @@ _run_lua_decider() {  # $1 = scripts/lua/<name>.lua, remaining args are explicit
             "cargo build --release -p tillandsias-plan (or refresh the installed copy), then re-run"
         return 3
     fi
-    _run "$_ld_bin" script run "$SCRIPT_DIR/$_ld_script" -- "$@"
+    # ORDER 1570-mxcg: a decider that must ASK the plan binary (the fold, the
+    # fragment verbs) is handed the runner this helper already resolved, so it
+    # never re-resolves (704-zcgi: one probe). A new name with no prior meaning,
+    # so no other decider's behaviour changes.
+    TILLANDSIAS_SCRIPT_RUNNER_BIN="$_ld_bin" _run "$_ld_bin" script run "$SCRIPT_DIR/$_ld_script" -- "$@"
 }
 
 _run_litmus_phase() {
@@ -2574,7 +2581,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
                 # froze every host's gate for an hour.
                 _info "ok:gate-fresh-except-plan (stamped ${_memo_verdict#ok:gate-fresh-except-plan })"
                 _info "  Code is unchanged since that passing gate; the plan ledger moved, so the ledger guards run."
-                if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-status-loss.sh" 2>&1; then
+                if ! _run_lua_decider "scripts/lua/check-fragment-status-loss.lua" 2>&1; then
                     _error "a fragment declares a status the fold does not apply — write a status: LWW entry instead (plan/index.d/README.md)"
                     exit 1
                 fi
@@ -2588,8 +2595,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
                 # not see it. Filed separately; not worked around here.
                 #
                 # NO "SKIP IF ABSENT" BRANCH, because a missing binary is
-                # already impossible at this line: check-fragment-status-loss.sh
-                # ran above and exits 2 when none resolves, which the refusal
+                # already impossible at this line: check-fragment-status-loss.lua
+                # ran above and exits 2 or 3 when none resolves, which the refusal
                 # above turns into a failed gate. A conditional here would be a
                 # second opinion on a question already settled — and the shape
                 # of it, a skip that reads as a pass, is what this whole packet
@@ -2689,7 +2696,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # ORDER 1063-363b: BASELINE THE TREE THE GATE IS ABOUT TO MEASURE.
     # On lenovinha 2026-09-05 something in the gates and litmus overwrote
     # scripts/plan-binary-probe.sh in the WORKING TREE with the contents of
-    # scripts/check-fragment-status-loss.sh. That file is an instrument — half
+    # check-fragment-status-loss.sh (since ported to Lua). That file is an instrument — half
     # the gate resolves the plan binary through it — so every verdict taken
     # after the write measured something other than the tree under test, and
     # said so confidently. 61ms against a 254s gate.
@@ -2767,7 +2774,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # refusal on this line stops every Linux host rather than one. Promotion is
     # a flag (TILLANDSIAS_COMPETING_GATE_ADVISORY=0), pinned by the fixture, to
     # be flipped on fleet evidence rather than on confidence -- the same staging
-    # check-portability-idioms.sh argues for itself.
+    # check-portability-idioms (now scripts/lua/) argues for itself.
     # DELIBERATELY UNFLAGGED. By the time this runs on a Silverblue or WSL host
     # we are INSIDE the dispatch, where the host-side wrapper is unreadable (or,
     # on WSL, has no /proc entry at all), so any verdict from here is a guess —
@@ -2934,21 +2941,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # check but not clippy. The two also share no fingerprints (clippy drives
     # its own compiler), so the removed step was a full second frontend pass.
     # Type errors now surface under the clippy banner.
-    # ALLOW double_must_use (relay-fix, coordinator 2026-10-01). The repo pins
-    # no toolchain, and stable moved to rustc/clippy 1.99.0 (2026-09-28) on
-    # this host mid-session; clippy 1.99 fires double_must_use on the
-    # #[must_use] that async_trait's OWN expansion adds to trait methods whose
-    # return type is already must-use (tillandsias-control-wire GuestTransport,
-    # tillandsias-core image_builder, ...). Nothing in our source asks for it,
-    # and with the lint allowed the workspace is otherwise clippy-clean on
-    # 1.99. Remove this when async-trait stops emitting the attribute, or when
-    # a pinned toolchain makes the choice explicit.
+    # double_must_use is allowed ONCE, in Cargo.toml [workspace.lints.clippy]
+    # (1572-dmus), not by a flag here: a flag reached build.sh and local-ci.sh
+    # but never scripts/build-macos-tray.sh, so the lanes disagreed.
     _step "Running clippy (strict; includes the workspace type-check)..."
-    _run cargo clippy --all-targets --manifest-path "$SCRIPT_DIR/Cargo.toml" -- -D warnings -A clippy::double_must_use 2>&1
+    _run cargo clippy --all-targets --manifest-path "$SCRIPT_DIR/Cargo.toml" -- -D warnings 2>&1
     _info "Clippy passed"
 
     _step "Running clippy (strict + listen-vsock)..."
-    _run cargo clippy --all-targets --manifest-path "$SCRIPT_DIR/Cargo.toml" -p tillandsias-headless --features listen-vsock -- -D warnings -A clippy::double_must_use 2>&1
+    _run cargo clippy --all-targets --manifest-path "$SCRIPT_DIR/Cargo.toml" -p tillandsias-headless --features listen-vsock -- -D warnings 2>&1
     _info "Clippy (listen-vsock) passed"
 
     _step "Checking plan ledger integrity (tillandsias-plan check)..."
@@ -2997,7 +2998,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # noticed. A writer that reports success while corrupting an append-only
     # record needs a fixture, not a third incident.
     # WHOLE-OVERLAY, not diff-scoped. check-added-fragments-parse.sh refuses a
-    # push that ADDS an unreadable fragment, and check-fragment-status-loss.sh
+    # push that ADDS an unreadable fragment, and check-fragment-status-loss.lua
     # already wrote the caveat down: a fragment damaged by MERGE is outside it.
     # On 2026-08-23 git rename detection paired two hosts' set-field fragments
     # after concurrent compactions and wrote conflict markers into both; they
@@ -3093,7 +3094,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # `grep -Rl` saw the name and nothing ever ran the file. A negative control
     # nobody executes cannot protect the hole it names (calmecacpilli).
     #
-    # scripts/audit-guard-activation.sh did not catch it for two reasons, both
+    # The guard-activation audit (then scripts/audit-guard-activation.sh, now
+    # scripts/lua/audit-guard-activation.lua) did not catch it for two reasons, both
     # worth knowing: its population is the 76 `check-*` guards, so `test-*`
     # fixtures are not audited at all; and its own source (line ~74) records that
     # it decides activation by `grep -Rl <basename>`, which cannot tell an
@@ -3325,6 +3327,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "append-event archived-refusal fixture passed"
+
+    # The fixture above must not be able to dirty THIS checkout however it dies
+    # (1564-lk9f): a SIGKILL after its live-accept arm left a host: fixture
+    # fragment in macuahuitl's plan/index.d on 2026-10-09 and land-queue refused
+    # the dirty tree. Arm 1 SIGKILLs it in a scratch repo; arm 2 is the negative
+    # control that keeps 699-usxc asserted.
+    _step "Checking the append-event archived-refusal fixture is hermetic (1564-lk9f)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-append-event-archived-refusal-is-hermetic.sh" 2>&1; then
+        _error "the append-event archived-refusal fixture can leave a write in the checkout it runs from, or no longer asserts that a fragment-only packet accepts events"
+        exit 1
+    fi
+    _info "append-event archived-refusal hermetic fixture passed"
 
     _step "Checking the checkout-lock attested-release fixture (899-q9di)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-cycle-lock-attested-release.sh" 2>&1; then
@@ -4012,7 +4026,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _step "Checking for fragment status transitions the fold discards..."
     if _class_may_skip fragment-status-loss plan-ledger path:crates/tillandsias-plan/*; then
         _class_skip_line fragment-status-loss plan-ledger path:crates/tillandsias-plan/*
-    elif ! _run bash "$SCRIPT_DIR/scripts/check-fragment-status-loss.sh" 2>&1; then
+    elif ! _run_lua_decider "scripts/lua/check-fragment-status-loss.lua" 2>&1; then
         _error "a fragment declares a status the fold does not apply — write a status: LWW entry instead (plan/index.d/README.md)"
         exit 1
     else
@@ -4399,13 +4413,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # fix them would cost more than it saves, so this only COUNTS — and the
     # count is split silent-degrade first, because a hook that quietly stops
     # guarding is worse than a fixture that fails by name.
-    if [ -x scripts/check-portability-idioms.sh ] || [ -f scripts/check-portability-idioms.sh ]; then
-        _portability="$(bash scripts/check-portability-idioms.sh 2>/dev/null | head -1 || true)"
-        case "$_portability" in
-            portability-idioms:*silent-degrade=0*loud-fail=0) : ;;
-            portability-idioms:*) _warn "$_portability (see scripts/check-portability-idioms.sh; not a gate)" ;;
-        esac
-    fi
+    # ORDER 1570-g4rx: Lua on the one runner; stdout is the ONE verdict line,
+    # read as a value (no `| head -1`), and a runner that cannot run it is
+    # named rather than silently dropped.
+    _portability="$(_run_lua_decider "scripts/lua/check-portability-idioms.lua" 2>/dev/null || true)"
+    case "$_portability" in
+        "portability-idioms: silent-degrade=0 loud-fail=0 (advisory)") : ;;
+        portability-idioms:*) _warn "$_portability (see scripts/lua/check-portability-idioms.lua; not a gate)" ;;
+        could-not-run:*) _warn "$_portability (the portability advisory did not run)" ;;
+    esac
 
     # ORDER 656-spux. Every host compiles for itself and nothing else, so
     # cfg-gated code is verified by exactly the platform that cannot exercise
@@ -4514,6 +4530,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Shell ratchet passed"
+
+    # The guard-activation auditor's own fixture (1570-25iq), a Lua fixture on
+    # the one runner: parity with the pre-port .sh, an orphan that refuses, the
+    # 1087-h2z9 symlink-farm shape, an empty population refused. The auditor
+    # itself runs as gate step 190.
+    _step "Checking the guard-activation auditor's fixture (1570-25iq)..."
+    if ! _run_lua_decider "scripts/lua/test-audit-guard-activation.lua" 2>&1; then
+        _error "the guard-activation auditor no longer agrees with its pre-port .sh, or stopped refusing an orphan — see the FAIL lines above (1570-25iq)"
+        exit 1
+    fi
+    _info "Guard-activation auditor fixture passed"
 
     _step "Checking the litmus step model (901-jtvi)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-step-model.sh" 2>&1; then
@@ -5283,6 +5310,23 @@ if [[ "$FLAG_CHECK" == true ]]; then
         _error "scripts/test-guest-unit-hardening.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
         exit 1
     fi
+    _step "Checking test-release-freeze-audit (1255-s4im)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-release-freeze-audit.sh" 2>&1; then
+        _error "scripts/test-release-freeze-audit.sh failed — the server-visible freeze audit may no longer name a breach, or the release preflight may no longer refuse one (1255-s4im); read the fixture output above"
+        exit 1
+    fi
+    # test-land-queue.sh was bound by no gate, so its arms — now including the
+    # freeze hold and the mid-gate re-check (1255-s4im) — ran only by hand. 14 s.
+    _step "Checking test-land-queue (1316-bnzt, 1255-s4im; ~14s)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-land-queue.sh" 2>&1; then
+        _error "scripts/test-land-queue.sh failed — the landing queue may land into a frozen trunk or mis-order, evict or re-queue candidates; read the fixture output above"
+        exit 1
+    fi
+    _step "Checking test-ensure-hooks (1255-s4im)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-ensure-hooks.sh" 2>&1; then
+        _error "scripts/test-ensure-hooks.sh failed — a toolchain-less checkout may no longer arm its push guards (1255-s4im); read the fixture output above"
+        exit 1
+    fi
     _step "Checking test-litmus-steps-can-fail (1063-nraf; 38ms)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-steps-can-fail.sh" 2>&1; then
         _error "scripts/test-litmus-steps-can-fail.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
@@ -5396,6 +5440,23 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "wsl.exe single-constructor check passed"
+
+    # Order 1562-tc7p. Every build reads ONE Rust toolchain, pinned in
+    # rust-toolchain.toml. v56.10.8.1's macOS job floated to `stable` (rustc
+    # 1.99.0) while this host gated on 1.96.1 and the Nix release on 1.98.0, and
+    # the cut failed after every gate passed. This refuses a workflow, flake or
+    # build script that stops reading the pin.
+    _step "Checking every build reads the pinned Rust toolchain (1562-tc7p)..."
+    if ! _run_lua_decider "scripts/lua/check-toolchain-pinned.lua" 2>&1; then
+        _error "a build no longer reads the pinned toolchain in rust-toolchain.toml (1562-tc7p) — see the violation lines above"
+        exit 1
+    fi
+    _info "toolchain pin check passed"
+    _step "Checking test-check-toolchain-pinned (1562-tc7p)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-check-toolchain-pinned.sh" 2>&1; then
+        _error "scripts/test-check-toolchain-pinned.sh failed — the toolchain-pin guard no longer refuses a float it must refuse; read the fixture output above"
+        exit 1
+    fi
 
     # Order 803-49re. A purge that destroys the guest must also clear the host's
     # copy of that guest's Vault identity. Part A landed the clearing in ONE of

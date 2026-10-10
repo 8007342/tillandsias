@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: centicolon-evidence-pilots-2026-09-28
+    event:
+      type: note
+      ts: "2026-10-09T22:29:08Z"
+      agent_id: forge-forge-tillandsias-claude-20261009t193211z
+      host: yoga
+      summary: |-
+        AUDIT MEASUREMENT (yoga 2026-10-09T22:20Z, 4b76eb15f): `bash scripts/centicolon-grade.sh` takes 520 ms and prints warn:centicolon-grade:zero-resolved-requirement-keys:files=518 then ok:centicolon-grade:R=1515 satisfied=0 denominator=1515 declared=1515 traced=0 positively_tested=0 records=0 — the extractor (centicolon-extract.lua, Cacheable), static grader and observed grader all run as Lua predicates on every --check (gate steps 480/490/500 plus check-centicolon-ratchet.lua in 238 ms), but 0 of 518 litmus files resolve a requirement key and 0 timing records carry a digest, so the advisory R line has never moved off the denominator. Pilot A (1472-5t4b, the evidence envelope per litmus result) is therefore the single row that lets ANY Lua or shell decider feed credit; until it lands the CentiColon integration of the Lua runtime is structural (pipeline present) and not evidential. Also seen: with TILLANDSIAS_CENTICOLON_DIR set to an absolute path outside the repo the pipeline prints blocked:centicolon-grade:static: with an empty reason (fs rooting), 278 ms; the default target/centicolon works. The orchestrator itself is still bash (centicolon-grade.sh, 80 lines, 2 pipe sites) under a Lua ratchet that proc.runs it.

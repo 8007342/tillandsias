@@ -45,17 +45,38 @@
 #   refused:freeze:unreachable:<detail>       the remote could not be queried, fetched
 #                                             from or pushed to; <detail> carries
 #                                             git's own refusal lines (1422-fvce)
+#
+# AUDIT (order 1255-s4im) — the server-visible half. The hook refuses a frozen
+# push only on a host whose hook is armed, and `--no-verify`, a redirected
+# hooksPath or a host that never installed hooks bypasses it by construction.
+# But the marker POINTS AT THE BRANCH TIP AS FROZEN, so what arrived during the
+# freeze is simply `<marker target>..<branch tip>`. `audit` reads origin only
+# through ls-remote and fetch, so it gives the same answer from ANY host, hooked
+# or not, and it names every commit that brought a held path in:
+#   ok:freeze-none:<branch>                                  not frozen
+#   ok:freeze-audit:clean:<branch>:moved=<n>                 nothing held arrived
+#   breach:<branch>:<sha>:<author>:<subject>                 one per offending commit
+#   held:<path>                                              each held path (first 20)
+#   violation:freeze-breached:<branch>:commits=<n>:held-paths=<k>:frozen-at=<sha>:tip=<sha>   exit 1
+#   refused:freeze:unreachable:<detail>                      exit 3 — could not ask
+# `status` prints the audit verdict on stderr when the branch is frozen.
 set -euo pipefail
+
+# The freeze predicate and the marker read are shared with the hook,
+# release-preflight and land-queue (1255-s4im), so they cannot disagree.
+# shellcheck source=lib-freeze-paths.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-freeze-paths.sh"
 
 NS="refs/tillandsias/freeze"
 
 _usage() {
     cat >&2 <<'USAGE'
-usage: scripts/release-freeze.sh set <branch> [reason] | clear <branch> | status <branch>
+usage: scripts/release-freeze.sh set <branch> [reason] | clear <branch> | status <branch> | audit <branch>
        [--remote <name>]   (default: origin)
   set     declare a freeze on <branch>; code pushes to it are refused by the pre-push hook
   clear   remove every freeze marker for <branch>, whoever set it
   status  report whether <branch> is frozen, by whom, and for how long
+  audit   name every commit that brought a held path into <branch> since it froze
 A freeze holds CODE pushes only. Plan-only pushes stay admitted by design:
 the plan lane is how coordination keeps moving during a cut.
 USAGE
@@ -74,7 +95,7 @@ done
 set -- ${ARGS[@]+"${ARGS[@]}"}
 CMD="${1:-}"; BRANCH="${2:-}"; REASON="${3:-}"
 case "$CMD" in
-    set|clear|status) ;;
+    set|clear|status|audit) ;;
     *) _usage; echo "refused:freeze:usage:${CMD:-<no command>}"; exit 2 ;;
 esac
 if [ -z "$BRANCH" ]; then
@@ -115,8 +136,59 @@ _git_reason() {
     printf '%s' "$why" | tr '\n' ' ' | sed 's/  */ /g; s/ $//'
 }
 
-_markers() { # -> "<sha>\t<ref>" lines, empty when not frozen
-    _t 10 git ls-remote "$REMOTE" "$NS/$BRANCH/*" 2>/dev/null || return 1
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+
+_markers() { # -> "<sha>\t<ref>" lines, oldest first, empty when not frozen
+    freeze_markers "$REMOTE" "$BRANCH"
+}
+
+# The audit body (1255-s4im). Prints its lines and verdict on stdout and
+# returns 0 clean/none, 1 breach, 3 could-not-ask.
+_audit() {
+    local out rc oldest frozen_at ref tip held n k moved commits paths p
+    rc=0; out="$(_markers)" || rc=$?
+    if [ "$rc" -ne 0 ]; then echo "refused:freeze:unreachable:git ls-remote $REMOTE failed or timed out"; _afford "$REMOTE did not answer, so whether the freeze held is unknown — never clean (1255-s4im)" "check the network and credentials for $REMOTE (git ls-remote $REMOTE), then re-run scripts/release-freeze.sh audit $BRANCH"; return 3; fi
+    if [ -z "$out" ]; then echo "ok:freeze-none:$BRANCH"; return 0; fi
+    # The OLDEST marker is when the freeze began; a later marker cannot excuse
+    # what arrived between the two.
+    oldest="$(printf '%s\n' "$out" | head -n 1)"
+    frozen_at="$(printf '%s' "$oldest" | cut -f1)"; ref="$(printf '%s' "$oldest" | cut -f2)"
+    rc=0; tip="$(_t 10 git ls-remote "$REMOTE" "refs/heads/$BRANCH" 2>/dev/null | cut -f1)" || rc=$?
+    if [ "$rc" -ne 0 ]; then echo "refused:freeze:unreachable:git ls-remote $REMOTE failed or timed out"; _afford "$REMOTE did not answer, so whether the freeze held is unknown — never clean (1255-s4im)" "check the network and credentials for $REMOTE (git ls-remote $REMOTE), then re-run scripts/release-freeze.sh audit $BRANCH"; return 3; fi
+    if [ -z "$tip" ]; then echo "refused:freeze:unreachable:$BRANCH is gone from $REMOTE while $ref still marks it"; _afford "a freeze marker names $BRANCH but $REMOTE has no such branch, so there is nothing to compare the freeze against" "if the branch was deleted on purpose, clear the stale marker: scripts/release-freeze.sh clear $BRANCH"; return 3; fi
+    if [ "$tip" = "$frozen_at" ]; then echo "ok:freeze-audit:clean:$BRANCH:moved=0"; return 0; fi
+    # Both objects from origin itself, so every host computes the same answer.
+    if ! git cat-file -e "$frozen_at^{commit}" 2>/dev/null || ! git cat-file -e "$tip^{commit}" 2>/dev/null; then
+        rc=0; err="$(_t 60 git fetch --quiet "$REMOTE" "refs/heads/$BRANCH" "$ref" 2>&1)" || rc=$?
+        if [ "$rc" -ne 0 ] || ! git cat-file -e "$frozen_at^{commit}" 2>/dev/null || ! git cat-file -e "$tip^{commit}" 2>/dev/null; then
+            echo "refused:freeze:unreachable:could not fetch $BRANCH and $ref from $REMOTE: $(_git_reason "${err:-}")"; _afford "$REMOTE did not answer, so whether the freeze held is unknown — never clean (1255-s4im)" "check the network and credentials for $REMOTE (git ls-remote $REMOTE), then re-run scripts/release-freeze.sh audit $BRANCH"; return 3
+        fi
+    fi
+    moved="$(git rev-list --count "$frozen_at..$tip" 2>/dev/null || echo '?')"
+    held="$(freeze_held_paths "$frozen_at" "$tip")"
+    if [ -z "$held" ]; then echo "ok:freeze-audit:clean:$BRANCH:moved=$moved"; return 0; fi
+    k="$(printf '%s\n' "$held" | wc -l | tr -d ' ')"
+    paths=()
+    while IFS= read -r p; do [ -n "$p" ] && paths+=("$p"); done <<HELD
+$held
+HELD
+    commits="$(git log --format='%h%x09%an%x09%s' "$frozen_at..$tip" -- "${paths[@]}" 2>/dev/null)"
+    n=0
+    while IFS=$'\t' read -r c a subj; do
+        [ -n "$c" ] || continue
+        n=$((n + 1))
+        echo "breach:$BRANCH:$c:$a:$subj"
+    done <<COMMITS
+$commits
+COMMITS
+    printf '%s\n' "$held" | head -n 20 | sed 's/^/held:/'
+    if ! git merge-base --is-ancestor "$frozen_at" "$tip" 2>/dev/null; then
+        echo "  note: $BRANCH no longer contains its freeze-time tip ${frozen_at:0:12} (rewritten while frozen)" >&2
+    fi
+    echo "  why: $BRANCH was frozen at ${frozen_at:0:12} ($ref) and $n commit(s) since then brought in $k path(s) the freeze holds; a cut gated before they arrived does not describe the tree that would ship" >&2
+    echo "  remedy: either revert the breach (git revert the commits named above; the audit then reads clean), or re-gate the cut from the new tip ${tip:0:12} and re-freeze there (scripts/release-freeze.sh clear $BRANCH && scripts/release-freeze.sh set $BRANCH) — either clears it, and neither needs the operator" >&2
+    echo "violation:freeze-breached:$BRANCH:commits=$n:held-paths=$k:frozen-at=${frozen_at:0:12}:tip=${tip:0:12}"
+    return 1
 }
 
 case "$CMD" in
@@ -132,7 +204,14 @@ case "$CMD" in
         now="$(date -u +%s)"
         case "$when" in ''|*[!0-9]*) age="unknown" ;; *) age="$((now - when))s" ;; esac
         printf 'frozen:%s:by=%s:since=%s:age=%s\n' "$BRANCH" "$who" "$when" "$age"
+        # 1255-s4im: say whether the freeze has held, on stderr so the status
+        # grammar (one stdout line) is unchanged.
+        _audit 2>&1 | sed 's/^/  audit: /' >&2 || true
         exit 0
+        ;;
+    audit)
+        rc=0; _audit || rc=$?
+        exit "$rc"
         ;;
     set)
         rc=0; out="$(_markers)" || rc=$?
