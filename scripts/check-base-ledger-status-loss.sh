@@ -5,7 +5,7 @@
 #
 # THE GAP THIS CLOSES
 #
-# scripts/check-fragment-status-loss.sh reads "$FRAG_DIR"/*.yaml — plan/index.d
+# scripts/lua/check-fragment-status-loss.lua reads plan/index.d/*.yaml — plan/index.d
 # only. Compaction folds every fragment INTO plan/index.yaml, so the moment a
 # ledger is compacted, every closure event it carried moves somewhere that
 # checker cannot see. Nothing re-examines the base after a fold.
@@ -28,7 +28,7 @@
 # The packet's exit criteria require this to be ADVISORY: "report and let a
 # cycle check exit criteria. Auto-promoting a status from an event is how a
 # false completion becomes permanent — 532 was only closable because its litmus
-# was re-run and passed." check-fragment-status-loss.sh is a HARD GATE on two
+# was re-run and passed." check-fragment-status-loss.lua is a HARD GATE on two
 # surfaces (build.sh exits 1; the pre-push plan-only lane refuses). Folding an
 # advisory pass into a gate makes the two severities share one exit code, and
 # the first time this reports a false positive on a historical base row, someone
@@ -113,7 +113,7 @@ fi
 # `--live` applies the WITHDRAWAL rule: a closure a later `falsified` event
 # retracted is not a live declaration, so a withdrawn completion does not report
 # forever. The flag is opt-in precisely so the sibling GATE
-# (check-fragment-status-loss.sh) keeps the plain syntactic question it has
+# (check-fragment-status-loss.lua) keeps the plain syntactic question it has
 # always asked.
 declared="$("$PLAN" fragment-terminal-events "$BASE" --live 2>/dev/null)"
 rc=$?

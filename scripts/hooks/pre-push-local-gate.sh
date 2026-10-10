@@ -1447,8 +1447,16 @@ attempt_plan_only_lane() {
             LANE_NOTES+=("scripts/check-fragment-ts-skew.sh absent — skipped")
         fi
 
-        if [[ -f scripts/check-fragment-status-loss.sh ]]; then
-            if ! out="$(bash scripts/check-fragment-status-loss.sh 2>&1)"; then
+        if [[ -f scripts/lua/check-fragment-status-loss.lua ]]; then
+            # ORDER 1570-mxcg: the guard is Lua on `script run`, asking the same
+            # plan_bin this lane already resolved and ran above. A binary too
+            # old to carry `script` cannot run it, and a guard that cannot run
+            # is a refusal here, never a skip (787-f7dh).
+            if ! grep -qx script <<<"$("$plan_bin" capabilities 2>/dev/null)"; then
+                echo "plan-only lane: validation FAILED — $plan_bin has no \`script run\`, so check-fragment-status-loss cannot run (rebuild: cargo build --release -p tillandsias-plan; full gate required)" >&2
+                return 1
+            fi
+            if ! out="$("$plan_bin" script run scripts/lua/check-fragment-status-loss.lua -- --plan "$plan_bin" 2>&1)"; then
                 echo "plan-only lane: validation FAILED — check-fragment-status-loss refused (full gate required):" >&2
                 echo "$out" | head -6 | sed 's/^/  /' >&2
                 return 1
@@ -1472,7 +1480,7 @@ attempt_plan_only_lane() {
             # refuse here, and broke test-gate-stamp-scope.sh case 7, whose tree
             # legitimately provisions a minimal set. Scope kept to the binary,
             # which is what 1124-7f3u is about.
-            LANE_NOTES+=("scripts/check-fragment-status-loss.sh absent — skipped")
+            LANE_NOTES+=("scripts/lua/check-fragment-status-loss.lua absent — skipped")
         fi
     else
         # ORDER 1124-7f3u: A SKIP HERE IS A REFUSAL, because yq cannot stand in
@@ -1483,7 +1491,7 @@ attempt_plan_only_lane() {
         # above, which asks "is this YAML, and is it a map" — yq answers that.
         # It is wrong here. The two checks below are the FOLD: `check
         # --strict-fragments` reads every fragment together, and
-        # check-fragment-status-loss.sh asks whether a status transition a
+        # check-fragment-status-loss.lua asks whether a status transition a
         # fragment declares actually survives folding. Neither is a property of
         # any single blob, and no YAML parser can compute either. So a host with
         # yq and no plan binary passed the fail-closed test and then skipped the
@@ -1492,8 +1500,8 @@ attempt_plan_only_lane() {
         # MEASURED 2026-09-12: yoga's honest reopen of 1115-yvrq reached
         # origin/linux-next carrying a 'completed' event beside a status that
         # folds as in_progress. build.sh --check refuses that shape
-        # (check-fragment-status-loss.sh exits 2 unbuilt, and build.sh runs it
-        # through _run, which honours the rc) — but a fragment-only push never
+        # (check-fragment-status-loss.lua exits 2 unbuilt, and build.sh runs it
+        # through _run_lua_decider, which honours the rc) — but a fragment-only push never
         # runs build.sh, and a ledger reopen is EXACTLY a fragment-only push.
         # Every host that then obeyed the pre-push merge rule was refused at its
         # own gate for about an hour, for a shape this lane let through.
