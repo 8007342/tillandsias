@@ -317,7 +317,6 @@ scripts/test-gate-host-memory-figure.sh
 scripts/test-gate-memory-floor-consumer.sh
 scripts/test-gate-memory-refusal.sh
 scripts/test-gate-memory-wsl2-guest.sh
-scripts/test-gate-podman-mode-configuration.sh
 scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh
 scripts/test-gate-stamp-memoization.sh
 scripts/test-gate-stamp-movers-batching-is-equivalent.sh
