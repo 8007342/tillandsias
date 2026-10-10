@@ -1,0 +1,16 @@
+# Gate step 1563-u2yx — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. wsl.exe writes stdout and stderr at independent offsets, so a
+# Windows caller's `./build.sh --preflight > log 2>&1` kept 25600 of 38000
+# bytes (yolanda 2026-10-08, 3/3 runs; `>>` the same) and lost a guard's
+# refused:preflight:<name> line on every stack ref. scripts/with-wsl2-builder.sh
+# now reaches wsl.exe only through scripts/lib-wsl-capture.sh, which funnels a
+# same-file capture through one writer. The fixture's stub wsl.exe reopens its
+# stderr by path, so the shape is guarded on every host, Linux included.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking a same-file capture of wsl.exe keeps every refused:preflight line (1563-u2yx)"
+STEP_SCRIPT="scripts/test-preflight-refused-name-lines-whole.sh"
+STEP_ERROR="a Windows '> log 2>&1' capture of the builder hop can again overwrite refusal lines, or the hop lost exec/exit-code/signal behaviour (1563-u2yx); see which arm failed above"
+STEP_OK="the builder hop keeps every refusal line in a same-file capture, and still execs for terminals and pipes"
+STEP_SECOND_REGIME="yolanda-windows 2026-10-09 msys ok:wsl-capture-fixture:7/7"

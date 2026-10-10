@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Child of 1562-bqcg, filed and implemented at the coordinator's request.
+packets:
+  - packet_id: the-macos-tray-has-a-behavioural-test-that-a-superseded-credential-delivery-repopulates-the-keychain-from-the-guests-handover
+    order: 1562-bqcm
+    title: A macOS-tray test drives a Superseded DeliverCredentials through to GetVaultHandover and asserts the Keychain is repopulated (scratch service, swept before and after)
+    status: in_progress
+    kind: test
+    priority: p1
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, keychain, credentials, vault, test]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-macos-tray/src/installation_uuid.rs
+    depends_on: [the-windows-tray-treats-a-superseded-credential-delivery-as-a-failure-and-never-reads-the-guests-handover-so-the-first-launch-after-a-reset-fails-and-credential-manager-is-never-repopulated]
+    context: >
+      #255 (1562-bqcg) changes the macOS bail identically to Windows
+      (is_accepted -> proceeds_to_handover in deliver_credentials_and_check_handover),
+      but its behavioural tests are Windows-only. On macOS, measured
+      2026-10-08 at #255 merged with linux-next: 166 tray tests pass, but none
+      drives that line. The macOS delivery path was hard-wired to the
+      production Keychain service "tillandsias", so it could not be tested
+      without touching the operator's real credentials.
+    exit_criteria:
+      - The delivery and handover take the Keychain service as a parameter. Production passes KEYCHAIN_SERVICE; tests pass a scratch tillandsias-scratch-test-<pid>-<uuid> service.
+      - A fake guest over tokio duplex answers Superseded. The test asserts Ok, that GetVaultHandover was asked, and that the share and token are written to the scratch service. It is RED with is_accepted() and GREEN with proceeds_to_handover().
+      - The Rejected side still fails closed and writes nothing.
+      - Scratch items are swept by prefix BEFORE (any run whose pid is dead, the 1562-uxhc lesson) and AFTER (Drop, own service). The sweep refuses any service outside the scratch prefix, so the real tillandsias entries are never touched.
+    verifiable_closure: |
+      cargo test -p tillandsias-macos-tray --bin tillandsias-tray installation_uuid on darwin: a_superseded_delivery_repopulates_the_keychain_from_the_handover is red under is_accepted() and green under proceeds_to_handover(); a_rejected_delivery_still_fails_closed_on_macos is green under both. Afterwards `security dump-keychain | grep -c tillandsias-scratch-test-` is 0, and an item planted under a dead pid is removed by the next run.
+      unscoreable: unpinnable-until-the-guard-exists — the cargo tests in crates/tillandsias-macos-tray/src/installation_uuid.rs are the deliverable, written in the same commit.
+    next_action: Land right after #255 (1562-bqcg).
+    events:
+      - type: note
+        ts: "2026-10-09T00:22:10Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Implemented on darwin. RED under is_accepted(): left Err("DeliverCredentials was received but not accepted: superseded by a newer in-guest handover"), right Ok(()). GREEN under proceeds_to_handover(). The crate's tests went from 157 to 160 unit tests passing (+3), plus 2+2+5 integration tests; clippy -D warnings is clean. A planted dead-pid scratch item was swept, the scratch count afterwards is 0, and the real tillandsias-vm-uuid entry was untouched.
+          FOUND ON THE WAY: `security dump-keychain` writes about 90 KB here, which is more than a pipe buffer. spawn_bounded reads its pipe only after the child exits, so a large-output call blocks on the full pipe until the 10 s bound kills it. Production calls (find/add/delete) print a few bytes and are not affected. The test sends the dump to a file instead.
