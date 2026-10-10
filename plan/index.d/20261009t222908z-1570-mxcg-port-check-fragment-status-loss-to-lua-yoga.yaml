@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed 2026-10-09 on yoga from the Lua-runtime audit: the second slowest
+# shell decider in --check and the carrier of a hand-rolled YAML row
+# splitter with a recorded false-refusal lineage.
+packets:
+  - packet_id: check-fragment-status-loss-walks-937-fragments-with-a-hand-rolled-yaml-row-splitter-in-awk-and-sed-for-16-s-per-check-so-it-is-ported-to-scripts-lua-with-yaml-parse-making-the-row-splitter-defect-class-unrepresentable
+    order: 1570-mxcg
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, ci-gate, plan-ledger, ratchet, performance]
+    estimated_hours: 8
+    owned_files:
+      - scripts/check-fragment-status-loss.sh
+      - scripts/lua/check-fragment-status-loss.lua
+      - build.sh
+      - scripts/portability/pipe-site-floor.txt
+      - scripts/portability/shell-decider-floor.txt
+    title: |
+      scripts/check-fragment-status-loss.sh (652 lines, 22 pipe sites, jq x3, awk x13, sed x12) takes 16.5 s per run on yoga and build.sh names it at two sites (2577 and 4027); it splits plan fragments into rows with the same indent-2/indent-4 dash heuristic that produced the false refusals of 1319-vd5h and 1331-884p in its sibling. Port it to scripts/lua/check-fragment-status-loss.lua using yaml.parse over fs.walk("plan/index.d"), same verdict grammar, .sh deleted, floors lowered
+    context: |
+      Measured on yoga 2026-10-09T22:20Z, linux-next 4b76eb15f:
+        - `bash scripts/check-fragment-status-loss.sh`: rc=0, 16,537 ms,
+          verdict ok:no-fragment-status-loss:937 checked.
+        - pipe-site-floor.txt: `scripts scripts/check-fragment-status-loss.sh
+          22`; it is in shell-decider-floor.txt.
+        - build.sh call sites: 2577 (`_run bash .../check-fragment-status-
+          loss.sh`) and 4027 (the --check step "Checking for fragment status
+          transitions the fold discards", behind _class_may_skip
+          fragment-status-loss).
+        - Lineage: the ledger records (1319-vd5h, carried into 1331-884p)
+          that "check-fragment-status-loss.sh has the same shape in three
+          sites — it flushes on a bare dash at indent 2 and matches rows
+          only as indent-2-with-dash or indent-4", the row-splitter defect
+          that false-refused lands from check-scorable-obligation-added.sh.
+          A port that reads each fragment with yaml.parse (lua_std, 1375-
+          btuf; the same parser the plan binary folds with) cannot have a
+          row splitter at all, which is the 1384-ddua standard: show the
+          incident class unrepresentable, not avoided.
+        - The plan binary already folds these fragments; if a `fragments`
+          or `plan-events` verb exposes the status transitions, the Lua
+          decider may call it through proc.run{argv={plan,...}} and read
+          JSON, which is allowed (argv, no shell string).
+      Ratchet totals the port lowers: sh=668:floor:664 pipes=3922:floor:3914.
+      Related, not duplicated: 1384-ddua, 1525-c6jm, 1533-ew3n (decider
+      ports); 1570-g4rx (the other large pure port, filed with this row).
+    exit_criteria:
+      - 'scripts/lua/check-fragment-status-loss.lua prints `ok:no-fragment-status-loss:<n> checked` with the same n as the .sh on the same tree (pre-fix: 937 on 4b76eb15f) and the same violation line for a fixture fragment that drops a status; pre-fix: no .lua'
+      - 'wall time on yoga under 4 s (pre-fix: 16,537 ms) recorded on the closing event beside the .sh number; both build.sh sites call `_run_lua_decider`'
+      - 'a fixture fragment whose packet carries a `- ` dash at indent 2 inside a block scalar (the 1319-vd5h shape) is read as ONE packet by the port; pre-fix: the .sh splits it (the recorded defect class)'
+      - 'the .sh is deleted in the same commit and both floor files are lowered by `check-shell-ratchet.lua --dump-floors`; pre-fix: floors 664 / 3914'
+    verifiable_closure: |
+      bash scripts/test-fragment-status-loss.sh (existing fixture, if any,
+      otherwise a new one or its Lua successor under 1570-k5yt) exits 0
+      against the Lua decider with the 1319-vd5h-shape arm added. Pre-fix:
+      that arm FAILS on the .sh.
+    depends_on: []
+    next_action: >
+      Read the .sh's three row-splitting sites and its verdict grammar;
+      write the Lua port over yaml.parse(fs.read(f)) for every
+      fs.walk("plan/index.d", {suffix=".yaml"}) file, computing the same
+      status-transition set; add the 1319-vd5h fixture arm; rewire build.sh
+      at both sites; dump floors; delete the .sh.
+    events:
+      - type: filed
+        ts: "2026-10-09T22:29:08Z"
+        agent_id: forge-forge-tillandsias-claude-20261009t193211z
+        host: yoga
+        summary: |-
+          Filed from the Lua-runtime audit on yoga. Measured: 16,537 ms per run, 937 fragments, 22 pipe sites, two build.sh call sites; hand-rolled YAML row splitter with the 1319-vd5h / 1331-884p false-refusal lineage, unrepresentable under yaml.parse.

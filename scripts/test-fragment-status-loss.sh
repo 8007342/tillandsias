@@ -24,7 +24,11 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GUARD="$ROOT/scripts/check-fragment-status-loss.sh"
+# ORDER 1570-mxcg: the guard is scripts/lua/check-fragment-status-loss.lua on
+# `tillandsias-plan script run`. The RUNNER is always the real binary (a stub
+# cannot run Lua); the binary the guard ASKS — the sandbox's, real or stub — is
+# named with --plan, so the degraded-lane arms still exercise a degraded fold.
+GUARD="$ROOT/scripts/lua/check-fragment-status-loss.lua"
 PROBE="$ROOT/scripts/plan-binary-probe.sh"
 fail=0
 
@@ -45,7 +49,7 @@ sandbox() {
     _sb_dir="$1"
     _sb_bin="${2:-$REAL_PLAN}"
     mkdir -p "$_sb_dir/scripts" "$_sb_dir/plan/index.d" "$_sb_dir/target/release"
-    cp "$GUARD" "$PROBE" "$_sb_dir/scripts/"
+    cp "$PROBE" "$_sb_dir/scripts/"
     cp "$_sb_bin" "$_sb_dir/target/release/tillandsias-plan"
     chmod +x "$_sb_dir/target/release/tillandsias-plan"
     # Two packets, both non-terminal in the fold. Any terminal declaration or
@@ -86,6 +90,13 @@ assert() {
     echo "ok: $_a_name"
 }
 
+# run_guard: the guard over the sandbox in the CURRENT directory (each arm cd's
+# into $S first, exactly as it used to before `bash scripts/...sh`).
+run_guard() {
+    env -u TILLANDSIAS_REPO_ROOT -u TILLANDSIAS_PLAN_BIN \
+        "$REAL_PLAN" script run "$GUARD" -- --plan "$PWD/target/release/tillandsias-plan"
+}
+
 TDIR="$(mktemp -d)"
 trap 'rm -rf "$TDIR"' EXIT
 
@@ -100,7 +111,7 @@ packets:
     status: ready
     title: "declares what the fold already says"
 F
-out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 assert "matching declaration passes" 0 "ok:no-fragment-status-loss:1 checked" "$rc" "$out"
 
 # ── 2. MUTATION: a terminal declaration the fold discarded ──────────────────
@@ -114,7 +125,7 @@ packets:
     status: completed
     title: "declares completed; the fold still says ready"
 F
-out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 assert "MUTATION discarded terminal declaration refuses" 1 \
     "alpha-packet: declared 'completed' in a fragment, folds as 'ready'" "$rc" "$out"
 
@@ -129,7 +140,7 @@ packets:
     status: ready
     title: "stale ready; the fold moved on to in_progress"
 F
-out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 assert "fold ahead of a non-terminal declaration passes" 0 "ok:no-fragment-status-loss:1 checked" "$rc" "$out"
 
 # ── 4. MUTATION: a closure EVENT with no status transition ──────────────────
@@ -148,7 +159,7 @@ packets:
         host: fixture
         summary: closed without writing the status LWW entry
 F
-out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 assert "MUTATION closure event without transition refuses" 1 \
     "alpha-packet: has a 'completed' EVENT but folds as 'ready'" "$rc" "$out"
 
@@ -171,7 +182,7 @@ packets:
         host: fixture
         summary: filed
 F
-out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 assert "prose quoting the marker is not a declaration" 0 "ok:no-fragment-status-loss:1 checked" "$rc" "$out"
 
 # ── 6. 598-kibt: the per-file boundary stays isolated ───────────────────────
@@ -202,7 +213,7 @@ packets:
         host: fixture
         summary: done
 F
-out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 assert "file boundary isolated: only the real closure is flagged" 1 \
     "alpha-packet: has a 'completed' EVENT but folds as 'ready'" "$rc" "$out"
 if printf '%s' "$out" | grep -qF 'beta-packet'; then
@@ -232,7 +243,7 @@ packets:
     status: ready
     title: "stale binary lane"
 F
-out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 assert "stale binary skips the event pass loudly, not as a violation" 0 \
     "predates fragment-terminal-events" "$rc" "$out"
 
@@ -266,7 +277,7 @@ packets:
     status: completed
     title: "terminal declaration, batch path unavailable"
 F
-out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 assert "FAIL-SAFE unusable batch falls back and still refuses" 1 \
     "alpha-packet: declared 'completed' in a fragment, folds as 'ready'" "$rc" "$out"
 if printf '%s' "$out" | grep -qF 'batched fold unavailable'; then
@@ -287,7 +298,7 @@ packets:
     status: ready
     title: "real binary, batch path expected"
 F
-out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 if printf '%s' "$out" | grep -qF 'batched fold unavailable'; then
     echo "FAIL: real binary fell back to per-packet lookups; the speedup is not live" >&2
     fail=1
@@ -311,7 +322,7 @@ events:
       host: fixture
       summary: "closed via append-event; no packets block, no status entry"
 F
-out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 assert "MUTATION events-only fragment still refuses" 1 \
     "alpha-packet: has a 'completed' EVENT but folds as 'ready'" "$rc" "$out"
 
@@ -336,7 +347,7 @@ events:
       host: fixture
       summary: closed WITH the status LWW entry beside it
 F
-out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 assert "events-only fragment whose transition landed passes" 0 \
     "ok:no-fragment-status-loss:" "$rc" "$out"
 if printf '%s' "$out" | grep -qE '^ok:no-fragment-status-loss:0 checked$'; then
@@ -360,12 +371,12 @@ events:
       host: fixture
       summary: progress is not a closure
 F
-out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 assert "no declarations and no closure events passes as 0 checked" 0 \
     "ok:no-fragment-status-loss:0 checked" "$rc" "$out"
 
 S="$TDIR/emptydir"; sandbox "$S"
-out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 assert "empty fragment directory passes as 0 checked" 0 \
     "ok:no-fragment-status-loss:0 checked" "$rc" "$out"
 
@@ -389,7 +400,7 @@ packets:
         host: fixture
         summary: broke the parse: an unquoted colon-space does it
 F
-out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 assert "MUTATION unparseable fragment hiding a closure refuses" 1 \
     "violation:fragment-status-loss:1" "$rc" "$out"
 # The refusal must NAME the file — "something failed" sends the reader hunting.
@@ -418,7 +429,7 @@ packets:
         host: fixture
         summary: "broke the parse: an unquoted colon-space does it"
 F
-out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 assert "the parseable twin is read and judged on its merits" 1 \
     "alpha-packet" "$rc" "$out"
 if printf '%s' "$out" | grep -qF 'UNPARSEABLE'; then
@@ -446,7 +457,7 @@ events:
       host: fixture
       summary: "terminal event, no status transition — the EVENT class"
 F
-out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 assert "event-class violation prints the event remedy" 1 "REMEDY (event):" "$rc" "$out"
 case "$out" in
     *"REMEDY (declared):"*)
@@ -464,7 +475,7 @@ packets:
     status: completed
     title: "terminal status declared under packets: and discarded by the G-Set"
 F
-out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 assert "declared-class violation prints the declared remedy" 1 "REMEDY (declared):" "$rc" "$out"
 case "$out" in
     *"REMEDY (event):"*)
@@ -497,7 +508,7 @@ events:
       host: fixture
       summary: "a note addressed to a packet nobody ever filed"
 F
-out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 assert "non-terminal event on an unknown packet_id is named" 0 \
     "ghost-packet: an events block addresses it but NO SUCH PACKET is in the fold" "$rc" "$out"
 case "$out" in
@@ -525,7 +536,7 @@ events:
       host: fixture
       summary: "an ordinary note on a real packet"
 F
-out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 case "$out" in
     *"an events block addresses it"*)
         echo "FAIL: advisory fired on a KNOWN packet_id; out=$out" >&2
@@ -549,7 +560,7 @@ events:
     title: "a packet definition written under the wrong key"
     deliverable: "should be reported, not silently discarded"
 F
-out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 assert "misplaced packet definition is named" 0 \
     "dropped-on-the-floor is a packet DEFINITION under" "$rc" "$out"
 case "$out" in
@@ -569,7 +580,7 @@ packets:
     title: "a packet definition under the correct key"
     deliverable: "must draw no advisory"
 F
-out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 case "$out" in
     *"is a packet DEFINITION under"*)
         echo "FAIL: advisory fired on a CORRECTLY filed packet; out=$out" >&2; fail=1 ;;
@@ -603,7 +614,7 @@ packets:
     title: "declared complete at birth in a LATER file"
     depends_on: []
 F
-out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 case "$out" in
     *beta-packet*)
         echo "FAIL: status leaked across files onto beta-packet; out=$out" >&2; fail=1 ;;
@@ -628,7 +639,7 @@ packets:
     title: "re-declared terminal in house key order — the G-Set drops this"
     depends_on: []
 F
-out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 assert "order-first declaration is seen and its loss refused" 1 \
     "alpha-packet" "$rc" "$out"
 

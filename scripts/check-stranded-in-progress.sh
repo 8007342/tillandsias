@@ -21,7 +21,7 @@
 # cannot see it:
 #
 #   635-i6vm  completion WAS declared, and the G-Set fold discarded it.
-#             check-fragment-status-loss.sh catches that.
+#             check-fragment-status-loss.lua catches that.
 #   this      completion was NEVER declared. 627-k4mz was filed
 #             `status: in_progress`, the fix was written, reviewed and merged —
 #             and no fragment ever said so. Nothing was discarded, so nothing

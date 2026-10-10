@@ -10,3 +10,6 @@ description = "Approved infrastructure facade for Tillandsias Podman operations"
 tillandsias-podman = { workspace = true }
 tokio = { workspace = true }
 serde_json = "1"
+
+[lints]
+workspace = true

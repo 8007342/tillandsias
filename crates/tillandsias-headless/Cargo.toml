@@ -1,6 +1,6 @@
 [package]
 name = "tillandsias-headless"
-version = "56.9.27"
+version = "56.10.9"
 edition = "2024"
 license = "GPL-3.0-or-later"
 authors = ["Tlatoani"]
@@ -112,3 +112,6 @@ tray = ["image", "zbus", "zvariant"]
 listen-vsock = ["tokio-vsock", "tillandsias-control-wire/vsock"]
 # @trace spec:tillandsias-vault — Phase 6 default-on.
 vault = ["tillandsias-vault-client", "uuid", "zeroize", "dirs", "keyring"]
+
+[lints]
+workspace = true
