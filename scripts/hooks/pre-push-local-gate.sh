@@ -2205,6 +2205,27 @@ if [[ -f scripts/check-windows-tray-clippy.sh ]]; then
             ;;
     esac
 fi
+# ORDER 1577-g96z — A WORK PUSH IS TOLD WHAT IT OWES. On a work/<order> push,
+# a change that is DUE to a carried obligation (methodology/convergence.yaml
+# carried_obligations) and neither pays an item nor carries a Carried-Waiver
+# trailer gets ONE warn:pre-push:carried-obligations line naming the offered
+# item and the waiver line, and the push goes on (gentle stage: silence is
+# refused only at landing). Outside the work lane it is not run at all.
+if [[ "$WORK_REF_LANE" == "1" && -f scripts/lua/check-carried-obligations.lua ]]; then
+    _co_plan="$( . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null )" || _co_plan=""
+    if [[ -n "$_co_plan" ]] && grep -qx script <<<"$("$_co_plan" capabilities 2>/dev/null)"; then
+        _co_out="$("$_co_plan" script run scripts/lua/check-carried-obligations.lua 2>"${TMPDIR:-/tmp}/carried-obligations.$$.err")" || true
+        _co_err="$(cat "${TMPDIR:-/tmp}/carried-obligations.$$.err" 2>/dev/null)"; rm -f "${TMPDIR:-/tmp}/carried-obligations.$$.err"
+        while IFS= read -r _co_line; do
+            case "$_co_line" in
+                carried:*:due:*)
+                    TILLANDSIAS_HOOK_DECIDER="carried-obligations" \
+                    refuse "${_co_line} — this change touches the backlog's area and neither pays an item nor waives (1577-g96z)" \
+                           "$(grep -E '^    |^Carried-Waiver:' <<<"$_co_err")" ;;
+            esac
+        done <<<"$_co_out"
+    fi
+fi
 # ORDER 1352-qbrd — THE TRAILER STATES WHAT THE HOOK SAW. It used to be an
 # UNCONDITIONAL "preflight clean, ./build.sh --check current for this tree",
 # reached on a work ref after every red decider had degraded to a warn and
