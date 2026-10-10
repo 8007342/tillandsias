@@ -21,6 +21,23 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CLAIM="$ROOT/scripts/claim-ledger-node.sh"
+
+# Resolve the plan binary from THIS checkout, not the caller's cwd, and make it
+# absolute (84f37ff24's pattern; class 1401-x76w). The claim script's own
+# fallback is the cwd-relative ./target/release path, so run from a scratch cwd
+# with no CARGO_TARGET_DIR (the gate's default-target regime) it found nothing,
+# the ledger read as unverifiable, and the refused-claim arm could not refuse.
+# An explicit TILLANDSIAS_PLAN_BIN keeps its caller-given meaning.
+if [ -z "${TILLANDSIAS_PLAN_BIN:-}" ]; then
+  # Plain statements, no `case` inside $( ): macOS /bin/bash 3.2 mis-parses a
+  # case pattern's `)` inside a command substitution.
+  _plan="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || _plan=""
+  if [ -n "$_plan" ] && [ "${_plan#/}" = "$_plan" ]; then
+    _plan="$ROOT/${_plan#./}"
+  fi
+  if [ -n "$_plan" ]; then export TILLANDSIAS_PLAN_BIN="$_plan"; fi
+  unset _plan
+fi
 TDIR="$(mktemp -d)"
 trap 'rm -rf "$TDIR"' EXIT
 
