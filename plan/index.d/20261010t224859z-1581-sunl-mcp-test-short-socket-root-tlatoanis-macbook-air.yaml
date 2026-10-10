@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed and fixed on work/1581-sunl at the coordinator's request (2026-10-10), found while re-measuring 1276-mugq.
+packets:
+  - packet_id: the-darwin-gate-is-red-because-an-mcp-tray-test-binds-a-unix-socket-under-the-long-macos-tmpdir-past-sun-len
+    order: 1581-sunl
+    status: in_progress
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [gate, darwin-regime, tray, mcp, unix-socket]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-headless/src/tray/mod.rs
+    title: |
+      ./build.sh --check is red on darwin: tray::tests::mcp_listener_failed_start_rolls_back_registry_for_retry binds its MCP socket under the macOS TMPDIR, past the 104-byte sun_path ("path must be shorter than SUN_LEN"); its sibling dodged the same limit with a macOS skip
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-10-10. After #297 cleared TWO_ROUTERS (clippy --all-targets -p tillandsias-headless -D warnings is clean on eade33054), the --check feature-gated pass (tray,listen-vsock; build.sh:3935, 1074-w7qv) still failed. A scratch gate went 932 passed, 1 failed. On plain trunk eade33054, `cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock -- tray::tests::mcp_listener` gave 1 passed, 1 FAILED, panicking at tray/mod.rs:6493: "same lane must retry after failure: Err(\"failed to bind mcp socket: path must be shorter than SUN_LEN\")". The test's tempdir came from tempfile::tempdir() under /var/folders/<hash>/T/ (49 chars). Its sibling mcp_per_lane_socket_location_and_permissions_0600 skipped its bind half off Linux (831-wmn4), so macOS never ran it. With no Mac gate green, no Mac can earn a gate stamp.
+    exit_criteria:
+      - 'on darwin, `cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock -- tray::tests::mcp_` passes, including the retry test (pre-fix: FAILED with SUN_LEN) and the sibling with its bind half RUN, not skipped (pre-fix: SKIP line)'
+      - 'darwin ./build.sh --check no longer fails in the feature-gated pass'
+    unscoreable: "unpinnable-until-the-guard-exists: the two tray tests are themselves the pin and are run by build.sh --check's feature-gated pass on every host (pre-fix result: the retry test FAILED on darwin)"
+    depends_on: []
+    next_action: >
+      Land the short-root fix (work/1581-sunl); then re-run darwin --check from trunk and close 1276-mugq with a live verify.
+    provenance: |
+      Filed by tlatoanis-macbook-air on macuahuitl's go, 2026-10-10.
+    events:
+      - type: filed
+        ts: "2026-10-10T22:48:59Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Darwin gate red on a tray MCP test's unix-socket path length.
+      - type: note
+        ts: "2026-10-10T22:48:59Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Fix on work/1581-sunl. Both MCP tray tests bind under short_runtime_root(), a tempfile dir under /tmp. The retry test uses it for its runtime root. The sibling's macOS SKIP is REPLACED by pointing XDG_RUNTIME_DIR at a short root under the shared env lock, so its bind and 0600 check now run on macOS too, and it restores the prior value.
+          MEASURED on darwin, rustc 1.99.0:
+          - Pre-fix: the retry test FAILED (SUN_LEN) and the sibling printed SKIP.
+          - Post-fix: both pass, with no SKIP line. The full feature-gated set (tray,listen-vsock) is 935 passed, 0 failed (pre-fix 932/1).
+          - clippy --all-targets with those features and -D warnings is clean, and fmt is ok. The aarch64-musl cross-build of the tests is clean apart from a pre-existing libc::time_t deprecation warning in clock_sync.rs:37.
