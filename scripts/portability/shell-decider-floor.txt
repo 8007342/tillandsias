@@ -577,7 +577,6 @@ scripts/test-session-tokens.sh
 scripts/test-set-field-prose-guard.sh
 scripts/test-set-field-refuses-unknown-flags.sh
 scripts/test-set-field-yaml-shapes.sh
-scripts/test-shell-ratchet.sh
 scripts/test-shipped-diagnostic-tool-dispatch.sh
 scripts/test-sidecar-arch-derivation.sh
 scripts/test-sidecar-staleness-stamp.sh
