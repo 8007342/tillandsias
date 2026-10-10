@@ -62,6 +62,11 @@ deletes a `.sh` MUST lower the floors in the same commit through
 `check-shell-ratchet.lua --dump-floors`, never by hand. The `--check` log
 prints the counts on every run (`ok:shell-ratchet:sh=<n>:floor:<f> ...
 gate-steps:sh=<a>:lua=<b>`) so a reader can see the corpus only descend.
+Each change that adds a Lua decider or fixture MUST also port at least one
+existing shell decider or fixture to Lua in that same change, deleting the
+`.sh` and lowering the floors (operator ruling 2026-10-09: "each new lua
+requires to retroactively update 1+ of old ones"). New gates therefore pay
+down the shell corpus instead of only stopping its growth.
 The bootstrap and installer shell in
 `scripts/portability/bootstrap-shell-allowlist.txt` is outside this
 requirement by design (it runs before any binary exists).
@@ -75,6 +80,11 @@ requirement by design (it runs before any binary exists).
 - **WHEN** a commit replaces `scripts/check-<name>.sh` with `scripts/lua/check-<name>.lua` and deletes the `.sh`
 - **THEN** that commit also removes the file's lines from both floor files via `--dump-floors`
 - **AND** a later commit that re-adds either line is refused as `violation:shell-ratchet:floor-raised`, judged over the floor file's own history
+
+#### Scenario: A new Lua decider carries a port of an old shell one
+- **WHEN** a change adds `scripts/lua/check-<new>.lua` to the gate
+- **THEN** the same change deletes at least one `scripts/check-*.sh`, `test-*.sh`, `verify-*.sh` or `guard-*.sh` and replaces it with a Lua equivalent
+- **AND** `shell-decider-floor.txt` is at least one line shorter than on the change's base
 
 #### Scenario: A new shell fixture is counted until native process conformance lands
 - **WHEN** a commit adds `scripts/test-<name>.sh` not present in `shell-decider-floor.txt`

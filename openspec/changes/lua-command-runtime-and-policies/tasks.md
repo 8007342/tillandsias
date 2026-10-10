@@ -100,6 +100,11 @@ retirement, Lua land rewrite or draft-spec activation is implied.
            (req-id: ec267f02, "A new gate decider or gate fixture runs on
            the Lua runner"); the audit's port candidates are 1570-g4rx,
            1570-mxcg, 1570-25iq, 1570-k4fx, 1570-qutp. -->
+      <!-- 2026-10-09 operator ruling: each new Lua decider ports 1+ old
+           shell decider in the same change (spec scenario "A new Lua
+           decider carries a port of an old shell one"). The ratchet does
+           NOT enforce this yet: an arm comparing the floor length to the
+           base when scripts/lua/check-*.lua is added is still to build. -->
       <!-- Note: the "proc.spawn is unlanded" premise behind the ratchet's
            fixture arm is stale since 1534-puyz / 1538-pwdr; what remains
            open is native macOS/Windows conformance (1543-ffhg, 1544-cnae). -->
