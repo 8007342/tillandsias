@@ -26,7 +26,7 @@ size: instant
 
 preconditions:
   - workspace contains scripts/test-litmus-binding-truth.sh
-  - workspace contains scripts/check-litmus-bindings.sh
+  - workspace contains scripts/lua/check-litmus-bindings.lua and a tillandsias-plan with `script run` (else the fixture skips by name)
   - git is available, or the fixture skips by name
 
 critical_path:
