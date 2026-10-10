@@ -677,6 +677,68 @@ case "$out12b" in
 $out12b" ;;
 esac
 
+# ──────────────────────────────────────────────────────────── ARM 13
+# EVERY LANDING RECORDS WHAT IT OWED ITS CARRIED OBLIGATIONS (1577-568c): one
+# `Carried: <backlog> <state> [<item-or-reason>]` trailer per backlog on the land
+# commit, read from the guard on the merged tree. The trunk carries the real
+# rule and a decider in the shell-to-lua area. PRE-FIX: no land commit carries
+# a Carried trailer and the silent candidate lands.
+scaffold arm13
+mkdir -p "$WORK_DIR/methodology" "$WORK_DIR/scripts"
+cp "$ROOT/methodology/convergence.yaml" "$WORK_DIR/methodology/"
+printf '#!/usr/bin/env bash\necho ok:x\n' > "$WORK_DIR/scripts/check-x.sh"
+printf '.cache/\n' > "$WORK_DIR/.gitignore"
+git -C "$WORK_DIR" add -A && git -C "$WORK_DIR" commit -q -m "the rule and one decider"
+git -C "$WORK_DIR" push -q origin linux-next
+candidate arm13 1301-aaaa notes.txt "not in the area"
+candidate arm13 1302-bbbb scripts/check-x.sh "$(printf '#!/usr/bin/env bash\necho ok:x2')"
+git -C "$WORK_DIR" checkout -q -B work/1303-cccc origin/linux-next
+printf '#!/usr/bin/env bash\necho ok:x3\n' > "$WORK_DIR/scripts/check-x.sh"
+git -C "$WORK_DIR" add -A
+git -C "$WORK_DIR" commit -q -m "work(1303-cccc)" -m "Carried-Waiver: shell-to-lua no-item-in-reach"
+git -C "$WORK_DIR" push -q origin work/1303-cccc
+git -C "$WORK_DIR" checkout -q linux-next
+cat > "$GH_PRS" <<JSON
+[{"number":1,"headRefName":"work/1301-aaaa","isDraft":false},
+ {"number":2,"headRefName":"work/1302-bbbb","isDraft":false},
+ {"number":3,"headRefName":"work/1303-cccc","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated \$(git rev-parse HEAD)" >> "$GATE_LOG"
+exit 0
+GATE
+out13="$(run_queue)"
+git -C "$WORK_DIR" fetch -q origin linux-next
+tr13="$(git -C "$WORK_DIR" log --first-parent --format='%s|%(trailers:key=Carried,valueonly,separator=;)' origin/linux-next | grep '^land(')"
+if grep -qx 'land(1): work/1301-aaaa into linux-next|shell-to-lua not-due' <<<"$tr13"; then
+    ok "ARM 13a: a not-due candidate lands with 'Carried: shell-to-lua not-due'"
+else
+    bad "ARM 13a: wanted a land(1) commit with Carried: shell-to-lua not-due; got
+$tr13
+$out13"
+fi
+if grep -qx 'land(3): work/1303-cccc into linux-next|shell-to-lua waived no-item-in-reach' <<<"$tr13"; then
+    ok "ARM 13b: a due candidate carrying a Carried-Waiver trailer lands with 'Carried: shell-to-lua waived no-item-in-reach'"
+else
+    bad "ARM 13b: wanted a land(3) commit with Carried: shell-to-lua waived; got
+$tr13
+$out13"
+fi
+# ARM 13c: the due, SILENT candidate is evicted before any gate runs, the
+# trailer line to add is on stdout and in the PR comment, and it never lands.
+if grep -qx 'evict:land-queue:2:carried-silent:shell-to-lua' <<<"$out13" \
+   && grep -q 'Carried-Waiver: shell-to-lua <reason>' <<<"$out13" \
+   && grep -q '^2 --body Evicted' "$GH_COMMENTS" && grep -q '^Carried-Waiver: shell-to-lua' "$GH_COMMENTS" \
+   && ! grep -q '^land(2)' <<<"$tr13" \
+   && [ "$(grep -c . "$GATE_LOG")" -eq 2 ]; then
+    ok "ARM 13c: a due, silent candidate is EVICTED as carried-silent before its gate, with the waiver line on stdout and on the PR"
+else
+    bad "ARM 13c: wanted evict carried-silent for #2, the waiver line on stdout and the PR, 2 gates run; gates=$(grep -c . "$GATE_LOG")
+$out13
+comments: $(cat "$GH_COMMENTS")"
+fi
+
 printf '\n'
 if [ "$fail" -eq 0 ]; then
     if [ "$skipped" -gt 0 ]; then

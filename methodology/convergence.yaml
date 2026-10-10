@@ -633,9 +633,21 @@ carried_obligations:
     `./build.sh --preflight` (the pre-ready step every work ref already
     takes, join-the-fleet step 4), in scripts/relay-preflight.sh, and in the
     work-ref pre-push warn lane (`warn:pre-push:...`). The guard is
-    1577-g96z; until it lands the rule is binding convention and an agent
-    reads its due item from the backlog's own counter (shell-to-lua:
-    `tillandsias-plan script run scripts/lua/check-shell-ratchet.lua`).
+    1577-g96z. Landing is where silence is refused (1577-568c): relay-
+    preflight runs it with --landing as a decider, and scripts/land-queue.sh
+    runs it on the merged tree before the gate, evicting a due, silent
+    candidate as `evict:land-queue:<n>:carried-silent:<backlog>` with the
+    waiver line on stdout and on the PR.
+  tally: >
+    Every land commit the queue writes carries one trailer per backlog,
+    `Carried: <backlog> <not-due|paid|waived|due> [<item-or-reason>]`, so the
+    window's paid / waived / silent counts are one
+    `git log --first-parent --format=%(trailers:key=Carried,valueonly)` with no
+    forge call (1577-568c). A land commit with no Carried trailer was not
+    judged (no runner, or no rule in that tree) and the queue says so as
+    `advisory:land-queue:<n>:carried-unjudged`. Work refs that went stale
+    before the switch owe nothing until revived; a revived ref is judged at
+    its landing like any other.
   counter: >
     One integer a script prints on every --check, judged against a floor file
     that may only descend over that file's OWN git history (check-shell-
