@@ -350,16 +350,13 @@ scripts scripts/check-append-vs-origin-fold.sh 15
 scripts scripts/check-approved-ux-strings.sh 5
 scripts scripts/check-archive-answerability.sh 5
 scripts scripts/check-arrival-routing.sh 3
-scripts scripts/check-backgrounded-jobs-redirect-stderr.sh 2
 scripts scripts/check-bare-metal-host-initialized.sh 3
 scripts scripts/check-base-ledger-status-loss.sh 7
 scripts scripts/check-bash-composition-hazards.sh 1
 scripts scripts/check-build-cache-sweep.sh 3
-scripts scripts/check-ca-path-literals.sh 2
 scripts scripts/check-capability-row.sh 17
 scripts scripts/check-carry-forward.sh 6
 scripts scripts/check-cheatsheet-frontmatter.sh 1
-scripts scripts/check-cheatsheet-source-anchors.sh 2
 scripts scripts/check-claim-confirmed.sh 6
 scripts scripts/check-claim-protocol-agrees.sh 3
 scripts scripts/check-claims-across-branches.sh 5
@@ -421,9 +418,7 @@ scripts scripts/check-nix-builder-e2e.sh 7
 scripts scripts/check-nix-deps-stability.sh 6
 scripts scripts/check-no-competing-gate.sh 6
 scripts scripts/check-no-fixture-writes-live-ledger.sh 16
-scripts scripts/check-no-spawn-in-if-not.sh 6
 scripts scripts/check-no-tracked-binaries.sh 7
-scripts scripts/check-oom-postmortem.sh 2
 scripts scripts/check-opsx-generated-dirt.sh 1
 scripts scripts/check-order-citations-resolve.sh 6
 scripts scripts/check-packet-tier-declared.sh 4
@@ -445,7 +440,6 @@ scripts scripts/check-salvage-refs-ledger.sh 3
 scripts scripts/check-scorable-obligation-added.sh 21
 scripts scripts/check-scratchpad-headroom.sh 7
 scripts scripts/check-script-exec-bits.sh 6
-scripts scripts/check-secure-wire-single-reader.sh 5
 scripts scripts/check-sigpipe-verdict-pipelines-added.sh 15
 scripts scripts/check-skill-canonicalization.sh 4
 scripts scripts/check-skills-single-source.sh 8
@@ -466,7 +460,6 @@ scripts scripts/check-version-bump-isolation.sh 2
 scripts scripts/check-windows-only-sources-verified.sh 12
 scripts scripts/check-windows-tray-clippy.sh 6
 scripts scripts/check-windows-tray-diagnose-surface.sh 2
-scripts scripts/check-wsl-exe-single-constructor.sh 2
 scripts scripts/check-wt-reparse-workarounds-deleted.sh 1
 scripts scripts/claim-ledger-node.sh 6
 scripts scripts/clamp-ca-material.sh 1

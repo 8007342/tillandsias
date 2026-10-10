@@ -19,6 +19,9 @@
 #   7 FIXTURE    a NEW test-*.sh is counted and warned, not refused (coordinator
 #                scope 2026-10-01: fixtures stay shell until scripts/lua can spawn)
 #   8 PIPES      a NEW pipe site in a script is counted and warned, not refused
+#   9 STALE      deleting a decider WITHOUT lowering its floor lines is refused as
+#                violation:shell-ratchet:stale-floor:<path> naming --dump-floors;
+#                dropping its lines from both floors is accepted (1577-57u3)
 #
 # HERMETIC, AND IT ENCODES NO MOMENT: every arm runs in a FRESH scratch git repo
 # seeded from this tree's scripts/ and litmus files, with TILLANDSIAS_REPO_ROOT
@@ -156,6 +159,23 @@ if [ "$RC" = 0 ] && grep -q '^ok:shell-ratchet:' <<<"$OUT" && grep -q 'warn:shel
     ok "ARM 8: a new pipe site passes with a warn:shell-ratchet:new-pipes line"
 else
     bad "ARM 8: rc=$RC out=[$OUT] err=[$(head -c 300 <<<"$ERR")]"
+fi
+# ── ARM 9: a floor line naming a deleted file is STALE (1577-57u3) ─────────
+# Pre-fix: ok:, and 9 such lines sat silent on the live floor (2026-10-10).
+S="$W/s9"; seed "$S"
+victim="$(grep -m1 -E '^scripts/check-[a-z0-9-]+\.sh$' "$S/scripts/portability/shell-decider-floor.txt")"
+rm -f "$S/$victim"
+run "$S"
+st_rc=$RC; st_out="$OUT"; st_err="$ERR"
+grep -vxF "$victim" "$S/scripts/portability/shell-decider-floor.txt" > "$W/dfloor" && cp "$W/dfloor" "$S/scripts/portability/shell-decider-floor.txt"
+grep -vE "^scripts $victim [0-9]+$" "$S/scripts/portability/pipe-site-floor.txt" > "$W/pfloor"; cp "$W/pfloor" "$S/scripts/portability/pipe-site-floor.txt"
+commit "$S" "port: drop $victim and its floor lines" >/dev/null 2>&1
+run "$S"
+if [ "$st_rc" = 1 ] && grep -qx "violation:shell-ratchet:stale-floor:$victim" <<<"$st_out" && grep -q -- '--dump-floors' <<<"$st_err" \
+   && [ "$RC" = 0 ] && grep -q '^ok:shell-ratchet:' <<<"$OUT"; then
+    ok "ARM 9: deleting $victim without lowering its floor is refused as stale-floor; dropping its lines is accepted"
+else
+    bad "ARM 9: stale rc=$st_rc out=[$st_out]; lowered rc=$RC out=[$OUT]"
 fi
 echo "shell-ratchet: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

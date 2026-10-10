@@ -241,6 +241,34 @@ To guarantee convergence in finite time, the orchestrator MUST track and enforce
 
 ---
 
+## Carried-Obligation Burndown — RUN THE SCRIPT EACH PASS (order 1577-57u3)
+
+A carried obligation (`methodology/convergence.yaml` → `carried_obligations`)
+moves to a stricter stage only on a MEASURED stall, and only by the operator.
+Each pass, run:
+
+```bash
+tillandsias-plan script run scripts/lua/check-carried-obligations.lua -- --burndown
+```
+
+It prints one line per backlog, read from the `Carried:` trailers the land
+queue writes on every land commit (1577-568c):
+
+```
+burndown:<backlog>:count=<n>:stage=<s>:window=<k>:paid=<p>:waived=<v>:silent=<q>:trigger=<fired|clear>
+```
+
+- `trigger=clear`: nothing to do. A short window (`k` below `window_size`)
+  is clear by construction. Landings before 1577-568c carry no trailer.
+- `trigger=fired`: the counter did not descend across the last `window_size`
+  due landings. Put ONE plain ask in the operator queue carrying the line's
+  numbers (paid, waived, silent, count at both ends, on stderr) and the
+  proposed next stage. If most waivers cite `blocked-by:`, propose promoting
+  those rows instead (`triggers.gentle_to_enforced`). Never edit `stage:`
+  yourself: a stage move is a bar raise (`governance`).
+
+---
+
 ## Stale Ready Rows: Surface, Never Close (order 1144-jfr5)
 
 Before shaping work, run the first-pass reconciliation and carry its
