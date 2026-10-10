@@ -108,35 +108,60 @@ if ! command -v socat >/dev/null 2>&1; then
   exit 3
 fi
 
-# The 900s is NOT a bind-latency budget: the listener is the first await in the
-# vsock task and answers in 61-255 ms (measured over four cold boots, 795-jeym).
-# What this window covers is the module load racing the probe. Shorten it only
-# after that dependency is deterministic everywhere -- otherwise a short
-# deadline just converts a slow pass into a fast INDETERMINATE.
-DEADLINE=$(( $(date +%s) + ${TILLANDSIAS_READY_TIMEOUT:-900} ))
+# NESTED, NAMED BUDGETS replace the flat 900 s (798-vxj5; the nested-deadline
+# shape is microsoft/mxc's, plan/issues/microsoft-mxc-learnings-2026-10-07.md).
+# Each expiry names the budget that ran out, so a slow step surfaces as itself,
+# not as one undifferentiated timeout.
+#   transport-budget: from probe start until the vsock loopback answers at all
+#     (anything but ENETUNREACH). MEASURED, three cold boots on yolanda-windows
+#     2026-10-08: systemd-modules-load finished in 16 ms each time and the
+#     module was already loaded when the probe started (798-emje made the order
+#     deterministic). 5 s is a floor for a loaded host, not a multiple.
+#   bind-budget: from the transport answering until the listener accepts.
+#     MEASURED, daemon start -> "vsock listener bound": 26, 257, 52 ms (2026-10-08)
+#     and 61-255 ms (four cold boots, 795-jeym). 5 s is about 20x the worst.
+# TILLANDSIAS_READY_TIMEOUT, when set, is a NAMED OVERRIDE of the whole wait.
+TRANSPORT_BUDGET="${TILLANDSIAS_READY_TRANSPORT_BUDGET:-5}"
+BIND_BUDGET="${TILLANDSIAS_READY_BIND_BUDGET:-5}"
+OVERRIDE="${TILLANDSIAS_READY_TIMEOUT:-}"
+T0=$(date +%s)
+transport_up_at=""
 last=""
 while :; do
   # The CONNECT address must come FIRST -- see the module docs. The reversed
   # form was measured returning 0 for both a live and a dead port.
-  last="$(timeout 8 socat -T1 "VSOCK-CONNECT:1:${PORT}" /dev/null 2>&1)" && {
+  last="$(timeout 3 socat -T1 "VSOCK-CONNECT:1:${PORT}" /dev/null 2>&1)" && {
     echo "[tillandsias-ready] vsock_listener=bound port=${PORT}"
     exit 0
   }
-  if [ "$(date +%s)" -ge "$DEADLINE" ]; then
-    case "$last" in
-      *"Network is unreachable"*)
-        echo "[tillandsias-ready] vsock_listener=INDETERMINATE port=${PORT} -- no vsock loopback transport in this guest (vsock_loopback absent), so a guest-local probe cannot observe the listener; this says NOTHING about host reachability, which does not use loopback." >&2
+  now=$(date +%s)
+  case "$last" in
+    *"Network is unreachable"*) phase=transport; deadline=$(( T0 + TRANSPORT_BUDGET )); budget="transport-budget=${TRANSPORT_BUDGET}s" ;;
+    *"No such file or directory"*|*"command not found"*) phase=tool; deadline=$(( T0 + TRANSPORT_BUDGET )); budget="transport-budget=${TRANSPORT_BUDGET}s" ;;
+    *)
+      phase=bind
+      [ -n "$transport_up_at" ] || transport_up_at=$now
+      deadline=$(( transport_up_at + BIND_BUDGET )); budget="bind-budget=${BIND_BUDGET}s"
+      ;;
+  esac
+  if [ -n "$OVERRIDE" ]; then
+    deadline=$(( T0 + OVERRIDE )); budget="TILLANDSIAS_READY_TIMEOUT=${OVERRIDE}s (override)"
+  fi
+  if [ "$now" -ge "$deadline" ]; then
+    case "$phase" in
+      transport)
+        echo "[tillandsias-ready] vsock_listener=INDETERMINATE port=${PORT} -- ${budget} expired: no vsock loopback transport in this guest (Network is unreachable; vsock_loopback absent), so a guest-local probe cannot observe the listener; this says NOTHING about host reachability, which does not use loopback." >&2
         exit 2
         ;;
-      *"No such file or directory"*|*"command not found"*)
+      tool)
         # Belt and braces for the up-front check: if socat vanishes mid-window
         # (a dnf transaction, a read-only remount) the verdict must still not
         # be NOT-BOUND. A broken check and an unbound port are different facts.
-        echo "[tillandsias-ready] vsock_listener=UNVERIFIABLE port=${PORT} -- the probe tool could not be run, so nothing was observed. Last error: ${last}" >&2
+        echo "[tillandsias-ready] vsock_listener=UNVERIFIABLE port=${PORT} -- ${budget} expired: the probe tool could not be run, so nothing was observed. Last error: ${last}" >&2
         exit 3
         ;;
       *)
-        echo "[tillandsias-ready] vsock_listener=NOT-BOUND port=${PORT} -- the transport works but nothing accepts on the control-wire port; the host cannot reach this guest. Last error: ${last}" >&2
+        echo "[tillandsias-ready] vsock_listener=NOT-BOUND port=${PORT} -- ${budget} expired: the transport works but nothing accepts on the control-wire port; the host cannot reach this guest. Last error: ${last}" >&2
         exit 1
         ;;
     esac
@@ -347,5 +372,141 @@ mod tests {
             unit.contains("After=systemd-modules-load.service"),
             "the module edge must be DECLARED, not merely implied (798-emje)"
         );
+    }
+
+    // ORDER 798-vxj5. The probe's expiry must NAME the budget that ran out, and
+    // each budget must be small enough to expire inside a test. These run the
+    // REAL script with a stubbed `socat` on PATH. Unix only: the script is a
+    // guest script, and on Windows `bash` can resolve to System32\bash.exe (the
+    // WSL launcher), the namesake trap of 1386-iubj.
+    #[cfg(unix)]
+    fn run_probe(socat_body: &str, envs: &[(&str, &str)]) -> (i32, String, std::time::Duration) {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("bin");
+        std::fs::create_dir(&bin).unwrap();
+        for (name, body) in [("socat", socat_body), ("modprobe", "exit 0")] {
+            let p = bin.join(name);
+            std::fs::write(&p, format!("#!/bin/sh\n{body}\n")).unwrap();
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let script = dir.path().join("ready.sh");
+        std::fs::write(&script, READY_SCRIPT).unwrap();
+        let path = format!(
+            "{}:{}",
+            bin.display(),
+            std::env::var("PATH").unwrap_or_default()
+        );
+        let started = std::time::Instant::now();
+        let mut cmd = std::process::Command::new("/bin/bash");
+        cmd.arg(&script)
+            .arg("42420")
+            .env("PATH", path)
+            .env_remove("TILLANDSIAS_READY_TIMEOUT")
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        for (k, v) in envs {
+            cmd.env(k, v);
+        }
+        let mut child = cmd.spawn().expect("spawn bash");
+        // A hard wall: pre-fix the loop runs for the flat 900 s, and a test that
+        // hangs for 15 minutes is not a failing test anyone sees.
+        let wall = std::time::Duration::from_secs(30);
+        loop {
+            if child.try_wait().unwrap().is_some() {
+                break;
+            }
+            if started.elapsed() > wall {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("the probe did not expire within {wall:?}: a budget is not honoured");
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        let out = child.wait_with_output().unwrap();
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        (out.status.code().unwrap_or(-1), text, started.elapsed())
+    }
+
+    /// A transport that works and a port nobody accepts on expires the BIND
+    /// budget, by name, as NOT-BOUND.
+    #[cfg(unix)]
+    #[test]
+    fn an_unbound_port_expires_the_bind_budget_by_name() {
+        let (rc, out, took) = run_probe(
+            "echo 'Connection refused' >&2; exit 1",
+            &[
+                ("TILLANDSIAS_READY_TRANSPORT_BUDGET", "1"),
+                ("TILLANDSIAS_READY_BIND_BUDGET", "2"),
+            ],
+        );
+        assert_eq!(rc, 1, "NOT-BOUND keeps exit 1: {out}");
+        assert!(out.contains("vsock_listener=NOT-BOUND"), "{out}");
+        assert!(
+            out.contains("bind-budget=2s"),
+            "the expiry must name its budget: {out}"
+        );
+        assert!(took < std::time::Duration::from_secs(12), "took {took:?}");
+    }
+
+    /// No vsock loopback transport expires the TRANSPORT budget, by name, as
+    /// INDETERMINATE, and never as NOT-BOUND.
+    #[cfg(unix)]
+    #[test]
+    fn a_missing_transport_expires_the_transport_budget_by_name() {
+        let (rc, out, _) = run_probe(
+            "echo 'Network is unreachable' >&2; exit 1",
+            &[
+                ("TILLANDSIAS_READY_TRANSPORT_BUDGET", "1"),
+                ("TILLANDSIAS_READY_BIND_BUDGET", "1"),
+            ],
+        );
+        assert_eq!(rc, 2, "INDETERMINATE keeps exit 2: {out}");
+        assert!(out.contains("vsock_listener=INDETERMINATE"), "{out}");
+        assert!(
+            out.contains("transport-budget=1s"),
+            "the expiry must name its budget: {out}"
+        );
+        assert!(!out.contains("NOT-BOUND"), "{out}");
+    }
+
+    /// TILLANDSIAS_READY_TIMEOUT stays, as a NAMED override of the whole wait.
+    #[cfg(unix)]
+    #[test]
+    fn the_ready_timeout_override_is_named_on_expiry() {
+        let (rc, out, _) = run_probe(
+            "echo 'Connection refused' >&2; exit 1",
+            &[("TILLANDSIAS_READY_TIMEOUT", "1")],
+        );
+        assert_eq!(rc, 1, "{out}");
+        assert!(
+            out.contains("TILLANDSIAS_READY_TIMEOUT=1s"),
+            "the override must be named: {out}"
+        );
+    }
+
+    /// Control: a listener that accepts passes at once, whatever the budgets.
+    #[cfg(unix)]
+    #[test]
+    fn a_bound_listener_passes_without_spending_a_budget() {
+        let (rc, out, took) = run_probe("exit 0", &[]);
+        assert_eq!(rc, 0, "{out}");
+        assert!(out.contains("vsock_listener=bound"), "{out}");
+        assert!(took < std::time::Duration::from_secs(5), "took {took:?}");
+    }
+
+    /// The defaults are the MEASURED budgets, not the flat 900 s (798-vxj5).
+    #[test]
+    fn the_flat_900s_deadline_is_gone() {
+        assert!(
+            !READY_SCRIPT.contains(":-900}"),
+            "the flat 900 s default must be gone"
+        );
+        assert!(READY_SCRIPT.contains("TILLANDSIAS_READY_TRANSPORT_BUDGET:-"));
+        assert!(READY_SCRIPT.contains("TILLANDSIAS_READY_BIND_BUDGET:-"));
     }
 }
