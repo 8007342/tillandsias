@@ -1,0 +1,13 @@
+diff --git a/crates/tillandsias-plan/src/script_run.rs b/crates/tillandsias-plan/src/script_run.rs
+index 6b65800e3..7deea3b35 100644
+--- a/crates/tillandsias-plan/src/script_run.rs
++++ b/crates/tillandsias-plan/src/script_run.rs
+@@ -828,7 +828,7 @@ fn run_to_verdict(
+                 "{path} ended without calling verdict.ok/skip/refused/blocked/could_not_run — \
+                   a decider that says nothing cannot be read as green (1384-bqhy)"
+             )),
+-            1,
++            0,
+         ),
+         Err(e) => (
+             format!("refused:script-error:{name}"),

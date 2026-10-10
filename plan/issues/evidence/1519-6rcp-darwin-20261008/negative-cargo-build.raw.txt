@@ -1,0 +1,2 @@
+   Compiling tillandsias-plan v0.1.0 (/Users/tlatoani/claudia/wt-6rcp/crates/tillandsias-plan)
+    Finished `release` profile [optimized] target(s) in 46.78s

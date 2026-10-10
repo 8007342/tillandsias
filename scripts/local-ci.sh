@@ -1066,7 +1066,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "spec-cheatsheet-binding" "fail" /tmp/binding-check.log
         fi
     else
-        log_fail_missing_guard "spec-cheatsheet-binding" "scripts/check-cheatsheet-refs.sh"
+        log_fail_missing_guard "spec-cheatsheet-binding" "scripts/validate-spec-cheatsheet-binding-fast.sh"
         archive_check_log "spec-cheatsheet-binding" "skipped"
     fi
 
@@ -1218,13 +1218,10 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # of recompiling — and coverage strictly widens (trunk is already held
     # clean at --all-targets -D warnings by the local gate). The heavy
     # --all-features flavor below is deliberately untouched.
-    # ALLOW double_must_use in BOTH flavors, for the reason build.sh --check
-    # records beside its own clippy line (relay-fix 2b57c3304, 2026-10-01):
-    # clippy 1.99 fires it on the #[must_use] that async_trait's own expansion
-    # adds, across 22 trait sites in 11 files. That relay-fix changed build.sh
-    # only, so the release tier went red on code the landing gate had accepted
-    # (v56.10.8.1 cut, 2026-10-08). Remove both allows together.
-    if run_rust_on_host cargo clippy --workspace --all-targets -- -D warnings -A clippy::double_must_use 2>&1 | tee /tmp/clippy-check.log; then
+    # double_must_use is allowed in Cargo.toml [workspace.lints.clippy]
+    # (1572-dmus); per-script flags drifted apart once already (the v56.10.8.1
+    # cut went red on code the landing gate had accepted).
+    if run_rust_on_host cargo clippy --workspace --all-targets -- -D warnings 2>&1 | tee /tmp/clippy-check.log; then
         log_pass "Clippy checks pass (no warnings)"
         archive_check_log "rust-clippy" "pass" /tmp/clippy-check.log
     else
@@ -1244,7 +1241,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     if [[ "$FAST_MODE" == "1" ]]; then
         log_skip "All-features clippy lane (deep lane, skipped in fast mode)"
         archive_check_log "rust-clippy-all-features" "skipped"
-    elif run_rust_on_host cargo clippy --workspace --all-targets --all-features -- -D warnings -A clippy::double_must_use 2>&1 | tee /tmp/clippy-all-features-check.log; then
+    elif run_rust_on_host cargo clippy --workspace --all-targets --all-features -- -D warnings 2>&1 | tee /tmp/clippy-all-features-check.log; then
         log_pass "All-features clippy lane passes (no warnings)"
         archive_check_log "rust-clippy-all-features" "pass" /tmp/clippy-all-features-check.log
     else
@@ -1824,8 +1821,15 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # running is not a guard. Fails loud if any check-*.sh has no invoker.
     # ============================================================================
     log_section "Guard Activation Audit (599-4wzr)"
-    if [[ -f "scripts/audit-guard-activation.sh" ]]; then
-        if bash scripts/audit-guard-activation.sh 2>&1 | tee /tmp/guard-activation.log; then
+    # ORDER 1570-25iq: the auditor is Lua on the one runner. No runnable plan
+    # binary is a failed audit (a guard that cannot run is not a guard), not a pass.
+    _ga_plan="$( . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null )" || _ga_plan=""
+    if [[ -f "scripts/lua/audit-guard-activation.lua" && -n "$_ga_plan" ]]; then
+        # Captured, then shown: no pipe, so the auditor's own status is the one tested.
+        _ga_rc=0
+        "$_ga_plan" script run scripts/lua/audit-guard-activation.lua > /tmp/guard-activation.log 2>&1 || _ga_rc=$?
+        cat /tmp/guard-activation.log
+        if [[ "$_ga_rc" -eq 0 ]]; then
             log_pass "Every shipped guard is invoked by an activation surface"
             archive_check_log "guard-activation" "pass" /tmp/guard-activation.log
         else
@@ -1834,10 +1838,9 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "guard-activation" "fail" /tmp/guard-activation.log
         fi
     else
-        log_fail_missing_guard "guard-activation" "scripts/audit-guard-activation.sh"
+        log_fail_missing_guard "guard-activation" "scripts/lua/audit-guard-activation.lua (or no runnable tillandsias-plan)"
         archive_check_log "guard-activation" "skipped"
     fi
-
     # Markdown distillation policy (order 599-4wzr activation): was orphaned.
     log_section "Markdown Distillation Policy"
     if [[ -f "scripts/check-markdown-distillation.sh" ]]; then

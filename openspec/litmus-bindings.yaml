@@ -605,6 +605,12 @@ specs:
   - litmus:host-chromium-on-demand-shape
   coverage_ratio: 75
   last_verified: '2026-05-30'
+- spec_id: host-state-lifecycle
+  status: active
+  litmus_tests:
+  - litmus:uninstall-confirms-before-destroying
+  coverage_ratio: 100
+  last_verified: '2026-10-08'
 - spec_id: inference-container
   status: active
   litmus_tests:

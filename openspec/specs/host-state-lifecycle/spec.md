@@ -557,6 +557,31 @@ with the keyring share and root token, whatever the answer to the prompt; the
 prompt and the notice cover only what stays useful without credentials:
 `config/`, `downloads/` (with the manifest), `cache/`, `state/`.
 
+Third ruling, 2026-10-08, verbatim: "a destructive approval on uninstall,
+particularly since the vault getting destroyed means even on reinstall a user
+would need to re-login, so on uninstall a big detailed prompt is acceptable.
+Make sure it has big shiny red signs to make sure that this is a destructive
+step and cannot be undone, although it is intended during uninstall." So
+uninstall asks ONE up-front destructive confirmation, behind a bold-red
+warning, before anything is stopped or removed. The 2026-09-27 wording that
+the Vault and keyring entries are removed "unconditionally, before any
+question is asked" is SUPERSEDED on that point only: the removal is still
+unconditional with respect to the `~/.tillandsias/` `[y/N]` answer, but it now
+happens only AFTER the operator confirms the destruction.
+
+(0) Before (1) or anything else runs, `scripts/uninstall.sh` SHALL print a
+bold-red (`ESC[1;31m`, plain words when stdout is not a terminal) boxed warning
+sized to the terminal that says, in end-user words, that it permanently
+deletes Tillandsias, the Vault and every sign-in (GitHub and model
+providers), that it CANNOT BE UNDONE, that a reinstall means signing in
+again, and that project files are not touched. After the listing it SHALL ask
+`Type "delete" to uninstall, or press Enter to cancel:` reading from the
+terminal (`/dev/tty`, seam `TILLANDSIAS_UNINSTALL_TTY`), default NO. Any
+answer other than `delete` prints `Uninstall cancelled. Nothing was removed.`
+and exits 1 having stopped and removed nothing. With no readable terminal it
+SHALL refuse the same way unless `--yes` is passed (accepted with `--wipe`
+in either order); `--yes` is named only in that refusal.
+
 `tillandsias --uninstall` (Linux headless binary), `tillandsias-tray
 --uninstall` (macOS) and `tillandsias-tray.exe --uninstall` (Windows) SHALL
 exist and SHALL be the preferred and documented way to remove Tillandsias;
@@ -580,8 +605,10 @@ list only when it is not, printing that they did. Uninstall SHALL:
    container first;
 3. remove everything in (1) PLUS `~/.tillandsias/vault/` (the store and the
    audit log; on a guest regime the guest-resident store went with the HARD
-   set) — this is the ZERO-TRACES set, and it is removed unconditionally,
-   before any question is asked; a merged system file is reverted, never
+   set) — this is the ZERO-TRACES set, and it is removed whatever the answer to the
+   `~/.tillandsias/` question, but only AFTER the up-front destructive
+   confirmation of (0) above (2026-10-08; supersedes "before any question
+   is asked"); a merged system file is reverted, never
    deleted. The listing in (1) SHALL name the Vault store and the keyring
    entries so the operator sees, before the deletion, that the credentials
    are going;
@@ -634,14 +661,34 @@ requirement, each with a one-line note citing 2026-09-27.
   `scripts/uninstall.sh` never touches keyring entries or podman objects and
   `-Purge` leaves the `.wslconfig` keys.
 
-#### Scenario: The Vault store goes whatever the answer
-- **WHEN** uninstall runs and the operator answers N, y, or nothing (no TTY)
+#### Scenario: The Vault store goes whatever the home-folder answer, once confirmed
+- **WHEN** uninstall has been confirmed and the operator answers N, y, or
+  nothing (no TTY) to the `~/.tillandsias/` question
 - **THEN** in every case `~/.tillandsias/vault/` and the keyring share and
-  root token SHALL be gone before the prompt is even shown
+  root token SHALL be gone before that question is shown
 - **AND** the pre-deletion listing SHALL have named them
 - **AND** a fixture arm per answer SHALL assert it (three arms, same
   outcome for the store).
 - Pre-fix result: FAILS — nothing removes the store or the keyring entries.
+
+#### Scenario: Cancelling the destructive confirmation removes and stops nothing
+- **WHEN** `scripts/uninstall.sh` is run and the answer to the `delete`
+  prompt is Enter, `no` or anything but `delete`
+- **THEN** it SHALL print `Uninstall cancelled. Nothing was removed.`, exit
+  non-zero, and every path of the install (binary, libraries, data, settings,
+  Vault store) SHALL be byte-identical to before
+- **AND** the red warning with the words "cannot be undone" and "sign in
+  again" SHALL have been printed before the question.
+- Pre-fix result: FAILS — the script deleted with no confirmation.
+
+#### Scenario: No terminal and no --yes refuses before touching anything
+- **WHEN** `scripts/uninstall.sh` runs with no readable terminal and without
+  `--yes`
+- **THEN** it SHALL exit non-zero having removed and stopped nothing, with
+  one line saying no terminal is available and naming `--yes` as the remedy
+- **AND** with `--yes` (alone, or with `--wipe` in either order) it SHALL
+  proceed.
+- Pre-fix result: FAILS.
 
 #### Scenario: Uninstall with y removes the folder too
 - **WHEN** the operator answers y, or passes `--remove-home`

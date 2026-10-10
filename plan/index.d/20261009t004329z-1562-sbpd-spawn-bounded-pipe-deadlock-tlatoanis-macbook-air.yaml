@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request: found while writing 1562-bqcm (PR #257).
+packets:
+  - packet_id: the-macos-trays-bounded-security-spawn-deadlocks-on-output-larger-than-a-pipe-buffer-and-the-bound-kills-a-call-that-was-only-waiting-to-be-read
+    order: 1562-sbpd
+    title: The macOS tray's bounded `security` spawn deadlocks on output larger than a pipe buffer, so the bound kills a call that was only waiting to be read
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, keychain, process, bounded-spawn]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-macos-tray/src/installation_uuid.rs
+    context: >
+      MEASURED 2026-10-08 on tlatoanis-macbook-air while writing 1562-bqcm.
+      spawn_bounded (installation_uuid.rs) spawns with stdout/stderr piped and
+      polls try_wait() until the deadline, reading the pipes (wait_with_output)
+      only AFTER the child has exited. A child that writes more than the pipe
+      buffer (64 KiB) blocks on write, never exits, and is killed at the 10 s
+      SECURITY_CALL_BUDGET. That gets reported as TimedOut with "a LOCKED
+      LOGIN KEYCHAIN is the usual cause", which is wrong. Observed:
+      `security dump-keychain` (about 90 KB on this host) through
+      security_bounded failed with that TimedOut every time, and the same
+      command to a file finished in well under a second. Today's production
+      callers (find-generic-password -w, add-generic-password,
+      delete-generic-password) print a few bytes, so nothing ships broken.
+      But any future caller with large output hangs for the full bound and
+      then misreports the cause. It is a latent hang inside the one helper
+      whose job is to never hang.
+    exit_criteria:
+      - spawn_bounded drains stdout and stderr WHILE it waits (reader threads or equivalent), so a child's output volume cannot hold it past its own exit.
+      - The 690-w94k properties still hold. A child that outruns the budget is killed and reaped, and a_bound_that_fires_leaves_no_surviving_child stays green.
+      - A red test pipes more than 64 KiB through spawn_bounded under a budget the child easily meets (for example /bin/sh printing 200 KiB). Pre-fix it is TimedOut, post-fix it is Ok with the full byte count.
+    verifiable_closure: |
+      cargo test -p tillandsias-macos-tray --bin tillandsias-tray installation_uuid on darwin: the new more-than-a-pipe-buffer test is red before the fix (TimedOut at the budget) and green after (Ok, all bytes), and a_bound_that_fires_leaves_no_surviving_child is green both times.
+      unscoreable: unpinnable-until-the-guard-exists — the red test in crates/tillandsias-macos-tray/src/installation_uuid.rs is the deliverable, written in the same commit as the fix.
+    next_action: The coordinator schedules it.
+    events:
+      - type: filed
+        ts: "2026-10-09T00:43:29Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Filed at the coordinator's request as its own row (it was a note on 1562-bqcm). The #257 test works around it by writing the dump to a file.
