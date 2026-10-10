@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Finding from yolanda-windows 2026-10-10 (1268-fx87 full-corpus run), filed at
+# the coordinator's direction (p1: it silently destroys work).
+packets:
+  - packet_id: a-litmus-fixture-that-runs-git-worktree-prune-on-the-operators-repo-inside-the-wsl-guest-deletes-every-windows-worktree-whose-c-path-the-guest-cannot-see
+    order: 1581-d9ig
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, fixtures, git, worktree, windows, wsl, data-loss]
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-fragment-ts-skew.sh
+      - scripts/test-pre-push-trailer-states-what-it-saw.sh
+    title: |
+      Two fixtures tear down with `git -C "$ROOT" worktree prune` on the OPERATOR's repository; run inside the tillandsias-build WSL guest (every Windows gate and litmus run), prune sees a Windows worktree's C:/ gitdir path as missing and deletes its metadata, so the operator's open worktree stops being a git repository mid-edit
+    context: |
+      MEASURED on yolanda-windows 2026-10-10. A worktree created from Git Bash
+      (`git worktree add ../wt-226`, gitdir C:/Users/bullo/claudia/tillandsias/
+      .git/worktrees/wt-226) was in use for a merge while the 1268-fx87
+      full-corpus litmus run executed in the tillandsias-build guest against the
+      same checkout (/mnt/c/...). Between two commands its metadata directory
+      vanished from .git/worktrees, and every git command in it answered
+      "fatal: not a git repository: (NULL)"; the uncommitted edit survived only
+      because the files are plain files. `git worktree list` from Windows then
+      showed a worktree the guest had created itself under target/plan-scratch.
+      WHO DOES IT, read from the code and the run log: the corpus run had
+      already executed litmus:pre-push-trailer-states-what-it-saw (line 201 of
+      its log) and later litmus:fragment-ts-skew (line 436); their fixtures'
+      teardown traps run
+        scripts/test-pre-push-trailer-states-what-it-saw.sh:32
+          ... git -C "$ROOT" worktree prune ...
+        scripts/test-fragment-ts-skew.sh:19
+          ... git -C "$ROOT" worktree prune ...
+      with ROOT the real checkout. Inside the guest a Windows worktree's
+      recorded path (C:/...) does not exist, so prune treats it as stale and
+      removes .git/worktrees/<name>. The converse holds too: a Windows-side
+      prune would delete the guest's /mnt/c-path worktrees.
+      Not a pruning bug in git; a fixture owning cleanup of state it did not
+      create. Each fixture already removes its OWN worktree with
+      `git worktree remove --force "$WT"`, so the prune adds nothing for its
+      own state and only reaches everyone else's.
+    exit_criteria:
+      - 'no fixture or litmus step runs `git worktree prune` (or `git gc`/`git worktree remove` on a path it did not create) against the operator checkout; a fixture removes only its own worktree, by path, or prunes only a scratch repository it created (pre-fix: two do, named above)'
+      - 'a guard refuses a scripts/ or litmus line that prunes worktrees of the real checkout (ROOT / PROJECT_ROOT / the repo the runner is in), comment-stripped, with the two pre-fix sites as its red-first evidence'
+      - 'measured on a Windows host: with a Git Bash worktree open, the two litmus tests run inside the tillandsias-build guest leave its .git/worktrees/<name> intact (pre-fix: deleted)'
+    verifiable_closure: |
+      unscoreable: unpinnable-until-the-guard-exists — the guard is part of the
+      deliverable; the Windows measurement is the third criterion.
+    events:
+      - type: filed
+        ts: "2026-10-10T22:55:47Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Filed at the coordinator's direction (p1) after a Git Bash worktree's metadata was deleted mid-merge during the 1268-fx87 corpus run; sites read from the code and the run log, not reproduced in isolation.
