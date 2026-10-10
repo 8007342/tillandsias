@@ -459,7 +459,6 @@ scripts scripts/check-test-baseline.sh 8
 scripts scripts/check-tracked-files-unwritten.sh 4
 scripts scripts/check-tray-import-surface.sh 25
 scripts scripts/check-tray-string-corpus-drift.sh 2
-scripts scripts/check-unique-bin-names.sh 1
 scripts scripts/check-unrunnable-platform-arms.sh 5
 scripts scripts/check-version-bump-isolation.sh 2
 scripts scripts/check-windows-only-sources-verified.sh 12

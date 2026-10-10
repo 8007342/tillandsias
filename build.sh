@@ -504,8 +504,8 @@ _pf_predecide() {  # $1 = roster path, $2 = label
     # because a check-* is a push decider the door exists to run; and the
     # full gate still runs every declared guard.
     # (`gate-only-decider`, 1518-8p5k below, is a different token: excluded here.)
-    _go="$(sed -n '1,40{/^# preflight: gate-only-decider/d;s/^# preflight: gate-only[[:space:]]*//p}' "$SCRIPT_DIR/$_p" | head -n 1)"
-    if [ -n "$(sed -n '1,40{/^# preflight: gate-only-decider/d;/^# preflight: gate-only/p}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
+    _go="$(sed -n '1,40{/^# preflight: gate-only-decider/d;s/^# preflight: gate-only[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1)"
+    if [ -n "$(sed -n '1,40{/^# preflight: gate-only-decider/d;/^# preflight: gate-only/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
         _reason="$(printf '%s' "$_go" | sed 's/^[—-][[:space:]]*//')"
         case "$_p" in
             scripts/test-*)
@@ -529,8 +529,8 @@ _pf_predecide() {  # $1 = roster path, $2 = label
     # above, which a check-* may not use: this token is honoured only for a
     # check-* that NO pre-push hook runs (the push lane keeps every decider it
     # has), only with a reason, and the full gate still runs it.
-    if [ -n "$(sed -n '1,40{/^# preflight: gate-only-decider/p}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
-        _reason="$(sed -n '1,40{s/^# preflight: gate-only-decider[[:space:]]*//p}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
+    if [ -n "$(sed -n '1,40{/^# preflight: gate-only-decider/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
+        _reason="$(sed -n '1,40{s/^# preflight: gate-only-decider[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
         case "$_p" in
             scripts/check-*)
                 if grep -qF "${_p##*/}" "$SCRIPT_DIR"/scripts/hooks/* 2>/dev/null; then
@@ -553,8 +553,8 @@ _pf_predecide() {  # $1 = roster path, $2 = label
     # shape as gate-only; the launcher then waits for every running guard,
     # runs it with nothing beside it, and only then launches the next. The
     # reason is required: a bare declaration runs concurrently, with a note.
-    if [ -n "$(sed -n '1,40{/^# preflight: serial/p}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
-        _reason="$(sed -n '1,40{s/^# preflight: serial[[:space:]]*//p}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
+    if [ -n "$(sed -n '1,40{/^# preflight: serial/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
+        _reason="$(sed -n '1,40{s/^# preflight: serial[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
         if [ -n "$_reason" ]; then
             return 12
         fi
@@ -2828,7 +2828,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
-    if ! _run bash "$SCRIPT_DIR/scripts/check-unique-bin-names.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-unique-bin-names.lua" 2>&1; then
         _error "two workspace crates declare the same [[bin]] name — they overwrite each other in target/ and tests run the wrong binary (1043-kvvn)"
         exit 1
     fi
