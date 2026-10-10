@@ -5,10 +5,16 @@
 # Measured green and cheap on b026372ff (Guard activation audit), so the honest verdict is to run
 # it where every host lands rather than once a day on the release gate.
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf): a binding assembled
-# from a variable is invisible to every name-based scan.
+# STEP_LUA is a LITERAL path on purpose (1063-nraf): a binding assembled
+# from a variable is invisible to every name-based scan. Ported from
+# audit-guard-activation.sh by 1570-25iq; the verdict line is now house-
+# prefixed (ok:/violation:guard-activation:population=...).
 STEP_DESC="Auditing that every guard is actually wired"
-STEP_SCRIPT="scripts/audit-guard-activation.sh"
+STEP_LUA="scripts/lua/audit-guard-activation.lua"
 STEP_ERROR="a guard exists but nothing invokes it (1087-h2z9)"
 STEP_OK="Guard activation audit passed"
+# The second-regime record below was taken on the .sh. The port (1570-25iq)
+# has not yet been run on darwin or msys; it is pure fs reads with no spawn,
+# no symlink-following and no grep, which removes the regime differences the
+# .sh had (1087-h2z9), but that is an argument, not a measurement.
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:rc0-no-verdict-line"

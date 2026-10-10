@@ -194,7 +194,9 @@ set -eu
 # Fedora, so the absence was an omission rather than a constraint.
 #
 # ORDER 1129-xm5z - `ripgrep`, and it is the THIRD instance of the sentence
-# above. check-cheatsheet-refs.sh hard-requires rg (host first, then the
+# above. check-cheatsheet-refs.sh hard-required rg until 1570-k4fx ported it to
+# Lua with no rg (1578-7s8h asks whether rg is still provisioned for a reason)
+# (host first, then the
 # builder toolbox, else refuse), and 1087-h2z9 moved that check from --ci-full
 # into --check, so it now runs on EVERY land on EVERY host. Nothing provisions
 # rg here, and the podman toolbox's init set that does name it is unreachable
@@ -297,6 +299,17 @@ if [ -z "${TILLANDSIAS_GATE_HOST_MEMAVAILABLE_KB:-}" ] && [ -r "$_w2_host_meminf
     esac
 fi
 # END-HOST-MEMORY-SAMPLE
+# ORDER 1567-9fgi — BIND THE GUEST RUN TO THIS HOST SHELL. Every build-path
+# command reaches the distro through scripts/wsl-guest-session.sh, which tears
+# the guest run down when the host side goes away: the pty hangup, the
+# session's Relay exiting, or this shell's Windows process disappearing (its
+# winpid, asked of tasklist.exe through interop). The last is the only signal a
+# hard kill of a capture-path host shell leaves, because wsl.exe outlives it.
+# This shell's winpid is also an exec'd wsl.exe's lifetime: MSYS keeps the
+# process until the exec'd program exits. Always overwritten, never inherited.
+export TILLANDSIAS_WSL_HOST_WINPID
+TILLANDSIAS_WSL_HOST_WINPID="$(cat "/proc/$$/winpid" 2>/dev/null || true)"
+_W2_SESSION="$(printf '%q' "$(realpath --relative-to="$(pwd)" "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/wsl-guest-session.sh")")"
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-env-forward.sh"
 _ENV_FORWARD="$(tillandsias_env_forward_prefix)"
 
@@ -329,13 +342,18 @@ fi
 
 echo "[wsl2-builder] Re-execing inside '$BUILD_DISTRO' WSL2 distro..."
 
+# ORDER 1563-u2yx: every build-path wsl.exe goes through this lib, because
+# wsl.exe writes stdout and stderr at independent offsets and a caller's
+# `> log 2>&1` lost refusal lines (25600 of 38000 bytes, measured).
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-wsl-capture.sh"
+
 if [[ "$_W2_DIRECT" == 1 ]]; then
     if [[ $# -eq 0 ]]; then
         echo "usage: $WSL2_SELF <command> [args...]" >&2
         exit 2
     fi
-    exec wsl.exe -d "$BUILD_DISTRO" -u root --cd "$PWD_WIN" -- \
-        bash -c "$_ENV_PREFIX exec $ARGS_QUOTED"
+    tillandsias_wsl_exec -d "$BUILD_DISTRO" -u root --cd "$PWD_WIN" -- \
+        bash -c "$_ENV_PREFIX exec bash $_W2_SESSION $ARGS_QUOTED"
 fi
 
 # Sourced from a build script: $0/$@ are the calling script and its args.
@@ -360,9 +378,9 @@ if [[ "$(basename "$SCRIPT_REL")" == build.sh ]]; then
     done
 fi
 if [[ "$_w2_refresh_native" == 1 && "${TILLANDSIAS_WSL2_NO_NATIVE_REFRESH:-}" != 1 ]]; then
-    wsl.exe -d "$BUILD_DISTRO" -u root --cd "$PWD_WIN" -- \
-        bash -c "$_ENV_PREFIX exec bash $(printf '%q' "./$SCRIPT_REL") $ARGS_QUOTED"
-    _w2_rc=$?
+    _w2_rc=0
+    tillandsias_wsl_run -d "$BUILD_DISTRO" -u root --cd "$PWD_WIN" -- \
+        bash -c "$_ENV_PREFIX exec bash $_W2_SESSION bash $(printf '%q' "./$SCRIPT_REL") $ARGS_QUOTED" || _w2_rc=$?
     [[ "$_w2_rc" -eq 0 ]] || exit "$_w2_rc"
     echo "[wsl2-builder] gate passed in '$BUILD_DISTRO'; refreshing the native plan binary this host's lanes resolve (1267-uafx)..."
     if ! command -v cargo >/dev/null 2>&1; then
@@ -376,5 +394,5 @@ if [[ "$_w2_refresh_native" == 1 && "${TILLANDSIAS_WSL2_NO_NATIVE_REFRESH:-}" !=
     bash scripts/check-plan-binary-current.sh
     exit $?
 fi
-exec wsl.exe -d "$BUILD_DISTRO" -u root --cd "$PWD_WIN" -- \
-    bash -c "$_ENV_PREFIX exec bash $(printf '%q' "./$SCRIPT_REL") $ARGS_QUOTED"
+tillandsias_wsl_exec -d "$BUILD_DISTRO" -u root --cd "$PWD_WIN" -- \
+    bash -c "$_ENV_PREFIX exec bash $_W2_SESSION bash $(printf '%q' "./$SCRIPT_REL") $ARGS_QUOTED"

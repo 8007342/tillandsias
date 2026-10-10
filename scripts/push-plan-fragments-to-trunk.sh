@@ -119,6 +119,9 @@ ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" \
              "cd into the project checkout (any branch) and re-run; paths are resolved from its root"
          exit 2; }
 cd "$ROOT"
+# ORDER 1255-s4im: a floor host's first plan-lane action arms its push guards
+# (bash-only, silent when they already are, never fails this script).
+bash "$(dirname "${BASH_SOURCE[0]}")/ensure-hooks.sh" --prelude || true
 REMOTE="${TILLANDSIAS_TRUNK_REMOTE:-origin}"
 TRUNK="${TILLANDSIAS_TRUNK_BRANCH:-linux-next}"
 TRACK="refs/remotes/$REMOTE/$TRUNK"

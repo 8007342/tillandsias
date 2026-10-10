@@ -115,17 +115,24 @@ done
 # ARM 4 — announce BEFORE destroy, in the macOS body. Ordering by byte offset:
 # the announcement call must precede the first destructive call.
 A="$(grep -n 'announce_reset_plan(&d, &p)' "$MAC" | head -1 | cut -d: -f1)"
-D="$(grep -n 'wipe_provisioned_artifacts()' "$MAC" | head -1 | cut -d: -f1)"
+# 1437-8c6p: the SOFT body's first destructive call is apply_soft_reset (the
+# derived host files and the guest's request); it never wipes the VM.
+D="$(grep -n '^    apply_soft_reset(' "$MAC" | head -1 | cut -d: -f1)"
 if [ -n "$A" ] && [ -n "$D" ] && [ "$A" -lt "$D" ]; then
     ok "ARM4 macOS announces (line $A) before it destroys (line $D)"
 else bad "ARM4 macOS announce=$A destroy=$D — announcement must come first"; fi
 
 # ARM 5 — the preserved anchor is named in the PRESERVED list and never cleared.
 # 803-49re: clearing it makes the next vault underivable rather than re-inited.
-if grep -q 'PRESERVED_ANCHOR: &str = "installation-uuid-v1"' "$MAC" \
-   && grep -q 'preserved: Vec<String> = vec!\[' "$MAC" \
-   && ! grep -q 'CLEARED_CREDENTIALS.*installation-uuid' "$MAC"; then
-    ok "ARM5 installation-uuid-v1 is preserved, not cleared"
+# 1437-8c6p: the macOS anchor is the account the tray WRITES
+# (installation_uuid::KEYCHAIN_ACCOUNT = tillandsias-vm-uuid). This arm pinned
+# the Linux name, installation-uuid-v1, which every macOS reset then announced
+# "ABSENT BEFORE THIS RESET" on hosts that held the real anchor.
+if grep -q 'PRESERVED_ANCHOR: &str = crate::installation_uuid::KEYCHAIN_ACCOUNT' "$MAC" \
+   && grep -q 'KEYCHAIN_ACCOUNT: &str = "tillandsias-vm-uuid"' crates/tillandsias-macos-tray/src/installation_uuid.rs \
+   && grep -q 'let mut preserved = vec!\[' "$MAC" \
+   && ! grep -q 'delete_credential_string(' "$MAC"; then
+    ok "ARM5 the macOS anchor tillandsias-vm-uuid is preserved, not cleared"
 else bad "ARM5 the installation anchor is not provably on the preserved side"; fi
 
 # ARM 7 — the shared constants' PUNCTUATION is part of them.
@@ -168,10 +175,10 @@ else ok "ARM6 NEGATIVE CONTROL — a flag that does not exist is not found"; fi
 # reset_bodies_decide_by_keyring_and_never_clear_the_keychain). What no reset
 # may ever call is the KEYCHAIN clearer; those names are what this arm greps.
 #
-# The Linux bodies are asserted HARD. The macOS and Windows bodies are their own
-# packets (1437-av8u, 1437-3iux), so until those land a clearer there is a
-# NAMED PENDING line, not a pass and not a red that would block every gate on a
-# sibling's schedule. When a sibling lands, its line turns ok by itself.
+# The Linux bodies are asserted HARD, and so is the macOS body since 1437-8c6p
+# made it SOFT. The Windows body is its own packet (1437-3iux), so until it is
+# asserted here a clearer there is a NAMED PENDING line, not a pass and not a
+# red that would block every gate on a sibling's schedule.
 CLEARERS='clear_host_vault_credentials|clear_guest_vault_credentials|CLEARED_CREDENTIALS'
 fn_body() {   # <file> <literal that opens the fn>: from that line to the first column-0 '}'
     awk -v pat="$2" 'index($0, pat) { p = 1 } p { print } p && /^}/ { exit }' "$1"
@@ -180,14 +187,14 @@ WINNOTIFY=crates/tillandsias-windows-tray/src/notify_icon.rs
 for spec in \
     "linux|$LIN|fn run_reset_state(debug: bool)" \
     "linux|$LIN|fn run_reset_guest(debug: bool)" \
-    "1437-av8u|$MAC|pub fn run_reset_state()" \
+    "macos|$MAC|pub fn run_reset_state()" \
     "1437-3iux|$WINNOTIFY|pub fn reset_state_once()"; do
     owner="${spec%%|*}"; rest="${spec#*|}"; file="${rest%%|*}"; opener="${rest#*|}"
     body="$(fn_body "$file" "$opener")"
     if [ -z "$body" ]; then bad "ARM8 could not find '$opener' in $file — the probe no longer reaches its subject"; continue; fi
     calls="$(printf '%s\n' "$body" | grep -vE '^[[:space:]]*(//|\*)' | grep -cE "$CLEARERS")"
     if [ "$calls" -eq 0 ]; then ok "ARM8 $file '$opener' calls no credential clearer"
-    elif [ "$owner" = linux ]; then bad "ARM8 $file '$opener' calls a credential clearer ($calls site(s)) — only uninstall may"
+    elif [ "$owner" = linux ] || [ "$owner" = macos ]; then bad "ARM8 $file '$opener' calls a credential clearer ($calls site(s)) — only uninstall may"
     else printf 'PENDING(%s): ARM8 %s %s still calls a credential clearer (%s site(s)) — owned by %s, NOT a pass\n' "$owner" "$file" "$opener" "$calls" "$owner"; fi
 done
 # ARM 8b — POSITIVE CONTROL: the extractor and the pattern catch a clearer call.

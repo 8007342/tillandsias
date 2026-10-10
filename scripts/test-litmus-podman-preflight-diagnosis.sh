@@ -55,6 +55,21 @@ FAILED=0
 _fail() { echo "FAIL: $*"; FAILED=1; }
 _ok() { echo "  ok: $*"; }
 
+# ORDER 1576-yqmc. The podman preflight this fixture exercises fires on LINUX
+# HOSTS ONLY, by design (run-litmus-test.sh, "Linux hosts ONLY: on
+# macOS/Windows podman is VM-internal"). Elsewhere fixtures A and B can never
+# reach it, and C's "no ENV-FAIL" holds vacuously. MEASURED on
+# tlatoanis-macbook-air 2026-10-10: with a broken podman first on PATH,
+# litmus:podman-path-availability ran [OK] and A/B printed "did not reach the
+# podman preflight at all". The row blamed the "no yq" warning, but the runner's
+# own summary said "DEGRADED: 0 executed step(s) mention yq". Skip BY NAME on
+# the last line (the litmus runner's skip rule) rather than FAIL a gate this
+# host does not have.
+if [ "$(uname -s)" != "Linux" ]; then
+    echo "skip:podman-preflight-diagnosis:linux-only-preflight (the podman preflight fires only on Linux hosts; on $(uname -s) podman is VM-internal, so nothing here can reach it)"
+    exit 0
+fi
+
 SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/tillandsias-preflight-diagnosis.XXXXXX")"
 cleanup() { rm -rf "$SANDBOX"; }
 trap cleanup EXIT

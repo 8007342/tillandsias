@@ -46,7 +46,25 @@ bad() { echo "FAIL: $1" >&2; fail=1; }
 # bit is a claim; running the binary is evidence (704-zcgi, 721-nyev, 751-vega).
 # shellcheck source=scripts/plan-binary-probe.sh
 . "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
-BIN="$(resolve_plan_binary)" || BIN=""
+# Resolved INSIDE the checkout and made absolute (84f37ff24, 1401-x76w): the
+# probe's fallback is the cwd-relative ./target/release path, so a run from any
+# other cwd found nothing and SKIPPED wherever no CARGO_TARGET_DIR or installed
+# copy masked it. An explicit TILLANDSIAS_PLAN_BIN keeps its own meaning.
+# The case lives in a function, not inside $( ): bash 3.2 (macOS) ends a
+# substitution at an unparenthesised case pattern's ')' (check-bash-dialect).
+plan_bin_from_checkout() {
+    local p
+    p="$(cd "$ROOT" && resolve_plan_binary)" || return 1
+    case "$p" in
+        /*) printf '%s\n' "$p" ;;
+        *)  printf '%s/%s\n' "$ROOT" "${p#./}" ;;
+    esac
+}
+if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ]; then
+    BIN="$(resolve_plan_binary)" || BIN=""
+else
+    BIN="$(plan_bin_from_checkout)" || BIN=""
+fi
 if [ -z "$BIN" ]; then
     echo "skip:append-event-archived-refusal:no-plan-binary"
     exit 0
@@ -75,17 +93,41 @@ fi
 FIXTURE_AGENT="$("$ROOT/scripts/agent-identity.sh" id claude 2>/dev/null | tail -1)"
 [ -n "$FIXTURE_AGENT" ] || FIXTURE_AGENT="linux-fixture-claude-20260101t000000z"
 
-# Remove any fragment this fixture wrote, by its own marker text. Runs on every
-# exit path so a pre-fix (accepting) binary cannot leave the ledger dirty.
+# Every summary this fixture passes to append-event carries this text, so a
+# fragment it wrote can be told apart from anyone else's.
 FIXTURE_MARK="append-event-archived-refusal fixture probe"
-cleanup_fixture_fragments() {
-    local f
-    for f in "$ROOT"/plan/index.d/*.yaml; do
-        [ -e "$f" ] || continue
-        if grep -q "$FIXTURE_MARK" "$f" 2>/dev/null; then rm -f "$f"; fi
-    done
-}
-trap cleanup_fixture_fragments EXIT
+
+# ORDER 1564-lk9f — EVERY ARM WRITES INTO A SCRATCH COPY OF plan/, NEVER INTO
+# THE CHECKOUT IT RUNS FROM.
+#
+# This used to run append-event against the LIVE ledger and reap what the
+# live-accept arm wrote with an EXIT trap. A trap does not run on SIGKILL, an
+# OOM kill or a tool cap. MEASURED 2026-10-09 on macuahuitl: the v56.10.9.1
+# ./build.sh --ci-full left plan/index.d/20261009t080546z-12a361a8-fixture.yaml
+# (host: fixture) in the real checkout, and land-queue refused to start on the
+# dirty tree; a later plan push could have carried it to trunk. The trap also
+# reaped under $ROOT while append-event, given no --index, resolved plan/ from
+# the CWD — run from another directory, the write and the reap disagreed.
+#
+# So the ledger under test is a copy under target/ (gitignored, never /tmp),
+# every append-event names it with --index, and the trap removes only the copy.
+# A kill now leaves at worst a stray scratch dir under target/, which no
+# `git status`, land or plan push can see. The copy is exactly what the fold
+# reads — index.yaml, index.d/ and archive/ — because --index derives index.d/
+# and archive/ from the index path: arm 1 still resolves against the real
+# archive and arm 4 against a real fragment-only packet. Not the whole plan/
+# (~67 MB, most of it issues/ and evidence/): a forge checkout lives on a
+# tmpfs of a few hundred MB.
+mkdir -p "$ROOT/target/plan-scratch"
+SCRATCH="$(mktemp -d "$ROOT/target/plan-scratch/append-event-archived-refusal.XXXXXX")" || {
+    echo "could-not-run:append-event-archived-refusal:no-scratch-dir"; exit 3; }
+trap 'rm -rf "$SCRATCH"' EXIT INT TERM HUP
+if ! mkdir -p "$SCRATCH/plan" \
+   || ! cp -R "$ROOT/plan/index.yaml" "$ROOT/plan/index.d" "$ROOT/plan/archive" "$SCRATCH/plan/"; then
+    echo "could-not-run:append-event-archived-refusal:scratch-copy-failed"; exit 3
+fi
+PLAN_DIR="$SCRATCH/plan"
+INDEX=(--index "$PLAN_DIR/index.yaml")
 
 # ORDER 923-28js — OBSERVE WHAT THIS TEST COULD HAVE CAUSED, NOT WHAT THE
 # DIRECTORY DID.
@@ -110,10 +152,12 @@ trap cleanup_fixture_fragments EXIT
 # carries and which cleanup_fixture_fragments above already trusts for exactly
 # this purpose. FIXTURE_AGENT is NOT usable as the identity — it resolves to
 # this host's real agent id, so it matches the operator's own fragments too.
-before_set="$(ls "$ROOT"/plan/index.d/ 2>/dev/null | LC_ALL=C sort)"
+# (Since 1564-lk9f the directory is this run's scratch copy, so no concurrent
+# writer can reach it; the mark-based judgment is kept as the stricter rule.)
+before_set="$(ls "$PLAN_DIR"/index.d/ 2>/dev/null | LC_ALL=C sort)"
 
 # ── 1. an ARCHIVED ref is refused, and says so as its own case ──────────────
-out="$("$BIN" append-event "$ARCHIVED_ORDER" note "append-event-archived-refusal fixture probe: must refuse" \
+out="$("$BIN" "${INDEX[@]}" append-event "$ARCHIVED_ORDER" note "append-event-archived-refusal fixture probe: must refuse" \
         --agent "$FIXTURE_AGENT" --host fixture 2>&1)"
 rc=$?
 if [ "$rc" -eq 0 ]; then
@@ -127,7 +171,7 @@ fi
 # ── 2. a ref matching nothing is refused DIFFERENTLY ───────────────────────
 # The two need different remedies. Reporting an archived target as "check your
 # ref" sends the author hunting a typo that does not exist.
-out2="$("$BIN" append-event "999999-zzzzzz" note "append-event-archived-refusal fixture probe: must refuse" \
+out2="$("$BIN" "${INDEX[@]}" append-event "999999-zzzzzz" note "append-event-archived-refusal fixture probe: must refuse" \
         --agent "$FIXTURE_AGENT" --host fixture 2>&1)"
 rc2=$?
 if [ "$rc2" -eq 0 ]; then
@@ -142,13 +186,13 @@ fi
 # Judged over the set difference, and only over files carrying this fixture's
 # mark. A fragment that appeared from somewhere else is somebody else's write
 # and is reported as context, never as this test's verdict (923-28js).
-after_set="$(ls "$ROOT"/plan/index.d/ 2>/dev/null | LC_ALL=C sort)"
+after_set="$(ls "$PLAN_DIR"/index.d/ 2>/dev/null | LC_ALL=C sort)"
 new_fragments="$(comm -13 <(printf '%s\n' "$before_set") <(printf '%s\n' "$after_set") | grep . || true)"
 leaked=""
 foreign=""
 while IFS= read -r _nf; do
     [ -n "$_nf" ] || continue
-    if grep -q "$FIXTURE_MARK" "$ROOT/plan/index.d/$_nf" 2>/dev/null; then
+    if grep -q "$FIXTURE_MARK" "$PLAN_DIR/index.d/$_nf" 2>/dev/null; then
         leaked="${leaked}${leaked:+ }plan/index.d/$_nf"
     else
         foreign="${foreign}${foreign:+ }$_nf"
@@ -172,9 +216,10 @@ fi
 #
 # The first draft took the first row of `ready`, which on this ledger is a
 # BASE-HOSTED packet — so append-event took the base-append path and wrote 30
-# lines into plan/index.yaml. The EXIT trap only reaps fragments, so the fixture
+# lines into plan/index.yaml. The EXIT trap only reaped fragments, so the fixture
 # silently mutated the committed base ledger on every run, and would have done
-# so on every host's every `--check`. Caught by `git status` showing
+# so on every host's every `--check`. (Since 1564-lk9f that write would land in
+# the scratch copy; the fragment-only requirement stands for the reason below.) Caught by `git status` showing
 # `M plan/index.yaml` after wiring it into the gate, not by any arm.
 #
 # A fragment-only packet is also the RIGHT target: 699-usxc exists precisely so
@@ -182,25 +227,24 @@ fi
 # negative control is supposed to protect. The base-hosted path was never the
 # case at risk.
 LIVE_ORDER=""
-for _f in "$ROOT"/plan/index.d/*.yaml; do
+for _f in "$PLAN_DIR"/index.d/*.yaml; do
     [ -e "$_f" ] || continue
     _o="$(grep -m1 -oE '^    order: "?[0-9]+-[a-z0-9]+' "$_f" 2>/dev/null | sed -E 's/.*order: "?//')"
     _s="$(grep -m1 -oE '^    status: [a-z_]+' "$_f" 2>/dev/null | awk '{print $2}')"
     [ -n "$_o" ] && [ "$_s" = "ready" ] || continue
-    grep -qE "^      order: \"?${_o}\"?$" "$ROOT/plan/index.yaml" 2>/dev/null && continue
+    grep -qE "^      order: \"?${_o}\"?$" "$PLAN_DIR/index.yaml" 2>/dev/null && continue
     LIVE_ORDER="$_o"; break
 done
 if [ -z "$LIVE_ORDER" ]; then
     ok "no live ready packet to test against — live-accept arm skipped, not passed"
 else
-    out4="$("$BIN" append-event "$LIVE_ORDER" note \
+    out4="$("$BIN" "${INDEX[@]}" append-event "$LIVE_ORDER" note \
             "append-event-archived-refusal fixture probe: live packets must still accept events (699-usxc preserved)" \
             --agent "$FIXTURE_AGENT" --host fixture 2>&1)"
     rc4=$?
     if [ "$rc4" -eq 0 ]; then
-        # The fragment this wrote is removed by the EXIT trap, which matches on
-        # FIXTURE_MARK rather than on "the newest file" — a newest-file heuristic
-        # would delete a CONCURRENT host's fragment if one landed in between.
+        # The fragment this wrote lives in the scratch copy and goes with it;
+        # nothing in the checkout needs reaping (1564-lk9f).
         ok "a LIVE packet still accepts events (699-usxc fragment-only path intact)"
     else
         bad "a LIVE packet was REFUSED — the fix has broken legitimate writes: $out4"

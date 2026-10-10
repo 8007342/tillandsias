@@ -45,7 +45,7 @@ critical_path:
     expected_behavior: "ok:shipped-diagnostic-tool-dispatch:all"
 
   - step: "neither shipped diagnostic tells an end user to brew install a developer tool (executable lines only — the old grep matched the removal COMMENT and was born red, 956-llei)"
-    command: "bash scripts/check-no-end-user-brew-instruction.sh scripts/tray-diagnose.sh scripts/diagnose-macos-provision.sh"
+    command: ". scripts/plan-binary-probe.sh; \"$(resolve_plan_binary)\" script run scripts/lua/check-no-end-user-brew-instruction.lua -- scripts/tray-diagnose.sh scripts/diagnose-macos-provision.sh"
     timeout_ms: 5000
     expected_behavior: "ok:no-end-user-brew-instruction:2"
 

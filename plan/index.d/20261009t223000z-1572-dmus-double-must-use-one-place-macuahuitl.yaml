@@ -1,0 +1,26 @@
+# Found 2026-10-09 by tlatoanis-macbook-air after #258 pinned rust 1.99.0; fixed on macuahuitl.
+packets:
+  - packet_id: clippy-double-must-use-allow-lives-in-the-workspace-lints-not-in-per-script-flags
+    order: 1572-dmus
+    status: in_progress
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [toolchain, clippy, gate-parity, macos]
+    estimated_hours: 1
+    title: |
+      clippy 1.99 (now pinned by 1562-tc7p) fires double_must_use on async_trait's own expansion in control-wire, core, podman and vm-layer; the allow lived as a `-A clippy::double_must_use` flag on build.sh's and local-ci.sh's clippy lines only, so `cargo clippy -D warnings` from scripts/build-macos-tray.sh or by hand failed every dependent crate while the gate stayed green
+    context: |
+      Reported by tlatoanis-macbook-air 2026-10-09 (darwin, rustc 1.99.0):
+      control-wire guest_transport (3) and core image_builder (1). A Linux
+      workspace clippy without the flag found 16 sites across control-wire,
+      core, podman and vm-layer. The same flag drift had already turned the
+      v56.10.8.1 release tier red once (local-ci.sh comment).
+    exit_criteria:
+      - '`cargo clippy --workspace --all-targets -- -D warnings` with NO -A flag passes; pre-fix: 16 double_must_use errors across control-wire, core, podman and vm-layer'
+      - 'the allow is declared once in Cargo.toml [workspace.lints.clippy] and every workspace member has `[lints] workspace = true`; no script passes -A clippy::double_must_use'
+    unscoreable: "no-separate-litmus: the scorer is the gate itself — build.sh --check now runs cargo clippy --workspace --all-targets -- -D warnings (no -A flag) on rustc 1.99.0 — pre-fix result: 16 errors, measured macuahuitl 2026-10-09; post-fix: clean."
+    depends_on: []
+    next_action: >
+      Land work/1572-dmus; then tell macbookair it can drop the local -A flag.
