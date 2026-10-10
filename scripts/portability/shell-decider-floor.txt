@@ -139,7 +139,6 @@ scripts/check-tray-import-surface.sh
 scripts/check-tray-string-corpus-drift.sh
 scripts/check-unique-bin-names.sh
 scripts/check-unrunnable-platform-arms.sh
-scripts/check-vault-cli-gate-coverage.sh
 scripts/check-version-bump-isolation.sh
 scripts/check-windows-only-sources-verified.sh
 scripts/check-windows-tray-clippy.sh
