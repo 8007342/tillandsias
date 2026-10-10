@@ -38,7 +38,7 @@
 # measurement caught it. A refusing check on the path every Linux build takes
 # stops the FLEET when it is wrong, not one host. So it reports, is exercised
 # every gate, and is promoted to refusing once it has run clean across hosts.
-# Same argument check-portability-idioms.sh makes for staying advisory, and the
+# Same argument check-portability-idioms.lua makes for staying advisory, and the
 # same evidence standard: promote on measurements, not on confidence.
 #
 # Exit: 0 no competing gate  |  1 a surviving gate is holding this checkout

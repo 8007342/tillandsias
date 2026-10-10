@@ -1906,7 +1906,7 @@ if [[ -f scripts/gate-stamp.sh ]]; then
                     # measured at 132 s here against this form's 2.3 s.
                     #
                     # WHY NOT `stat -c`: GNU-only.
-                    # scripts/check-portability-idioms.sh flags it, and this hook
+                    # scripts/lua/check-portability-idioms.lua flags it, and this hook
                     # runs on every platform. `find -newer` is POSIX.
                     _movers="$(
                         git ls-files -z --cached --others --exclude-standard 2>/dev/null \

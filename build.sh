@@ -2767,7 +2767,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # refusal on this line stops every Linux host rather than one. Promotion is
     # a flag (TILLANDSIAS_COMPETING_GATE_ADVISORY=0), pinned by the fixture, to
     # be flipped on fleet evidence rather than on confidence -- the same staging
-    # check-portability-idioms.sh argues for itself.
+    # check-portability-idioms (now scripts/lua/) argues for itself.
     # DELIBERATELY UNFLAGGED. By the time this runs on a Silverblue or WSL host
     # we are INSIDE the dispatch, where the host-side wrapper is unreadable (or,
     # on WSL, has no /proc entry at all), so any verdict from here is a guess —
@@ -4405,13 +4405,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # fix them would cost more than it saves, so this only COUNTS — and the
     # count is split silent-degrade first, because a hook that quietly stops
     # guarding is worse than a fixture that fails by name.
-    if [ -x scripts/check-portability-idioms.sh ] || [ -f scripts/check-portability-idioms.sh ]; then
-        _portability="$(bash scripts/check-portability-idioms.sh 2>/dev/null | head -1 || true)"
-        case "$_portability" in
-            portability-idioms:*silent-degrade=0*loud-fail=0) : ;;
-            portability-idioms:*) _warn "$_portability (see scripts/check-portability-idioms.sh; not a gate)" ;;
-        esac
-    fi
+    # ORDER 1570-g4rx: Lua on the one runner; stdout is the ONE verdict line,
+    # read as a value (no `| head -1`), and a runner that cannot run it is
+    # named rather than silently dropped.
+    _portability="$(_run_lua_decider "scripts/lua/check-portability-idioms.lua" 2>/dev/null || true)"
+    case "$_portability" in
+        "portability-idioms: silent-degrade=0 loud-fail=0 (advisory)") : ;;
+        portability-idioms:*) _warn "$_portability (see scripts/lua/check-portability-idioms.lua; not a gate)" ;;
+        could-not-run:*) _warn "$_portability (the portability advisory did not run)" ;;
+    esac
 
     # ORDER 656-spux. Every host compiles for itself and nothing else, so
     # cfg-gated code is verified by exactly the platform that cannot exercise
