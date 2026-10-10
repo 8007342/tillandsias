@@ -15,7 +15,6 @@ scripts/check-ca-path-literals.sh
 scripts/check-capability-row.sh
 scripts/check-carry-forward.sh
 scripts/check-cheatsheet-frontmatter.sh
-scripts/check-cheatsheet-refs.sh
 scripts/check-cheatsheet-source-anchors.sh
 scripts/check-cheatsheet-sources.sh
 scripts/check-cheatsheet-tiers.sh
