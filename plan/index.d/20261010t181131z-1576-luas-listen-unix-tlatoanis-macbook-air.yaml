@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# 1576-luas on work/1576-luas (stacked on work/1428-3kdu, #291).
+status:
+  - packet_id: the-lua-runtime-has-no-af-unix-socket-api-so-no-fixture-that-needs-a-real-listening-socket-can-be-ported-to-lua
+    field: status
+    value: in_progress
+    ts: "2026-10-10T18:11:31Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-lua-runtime-has-no-af-unix-socket-api-so-no-fixture-that-needs-a-real-listening-socket-can-be-ported-to-lua
+    event:
+      type: note
+      ts: "2026-10-10T18:11:31Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        Added fs.listen_unix(path) -> handle (:path(), :close()) to the tillandsias-plan Lua runtime (lua_predicate.rs, register_fs_write_verbs; Observing only). It binds and listens ONE AF_UNIX stream socket, rooted exactly like fs.write (resolve_write_path containment plus the fixture-regime guard). There is no connect, accept or network socket.
+        - The socket is unlinked on :close() or when the handle is collected, at the latest when the script's Lua state drops.
+        - An over-long path is refused by name as sun-path-too-long (capacity 104 bytes on macOS, 108 on Linux, including the NUL). Off Unix the primitive is "unsupported".
+        - No other verb was added: the port uses existing fs.mkdir, fs.write, time.now_ms and proc.run (cp, chmod, env -u, bash, test, rm).
+        Ported scripts/test-gate-podman-mode-configuration.sh to scripts/lua/test-gate-podman-mode-configuration.lua, deleting the .sh. This is the carried shell->lua obligation, and it retires the fixture's grandfathered python3 call. The litmus and three pinning comments are rewired and the decider floor descends.
+        MEASURED on darwin, rustc 1.99.0:
+        - tests/lua_listen_unix.rs: 4/4 FAIL on origin/linux-next's lua_predicate.rs ("attempt to call a nil value (field 'listen_unix')") and 4/4 ok after. The arms are a real socket (test -S) that :close() unlinks, unlinked at script end, outside-root refused, and over-long path named.
+        - The tillandsias-plan suite is 548 passed, 0 failed; clippy -D warnings and fmt are clean.
+        - .sh vs .lua on darwin: identical "  ok:" lines and "PASS: gate podman mode is configuration, not inference (797-r6tc)". With the old socket inference re-inserted into build.sh, both FAIL scenarios 1 and 2 and exit 1. The sandbox is removed after each run.
+        - check-shell-ratchet: this change is decider sh -1 (branch sh=668; trunk main checkout 671, the rest from the stacked #291 and trunk).
+        NOT MEASURED: the Windows "unsupported" arm, which is cfg(not(unix)) only and not compiled on this host. The no-AF_UNIX skip could not be forced on Unix.

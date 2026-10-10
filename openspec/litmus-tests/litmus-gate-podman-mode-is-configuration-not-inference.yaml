@@ -33,16 +33,16 @@ size: instant
 inputs:
   - build.sh
   - scripts/common.sh
-  - scripts/test-gate-podman-mode-configuration.sh
+  - scripts/lua/test-gate-podman-mode-configuration.lua
 
 preconditions:
   - workspace contains build.sh and scripts/common.sh
-  - workspace contains scripts/test-gate-podman-mode-configuration.sh
-  - python3 is available (the fixture binds a real AF_UNIX socket)
+  - workspace contains scripts/lua/test-gate-podman-mode-configuration.lua
+  - a tillandsias-plan with fs.listen_unix (1576-luas) resolves; the fixture binds a real AF_UNIX socket with it
 
 critical_path:
   - step: "four-scenario fixture: no inference from a real socket, caller URL passes through, local mode leaves the podman bin unpinned, explicit remote mode still pins the wrapper"
-    command: "bash scripts/test-gate-podman-mode-configuration.sh"
+    command: ". scripts/plan-binary-probe.sh; \"$(resolve_plan_binary)\" script run scripts/lua/test-gate-podman-mode-configuration.lua"
     timeout_ms: 60000
     success_pattern: "PASS: gate podman mode is configuration, not inference"
     failure_pattern: "FAIL:"

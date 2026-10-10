@@ -421,7 +421,6 @@ scripts scripts/check-must-ship-rows.sh 5
 scripts scripts/check-nix-builder-e2e.sh 7
 scripts scripts/check-nix-deps-stability.sh 6
 scripts scripts/check-no-competing-gate.sh 6
-scripts scripts/check-no-end-user-brew-instruction.sh 2
 scripts scripts/check-no-fixture-writes-live-ledger.sh 16
 scripts scripts/check-no-spawn-in-if-not.sh 6
 scripts scripts/check-no-tracked-binaries.sh 7

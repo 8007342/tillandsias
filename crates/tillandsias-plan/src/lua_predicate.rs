@@ -750,6 +750,94 @@ fn fixture_write_guard(root: &Path, target: &Path, verb: &str) -> Result<(), mlu
     )))
 }
 
+/// `sun_path` capacity in bytes INCLUDING the terminating NUL: 104 on macOS
+/// and the BSDs, 108 on Linux. A path of this many bytes or more cannot be
+/// bound, and the kernel's own error ("path too long") names neither the
+/// limit nor the length, so the refusal does (order 1576-luas; the macOS
+/// TMPDIR measured 108 bytes on 1428-3kdu).
+#[cfg(unix)]
+pub(crate) const SUN_PATH_CAPACITY: usize = if cfg!(target_os = "linux") { 108 } else { 104 };
+
+/// The named refusal for an over-long socket path.
+pub(crate) fn sun_path_refusal(path: &Path) -> Option<String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        let n = path.as_os_str().as_bytes().len();
+        if n >= SUN_PATH_CAPACITY {
+            return Some(format!(
+                "refused — sun-path-too-long: '{}' is {n} bytes; an AF_UNIX path must be at most {} on this OS",
+                path.display(),
+                SUN_PATH_CAPACITY - 1
+            ));
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = path;
+    None
+}
+
+/// A listening AF_UNIX stream socket owned by a Lua script (fs.listen_unix).
+/// Dropping it closes the listener and unlinks the socket file, but only if
+/// the path still holds a socket: a file the script replaced is not removed.
+pub(crate) struct UnixSocketHandle {
+    path: PathBuf,
+    #[cfg(unix)]
+    listener: Option<std::os::unix::net::UnixListener>,
+}
+
+impl UnixSocketHandle {
+    pub(crate) fn bind(path: &Path) -> Result<Self, String> {
+        if let Some(r) = sun_path_refusal(path) {
+            return Err(r);
+        }
+        #[cfg(unix)]
+        {
+            let listener = std::os::unix::net::UnixListener::bind(path)
+                .map_err(|e| format!("could not bind '{}': {e}", path.display()))?;
+            Ok(Self {
+                path: path.to_path_buf(),
+                listener: Some(listener),
+            })
+        }
+        #[cfg(not(unix))]
+        {
+            Err(format!(
+                "unsupported — AF_UNIX listening sockets are not available on this platform ('{}')",
+                path.display()
+            ))
+        }
+    }
+
+    fn close(&mut self) {
+        #[cfg(unix)]
+        {
+            if self.listener.take().is_some() {
+                use std::os::unix::fs::FileTypeExt;
+                if std::fs::symlink_metadata(&self.path).is_ok_and(|m| m.file_type().is_socket()) {
+                    let _ = std::fs::remove_file(&self.path);
+                }
+            }
+        }
+    }
+}
+
+impl Drop for UnixSocketHandle {
+    fn drop(&mut self) {
+        self.close();
+    }
+}
+
+impl LuaUserData for UnixSocketHandle {
+    fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("path", |_, this, ()| Ok(this.path.display().to_string()));
+        methods.add_method_mut("close", |_, this, ()| {
+            this.close();
+            Ok(())
+        });
+    }
+}
+
 /// fs.mkdir / fs.write / fs.list / fs.exists: OBSERVING ONLY (order 1380-u7sq).
 /// Rooted exactly like fs.read, so a script can touch the checkout (or the
 /// root TILLANDSIAS_REPO_ROOT names, which is how the archiver's --check points
@@ -867,11 +955,30 @@ fn register_fs_write_verbs(lua: &Lua) -> Result<(), LuaError> {
         })
         .map_err(|e| LuaError::VmError(format!("fs.exists: {e}")))?;
 
+    // ORDER 1576-luas: fs.listen_unix(path) -> handle. The smallest socket
+    // primitive a fixture needs: bind + listen ONE AF_UNIX stream socket at a
+    // path rooted exactly like fs.write (repo or TILLANDSIAS_REPO_ROOT, the
+    // fixture-regime guard included). No connect, no accept, no network
+    // sockets. The socket file is unlinked when the handle is closed or
+    // collected, and at the latest when the script's Lua state is dropped.
+    let root_listen = rooted("fs.listen_unix");
+    let listen_unix = lua
+        .create_function(move |_, path_str: String| {
+            let root = root_listen()?;
+            let p = resolve_write_path(&root, &path_str, "fs.listen_unix")
+                .map_err(mlua::Error::RuntimeError)?;
+            fixture_write_guard(&root, &p, "fs.listen_unix")?;
+            UnixSocketHandle::bind(&p)
+                .map_err(|e| mlua::Error::RuntimeError(format!("fs.listen_unix: {e}")))
+        })
+        .map_err(|e| LuaError::VmError(format!("fs.listen_unix: {e}")))?;
+
     for (name, f) in [
         ("mkdir", mkdir),
         ("write", write),
         ("list", list),
         ("exists", exists),
+        ("listen_unix", listen_unix),
     ] {
         fs_table
             .set(name, f)
