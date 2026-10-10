@@ -23775,6 +23775,7 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "linux")] // its only users are the linux-only tests below (958-w4kq)
     const TWO_ROUTERS: &str = "default proto ra metric 20600 pref medium\n\
         \tnexthop via fe80::1 dev wlp3s0 weight 1\n\
         \tnexthop via fe80::2 dev wlp3s0 weight 1\n";

@@ -210,6 +210,12 @@ set -eu
 #
 # The absence was never a constraint: ripgrep is packaged in Fedora 44 and
 # installs in about a second.
+#
+# ORDER 958-w4kq - `mingw64-gcc`. The gate lints cfg(windows) code by running
+# clippy for x86_64-pc-windows-gnu (scripts/lua/check-cross-target-build.lua),
+# and ring's build script needs the mingw C compiler for that target. Without
+# it the check printed skip:cross-target on every Windows gate, while native
+# clippy was red on windows-next. The Linux builder toolbox already installs it.
 dnf install -y \
     gcc pkg-config file cmake make \
     musl-gcc musl-devel musl-libc-static \
@@ -219,6 +225,7 @@ dnf install -y \
     git curl tar xz ShellCheck awk \
     jq yq \
     ripgrep \
+    mingw64-gcc \
     2>&1 | sed 's/^/  [dnf] /'
 if ! command -v rustup >/dev/null 2>&1 && [ ! -x /root/.cargo/bin/rustup ]; then
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o /tmp/rustup-init.sh
