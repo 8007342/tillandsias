@@ -112,3 +112,6 @@ tray = ["image", "zbus", "zvariant"]
 listen-vsock = ["tokio-vsock", "tillandsias-control-wire/vsock"]
 # @trace spec:tillandsias-vault — Phase 6 default-on.
 vault = ["tillandsias-vault-client", "uuid", "zeroize", "dirs", "keyring"]
+
+[lints]
+workspace = true
