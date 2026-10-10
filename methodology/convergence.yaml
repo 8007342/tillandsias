@@ -610,7 +610,10 @@ carried_obligations:
     gentle stage. Conventional reasons, so the tally can group them:
     `too-big:<item>:<lines>` (budget rule below), `blocked-by:<order>`,
     `no-item-in-reach`, `conflict:<work-ref>` (another open ref already ports
-    it). Waivers are COUNTED, NOT JUDGED: no reviewer weighs a reason, the
+    it), `uncounted-item:<path>` (the change DID port or retire a shell decider,
+    but one outside the counter's population, e.g. an `audit-` script, so the
+    counter cannot see the payment; 1577-57u3 is the counter fix). Waivers are
+    COUNTED, NOT JUDGED: no reviewer weighs a reason, the
     landing records it, and the stall trigger reads the counts. A PR-body line
     is not the record: the land queue reads only number, headRefName and
     isDraft, and a forge cannot see a PR body at all; a trailer travels with

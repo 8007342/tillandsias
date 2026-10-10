@@ -2774,7 +2774,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # refusal on this line stops every Linux host rather than one. Promotion is
     # a flag (TILLANDSIAS_COMPETING_GATE_ADVISORY=0), pinned by the fixture, to
     # be flipped on fleet evidence rather than on confidence -- the same staging
-    # check-portability-idioms.sh argues for itself.
+    # check-portability-idioms (now scripts/lua/) argues for itself.
     # DELIBERATELY UNFLAGGED. By the time this runs on a Silverblue or WSL host
     # we are INSIDE the dispatch, where the host-side wrapper is unreadable (or,
     # on WSL, has no /proc entry at all), so any verdict from here is a guess —
@@ -3094,7 +3094,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # `grep -Rl` saw the name and nothing ever ran the file. A negative control
     # nobody executes cannot protect the hole it names (calmecacpilli).
     #
-    # scripts/audit-guard-activation.sh did not catch it for two reasons, both
+    # The guard-activation audit (then scripts/audit-guard-activation.sh, now
+    # scripts/lua/audit-guard-activation.lua) did not catch it for two reasons, both
     # worth knowing: its population is the 76 `check-*` guards, so `test-*`
     # fixtures are not audited at all; and its own source (line ~74) records that
     # it decides activation by `grep -Rl <basename>`, which cannot tell an
@@ -4412,13 +4413,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # fix them would cost more than it saves, so this only COUNTS — and the
     # count is split silent-degrade first, because a hook that quietly stops
     # guarding is worse than a fixture that fails by name.
-    if [ -x scripts/check-portability-idioms.sh ] || [ -f scripts/check-portability-idioms.sh ]; then
-        _portability="$(bash scripts/check-portability-idioms.sh 2>/dev/null | head -1 || true)"
-        case "$_portability" in
-            portability-idioms:*silent-degrade=0*loud-fail=0) : ;;
-            portability-idioms:*) _warn "$_portability (see scripts/check-portability-idioms.sh; not a gate)" ;;
-        esac
-    fi
+    # ORDER 1570-g4rx: Lua on the one runner; stdout is the ONE verdict line,
+    # read as a value (no `| head -1`), and a runner that cannot run it is
+    # named rather than silently dropped.
+    _portability="$(_run_lua_decider "scripts/lua/check-portability-idioms.lua" 2>/dev/null || true)"
+    case "$_portability" in
+        "portability-idioms: silent-degrade=0 loud-fail=0 (advisory)") : ;;
+        portability-idioms:*) _warn "$_portability (see scripts/lua/check-portability-idioms.lua; not a gate)" ;;
+        could-not-run:*) _warn "$_portability (the portability advisory did not run)" ;;
+    esac
 
     # ORDER 656-spux. Every host compiles for itself and nothing else, so
     # cfg-gated code is verified by exactly the platform that cannot exercise
@@ -4527,6 +4530,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Shell ratchet passed"
+
+    # The guard-activation auditor's own fixture (1570-25iq), a Lua fixture on
+    # the one runner: parity with the pre-port .sh, an orphan that refuses, the
+    # 1087-h2z9 symlink-farm shape, an empty population refused. The auditor
+    # itself runs as gate step 190.
+    _step "Checking the guard-activation auditor's fixture (1570-25iq)..."
+    if ! _run_lua_decider "scripts/lua/test-audit-guard-activation.lua" 2>&1; then
+        _error "the guard-activation auditor no longer agrees with its pre-port .sh, or stopped refusing an orphan — see the FAIL lines above (1570-25iq)"
+        exit 1
+    fi
+    _info "Guard-activation auditor fixture passed"
 
     _step "Checking the litmus step model (901-jtvi)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-step-model.sh" 2>&1; then
