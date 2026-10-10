@@ -4553,6 +4553,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Guard-activation auditor fixture passed"
 
+    # The end-user-installer output guard's own fixture (1561-47a8), a Lua
+    # fixture on the one runner: a flag-naming line refused by file:line, the
+    # power-user-only and PENDING-1560-UAM3 exemptions, a comment not counted,
+    # install.sh above its floor refused. The guard itself runs as gate step 800.
+    _step "Checking the end-user installer output guard's fixture (1561-47a8)..."
+    if ! _run_lua_decider "scripts/lua/test-check-installer-end-user-output.lua" 2>&1; then
+        _error "the end-user installer output guard stopped refusing a diagnostic line, or lost an exemption — see the FAIL lines above (1561-47a8)"
+        exit 1
+    fi
+    _info "End-user installer output guard fixture passed"
+
     _step "Checking the litmus step model (901-jtvi)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-step-model.sh" 2>&1; then
         _error "the litmus step model regressed — a producer's failure or its stderr can go missing again (901-jtvi)"
