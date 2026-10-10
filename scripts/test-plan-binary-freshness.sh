@@ -160,9 +160,11 @@ git init -q -b linux-next "$LW/wc"
 ( cd "$LW/wc" && git remote add origin "$LW/bare.git" && git config core.hooksPath .git/hooks )
 mkdir -p "$LW/wc/scripts/hooks" "$LW/wc/plan/index.d" "$LW/wc/crates/tillandsias-plan/src" "$LW/wc/target/release"
 cp "$_LANE_ROOT/scripts/hooks/pre-push-local-gate.sh" "$LW/wc/scripts/hooks/"
-for f in plan-binary-probe.sh gate-stamp.sh common.sh check-fragment-status-loss.sh check-issue-citation-convention.sh; do
+for f in plan-binary-probe.sh gate-stamp.sh common.sh check-issue-citation-convention.sh; do
     cp "$_LANE_ROOT/scripts/$f" "$LW/wc/scripts/" 2>/dev/null || true
 done
+# ORDER 1570-mxcg: the status-loss guard is Lua; the lane runs it from scripts/lua/.
+mkdir -p "$LW/wc/scripts/lua" && cp "$_LANE_ROOT/scripts/lua/check-fragment-status-loss.lua" "$LW/wc/scripts/lua/" 2>/dev/null || true
 chmod +x "$LW/wc/scripts"/*.sh "$LW/wc/scripts/hooks"/*.sh 2>/dev/null
 printf 'packets: []\n' > "$LW/wc/plan/index.yaml"
 echo 'fn main() {}' > "$LW/wc/crates/tillandsias-plan/src/main.rs"

@@ -1614,7 +1614,7 @@ distributed_work:
       writing a fragment that applies to nothing, and reports a no-op instead of
       writing one.
     detectors: >
-      scripts/check-fragment-status-loss.sh (gates: a declared terminal status the
+      scripts/lua/check-fragment-status-loss.lua (gates: a declared terminal status the
       fold discards, and a `completed` event with no transition);
       scripts/check-stranded-in-progress.sh (advisory: claims that never produced
       an event); scripts/reclaim-stranded-claims.sh (returns claims older than the

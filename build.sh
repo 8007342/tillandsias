@@ -395,7 +395,10 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, 
     # ORDER 1384-bqhy: a .lua guard runs through `tillandsias-plan script run`,
     # the one runner, never `bash`; every other guard is unchanged.
     local -a _runner=(bash "$_p")
-    case "$_p" in *.lua) _runner=("${_pf_plan_bin:-tillandsias-plan}" script run "$_p") ;; esac
+    # ORDER 1570-mxcg: and it is told which binary runs it (the same contract as
+    # _run_lua_decider), for a decider that must ask the fold.
+    case "$_p" in *.lua) _runner=(env "TILLANDSIAS_SCRIPT_RUNNER_BIN=${_pf_plan_bin:-tillandsias-plan}"
+                                  "${_pf_plan_bin:-tillandsias-plan}" script run "$_p") ;; esac
     # POLL IN TENTHS, NOT SECONDS. A one-second poll puts a ONE-SECOND FLOOR
     # under every guard, including the 54 that finish in under 250ms: measured
     # here, that floor alone took the run from 148s to 196s — the deadline
@@ -1980,7 +1983,11 @@ _run_lua_decider() {  # $1 = scripts/lua/<name>.lua, remaining args are explicit
             "cargo build --release -p tillandsias-plan (or refresh the installed copy), then re-run"
         return 3
     fi
-    _run "$_ld_bin" script run "$SCRIPT_DIR/$_ld_script" -- "$@"
+    # ORDER 1570-mxcg: a decider that must ASK the plan binary (the fold, the
+    # fragment verbs) is handed the runner this helper already resolved, so it
+    # never re-resolves (704-zcgi: one probe). A new name with no prior meaning,
+    # so no other decider's behaviour changes.
+    TILLANDSIAS_SCRIPT_RUNNER_BIN="$_ld_bin" _run "$_ld_bin" script run "$SCRIPT_DIR/$_ld_script" -- "$@"
 }
 
 _run_litmus_phase() {
@@ -2574,7 +2581,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
                 # froze every host's gate for an hour.
                 _info "ok:gate-fresh-except-plan (stamped ${_memo_verdict#ok:gate-fresh-except-plan })"
                 _info "  Code is unchanged since that passing gate; the plan ledger moved, so the ledger guards run."
-                if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-status-loss.sh" 2>&1; then
+                if ! _run_lua_decider "scripts/lua/check-fragment-status-loss.lua" 2>&1; then
                     _error "a fragment declares a status the fold does not apply — write a status: LWW entry instead (plan/index.d/README.md)"
                     exit 1
                 fi
@@ -2588,8 +2595,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
                 # not see it. Filed separately; not worked around here.
                 #
                 # NO "SKIP IF ABSENT" BRANCH, because a missing binary is
-                # already impossible at this line: check-fragment-status-loss.sh
-                # ran above and exits 2 when none resolves, which the refusal
+                # already impossible at this line: check-fragment-status-loss.lua
+                # ran above and exits 2 or 3 when none resolves, which the refusal
                 # above turns into a failed gate. A conditional here would be a
                 # second opinion on a question already settled — and the shape
                 # of it, a skip that reads as a pass, is what this whole packet
@@ -2689,7 +2696,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # ORDER 1063-363b: BASELINE THE TREE THE GATE IS ABOUT TO MEASURE.
     # On lenovinha 2026-09-05 something in the gates and litmus overwrote
     # scripts/plan-binary-probe.sh in the WORKING TREE with the contents of
-    # scripts/check-fragment-status-loss.sh. That file is an instrument — half
+    # check-fragment-status-loss.sh (since ported to Lua). That file is an instrument — half
     # the gate resolves the plan binary through it — so every verdict taken
     # after the write measured something other than the tree under test, and
     # said so confidently. 61ms against a 254s gate.
@@ -2767,7 +2774,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # refusal on this line stops every Linux host rather than one. Promotion is
     # a flag (TILLANDSIAS_COMPETING_GATE_ADVISORY=0), pinned by the fixture, to
     # be flipped on fleet evidence rather than on confidence -- the same staging
-    # check-portability-idioms.sh argues for itself.
+    # check-portability-idioms (now scripts/lua/) argues for itself.
     # DELIBERATELY UNFLAGGED. By the time this runs on a Silverblue or WSL host
     # we are INSIDE the dispatch, where the host-side wrapper is unreadable (or,
     # on WSL, has no /proc entry at all), so any verdict from here is a guess —
@@ -2991,7 +2998,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # noticed. A writer that reports success while corrupting an append-only
     # record needs a fixture, not a third incident.
     # WHOLE-OVERLAY, not diff-scoped. check-added-fragments-parse.sh refuses a
-    # push that ADDS an unreadable fragment, and check-fragment-status-loss.sh
+    # push that ADDS an unreadable fragment, and check-fragment-status-loss.lua
     # already wrote the caveat down: a fragment damaged by MERGE is outside it.
     # On 2026-08-23 git rename detection paired two hosts' set-field fragments
     # after concurrent compactions and wrote conflict markers into both; they
@@ -4018,7 +4025,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _step "Checking for fragment status transitions the fold discards..."
     if _class_may_skip fragment-status-loss plan-ledger path:crates/tillandsias-plan/*; then
         _class_skip_line fragment-status-loss plan-ledger path:crates/tillandsias-plan/*
-    elif ! _run bash "$SCRIPT_DIR/scripts/check-fragment-status-loss.sh" 2>&1; then
+    elif ! _run_lua_decider "scripts/lua/check-fragment-status-loss.lua" 2>&1; then
         _error "a fragment declares a status the fold does not apply — write a status: LWW entry instead (plan/index.d/README.md)"
         exit 1
     else
@@ -4405,13 +4412,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # fix them would cost more than it saves, so this only COUNTS — and the
     # count is split silent-degrade first, because a hook that quietly stops
     # guarding is worse than a fixture that fails by name.
-    if [ -x scripts/check-portability-idioms.sh ] || [ -f scripts/check-portability-idioms.sh ]; then
-        _portability="$(bash scripts/check-portability-idioms.sh 2>/dev/null | head -1 || true)"
-        case "$_portability" in
-            portability-idioms:*silent-degrade=0*loud-fail=0) : ;;
-            portability-idioms:*) _warn "$_portability (see scripts/check-portability-idioms.sh; not a gate)" ;;
-        esac
-    fi
+    # ORDER 1570-g4rx: Lua on the one runner; stdout is the ONE verdict line,
+    # read as a value (no `| head -1`), and a runner that cannot run it is
+    # named rather than silently dropped.
+    _portability="$(_run_lua_decider "scripts/lua/check-portability-idioms.lua" 2>/dev/null || true)"
+    case "$_portability" in
+        "portability-idioms: silent-degrade=0 loud-fail=0 (advisory)") : ;;
+        portability-idioms:*) _warn "$_portability (see scripts/lua/check-portability-idioms.lua; not a gate)" ;;
+        could-not-run:*) _warn "$_portability (the portability advisory did not run)" ;;
+    esac
 
     # ORDER 656-spux. Every host compiles for itself and nothing else, so
     # cfg-gated code is verified by exactly the platform that cannot exercise

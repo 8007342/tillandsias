@@ -20,18 +20,49 @@
 # The pre-fix arms read real blobs out of git rather than a synthetic corpus: a
 # fixture that writes its own bad input proves the pattern matches that input,
 # not that it matches what shipped.
+#
+# ORDER 1570-g4rx: the advisory is scripts/lua/check-portability-idioms.lua on
+# `tillandsias-plan script run`. Its stdout is ONE line, the verdict
+# (`portability-idioms: silent-degrade=N loud-fail=M (advisory)`); the entries
+# and the limits note are on stderr. The PARITY arm runs the pre-port .sh,
+# pinned from git, and the port over one constructed corpus
+# (scripts/portability/idiom-parity-corpus.txt) and requires identical entries.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
-GUARD="scripts/check-portability-idioms.sh"
+GUARD="scripts/lua/check-portability-idioms.lua"
+# The .sh this was ported from, pinned at its last commit (the PARITY arm).
+PINNED_SH_SHA="${PORTABILITY_PINNED_SH_SHA:-152240b1332bbe675c83b283f908846345cb6ccd}"
+
+# shellcheck source=scripts/plan-binary-probe.sh
+. "$ROOT/scripts/plan-binary-probe.sh"
+plan_from_checkout() {
+    local p
+    p="$(cd "$ROOT" && resolve_plan_binary)" || return 1
+    case "$p" in
+        /*) printf '%s\n' "$p" ;;
+        *)  printf '%s/%s\n' "$ROOT" "${p#./}" ;;
+    esac
+}
+PLAN="$(plan_from_checkout)" || PLAN=""
+if [ -z "$PLAN" ] || ! grep -qx script <<<"$("$PLAN" capabilities 2>/dev/null)"; then
+    echo "SKIP: no tillandsias-plan with \`script run\` resolves; the advisory cannot be run (not a pass)"
+    exit 0
+fi
+run_guard() { env -u TILLANDSIAS_REPO_ROOT "$PLAN" script run "$GUARD"; }
 
 pass=0; fail=0
 ok()  { pass=$((pass+1)); printf '  ok   %s\n' "$1"; }
 bad() { fail=$((fail+1)); printf '  FAIL %s\n' "$1"; }
 
-OUT="$(bash "$GUARD" 2>&1)"
+mkdir -p "$ROOT/target/plan-scratch"
+_W="$(mktemp -d "$ROOT/target/plan-scratch/portability-idioms.XXXXXX")"
+trap 'rm -rf "$_W"' EXIT INT TERM
+run_guard > "$_W/stdout" 2> "$_W/stderr"
 RC=$?
+VERDICT="$(cat "$_W/stdout")"
+OUT="$(cat "$_W/stdout" "$_W/stderr")"
 
 # ── the advisory contract ──────────────────────────────────────────────────
 # ALWAYS 0. Four of the defects this reports each froze a platform; a blocking
@@ -39,10 +70,13 @@ RC=$?
 [ "$RC" -eq 0 ] && ok "advisory exits 0 (never a gate)" \
                 || bad "advisory exited $RC — it must never block"
 
-case "$(printf '%s\n' "$OUT" | head -1)" in
-    "portability-idioms: silent-degrade="*" loud-fail="*)
+# ONE stdout line, the counted verdict — read as a value, never `| head -1`.
+case "$VERDICT" in
+    *"
+"*) bad "stdout carries more than the one verdict line: [$VERDICT]" ;;
+    "portability-idioms: silent-degrade="*" loud-fail="*" (advisory)")
         ok "counted verdict, severity-split, silent class first" ;;
-    *)  bad "verdict line missing or reshaped" ;;
+    *)  bad "verdict line missing or reshaped: [$VERDICT]" ;;
 esac
 
 # ── HALF 1: it catches the real defects on the trees that carried them ─────
@@ -133,7 +167,7 @@ _I=i
 _dw="$(mktemp -d "$ROOT/target/plan-scratch/portability-dialect.XXXXXX" 2>/dev/null || mktemp -d "${TMPDIR:-/tmp}/portability-dialect.XXXXXX")"
 mkdir -p "$_dw/scripts"
 printf '#!/usr/bin/env bash\nsed -%s "s/a/b/" "$1"\n' "$_I" > "$_dw/scripts/bare-idiom.sh"
-_dout="$(TILLANDSIAS_PORTABILITY_ROOT="$_dw" bash "$GUARD" 2>&1)"
+_dout="$(TILLANDSIAS_PORTABILITY_ROOT="$_dw" run_guard 2>&1)"
 rm -rf "$_dw"
 printf '%s\n' "$_dout" | grep -qE 'bare-idiom\.sh:[0-9]+' \
     && ok "DIALECT BRANCH control: a bare idiom with no nearby probe IS still flagged (constructed tree)" \
@@ -191,10 +225,42 @@ printf '%s\n' "$OUT" | grep -q 'check-plan-ledger-readers.sh' \
 # The first cut took 102s by forking grep for every line of every script. A
 # cheap glob pre-filter took it to 6s with byte-identical output. An advisory
 # that slow gets disabled, which is the same end state as never writing it.
-_t0="$(date +%s)"; bash "$GUARD" >/dev/null 2>&1; _t1="$(date +%s)"
+_t0="$(date +%s)"; run_guard >/dev/null 2>&1; _t1="$(date +%s)"
 _d=$((_t1-_t0))
 [ "$_d" -le 45 ] && ok "advisory is cheap (${_d}s)" \
                  || bad "advisory took ${_d}s — it will be disabled (1009-gccx)"
+
+# ── PARITY with the pre-port .sh (1570-g4rx) ───────────────────────────────
+# One constructed corpus with every flagged class and every false-positive
+# control, in a SILENT (hook) and a LOUD (fixture) file. Both implementations
+# scan it; the entry sets must be identical, and so must the two counts.
+# Constructed, so it can never depend on the live tree staying broken.
+if ! git cat-file -e "$PINNED_SH_SHA:scripts/check-portability-idioms.sh" 2>/dev/null; then
+    ok "PARITY (skip: pinned .sh unreachable at $PINNED_SH_SHA — shallow clone)"
+else
+    _pc="$_W/corpus"; mkdir -p "$_pc"
+    for _cp in $(awk '/^=== /{ print $2 }' "$ROOT/scripts/portability/idiom-parity-corpus.txt"); do
+        mkdir -p "$_pc/$(dirname "$_cp")"
+    done
+    awk -v d="$_pc" '/^=== /{ f = d "/" $2; next } f { print > f }' "$ROOT/scripts/portability/idiom-parity-corpus.txt"
+    git show "$PINNED_SH_SHA:scripts/check-portability-idioms.sh" > "$_W/pinned.sh"
+    TILLANDSIAS_PORTABILITY_ROOT="$_pc" bash "$_W/pinned.sh" > "$_W/sh.out" 2>&1
+    TILLANDSIAS_PORTABILITY_ROOT="$_pc" run_guard > "$_W/lua.out" 2> "$_W/lua.err"
+    grep -E '^    ' "$_W/sh.out"  > "$_W/sh.raw";  LC_ALL=C sort -o "$_W/sh.e"  "$_W/sh.raw"
+    grep -E '^    ' "$_W/lua.err" > "$_W/lua.raw"; LC_ALL=C sort -o "$_W/lua.e" "$_W/lua.raw"
+    _shv="$(grep -m1 '^portability-idioms:' "$_W/sh.out")"
+    _luav="$(cat "$_W/lua.out")"
+    _n="$(wc -l < "$_W/sh.e")"; _n=$((_n + 0))
+    if [ "$_n" -lt 10 ]; then
+        bad "PARITY: the pinned .sh named only $_n corpus entries — the corpus or the pin is not exercising the classes"
+    elif ! cmp -s "$_W/sh.e" "$_W/lua.e"; then
+        bad "PARITY: the port's entries differ from the pinned .sh's: $(diff "$_W/sh.e" "$_W/lua.e" | tr '\n' ' ')"
+    elif [ "$_luav" != "$_shv (advisory)" ]; then
+        bad "PARITY: counts differ — .sh [$_shv] vs port [$_luav]"
+    else
+        ok "PARITY: $_n corpus entries identical to the pinned .sh, counts identical ($_shv)"
+    fi
+fi
 
 total=$((pass+fail))
 if [ "$fail" -eq 0 ]; then
