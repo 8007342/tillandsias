@@ -1,4 +1,4 @@
--- @env TILLANDSIAS_CROSS_TARGET
+-- @env TILLANDSIAS_CROSS_TARGET CARGO_TARGET_DIR
 -- @trace spec:ci-release, order:656-spux, order:958-w4kq
 --
 -- check-cross-target-build.lua — PORTED from check-cross-target-build.sh
@@ -84,13 +84,21 @@ if not target_installed() then
     end
 end
 
-local r = proc.run({
-    argv = {
-        "cargo", "clippy", "--workspace", "--all-targets", "--target", TARGET,
-        "--", "-D", "warnings",
-    },
-    timeout_ms = 1800000,
-})
+-- THE GATE'S TARGET DIR, PASSED EXPLICITLY. proc.run children start from a
+-- scrubbed environment (1551-nyzb: PATH, HOME, TILLANDSIAS_* and a fixed few),
+-- so CARGO_TARGET_DIR never reaches cargo. Measured on yolanda before this
+-- line: the cross build went into the CHECKOUT's target/ (1.4 GB over 9p on a
+-- Windows host) instead of the distro-native dir the gate exports, a second
+-- dependency tree on every host. --target-dir keeps it beside the gate's own.
+local argv = { "cargo", "clippy", "--workspace", "--all-targets", "--target", TARGET }
+local target_dir = env.get("CARGO_TARGET_DIR")
+if target_dir ~= nil and target_dir ~= "" then
+    argv[#argv + 1] = "--target-dir"
+    argv[#argv + 1] = target_dir
+end
+for _, a in ipairs({ "--", "-D", "warnings" }) do argv[#argv + 1] = a end
+
+local r = proc.run({ argv = argv, timeout_ms = 1800000 })
 if r.status == "exited" and r.code == 0 then
     verdict.emit("ok:cross-target:" .. TARGET, 0)
 end
