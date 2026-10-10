@@ -50,7 +50,9 @@
 #      check-added-test-is-referenced, check-refusal-affordance-added,
 #      check-rust-source-pin-added, check-no-python-scripts,
 #      check-jq-callsite-ratchet, preflight-fixtures-default-target,
-#      check-issue-citation-convention, trace-coverage.sh --gate, plus
+#      check-issue-citation-convention, trace-coverage.sh --gate,
+#      check-carried-obligations.lua --landing (1577-568c: a change due to a
+#      carried-obligation backlog that neither pays nor waives), plus
 #      `tillandsias-plan check --strict-fragments` and `tillandsias-policy
 #      plan-orders` when the diff adds plan/index.d fragments.
 #   4. `cargo fmt --check` when the diff touches *.rs.
@@ -298,7 +300,7 @@ if grep -q '^crates/tillandsias-plan/' <<<"$DIFF_ALL"; then
 fi
 
 # ── phase 3: deciders, judged by rc only ────────────────────────────────────
-DECIDER_NAMES="check-bash-dialect check-sigpipe-verdict-pipelines-added check-plan-binary-probe-usage check-litmus-pin-claims check-script-exec-bits check-added-fragments-parse check-scorable-obligation-added check-gate-step-regimes check-added-test-is-referenced check-refusal-affordance-added check-rust-source-pin-added check-no-python-scripts check-jq-callsite-ratchet preflight-fixtures-default-target check-issue-citation-convention trace-coverage"
+DECIDER_NAMES="check-bash-dialect check-sigpipe-verdict-pipelines-added check-plan-binary-probe-usage check-litmus-pin-claims check-script-exec-bits check-added-fragments-parse check-scorable-obligation-added check-gate-step-regimes check-added-test-is-referenced check-refusal-affordance-added check-rust-source-pin-added check-no-python-scripts check-jq-callsite-ratchet preflight-fixtures-default-target check-issue-citation-convention trace-coverage check-carried-obligations"
 
 PLAN_BIN=""
 POLICY_BIN=""
@@ -312,22 +314,34 @@ if [ "$FRAGMENTS_ADDED" = 1 ] && [ "$STUB" != 1 ]; then
     [ -n "$POLICY_BIN" ] && DECIDER_NAMES="$DECIDER_NAMES policy-plan-orders"
 fi
 
+# _lua_runner <decider> -> sets _lb, or DEC_OUT and returns 3. 1384-ddua: a Lua
+# decider runs through the one runner. No runner is a loud could-not-run
+# (rc 3), which this phase refuses like any rc.
+_lua_runner() {
+    _lb=""
+    command -v resolve_plan_binary >/dev/null 2>&1 && _lb="$(resolve_plan_binary 2>/dev/null || true)"
+    if [ -z "$_lb" ] || ! grep -qx script <<<"$("$_lb" capabilities 2>/dev/null)"; then
+        DEC_OUT="could-not-run:$1:no-script-runner — no tillandsias-plan with \`script run\` resolves; rebuild it (cargo build --release -p tillandsias-plan)"
+        return 3
+    fi
+}
+
 _run_decider() { # name -> sets DEC_OUT, returns rc
-    local name="$1"
+    local name="$1" _lb=""
     case "$name" in
-        # 1384-ddua: a Lua decider through the one runner. No runner is a
-        # loud could-not-run (rc 3), which this phase refuses like any rc.
+        # The runner finds its repo root from TILLANDSIAS_REPO_ROOT, then
+        # PROJECT_ROOT, then cwd; a caller (the litmus runner) may export
+        # PROJECT_ROOT for another tree, so pin THIS one.
         check-bash-dialect)
-            local _lb=""
-            command -v resolve_plan_binary >/dev/null 2>&1 && _lb="$(resolve_plan_binary 2>/dev/null || true)"
-            if [ -z "$_lb" ] || ! grep -qx script <<<"$("$_lb" capabilities 2>/dev/null)"; then
-                DEC_OUT="could-not-run:check-bash-dialect:no-script-runner — no tillandsias-plan with \`script run\` resolves; rebuild it (cargo build --release -p tillandsias-plan)"
-                return 3
-            fi
-            # The runner finds its repo root from TILLANDSIAS_REPO_ROOT, then
-            # PROJECT_ROOT, then cwd; a caller (the litmus runner) may export
-            # PROJECT_ROOT for another tree, so pin THIS one.
+            _lua_runner "$name" || return 3
             _cap env TILLANDSIAS_REPO_ROOT="$ROOT" "$_lb" script run "$SELF_DIR/lua/check-bash-dialect.lua" ;;
+        # 1577-568c: the landing switch. A merged change that touches a
+        # carried-obligation backlog's area and neither pays an item nor
+        # carries a `Carried-Waiver:` trailer refuses here, as the land queue
+        # evicts it. HEAD is the relay branch, so every ref's commits are read.
+        check-carried-obligations)
+            _lua_runner "$name" || return 3
+            _cap env TILLANDSIAS_REPO_ROOT="$ROOT" TILLANDSIAS_CARRIED_BASE="$BASE" "$_lb" script run "$SELF_DIR/lua/check-carried-obligations.lua" -- --landing ;;
         check-sigpipe-verdict-pipelines-added) DEC_OUT="$(TILLANDSIAS_SIGPIPE_BASE="$BASE" bash "$SELF_DIR/check-sigpipe-verdict-pipelines-added.sh" 2>&1)"; return $? ;;
         check-plan-binary-probe-usage) _cap bash "$SELF_DIR/check-plan-binary-probe-usage.sh" ;;
         check-litmus-pin-claims) _cap bash "$SELF_DIR/check-litmus-pin-claims.sh" ;;

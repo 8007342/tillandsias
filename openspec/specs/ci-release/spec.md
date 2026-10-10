@@ -85,13 +85,21 @@ operator 2026-10-09, "new gates in lua only, and each new lua requires to
 retroactively update 1+ of old ones"; operator 2026-10-10, withdrawing that
 wording but not its intent, "I just want to automatically do backlog to LUA
 migration as agents do progress" and "migrate +1 with your PR". What enforces
-this today: nothing beyond the ratchet. The guard that prints and judges the
-carried item is 1577-g96z, the landing tally 1577-568c, the honest counter
-1577-57u3; until they land the clause is binding convention.
+this: `scripts/lua/check-carried-obligations.lua` (1577-g96z) prints what a
+change owes in `./build.sh --preflight` and warns on a work-ref push; at
+landing, `scripts/relay-preflight.sh` refuses a due, silent change and
+`scripts/land-queue.sh` evicts it before its gate, and every land commit
+records a `Carried: <backlog> <state> [<item-or-reason>]` trailer per backlog
+(1577-568c). The honest counter is 1577-57u3.
 
 The bootstrap and installer shell in
 `scripts/portability/bootstrap-shell-allowlist.txt` is outside this
 requirement by design (it runs before any binary exists).
+
+#### Scenario: A due, silent change is evicted at landing and a waived one is recorded
+- **WHEN** the land queue merges a work ref that edits `scripts/check-<name>.sh`, ports nothing and carries no `Carried-Waiver:` trailer
+- **THEN** it prints `evict:land-queue:<n>:carried-silent:shell-to-lua` and the waiver line to add, comments it on the PR, and runs no gate for it
+- **AND** the same change carrying `Carried-Waiver: shell-to-lua <reason>` in its last paragraph lands with the trailer `Carried: shell-to-lua waived <reason>` on the land commit
 
 #### Scenario: A new shell decider is refused by name
 - **WHEN** a commit adds `scripts/check-<name>.sh` not present in `shell-decider-floor.txt`
