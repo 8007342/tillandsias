@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# 1576-yqmc on work/1576-yqmc: the row's premise (yq) is REFUTED by measurement; fixed as a named darwin skip.
+status:
+  - packet_id: on-a-mac-without-yq-the-litmus-runner-degrades-so-the-podman-preflight-fixtures-never-reach-the-code-they-test
+    field: status
+    value: in_progress
+    ts: "2026-10-10T17:19:10Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: on-a-mac-without-yq-the-litmus-runner-degrades-so-the-podman-preflight-fixtures-never-reach-the-code-they-test
+    event:
+      type: note
+      ts: "2026-10-10T17:19:10Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        PREMISE REFUTED. MEASURED on tlatoanis-macbook-air 2026-10-10 by running fixture A's exact runner command and capturing ALL of its output. The filing quoted only the first line (the yq warning), and the summary reads "DEGRADED: 0 executed step(s) mention yq with no yq available". yq is not why fixtures A/B "did not reach the podman preflight".
+        The real cause is by design: the podman preflight fires on LINUX HOSTS ONLY (scripts/run-litmus-test.sh ~1547-1592, "on macOS/Windows podman is VM-internal"). With a broken podman first on PATH, litmus:podman-path-availability ran [OK] on darwin. A and B cannot reach a gate this host does not have, and C's "no ENV-FAIL" holds vacuously.
+        Also seen: without CARGO_TARGET_DIR exported, the runner in a worktree stops at blocked:litmus-no-plan-binary, after the same yq warning line.
+        FIX on work/1576-yqmc: scripts/test-litmus-podman-preflight-diagnosis.sh emits `skip:podman-preflight-diagnosis:linux-only-preflight (...)` as its last line on non-Linux hosts (the runner's skip rule, the 1462-ruq9 shape).
+        - Darwin pre-fix: FAIL (A and B "did not reach", the closing "cannot tell a timeout from a failed exec"). Post-fix: the named skip, exit 0.
+        - With uname forced to "Linux", the full arms still run, and A and B pass on this host.
+        CARRIED OBLIGATION: see the port commit on this branch (the item is chosen to avoid refs that already port one).
