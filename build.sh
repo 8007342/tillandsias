@@ -4521,6 +4521,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Shell ratchet passed"
 
+    # The cheatsheet-reference checker's own fixture (1570-k4fx), a Lua fixture
+    # on the one runner: both reference shapes, See-also scoping, a dangling
+    # reference refused by name and its negative control, a PATH that resolves
+    # nothing, no cheatsheets/ refused. The checker itself is gate step 165.
+    _step "Checking the cheatsheet-reference checker's fixture (1570-k4fx)..."
+    if ! _run_lua_decider "scripts/lua/test-cheatsheet-refs.lua" 2>&1; then
+        _error "the cheatsheet-reference checker's fixture failed — see the FAIL lines above (1570-k4fx)"
+        exit 1
+    fi
+    _info "Cheatsheet-reference fixture passed"
+
     _step "Checking the litmus step model (901-jtvi)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-step-model.sh" 2>&1; then
         _error "the litmus step model regressed — a producer's failure or its stderr can go missing again (901-jtvi)"
