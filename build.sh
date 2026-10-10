@@ -4592,9 +4592,9 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # fixtures' teardown ran `git -C "$ROOT" worktree prune`, which inside the
     # WSL guest deletes every Windows worktree whose C:/ path the guest cannot
     # see. A fixture removes its OWN worktree; pruning a scratch repo is fine.
-    _step "Checking no fixture prunes the operator checkout (1581-d9ig)..."
+    _step "Checking no script or litmus step prunes the operator checkout (1581-d9ig)..."
     if ! _run_lua_decider "scripts/lua/check-fixture-prunes-checkout.lua" 2>&1; then
-        _error "a fixture runs git worktree prune or git gc against the checkout — see the lines above; remove only its own worktree (1581-d9ig)"
+        _error "a script or litmus step runs git worktree prune or git gc against the checkout — see the lines above; remove only its own worktree (1581-d9ig)"
         exit 1
     fi
     _info "No fixture prunes the checkout"

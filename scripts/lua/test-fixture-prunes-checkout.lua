@@ -12,7 +12,10 @@
 --   4 SCRATCH    NEGATIVE CONTROL: `git -C "$WORK/copy" gc --prune=now` is
 --                allowed and counted as a scratch site
 --   5 COMMENT    NEGATIVE CONTROL: the same root prune in a comment is not read
---   6 EMPTY      no scripts/**/test-*.sh is could-not-run (exit 3), never ok
+--   6 EMPTY      no scripts/**/*.sh is could-not-run (exit 3), never ok
+--   7 LITMUS     a litmus `command:` running `git worktree prune` with no -C
+--                (a litmus step runs in the checkout) is refused
+--   8 TOOL       a non-fixture script pruning "$PROJECT_ROOT" is refused
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-fixture-prunes-checkout.lua [-- --plan <bin>]
 
@@ -42,11 +45,13 @@ local W = ROOT .. "/" .. REL
 
 -- One fresh tree per arm, holding exactly the fixtures named.
 local n_tree = 0
-local function tree(files)
+local function tree(files, litmus)
     n_tree = n_tree + 1
     local d = REL .. "/t" .. n_tree
     fs.mkdir(d .. "/scripts")
+    fs.mkdir(d .. "/openspec/litmus-tests")
     for name, body in pairs(files) do fs.write(d .. "/scripts/" .. name, body) end
+    for name, body in pairs(litmus or {}) do fs.write(d .. "/openspec/litmus-tests/" .. name, body) end
     return W .. "/t" .. n_tree
 end
 local function guard(dir)
@@ -81,17 +86,28 @@ check("BARE: a prune with no -C (the cwd, i.e. the checkout) is refused",
 -- 4. SCRATCH (negative control)
 rc, o = guard(tree({ ["test-d.sh"] = HEAD .. 'WORK="$(mktemp -d)"\ngit -C "$WORK/copy" gc --quiet --prune=now\ngit -C "$WORK/copy" worktree prune\n' }))
 check("SCRATCH: gc and prune on the fixture's own scratch repo are allowed and counted",
-    rc == 0 and has_line(o, "ok:fixture-prunes-checkout:fixtures=1 scratch-sites=2"), "rc=" .. rc .. " out=[" .. o .. "]")
+    rc == 0 and has_line(o, "ok:fixture-prunes-checkout:scripts=1 litmus=0 scratch-sites=2"), "rc=" .. rc .. " out=[" .. o .. "]")
 
 -- 5. COMMENT (negative control)
 rc, o = guard(tree({ ["test-e.sh"] = HEAD .. '# git -C "$ROOT" worktree prune\necho done  # then git -C "$ROOT" gc\n' }))
 check("COMMENT: a root prune or gc in a comment is not read",
-    rc == 0 and has_line(o, "ok:fixture-prunes-checkout:fixtures=1 scratch-sites=0"), "rc=" .. rc .. " out=[" .. o .. "]")
+    rc == 0 and has_line(o, "ok:fixture-prunes-checkout:scripts=1 litmus=0 scratch-sites=0"), "rc=" .. rc .. " out=[" .. o .. "]")
 
 -- 6. EMPTY
-rc, o = guard(tree({ ["helper.sh"] = "#!/usr/bin/env bash\n" }))
-check("EMPTY: no fixtures is could-not-run (exit 3), never ok",
+rc, o = guard(tree({ ["notes.txt"] = "not a script\n" }))
+check("EMPTY: no scripts is could-not-run (exit 3), never ok",
     rc == 3 and has_line(o, "could-not-run:fixture-prunes-checkout:empty-population"), "rc=" .. rc .. " out=[" .. o .. "]")
+
+-- 7. LITMUS, bare prune in a command: value
+rc, o = guard(tree({ ["helper.sh"] = "#!/usr/bin/env bash\necho ok\n" },
+    { ["zz.yaml"] = 'critical_path:\n  - step: "x"\n    command: "echo \\"t\\" && git worktree prune"\n' }))
+check("LITMUS: a litmus command: running git worktree prune with no -C is refused",
+    rc == 1 and has_line(o, "violation:fixture-prunes-checkout:openspec/litmus-tests/zz.yaml:3:worktree-prune"), "rc=" .. rc .. " out=[" .. o .. "]")
+
+-- 8. TOOL, a non-fixture script on PROJECT_ROOT
+rc, o = guard(tree({ ["cleanup-helper.sh"] = '#!/usr/bin/env bash\ngit -C "${PROJECT_ROOT}" worktree prune\n' }))
+check("TOOL: a non-fixture script pruning ${PROJECT_ROOT} is refused",
+    rc == 1 and has_line(o, "violation:fixture-prunes-checkout:scripts/cleanup-helper.sh:2:worktree-prune"), "rc=" .. rc .. " out=[" .. o .. "]")
 
 run({ "rm", "-rf", W })
 

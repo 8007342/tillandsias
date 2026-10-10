@@ -1,7 +1,7 @@
 -- @trace order:1581-d9ig
 --
--- check-fixture-prunes-checkout.lua — no fixture runs `git worktree prune` or
--- `git gc` against the operator's checkout.
+-- check-fixture-prunes-checkout.lua — no script or litmus step runs
+-- `git worktree prune` or `git gc` against the operator's checkout.
 --
 -- WHY. Two fixtures' teardown traps ran `git -C "$ROOT" worktree prune` on the
 -- REAL checkout (test-pre-push-trailer-states-what-it-saw.sh,
@@ -12,32 +12,35 @@
 -- gc belongs to the operator, never to a test; a fixture may prune or gc its
 -- OWN scratch repo (`git -C "$WORK/copy" gc` stays allowed).
 --
--- POPULATION. Fixtures: scripts/**/test-*.sh. A shell fixture is read with its
--- comments stripped (a `#` that starts a word outside quotes ends the line),
--- then every `git` invocation is cut at the next `;`, `&&`, `||`, `|`, `'`, `)`
--- or backtick, so a site inside a single-quoted trap body is still seen.
+-- POPULATION. Every scripts/**/*.sh (fixtures and the tools they call), and
+-- every openspec/litmus-tests/*.yaml `command:` value (its outer YAML quotes
+-- off, `\"` decoded). A line is read with its comments stripped (a `#` that
+-- starts a word outside quotes ends the line), then every `git` invocation is
+-- cut at the next `;`, `&&`, `||`, `|`, `'`, `)` or backtick, so a site inside
+-- a single-quoted trap body is still seen. A litmus step runs in the checkout,
+-- so a litmus `git worktree prune` with no -C is against it.
 --
 -- AGAINST THE CHECKOUT means the invocation's -C (or --git-dir/--work-tree)
 -- names a ROOT variable, `.`, or `$(git rev-parse --show-toplevel)`, or the
 -- invocation has none at all (it acts on the cwd, which for a fixture run by
--- build.sh is the checkout). The ROOT variables are ROOT and REPO_ROOT, plus any
+-- build.sh is the checkout). The ROOT variables are ROOT, REPO_ROOT and
+-- PROJECT_ROOT, plus any
 -- variable the file assigns from `git rev-parse --show-toplevel` or from
 -- `dirname` of BASH_SOURCE / $0.
 --
 -- Verdicts:
---   ok:fixture-prunes-checkout:fixtures=<n> scratch-sites=<k>          exit 0
+--   ok:fixture-prunes-checkout:scripts=<n> litmus=<m> scratch-sites=<k> exit 0
 --   violation:fixture-prunes-checkout:<path>:<line>:<worktree-prune|gc> exit 1 (one line each)
 --   could-not-run:fixture-prunes-checkout:empty-population              exit 3
 local function read(p) local ok, s = pcall(fs.read, p); if ok then return s end; return nil end
 
-local fixtures = {}
-for _, f in ipairs(fs.walk("scripts", { suffix = ".sh" })) do
-    if (f:match("([^/]+)$") or ""):find("^test%-") then fixtures[#fixtures + 1] = f end
-end
-table.sort(fixtures)
-if #fixtures == 0 then
+local scripts = fs.walk("scripts", { suffix = ".sh" })
+table.sort(scripts)
+local litmus = fs.walk("openspec/litmus-tests", { suffix = ".yaml" })
+table.sort(litmus)
+if #scripts == 0 then
     verdict.emit("could-not-run:fixture-prunes-checkout:empty-population", 3,
-        "no scripts/**/test-*.sh found: nothing was read, so nothing is vouched for")
+        "no scripts/**/*.sh found: nothing was read, so nothing is vouched for")
 end
 
 -- Drop a shell comment: a `#` at the start of a word, outside quotes.
@@ -70,7 +73,7 @@ local function words(seg)
 end
 
 local function roots_of(src)
-    local r = { ROOT = true, REPO_ROOT = true }
+    local r = { ROOT = true, REPO_ROOT = true, PROJECT_ROOT = true }
     for _, l in ipairs(text.lines(src)) do
         local name, rhs = l:match("^%s*[%w%s]-([%a_][%w_]*)=(.*)$")
         if name and (rhs:find("rev-parse --show-toplevel", 1, true)
@@ -106,12 +109,23 @@ local function judge(seg)
     return nil
 end
 
+-- A litmus `command:` value with its outer YAML quotes off and \" decoded;
+-- any other line is not a command and yields nil.
+local function litmus_command(l)
+    local v = l:match("^%s*%-?%s*command:%s*(.*)$")
+    if not v then return nil end
+    local inner = v:match('^"(.*)"%s*$') or v:match("^'(.*)'%s*$") or v
+    return (inner:gsub('\\"', '"'))
+end
+
 local violations, scratch = {}, 0
-for _, f in ipairs(fixtures) do
+local function scan(f, is_litmus)
     local src = read(f) or ""
     local roots = roots_of(src)
     for n, raw in ipairs(text.lines(src)) do
-        local l = strip_comment(raw)
+        local l = raw
+        if is_litmus then l = litmus_command(raw) or "" end
+        l = strip_comment(l)
         local from = 1
         while true do
             local s, e = l:find("%f[%w_%-]git%f[^%w_%-]", from)
@@ -136,7 +150,9 @@ for _, f in ipairs(fixtures) do
         end
     end
 end
+for _, f in ipairs(scripts) do scan(f, false) end
+for _, f in ipairs(litmus) do scan(f, true) end
 
 for i = 1, #violations - 1 do out.line(violations[i]) end
 if #violations > 0 then verdict.emit(violations[#violations], 1) end
-verdict.emit(("ok:fixture-prunes-checkout:fixtures=%d scratch-sites=%d"):format(#fixtures, scratch), 0)
+verdict.emit(("ok:fixture-prunes-checkout:scripts=%d litmus=%d scratch-sites=%d"):format(#scripts, #litmus, scratch), 0)
