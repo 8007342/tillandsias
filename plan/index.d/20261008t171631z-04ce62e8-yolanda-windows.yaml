@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: guest-daemon-binds-vsock-before-provisioning-work
+    field: status
+    value: completed
+    ts: "2026-10-08T17:16:31Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: guest-daemon-binds-vsock-before-provisioning-work
+    event:
+      type: completed
+      ts: "2026-10-08T17:16:31Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: superseded: 798-emje completed + 798-vxj5; 2026-08-17 four cold boots bind 61-255ms before provisioning; readiness.rs:111 on origin/linux-next 9b7933b25
+  - packet_id: guest-daemon-binds-vsock-before-provisioning-work
+    event:
+      type: note
+      ts: "2026-10-08T17:16:31Z"
+      host: yolanda-windows
+      summary: |-
+        Closed as SUPERSEDED by 798-emje (completed) and 798-vxj5 (coordinator ruling 2026-10-08; read-and-plan pass by yolanda-windows). THE PREMISE IS REFUTED BY MEASUREMENT. The guest daemon already binds its vsock listener BEFORE any provisioning work. Four cold boots on 2026-08-17 (this row's own progress event; systemd ExecMainStartTimestampMonotonic to vsock_listener=bound): 255 ms (vault image missing, truly cold), 90 ms, 61 ms, 78 ms, with 4/4 identical verdicts. The code still says so today: crates/tillandsias-vm-layer/src/readiness.rs:111, "The 900s is NOT a bind-latency budget: the listener is the first await in the vsock task and answers in 61-255 ms (measured over four cold boots, 795-jeym)." THE REAL DEFECT this row stood in for was the vsock_loopback module load racing the readiness probe: 798-emje, completed. EXIT CRITERION "all six exceptions DELETED" IS CONTRADICTED by later evidence. 757-4hdt keeps the separate readiness unit, because an ExecStartPost probe that fails STOPS the healthy daemon it measures (it killed clean-room provisioning of v0.4.260815.1). The modprobe and the ENETUNREACH/INDETERMINATE branch are the transport step, not a tolerance of bind ordering. What remains is the flat 900 s deadline (and --no-block), now carried by 798-vxj5 as nested, named budgets (transport-budget, bind-budget) set from measured cold boots, per the microsoft/mxc nested-deadline learning noted on this row 2026-10-08.

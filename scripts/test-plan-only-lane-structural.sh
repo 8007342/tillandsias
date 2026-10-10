@@ -282,9 +282,15 @@ mkdir -p "$CD/wc/scripts/hooks" "$CD/wc/plan/index.d" "$CD/wc/target/release" \
          "$CD/wc/crates/tillandsias-plan/src"
 cp "$GUARD" "$CD/wc/scripts/hooks/pre-push-local-gate.sh"
 cp "$CHECKER" "$CD/wc/scripts/check-plan-binary-current.sh"
-for f in plan-binary-probe.sh gate-stamp.sh common.sh check-issue-citation-convention.sh check-fragment-status-loss.sh; do
+for f in plan-binary-probe.sh gate-stamp.sh common.sh check-issue-citation-convention.sh; do
     cp "$ROOT/scripts/$f" "$CD/wc/scripts/$f" 2>/dev/null || true
 done
+# ORDER 1570-mxcg: the status-loss guard is now scripts/lua/check-fragment-
+# status-loss.lua, which the lane runs through `script run` on plan_bin. This
+# tree's plan_bin is a STUB that cannot run Lua, so the guard is deliberately
+# NOT provisioned: the lane then skips it with a note (the 1124-7f3u minimal-
+# tree case) and every arm here keeps measuring the validator-surface question
+# it exists for, not a stub's missing `script` verb.
 # A trivial stand-in for check-plan-binary-current.sh's OWN fixture
 # dependency. That fixture's 16 write-vs-read arms are order 1079-qb8k's
 # concern, unrelated to this packet; this stub exists only so

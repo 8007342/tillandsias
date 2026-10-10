@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found 2026-10-10 on yoga while reading audit-guard-activation.sh for
+# 1570-25iq (p2, pickup linux).
+packets:
+  - packet_id: audit-guard-activation-enumerates-only-scripts-check-sh-so-every-shell-to-lua-port-silently-removes-a-guard-from-the-wiring-audit
+    order: 1577-ct29
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, ratchet, guard-activation, ci-gate]
+    estimated_hours: 2
+    owned_files:
+      - scripts/audit-guard-activation.sh
+      - scripts/lua/audit-guard-activation.lua
+    title: |
+      audit-guard-activation (599-4wzr: "a guard nobody can prove is running is not a guard") enumerates its population as scripts/check-*.sh only, so each shell-to-Lua port (1570-mxcg, 1570-g4rx, 1527-v7cy, 1525-c6jm …) REMOVES that guard from the wiring audit — the migration the carried obligation now accelerates shrinks the auditor's denominator, the exact 831-ezea "a check that narrows its own denominator" shape
+    context: |
+      Measured on yoga 2026-10-10, linux-next 22143e8e1: the auditor's loop is
+      `for f in scripts/check-*.sh`; scripts/lua/check-*.lua (27 files today,
+      19 run by build.sh's _run_lua_decider and 1 by a STEP_LUA gate step) is
+      never enumerated. A Lua decider whose build.sh call is deleted or
+      mistyped is therefore an orphan no audit reports. The preflight door's
+      roster has the same blind spot one level down: it only matches the
+      QUOTED `_run_lua_decider "scripts/lua/…"` form — measured while
+      preflighting 1570-mxcg, an unquoted call would never have run at the
+      door (fixed in that PR for its own call sites).
+      Related: 1570-25iq ports the auditor itself and keeps parity with the
+      .sh's population; this row is the deliberate widening, kept separate
+      so that port stays a pure port.
+    exit_criteria:
+      - 'the audit enumerates scripts/check-*.sh AND scripts/lua/check-*.lua (and audit-*/verify-* as the ratchet does), and reports them in one population; pre-fix: population counts only check-*.sh (yoga 2026-10-10)'
+      - 'NEGATIVE CONTROL: a scratch tree with an unreferenced scripts/lua/check-x.lua reports orphan=1 and refuses; a referenced one is active'
+      - 'every Lua decider live on linux-next at the fix is reported active (none was silently unwired by its port)'
+    unscoreable: "unpinnable-until-the-guard-exists: future arm in the auditor's fixture with an unreferenced scripts/lua/check-x.lua; pre-fix result: not enumerated, so not reported. NEGATIVE CONTROL: a referenced .lua is active."
+    depends_on: []
+    next_action: >
+      After 1570-25iq lands, extend the Lua auditor's population to
+      scripts/lua/check-*.lua; check the live result before raising it to a
+      refusal.
+    events:
+      - type: filed
+        ts: "2026-10-10T16:34:07Z"
+        agent_id: forge-forge-tillandsias-claude-20261009t193211z
+        host: yoga
+        summary: |-
+          Found while reading audit-guard-activation.sh for the 1570-25iq port: each Lua port silently drops a guard from the wiring audit.

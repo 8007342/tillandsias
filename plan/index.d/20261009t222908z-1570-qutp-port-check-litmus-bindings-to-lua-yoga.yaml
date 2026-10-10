@@ -1,0 +1,69 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed 2026-10-09 on yoga from the Lua-runtime audit: the registry decider
+# whose GNU-only sed idioms broke osx-next, now portable through yaml.parse
+# and proc.run{git}.
+packets:
+  - packet_id: check-litmus-bindings-reads-the-bindings-registry-with-nine-sed-sites-whose-gnu-only-idioms-broke-osx-next-and-is-ported-to-scripts-lua-with-yaml-parse-and-proc-run-git-diff-same-verdict
+    order: 1570-qutp
+    status: ready
+    kind: enhancement
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, ci-gate, litmus, portability, macos, ratchet]
+    estimated_hours: 4
+    owned_files:
+      - scripts/check-litmus-bindings.sh
+      - scripts/lua/check-litmus-bindings.lua
+      - build.sh
+      - scripts/portability/pipe-site-floor.txt
+      - scripts/portability/shell-decider-floor.txt
+    title: |
+      scripts/check-litmus-bindings.sh (660-ryhn, spec ci-release; build.sh 4756, every --check) parses openspec/litmus-bindings.yaml with 9 sed sites and 2 awk sites and diffs it against a base ref with git; the ledger records that "the 761-g36m bash-dialect scanner passed over two GNU-only idioms that broke the osx-next union on 2026-09-02" in this file (`\+` inside a BRE). Port it to scripts/lua/check-litmus-bindings.lua: yaml.parse for the registry, fs.walk for the litmus corpus, proc.run{argv={"git","diff",...}} for the base-ref arm, same `ok:litmus-bindings:files=... bound=...` line
+    context: |
+      Measured on yoga 2026-10-09T22:20Z, linux-next 4b76eb15f:
+        - `bash scripts/check-litmus-bindings.sh`: rc=0, 879 ms,
+          ok:litmus-bindings:files=517 bound=501 retired=6 grandfathered=10
+          spec_ids=147 ...
+        - pipe-site-floor.txt: `scripts scripts/check-litmus-bindings.sh 7`;
+          in shell-decider-floor.txt.
+        - Tool calls: sed 9, awk 2, git 5 (rev-parse --verify BASE_REF,
+          diff -U0 BASE_REF -- openspec/litmus-bindings.yaml, diff
+          --name-only), no jq/rg/python.
+        - The git arm is why this row is p3 behind the no-spawn ports:
+          proc.run{argv={"git","diff","-U0",ref,"--",path}} IS available in
+          script run (measured on yoga: proc keys all,chain,run,select,
+          spawn; argv-only), and check-shell-ratchet.lua already uses
+          exactly this call for `git log --format=%H -- <floor>`; but
+          native macOS/Windows proc conformance is still open (1543-ffhg,
+          1544-cnae), so the first all-Lua gate run on those hosts is this
+          row's second regime, to be recorded in STEP_SECOND_REGIME style
+          on the closing event.
+        - Ledger lineage (verbatim): "The 761-g36m bash-dialect scanner
+          passed over two GNU-only idioms that broke the osx-next union on
+          2026-09-02 (see plan/issues/macos-union-red-956-llei-family-
+          2026-09-02.md): (a) `\+` used inside a BRE — GNU sed treats it as
+          one-or-more, BSD sed as a literal plus". yaml.parse has no
+          dialect.
+      Related, not duplicated: 1384-ddua, 1525-c6jm, 1533-ew3n; 902-5bf9
+      (litmus steps: form, which this decider will eventually count);
+      1570-k5yt (fixture pattern).
+    exit_criteria:
+      - 'scripts/lua/check-litmus-bindings.lua prints the identical ok:litmus-bindings line on 4b76eb15f (pre-fix: files=517 bound=501 retired=6 grandfathered=10 spec_ids=147 from the .sh) and refuses an unbound fixture litmus file by name; build.sh 4756 calls `_run_lua_decider`; the .sh is deleted; pre-fix: no .lua, 879 ms'
+      - 'the base-ref arm (added bindings since BASE_REF) is read from proc.run git diff as data and the no-base-ref case is a named skip, never silence; pre-fix: `git ... 2>/dev/null \| sed ...` pipelines'
+      - 'pipe-site-floor.txt loses the 7-site entry and shell-decider-floor.txt the line, via --dump-floors; pre-fix: 3914 / 664'
+      - 'NEGATIVE CONTROL: a bindings registry entry naming a litmus file that does not exist is still refused'
+    unscoreable: "unpinnable-until-the-guard-exists: future fixture scripts/test-litmus-bindings-lua-port.sh (or its Lua successor under 1570-k5yt), written in the same commit as the port, exits 0 against the Lua decider with a BSD-sed-shaped arm added (a bindings entry whose id contains a plus sign); pre-fix result: the arm is absent and the .sh depends on GNU sed. NEGATIVE CONTROL: a registry entry naming a missing litmus file is still refused."
+    depends_on: []
+    next_action: >
+      Port the registry read to yaml.parse(fs.read("openspec/litmus-
+      bindings.yaml")), the corpus to fs.walk("openspec/litmus-tests",
+      {suffix=".yaml"}), the two git diff arms to proc.run with argv; keep
+      the verdict grammar; rewire build.sh 4756; dump floors; delete the .sh.
+    events:
+      - type: filed
+        ts: "2026-10-09T22:29:08Z"
+        agent_id: forge-forge-tillandsias-claude-20261009t193211z
+        host: yoga
+        summary: |-
+          Filed from the Lua-runtime audit on yoga. Measured: 879 ms per --check, 7 pipe sites, sed x9 with a recorded osx-next break (GNU BRE `\+`), git x5 readable through proc.run argv; p3 because the git arm rides on native proc conformance rows.
