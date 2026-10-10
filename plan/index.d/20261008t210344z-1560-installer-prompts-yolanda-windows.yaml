@@ -1,0 +1,90 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Operator ruling 2026-10-08 (relayed by the coordinator), verbatim: "we do not
+# ask end users to do power user stuff. That's our guideline. An install prompt
+# asking for destructive cases should not be an acceptable case. End user is NOT
+# a power user. No prompts like those, we make all the decisions for them, on
+# their behalf, for their best interests. So SOFT reset is the default only and
+# forever. A power user wanting to do a hard reset should be capable of figuring
+# out where to place a flag and which flag, we do not need to print any power
+# user messages during install, at all. Install should be for END USER (NOT
+# POWER USER) and be a pretty installer, rather than an informational/debugging
+# installer. As frictionless as possible for end users."
+packets:
+  - packet_id: a-ratchet-refuses-any-new-interactive-prompt-in-the-end-user-installers-with-the-floor-at-the-two-the-operator-left-for-now
+    order: 1560-g5d9
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [installer, ratchet, end-user, ux, guard]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-installer-prompts.sh
+      - scripts/portability/installer-prompt-floor.txt
+    title: |
+      A ratchet counts interactive prompts (Read-Host, read -p, [y/N] / [Y/n]) in the end-user installers (scripts/install.sh, scripts/install-macos.sh, scripts/install-windows.ps1) and refuses a NEW one by name; the floor is today's 2 (install-windows.ps1's .wslconfig and Hyper-V prompts, left "for now" by the operator)
+    context: |
+      Coordinator request 2026-10-08, following the operator ruling quoted at the
+      top of this fragment. Measured on trunk 2026-10-08: exactly 2 prompt lines
+      in the population, both in scripts/install-windows.ps1 (the .wslconfig
+      keys prompt "[y/N]" and the Hyper-V Administrators prompt "[Y/n]").
+      scripts/uninstall.sh is OUTSIDE the population on purpose:
+      host-state-lifecycle REQUIRES --uninstall to ask before removing
+      ~/.tillandsias/. Comments are stripped before counting, so a comment that
+      names a prompt neither counts nor hides one.
+    exit_criteria:
+      - 'scripts/check-installer-prompts.sh prints ok at the floor 2 on trunk, and refuses by file:line a prompt added to any installer in the population (pre-fix: no guard exists)'
+      - 'a prompt quoted only in a comment does not count; a count BELOW the floor passes with a note to lower the floor'
+      - 'bound as a gate step'
+    verifiable_closure: |
+      A fixture runs the real guard over the real tree and scratch copies (an
+      added read -p: refused by name; comment only: ok; one removed: ok with the
+      lower-the-floor note), red pre-fix because the guard does not exist.
+      unscoreable: unpinnable-until-the-guard-exists — the guard and its fixture
+      land together.
+    events:
+      - type: filed
+        ts: "2026-10-08T21:03:44Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Filed at the coordinator's request after the operator's no-prompts ruling (2026-10-08).
+  - packet_id: remove-the-two-remaining-interactive-prompts-from-install-windows-ps1-per-the-end-user-installer-guideline
+    order: 1560-uam3
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [installer, windows, end-user, ux]
+    estimated_hours: 3
+    depends_on:
+      - a-ratchet-refuses-any-new-interactive-prompt-in-the-end-user-installers-with-the-floor-at-the-two-the-operator-left-for-now
+    owned_files:
+      - scripts/install-windows.ps1
+    title: |
+      Remove the two remaining interactive prompts from install-windows.ps1 (the .wslconfig keys "[y/N]" and the Hyper-V Administrators "[Y/n]") per the end-user installer guideline: the installer decides on the user's behalf; then lower the 1560-g5d9 floor to 0
+    context: |
+      Operator ruling 2026-10-08, quoted verbatim at the top of this fragment. The
+      operator said to leave these two "for now", so THIS ROW IS NOT SCHEDULED: do
+      not implement it until the operator schedules it. When scheduled, each
+      prompt's decision must be made for the user (and say in the row what was
+      chosen and why), without power-user text in the output.
+    exit_criteria:
+      - 'install-windows.ps1 has no Read-Host / [y/N] / [Y/n] prompt; the .wslconfig and Hyper-V decisions are made on the user''s behalf with no power-user text'
+      - 'the 1560-g5d9 floor is lowered to 0 in the same change'
+    verifiable_closure: |
+      scripts/check-installer-prompts.sh at floor 0 passes; a live Windows
+      install shows no prompt.
+      unscoreable: blocked-on-operator-scheduling — the operator left these
+      prompts in place "for now".
+    events:
+      - type: filed
+        ts: "2026-10-08T21:03:44Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Filed at the coordinator's request; left unimplemented until the operator schedules it.

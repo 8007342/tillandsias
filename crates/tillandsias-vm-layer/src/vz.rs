@@ -2574,8 +2574,10 @@ pub mod boot {
     }
 
     fn open_read_only_devnull() -> Option<c_int> {
+        // libc's open(2) is variadic. rustc 1.99 denies a non-variadic
+        // declaration of a symbol std itself uses (invalid_runtime_symbol_definitions).
         unsafe extern "C" {
-            fn open(path: *const std::os::raw::c_char, oflag: c_int) -> c_int;
+            fn open(path: *const std::os::raw::c_char, oflag: c_int, ...) -> c_int;
         }
         let fd = unsafe {
             open(c"/dev/null".as_ptr(), 0 /* O_RDONLY */)

@@ -248,10 +248,24 @@ async fn a_sigpipe_killed_producer_keeps_its_own_status() {
         .await
         .expect("spawn consumer");
 
+    // Signals are a Unix contract (1553-5x9x). On native Windows there is no
+    // SIGPIPE: the MSYS `sh` reports its own signal death as an EXIT code,
+    // measured Exited(3328) = 13 << 8 on yolanda-windows 2026-10-08. What
+    // still holds there is that the producer keeps its OWN status. The
+    // executor deliberately does NOT decode 3328 back into Signaled(13): a
+    // native Windows program can exit 3328 on its own, and decoding would
+    // invent a signal it never received.
+    #[cfg(unix)]
     assert_eq!(
         producer.completion,
         Completion::Signaled(SIGPIPE),
         "the producer's SIGPIPE death is its own, reported as a signal"
+    );
+    #[cfg(windows)]
+    assert_eq!(
+        producer.completion,
+        Completion::Exited(SIGPIPE << 8),
+        "the producer's MSYS signal-exit code is its own, kept unrelabelled"
     );
     assert!(
         !producer.completion.is_success(),

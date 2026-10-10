@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gnome-keyring-daemon-aborts-when-a-preflight-guard-is-killed-mid-secret-service-read-locking-gh-and-pushes-on-the-coordinator
+    event:
+      type: note
+      ts: "2026-10-09T14:46:26Z"
+      agent_id: linux-macuahuitl-opus5-20261009t144626z
+      host: macuahuitl
+      summary: |
+        Second instance on macuahuitl: gnome-keyring-daemon SIGABRT at 2026-10-09 01:55:54 PDT (08:55:54Z), coredump present (pid 1444614). It fell about 7 min into the v56.10.9.1 release gate (./build.sh --ci-full started 08:48Z, log target/session-logs/ci-full-rc4.log), not into a bare --preflight, and no gh or bulk preflight was running beside it. Gh hung on the locked collection until the operator unlocked it. So the trigger is in the set the release gate runs in its first ~7 minutes, which is wider than the preflight front door alone.
