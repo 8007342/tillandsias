@@ -555,7 +555,7 @@ cleanup_old_evidence_bundles() {
 
     for bundle in ${old_bundles[@]+"${old_bundles[@]}"}; do
         local bundle_name="$(basename "$bundle")"
-        local bundle_mtime=$(stat -c %y "$bundle" 2>/dev/null | cut -d' ' -f1 || echo "unknown")
+        local bundle_mtime=$( { stat -c %y "$bundle" 2>/dev/null || stat -f %Sm -t %Y-%m-%d "$bundle" 2>/dev/null; } | cut -d' ' -f1)
 
         if rm -f "$bundle"; then
             deleted_count=$((deleted_count + 1))

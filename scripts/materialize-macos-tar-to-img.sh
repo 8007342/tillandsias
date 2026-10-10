@@ -145,6 +145,6 @@ umount "$ESP_MOUNT" "$ROOT_MOUNT"
 losetup -d "$LOOP_DEV"; LOOP_DEV=""
 
 SHA="$(sha256sum "$OUT_IMG" | awk '{print $1}')"
-SIZE_BYTES="$(stat -c %s "$OUT_IMG")"
+SIZE_BYTES="$(stat -c %s "$OUT_IMG")"  # stat-c: ok (Linux-only per D6: this script refuses to run on macOS)
 SIZE_MIB="$((SIZE_BYTES / 1048576))"
 say "done: $OUT_IMG (${SIZE_MIB} MiB allocated, sha256 ${SHA})"
