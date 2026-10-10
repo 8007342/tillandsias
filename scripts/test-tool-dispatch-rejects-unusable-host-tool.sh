@@ -5,7 +5,7 @@
 # resolve_tool used to accept anything `command -v` could see. That is a claim
 # about the PATH, not about the binary. MEASURED on lenovinha while reproducing
 # 1137-dzzu: with a stub `rg` on PATH exiting non-zero,
-# scripts/check-cheatsheet-refs.sh ran a broken rg for every scan, matched
+# check-cheatsheet-refs.sh (then a .sh; Lua with no rg since 1570-k4fx) ran a broken rg for every scan, matched
 # nothing, recorded no broken reference, and exited 0 — announcing that every
 # cheatsheet reference resolves, having examined none.
 #
@@ -95,32 +95,38 @@ else
 fi
 
 # ── ARM 4 — THE CONSEQUENCE AT THE CALL SITE, which is where the defect was
-#           actually observed. With rg present-but-broken, check-cheatsheet-refs
-#           must reach its could-not-run exit 2 instead of passing over nothing.
+#           actually observed: with the tool present-but-broken, a CALLER of the
+#           dispatch must reach its could-not-run exit instead of passing over
+#           nothing.
 #
-#           SKIPPED, LOUDLY, where a toolbox can supply a real rg: there the
-#           correct answer is that the toolbox arm rescues the run, and asserting
-#           exit 2 would pin the wrong behaviour.
-cat > "$work/bin/rg" <<'STUB'
-#!/bin/sh
-echo "rg: not installed (1138-bb5r fixture)" >&2
-exit 127
-STUB
-chmod +x "$work/bin/rg"
-
-if command -v toolbox >/dev/null 2>&1 \
-   && toolbox run --container tillandsias-builder rg --version >/dev/null 2>&1; then
-    ok "SKIPPED arm 4: this host has a real rg in the toolbox, so the fallback correctly rescues the run"
+#           ORDER 1570-k4fx: RE-SUBJECTED ONTO A STUB CALLER. This arm used to
+#           run scripts/check-cheatsheet-refs.sh under a broken rg; that checker
+#           is now Lua and resolves no tool at all. The caller below is kept in
+#           this fixture's own data and has the exact shape the old one had
+#           (`TOOL="$(resolve_tool X || printf '')"`, empty -> exit 2), aimed at
+#           the fabricated broken tool, so no toolbox can rescue it and no skip
+#           is needed — and the next port cannot strand this arm again.
+cat > "$work/stub-caller.sh" <<'CALLER'
+#!/usr/bin/env bash
+# Stub caller of the shared dispatch: could-not-run (2) when its tool does not
+# resolve; otherwise it "scans" with the tool and passes only if the tool ran.
+. "$1/scripts/lib/tool-dispatch.sh"
+T="$(resolve_tool tilde-probe-broken || printf '')"
+if [ -z "$T" ]; then
+    echo "error: tilde-probe-broken is available neither on this host nor in the toolbox" >&2
+    exit 2
+fi
+"$T" --scan >/dev/null 2>&1 || exit 0   # the 1138-bb5r FALSE PASS: a broken tool, nothing examined, exit 0
+exit 0
+CALLER
+PATH="$work/bin:/usr/bin:/bin" bash "$work/stub-caller.sh" "$ROOT" >/dev/null 2>&1
+rc=$?
+if [ "$rc" -eq 2 ]; then
+    ok "a present-but-broken tool makes its caller reach the could-not-run exit 2 instead of passing over nothing"
+elif [ "$rc" -eq 0 ]; then
+    bad "a present-but-broken tool still yields exit 0 at the call site — the caller passed having examined nothing, which is the whole packet"
 else
-    PATH="$work/bin:/usr/bin:/bin" bash scripts/check-cheatsheet-refs.sh >/dev/null 2>&1
-    rc=$?
-    if [ "$rc" -eq 2 ]; then
-        ok "a broken host rg reaches the could-not-run exit 2 instead of passing over zero references"
-    elif [ "$rc" -eq 0 ]; then
-        bad "a broken host rg still yields exit 0 — the checker is passing having examined nothing, which is the whole packet"
-    else
-        bad "a broken host rg yields exit $rc, expected 2 (could-not-run)"
-    fi
+    bad "a present-but-broken tool yields exit $rc at the call site, expected 2 (could-not-run)"
 fi
 
 echo "tool-dispatch-rejects-unusable-host-tool: $pass passed, $fail failed"

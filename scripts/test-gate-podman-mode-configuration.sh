@@ -32,7 +32,13 @@ FAILED=0
 _fail() { echo "FAIL: $*"; FAILED=1; }
 _ok() { echo "  ok: $*"; }
 
-SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/tillandsias-gate-podman-mode.XXXXXX")"
+# ORDER 1428-3kdu. The sandbox root is SHORT and under /tmp, NOT $TMPDIR. The
+# fixture binds a real AF_UNIX socket at $SANDBOX/run/podman/podman.sock, and
+# sun_path holds 104 bytes on macOS (108 on Linux). macOS TMPDIR is
+# /var/folders/<..>/T/ (49 chars), and the old root put the socket path past the
+# limit. MEASURED on tlatoanis-macbook-air 2026-10-10: a working python3 raised
+# "OSError: AF_UNIX path too long", and the fixture printed a FAIL blaming python3.
+SANDBOX="$(mktemp -d /tmp/tgpm.XXXXXX)"
 cleanup() { rm -rf "$SANDBOX"; }
 trap cleanup EXIT
 
@@ -42,6 +48,15 @@ trap cleanup EXIT
 # reports what build.sh handed it and then stops the script.
 # ---------------------------------------------------------------------------
 mkdir -p "$SANDBOX/scripts" "$SANDBOX/run/podman"
+
+# 1428-3kdu: the socket path must fit the SMALLEST sun_path we run on (macOS,
+# 104 bytes including the NUL). Checked before any interpreter is asked, so an
+# over-long root is named as such instead of surfacing as an interpreter error.
+FIXTURE_SOCK="$SANDBOX/run/podman/podman.sock"
+if [ "${#FIXTURE_SOCK}" -ge 104 ]; then
+    echo "FAIL: fixture socket path is ${#FIXTURE_SOCK} bytes, over the 103 that macOS sun_path allows: $FIXTURE_SOCK"
+    exit 1
+fi
 cp "$ROOT/build.sh" "$SANDBOX/build.sh"
 : > "$SANDBOX/scripts/with-tillandsias-builder.sh"
 : > "$SANDBOX/scripts/with-wsl2-builder.sh"

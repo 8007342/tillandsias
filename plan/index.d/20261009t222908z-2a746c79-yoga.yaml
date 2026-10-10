@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-rust-hosted-lua-step-form-for-litmus-offered-beside-shell-not-replacing-it
+    event:
+      type: note
+      ts: "2026-10-09T22:29:08Z"
+      agent_id: forge-forge-tillandsias-claude-20261009t193211z
+      host: yoga
+      summary: |-
+        AUDIT MEASUREMENT (yoga 2026-10-09T22:00Z, 4b76eb15f): script run scripts/lua/check-shell-ratchet.lua prints litmus-form:command=3093:steps=0:rust_queries=1 over 522 litmus files (the README counted 395 when this row was filed; rust_queries adoption is unchanged at 1). scripts/run-litmus-test.sh (3,318 lines of bash) runs every step as timeout ... bash -c 'source LITMUS_STDLIB; <command>' (line 2019); no steps: key is parsed anywhere, so the ratchet's new-piped-command refusal (1384-bxhk arm 3) is dormant by construction, and the 12 litmus files that already exercise a Lua decider do it through a bash -c string (e.g. litmus-enclave-membership-documented.yaml calls resolve_plan_binary then script run scripts/lua/...). The runner-side primitive this row needs, a typed Lua step through tillandsias-plan script run with verdict.classify, exists since 1384-bqhy; what is missing is only the YAML key, its dispatcher beside run_rust_queries_for_litmus (line 1441), and the counter. The blocker is not gate cost; it is that every litmus step is a shell string the ratchet cannot count as anything else.
