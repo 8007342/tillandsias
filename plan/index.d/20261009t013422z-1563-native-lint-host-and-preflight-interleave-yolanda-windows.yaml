@@ -1,0 +1,77 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Two findings from yolanda-windows' long-deadline preflights of the v56.10.8.2
+# stack (2026-10-08), filed at the coordinator's direction.
+packets:
+  - packet_id: attest-native-lint-falls-back-to-uname-n-and-refuses-an-empty-host-instead-of-writing-a-trailer-whose-fields-shift
+    order: 1563-ms7e
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, native-lint, windows, portability, guard]
+    estimated_hours: 1
+    owned_files:
+      - scripts/attest-native-lint.sh
+      - scripts/test-native-lint-attested.sh
+    title: |
+      attest-native-lint.sh takes the host from agent-identity.sh then `hostname -s`; Git Bash rejects -s and the WSL builder has no hostname, so the host is EMPTY, the trailer leads with the platform, check-native-lint-attested's `set -- $t` shifts every field, and test-native-lint-attested arms 3-4 are red on every Windows preflight
+    context: |
+      Measured on yolanda-windows 2026-10-08, every stack ref (1437-3iux,
+      1559-9uvb, 1559-sqzp, 1559-2uw3, 1560-g5d9) refused=2 with
+      TILLANDSIAS_PREFLIGHT_TIMEOUT=180, one being test-native-lint-attested
+      arms 3+4 (refused:native-lint:unattested after a successful attest).
+      Natively: "hostname: unknown option -- s" rc 1; in tillandsias-build:
+      "hostname: command not found". The fixture's scratch repo does not carry
+      agent-identity.sh, so it always reached the hostname fallback.
+    exit_criteria:
+      - 'attest-native-lint.sh falls back to uname -n when hostname -s yields nothing'
+      - 'with no host name at all it prints refused:attest-native-lint:no-host (rc 2) with why/remedy and writes NO trailer; a trailer never carries an empty or split host field'
+      - 'test-native-lint-attested.sh arms stub hostname to fail as Git Bash does (fallback admitted) and stub both (refused, no commit); red pre-fix'
+    verifiable_closure: |
+      Pre-fix (fix stashed, fixture kept): 6/10, arm 10 shows arc=0 and a
+      commit written with the empty-host trailer. Post-fix: 10/10.
+      unscoreable: no-litmus-covers-the-fixture — scored by scripts/test-native-lint-attested.sh, already bound as gate step 285-1235-rfub; arms 9-10 land with the fix.
+    events:
+      - type: filed
+        ts: "2026-10-09T01:34:22Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Filed at the coordinator's direction (packet b1 after the stack went READY).
+      - type: claim
+        ts: "2026-10-09T01:34:22Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          yolanda-windows claims 1563-ms7e at the coordinator's direction; work on refs/heads/work/1563-ms7e, one READY PR.
+  - packet_id: preflight-emits-every-refused-guards-name-line-whole-so-a-deadline-skip-notice-cannot-cut-it
+    order: 1563-u2yx
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, preflight, observability, guard]
+    estimated_hours: 2
+    title: |
+      ./build.sh --preflight interleaves parallel guard output, and a deadline-skip notice cut a guard's own refused:preflight:<name> line, so the refusal (summary said refused=2) could only be counted from FAIL lines
+    context: |
+      Measured on yolanda-windows 2026-10-08 in all five stack-ref logs: the
+      summary read refused=2 but only refused:preflight:test-native-lint-attested
+      was printed whole; test-pre-push-main-branch-affordance's FAIL arm 2 was
+      visible, then its arm-5 line was cut mid-line by
+      "skip:preflight:test-project-info-grep-code-recall:deadline:183s", and its
+      refused:preflight:<name> line never appeared.
+    exit_criteria:
+      - 'every refused guard emits its refused:preflight:<name> line whole: written atomically per guard, or collected and printed after the parallel section'
+      - 'a fixture that interleaves a deadline-skip notice with a refusal is RED pre-fix (the name line is missing or cut) and green post-fix; the count of refused:preflight:<name> lines equals the summary refused=N'
+    verifiable_closure: |
+      unscoreable: unpinnable-until-the-guard-exists — the reproduction fixture (scripts/test-preflight-refused-name-lines-whole.sh) lands in the same commit as the fix, red pre-fix.
+    events:
+      - type: filed
+        ts: "2026-10-09T01:34:22Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Filed at the coordinator's direction (p3), from the stack preflight logs.

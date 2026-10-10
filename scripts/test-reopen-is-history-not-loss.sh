@@ -68,7 +68,6 @@ trap 'rm -rf "$W"' EXIT INT TERM
 build_tree() {
     _t="$W/$1"
     mkdir -p "$_t/scripts/lib" "$_t/plan/index.d"
-    cp "$ROOT/scripts/check-fragment-status-loss.sh" "$_t/scripts/"
     cp "$ROOT/scripts/plan-binary-probe.sh" "$_t/scripts/" 2>/dev/null || true
     cp "$ROOT/scripts/lib/tool-dispatch.sh" "$_t/scripts/lib/" 2>/dev/null || true
     printf 'plan_index:\n  steps:\n    - packet_id: probe-reopen-subject\n      order: 9990-aaaa\n      status: %s\n      title: the packet under test\n' "$2" \
@@ -76,7 +75,9 @@ build_tree() {
 }
 add_frag() { printf '%s' "$3" > "$W/$1/plan/index.d/$2"; }
 run_guard_in() {
-    ( cd "$W/$1" && TILLANDSIAS_PLAN_BIN="$PLAN_BIN" bash scripts/check-fragment-status-loss.sh 2>&1 )
+    # ORDER 1570-mxcg: the guard is scripts/lua/check-fragment-status-loss.lua,
+    # run by the real binary over the scratch tree (the cwd), asking PLAN_BIN.
+    ( cd "$W/$1" && env -u TILLANDSIAS_REPO_ROOT "$PLAN_BIN" script run "$ROOT/scripts/lua/check-fragment-status-loss.lua" -- --plan "$PLAN_BIN" 2>&1 )
 }
 folded_status() {
     ( cd "$W/$1" && "$PLAN_BIN" status probe-reopen-subject 2>/dev/null | awk '{print $2}' )
