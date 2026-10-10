@@ -2828,7 +2828,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
-    if ! _run bash "$SCRIPT_DIR/scripts/check-unique-bin-names.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-unique-bin-names.lua" 2>&1; then
         _error "two workspace crates declare the same [[bin]] name — they overwrite each other in target/ and tests run the wrong binary (1043-kvvn)"
         exit 1
     fi
