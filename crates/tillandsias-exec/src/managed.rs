@@ -134,7 +134,7 @@ impl Scope {
             rx,
         )
     }
-    #[cfg(all(test, unix))] // its only caller is the unix-only test module (958-w4kq)
+    #[cfg(test)] // the test module runs on Windows too since 1554-prxf (958-w4kq had narrowed this to unix)
     fn with_setup_delay(
         deadline: Option<Instant>,
         setup_delay: Duration,
