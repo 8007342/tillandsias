@@ -36,7 +36,7 @@ description: >
 preconditions:
   - workspace contains scripts/check-base-ledger-status-loss.sh
   - workspace contains scripts/test-base-ledger-status-loss.sh
-  - workspace contains scripts/check-fragment-status-loss.sh
+  - workspace contains scripts/lua/check-fragment-status-loss.lua
   - tillandsias-plan is built (the fixture SKIPs loudly otherwise)
 
 critical_path:
@@ -83,7 +83,7 @@ critical_path:
     # The two must not blur. If the gate ever starts emitting the advisory's
     # tokens, the severity split has collapsed and a ledger finding can red a
     # build again.
-    command: "out=$(scripts/check-fragment-status-loss.sh 2>/dev/null); case \"$out\" in ok:no-fragment-status-loss:*|violation:fragment-status-loss:*) echo 'ok: gate grammar intact';; *) echo \"FAIL: gate grammar drifted: $out\"; exit 1;; esac"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; out=$(\"$MFPLAN\" script run scripts/lua/check-fragment-status-loss.lua -- --plan \"$MFPLAN\" 2>/dev/null); case \"$out\" in ok:no-fragment-status-loss:*|violation:fragment-status-loss:*) echo 'ok: gate grammar intact';; *) echo \"FAIL: gate grammar drifted: $out\"; exit 1;; esac"
     timeout_ms: 60000
     expected_behavior: "ok: gate grammar intact"
 

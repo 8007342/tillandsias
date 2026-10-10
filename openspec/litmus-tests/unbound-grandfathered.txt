@@ -2,7 +2,7 @@
 #
 # Every name here is an executable assertion that exists on disk and has NEVER
 # been run by any suite. They predate the creation-time gate
-# (scripts/check-litmus-bindings.sh) and are grandfathered so that turning the
+# (scripts/lua/check-litmus-bindings.lua) and are grandfathered so that turning the
 # gate on did not flip 11 undiagnosed tests red at once — the packet's own
 # triage calls blind binding the wrong move.
 #
