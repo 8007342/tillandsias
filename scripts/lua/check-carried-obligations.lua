@@ -21,6 +21,9 @@
 --   ok:carried-obligations:backlogs=<n> due=<n> silent=<n>          exit 0
 --   violation:carried:<backlog>:silent                              exit 1  (--landing only,
 --                                                                   stage gentle/enforced)
+--   violation:carried:<backlog>:waiver-not-a-trailer                exit 1  (--landing; a
+--                                                                   Carried-Waiver line git did not
+--                                                                   parse: not in the last paragraph)
 --   skip:carried-obligations:no-base:<ref>                          exit 0
 --
 -- DUE is the change's own diff, `git diff --name-only BASE...HEAD` (BASE
@@ -42,9 +45,13 @@
 -- the one offered is picked by the work ref's order modulo five so two
 -- concurrent changes are not steered onto the same file.
 --
+-- TAKEN ITEMS are skipped: a .sh another open origin/work/* ref deletes is
+-- never offered, and each skip prints `taken-by:work/<ref> <item>` on stderr
+-- (two hosts ported the same offered item on 2026-10-10). Only refs fetched
+-- into this clone are seen.
+--
 -- WHAT IT CANNOT SEE: uncommitted work (it reads BASE...HEAD, the change as it
--- will be pushed); whether another open work/* ref already ports the offered
--- item (`Carried-Waiver: <backlog> conflict:<work-ref>` exists for that);
+-- will be pushed); a port on a ref not yet pushed or fetched;
 -- whether a waiver's reason is TRUE (gentle stage: counted, not judged). Only
 -- the shell-to-lua counter is implemented; any other backlog prints
 -- unsupported-counter rather than a guess.
@@ -99,6 +106,16 @@ for _, l in ipairs(lines(tr)) do
     local b, reason = text.trim(l):match("^(%S+)%s+(.+)$")
     if b and not waivers[b] then waivers[b] = text.trim(reason) end
 end
+-- A `Carried-Waiver:` line git did NOT parse as a trailer: git reads trailers
+-- ONLY from a message's LAST paragraph, so a waiver written above the
+-- Co-Authored-By block is invisible to %(trailers) (measured on 1570-25iq,
+-- 2026-10-10). Found in the raw messages, it is NAMED rather than ignored.
+local _, raw = git({ "log", "--format=%B", BASE .. ".." .. HEAD })
+local unparsed = {} -- backlog -> the raw line
+for _, l in ipairs(lines(raw)) do
+    local b = l:match("^Carried%-Waiver:%s*(%S+)")
+    if b and not waivers[b] and not unparsed[b] then unparsed[b] = l end
+end
 
 local function glob_to_pattern(g)
     local p = g:gsub("[%^%$%(%)%%%.%[%]%+%-%?]", "%%%0")
@@ -152,11 +169,40 @@ local function ref_order()
     return tonumber(name:match("work/(%d+)%-") or "") or 0
 end
 
+-- Items another open work ref already deletes (ported or retired there): one
+-- `git diff --name-only --diff-filter=D merge-base..tip` per origin/work/*
+-- ref not yet contained in BASE. Measured 2026-10-10: two hosts ported the
+-- same offered item half a day after the rule went live. Computed only when
+-- a backlog is due.
+local taken_cache
+local function taken_items()
+    if taken_cache then return taken_cache end
+    taken_cache = {}
+    local _, refs = git({ "for-each-ref", "--format=%(refname:short)", "refs/remotes/origin/work/" })
+    for _, ref in ipairs(lines(refs)) do
+        local merged = git({ "merge-base", "--is-ancestor", ref, BASE })
+        if not merged then
+            local _, mbr = git({ "merge-base", BASE, ref })
+            mbr = text.trim(mbr)
+            if mbr ~= "" then
+                local _, del = git({ "diff", "--name-only", "--diff-filter=D", mbr, ref })
+                for _, f in ipairs(lines(del)) do
+                    if not taken_cache[f] then taken_cache[f] = ref:gsub("^origin/", "") end
+                end
+            end
+        end
+    end
+    return taken_cache
+end
+
 local function candidates(pop, ceiling)
     local items = {}
+    local taken = taken_items()
     for _, f in ipairs(pop) do
         local n = line_count(f)
-        if n and n <= ceiling then
+        if n and n <= ceiling and taken[f] then
+            log.raw("  taken-by:" .. taken[f] .. " " .. f)
+        elseif n and n <= ceiling then
             items[#items + 1] = { f, n, f:match("^scripts/test%-") and 1 or 0 }
         end
     end
@@ -202,7 +248,7 @@ for _, b in ipairs(backlogs) do
             local top = candidates(head_pop, ceiling)
             if #top == 0 then
                 out.line("carried:" .. name .. ":due:(no item at or under " .. ceiling .. " lines)")
-                log.raw("  nothing in reach: write `Carried-Waiver: " .. name .. " no-item-in-reach`")
+                log.raw("  nothing in reach (every small item is taken or none exists): write `Carried-Waiver: " .. name .. " no-item-in-reach` in the message's last paragraph")
             else
                 local pick = top[(ref_order() % #top) + 1]
                 out.line("carried:" .. name .. ":due:" .. pick[1] .. " (" .. pick[2] .. " lines)")
@@ -210,8 +256,11 @@ for _, b in ipairs(backlogs) do
                 log.raw("  candidates (smallest existing items at or under " .. ceiling .. " lines; the offered one is picked by the work ref's order):")
                 for _, c in ipairs(top) do log.raw("    " .. c[1] .. " (" .. c[2] .. " lines)") end
                 log.raw("  pay it: port one to scripts/lua/ on `tillandsias-plan script run`, delete the .sh, lower both floors with check-shell-ratchet.lua --dump-floors;")
-                log.raw("  or put this trailer on any commit in the change (one line; reasons too-big:<item>:<lines>, blocked-by:<order>, no-item-in-reach, conflict:<work-ref>):")
+                log.raw("  or put this trailer on any commit in the change, in the message's LAST paragraph next to Co-Authored-By (git reads trailers only there); one line; reasons too-big:<item>:<lines>, blocked-by:<order>, no-item-in-reach, conflict:<work-ref>, uncounted-item:<path>:")
                 log.raw("Carried-Waiver: " .. name .. " <reason>")
+            end
+            if unparsed[name] then
+                log.raw("  waiver present but not a trailer: move it to the last paragraph — " .. unparsed[name])
             end
             local stage = tostring(b.stage or "gentle")
             if stage == "gentle" or stage == "enforced" then silent[#silent + 1] = name end
@@ -219,6 +268,10 @@ for _, b in ipairs(backlogs) do
     end
 end
 
+if LANDING and #silent > 0 and unparsed[silent[1]] then
+    verdict.emit("violation:carried:" .. silent[1] .. ":waiver-not-a-trailer", 1,
+        "  waiver present but not a trailer: move it to the last paragraph (git reads trailers only from a message's last paragraph): " .. unparsed[silent[1]])
+end
 if LANDING and #silent > 0 then
     verdict.emit("violation:carried:" .. silent[1] .. ":silent", 1,
         "  a due change landed with neither a ported item nor a `Carried-Waiver: " .. silent[1] ..

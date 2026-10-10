@@ -20,6 +20,13 @@
 --   6 NOT DUE    NEGATIVE CONTROL: a crates/-only change is not-due, exit 0,
 --                never shown the obligation, even at landing.
 --   7 OFFER      two refs one order apart are offered different items.
+--   8 UNPARSED   a Carried-Waiver line NOT in the message's last paragraph (so
+--                git does not parse it as a trailer) is named — "waiver present
+--                but not a trailer" — and refused at landing as
+--                violation:carried:shell-to-lua:waiver-not-a-trailer.
+--   9 TAKEN      an open origin/work/* ref that deletes the smallest item makes
+--                the guard skip it (`taken-by:work/<ref>` on stderr) and offer
+--                another; two hosts ported the same offered item on 2026-10-10.
 --
 -- PRE-GUARD CODE FAILS IT: with no check-carried-obligations.lua the first arm
 -- refuses the whole fixture, never a skip.
@@ -166,6 +173,34 @@ local _, ob = judge(false)
 local a, b = oa:match("due:(%S+)"), ob:match("due:(%S+)")
 check("OFFER: refs one order apart are offered different items",
     a ~= nil and b ~= nil and a ~= b, "1240 offered [" .. tostring(a) .. "], 1241 offered [" .. tostring(b) .. "]")
+
+-- 8. UNPARSED waiver
+change("work/1238-unpa")
+write("scripts/check-x.sh", n_lines("x", 10) .. "echo u\n")
+G({ "commit", "-qa", "-m", "edit with a misplaced waiver", "-m", "Carried-Waiver: shell-to-lua too-big:scripts/check-y.sh:200",
+    "-m", "A closing paragraph after the waiver, so git does not read it as a trailer." })
+rc, o, e = judge(true)
+check("UNPARSED: a waiver outside the last paragraph is named and refused at landing as waiver-not-a-trailer",
+    rc == 1 and has_line(o, "violation:carried:shell-to-lua:waiver-not-a-trailer")
+        and e:find("waiver present but not a trailer: move it to the last paragraph", 1, true) ~= nil,
+    "rc=" .. rc .. " out=[" .. o .. "] err=[" .. e .. "]")
+
+-- 9. TAKEN: another open work ref deletes the smallest item (check-y.sh)
+change("work/9999-take")
+G({ "rm", "-q", "scripts/check-y.sh" }); G({ "commit", "-qm", "another host ports check-y" })
+local take_sha = text.trim(G({ "rev-parse", "HEAD" }).stdout)
+G({ "update-ref", "refs/remotes/origin/work/9999-take", take_sha })
+change("work/1000-tkn0") -- order 1000: without the skip, check-y.sh (smallest) is offered
+write("scripts/check-x.sh", n_lines("x", 10) .. "echo t\n")
+G({ "commit", "-qam", "edit while check-y is taken" })
+rc, o, e = judge(false)
+local offered = o:match("due:(%S+)")
+check("TAKEN: the item another open work ref deletes is skipped with taken-by on stderr, and another is offered",
+    rc == 0 and offered ~= nil and offered ~= "scripts/check-y.sh"
+        and e:find("taken-by:work/9999-take scripts/check-y.sh", 1, true) ~= nil
+        and not e:find("    scripts/check-y.sh (", 1, true),
+    "rc=" .. rc .. " offered=[" .. tostring(offered) .. "] err=[" .. e .. "]")
+G({ "update-ref", "-d", "refs/remotes/origin/work/9999-take" })
 
 run({ "rm", "-rf", R })
 
