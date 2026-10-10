@@ -5748,6 +5748,23 @@ const VSOCK_FORWARDER_NAME: &str = "tillandsias-vsock-forwarder";
 /// first-boot problem this row rejected twice.
 const VSOCK_FORWARD_DIR: &str = "/run/tillandsias";
 
+/// Where the forward target is written and read. A per-process temp dir in
+/// test builds, so the SetVsockForwardTarget success path is reachable from a
+/// unit test on any host (1509-kf4d); /run/tillandsias otherwise.
+pub(crate) fn vsock_forward_dir() -> PathBuf {
+    #[cfg(test)]
+    {
+        std::env::temp_dir().join(format!(
+            "tillandsias-vsock-forward-test-{}",
+            std::process::id()
+        ))
+    }
+    #[cfg(not(test))]
+    {
+        PathBuf::from(VSOCK_FORWARD_DIR)
+    }
+}
+
 /// The host endpoint an in-guest forwarder should relay to, or None when the
 /// lane is off.
 ///
@@ -5767,7 +5784,7 @@ fn vsock_forward_target() -> Option<(u32, u32)> {
     if let Ok(v) = std::env::var("TILLANDSIAS_GUEST_VSOCK_FORWARD_TO") {
         return parse(&v);
     }
-    let path = Path::new(VSOCK_FORWARD_DIR).join("vsock-forward");
+    let path = vsock_forward_dir().join("vsock-forward");
     parse(&std::fs::read_to_string(path).ok()?)
 }
 
@@ -19173,6 +19190,8 @@ pub(crate) fn spawn_terminal_and_reap(mut child: Command) -> Result<(), String> 
 /// host — `pty_handler` is gated on the `listen-vsock`+unix combo that order
 /// 254 recorded as never linted or tested in CI.
 pub mod exec_allowlist;
+#[cfg(feature = "listen-vsock")]
+mod guest_poweroff;
 #[cfg(all(feature = "listen-vsock", unix))]
 mod pty_handler;
 /// Order 723-54zj. Declared unconditionally: the classification half is pure

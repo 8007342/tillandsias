@@ -1,0 +1,287 @@
+   Compiling smallvec v1.15.1
+   Compiling getrandom v0.2.17
+   Compiling adler2 v2.0.1
+   Compiling memchr v2.8.0
+   Compiling crc32fast v1.5.0
+   Compiling cpufeatures v0.2.17
+   Compiling memmap2 v0.9.10
+   Compiling futures-util v0.3.32
+   Compiling dirs-sys v0.5.0
+   Compiling security-framework-sys v2.17.0
+   Compiling rand_core v0.6.4
+   Compiling miniz_oxide v0.8.9
+   Compiling ring v0.17.14
+   Compiling core-foundation v0.10.1
+   Compiling dirs v6.0.0
+   Compiling parking_lot_core v0.9.12
+   Compiling fontdb v0.23.0
+   Compiling icu_normalizer v2.2.0
+   Compiling crypto-common v0.1.7
+   Compiling uuid v1.23.1
+   Compiling parking_lot v0.12.5
+   Compiling digest v0.10.7
+   Compiling aho-corasick v1.1.4
+   Compiling flate2 v1.1.9
+   Compiling tokio v1.52.2
+   Compiling cipher v0.4.4
+   Compiling universal-hash v0.5.1
+   Compiling sha2 v0.10.9
+   Compiling serde_json v1.0.149
+   Compiling polyval v0.6.2
+   Compiling idna_adapter v1.2.2
+   Compiling png v0.17.16
+   Compiling usvg v0.45.1
+   Compiling security-framework v3.7.0
+   Compiling aead v0.5.2
+   Compiling futures-channel v0.3.32
+   Compiling fs2 v0.4.3
+   Compiling rustls-webpki v0.101.7
+   Compiling regex-automata v0.4.14
+   Compiling tiny-skia v0.11.4
+   Compiling sct v0.7.1
+   Compiling socket2 v0.5.10
+   Compiling rustls v0.21.12
+   Compiling keyring v3.6.3
+   Compiling idna v1.1.0
+   Compiling ghash v0.5.1
+   Compiling ctr v0.9.2
+   Compiling aes v0.8.4
+   Compiling chacha20 v0.9.1
+   Compiling poly1305 v0.8.0
+   Compiling objc2-foundation v0.2.2
+   Compiling system-configuration-sys v0.5.0
+   Compiling core-foundation v0.9.4
+   Compiling simd-adler32 v0.3.9
+   Compiling aes-gcm v0.10.3
+   Compiling resvg v0.45.1
+   Compiling system-configuration v0.5.1
+   Compiling url v2.5.8
+   Compiling chacha20poly1305 v0.10.1
+   Compiling lzma-sys v0.1.20
+   Compiling blake2 v0.10.6
+   Compiling hmac v0.12.1
+   Compiling matchers v0.2.0
+   Compiling regex v1.12.3
+   Compiling tracing-subscriber v0.3.23
+   Compiling xattr v1.6.1
+   Compiling filetime v0.2.29
+   Compiling fsevent-sys v4.1.0
+   Compiling tillandsias-core v56.9.27 (/Users/tlatoani/claudia/wt-kf4d/crates/tillandsias-core)
+   Compiling tempfile v3.27.0
+   Compiling console v0.15.11
+   Compiling tokio-util v0.7.18
+   Compiling tokio-rustls v0.24.1
+   Compiling tar v0.4.46
+   Compiling notify v8.2.0
+   Compiling h2 v0.3.27
+   Compiling tillandsias-control-wire v0.1.170 (/Users/tlatoani/claudia/wt-kf4d/crates/tillandsias-control-wire)
+   Compiling tracing-appender v0.2.5
+   Compiling objc2-virtualization v0.2.2
+   Compiling tillandsias-logging v0.1.260513 (/Users/tlatoani/claudia/wt-kf4d/crates/tillandsias-logging)
+   Compiling snow v0.9.6
+   Compiling hkdf v0.12.4
+   Compiling xz2 v0.1.7
+   Compiling indicatif v0.17.11
+   Compiling tillandsias-secure-channel v0.1.0 (/Users/tlatoani/claudia/wt-kf4d/crates/tillandsias-secure-channel)
+   Compiling tillandsias-macos-tray v0.1.0 (/Users/tlatoani/claudia/wt-kf4d/crates/tillandsias-macos-tray)
+   Compiling objc2-app-kit v0.2.2
+   Compiling hyper v0.14.32
+   Compiling tillandsias-progress-tty v0.1.0 (/Users/tlatoani/claudia/wt-kf4d/crates/tillandsias-progress-tty)
+   Compiling hyper-rustls v0.24.2
+   Compiling tillandsias-scanner v56.9.27 (/Users/tlatoani/claudia/wt-kf4d/crates/tillandsias-scanner)
+   Compiling reqwest v0.11.27
+   Compiling tillandsias-vm-layer v0.1.0 (/Users/tlatoani/claudia/wt-kf4d/crates/tillandsias-vm-layer)
+   Compiling tillandsias-host-shell v0.1.0 (/Users/tlatoani/claudia/wt-kf4d/crates/tillandsias-host-shell)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 10.10s
+     Running unittests src/main.rs (target/debug/deps/tillandsias_tray-96a9b2c9fc4b5eaf)
+
+running 159 tests
+test action_host::tests::a_quit_before_the_host_exists_is_not_swallowed ... ok
+test action_host::tests::apply_menu_action_state_mutates_only_on_agent_change ... ok
+test action_host::tests::attach_action_resolves_to_project_via_intent_for_action ... ok
+test action_host::tests::cloud_entry_maps_to_owner_slash_repo_slug ... ok
+test action_host::tests::apply_cloud_projects_empty_reply_marks_loaded_and_logout_resets ... ok
+test action_host::tests::compose_chip_text_appends_last_event ... ok
+test action_host::tests::apply_login_state_reports_rebuild_only_on_change ... ok
+test action_host::tests::compose_chip_text_caps_overlong_payloads ... ok
+test action_host::tests::applescript_escape_handles_metas_and_newlines ... ok
+test action_host::tests::describe_wire_error_includes_code_and_message ... ok
+test action_host::tests::apply_cloud_projects_reports_rebuild_only_on_change ... ok
+test action_host::tests::describe_wire_error_no_trailing_colon_on_empty_message ... ok
+test action_host::tests::failed_fetch_does_not_render_no_repos_but_confirmed_empty_does ... ok
+test action_host::tests::failed_fetch_preserves_a_previously_confirmed_list ... ok
+test action_host::tests::map_login_state_covers_all_reply_shapes ... ok
+test action_host::tests::cloud_reply_received_while_logged_out_does_not_survive_the_next_sign_in ... ok
+test action_host::tests::empty_cloud_reply_renders_no_repos_through_the_real_build ... ok
+test action_host::tests::push_subscribe_topics_has_no_local_projects ... ok
+test action_host::tests::run_start_full_e2e ... ignored, slow (~5min), network, needs com.apple.security.virtualization entitlement (.app only)
+test action_host::tests::should_poll_fallback_is_pure_fallback_gate ... ok
+test action_host::tests::progress_topic_is_opt_in_by_guest_capability ... ok
+test action_host::tests::project_launch_lease_rejects_duplicate_until_released ... ok
+test action_host::tests::action_host_control_wire_opener_uses_guest_transport_facade ... ok
+test action_host::tests::vm_phase_status_text_reflects_phase_and_podman ... ok
+test action_host::tests::run_start_drives_the_cfrunloop_pump_off_the_async_worker ... ok
+test action_host::tests::wire_unreachable_chip_text_pinned ... ok
+test action_host::tests::progress_log_throttles_to_deciles ... ok
+test action_host::tests::tray_action_host_class_registers ... ok
+test diagnose::tests::a_guest_still_coming_up_is_not_reported_as_failed_or_as_this_defect ... ok
+test action_host::tests::apply_vm_status_syncs_menu_state_status_text_for_rebuilds ... ok
+test diagnose::tests::an_mtime_fallback_is_disclosed_and_a_content_timestamp_is_not ... ok
+test diagnose::tests::a_push_driven_timestamp_would_fail_the_bound_a_heartbeat_passes ... ok
+test diagnose::tests::a_completed_provision_carries_the_guests_own_binary_hash ... ok
+test diagnose::tests::crashloop_state_path_under_image_root ... ok
+test action_host::tests::apply_vm_status_updates_menu_state_and_reports_rebuild_on_change ... ok
+test diagnose::tests::exit_code_separates_healthy_converging_and_degraded ... ok
+test diagnose::tests::format_utc_fixed_points ... ok
+test diagnose::tests::both_exec_paths_share_one_preamble_differing_only_in_the_subcommand ... ok
+test diagnose::tests::diagnose_report_none_bytes_serialise_as_null ... ok
+test diagnose::tests::diagnose_report_json_keys_locked ... ok
+test diagnose::tests::diagnose_report_none_pin_serialises_as_null ... ok
+test diagnose::tests::github_login_preamble_pins_the_shared_lock_namespace ... ok
+test diagnose::tests::heartbeat_bound_is_three_periods ... ok
+test action_host::tests::every_quit_route_reaches_the_shared_drain ... ok
+test diagnose::tests::heartbeat_bound_reports_a_phase_when_fresh_and_unknown_when_stale ... ok
+test diagnose::tests::heartbeat_falls_back_to_mtime_only_when_the_record_has_no_timestamp ... ok
+test diagnose::tests::github_login_host_prompts_after_control_wire_ready ... ok
+test diagnose::tests::humanize_age_pins ... ok
+test diagnose::tests::guest_health_verdict_matches_pinned_grammar ... ok
+test diagnose::tests::guest_health_line_names_source_and_age_and_is_never_the_bare_verdict ... ok
+test diagnose::tests::metrics_error_sample_renders_null_counters_never_zero ... ok
+test diagnose::tests::image_root_guard_redirects_and_releases ... ok
+test diagnose::tests::metrics_status_states_why_metrics_are_absent ... ok
+test diagnose::tests::production_image_root_is_unchanged_without_a_guard ... ok
+test diagnose::tests::project_path_translation_rules ... ok
+test diagnose::tests::probe_phase_secure_or_plain_uses_the_secure_or_plain_opener ... ok
+test diagnose::tests::parses_bare_key_sha_form ... ok
+test diagnose::tests::parses_quoted_key_sha_form ... ok
+test diagnose::tests::provision_record_distinguishes_complete_aborted_and_failed ... ok
+test diagnose::tests::provision_record_takes_its_timestamp_from_the_content ... ok
+test diagnose::tests::refuses_placeholder_pending_ci ... ok
+test diagnose::tests::diagnose_control_wire_opener_uses_guest_transport_endpoint ... ok
+test diagnose::tests::shared_reader_owns_the_default_and_refuses_blank ... ok
+test diagnose::tests::prompt_line_is_bounded_for_non_interactive_stdin ... ok
+test diagnose::tests::provisioning_refuses_below_macos_14_and_names_both_versions ... ok
+test diagnose::tests::the_preamble_never_bakes_in_the_hosts_home ... ok
+test diagnose::tests::the_preamble_keeps_every_part_that_is_load_bearing ... ok
+test diagnose::tests::the_provisioning_line_is_actually_printed_by_the_report ... ok
+test diagnose::tests::the_macos_version_refusal_runs_first_in_provision_main ... ok
+test diagnose::tests::tripped_state_reads_back_as_crash_loop ... ok
+test exec_guest_argv_tests::join_contract ... ok
+test exec_guest_classify_tests::shell_shapes_stay_on_the_shell_arm ... ok
+test exec_guest_classify_tests::absolute_clean_argv_goes_verbatim ... ok
+test exec_guest_classify_tests::traversal_is_refused_with_the_reason ... ok
+test exec_guest_classify_tests::arguments_never_steer_the_arm ... ok
+test exec_guest_classify_tests::wrapper_and_empty_refusals_survive_the_new_arm ... ok
+test diagnose::tests::guest_ca_preflight_never_widens_the_private_key ... ok
+test guest_binary::tests::an_unreadable_side_is_undecidable_never_agreement ... ok
+test action_host::tests::silent_peer_fails_the_secure_handshake_within_the_bound ... ok
+test guest_binary::tests::filename_matches_host_arch ... ok
+test diagnose::tests::macos_lane_pairs_server_and_client_under_shared_reader_on ... ok
+test action_host::tests::responsive_peer_completes_the_secure_handshake_untouched ... ok
+test guest_binary::tests::differing_contents_are_reported_as_skew_not_agreement ... ok
+test installation_uuid::tests::generated_uuid_has_v4_format ... ok
+test installation_uuid::tests::keychain_account_matches_spec_wording ... ok
+test guest_binary::tests::an_identical_binary_is_up_to_date_not_a_downgrade ... ok
+test installation_uuid::tests::the_security_budget_fits_inside_the_status_path_budget ... ok
+test menu_disabled_v2::tests::render_failed_carries_retry_and_open_log_items ... ok
+test guest_binary::tests::identical_contents_are_reported_as_agreement ... ok
+test menu_disabled_v2::tests::render_logged_out_collapses_to_login_leaf_on_macos ... ok
+test menu_disabled_v2::tests::render_marks_observatorium_disabled_with_v2_tooltip_on_macos ... ok
+test guest_binary::tests::an_unknown_build_time_is_undecidable_not_newer ... ok
+test menu_disabled_v2::tests::render_marks_opencode_web_disabled_with_v2_tooltip_on_macos ... ok
+test menu_disabled_v2::tests::render_propagates_disabled_reason_into_tooltip ... ok
+test menu_disabled_v2::tests::render_ready_top_level_matches_macos_parity_contract ... ok
+test menu_disabled_v2::tests::render_propagates_checkmarks_for_agents ... ok
+test menu_disabled_v2::tests::render_ready_walks_cloud_projects_submenu ... ok
+test menu_disabled_v2::tests::render_starts_with_status_item_disabled ... ok
+test guest_binary::tests::a_legitimate_upgrade_still_stages ... ok
+test provision_error::tests::a_guest_record_with_no_fields_still_says_something ... ok
+test provision_error::tests::an_unprefixed_fetch_error_is_image_setup_not_a_guess ... ok
+test provision_error::tests::five_faults_give_five_distinct_stage_named_texts ... ok
+test provision_error::tests::the_space_refusal_is_named_as_disk_space_with_the_right_hint ... ok
+test provision_progress::tests::an_unknown_total_is_activity_not_a_fake_fraction ... ok
+test provision_progress::tests::menu_bar_bar_uses_the_tillandsia_palette ... ok
+test provision_progress::tests::typed_events_map_totally_onto_renderer_states ... ok
+test provision_progress::tests::percent_gate_repaints_once_per_percent ... ok
+test guest_binary::tests::staging_refuses_to_replace_a_newer_binary_with_an_older_one ... ok
+test guest_binary::tests::an_absent_sidecar_stages_rather_than_refusing ... ok
+test pty_vsock_bridge::tests::reader_routes_inbound_pty_data ... ok
+test pty_vsock_bridge::tests::pipelined_frame_behind_the_helloack_is_not_dropped ... ok
+test pty_vsock_bridge::tests::writer_frames_outbound_messages_correctly ... ok
+test status_item::tests::image_root_is_top_level_not_vm_subdir ... ok
+test pty_vsock_bridge::tests::connect_pty_bridge_does_handshake_then_starts_framing ... ok
+test status_item::tests::status_text_fallback_is_only_a_missing_icon_fallback ... ok
+test status_item::tests::tray_icon_bytes_are_embedded_and_decode ... ok
+test terminal_attach::live_geometry_probe::live_geometry_round_trip ... ignored, opens a real Terminal.app window
+test terminal_attach::tests::apple_script_for_terminal_app_escapes_quotes_correctly ... ok
+test terminal_attach::tests::applescript_escape_doubles_backslashes_and_quotes ... ok
+test terminal_attach::tests::applescript_for_iterm2_writes_text_into_current_session ... ok
+test terminal_attach::tests::attach_client_ends_with_banner_and_exit ... ok
+test terminal_attach::tests::attach_client_escapes_paths_with_specials ... ok
+test terminal_attach::tests::attach_client_never_invokes_ssh ... ok
+test terminal_attach::tests::attach_client_replaces_screen_and_stty ... ok
+test terminal_attach::tests::attach_window_title_is_human_readable ... ok
+test terminal_attach::tests::attach_window_title_is_unique_per_session_socket ... ok
+test terminal_attach::tests::bundle_ids_match_spec_scenario ... ok
+test terminal_attach::tests::geometry_reply_parses_rows_by_cols ... ok
+test terminal_attach::tests::geometry_reply_refuses_absence_and_degenerate_sizes ... ok
+test provision_progress::tests::vm_layer_no_longer_emits_percent_prose ... ok
+test terminal_attach::tests::geometry_snippet_escapes_its_title ... ok
+test terminal_attach::tests::open_shell_stub_quotes_message_safely ... ok
+test terminal_attach::tests::tagging_snippet_tags_the_tab_do_script_returned ... ok
+test terminal_attach::tests::terminal_detection_falls_back_to_terminal_app_when_none_installed ... ok
+test terminal_attach::tests::terminal_detection_falls_back_to_terminal_app_when_only_default_present ... ok
+test terminal_attach::tests::terminal_detection_falls_back_to_warp_when_iterm2_absent ... ok
+test terminal_attach::tests::terminal_detection_returns_iterm2_preferred_when_present ... ok
+test tests::diagnose_wires_in_crashloop_verdict ... ok
+test tests::login_transitive_state_wiring_is_present ... ok
+test tests::modules_touching_siblings_or_unix_are_gated_on_macos ... ok
+test tests::action_host_wires_in_crashloop_live_feed ... ok
+test tests::singleton_guard_applies_only_to_appkit_tray_mode ... ok
+test tests::provisioning_surfaces_use_live_qcow2_path ... ok
+test tray_log::tests::iso8601_utc_ms_matches_known_instants ... ok
+test tests::vm_booting_oneshots_guard_against_live_tray ... ok
+test tray_log::tests::rotates_only_past_the_limit_and_keeps_two_generations ... ok
+test tray_log::tests::stamped_line_keeps_the_prefix_and_content ... ok
+test tray_log::tests::the_log_lives_where_open_log_looks ... ok
+test version_line_tests::version_line_uses_workspace_version_and_commit ... ok
+test version_line_tests::workspace_version_is_not_the_frozen_crate_version ... ok
+test tests::reset_guest_menu_wiring_absent_cli_and_worker_present ... ok
+test tray_log::tests::relay_stamps_every_line_and_loses_nothing_at_exit_or_panic ... ok
+test status_item::tests::status_icon_image_loads_as_template ... ok
+test status_item::tests::embedded_icon_builds_an_nsimage_sized_for_the_menu_bar ... ok
+test action_host::tests::spawned_helpers_are_reaped_and_do_not_accumulate_zombies ... ok
+test installation_uuid::tests::keychain_persists_credentials_across_calls ... ok
+test installation_uuid::tests::a_bound_that_fires_leaves_no_surviving_child ... ok
+test terminal_attach::tests::a_query_that_never_answers_is_bounded_and_kills_its_child ... ok
+test diagnose::tests::the_skew_line_names_skew_and_never_calls_unknown_a_match ... ok
+
+test result: ok. 157 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 1.46s
+
+     Running tests/cli_unknown_flags.rs (target/debug/deps/cli_unknown_flags-592d1aeecdba24dd)
+
+running 2 tests
+test unknown_flag_is_refused_loudly_and_names_the_flag ... ok
+test supported_flag_is_not_swallowed_by_the_unknown_flag_guard ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.31s
+
+     Running tests/exec_guest_stdin.rs (target/debug/deps/exec_guest_stdin-7777b318479e21c0)
+
+running 2 tests
+test stdin_that_closes_is_still_forwarded_without_the_bound_warning ... ok
+test stdin_that_never_eofs_does_not_block_the_boot_forever ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.34s
+
+     Running tests/github_login_expect_order.rs (target/debug/deps/github_login_expect_order-c296540636d1fe63)
+
+running 5 tests
+test host_shows_the_guest_output_raw ... ok
+test host_waits_for_no_prompt_the_device_flow_never_prints ... ok
+test guest_github_terminal_login_takes_the_device_flow ... ok
+test host_identity_expects_match_the_guest_prompt_order ... ok
+test extraction_discriminates_the_live_path_from_the_retired_one ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+

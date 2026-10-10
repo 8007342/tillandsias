@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: every-tray-quit-ends-in-a-force-stop-because-the-guest-never-shuts-itself-down-cleanly
+    field: status
+    value: in_progress
+    ts: "2026-10-08T19:21:15Z"
+    host: tlatoanis-macbook-air
+
+packets:
+  - packet_id: the-guest-powers-itself-off-when-the-tray-heartbeat-stops
+    order: 1560-73zh
+    title: A guest-side watchdog powers the VM off cleanly when the tray's heartbeat stops (a tray killed mid-drain leaves no one to stop the guest)
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [guest, shutdown, filesystem-safety, macos, vm-layer]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-headless/src/guest_poweroff.rs
+      - crates/tillandsias-headless/src/vsock_server.rs
+    context: >
+      Stage S3 of the coordinator-approved 1430-rnpd plan, filed only. The mxc
+      note on 1430-rnpd (relayed by the coordinator, 2026-10-08) suggests a
+      guest-side shutdown watchdog keyed to the tray heartbeat. Evidence for
+      the gap, from ~/Library/Logs/Tillandsias/tray.log on tlatoanis-macbook-air
+      (2026-09-28..30): 10 tray quits. 8 were force-stopped after the 60 s
+      drain. In 2 the tray itself was killed mid-drain: the next line is a new
+      launch, or the log ends, with no drain outcome. S1 (the guest acks
+      VmShutdownRequest and powers itself off) covers a quit that reaches the
+      guest. It cannot cover a tray that dies first, because then nobody asks.
+      The image root already holds heartbeat.state.
+    depends_on: [every-tray-quit-ends-in-a-force-stop-because-the-guest-never-shuts-itself-down-cleanly]
+    exit_criteria:
+      - When the host heartbeat is silent past a stated threshold, the guest drains and powers off through the same guarded action as 1430-rnpd S1, and logs why.
+      - A heartbeat that resumes before the threshold cancels it, and a live tray never triggers it.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. Future test: a headless watchdog test
+      with an injected clock and heartbeat source, and the poweroff recorder.
+      Silence past the threshold must call poweroff exactly once, and a resumed
+      heartbeat must call it zero times. PRE-FIX: no watchdog exists, so a
+      killed tray leaves the guest running until the next launch force-stops it.
+    next_action: Not before 1430-rnpd S1 lands; the coordinator schedules it.
+
+events:
+  - packet_id: every-tray-quit-ends-in-a-force-stop-because-the-guest-never-shuts-itself-down-cleanly
+    event:
+      type: note
+      ts: "2026-10-08T19:21:15Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        S1 implemented by macbookair-macos on the coordinator-approved plan. Unit-level READY; the live arm comes from the RC smoke or the next VM run.
+        MEASURED BEFORE CODE (tray.log, 2026-09-28..30): 10 quits, 0 clean. 8 force-stopped. On every timestamped quit, VmShutdownRequest got no reply for 10.0 s, then requestStop -> force-stop took 65.1-66.8 s (about 75 s per quit). 2 trays were killed mid-drain. ROOT CAUSE: the guest's VmShutdownRequest arm set Draining and closed the connection. It neither replied nor started the OS shutdown whose SIGTERM drains headless.
+        FIX: (1) the guest answers IssueAck { seq_acked }, an existing variant with no wire bump, then starts the guarded poweroff. (2) guest_poweroff::request_poweroff has three fences: under cfg(test) it is a recorder; the real action compiles only on Linux; and at runtime it refuses unless TILLANDSIAS_GUEST_POWEROFF=1, which is set ONLY in the VZ guest unit (vz.rs, pinned by a unit-text assertion). (3) VzRuntime::stop treats an already-Stopped VM, or a requestStop failure on a VM that is now Stopped, as a clean stop. The tray's request_vm_shutdown already took any non-Error reply as OK, so the ack ends the 10 s wait.
+        TEST-FIRST (darwin): vm_shutdown_request_is_acked_and_starts_the_guest_poweroff was red pre-fix ('got Err("no frame within 2s")') and is green post-fix (ack, phase Draining, exactly one poweroff call). The fence test covers non-Linux, no opt-in, and opt-in values other than "1". vsock_server 40/40, vm-layer 135/135, fmt clean, strict clippy 0 with and without listen-vsock (with #224's TWO_ROUTERS gate applied temporarily).
+        Existing provisioned VMs: the unit is written by cloud-init on first boot, so a VM provisioned before this change has no opt-in, refuses, and falls back to today's path until it is reprovisioned. The smoke's fresh install is the live arm. S2 (the ACPI/requestStop path) waits on the smoke's console.log capture. S3 is filed as 1560-73zh.

@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by hand on the LWW `status:` channel (corrects any field, 642-fedr).
+status:
+  - packet_id: the-tray-sends-set-vsock-forward-target-with-request-but-the-guest-is-silent-on-success-so-the-request-consumes-the-next-reply
+    field: status
+    value: in_progress
+    ts: "2026-10-08T17:55:39Z"
+    host: tlatoanis-macbook-air
+  - packet_id: the-tray-sends-set-vsock-forward-target-with-request-but-the-guest-is-silent-on-success-so-the-request-consumes-the-next-reply
+    field: verifiable_closure
+    value: >
+      cargo test -p tillandsias-headless --features listen-vsock
+      set_vsock_forward_target_answers_one_frame_so_the_status_reply_reaches_its_caller.
+      The test drives the real vsock handler in the tray's exact order:
+      request(SetVsockForwardTarget) and read one frame, then
+      request(VmStatusRequest) and read one frame. It asserts IssueAck
+      { seq_acked } for the first, that the target file was written, and that
+      the second is VmStatusReply. Darwin pre-fix: FAILS with
+      'got Err("no frame within 2s")' (the guest is silent on success, so the
+      tray's request waits for a frame that never comes). Post-fix: passes.
+      Receipts are in plan/issues/evidence/1509-kf4d-darwin-20261008/.
+    ts: "2026-10-08T17:55:39Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-tray-sends-set-vsock-forward-target-with-request-but-the-guest-is-silent-on-success-so-the-request-consumes-the-next-reply
+    event:
+      type: note
+      ts: "2026-10-08T17:55:39Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        Claimed and fixed by macbookair-macos on coordinator assignment. DIRECTION CHOSEN: the GUEST ACKS. On success, SetVsockForwardTarget answers exactly one frame, IssueAck { seq_acked: env.seq }, as HostClockSync (1503-qrgz) does; failure still answers Error. IssueAck is an EXISTING variant, so the encoding is unchanged: no WIRE_VERSION bump, and 1029-5wvd's discriminant pins are untouched (control-wire 90/90). Version skew cannot pair an acking guest with a non-expecting tray, because derive_psk binds the build version into the channel key (the SetVsockForwardTarget doc's no-capability-bit argument).
+        Tray: both call sites (poll_vm_status_once, and the push listener's reconnect path before Subscribe, a second instance of the same bug) now go through set_vsock_forward_target. It checks the reply is the IssueAck for its own seq, and warns by name on Error or any other frame instead of treating it as success. Still best-effort, as before.
+        Test seam: vsock_forward_dir() is the real /run/tillandsias in the product and a per-process temp dir under cfg(test), used by both the writer (vsock_server) and the reader (vsock_forward_target).
+        Darwin: headless vsock_server tests 40/40, control-wire 90/90, macos-tray 166/166, fmt clean. Strict clippy (-D warnings -A clippy::double_must_use) exits 0, with and without --features listen-vsock, with #224's TWO_ROUTERS gate applied temporarily (that trunk defect is the only other red; #224 lands first).
+        UNIT-LEVEL ONLY: not run against a real guest. That needs a freshly built and installed tray plus guest image, which the RC smoke will exercise.
