@@ -1,0 +1,7 @@
+  [OK]   gate-only is read with its reason (declared skip, rc 10)
+  [OK]   gate-only-decider is read with its reason (declared skip, rc 10)
+  [OK]   serial is read with its reason (run alone, rc 12)
+  [OK]   NEGATIVE CONTROL: an undeclared guard is run (rc 0, nothing printed)
+  [OK]   the host sed accepted every program the door reads headers with
+preflight-declarations-host-sed: 5 passed, 0 failed (bsd-sed)
+ok:preflight-declarations-host-sed:5
