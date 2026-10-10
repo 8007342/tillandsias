@@ -15,8 +15,9 @@
 # meaning could-not-run, which is the vocabulary the sibling tier check already
 # had in its own script (`skip:cheatsheet-tiers:cargo-absent`).
 #
-# REGIME. Arms 1 and 2 EXECUTE the real checker against a reproduced condition
-# and pin the two exit codes the whole design rests on being distinct. Arm 3
+# REGIME. Arms 1 and 2 EXECUTE a stub subject (since 1570-k4fx; see below)
+# against a reproduced condition and pin the two exit codes the whole design
+# rests on being distinct. Arm 3
 # pins the wiring that binds them. Arm 4 is a STRUCTURAL assertion on build.sh's
 # loop, not an execution of it: the loop is inline in build.sh's gate function
 # and cannot be invoked without running a gate. That is a real limit of this
@@ -36,72 +37,82 @@ fail=0
 ok()  { echo "ok   $*"; pass=$((pass + 1)); }
 bad() { echo "FAIL $*"; fail=$((fail + 1)); }
 
-STEP="scripts/gate-steps.d/165-1087-h2z9.step"
-CHECKER="scripts/check-cheatsheet-refs.sh"
-
+# ORDER 1570-k4fx: RE-SUBJECTED ONTO A STUB. Arms 1-3 used to drive
+# scripts/check-cheatsheet-refs.sh and step 165, whose exit 2 meant "no rg".
+# That checker is now Lua with no tool, so it has no could-not-run condition
+# and step 165 nominates none. The STEP_SKIP_EXIT contract this fixture pins is
+# unchanged and still used by ~30 steps, so it is exercised against a STUB
+# subject kept in this fixture's own data: a checker that needs a tool no host
+# carries, and a step file that nominates its could-not-run code. A stub, not
+# another real tool-dependent checker, so the next port cannot strand it again.
 work="$(mktemp -d "${TMPDIR:-/tmp}/gate-step-skip-exit.XXXXXX")"
-probe=""
-cleanup() { rm -rf "$work"; [ -n "$probe" ] && rm -f "$ROOT/$probe"; }
+cleanup() { rm -rf "$work"; }
 trap cleanup EXIT INT TERM
 
-# ── ARM 1 — THE TOOLING GAP, REPRODUCED RATHER THAN DESCRIBED.
-#
-# Genuine ABSENCE, not a shadow that fails when run. A stub `rg` on PATH does
-# NOT reproduce this: `command -v rg` still finds it, resolve_tool returns it,
-# and the checker runs a broken rg, matches nothing, and exits 0 — a vacuous
-# pass, which is a different defect from the one measured here. So PATH is
-# narrowed to the system directories instead, and `toolbox` is stubbed to fail
-# its `--version` probe so the fallback arm cannot resolve either. On a host
-# with no toolbox the stub changes nothing.
+TOOL="tillandsias-skip-exit-probe-tool"   # a name no real host carries
+CHECKER="$work/stub-checker.sh"
+STEP="$work/999-stub.step"
+cat > "$CHECKER" <<'STUB'
+#!/bin/sh
+# Stub subject: COULD NOT RUN (exit 2) without its tool; a content failure
+# (exit 1) when the reference it is given does not resolve; ok (0) otherwise.
+if ! command -v tillandsias-skip-exit-probe-tool >/dev/null 2>&1; then
+    echo "error: tillandsias-skip-exit-probe-tool is available neither on this host nor in the toolbox" >&2
+    exit 2
+fi
+[ -f "$1" ] || { echo "unresolved reference: $1" >&2; exit 1; }
+exit 0
+STUB
+cat > "$STEP" <<'STEPDATA'
+STEP_DESC="Stub: checking a reference resolves"
+STEP_SCRIPT="stub-checker.sh"
+STEP_ERROR="a reference does not resolve (stub)"
+STEP_OK="Stub passed"
+STEP_SKIP_EXIT=2
+STEP_SKIP_DESC="the stub's tool is absent"
+STEPDATA
 mkdir -p "$work/bin"
-printf '#!/bin/sh\nexit 1\n' > "$work/bin/toolbox"
-chmod +x "$work/bin/toolbox"
+printf '#!/bin/sh\nexit 0\n' > "$work/bin/$TOOL"
+chmod +x "$work/bin/$TOOL"
+: > "$work/present-ref"
 
-if command -v rg >/dev/null 2>&1 && [ -x /usr/bin/rg ]; then
-    ok "SKIPPED arm 1: this host has rg in /usr/bin, which the narrowed PATH cannot exclude"
+# ── ARM 1 — THE TOOLING GAP: genuine ABSENCE gives the could-not-run code,
+#           and says so on stderr, never as a content verdict.
+PATH="/usr/bin:/bin" sh "$CHECKER" "$work/present-ref" >/dev/null 2>"$work/err"
+rc=$?
+if [ "$rc" -eq 2 ]; then
+    ok "tool absent -> the subject exits 2 (could-not-run)"
 else
-    PATH="$work/bin:/usr/bin:/bin" bash "$CHECKER" >/dev/null 2>"$work/err"
-    rc=$?
-    if [ "$rc" -eq 2 ]; then
-        ok "no rg on host and none in the toolbox -> checker exits 2 (could-not-run)"
-    else
-        bad "no rg anywhere -> checker exits $rc, expected 2 — STEP_SKIP_EXIT=2 would then nominate the wrong code"
-    fi
-    if grep -q 'available neither on this host nor in the' "$work/err"; then
-        ok "the exit-2 path names the TOOLING gap on stderr, not a cheatsheet verdict"
-    else
-        bad "the exit-2 path did not explain itself: $(head -1 "$work/err")"
-    fi
+    bad "tool absent -> the subject exits $rc, expected 2 — STEP_SKIP_EXIT=2 would then nominate the wrong code"
+fi
+if grep -q 'available neither on this host nor in the' "$work/err"; then
+    ok "the exit-2 path names the TOOLING gap on stderr, not a content verdict"
+else
+    bad "the exit-2 path did not explain itself: $(head -1 "$work/err")"
 fi
 
-# ── ARM 2 — THE NEGATIVE CONTROL, AND THE REASON THE FIX CANNOT BE
-#           "drop the step". A genuine unresolvable reference must still exit 1
-#           and must still refuse. If this ever came back 2, the skip path would
-#           swallow a real content failure — the exact downgrade the packet
-#           named as its negative control.
-if ! bash "$CHECKER" >/dev/null 2>&1; then
-    ok "SKIPPED arm 2: the checker is not green on this host as-is, so an injected break proves nothing"
+# ── ARM 2 — THE NEGATIVE CONTROL: with the tool present, an unresolvable
+#           reference exits 1 (a content failure must never share the skip
+#           code), and a resolvable one exits 0.
+PATH="$work/bin:/usr/bin:/bin" sh "$CHECKER" "$work/no-such-ref" >/dev/null 2>&1
+rc=$?
+if [ "$rc" -eq 1 ]; then
+    ok "a genuinely unresolvable reference -> exit 1, distinct from the could-not-run 2"
 else
-    probe="cheatsheets/zzz-skip-exit-probe-$$.md"
-    printf '# probe (1087-h2z9 fixture)\n\n@cheatsheet runtime/no-such-cheatsheet-%s.md\n' "$$" \
-        > "$ROOT/$probe"
-    bash "$CHECKER" >/dev/null 2>&1
-    rc=$?
-    rm -f "$ROOT/$probe"; probe=""
-    if [ "$rc" -eq 1 ]; then
-        ok "a genuinely unresolvable reference -> checker exits 1, distinct from the could-not-run 2"
-    else
-        bad "an unresolvable reference -> checker exits $rc, expected 1 — a content failure sharing the skip code would be silently downgraded"
-    fi
+    bad "an unresolvable reference -> exit $rc, expected 1 — a content failure sharing the skip code would be silently downgraded"
 fi
+PATH="$work/bin:/usr/bin:/bin" sh "$CHECKER" "$work/present-ref" >/dev/null 2>&1
+rc=$?
+[ "$rc" -eq 0 ] && ok "POSITIVE CONTROL: tool present and reference resolves -> exit 0" \
+                || bad "tool present and reference resolves -> exit $rc, expected 0"
 
 # ── ARM 3 — THE WIRING. The step must nominate the code arm 1 observed, and
 #           must never nominate the code arm 2 observed.
 skip_exit="$(sed -n 's/^STEP_SKIP_EXIT=["]\{0,1\}\([^"]*\)["]\{0,1\}$/\1/p' "$STEP")"
 if [ "$skip_exit" = "2" ]; then
-    ok "the step nominates exit 2 as could-not-run, matching what the checker actually returns"
+    ok "the step nominates exit 2 as could-not-run, matching what the subject actually returns"
 else
-    bad "the step nominates STEP_SKIP_EXIT='$skip_exit'; the checker's could-not-run code is 2"
+    bad "the step nominates STEP_SKIP_EXIT='$skip_exit'; the subject's could-not-run code is 2"
 fi
 if [ "$skip_exit" = "1" ] || [ "$skip_exit" = "0" ]; then
     bad "the step nominates $skip_exit, which is success or the content-failure code — every real refusal in this step would read as a skip"
@@ -112,6 +123,14 @@ if grep -q '^STEP_ERROR="..*"$' "$STEP"; then
     ok "the step still carries STEP_ERROR — the exit-1 refusal keeps its sentence"
 else
     bad "the step lost STEP_ERROR; a genuine unresolved reference would refuse with no explanation"
+fi
+# And step 165 itself, whose subject now has no could-not-run condition, must
+# nominate NOTHING: its only exit 2 is a missing cheatsheets/ dir, which must
+# refuse rather than skip (1570-k4fx).
+if grep -q '^STEP_SKIP_EXIT=' scripts/gate-steps.d/165-1087-h2z9.step; then
+    bad "step 165 still nominates a skip code, though check-cheatsheet-refs.lua needs no tool — a broken checkout would read as a skip"
+else
+    ok "step 165 nominates no skip: its tool-free subject has no could-not-run condition"
 fi
 
 # ── ARM 4 — THE RUNNER'S DECISION (structural; see REGIME above).

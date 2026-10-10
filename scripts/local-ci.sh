@@ -1066,7 +1066,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "spec-cheatsheet-binding" "fail" /tmp/binding-check.log
         fi
     else
-        log_fail_missing_guard "spec-cheatsheet-binding" "scripts/check-cheatsheet-refs.sh"
+        log_fail_missing_guard "spec-cheatsheet-binding" "scripts/validate-spec-cheatsheet-binding-fast.sh"
         archive_check_log "spec-cheatsheet-binding" "skipped"
     fi
 

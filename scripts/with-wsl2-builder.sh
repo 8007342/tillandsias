@@ -194,7 +194,9 @@ set -eu
 # Fedora, so the absence was an omission rather than a constraint.
 #
 # ORDER 1129-xm5z - `ripgrep`, and it is the THIRD instance of the sentence
-# above. check-cheatsheet-refs.sh hard-requires rg (host first, then the
+# above. check-cheatsheet-refs.sh hard-required rg until 1570-k4fx ported it to
+# Lua with no rg (1578-7s8h asks whether rg is still provisioned for a reason)
+# (host first, then the
 # builder toolbox, else refuse), and 1087-h2z9 moved that check from --ci-full
 # into --check, so it now runs on EVERY land on EVERY host. Nothing provisions
 # rg here, and the podman toolbox's init set that does name it is unreachable

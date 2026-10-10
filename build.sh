@@ -4520,6 +4520,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Bash dialect gate passed"
 
+    # The cheatsheet-reference checker's own fixture (1570-k4fx), a Lua fixture
+    # on the one runner: both reference shapes, See-also scoping, a dangling
+    # reference refused by name and its negative control, a PATH that resolves
+    # nothing, no cheatsheets/ refused. The checker itself is gate step 165.
+    _step "Checking the cheatsheet-reference checker's fixture (1570-k4fx)..."
+    if ! _run_lua_decider "scripts/lua/test-cheatsheet-refs.lua" 2>&1; then
+        _error "the cheatsheet-reference checker's fixture failed — see the FAIL lines above (1570-k4fx)"
+        exit 1
+    fi
+    _info "Cheatsheet-reference fixture passed"
+
     # ORDER 1384-bxhk — the shell ratchet: prints the Lua migration's counts on
     # every --check, refuses a NEW .sh decider (check-/test-/verify-/guard-), a
     # new pipe site beyond a file's floor and (once steps: exists) a new piped
