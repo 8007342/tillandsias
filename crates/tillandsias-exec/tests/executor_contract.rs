@@ -339,3 +339,111 @@ async fn empty_argv_is_refused() {
     let err = Command::new(Vec::<String>::new()).run().await.unwrap_err();
     assert!(matches!(err, tillandsias_exec::ExecError::EmptyArgv));
 }
+
+// ORDER 1553-q3wi. CRITERION 4 FOR A NEWLINE, ON WINDOWS. Windows has no argv,
+// only a command line the child re-parses. Rust std forces quotes only for a
+// space, a tab or an empty argument, so an argument holding a newline went out
+// bare, and an MSYS child (Git's printf) split it in two: measured on yolanda
+// 2026-10-08, `printf %s "beta\nalpha"` printed only "beta". These pin, byte
+// for byte, that such an argument arrives as ONE entry at an MSYS child and at
+// a native (MSVC-rules) child, and that every argument WITHOUT CR/LF arrives
+// exactly as std delivers it today.
+
+/// The bytes a native child received, one hex line per argv entry.
+#[cfg(windows)]
+async fn native_child_hex(args: &[&str]) -> Vec<String> {
+    let mut argv = vec![env!("CARGO_BIN_EXE_tillandsias-exec-argv-hex").to_string()];
+    argv.extend(args.iter().map(|a| a.to_string()));
+    let out = Command::new(argv)
+        .run()
+        .await
+        .expect("spawn the hex helper");
+    assert!(out.completion.is_success(), "{:?}", out.completion);
+    out.stdout_lossy().lines().map(str::to_string).collect()
+}
+
+#[cfg(windows)]
+fn hex(s: &str) -> String {
+    s.bytes().map(|b| format!("{b:02x}")).collect()
+}
+
+/// An MSYS child (Git for Windows' printf) receives an argument holding LF, and
+/// one holding CRLF, as ONE entry, byte-identical. Skips by name where no MSYS
+/// printf is on PATH. Pre-fix: FAILS on LF ("a" printed, "b" dropped).
+#[cfg(windows)]
+#[tokio::test]
+async fn a_newline_argument_arrives_whole_at_an_msys_child() {
+    let probe = Command::new(["printf", "%s", "x"]).run().await;
+    match &probe {
+        Ok(out) if out.stdout_lossy() == "x" => {}
+        _ => {
+            eprintln!("skip:newline-argv-msys:no MSYS printf on PATH");
+            return;
+        }
+    }
+    for arg in ["a\nb", "a\r\nb", "a b\nc", "trailing\\n"] {
+        let out = Command::new(["printf", "%s", arg])
+            .run()
+            .await
+            .expect("spawn");
+        assert_eq!(
+            out.stdout,
+            arg.as_bytes(),
+            "MSYS printf must receive {arg:?} as one byte-identical entry; got {:?} (stderr {:?})",
+            String::from_utf8_lossy(&out.stdout),
+            out.stderr_lossy()
+        );
+    }
+}
+
+/// A native (MSVC CRT rules) child receives the same arguments, plus the
+/// CRITERION 4 hostile literal, as one byte-identical entry each.
+#[cfg(windows)]
+#[tokio::test]
+async fn a_newline_argument_arrives_whole_at_a_native_child() {
+    let args = [
+        "a\nb",
+        "a\r\nb",
+        "lone\rcr",
+        "a b\nc",
+        "trailing\\",
+        "q\\\"x\n",
+        r#"a b "c" *.rs $HOME `id` 'q'"#,
+    ];
+    let got = native_child_hex(&args).await;
+    let want: Vec<String> = args.iter().map(|a| hex(a)).collect();
+    assert_eq!(
+        got, want,
+        "each argument must arrive as one byte-identical entry"
+    );
+}
+
+/// An argument WITHOUT CR/LF goes out exactly as std delivers it today: the
+/// executor's result equals a plain std::process::Command's for the same set.
+#[cfg(windows)]
+#[tokio::test]
+async fn arguments_without_newlines_arrive_exactly_as_std_delivers_them() {
+    let args = [
+        "plain",
+        "",
+        "two words",
+        "tab\there",
+        "trailing\\",
+        "q\"uote",
+        "back\\slash \\\"",
+        r#"a b "c" *.rs $HOME `id` 'q'"#,
+    ];
+    let ours = native_child_hex(&args).await;
+    let std_out = std::process::Command::new(env!("CARGO_BIN_EXE_tillandsias-exec-argv-hex"))
+        .args(args)
+        .output()
+        .expect("spawn the hex helper through std");
+    let theirs: Vec<String> = String::from_utf8_lossy(&std_out.stdout)
+        .lines()
+        .map(str::to_string)
+        .collect();
+    assert_eq!(
+        ours, theirs,
+        "no-CR/LF arguments must be delivered exactly as std does"
+    );
+}
