@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# 1498-fn96 fix on work/1498-fn96 (coordinator queue item 4; plan approved 2026-10-10).
+status:
+  - packet_id: quit-during-a-forge-build-gets-no-in-vm-shutdown-reply-and-the-drain-expires-to-a-force-stop-with-no-named-cause
+    field: status
+    value: in_progress
+    ts: "2026-10-10T07:36:23Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: quit-during-a-forge-build-gets-no-in-vm-shutdown-reply-and-the-drain-expires-to-a-force-stop-with-no-named-cause
+    event:
+      type: note
+      ts: "2026-10-10T07:36:23Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        Fix on work/1498-fn96 (crates/tillandsias-macos-tray/src/action_host.rs):
+        - The in-VM shutdown request is staged: connect, handshake, request, reply. A shared ShutdownProgress marker records the stage in flight, and Quit's 10 s timeout now logs "stalled at stage <name>: <meaning>". Pre-fix it logged only "got no reply within 10s".
+        - The plain Hello/HelloAck handshake has its own 3 s bound. Pre-fix it was unbounded, the likeliest sink for the 10 s.
+        - The guest's VmShutdownRequest arm closes the wire without a reply (headless vsock_server.rs: "drain happens via signal path"). That EOF is now a NAMED line, SHUTDOWN_CLOSED_WITHOUT_ACK, not a generic read error.
+        SOURCE READ, not measured: the S3 baseline (2026-10-09) shows the guest never logged receiving the request. An EOF fails fast, so the live 10 s stall is before the reply; the next live quit's log will name the stage.
+        MEASURED, darwin rustc 1.99.0, cargo test -p tillandsias-macos-tray:
+        - the_quit_no_reply_timeout_names_the_stalled_stage (source scan) is FAILED against the pre-fix action_host.rs ("the Quit drain's timeout arm must read the stage marker") and ok post-fix.
+        - shutdown_stages, with a fake guest over a 4-byte duplex: a_stall_at_each_stage_is_named (connect, handshake, request, reply each named), a_silent_handshake_is_bounded_on_its_own, a_close_without_ack_is_named, and NEGATIVE CONTROL a_guest_that_answers_is_an_ack. 4/4 in each of 10 consecutive runs.
+        - The crate is 169 passed, 0 failed; clippy -D warnings clean; fmt ok.
+        NOT MEASURED: a live Quit during a forge build with the new log line.
