@@ -106,7 +106,6 @@ scripts/check-readme-discipline.sh
 scripts/check-refusal-affordance-added.sh
 scripts/check-release-asset-integrity.sh
 scripts/check-release-tier-freshness.sh
-scripts/check-release-uploads-gated.sh
 scripts/check-resumable-claim-dirt.sh
 scripts/check-ripgrep-available.sh
 scripts/check-running-image-freshness.sh

@@ -52,7 +52,7 @@ critical_path:
     # and was green while macos-release uploaded twice with none. The checker
     # pairs each `gh release upload|create <dir>/*` with a check over <dir> in
     # the same job.
-    command: "bash scripts/check-release-uploads-gated.sh .github/workflows/release.yml"
+    command: ". scripts/plan-binary-probe.sh; P=$(resolve_plan_binary) && \"$P\" script run scripts/lua/check-release-uploads-gated.lua -- .github/workflows/release.yml"
     timeout_ms: 3000
     expected_behavior: "ok:release-uploads-gated:"
 
