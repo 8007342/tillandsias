@@ -89,7 +89,6 @@ scripts/check-nix-builder-e2e.sh
 scripts/check-nix-deps-stability.sh
 scripts/check-no-base64-script-injection.sh
 scripts/check-no-competing-gate.sh
-scripts/check-no-end-user-brew-instruction.sh
 scripts/check-no-fixture-writes-live-ledger.sh
 scripts/check-no-python-scripts.sh
 scripts/check-no-spawn-in-if-not.sh
