@@ -388,7 +388,6 @@ scripts scripts/check-forge-service-health.sh 6
 scripts scripts/check-fragment-closure-evidence-added.sh 5
 scripts scripts/check-fragment-events-land.sh 1
 scripts scripts/check-fragment-keys-are-read.sh 1
-scripts scripts/check-fragment-status-loss.sh 22
 scripts scripts/check-fragment-ts-skew.sh 4
 scripts scripts/check-gate-memory-floor.sh 3
 scripts scripts/check-gate-step-prefix-across-refs.sh 4
@@ -700,7 +699,6 @@ scripts scripts/test-forge-standard-gitconfig-path.sh 2
 scripts scripts/test-forge-swap-service.sh 6
 scripts scripts/test-fragment-batch-never-collapses-verdicts.sh 1
 scripts scripts/test-fragment-events-land-callsite.sh 8
-scripts scripts/test-fragment-status-loss-row-boundary.sh 5
 scripts scripts/test-fragment-status-loss.sh 7
 scripts scripts/test-fragment-ts-skew.sh 1
 scripts scripts/test-freshness-regime-budget.sh 22

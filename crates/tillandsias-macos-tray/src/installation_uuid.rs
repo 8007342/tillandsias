@@ -100,15 +100,44 @@ fn spawn_bounded(
         .stderr(Stdio::piped())
         .spawn()?;
 
+    // ORDER 1562-sbpd. Drain both pipes WHILE waiting. Reading them only after
+    // the child exits deadlocks any child whose output exceeds a pipe buffer
+    // (64 KiB): it blocks on write, never exits, and the bound below killed it
+    // and blamed a locked keychain. Measured: `security dump-keychain` (~90 KB)
+    // timed out every time through this helper and took well under a second to
+    // a file.
+    let drain = |pipe: Option<Box<dyn std::io::Read + Send>>| {
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            if let Some(mut p) = pipe {
+                let _ = p.read_to_end(&mut buf);
+            }
+            buf
+        })
+    };
+    let stdout = drain(child.stdout.take().map(|p| Box::new(p) as _));
+    let stderr = drain(child.stderr.take().map(|p| Box::new(p) as _));
+
     let deadline = Instant::now() + budget;
     loop {
         match child.try_wait()? {
-            Some(_) => return child.wait_with_output(),
+            Some(status) => {
+                // The child has exited, so its write ends are closed and both
+                // readers finish (a grandchild still holding a pipe would be a
+                // caller's own doing; none of the `security` calls fork).
+                return Ok(std::process::Output {
+                    status,
+                    stdout: stdout.join().unwrap_or_default(),
+                    stderr: stderr.join().unwrap_or_default(),
+                });
+            }
             None => {
                 if Instant::now() >= deadline {
                     let _ = child.kill();
                     // Reap, so the kill does not leave a zombie (690-w94k
-                    // criterion 4 is the same lesson one call away).
+                    // criterion 4 is the same lesson one call away). The
+                    // readers end when the killed child's pipes close; they
+                    // are not joined, so a straggler cannot hold this return.
                     let _ = child.wait();
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::TimedOut,
@@ -450,6 +479,40 @@ mod tests {
             "the bound returned but left {survivors} child(ren) alive. That is the \
              21h45m failure macneo measured: the caller is unblocked and the host \
              keeps a process holding a prompt (order 690-w94k)"
+        );
+    }
+
+    /// ORDER 1562-sbpd. Output larger than a pipe buffer must not hold the call
+    /// past the child's own exit. Pre-fix the pipes were read only after exit,
+    /// so this child blocked on write and the bound killed it as TimedOut.
+    #[test]
+    fn output_larger_than_a_pipe_buffer_is_returned_whole() {
+        const BYTES: usize = 200 * 1024;
+        let t0 = Instant::now();
+        let out = spawn_bounded(
+            "/bin/sh",
+            &[
+                "-c",
+                "head -c 204800 /dev/zero; head -c 81920 /dev/zero >&2",
+            ],
+            Duration::from_secs(5),
+        )
+        .expect("a child that writes 200 KiB and exits must not be killed by the bound");
+        assert!(out.status.success(), "{:?}", out.status);
+        assert_eq!(
+            out.stdout.len(),
+            BYTES,
+            "every stdout byte must be returned"
+        );
+        assert_eq!(
+            out.stderr.len(),
+            80 * 1024,
+            "every stderr byte must be returned"
+        );
+        assert!(
+            t0.elapsed() < Duration::from_secs(4),
+            "the call must return when the child exits, not at the bound ({:?})",
+            t0.elapsed()
         );
     }
 
