@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found 2026-10-09 on yoga (first forge on stable v56.10.9.1), filed at the
+# coordinator's direction (p2, pickup linux).
+packets:
+  - packet_id: forge-git-identity-is-written-with-git-config-global-into-a-read-only-bind-mounted-gitconfig-so-every-forge-has-no-user-name-or-email-while-the-lifecycle-log-says-configured
+    order: 1569-citv
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, git-identity, github-login, gitconfig]
+    estimated_hours: 2
+    owned_files:
+      - images/default/lib-common.sh
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      A forge launched after a successful tray GitHub login has NO user.name / user.email: configure_git_identity (1453-7rzd) writes them with git config --global, but ~/.gitconfig is the launcher's read-only bind mount (order 224, write_forge_gitconfig), so every write fails behind "|| true" and the lifecycle log still reports "git-identity | configured from github-app"
+    context: |
+      Measured on yoga 2026-10-09T19:20Z, forge on v56.10.9.1, host signed in
+      through the tray (identity auto-filled from the GitHub noreply address):
+        - env carries TILLANDSIAS_GIT_NAME, TILLANDSIAS_GIT_EMAIL
+          (...@users.noreply.github.com), TILLANDSIAS_GIT_HOST=yoga,
+          TILLANDSIAS_GIT_IDENTITY_SOURCE=github-app: the launcher DID pass it.
+        - /tmp/forge-lifecycle.log, twice: "[lifecycle] git-identity |
+          configured from github-app as tillandsia-usneoides on yoga".
+        - ~/.gitconfig has [safe], [credential], [core], [push], [url] only.
+        - /proc/self/mountinfo: <host>/.cache/tillandsias/forge-gitconfig/
+          tillandsias.config -> /home/forge/.gitconfig ro.
+        - "git config --global user.name x" -> "error: could not write config
+          file /home/forge/.gitconfig: Device or resource busy", rc=4.
+        - "git var GIT_AUTHOR_IDENT" -> "Author identity unknown ... fatal:
+          unable to auto-detect email address (got 'forge@forge-tillandsias.(none)')".
+      Two shipped rows collide: 224 made the global config read-only and
+      launcher-owned; 1453-7rzd (completed) writes the identity into that same
+      file from inside the forge. The success trace is unconditional, so the
+      failure is invisible until a commit refuses.
+    exit_criteria:
+      - 'a fresh forge on a signed-in host has a non-empty user.name and user.email matching the tray''s stored identity (git var GIT_AUTHOR_IDENT succeeds as the forge user); pre-fix: yoga 2026-10-09T19:20Z, "Author identity unknown"'
+      - 'configure_git_identity logs "configured" only when the value it wrote reads back; a failed write logs a failure line naming the read-only target; pre-fix: "configured from github-app" logged while ~/.gitconfig has no [user]'
+      - 'the 1453-7rzd property holds: the identity is git CONFIG, never exported GIT_AUTHOR_*/GIT_COMMITTER_*, and a scratch repo''s own -c user.name still wins'
+    unscoreable: "unpinnable-until-the-guard-exists: future fixture that runs configure_git_identity against a read-only ~/.gitconfig (a 0444 file under a scratch HOME) with TILLANDSIAS_GIT_NAME/EMAIL set and asserts git var GIT_AUTHOR_IDENT succeeds; pre-fix result: Author identity unknown plus a 'configured' lifecycle line. NEGATIVE CONTROL: with no TILLANDSIAS_GIT_NAME the not-configured line is still printed."
+    depends_on: []
+    next_action: >
+      Either have write_forge_gitconfig emit the [user] block (name + host +
+      species) host-side, or have the injected config [include] a writable
+      forge-local file that configure_git_identity writes; and gate the trace
+      on a read-back.
+    events:
+      - type: filed
+        ts: "2026-10-09T19:32:28Z"
+        agent_id: forge-forge-tillandsias-claude-20261009t193211z
+        host: yoga
+        summary: |-
+          Filed at the coordinator's direction (p2, pickup linux) from the first forge on stable v56.10.9.1 (yoga).

@@ -2927,6 +2927,18 @@ fn note_crashloop_observation(
     }
 }
 
+/// The last VM status event written to the tray log (order 1571-lgex), shared
+/// by the poll and push surfaces like `last_logged_phase`.
+static LAST_LOGGED_EVENT: Mutex<Option<String>> = Mutex::new(None);
+
+/// The tray-log line for a VM status event change, or `None` when the event is
+/// unchanged or absent. Pure, so the "an expired sign-in is visible in the log"
+/// property is testable without AppKit (order 1571-lgex).
+fn event_change_line(logged: Option<&str>, current: Option<&str>) -> Option<String> {
+    let current = current.filter(|e| !e.is_empty())?;
+    (logged != Some(current)).then(|| format!("[tillandsias-tray] vm-status: event={current}"))
+}
+
 /// Apply a live `VmStatus` observation — from a poll reply or an unrequested
 /// `VmStatusPush` frame — to the shared `MenuState` and status chip. Returns
 /// whether the menu needs a rebuild (podman_ready / login gating changed).
@@ -2960,6 +2972,16 @@ fn apply_vm_status(
                     .map(|e| format!(" event={e}"))
                     .unwrap_or_default()
             );
+        }
+    }
+    {
+        // ORDER 1571-lgex: a phase-only log hid every event change inside
+        // Ready — an expired sign-in left "Building Forge" on the chip and
+        // nothing in this log. Log each distinct event once.
+        let mut logged_event = LAST_LOGGED_EVENT.lock().unwrap();
+        if let Some(line) = event_change_line(logged_event.as_deref(), last_event) {
+            eprintln!("{line}");
+            *logged_event = last_event.map(str::to_string);
         }
     }
     let mut base = vm_phase_status_text(phase, podman_ready);
@@ -3751,6 +3773,30 @@ fn dispatch_rebuild(
 
 #[cfg(test)]
 mod tests {
+
+    /// ORDER 1571-lgex. An event change INSIDE one phase reaches the tray log.
+    /// Measured 2026-10-09: the chip moved nowhere and the log said nothing for
+    /// the 170 s between the expired sign-in and the user's quit, because only
+    /// phase changes were logged.
+    #[test]
+    fn an_event_change_inside_one_phase_is_logged_once() {
+        use super::event_change_line;
+        assert_eq!(
+            event_change_line(Some("Building Forge"), Some("Sign-in did not finish")).as_deref(),
+            Some("[tillandsias-tray] vm-status: event=Sign-in did not finish"),
+        );
+        assert_eq!(
+            event_change_line(None, Some("Building Forge")).as_deref(),
+            Some("[tillandsias-tray] vm-status: event=Building Forge"),
+        );
+        // Once: the same event again, an absent event and an empty one are silent.
+        assert_eq!(
+            event_change_line(Some("Building Forge"), Some("Building Forge")),
+            None
+        );
+        assert_eq!(event_change_line(Some("Building Forge"), None), None);
+        assert_eq!(event_change_line(Some("Building Forge"), Some("")), None);
+    }
 
     /// 1426-cb6g / 1244-9dx3. Before an action host exists there is nothing to
     /// drain, so the shared quit must report "not handled" and let the caller

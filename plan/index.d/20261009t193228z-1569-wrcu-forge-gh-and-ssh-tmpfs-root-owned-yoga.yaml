@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found 2026-10-09 on yoga (first forge on stable v56.10.9.1), filed at the
+# coordinator's direction (p2, pickup linux).
+packets:
+  - packet_id: forge-credential-quarantine-tmpfs-for-config-gh-and-ssh-is-root-owned-0700-so-gh-auth-status-as-the-forge-user-fails-with-permission-denied-instead-of-a-clear-not-authenticated-by-design
+    order: 1569-wrcu
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, credentials, gh-cli, agent-ux]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      Inside the forge ~/.config/gh and ~/.ssh are credential-quarantine tmpfs mounts owned root:root mode 0700, so as the forge user "gh auth status" fails with "failed to read configuration: open /home/forge/.config/gh/config.yml: permission denied" instead of reporting cleanly that the forge is not authenticated by design
+    context: |
+      Measured on yoga 2026-10-09T19:20Z, forge on v56.10.9.1. mountinfo shows
+      both as tmpfs size=1m,mode=700,uid=524288,gid=524288 (root in the
+      container's userns); ls -ld shows root root drwx------. The tmpfs is the
+      intended quarantine (.tmpfs("/home/forge/.config/gh:size=1m,mode=0700")
+      in crates/tillandsias-headless/src/main.rs), but without a forge-user
+      owner gh cannot even read an empty config, and an agent reading
+      "permission denied" reasonably concludes the forge is broken and starts
+      debugging credentials it is not supposed to have.
+    exit_criteria:
+      - 'as the forge user, "gh auth status" either reports not-logged-in cleanly (no "permission denied"), or the directories are absent or forge-owned; pre-fix: yoga 2026-10-09T19:20Z, "failed to read configuration: open /home/forge/.config/gh/config.yml: permission denied"'
+      - 'the quarantine still holds: no host gh config or ssh key is visible in the forge, and nothing written there survives the container'
+    unscoreable: "unpinnable-until-the-guard-exists: future forge litmus that runs gh auth status as uid forge and asserts no 'permission denied' and an empty forge-owned ~/.config/gh and ~/.ssh; pre-fix result: permission denied, root:root 0700. NEGATIVE CONTROL: the host's gh hosts.yml is not readable from the forge."
+    depends_on: []
+    next_action: >
+      Give both tmpfs mounts the forge user as owner (podman tmpfs U or
+      uid=/gid= options, or a chown in the entrypoint), keeping mode 0700 and
+      size=1m.
+    events:
+      - type: filed
+        ts: "2026-10-09T19:32:28Z"
+        agent_id: forge-forge-tillandsias-claude-20261009t193211z
+        host: yoga
+        summary: |-
+          Filed at the coordinator's direction (p2, pickup linux) from the first forge on stable v56.10.9.1 (yoga).

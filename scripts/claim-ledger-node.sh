@@ -2,6 +2,10 @@
 # freshness: refreshed 2026-07-24 forge-bigpickle-20260724
 set -uo pipefail
 
+# ORDER 1255-s4im: a floor host's first plan-lane action arms its push guards
+# (bash-only, silent when they already are, never fails this script).
+bash "$(dirname "${BASH_SOURCE[0]}")/ensure-hooks.sh" --prelude || true
+
 # @trace spec:meta-orchestration
 #
 ##Agent-Affordance:

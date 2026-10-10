@@ -1,0 +1,70 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found 2026-10-09 by tlatoanis-macbook-air from the operator's own v56.10.9.1 Claude launch (logs: guest console + tray.log); filed on the coordinator's ruling.
+packets:
+  - packet_id: macos-claude-launch-hangs-silently-when-the-claude-login-window-expires-and-the-tray-stays-on-building-forge
+    order: 1571-lgex
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [claude-login, forge, attach, macos-tray, ux, end-user]
+    estimated_hours: 4
+    title: |
+      A Claude launch whose sign-in window expires leaves the attach terminal wedged with no message, and the tray on "Building Forge" for minutes; the end user experiences a timeout and a crashed terminal
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-10-09 (v56.10.9.1, d3e8c8729), the operator's own launch after a default (FULL-reset) curl install:
+      - 21:28:27Z tray click: Attach Claude on 8007342/tillandsias.org.
+      - 21:28:37-21:31:45 the guest rebuilds router, inference, forge-base (147 s) and forge images (the reset destroyed them).
+      - 21:32:54.47 container tillandsias-claude-login-13575 (forge image) starts; the reset wiped the Vault, so the Claude credential is gone.
+      - 21:37:54.68 it dies, 300.2 s later, and its podman secret is removed: a 5-minute login window expired.
+      - 21:37:55 one short git container, then nothing until the operator quits at 21:40:44 with vm-status still "Building Forge" (3 min stuck, no message). The operator saw a timeout and a wedged terminal, and killed it.
+      The 300 s window is NOT tillandsias-headless cloudflare_login.rs LOGIN_WINDOW, and the 300 s wait_phase_ready calls in macos-tray diagnose.rs are unrelated. Not yet located.
+    exit_criteria:
+      - 'when the Claude-login window expires, the attach terminal prints a plain end-user line saying the sign-in timed out and to try again, then exits (pre-fix: no line, the terminal stays attached; 21:37:54 -> 21:40:44 on 2026-10-09)'
+      - 'the tray leaves "Building Forge" within 10 s of the login container dying (pre-fix: still "Building Forge" 170 s later, until the user quit)'
+    unscoreable: "unpinnable-until-the-guard-exists: the window is not located yet; the fixture is written with the fix (pre-fix result: no expiry line, tray stuck on Building Forge)"
+    depends_on: []
+    next_action: >
+      Locate the 300 s window: check the claude-login container's own timeout
+      inside the forge image (images/default/*claude*, provider-oauth-vault.sh,
+      the claude auth login --claudeai call) and the headless --claude-login launcher.
+      Then make the expiry reach the attach terminal as one end-user line plus
+      an exit, and move the tray's vm-status off "Building Forge".
+    provenance: |
+      Filed by tlatoanis-macbook-air on macuahuitl's ruling, 2026-10-09; evidence copied before relaunch.
+    events:
+      - type: filed
+        ts: "2026-10-09T21:43:50Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Operator's Claude launch: the login window expired at 300 s, and the terminal and tray stayed wedged with no message.
+
+  - packet_id: first-launch-after-a-reset-serializes-image-builds-and-model-pulls-ahead-of-the-claude-login-prompt
+    order: 1571-fl8t
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [forge, inference, first-launch, ux, images]
+    estimated_hours: 4
+    title: |
+      The first Claude launch after a reset waits ~4.5 min (image builds + a 1.55 GB ollama asset + a 397 MB model pull) before the user sees any login prompt
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-10-09 (v56.10.9.1): click at 21:28:27Z, and the claude-login container started at 21:32:54Z. In between: router/inference/forge-base/forge image builds (21:28:37-21:31:45), then the inference container fetched a 1.55 GB ollama release asset (60 s) and pulled qwen2.5:0.5b (397 MB), all in front of the login.
+    exit_criteria:
+      - 'after a reset, the Claude login prompt is reachable without waiting on the inference model pull (pre-fix: the login container starts only after inference has started its 1.55 GB + 397 MB downloads; 4m27s from click to login on 2026-10-09)'
+    unscoreable: "unpinnable-until-the-guard-exists: a first-launch timing fixture is written with the fix (pre-fix result: 4m27s from click to login container)"
+    depends_on: []
+    next_action: >
+      Map the attach path's ordering (which ensure steps gate the login), and
+      move the inference bring-up and model pull off the login's critical path.
+    provenance: |
+      Filed by tlatoanis-macbook-air on macuahuitl's ruling, 2026-10-09.
+    events:
+      - type: filed
+        ts: "2026-10-09T21:43:50Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          The first launch after a reset serialises image builds and model pulls ahead of the login prompt.

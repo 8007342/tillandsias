@@ -10484,6 +10484,7 @@ fn run_reset_state(_debug: bool) -> Result<(), String> {
 /// `--reset-guest` is deliberately NOT changed. It documents "images are
 /// preserved, so this is fast when they still exist" and callers rely on that;
 /// this flag is the stronger sibling, not a redefinition.
+// @trace spec:host-state-lifecycle
 #[cfg(target_os = "linux")]
 fn run_reset_state(debug: bool) -> Result<(), String> {
     // Order 1437-qza3, aligned to host-state-lifecycle as amended by 1443-bs9z.
@@ -10579,6 +10580,111 @@ fn reset_state_plan(
         "the installed tillandsias binary itself",
     ];
     (destroyed, preserved)
+}
+
+/// The nonce of a macOS SOFT reset request this guest has not acted on yet,
+/// or `None` (order 1437-8c6p / 1437-av8u). Pure, so the once-per-request rule
+/// is tested without a guest: an absent or empty request is no request, and a
+/// request whose nonce equals the last handled one was already applied.
+#[cfg(any(target_os = "linux", test))]
+fn pending_soft_reset_nonce(request: Option<&str>, handled: Option<&str>) -> Option<String> {
+    let nonce = request.map(str::trim).filter(|n| !n.is_empty())?;
+    if handled.map(str::trim) == Some(nonce) {
+        return None;
+    }
+    Some(nonce.to_string())
+}
+
+/// The guest half of the macOS SOFT reset (order 1437-8c6p / 1437-av8u,
+/// host-state-lifecycle "macOS SOFT reset keeps the guest, the store and the
+/// downloads"). The host tray cannot run a command in the guest (order 272),
+/// so its `--reset-state` leaves a request with a nonce in the read-only
+/// guest-bin share, and the daemon applies it HERE, once per nonce, before it
+/// binds the control wire.
+///
+/// DERIVED state only, the Linux SOFT reset's destroyed set without its
+/// trailing init: `podman system reset --force`, the build markers, and the
+/// enclave resolver drop-in (derived from the network the reset destroys;
+/// left behind it points every lookup at an address that answers nothing —
+/// measured on yolanda's Windows guest 2026-10-08). The Vault store is a
+/// directory under the cache dir that the podman reset cannot reach.
+///
+/// NO INIT HERE, for the reason Windows' `soft_wipe_guest` gives: an init
+/// before the tray has delivered the Keychain share meets the "store without
+/// its share is rebuilt" guard and destroys the very store SOFT keeps. Running
+/// before the bind means the tray connects to a daemon that has already wiped,
+/// delivers the share, and only then does the vault bootstrap.
+///
+/// A failed wipe is reported and the nonce is NOT recorded, so the next start
+/// retries; the daemon still starts, because a guest that cannot serve the wire
+/// cannot be reached by the tray at all.
+#[cfg(target_os = "linux")]
+fn apply_pending_soft_reset(request: &Path, handled: &Path, debug: bool) {
+    let read = |p: &Path| fs::read_to_string(p).ok();
+    let Some(nonce) = pending_soft_reset_nonce(read(request).as_deref(), read(handled).as_deref())
+    else {
+        return;
+    };
+    eprintln!("[tillandsias] soft-reset request {nonce}: podman system reset --force ...");
+    let mut reset_cmd = podman_command();
+    reset_cmd.args(["system", "reset", "--force"]);
+    if let Err(e) = run_podman_command(reset_cmd, debug) {
+        eprintln!(
+            "[tillandsias] soft-reset request {nonce}: podman system reset failed ({e}); \
+             will retry at the next start"
+        );
+        return;
+    }
+    if let Err(e) = run_cache_clear(debug) {
+        eprintln!("[tillandsias] soft-reset request {nonce}: build markers: {e}");
+    }
+    if fs::remove_file(ENCLAVE_RESOLVED_CONF).is_ok() {
+        let mut restart = Command::new("systemctl");
+        restart.args(["try-restart", "systemd-resolved"]);
+        let _ = run_command(restart, debug);
+    }
+    if let Some(parent) = handled.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    match fs::write(handled, format!("{nonce}\n")) {
+        Ok(()) => eprintln!(
+            "[tillandsias] soft-reset request {nonce}: derived state wiped \u{2713} — Vault store kept"
+        ),
+        Err(e) => eprintln!(
+            "[tillandsias] soft-reset request {nonce}: wiped, but recording {} failed: {e}",
+            handled.display()
+        ),
+    }
+}
+
+#[cfg(test)]
+mod soft_reset_request_tests {
+    use super::pending_soft_reset_nonce as pending;
+
+    /// Once per request: a new nonce is pending, the same nonce after it was
+    /// handled is not, and no request (or an empty one) never wipes anything.
+    /// Pre-fix: no guest half existed, so a macOS SOFT reset could not wipe the
+    /// guest's derived state at all.
+    #[test]
+    fn a_request_is_applied_once_per_nonce() {
+        assert_eq!(pending(Some("n1\n"), None), Some("n1".to_string()));
+        assert_eq!(pending(Some("n2\n"), Some("n1\n")), Some("n2".to_string()));
+        assert_eq!(pending(Some("n1\n"), Some("n1\n")), None);
+        assert_eq!(pending(None, Some("n1\n")), None);
+        assert_eq!(pending(Some("  \n"), None), None);
+    }
+
+    /// The guest reads the request where the host writes it: the guest-bin
+    /// share, under the core constant both sides use.
+    #[test]
+    fn the_guest_reads_the_request_from_the_guest_bin_share() {
+        use tillandsias_core::guest_bin_path as g;
+        assert_eq!(
+            g::GUEST_SOFT_RESET_REQUEST,
+            format!("{}/{}", g::GUEST_BIN_MOUNT, g::SOFT_RESET_REQUEST_FILE)
+        );
+        assert!(!g::GUEST_SOFT_RESET_HANDLED.starts_with(g::GUEST_BIN_MOUNT));
+    }
 }
 
 fn run_reset_guest(debug: bool) -> Result<(), String> {
@@ -11446,6 +11552,82 @@ impl CodexDeviceQrScanner {
     }
 }
 
+/// Rows in one [`big_glyph`].
+const BIG_GLYPH_ROWS: usize = 5;
+
+/// A 5x5 block glyph for one device-code character (order 1569-bgcd).
+/// GitHub user codes are `XXXX-XXXX` over upper-case letters and digits; a
+/// lower-case letter is drawn as its capital, and anything else as `?` so a
+/// surprise character is visible instead of silently blank. Zero is slashed
+/// so it can never be read as O.
+fn big_glyph(c: char) -> [&'static str; BIG_GLYPH_ROWS] {
+    match c.to_ascii_uppercase() {
+        'A' => [" ### ", "#   #", "#####", "#   #", "#   #"],
+        'B' => ["#### ", "#   #", "#### ", "#   #", "#### "],
+        'C' => [" ####", "#    ", "#    ", "#    ", " ####"],
+        'D' => ["#### ", "#   #", "#   #", "#   #", "#### "],
+        'E' => ["#####", "#    ", "#### ", "#    ", "#####"],
+        'F' => ["#####", "#    ", "#### ", "#    ", "#    "],
+        'G' => [" ####", "#    ", "#  ##", "#   #", " ####"],
+        'H' => ["#   #", "#   #", "#####", "#   #", "#   #"],
+        'I' => ["#####", "  #  ", "  #  ", "  #  ", "#####"],
+        'J' => ["#####", "   # ", "   # ", "#  # ", " ##  "],
+        'K' => ["#   #", "#  # ", "###  ", "#  # ", "#   #"],
+        'L' => ["#    ", "#    ", "#    ", "#    ", "#####"],
+        'M' => ["#   #", "## ##", "# # #", "#   #", "#   #"],
+        'N' => ["#   #", "##  #", "# # #", "#  ##", "#   #"],
+        'O' => [" ### ", "#   #", "#   #", "#   #", " ### "],
+        'P' => ["#### ", "#   #", "#### ", "#    ", "#    "],
+        'Q' => [" ### ", "#   #", "# # #", "#  # ", " ## #"],
+        'R' => ["#### ", "#   #", "#### ", "#  # ", "#   #"],
+        'S' => [" ####", "#    ", " ### ", "    #", "#### "],
+        'T' => ["#####", "  #  ", "  #  ", "  #  ", "  #  "],
+        'U' => ["#   #", "#   #", "#   #", "#   #", " ### "],
+        'V' => ["#   #", "#   #", "#   #", " # # ", "  #  "],
+        'W' => ["#   #", "#   #", "# # #", "## ##", "#   #"],
+        'X' => ["#   #", " # # ", "  #  ", " # # ", "#   #"],
+        'Y' => ["#   #", " # # ", "  #  ", "  #  ", "  #  "],
+        'Z' => ["#####", "   # ", "  #  ", " #   ", "#####"],
+        '0' => [" ### ", "#  ##", "# # #", "##  #", " ### "],
+        '1' => ["  #  ", " ##  ", "  #  ", "  #  ", " ### "],
+        '2' => [" ### ", "#   #", "  ## ", " #   ", "#####"],
+        '3' => ["#### ", "    #", " ### ", "    #", "#### "],
+        '4' => ["#   #", "#   #", "#####", "    #", "    #"],
+        '5' => ["#####", "#    ", "#### ", "    #", "#### "],
+        '6' => [" ### ", "#    ", "#### ", "#   #", " ### "],
+        '7' => ["#####", "    #", "   # ", "  #  ", "  #  "],
+        '8' => [" ### ", "#   #", " ### ", "#   #", " ### "],
+        '9' => [" ### ", "#   #", " ####", "    #", " ### "],
+        '-' => ["     ", "     ", " ### ", "     ", "     "],
+        _ => [" ### ", "#   #", "  ## ", "     ", "  #  "],
+    }
+}
+
+/// The one-time code drawn in large block letters (order 1569-bgcd): the
+/// operator failed a GitHub device login several times on 2026-10-09 because
+/// the one-line code was too hard to read. Five rows of `█`, blush on a colour
+/// tier; the Plain tier carries no escape bytes, matching the QR beside it.
+/// The caller still prints the plain one-line code, so it stays copyable.
+fn big_user_code(code: &str, tier: tillandsias_progress_tty::Tier) -> String {
+    let open = qr_sgr(tier, tillandsias_progress_tty::palette::TIP_BLUSH, None);
+    let mut out = String::new();
+    for row in 0..BIG_GLYPH_ROWS {
+        let mut line = String::from("  ");
+        for c in code.chars() {
+            line.push_str(&big_glyph(c)[row].replace('#', "█"));
+            line.push(' ');
+        }
+        let line = line.trim_end();
+        if open.is_empty() {
+            out.push_str(line);
+        } else {
+            out.push_str(&format!("{open}{line}\x1b[0m"));
+        }
+        out.push('\n');
+    }
+    out
+}
+
 /// The one-time code, in blush on a colour tier and plain otherwise.
 fn styled_user_code(code: &str, tier: tillandsias_progress_tty::Tier) -> String {
     let open = qr_sgr(tier, tillandsias_progress_tty::palette::TIP_BLUSH, None);
@@ -11678,6 +11860,9 @@ fn run_github_device_login(container: &str, debug: bool) -> Result<(), String> {
     print!("{qr_code_str}");
     println!();
     println!("  Or in any browser, visit: {}", dc.verification_uri);
+    println!("  Enter this one-time code:\n");
+    print!("{}", big_user_code(&dc.user_code, tier));
+    println!();
     println!(
         "  Enter one-time code:      {}\n",
         styled_user_code(&dc.user_code, tier)
@@ -12299,6 +12484,35 @@ fn run_codex_device_login_with_qr(
     }
 }
 
+/// ORDER 1571-lgex. What an end user sees, and what the tray's status label
+/// becomes, when a provider's interactive sign-in step ends without a
+/// credential — most often because its window expired (Claude closes it at
+/// 300 s). One plain line: no flag or variable names (operator rule,
+/// 2026-10-08), and it says what to do next.
+#[derive(Debug, PartialEq, Eq)]
+struct SignInUnfinished {
+    terminal_line: String,
+    status_event: &'static str,
+}
+
+impl SignInUnfinished {
+    /// The tray paints this as the VM status event, replacing the last build
+    /// label; `run_provider_login` pushes it before the login container is
+    /// removed, so the tray recovers at once instead of staying on
+    /// "Building Forge" (measured 2026-10-09: 170 s and counting).
+    const STATUS_EVENT: &'static str = "Sign-in did not finish";
+
+    fn for_provider(provider_name: &str) -> Self {
+        Self {
+            terminal_line: format!(
+                "{provider_name} sign-in did not finish (it may have timed out). \
+                 Choose it again in the Tillandsias menu to try again."
+            ),
+            status_event: Self::STATUS_EVENT,
+        }
+    }
+}
+
 fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), String> {
     let provider_name = config.provider.name();
     let flag = format!("--{}-login", config.provider.id_str());
@@ -12500,12 +12714,25 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             &config.token_script,
             config.input_mode,
         ));
-        if matches!(config.provider, ProviderId::Codex)
+        let interactive = if matches!(config.provider, ProviderId::Codex)
             && matches!(config.input_mode, LoginInputMode::Terminal)
         {
-            run_codex_device_login_with_qr(login, debug)?;
+            run_codex_device_login_with_qr(login, debug)
         } else {
-            run_podman_command(login, debug)?;
+            run_podman_command(login, debug)
+        };
+        // ORDER 1571-lgex. This step waits on the PERSON: the provider CLI
+        // holds its sign-in window open (Claude's closes at 300 s) and exits
+        // non-zero when it expires. Its raw error is a podman exec line, and
+        // the tray's status label was left on whatever the last build pushed
+        // ("Building Forge"), so an expired window read as a wedge. Name it.
+        if let Err(detail) = interactive {
+            let unfinished = SignInUnfinished::for_provider(provider_name);
+            if debug {
+                eprintln!("[tillandsias] {provider_name} sign-in step failed: {detail}");
+            }
+            push_udp_event(unfinished.status_event);
+            return Err(unfinished.terminal_line);
         }
     }
 
@@ -19482,6 +19709,10 @@ fn maybe_spawn_vsock_listener(
                 let mut buf = [0; 1024];
                 while let Ok((len, _)) = socket.recv_from(&mut buf).await {
                     if let Ok(msg) = std::str::from_utf8(&buf[..len]) {
+                        // ORDER 1571-lgex: name every pushed status in the
+                        // guest log. An expired sign-in used to leave no
+                        // trace here at all.
+                        eprintln!("[tillandsias] status event: {msg}");
                         udp_state.set_last_event(msg.to_string());
                     }
                 }
@@ -19618,6 +19849,19 @@ async fn run_headless_async(
             "[tillandsias] preflight vsock_loopback {}",
             probe_vsock_loopback()
         );
+        // 1437-8c6p: a host SOFT reset's guest half runs BEFORE the bind (see
+        // apply_pending_soft_reset for why the order matters).
+        #[cfg(target_os = "linux")]
+        {
+            let _ = tokio::task::spawn_blocking(|| {
+                apply_pending_soft_reset(
+                    Path::new(tillandsias_core::guest_bin_path::GUEST_SOFT_RESET_REQUEST),
+                    Path::new(tillandsias_core::guest_bin_path::GUEST_SOFT_RESET_HANDLED),
+                    false,
+                )
+            })
+            .await;
+        }
     }
     // @trace spec:vsock-transport — when `--listen-vsock <PORT>` was supplied,
     // bind the control wire on virtio-vsock instead of the Linux Unix socket.
@@ -25084,6 +25328,61 @@ mod tests {
         );
     }
 
+    /// ORDER 1571-lgex. The interactive sign-in step waits on the person and
+    /// its window expires (Claude: 300 s). Pre-fix its error propagated raw
+    /// with `?` — a podman exec line on the user's terminal and no status
+    /// push, so the tray stayed on "Building Forge". Scanned in the SOURCE so
+    /// this arm compiles, and fails, against the pre-fix tree.
+    #[test]
+    fn an_unfinished_sign_in_step_is_named_and_pushed_not_propagated_raw() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let login_window = source_window(
+            source,
+            "fn run_provider_login(config: &ProviderLoginConfig, debug: bool)",
+        );
+        for raw in [
+            "run_podman_command(login, debug)?",
+            "run_codex_device_login_with_qr(login, debug)?",
+        ] {
+            assert!(
+                !login_window.contains(raw),
+                "the interactive sign-in step must not propagate its raw error ({raw}); \
+                 an expired window must reach the user as one plain line (1571-lgex)"
+            );
+        }
+        assert!(
+            login_window.contains("push_udp_event(unfinished.status_event)"),
+            "an unfinished sign-in must push a status event so the tray leaves the last \
+             build label (1571-lgex)"
+        );
+    }
+
+    /// ORDER 1571-lgex. The end-user line: one line, names the provider, says
+    /// what to do, and carries no flag, variable or podman text.
+    #[test]
+    fn the_sign_in_unfinished_line_is_plain_and_actionable() {
+        for provider in [
+            ProviderId::Claude,
+            ProviderId::Codex,
+            ProviderId::Antigravity,
+            ProviderId::GitHub,
+        ] {
+            let u = SignInUnfinished::for_provider(provider.name());
+            let line = &u.terminal_line;
+            assert!(!line.contains('\n'), "one line: {line:?}");
+            assert!(line.starts_with(provider.name()), "{line:?}");
+            assert!(line.contains("try again"), "{line:?}");
+            for banned in ["--", "TILLANDSIAS_", "podman", "exec"] {
+                assert!(
+                    !line.contains(banned),
+                    "{banned:?} in an end-user line: {line:?}"
+                );
+            }
+            assert_eq!(u.status_event, "Sign-in did not finish");
+            assert_ne!(u.status_event, "Building Forge");
+        }
+    }
+
     #[test]
     fn provider_login_persists_only_provider_scoped_tool_cache() {
         let codex = provider_login_tool_cache_mount(&ProviderId::Codex).expect("codex cache mount");
@@ -25368,6 +25667,50 @@ mod tests {
             styled_user_code("ABCD-1234", tillandsias_progress_tty::Tier::TrueColor),
             "\x1b[38;2;232;99;122mABCD-1234\x1b[0m"
         );
+    }
+
+    /// Order 1569-bgcd: the device code is drawn as five rows of block
+    /// letters, one 5-wide glyph per character, and the Plain tier carries no
+    /// escape bytes.
+    #[test]
+    fn big_user_code_draws_five_block_rows_per_character() {
+        use tillandsias_progress_tty::Tier;
+        let code = "WDJB-MJHT";
+        let plain = super::big_user_code(code, Tier::Plain);
+        let rows: Vec<&str> = plain.lines().collect();
+        assert_eq!(rows.len(), super::BIG_GLYPH_ROWS);
+        assert!(!plain.contains('\x1b'), "Plain tier must carry no escapes");
+        assert!(plain.contains('█'));
+        // Two leading spaces, then 9 glyphs of 5 columns with a 1-column gap.
+        let widest = rows.iter().map(|r| r.chars().count()).max().unwrap();
+        assert_eq!(widest, 2 + 9 * 6 - 1);
+        assert!(widest <= 80, "must fit an 80-column terminal");
+        let coloured = super::big_user_code(code, Tier::Ansi256);
+        assert!(coloured.contains("\x1b[0m"));
+        assert_eq!(coloured.lines().count(), super::BIG_GLYPH_ROWS);
+    }
+
+    /// Every character GitHub can put in a user code has its own glyph, and
+    /// no two of them are drawn the same, so the big code can never be more
+    /// ambiguous than the small one (O and 0 in particular).
+    #[test]
+    fn big_glyphs_are_distinct_and_cover_the_code_alphabet() {
+        let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-";
+        let unknown = super::big_glyph('?');
+        let mut seen = std::collections::HashMap::new();
+        for c in alphabet.chars() {
+            let g = super::big_glyph(c);
+            assert_ne!(g, unknown, "{c} fell through to the unknown glyph");
+            assert!(
+                g.iter().all(|r| r.chars().count() == 5),
+                "{c} is not 5 wide"
+            );
+            if let Some(prev) = seen.insert(g, c) {
+                panic!("{c} and {prev} share a glyph");
+            }
+        }
+        assert_eq!(super::big_glyph('a'), super::big_glyph('A'));
+        assert_ne!(super::big_glyph('O'), super::big_glyph('0'));
     }
 
     /// The tier decision itself: NO_COLOR and a non-TTY each force Plain.
@@ -26010,7 +26353,9 @@ mod tests {
                 .unwrap_or_else(|| panic!("run_provider_login must contain {needle:?}"))
         };
         let stdin_identity_idx = find("Some(resolve_existing_git_identity()?)");
-        let login_exec_idx = find("run_podman_command(login, debug)?");
+        // 1571-lgex: the exec's error is mapped, not `?`-propagated, so anchor
+        // on the call itself.
+        let login_exec_idx = find("run_podman_command(login, debug)");
         let verify_persisted_idx = find("in-container vault write verification failed");
         let terminal_identity_idx = find("None => prompt_and_store_git_identity()");
         let stdin_store_idx = find("store_git_identity(&name, &email)");
