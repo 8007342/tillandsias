@@ -4521,6 +4521,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Shell ratchet passed"
 
+    _step "Checking the litmus step model (901-jtvi)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-step-model.sh" 2>&1; then
+        _error "the litmus step model regressed — a producer's failure or its stderr can go missing again (901-jtvi)"
+        exit 1
+    fi
+    _info "Litmus step-model fixture passed"
+
     # ORDER 1577-g96z — what THIS change owes each carried obligation
     # (methodology/convergence.yaml carried_obligations; shell-to-lua is at
     # stage gentle). One carried:<backlog>:<not-due|paid|waived|due> line per
@@ -4544,13 +4551,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Carried-obligation fixture passed"
-
-    _step "Checking the litmus step model (901-jtvi)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-step-model.sh" 2>&1; then
-        _error "the litmus step model regressed — a producer's failure or its stderr can go missing again (901-jtvi)"
-        exit 1
-    fi
-    _info "Litmus step-model fixture passed"
 
     _step "Checking every litmus definition parses (933-4gm8)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-yaml-parses.sh" 2>&1; then

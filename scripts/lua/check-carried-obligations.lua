@@ -45,6 +45,9 @@
 -- the one offered is picked by the work ref's order modulo five so two
 -- concurrent changes are not steered onto the same file.
 --
+-- WRAPPERS are sized as their exec'd callee, so a 4-line exec shim onto a
+-- 450-line script is not offered as small (`wrapper-of:<callee>` on stderr).
+--
 -- TAKEN ITEMS are skipped: a .sh another open origin/work/* ref deletes is
 -- never offered, and each skip prints `taken-by:work/<ref> <item>` on stderr
 -- (two hosts ported the same offered item on 2026-10-10). Only refs fetched
@@ -195,11 +198,34 @@ local function taken_items()
     return taken_cache
 end
 
+-- A WRAPPER is sized as what it execs: check-macos-only-sources-verified.sh
+-- is 4 lines that `exec` the 450-line, unported windows-only sibling, so it
+-- cannot be ported alone (measured by the Mac, 2026-10-10). A candidate whose
+-- code lines `exec` a scripts/*.sh is given its callee's size, and when that
+-- puts it over the ceiling it is skipped with `wrapper-of:<callee>`.
+local function wrapper_callee(path)
+    local ok_r, c = pcall(fs.read, path)
+    if not ok_r then return nil end
+    for _, l in ipairs(text.lines(c)) do
+        if not l:match("^%s*#") then
+            local callee = l:match("^%s*exec%s.-([%w%-_.]+%.sh)")
+            if callee and fs.exists("scripts/" .. callee) and "scripts/" .. callee ~= path then return "scripts/" .. callee end
+        end
+    end
+    return nil
+end
+
 local function candidates(pop, ceiling)
     local items = {}
     local taken = taken_items()
     for _, f in ipairs(pop) do
         local n = line_count(f)
+        local callee = n and n <= ceiling and wrapper_callee(f) or nil
+        if callee then
+            local cn = line_count(callee) or 0
+            if cn > n then n = cn end
+            if n > ceiling then log.raw("  wrapper-of:" .. callee .. " " .. f .. " (sized as its callee, " .. cn .. " lines)") end
+        end
         if n and n <= ceiling and taken[f] then
             log.raw("  taken-by:" .. taken[f] .. " " .. f)
         elseif n and n <= ceiling then

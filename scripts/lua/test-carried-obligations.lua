@@ -27,6 +27,8 @@
 --   9 TAKEN      an open origin/work/* ref that deletes the smallest item makes
 --                the guard skip it (`taken-by:work/<ref>` on stderr) and offer
 --                another; two hosts ported the same offered item on 2026-10-10.
+--  10 WRAPPER    a tiny exec shim onto a big script is sized as the big one, is
+--                not offered, and is named `wrapper-of:<callee>`.
 --
 -- PRE-GUARD CODE FAILS IT: with no check-carried-obligations.lua the first arm
 -- refuses the whole fixture, never a skip.
@@ -201,6 +203,18 @@ check("TAKEN: the item another open work ref deletes is skipped with taken-by on
         and not e:find("    scripts/check-y.sh (", 1, true),
     "rc=" .. rc .. " offered=[" .. tostring(offered) .. "] err=[" .. e .. "]")
 G({ "update-ref", "-d", "refs/remotes/origin/work/9999-take" })
+
+-- 10. WRAPPER: a tiny exec shim onto a big script is sized as the big one
+change("work/1001-wrap")
+write("scripts/check-big.sh", n_lines("b", 200))
+write("scripts/check-shim.sh", '#!/usr/bin/env bash\nexec "$(dirname "$0")/check-big.sh" "$@"\n')
+write("scripts/check-x.sh", n_lines("x", 10) .. "echo w\n")
+G({ "add", "-A" }); G({ "commit", "-qm", "a shim, a big script, and an edit" })
+rc, o, e = judge(false)
+check("WRAPPER: a 2-line exec shim onto a 200-line script is not offered as small, and is named wrapper-of",
+    rc == 0 and not o:find("check-shim.sh", 1, true) and not e:find("    scripts/check-shim.sh (", 1, true)
+        and e:find("wrapper-of:scripts/check-big.sh scripts/check-shim.sh", 1, true) ~= nil,
+    "rc=" .. rc .. " out=[" .. o .. "] err=[" .. e .. "]")
 
 run({ "rm", "-rf", R })
 
