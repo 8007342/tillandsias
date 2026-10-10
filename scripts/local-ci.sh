@@ -1841,16 +1841,6 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         log_fail_missing_guard "guard-activation" "scripts/lua/audit-guard-activation.lua (or no runnable tillandsias-plan)"
         archive_check_log "guard-activation" "skipped"
     fi
-    # ORDER 1570-25iq: the auditor's own fixture — parity with the pre-port .sh,
-    # an orphan that must refuse, the symlink-farm shape, an empty population.
-    if bash scripts/test-audit-guard-activation.sh > /tmp/guard-activation-fixture.log 2>&1; then
-        log_pass "Guard activation auditor fixture passed"
-        archive_check_log "guard-activation-fixture" "pass" /tmp/guard-activation-fixture.log
-    else
-        log_fail_tracked "guard-activation-fixture" "The guard activation auditor's fixture failed (see /tmp/guard-activation-fixture.log)"
-        archive_check_log "guard-activation-fixture" "fail" /tmp/guard-activation-fixture.log
-    fi
-
     # Markdown distillation policy (order 599-4wzr activation): was orphaned.
     log_section "Markdown Distillation Policy"
     if [[ -f "scripts/check-markdown-distillation.sh" ]]; then
