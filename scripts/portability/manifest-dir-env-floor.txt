@@ -27,11 +27,8 @@ crates/tillandsias-plan/src/fragments.rs 1
 crates/tillandsias-plan/src/groundtruth.rs 1
 crates/tillandsias-plan/src/lua_predicate.rs 2
 crates/tillandsias-plan/src/methodology.rs 1
-crates/tillandsias-plan/src/pipeline.rs 2
-crates/tillandsias-plan/src/spec.rs 2
 crates/tillandsias-plan/tests/lua_predicate_classes.rs 3
 crates/tillandsias-plan/tests/lua_proc.rs 1
 crates/tillandsias-plan/tests/lua_source_agreements.rs 1
-crates/tillandsias-plan/tests/lua_std.rs 2
 crates/tillandsias-podman/src/lib.rs 1
 crates/tillandsias-vault-client/src/policy.rs 1
