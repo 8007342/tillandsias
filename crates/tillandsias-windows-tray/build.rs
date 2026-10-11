@@ -229,17 +229,11 @@ fn main() {
     println!("cargo:rerun-if-env-changed=BUILD_COMMIT_SHA_OVERRIDE");
     let override_mode = std::env::var("BUILD_COMMIT_SHA_OVERRIDE").is_ok();
     if !override_mode {
-        println!("cargo:rerun-if-changed=../../.git/HEAD");
-        let git_dir = manifest_dir_path.join("../../.git");
-        if let Ok(head) = std::fs::read_to_string(git_dir.join("HEAD"))
-            && let Some(ref_path) = head.trim().strip_prefix("ref: ")
-        {
-            println!("cargo:rerun-if-changed=../../.git/{ref_path}");
-        }
-        // Refs can also live packed (git gc/pack-refs); only track the file when
-        // it exists — cargo re-runs unconditionally for a tracked-but-missing path.
-        if git_dir.join("packed-refs").exists() {
-            println!("cargo:rerun-if-changed=../../.git/packed-refs");
+        // 1603-iwh2: HEAD, the ref it names and packed-refs at the paths git
+        // reports (a linked worktree has no ../../.git directory), existing
+        // ones only — see git_rerun_paths.
+        for path in git_rerun_paths(&manifest_dir_path) {
+            println!("cargo:rerun-if-changed={}", path.display());
         }
     }
     let build_commit = std::env::var("BUILD_COMMIT_SHA_OVERRIDE").unwrap_or_else(|_| {
@@ -601,4 +595,50 @@ fn generate_resource_rc(
     let path = std::path::PathBuf::from(&out_dir).join("tillandsias-generated.rc");
     std::fs::write(&path, rc).ok()?;
     Some(path)
+}
+
+/// ORDER 1603-iwh2. The git files that decide `git rev-parse HEAD`, at the
+/// paths git itself uses, and only those that EXIST. `../../.git/HEAD` is
+/// wrong in a linked worktree, where `.git` is a FILE: cargo saw a tracked
+/// path that is missing and re-ran this build script on every invocation,
+/// rebuilding the tray crate each time (10-15 s per tray-building command in
+/// every wt-* gate and preflight, measured with the fingerprint trace
+/// "the file `…/../../.git/HEAD` is missing"). `git rev-parse --git-path`
+/// answers for both layouts: HEAD is per-worktree (.git/worktrees/<name>/HEAD),
+/// the ref it names and packed-refs live in the common dir.
+fn git_rerun_paths(manifest_dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let git_path = |p: &str| -> Option<std::path::PathBuf> {
+        let out = std::process::Command::new("git")
+            .args(["rev-parse", "--git-path", p])
+            .current_dir(manifest_dir)
+            .output()
+            .ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        let s = String::from_utf8(out.stdout).ok()?;
+        let path = std::path::PathBuf::from(s.trim());
+        let path = if path.is_absolute() {
+            path
+        } else {
+            manifest_dir.join(path)
+        };
+        path.exists().then_some(path)
+    };
+    let mut paths = Vec::new();
+    if let Some(head) = git_path("HEAD") {
+        if let Ok(text) = std::fs::read_to_string(&head)
+            && let Some(r) = text.trim().strip_prefix("ref: ")
+            && let Some(ref_file) = git_path(r)
+        {
+            paths.push(ref_file);
+        }
+        paths.push(head);
+    }
+    // Refs can also live packed (git gc/pack-refs); tracked only when present,
+    // because cargo re-runs unconditionally for a tracked-but-missing path.
+    if let Some(packed) = git_path("packed-refs") {
+        paths.push(packed);
+    }
+    paths
 }
