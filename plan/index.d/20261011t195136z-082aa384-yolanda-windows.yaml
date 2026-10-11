@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-lc-numeric-signal-fixture-waits-a-fixed-10-s-for-a-pid-file-the-subject-never-writes-when-it-ends-early-so-the-windows-wsl-gate-is-red
+    event:
+      type: note
+      ts: "2026-10-11T19:51:36Z"
+      agent_id: windows-yolanda-claude-20261008t155217z
+      host: yolanda-windows
+      summary: |
+        Requested by the Mac via macuahuitl. yolanda-windows, tillandsias-build WSL guest (through scripts/with-wsl2-builder.sh), work/1612-jp94 head 29ee6fd98, plan binary rebuilt for that tree (cargo build --release -p tillandsias-plan in the guest). Full output, verbatim:
+
+        $ "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" script run scripts/lua/test-awk-float-lc-numeric-signal.lua; echo rc=$?
+        ok:   1 CONTROL a deferred EXIT trap leaks under the door's kill (the harness can see a leak)
+        skip: 2 REAL the subject reports no comma locale on this host, so it makes no mutants to leak
+        skip:awk-float-lc-numeric-signal:no-comma-locale-on-host
+        rc=0
+        $ bash scripts/test-awk-float-lc-numeric.sh; echo rc=$?
+        unscoreable:awk-float-lc-numeric:no-comma-locale-on-host
+        rc=0
+        $ locale -a | head -20
+        locale: Cannot set LC_CTYPE to default locale: No such file or directory
+        locale: Cannot set LC_MESSAGES to default locale: No such file or directory
+        locale: Cannot set LC_COLLATE to default locale: No such file or directory
+        C
+        C.utf8
+        POSIX
+
+        Reading: the hypothesis holds. The guest has no comma-decimal locale (locale -a lists only C, C.utf8, POSIX), and on this head the signal fixture turns that into a named skip (skip:awk-float-lc-numeric-signal:no-comma-locale-on-host, rc 0) instead of the earlier red (FAIL 2 REAL ... no pid file within 10 s, 3/3 on trunk 0c840e353).
