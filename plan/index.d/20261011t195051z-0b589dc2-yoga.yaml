@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: taken-by-and-forge-scans-consult-the-mirrors-diverged-markers-and-report-a-diverged-ref-as-taken-by-unknown
+    field: status
+    value: completed
+    ts: "2026-10-11T19:50:51Z"
+    host: yoga
+
+events:
+  - packet_id: taken-by-and-forge-scans-consult-the-mirrors-diverged-markers-and-report-a-diverged-ref-as-taken-by-unknown
+    event:
+      type: completed
+      ts: "2026-10-11T19:50:51Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 69167a303
+  - packet_id: taken-by-and-forge-scans-consult-the-mirrors-diverged-markers-and-report-a-diverged-ref-as-taken-by-unknown
+    event:
+      type: note
+      ts: "2026-10-11T19:50:51Z"
+      host: yoga
+      summary: |-
+        landed as #331 (merge 69167a303, gate green). check-carried-obligations.lua fetches refs/tillandsias/diverged/* and reports a mirror-diverged work ref as taken-by-unknown:<ref>:diverged instead of counting it as taken; test-carried-obligations.lua arm 16b, 24/24. Carried obligation paid by a real port: test-git-mirror-seed-failure-surfaced.sh -> Lua, .sh deleted, floor line removed, litmus repointed.
