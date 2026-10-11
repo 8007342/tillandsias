@@ -29,7 +29,7 @@ bad() { echo "FAIL: $1" >&2; fail=$((fail + 1)); }
 strip() { sed 's/\x1b\[[0-9;]*m//g'; }
 
 WT="$(mktemp -d "${TMPDIR:-/tmp}/pre-push-trailer.XXXXXX")" && rmdir "$WT" || exit 2
-trap 'cd / && git -C "$ROOT" worktree remove --force "$WT" >/dev/null 2>&1; rm -rf "$WT"; git -C "$ROOT" worktree prune >/dev/null 2>&1' EXIT
+trap 'cd / && git -C "$ROOT" worktree remove --force "$WT" >/dev/null 2>&1; rm -rf "$WT"' EXIT
 git -C "$ROOT" worktree add --no-checkout --detach -q "$WT" HEAD &&
     git -C "$WT" checkout -q HEAD -- scripts &&
     cp "$HOOK" "$WT/scripts/hooks/pre-push-local-gate.sh" &&

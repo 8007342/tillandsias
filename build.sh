@@ -4533,6 +4533,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Bash dialect gate passed"
 
+    # ORDER 1582-c32p — the dialect gate's case-in-$( ) rule on the shape bash
+    # 3.2 misparses when the `$(` opens MID-line (a continued pipeline) and the
+    # unparenthesised pattern sits lines later; red on it, green on (pat) and
+    # inside single quotes, comments, escaped regexes and awk programs.
+    _step "Checking the dialect gate's open-\$( ) case fixture (1582-c32p)..."
+    if ! _run_lua_decider "scripts/lua/test-bash-dialect-open-cs-case.lua" 2>&1; then
+        _error "the dialect gate no longer refuses an unparenthesised case pattern inside a multi-line \$( ), or refuses a safe form — see the FAIL lines above (1582-c32p)"
+        exit 1
+    fi
+    _info "Dialect open-\$( ) case fixture passed"
+
     # The cheatsheet-reference checker's own fixture (1570-k4fx), a Lua fixture
     # on the one runner: both reference shapes, See-also scoping, a dangling
     # reference refused by name and its negative control, a PATH that resolves
@@ -4618,6 +4629,24 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Carried-obligation fixture passed"
+
+    # ORDER 1581-d9ig — no fixture prunes or gcs the operator's checkout. Two
+    # fixtures' teardown ran `git -C "$ROOT" worktree prune`, which inside the
+    # WSL guest deletes every Windows worktree whose C:/ path the guest cannot
+    # see. A fixture removes its OWN worktree; pruning a scratch repo is fine.
+    _step "Checking no script or litmus step prunes the operator checkout (1581-d9ig)..."
+    if ! _run_lua_decider "scripts/lua/check-fixture-prunes-checkout.lua" 2>&1; then
+        _error "a script or litmus step runs git worktree prune or git gc against the checkout — see the lines above; remove only its own worktree (1581-d9ig)"
+        exit 1
+    fi
+    _info "No fixture prunes the checkout"
+
+    _step "Checking the fixture-prune guard's fixture (1581-d9ig)..."
+    if ! _run_lua_decider "scripts/lua/test-fixture-prunes-checkout.lua" 2>&1; then
+        _error "the fixture-prune guard no longer refuses a root prune or allows a scratch one — see the FAIL lines above (1581-d9ig)"
+        exit 1
+    fi
+    _info "Fixture-prune guard fixture passed"
 
     _step "Checking every litmus definition parses (933-4gm8)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-yaml-parses.sh" 2>&1; then

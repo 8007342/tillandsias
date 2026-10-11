@@ -75,8 +75,6 @@ local ALLOWLIST = {}   -- empty since 761-g36m's burndown; the branch is kept
 -- entry that matches nothing is reported, so the list can only shrink.
 -- key = "<path>|<rule>|<literal substring of the offending line>"
 local SITE_ALLOWLIST = {
-  ["scripts/claim-ledger-node.sh|stat-c|stat -c %Y \"$dir\""] =
-    "ported to Lua under slice C; do not patch",
   -- a '\'-continued condition line: a trailing marker comment would end the continuation
   ["scripts/check-archive-answerability.sh|stat-c|stat -f -c '%T' \"$REPO_ROOT\""] =
     "GNU file-system-mode v9fs probe; BSD fails it to empty, which correctly reads as not-9P",
@@ -205,8 +203,10 @@ local function case_in_cs_sites(raw)
                     local c = rest:sub(k, k)
                     if c == "(" then depth = depth + 1
                     elseif c == ")" then depth = depth - 1
-                    elseif c == "c" and text.is_match(rest:sub(k, k + 4), [=[^case[[:space:]]]=])
-                        and (k == 1 or text.is_match(rest:sub(k - 1, k - 1), [=[[[:space:];&|(]]=])) then
+                    -- byte-wise Lua patterns: a slice may split a UTF-8
+                    -- character, which the regex engine refuses (1582-c32p)
+                    elseif c == "c" and rest:sub(k, k + 4):match("^case%s")
+                        and (k == 1 or rest:sub(k - 1, k - 1):match("[%s;&|(]")) then
                         cpos = k + 5; break
                     end
                     k = k + 1
@@ -219,6 +219,111 @@ local function case_in_cs_sites(raw)
                         if text.is_match(tail, [=[^[[:space:]]*$]=]) then in_case = 1; break end
                         if arms_bad(tail) then out[#out + 1] = tostring(nr); break end
                     end
+                end
+            end
+        end
+        ::continue::
+    end
+    return out
+end
+
+-- ── 1582-c32p: a case inside a $( ) that is LEFT OPEN at the end of a line ──
+-- case_in_cs_sites above reads a `$(` and its case on ONE line, or a line
+-- ENDING in `$(` followed by a `case … in` line. It missed the shape the Mac
+-- measured in images/default/lib-ledger-freshness.sh:51-59:
+--     newest_line="$(git … \
+--         | while read -r _ref _ts; do
+--             case "$_ref" in origin | origin/HEAD) continue ;; esac
+-- where the substitution opens MID-line and the case sits lines later. bash 3.2
+-- ends the $( at the pattern's ')', prints a syntax error, returns rc=0, and the
+-- variable holds SOURCE TEXT. This pass carries shell context ACROSS lines (a
+-- stack of N top / C `$(` / P `(` / S '…' / D "…" frames, and heredoc bodies
+-- skipped), so a `$(` inside single quotes (an awk program, a quoted
+-- `bash -c '…'`), an escaped `\$(` (a regex), or a comment never opens one, and
+-- a pattern is judged only where the shell would read it as code.
+local function cs_scan(s, st)
+    local i, L, prev = 1, #s, " "
+    while i <= L do
+        local top = st[#st]
+        -- jump to the next byte that can change context; `#` needs the byte
+        -- before it, so it is read from s rather than carried
+        local j = s:find(top == "S" and "'" or "[\\'\"#$()]", i)
+        if not j then break end
+        if j > i then prev = s:sub(j - 1, j - 1); i = j end
+        local c = s:sub(i, i)
+        if top == "S" then
+            if c == "'" then st[#st] = nil end
+            i = i + 1
+        elseif c == "\\" then
+            i = i + 2
+        elseif top == "D" then
+            if c == '"' then st[#st] = nil; i = i + 1
+            elseif s:sub(i, i + 2) == "$((" then st[#st + 1] = "P"; st[#st + 1] = "P"; i = i + 3
+            elseif s:sub(i, i + 1) == "$(" then st[#st + 1] = "C"; i = i + 2
+            else i = i + 1 end
+        else
+            if c == "'" then st[#st + 1] = "S"; i = i + 1
+            elseif c == '"' then st[#st + 1] = "D"; i = i + 1
+            elseif c == "#" and prev:match("[%s;&|(]") then break
+            elseif s:sub(i, i + 2) == "$((" then st[#st + 1] = "P"; st[#st + 1] = "P"; i = i + 3
+            elseif s:sub(i, i + 1) == "$(" then st[#st + 1] = "C"; i = i + 2
+            elseif c == "(" then st[#st + 1] = "P"; i = i + 1
+            elseif c == ")" then if top == "C" or top == "P" then st[#st] = nil end; i = i + 1
+            else i = i + 1 end
+        end
+        prev = c
+    end
+end
+local function in_cs(st) for _, f in ipairs(st) do if f == "C" then return true end end; return false end
+local function ml_case_sites(raw)
+    local out, st, hd, hd_dash, in_case = {}, { "N" }, nil, false, 0
+    for nr, s in ipairs(raw) do
+        if hd then
+            local t = hd_dash and s:gsub("^\t+", "") or s
+            if t == hd then hd = nil end
+            goto continue
+        end
+        do
+            local top = st[#st]
+            local code_ctx = top == "C" or top == "P"
+            local skip_scan = false
+            if code_ctx and in_cs(st) and not text.is_match(s, [=[^[[:space:]]*#]=]) and not has(s, "# case-in-cs: ok") then
+                if in_case > 0 then
+                    if text.is_match(s, [=[^[[:space:]]*esac([[:space:];)]|$)]=]) then
+                        in_case = in_case - 1
+                        skip_scan = true
+                    elseif text.is_match(s, CASE_LINE) then
+                        in_case = in_case + 1; skip_scan = true
+                    else
+                        local a, b = text.find(s, [=[^[[:space:]]*[^([:space:]#][^[:space:]]*\)]=])
+                        if a then
+                            local tok = s:sub(a, b)
+                            if not has(tok, "$(") and not has(tok, "=") then out[#out + 1] = tostring(nr) end
+                            s = s:sub(b + 1)
+                        else
+                            local p, q = text.find(s, [=[^[[:space:]]*\([^)]*\)]=])
+                            if p then s = s:sub(q + 1) end
+                        end
+                    end
+                else
+                    local a, b = text.find(s, [=[(^|[;&|(]|[[:space:]])case[[:space:]].*[[:space:]]in([[:space:]]|$)]=])
+                    if a and not s:sub(1, a):find("['\"]") then
+                        local tail = s:sub(b + 1)
+                        if text.is_match(tail, [=[^[[:space:]]*$]=]) then
+                            in_case = 1; skip_scan = true
+                        else
+                            if arms_bad(tail) then out[#out + 1] = tostring(nr) end
+                            local e = tail:find("esac", 1, true)
+                            s = s:sub(1, a) .. (e and tail:sub(e + 4) or "")
+                        end
+                    end
+                end
+            end
+            if not skip_scan then
+                cs_scan(s, st)
+                if s:find("<<", 1, true) and not s:find("<<<", 1, true) and (st[#st] ~= "S" and st[#st] ~= "D") then
+                    local dash, word = s:match("<<(%-?)%s*['\"]?([%a_][%w_]*)")
+                    if word then hd, hd_dash = word, dash == "-" end
                 end
             end
         end
@@ -556,6 +661,7 @@ end
 local unguarded, allowlisted_hits = 0, 0
 for _, f in ipairs(files) do
     local full = read(f)
+    local cc_seen = {}
     local src = full
     local base = f:match("([^/]+)$")
     local file_bad = false
@@ -606,7 +712,18 @@ for _, f in ipairs(files) do
         local av = awkv_sites(raw)
         if #av > 0 then err(sub(M.awkv, { f = f })); for i = 1, math.min(3, #av) do err("  " .. f .. ":" .. av[i]) end; file_bad = true end
         local cc = case_in_cs_sites(raw)
+        cc_seen = {}
+        for _, n in ipairs(cc) do cc_seen[n] = true end
         if #cc > 0 then err(sub(M.caseincs, { f = f })); for i = 1, math.min(3, #cc) do err("  " .. f .. ":" .. cc[i]) end; file_bad = true end
+    end
+    -- 1582-c32p: the open-$( case pass reads every file that has a `case` and
+    -- a `$(`, whatever the TRIGGER said (its own cheap prefilter), and names
+    -- only lines case_in_cs_sites did not already name.
+    if full and base ~= "check-bash-dialect.sh" and not base:find("^test%-check%-bash%-dialect")
+        and full:find("%f[%w_]case%f[^%w_]") and full:find("$(", 1, true) then
+        local extra = {}
+        for _, n in ipairs(ml_case_sites(lines_of(full))) do if not cc_seen[n] then extra[#extra + 1] = n end end
+        if #extra > 0 then err(sub(M.caseincs, { f = f })); for i = 1, math.min(3, #extra) do err("  " .. f .. ":" .. extra[i]) end; file_bad = true end
     end
     -- 1553-x8js: the sed/stat rules read EVERY file, whatever the TRIGGER said.
     if full and base ~= "check-bash-dialect.sh" and not base:find("^test%-check%-bash%-dialect")
@@ -617,6 +734,31 @@ for _, f in ipairs(files) do
         if #xs > 0 then err(sub(M.statc, { f = f })); head3(xs); file_bad = true end
     end
     if file_bad then unguarded = unguarded + 1 end
+end
+
+-- 1582-c32p: images/**/*.sh are read for the case-in-$( ) rule ONLY. Image
+-- scripts mostly run in a container's bash 5, so the other rules stay out of
+-- them; but a library a host SOURCES (lib-ledger-freshness.sh, by
+-- litmus-forge-ledger-freshness-shape on every host) is parsed by /bin/bash
+-- 3.2 on a Mac, and writing every arm as (pat) costs nothing anywhere.
+if scan_dir_env == nil or scan_dir_env == "" then
+    local ok, imgs = pcall(fs.walk, "images", { suffix = ".sh" })
+    imgs = ok and imgs or {}
+    table.sort(imgs)
+    for _, f in ipairs(imgs) do
+        local src = read(f)
+        if src and src:find("%f[%w_]case%f[^%w_]") and src:find("$(", 1, true) then
+            local raw = lines_of(src)
+            local cc = case_in_cs_sites(raw)
+            local seen = {}
+            for _, n in ipairs(cc) do seen[n] = true end
+            for _, n in ipairs(ml_case_sites(raw)) do if not seen[n] then seen[n] = true; cc[#cc + 1] = n end end
+            if #cc > 0 then
+                err(sub(M.caseincs, { f = f })); for i = 1, math.min(3, #cc) do err("  " .. f .. ":" .. cc[i]) end
+                unguarded = unguarded + 1
+            end
+        end
+    end
 end
 
 if scan_dir_env == nil or scan_dir_env == "" then

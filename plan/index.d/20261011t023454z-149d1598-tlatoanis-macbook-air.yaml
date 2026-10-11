@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-bash-3-2-ends-a-command-substitution-at-an-unparenthesised-case-pattern-and-carries-on-with-garbage-rc-0
+    field: status
+    value: completed
+    ts: "2026-10-11T02:34:54Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: macos-bash-3-2-ends-a-command-substitution-at-an-unparenthesised-case-pattern-and-carries-on-with-garbage-rc-0
+    event:
+      type: completed
+      ts: "2026-10-11T02:34:54Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: ea77493f8 land(303); /bin/bash 3.2.57 live: no syntax error, LEDGER_NEWEST=linux-next (pre-fix file: source text); check-bash-dialect ok, fixture 69/69
+  - packet_id: macos-bash-3-2-ends-a-command-substitution-at-an-unparenthesised-case-pattern-and-carries-on-with-garbage-rc-0
+    event:
+      type: note
+      ts: "2026-10-11T02:34:54Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        LIVE CONFIRMATION on tlatoanis-macbook-air 2026-10-10, GNU bash 3.2.57(1)-release (arm64-apple-darwin26), trunk ea77493f8 (land(303)). - POST: /bin/bash -c '. images/default/lib-ledger-freshness.sh; tillandsias_ledger_freshness .' printed NO syntax error. rc=0, TILLANDSIAS_BASE_HEAD=ea77493f8, TILLANDSIAS_LEDGER_LAG_H=0, TILLANDSIAS_LEDGER_NEWEST=linux-next (a real ref). - PRE, the same call on ea77493f8^1's file in the same run: two "command substitution:" syntax errors, then rc=0 with TILLANDSIAS_LEDGER_NEWEST=" continue ;; esac ..." (source text). - Line 55 now reads: case "$_ref" in (origin | origin/HEAD) continue ;; esac - The guard: #303 adds the shape to scripts/lua/check-bash-dialect.lua (+148). On trunk, check-bash-dialect gives ok:bash-dialect-clean and scripts/test-check-bash-dialect.sh gives 69/69 scenarios green.

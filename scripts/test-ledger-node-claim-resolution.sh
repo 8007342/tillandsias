@@ -21,6 +21,23 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CLAIM="$ROOT/scripts/claim-ledger-node.sh"
+
+# Resolve the plan binary from THIS checkout, not the caller's cwd, and make it
+# absolute (84f37ff24's pattern; class 1401-x76w). The claim script's own
+# fallback is the cwd-relative ./target/release path, so run from a scratch cwd
+# with no CARGO_TARGET_DIR (the gate's default-target regime) it found nothing,
+# the ledger read as unverifiable, and the refused-claim arm could not refuse.
+# An explicit TILLANDSIAS_PLAN_BIN keeps its caller-given meaning.
+if [ -z "${TILLANDSIAS_PLAN_BIN:-}" ]; then
+  # Plain statements, no `case` inside $( ): macOS /bin/bash 3.2 mis-parses a
+  # case pattern's `)` inside a command substitution.
+  _plan="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || _plan=""
+  if [ -n "$_plan" ] && [ "${_plan#/}" = "$_plan" ]; then
+    _plan="$ROOT/${_plan#./}"
+  fi
+  if [ -n "$_plan" ]; then export TILLANDSIAS_PLAN_BIN="$_plan"; fi
+  unset _plan
+fi
 TDIR="$(mktemp -d)"
 trap 'rm -rf "$TDIR"' EXIT
 
@@ -149,8 +166,42 @@ else
   bad "grammar: $good/$tot well-formed"
 fi
 
+# --- 9. an ORPHANED lease past its TTL is reclaimed (1553-kvmf) ------------
+# A claimant killed between mkdir and write_holder leaves a lease dir with no
+# holder; lease_is_stale ages it by the dir's own mtime. That read was
+# `stat -c %Y` alone, which BSD stat refuses, so on darwin the mtime was empty,
+# the orphan read as live forever, and the node could never be claimed again.
+# The dir is aged with `touch -t` (BSD and GNU), and the aging is CHECKED with
+# `find -mmin` (also both) before the verdict counts: an unaged dir would make
+# this arm assert the live path and pass for the wrong reason.
+r9="$TDIR/l9"
+mkdir -p "$r9/fixture-real-node.lease"
+touch -t 202001010000 "$r9/fixture-real-node.lease"
+if [ -z "$(find "$r9/fixture-real-node.lease" -maxdepth 0 -mmin +60 2>/dev/null)" ]; then
+  bad "orphan setup: the lease dir was not aged (touch -t did not apply)"
+else
+  out="$(TILLANDSIAS_LEDGER_LEASE_TTL_SECS=60 run_claim "$r9" claim fixture-real-node)"; rc=$?
+  if [ "$out" = "reclaimed:fixture-real-node" ] && [ "$rc" -eq 0 ]; then
+    ok "an orphaned lease dir past its TTL is reclaimed (rc=0)"
+  else
+    bad "orphan past TTL not reclaimed: out=$out rc=$rc (pre-1553-kvmf darwin: in-flight forever)"
+  fi
+fi
+
+# --- 10. CONTROL: a FRESH orphan is still live -----------------------------
+# The write window between a winning mkdir and its holder must stay protected,
+# or arm 9 could pass by reclaiming every holderless dir.
+r10="$TDIR/l10"
+mkdir -p "$r10/fixture-real-node.lease"
+out="$(TILLANDSIAS_LEDGER_LEASE_TTL_SECS=3600 run_claim "$r10" claim fixture-real-node)"; rc=$?
+if [ "$out" = "in-flight:fixture-real-node" ] && [ "$rc" -eq 1 ]; then
+  ok "a fresh holderless lease dir is still live (the write window holds)"
+else
+  bad "fresh orphan was not treated as live: out=$out rc=$rc"
+fi
+
 if [ "$fail" -eq 0 ]; then
-  echo "ok:ledger-node-claim-resolution-fixture:8"
+  echo "ok:ledger-node-claim-resolution-fixture:10"
   exit 0
 fi
 echo "fail: ledger-node-claim-resolution scenarios failed" >&2
