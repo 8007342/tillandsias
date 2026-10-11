@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11): one shell->lua burndown item, announced and confirmed free.
+packets:
+  - packet_id: port-test-no-end-user-brew-instruction-sh-to-a-lua-fixture-shell-to-lua-burndown
+    order: 1593-t8xx
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [shell-to-lua, lua, litmus, fixtures]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-no-end-user-brew-instruction.sh
+      - scripts/lua/test-no-end-user-brew-instruction.lua
+      - openspec/litmus-tests/litmus-shipped-diagnostic-tool-dispatch.yaml
+      - scripts/portability/shell-decider-floor.txt
+      - scripts/portability/pipe-site-floor.txt
+    title: |
+      Port scripts/test-no-end-user-brew-instruction.sh (the 956-llei mutation pair for scripts/lua/check-no-end-user-brew-instruction.lua) to scripts/lua/test-no-end-user-brew-instruction.lua, one shell->lua burndown item
+    context: |
+      Shell-to-lua burndown (methodology convergence.yaml carried_obligations). The item is 40 lines, not a wrapper, and has one caller: litmus-shipped-diagnostic-tool-dispatch.yaml:53, which runs `bash ... | tail -1`.
+      Before the port it was announced to the coordinator, who confirmed no open PR, work ref or host holds it. taken-by at trunk a2b157a44 was empty.
+      The fixture drives the existing Lua guard through proc.run. Its mutants live in target/plan-scratch, read via TILLANDSIAS_REPO_ROOT, so this forge gives native parity (no podman, no network).
+    exit_criteria:
+      - 'scripts/lua/test-no-end-user-brew-instruction.lua passes the same three arms as the .sh, in the same run as the .sh: the current tree passes, a live brew instruction fails with file:line, and a trailing-comment mention passes'
+      - 'a reader-search arm shows the .sh''s old terminal token (assembled so the fixture cannot match itself) has 0 readers, and prints the count of files searched'
+      - 'the .sh is deleted, its floor lines are dropped, and the litmus step runs the Lua directly with no pipe, expecting the port''s ok: terminal line'
+    unscoreable: "a port: the parity run and the litmus step are its evidence"
+    depends_on: []
+    next_action: >
+      Port it, delete the .sh, drop its floor lines and repoint the litmus step. Prove parity in the same run as the .sh, then re-check taken-by after a fetch before pushing.
+    provenance: |
+      Filed by yoga (forge) on macuahuitl-fedora's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T08:52:30Z"
+        host: yoga
+        summary: |-
+          One shell->lua burndown item, test-no-end-user-brew-instruction.sh, announced and confirmed free by the coordinator.
