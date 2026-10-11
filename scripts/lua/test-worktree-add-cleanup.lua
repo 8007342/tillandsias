@@ -21,6 +21,9 @@
 --   8 PRE-FIX  the same function with its sweep calls removed leaves the
 --              registration behind (the defect, constructed)
 --   9 POST-FIX the real function leaves 0 and records swept:worktree:<path>
+--  10 LOCKED   the guard locks its worktree (as one KILLed inside `git worktree
+--              add` leaves it): a single --force fails it, and the real sweep's
+--              -f -f removes it
 -- Every worktree this fixture causes is removed at the end of its arm.
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-worktree-add-cleanup.lua [-- --plan <bin>]
@@ -117,7 +120,8 @@ local function extract(text_, name)
     return table.concat(acc, "\n")
 end
 local build = fs.read("build.sh")
-local fns = extract(build, "_pf_sweep_guard_tmp") .. "\n" .. extract(build, "_pf_run_guard") .. "\n"
+local fns = extract(build, "_pf_sweep_under") .. "\n" .. extract(build, "_pf_sweep_guard_tmp") .. "\n" ..
+    extract(build, "_pf_run_guard") .. "\n"
 if not fns:find("_pf_sweep_guard_tmp \"$_gtmp\" \"$_out\"", 1, true) then
     arm("8/9 DOOR premise: build.sh's _pf_run_guard calls _pf_sweep_guard_tmp", false, "the call is not in the extracted function")
 else
@@ -135,19 +139,24 @@ else
         "SCRIPT_DIR=\"$ROOT\"",
         ". \"$FN\"",
         "G=\"$BASE/plant.sh\"",
-        "printf '%s\\n' 'git -C \"$1\" worktree add --detach -q \"$TMPDIR/wt\" HEAD' \"trap '' TERM\" 'sleep 6' > \"$G\"",
+        "printf '%s\\n' 'git -C \"$1\" worktree add --detach -q \"$TMPDIR/wt\" HEAD' > \"$G\"",
+        "[ -z \"${LOCK:-}\" ] || printf '%s\\n' 'git -C \"$1\" worktree lock \"$TMPDIR/wt\"' >> \"$G\"",
+        "printf '%s\\n' \"trap '' TERM\" 'sleep 6' >> \"$G\"",
         "rc=0; _pf_run_guard \"$G\" 2 \"$BASE/out\" \"$ROOT\" || rc=$?",
         "echo \"rc=$rc\"",
         "real=\"$(cd \"$BASE\" && pwd -P)\"; n=0",
-        "while read -r k v; do [ \"$k\" = worktree ] || continue; case \"$v\" in \"$real\"/*|\"$BASE\"/*) n=$((n+1)); git -C \"$ROOT\" worktree remove --force \"$v\" >/dev/null 2>&1;; esac; done < <(git -C \"$ROOT\" worktree list --porcelain)",
+        "while read -r k v; do [ \"$k\" = worktree ] || continue; case \"$v\" in \"$real\"/*|\"$BASE\"/*) n=$((n+1)); git -C \"$ROOT\" worktree remove -f -f \"$v\" >/dev/null 2>&1;; esac; done < <(git -C \"$ROOT\" worktree list --porcelain)",
         "echo \"left=$n\"",
         "[ ! -f \"$BASE/out.swept\" ] || cat \"$BASE/out.swept\"",
         "rm -rf \"$BASE\"",
         "",
     }, "\n"))
-    local function door(which)
+    -- The single-force variant: what the sweep did before it learned that a
+    -- guard KILLed inside `git worktree add` leaves the worktree LOCKED.
+    fs.write(REL .. "/door-oneforce.sh", (fns:gsub("worktree remove %-f %-f", "worktree remove --force")))
+    local function door(which, lock)
         local r = proc.run({ argv = { "bash", ROOT .. "/" .. REL .. "/harness.sh", ROOT, ROOT .. "/" .. REL .. "/door-" .. which .. ".sh" },
-            cwd = ROOT, timeout_ms = 60000 })
+            env = lock and { LOCK = "1" } or {}, cwd = ROOT, timeout_ms = 60000 })
         return text.trim(r.stdout or ""), text.trim(r.stderr or "")
     end
     local pre_out, pre_err = door("pre")
@@ -159,9 +168,15 @@ else
         post_out:find("rc=124", 1, true) ~= nil and post_out:find("left=0", 1, true) ~= nil
         and post_out:find("swept:worktree:", 1, true) ~= nil,
         post_out:gsub("\n", " ") .. " " .. post_err:sub(1, 200))
+    local one_out = door("oneforce", true)
+    local two_out, two_err = door("post", true)
+    arm("10 LOCKED a worktree locked mid-add needs -f -f: one --force fails it, the door's sweep removes it",
+        one_out:find("swept:worktree-failed:", 1, true) ~= nil and one_out:find("left=1", 1, true) ~= nil
+        and two_out:find("left=0", 1, true) ~= nil and two_out:find("swept:worktree:", 1, true) ~= nil,
+        "one-force=[" .. one_out:gsub("\n", " ") .. "] door=[" .. two_out:gsub("\n", " ") .. "] " .. two_err:sub(1, 200))
 end
 
 if #failed > 0 then
     verdict.emit("violation:worktree-add-cleanup-fixture:" .. #failed .. "-failed", 1)
 end
-verdict.ok("worktree-add-cleanup-fixture", "9 arms")
+verdict.ok("worktree-add-cleanup-fixture", "10 arms")
