@@ -725,19 +725,39 @@ GATE
 out13="$(run_queue)"
 git -C "$WORK_DIR" fetch -q origin linux-next
 tr13="$(git -C "$WORK_DIR" log --first-parent --format='%s|%(trailers:key=Carried,valueonly,separator=;)' origin/linux-next | grep '^land(')"
-if grep -qx 'land(1): work/1301-aaaa into linux-next|shell-to-lua not-due' <<<"$tr13"; then
+# The trailer carries ONE entry per backlog in convergence.yaml, joined by `;`
+# (1590-j20f added manifest-dir-runtime, and arms that compared the WHOLE value
+# against `shell-to-lua ...` went red although land-queue was right). So 13a/13b
+# assert the shell-to-lua COMPONENT, and 13d asserts one entry per backlog.
+# carried_of <land(N) prefix> -> that land commit's entries, one per line.
+carried_of() {
+    local l
+    l="$(grep -m1 "^$1" <<<"$tr13")"
+    tr ';' '\n' <<<"${l#*|}"
+}
+if grep -qx 'shell-to-lua not-due' <<<"$(carried_of 'land(1): work/1301-aaaa into linux-next|')"; then
     ok "ARM 13a: a not-due candidate lands with 'Carried: shell-to-lua not-due'"
 else
     bad "ARM 13a: wanted a land(1) commit with Carried: shell-to-lua not-due; got
 $tr13
 $out13"
 fi
-if grep -qx 'land(3): work/1303-cccc into linux-next|shell-to-lua waived no-item-in-reach' <<<"$tr13"; then
+if grep -qx 'shell-to-lua waived no-item-in-reach' <<<"$(carried_of 'land(3): work/1303-cccc into linux-next|')"; then
     ok "ARM 13b: a due candidate carrying a Carried-Waiver trailer lands with 'Carried: shell-to-lua waived no-item-in-reach'"
 else
     bad "ARM 13b: wanted a land(3) commit with Carried: shell-to-lua waived; got
 $tr13
 $out13"
+fi
+# ARM 13d: one Carried entry per backlog in the REAL convergence.yaml, so a
+# new backlog cannot silently drop out of the tally (or re-break 13a/13b).
+n_backlogs="$(awk '/^  backlogs:/{f=1; next} f && /^[^ ]/{f=0} f && /^    - name: /{n++} END{print n+0}' "$ROOT/methodology/convergence.yaml")"
+n_entries="$(grep -c . <<<"$(carried_of 'land(1): work/1301-aaaa into linux-next|')")"
+if [ "$n_backlogs" -ge 1 ] && [ "$n_entries" = "$n_backlogs" ]; then
+    ok "ARM 13d: the land trailer carries one entry per backlog ($n_entries of $n_backlogs in convergence.yaml)"
+else
+    bad "ARM 13d: wanted $n_backlogs Carried entries (one per backlog), got $n_entries:
+$tr13"
 fi
 # ARM 13c: the due, SILENT candidate is evicted before any gate runs, the
 # trailer line to add is on stdout and in the PR comment, and it never lands.
