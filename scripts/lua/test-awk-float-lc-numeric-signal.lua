@@ -122,16 +122,42 @@ local ORIG_PATH = env.get("PATH") or "/usr/bin:/bin"
 fs.mkdir(REL .. "/bin")
 fs.write(REL .. "/bin/sed", table.concat({
     "#!/bin/sh",
-    "[ -f '" .. REAL_PID .. "' ] && sleep 5",
+    "[ -f '" .. REAL_PID .. ".ready' ] && sleep 5",
     "PATH='" .. ORIG_PATH .. "' exec sed \"$@\"",
     "",
 }, "\n"))
 proc.run({ argv = { "chmod", "+x", ROOT .. "/" .. REL .. "/bin/sed" }, timeout_ms = 5000 })
 local hr, pidr = spawn_until_pidfile({ "bash", ROOT .. "/" .. SUBJECT }, REL .. "/real.pid",
     { PATH = ROOT .. "/" .. REL .. "/bin:" .. ORIG_PATH })
+-- 1612-jp94 (red 3/3 in Windows' WSL builder guest: "no pid file within
+-- 10 s"). The subject writes its pid at START and <pid>.ready once its mutants
+-- exist, so this waits for an EVENT, not a fixed time: ready, or the subject
+-- gone. A subject that ends before its mutants is judged by what it SAID.
+local ready, ended = false, false
+if pidr then
+    for _ = 1, 1200 do
+        if fs.exists(REL .. "/real.pid.ready") then ready = true; break end
+        if not alive(pidr) then ended = true; break end
+        pause("0.1")
+    end
+end
+local SKIPPED
 if not pidr then
     hr:kill()
-    arm("2 REAL the script reached its mutants", false, "no pid file within 10 s")
+    arm("2 REAL the script started", false, "no pid file within 10 s of spawning it")
+elseif not ready then
+    local done
+    if ended then done = hr:wait() else done = hr:kill() end
+    local said = text.trim((type(done) == "table" and done.stdout) or "")
+    if said:find("unscoreable:awk-float-lc-numeric:no-comma-locale-on-host", 1, true) then
+        -- The host has no comma-decimal locale, so the subject never makes
+        -- mutants and there is nothing for a signal to leak. Named, not passed.
+        SKIPPED = "no-comma-locale-on-host"
+        out.line("skip: 2 REAL the subject reports no comma locale on this host, so it makes no mutants to leak")
+    else
+        arm("2 REAL the script reached its mutants", false,
+            (ended and "it ended first, saying: " or "not ready within 120 s, last said: ") .. said:sub(-300))
+    end
 else
     pause("1")
     local how, done = door_kill(hr, pidr)
@@ -146,4 +172,5 @@ end
 if #failed > 0 then
     verdict.emit("violation:awk-float-lc-numeric-signal:" .. #failed .. "-failed", 1)
 end
+if SKIPPED then verdict.skip("awk-float-lc-numeric-signal", SKIPPED) end
 verdict.ok("awk-float-lc-numeric-signal", "3 arms")
