@@ -7525,7 +7525,16 @@ mod tests {
     #[test]
     // @trace order:803-rbqf, spec:accel-capability-probe
     fn the_macos_arm_cannot_advertise_the_container_lane() {
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/accel_probe.rs"));
+        // Runtime read (1590-j20f, 1610-d6ra): the source of THIS checkout, not the
+        // one an embedded include_str! captured when a shared target built it.
+        let source = std::fs::read_to_string(
+            std::path::Path::new(
+                &std::env::var("CARGO_MANIFEST_DIR").expect("cargo test sets CARGO_MANIFEST_DIR"),
+            )
+            .join("src/accel_probe.rs"),
+        )
+        .expect("read src/accel_probe.rs");
+        let source = source.as_str();
 
         // ANCHOR FIRST. A scan that silently finds nothing is a guard that
         // never fires, and it looks exactly like a guard that passes.

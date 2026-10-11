@@ -62,7 +62,10 @@ impl Drop for RestoreRepoRoot {
 }
 
 fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+    // Runtime read (1590-j20f, 1610-d6ra): a compile-time env! path names the
+    // checkout that compiled this binary, which a shared target may reuse.
+    Path::new(&std::env::var("CARGO_MANIFEST_DIR").expect("cargo test sets CARGO_MANIFEST_DIR"))
+        .join("../..")
 }
 
 fn module_path() -> PathBuf {

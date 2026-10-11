@@ -10,7 +10,12 @@ use std::fs;
 use std::path::Path;
 
 fn repo_file(relative: &str) -> String {
-    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    // Runtime read (1590-j20f, 1610-d6ra): a compile-time env! path names the
+    // checkout that compiled this binary, which a shared target may reuse.
+    let repo_root = Path::new(
+        &std::env::var("CARGO_MANIFEST_DIR").expect("cargo test sets CARGO_MANIFEST_DIR"),
+    )
+    .join("../..");
     fs::read_to_string(repo_root.join(relative))
         .unwrap_or_else(|error| panic!("failed to read {relative}: {error}"))
 }

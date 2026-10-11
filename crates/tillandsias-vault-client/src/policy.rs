@@ -149,7 +149,11 @@ mod tests {
 
     fn repo_root() -> PathBuf {
         // crates/tillandsias-vault-client/ -> repo root
-        let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        // Runtime read (1590-j20f, 1610-d6ra): a compile-time env! path names the
+        // checkout that compiled this binary, which a shared target may reuse.
+        let manifest = PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo test sets CARGO_MANIFEST_DIR"),
+        );
         manifest.parent().unwrap().parent().unwrap().to_path_buf()
     }
 
