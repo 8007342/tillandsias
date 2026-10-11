@@ -568,6 +568,7 @@ scripts/test-sigpipe-verdict-pipelines.sh
 scripts/test-silverblue-update-skew-probe.sh
 scripts/test-skill-canonicalization-remedy.sh
 scripts/test-skills-single-source.sh
+scripts/test-slowest-span-marker.sh
 scripts/test-smoke-agent-watch.sh
 scripts/test-smoke-consecutive-lanes.sh
 scripts/test-smoke-evidence-dir-is-fresh.sh
