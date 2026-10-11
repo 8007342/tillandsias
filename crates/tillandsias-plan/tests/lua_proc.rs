@@ -161,6 +161,39 @@ mod managed_script {
         );
     }
 
+    // ORDER 1593-1ny6. CARGO_TARGET_DIR is on the allowlist, so a nested runner
+    // finds the caller's build artifacts (a linked worktree on a shared target
+    // has no ./target of its own); a variable NOT on it still never reaches the
+    // child. Both through the proc.run door, the one fixtures use.
+    #[test]
+    fn cargo_target_dir_reaches_the_child_and_an_unlisted_variable_does_not() {
+        let f = ScriptFixture::new();
+        let script = f.write(
+            "probe.lua",
+            r#"
+            local a = proc.run{argv={'printenv','CARGO_TARGET_DIR'}}
+            assert(a.status == 'exited' and a.code == 0, 'CARGO_TARGET_DIR did not reach the child: '..tostring(a.status)..' '..tostring(a.code))
+            assert(a.stdout:gsub('[\r\n]+$', '') == 'target-dir-1593', 'CARGO_TARGET_DIR arrived as ['..a.stdout..']')
+            local b = proc.run{argv={'printenv','UNLISTED_1593_PROBE'}}
+            assert(b.stdout == '', 'an unlisted variable reached the child: ['..b.stdout..']')
+            verdict.ok('allowlist')
+        "#,
+        );
+        let out = f
+            .runner(&script)
+            .args(["--timeout", "20s"])
+            .env("CARGO_TARGET_DIR", "target-dir-1593")
+            .env("UNLISTED_1593_PROBE", "must-not-leak")
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
     // ORDER 1551-pemw, 1551-8gkg. What the instruction hook cannot follow, and
     // what no restriction survives, is not in the environment at all.
     #[test]
