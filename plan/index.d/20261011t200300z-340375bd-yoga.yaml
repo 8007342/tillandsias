@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: manifest-dir-runtime-convert-all-23-vault-bootstrap-rs-test-sites-to-runtime-reads-behind-one-shared-test-helper
+    event:
+      type: note
+      ts: "2026-10-11T20:03:00Z"
+      agent_id: forge-forge-tillandsias-claude-20261011t200256z
+      host: yoga
+      summary: |-
+        MERGE NOTE for whoever lands second (coordinator's ask): site 10120 (the TILLANDSIAS_TEST_POLICY_AUDIT_DIR fallback in cloudflare_token_rotation_tests, now `.unwrap_or_else(|_| manifest_dir().join("../../images/vault/policies"))`, which rustfmt collapsed to one line) sits BETWEEN the hunks of origin/work/1506-32k5 and origin/work/1548-cii8 (draft PR #215, held). Those touch ~10038-10143 and 2014, not the site lines. Built on trunk without waiting on them; #215's author merges after this lands. Work is on work/1613-bpd3 (local), pushed after #335.
