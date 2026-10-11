@@ -22,7 +22,12 @@ if [ -z "$PLAN_BIN" ] || ! grep -qx script <<<"$("$PLAN_BIN" capabilities 2>/dev
 fi
 CHECK="$ROOT/scripts/lua/check-no-spawn-in-if-not.lua"
 
-WORK="$(mktemp -d "$ROOT/.if-not-pipeline-guard.XXXXXX")"
+# 1611-imnj: scratch goes under .tillandsias/fixture-scratch/, which is inside
+# the repo (the Lua runner's fs is repo-rooted, and target/ can be a symlink out
+# of it) but gitignored, so a run the preflight door KILLs leaves nothing that
+# diff-scoped guards read as added code. It was a visible dotdir at the root.
+mkdir -p "$ROOT/.tillandsias/fixture-scratch"
+WORK="$(mktemp -d "$ROOT/.tillandsias/fixture-scratch/if-not-pipeline-guard.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
 fail_fixture="$WORK/fail_fixture.sh"

@@ -39,7 +39,12 @@ if [ -z "$PLAN_BIN" ] || ! grep -qx script <<<"$("$PLAN_BIN" capabilities 2>/dev
 fi
 OOM() { "$PLAN_BIN" script run "$OOM_LUA" -- "$@"; }
 
-W="$(mktemp -d "$ROOT/.gate-mem-refusal.XXXXXX")" || exit 3
+# 1611-imnj: scratch goes under .tillandsias/fixture-scratch/, which is inside
+# the repo (the Lua runner's fs is repo-rooted, and target/ can be a symlink out
+# of it) but gitignored, so a run the preflight door KILLs leaves nothing that
+# diff-scoped guards read as added code. It was a visible dotdir at the root.
+mkdir -p "$ROOT/.tillandsias/fixture-scratch" || exit 3
+W="$(mktemp -d "$ROOT/.tillandsias/fixture-scratch/gate-mem-refusal.XXXXXX")" || exit 3
 trap 'rm -rf "$W"' EXIT
 
 pass=0; fail=0

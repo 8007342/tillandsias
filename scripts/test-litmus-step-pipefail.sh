@@ -30,9 +30,12 @@ set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 2
 ROOT="$PWD"
 
-TMP="$(mktemp -d)"
-PREFIX_RUNNER="$ROOT/scripts/.wka4-prefix-runner.$$.sh"
-trap 'rm -rf "$TMP" "$PREFIX_RUNNER"' EXIT
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/litmus-step-pipefail.XXXXXX")"
+# 1611-imnj: the pre-fix copy lives in $TMP, never beside the scripts. A copy in
+# scripts/ outlived the preflight door's KILL and diff-scoped guards then read it
+# as added code. The copy's own-path lookups are pinned to this checkout below.
+PREFIX_RUNNER="$TMP/wka4-prefix-runner.sh"
+trap 'rm -rf "$TMP"' EXIT
 
 LIT="litmus"
 pass=0; fail=0
@@ -102,12 +105,15 @@ fi
 # ---------------------------------------------------------------- ARM 3
 # PRE-FIX CONTROL. Neutralise the prelude in a COPY and require the false green
 # to come back. Without this, arm 2 would stay green if the fix were deleted.
-sed 's|^ *step_shell_prelude="set -o pipefail; "|                    step_shell_prelude=""|' \
+sed -e 's|^ *step_shell_prelude="set -o pipefail; "|                    step_shell_prelude=""|' \
+    -e 's|\$(dirname "\${BASH_SOURCE\[0\]}")|'"$ROOT"'/scripts|g' \
     "$ROOT/scripts/run-${LIT}-test.sh" > "$PREFIX_RUNNER" 2>/dev/null
 chmod +x "$PREFIX_RUNNER" 2>/dev/null
 live_hits="$(grep -c 'step_shell_prelude="set -o pipefail; "' "$ROOT/scripts/run-${LIT}-test.sh")"
 mut_hits="$(grep -c 'step_shell_prelude="set -o pipefail; "' "$PREFIX_RUNNER")"
-if [ "$live_hits" -ge 1 ] && [ "$mut_hits" -eq 0 ]; then
+if grep -q 'BASH_SOURCE' "$PREFIX_RUNNER"; then
+    bad "ARM 3: the copy still resolves a path from its own location (BASH_SOURCE), so it cannot run from \$TMP; pin the new lookup"
+elif [ "$live_hits" -ge 1 ] && [ "$mut_hits" -eq 0 ]; then
     verdict="$(run_probe "$PREFIX_RUNNER")"
     if [ "$verdict" = "Status: [PASS]" ]; then
         ok "ARM 3: PRE-FIX the same step PASSES — the defect reproduces on demand"

@@ -1,0 +1,11 @@
+# Gate step 1611-imnj — the checkout-writers scan's arms on constructed roots,
+# and the door kill on scripts/test-litmus-step-pipefail.sh in one run: held in
+# ARM 3 and killed (TERM, 1 s, KILL), the pre-fix file leaves its runner copy in
+# scripts/ and the file as it stands leaves nothing in the checkout.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the checkout-writers scan and the door-kill fixture (1611-imnj)"
+STEP_LUA="scripts/lua/test-checkout-writers.lua"
+STEP_ERROR="the checkout-writers scan or the moved fixture no longer does what its fixture constructs (1611-imnj) — see the FAIL lines above"
+STEP_OK="Checkout-writers scan and door-kill fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-11 darwin ok:checkout-writers-fixture:11 arms"

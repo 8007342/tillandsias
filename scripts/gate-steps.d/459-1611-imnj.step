@@ -1,0 +1,12 @@
+# Gate step 1611-imnj — a script that makes scratch files inside the tracked
+# tree (scripts/, the root), instead of ${TMPDIR:-/tmp}, is declared with a
+# reason in scripts/portability/checkout-writers.txt and has 1587-qqzs's shape
+# (EXIT trap, a TERM trap that exits, long steps under wait). Prints
+# scanned/writers/unsafe/ignored-scratch, one note per kept writer.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking scripts keep scratch out of the tracked tree (1611-imnj)"
+STEP_LUA="scripts/lua/check-checkout-writers.lua"
+STEP_ERROR="a script makes scratch files in the tracked tree that the preflight door's KILL would leave behind (1611-imnj) — see the violation lines above"
+STEP_OK="Scratch files stay out of the tracked tree"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-11 darwin ok:checkout-writers:scanned=891:writers=1:unsafe=0"
