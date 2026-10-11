@@ -4834,6 +4834,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Gate-touch fixture passed"
 
+    # ORDER 1602-3ave — a gate-failed eviction comment carries the failing
+    # step's verdict lines, not only the last five lines of the gate log.
+    _step "Checking eviction comments name the failing step (1602-3ave)..."
+    if ! _run_lua_decider "scripts/lua/test-land-queue-eviction-comment.lua" 2>&1; then
+        _error "the land queue's eviction comment no longer carries the failing step's FAIL lines — an eviction could not be diagnosed after the fact (1602-3ave)"
+        exit 1
+    fi
+    _info "Eviction-comment fixture passed"
+
     _step "Checking the nix-capability probe's evidence survives a noisy shell (917-zkge)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-probe-nix-capability-evidence.sh" 2>&1; then
         _error "a capable row can carry shell noise as its proof that nix answered (917-zkge)"
