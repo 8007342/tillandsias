@@ -63,7 +63,9 @@ TILLANDSIAS_RESCUE_REF_HINT="$(sed -n "s/^ *TILLANDSIAS_RESCUE_REF_HINT='\(.*\)'
 TILLANDSIAS_DISCIPLINE_SEED_REFS="$(sed -n "s/^ *TILLANDSIAS_DISCIPLINE_SEED_REFS='\(.*\)'$/\1/p" "$ENTRY")"
 [ -n "$TILLANDSIAS_DISCIPLINE_SEED_REFS" ] || { echo "blocked:mirror-discipline:no-seed-refs-config-in-entrypoint"; exit 2; }
 export TILLANDSIAS_RESCUE_REF_GLOB TILLANDSIAS_RESCUE_REF_HINT TILLANDSIAS_DISCIPLINE_SEED_REFS
-command -v ruby >/dev/null 2>&1 || { echo "skip:mirror-discipline:no-ruby (the mirror image ships ruby)"; exit 0; }
+# 1597-rrku: run ruby, don't stat it. A forge's `ruby` is a Homebrew shim that
+# exits 127, which `command -v` accepted, so this fixture ran and went red.
+TILLANDSIAS_BREW_AUTOINSTALL=0 ruby -e 'exit 0' >/dev/null 2>&1 || { echo "skip:mirror-discipline:no-ruby (the mirror image ships ruby)"; exit 0; }
 
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/mirror-discipline.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
