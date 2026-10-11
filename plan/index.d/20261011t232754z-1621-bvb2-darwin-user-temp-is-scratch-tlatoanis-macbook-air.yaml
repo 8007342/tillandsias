@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11, review of the operator-facing approval prompts): build after 1619-7i9r.
+packets:
+  - packet_id: the-command-policy-bridge-does-not-count-darwins-per-user-temp-dir-as-scratch-so-cleaning-what-bare-mktemp-leaked-there-asks-the-operator
+    order: 1621-bvb2
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [harness, command-policy, darwin-regime, operator-prompts]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/bash_policy.rs
+    title: |
+      bash_policy.rs context_for() counts /tmp, /private/tmp and the session's TMPDIR as scratch roots. On darwin, an agent session's TMPDIR can be elsewhere (here /private/tmp/claude-501/...), and the OS's own per-user temp dir (getconf DARWIN_USER_TEMP_DIR, /var/folders/<..>/T/) is not one. So a recursive rm of scratch that bare mktemp leaked there is consent:bash-policy:workspace-destroy, put to the OPERATOR.
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-10-11 (audit .cache/metrics/command-policy-audit.jsonl): two of the day's three real operator prompts were `rm -rf /private/var/folders/.../T/<fixture-scratch>`, at 14:12:57Z and 19:26:23Z. The scratch got there because darwin's mktemp without a template ignores TMPDIR (1619-7i9r). 1619 stops NEW leaks; it does not clean what already leaked.
+      RULING (macuahuitl, 2026-10-11):
+      - YES to darwin's per-user temp dir as a scratch root, as its own narrow row. It is the OS's TMPDIR, the same class as /tmp.
+      - NO to counting sibling worktrees as scratch: single_checkout_branching (1620-67ji) makes that moot, and widening a destroy floor to paths outside the session is the wrong direction.
+      As with the other roots, paths BENEATH it are scratch, and the root itself, and anything above it, still ask.
+    exit_criteria:
+      - 'on darwin, in one run: `rm -rf "$(getconf DARWIN_USER_TEMP_DIR)/x.abc"` classifies allow, while the same path''s parent (the DARWIN_USER_TEMP_DIR root itself) and /var/folders itself still ask (consent:bash-policy:workspace-destroy)'
+    unscoreable: "unpinnable-until-the-guard-exists: the scratch root and its classify fixture are written together"
+    depends_on: [on-darwin-a-mktemp-without-a-template-ignores-tmpdir-so-scratch-made-that-way-escapes-the-preflight-doors-per-guard-tmpdir-sweep]
+    related: [1619-7i9r, 1620-67ji, 1443-we89]
+    next_action: >
+      After 1619 lands: in context_for(), on darwin, add confstr(_CS_DARWIN_USER_TEMP_DIR) (what getconf DARWIN_USER_TEMP_DIR prints) to the scratch roots, trailing slash trimmed. Pin it with `policy classify-bash --command` cases: beneath (allow), the root (ask), /var/folders (ask).
+    provenance: |
+      Filed by tlatoanis-macbook-air on macuahuitl's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T23:27:54Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Darwin's per-user temp dir should be a scratch root for the command-policy bridge (beneath it allows; the root and /var/folders still ask).
