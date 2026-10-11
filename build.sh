@@ -384,6 +384,53 @@ _pf_classify() {  # $1 = rc, $2 = captured output file
     "$_pf_plan_bin" script classify --rc "$1" --file "$2" 2>/dev/null || true
 }
 
+# ORDER 1600-nn5b. THE DOOR SWEEPS WHAT A KILLED GUARD LEFT REGISTERED. A fixture
+# that `git worktree add`s registers the worktree in THIS checkout's .git, and
+# when the door's KILL lands while bash waits on a long step, no trap of the
+# fixture's can run (MEASURED 2026-10-11 on darwin: after deadline-killed
+# preflights, `git worktree list` held closure-guards.*/wt and
+# scorable-quoting.*/wt under $TMPDIR, five and two times). So every guard runs
+# with its OWN TMPDIR, and afterwards the door removes ONLY the worktrees whose
+# registered path lies under that directory (never by name pattern), prints
+# each as `swept:worktree:<path>` into <outfile>.swept, and deletes the dir.
+_pf_sweep_under() {  # $1 = resolved root, $2 = root as given, $3 = file to append to, $4 = tag
+    local _k _v
+    while read -r _k _v; do
+        [ "$_k" = worktree ] || continue
+        case "$_v" in
+            "$1"/*|"$2"/*)
+                # -f -f: a guard KILLed inside `git worktree add` leaves the
+                # worktree LOCKED ("initializing"), which one --force refuses.
+                if git -C "$SCRIPT_DIR" worktree remove -f -f "$_v" >/dev/null 2>&1; then
+                    echo "$4:$_v" >> "$3"
+                else
+                    echo "$4-failed:$_v" >> "$3"
+                fi ;;
+        esac
+    done < <(git -C "$SCRIPT_DIR" worktree list --porcelain 2>/dev/null)
+}
+_pf_sweep_guard_tmp() {  # $1 = the guard's TMPDIR, $2 = outfile
+    local _gt="$1" _real
+    [ -n "$_gt" ] && [ -d "$_gt" ] || return 0
+    _real="$(cd "$_gt" 2>/dev/null && pwd -P)" || _real=""
+    if [ -n "$_real" ]; then
+        _pf_sweep_under "$_real" "$_gt" "$2.swept" "swept:worktree"
+        # Recorded for the LATE sweep: without setsid (darwin) a KILLed
+        # guard's children outlive it and can register a worktree AFTER this.
+        echo "$_real" >> "$(dirname "$2")/guard-tmp-roots"
+    fi
+    rm -rf "$_gt"
+}
+# The late sweep, from the preflight's EXIT trap: the recorded roots only.
+_pf_sweep_late() {  # $1 = the preflight run dir
+    local _r
+    [ -n "$1" ] && [ -s "$1/guard-tmp-roots" ] || return 0
+    while read -r _r; do
+        [ -n "$_r" ] && _pf_sweep_under "$_r" "$_r" "$1/late.swept" "swept:worktree-late"
+    done < "$1/guard-tmp-roots"
+    [ ! -s "$1/late.swept" ] || cat "$1/late.swept"
+}
+
 _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, $4 = args
     local _p="$1" _d="$2" _out="$3" _pid _ticks=0 _tick _per_s _max
     # ORDER 1499-m9fj: THE GATE'S ARGUMENTS, WORD FOR WORD. A guard run without
@@ -432,10 +479,13 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, 
 
     if sleep 0.1 2>/dev/null; then _tick=0.1; _per_s=10; else _tick=1; _per_s=1; fi
     _max=$(( _d * _per_s ))
+    local _gtmp _rc=0
+    _gtmp="$(mktemp -d "${TMPDIR:-/tmp}/pf-guard.XXXXXX" 2>/dev/null)" || _gtmp=""
+    rm -f "$_out.swept"
     if [ -n "$_PF_SETSID" ]; then
-        ( cd "$SCRIPT_DIR" && exec setsid "${_runner[@]}" ${_a[@]+"${_a[@]}"} ) >"$_out" 2>&1 </dev/null &
+        ( { [ -z "$_gtmp" ] || export TMPDIR="$_gtmp"; }; cd "$SCRIPT_DIR" && exec setsid "${_runner[@]}" ${_a[@]+"${_a[@]}"} ) >"$_out" 2>&1 </dev/null &
     else
-        ( cd "$SCRIPT_DIR" && exec "${_runner[@]}" ${_a[@]+"${_a[@]}"} ) >"$_out" 2>&1 </dev/null &
+        ( { [ -z "$_gtmp" ] || export TMPDIR="$_gtmp"; }; cd "$SCRIPT_DIR" && exec "${_runner[@]}" ${_a[@]+"${_a[@]}"} ) >"$_out" 2>&1 </dev/null &
     fi
     _pid=$!
     while kill -0 "$_pid" 2>/dev/null; do
@@ -457,10 +507,12 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, 
         done
         kill -KILL "-$_pid" 2>/dev/null || kill -KILL "$_pid" 2>/dev/null
         wait "$_pid" 2>/dev/null
+        _pf_sweep_guard_tmp "$_gtmp" "$_out"
         return 124
     fi
-    wait "$_pid"
-    return $?
+    wait "$_pid" || _rc=$?
+    _pf_sweep_guard_tmp "$_gtmp" "$_out"
+    return "$_rc"
 }
 
 # ORDER 1499-m9fj. WHETHER THE DOOR RUNS A GUARD, decided in ONE place, because
@@ -1075,7 +1127,7 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     _pf_wall0=$SECONDS
     printf '%s\n' "$_pf_roster" | _pf_launcher "$_pf_dir" "$_pf_deadline" "$_pf_jobs" &
     _pf_launcher_pid=$!
-    trap 'kill "$_pf_launcher_pid" 2>/dev/null || true; wait "$_pf_launcher_pid" 2>/dev/null || true; rm -rf "$_pf_dir"' EXIT
+    trap 'kill "$_pf_launcher_pid" 2>/dev/null || true; wait "$_pf_launcher_pid" 2>/dev/null || true; _pf_sweep_late "$_pf_dir"; rm -rf "$_pf_dir"' EXIT
     # ORDER 1353-ryhq — FIVE CATEGORIES, NOT TWO. `skipped` conflated a guard
     # that DECLARED its own skip with a guard the runner never got an answer
     # from, and the summary then vouched for both with `ok:`. Measured on
@@ -1160,6 +1212,8 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
         fi
         _pf_t0=$(( SECONDS - _pf_el ))
         [ -f "$_pf_tmp" ] || : > "$_pf_tmp"
+        # 1600-nn5b: what the door swept after this guard, whatever its outcome.
+        [ ! -s "$_pf_tmp.swept" ] || sed "s|\$| (after $_pf_label)|" "$_pf_tmp.swept"
         if [ "$_pf_rc" -eq 0 ]; then
             _pf_ran=$((_pf_ran + 1))
             grep -E '^note:' "$_pf_tmp" || true
@@ -2010,7 +2064,10 @@ _run_gate_steps() {  # $1 = root
         _step_rc=0
         _step_out="$(mktemp "${TMPDIR:-/tmp}/gate-step.XXXXXX")"
         if [ -n "$STEP_LUA" ]; then
-            _run "$_gs_plan" script run "$_gs_root/$STEP_LUA" > >(tee "$_step_out") 2>&1 || _step_rc=$?
+            # 1600-nn5b: handed the runner that runs it, the _run_lua_decider and
+            # preflight-door contract (1570-mxcg), so a fixture that must ask the
+            # plan binary finds one in the land queue's clean env too.
+            _run env "TILLANDSIAS_SCRIPT_RUNNER_BIN=$_gs_plan" "$_gs_plan" script run "$_gs_root/$STEP_LUA" > >(tee "$_step_out") 2>&1 || _step_rc=$?
         else
             _run bash "$_gs_root/$STEP_SCRIPT" > >(tee "$_step_out") 2>&1 || _step_rc=$?
         fi
