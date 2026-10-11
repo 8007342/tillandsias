@@ -75,7 +75,7 @@ set -uo pipefail
 REPO_ROOT="${TILLANDSIAS_SIGPIPE_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$REPO_ROOT" || exit 2
 
-base_ref="${TILLANDSIAS_SIGPIPE_BASE:-origin/linux-next}"
+base_ref="${TILLANDSIAS_SIGPIPE_BASE:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}"
 
 # ORDER 1443-xkwb. This guard is diff-scoped, so what it GUARDS is every file a
 # change could hand it: tracked or untracked *.sh (and build.sh) that set

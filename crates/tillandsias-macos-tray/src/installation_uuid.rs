@@ -42,11 +42,23 @@ pub fn read_or_generate() -> std::io::Result<String> {
 }
 
 fn read_or_generate_in(service: &str) -> std::io::Result<String> {
-    if let Some(existing) = read_credential_string_in(service, KEYCHAIN_ACCOUNT)? {
+    read_or_generate_with(
+        || read_credential_string_in(service, KEYCHAIN_ACCOUNT),
+        |new| write_credential_string_in(service, KEYCHAIN_ACCOUNT, new),
+    )
+}
+
+/// The read-then-generate decision with the Keychain calls passed in, so a
+/// test can make the read fail and see whether a write follows (1591-7yf1).
+fn read_or_generate_with(
+    read: impl FnOnce() -> std::io::Result<Option<String>>,
+    write: impl FnOnce(&str) -> std::io::Result<()>,
+) -> std::io::Result<String> {
+    if let Some(existing) = read()? {
         return Ok(existing);
     }
     let new = generate_uuid();
-    write_credential_string_in(service, KEYCHAIN_ACCOUNT, &new)?;
+    write(&new)?;
     Ok(new)
 }
 
@@ -167,9 +179,31 @@ pub(crate) fn read_credential_string_in(
     target: &str,
 ) -> std::io::Result<Option<String>> {
     let output = security_bounded(&["find-generic-password", "-a", target, "-s", service, "-w"])?;
+    credential_from_find_output(output)
+}
+
+/// `security` exits 44 (errSecItemNotFound) when the entry is missing.
+const SECURITY_EXIT_ITEM_NOT_FOUND: i32 = 44;
+
+/// Turn a finished `find-generic-password` into the credential it read.
+///
+/// ORDER 1591-7yf1. ONLY 44 MEANS ABSENT. Every non-zero exit used to read as
+/// `Ok(None)`, so a transient failure (36 for a locked or non-interactive
+/// keychain, 51, a securityd busy under load) told `read_or_generate_in` the
+/// anchor was missing, and it wrote a fresh one over the anchor that was there.
+/// A failure is now an `Err` naming the exit, and every caller already has an
+/// error path: delivery fails by name, the hard reset refuses, the clear
+/// reports "could not confirm".
+fn credential_from_find_output(output: std::process::Output) -> std::io::Result<Option<String>> {
     if !output.status.success() {
-        // `security` exits 44 (errSecItemNotFound) when the entry is missing.
-        return Ok(None);
+        if output.status.code() == Some(SECURITY_EXIT_ITEM_NOT_FOUND) {
+            return Ok(None);
+        }
+        return Err(std::io::Error::other(format!(
+            "security find-generic-password exited {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
     }
     let secret = String::from_utf8(output.stdout)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?
@@ -887,5 +921,81 @@ pub(crate) mod tests {
         assert!(!KEYCHAIN_SERVICE.starts_with(SCRATCH_SERVICE_PREFIX));
         assert!(scratch_service().starts_with(SCRATCH_SERVICE_PREFIX));
         assert_ne!(scratch_service(), KEYCHAIN_SERVICE);
+    }
+
+    /// A `find-generic-password` that finished with `code`, as `security` would
+    /// leave it. No Keychain is touched: the exit is the whole input.
+    fn find_exited(code: i32, stderr: &str) -> std::process::Output {
+        use std::os::unix::process::ExitStatusExt;
+        std::process::Output {
+            status: std::process::ExitStatus::from_raw(code << 8),
+            stdout: Vec::new(),
+            stderr: stderr.as_bytes().to_vec(),
+        }
+    }
+
+    /// ORDER 1591-7yf1, the control: 44 (errSecItemNotFound) is still absent,
+    /// or the fix below would have made every missing item an error.
+    #[test]
+    fn a_find_that_exits_44_reads_as_absent() {
+        assert_eq!(
+            credential_from_find_output(find_exited(44, "could not be found")).unwrap(),
+            None
+        );
+    }
+
+    /// ORDER 1591-7yf1. Any other failure is an error that names the exit.
+    /// Pre-fix: `Ok(None)` for all of them.
+    #[test]
+    fn a_find_that_fails_any_other_way_is_an_error_naming_the_exit() {
+        for code in [36, 51, 1] {
+            let read = credential_from_find_output(find_exited(code, "keychain busy"));
+            let err = read.expect_err("a failed find is not an absent item");
+            assert!(
+                err.to_string().contains(&format!("exit status: {code}")),
+                "the error names the exit ({code}): {err}"
+            );
+        }
+    }
+
+    /// ORDER 1591-7yf1, the defect's consequence: a failed read must not be
+    /// followed by a write. Pre-fix the failed find read as `None`, and the
+    /// anchor was regenerated over the one already stored.
+    #[test]
+    fn a_failed_find_does_not_generate_and_write_a_new_anchor() {
+        let mut wrote = None;
+        let result = read_or_generate_with(
+            || credential_from_find_output(find_exited(36, "User interaction is not allowed.")),
+            |new| {
+                wrote = Some(new.to_string());
+                Ok(())
+            },
+        );
+        assert!(result.is_err(), "the failed read surfaces: {result:?}");
+        assert_eq!(wrote, None, "no anchor is written after a failed read");
+    }
+
+    /// ORDER 1591-7yf1, the gate observation's shape (reset_state.rs:644 read
+    /// `left: None` for an anchor it had just written). An anchor that IS in
+    /// the Keychain, read through a find that fails with anything but 44,
+    /// surfaces as Err, never as None. The real read afterwards proves the
+    /// item was there, so None would have been a false "absent".
+    /// Scratch Keychain service only.
+    #[test]
+    fn a_stored_anchor_read_through_a_failing_find_is_an_error_not_absent() {
+        let scratch = ScratchService::new();
+        write_credential_string_in(&scratch.0, KEYCHAIN_ACCOUNT, "scratch-anchor").unwrap();
+        let read = credential_from_find_output(find_exited(36, "User interaction is not allowed."));
+        assert!(
+            read.is_err(),
+            "a failing find over a stored anchor: {read:?}"
+        );
+        assert_eq!(
+            read_credential_string_in(&scratch.0, KEYCHAIN_ACCOUNT)
+                .unwrap()
+                .as_deref(),
+            Some("scratch-anchor"),
+            "the anchor really was stored"
+        );
     }
 }

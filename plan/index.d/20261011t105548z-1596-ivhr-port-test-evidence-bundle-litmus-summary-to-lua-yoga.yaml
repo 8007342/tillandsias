@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11): one shell->lua burndown item, announced and confirmed free.
+packets:
+  - packet_id: port-test-evidence-bundle-litmus-summary-sh-to-a-lua-fixture-shell-to-lua-burndown
+    order: 1596-ivhr
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [shell-to-lua, lua, litmus, fixtures, evidence-bundle]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-evidence-bundle-litmus-summary.sh
+      - scripts/lua/test-evidence-bundle-litmus-summary.lua
+      - openspec/litmus-tests/litmus-build-ci-dispatch-shape.yaml
+      - scripts/portability/shell-decider-floor.txt
+      - scripts/portability/pipe-site-floor.txt
+    title: |
+      Port scripts/test-evidence-bundle-litmus-summary.sh (the evidence bundle's litmus-total parser reads phase summaries, not explanatory FAIL tokens) to scripts/lua/test-evidence-bundle-litmus-summary.lua, one shell->lua burndown item
+    context: |
+      Shell-to-lua burndown (methodology convergence.yaml carried_obligations). The item is 60 lines, not a wrapper, and has one caller: litmus-build-ci-dispatch-shape.yaml:46. That step runs it directly and expects "ok: evidence bundle litmus summary parser", which the port keeps byte-identical.
+      Announced to the coordinator and confirmed free. taken-by at trunk 2dee73f0c found four refs (work/1367-lua-predicate-shims, work/437-forge-src-tmpfs-topology, work/retire-ruby-lua from 2026-09-25, and work/914-ahsy from 2026-10-08) that MODIFY the subject scripts/generate-evidence-bundle.sh. None touches the fixture.
+      SKIPPED ON THIS FORGE, recorded for whoever picks them up: scripts/test-exit-pause-host-hold.sh needs a host with script(1), and scripts/test-bare-metal-lane-command-is-runnable.sh needs a host with podman. On yoga's forge both print a skip, so a port would show a skip on both sides, which is not parity.
+    exit_criteria:
+      - 'scripts/lua/test-evidence-bundle-litmus-summary.lua makes both of the .sh''s parser checks (passed=140 failed=0 across three phase logs whose prose names FAIL; passed=134 failed=1 with a failing phase) in the same run as the .sh, and prints the same ok line'
+      - 'a readers arm shows the .sh''s retired FAIL: line has 0 readers, and prints the count of files searched'
+      - 'the .sh is deleted, its floor lines are dropped, and the litmus runs the Lua'
+    unscoreable: "a port: the parity run and the litmus step are its evidence"
+    depends_on: []
+    next_action: >
+      Port it, prove parity in the same run as the .sh, delete the .sh, drop its floor lines and repoint the litmus. Re-check taken-by after a fetch before pushing.
+    provenance: |
+      Filed by yoga (forge) on macuahuitl-fedora's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T10:55:48Z"
+        host: yoga
+        summary: |-
+          One shell->lua burndown item, test-evidence-bundle-litmus-summary.sh; exit-pause-host-hold and bare-metal-lane-command were skipped as needing script(1) or podman.

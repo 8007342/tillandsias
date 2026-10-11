@@ -75,7 +75,7 @@ targets=""
 if [ "${1:-}" = "--all" ]; then
     targets="$candidates"
 else
-    base="${TILLANDSIAS_WINDOWS_CLIPPY_BASE:-origin/linux-next}"
+    base="${TILLANDSIAS_WINDOWS_CLIPPY_BASE:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}"
     if ! git rev-parse --verify --quiet "$base" >/dev/null 2>&1; then
         echo "skip:windows-tray-clippy:base-ref-unavailable:$base"
         exit 0

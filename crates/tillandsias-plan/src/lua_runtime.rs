@@ -561,6 +561,17 @@ mod tests {
     use super::*;
     use std::fs;
 
+    /// This package's directory in the checkout that RUNS the test, read at
+    /// runtime. Compile-time `env!("CARGO_MANIFEST_DIR")` names the checkout
+    /// that COMPILED the binary, and with a shared CARGO_TARGET_DIR cargo
+    /// reuses that binary from another worktree, because it does not track
+    /// the env-dep it set itself (1590-j20f, 1603-muav).
+    fn manifest_dir() -> PathBuf {
+        PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo test sets CARGO_MANIFEST_DIR"),
+        )
+    }
+
     fn fixture_lua_dir(tag: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("tilland-lua-{tag}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
@@ -613,9 +624,9 @@ mod tests {
     /// collection — good responses included — down with it.
     #[test]
     fn collect_survives_a_nil_answer_response() {
-        let lua_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("lua");
-        let rt = LuaRuntime::new(&lua_dir, Path::new(env!("CARGO_MANIFEST_DIR")))
-            .expect("the crate's own lua scripts load");
+        let lua_dir = manifest_dir().join("lua");
+        let rt =
+            LuaRuntime::new(&lua_dir, &manifest_dir()).expect("the crate's own lua scripts load");
         let json = concat!(
             "[",
             r#"{"validated":true,"query_kind":"original","source_prompt":"p"},"#,
@@ -635,9 +646,9 @@ mod tests {
     /// no caller sends, so one tier wore three names.
     #[test]
     fn every_servable_tier_is_reachable_from_classification() {
-        let lua_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("lua");
-        let rt = LuaRuntime::new(&lua_dir, Path::new(env!("CARGO_MANIFEST_DIR")))
-            .expect("the crate's own lua scripts load");
+        let lua_dir = manifest_dir().join("lua");
+        let rt =
+            LuaRuntime::new(&lua_dir, &manifest_dir()).expect("the crate's own lua scripts load");
         assert_eq!(rt.classify_tier("what is ready?").unwrap(), "immediate");
         assert_eq!(
             rt.classify_tier("how does the forge stay isolated from the host machine?")

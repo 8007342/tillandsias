@@ -369,7 +369,7 @@ changed_files() {
         {
             git -C "$ROOT" diff --name-only 2>/dev/null
             git -C "$ROOT" diff --name-only --cached 2>/dev/null
-            git -C "$ROOT" diff --name-only origin/linux-next...HEAD 2>/dev/null
+            git -C "$ROOT" diff --name-only "${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}"...HEAD 2>/dev/null
         }
     fi | sort -u | grep .
 }

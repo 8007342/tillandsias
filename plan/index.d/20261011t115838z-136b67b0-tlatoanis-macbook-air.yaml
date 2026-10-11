@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-macos-trays-keychain-read-treats-every-security-find-failure-as-absent-so-a-transient-keychain-error-becomes-a-write
+    event:
+      type: note
+      ts: "2026-10-11T11:58:38Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261011t115838z
+      host: tlatoanis-macbook-air
+      summary: |
+        Landed #318 as d920a8dbe, darwin land gate green. Fix: in read_credential_string_in only exit 44 (errSecItemNotFound) reads as absent. Any other `security find-generic-password` failure is an Err naming the exit, so read_or_generate_in no longer writes a new installation anchor over a stored one after a transient Keychain failure.
+        Pinned in the land by installation_uuid tests:
+        - a_find_that_exits_44_reads_as_absent (the control);
+        - a_find_that_fails_any_other_way_is_an_error_naming_the_exit (36, 51, 1);
+        - a_failed_find_does_not_generate_and_write_a_new_anchor;
+        - a_stored_anchor_read_through_a_failing_find_is_an_error_not_absent (scratch Keychain service only).
+        MEASURED in one run: the pre-fix mapping gave 3 FAIL with the 44 control passing; post-fix 13/13; reset_state 10/10.
+        UNVERIFIED HYPOTHESIS, still labelled so: that this mechanism caused the darwin gate flakes (anchor read as None at 7fed6879c; exit 45 at 7d3a9a3b9). There were 0/16 standalone reproductions. It is to be judged on the next darwin gates: if the anchor-None flake recurs post-d920a8dbe, this was not its cause.

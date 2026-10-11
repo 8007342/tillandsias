@@ -62,7 +62,7 @@ cd "$REPO_ROOT" || exit 2
 MANIFEST="scripts/test-reference-surfaces.manifest"
 SHELL_GRANDFATHERED="scripts/unreferenced-grandfathered.txt"
 LITMUS_GRANDFATHERED="openspec/litmus-tests/unbound-grandfathered.txt"
-base_ref="${TILLANDSIAS_ADDED_TEST_BASE:-origin/linux-next}"
+base_ref="${TILLANDSIAS_ADDED_TEST_BASE:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}"
 enforce="${TILLANDSIAS_ADDED_TEST_REFERENCE_ENFORCE:-0}"
 
 if [ ! -f "$MANIFEST" ]; then

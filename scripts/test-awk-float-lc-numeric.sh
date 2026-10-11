@@ -68,6 +68,31 @@ MUTANTS=()
 cleanup() { rm -rf "$TMP"; for m in ${MUTANTS[@]+"${MUTANTS[@]}"}; do rm -f "$m"; done; }
 trap cleanup EXIT
 
+# ORDER 1587-qqzs. A SIGNAL MUST CLEAN UP BEFORE THE KILL. The preflight door
+# sends TERM, waits 1s, then KILL (no setsid on darwin, so it signals only this
+# pid). Bash defers a trap until the FOREGROUND command returns, and a producer
+# run in $(...) takes seconds, so the EXIT trap had not run when the KILL
+# landed. The mutants beside the originals then leaked into the checkout, where
+# diff-scoped guards read them as added code. MEASURED 2026-10-11 on darwin:
+# killing at t=1,3,5,9,11s leaked all three mutants (rc 137), and t=7s, between
+# producers, did not. So every producer runs in the BACKGROUND under `wait`,
+# which a trapped signal interrupts at once, and TERM/INT/HUP stop the child,
+# clean up and exit.
+CHILD=""
+on_signal() {
+    [ -n "$CHILD" ] && kill -TERM "$CHILD" 2>/dev/null
+    cleanup; trap - EXIT; exit "$1"
+}
+trap 'on_signal 143' TERM; trap 'on_signal 130' INT; trap 'on_signal 129' HUP
+# bg <var> <cmd...> — run cmd in the background, wait for it, and set var to
+# its stdout (trailing newlines stripped, as $(...) does).
+bg() {
+    local __var="$1"; shift
+    "$@" >"$TMP/bg.out" & CHILD=$!
+    wait "$CHILD"; CHILD=""
+    printf -v "$__var" '%s' "$(cat "$TMP/bg.out")"
+}
+
 # make_mutant <script> — copy beside the original (so its relative sourcing
 # still resolves) with every LC_ALL=C pin removed. Runs in THIS shell so the
 # trap knows the copy; mpath prints where it went.
@@ -82,6 +107,9 @@ make_mutant() {
 for s in scripts/freshness-inventory.sh scripts/refusal-calibration/measure-bands.sh scripts/select-work-batch.sh; do
     make_mutant "$s"
 done
+# The signal fixture (scripts/lua/test-awk-float-lc-numeric-signal.lua) sends
+# TERM once this file names our pid: the mutants exist from here on.
+[ -n "${TILLANDSIAS_AWKLC_PIDFILE:-}" ] && echo "$$" >"$TILLANDSIAS_AWKLC_PIDFILE"
 
 # every_dot <label> <values...> — all values match the dot grammar (and exist).
 every_dot() {
@@ -98,10 +126,10 @@ printf '# freshness: auditor=t date=%s verdict=refreshed scope=x\n' "$(date -u +
 printf '#!/bin/sh\n' >"$FX/b.sh"; printf '#!/bin/sh\n' >"$FX/c.sh"
 fresh_pct() { FRESHNESS_FIXTURE_DIR="$FX" inject bash "$1" 2>/dev/null \
     | sed -n 's/^freshness-coverage: \([^%]*\)%.*/\1/p'; }
-v="$(fresh_pct scripts/freshness-inventory.sh)"
+bg v fresh_pct scripts/freshness-inventory.sh
 if bad_v="$(every_dot fresh $v)"; then ok "freshness-inventory coverage=$v under $COMMA"
 else bad "freshness-inventory emitted '${bad_v}' under $COMMA (want dot decimal)"; fi
-v="$(fresh_pct "$(mpath scripts/freshness-inventory.sh)")"
+bg v fresh_pct "$(mpath scripts/freshness-inventory.sh)"
 if every_dot fresh $v >/dev/null; then bad "mutation arm vacuous: unpinned freshness-inventory still emitted '$v'"
 else ok "mutation arm: unpinned freshness-inventory emits '$v' (red as it must be)"; fi
 
@@ -120,10 +148,10 @@ mkdir -p "$TMP/idx"
 printf '{"band":"answer","corpus":"spec","q":"what is x"}\n' >"$TMP/q.jsonl"
 bands_margin() { SHIM_PATH="$TMP/bin:$SHIM_PATH" TILLANDSIAS_PLAN_BIN="$TMP/plan-stub" inject bash "$1" \
     --model m --index-dir "$TMP/idx" --questions "$TMP/q.jsonl" 2>/dev/null | awk -F'\t' 'NR==2{print $5}'; }
-v="$(bands_margin scripts/refusal-calibration/measure-bands.sh)"
+bg v bands_margin scripts/refusal-calibration/measure-bands.sh
 if bad_v="$(every_dot bands $v)"; then ok "measure-bands margin=$v under $COMMA"
 else bad "measure-bands emitted margin '${bad_v}' under $COMMA (want dot decimal)"; fi
-v="$(bands_margin "$(mpath scripts/refusal-calibration/measure-bands.sh)")"
+bg v bands_margin "$(mpath scripts/refusal-calibration/measure-bands.sh)"
 if every_dot bands $v >/dev/null; then bad "mutation arm vacuous: unpinned measure-bands still emitted '$v'"
 else ok "mutation arm: unpinned measure-bands emits '$v' (red as it must be)"; fi
 
@@ -133,7 +161,7 @@ else ok "mutation arm: unpinned measure-bands emits '$v' (red as it must be)"; f
 frontier_raw() { inject bash "$1" linux 2>/dev/null; }
 frontier_vals() { printf '%s\n' "$1" | awk -F'\t' '/^frontier\t/{
     print $2; n=$6; sub(/^neglect=/,"",n); print n; p=$7; sub(/^p=/,"",p); print p }'; }
-raw="$(frontier_raw scripts/select-work-batch.sh)"
+bg raw frontier_raw scripts/select-work-batch.sh
 if grep -q '^refused:no-plan-binary' <<<"$raw"; then
     # A precondition, not a verdict: no runnable plan binary means no frontier
     # to measure. Named skip, so the arm is visibly not scored.
@@ -143,7 +171,8 @@ else
     v="$(frontier_vals "$raw")"
     if bad_v="$(every_dot select $v)"; then ok "select-work-batch frontier fields all dot-decimal ($(printf '%s\n' $v | wc -l | tr -d ' ') values) under $COMMA"
     else bad "select-work-batch emitted '${bad_v}' under $COMMA (want dot decimal)"; fi
-    v="$(frontier_vals "$(frontier_raw "$(mpath scripts/select-work-batch.sh)")")"
+    bg raw frontier_raw "$(mpath scripts/select-work-batch.sh)"
+    v="$(frontier_vals "$raw")"
     if every_dot select $v >/dev/null; then bad "mutation arm vacuous: unpinned select-work-batch still all-dot"
     else ok "mutation arm: unpinned select-work-batch emits '$(printf '%s\n' $v | head -1)' (red as it must be)"; fi
 fi

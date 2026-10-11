@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: with-a-shared-cargo-target-dir-cargo-judges-a-path-package-fresh-by-mtime-alone-so-a-gate-in-one-worktree-runs-tests-compiled-from-another-worktrees-source
+    event:
+      type: note
+      ts: "2026-10-11T13:59:16Z"
+      agent_id: forge-forge-tillandsias-claude-20261011t135916z
+      host: yoga
+      summary: |
+        RESULT (yoga), work/1599-egzz at 094d1ee07. Chosen remedy: option 1, the gate-start touch of EVERY tracked file. It runs right after the 1592 base freeze, for --check, --test, --ci, --ci-full, --release and --install; not for --preflight or a plain dev build. Always, NOT on a marker: touching only when a marker in the target names another checkout was considered and rejected, because agent worktrees run bare cargo and would never write the marker, which is exactly the exposure (coordinator's decision).
+
+        EXIT CRITERION 1, measured in one run through ./build.sh --test, the entry that applies the freeze and the touch. Two scratch worktrees shared one target. A probe test (panic "EGZZ-CODE=X") and an include_str! input (egzz-probe.txt = X) were committed in B first and in A 2 s later. A gated through ./build.sh --test, so A's build is the newest output and B's differing files are older. Then in B:
+          pre-fix (BEGIN/END-GATE-TOUCH block stripped): EGZZ-CODE=A EGZZ-INCLUDE=A. B's test baseline reported new-red tillandsias_policy::egzz_probe, running A's code and A's include.
+          post-fix: note:gate-touch printed; cargo fingerprint `stale: changed .../egzz-wt-b/crates/tillandsias-policy/src/main.rs`; EGZZ-CODE=B EGZZ-INCLUDE=B.
+        NUANCE: with A built by BARE cargo, B's pre-fix build.sh gate already rebuilt the unit, so the exposure through a gate needs A's build to have come through build.sh too: the land queue's own gates versus an agent's gate. Bare cargo in B reproduces A-for-B on Linux regardless.
+
+        EXIT CRITERION 2, cost per gate:
+        - Linux (yoga forge, 12 cores, tmpfs): +59 s when one checkout gates twice (clippy +8.3, clippy listen-vsock +7.8, test --no-run +35.2, build plan/policy +7.7). +10-18 s on top of the ~180 s a switch between checkouts already costs.
+        - darwin (the Mac, M5 MacBook Air, taskpolicy -b): clippy +111.3, clippy listen-vsock +16.0, test --no-run +62.2, build +27.0, about +216 s; the touch of 11006 files takes 2.0 s. Darwin's no-op is not free (10-15 s steady state); the Mac is filing that separately.
+        - No cheap and safe saving on clippy --all-targets: its check-profile units are in the same shared target, so without the touch clippy would lint another checkout's code.
+
+        EXIT CRITERION 3, the VERSION instance: covered by EGZZ-INCLUDE above (an include_str! input that differs in B and is older than A's build is read from B's copy post-fix).
+
+        ALSO: the gate memo (gate-stamp.sh compute) is a content digest, identical before and after touching all 11001 files. A fresh worktree still needs build.sh's sidecar staging before cargo can build at all (order 710-w9kc), so these costs assume a staged sidecar. Fixture scripts/lua/test-gate-touch.lua (3 arms) is wired in --check.

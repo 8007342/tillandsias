@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: test-awk-float-lc-numeric-leaks-its-mutant-lcnum-copies-into-the-checkout-when-the-preflight-deadline-kills-it
+    field: status
+    value: completed
+    ts: "2026-10-11T13:55:30Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: test-awk-float-lc-numeric-leaks-its-mutant-lcnum-copies-into-the-checkout-when-the-preflight-deadline-kills-it
+    event:
+      type: completed
+      ts: "2026-10-11T13:55:30Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: 6c62b0e5e

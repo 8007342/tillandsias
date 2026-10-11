@@ -30,7 +30,7 @@
 # TILLANDSIAS_STEP_PREFIX_REFS (default refs/remotes/origin/work/),
 # TILLANDSIAS_STEP_PREFIX_WINDOW_DAYS (default 14).
 set -uo pipefail
-TRUNK="${TILLANDSIAS_STEP_PREFIX_TRUNK:-origin/linux-next}"
+TRUNK="${TILLANDSIAS_STEP_PREFIX_TRUNK:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}"
 REFS="${TILLANDSIAS_STEP_PREFIX_REFS:-refs/remotes/origin/work/}"
 WINDOW="${TILLANDSIAS_STEP_PREFIX_WINDOW_DAYS:-14}"
 DIR=scripts/gate-steps.d

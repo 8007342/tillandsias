@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: port-check-launch-artifacts-untracked-sh-to-lua-shell-to-lua-burndown
+    field: status
+    value: in_progress
+    ts: "2026-10-11T11:02:40Z"
+    host: yoga
+
+events:
+  - packet_id: port-check-launch-artifacts-untracked-sh-to-lua-shell-to-lua-burndown
+    event:
+      type: note
+      ts: "2026-10-11T11:02:40Z"
+      host: yoga
+      summary: |-
+        coordinator-confirmed burndown port
+  - packet_id: port-check-launch-artifacts-untracked-sh-to-lua-shell-to-lua-burndown
+    event:
+      type: note
+      ts: "2026-10-11T11:02:40Z"
+      host: yoga
+      summary: |-
+        wip-override by yoga: coordinator assignment; the three held claims (1594-mtc3 #315, 1595-pvju #316, 1596-ivhr) are finished and pushed, waiting only on the land queue — admitted past: refused:set-field:wip-limit:3/3 — yoga already holds 3 in_progress packet(s) outside a story: 1594-mtc3, 1595-pvju, 1596-ivhr (1367-2sbc; the limit is 3, from methodology/distributed-work.yaml packet_discipline.wip_limit).

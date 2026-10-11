@@ -55,7 +55,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 2
 
 FRAG_DIR="plan/index.d"
-base_ref="${TILLANDSIAS_FRAGMENT_PARSE_BASE:-origin/linux-next}"
+base_ref="${TILLANDSIAS_FRAGMENT_PARSE_BASE:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}"
 
 # A validator that EXISTS where we are. `yq` is absent on macOS hosts and
 # `ruby` is absent from the forge image, so prefer the workspace binary and fall

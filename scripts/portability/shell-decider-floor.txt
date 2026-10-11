@@ -56,7 +56,6 @@ scripts/check-jq-callsite-ratchet.sh
 scripts/check-jq-multiline-capture-strips-cr.sh
 scripts/check-landed-but-open.sh
 scripts/check-landing-provenance.sh
-scripts/check-launch-artifacts-untracked.sh
 scripts/check-ledger-distillation.sh
 scripts/check-litmus-dead-inputs.sh
 scripts/check-litmus-expression-pinning-added.sh
@@ -202,7 +201,6 @@ scripts/test-compaction-coverage.sh
 scripts/test-competing-gate-consumer.sh
 scripts/test-competing-gate-no-dispatch-cause.sh
 scripts/test-concurrent-forge-shared-stack.sh
-scripts/test-configure-codex.sh
 scripts/test-convergence-dashboard-locale.sh
 scripts/test-convergence-dashboard.sh
 scripts/test-credential-and-proxy-confinement.sh
@@ -219,7 +217,6 @@ scripts/test-cycle-claims-report.sh
 scripts/test-cycle-driver.sh
 scripts/test-cycle-flow-emit-idempotency.sh
 scripts/test-cycle-lock-attested-release.sh
-scripts/test-cycle-metrics-mix-label.sh
 scripts/test-cycle-metrics-recurrence.sh
 scripts/test-cycle-preflight-cargo-resolution.sh
 scripts/test-daily-maintenance-day-boundary.sh
@@ -243,11 +240,9 @@ scripts/test-ensure-cosign.sh
 scripts/test-ensure-toolbox-properties.sh
 scripts/test-env-forward-shared.sh
 scripts/test-envelope-suite-resolves-the-gates-artifact.sh
-scripts/test-evidence-bundle-litmus-summary.sh
 scripts/test-exact-version-literal-added.sh
 scripts/test-exec-bits-guard-end-to-end.sh
 scripts/test-exec-transcript-capped-in-every-driver.sh
-scripts/test-exit-pause-host-hold.sh
 scripts/test-expert-accuracy-provenance.sh
 scripts/test-expert-accuracy-record-shape.sh
 scripts/test-expert-capability-behaviour-skew.sh

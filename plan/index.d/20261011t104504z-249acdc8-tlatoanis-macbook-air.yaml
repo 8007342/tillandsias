@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-hook-phase-blind-band-arm-is-red-on-darwin-under-taskpolicy-b-because-sleep-overshoots-its-fixed-4x-ceiling
+    event:
+      type: note
+      ts: "2026-10-11T10:45:04Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261011t104504z
+      host: tlatoanis-macbook-air
+      summary: |
+        Landed #308 (8fac92659). Arm 4 of scripts/test-hook-phase-instrumentation.sh now calibrates its budget from arm 3s measured elapsed time and retries up to 3 times, so the 1x-to-4x band stays open under timer coalescing. MEASURED on darwin under taskpolicy -b 2026-10-11: pre-fix 3/5 FAIL, post-fix 5/5 pass; plain 3/3 pass; the band-closed mutation 3/3 FAIL (the guard still bites). The same fixture is what this land runs, so it exercises the exit criteria. The full gate on e28050992 under -b ran this arm green.

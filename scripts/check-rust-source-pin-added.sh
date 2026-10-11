@@ -39,7 +39,7 @@
 set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 2
-base_ref="${TILLANDSIAS_RUST_PIN_BASE:-origin/linux-next}"
+base_ref="${TILLANDSIAS_RUST_PIN_BASE:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}"
 
 INC='let[[:space:]]+(mut[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)[^=]*=[[:space:]]*include_str!\(.*\.(rs|sh|ps1|toml|yaml|yml|json|plist|template)"'
 NEG='negative control|NEG-|must FAIL|negative_control'

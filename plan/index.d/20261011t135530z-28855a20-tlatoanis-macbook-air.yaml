@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: with-a-shared-cargo-target-dir-a-test-that-reads-files-through-env-cargo-manifest-dir-runs-a-binary-compiled-in-another-worktree-and-reads-that-checkouts-files
+    event:
+      type: note
+      ts: "2026-10-11T13:55:30Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261011t135530z
+      host: tlatoanis-macbook-air
+      summary: |
+        Landed #321 as 6b3144df8, land gate green. The exit criteria, each exercised in the land:
+        1. B follows B's file: scripts/lua/test-manifest-dir-env.lua arm 5 builds a two-copy crate on one shared target. The runtime std::env::var("CARGO_MANIFEST_DIR") read follows B's file, and in the same run the compile-time env!() read still follows A's (the control). On the real tree, tillandsias-policy's parity test was measured pre-fix passing in B on A's matrix and post-fix reading B's.
+        2. The guard counts its population and refuses a new site: check-manifest-dir-env.lua in --check prints scanned=157:test=154:floor=154:non-test=3:files=37. The fixture arm NEW (mutation) is refused, STALE is refused, EMPTY is could-not-run.
+        3. The fingerprint question is answered on this row (event 2026-10-11T11:25Z): cargo 1.99.0 drops env-deps for the variables it sets (CARGO_MANIFEST_DIR) and keeps user variables.
+        Also in the land: test-land-queue ARMS 13a/13b now assert the shell-to-lua component of the Carried trailer, and ARM 13d asserts one entry per backlog.
+        Related, filed separately: 1599-egzz (mtime-only freshness, the wider defect).

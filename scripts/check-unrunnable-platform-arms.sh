@@ -63,7 +63,7 @@ cd "$ROOT" || exit 2
 
 SPEC_SOURCE="scripts/check-host-tools.sh"
 PLATFORM=""
-BASE_REF="${TILLANDSIAS_UNRUNNABLE_BASE:-origin/linux-next}"
+BASE_REF="${TILLANDSIAS_UNRUNNABLE_BASE:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}"
 
 while [ $# -gt 0 ]; do
     case "$1" in

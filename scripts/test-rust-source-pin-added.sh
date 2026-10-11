@@ -17,6 +17,9 @@
 # PRE-FIX RESULT: FAILS — no guard covered Rust include_str! pins (827-d3dc:
 # 92 of them, four of the ten costliest).
 set -uo pipefail
+# 1592-idmu: this fixture builds its own repo, so the gate's frozen base (a SHA of
+# the gated checkout) is not its base; its scratch origin/linux-next is.
+unset TILLANDSIAS_GATE_DIFF_BASE
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GUARD="$ROOT/scripts/check-rust-source-pin-added.sh"
 pass=0; total=7

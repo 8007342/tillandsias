@@ -35,7 +35,7 @@
 set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 2
-base_ref="${TILLANDSIAS_EXACT_VERSION_BASE:-origin/linux-next}"
+base_ref="${TILLANDSIAS_EXACT_VERSION_BASE:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}"
 
 if ! git rev-parse --verify --quiet "$base_ref" >/dev/null 2>&1; then
     echo "ok:exact-version-literal-added:base-unavailable"

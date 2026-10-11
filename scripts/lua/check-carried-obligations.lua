@@ -1,5 +1,5 @@
 -- @trace order:1577-g96z, order:1570-k5yt, order:1577-57u3, order:1589-hm2r, spec:ci-release
--- @env TILLANDSIAS_CARRIED_BASE TILLANDSIAS_CARRIED_HEAD TILLANDSIAS_CARRIED_REF TILLANDSIAS_CARRIED_NO_FETCH
+-- @env TILLANDSIAS_CARRIED_BASE TILLANDSIAS_CARRIED_HEAD TILLANDSIAS_CARRIED_REF TILLANDSIAS_CARRIED_NO_FETCH TILLANDSIAS_GATE_DIFF_BASE
 --
 -- check-carried-obligations.lua — what does THIS change owe each carried
 -- obligation backlog? The rule is methodology/convergence.yaml
@@ -72,6 +72,7 @@
 -- Arguments: --landing  refuse a due, silent change (the land queue's mode).
 
 local BASE = env.get("TILLANDSIAS_CARRIED_BASE")
+if not BASE or BASE == "" then BASE = env.get("TILLANDSIAS_GATE_DIFF_BASE") end
 if not BASE or BASE == "" then BASE = "origin/linux-next" end
 local HEAD = env.get("TILLANDSIAS_CARRIED_HEAD")
 if not HEAD or HEAD == "" then HEAD = "HEAD" end

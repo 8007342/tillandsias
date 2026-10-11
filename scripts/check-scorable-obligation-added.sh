@@ -97,7 +97,7 @@
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-BASE="${1:-origin/linux-next}"
+BASE="${1:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}"
 
 # Fragments ADDED versus the base, plus wholly untracked ones — new debt only.
 #

@@ -912,6 +912,95 @@ EOF
     shift
 done
 
+# ORDER 1592-idmu — THE DIFF BASE IS FROZEN AT GATE START.
+#
+# The diff-scoped guards (`check-*-added.sh` and their kin) default their base
+# to origin/linux-next, which is ONE ref shared by every worktree of the
+# checkout. Measured on tlatoanis-macbook-air 2026-10-11: a fetch in the main
+# checkout mid-gate moved it past a fix trunk had made to a file the gated tree
+# still carried in its old form. `git diff <live ref>` then read the old line as
+# this change ADDING it, and check-sigpipe-verdict-pipelines-added refused a
+# gate whose 3069 tests were green.
+#
+# So the base is captured ONCE: the merge-base of HEAD and origin/linux-next,
+# as a SHA no fetch can move, exported for every guard and gate step this run
+# starts. Each guard reads its own override first, then this, then the live ref,
+# so a guard run by hand behaves as before.
+#
+# AN INHERITED BASE IS KEPT ONLY IF IT IS AN ANCESTOR OF HEAD. A caller that
+# froze it (the pre-push hook, a land queue) is honoured, but an env var
+# exported for one purpose can ride into a later unit: a base frozen for
+# another branch is not this tree's base, and diffing against it would judge
+# that branch's changes as this one's. That is refused by name, never silently
+# re-frozen, so the leak is seen where it happened.
+#
+# THE BASE NAMES ITS CHECKOUT. TILLANDSIAS_GATE_DIFF_BASE_ROOT is the toplevel
+# it was frozen for. A gate's fixtures build their own repos and run this
+# script or the pre-push hook inside them; there the inherited SHA belongs to
+# another repository and does not apply, so that repo freezes its own and the
+# note says so. Measured in --preflight: two pre-push fixtures refused until the
+# base carried its root.
+# BEGIN-GATE-DIFF-BASE
+_freeze_gate_diff_base() {
+    local _gdb="${TILLANDSIAS_GATE_DIFF_BASE:-}" _top=""
+    _top="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null)" || _top=""
+    if [ -n "$_gdb" ] && [ -n "${TILLANDSIAS_GATE_DIFF_BASE_ROOT:-}" ] && [ "$TILLANDSIAS_GATE_DIFF_BASE_ROOT" != "$_top" ]; then
+        echo "note:gate-diff-base:other-checkout:$TILLANDSIAS_GATE_DIFF_BASE_ROOT (the inherited base was frozen there, not for $_top; freezing this checkout's own)" >&2
+        _gdb=""; unset TILLANDSIAS_GATE_DIFF_BASE TILLANDSIAS_GATE_DIFF_BASE_ROOT
+    fi
+    if [ -n "$_gdb" ]; then
+        if git -C "$SCRIPT_DIR" merge-base --is-ancestor "$_gdb" HEAD 2>/dev/null; then
+            echo "note:gate-diff-base:inherited:$_gdb (an ancestor of HEAD, kept from the caller; 1592-idmu)" >&2
+            return 0
+        fi
+        echo "refused:gate-diff-base:inherited-not-ancestor:$_gdb"
+        echo "  why: TILLANDSIAS_GATE_DIFF_BASE came from the environment and is not an ancestor of HEAD, so it is some other tree's base; every diff-scoped guard would judge that tree's changes as this one's (1592-idmu)" >&2
+        echo "  remedy: unset TILLANDSIAS_GATE_DIFF_BASE and re-run; this gate then freezes its own base" >&2
+        return 1
+    fi
+    _gdb="$(git -C "$SCRIPT_DIR" merge-base HEAD origin/linux-next 2>/dev/null)" || _gdb=""
+    if [ -n "$_gdb" ]; then
+        export TILLANDSIAS_GATE_DIFF_BASE="$_gdb" TILLANDSIAS_GATE_DIFF_BASE_ROOT="$_top"
+        echo "note:gate-diff-base:frozen:$_gdb (merge-base of HEAD and origin/linux-next, frozen here at gate start; 1592-idmu)" >&2
+    fi
+}
+# END-GATE-DIFF-BASE
+# --preflight fetches first, so it freezes after its own fetch.
+if [[ "$FLAG_PREFLIGHT" != true ]]; then _freeze_gate_diff_base || exit 1; fi
+
+# ORDER 1599-egzz — EVERY GATE TOUCHES THE GATING CHECKOUT'S TRACKED FILES.
+#
+# With one CARGO_TARGET_DIR shared by several worktrees, cargo judges a path
+# package fresh by MTIME ALONE, against package-relative dep-info paths, and
+# records nothing about which checkout built the output. Measured on
+# tlatoanis-macbook-air: `cargo test` in worktree B printed worktree A's code,
+# with no rebuild, because B's differing file was older than A's last build. A
+# green gate can be another checkout's code.
+#
+# So before any cargo runs, the gate bumps the mtime of EVERY tracked file in
+# this checkout. Every workspace unit that reads one rebuilds here, from this
+# checkout's bytes; registry dependencies stay cached. Every tracked file, not
+# crates/**: tillandsias-headless's build script embeds whole images/ trees,
+# and a crates-plus-include_str! list missed 439 of them (yoga, 2026-10-11).
+# Measured cost on yoga: +59 s when one checkout gates twice in a row; +10-18 s
+# on top of the ~180 s a switch between checkouts already costs. The gate's
+# memo is a content digest, unchanged by a touch.
+#
+# ALWAYS, NOT ON A MARKER. Touching only when a marker in the target names
+# another checkout was considered and rejected: agent worktrees run bare cargo
+# and would never write the marker, which is exactly the exposure.
+# --preflight never builds and is not touched; a plain dev build is not a gate.
+# BEGIN-GATE-TOUCH
+_touch_gating_checkout() {
+    local _t0="$SECONDS"
+    xargs -0 touch -c < <(git -C "$SCRIPT_DIR" ls-files -z --full-name -- ":/") 2>/dev/null || true
+    echo "note:gate-touch:tracked files of $SCRIPT_DIR touched in $(( SECONDS - _t0 ))s, so cargo rebuilds this checkout's units (1599-egzz)" >&2
+}
+if [[ "$FLAG_CHECK$FLAG_TEST$FLAG_CI$FLAG_CI_FULL$FLAG_RELEASE$FLAG_INSTALL" == *true* ]]; then
+    (cd "$SCRIPT_DIR" && _touch_gating_checkout)
+fi
+# END-GATE-TOUCH
+
 # ORDER 1305-udgs — `./build.sh --preflight`: every guard that can refuse a push,
 # before the SHA, in seconds.
 #
@@ -927,6 +1016,7 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     # The `-added` family scopes itself against origin/linux-next; without a
     # fetch it scans nothing and prints a green that means nothing.
     git -C "$SCRIPT_DIR" fetch -q origin 2>/dev/null || true
+    _freeze_gate_diff_base || exit 1
 
     # ORDER 1247-9pr8 — A STALE PLAN BINARY IS ONE CAUSE, SO SAY IT ONCE. Measured
     # on yolanda 2026-09-28 (1462-trch): with a plan binary older than the tree,
@@ -4577,6 +4667,25 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Shell-ratchet fixture passed"
 
+    # ORDER 1590-j20f — a test that builds a path from compile-time
+    # env!("CARGO_MANIFEST_DIR") reads the checkout that COMPILED it, and with
+    # a shared CARGO_TARGET_DIR cargo reuses that binary from another worktree
+    # (it drops the env-dep it set itself). Refuses a new site in test code
+    # beyond its per-file floor and prints the count; the fixture shows the
+    # defect on a real cargo (two copies, one target) and the guard's arms.
+    _step "Checking for new compile-time CARGO_MANIFEST_DIR paths in tests (1590-j20f)..."
+    if ! _run_lua_decider "scripts/lua/check-manifest-dir-env.lua" 2>&1; then
+        _error "a test reads a fixture through compile-time env!(\"CARGO_MANIFEST_DIR\") — use std::env::var(\"CARGO_MANIFEST_DIR\") at runtime (1590-j20f)"
+        exit 1
+    fi
+    _info "CARGO_MANIFEST_DIR ratchet passed"
+    _step "Checking the CARGO_MANIFEST_DIR ratchet's fixture (1590-j20f)..."
+    if ! _run_lua_decider "scripts/lua/test-manifest-dir-env.lua" 2>&1; then
+        _error "the CARGO_MANIFEST_DIR fixture failed — see the FAIL lines above (1590-j20f)"
+        exit 1
+    fi
+    _info "CARGO_MANIFEST_DIR fixture passed"
+
     # The guard-activation auditor's own fixture (1570-25iq), a Lua fixture on
     # the one runner: parity with the pre-port .sh, an orphan that refuses, the
     # 1087-h2z9 symlink-farm shape, an empty population refused. The auditor
@@ -4663,6 +4772,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Unknown-host claim fixture passed"
 
+    # ORDER 1592-idmu — the diff-scoped guards read the base frozen at gate
+    # start (TILLANDSIAS_GATE_DIFF_BASE), so a fetch mid-gate cannot move it.
+    _step "Checking the diff-scoped guards read a frozen base (1592-idmu)..."
+    if ! _run_lua_decider "scripts/lua/test-gate-diff-base-frozen.lua" 2>&1; then
+        _error "a diff-scoped guard reads the live origin/linux-next again, or the gate no longer freezes the base — see the FAIL lines above (1592-idmu)"
+        exit 1
+    fi
+    _info "Frozen diff-base fixture passed"
+
     # ORDER 1581-d9ig — no fixture prunes or gcs the operator's checkout. Two
     # fixtures' teardown ran `git -C "$ROOT" worktree prune`, which inside the
     # WSL guest deletes every Windows worktree whose C:/ path the guest cannot
@@ -4688,6 +4806,52 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Litmus YAML parse gate passed"
+
+    # ORDER 1594-mtc3 — relay-preflight's phase 5 does not select a test-*.sh
+    # the diff deletes (every shell->lua port deletes one) as a touched fixture.
+    _step "Checking relay-preflight skips deleted fixtures (1594-mtc3)..."
+    if ! _run_lua_decider "scripts/lua/test-relay-preflight-deleted-fixture.lua" 2>&1; then
+        _error "relay-preflight phase 5 selects a fixture the diff deleted, or lost a present one — see the FAIL lines above (1594-mtc3)"
+        exit 1
+    fi
+    _info "Relay-preflight deleted-fixture check passed"
+
+    # ORDER 1597-rrku — the mirror's discipline parser and its fixture probe
+    # ruby by running it: a forge's `ruby` is a Homebrew shim that exits 127.
+    _step "Checking the discipline parser probes ruby by running it (1597-rrku)..."
+    if ! _run_lua_decider "scripts/lua/test-ruby-probe-runs.lua" 2>&1; then
+        _error "the mirror discipline parser or its fixture checks ruby by presence again — a shim that cannot run would read as ruby (1597-rrku)"
+        exit 1
+    fi
+    _info "Ruby probe fixture passed"
+
+    # ORDER 1599-egzz — every gate touches the gating checkout's tracked files
+    # before any cargo, so a shared target cannot serve another checkout's units.
+    _step "Checking every gate touches its checkout's tracked files (1599-egzz)..."
+    if ! _run_lua_decider "scripts/lua/test-gate-touch.lua" 2>&1; then
+        _error "the gate-start touch moved, lost a gate mode, or no longer reaches every tracked file — a shared target could serve another checkout's code (1599-egzz)"
+        exit 1
+    fi
+    _info "Gate-touch fixture passed"
+
+    # ORDER 1602-3ave — a gate-failed eviction comment carries the failing
+    # step's verdict lines, not only the last five lines of the gate log.
+    _step "Checking eviction comments name the failing step (1602-3ave)..."
+    if ! _run_lua_decider "scripts/lua/test-land-queue-eviction-comment.lua" 2>&1; then
+        _error "the land queue's eviction comment no longer carries the failing step's FAIL lines — an eviction could not be diagnosed after the fact (1602-3ave)"
+        exit 1
+    fi
+    _info "Eviction-comment fixture passed"
+
+    # ORDER 1606-25nf — the mirror follows a work ref upstream rewrote (when
+    # upstream provably held every commit it drops) and publishes the rest as
+    # diverged, instead of serving a dead tip under heads-current.
+    _step "Checking the mirror follows rewritten work refs (1606-25nf)..."
+    if ! _run_lua_decider "scripts/lua/test-mirror-follows-rewritten-work-refs.lua" 2>&1; then
+        _error "the mirror's reconcile pass no longer follows an upstream rewrite, clobbers an un-relayed head, or reports heads-current over a diverged work ref (1606-25nf)"
+        exit 1
+    fi
+    _info "Mirror rewrite-follow fixture passed"
 
     _step "Checking the nix-capability probe's evidence survives a noisy shell (917-zkge)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-probe-nix-capability-evidence.sh" 2>&1; then
