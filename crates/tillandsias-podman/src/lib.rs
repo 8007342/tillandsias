@@ -1494,7 +1494,12 @@ while [ $i -lt 2000 ]; do echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; i=$((
     /// declared and never contended looks identical at runtime to no lock.
     #[test]
     fn exactly_one_mutex_guards_the_process_global_podman_bin() {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        // Runtime read (1590-j20f, 1610-d6ra): a compile-time env! path names the
+        // checkout that compiled this binary, which a shared target may reuse.
+        let root = std::path::Path::new(
+            &std::env::var("CARGO_MANIFEST_DIR").expect("cargo test sets CARGO_MANIFEST_DIR"),
+        )
+        .join("src");
         let mut declarations = Vec::new();
 
         for name in ["lib.rs", "backend.rs"] {
