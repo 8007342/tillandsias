@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-lc-numeric-signal-fixture-waits-a-fixed-10-s-for-a-pid-file-the-subject-never-writes-when-it-ends-early-so-the-windows-wsl-gate-is-red
+    event:
+      type: note
+      ts: "2026-10-11T19:59:44Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261011t195944z
+      host: tlatoanis-macbook-air
+      summary: |
+        COVERAGE GAP, kept visible (coordinator, 2026-10-11): on Windows gates the REAL arm of test-awk-float-lc-numeric-signal.lua is UNEXERCISED until the WSL builder guest image gains a comma-decimal locale (its `locale -a` lists only C, C.utf8, POSIX; yolanda note on trunk 9cef72228). The fixture names this as skip:awk-float-lc-numeric-signal:no-comma-locale-on-host, which is not a pass. It is a coverage gap, not a defect. PR #336.
