@@ -82,6 +82,16 @@ pub fn version() -> &'static str {
 mod locale_strings_tests {
     use super::locale_strings;
 
+    /// This package's directory in the checkout that RUNS the test, read at
+    /// runtime. Compile-time `env!("CARGO_MANIFEST_DIR")` names the checkout
+    /// that COMPILED the binary, and with a shared CARGO_TARGET_DIR cargo
+    /// reuses that binary from another worktree (1590-j20f, 1608-qb2c).
+    fn manifest_dir() -> std::path::PathBuf {
+        std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo test sets CARGO_MANIFEST_DIR"),
+        )
+    }
+
     /// 792-cf5x: the generated layer carries the values `en.toml` actually
     /// holds. (Non-emptiness is enforced one level up by a const assertion,
     /// which fails the BUILD rather than a test run.)
@@ -117,7 +127,7 @@ mod locale_strings_tests {
     /// measurement.
     #[test]
     fn en_corpus_does_not_describe_the_shipped_tray() {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let root = manifest_dir().join("../..");
         let en = std::fs::read_to_string(root.join("locales/en.toml"))
             .expect("locales/en.toml must be readable");
 
@@ -210,7 +220,7 @@ mod locale_strings_tests {
     /// than a runtime assertion.
     #[test]
     fn sparse_locales_are_normal_and_do_not_break_the_build() {
-        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../locales");
+        let dir = manifest_dir().join("../../locales");
         let count_keys = |name: &str| -> usize {
             let src = std::fs::read_to_string(dir.join(name)).unwrap_or_default();
             src.lines()
