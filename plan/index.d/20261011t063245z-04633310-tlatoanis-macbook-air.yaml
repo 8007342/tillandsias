@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: on-a-mac-without-yq-the-litmus-runner-degrades-so-the-podman-preflight-fixtures-never-reach-the-code-they-test
+    field: status
+    value: completed
+    ts: "2026-10-11T06:32:45Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: on-a-mac-without-yq-the-litmus-runner-degrades-so-the-podman-preflight-fixtures-never-reach-the-code-they-test
+    event:
+      type: completed
+      ts: "2026-10-11T06:32:45Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: 7ec920a1c
+  - packet_id: on-a-mac-without-yq-the-litmus-runner-degrades-so-the-podman-preflight-fixtures-never-reach-the-code-they-test
+    event:
+      type: note
+      ts: "2026-10-11T06:32:45Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        Closed against a criterion that named the wrong cause, recorded so (coordinator ruling 2026-10-11). The exit criterion asked for a darwin skip naming the missing yq. The true cause on darwin is that the podman preflight is Linux-only: on macOS podman is VM-internal, so no host fixture can reach it whatever yq does. Landed #295 (7ec920a1c): scripts/test-litmus-podman-preflight-diagnosis.sh emits `skip:podman-preflight-diagnosis:linux-only-preflight (the podman preflight fires only on Linux hosts; on Darwin podman is VM-internal, so nothing here can reach it)`. MEASURED on darwin 2026-10-11, with no yq on PATH (`command -v yq` empty) and also with PATH=/usr/bin:/bin:/usr/sbin:/sbin: that skip, never a FAIL blaming the preflight. The skip text deliberately does NOT name yq, because naming it would make it less true.

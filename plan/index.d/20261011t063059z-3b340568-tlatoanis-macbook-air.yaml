@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: quit-during-a-forge-build-gets-no-in-vm-shutdown-reply-and-the-drain-expires-to-a-force-stop-with-no-named-cause
+    field: next_action
+    value: 'RELEASED 2026-10-11 by tlatoanis-macbook-air (WIP sweep). Code landed in #289 (e6bed954e): ShutdownStage markers, a 3 s handshake budget, and a no-reply line that names the stage. Fake-guest unit-pinned; what is left is LIVE only. To observe, after a Quit DURING a forge build on a real Mac VM: the log ends in either a clean shutdown ack or a named-stage cause line, never a bare force-stop. The reproduce also records the headless process state and whether the request was delivered, with the guest console kept.'
+    ts: "2026-10-11T06:30:59Z"
+    host: tlatoanis-macbook-air

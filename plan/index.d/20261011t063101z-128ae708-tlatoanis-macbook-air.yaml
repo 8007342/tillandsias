@@ -1,0 +1,16 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: after-a-successful-forge-launch-the-tray-label-sticks-on-the-last-build-status-because-the-guest-cannot-see-the-clis-rootless-containers
+    field: next_action
+    value: |-
+      Push a status event from the CLI when the forge session is attached (mirroring #283's failure push), or give the daemon visibility of the rootless containers' events.
+
+
+      [2026-10-11T06:31:01Z tlatoanis-macbook-air] RELEASED 2026-10-11 by tlatoanis-macbook-air (WIP sweep). Code landed in #296 (81eb64945): headless pushes session_open/session_ended UDP status events around the attached agent container. What is left is LIVE only. To observe, after a successful attach on a real install: the tray label moves off the last build status within 10 s of the forge session starting.
+    ts: "2026-10-11T06:31:01Z"
+    host: tlatoanis-macbook-air

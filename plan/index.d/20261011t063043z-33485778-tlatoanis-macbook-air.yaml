@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-macos-hard-reset-reset-guest-has-no-per-run-approval-and-does-not-clear-the-vault-keychain-items-so-it-lacks-parity-with-the-windows-hard-reset
+    field: status
+    value: completed
+    ts: "2026-10-11T06:30:43Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-macos-hard-reset-reset-guest-has-no-per-run-approval-and-does-not-clear-the-vault-keychain-items-so-it-lacks-parity-with-the-windows-hard-reset
+    event:
+      type: completed
+      ts: "2026-10-11T06:30:43Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: fb53b57ac
+  - packet_id: the-macos-hard-reset-reset-guest-has-no-per-run-approval-and-does-not-clear-the-vault-keychain-items-so-it-lacks-parity-with-the-windows-hard-reset
+    event:
+      type: note
+      ts: "2026-10-11T06:30:43Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        Landed #294. reset_state.rs: hard_reset_without_approval_refuses_and_touches_nothing; approved_hard_reset_clears_the_vault_credentials_and_keeps_t... (scratch HOME + tillandsias-scratch-test-* Keychain services, never the real ones; the plan is announced before destruction); an_unreachable_keychain_refuses_hard; the_installer_cannot_reach_the_hard_reset (source scan), and test-install-macos-setup-is-quiet.sh scans install-macos.sh for --reset-guest.

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-podman-preflight-diagnosis-fixture-requires-python3-which-on-a-stock-mac-is-the-xcode-clt-shim
+    field: status
+    value: completed
+    ts: "2026-10-11T06:30:41Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-podman-preflight-diagnosis-fixture-requires-python3-which-on-a-stock-mac-is-the-xcode-clt-shim
+    event:
+      type: completed
+      ts: "2026-10-11T06:30:41Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: f30a0ee60
+  - packet_id: the-podman-preflight-diagnosis-fixture-requires-python3-which-on-a-stock-mac-is-the-xcode-clt-shim
+    event:
+      type: note
+      ts: "2026-10-11T06:30:41Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        Landed #291 (short /tmp sandbox root), and the fixture is now Lua (#298, fs.listen_unix, no python3). MEASURED on darwin 2026-10-11 with PATH=/usr/bin:/bin:/usr/sbin:/sbin (python3 = the CLT shim /usr/bin/python3): `tillandsias-plan script run scripts/lua/test-gate-podman-mode-configuration.lua` -> ok:gate-podman-mode-configuration:7 scenarios.
