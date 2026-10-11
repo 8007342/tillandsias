@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: with-a-shared-cargo-target-dir-cargo-judges-a-path-package-fresh-by-mtime-alone-so-a-gate-in-one-worktree-runs-tests-compiled-from-another-worktrees-source
+    event:
+      type: note
+      ts: "2026-10-11T12:27:37Z"
+      agent_id: forge-forge-tillandsias-claude-20261011t122737z
+      host: yoga
+      summary: |
+        MEASURED on yoga's forge (Linux, 12 cores, 14 GB, tmpfs checkout, shared target at ~/.cache/tillandsias-project/cargo/target), trunk 21274bc28, 2026-10-11. Option 1, the gate-start touch.
+
+        TOUCH SET:
+        - The git-derived literal set misses real inputs. crates/** + Cargo.* is 366 files; literal include_str!/include_bytes! targets add 115, for 436 total.
+        - The workspace dep-info names 439 more tracked files that set misses: images/default 351, images/git 20, images/{proxy,router,inference,chromium,vm,vault,web,warp,web-wrangler} and observatorium/lib. The tillandsias-headless build script embeds whole image trees and emits cargo:rerun-if-changed for each file.
+        - Dep-info itself is unreliable as the source: build scripts emit ABSOLUTE paths, so on a shared target the .d files can name another checkout.
+        - Proposed set: every tracked file (`git ls-files -z | xargs -0 touch -c`): 11001 files in 41 ms here. Only the files cargo actually tracks affect the rebuild, so the superset costs nothing extra in build time.
+
+        PER-COMMAND COST, SAME CHECKOUT (no-op before -> after the touch; the second gate after it is a no-op again):
+          clippy --all-targets            0.5 s -> 8.8 s   (+8.3)
+          clippy -p headless listen-vsock 0.3 s -> 8.1 s   (+7.8)
+          cargo test --workspace --no-run 0.5 s -> 35.7 s  (+35.2)
+          cargo build -p plan -p policy   0.2 s -> 7.9 s   (+7.7)
+          ADDED PER GATE: about 59 s.
+
+        REVERSE DIRECTION, two worktrees alternating gates on one shared target (gate = the four commands above, total seconds):
+          B, first gate, no touch, after A built:   182.1  <- switching checkout ALREADY rebuilds most units
+          B, again, with touch:                      62.1   (the touch's own cost, as above)
+          A, with touch, after B:                   197.0
+          B, with touch, after A:                   191.6
+          A, no touch, after B:                     179.4
+        - In the alternating shape (land queue plus agent worktrees), each gate already pays about 180 s, because units with checkout-specific inputs rebuild on a switch: headless's absolute rerun-if-changed paths, env!("CARGO_MANIFEST_DIR") env-deps, and everything downstream. The touch adds about 10 to 18 s on top (A 197.0 vs 179.4; B 191.6 vs 182.1).
+        - The ~60 s figure is the cost for a checkout that gates repeatedly with no other build in between.
+        - The units that DO survive a switch (no env-dep, no absolute path) are exactly 1599's exposure. The touch closes them.
+
+        CAVEAT: a fresh worktree cannot build at all without build.sh's staging step. tillandsias-headless's build script panics on the untracked artifact images/router/tillandsias-router-sidecar (order 710-w9kc), which build.sh builds and stages before cargo. Worktree B had it copied in, so these costs assume a staged sidecar. A gate entered through ./build.sh stages it; a bare cargo run in a new worktree does not.
+
+        NOT YET DONE: (e), that gate-stamp memo still hits after a touch (its check is content-based per gate-stamp.sh:800; to verify); darwin numbers (the Mac); the A/B source probe through ./build.sh --check, pre-fix and post-fix.
