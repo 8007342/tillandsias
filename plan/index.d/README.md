@@ -198,6 +198,13 @@ Say so rather than editing. Canonical rule:
 - **Never hand-author the `fields:`/`status:` channel.** Use `tillandsias-plan set-field`.
   Re-declaring a packet under `packets:` to change it is a G-Set no-op that looks
   exactly like success — see the table above.
+- **A list field is replaced whole, with `tillandsias-plan list-replace`.**
+  `set-field` refuses lists (1184-tj2q). `list-replace <order> <field> <item>...
+  --reason "why"` writes one `list-replace` event carrying the entire new list
+  for exit_criteria, capability_tags, depends_on, owned_files or related. The
+  fold treats each such field as an LWW register: the latest `(ts, host)` wins,
+  the declaration stays byte-unchanged, and `status <order> --field <name>`
+  reads the folded value (1601-398e).
 - **`status:` is an accepted alias for `fields:`.** Both fold identically —
   same LWW key `(packet_id, field)`, same closure lattice, same order
   independence — so no fragment needs rewriting and none ever will (642-fedr).

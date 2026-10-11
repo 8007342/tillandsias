@@ -58,6 +58,8 @@ json
 # IF YOU ADD A SUBCOMMAND: add it here in the same commit. The dispatch and this
 #      include_str!, so the answer describes the sources that binary was
 # litmus:expert-capability-skew-honesty, which runs every token declared here
+# list-replace: order 1601-398e — replace a list field of a trunk packet (LWW by ts, host).
+list-replace
 loop-status
 loop-status-append
 loop-status-compact
