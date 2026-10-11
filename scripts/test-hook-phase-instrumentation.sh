@@ -128,7 +128,7 @@ for _try in 1 2 3; do
 done
 if [ -z "$banded" ]; then
     bad "could not place the injected phase inside the 1x-to-4x band in 3 tries (last: ${el:-none}ms against ${budget:-none}ms); arm 4 measured nothing"
-elif printf '%s\n' "$out" | grep -q '_fixture_slow_phase took'; then
+elif grep -q '_fixture_slow_phase took' <<<"$out"; then
     bad "a phase between 1x and 4x now warns (${banded} ms) — the band is closed; if that is intended, update this arm and 1064-5hv2 together with the two-host volume evidence"
 else
     ok "the 1x-to-4x blind band is still open (${banded} ms; 1064-5hv2 remains open with it)"
