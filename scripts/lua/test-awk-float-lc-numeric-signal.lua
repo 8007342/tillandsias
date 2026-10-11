@@ -11,7 +11,7 @@
 -- cleanup leaks them into the checkout, where diff-scoped guards read them as
 -- added code.
 --   1 CONTROL  a constructed script with the pre-fix shape (an EXIT trap only,
---              and a long foreground $(...)) still holds its marker file when
+--              in a shell that ignores TERM, so the KILL always lands) still holds its marker file when
 --              TERM arrives, needs the KILL, and leaks. This shows the harness
 --              can see a leak.
 --   2 REAL     the real script, TERMed while its first producer runs (a sed shim
@@ -86,8 +86,16 @@ local marker = REL .. "/control-marker"
 fs.write(REL .. "/control.sh", table.concat({
     "set -u",
     "trap 'rm -f \"$MARKER\"' EXIT",
+    "trap '' TERM",
     ": >\"$MARKER\"",
     "echo \"$$\" >\"$TILLANDSIAS_AWKLC_PIDFILE\"",
+    -- DETERMINISTIC, NOT TIMING (#322 was evicted on Linux). A `$(sleep 5)`
+    -- deferred the EXIT trap on darwin's bash 3.2, but Linux bash ran it on
+    -- TERM and the control did not leak. A plain foreground child does not
+    -- leak on darwin either: bash runs the EXIT trap on a fatal TERM. So the
+    -- control's shell IGNORES TERM. The door's grace then expires, the KILL
+    -- lands, and no trap runs under SIGKILL on any platform. That is the leak
+    -- the harness must be able to see.
     "v=\"$(sleep 5)\"",
     "",
 }, "\n"))
