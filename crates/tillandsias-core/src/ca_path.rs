@@ -169,11 +169,16 @@ mod expansion_tests {
         // instead of one.
         let rust = expand_home(&ca_dir_template(), home);
 
-        let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
+        // Read at RUNTIME (1590-j20f, 1608-qb2c): a compile-time env! path names the
+        // checkout that compiled this binary, which a shared target may reuse.
+        let root = format!(
+            "{}/../..",
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo test sets CARGO_MANIFEST_DIR")
+        );
         let out = std::process::Command::new("bash")
             .arg("-c")
             .arg(". \"$0/scripts/lib-ca-path.sh\"; printf %s \"$TILLANDSIAS_CA_DIR\"")
-            .arg(root)
+            .arg(&root)
             .env("HOME", home)
             .env_remove("TILLANDSIAS_CA_DIR")
             .output()

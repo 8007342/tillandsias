@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: with-a-shared-cargo-target-dir-cargo-judges-a-path-package-fresh-by-mtime-alone-so-a-gate-in-one-worktree-runs-tests-compiled-from-another-worktrees-source
+    field: status
+    value: completed
+    ts: "2026-10-11T14:21:58Z"
+    host: yoga
+
+events:
+  - packet_id: with-a-shared-cargo-target-dir-cargo-judges-a-path-package-fresh-by-mtime-alone-so-a-gate-in-one-worktree-runs-tests-compiled-from-another-worktrees-source
+    event:
+      type: completed
+      ts: "2026-10-11T14:21:58Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 379140a52
+  - packet_id: with-a-shared-cargo-target-dir-cargo-judges-a-path-package-fresh-by-mtime-alone-so-a-gate-in-one-worktree-runs-tests-compiled-from-another-worktrees-source
+    event:
+      type: note
+      ts: "2026-10-11T14:21:58Z"
+      host: yoga
+      summary: |-
+        landed as #324 (merge 379140a52, gate green). Every gate build.sh runs touches the gating checkout's tracked files right after the 1592 base freeze. Measured in one run through ./build.sh --test: B pre-fix ran A's code and A's include_str! input (EGZZ-CODE=A EGZZ-INCLUDE=A); post-fix ran B's (EGZZ-CODE=B EGZZ-INCLUDE=B). Cost: Linux +59 s same-checkout (+10-18 s over a ~180 s switch), darwin +216 s; first live queue gate with the touch, run 20, took 1193 s for one PR against ~1023 s per PR in runs 18-19 (about +170 s, first touched gate after another tree state). scripts/lua/test-gate-touch.lua 3/3 in --check.

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-land-queue-eviction-comment-quotes-only-the-last-five-gate-lines-so-the-failing-fixtures-fail-lines-never-reach-the-pr
+    field: status
+    value: completed
+    ts: "2026-10-11T15:51:40Z"
+    host: yoga
+
+events:
+  - packet_id: the-land-queue-eviction-comment-quotes-only-the-last-five-gate-lines-so-the-failing-fixtures-fail-lines-never-reach-the-pr
+    event:
+      type: completed
+      ts: "2026-10-11T15:51:40Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: f05803146
+  - packet_id: the-land-queue-eviction-comment-quotes-only-the-last-five-gate-lines-so-the-failing-fixtures-fail-lines-never-reach-the-pr
+    event:
+      type: note
+      ts: "2026-10-11T15:51:40Z"
+      host: yoga
+      summary: |-
+        landed as #327 (merge f05803146, gate green). land-queue.sh's factored gate_failed_comment() quotes the first 20 distinct FAIL/[FAIL]/refused:/violation:/blocked: lines of the gate log, colour-stripped, ahead of the same tail. scripts/lua/test-land-queue-eviction-comment.lua 4/4 shows the pre-fix tail-only body lacking a planted FAIL line and the fixed body carrying it, in one run.

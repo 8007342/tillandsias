@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: with-a-shared-cargo-target-dir-cargo-judges-a-path-package-fresh-by-mtime-alone-so-a-gate-in-one-worktree-runs-tests-compiled-from-another-worktrees-source
+    event:
+      type: note
+      ts: "2026-10-11T14:49:49Z"
+      agent_id: forge-forge-tillandsias-claude-20261011t144948z
+      host: yoga
+      summary: |
+        LIVE STEADY-STATE COST on macuahuitl (land queue), recorded so the cost is not re-derived from the forge's number. Measured by macuahuitl-fedora 2026-10-11:
+        - Before the touch: runs 18 and 19 took 2046 s and 2048 s for two PRs each, about 1023 s per PR.
+        - With the touch: run 20 (the first touched gate) took 1193 s for one PR, and run 21 (the second) took 1192 s for one PR.
+        - So the steady-state cost on macuahuitl is about +170 s per gate (about 1023 -> 1192 s, +17%), NOT the forge's +59 s.
+        - Same-checkout repeats still pay a full workspace rebuild there: CPUWeight=50 on a slow NVMe, against the forge's 12-core tmpfs.
+        - The coordinator accepts it for the correctness it buys; queue pacing is the coordinator's to adjust.
+        Per-host figures to date: yoga forge +59 s same-checkout (+10-18 s over a ~180 s checkout switch); darwin (M5, taskpolicy -b) about +216 s; macuahuitl land queue about +170 s.

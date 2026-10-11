@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: manifest-dir-runtime-convert-tillandsias-core-four-files-and-tillandsias-host-shell-lib-rs-test-sites-to-a-runtime-manifest-dir-read
+    field: status
+    value: completed
+    ts: "2026-10-11T17:17:00Z"
+    host: yoga
+
+events:
+  - packet_id: manifest-dir-runtime-convert-tillandsias-core-four-files-and-tillandsias-host-shell-lib-rs-test-sites-to-a-runtime-manifest-dir-read
+    event:
+      type: completed
+      ts: "2026-10-11T17:17:00Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: d77e0b7cb
+  - packet_id: manifest-dir-runtime-convert-tillandsias-core-four-files-and-tillandsias-host-shell-lib-rs-test-sites-to-a-runtime-manifest-dir-read
+    event:
+      type: note
+      ts: "2026-10-11T17:17:00Z"
+      host: yoga
+      summary: |-
+        landed as #330 (merge d77e0b7cb, gate green). tillandsias-core ca_path.rs, tests/credential_probe_never_erases.rs, tests/forge_shell_tools.rs, tests/gh_auth_deploy_key.rs and tillandsias-host-shell src/lib.rs: 6 test sites read CARGO_MANIFEST_DIR at runtime; five floor lines removed; check-manifest-dir-env.lua test 140 -> 134; affected core and host-shell tests identical before and after.
