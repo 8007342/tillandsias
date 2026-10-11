@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11): one shell->lua burndown item, announced and confirmed free.
+packets:
+  - packet_id: port-check-launch-artifacts-untracked-sh-to-lua-shell-to-lua-burndown
+    order: 1598-kgra
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [shell-to-lua, lua, litmus, launch-artifacts]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-launch-artifacts-untracked.sh
+      - scripts/lua/check-launch-artifacts-untracked.lua
+      - scripts/lua/test-launch-artifacts-untracked.lua
+      - openspec/litmus-tests/litmus-launch-artifacts-untracked.yaml
+      - scripts/portability/shell-decider-floor.txt
+      - scripts/portability/pipe-site-floor.txt
+    title: |
+      Port scripts/check-launch-artifacts-untracked.sh (order 444: harness launch artifacts are untracked and gitignored, and entrypoint writes into per-harness checkout dirs are manifested) to scripts/lua/check-launch-artifacts-untracked.lua, with a mutant fixture
+    context: |
+      Shell-to-lua burndown (methodology convergence.yaml carried_obligations). The item is a 78-line check-*, not a wrapper, and has one caller: litmus-launch-artifacts-untracked.yaml, with the :20 step, the :39 rollback command and the :16 precondition.
+      Announced to the coordinator and confirmed free. taken-by at trunk 05513d03 was clean.
+      The .sh's ok:launch-artifacts-untracked line has a reader (the litmus success_pattern) and is kept byte-identical. Its fail:<kind>-launch-artifact:<path> lines have NO reader outside the .sh. The runner's verdict grammar has no fail: prefix, so the port prints the same fail: line unchanged and ends with a violation: verdict.
+    exit_criteria:
+      - 'in the same run as the .sh, the Lua check prints ok:launch-artifacts-untracked on the real tree'
+      - 'a fixture shows the Lua check refusing a tracked artifact, an unignored artifact and an unmanifested entrypoint write (each with the .sh''s fail: line), and passing an entrypoint write that .gitignore covers'
+      - 'a readers arm shows the .sh path has 0 readers, and prints the count of files searched'
+      - 'the .sh is deleted, its floor lines are dropped, and the litmus step, rollback command and precondition name the Lua'
+    unscoreable: "a port: the parity run, the mutant arms and the litmus step are its evidence"
+    depends_on: []
+    next_action: >
+      Port the check (an optional root argument so the fixture can aim it at scratch repos), write the mutant fixture, delete the .sh, drop its floor lines and repoint the litmus. Re-check taken-by after a fetch before pushing.
+    provenance: |
+      Filed by yoga (forge) on macuahuitl-fedora's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T11:02:21Z"
+        host: yoga
+        summary: |-
+          One shell->lua burndown item, check-launch-artifacts-untracked.sh, announced and confirmed free by the coordinator.
