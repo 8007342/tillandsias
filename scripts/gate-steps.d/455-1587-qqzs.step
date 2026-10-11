@@ -1,0 +1,15 @@
+# Gate step 1587-qqzs — a TERM cleans up test-awk-float-lc-numeric's mutants
+# before the preflight door's KILL. The door signals only the guard pid (no
+# setsid on darwin): TERM, a 1 s grace, then KILL. The script writes three
+# .mutant-lcnum-* copies BESIDE the producers, and pre-fix its EXIT trap was
+# deferred behind a producer running in $(...), so a deadline kill leaked them
+# into the checkout. The fixture TERMs the real script while a sed shim holds
+# its first producer, and has a constructed pre-fix-shape control that must
+# leak. A mutant already present before the run is could-not-run, never a pass.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking a TERM cleans up the lc-numeric fixture's mutants before the KILL (1587-qqzs)"
+STEP_LUA="scripts/lua/test-awk-float-lc-numeric-signal.lua"
+STEP_ERROR="test-awk-float-lc-numeric.sh no longer cleans its mutants on TERM, or the control stopped leaking (1587-qqzs) — see the FAIL lines above"
+STEP_OK="The lc-numeric fixture cleans its mutants on TERM"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-11 darwin ok:awk-float-lc-numeric-signal:3 arms"

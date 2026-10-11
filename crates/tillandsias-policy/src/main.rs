@@ -5427,6 +5427,17 @@ fn plan_orders(args: &[String]) {
 mod tests {
     use super::*;
 
+    /// This package's directory in the checkout that RUNS the test, read at
+    /// runtime. Compile-time `env!("CARGO_MANIFEST_DIR")` names the checkout
+    /// that COMPILED the binary, and with a shared CARGO_TARGET_DIR cargo
+    /// reuses that binary from another worktree, because it does not track
+    /// the env-dep it set itself (1590-j20f).
+    fn manifest_dir() -> std::path::PathBuf {
+        std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo test sets CARGO_MANIFEST_DIR"),
+        )
+    }
+
     // land94 (2026-09-29): agent worktrees under .claude/worktrees/ carry a
     // `.git` FILE and are separate checkouts; the harness scans must not
     // judge them. A plain directory stays in scope (negative control).
@@ -5538,10 +5549,9 @@ mod tests {
         // PARITY_FIXTURE, so asserting it against the live matrix was both
         // redundant and fragile. A test over a moving document must assert only
         // what should never change.
-        let text = std::fs::read_to_string(
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../openspec/tray-parity-matrix.yaml"),
-        )
-        .expect("repo matrix readable");
+        let text =
+            std::fs::read_to_string(manifest_dir().join("../../openspec/tray-parity-matrix.yaml"))
+                .expect("repo matrix readable");
         assert!(
             parity_matrix_check(&text, "linux").is_ok(),
             "the committed matrix must keep the linux column green"

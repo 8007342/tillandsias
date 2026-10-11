@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: port-check-launch-artifacts-untracked-sh-to-lua-shell-to-lua-burndown
+    field: status
+    value: completed
+    ts: "2026-10-11T13:21:20Z"
+    host: yoga
+
+events:
+  - packet_id: port-check-launch-artifacts-untracked-sh-to-lua-shell-to-lua-burndown
+    event:
+      type: completed
+      ts: "2026-10-11T13:21:20Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 33ed330ed
+  - packet_id: port-check-launch-artifacts-untracked-sh-to-lua-shell-to-lua-burndown
+    event:
+      type: note
+      ts: "2026-10-11T13:21:20Z"
+      host: yoga
+      summary: |-
+        landed as #319 (merge 33ed330ed, gate green on its run-18 retry; the run-17 eviction was an unrelated host-dependent keychain fixture). scripts/lua/check-launch-artifacts-untracked.lua keeps the order-444 rules with the same ok line and fail: lines; parity with the .sh on five mutants; scripts/lua/test-launch-artifacts-untracked.lua 7/7 in the litmus.

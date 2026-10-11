@@ -749,6 +749,45 @@ carried_obligations:
       guard: 1577-g96z
       tally: 1577-568c
       honest_counter: 1577-57u3
+    - name: manifest-dir-runtime
+      stage: advisory
+      since: "2026-10-11"
+      proposed_by: "1590-j20f, at the coordinator's request; advisory is where every backlog starts, so no bar raise is asked"
+      area:
+        - crates/**/*.rs
+      population: "Rust test code under crates/ (a tests/ file, or at or after the file's first #[cfg(test)])"
+      counter: >
+        `test=<n>` on the ok: line of scripts/lua/check-manifest-dir-env.lua,
+        printed on every --check: compile-time `env!("CARGO_MANIFEST_DIR")`
+        sites in Rust test code. Its floor,
+        scripts/portability/manifest-dir-env-floor.txt, is per file and may
+        only descend: the guard refuses a site above it AND a floor line above
+        the count, so the floor cannot carry slack. At 2026-10-11 on the
+        1590-j20f branch: test=154 in 37 files (non-test=3, not part of this
+        backlog). check-carried-obligations.lua has no counter for this backlog
+        yet, so it prints `carried:manifest-dir-runtime:unsupported-counter`
+        for a change in the area and judges nothing; that is the honest
+        advisory reading.
+      why: >
+        MEASURED 2026-10-11, cargo 1.99.0: cargo keeps rustc's env-deps in the
+        fingerprint EXCEPT the variables cargo sets itself, so a test binary
+        compiled in one worktree is reused unchanged by `cargo test` in another
+        worktree on the same CARGO_TARGET_DIR, and its env!("CARGO_MANIFEST_DIR")
+        paths still name the compiling checkout. The gate then measures the
+        wrong tree, or reads NotFound once that worktree is removed. On one host
+        74 of 532 cached executables embedded another checkout.
+      item: >
+        One file's test sites converted to the runtime read,
+        `std::env::var("CARGO_MANIFEST_DIR")` (a per-crate `manifest_dir()` test
+        helper is the shape tillandsias-policy uses), and that file's floor line
+        lowered or removed in the same commit (`check-manifest-dir-env.lua
+        --dump-floor` prints it).
+      item_ceiling_sites: 6
+      item_ceiling_measured: >
+        2026-10-11, from the floor file: 35 of the 37 files carry 1 to 6
+        sites. The other two, tillandsias-headless src/main.rs (75) and
+        src/vault_bootstrap.rs (23), are packets of their own.
+      guard: 1590-j20f
 
 approved_bar_raises:
   - id: ci-full-all-features-clippy

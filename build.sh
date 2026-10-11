@@ -4670,6 +4670,25 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Shell-ratchet fixture passed"
 
+    # ORDER 1590-j20f — a test that builds a path from compile-time
+    # env!("CARGO_MANIFEST_DIR") reads the checkout that COMPILED it, and with
+    # a shared CARGO_TARGET_DIR cargo reuses that binary from another worktree
+    # (it drops the env-dep it set itself). Refuses a new site in test code
+    # beyond its per-file floor and prints the count; the fixture shows the
+    # defect on a real cargo (two copies, one target) and the guard's arms.
+    _step "Checking for new compile-time CARGO_MANIFEST_DIR paths in tests (1590-j20f)..."
+    if ! _run_lua_decider "scripts/lua/check-manifest-dir-env.lua" 2>&1; then
+        _error "a test reads a fixture through compile-time env!(\"CARGO_MANIFEST_DIR\") — use std::env::var(\"CARGO_MANIFEST_DIR\") at runtime (1590-j20f)"
+        exit 1
+    fi
+    _info "CARGO_MANIFEST_DIR ratchet passed"
+    _step "Checking the CARGO_MANIFEST_DIR ratchet's fixture (1590-j20f)..."
+    if ! _run_lua_decider "scripts/lua/test-manifest-dir-env.lua" 2>&1; then
+        _error "the CARGO_MANIFEST_DIR fixture failed — see the FAIL lines above (1590-j20f)"
+        exit 1
+    fi
+    _info "CARGO_MANIFEST_DIR fixture passed"
+
     # The guard-activation auditor's own fixture (1570-25iq), a Lua fixture on
     # the one runner: parity with the pre-port .sh, an orphan that refuses, the
     # 1087-h2z9 symlink-farm shape, an empty population refused. The auditor
