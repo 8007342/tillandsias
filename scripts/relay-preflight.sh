@@ -448,6 +448,20 @@ fi
 # ── phase 5: touched fixtures, LISTED before any of them run ────────────────
 _all_fixtures="$(git ls-files 'scripts/test-*.sh' 2>/dev/null | grep -v '^scripts/test-support/' | LC_ALL=C sort -u)"
 _set_a="$(printf '%s\n' "$DIFF_SCRIPTS" | grep -E '^scripts/test-[^/]+\.sh$' | grep -v '^scripts/test-support/' || true)"
+# ORDER 1594-mtc3: DIFF_SCRIPTS includes the paths the diff DELETES, and every
+# shell->lua port deletes a test-*.sh, so _set_a selected a fixture that no
+# longer exists and reported it red ("No such file"; #314 on 2026-10-11).
+# Keep only the ones present, as _set_b below already does.
+# BEGIN-SET-A-EXISTS
+_set_a_present=""
+while IFS= read -r _fa; do
+    [ -n "$_fa" ] && [ -f "$_fa" ] && _set_a_present="${_set_a_present}${_fa}
+"
+done <<SETAEOF
+$_set_a
+SETAEOF
+_set_a="$_set_a_present"
+# END-SET-A-EXISTS
 _set_b=""
 if [ -n "$DIFF_SCRIPTS" ]; then
     while IFS= read -r _fx; do
