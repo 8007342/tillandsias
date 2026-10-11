@@ -132,9 +132,9 @@ critical_path:
     expected_behavior: "ok: surfaced lines recorded in methodology"
 
   - step: "890-nkdz rule 1: a timing line derived from a log with any memoised gate run carries build_check_mix=mixed:forced=N,memoised=M, and the label is absent only when every run was forced (RED before the labelling change)"
-    command: "bash scripts/test-cycle-metrics-mix-label.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-cycle-metrics-mix-label.lua 2>&1"
     timeout_ms: 20000
-    expected_behavior: "PASS: build_check_mix label 2/2 (890-nkdz)"
+    expected_behavior: "ok:cycle-metrics-mix-label-fixture:3"
 
   # ── packet 1004-j4p4: a probe whose target is gone must go RED, not unknown ──
   - step: "1004-j4p4: every scripts/*.sh the reporter probes exists and is executable, and the repo: traces= field is never a bare unknown"

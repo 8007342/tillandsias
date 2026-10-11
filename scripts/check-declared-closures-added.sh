@@ -38,7 +38,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 2
 
 FRAG_DIR="plan/index.d"
-base_ref="${TILLANDSIAS_DECLARED_CLOSURES_BASE:-origin/linux-next}"
+base_ref="${TILLANDSIAS_DECLARED_CLOSURES_BASE:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}"
 
 . "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
 _bin="$(resolve_plan_binary)" || _bin=""

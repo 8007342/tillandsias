@@ -47,7 +47,7 @@ set -uo pipefail
 
 FRAG_DIR="plan/index.d"
 LIMIT="${TILLANDSIAS_FRAGMENT_TS_SKEW_LIMIT:-900}"
-base_ref="${TILLANDSIAS_FRAGMENT_PARSE_BASE:-origin/linux-next}"
+base_ref="${TILLANDSIAS_FRAGMENT_PARSE_BASE:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}"
 
 cd "$(git rev-parse --show-toplevel 2>/dev/null || echo .)" || exit 0
 

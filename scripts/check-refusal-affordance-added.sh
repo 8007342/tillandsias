@@ -46,7 +46,7 @@
 set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 2
-base_ref="${TILLANDSIAS_AFFORDANCE_BASE:-origin/linux-next}"
+base_ref="${TILLANDSIAS_AFFORDANCE_BASE:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}"
 WINDOW=8
 BACK=3
 

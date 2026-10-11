@@ -68,7 +68,7 @@ fi
 if [ "$#" -gt 0 ]; then
     fixtures="$(printf '%s\n' "$@")"
 else
-    base_ref="${TILLANDSIAS_DEFAULT_TARGET_BASE:-origin/linux-next}"
+    base_ref="${TILLANDSIAS_DEFAULT_TARGET_BASE:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}"
     if ! git rev-parse --verify --quiet "$base_ref" >/dev/null 2>&1; then
         echo "skip:fixture-default-target:base-ref-unavailable:$base_ref"
         exit 0

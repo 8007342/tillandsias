@@ -16,6 +16,9 @@
 #
 # Pre-fix: FAILS at arm 1 (no decider prints a population line).
 set -uo pipefail
+# 1592-idmu: this fixture builds its own repo, so the gate's frozen base (a SHA of
+# the gated checkout) is not its base; its scratch origin/linux-next is.
+unset TILLANDSIAS_GATE_DIFF_BASE
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RETIRE="$ROOT/scripts/check-decider-retirement.sh"

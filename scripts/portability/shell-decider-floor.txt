@@ -219,7 +219,6 @@ scripts/test-cycle-claims-report.sh
 scripts/test-cycle-driver.sh
 scripts/test-cycle-flow-emit-idempotency.sh
 scripts/test-cycle-lock-attested-release.sh
-scripts/test-cycle-metrics-mix-label.sh
 scripts/test-cycle-metrics-recurrence.sh
 scripts/test-cycle-preflight-cargo-resolution.sh
 scripts/test-daily-maintenance-day-boundary.sh

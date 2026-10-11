@@ -59,7 +59,7 @@ if [ "${1:-}" = "--list" ]; then
     exit 0
 fi
 
-base="${TILLANDSIAS_NATIVE_LINT_BASE:-origin/linux-next}"
+base="${TILLANDSIAS_NATIVE_LINT_BASE:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}"
 if [ "${1:-}" = "--base" ]; then base="${2:?--base needs a ref}"; fi
 
 if ! git rev-parse --verify --quiet "$base^{commit}" >/dev/null 2>&1; then
