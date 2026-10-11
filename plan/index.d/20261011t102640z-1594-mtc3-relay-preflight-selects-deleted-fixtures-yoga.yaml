@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11, p3), seen in their relay-preflight --keep-going of #314.
+packets:
+  - packet_id: relay-preflight-phase-5-selects-a-test-sh-the-diff-deletes-as-a-touched-fixture-and-reports-it-red-no-such-file
+    order: 1594-mtc3
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [relay-preflight, fixtures, diff-scoped, false-red]
+    estimated_hours: 1
+    owned_files:
+      - scripts/relay-preflight.sh
+    title: |
+      relay-preflight.sh phase 5 takes scripts/test-*.sh names straight from the diff (_set_a) without checking that the file still exists, so a change that DELETES a fixture (a shell-to-lua port) selects it and reports it red with "No such file"
+    context: |
+      SEEN by macuahuitl-fedora 2026-10-11: relay-preflight --keep-going on #314 (work/1592-idmu, head 2e1449e6d), which ports scripts/test-cycle-metrics-mix-label.sh to scripts/lua and deletes the .sh. Phase 5 listed fixture:test-cycle-metrics-mix-label as touched and reported it red, "No such file".
+      The cause, at trunk 9ce35d039: scripts/relay-preflight.sh:450 builds _set_a from DIFF_SCRIPTS (every scripts/*.sh path in the diff, deletions included) with a grep on the name only. The sibling _set_b loop already skips absent files (`[ -f "$_fx" ] || continue`); _set_a has no such check.
+      Every shell-to-lua port deletes a test-*.sh, so each one meets this false red under relay-preflight.
+    exit_criteria:
+      - 'a diff that deletes scripts/test-x.sh does not select fixture:test-x, and the report does not go red on it'
+      - 'in the same run, the pre-fix relay-preflight is shown selecting the deleted test-x as a touched fixture'
+      - 'a diff that ADDS or MODIFIES scripts/test-x.sh still selects it (negative control)'
+    unscoreable: "unpinnable-until-the-guard-exists: the fix and its scratch-diff fixture are written together"
+    depends_on: []
+    next_action: >
+      Filter _set_a to paths that exist (or build DIFF_SCRIPTS with --diff-filter=d for this set). Then pin it with a Lua fixture: a scratch repo whose diff deletes one test-*.sh and modifies another, run through the pre-fix and fixed relay-preflight phase 5 in the same run.
+    provenance: |
+      Filed by yoga (forge) on macuahuitl-fedora's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T10:26:40Z"
+        host: yoga
+        summary: |-
+          relay-preflight phase 5 selected the deleted test-cycle-metrics-mix-label.sh from #314's diff and reported it red.
