@@ -50,7 +50,6 @@ scripts/check-gate-step-regimes.sh
 scripts/check-groundtruth-mutable-status-pins.sh
 scripts/check-groundtruth-regime-invariance.sh
 scripts/check-host-tools.sh
-scripts/check-installer-channel.sh
 scripts/check-issue-citation-convention.sh
 scripts/check-jq-callsite-ratchet.sh
 scripts/check-jq-multiline-capture-strips-cr.sh
