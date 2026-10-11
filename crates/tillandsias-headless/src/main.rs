@@ -6073,13 +6073,13 @@ fn build_inference_run_args(
     // kept this LaneScoped container up. The residency policy is tier-derived
     // inside the container (images/inference/engine-tuning.sh, which documents
     // the rationale); the launcher only forwards an operator override.
-    if let Ok(keep_alive) = std::env::var("TILLANDSIAS_INFERENCE_KEEP_ALIVE") {
-        if !keep_alive.is_empty() {
-            args.extend([
-                "--env".into(),
-                format!("TILLANDSIAS_INFERENCE_KEEP_ALIVE={keep_alive}"),
-            ]);
-        }
+    if let Ok(keep_alive) = std::env::var("TILLANDSIAS_INFERENCE_KEEP_ALIVE")
+        && !keep_alive.is_empty()
+    {
+        args.extend([
+            "--env".into(),
+            format!("TILLANDSIAS_INFERENCE_KEEP_ALIVE={keep_alive}"),
+        ]);
     }
 
     // Order 392: tier-appropriate GPU delivery. Hardware truth comes from
