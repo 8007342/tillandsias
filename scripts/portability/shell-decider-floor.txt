@@ -389,7 +389,6 @@ scripts/test-litmus-budget-negative-control.sh
 scripts/test-litmus-budget-tally.sh
 scripts/test-litmus-covering-relay-scope.sh
 scripts/test-litmus-diff-scope.sh
-scripts/test-litmus-empty-spec-refused.sh
 scripts/test-litmus-fake-backend-under-remote-podman.sh
 scripts/test-litmus-fake-podman-hermetic.sh
 scripts/test-litmus-grep-escapes.sh
@@ -568,14 +567,12 @@ scripts/test-sigpipe-verdict-pipelines.sh
 scripts/test-silverblue-update-skew-probe.sh
 scripts/test-skill-canonicalization-remedy.sh
 scripts/test-skills-single-source.sh
-scripts/test-slowest-span-marker.sh
 scripts/test-smoke-agent-watch.sh
 scripts/test-smoke-consecutive-lanes.sh
 scripts/test-smoke-evidence-dir-is-fresh.sh
 scripts/test-smoke-forge-lane-cold-host-outcome.sh
 scripts/test-smoke-skill-reset-env-matches-policy.sh
 scripts/test-smoke-verifies-a-signature.sh
-scripts/test-source-slice-bounds.sh
 scripts/test-spawn-failure-names-program.sh
 scripts/test-spec-index-durable-tier-demotion.sh
 scripts/test-spec-index-endpoint-classification.sh

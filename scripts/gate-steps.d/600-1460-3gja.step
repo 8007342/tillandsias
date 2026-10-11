@@ -6,9 +6,10 @@
 # refused:empty-litmus-spec-argument, exit 3. Pre-fix, arm 1 times out
 # running the suite.
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+# STEP_LUA is a LITERAL path on purpose (1063-nraf). Ported to Lua by 1588-bzre;
+# the record below is the Lua run (the .sh-era record quoted its PASS: line).
 STEP_DESC="Checking an empty litmus spec name is refused, not read as run-everything (1460-3gja)"
-STEP_SCRIPT="scripts/test-litmus-empty-spec-refused.sh"
+STEP_LUA="scripts/lua/test-litmus-empty-spec-refused.lua"
 STEP_ERROR="run-litmus-test.sh again treats an explicit empty spec as no filter and runs every spec (1460-3gja)"
 STEP_OK="an empty litmus spec name is refused"
-STEP_SECOND_REGIME="yolanda 2026-09-28 msys PASS: litmus-empty-spec-refused (1460-3gja) at 450020f66, checkout clean"
+STEP_SECOND_REGIME="yolanda-windows 2026-10-11 msys ok:litmus-empty-spec-refused:3"
