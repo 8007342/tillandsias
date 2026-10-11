@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11), found during the tlatoanis-macbook-air WIP sweep.
+packets:
+  - packet_id: set-field-status-in-progress-accepts-any-host-string-so-a-mistyped-or-dummy-host-claims-past-the-wip-cap
+    order: 1588-27v3
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [plan, ledger, wip, claims, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+    title: |
+      `tillandsias-plan set-field <order> status in_progress --host x` writes an in_progress claim for a host that does not exist, so a typo or dummy --host is outside every host's WIP count and the cap (packet_discipline.wip_limit, 1367-2sbc) never sees it
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-10-11 ~06:31Z, trunk 87708c97e.
+      - The real host's claim was refused: `set-field 1587-qqzs status in_progress --host tlatoanis-macbook-air` -> `refused:set-field:wip-limit:16/3`.
+      - Meant only as a probe, `set-field 1587-qqzs status in_progress --host x --reason probe` printed nothing alarming and WROTE plan/index.d/20261011t063141z-04d6d0b8-x.yaml, an in_progress claim for host "x". It was deleted unpushed and confirmed absent from trunk.
+      So the cap is per host STRING. Any string that is not a fleet host has 0 held and always passes, and the claim then reads as held by nobody reachable.
+      NO FLEET HOST LIST EXISTS today: no methodology file or plan-binary table enumerates the hosts, and names appear only in prose and ledger provenance. The fix must choose and name its source. Candidates: a new methodology list (e.g. distributed-work.yaml fleet_hosts), or the set of hosts that have already written ledger fragments, with an explicit --new-host for a first claim.
+    exit_criteria:
+      - '`set-field <order> status in_progress --host x` (a host not in the chosen fleet list) prints a named refusal and writes NO fragment (git status shows nothing new under plan/index.d)'
+      - 'the same command with a real fleet host still succeeds (subject to the ordinary WIP cap)'
+      - 'the pre-fix binary is shown writing the fragment for --host x in the same run'
+    unscoreable: "unpinnable-until-the-guard-exists: the refusal and its fixture are written together"
+    depends_on: []
+    next_action: >
+      Pick the host-list source and state it on the row. Then add the refusal to set-field's in_progress path, with a fixture on a scratch ledger: unknown host refused and no fragment, known host claims, and the pre-fix binary writes. Taken by tlatoanis-macbook-air after 1587-qqzs, unless the coordinator hands it to yoga.
+    provenance: |
+      Filed by tlatoanis-macbook-air on macuahuitl's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T06:32:45Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          A dummy --host writes an in_progress claim past the WIP cap (observed 2026-10-11, fragment deleted unpushed).
