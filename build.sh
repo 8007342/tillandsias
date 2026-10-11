@@ -968,6 +968,39 @@ _freeze_gate_diff_base() {
 # --preflight fetches first, so it freezes after its own fetch.
 if [[ "$FLAG_PREFLIGHT" != true ]]; then _freeze_gate_diff_base || exit 1; fi
 
+# ORDER 1599-egzz — EVERY GATE TOUCHES THE GATING CHECKOUT'S TRACKED FILES.
+#
+# With one CARGO_TARGET_DIR shared by several worktrees, cargo judges a path
+# package fresh by MTIME ALONE, against package-relative dep-info paths, and
+# records nothing about which checkout built the output. Measured on
+# tlatoanis-macbook-air: `cargo test` in worktree B printed worktree A's code,
+# with no rebuild, because B's differing file was older than A's last build. A
+# green gate can be another checkout's code.
+#
+# So before any cargo runs, the gate bumps the mtime of EVERY tracked file in
+# this checkout. Every workspace unit that reads one rebuilds here, from this
+# checkout's bytes; registry dependencies stay cached. Every tracked file, not
+# crates/**: tillandsias-headless's build script embeds whole images/ trees,
+# and a crates-plus-include_str! list missed 439 of them (yoga, 2026-10-11).
+# Measured cost on yoga: +59 s when one checkout gates twice in a row; +10-18 s
+# on top of the ~180 s a switch between checkouts already costs. The gate's
+# memo is a content digest, unchanged by a touch.
+#
+# ALWAYS, NOT ON A MARKER. Touching only when a marker in the target names
+# another checkout was considered and rejected: agent worktrees run bare cargo
+# and would never write the marker, which is exactly the exposure.
+# --preflight never builds and is not touched; a plain dev build is not a gate.
+# BEGIN-GATE-TOUCH
+_touch_gating_checkout() {
+    local _t0="$SECONDS"
+    xargs -0 touch -c < <(git -C "$SCRIPT_DIR" ls-files -z --full-name -- ":/") 2>/dev/null || true
+    echo "note:gate-touch:tracked files of $SCRIPT_DIR touched in $(( SECONDS - _t0 ))s, so cargo rebuilds this checkout's units (1599-egzz)" >&2
+}
+if [[ "$FLAG_CHECK$FLAG_TEST$FLAG_CI$FLAG_CI_FULL$FLAG_RELEASE$FLAG_INSTALL" == *true* ]]; then
+    (cd "$SCRIPT_DIR" && _touch_gating_checkout)
+fi
+# END-GATE-TOUCH
+
 # ORDER 1305-udgs — `./build.sh --preflight`: every guard that can refuse a push,
 # before the SHA, in seconds.
 #
@@ -4791,6 +4824,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Ruby probe fixture passed"
+
+    # ORDER 1599-egzz — every gate touches the gating checkout's tracked files
+    # before any cargo, so a shared target cannot serve another checkout's units.
+    _step "Checking every gate touches its checkout's tracked files (1599-egzz)..."
+    if ! _run_lua_decider "scripts/lua/test-gate-touch.lua" 2>&1; then
+        _error "the gate-start touch moved, lost a gate mode, or no longer reaches every tracked file — a shared target could serve another checkout's code (1599-egzz)"
+        exit 1
+    fi
+    _info "Gate-touch fixture passed"
 
     _step "Checking the nix-capability probe's evidence survives a noisy shell (917-zkge)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-probe-nix-capability-evidence.sh" 2>&1; then
