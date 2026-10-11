@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: test-preflight-front-door-removes-its-scratch-worktree-only-on-normal-return-so-a-killed-run-leaves-a-registered-worktree-sharing-the-target
+    event:
+      type: note
+      ts: "2026-10-11T12:31:49Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261011t123149z
+      host: tlatoanis-macbook-air
+      summary: |
+        CORRECTION to my 2026-10-11T11:58Z event on this row. Its "13 scanned / 6 with no such trap" heuristic was WRONG in both directions: it matched a remove only on the trap line itself, and it counted scratch-repo adds.
+        - closure-guards-name-the-way-out.sh and scorable-closure-quoting.sh DO register `trap cleanup EXIT INT TERM` with `git worktree remove --force` BEFORE the add.
+        - Several files counted "trapped" add worktrees only to scratch repos they create.
+        CORRECTED POPULATION, read by hand on 83b8ac751: fixtures that add a worktree to the REAL checkout number 6, and all 6 are unsafe under the preflight door's TERM, 1 s, KILL:
+        - test-closure-guards-name-the-way-out.sh, test-scorable-closure-quoting.sh: the right trap, but it is deferred behind a long foreground step, so the KILL lands first (the 1587-qqzs mechanism). Observed leaking ×5 and ×2 on 2026-10-11.
+        - test-headless-sidecar-target-gate.sh, test-pre-push-trailer-states-what-it-saw.sh: trap EXIT only. An untrapped TERM kills bash without running the EXIT trap.
+        - test-no-fixture-writes-live-ledger.sh: the EXIT trap does rm -rf only, leaving the registration even on a clean exit.
+        - test-preflight-front-door.sh (outer half): no trap around add, nested run, remove.
+        OUT (scratch-repo adds or prose): test-credential-store-worktree, test-metrics-log-path-agreement, test-land-push-classification, test-worktree-boundary-guard, test-metrics-log-fallback-is-loud, test-timing-record-carries-root, metrics-log-path.sh.
+        Approved shape (coordinator):
+        (1) per-fixture `trap ... EXIT INT TERM HUP` doing `git worktree remove --force`, plus a Lua scan printing scanned/real/unguarded;
+        (2) a door backstop: each guard gets its own TMPDIR, and afterwards the door removes ONLY worktrees registered under that dir, printing `swept:worktree:<path>`.

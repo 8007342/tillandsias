@@ -4764,6 +4764,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Relay-preflight deleted-fixture check passed"
 
+    # ORDER 1597-rrku — the mirror's discipline parser and its fixture probe
+    # ruby by running it: a forge's `ruby` is a Homebrew shim that exits 127.
+    _step "Checking the discipline parser probes ruby by running it (1597-rrku)..."
+    if ! _run_lua_decider "scripts/lua/test-ruby-probe-runs.lua" 2>&1; then
+        _error "the mirror discipline parser or its fixture checks ruby by presence again — a shim that cannot run would read as ruby (1597-rrku)"
+        exit 1
+    fi
+    _info "Ruby probe fixture passed"
+
     _step "Checking the nix-capability probe's evidence survives a noisy shell (917-zkge)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-probe-nix-capability-evidence.sh" 2>&1; then
         _error "a capable row can carry shell noise as its proof that nix answered (917-zkge)"

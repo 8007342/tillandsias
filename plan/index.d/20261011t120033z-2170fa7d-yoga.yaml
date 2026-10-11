@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: test-preflight-front-door-removes-its-scratch-worktree-only-on-normal-return-so-a-killed-run-leaves-a-registered-worktree-sharing-the-target
+    event:
+      type: note
+      ts: "2026-10-11T12:00:33Z"
+      agent_id: forge-forge-tillandsias-claude-20261011t120033z
+      host: yoga
+      summary: |
+        AMENDED EXIT CRITERIA, recorded as an event because the declaration cannot be edited. exit_criteria is a list: set-field refuses list-valued fields (1184-tj2q), and the plan lane refuses a changed copy of a fragment already on trunk ("fragments are immutable once on the trunk"). The row's owner (yoga) states them here at the coordinator's request, after the Mac's event: the same leak is in test-closure-guards-name-the-way-out (x3) and test-scorable-closure-quoting (x1). These SUPERSEDE the two criteria in the declaration, which only covered the front-door wrapper:
+        1. A population scan prints scanned=<scripts with `git worktree add`> unguarded=<those that create a worktree without a trap removing it>, and requires unguarded=0. The Mac's heuristic scan found 13 scanned and 6 unguarded.
+        2. Each trap removes the registration with `git worktree remove --force` (or prunes), not just `rm -rf` of the directory, which leaves a prunable .git/worktrees entry.
+        3. A deadline-killed ./build.sh --preflight leaves 0 registered worktrees (git worktree list) and 0 scratch worktree directories under target/plan-scratch. Pre-fix and post-fix are shown in one run.
