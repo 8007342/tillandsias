@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: proc-run-drops-cargo-target-dir-so-a-lua-fixture-running-a-nested-shell-runner-in-a-linked-worktree-on-a-shared-target-finds-no-plan-binary
+    event:
+      type: note
+      ts: "2026-10-11T10:45:04Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261011t104504z
+      host: tlatoanis-macbook-air
+      summary: |
+        Workaround limits, MEASURED on tlatoanis-macbook-air 2026-10-11, for whoever takes this row. Symlinking the WHOLE linked-worktree target/ to the shared CARGO_TARGET_DIR is NOT safe: the Lua runtime's repo confinement resolves the symlink, so scripts/lua/test-fragment-backlog.lua (941-trcf) is refused at fs.mkdir 'target/plan-scratch/...' as outside the repository root (gate on f10046b99, 08:53 to 09:17Z, the only red; new-red=0). Exporting TILLANDSIAS_PLAN_BIN reddens plan-binary-locus-native (coordinator, land queue). The one safe interim shape: a real target/ dir with ONLY target/release symlinked to the shared release dir. Standalone in that regime, test-litmus-verdict-reads-stdout-only.lua is ok, 5 arms, and test-fragment-backlog.lua is ok, 3/3.
