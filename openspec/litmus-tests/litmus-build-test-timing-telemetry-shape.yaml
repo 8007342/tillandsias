@@ -40,7 +40,7 @@ inputs:
   - scripts/local-ci.sh
   - scripts/run-litmus-test.sh
   - scripts/test-build-step-timing-attribution.sh
-  - scripts/test-slowest-span-marker.sh
+  - scripts/lua/test-slowest-span-marker.lua
   - scripts/timing-log.sh
 
 preconditions:
@@ -147,9 +147,9 @@ critical_path:
   - step: "785-ibu9: a phase with no measurable work is labelled build-span and slowest= marks it ~span"
     # The honesty half: when there is no attributable number, the wall-clock
     # fallback must announce itself rather than pose as a step cost.
-    command: "bash scripts/test-slowest-span-marker.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-slowest-span-marker.lua 2>&1"
     timeout_ms: 30000
-    expected_behavior: "ok:slowest-span-marker-fixture:3"
+    expected_behavior: "ok:slowest-span-marker-fixture:4"
 
   - step: "1233-jqp4: the litmus runner records one duration per EXECUTED STEP (budgets are per step; per-test totals only bound them)"
     command: "bash scripts/test-litmus-step-timing.sh 2>&1 | tail -1"
