@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11, p3): the consumer half of 1606-25nf.
+packets:
+  - packet_id: taken-by-and-forge-scans-consult-the-mirrors-diverged-markers-and-report-a-diverged-ref-as-taken-by-unknown
+    order: 1607-8bq5
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [carried-obligations, taken-by, git-mirror, forge]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/check-carried-obligations.lua
+      - scripts/lua/test-carried-obligations.lua
+    title: |
+      The carried guard's taken-by (and any forge scan of origin/work/*) consults the mirror's refs/tillandsias/diverged/* markers (1606-25nf). A work ref marked diverged is NOT counted as taking an item, but is printed as `taken-by-unknown:<ref>:diverged` so a human looks
+    context: |
+      1606-25nf (its PR was gating in land-queue run 24 when this was filed) makes the mirror follow work refs that upstream rewrote, when upstream provably held every commit dropped. It publishes each work ref it could not follow at refs/tillandsias/diverged/<ref>, pointing at the exported head, with a whole-mirror heads-diverged/<n> verdict. What remains diverged is either a head carrying commits no upstream value ever held (un-relayed work), or one with no twin history (the first-run state). In both cases the exported tip a forge fetches may not be what upstream holds.
+      Today taken_items() in scripts/lua/check-carried-obligations.lua judges every unmerged origin/work/* ref by its fetched tip. On 2026-10-11 it flagged work/1590-j20f, whose mirror tip c42a22b29 had been abandoned upstream (337dc0df9 landed), as an open ref ADDING scripts/portability/manifest-dir-env-floor.txt.
+      COORDINATOR'S RULE: a ref marked diverged is neither "taken" nor silently skipped. It is printed `taken-by-unknown:<ref>:diverged`, for a person to read. Forge scans that judge work refs (pre-push taken scans, sibling checks) follow the same rule.
+    exit_criteria:
+      - 'on a scratch origin carrying refs/tillandsias/diverged/work/x, a work/x that deletes item X.sh is NOT reported taken-by; the guard prints `taken-by-unknown:work/x:diverged` and still offers X'
+      - 'the pre-fix guard is shown reporting taken-by:work/x for the same ref, in the same run'
+      - 'a non-diverged work ref deleting another item is still reported taken-by (negative control)'
+    unscoreable: "unpinnable-until-the-guard-exists: the marker read and its scratch-origin arm are written together"
+    depends_on: [the-git-mirror-keeps-serving-a-work-ref-at-its-old-tip-after-upstream-rewrites-it-non-fast-forward-while-sync-state-reads-heads-current]
+    related: [1589-hm2r, 1606-25nf]
+    next_action: >
+      After 1606-25nf lands: in taken_items(), read `git ls-remote origin 'refs/tillandsias/diverged/*'` (or fetch the namespace) after the work-ref refresh. Skip marked refs from the taken set and print taken-by-unknown for each. Add the arm to test-carried-obligations.lua.
+    provenance: |
+      Filed by yoga (forge) on macuahuitl-fedora's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T16:34:48Z"
+        host: yoga
+        summary: |-
+          Consumer half of 1606-25nf: taken-by reports a mirror-diverged work ref as taken-by-unknown instead of counting it.

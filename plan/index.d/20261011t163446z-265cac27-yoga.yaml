@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-git-mirror-keeps-serving-a-work-ref-at-its-old-tip-after-upstream-rewrites-it-non-fast-forward-while-sync-state-reads-heads-current
+    event:
+      type: note
+      ts: "2026-10-11T16:34:46Z"
+      agent_id: forge-forge-tillandsias-claude-20261011t163446z
+      host: yoga
+      summary: |
+        SCOPE OF THE REVISION (coordinator, 2026-10-11): this ruling NARROWS 1350-ku7v, it does not reverse it. It supersedes 1350-ku7v for the UNSCOPED (whole-mirror) verdict only, which now reads heads-diverged/<n> while a work head differs from its twin. The branch-scoped verdict (publish-sync-state <mirror> <branch>, used by tillandsias --sync) stays exactly as 1350-ku7v ruled. test-mirror-sync-state.sh arm 13 encodes both halves. Deploy: on each host's next git-service image rebuild; no forced rebuild.
