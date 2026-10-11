@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: in-a-forge-the-brew-shim-named-ruby-passes-command-v-ruby-so-the-mirror-discipline-parser-and-its-fixture-run-a-ruby-that-cannot-execute
+    field: status
+    value: completed
+    ts: "2026-10-11T12:25:18Z"
+    host: yoga
+
+events:
+  - packet_id: in-a-forge-the-brew-shim-named-ruby-passes-command-v-ruby-so-the-mirror-discipline-parser-and-its-fixture-run-a-ruby-that-cannot-execute
+    event:
+      type: completed
+      ts: "2026-10-11T12:25:18Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: c021db8c2
+  - packet_id: in-a-forge-the-brew-shim-named-ruby-passes-command-v-ruby-so-the-mirror-discipline-parser-and-its-fixture-run-a-ruby-that-cannot-execute
+    event:
+      type: note
+      ts: "2026-10-11T12:25:18Z"
+      host: yoga
+      summary: |-
+        landed as #320 (merge c021db8c2, gate green). The mirror pre-receive hook's discipline_parse and test-mirror-discipline.sh's skip guard probe ruby by running it (TILLANDSIAS_BREW_AUTOINSTALL=0 ruby -e 'exit 0'), so the forge's brew shim reads as no ruby (reason=no-ruby; the fixture skips by name) and never attempts a network install. scripts/lua/test-ruby-probe-runs.lua 4/4 shows pre-fix (empty reason, an install attempt) and fixed (reason=no-ruby, none) in one run; forge preflight is back to refused=2.

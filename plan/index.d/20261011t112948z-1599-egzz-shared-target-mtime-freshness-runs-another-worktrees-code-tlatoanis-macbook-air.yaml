@@ -1,0 +1,54 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11, p1), found while measuring the secure-channel VERSION case for 1590-j20f.
+packets:
+  - packet_id: with-a-shared-cargo-target-dir-cargo-judges-a-path-package-fresh-by-mtime-alone-so-a-gate-in-one-worktree-runs-tests-compiled-from-another-worktrees-source
+    order: 1599-egzz
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, cargo, test-hermeticity, worktrees, land-queue]
+    estimated_hours: 6
+    owned_files:
+      - build.sh
+    title: |
+      With one CARGO_TARGET_DIR shared by several worktrees, cargo judges a path package fresh by MTIME ONLY, against package-relative dep-info paths. A gate in worktree B therefore runs tests compiled from worktree A's SOURCE whenever B's differing files are older than A's last build. A green gate can be another checkout's code.
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-10-11, cargo 1.99.0 (5f94df478 2026-08-27).
+      PROBE 1, real tree:
+      - Two scratch worktrees at trunk, one shared target. A probe test printing J20F-CODE=B was appended to B's crates/tillandsias-policy/src/main.rs; 1 s later, J20F-CODE=A to A's copy of the same file.
+      - `cargo test -p tillandsias-policy --bin tillandsias-policy j20f_which -- --nocapture` in A: Compiling (wt-srcA), J20F-CODE=A.
+      - The same command in B: NO Compiling line, printed J20F-CODE=A, while B's file on disk said J20F-CODE=B.
+      PROBE 2, standalone crate (copies A/B, one target): B's main.rs written first ("code=B"), A's 1 s later ("code=A"). `cargo run` in A gives code=A; in B, no rebuild, code=A.
+      INSTANCE, the VERSION file: a crate embedding include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/VERSION")), as tillandsias-secure-channel/src/lib.rs:127 does in non-test code.
+      - VERSION bumped only in B (newer than the build): B rebuilt and printed B's 2.0.0, which is correct.
+      - Then A rebuilt with VERSION 3.0.0, and B, with its own 2.0.0 file now OLDER than A's build, printed 3.0.0 with no rebuild.
+      - The fingerprint's kept dep-info lists `src/main.rs` and `VERSION`, package-relative.
+      MECHANISM: the fingerprint stores package-relative dep-info paths. In the invoking checkout it resolves them and compares their mtimes with the output's. Nothing records which checkout produced the output, so any differing file that is older than the last build from any checkout is ignored. This is wider than 1590-j20f. That row fixes fixture PATHS (env!("CARGO_MANIFEST_DIR") names the compiling checkout; cargo drops that env-dep) and does not fix this.
+      EXPOSURE:
+      - Agent worktrees on one host, and macuahuitl's land-queue gates in the main checkout, which share a target with agent worktrees.
+      - Any agent build of an edited crate taints the next gate on every file that gate's merge did not rewrite: a merge rewrites, and so re-mtimes, only the files it changes.
+      INTERIM RULE until this lands: a host gates only after a clean build in the gating checkout, or when no other worktree has built since the gating checkout's last build.
+    remedy_options: |
+      Ranked (coordinator's lean is 1):
+      1. GATE-START TOUCH. Before building, the gate bumps the mtime of the gating checkout's tracked workspace inputs (crates/**, Cargo.toml, Cargo.lock, and files they include_str!, e.g. VERSION). Every workspace crate rebuilds there, while registry deps stay cached. Correct by construction. Cost: one workspace rebuild per gate. MEASURE it in seconds on the Mac and on Linux before choosing.
+      2. A BUILD-ORIGIN STAMP. Record which checkout and tree last built each workspace unit, and purge or touch only on mismatch. Cheaper per gate, but with more ways to be wrong: units, profiles, features, and races with a concurrent build.
+      3. `-Z checksum-freshness`: content-hash freshness. It is the real fix, but still unstable on 1.99 and the toolchain is pinned stable (1562-tc7p).
+      4. Per-worktree CARGO_TARGET_DIR. Rejected: disk, as in 1590-j20f.
+    exit_criteria:
+      - 'the A/B source probe (B''s file says B and is older than A''s build of the same crate) run through the gate''s own entry point (./build.sh --check, or its test-baseline step) prints B''s code in B; the pre-fix gate printing A''s code is shown in the same run'
+      - 'the chosen remedy''s cost is measured: the added seconds per gate on darwin and on linux, recorded on the row'
+      - 'the VERSION instance is covered: an include_str! input that differs in B and is older than A''s build is rebuilt from B''s copy by the gate'
+    unscoreable: "unpinnable-until-the-guard-exists: the gate-entry probe and the remedy are written together"
+    depends_on: []
+    next_action: >
+      Measure option 1's cost first: on a warm shared target, touch the tracked workspace sources and time `cargo test --workspace --no-run` on darwin and linux. Then wire the touch at gate start, and run the A/B probe through ./build.sh --check, pre-fix and post-fix in one run. Related: 1590-j20f.
+    provenance: |
+      Filed by tlatoanis-macbook-air on macuahuitl's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T11:29:48Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          A shared target judges path packages fresh by mtime alone: cargo test in worktree B ran code compiled from worktree A's source (measured, real tree, cargo 1.99.0).
