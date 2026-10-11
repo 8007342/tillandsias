@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11, p2): the "darwin no-op is not free" finding from the 1599-egzz timing, measured to its cause.
+packets:
+  - packet_id: in-a-linked-worktree-both-tray-build-scripts-track-a-git-head-path-that-does-not-exist-so-every-build-reruns-them-and-rebuilds-both-tray-crates
+    order: 1603-iwh2
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, cargo, build-rs, worktrees, gate-cost]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-macos-tray/build.rs
+      - crates/tillandsias-windows-tray/build.rs
+    title: |
+      In a linked git worktree `.git` is a FILE, so `cargo:rerun-if-changed=../../.git/HEAD` in the macos-tray and windows-tray build scripts names a path that never exists. Cargo reruns a build script whose tracked path is missing on EVERY invocation, so every build in a linked worktree rebuilds both tray crates: about 10-15 s per command on darwin, in every gate, preflight and agent build run outside the main checkout.
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-10-11 (cargo 1.99.0, taskpolicy -b, shared CARGO_TARGET_DIR), with the four 1599-egzz gate commands: c1 clippy --workspace --all-targets, c2 clippy -p tillandsias-headless --features listen-vsock, c3 cargo test --workspace --no-run, c4 cargo build -p tillandsias-plan -p tillandsias-policy.
+      - MAIN CHECKOUT (.git is a directory): after settling, every command and every ordered pair is a true no-op at 0.6-1.7 s, with 0 units rebuilt and no Dirty line in CARGO_LOG=cargo::core::compiler::fingerprint=info.
+      - LINKED WORKTREE wt-noop (.git is the 67-byte file `gitdir: .../.git/worktrees/wt-noop`) at trunk with the router sidecar staged: after settling, c1 takes 10.5-11.5 s and c3 13.4-16.5 s on EVERY run. The fingerprint trace names exactly two units each time:
+          Dirty tillandsias-macos-tray v0.1.0 (.../wt-noop/crates/tillandsias-macos-tray): the file `crates/tillandsias-macos-tray/../../.git/HEAD` is missing
+          Dirty tillandsias-windows-tray v0.1.0 (.../wt-noop/crates/tillandsias-windows-tray): the file `crates/tillandsias-windows-tray/../../.git/HEAD` is missing
+        c2 and c4 do not build those crates and are true no-ops (0.7-1.0 s).
+      SOURCE: crates/tillandsias-macos-tray/build.rs:179 and crates/tillandsias-windows-tray/build.rs:232 emit `cargo:rerun-if-changed=../../.git/HEAD` unconditionally, and windows-tray also emits `../../.git/{ref_path}`. The windows-tray script already knows the rule for packed-refs ("only track the file when it exists — cargo re-runs unconditionally for a tracked-but-missing path") but does not apply it to HEAD.
+      SCOPE: platform-independent. Any linked worktree on any host pays it: agent worktrees, every wt-* gate and preflight on this host, and macuahuitl's agent worktrees. The main checkout does not. Yoga's Linux 1599 numbers (no-op 0.5 s) are consistent with a main-checkout measurement.
+      It also inflated this host's 1599-egzz darwin data point: those no-ops (c1 10.1 s, c3 14.7 s) were taken in a linked worktree. The +216 s touch cost is unaffected, since it was after-touch minus no-op.
+    exit_criteria:
+      - 'in a linked worktree, after settling, c1 and c3 run twice in a row with 0 units rebuilt and no Dirty line for either tray crate in the fingerprint trace; the pre-fix trace naming `../../.git/HEAD is missing` is shown in the same run'
+      - 'the embedded commit SHA still follows HEAD in BOTH a main checkout and a linked worktree: a commit (or checkout of another commit) reruns the build script and the binary reports the new SHA; tracked paths come from `git rev-parse --git-path HEAD` (and the ref it names), emitted only when they exist'
+      - 'the BUILD_COMMIT_SHA_OVERRIDE mode is unchanged (no .git directives emitted)'
+    unscoreable: "unpinnable-until-the-guard-exists: the linked-worktree no-op check and the fix are written together"
+    depends_on: []
+    next_action: >
+      In both build.rs files, resolve the real HEAD via `git rev-parse --git-path HEAD` (relative to the manifest dir, made absolute), and the ref it names via `git rev-parse --git-path <ref>`. Emit rerun-if-changed only for paths that exist, and keep the packed-refs rule. Measure c1/c3 in a linked worktree before and after, and the SHA-follows-HEAD property in both checkout kinds.
+    provenance: |
+      Filed by tlatoanis-macbook-air on macuahuitl's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T13:17:28Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Linked worktrees rebuild both tray crates on every build: build.rs tracks ../../.git/HEAD, which is missing when .git is a file (measured, fingerprint trace).
