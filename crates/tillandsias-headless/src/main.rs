@@ -6067,9 +6067,20 @@ fn build_inference_run_args(
         "--pids-limit=1024".into(),
         "--env".into(),
         "OLLAMA_DEBUG=1".into(),
-        "--env".into(),
-        "OLLAMA_KEEP_ALIVE=24h".into(),
     ];
+    // Order 527: no OLLAMA_KEEP_ALIVE here. It was a bare `24h` that pinned
+    // every model a departed forge had loaded for a day while any other lane
+    // kept this LaneScoped container up. The residency policy is tier-derived
+    // inside the container (images/inference/engine-tuning.sh, which documents
+    // the rationale); the launcher only forwards an operator override.
+    if let Ok(keep_alive) = std::env::var("TILLANDSIAS_INFERENCE_KEEP_ALIVE") {
+        if !keep_alive.is_empty() {
+            args.extend([
+                "--env".into(),
+                format!("TILLANDSIAS_INFERENCE_KEEP_ALIVE={keep_alive}"),
+            ]);
+        }
+    }
 
     // Order 392: tier-appropriate GPU delivery. Hardware truth comes from
     // detect_inference_tier(); deliverability is gated separately (CDI for
@@ -22231,6 +22242,38 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn inference_run_args_pin_no_keep_alive_and_forward_the_override() {
+        // Order 527: the launcher used to pin OLLAMA_KEEP_ALIVE=24h, holding a
+        // departed forge's models in VRAM for a day. Residency is now decided by
+        // the tier policy in images/inference/engine-tuning.sh; the launcher may
+        // only forward the operator's TILLANDSIAS_INFERENCE_KEEP_ALIVE.
+        let _guard = env_lock();
+        let restore = TestEnvRestore::capture(&["TILLANDSIAS_INFERENCE_KEEP_ALIVE"]);
+        let certs = Path::new("/tmp/tilland-test-certs");
+        let image = "localhost/tillandsias-inference:test";
+
+        restore.set("TILLANDSIAS_INFERENCE_KEEP_ALIVE", "");
+        let args = build_inference_run_args(certs, image, false);
+        assert!(
+            !args.iter().any(|a| a.contains("KEEP_ALIVE")),
+            "no keep-alive may be pinned without an override; args: {args:?}"
+        );
+
+        restore.set("TILLANDSIAS_INFERENCE_KEEP_ALIVE", "2m");
+        let args = build_inference_run_args(certs, image, false);
+        let at = args
+            .iter()
+            .position(|a| a == "TILLANDSIAS_INFERENCE_KEEP_ALIVE=2m")
+            .unwrap_or_else(|| panic!("override must be forwarded; args: {args:?}"));
+        assert_eq!(args.get(at - 1).map(String::as_str), Some("--env"));
+        assert!(
+            !args.iter().any(|a| a.starts_with("OLLAMA_KEEP_ALIVE=")),
+            "the launcher must not translate the override into an ollama literal; args: {args:?}"
+        );
+        drop(restore);
     }
 
     #[test]

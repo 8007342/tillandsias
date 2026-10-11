@@ -1,5 +1,6 @@
 # @trace spec:ephemeral-guarantee, spec:forge-environment-discoverability
 # @trace order:394 (rung 1, slice 5 — expert-launch-state-and-ephemerality)
+# @trace order:527 (expert-keepalive-contradicts-ephemerality)
 # @trace plan/issues/experts-construction-research-2026-07-29.md §7.3
 #
 # THE TEARDOWN PROOF (exit criterion 3 of order 394e)
@@ -23,6 +24,13 @@
 # The negative control in step 4 is what makes this a proof rather than a
 # tautology: a scan that reaches nothing would report "no expert artifacts" too.
 #
+# MODEL RESIDENCY (order 527, exit criterion 3): on a GPU tier the same
+# seed/witness/teardown/verdict shape is applied to VRAM — a model loaded in the
+# real inference image is witnessed resident (by host PID, with ollama's own
+# expires_at inside the tier policy window), the container is torn down, and no
+# PID of it may still hold VRAM. On a CPU host those steps skip with a named
+# reason (skip:no-gpu-tier:<why>), never a silent pass.
+#
 # EXPLICITLY OUT OF SCOPE (order 394 slice 5, research §7.3): the compiled
 # binary inside $CARGO_TARGET_DIR on the persistent cache volume. That is a
 # BUILD ARTIFACT, not knowledge — the cargo subtree is pruned from the verdict
@@ -38,7 +46,9 @@ description: >
   Behavioural teardown proof for the forge plan expert: seed real expert state
   in a real container, witness it with the verdict scan while the container is
   alive, destroy the container, then prove the surviving persistent volume and
-  the host filesystem carry the control marker but ZERO expert artifacts.
+  the host filesystem carry the control marker but ZERO expert artifacts. On a
+  GPU tier, also prove a loaded model's VRAM is held only within the tier
+  keep-alive window and is released by teardown (order 527).
 severity: high
 size: e2e
 
@@ -107,8 +117,38 @@ critical_path:
     timeout_ms: 120000
     expected_behavior: "ok: production-surface"
 
+  - step: "RESIDENCY SETUP: on a GPU tier, start the inference image with the checkout's keep-alive policy"
+    # MODEL RESIDENCY (order 527). The surfaces above prove no expert INDEX
+    # survives; this proves no resident MODEL does. OLLAMA_KEEP_ALIVE=24h used to
+    # pin a departed forge's models in VRAM for a day while another lane kept the
+    # LaneScoped tillandsias-inference container up. The container below is the
+    # product launch shape (real image, real entrypoint, CDI GPU, keep-id) with
+    # this CHECKOUT's engine-tuning.sh bound over the image's copy and NO
+    # OLLAMA_KEEP_ALIVE in its env, so the residency it shows is the policy's.
+    # A CPU host holds no VRAM: every residency step skips with a NAMED reason.
+    command: "C=tillandsias-litmus-keepalive-vram; S=\"${XDG_RUNTIME_DIR:-/tmp}/$C\"; podman rm -f \"$C\" >/dev/null 2>&1; rm -rf \"$S\"; mkdir -p \"$S\"; skip() { echo \"$1\" > \"$S/skip\"; echo \"skip:no-gpu-tier:$1\"; exit 0; }; command -v nvidia-smi >/dev/null 2>&1 || skip nvidia-smi-absent; nvidia-smi -L >/dev/null 2>&1 || skip nvidia-smi-sees-no-device; cdi=0; for f in /etc/cdi/nvidia*.yaml /etc/cdi/nvidia*.json /var/run/cdi/nvidia*.yaml /var/run/cdi/nvidia*.json \"$HOME\"/.config/cdi/nvidia*.yaml \"$HOME\"/.config/cdi/nvidia*.json; do [ -e \"$f\" ] && cdi=1; done; [ \"$cdi\" = 1 ] || skip no-nvidia-cdi-spec; podman image exists localhost/tillandsias-inference:latest || skip no-inference-image; test -d \"$HOME/.cache/tillandsias/models/manifests/registry.ollama.ai/library/qwen2.5\" || skip qwen2.5-not-in-model-cache; podman run --detach --name \"$C\" --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --userns=keep-id --pids-limit=1024 --device nvidia.com/gpu=all --env TILLANDSIAS_INFERENCE_TIER=gpu-cuda --env TILLANDSIAS_INFERENCE_PRELOAD=off -v \"$HOME/.cache/tillandsias/models:/home/ollama/.ollama/models:rw\" --mount \"type=bind,source=$PWD/images/inference/engine-tuning.sh,target=/usr/local/bin/tillandsias-engine-tuning.sh,readonly=true\" localhost/tillandsias-inference:latest >/dev/null || { echo 'FAIL: inference container did not start'; exit 1; }; for _ in $(seq 1 150); do podman exec \"$C\" curl -fsS http://127.0.0.1:11434/api/version >/dev/null 2>&1 && break; sleep 2; done; podman exec \"$C\" curl -fsS http://127.0.0.1:11434/api/version >/dev/null 2>&1 || { echo 'FAIL: /api/version never answered'; exit 1; }; podman logs \"$C\" 2>&1 | grep -q 'tuning: tier=gpu-cuda .* keep_alive=5m' || { echo \"FAIL: tuning line does not carry keep_alive=5m: $(podman logs \"$C\" 2>&1 | grep 'tuning:')\"; exit 1; }; echo 'ok: residency-container-up keep_alive=5m'"
+    timeout_ms: 360000
+    expected_behavior: "ok: residency-container-up"
+
+  - step: "RESIDENCY WITNESS: a loaded model holds VRAM in THIS container, and ollama schedules its release within the policy window"
+    # WITNESS: the model IS resident while its consumer lives, attributed to this
+    # container's own llama-server by host PID (other GPU users on the host
+    # cannot move this number). Without this the release below is unfalsifiable.
+    # expires_at is ollama's own statement of the residency it will honour.
+    command: "C=tillandsias-litmus-keepalive-vram; S=\"${XDG_RUNTIME_DIR:-/tmp}/$C\"; podman container exists \"$C\" || { echo \"skip:no-gpu-tier:$(cat \"$S/skip\" 2>/dev/null || echo residency-container-absent)\"; exit 0; }; podman exec \"$C\" curl -fsS http://127.0.0.1:11434/api/generate -d '{\"model\":\"qwen2.5:0.5b\",\"prompt\":\"say ok\",\"stream\":false,\"options\":{\"num_predict\":4}}' >/dev/null || { echo 'FAIL: generate failed'; exit 1; }; podman top \"$C\" hpid comm | awk '$2 ~ /llama-server|ollama/ {print $1}' > \"$S/hpids\"; test -s \"$S/hpids\" || { echo 'BROKEN WITNESS: no llama-server/ollama PID in the container'; exit 1; }; mib=$(nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader,nounits | awk -F', *' 'NR==FNR {p[$1]=1; next} ($1 in p) {s+=$2} END {print s+0}' \"$S/hpids\" -); test \"$mib\" -ge 100 || { echo \"BROKEN WITNESS: this container holds ${mib} MiB of VRAM with a model loaded (expected >=100)\"; exit 1; }; exp=$(podman exec \"$C\" curl -fsS http://127.0.0.1:11434/api/ps | grep -o '\"expires_at\":\"[^\"]*\"' | head -n1 | cut -d'\"' -f4); left=$(( $(date -d \"$exp\" +%s) - $(date +%s) )); test \"$left\" -gt 0 && test \"$left\" -le 330 || { echo \"FAIL: ollama keeps the model ${left}s after its last request (expires_at=$exp) — the 5m GPU policy did not reach the engine\"; exit 1; }; echo \"ok: model-resident vram_mib=$mib releases_in=${left}s\""
+    timeout_ms: 180000
+    expected_behavior: "ok: model-resident"
+
+  - step: "RESIDENCY VERDICT: after teardown no process of the stack holds VRAM"
+    # TEARDOWN: the lane-scoped container goes the way the last lane's exit
+    # removes it, and every PID that held VRAM must be gone from the driver's
+    # accounting. This is the half no keep-alive value can break.
+    command: "C=tillandsias-litmus-keepalive-vram; S=\"${XDG_RUNTIME_DIR:-/tmp}/$C\"; podman container exists \"$C\" || { echo \"skip:no-gpu-tier:$(cat \"$S/skip\" 2>/dev/null || echo residency-container-absent)\"; exit 0; }; test -s \"$S/hpids\" || { echo 'BROKEN WITNESS: no PIDs were recorded'; exit 1; }; podman rm -f \"$C\" >/dev/null 2>&1; for _ in $(seq 1 30); do held=$(nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader,nounits | awk -F', *' 'NR==FNR {p[$1]=1; next} ($1 in p) {s+=$2} END {print s+0}' \"$S/hpids\" -); test \"$held\" = 0 && break; sleep 1; done; test \"$held\" = 0 && echo \"ok: vram-released-after-teardown (pids=$(tr '\\n' ',' < \"$S/hpids\"))\" || { echo \"REGRESSION: ${held} MiB of VRAM still held by the torn-down stack\"; exit 1; }"
+    timeout_ms: 60000
+    expected_behavior: "ok: vram-released-after-teardown"
+
   - step: "CLEANUP: the litmus removes its own throwaway surfaces (idempotent re-run)"
-    command: "podman volume rm -f tillandsias-litmus-experts-cache >/dev/null 2>&1; n=$(podman volume ls --format '{{.Name}}' | grep -c '^tillandsias-litmus-experts-cache$'); test \"$n\" = 0 && echo 'ok: litmus-surfaces-removed'"
+    command: "podman rm -f tillandsias-litmus-keepalive-vram >/dev/null 2>&1; podman volume rm -f tillandsias-litmus-experts-cache >/dev/null 2>&1; n=$(podman volume ls --format '{{.Name}}' | grep -c '^tillandsias-litmus-experts-cache$'); test \"$n\" = 0 && echo 'ok: litmus-surfaces-removed'"
     timeout_ms: 60000
     expected_behavior: "ok: litmus-surfaces-removed"
 
@@ -136,4 +176,4 @@ rollback:
     did not reach the surviving volume and the run proved nothing — fix the
     harness before trusting any green. If the WITNESS step failed, the seed did
     not produce expert state at all and every later assertion is vacuous.
-  command: "podman rm -f tillandsias-litmus-experts-teardown 2>/dev/null; podman volume rm -f tillandsias-litmus-experts-cache 2>/dev/null; sed -n '/^FORGE_EXPERTS_BIN_DIR=/,/^export FORGE_EXPERTS/p' images/default/lib-common.sh"
+  command: "podman rm -f tillandsias-litmus-experts-teardown tillandsias-litmus-keepalive-vram 2>/dev/null; podman volume rm -f tillandsias-litmus-experts-cache 2>/dev/null; sed -n '/^FORGE_EXPERTS_BIN_DIR=/,/^export FORGE_EXPERTS/p' images/default/lib-common.sh"
