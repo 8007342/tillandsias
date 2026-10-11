@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: test-preflight-front-door-removes-its-scratch-worktree-only-on-normal-return-so-a-killed-run-leaves-a-registered-worktree-sharing-the-target
+    event:
+      type: note
+      ts: "2026-10-11T11:58:38Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261011t115838z
+      host: tlatoanis-macbook-air
+      summary: |
+        SAME SHAPE, MORE SCRIPTS, OBSERVED on tlatoanis-macbook-air 2026-10-11 (darwin, taskpolicy -b ./build.sh --preflight, 5 s front-door deadline). After my preflights of #321 and #322, `git worktree list` showed 4 detached worktrees under $TMPDIR that nothing was running:
+        - closure-guards.*/wt ×3, from scripts/test-closure-guards-name-the-way-out.sh (heads c42a22b29, 305b8b729, c34e9119a);
+        - scorable-quoting.*/wt ×1, from scripts/test-scorable-closure-quoting.sh (head c34e9119a).
+        They were removed by hand with `git worktree remove --force`. They share refs with every checkout and keep the target shared (1590-j20f, 1599-egzz).
+        POPULATION SCAN (heuristic: the file mentions `worktree add`, and whether ANY `trap` names worktree remove/prune or rm -rf), over scripts/**/*.sh and *.lua on 8c744a4fc: 13 scanned, 6 with no such trap. Those are metrics-log-path.sh (probably prose, not a fixture), test-closure-guards-name-the-way-out.sh, test-headless-sidecar-target-gate.sh, test-land-push-classification.sh, test-preflight-front-door.sh and test-scorable-closure-quoting.sh.
+        CAVEAT: a trap that only rm -rf's the scratch dir still leaves a prunable registration in .git/worktrees, so "trapped" here is not "clean". The fix should remove the worktree in the trap (git worktree remove --force), registered right after the add.
+        SIGNAL NOTE from 1587-qqzs: an EXIT trap alone does not survive the door's TERM-then-KILL when bash is blocked in a long foreground command (a $(...) or a git call). The trap runs only after that command returns, and the KILL lands first. The robust shape is a TERM/INT/HUP trap plus long steps under `cmd & wait $!`, measured in #322.
+
+        PROPOSED WIDER EXIT CRITERION (the coordinator asked to widen it to the population; set-field refuses list fields, so it is recorded here for the row owner to amend): the POPULATION, not one script: a scan of scripts/**/*.sh and *.lua for fixtures that run `git worktree add` prints how many it scanned and how many register NO cleanup that removes the worktree (git worktree remove/prune) right after the add. Unguarded=0 after the fix, and the count is printed on every --check. A deadline-killed preflight (TERM, 1 s, KILL) then leaves 0 entries under $TMPDIR in `git worktree list`; shown pre-fix and post-fix in the same run.
