@@ -1,0 +1,6 @@
+== codesign view: unsigned
+(no virtualization entitlement)
+probe: Absent
+== codesign view: ad-hoc signed with crates/tillandsias-macos-tray/assets/Tillandsias.entitlements
+com.apple.security.virtualization
+probe: Present

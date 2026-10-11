@@ -1,0 +1,33 @@
+    Blocking waiting for file lock on build directory
+   Compiling rustybuzz v0.20.1
+   Compiling tokio-util v0.7.18
+   Compiling tillandsias-logging v0.1.260513 (/Users/tlatoani/claudia/wt-j9fc/crates/tillandsias-logging)
+   Compiling futures-util v0.3.32
+   Compiling tillandsias-control-wire v0.1.170 (/Users/tlatoani/claudia/wt-j9fc/crates/tillandsias-control-wire)
+   Compiling usvg v0.45.1
+   Compiling resvg v0.45.1
+   Compiling tillandsias-core v56.9.27 (/Users/tlatoani/claudia/wt-j9fc/crates/tillandsias-core)
+   Compiling tillandsias-vm-layer v0.1.0 (/Users/tlatoani/claudia/wt-j9fc/crates/tillandsias-vm-layer)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 08s
+     Running tests/vz_entitlement_preflight.rs (/Users/tlatoani/claudia/tillandsias/target/debug/deps/vz_entitlement_preflight-7864388cfc97b059)
+
+running 1 test
+test an_unentitled_binary_is_refused_by_name_before_touching_the_image_root ... FAILED
+
+failures:
+
+---- an_unentitled_binary_is_refused_by_name_before_touching_the_image_root stdout ----
+[tillandsias-vz] guest disk grown 0 -> 10 GiB (0 GiB allocated; cap 50 GiB)
+[tillandsias-vz] guest sizing: 8 vCPU / 8 GiB (host: 10 cores / 16 GiB) — order 919-jii2 host-headroom-aware allocation
+
+thread 'an_unentitled_binary_is_refused_by_name_before_touching_the_image_root' (6844212) panicked at crates/tillandsias-vm-layer/tests/vz_entitlement_preflight.rs:53:5: <!-- cite-ok: raw compiler/test output, the location is part of the receipt -->
+the refusal must be named, not a generic VZ error; got: validate: Invalid virtual machine configuration. The process doesn’t have the “com.apple.security.virtualization” entitlement.
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    an_unentitled_binary_is_refused_by_name_before_touching_the_image_root
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.54s
+
+error: test failed, to rerun pass `-p tillandsias-vm-layer --test vz_entitlement_preflight`
