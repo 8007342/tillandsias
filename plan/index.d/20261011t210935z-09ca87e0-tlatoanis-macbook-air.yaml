@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-lc-numeric-signal-fixture-waits-a-fixed-10-s-for-a-pid-file-the-subject-never-writes-when-it-ends-early-so-the-windows-wsl-gate-is-red
+    field: status
+    value: completed
+    ts: "2026-10-11T21:09:35Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-lc-numeric-signal-fixture-waits-a-fixed-10-s-for-a-pid-file-the-subject-never-writes-when-it-ends-early-so-the-windows-wsl-gate-is-red
+    event:
+      type: completed
+      ts: "2026-10-11T21:09:35Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: 6d96f5cca
