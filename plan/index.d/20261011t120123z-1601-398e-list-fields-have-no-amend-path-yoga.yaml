@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11, p3), found amending 1600-nn5b's exit_criteria.
+packets:
+  - packet_id: a-list-valued-packet-field-has-no-amend-path-once-its-declaration-is-on-trunk-so-exit-criteria-can-only-be-superseded-by-a-note-no-check-reads
+    order: 1601-398e
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [plan, ledger, crdt, fold, closure]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+      - crates/tillandsias-plan/src/lib.rs
+      - crates/tillandsias-plan/src/fragments.rs
+    title: |
+      Once a packet's declaration is on trunk, nothing can change a LIST-valued field (exit_criteria, capability_tags, depends_on, owned_files). set-field refuses lists (1184-tj2q), the plan lane refuses a changed copy of a trunk fragment, and re-declaring under packets: is a G-Set no-op. The only recourse is a "SUPERSEDES" note that closure checks never read.
+    context: |
+      MEASURED on yoga's forge 2026-10-11 while amending 1600-nn5b's exit_criteria at the coordinator's request (population criteria after the Mac's event on the same leak):
+      - `set-field 1600-nn5b exit_criteria ...` gives refused:set-field:list-valued-field, whose remedy reads "Edit a list in the packet's own declaration, or record the intent as an event and ask the row's owner to amend it".
+      - The owner edited the declaring fragment, and scripts/push-plan-fragments-to-trunk.sh refused: "fragments are immutable once on the trunk; a changed copy under the same name would silently rewrite history ... write the change as a NEW fragment".
+      - methodology/distributed-work.yaml:1588 forbids re-declaring a packet under packets: to change it (a G-Set no-op).
+      The amendment therefore went on trunk as a note event (21274bc28) stating it SUPERSEDES the declared criteria. The coordinator checked: neither the methodology nor the plan crate has an amend path for list fields. closure-evidence-check and the other closure checks read the declared list, not notes, so a superseded criterion still governs closure.
+    design: |
+      THE CRDT CHOICE (coordinator, 2026-10-11): each list field becomes an LWW REGISTER, keyed by event timestamp. A `list-replace` event carries the whole new list for one field. The fold takes the latest list-replace for that packet and field as the field's value, and the declaration's list is the value until one exists. The declaration stays immutable, so history is kept; only the folded value changes. Concurrent replaces resolve deterministically: the later ts wins, and a tie is broken by host id. A verb (e.g. `set-field <id> <field> --list-replace <item>...`, or a list-replace event via append-event) writes it, refusing an empty list unless it is explicit.
+    exit_criteria:
+      - 'on a scratch ledger, a list-replace event changes the FOLDED exit_criteria that closure-evidence-check reads (the pre-fix fold shown still reading the declared list, in the same run)'
+      - 'the original declaring fragment is byte-unchanged after the replace'
+      - 'two concurrent list-replace events resolve deterministically: the later ts wins, and on equal ts the host-id tie-break wins, shown in one run'
+    unscoreable: "unpinnable-until-the-guard-exists: the fold rule and its scratch-ledger fixture are written together"
+    depends_on: []
+    related: [1184-tj2q, 1600-nn5b]
+    next_action: >
+      Add the list-replace event kind and its LWW fold (ts, then host id) for list fields. Point closure-evidence-check and the other readers at the folded value. Pin it with a scratch-ledger fixture. Then 1600-nn5b's SUPERSEDES note can become a real list-replace.
+    provenance: |
+      Filed by yoga (forge) on macuahuitl-fedora's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T12:01:23Z"
+        host: yoga
+        summary: |-
+          No amend path exists for list-valued fields on trunk: set-field refuses lists, the lane refuses edited fragments, and re-declaring is a no-op. 1600-nn5b's criteria could only be superseded by a note.
