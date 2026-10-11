@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: llama-server-engine-parity-smoke
+    event:
+      type: note
+      ts: "2026-10-11T23:10:14Z"
+      agent_id: linux-lenovinha-opus5-20261011t231014z
+      host: lenovinha
+      summary: |
+        HOST REQUIREMENT, made explicit (checked by lenovinha 2026-10-11, not claimed). Criterion 5 admits the measured 7B Q4_K_M / 32768-ctx / flash-attn / q8_0-KV profile at 5690 MiB "only with the required memory headroom". On lenovinha's RTX 3070 Laptop (8192 MiB total; ~110 MiB used at idle by the desktop, and the dev-inference container can hold another ~500-700 MiB), that leaves at most ~1.6-2.4 GiB of headroom. Whether that admits the profile depends on the headroom rule the guard picks, so this host is marginal for criterion 5. A >=12 GB card (e.g. macuahuitl's 24 GB A5000) is the safe host for the big-profile half. lenovinha can still run the Vulkan half: it has a CUDA dGPU plus an AMD Cezanne iGPU (Radeon Vega, Vulkan). Separately, this row is BLOCKED today: depends_on 482b (llama-server-vulkan-image-variant) and 482d (llama-server-shared-tier-model-table) are both still ready, not done.
