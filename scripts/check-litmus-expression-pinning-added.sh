@@ -65,7 +65,7 @@ if [ "${1:-}" = "--check-line" ]; then
 fi
 
 LITMUS_GLOB="openspec/litmus-tests"
-base_ref="${TILLANDSIAS_PIN_ENFORCE_BASE:-origin/linux-next}"
+base_ref="${TILLANDSIAS_PIN_ENFORCE_BASE:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}"
 
 if ! git rev-parse --verify "$base_ref" >/dev/null 2>&1; then
     echo "ok: base ref '$base_ref' unavailable — added-step enforcement skipped (nothing to diff against)"

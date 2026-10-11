@@ -23,6 +23,9 @@
 # PRE-FIX RESULT: FAILS — neither script existed, and the relay landed
 # d44909353 with the clippy error (trunk red for macOS for hours).
 set -uo pipefail
+# 1592-idmu: this fixture builds its own repo, so the gate's frozen base (a SHA of
+# the gated checkout) is not its base; its scratch origin/linux-next is.
+unset TILLANDSIAS_GATE_DIFF_BASE
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 pass=0; total=10
 ok()  { echo "ok:   $1"; pass=$((pass+1)); }

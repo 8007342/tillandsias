@@ -13,6 +13,9 @@
 #   5  a holder ref already merged into trunk -> ignored
 #   6  no new steps -> ok:no-new-steps
 set -uo pipefail
+# 1592-idmu: this fixture builds its own repo, so the gate's frozen base (a SHA of
+# the gated checkout) is not its base; its scratch origin/linux-next is.
+unset TILLANDSIAS_GATE_DIFF_BASE
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHECK="$ROOT/scripts/check-gate-step-prefix-across-refs.sh"
 pass=0; fail=0

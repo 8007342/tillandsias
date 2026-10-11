@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: carried-obligations-taken-by-judges-a-stale-local-snapshot-of-work-refs-so-two-hosts-port-the-same-item
+    event:
+      type: completed
+      ts: "2026-10-11T09:38:20Z"
+      agent_id: windows-yolanda-claude-20261008t155217z
+      host: yolanda-windows
+      summary: |-
+        Landed as #313, merge 692c1f088 on linux-next, full tier, gate green. The guard fetches work refs before judging (snapshot=<iso> / stale:<age> on taken-by and offer lines) and refuses a paid item another open work ref deletes (refused:carried:paid-but-taken-by:...; a conflict: waiver clears it). test-carried-obligations 22/22 natively and in the guest, with the pre-snapshot guard (from git) and the fixed guard in the same run for both shapes.

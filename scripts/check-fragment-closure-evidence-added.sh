@@ -34,7 +34,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 2
 
 FRAG_DIR="plan/index.d"
-base_ref="${TILLANDSIAS_CLOSURE_EVIDENCE_BASE:-origin/linux-next}"
+base_ref="${TILLANDSIAS_CLOSURE_EVIDENCE_BASE:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}"
 
 # The workspace binary carries the parser + rule (closure-evidence-check).
 #
