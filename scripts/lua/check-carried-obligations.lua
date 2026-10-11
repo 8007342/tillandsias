@@ -1,5 +1,5 @@
--- @trace order:1577-g96z, order:1570-k5yt, order:1577-57u3, spec:ci-release
--- @env TILLANDSIAS_CARRIED_BASE TILLANDSIAS_CARRIED_HEAD TILLANDSIAS_CARRIED_REF
+-- @trace order:1577-g96z, order:1570-k5yt, order:1577-57u3, order:1589-hm2r, spec:ci-release
+-- @env TILLANDSIAS_CARRIED_BASE TILLANDSIAS_CARRIED_HEAD TILLANDSIAS_CARRIED_REF TILLANDSIAS_CARRIED_NO_FETCH
 --
 -- check-carried-obligations.lua — what does THIS change owe each carried
 -- obligation backlog? The rule is methodology/convergence.yaml
@@ -54,8 +54,14 @@
 --
 -- TAKEN ITEMS are skipped: a .sh another open origin/work/* ref deletes is
 -- never offered, and each skip prints `taken-by:work/<ref> <item>` on stderr
--- (two hosts ported the same offered item on 2026-10-10). Only refs fetched
--- into this clone are seen.
+-- (two hosts ported the same offered item on 2026-10-10). Since 1589-hm2r the
+-- work refs are FETCHED right before they are judged, and each taken-by and
+-- offer line says which snapshot it judged (snapshot=<iso>, or
+-- snapshot=stale:<age> when it could not fetch): the guard used to judge
+-- whatever the last fetch left. The item a change PAYS is held to the same
+-- test: one another open work ref already deletes is refused on every push as
+-- refused:carried:paid-but-taken-by:work/<ref>:<item>, and a
+-- `Carried-Waiver: <backlog> conflict:<item> (#<pr>)` trailer clears it.
 --
 -- WHAT IT CANNOT SEE: uncommitted work (it reads BASE...HEAD, the change as it
 -- will be pushed); a port on a ref not yet pushed or fetched;
@@ -279,6 +285,52 @@ local function ref_order()
     return tonumber(name:match("work/(%d+)%-") or "") or 0
 end
 
+-- ORDER 1589-hm2r. JUDGE A FRESH SNAPSHOT, OR SAY HOW OLD IT IS. taken-by
+-- reads refs/remotes/origin/work/*, which is only as new as this clone's last
+-- fetch. Measured: work/1585-hb8w was created on GitHub at 06:33:30Z, yoga had
+-- fetched at 06:33:23Z, and the guard ran at 06:45 on that snapshot, so it
+-- offered check-litmus-yaml-parses.sh, which hb8w already ported: two hosts
+-- ported the same item. So the work refs are fetched (and pruned, in that
+-- namespace only) right before they are judged, and every taken-by and offer
+-- line says which snapshot it judged: snapshot=<iso> when the fetch
+-- succeeded, snapshot=stale:<age> when it could not fetch (offline, no
+-- origin), the age read from the newest remote-tracking update in the reflog.
+-- TILLANDSIAS_CARRIED_NO_FETCH=1 skips the fetch (the fixture's pre-snapshot
+-- control and an offline host); the line then says stale.
+local SNAPSHOT
+local function snapshot()
+    if SNAPSHOT then return SNAPSHOT end
+    if env.get("TILLANDSIAS_CARRIED_NO_FETCH") ~= "1" then
+        local r = proc.run({ argv = { "git", "fetch", "--quiet", "--prune", "origin",
+            "+refs/heads/work/*:refs/remotes/origin/work/*" }, timeout_ms = 60000 })
+        if r.status == "exited" and r.code == 0 then
+            -- time.iso_utc() is the compact 20261011t082608z; print ISO-8601.
+            local c = time.iso_utc()
+            local y, mo, d, h, mi, s = c:match("^(%d%d%d%d)(%d%d)(%d%d)[tT](%d%d)(%d%d)(%d%d)")
+            SNAPSHOT = y and string.format("%s-%s-%sT%s:%s:%sZ", y, mo, d, h, mi, s) or c
+            return SNAPSHOT
+        end
+    end
+    -- How old is what we have? The newest reflog entry among the remote-
+    -- tracking refs records the last fetch that moved one (reflogs are on by
+    -- default in a non-bare clone); "@{<unix>}" with --date=unix.
+    local newest = 0
+    local _, refs = git({ "for-each-ref", "--format=%(refname)", "refs/remotes/origin/" })
+    for _, ref in ipairs(lines(refs)) do
+        local _, lg = git({ "reflog", "show", "--date=unix", "-n", "1", ref })
+        local t = tonumber(lg:match("@{(%d+)}") or "")
+        if t and t > newest then newest = t end
+    end
+    if newest == 0 then
+        SNAPSHOT = "stale:unknown"
+    else
+        local age = math.floor(time.now_ms() / 1000) - newest
+        if age < 0 then age = 0 end
+        SNAPSHOT = string.format("stale:%dh%02dm", math.floor(age / 3600), math.floor((age % 3600) / 60))
+    end
+    return SNAPSHOT
+end
+
 -- Items another open work ref already deletes (ported or retired there): one
 -- `git diff --name-only --diff-filter=D merge-base..tip` per origin/work/*
 -- ref not yet contained in BASE. Measured 2026-10-10: two hosts ported the
@@ -288,10 +340,19 @@ local taken_cache
 local function taken_items()
     if taken_cache then return taken_cache end
     taken_cache = {}
+    snapshot() -- 1589-hm2r: refresh the work refs before judging them
+    -- This change's own ref, once pushed, deletes what this change pays: it is
+    -- never "another" ref (by name, or because HEAD already contains its tip).
+    local own = env.get("TILLANDSIAS_CARRIED_REF")
+    if not own or own == "" then
+        local _, b = git({ "rev-parse", "--abbrev-ref", "HEAD" })
+        own = text.trim(b)
+    end
     local _, refs = git({ "for-each-ref", "--format=%(refname:short)", "refs/remotes/origin/work/" })
     for _, ref in ipairs(lines(refs)) do
         local merged = git({ "merge-base", "--is-ancestor", ref, BASE })
-        if not merged then
+        local mine = (ref == "origin/" .. own) or git({ "merge-base", "--is-ancestor", ref, HEAD })
+        if not merged and not mine then
             local _, mbr = git({ "merge-base", BASE, ref })
             mbr = text.trim(mbr)
             if mbr ~= "" then
@@ -334,7 +395,7 @@ local function candidates(pop, ceiling)
             if n > ceiling then log.raw("  wrapper-of:" .. callee .. " " .. f .. " (sized as its callee, " .. cn .. " lines)") end
         end
         if n and n <= ceiling and taken[f] then
-            log.raw("  taken-by:" .. taken[f] .. " " .. f)
+            log.raw("  taken-by:" .. taken[f] .. " " .. f .. " snapshot=" .. snapshot())
         elseif n and n <= ceiling then
             items[#items + 1] = { f, n, f:match("^scripts/test%-") and 1 or 0 }
         end
@@ -351,6 +412,7 @@ end
 
 -- ── judge each backlog ─────────────────────────────────────────────────────
 local n_due, silent = 0, {}
+local paid_taken -- "<ref>:<item>" of the first paid item another open ref already deletes
 for _, b in ipairs(backlogs) do
     local name = tostring(b.name)
     local area = type(b.area) == "table" and b.area or {}
@@ -372,7 +434,17 @@ for _, b in ipairs(backlogs) do
         for _, f in ipairs(head_pop) do head_set[f] = true end
         local removed = nil
         for _, f in ipairs(base_pop) do if not head_set[f] then removed = f; break end end
-        if #head_pop < #base_pop and removed then
+        -- 1589-hm2r (measured by yoga): taken-by used to filter only the
+        -- OFFER, so a port duplicating another open work ref read as paid.
+        -- After the refresh, an item another open ref already deletes is not
+        -- this change's to pay with, unless the change carries a waiver.
+        local paid_by = (#head_pop < #base_pop and removed) and taken_items()[removed] or nil
+        if paid_by and not waivers[name] then
+            paid_taken = paid_taken or (paid_by .. ":" .. removed)
+            log.raw("  " .. removed .. " is already deleted by another open work ref (" .. paid_by .. ", snapshot=" .. snapshot() ..
+                "): two changes paid with the same item. Land one; on this one write `Carried-Waiver: " .. name ..
+                " conflict:" .. removed .. " (#<pr>)` in the message's last paragraph.")
+        elseif #head_pop < #base_pop and removed and not paid_by then
             out.line("carried:" .. name .. ":paid:" .. removed)
         elseif waivers[name] then
             out.line("carried:" .. name .. ":waived:" .. waivers[name])
@@ -386,7 +458,7 @@ for _, b in ipairs(backlogs) do
                 local pick = top[(ref_order() % #top) + 1]
                 out.line("carried:" .. name .. ":due:" .. pick[1] .. " (" .. pick[2] .. " lines)")
                 log.raw("  " .. name .. " is DUE: this change touches its area (" .. touched .. ") and neither pays an item nor waives.")
-                log.raw("  candidates (smallest existing items at or under " .. ceiling .. " lines; the offered one is picked by the work ref's order):")
+                log.raw("  candidates (smallest existing items at or under " .. ceiling .. " lines; the offered one is picked by the work ref's order) snapshot=" .. snapshot() .. ":")
                 for _, c in ipairs(top) do log.raw("    " .. c[1] .. " (" .. c[2] .. " lines)") end
                 log.raw("  pay it: port one to scripts/lua/ on `tillandsias-plan script run`, delete the .sh, lower both floors with check-shell-ratchet.lua --dump-floors;")
                 log.raw("  or put this trailer on any commit in the change, in the message's LAST paragraph next to Co-Authored-By (git reads trailers only there); one line; reasons too-big:<item>:<lines>, blocked-by:<order>, no-item-in-reach, conflict:<work-ref>, uncounted-item:<path>:")
@@ -401,6 +473,10 @@ for _, b in ipairs(backlogs) do
     end
 end
 
+if paid_taken then
+    verdict.emit("refused:carried:paid-but-taken-by:" .. paid_taken, 1,
+        "  a refusal on every push, not only at landing: the waiver line above clears it (1589-hm2r).")
+end
 if LANDING and #silent > 0 and unparsed[silent[1]] then
     verdict.emit("violation:carried:" .. silent[1] .. ":waiver-not-a-trailer", 1,
         "  waiver present but not a trailer: move it to the last paragraph (git reads trailers only from a message's last paragraph): " .. unparsed[silent[1]])
