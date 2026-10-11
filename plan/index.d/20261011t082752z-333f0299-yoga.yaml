@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: local-web-preview-live-acceptance
+    field: next_action
+    value: 'Waits on 1552-238z and 1552-mqvf closing. Basic real-lane acceptance is landed (litmus:local-web-preview, bound; spec identities stamped at 1e56609ed). What is LEFT: (1) the A-E negative-control matrix from plan/issues/local-web-preview-design-2026-10-07.md, run through the MCP socket and host HTTPS ingress; (2) normal-launcher version compatibility (the 10-07 pass used a fixture, not the installed launcher); (3) host-browser trust measured separately, without installing the CA or touching the tray; (4) reconcile the HTTP-only router spec and the forge-hot-cold-split source mechanism narrowly; then (5) move openspec/specs/local-web-preview from draft S0 to active only with that evidence.'
+    ts: "2026-10-11T08:27:52Z"
+    host: yoga
+    replaces_sha256: "96088c63cd0f1f4ca33cf66017e5f6f57d127252581708d85c48deb5a160619c"
+
+events:
+  - packet_id: local-web-preview-live-acceptance
+    event:
+      type: note
+      ts: "2026-10-11T08:27:52Z"
+      host: yoga
+      summary: |-
+        sweep of a stale 2026-10-07 yoga claim at the coordinator's request; the claiming OpenCode session is gone

@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: local-web-preview-runtime
+    field: next_action
+    value: 'The runtime IMPLEMENTATION is on trunk (d74d07f4b, work/1552-e3wf fully merged), and litmus:local-web-preview passed the real live MCP/TLS lifecycle. What is LEFT is closure evidence, not the feature: (1) injected Caddy-reload and cleanup failures and a stalled-command deadline, each with a failure control showing a truthful error and a whole launch-generation cleanup; (2) abrupt listener death; (3) source-generation and cross-lane refusal controls (acceptance A/C/D); (4) the canonical bounded-source exception to forge-hot-cold-split, reconciled with evidence (see plan/issues/local-web-preview-shared-tmpfs-proof-2026-10-07.md). Read the remaining-obligations entries in plan/issues/local-web-preview-design-2026-10-07.md and core-review B1-B8 first. Needs a Linux host with podman.'
+    ts: "2026-10-11T08:27:51Z"
+    host: yoga
+    replaces_sha256: "9cdc579f08ad9d2dc660e43acb65aa116d40bd742d22791577a96b4712e1e1a4"
+
+events:
+  - packet_id: local-web-preview-runtime
+    event:
+      type: note
+      ts: "2026-10-11T08:27:51Z"
+      host: yoga
+      summary: |-
+        sweep of a stale 2026-10-07 yoga claim at the coordinator's request; the claiming OpenCode session is gone
