@@ -43,7 +43,7 @@ critical_path:
     expected_behavior: "ok: evidence reuse enabled"
 
   - step: "evidence bundle litmus totals use phase summaries"
-    command: "bash scripts/test-evidence-bundle-litmus-summary.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-evidence-bundle-litmus-summary.lua 2>&1"
     timeout_ms: 3000
     expected_behavior: "ok: evidence bundle litmus summary parser"
 
