@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11): the vault_bootstrap.rs manifest-dir-runtime packet, 23 sites in one file behind one shared test helper.
+packets:
+  - packet_id: manifest-dir-runtime-convert-all-23-vault-bootstrap-rs-test-sites-to-runtime-reads-behind-one-shared-test-helper
+    order: 1613-bpd3
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [manifest-dir-runtime, rust, test-hermeticity, worktrees, vault]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-headless/src/vault_bootstrap.rs
+      - scripts/portability/manifest-dir-env-floor.txt
+    title: |
+      manifest-dir-runtime packet: all 23 compile-time env!("CARGO_MANIFEST_DIR") test sites in tillandsias-headless src/vault_bootstrap.rs read the manifest dir at runtime through one shared #[cfg(test)] helper, and the file's floor line (23) is removed
+    context: |
+      The manifest-dir-runtime backlog (methodology/convergence.yaml, opened by 1590-j20f / #321). convergence.yaml's item_ceiling_measured names this file (23 sites) "a packet of its own".
+      CEILING EXCEPTION (coordinator macuahuitl-fedora, 2026-10-11): one PR, not three. The ceiling keeps a payment bounded and reviewable; 23 identical substitutions behind a ~15-line helper review better as one diff than as three serialized ones editing the same floor line.
+      Sites at trunk 7cf2f2c1a, all test code (21 in `mod tests` from 6441, 2 in `mod cloudflare_token_rotation_tests` from 9141):
+        A. 17 include_str! of the file's own source: 7696 7739 7860 7876 7904 7934 8006 8040 8064 8097 8173 8259 8313 8378 8415 8639 9077
+        B. 4 include_str! of repo files: 8128 images/selinux/vault_container.cil; 8209, 9030 images/vault/entrypoint.sh; 9116 openspec/specs/host-state-lifecycle/spec.md
+        C. 2 PathBuf fallbacks behind an env override: 9289 start_fake() (TILLANDSIAS_FAKE_CLOUDFLARE_BIN), 10120 policies dir (TILLANDSIAS_TEST_POLICY_AUDIT_DIR)
+      Shape: one file-level #[cfg(test)] block, reached by both modules through `use super::*`: manifest_dir() -> PathBuf from std::env::var, repo_text(rel) -> String, own_source() -> &'static str read once through a OnceLock. A sites keep their &'static str type, so no test body changes.
+      OVERLAP: origin/work/1506-32k5 and origin/work/1548-cii8 (behind draft PR #215, held) touch this file at 2014 and in cloudflare_token_rotation_tests (~10038-10143). Site 10120 sits BETWEEN their hunks, touched by neither; whoever lands second merges across it. Not waited on, per the coordinator; their author merges after this lands.
+      CREDENTIAL-ADJACENT: tests run with scratch credentials only (HOME, XDG_CACHE_HOME, XDG_CONFIG_HOME, XDG_DATA_HOME and XDG_RUNTIME_DIR in an empty scratch dir; DBUS_SESSION_BUS_ADDRESS, VAULT_ADDR, VAULT_TOKEN unset).
+    exit_criteria:
+      - 'all 23 sites read `std::env::var("CARGO_MANIFEST_DIR")` at runtime through the shared helper, and vault_bootstrap.rs has no compile-time CARGO_MANIFEST_DIR site'
+      - 'the floor line is removed in the same commit, and scripts/lua/check-manifest-dir-env.lua passes with the test count down by 23'
+      - '`cargo test -p tillandsias-headless --bins vault_bootstrap` and scripts/test-cloudflare-token-rotation.sh pass before and after under scratch credentials, and the checkout is clean afterwards'
+    unscoreable: "a burndown packet: the guard's count and the module's tests are its evidence"
+    depends_on: []
+    related: [1590-j20f, 1610-d6ra]
+    next_action: >
+      Convert the 23 sites behind the shared helper, remove the floor line, run both baseline commands before and after under scratch credentials. After #335 lands (it also edits the floor file), merge trunk, then preflight and push as separate plain commands.
+    provenance: |
+      Filed by yoga (forge) on macuahuitl-fedora's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T19:59:27Z"
+        host: yoga
+        summary: |-
+          The vault_bootstrap.rs manifest-dir-runtime packet: 23 sites, one shared test helper, one PR (ceiling exception per the coordinator).
