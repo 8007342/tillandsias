@@ -4566,6 +4566,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Guard-activation auditor fixture passed"
 
+    # ORDER 1584-ik5v. The local-expert health probe is Lua; its fixture runs
+    # the port and the pre-port .sh against a stub curl in four modes and
+    # requires the same line and exit code from both (skips by name on a
+    # native Windows host, which cannot exec the shell stub by bare name).
+    _step "Checking the local-expert health probe answers as before (1584-ik5v)..."
+    if ! _run_lua_decider "scripts/lua/test-check-local-expert-health.lua" 2>&1; then
+        _error "the local-expert health probe no longer answers line-for-line as the .sh did — see the FAIL lines above (1584-ik5v)"
+        exit 1
+    fi
+    _info "Local-expert health probe fixture passed"
+
     # The end-user-installer output guard's own fixture (1561-47a8), a Lua
     # fixture on the one runner: a flag-naming line refused by file:line, the
     # power-user-only and PENDING-1560-UAM3 exemptions, a comment not counted,

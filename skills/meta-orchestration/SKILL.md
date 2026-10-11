@@ -1335,7 +1335,7 @@ section entirely rather than paying a connection timeout probing an ollama
 that was never provisioned:
 
 ```bash
-[ -n "${TILLANDSIAS_HOST_EXPERTS:-}" ] && scripts/check-local-expert-health.sh
+[ -n "${TILLANDSIAS_HOST_EXPERTS:-}" ] && "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" script run scripts/lua/check-local-expert-health.lua
 ```
 
 It pings the local Ollama inference endpoint and prints exactly one line matching
