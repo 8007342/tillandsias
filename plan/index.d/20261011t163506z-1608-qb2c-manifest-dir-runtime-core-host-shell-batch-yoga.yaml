@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11): one manifest-dir-runtime burndown batch, 5 files, 6 sites (the item ceiling).
+packets:
+  - packet_id: manifest-dir-runtime-convert-tillandsias-core-four-files-and-tillandsias-host-shell-lib-rs-test-sites-to-a-runtime-manifest-dir-read
+    order: 1608-qb2c
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [manifest-dir-runtime, rust, test-hermeticity, worktrees]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-core/src/ca_path.rs
+      - crates/tillandsias-core/tests/credential_probe_never_erases.rs
+      - crates/tillandsias-core/tests/forge_shell_tools.rs
+      - crates/tillandsias-core/tests/gh_auth_deploy_key.rs
+      - crates/tillandsias-host-shell/src/lib.rs
+      - scripts/portability/manifest-dir-env-floor.txt
+    title: |
+      manifest-dir-runtime batch: the compile-time env!("CARGO_MANIFEST_DIR") test sites of tillandsias-core (src/ca_path.rs, tests/credential_probe_never_erases.rs, tests/forge_shell_tools.rs, tests/gh_auth_deploy_key.rs, 1 each) and tillandsias-host-shell src/lib.rs (2) read the manifest dir at runtime, and their five floor lines are removed
+    context: |
+      The manifest-dir-runtime backlog (methodology/convergence.yaml, opened by 1590-j20f / #321). A dedicated burndown PR batched under item_ceiling_sites (6), at the coordinator's request.
+      Floor lines at trunk after #328 (1 each in core, 2 in host-shell):
+        crates/tillandsias-core/src/ca_path.rs 1
+        crates/tillandsias-core/tests/credential_probe_never_erases.rs 1
+        crates/tillandsias-core/tests/forge_shell_tools.rs 1
+        crates/tillandsias-core/tests/gh_auth_deploy_key.rs 1
+        crates/tillandsias-host-shell/src/lib.rs 2   (test-module sites: :120 repo root, :213 locales)
+      All five were clean in taken-by after a fetch. host-shell's Windows dependencies are target-gated, so it builds and tests on Linux.
+    exit_criteria:
+      - 'the 6 sites read `std::env::var("CARGO_MANIFEST_DIR")` (a manifest_dir() helper per test module or test file), and none of the five files has a compile-time CARGO_MANIFEST_DIR site in test code'
+      - 'the five floor lines are removed in the same commit, and scripts/lua/check-manifest-dir-env.lua passes with the test count down by 6'
+      - 'tillandsias-core''s and tillandsias-host-shell''s affected tests pass before and after, in the same run'
+    unscoreable: "a burndown batch: the guard's count and the crates' tests are its evidence"
+    depends_on: []
+    related: [1590-j20f, 1605-42nh]
+    next_action: >
+      Convert the 6 sites, remove the five floor lines, run the core and host-shell tests and check-manifest-dir-env.lua before and after, then preflight and push as separate plain commands.
+    provenance: |
+      Filed by yoga (forge) on macuahuitl-fedora's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T16:35:06Z"
+        host: yoga
+        summary: |-
+          A 5-file manifest-dir-runtime batch (core x4, host-shell lib.rs; 6 sites), at the coordinator's request.
