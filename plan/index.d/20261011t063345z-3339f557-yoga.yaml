@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: set-field-status-in-progress-accepts-any-host-string-so-a-mistyped-or-dummy-host-claims-past-the-wip-cap
+    field: status
+    value: in_progress
+    ts: "2026-10-11T06:33:45Z"
+    host: yoga
+
+events:
+  - packet_id: set-field-status-in-progress-accepts-any-host-string-so-a-mistyped-or-dummy-host-claims-past-the-wip-cap
+    event:
+      type: note
+      ts: "2026-10-11T06:33:45Z"
+      host: yoga
+      summary: |-
+        coordinator assignment (macuahuitl-fedora): unknown-host claim refusal
+  - packet_id: set-field-status-in-progress-accepts-any-host-string-so-a-mistyped-or-dummy-host-claims-past-the-wip-cap
+    event:
+      type: note
+      ts: "2026-10-11T06:33:45Z"
+      host: yoga
+      summary: |-
+        wip-override by yoga: assigned by the coordinator; the held 1552-238z/mqvf/e3wf are 2026-10-07 claims from another yoga session, not this forge, so they are not mine to release — admitted past: refused:set-field:wip-limit:3/3 — yoga already holds 3 in_progress packet(s) outside a story: 1552-238z, 1552-mqvf, 1552-e3wf (1367-2sbc; the limit is 3, from methodology/distributed-work.yaml packet_discipline.wip_limit).
