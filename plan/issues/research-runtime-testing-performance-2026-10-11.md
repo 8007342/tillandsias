@@ -3,7 +3,7 @@
 Date: 2026-10-11. Operator-requested research on Macuahuitl.
 Branch: `research/litmus-lua-performance-20261011`.
 Audit source frame: `cdba630cee433fa52366d29b3d5888a5d6177825`.
-Integration refresh before handoff: `f07e77e19`. Audit claims below retain their
+Integration refresh before handoff: `8d693e42a`. Audit claims below retain their
 original `cdba630ce` frame; the profiled gate used `323098bc6`.
 Disposition: proposals for coordinator review; no production gate changes.
 
@@ -118,12 +118,46 @@ Command: `TILLANDSIAS_GATE_PROFILE=1 /usr/bin/time -v ./build.sh --check`.
   commands reported 3.84 s and 4.82 s. This deliberately bounded recheck is
   **not** a second 20-minute benchmark or a full validation pass.
 
-Research-only persistence uses the repository's existing issue-capture hook
-lane, which validates outgoing prose without requiring a full-build stamp.
-The actual hook result is reported by the primary after pushing; no stamp or
-full-gate success was manufactured for this branch.
+- Attempt 5: `TILLANDSIAS_GATE_PROFILE=1 ./build.sh --check`, with a one-hour
+  ceiling, exited 1 normally. Its terminal existing JSONL record reports
+  **457,545 ms** (7m37.545s) after the preamble. The data-step loop refused
+  after `test-gate-divergence-is-declared.sh` printed its passing verdict,
+  attributing growth of two records in `/tmp/tillandsias-timing.jsonl` to it.
+  No final phase table or green stamp was produced.
+- Bounded reproduction in the same toolbox: that test alone exited 0 in
+  **69.196 ms**, stdout `ok:gate-divergence-declared:21`, empty stderr, shared
+  fallback log absent before and after. Another checkout's full gate was
+  concurrently active in the same builder at inspection. The original two
+  records were already absent when inspected inside the toolbox; their writer
+  cannot be established from this session's retained evidence.
 
-The captured transcript contains 107 Cargo test-summary lines, totaling 3,922
+`build.sh`, `_run_gate_steps`, compares a host-global fallback log's line count
+before and after each step, without writer/run attribution. This cannot prove
+the current step wrote the observed records when another fixture can write or
+remove that shared file. **Cross-run attribution is a candidate cause, not a
+confirmed root cause**. Keep the pollution prohibition; give each execution
+private telemetry sinks and record writer/run identities, then plant an unrelated
+concurrent writer as a negative control. Do not "fix" the passing 69 ms decider
+with a ritual export without establishing who produced the original writes.
+
+### Publication blocker and operator ruling
+
+Normal `git push --set-upstream origin research/litmus-lua-performance-20261011`
+was refused: the issue-capture hook lane cannot diff a branch that is new on
+the remote and demands a green full-gate stamp. Its message said the gate
+"has never run" despite the failed and killed attempts above; operationally
+that means no successful stamp, not no invocation. Document this new-branch
+cliff separately from the test runtime.
+
+After attempt 5 and the bounded reproduction, the primary asked the operator
+for explicit authorization to run `git push --no-verify` **solely for this
+research-only branch**, with the gate results retained, no PR and no merge to
+linux-next. The operator selected **Publish research (Recommended)**, approving
+that precise request. This permission does not authorize code pushes or later
+integration without normal validation. Publication is an ungated research
+handoff; no full-gate success or stamp is manufactured.
+
+Attempt 3's captured transcript contains 107 Cargo test-summary lines, totaling 3,922
 passing executions and zero failed executions. Those are **execution counts,
 not unique tests**, and do not cover unfinished fixtures. Compiler messages
 reported 17.80 s and 13.05 s for dev-profile invocations, then 40.75 s,
@@ -228,6 +262,9 @@ do not silently change policy during a performance port.
   including subject-root discovery in `lua_source_agreements.rs`. That repairs
   the root-location issue named by the audit; the nine-evaluation duplication
   remains an independent finding at the original frame.
+- Final merge-only refresh includes `1612-jp94`'s locale-signal fixture repair
+  and two subsequent plan fragments. These are inherited integration changes,
+  not production edits authored by this research branch.
 
 Coordinator: review this branch later for a PR into `linux-next`; allocate
 bounded implementation packets from the sequence above, keeping measurements
