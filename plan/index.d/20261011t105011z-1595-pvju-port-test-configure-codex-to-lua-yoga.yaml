@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11): one shell->lua burndown item, announced and confirmed free.
+packets:
+  - packet_id: port-test-configure-codex-sh-to-a-lua-fixture-shell-to-lua-burndown
+    order: 1595-pvju
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [shell-to-lua, lua, litmus, fixtures, codex]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-configure-codex.sh
+      - scripts/lua/test-configure-codex.lua
+      - openspec/litmus-tests/litmus-codex-device-auth-shape.yaml
+      - scripts/portability/shell-decider-floor.txt
+      - scripts/portability/pipe-site-floor.txt
+    title: |
+      Port scripts/test-configure-codex.sh (the 1505-42zx pin that configure-codex.sh no longer prompts for a host GitHub token) to scripts/lua/test-configure-codex.lua, one shell->lua burndown item that also drops the fixture's rg dependency
+    context: |
+      Shell-to-lua burndown (methodology convergence.yaml carried_obligations). The item is 49 lines, not a wrapper, and has one caller: litmus-codex-device-auth-shape.yaml:19. That step runs it directly and expects ok:configure-codex:no-token-prompt, which the port keeps byte-identical.
+      Announced to the coordinator and confirmed free. taken-by at trunk a457dbef5 found two stale 2026-09-29 refs (work/1470-dbuw, row completed, and work/configure-codex-host-20260929) that only ADD an early scripts/configure-codex.sh; neither touches the fixture.
+      The .sh greps with `rg`; the port matches in Lua, so the fixture no longer needs ripgrep on the host.
+    exit_criteria:
+      - 'scripts/lua/test-configure-codex.lua makes every check the .sh makes, in the same run as the .sh, and prints the same ok:configure-codex:no-token-prompt line'
+      - 'a mutant launcher that still advertises --seed-github-token is refused by the port (the fixture can fail)'
+      - 'a readers arm shows the .sh''s retired FAIL: lines (assembled so the fixture cannot match itself) have 0 readers, and prints the count of files searched'
+      - 'the .sh is deleted, its floor lines are dropped, and the litmus runs the Lua'
+    unscoreable: "a port: the parity run and the litmus step are its evidence"
+    depends_on: []
+    next_action: >
+      Port it, prove parity and a mutant refusal in the same run, delete the .sh, drop its floor lines and repoint the litmus. Re-check taken-by after a fetch before pushing.
+    provenance: |
+      Filed by yoga (forge) on macuahuitl-fedora's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T10:50:11Z"
+        host: yoga
+        summary: |-
+          One shell->lua burndown item, test-configure-codex.sh, announced and confirmed free by the coordinator.

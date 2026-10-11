@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11, p3): test-mirror-discipline is a forge-only preflight refusal.
+packets:
+  - packet_id: in-a-forge-the-brew-shim-named-ruby-passes-command-v-ruby-so-the-mirror-discipline-parser-and-its-fixture-run-a-ruby-that-cannot-execute
+    order: 1597-rrku
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [forge, git-mirror, discipline, fixtures, run-dont-stat]
+    estimated_hours: 1
+    owned_files:
+      - images/git/pre-receive-hook.sh
+      - scripts/test-mirror-discipline.sh
+    title: |
+      In a forge, `command -v ruby` finds the Homebrew lazy-install shim, which exits 127, so the mirror pre-receive hook's discipline parser reports branch-discipline.yaml "present but unreadable ()" with an empty reason, and test-mirror-discipline runs instead of skipping and goes red: a forge-only refusal in ./build.sh --preflight
+    context: |
+      MEASURED on yoga's forge 2026-10-11 (v56.10.9.1, trunk a31e09f8a):
+      - `command -v ruby` -> /home/forge/.local/share/tillandsias/brew-shims/ruby, a 74-byte bash shim (`exec /usr/local/bin/tillandsias-brew-shim-exec ruby ruby "$@"`), installed by images/default/lib-common.sh:3673. Running `ruby -ryaml -e ...` prints "Homebrew bootstrap failed recently (network/proxy?); backing off. 'ruby' is not installed." and exits 127. There is no real ruby in the forge.
+      - images/git/pre-receive-hook.sh discipline_parse probes with `command -v ruby` (passes on the shim), then runs ruby with 2>/dev/null. The parse fails with no `reason=` line, so the hook logs "WARNING: .tillandsias/branch-discipline.yaml at refs/heads/linux-next is present but unreadable (); no discipline rule is applied". The empty () is the shim's discarded failure, not a YAML problem. The file itself is fine; the real mirror image ships ruby.
+      - scripts/test-mirror-discipline.sh:66 skips only on `command -v ruby` failing, so in a forge it RUNS with the shim. Its arms then fail (ARM1, ARM3, ARM4, ARM7: no discipline applied, empty digest), and only ARM11 (ruby removed from PATH) behaves.
+      - The fixture takes ~4.5 s here, against --preflight's 5 s front-door deadline. Across this session's preflight logs it was refused 5 times and skipped by deadline 10 times. That is why it showed up only "sometimes", alongside the two permanent forge refusals (test-branch-discipline-verb, test-discipline-derive).
+      The class is run-don't-stat (770-ifeg): a presence check that a shim satisfies.
+    exit_criteria:
+      - './build.sh --preflight in a forge shows refused=2 again (the two known discipline refusals), with test-mirror-discipline skipped by name or passing, never refused'
+      - 'the fixture''s ruby probe and the hook''s discipline_parse probe ruby by EXECUTION (e.g. `ruby -e "exit 0"`), so a shim that cannot run reads as no ruby: the fixture skips with skip:mirror-discipline:no-ruby, and the hook reports "(no-ruby)", not "()"'
+      - 'in the same run, a PATH holding a failing `ruby` shim is shown passing the pre-fix probe and failing the fixed one'
+    unscoreable: "unpinnable-until-the-guard-exists: the probe change and its shim fixture are written together"
+    depends_on: []
+    next_action: >
+      Not started, by the coordinator's instruction: file, don't fix. To fix, replace the two `command -v ruby` probes with an execution probe. Pin it with a fixture that puts a ruby shim exiting 127 first on PATH.
+    provenance: |
+      Filed by yoga (forge) on macuahuitl-fedora's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T11:00:25Z"
+        host: yoga
+        summary: |-
+          The forge's brew shim for ruby satisfies `command -v ruby`, so test-mirror-discipline runs a ruby that exits 127 and refuses in preflight whenever it beats the 5 s deadline.
