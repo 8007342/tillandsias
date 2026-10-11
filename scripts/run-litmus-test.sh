@@ -1876,7 +1876,7 @@ run_litmus_test_file() {
             printf '%s\n' "         step '${dkstep}': key '${dkkey}' appears more than once" >&2
         done
         printf '%s\n' "         a YAML loader REJECTS this file; this parser would silently take the last occurrence" >&2
-        printf '%s\n' "         verify with: scripts/check-litmus-yaml-parses.sh" >&2
+        printf '%s\n' "         verify with: tillandsias-plan script run scripts/lua/check-litmus-yaml-parses.lua" >&2
         return 1
     fi
 
@@ -2906,7 +2906,7 @@ parse_args() {
                 log_fail "Unknown option: $1"
                 echo "Use: $0 [spec-name] --timeout N --phase <name> --list --json" >&2
                 echo "     --parse-only <file>... loads each file as YAML and REFUSES if it does not load, then reports whether THIS RUNNER can extract its steps (order 1303-2d5g)" >&2
-                echo "                            scripts/check-litmus-yaml-parses.sh is the AUTHORITATIVE gate over the whole corpus; --parse-only answers for named files only" >&2
+                echo "                            scripts/lua/check-litmus-yaml-parses.lua is the AUTHORITATIVE gate over the whole corpus; --parse-only answers for named files only" >&2
                 exit 3
                 ;;
             *)
@@ -2994,7 +2994,7 @@ main() {
         # What remains true, and is the only thing worth saying here, is the
         # difference in SCOPE: this answers for the files named on the command
         # line, and the gate answers for the whole corpus.
-        printf 'note:parse-only judges the FILES NAMED HERE (loads each as YAML, then reports extractability); scripts/check-litmus-yaml-parses.sh is the corpus-wide gate\n' >&2
+        printf 'note:parse-only judges the FILES NAMED HERE (loads each as YAML, then reports extractability); scripts/lua/check-litmus-yaml-parses.lua is the corpus-wide gate\n' >&2
         # ORDER 1303-2d5g. LOAD THE DOCUMENT BEFORE EXTRACTING FROM IT.
         #
         # 1274-cbk7 added the note above, on the theory that naming the
@@ -3015,7 +3015,7 @@ main() {
         # and the two instruments cannot disagree about the same file again.
         #
         # NO READER IS ITS OWN NAMED STATE, not a pass — and the wording and
-        # the stand-aside both match scripts/check-litmus-yaml-parses.sh
+        # the stand-aside both match scripts/lua/check-litmus-yaml-parses.lua
         # deliberately, because two instruments answering the same question
         # must not differ on what "cannot answer" looks like. Extractability is
         # still reported, since that is this flag's own question and a fresh

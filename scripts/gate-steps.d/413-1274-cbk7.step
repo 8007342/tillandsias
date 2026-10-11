@@ -4,7 +4,7 @@
 # authors reach for did not say which was which:
 #
 #   run-litmus-test.sh --parse-only     -> "can the RUNNER extract steps here"
-#   scripts/check-litmus-yaml-parses.sh -> "does this LOAD as YAML"
+#   scripts/lua/check-litmus-yaml-parses.lua -> "does this LOAD as YAML"
 #
 # The runner's parser is line-based and tolerated a duplicated mapping key,
 # silently taking the last occurrence, while a YAML loader rejects the document

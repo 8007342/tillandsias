@@ -4638,7 +4638,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Fixture-prune guard fixture passed"
 
     _step "Checking every litmus definition parses (933-4gm8)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-yaml-parses.sh" 2>&1; then
+    # PORTED to Lua (1585-hb8w): scripts/lua/check-litmus-yaml-parses.lua.
+    if ! _run_lua_decider "scripts/lua/check-litmus-yaml-parses.lua" 2>&1; then
         _error "a litmus YAML does not load — the runner's fallbacks would silently re-bucket it (933-4gm8; the named file is above)"
         exit 1
     fi
