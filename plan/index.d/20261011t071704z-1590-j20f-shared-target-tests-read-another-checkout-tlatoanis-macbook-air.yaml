@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11, p1), found when the post-#308 darwin gate went red during the 1276-mugq live verify.
+packets:
+  - packet_id: with-a-shared-cargo-target-dir-a-test-that-reads-files-through-env-cargo-manifest-dir-runs-a-binary-compiled-in-another-worktree-and-reads-that-checkouts-files
+    order: 1590-j20f
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, cargo, test-hermeticity, worktrees, guard]
+    estimated_hours: 4
+    owned_files:
+      - crates/
+    title: |
+      Tests that build fixture paths with compile-time `env!("CARGO_MANIFEST_DIR")` run binaries that a shared CARGO_TARGET_DIR reused from ANOTHER worktree. A gate on checkout B then reads checkout A's files: green on the wrong tree, or NotFound once A is removed.
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-10-11.
+      - Gate: `taskpolicy -b ./build.sh --check` in wt-mugq on 27949016b (trunk 8fac92659 plus a scratch code commit), 06:48 to 07:14Z, GATE_RC=1.
+      - The failure was test-baseline new-red=1: tillandsias_policy::tests::parity_matrix_accepts_committed_repo_matrix_for_linux_column panicked at crates/tillandsias-policy/src/main.rs:5544, "repo matrix readable: NotFound". openspec/tray-parity-matrix.yaml exists in both checkouts.
+      - The binary cargo ran, target/debug/deps/tillandsias_policy-78e131fe2b276d0f, was built 2026-10-10 16:03 and embeds /Users/tlatoani/claudia/wt-trunkcheck/crates/tillandsias-policy. That worktree had been removed in a routine landed-worktree cleanup.
+      - Cargo did NOT rebuild the path package when only the checkout path changed.
+      SCOPE on that host: 74 of 532 cached executables embedded a checkout other than the one being gated.
+      - 48 pointed at removed worktrees (wt-8c6p 20, wt-rnpd 14, wt-luas 4, wt-s4im-c 3, wt-bqcm 2, wt-fn96 2, and 1 each for wt-trunkcheck, wt-yqmc and wt-dkxi-pre).
+      - 25 pointed at the main checkout and 1 at wt-f44v. Those PASS while reading another checkout's fixtures: green gates that measured the wrong tree.
+      - The tree has 159 `env!("CARGO_MANIFEST_DIR")` sites in 42 files under crates/: tillandsias-plan 15 files, headless 12, macos-tray 5, core 5, and others.
+      Every host sharing one CARGO_TARGET_DIR across worktrees is exposed, including the macuahuitl agent worktrees.
+      Local remedy used (build cache only): deleted the 74 executables so cargo rebuilt them in place.
+      PREFERRED FIX (coordinator): tests resolve the repo root at RUNTIME with `std::env::var("CARGO_MANIFEST_DIR")`. cargo test sets it per invocation, for the package being tested from the invoking checkout. That replaces compile-time `env!()`, plus a guard that refuses NEW `env!("CARGO_MANIFEST_DIR")` used as a path in test code.
+      REJECTED: one CARGO_TARGET_DIR per worktree. It costs disk the fleet's hosts do not have, since every worktree would carry a full debug/release build, and the shared target is a standing rule for that reason.
+      OPEN QUESTION TO MEASURE (the fix does not depend on it): should cargo's fingerprint have caught this? rustc records env!() reads as env-dep in the dep-info. Does cargo ignore CARGO_MANIFEST_DIR there, or does it compare against a value that did not change? The answer says whether any OTHER env!() is exposed the same way.
+    exit_criteria:
+      - 'Build tests in worktree A, change the fixture file only in worktree B, run them from B: B''s result follows B''s file. The pre-fix version is shown following A''s file (or NotFound after A is removed) in the same run.'
+      - 'The guard counts its population: it prints how many env! sites it scanned and how many it allowed, and it refuses a newly added `env!("CARGO_MANIFEST_DIR")` path in test code (mutation shown red).'
+      - 'The row records the measured answer to the fingerprint question: does cargo''s env-dep tracking cover CARGO_MANIFEST_DIR, and are other env!() reads exposed?'
+    unscoreable: "unpinnable-until-the-guard-exists: the guard and the cross-worktree fixture are written together"
+    depends_on: []
+    next_action: >
+      Reproduce first. In two scratch worktrees sharing one target dir, build the policy tests in A, edit openspec/tray-parity-matrix.yaml only in B, and run from B. Expect pre-fix to follow A. Then convert the sites to runtime std::env::var("CARGO_MANIFEST_DIR"), add the counting guard, and measure the fingerprint question.
+    provenance: |
+      Filed by tlatoanis-macbook-air on macuahuitl's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T07:17:04Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Shared CARGO_TARGET_DIR: cached test binaries read the compiling worktree's files (74/532; one darwin gate red on a removed worktree's path).
