@@ -8,18 +8,23 @@ description: >
   Order 444: no agent-harness launch write may land on a TRACKED checkout
   path. OpenCode's npm install regenerated the tracked
   .opencode/package-lock.json on every launch, dirtying the shared checkout
-  (cross-forge dirt, 2026-07-20). scripts/check-launch-artifacts-untracked.sh
+  (cross-forge dirt, 2026-07-20). scripts/lua/check-launch-artifacts-untracked.lua
   makes the invariant executable: every known launch artifact must be
   untracked AND gitignored, and entrypoint write idioms into per-harness
   checkout dirs must resolve to manifested-or-ignored paths.
 preconditions:
-  - workspace contains scripts/check-launch-artifacts-untracked.sh
+  - workspace contains scripts/lua/check-launch-artifacts-untracked.lua
 
 critical_path:
   - step: "launch artifacts are untracked+ignored and entrypoint writes are manifested"
-    command: "scripts/check-launch-artifacts-untracked.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-launch-artifacts-untracked.lua 2>&1"
     success_pattern: "ok:launch-artifacts-untracked"
     timeout_ms: 10000
+
+  - step: "each refusal fires on a scratch repo (tracked, unignored, unmanifested write) and the scan passes ignored and commented writes"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" && TILLANDSIAS_PLAN_BIN=\"$P\" \"$P\" script run scripts/lua/test-launch-artifacts-untracked.lua 2>&1"
+    success_pattern: "ok:launch-artifacts-untracked-fixture:7"
+    timeout_ms: 60000
 
 observability:
   traces:
@@ -33,7 +38,7 @@ rollback:
   on_failure: >
     Do NOT delete the artifact from the entrypoint to silence the check if
     the harness genuinely needs it — declare it: add the path to
-    LAUNCH_ARTIFACTS in scripts/check-launch-artifacts-untracked.sh AND to
+    LAUNCH_ARTIFACTS in scripts/lua/check-launch-artifacts-untracked.lua AND to
     .gitignore. Only a write that should never happen gets removed at the
     source.
-  command: "scripts/check-launch-artifacts-untracked.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-launch-artifacts-untracked.lua 2>&1"
