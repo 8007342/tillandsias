@@ -106,7 +106,13 @@ local function on_pty(name, held, deadline_ms)
         cmd = "script -q /dev/null bash " .. harness
     end
     local runner = REL .. "/" .. name .. (held and ".held" or ".unheld") .. ".run"
-    fs.write(runner, "exec " .. cmd .. " < <(exec 2>/dev/null; sleep 8) > " .. outf .. " 2>&1\n")
+    -- NO `exec` (measured on util-linux, 2026-10-11): exec'ing script(1) makes
+    -- the process-substitution writer (sleep 8) a child of script itself, and
+    -- util-linux script did not exit when its command did. Every held arm then
+    -- timed out, although HOLD=1 reached the shell and the pause was skipped.
+    -- Run as an ordinary child, as the .sh did, the writer stays the runner's
+    -- child, and nothing waits for it.
+    fs.write(runner, cmd .. " < <(exec 2>/dev/null; sleep 8) > " .. outf .. " 2>&1\n")
     local env_t = held and { TILLANDSIAS_HOST_HOLDS_WINDOW = "1" } or {}
     local r = proc.run({ argv = { "bash", ROOT .. "/" .. runner }, env = env_t, timeout_ms = deadline_ms })
     local okf, o = pcall(fs.read, REL .. "/" .. name .. (held and ".held" or ".unheld"))
