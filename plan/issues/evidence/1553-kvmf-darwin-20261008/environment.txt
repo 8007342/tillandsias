@@ -1,0 +1,5 @@
+ProductName:		macOS
+ProductVersion:		27.0.1
+BuildVersion:		26A434
+arm64
+base: work/1553-x8js 5e2d94279
