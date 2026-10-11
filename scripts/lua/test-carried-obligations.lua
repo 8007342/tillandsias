@@ -38,6 +38,14 @@
 --  14 FIRED      --burndown over ten waived `Carried:` landings with a flat
 --                counter prints trigger=fired; a not-due landing is not counted.
 --  15 CLEAR      one paid landing that deletes an item clears the trigger.
+--  16 STALE      (1589-hm2r) a work ref deleting the smallest item is pushed to the
+--                REMOTE after the clone's last fetch: the pre-snapshot guard (from
+--                git) offers it; the fixed guard fetches first and reports it
+--                taken-by with snapshot=<iso>; offline it says snapshot=stale:<age>.
+--  17 PAID-BUT-TAKEN (1589-hm2r, measured by yoga) a port duplicating another
+--                open work ref: pre-snapshot prints paid; the fixed guard refuses
+--                refused:carried:paid-but-taken-by:work/<ref>:<item> on every push
+--                and at landing; a conflict: waiver trailer clears it.
 --
 -- PRE-GUARD CODE FAILS IT: with no check-carried-obligations.lua the first arm
 -- refuses the whole fixture, never a skip.
@@ -304,6 +312,109 @@ rc, o = judge(false, "trunk-clear", "--burndown")
 check("CLEAR: with one paid landing that deletes an item, the counter descends and trigger=clear",
     rc == 0 and has_line(o, "burndown:shell-to-lua:count=4:stage=gentle:window=10:paid=1:waived=9:silent=0:trigger=clear"),
     "rc=" .. rc .. " out=[" .. o .. "]")
+
+
+-- 16. STALE SNAPSHOT (1589-hm2r): a work ref deleting the smallest item is
+-- pushed to the REMOTE after this clone's last fetch. The pre-snapshot guard
+-- (this guard as of its last committed version without `snapshot=`, from
+-- git) judges the stale local refs and offers that item; the fixed guard
+-- fetches the work refs first and reports it taken-by, stamped with its
+-- snapshot. Both run here, on the same tree. Measured shape: work/1585-hb8w
+-- was created at 06:33:30Z, yoga had fetched at 06:33:23Z, the guard ran at
+-- 06:45 and two hosts ported check-litmus-yaml-parses.sh.
+local BARE = R .. "/remote.git"
+run({ "git", "init", "-q", "--bare", BARE })
+G({ "checkout", "-q", "base" })
+G({ "remote", "add", "origin", BARE })
+G({ "push", "-q", "origin", "base" })
+G({ "fetch", "-q", "origin" }) -- the clone's last fetch: no work refs yet
+local LATE = R .. "/late"
+run({ "git", "clone", "-q", "-b", "base", BARE, LATE })
+local function GL(args)
+    local argv = { "git", "-c", "user.email=f@f", "-c", "user.name=f", "-c", "commit.gpgsign=false" }
+    for _, a in ipairs(args) do argv[#argv + 1] = a end
+    return run(argv, { cwd = LATE })
+end
+GL({ "checkout", "-q", "-b", "work/9997-late" })
+GL({ "rm", "-q", "scripts/check-y.sh" }); GL({ "commit", "-qm", "another host ports check-y after our fetch" })
+GL({ "push", "-q", "origin", "work/9997-late" })
+change("work/1000-late") -- order 1000: check-y.sh (smallest) is the offer unless it is seen as taken
+write("scripts/check-x.sh", n_lines("x", 10) .. "echo late\n")
+G({ "commit", "-qam", "edit after another host's push we have not fetched" })
+
+-- The pre-snapshot guard, from the real checkout's history.
+local PRE
+local hist = run({ "git", "log", "--format=%H", "--", GUARD_REL }, { cwd = ROOT })
+for _, sha in ipairs(text.lines(hist.stdout or "")) do
+    if sha ~= "" then
+        local s = run({ "git", "show", sha .. ":" .. GUARD_REL }, { cwd = ROOT })
+        if s.status == "exited" and s.code == 0 and not text.contains(s.stdout or "", "snapshot=") then
+            fs.write(REL .. "/pre-snapshot-guard.lua", s.stdout)
+            PRE = R .. "/pre-snapshot-guard.lua"
+            break
+        end
+    end
+end
+local function judge_with(guard)
+    local r = run({ PLAN, "script", "run", guard }, { cwd = R, env = { TILLANDSIAS_REPO_ROOT = R, TILLANDSIAS_CARRIED_BASE = "base" } })
+    return (r.status == "exited" and r.code or -1), (r.stdout or ""), (r.stderr or "")
+end
+if PRE then
+    local _, po = judge_with(PRE)
+    local pre_offer = po:match("due:(%S+)")
+    check("STALE (control): the pre-snapshot guard, on the clone's stale refs, offers the item another host already took",
+        pre_offer == "scripts/check-y.sh", "pre-snapshot offered [" .. tostring(pre_offer) .. "]")
+else
+    check("STALE (control): the pre-snapshot guard is in this clone's history", false, "no committed guard without snapshot=")
+end
+rc, o, e = judge_with(GUARD)
+local fixed_offer = o:match("due:(%S+)")
+local taken_line = grep(e, [[taken-by:work/9997-late scripts/check-y\.sh snapshot=\d{4}-\d\d-\d\dT]])
+check("STALE: the fixed guard fetches first, reports the item taken-by with its snapshot, and offers another",
+    rc == 0 and fixed_offer ~= nil and fixed_offer ~= "scripts/check-y.sh" and taken_line ~= nil,
+    "rc=" .. rc .. " offered=[" .. tostring(fixed_offer) .. "] err=[" .. e .. "]")
+-- Offline: no fetch, and the line says the snapshot is stale and how old.
+local r_off = run({ PLAN, "script", "run", GUARD }, { cwd = R, env = { TILLANDSIAS_REPO_ROOT = R,
+    TILLANDSIAS_CARRIED_BASE = "base", TILLANDSIAS_CARRIED_NO_FETCH = "1" } })
+check("STALE (offline): with no fetch the offer lines say snapshot=stale:<age>",
+    grep(r_off.stderr or "", [[snapshot=stale:(\d+h\d\dm|unknown)]]) ~= nil, "err=[" .. (r_off.stderr or "") .. "]")
+
+-- 17. PAID BUT TAKEN (1589-hm2r, measured by yoga): taken-by filtered only the
+-- OFFER list, so a change porting an item another open work ref already
+-- deletes read as paid. Another host pushes work/9996-dup deleting check-w.sh
+-- AFTER our fetch; our change ports the same item. The pre-snapshot guard
+-- prints paid:scripts/check-w.sh; the fixed guard refreshes, sees the other
+-- ref, and prints refused:carried:paid-but-taken-by:work/9996-dup:scripts/check-w.sh
+-- (and refuses it at landing).
+GL({ "checkout", "-q", "base" }); GL({ "checkout", "-q", "-b", "work/9996-dup" })
+GL({ "rm", "-q", "scripts/check-w.sh" }); GL({ "commit", "-qm", "another host ports check-w" })
+GL({ "push", "-q", "origin", "work/9996-dup" })
+change("work/1002-dup")
+G({ "rm", "-q", "scripts/check-w.sh" })
+fs.mkdir(REL .. "/scripts/lua")
+write("scripts/lua/check-w.lua", "verdict.emit('ok:w', 0)\n")
+G({ "add", "-A" }); G({ "commit", "-qm", "our port of check-w, duplicating 9996-dup" })
+if PRE then
+    local _, po = judge_with(PRE)
+    check("PAID-BUT-TAKEN (control): the pre-snapshot guard reads the duplicate port as paid",
+        has_line(po, "carried:shell-to-lua:paid:scripts/check-w.sh"), "pre-snapshot out=[" .. po .. "]")
+end
+rc, o, e = judge_with(GUARD)
+check("PAID-BUT-TAKEN: the fixed guard refreshes and refuses the duplicate port, naming the other ref",
+    rc == 1 and has_line(o, "refused:carried:paid-but-taken-by:work/9996-dup:scripts/check-w.sh"),
+    "rc=" .. rc .. " out=[" .. o .. "] err=[" .. e .. "]")
+local rl = run({ PLAN, "script", "run", GUARD, "--", "--landing" }, { cwd = R, env = { TILLANDSIAS_REPO_ROOT = R, TILLANDSIAS_CARRIED_BASE = "base" } })
+check("PAID-BUT-TAKEN at landing: refused, exit 1",
+    rl.status == "exited" and rl.code == 1 and text.contains(rl.stdout or "", "paid-but-taken-by:work/9996-dup:scripts/check-w.sh"),
+    "rc=" .. tostring(rl.code) .. " out=[" .. (rl.stdout or "") .. "]")
+-- The remedy: a conflict: waiver trailer turns the refusal into waived, exit 0.
+G({ "commit", "-q", "--allow-empty", "-m", "duplicate of 9996-dup", "-m", "Carried-Waiver: shell-to-lua conflict:scripts/check-w.sh (#9996)" })
+rc, o, e = judge_with(GUARD)
+check("PAID-BUT-TAKEN remedy: a Carried-Waiver conflict: trailer clears the refusal (waived, exit 0)",
+    rc == 0 and has_line(o, "carried:shell-to-lua:waived:conflict:scripts/check-w.sh (#9996)"),
+    "rc=" .. rc .. " out=[" .. o .. "] err=[" .. e .. "]")
+G({ "checkout", "-q", "base" })
+G({ "remote", "remove", "origin" })
 
 run({ "rm", "-rf", R })
 
