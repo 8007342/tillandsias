@@ -67,7 +67,6 @@ scripts/check-litmus-mutation-arms-mutate.sh
 scripts/check-litmus-pin-claims.sh
 scripts/check-litmus-steps-can-fail.sh
 scripts/check-litmus-yaml-parses.sh
-scripts/check-local-expert-health.sh
 scripts/check-long-running-view.sh
 scripts/check-macos-only-sources-verified.sh
 scripts/check-macos-stock-binaries.sh
