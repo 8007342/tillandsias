@@ -667,6 +667,7 @@ carried_obligations:
     port), the agent writes `Carried-Waiver: <backlog> too-big:<item>:<lines>`
     instead of growing the change. An item over the ceiling is never carried;
     it is a packet of its own (1570-mxcg, 652 lines, 8 h, is that shape).
+  window_size: 10
   triggers:
     window: >
       W = the last 10 DUE integrations of the backlog, counted by first parent
@@ -703,12 +704,32 @@ carried_obligations:
         - scripts/test-*.sh
         - scripts/verify-*.sh
         - scripts/guard-*.sh
+        - scripts/audit-*.sh
+        - scripts/census-*.sh
+        - scripts/preflight-*.sh
         - scripts/lua/**
         - scripts/gate-steps.d/**
+      population:
+        - scripts/check-*.sh
+        - scripts/test-*.sh
+        - scripts/verify-*.sh
+        - scripts/guard-*.sh
+        - scripts/audit-*.sh
+        - scripts/census-*.sh
+        - scripts/preflight-*.sh
+      population_excludes: scripts/portability/bootstrap-shell-allowlist.txt
       counter: >
-        `sh=` on the ok: line of scripts/lua/check-shell-ratchet.lua (existing
-        top-level check-/test-/verify-/guard- .sh outside the bootstrap
-        allowlist), floor scripts/portability/shell-decider-floor.txt.
+        `counter=shell-to-lua:<n>` on the ok: line of
+        scripts/lua/check-carried-obligations.lua, printed on every --check
+        (1577-57u3): the top-level scripts matching `population` above, outside
+        `population_excludes`, with an exec WRAPPER (at most 10 code lines
+        whose exec names another population file) counted once with its
+        callee. Widened on 2026-10-10 past the ratchet's four prefixes because
+        gate-run audit-/census-/preflight- deciders were ported and paid
+        nothing (1570-25iq needed an uncounted-item waiver). `sh=` on
+        check-shell-ratchet.lua stays the narrower count its refusal floor,
+        scripts/portability/shell-decider-floor.txt, is judged on. Before the
+        widening:
         2026-10-10 on linux-next 1b1d0ea0c: sh=671, floor 664. Of the 664
         floor lines 9 name files already ported to Lua and deleted (slack);
         sh exceeds the floor by 16 because the new-shell-fixture arm is
