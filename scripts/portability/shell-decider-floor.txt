@@ -452,7 +452,6 @@ scripts/test-native-lint-attested.sh
 scripts/test-nix-cache-service.sh
 scripts/test-nix-toolbox.sh
 scripts/test-no-competing-gate.sh
-scripts/test-no-end-user-brew-instruction.sh
 scripts/test-no-fixture-writes-live-ledger.sh
 scripts/test-no-stale-base-revert-pre-receive.sh
 scripts/test-no-stale-base-revert.sh
