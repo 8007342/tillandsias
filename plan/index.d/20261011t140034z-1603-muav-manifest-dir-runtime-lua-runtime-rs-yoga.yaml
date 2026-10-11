@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11): one manifest-dir-runtime burndown item, announced and confirmed free.
+packets:
+  - packet_id: manifest-dir-runtime-convert-tillandsias-plan-src-lua-runtime-rs-test-sites-to-a-runtime-manifest-dir-read
+    order: 1603-muav
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [manifest-dir-runtime, rust, test-hermeticity, worktrees]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-plan/src/lua_runtime.rs
+      - scripts/portability/manifest-dir-env-floor.txt
+    title: |
+      manifest-dir-runtime item: crates/tillandsias-plan/src/lua_runtime.rs's 4 compile-time env!("CARGO_MANIFEST_DIR") test sites read the manifest dir at runtime instead, and the file's floor line is removed
+    context: |
+      The manifest-dir-runtime backlog (methodology/convergence.yaml, opened by 1590-j20f / #321): with a shared CARGO_TARGET_DIR, cargo reuses a test binary compiled in another worktree unchanged, and its env!("CARGO_MANIFEST_DIR") paths still name the compiling checkout. One file per item, with its floor line lowered in the same commit.
+      This file has 4 sites, all in #[cfg(test)]: lines 616-617 and 638-639 build `Path::new(env!("CARGO_MANIFEST_DIR")).join("lua")` and pass the manifest dir to LuaRuntime::new. Floor line: `crates/tillandsias-plan/src/lua_runtime.rs 4`.
+      Announced to the coordinator and confirmed free. tests/lua_predicate_classes.rs (3) was skipped because a stale 2026-09-25 ref (work/1367-lua-predicate-shims) modifies it.
+    exit_criteria:
+      - 'the 4 sites read `std::env::var("CARGO_MANIFEST_DIR")` through a per-module manifest_dir() test helper (the tillandsias-policy shape), and lua_runtime.rs has 0 compile-time CARGO_MANIFEST_DIR sites in test code'
+      - 'the file''s floor line is removed in the same commit, and scripts/lua/check-manifest-dir-env.lua passes with the test count down by 4'
+      - 'tillandsias-plan''s lua_runtime tests pass before and after, in the same run'
+    unscoreable: "a burndown item: the guard's count and the crate's tests are its evidence"
+    depends_on: []
+    related: [1590-j20f]
+    next_action: >
+      Convert the 4 sites, remove the floor line, and run the lua_runtime tests and check-manifest-dir-env.lua before and after. Merge trunk after #324 lands, then preflight and push.
+    provenance: |
+      Filed by yoga (forge) on macuahuitl-fedora's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T14:00:34Z"
+        host: yoga
+        summary: |-
+          One manifest-dir-runtime item, tillandsias-plan src/lua_runtime.rs (4 sites), announced and confirmed free by the coordinator.
