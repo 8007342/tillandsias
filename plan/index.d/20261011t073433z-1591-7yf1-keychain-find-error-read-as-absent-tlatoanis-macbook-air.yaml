@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11, p2), found while diagnosing a darwin gate red during the 1276-mugq live verify.
+packets:
+  - packet_id: the-macos-trays-keychain-read-treats-every-security-find-failure-as-absent-so-a-transient-keychain-error-becomes-a-write
+    order: 1591-7yf1
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, keychain, tray, fail-loud, flake]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-macos-tray/src/installation_uuid.rs
+    title: |
+      read_credential_string_in reads ANY non-zero `security find-generic-password` exit as "absent", not only 44 (errSecItemNotFound), so a transient keychain error (36, 51, a busy securityd) makes read_or_generate_in WRITE a new value over a credential that may exist
+    context: |
+      Two claims, kept separate.
+      DEFECT (read in source, trunk b620b2f4e). In crates/tillandsias-macos-tray/src/installation_uuid.rs, read_credential_string_in runs `find-generic-password -a <target> -s <service> -w` and does `if !output.status.success() { return Ok(None) }`. Its own comment says only 44 means missing. read_or_generate_in then treats None as "generate and write". So any other failure turns into a write of a fresh value: 36 (interaction not allowed / locked), 51, or a securityd error under contention. For the installation UUID that write replaces the anchor. Nothing logs it.
+      HYPOTHESIS (UNVERIFIED): the one gate flake came from this path. It may not have.
+      - The single observation: darwin `taskpolicy -b ./build.sh --check` in wt-mugq on 7d3a9a3b9 (trunk 8fac92659 plus a README-only scratch commit), 07:15 to 07:31Z on 2026-10-11, GATE_RC=1.
+      - It failed with test-baseline new-red=1: tillandsias_tray::installation_uuid::tests::a_superseded_delivery_repopulates_the_keychain_from_the_handover, "read_or_generate UUID failed: security add-generic-password exited exit status: 45" (installation_uuid.rs:845). The other 180 tests in the binary passed.
+      - Standalone reproductions, 0 failures in 16 runs on the same code: the 9 installation_uuid tests 5/5 plain and 5/5 under taskpolicy -b, and the full tray binary (181 tests, parallel) 6/6 under taskpolicy -b.
+      - The add uses -U, so a single writer updating an existing item should not see 45 (errSecDuplicateItem). That points at a concurrent creator of the same item, or at securityd under contention. The defect above would explain a spurious add after a failed find, but NOT why that add saw 45. The fix may leave the flake unexplained; say so on closure if so.
+      Tests use scratch services only (tillandsias-scratch-test-<pid>-<uuid>); never the real login-keychain tillandsias entries.
+    exit_criteria:
+      - 'with `find-generic-password` stubbed to exit e.g. 36 or 51 (scratch service, or an injected runner, never the real Keychain), read_credential_string_in returns Err naming the exit code, and read_or_generate_in runs NO add; exit 44 still reads as absent (control)'
+      - 'the pre-fix code is shown calling add for that stubbed failure in the same run'
+      - 'on closure, the row says whether the exit-45 gate flake recurred and whether this fix explains it (it may not)'
+    unscoreable: "unpinnable-until-the-guard-exists: the stub-runner test is the pin and is written with the fix"
+    depends_on: []
+    next_action: >
+      Give security_bounded's find path an injectable runner (or a scratch-service stub) so a test can make find exit 36 or 51. Make read_credential_string_in return Ok(None) only for 44 and Err otherwise. Pin it pre-fix red (add called) and post-fix green (Err, no add), with 44 as the control.
+    provenance: |
+      Filed by tlatoanis-macbook-air on macuahuitl's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T07:34:33Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Keychain find errors other than 44 are read as absent and trigger a write (from source). One unreproduced exit-45 gate flake is recorded as an unverified hypothesis.
