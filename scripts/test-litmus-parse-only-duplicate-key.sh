@@ -6,7 +6,7 @@
 # reach for did not say which was which:
 #
 #   run-litmus-test.sh --parse-only    -> "can the RUNNER extract steps here"
-#   scripts/check-litmus-yaml-parses.sh -> "does this LOAD as YAML"
+#   scripts/lua/check-litmus-yaml-parses.lua -> "does this LOAD as YAML"
 #
 # The runner's parser is line-based and tolerates a duplicated mapping key,
 # silently taking the last occurrence. A YAML loader rejects the document
@@ -272,7 +272,7 @@ fi
 # on saying something untrue in order to keep a fixture green. What survives
 # the change, and is the thing this arm was always really about, is that the
 # mode states its SCOPE and names the corpus-wide gate by path: --parse-only
-# answers for the files named on the command line, check-litmus-yaml-parses.sh
+# answers for the files named on the command line, scripts/lua/check-litmus-yaml-parses.lua
 # answers for the corpus.
 #
 # Kept deliberately loose — 'FILES NAMED' and the path — rather than pinning
@@ -280,7 +280,7 @@ fi
 # that changed nothing, which is the expression-pinning shape 634-39ik refuses
 # in litmus steps and which is no better in a fixture.
 out="$(run_runner bash "$RUNNER" --parse-only "$TMP/clean.yaml" 2>&1)"
-if printf '%s' "$out" | grep -Fq 'check-litmus-yaml-parses.sh' \
+if printf '%s' "$out" | grep -Fq 'check-litmus-yaml-parses.lua' \
    && printf '%s' "$out" | grep -Fqi 'FILES NAMED'; then
     ok "ARM 7: --parse-only states its scope and names the corpus-wide gate by path"
 else

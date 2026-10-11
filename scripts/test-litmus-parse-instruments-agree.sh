@@ -42,7 +42,7 @@ RUNNER="$ROOT/scripts/run-litmus-test.sh"
 READER="$(resolve_plan_binary 2>/dev/null || true)"
 if [ -z "$READER" ] || [ ! -x "$READER" ]; then
     # Same stand-aside, and the same wording, as
-    # scripts/check-litmus-yaml-parses.sh: two instruments answering one
+    # scripts/lua/check-litmus-yaml-parses.lua: two instruments answering one
     # question must not differ on what "cannot answer" looks like.
     echo "skip:no-runnable-reader"
     exit 0

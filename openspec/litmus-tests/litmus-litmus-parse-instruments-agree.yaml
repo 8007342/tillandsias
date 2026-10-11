@@ -48,7 +48,7 @@ critical_path:
   #
   # `skip:no-runnable-reader` is a LEGITIMATE outcome, not a pass dressed up:
   # a fresh clone with no built plan binary cannot answer the question, and the
-  # fixture says so in the same words scripts/check-litmus-yaml-parses.sh uses.
+  # fixture says so in the same words scripts/lua/check-litmus-yaml-parses.lua uses.
   - step: "both instruments agree, or the fixture says it cannot answer"
     command: "bash scripts/test-litmus-parse-instruments-agree.sh 2>&1 | tail -1 | grep -E '^(ok:litmus-parse-instruments-agree:3/3|skip:no-runnable-reader)$'"
     expected_behavior: "ok:litmus-parse-instruments-agree:3/3 (or skip:no-runnable-reader)"
