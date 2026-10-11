@@ -1989,8 +1989,20 @@ pub mod edit {
 mod tests {
     use super::*;
 
+    /// This package's directory in the checkout that RUNS the test, read at
+    /// runtime. Compile-time `env!("CARGO_MANIFEST_DIR")` names the checkout
+    /// that COMPILED the binary, and with a shared CARGO_TARGET_DIR cargo
+    /// reuses that binary from another worktree, because it does not track
+    /// the env-dep it set itself; these tests would then judge THAT
+    /// checkout's plan/index.yaml (1590-j20f, 1604-64q6).
+    fn manifest_dir() -> std::path::PathBuf {
+        std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo test sets CARGO_MANIFEST_DIR"),
+        )
+    }
+
     fn live_ledger() -> Ledger {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plan/index.yaml");
+        let path = manifest_dir().join("../../plan/index.yaml");
         Ledger::load(&path).expect("live plan/index.yaml loads")
     }
 
@@ -2272,7 +2284,7 @@ steps:
     /// item starts with `- order:` rather than `- packet_id:`, fails here.
     #[test]
     fn every_live_packet_has_a_span_that_contains_its_own_id() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plan/index.yaml");
+        let path = manifest_dir().join("../../plan/index.yaml");
         let raw = std::fs::read_to_string(&path).expect("read live ledger");
         let lines: Vec<&str> = raw.lines().collect();
         let ledger = Ledger::load(&path).expect("live ledger loads");
@@ -2642,7 +2654,7 @@ steps:
     /// `parse: did not find expected alpha` for the bullets.
     #[test]
     fn event_block_survives_multiline_summaries_on_the_real_ledger() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plan/index.yaml");
+        let path = manifest_dir().join("../../plan/index.yaml");
         let raw = std::fs::read_to_string(&path).expect("read live ledger");
         let ledger = live_ledger();
 
@@ -2703,7 +2715,7 @@ steps:
         // Slice 2: a well-formed surgical event append on the REAL ledger
         // inserts the event and passes the flush guard (parseable, ids
         // unique, references sound, packet count unchanged).
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plan/index.yaml");
+        let path = manifest_dir().join("../../plan/index.yaml");
         let raw = std::fs::read_to_string(&path).expect("read live ledger");
         let ledger = live_ledger();
         let block = edit::event_block(
