@@ -47,7 +47,12 @@ cleanup() {
     [ -d "$wt" ] && git -C "$ROOT" worktree remove --force "$wt" >/dev/null 2>&1
     rm -rf "$tmp"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+# 1600-nn5b: a signal must EXIT, so the EXIT trap removes the worktree. A trap
+# that only ran cleanup on TERM returned and let the script carry on without its
+# worktree. A KILL that lands while bash waits on a long step is swept by the
+# preflight door (per-guard TMPDIR).
+trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP
 
 # ── ARM 1 — GUARD 1 names the exit AND guard 2.
 if ! git worktree add --detach -q "$wt" HEAD 2>"$tmp/wterr"; then

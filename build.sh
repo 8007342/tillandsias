@@ -384,6 +384,35 @@ _pf_classify() {  # $1 = rc, $2 = captured output file
     "$_pf_plan_bin" script classify --rc "$1" --file "$2" 2>/dev/null || true
 }
 
+# ORDER 1600-nn5b. THE DOOR SWEEPS WHAT A KILLED GUARD LEFT REGISTERED. A fixture
+# that `git worktree add`s registers the worktree in THIS checkout's .git, and
+# when the door's KILL lands while bash waits on a long step, no trap of the
+# fixture's can run (MEASURED 2026-10-11 on darwin: after deadline-killed
+# preflights, `git worktree list` held closure-guards.*/wt and
+# scorable-quoting.*/wt under $TMPDIR, five and two times). So every guard runs
+# with its OWN TMPDIR, and afterwards the door removes ONLY the worktrees whose
+# registered path lies under that directory (never by name pattern), prints
+# each as `swept:worktree:<path>` into <outfile>.swept, and deletes the dir.
+_pf_sweep_guard_tmp() {  # $1 = the guard's TMPDIR, $2 = outfile
+    local _gt="$1" _real _k _v
+    [ -n "$_gt" ] && [ -d "$_gt" ] || return 0
+    _real="$(cd "$_gt" 2>/dev/null && pwd -P)" || _real=""
+    if [ -n "$_real" ]; then
+        while read -r _k _v; do
+            [ "$_k" = worktree ] || continue
+            case "$_v" in
+                "$_real"/*|"$_gt"/*)
+                    if git -C "$SCRIPT_DIR" worktree remove --force "$_v" >/dev/null 2>&1; then
+                        echo "swept:worktree:$_v" >> "$2.swept"
+                    else
+                        echo "swept:worktree-failed:$_v" >> "$2.swept"
+                    fi ;;
+            esac
+        done < <(git -C "$SCRIPT_DIR" worktree list --porcelain 2>/dev/null)
+    fi
+    rm -rf "$_gt"
+}
+
 _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, $4 = args
     local _p="$1" _d="$2" _out="$3" _pid _ticks=0 _tick _per_s _max
     # ORDER 1499-m9fj: THE GATE'S ARGUMENTS, WORD FOR WORD. A guard run without
@@ -432,10 +461,13 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, 
 
     if sleep 0.1 2>/dev/null; then _tick=0.1; _per_s=10; else _tick=1; _per_s=1; fi
     _max=$(( _d * _per_s ))
+    local _gtmp _rc=0
+    _gtmp="$(mktemp -d "${TMPDIR:-/tmp}/pf-guard.XXXXXX" 2>/dev/null)" || _gtmp=""
+    rm -f "$_out.swept"
     if [ -n "$_PF_SETSID" ]; then
-        ( cd "$SCRIPT_DIR" && exec setsid "${_runner[@]}" ${_a[@]+"${_a[@]}"} ) >"$_out" 2>&1 </dev/null &
+        ( cd "$SCRIPT_DIR" && { [ -z "$_gtmp" ] || export TMPDIR="$_gtmp"; } && exec setsid "${_runner[@]}" ${_a[@]+"${_a[@]}"} ) >"$_out" 2>&1 </dev/null &
     else
-        ( cd "$SCRIPT_DIR" && exec "${_runner[@]}" ${_a[@]+"${_a[@]}"} ) >"$_out" 2>&1 </dev/null &
+        ( cd "$SCRIPT_DIR" && { [ -z "$_gtmp" ] || export TMPDIR="$_gtmp"; } && exec "${_runner[@]}" ${_a[@]+"${_a[@]}"} ) >"$_out" 2>&1 </dev/null &
     fi
     _pid=$!
     while kill -0 "$_pid" 2>/dev/null; do
@@ -457,10 +489,12 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, 
         done
         kill -KILL "-$_pid" 2>/dev/null || kill -KILL "$_pid" 2>/dev/null
         wait "$_pid" 2>/dev/null
+        _pf_sweep_guard_tmp "$_gtmp" "$_out"
         return 124
     fi
-    wait "$_pid"
-    return $?
+    wait "$_pid" || _rc=$?
+    _pf_sweep_guard_tmp "$_gtmp" "$_out"
+    return "$_rc"
 }
 
 # ORDER 1499-m9fj. WHETHER THE DOOR RUNS A GUARD, decided in ONE place, because
@@ -1127,6 +1161,8 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
         fi
         _pf_t0=$(( SECONDS - _pf_el ))
         [ -f "$_pf_tmp" ] || : > "$_pf_tmp"
+        # 1600-nn5b: what the door swept after this guard, whatever its outcome.
+        [ ! -s "$_pf_tmp.swept" ] || sed "s|\$| (after $_pf_label)|" "$_pf_tmp.swept"
         if [ "$_pf_rc" -eq 0 ]; then
             _pf_ran=$((_pf_ran + 1))
             grep -E '^note:' "$_pf_tmp" || true

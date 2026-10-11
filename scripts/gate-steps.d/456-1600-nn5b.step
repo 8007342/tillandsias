@@ -1,0 +1,12 @@
+# Gate step 1600-nn5b — a fixture that `git worktree add`s into this checkout
+# registers, before the add, an EXIT trap and a TERM trap that exits, and its
+# cleanup runs `git worktree remove` (not only rm -rf). Prints scanned/real/
+# unguarded; a non-executed add is exempt only with a reason in
+# scripts/portability/worktree-add-scan-exempt.txt.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking fixtures that add worktrees remove them on every exit (1600-nn5b)"
+STEP_LUA="scripts/lua/check-worktree-add-cleanup.lua"
+STEP_ERROR="a fixture adds a worktree to this checkout without a cleanup that survives TERM (1600-nn5b) — see the violation lines above"
+STEP_OK="Worktree-adding fixtures clean up on every exit"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-11 darwin ok:worktree-add-cleanup"
