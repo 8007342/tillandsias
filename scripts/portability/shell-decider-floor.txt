@@ -311,7 +311,6 @@ scripts/test-git-mirror-existing-volume-hardening.sh
 scripts/test-git-mirror-ref-convergence.sh
 scripts/test-git-mirror-relay-token-expiry.sh
 scripts/test-git-mirror-relay-verified-ack.sh
-scripts/test-git-mirror-seed-failure-surfaced.sh
 scripts/test-git-mirror-stale-reconcile.sh
 scripts/test-git-mirror-startup-per-ref.sh
 scripts/test-git-mirror-unborn-head.sh
