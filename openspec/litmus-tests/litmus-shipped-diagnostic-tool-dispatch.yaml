@@ -49,10 +49,10 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok:no-end-user-brew-instruction:2"
 
-  - step: "the brew-instruction guard has teeth: current tree passes, a live instruction fails with file:line, a trailing comment passes (mutation pair)"
-    command: "bash scripts/test-no-end-user-brew-instruction.sh 2>&1 | tail -1"
+  - step: "the brew-instruction guard has teeth: current tree passes, a live instruction fails with file:line, a trailing comment passes (mutation pair; the retired .sh terminal lines have no reader)"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" && TILLANDSIAS_PLAN_BIN=\"$P\" \"$P\" script run scripts/lua/test-no-end-user-brew-instruction.lua 2>&1"
     timeout_ms: 20000
-    expected_behavior: "PASS: no-end-user-brew-instruction guard mutation pair 3/3"
+    expected_behavior: "ok:no-end-user-brew-instruction-fixture:4"
 
 evidence:
   artifact: "scripts/tray-diagnose.sh + scripts/diagnose-macos-provision.sh + scripts/test-shipped-diagnostic-tool-dispatch.sh"
