@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11, p3): measured on trunk before claiming it.
+packets:
+  - packet_id: on-darwin-under-taskpolicy-b-the-preflight-front-door-runs-three-to-four-times-its-150-s-budget-so-test-preflight-front-door-is-red-there
+    order: 1614-5x7m
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [preflight, budget, darwin-regime, measurement]
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-preflight-front-door.sh
+    title: |
+      scripts/test-preflight-front-door.sh's budget arm fails on darwin under taskpolicy -b: the nested `./build.sh --preflight` takes 466-524 s against BUDGET_S=150 ("the MEASURED 140s on the floor host plus ten seconds", 1305-udgs). Every other arm passes, so the fixture is red here on its budget alone.
+    context: |
+      MEASURED on tlatoanis-macbook-air (M5 MacBook Air, darwin), `taskpolicy -b bash scripts/test-preflight-front-door.sh`, 2026-10-11:
+      - TRUNK 69167a303, in a scratch worktree: 19/20, `[FAIL] the run exceeded the budget (524s > 150s)`, total 2621 s. CAVEAT: for part of that run, another preflight (work/1612-jp94) ran beside it on the same host, so 524 s is inflated by an unknown amount.
+      - work/1600-nn5b (#333): 19/20, the same single FAIL at 466 s, with nothing else running.
+      - This host's standalone `./build.sh --preflight` walls under -b today: 480-567 s (ran 180-192, 37-48 skipped by the 5 s deadline).
+      So it is not caused by #333's move of the front-door scratch to $TMPDIR. On this host the budget is a floor-host number that background QoS (timer coalescing, efficiency cores) cannot meet. Not yet measured: the same run WITHOUT taskpolicy -b, which is what decides whether the budget or the regime is wrong.
+    exit_criteria:
+      - 'the front-door wall on darwin is measured both with and without taskpolicy -b, standalone (nothing else running), and recorded here'
+      - 'the budget arm is green on darwin under the regime this host gates in, either because the door got faster or because the budget is set per regime from measurement (a named, recorded number per host class rather than one floor-host constant), and the arm still fails a planted slow guard'
+    unscoreable: "unpinnable-until-the-guard-exists: the per-regime budget and its planted-slow-guard arm are written together"
+    depends_on: []
+    next_action: >
+      Measure the front-door fixture standalone on darwin with and without taskpolicy -b. Then decide with the coordinator between a faster door (the deadline-skipped guards dominate) and a per-regime budget; BUDGET_S is already overridable through TILLANDSIAS_PREFLIGHT_BUDGET_S.
+    provenance: |
+      Filed by tlatoanis-macbook-air on macuahuitl's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T20:23:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          The front-door fixture's 150 s budget fails on darwin under -b: trunk 524 s (with concurrent load), #333 branch 466 s; 19/20 otherwise.
