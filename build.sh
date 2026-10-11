@@ -4533,6 +4533,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Bash dialect gate passed"
 
+    # ORDER 1582-c32p — the dialect gate's case-in-$( ) rule on the shape bash
+    # 3.2 misparses when the `$(` opens MID-line (a continued pipeline) and the
+    # unparenthesised pattern sits lines later; red on it, green on (pat) and
+    # inside single quotes, comments, escaped regexes and awk programs.
+    _step "Checking the dialect gate's open-\$( ) case fixture (1582-c32p)..."
+    if ! _run_lua_decider "scripts/lua/test-bash-dialect-open-cs-case.lua" 2>&1; then
+        _error "the dialect gate no longer refuses an unparenthesised case pattern inside a multi-line \$( ), or refuses a safe form — see the FAIL lines above (1582-c32p)"
+        exit 1
+    fi
+    _info "Dialect open-\$( ) case fixture passed"
+
     # The cheatsheet-reference checker's own fixture (1570-k4fx), a Lua fixture
     # on the one runner: both reference shapes, See-also scoping, a dangling
     # reference refused by name and its negative control, a PATH that resolves

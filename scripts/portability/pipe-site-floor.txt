@@ -430,7 +430,6 @@ scripts scripts/check-readme-discipline.sh 3
 scripts scripts/check-refusal-affordance-added.sh 3
 scripts scripts/check-release-asset-integrity.sh 12
 scripts scripts/check-release-tier-freshness.sh 7
-scripts scripts/check-release-uploads-gated.sh 1
 scripts scripts/check-resumable-claim-dirt.sh 1
 scripts scripts/check-running-image-freshness.sh 6
 scripts scripts/check-rust-source-pin-added.sh 2
