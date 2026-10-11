@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: burndown-check-litmus-yaml-parses-and-test-cheatsheet-index-byte-order-move-to-lua-with-parity-measured-on-windows
+    event:
+      type: completed
+      ts: "2026-10-11T07:07:04Z"
+      agent_id: windows-yolanda-claude-20261008t155217z
+      host: yolanda-windows
+      summary: |-
+        Landed as #309, merge 40551a584 on linux-next, full tier, gate green. Ports check-litmus-yaml-parses and test-cheatsheet-index-byte-order to Lua; parity measured natively on yolanda-windows (real corpus ok:litmus-yaml-parses:527 both; planted broken file blocked:...:1 rc 1 both; real INDEX and a perturbed INDEX byte-identical to the .sh); readers repointed incl. the parse-only ARM 7 pin (15/15).
