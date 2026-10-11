@@ -243,7 +243,6 @@ scripts/test-envelope-suite-resolves-the-gates-artifact.sh
 scripts/test-exact-version-literal-added.sh
 scripts/test-exec-bits-guard-end-to-end.sh
 scripts/test-exec-transcript-capped-in-every-driver.sh
-scripts/test-exit-pause-host-hold.sh
 scripts/test-expert-accuracy-provenance.sh
 scripts/test-expert-accuracy-record-shape.sh
 scripts/test-expert-capability-behaviour-skew.sh

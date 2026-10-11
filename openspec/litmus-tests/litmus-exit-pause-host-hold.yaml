@@ -1,11 +1,13 @@
-# @trace order:1457-r8yi, spec:simplified-tray-ux
+# @trace order:1457-r8yi, order:1600-h359, spec:simplified-tray-ux
 #
 # A Linux lane that fails inside the container asks for ONE keypress: the host's
 # `tillandsias --hold-window` passes TILLANDSIAS_HOST_HOLDS_WINDOW=1 into the
 # forge by name and each entrypoint's exit_pause skips its own pause when it is
 # set, while still pausing when it is not (macOS/Windows lanes, an operator's
-# own terminal). Wraps scripts/test-exit-pause-host-hold.sh, which runs each of
-# the six real exit_pause functions on a pseudo-terminal.
+# own terminal). Wraps scripts/lua/test-exit-pause-host-hold.lua (the 1600-h359
+# port of the .sh, which used the util-linux script(1) form and failed 0/6 on
+# darwin's BSD script), which runs each of the six real exit_pause functions on a
+# pseudo-terminal, plus two planted exit_pause failures its arms must catch.
 name: litmus:exit-pause-host-hold
 spec: ci-release
 phase: pre-build
@@ -16,17 +18,17 @@ severity: medium
 size: quick
 
 preconditions:
-  - workspace contains scripts/test-exit-pause-host-hold.sh
+  - workspace contains scripts/lua/test-exit-pause-host-hold.lua
   - workspace contains images/default/entrypoint-terminal.sh
-  - shell utilities (script, timeout, awk) are available in PATH
+  - script(1), util-linux or BSD form, is available in PATH
 
 critical_path:
-  - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-exit-pause-host-hold.sh && test -x scripts/test-exit-pause-host-hold.sh && echo 'ok: exit-pause-fixture-parses'"
+  - step: "the Lua port is present and the shell original is retired"
+    command: "test -f scripts/lua/test-exit-pause-host-hold.lua && test ! -e scripts/test-exit-pause-host-hold.sh && echo 'ok: exit-pause-fixture-present'"
     timeout_ms: 3000
-    expected_behavior: "ok: exit-pause-fixture-parses"
+    expected_behavior: "ok: exit-pause-fixture-present"
 
   - step: "held skips the in-container pause, unheld still pauses, for all six entrypoints"
-    command: "out=$(bash scripts/test-exit-pause-host-hold.sh 2>&1); rc=$?; case \"$out\" in (*'ok:exit-pause-host-hold:6/6'*) [ \"$rc\" = 0 ] && echo 'ok: exit-pause 6/6' ;; (*) printf '%s\\n' \"$out\" | tail -7; exit 1 ;; esac"
+    command: "out=$(\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-exit-pause-host-hold.lua 2>&1); rc=$?; case \"$out\" in (*'ok:exit-pause-host-hold:6/6'*) [ \"$rc\" = 0 ] && echo 'ok: exit-pause 6/6' ;; (*) printf '%s\\n' \"$out\" | tail -7; exit 1 ;; esac"
     timeout_ms: 120000
     expected_behavior: "ok: exit-pause 6/6"
