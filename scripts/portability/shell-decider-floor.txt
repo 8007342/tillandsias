@@ -292,7 +292,6 @@ scripts/test-fragment-batch-never-collapses-verdicts.sh
 scripts/test-fragment-events-land-callsite.sh
 scripts/test-fragment-status-loss-row-boundary.sh
 scripts/test-fragment-status-loss.sh
-scripts/test-fragment-ts-skew.sh
 scripts/test-freshness-regime-budget.sh
 scripts/test-gate-divergence-is-declared.sh
 scripts/test-gate-fast-refusals.sh

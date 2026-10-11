@@ -1,4 +1,4 @@
-# @trace spec:ci-release, order:1313-w78k
+# @trace spec:ci-release, order:1313-w78k, order:1581-d9ig
 name: litmus:fragment-ts-skew
 spec: ci-release
 phase: pre-build
@@ -21,11 +21,12 @@ description: >
   fold into a refusal or a ritual.
 preconditions:
   - workspace contains scripts/check-fragment-ts-skew.sh
-  - workspace contains scripts/test-fragment-ts-skew.sh
+  - workspace contains scripts/lua/test-fragment-ts-skew.lua (the Lua port of
+    the retired scripts/test-fragment-ts-skew.sh, 1581-d9ig)
 
 critical_path:
   - step: "a future ts is refused, a past ts is accepted and printed, and the check is diff-scoped"
-    command: "bash scripts/test-fragment-ts-skew.sh"
+    command: ". scripts/plan-binary-probe.sh; P=$(resolve_plan_binary) && \"$P\" script run scripts/lua/test-fragment-ts-skew.lua"
     timeout_ms: 60000
     expected_behavior: "ok:fragment-ts-skew-fixture"
     # Nine arms. The load-bearing one is the PAST arm: a fixture that proved only

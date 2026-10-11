@@ -4608,6 +4608,24 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Carried-obligation fixture passed"
 
+    # ORDER 1581-d9ig — no fixture prunes or gcs the operator's checkout. Two
+    # fixtures' teardown ran `git -C "$ROOT" worktree prune`, which inside the
+    # WSL guest deletes every Windows worktree whose C:/ path the guest cannot
+    # see. A fixture removes its OWN worktree; pruning a scratch repo is fine.
+    _step "Checking no script or litmus step prunes the operator checkout (1581-d9ig)..."
+    if ! _run_lua_decider "scripts/lua/check-fixture-prunes-checkout.lua" 2>&1; then
+        _error "a script or litmus step runs git worktree prune or git gc against the checkout — see the lines above; remove only its own worktree (1581-d9ig)"
+        exit 1
+    fi
+    _info "No fixture prunes the checkout"
+
+    _step "Checking the fixture-prune guard's fixture (1581-d9ig)..."
+    if ! _run_lua_decider "scripts/lua/test-fixture-prunes-checkout.lua" 2>&1; then
+        _error "the fixture-prune guard no longer refuses a root prune or allows a scratch one — see the FAIL lines above (1581-d9ig)"
+        exit 1
+    fi
+    _info "Fixture-prune guard fixture passed"
+
     _step "Checking every litmus definition parses (933-4gm8)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-yaml-parses.sh" 2>&1; then
         _error "a litmus YAML does not load — the runner's fallbacks would silently re-bucket it (933-4gm8; the named file is above)"

@@ -687,7 +687,6 @@ scripts scripts/test-forge-swap-service.sh 6
 scripts scripts/test-fragment-batch-never-collapses-verdicts.sh 1
 scripts scripts/test-fragment-events-land-callsite.sh 8
 scripts scripts/test-fragment-status-loss.sh 7
-scripts scripts/test-fragment-ts-skew.sh 1
 scripts scripts/test-freshness-regime-budget.sh 22
 scripts scripts/test-gate-divergence-is-declared.sh 6
 scripts scripts/test-gate-memory-refusal.sh 1
