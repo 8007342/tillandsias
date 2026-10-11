@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: test-preflight-front-door-removes-its-scratch-worktree-only-on-normal-return-so-a-killed-run-leaves-a-registered-worktree-sharing-the-target
+    event:
+      type: note
+      ts: "2026-10-11T22:12:47Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261011t221247z
+      host: tlatoanis-macbook-air
+      summary: |
+        Landed #333 as 9e371b4a3 (land gate green). The exit criteria, each exercised by scripts/lua/test-worktree-add-cleanup.lua (gate step 457), which extracts _pf_sweep_under, _pf_sweep_guard_tmp and _pf_run_guard from build.sh as they stand:
+        1. A guard KILLed after `git worktree add` leaves no registered worktree: arm 9 POST-FIX, rc=124 left=0 swept:worktree:<path>. The five fixture wrappers (test-preflight-front-door among them) now trap EXIT plus INT/TERM/HUP with exits, and check-worktree-add-cleanup.lua (step 456) holds the population at unguarded=0 (scanned=892 adders=10 real=5 exempt=1).
+        2. In the same run the pre-fix door (the same function with its sweep call removed) leaves it registered: arm 8 PRE-FIX, rc=124 left=1. Arm 10 shows a worktree locked mid-add needs -f -f.
+        MEASURED on trunk 9e371b4a3/ed7a73185, darwin: 4 of 5 runs green (3 under taskpolicy -b, 1 plain). The 1 red run was arm 9 under -b: "rc=124 left=0 swept:worktree-failed:<path>", so nothing leaked, but the record said failed. CAUSE, measured: the planted guard adds a worktree of the REAL checkout (11084 files), which takes 0.70 s plain and 3.85 s under -b, against the arm's 2 s deadline. The guard is killed mid-add, the sweep's remove races the orphaned git, and the guard TMPDIR's rm -rf then makes git abort. This is a fixture timing flake, not a door leak. The fix (door arms against a tiny scratch repo, so the add takes milliseconds) rides with 1614-5x7m, which edits the same function.
