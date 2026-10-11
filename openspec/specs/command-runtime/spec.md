@@ -46,6 +46,22 @@ the policy engine's `no-shell-strings` rule.
 - **THEN** the child receives exactly one argument whose bytes are `a "b" *`
 - **AND** this holds on Linux, macOS and the native Windows binary
 
+#### Scenario: An argument containing a newline arrives as one argv entry, byte-identical, on Windows
+
+- **WHEN** a caller runs a child with a single argument containing LF, or CRLF,
+  or a lone CR, on native Windows, whether the child is an MSYS program (Git's
+  `printf`) or a native one (MSVC CRT command-line rules)
+- **THEN** the child receives exactly one argument with exactly those bytes
+- **AND** an argument without CR or LF is delivered exactly as Rust std
+  delivers it, so no argv that worked before changes
+- Measured 2026-10-08 on yolanda-windows (order 1553-q3wi): std quotes only a
+  space, a tab or an empty argument, so a bare newline reached Git's MSYS
+  `printf` as a separator and `a\nb` arrived as two entries. The fix forces
+  CommandLineToArgvW / MSVC CRT quoting for arguments holding CR or LF only.
+  MSYS keeps the CR of a quoted CRLF.
+
+@trace order:1553-q3wi, spec:command-runtime
+
 #### Scenario: A shell string is refused with an affordance
 
 - **WHEN** a caller runs `bash -c "a | b"` through any door

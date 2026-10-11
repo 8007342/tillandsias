@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed and claimed at the coordinator's direction (2026-10-11): the port the
+# 1583-r9it waiver named as needing its own PR.
+packets:
+  - packet_id: check-local-expert-health-moves-to-lua-with-its-degraded-and-down-grammar-kept-byte-identical-for-its-readers
+    order: 1584-ik5v
+    status: in_progress
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [lua, carried-obligation, inference, ollama, verdict-grammar]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/script_run.rs
+      - scripts/lua/check-local-expert-health.lua
+      - scripts/configure-ollama.sh
+      - skills/meta-orchestration/SKILL.md
+    title: |
+      Port scripts/check-local-expert-health.sh to Lua: verdict.emit learns degraded: and down: (the probe's established grammar), the port answers line-for-line as the .sh on its real inputs, and configure-ollama.sh plus the meta-orchestration skill read the Lua decider in the same commit
+    context: |
+      1583-r9it carried a waiver because this item's verdicts (degraded:/down:)
+      were outside the Lua runner's emit grammar, and configure-ollama.sh and the
+      forge image's meta-orchestration skill read those lines verbatim.
+    exit_criteria:
+      - 'verdict.emit accepts degraded: and down: and emits them verbatim with their exit codes (0 and 1); a prefix outside the grammar is still refused; classify books them Ok and Refused as the .sh exit codes did'
+      - 'the Lua port prints the same line with the same exit code as the .sh in all four states (unreachable, model missing, inference failed, healthy), measured against one stub endpoint, plus the real unreachable state on a host without Ollama'
+      - 'every reader (configure-ollama.sh, skills/meta-orchestration/SKILL.md) runs the Lua decider, and the .sh is deleted'
+    verifiable_closure: |
+      unscoreable: unpinnable-until-the-guard-exists — the parity fixture
+      scripts/lua/test-check-local-expert-health.lua is part of the change.
+    events:
+      - type: filed
+        ts: "2026-10-11T01:48:12Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Filed and claimed at the coordinator's direction; the port 1583-r9it's waiver deferred.

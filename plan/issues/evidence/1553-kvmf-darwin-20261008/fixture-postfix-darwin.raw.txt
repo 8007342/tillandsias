@@ -1,0 +1,12 @@
+ok: NEGATIVE CONTROL a real packet_id still claims (rc=0)
+ok: a real order token claims (rc=0)
+ok: a slashed real packet_id claims (rc=0)
+ok: MUTATION a near-miss id is refused as unknown (rc=2)
+ok: a refused claim leaves no lease behind
+ok: release stays permissive for an unresolvable id (rc=0)
+ok: status stays permissive for an unresolvable id
+ok: an unverifiable ledger degrades LOUDLY and still leases (rc=0)
+ok: every verdict line matches the grammar (5/5)
+ok: an orphaned lease dir past its TTL is reclaimed (rc=0)
+ok: a fresh holderless lease dir is still live (the write window holds)
+ok:ledger-node-claim-resolution-fixture:10
