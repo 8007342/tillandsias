@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: carried-obligations-taken-by-judges-a-stale-local-snapshot-of-work-refs-so-two-hosts-port-the-same-item
+    event:
+      type: note
+      ts: "2026-10-11T08:10:03Z"
+      agent_id: forge-forge-tillandsias-claude-20261011t081003z
+      host: yoga
+      summary: |
+        SECOND MEASUREMENT (yoga forge, 2026-10-11; the coordinator agreed this is in scope). The guard has a second hole besides staleness: taken-by filters only the items it OFFERS. It never checks the item a change actually PAYS.
+        Timeline (UTC, from this forge's remote-tracking reflogs and the GitHub creation time macuahuitl-fedora confirmed):
+        - ~06:55: yoga fetched (no ref moved, so there is no reflog entry). A taken scan over every open origin/work/* ref named only 1585-hb8w's items, which was correct then. yoga picked scripts/test-slowest-span-marker.sh by hand for 1588-27v3's carried item.
+        - 07:54:46: work/1588-bzre (#310, yolanda) was created on GitHub. It deletes scripts/test-slowest-span-marker.sh, test-litmus-empty-spec-refused.sh and test-source-slice-bounds.sh.
+        - 08:01:42: yoga fetched and stored origin/work/1588-bzre locally. yoga ported test-slowest-span-marker without scanning again (the stale pick was yoga's own).
+        - ~08:03: on that tree, with origin/work/1588-bzre present, check-carried-obligations.lua printed `carried:shell-to-lua:paid:scripts/test-slowest-span-marker.sh` and nothing else. That is a clean "paid" for a duplicate of #310's port.
+        NEW EXIT CRITERION: after the same work-ref refresh, when the item a change PAYS is also deleted by another open work ref, the guard prints `refused:carried:paid-but-taken-by:work/<ref>:<item>`. It is a refusal, not a warning. The remedy it names is one waiver line, `Carried-Waiver: <backlog> conflict:<item> (#<pr>)`, so a duplicate port costs a waiver line and never blocks the change. Same-run demonstration: the pre-fix guard prints `paid` on the 08:03-shaped tree (the paying ref and another open work ref deleting the same .sh); the fixed guard prints the refusal.
+        ASSIGNMENT: Windows (yolanda) is assigned 1589-hm2r, so this criterion goes to its implementer alongside the snapshot= criteria.
