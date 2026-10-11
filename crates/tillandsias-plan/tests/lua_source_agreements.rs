@@ -91,7 +91,22 @@ fn with_repo_root<T>(root: &Path, f: impl FnOnce() -> T) -> T {
     f()
 }
 
+thread_local! {
+    // Full evaluator runs performed on THIS thread. Each run reads the real
+    // module, builds a VM, parses the manifest and reads every named source.
+    // Pre-fix (1604-fsxu) one assertion set evaluated the manifest nine times:
+    // once for the expected-value comparison and once more per negative
+    // control. Thread-local, because libtest runs sibling tests on their own
+    // threads and a process-wide count would attribute their runs to this one.
+    static EVALUATOR_RUNS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+fn evaluator_runs() -> usize {
+    EVALUATOR_RUNS.with(|runs| runs.get())
+}
+
 fn outcomes_at(root: &Path, manifest_relative: &str) -> (bool, Option<String>, Vec<Outcome>) {
+    EVALUATOR_RUNS.with(|runs| runs.set(runs.get() + 1));
     with_repo_root(root, || {
         let source = std::fs::read_to_string(module_path())
             .expect("the real Lua module must exist at runtime");
@@ -160,6 +175,7 @@ fn expected_by_id() -> BTreeMap<String, (i64, String, Option<String>)> {
 #[test]
 fn explicit_manifest_cases_match_their_expected_guard_verdicts() {
     let expected = expected_by_id();
+    let runs_before = evaluator_runs();
     let actual = outcomes();
     assert!(
         !actual.is_empty(),
@@ -170,7 +186,7 @@ fn explicit_manifest_cases_match_their_expected_guard_verdicts() {
         expected.len(),
         "every named case must execute once"
     );
-    for outcome in actual {
+    for outcome in &actual {
         let Some((exit, verdict, stderr)) = expected.get(&outcome.id) else {
             panic!("evaluator returned undeclared case {}", outcome.id);
         };
@@ -180,7 +196,9 @@ fn explicit_manifest_cases_match_their_expected_guard_verdicts() {
     }
 
     // Each mutation is a real failure.  An evaluator changed to always accept
-    // makes this target red even if the live tree still agrees.
+    // makes this target red even if the live tree still agrees. The outcome
+    // map captured above already holds every case; re-evaluating the manifest
+    // per control (the pre-1604-fsxu shape) proved nothing the one run did not.
     for id in [
         "tray-old-field",
         "tray-removed-new-field",
@@ -191,12 +209,21 @@ fn explicit_manifest_cases_match_their_expected_guard_verdicts() {
         "inference-missing-declaration",
         "inference-missing-file",
     ] {
-        let outcome = outcomes()
-            .into_iter()
+        let outcome = actual
+            .iter()
             .find(|outcome| outcome.id == id)
-            .unwrap();
+            .unwrap_or_else(|| panic!("negative control {id} missing from the evaluated manifest"));
         assert_ne!(outcome.exit, 0, "{id} must remain a negative control");
     }
+
+    // ORDER 1604-fsxu. One assertion set, one evaluator run. The pre-fix
+    // body ran the evaluator nine times on this thread (1 + 8 controls), so
+    // this count is what the fix changes and what a regression would move.
+    let runs = evaluator_runs() - runs_before;
+    assert_eq!(
+        runs, 1,
+        "the explicit manifest is evaluated once per assertion set, not {runs} times"
+    );
 }
 
 #[test]

@@ -260,16 +260,73 @@ _engine_wanted_backends() {
     esac
 }
 OLLAMA_WANTED_BACKENDS="$(_engine_wanted_backends)"
+
+OLLAMA_ARCH=""
+case "$(uname -m)" in
+    x86_64 | amd64) OLLAMA_ARCH="amd64" ;;
+    aarch64 | arm64) OLLAMA_ARCH="arm64" ;;
+esac
+# ORDER 1118-bscs/1118-d3b6 — PINNED VERSION, VERIFIED DIGEST.
+#
+# This read `releases/latest/download/...`, which is not a version at
+# all: whatever GitHub resolved at CONTAINER START was downloaded,
+# extracted, and EXECUTED inside the enclave. Two containers from the
+# same image, started an hour apart, could run different code, and
+# nothing recorded which. There was no checksum of any kind.
+#
+# PROVENANCE (order 521): these digests are a PIN, not an attestation.
+# They were read from the GitHub release API by whoever bumped the version
+# (trust on first fetch, at bump time); they prove the bytes downloaded
+# now are the bytes the bumper saw, NOT that ollama signed them. The
+# transport cannot vouch either: inside the enclave the TLS chain ends at
+# the enclave's own CA (Squid bump). Whoever bumps OLLAMA_VERSION owns
+# both digests.
+#
+# TO BUMP: change OLLAMA_VERSION and both digests together. The
+# digests come from the release API and need no 1.4GB download:
+#   curl -fsS https://api.github.com/repos/ollama/ollama/releases/tags/<tag> \
+#     | jq -r '.assets[] | select(.name|test("ollama-linux-(amd64|arm64)\\.tar\\.zst$"))
+#              | "\(.name) \(.digest)"'
+# Leaving the version and a digest out of step fails closed below, so
+# a half-done bump cannot ship.
+OLLAMA_VERSION="v0.34.0"
+case "$OLLAMA_ARCH" in
+    amd64) OLLAMA_SHA256="cf95886728959aa09910bb34de5cca1cc5a8f68003b5597197d3f2c2d57c0804" ;;
+    arm64) OLLAMA_SHA256="6a9e5b3650c2024d8a78da86b23876f6eea238657a3262d7e5ec0f3688c5d28e" ;;
+    *)     OLLAMA_SHA256="" ;;
+esac
+
+# ── Installed-engine integrity (order 521) ─────────────────────────────
+# images/inference/engine-integrity.sh owns the manifest grammar and the
+# verdicts; see its header for what is and is not covered.
+ENGINE_INTEGRITY_SH=/usr/local/bin/tillandsias-engine-integrity.sh
+if [ -r "$ENGINE_INTEGRITY_SH" ]; then
+    # shellcheck source=engine-integrity.sh
+    . "$ENGINE_INTEGRITY_SH"
+else
+    # An image without the helper cannot vouch for the cache: refuse it, so the
+    # check below forces a verified reinstall rather than trusting the cache.
+    echo "[inference] WARN: $ENGINE_INTEGRITY_SH missing — the installed engine cannot be checked" >&2
+    tillandsias_engine_id() { printf '%s %s sha256:%s\n' "$1" "$2" "$3"; }
+    tillandsias_engine_record() { printf '%s\n' "$3" > "$2"; }
+    tillandsias_engine_check() { echo "engine-integrity-refused:no-integrity-helper"; }
+fi
 # Stable set id for the manifest: core plus the sorted wanted backends.
 OLLAMA_ENGINE_SET="core$(printf '%s' "$OLLAMA_WANTED_BACKENDS" | tr ' ' '\n' | sed '/^$/d' | sort | sed 's/^/+/' | tr -d '\n')"
-_engine_installed_set=""
-[ -f "$OLLAMA_ENGINE_MANIFEST" ] && _engine_installed_set="$(cat "$OLLAMA_ENGINE_MANIFEST" 2>/dev/null)"
-# Reinstall when the binary is missing, when llama-server is missing (the pre-406
-# payload), or when the host's required backend set changed (e.g. a CPU-only host
-# that gained a GPU, or a driver major bump).
+# Order 521: the engine ID is the set PLUS the pinned version and payload
+# digest, so a version bump on a warm cache reinstalls instead of silently
+# serving the old engine, and the installed version is on record.
+OLLAMA_ENGINE_ID="$(tillandsias_engine_id "$OLLAMA_ENGINE_SET" "$OLLAMA_VERSION" "${OLLAMA_SHA256:-none}")"
+_engine_installed_id=""
+[ -f "$OLLAMA_ENGINE_MANIFEST" ] && _engine_installed_id="$(sed -n '1p' "$OLLAMA_ENGINE_MANIFEST" 2>/dev/null)"
+_engine_verdict="$(tillandsias_engine_check "$OLLAMA_TOOLSROOT" "$OLLAMA_ENGINE_MANIFEST" "$OLLAMA_ENGINE_ID")"
+# Reinstall unless the installed engine is exactly the wanted, intact one: a
+# missing binary or llama-server (the pre-406 payload), a changed backend set
+# (a CPU-only host that gained a GPU, a driver major bump), a different
+# version/digest, or any integrity refusal.
 if [ ! -x "$OLLAMA_BIN" ] || [ ! -x "$OLLAMA_LIBDIR/llama-server" ] \
-    || [ "$_engine_installed_set" != "$OLLAMA_ENGINE_SET" ]; then
-    echo "[inference] engine payload: need '$OLLAMA_ENGINE_SET' (have '${_engine_installed_set:-none}')"
+    || [ "$_engine_verdict" != "ok" ]; then
+    echo "[inference] engine payload: need '$OLLAMA_ENGINE_ID' (have '${_engine_installed_id:-none}'; check=$_engine_verdict)"
     echo "[inference] Installing ollama binary (first run)..."
     # Order 313: NO error swallowing in this chain — the volume-ownership
     # EACCES (root-owned models bind-mount vs uid-1000 container) hid for
@@ -296,11 +353,6 @@ if [ ! -x "$OLLAMA_BIN" ] || [ ! -x "$OLLAMA_LIBDIR/llama-server" ] \
         echo "[inference]   macOS: virtiofs share ownership (order 1183-j9dk)." >&2
         exit 1
     fi
-    OLLAMA_ARCH=""
-    case "$(uname -m)" in
-        x86_64 | amd64) OLLAMA_ARCH="amd64" ;;
-        aarch64 | arm64) OLLAMA_ARCH="arm64" ;;
-    esac
     if [ -n "$OLLAMA_ARCH" ]; then
         TMP_O="$(mktemp -d 2>/dev/null)" || true
         if [ -n "$TMP_O" ]; then
@@ -314,27 +366,6 @@ if [ ! -x "$OLLAMA_BIN" ] || [ ! -x "$OLLAMA_LIBDIR/llama-server" ] \
             # Gate the download on a proven egress probe with bounded backoff;
             # an egress that never comes up fails loud but stays non-fatal
             # (the fail-loud guard below + launcher soft-degrade handle it).
-            # ORDER 1118-bscs/1118-d3b6 — PINNED VERSION, VERIFIED DIGEST.
-            #
-            # This read `releases/latest/download/...`, which is not a version at
-            # all: whatever GitHub resolved at CONTAINER START was downloaded,
-            # extracted, and EXECUTED inside the enclave. Two containers from the
-            # same image, started an hour apart, could run different code, and
-            # nothing recorded which. There was no checksum of any kind.
-            #
-            # TO BUMP: change OLLAMA_VERSION and both digests together. The
-            # digests come from the release API and need no 1.4GB download:
-            #   curl -fsS https://api.github.com/repos/ollama/ollama/releases/tags/<tag> \
-            #     | jq -r '.assets[] | select(.name|test("ollama-linux-(amd64|arm64)\\.tar\\.zst$"))
-            #              | "\(.name) \(.digest)"'
-            # Leaving the version and a digest out of step fails closed below, so
-            # a half-done bump cannot ship.
-            OLLAMA_VERSION="v0.34.0"
-            case "$OLLAMA_ARCH" in
-                amd64) OLLAMA_SHA256="cf95886728959aa09910bb34de5cca1cc5a8f68003b5597197d3f2c2d57c0804" ;;
-                arm64) OLLAMA_SHA256="6a9e5b3650c2024d8a78da86b23876f6eea238657a3262d7e5ec0f3688c5d28e" ;;
-                *)     OLLAMA_SHA256="" ;;
-            esac
             OLLAMA_URL="https://github.com/ollama/ollama/releases/download/${OLLAMA_VERSION}/ollama-linux-${OLLAMA_ARCH}.tar.zst"
             _egress_ok=0
             _egress_delay=2
@@ -372,15 +403,15 @@ if [ ! -x "$OLLAMA_BIN" ] || [ ! -x "$OLLAMA_LIBDIR/llama-server" ] \
             # the hosts whose tooling is unusual enough to lack sha256sum.
             if [ "$_ollama_dl" -eq 0 ]; then
                 if [ -z "$OLLAMA_SHA256" ]; then
-                    echo "[inference] FATAL: no pinned SHA-256 for arch '$OLLAMA_ARCH' — refusing to execute an unverified engine (1118-d3b6)" >&2
+                    echo "[inference] FATAL: no pinned SHA-256 for arch '$OLLAMA_ARCH' — refusing to execute an unverified engine (1118-d3b6) reason=engine-integrity-refused:no-pinned-digest" >&2
                     _ollama_dl=1
                 elif ! command -v sha256sum >/dev/null 2>&1; then
-                    echo "[inference] FATAL: sha256sum unavailable — cannot verify the engine payload, refusing to execute it (1118-d3b6)" >&2
+                    echo "[inference] FATAL: sha256sum unavailable — cannot verify the engine payload, refusing to execute it (1118-d3b6) reason=engine-integrity-refused:no-verifier" >&2
                     _ollama_dl=1
                 else
                     _got_sha="$(sha256sum "$TMP_O/ollama.tar.zst" 2>/dev/null | cut -d" " -f1)"
                     if [ "$_got_sha" != "$OLLAMA_SHA256" ]; then
-                        echo "[inference] FATAL: engine digest mismatch for $OLLAMA_VERSION/$OLLAMA_ARCH — refusing to execute (1118-d3b6)" >&2
+                        echo "[inference] FATAL: engine digest mismatch for $OLLAMA_VERSION/$OLLAMA_ARCH — refusing to execute (1118-d3b6) reason=engine-integrity-refused:payload-digest-mismatch" >&2
                         echo "[inference]   expected $OLLAMA_SHA256" >&2
                         echo "[inference]   got      ${_got_sha:-<none>}" >&2
                         rm -f "$TMP_O/ollama.tar.zst"
@@ -424,13 +455,18 @@ if [ ! -x "$OLLAMA_BIN" ] || [ ! -x "$OLLAMA_LIBDIR/llama-server" ] \
                     | tar -xf - -C "$OLLAMA_TOOLSROOT" "$@" bin/ollama lib/ollama \
                     && install -m 0755 "$OLLAMA_TOOLSROOT/bin/ollama" "$OLLAMA_BIN"; then
                     rm -rf "$OLLAMA_TOOLSROOT/bin"
-                    printf '%s\n' "$OLLAMA_ENGINE_SET" > "$OLLAMA_ENGINE_MANIFEST"
+                    if ! tillandsias_engine_record "$OLLAMA_TOOLSROOT" "$OLLAMA_ENGINE_MANIFEST" "$OLLAMA_ENGINE_ID"; then
+                        echo "[inference] reason=engine-integrity-refused:record-failed — the verified engine could not be recorded; it will be refused below" >&2
+                        rm -f "$OLLAMA_ENGINE_MANIFEST"
+                    fi
                     echo "[inference] ollama $OLLAMA_ARCH engine '$OLLAMA_ENGINE_SET' installed ($(du -sh "$OLLAMA_LIBDIR" 2>/dev/null | cut -f1) libs) into model cache"
                 else
                     echo "[inference] ollama install FAILED (see errors above) — will retry next launch (non-fatal)" >&2
                 fi
             else
-                echo "[inference] ollama download FAILED — will retry next launch (non-fatal)" >&2
+                # Order 521: this branch is reached by a failed download AND by a
+                # refused payload; the reason= line above says which.
+                echo "[inference] ollama engine NOT installed (download failed or payload refused, see reason= above) — will retry next launch (non-fatal)" >&2
             fi
             rm -rf "$TMP_O"
         fi
@@ -438,8 +474,27 @@ if [ ! -x "$OLLAMA_BIN" ] || [ ! -x "$OLLAMA_LIBDIR/llama-server" ] \
         echo "[inference] unsupported arch $(uname -m) — relying on system ollama" >&2
     fi
 fi
+# Order 521: execute ONLY an engine the integrity check vouches for. A stale
+# engine (fully recorded and intact, but not the pinned version — e.g. the
+# reinstall after a bump failed) is served and reported; anything refused is
+# NOT put on PATH, so the fail-loud guard below exits and the next launch
+# retries, while the forge launch itself proceeds degraded (order 486).
+_engine_verdict="$(tillandsias_engine_check "$OLLAMA_TOOLSROOT" "$OLLAMA_ENGINE_MANIFEST" "$OLLAMA_ENGINE_ID")"
+case "$_engine_verdict" in
+    ok)
+        echo "[inference] engine integrity: ok ($OLLAMA_ENGINE_ID)"
+        ;;
+    stale:*)
+        echo "[inference] WARN: reason=engine-stale — serving the previously verified engine '${_engine_verdict#stale:}', not the pinned '$OLLAMA_ENGINE_ID'" >&2
+        ;;
+    *)
+        echo "[inference] FATAL: reason=$_engine_verdict — refusing to execute the engine in $OLLAMA_TOOLSROOT" >&2
+        ;;
+esac
 if [ -x "$OLLAMA_BIN" ]; then
-    export PATH="$OLLAMA_BINDIR:$PATH"
+    case "$_engine_verdict" in
+        ok | stale:*) export PATH="$OLLAMA_BINDIR:$PATH" ;;
+    esac
 fi
 
 # CA certificate from podman secret for HTTPS trust.
@@ -522,7 +577,7 @@ fi
 # banner-then-die exit 127. Exit early with one clear line instead; the
 # container dying IS the "retry next launch" mechanism.
 if ! command -v ollama >/dev/null 2>&1; then
-    echo "[inference] FATAL: no ollama binary available (self-install failed above) — exiting so the next launch retries" >&2
+    echo "[inference] FATAL: no ollama binary available (self-install failed, or the engine was refused — see the reason= line above) — exiting so the next launch retries" >&2
     exit 1
 fi
 

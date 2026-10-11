@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the OPERATOR's direction (2026-10-11): branch within one checkout, as git is designed to be used.
+packets:
+  - packet_id: hosts-work-in-sibling-git-worktrees-which-the-command-policy-hook-treats-as-outside-the-workspace-so-routine-cleanup-asks-the-operator-and-shared-targets-mix-checkouts
+    order: 1620-67ji
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [methodology, branching, operator-direction, harness]
+    estimated_hours: 1
+    owned_files:
+      - methodology/multi-host-development.yaml
+    title: |
+      methodology/multi-host-development.yaml tells hosts to "prefer separate `git worktree` directories" for concurrent work. Hosts do, and each sibling worktree sits outside the session's workspace. The command-policy bridge then asks the OPERATOR to approve any recursive rm there, and one shared cargo target mixes checkouts. The operator's direction: one checkout per repo, with work moved between branches by `git switch`.
+    context: |
+      OPERATOR, 2026-10-11, after denying an approval prompt: branch within the same workdir. That is the intended way to use git, and it should not land us on edge cases.
+      MEASURED on tlatoanis-macbook-air (audit .cache/metrics/command-policy-audit.jsonl and `tillandsias-plan policy audit`):
+      - The only class that ever asks is consent:bash-policy:workspace-destroy, from scripts/hooks/claude-pretooluse-command-policy.sh (1443-we89): 9 entries in 7 days, of 4,903 decisions.
+      - Today's 3 real prompts were a recursive rm in a sibling worktree (../wt-7i9r, the one denied) and two in darwin's /var/folders/.../T, which is not a scratch root when the session's TMPDIR is elsewhere.
+      - bash_policy.rs context_for() takes the workspace as the session cwd.
+      SAME ROOT, EARLIER EDGE CASES:
+      - 1599-egzz: a gate ran another worktree's code through the shared CARGO_TARGET_DIR.
+      - 1590-j20f: test binaries embed another checkout's path.
+      - 1603-iwh2: `.git` is a file in a linked worktree, so the tray rebuilds every time.
+      - test-bash-composition-hazards fails in a linked worktree before any change.
+    exit_criteria:
+      - 'methodology/multi-host-development.yaml states the single-checkout branching discipline (start, switch, carry no dirt across a switch, plan pushes, scratch and deletions inside the workspace, retiring existing worktrees), and the "prefer separate git worktree directories" line is gone'
+    unscoreable: "methodology-text: the exit criterion is the methodology's own wording, read on trunk"
+    depends_on: []
+    related: [1599-egzz, 1590-j20f, 1603-iwh2, 1443-we89, 1619-7i9r]
+    next_action: >
+      Write the rule in methodology/multi-host-development.yaml on work/1620-67ji, made in the main checkout with `git switch -c`, not a worktree.
+    provenance: |
+      Filed by tlatoanis-macbook-air at the operator's direction, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T23:25:34Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Operator direction: one checkout per repo, branches by git switch, no sibling worktrees; the hook prompts and three edge-case rows share that root.
