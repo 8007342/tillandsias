@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11, p2), found when a darwin gate during the 1276-mugq live verify false-refused after a mid-gate fetch.
+packets:
+  - packet_id: diff-scoped-gate-guards-diff-against-the-live-origin-linux-next-so-a-fetch-during-a-gate-moves-their-base-and-flips-the-verdict
+    order: 1592-idmu
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, guards, diff-scoped, land-queue, hermeticity]
+    estimated_hours: 3
+    owned_files:
+      - build.sh
+      - scripts/
+    title: |
+      Diff-scoped gate guards (e.g. check-sigpipe-verdict-pipelines-added) diff against the LIVE origin/linux-next, and every worktree shares that ref. Any fetch during a gate moves the guard's base: a fix trunk landed after the gate's base then reads as the gated tree ADDING the defect, and the gate false-refuses.
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-10-11.
+      - Gate: `taskpolicy -b ./build.sh --check` in wt-mugq on e31140da7 (base 8fac92659 plus a README-only scratch commit), 07:33 to 08:02Z. ok:test-baseline:ran=3069 new-red=0, but GATE_RC=1.
+      - The refusal: check-sigpipe-verdict-pipelines-added, "REFUSED: scripts/test-litmus-parse-only-duplicate-key.sh — this change ADDS a verdict pipeline that SIGPIPE can decide" (a printf | grep -Fq pin).
+      - FALSE: trunk had fixed that exact line in 83c39686b (1585-hb8w, here-string) after the gate's base. The host fetched in the main checkout mid-gate (plan-only pushes), which moved refs/remotes/origin/linux-next for every worktree.
+      Same class as earlier false refusals on files trunk had just deleted. It also bites the coordinator: any fetch on macuahuitl while land-queue gates are running can do the same.
+      Interim rule on the Mac host: no fetch while a gate runs.
+      FIX (coordinator): capture the merge-base SHA ONCE at gate start, export it to every diff-scoped guard, and diff against that, never the live origin/linux-next.
+    exit_criteria:
+      - 'In a scratch repo: start a guard run, then move origin/linux-next mid-run so the moved ref includes a fix the branch also carries. The pre-fix guard refuses falsely; the fixed guard keeps its verdict. Both shown in the same run.'
+      - 'Every diff-scoped guard that reads the live ref is listed, the count is printed, and all of them are repointed at the frozen base.'
+    unscoreable: "unpinnable-until-the-guard-exists: the scratch-repo moving-ref fixture is written with the fix"
+    depends_on: []
+    next_action: >
+      Enumerate the diff-scoped guards that resolve origin/linux-next (or its merge-base) at run time, and print the count. Then have the gate capture the base SHA once and export it (e.g. TILLANDSIAS_GATE_DIFF_BASE). Repoint every guard, and pin it with the scratch-repo moving-ref fixture.
+    provenance: |
+      Filed by tlatoanis-macbook-air on macuahuitl's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T08:52:20Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          A fetch mid-gate moved the diff base of a diff-scoped guard and false-refused a darwin gate whose tests were all green.

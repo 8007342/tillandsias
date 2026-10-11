@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11, p2), found when a darwin gate in a linked worktree went red during the 1276-mugq live verify.
+packets:
+  - packet_id: proc-run-drops-cargo-target-dir-so-a-lua-fixture-running-a-nested-shell-runner-in-a-linked-worktree-on-a-shared-target-finds-no-plan-binary
+    order: 1593-1ny6
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua-runtime, gate, worktrees, cargo-target-dir, litmus]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/lua_predicate.rs
+    title: |
+      proc.run's env allowlist (PATH, HOME, TMPDIR... plus TILLANDSIAS_*) drops CARGO_TARGET_DIR, so scripts/lua/test-litmus-verdict-reads-stdout-only.lua's nested run-litmus-test.sh finds no plan binary in a linked worktree on a shared target and refuses all 5 arms
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-10-11.
+      - Gate: `taskpolicy -b ./build.sh --check` in linked worktree wt-mugq on 920b70b94 (a17eb0575 plus a README-only scratch commit), 08:02 to 08:32Z.
+      - ok:test-baseline:ran=3069 new-red=0, but GATE_RC=1 at the 1268-fx87 fixture: refused:litmus-verdict-stdout-fixture:5-of-5, each arm "rc=2 blocked:litmus-no-plan-binary".
+      Standalone on the same tree:
+      - wt-mugq: 5-of-5 refused.
+      - the main checkout: ok:litmus-verdict-stdout-fixture:5 arms.
+      - wt-mugq with TILLANDSIAS_PLAN_BIN set: ok, 5 arms.
+      Cause (source): lua_predicate.rs builds every child with env_clear() and an allowlist; TILLANDSIAS_* passes, CARGO_TARGET_DIR does not. scripts/plan-binary-probe.sh documents CARGO_TARGET_DIR as its FIRST source (783-jdeh), then ./target/release. A linked worktree on the fleet's shared target has no ./target/release, so the nested runner's probe finds nothing. The main checkout passes only because its ./target IS the shared target.
+      Workarounds and their costs:
+      - Exporting TILLANDSIAS_PLAN_BIN on a gate reddens plan-binary-locus-native, which reads that variable; it evicted two PRs on the coordinator's land queue.
+      - The non-invasive local workaround: symlink the worktree's target to $CARGO_TARGET_DIR.
+      PREFERRED FIX (coordinator): pass CARGO_TARGET_DIR through proc.run's allowlist. It is the probe's documented first source, so dropping it is the defect. Exporting TILLANDSIAS_PLAN_BIN from _run_lua_decider, or having the fixture hand the runner a binary, only papers over it.
+    exit_criteria:
+      - 'in a linked worktree on a shared CARGO_TARGET_DIR with NO TILLANDSIAS_PLAN_BIN and no ./target symlink, `tillandsias-plan script run scripts/lua/test-litmus-verdict-reads-stdout-only.lua` is ok:5 arms (pre-fix: refused 5-of-5 blocked:litmus-no-plan-binary, shown in the same run)'
+      - 'CONTROL: the same fixture in the main checkout stays green'
+      - 'a proc.run unit test shows CARGO_TARGET_DIR reaches the child while a non-allowlisted variable still does not'
+    unscoreable: "unpinnable-until-the-guard-exists: the linked-worktree run is the pin and is written with the fix"
+    depends_on: []
+    next_action: >
+      Add CARGO_TARGET_DIR to the inherited allowlist in lua_predicate.rs, with a unit test that it reaches the child and an unlisted variable still does not. Then show the fixture red pre-fix and green post-fix in a linked worktree on the shared target, with the main checkout as control.
+    provenance: |
+      Filed by tlatoanis-macbook-air on macuahuitl's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T08:52:20Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          proc.run drops CARGO_TARGET_DIR; a Lua litmus fixture refuses 5/5 in a linked worktree on the shared target.

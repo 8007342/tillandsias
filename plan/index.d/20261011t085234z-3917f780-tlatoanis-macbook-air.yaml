@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-macos-trays-keychain-read-treats-every-security-find-failure-as-absent-so-a-transient-keychain-error-becomes-a-write
+    event:
+      type: note
+      ts: "2026-10-11T08:52:34Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261011t043000z
+      host: tlatoanis-macbook-air
+      summary: |
+        SECOND GATE OBSERVATION (still unverified as the cause). Darwin `taskpolicy -b ./build.sh --check` in wt-mugq on 7fed6879c (a17eb0575 plus a README-only scratch commit), 08:33 to 08:47Z on 2026-10-11, failed test-baseline new-red=1. The failing test was tillandsias_tray::reset_state::tests::approved_hard_reset_clears_the_vault_credentials_and_keeps_the_anchor, at reset_state.rs:644: "the installation anchor must survive HARD (803-49re)", left None, right Some("scratch-anchor"). The anchor had been written to the scratch service, and the hard reset preserves it by design. A READ of it returned None, which is what a find failure other than 44 produces under this row's defect (an item that exists reads as absent). The other 180 tests in the binary passed. So the darwin gate has now gone red on a keychain test in 2 of the last 3 runs that reached the test baseline: this one, and the exit-45 one at 7d3a9a3b9. Standalone runs on the same code are still 0 failures in 16. That gate ran with TILLANDSIAS_PLAN_BIN exported, which does not touch the keychain path.
