@@ -41,9 +41,9 @@ _tmpbase="$ROOT/target/plan-scratch"; mkdir -p "$_tmpbase" 2>/dev/null || _tmpba
 W="$(mktemp -d "$_tmpbase/claim-wip.XXXXXX")"
 trap 'rm -rf "$W"' EXIT INT TERM
 
-mk() { # mk <dir> : six ready rows 1-aaaa .. 6-ffff and a wip_limit of 2
+mk() { # mk <dir> : six ready rows 1-aaaa .. 6-ffff, a wip_limit of 2, fleet hosts hosta/hostb (1588-27v3)
     local d="$1" i=0; mkdir -p "$d/plan/index.d" "$d/methodology"
-    printf 'distributed_work:\n  packet_discipline:\n    wip_limit: 2\n' > "$d/methodology/distributed-work.yaml"
+    printf 'distributed_work:\n  packet_discipline:\n    wip_limit: 2\n    fleet_hosts: [hosta, hostb]\n' > "$d/methodology/distributed-work.yaml"
     echo "packets:" > "$d/plan/index.yaml"
     for o in 1-aaaa 2-bbbb 3-cccc 4-dddd 5-eeee 6-ffff; do
         i=$((i+1))

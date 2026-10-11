@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: set-field-status-in-progress-accepts-any-host-string-so-a-mistyped-or-dummy-host-claims-past-the-wip-cap
+    field: status
+    value: completed
+    ts: "2026-10-11T08:51:03Z"
+    host: yoga
+
+events:
+  - packet_id: set-field-status-in-progress-accepts-any-host-string-so-a-mistyped-or-dummy-host-claims-past-the-wip-cap
+    event:
+      type: completed
+      ts: "2026-10-11T08:51:03Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: b57d48881
+  - packet_id: set-field-status-in-progress-accepts-any-host-string-so-a-mistyped-or-dummy-host-claims-past-the-wip-cap
+    event:
+      type: note
+      ts: "2026-10-11T08:51:03Z"
+      host: yoga
+      summary: |-
+        landed as #311 (merge b57d48881, full tier, gate green). Exit criteria: refused:set-field:unknown-host:x with no fragment (fixture ARM 1 and the real tree); a listed host claims and is still capped (ARMs 2-3); the pre-fix binary writes the --host x fragment in the same run (ARM 8, 8/8). Source: methodology packet_discipline.fleet_hosts. Carried shell-to-lua: waived by conflict with #310.
