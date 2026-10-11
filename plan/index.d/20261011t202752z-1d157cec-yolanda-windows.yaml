@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: proc-run-drops-cargo-target-dir-so-a-lua-fixture-running-a-nested-shell-runner-in-a-linked-worktree-on-a-shared-target-finds-no-plan-binary
+    field: status
+    value: completed
+    ts: "2026-10-11T20:27:52Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: proc-run-drops-cargo-target-dir-so-a-lua-fixture-running-a-nested-shell-runner-in-a-linked-worktree-on-a-shared-target-finds-no-plan-binary
+    event:
+      type: completed
+      ts: "2026-10-11T20:27:52Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: PR 334 landed as 4df8bd9f6 on linux-next, gate green (coordinator relay). CARGO_TARGET_DIR added to PROC_RUN_BASE_ENV_PASSTHROUGH; test cargo_target_dir_reaches_the_child_and_an_unlisted_variable_does_not.
