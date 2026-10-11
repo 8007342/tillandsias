@@ -312,7 +312,11 @@ mod tests {
     /// So this asserts the invariance directly, across a 40-day shift.
     #[test]
     fn the_ranking_is_invariant_under_a_uniform_clock_shift() {
-        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        // Runtime read (1590-j20f, 1609-nay5): see answer.rs repo_root().
+        let root = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo test sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../..");
         let Ok(ledger) = crate::Ledger::load(&root.join("plan/index.yaml")) else {
             return; // no live ledger in this checkout; nothing to assert
         };

@@ -572,7 +572,9 @@ mod tests {
     fn repo_root() -> PathBuf {
         // CARGO_MANIFEST_DIR = <repo>/crates/tillandsias-plan; the Lua
         // scripts resolve from the repo root.
-        Path::new(env!("CARGO_MANIFEST_DIR"))
+        // Runtime read (1590-j20f, 1609-nay5): a compile-time env! path names the
+        // checkout that compiled this binary, which a shared target may reuse.
+        Path::new(&std::env::var("CARGO_MANIFEST_DIR").expect("cargo test sets CARGO_MANIFEST_DIR"))
             .ancestors()
             .nth(2)
             .expect("repo root")

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: manifest-dir-runtime-convert-six-one-site-tillandsias-plan-files-answer-expert-serve-forgotten-fragments-groundtruth-methodology
+    field: status
+    value: completed
+    ts: "2026-10-11T19:51:13Z"
+    host: yoga
+
+events:
+  - packet_id: manifest-dir-runtime-convert-six-one-site-tillandsias-plan-files-answer-expert-serve-forgotten-fragments-groundtruth-methodology
+    event:
+      type: completed
+      ts: "2026-10-11T19:51:13Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 7efbe6d53
+  - packet_id: manifest-dir-runtime-convert-six-one-site-tillandsias-plan-files-answer-expert-serve-forgotten-fragments-groundtruth-methodology
+    event:
+      type: note
+      ts: "2026-10-11T19:51:13Z"
+      host: yoga
+      summary: |-
+        landed as #332 (merge 7efbe6d53, gate green). tillandsias-plan src/answer.rs, expert_serve.rs, forgotten.rs, fragments.rs, groundtruth.rs and methodology.rs: 6 test sites read CARGO_MANIFEST_DIR at runtime; six floor lines removed; check-manifest-dir-env.lua test 134 -> 128; tillandsias-plan --lib identical before and after.

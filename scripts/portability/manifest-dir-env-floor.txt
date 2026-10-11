@@ -12,12 +12,6 @@ crates/tillandsias-headless/tests/signal_handling.rs 1
 crates/tillandsias-macos-tray/src/action_host.rs 1
 crates/tillandsias-macos-tray/src/diagnose.rs 6
 crates/tillandsias-macos-tray/src/main.rs 1
-crates/tillandsias-plan/src/answer.rs 1
-crates/tillandsias-plan/src/expert_serve.rs 1
-crates/tillandsias-plan/src/forgotten.rs 1
-crates/tillandsias-plan/src/fragments.rs 1
-crates/tillandsias-plan/src/groundtruth.rs 1
 crates/tillandsias-plan/src/lua_predicate.rs 2
-crates/tillandsias-plan/src/methodology.rs 1
 crates/tillandsias-plan/tests/lua_predicate_classes.rs 3
 crates/tillandsias-plan/tests/lua_proc.rs 1

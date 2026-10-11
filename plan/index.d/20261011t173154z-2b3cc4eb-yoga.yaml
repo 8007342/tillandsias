@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: manifest-dir-runtime-convert-six-single-site-files-across-plan-podman-vault-client-and-headless-to-a-runtime-manifest-dir-read
+    event:
+      type: note
+      ts: "2026-10-11T17:31:54Z"
+      agent_id: forge-forge-tillandsias-claude-20261011t173154z
+      host: yoga
+      summary: |
+        SWAP (coordinator, 2026-10-11): crates/tillandsias-headless/tests/signal_handling.rs is OUT of this batch and crates/tillandsias-headless/src/container_deps.rs is IN (1 site, an include_str! of its own source, now an fs read). Rule: every file in a batch is shown green before and after on the host that made the change. signal_handling fails identically before and after on yoga's forge (the binary exits 1 instead of stopping cleanly on SIGTERM/SIGINT, an environment difference), so it goes in a later batch where it runs green. owned_files in the declaration still names signal_handling.rs and cannot be edited (a list field; see 1601-398e); this note supersedes it.
