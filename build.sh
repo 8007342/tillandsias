@@ -2064,7 +2064,10 @@ _run_gate_steps() {  # $1 = root
         _step_rc=0
         _step_out="$(mktemp "${TMPDIR:-/tmp}/gate-step.XXXXXX")"
         if [ -n "$STEP_LUA" ]; then
-            _run "$_gs_plan" script run "$_gs_root/$STEP_LUA" > >(tee "$_step_out") 2>&1 || _step_rc=$?
+            # 1600-nn5b: handed the runner that runs it, the _run_lua_decider and
+            # preflight-door contract (1570-mxcg), so a fixture that must ask the
+            # plan binary finds one in the land queue's clean env too.
+            _run env "TILLANDSIAS_SCRIPT_RUNNER_BIN=$_gs_plan" "$_gs_plan" script run "$_gs_root/$STEP_LUA" > >(tee "$_step_out") 2>&1 || _step_rc=$?
         else
             _run bash "$_gs_root/$STEP_SCRIPT" > >(tee "$_step_out") 2>&1 || _step_rc=$?
         fi
