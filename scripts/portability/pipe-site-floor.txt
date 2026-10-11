@@ -352,7 +352,6 @@ scripts scripts/check-archive-answerability.sh 5
 scripts scripts/check-arrival-routing.sh 3
 scripts scripts/check-bare-metal-host-initialized.sh 3
 scripts scripts/check-base-ledger-status-loss.sh 7
-scripts scripts/check-bash-composition-hazards.sh 1
 scripts scripts/check-build-cache-sweep.sh 3
 scripts scripts/check-capability-row.sh 17
 scripts scripts/check-carry-forward.sh 6

@@ -4577,6 +4577,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Guard-activation auditor fixture passed"
 
+    # ORDER 1268-fx87. A litmus step's verdict is read from STDOUT only; its
+    # stderr is kept and named on failure. The fixture runs the REAL runner over
+    # a throwaway corpus with a manufactured stderr contaminant, plus a mutant
+    # runner with the merged capture restored, so the control cannot pass
+    # vacuously on a host whose build writes nothing to stderr.
+    _step "Checking a litmus verdict is read from stdout only (1268-fx87)..."
+    if ! _run_lua_decider "scripts/lua/test-litmus-verdict-reads-stdout-only.lua" 2>&1; then
+        _error "a litmus step's verdict again reads stderr, or a failing step no longer names its stderr log — see the FAIL lines above (1268-fx87)"
+        exit 1
+    fi
+    _info "Litmus stdout-verdict fixture passed"
+
     # The end-user-installer output guard's own fixture (1561-47a8), a Lua
     # fixture on the one runner: a flag-naming line refused by file:line, the
     # power-user-only and PENDING-1560-UAM3 exemptions, a comment not counted,
