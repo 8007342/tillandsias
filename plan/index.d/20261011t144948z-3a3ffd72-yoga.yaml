@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: manifest-dir-runtime-convert-tillandsias-plan-src-lua-runtime-rs-test-sites-to-a-runtime-manifest-dir-read
+    field: status
+    value: completed
+    ts: "2026-10-11T14:49:48Z"
+    host: yoga
+
+events:
+  - packet_id: manifest-dir-runtime-convert-tillandsias-plan-src-lua-runtime-rs-test-sites-to-a-runtime-manifest-dir-read
+    event:
+      type: completed
+      ts: "2026-10-11T14:49:48Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: d41df06ce
+  - packet_id: manifest-dir-runtime-convert-tillandsias-plan-src-lua-runtime-rs-test-sites-to-a-runtime-manifest-dir-read
+    event:
+      type: note
+      ts: "2026-10-11T14:49:48Z"
+      host: yoga
+      summary: |-
+        landed as #325 (merge d41df06ce, gate green). crates/tillandsias-plan/src/lua_runtime.rs's 4 test sites read CARGO_MANIFEST_DIR at runtime through a manifest_dir() helper; floor line removed; check-manifest-dir-env.lua test 154 -> 150; lua_runtime tests 7/7 before and after.
