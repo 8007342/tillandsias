@@ -112,9 +112,9 @@ local function judge(l, i)
 end
 
 -- ── counting ───────────────────────────────────────────────────────────────
-local count, templated = {}, 0
+local count, templated, where = {}, 0, {}
 for _, f in ipairs(files) do
-    for _, l in ipairs(lines(read(f))) do
+    for ln, l in ipairs(lines(read(f))) do
         if not l:match("^%s*#") then
             local start = 1
             while true do
@@ -123,7 +123,10 @@ for _, f in ipairs(files) do
                 local prevc = i > 1 and l:sub(i - 1, i - 1) or ""
                 if not prevc:match("[%w_%-/.]") then
                     local v = judge(l, i)
-                    if v == "bare" then count[f] = (count[f] or 0) + 1
+                    if v == "bare" then
+                        count[f] = (count[f] or 0) + 1
+                        where[f] = where[f] or {}
+                        where[f][#where[f] + 1] = f .. ":" .. ln .. ": " .. text.trim(l)
                     elseif v == "templated" then templated = templated + 1 end
                 end
                 start = i + 6
@@ -151,11 +154,19 @@ for _, l in ipairs(lines(read(FLOOR_FILE))) do
     if f and not f:find("^#") then floor[f] = tonumber(n); floor_total = floor_total + tonumber(n) end
 end
 
-local violations = {}
+-- A peer this bounces must be able to fix it without asking: the refusal names
+-- the darwin reason, the exact remedy and the file's bare sites, on stdout.
+local WHY = "  why: on darwin a mktemp without a template ignores TMPDIR (measured: /var/folders/.../T), so the preflight door's per-guard TMPDIR sweep never sees it (1619-7i9r)"
+local REMEDY = '  remedy: give the call a template, e.g. mktemp -d "${TMPDIR:-/tmp}/<name>.XXXXXX" (a file: mktemp "${TMPDIR:-/tmp}/<name>.XXXXXX")'
+local violations, detail = {}, {}
 for _, f in ipairs(site_files) do
     local n, fl = count[f], floor[f] or 0
     if n > fl then
-        violations[#violations + 1] = "violation:bare-mktemp:new-site:" .. f .. ":" .. n .. ">floor:" .. fl
+        local v = "violation:bare-mktemp:new-site:" .. f .. ":" .. n .. ">floor:" .. fl
+        violations[#violations + 1] = v
+        local d = { WHY, REMEDY }
+        for _, w in ipairs(where[f]) do d[#d + 1] = "  site: " .. w end
+        detail[v] = d
     end
 end
 local floor_files = {}
@@ -169,7 +180,15 @@ for _, f in ipairs(floor_files) do
 end
 
 if #violations > 0 then
-    for i = 1, #violations - 1 do out.line(violations[i]) end
+    for i = 1, #violations - 1 do
+        out.line(violations[i])
+        for _, d in ipairs(detail[violations[i]] or {}) do out.line(d) end
+    end
+    local last = violations[#violations]
+    if detail[last] then
+        -- the verdict line stays last, so its detail goes before it
+        for _, d in ipairs(detail[last]) do out.line(d) end
+    end
     log.raw("[check-bare-mktemp] on darwin a mktemp without a template ignores TMPDIR, so the preflight door's")
     log.raw("  per-guard TMPDIR (deleted after every guard, killed or not) never contains it. Give it a template:")
     log.raw("  mktemp -d \"${TMPDIR:-/tmp}/<name>.XXXXXX\"   (1619-7i9r)")
