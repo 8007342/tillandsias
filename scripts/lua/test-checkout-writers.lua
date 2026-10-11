@@ -7,7 +7,11 @@
 --   1 TMPDIR     scratch made under ${TMPDIR:-/tmp} is no writer: writers=0
 --   2 PLANTED    a $$ path in scripts/, undeclared: unsafe, named
 --   3 MKTEMP     mktemp -d "$ROOT/.x.XXXXXX": unsafe, named
---   4 IGNORED    mktemp under .tillandsias/ or target/: ignored-scratch, writers=0
+--   4 IGNORED    scratch under target/ is ignored-scratch, and a per-run
+--                .tillandsias/fixture-scratch/<guard>.$$ with an EXIT trap is
+--                fixture-scratch: writers=0 for both
+--   4b FLAT      a flat name directly in fixture-scratch/ stays unsafe
+--   4c NO-TRAP   a per-run fixture-scratch subdir with no EXIT trap is unsafe
 --   5 DECLARED   a declared writer with the 1587 shape (EXIT trap, a TERM
 --                handler function that exits, wait): ok, listed with its reason
 --   6 NO-EXIT    declared, but its TERM handler only cleans up: unsafe
@@ -96,10 +100,20 @@ arm("3 MKTEMP a dotdir at the checkout root is unsafe and named",
     rc == 1 and o:find("unsafe:" .. d .. "/scripts/test-c.sh:", 1, true) ~= nil, rc .. " " .. o)
 
 rc, o = scan(root_with("ignored", {
-    ["test-d.sh"] = "W=\"$(mktemp -d \"$ROOT/.tillandsias/fixture-scratch/d.XXXXXX\")\"\n",
+    ["test-d.sh"] = "W=\"$ROOT/.tillandsias/fixture-scratch/test-d.$$\"\ntrap 'rm -rf \"$W\"' EXIT\nrm -rf \"$W\"; mkdir -p \"$W\"\n",
     ["test-e.sh"] = "W=\"$ROOT/target/plan-scratch/e.$$\"\n" }))
-arm("4 IGNORED scratch under .tillandsias/ or target/ is counted apart, not as a writer",
-    rc == 0 and o:find(":writers=0:unsafe=0:ignored-scratch=2", 1, true) ~= nil, rc .. " " .. o)
+arm("4 IGNORED target/ scratch and a per-run fixture-scratch subdir are counted apart, not as writers",
+    rc == 0 and o:find(":writers=0:unsafe=0:ignored-scratch=1:fixture-scratch=1", 1, true) ~= nil, rc .. " " .. o)
+
+d = root_with("flat", { ["test-d2.sh"] = "trap 'rm -rf \"$W\"' EXIT\nW=\"$(mktemp -d \"$ROOT/.tillandsias/fixture-scratch/d.XXXXXX\")\"\n" })
+rc, o = scan(d)
+arm("4b FLAT a flat name directly in fixture-scratch/ stays unsafe (the door cannot find it by pid)",
+    rc == 1 and o:find("unsafe:" .. d .. "/scripts/test-d2.sh:scratch-in-the-checkout", 1, true) ~= nil, rc .. " " .. o)
+
+d = root_with("notrap", { ["test-d3.sh"] = "W=\"$ROOT/.tillandsias/fixture-scratch/test-d3.$$\"\nmkdir -p \"$W\"\n" })
+rc, o = scan(d)
+arm("4c NO-TRAP a per-run fixture-scratch subdir with no EXIT trap is unsafe",
+    rc == 1 and o:find("unsafe:" .. d .. "/scripts/test-d3.sh:fixture-scratch-without-exit-trap", 1, true) ~= nil, rc .. " " .. o)
 
 d = REL .. "/declared"
 root_with("declared", { ["test-f.sh"] = SHAPED }, d .. "/scripts/test-f.sh it must sit beside its producers\n")
@@ -189,4 +203,4 @@ proc.run({ argv = { "rm", "-rf", ROOT .. "/" .. REL }, timeout_ms = 30000 })
 if #failed > 0 then
     verdict.emit("violation:checkout-writers-fixture:" .. #failed .. "-failed", 1)
 end
-verdict.ok("checkout-writers-fixture", "11 arms")
+verdict.ok("checkout-writers-fixture", "13 arms")

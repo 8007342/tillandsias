@@ -43,8 +43,10 @@ OOM() { "$PLAN_BIN" script run "$OOM_LUA" -- "$@"; }
 # the repo (the Lua runner's fs is repo-rooted, and target/ can be a symlink out
 # of it) but gitignored, so a run the preflight door KILLs leaves nothing that
 # diff-scoped guards read as added code. It was a visible dotdir at the root.
-mkdir -p "$ROOT/.tillandsias/fixture-scratch" || exit 3
-W="$(mktemp -d "$ROOT/.tillandsias/fixture-scratch/gate-mem-refusal.XXXXXX")" || exit 3
+# Per run, in <guard>.<pid> (coordinator's ruling): the EXIT trap removes it, and
+# the door can find a KILLed guard's subdir by its pid.
+W="$ROOT/.tillandsias/fixture-scratch/test-gate-memory-refusal.$$"
+rm -rf "$W"; mkdir -p "$W" || exit 3
 trap 'rm -rf "$W"' EXIT
 
 pass=0; fail=0

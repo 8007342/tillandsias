@@ -49,8 +49,10 @@ PARENT="${TILLANDSIAS_PILOT_PARENT:-5c419a98fd245bbeee63f2cf9c70956cbd5e22c9}"
 # the repo (the Lua runner's fs is repo-rooted, and target/ can be a symlink out
 # of it) but gitignored, so a run the preflight door KILLs leaves nothing that
 # diff-scoped guards read as added code. It was a visible dotdir at the root.
-mkdir -p "$ROOT/.tillandsias/fixture-scratch"
-W="$(mktemp -d "$ROOT/.tillandsias/fixture-scratch/pilot-lua.XXXXXX")"; trap 'rm -rf "$W"' EXIT INT TERM
+# Per run, in <guard>.<pid> (coordinator's ruling): the EXIT trap removes it, and
+# the door can find a KILLed guard's subdir by its pid.
+W="$ROOT/.tillandsias/fixture-scratch/test-pilot-lua-ports.$$"
+rm -rf "$W"; mkdir -p "$W"; trap 'rm -rf "$W"' EXIT INT TERM
 
 # ── ARM 1: SEAM ────────────────────────────────────────────────────────────
 a1_ok=1; a1_why=""

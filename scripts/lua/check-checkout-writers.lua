@@ -17,10 +17,15 @@
 -- variable ($ROOT, $REPO_ROOT, $PROJECT_ROOT, braced or not) and marks it as
 -- scratch: the line runs mktemp on it, or the path carries $$ or XXXX. A copy
 -- made beside a script (a `.mutant` path built from `dirname`) is one too.
--- Paths under target/ or .tillandsias/ are gitignored, so a leftover there is
--- invisible to diff-scoped guards. They are counted as ignored, not as writers.
--- (target/ can be a symlink out of the repo, so a fixture whose Lua subject is
--- repo-confined uses .tillandsias/fixture-scratch/.)
+-- Paths under target/ are gitignored, so a leftover there is invisible to
+-- diff-scoped guards: counted as ignored-scratch, not as writers.
+-- .tillandsias/fixture-scratch/ is the third safe kind (coordinator's ruling,
+-- 2026-10-11), for a fixture whose Lua subject is repo-confined (target/ can be
+-- a symlink out of the repo). It is gitignored and inside the repo, but safe
+-- ONLY per run: .tillandsias/fixture-scratch/<guard>.$$ (a $$-named subdir the
+-- door can find by the guard's pid), in a file with an EXIT trap that removes
+-- it. A flat name directly in fixture-scratch/, or anywhere else under
+-- .tillandsias/, is a writer.
 --
 -- A writer that must stay in the tracked tree, because the copy resolves its
 -- siblings or ROOT from its own path, is DECLARED in
@@ -34,7 +39,8 @@
 --
 -- Verdicts:
 --   note:checkout-writer:<path>:kept-in-checkout:<reason>                    one per writer
---   ok:checkout-writers:scanned=<n>:writers=<w>:unsafe=0:ignored-scratch=<i> exit 0
+--   ok:checkout-writers:scanned=<n>:writers=<w>:unsafe=0:ignored-scratch=<i>:fixture-scratch=<f> exit 0
+--   violation:checkout-writers:unsafe:<path>:fixture-scratch-without-exit-trap    exit 1
 --   violation:checkout-writers:unsafe:<path>:<why>                           exit 1
 --   violation:checkout-writers:stale-declared:<path>                         exit 1
 --   could-not-run:checkout-writers:empty-population                          exit 3
@@ -61,9 +67,16 @@ for _, l in ipairs(lines(read(DECLARED))) do
 end
 
 local ROOT_VARS = { "$ROOT/", "${ROOT}/", "$REPO_ROOT/", "${REPO_ROOT}/", "$PROJECT_ROOT/", "${PROJECT_ROOT}/" }
-local IGNORED = { "target/", ".tillandsias/" }
+local IGNORED = { "target/" }
 
--- What a line writes, if anything: "writer", "ignored", or nil.
+-- Where under .tillandsias/ a scratch path is safe: one $$-named subdir of
+-- fixture-scratch/, or a path inside it.
+local function per_run(path)
+    local rest = path:match("^%.tillandsias/fixture%-scratch/([^/]+)")
+    return rest ~= nil and rest:sub(-2) == "$$" and #rest > 2
+end
+
+-- What a line writes, if anything: "writer", "fixture-scratch", "ignored", or nil.
 local function classify(l)
     local found
     for _, v in ipairs(ROOT_VARS) do
@@ -78,7 +91,9 @@ local function classify(l)
             if scratch then
                 local ign = false
                 for _, p in ipairs(IGNORED) do if path:sub(1, #p) == p then ign = true end end
-                if ign then found = found or "ignored" else return "writer" end
+                if per_run(path) then found = "fixture-scratch"
+                elseif ign then found = found or "ignored"
+                else return "writer" end
             end
             from = e + 1
         end
@@ -103,15 +118,17 @@ local function exits(action, ls)
     return false
 end
 
-local writers, ignored_n, violations, notes, seen = 0, 0, {}, {}, {}
+local writers, ignored_n, fs_n, violations, notes, seen = 0, 0, 0, {}, {}, {}
 for _, f in ipairs(files) do
     local ls = lines(read(f))
-    local writes, ignored = false, false
+    local writes, ignored, fscratch = false, false, false
     local exit_trap, term_exit, waits = false, false, false
     for _, l in ipairs(ls) do
         if not l:match("^%s*#") then
             local c = classify(l)
-            if c == "writer" then writes = true elseif c == "ignored" then ignored = true end
+            if c == "writer" then writes = true
+            elseif c == "fixture-scratch" then fscratch = true
+            elseif c == "ignored" then ignored = true end
             for act, sg in l:gmatch("trap%s+('[^']*')%s+([%u]+)") do
                 if sg == "EXIT" then exit_trap = true end
                 if sg == "TERM" and exits(act, ls) then term_exit = true end
@@ -123,7 +140,13 @@ for _, f in ipairs(files) do
             if l:find("%f[%w]wait%s+[\"$]") then waits = true end
         end
     end
-    if ignored and not writes then ignored_n = ignored_n + 1 end
+    if ignored and not writes and not fscratch then ignored_n = ignored_n + 1 end
+    if fscratch and not writes then
+        fs_n = fs_n + 1
+        if not exit_trap then
+            violations[#violations + 1] = "violation:checkout-writers:unsafe:" .. f .. ":fixture-scratch-without-exit-trap"
+        end
+    end
     if writes then
         writers = writers + 1
         seen[f] = true
@@ -150,10 +173,11 @@ for _, n in ipairs(notes) do out.line(n) end
 if #violations > 0 then
     for i = 1, #violations - 1 do out.line(violations[i]) end
     log.raw("[check-checkout-writers] scratch belongs in ${TMPDIR:-/tmp}: the preflight door deletes each guard's TMPDIR")
-    log.raw("  even after a KILL (1600-nn5b). A Lua subject confined to the repo: .tillandsias/fixture-scratch/.")
+    log.raw("  even after a KILL (1600-nn5b). A Lua subject confined to the repo: .tillandsias/fixture-scratch/<guard>.$$")
+    log.raw("  with an EXIT trap that removes it (never a flat name directly in fixture-scratch/).")
     log.raw("  A copy that must sit beside a script: declare it in " .. DECLARED .. " with its reason, and give it")
     log.raw("  1587-qqzs's shape: trap cleanup EXIT; a TERM/INT/HUP handler that exits; long steps as `cmd & wait $!`.")
     verdict.emit(violations[#violations], 1)
 end
 verdict.ok("checkout-writers", "scanned=" .. #files, "writers=" .. writers, "unsafe=0",
-    "ignored-scratch=" .. ignored_n)
+    "ignored-scratch=" .. ignored_n, "fixture-scratch=" .. fs_n)
