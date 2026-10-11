@@ -26,7 +26,7 @@ bad() { echo "FAIL: $*"; FAIL=$((FAIL+1)); }
 
 [ -x "$SHIM" ] || [ -f "$SHIM" ] || { echo "FAIL: shim not found at $SHIM"; exit 1; }
 
-W="$(mktemp -d)"; trap 'rm -rf "$W"' EXIT
+W="$(mktemp -d "${TMPDIR:-/tmp}/test-brew-shim-reentrancy.XXXXXX")"; trap 'rm -rf "$W"' EXIT
 
 # The fake brew's own stop. If the guard is absent the mutation arm must still
 # terminate, so the ceiling lives HERE and not in the code under test.
