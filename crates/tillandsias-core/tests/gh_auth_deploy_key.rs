@@ -6,8 +6,11 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::TempDir;
 
+// Read at RUNTIME (1590-j20f, 1608-qb2c): compile-time env!("CARGO_MANIFEST_DIR")
+// names the checkout that compiled this binary, and a shared CARGO_TARGET_DIR
+// reuses that binary from another worktree.
 fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").expect("cargo test sets CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(|p| p.parent())
         .expect("repo root")
