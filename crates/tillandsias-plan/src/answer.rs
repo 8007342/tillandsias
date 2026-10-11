@@ -2252,7 +2252,12 @@ mod tests {
     use std::path::PathBuf;
 
     fn repo_root() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+        // Runtime read (1590-j20f, 1609-nay5): a compile-time env! path names the
+        // checkout that compiled this binary, which a shared target may reuse.
+        PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo test sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../..")
     }
 
     fn live_ledger() -> Ledger {

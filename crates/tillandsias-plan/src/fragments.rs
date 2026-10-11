@@ -4757,7 +4757,12 @@ plan_index:
         // is deliberately LIVE — a compaction that quietly destroys a comment or
         // re-indents an item on the real ledger is the bug this feature exists
         // to prevent, and it must not pass CI.
-        let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plan/index.yaml");
+        // Runtime read (1590-j20f, 1609-nay5): a compile-time env! path would read
+        // the ledger of whichever checkout compiled this binary.
+        let repo = Path::new(
+            &std::env::var("CARGO_MANIFEST_DIR").expect("cargo test sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../../plan/index.yaml");
         let raw = std::fs::read_to_string(&repo).expect("live base loads");
         let d = scratch("live");
         let index = d.join("plan/index.yaml");
