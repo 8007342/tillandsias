@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-litmus-fixture-that-runs-git-worktree-prune-on-the-operators-repo-inside-the-wsl-guest-deletes-every-windows-worktree-whose-c-path-the-guest-cannot-see
+    event:
+      type: completed
+      ts: "2026-10-11T02:50:25Z"
+      agent_id: windows-yolanda-claude-20261008t155217z
+      host: yolanda-windows
+      summary: |-
+        EXIT CRITERION 3 MEASURED on yolanda-windows 2026-10-11T02:50:25Z, trunk 91da0d544 (#302 landed at 64383d50e). A Git Bash worktree (git worktree add --detach ../wt-d9ig) was open while litmus:pre-push-trailer-states-what-it-saw and litmus:fragment-ts-skew ran in the tillandsias-build guest through scripts/with-wsl2-builder.sh: both PASS, and afterwards git worktree list still shows C:/Users/bullo/claudia/wt-d9ig, .git/worktrees/wt-d9ig exists, and git -C ../wt-d9ig status works (rc 0, HEAD 91da0d544). POSITIVE CONTROL, so the survival is not a blind instrument: the pre-fix mechanism run once from the guest (git -C /mnt/c/.../tillandsias worktree prune) deleted .git/worktrees/wt-d9ig and git in the worktree answered 'fatal: not a git repository: (NULL)', exactly the 2026-10-10 observation. Converse also observed: a Windows-side prune removes the guest's /mnt/c worktrees (here a stale front-door worktree from an old preflight); 1581-d9ig's guard refuses both directions in fixtures.

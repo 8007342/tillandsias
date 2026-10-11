@@ -1,5 +1,5 @@
 # @trace spec:ci-release
-# @trace order:1384-bxhk
+# @trace order:1384-bxhk, order:1580-8hra
 #
 # Order 1384-bxhk: the Lua migration's forcing function and score. An available
 # seam with no forcing function stays at one adopter (902-5bf9). The ratchet
@@ -19,16 +19,17 @@ severity: high
 size: quick
 
 preconditions:
-  - workspace contains scripts/test-shell-ratchet.sh
+  - workspace contains scripts/lua/test-shell-ratchet.lua (the Lua port of the
+    retired scripts/test-shell-ratchet.sh, 1580-8hra)
   - a runnable tillandsias-plan that knows `script`, or the fixture answers could-not-run
 
 critical_path:
-  - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-shell-ratchet.sh && test -x scripts/test-shell-ratchet.sh && echo 'ok: shell-ratchet-parses'"
+  - step: "the fixture exists"
+    command: "test -f scripts/lua/test-shell-ratchet.lua && echo 'ok: shell-ratchet-fixture-present'"
     timeout_ms: 5000
-    expected_behavior: "ok: shell-ratchet-parses"
+    expected_behavior: "ok: shell-ratchet-fixture-present"
 
-  - step: "the six arms hold"
-    command: "bash scripts/test-shell-ratchet.sh"
+  - step: "the eight arms hold"
+    command: ". scripts/plan-binary-probe.sh; P=$(resolve_plan_binary) && TILLANDSIAS_PLAN_BIN=\"$P\" \"$P\" script run scripts/lua/test-shell-ratchet.lua"
     timeout_ms: 600000
-    expected_behavior: "shell-ratchet: 8 passed, 0 failed"
+    expected_behavior: "ok:shell-ratchet-fixture:8"
