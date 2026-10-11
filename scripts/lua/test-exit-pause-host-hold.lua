@@ -19,11 +19,13 @@
 -- ignores the hold must red the held arm, and one that never pauses must red the
 -- unheld control. If either is not caught, the arms cannot see what they claim.
 --
--- PORTABILITY. The .sh called the util-linux form `script -qec CMD /dev/null`,
+-- PORTABILITY. util-linux script runs under timeout(1), which must be its
+-- direct parent (see the flavor probe); BSD script runs bare. The .sh called the util-linux form `script -qec CMD /dev/null`,
 -- which BSD script (darwin) refuses with `illegal option -- c`. So on darwin it
 -- printed fail:exit-pause-host-hold:0/6 and still exited 0. The flavor is now
 -- PROBED: util-linux `-qec CMD FILE`, or BSD `-q FILE CMD...`. The deadline is
--- proc.run's timeout_ms, so timeout(1) is not needed. stdin must stay OPEN past
+-- proc.run's timeout_ms, so on BSD (darwin, where timeout(1) is not stock) it
+-- is not needed; on util-linux it is the parent only. stdin must stay OPEN past
 -- the deadline: with /dev/null the pty sees EOF at once, `read` returns, and
 -- neither arm could tell a pause from none. proc.run gives a child only
 -- /dev/null or fixed bytes, so each arm runs a generated runner FILE (argv
@@ -69,6 +71,15 @@ if not FLAVOR then
     verdict.emit("skip:exit-pause-host-hold:no-script", 3,
         "no script(1) in either the util-linux (-qec CMD FILE) or the BSD (-q FILE CMD) form: no pty to run exit_pause on")
 end
+-- util-linux script(1) exits promptly with its command ONLY when timeout(1)
+-- is its direct parent (measured by macuahuitl on util-linux 2.41.5: the same
+-- runner without timeout hung to the deadline; with `timeout 5 script ...` it
+-- returned in 23 ms; the env and the writer's parentage did not matter). So
+-- that flavor needs timeout(1), and a util-linux host has coreutils.
+if FLAVOR == "util-linux" and not rc0({ "timeout", "5", "true" }) then
+    verdict.emit("could-not-run:exit-pause-host-hold:no-timeout-for-util-linux-script", 3,
+        "util-linux script(1) needs timeout(1) as its direct parent to exit with its command; no timeout on PATH")
+end
 out.line("# script(1) flavor: " .. FLAVOR)
 
 local pass, fail = 0, 0
@@ -101,7 +112,10 @@ local function on_pty(name, held, deadline_ms)
     local harness, outf = W .. "/" .. name .. ".sh", W .. "/" .. name .. (held and ".held" or ".unheld")
     local cmd
     if FLAVOR == "util-linux" then
-        cmd = "script -qec 'bash " .. harness .. "' /dev/null"
+        -- timeout(1) as the DIRECT parent is what lets util-linux script exit
+        -- (see the probe above). Its bound is longer than this arm's
+        -- deadline, so proc.run's timeout_ms still decides a timed-out arm.
+        cmd = "timeout " .. (math.floor(deadline_ms / 1000) + 5) .. " script -qec 'bash " .. harness .. "' /dev/null"
     else
         cmd = "script -q /dev/null bash " .. harness
     end
