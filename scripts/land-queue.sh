@@ -340,6 +340,64 @@ Rebase or merge \`$TRUNK\` into \`$head\` and the queue will pick it up again. T
         fi
     fi
 
+    # ── WHAT THE CANDIDATE OWES ITS CARRIED OBLIGATIONS (1577-568c) ──────────
+    # methodology/convergence.yaml carried_obligations escalates only on a
+    # MEASURED stall, so every landing records, per backlog, whether it paid,
+    # waived, owed nothing or stayed silent: one `Carried: <backlog> <state>
+    # [<item-or-reason>]` trailer each on the land commit, which makes the tally
+    # one `git log --first-parent --format=%(trailers:key=Carried,valueonly)`.
+    # Asked BEFORE the gate, so no gate is spent on a candidate this evicts.
+    # The guard is THIS script's sibling; the rule it reads is the merged tree's.
+    #
+    # A guard that cannot judge (no runner, no backlog table) is NOT an
+    # eviction: the obligation is gentle and the gate runs the same guard. The
+    # land commit then carries no Carried trailer and says so here.
+    # A tree with no rule (methodology/convergence.yaml absent) is not asked:
+    # the runner writes its audit under the repo root, and a repo that does not
+    # ignore it would then read dirty to the next landing.
+    _cout="$(mktemp)"; _cerr="$(mktemp)"
+    if [ -f methodology/convergence.yaml ]; then
+        env TILLANDSIAS_REPO_ROOT="$ROOT" TILLANDSIAS_CARRIED_BASE="$base_sha" \
+            TILLANDSIAS_CARRIED_HEAD="$head_sha" TILLANDSIAS_CARRIED_REF="$head" \
+            "$PLAN" script run "$_SELF_DIR/lua/check-carried-obligations.lua" -- --landing \
+            < /dev/null > "$_cout" 2> "$_cerr"
+        _crc=$?
+    else
+        printf 'skip:carried-obligations:no-rule-in-tree\n' > "$_cout"
+        _crc=0
+    fi
+    _carried="$(sed -n 's/^carried:\([^:]*\):\([^:]*\):\{0,1\}\(.*\)$/Carried: \1 \2 \3/p' "$_cout" | sed 's/ *$//')"
+    _cverdict="$(tail -n 1 "$_cout")"
+    _cwaiver="$(grep '^Carried-Waiver: ' "$_cerr" | head -n 1)"
+    rm -f "$_cout" "$_cerr"
+    if [ "$_crc" -eq 1 ]; then
+        # violation:carried:<backlog>:<silent|waiver-not-a-trailer>
+        _cb="$(printf '%s' "$_cverdict" | cut -d: -f3)"
+        _ck="$(printf '%s' "$_cverdict" | cut -d: -f4)"
+        _cdue="$(printf '%s\n' "$_carried" | grep "^Carried: $_cb due " | head -n 1 | sed "s/^Carried: $_cb due //")"
+        say "evict:land-queue:$num:carried-$_ck:$_cb"
+        say "  add to the LAST paragraph of a commit on $head: ${_cwaiver:-Carried-Waiver: $_cb <reason>}  (or port ${_cdue:-one item})"
+        pr_comment "$num" "Evicted from the landing queue: \`$head\` touches the \`$_cb\` carried-obligation area and neither pays an item nor carries a waiver trailer git can read ($_ck). See methodology/convergence.yaml → carried_obligations.
+
+Pay it: port ${_cdue:-one item} to scripts/lua/ and delete the .sh. Or waive it with this line in the LAST paragraph of a commit message on \`$head\` (git reads trailers only there):
+
+\`\`\`
+${_cwaiver:-Carried-Waiver: $_cb <reason>}
+\`\`\`
+
+The queue continued with the next candidate."
+        evicted=$((evicted + 1))
+        continue
+    fi
+    if [ "$_crc" -eq 0 ] && [ -n "$_carried" ]; then
+        git -c user.name=land-queue -c user.email=land-queue@localhost \
+            commit -q --amend -m "land($num): $head into $TRUNK" -m "$_carried" >/dev/null 2>&1 \
+            || say "advisory:land-queue:$num:carried-trailer-not-written — the landing proceeds without it"
+        merge_sha="$(git rev-parse HEAD)"
+    else
+        say "advisory:land-queue:$num:carried-unjudged:rc=$_crc:${_cverdict:-no-verdict} — no Carried trailer on this landing"
+    fi
+
     # ── GATE THE MERGE RESULT ────────────────────────────────────────────────
     if [ "$DRY_RUN" -eq 1 ]; then
         say "dry-run: would gate ${merge_sha:0:9} then push to $TRUNK"

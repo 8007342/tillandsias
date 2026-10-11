@@ -28,7 +28,7 @@ W="$(mktemp -d "$_tmpbase/relay-preflight.XXXXXX")"
 trap 'rm -rf "$W"' EXIT INT TERM
 
 pass=0
-total=8
+total=11
 ok()  { echo "ok:   $1"; pass=$((pass + 1)); }
 bad() { echo "FAIL: $1: $2"; }
 
@@ -76,6 +76,14 @@ _seed() {
     # 1384-ddua: check-bash-dialect is a Lua decider on the one runner.
     mkdir -p "$d/scripts/lua"
     cp "$ROOT/scripts/lua/check-bash-dialect.lua" "$d/scripts/lua/"
+    # 1577-568c: the carried-obligation guard and the rule it reads.
+    cp "$ROOT/scripts/lua/check-carried-obligations.lua" "$d/scripts/lua/"
+    mkdir -p "$d/methodology"
+    cp "$ROOT/methodology/convergence.yaml" "$d/methodology/"
+    # The runner's command-policy audit writes .cache/metrics/ under the repo
+    # root (1443-w9hf); gitignored in the real checkout, so here too, or the
+    # next run in the same clone reads dirty.
+    printf '.cache/\n' > "$d/.gitignore"
     [ -f "$ROOT/scripts/lib/exec-bits-filter.awk" ] && cp "$ROOT/scripts/lib/exec-bits-filter.awk" "$d/scripts/lib/"
     [ -f "$ROOT/scripts/test-reference-surfaces.manifest" ] && cp "$ROOT/scripts/test-reference-surfaces.manifest" "$d/scripts/"
     chmod +x "$d"/scripts/*.sh
@@ -361,6 +369,72 @@ if [ "$RC" = 0 ] && grep -q '^ok:relay-preflight:' <<<"$OUT" && grep -q '^item: 
     ok "arm8: a ref deleting a decider passes; the merged copy of the tool re-executed and ran (1522-ey4h)"
 else
     bad "arm8" "rc=$RC out=[$OUT]"
+    printf '%s\n' "$ERR" | grep -vE '^item: .* ok ' | sed 's/^/    err: /' | head -12
+fi
+
+# ── arms 9-10: the carried-obligation landing switch (1577-568c) ───────────
+# A ref that edits a check-*.sh is DUE to the shell-to-lua backlog. Silent, it
+# refuses at the guard; the same edit with a `Carried-Waiver:` trailer passes.
+# PRE-FIX: relay-preflight runs no such decider and arm 9 reads ok:.
+CLONE_W="$W/clone-w"
+_clone "$BASE_BARE" "$CLONE_W"
+git -C "$CLONE_W" "${GC[@]}" checkout -qb work/silent
+printf '\n# touched\n' >> "$CLONE_W/scripts/check-litmus-pin-claims.sh"
+git -C "$CLONE_W" "${GC[@]}" add -A
+git -C "$CLONE_W" "${GC[@]}" commit -qm "touch a decider, pay nothing"
+git -C "$CLONE_W" "${GC[@]}" checkout -qb work/waived
+git -C "$CLONE_W" "${GC[@]}" commit -q --allow-empty -m "waive it" -m "Carried-Waiver: shell-to-lua no-item-in-reach"
+git -C "$CLONE_W" "${GC[@]}" checkout -q linux-next
+_run "$CLONE_W" work/silent --base origin/linux-next
+if [ "$RC" = 1 ] && [ "$OUT" = "refused:relay-preflight:deciders:check-carried-obligations" ] \
+   && grep -q 'violation:carried:shell-to-lua:silent' <<<"$ERR"; then
+    ok "arm9: a due, silent ref refuses at check-carried-obligations"
+else
+    bad "arm9" "rc=$RC out=[$OUT]"
+    printf '%s\n' "$ERR" | grep -vE '^item: .* ok ' | sed 's/^/    err: /' | head -12
+fi
+_run "$CLONE_W" work/waived --base origin/linux-next
+if [ "$RC" = 0 ] && grep -q '^ok:relay-preflight:' <<<"$OUT" && grep -q '^item: check-carried-obligations ok' <<<"$ERR"; then
+    ok "arm10: the same change with a Carried-Waiver trailer passes the guard"
+else
+    bad "arm10" "rc=$RC out=[$OUT]"
+    printf '%s\n' "$ERR" | grep -vE '^item: .* ok ' | sed 's/^/    err: /' | head -12
+fi
+
+# ── arm 11: the re-exec marker is consumed, never inherited (1577-568c) ────
+# A ref that changes relay-preflight.sh makes it exec the merged copy with
+# TILLANDSIAS_RELAY_PREFLIGHT_REEXEC exported. A selected fixture that runs
+# relay-preflight itself (this file) inherited it, and its inner runs skipped
+# their merge: measured relaying 1577-568c, 5 of 10 arms red. Here the selected
+# fixture refuses if the marker reached it. PRE-FIX: refused at that fixture.
+V_SEED="$W/v-seed"
+_seed "$V_SEED"
+printf '#!/usr/bin/env bash\necho v1\n' > "$V_SEED/scripts/vv-subject.sh"
+cat > "$V_SEED/scripts/test-vv-env.sh" <<'EOF'
+#!/usr/bin/env bash
+# exercises scripts/vv-subject.sh; refuses if the relay's re-exec marker leaked
+[ -z "${TILLANDSIAS_RELAY_PREFLIGHT_REEXEC:-}" ] || { echo "FAIL: inherited the re-exec marker"; exit 1; }
+echo "ok: vv-env 1"
+EOF
+chmod +x "$V_SEED"/scripts/vv-subject.sh "$V_SEED"/scripts/test-vv-env.sh
+git -C "$V_SEED" "${GC[@]}" add -A
+git -C "$V_SEED" "${GC[@]}" commit -qm "vv-subject and an env-probing fixture"
+V_BARE="$W/vv-origin.git"
+_origin "$V_SEED" "$V_BARE"
+CLONE_V="$W/clone-v"
+_clone "$V_BARE" "$CLONE_V"
+git -C "$CLONE_V" "${GC[@]}" checkout -qb work/vv
+printf '#!/usr/bin/env bash\necho v2\n' > "$CLONE_V/scripts/vv-subject.sh"
+printf '# a merged copy that differs, so the relay re-executes it\n' >> "$CLONE_V/scripts/relay-preflight.sh"
+git -C "$CLONE_V" "${GC[@]}" add -A
+git -C "$CLONE_V" "${GC[@]}" commit -qm "work/vv: touch vv-subject and the tool"
+git -C "$CLONE_V" "${GC[@]}" checkout -q linux-next
+_run "$CLONE_V" work/vv --base origin/linux-next
+if [ "$RC" = 0 ] && grep -q '^ok:relay-preflight:' <<<"$OUT" && grep -q '^item: reexec:merged-copy ok' <<<"$ERR" \
+   && grep -q '^item: fixture:test-vv-env ok' <<<"$ERR"; then
+    ok "arm11: after the re-exec, a selected fixture does not inherit TILLANDSIAS_RELAY_PREFLIGHT_REEXEC"
+else
+    bad "arm11" "rc=$RC out=[$OUT]"
     printf '%s\n' "$ERR" | grep -vE '^item: .* ok ' | sed 's/^/    err: /' | head -12
 fi
 
