@@ -1,0 +1,12 @@
+   Compiling tillandsias-vm-layer v0.1.0 (/Users/tlatoani/claudia/wt-j9fc/crates/tillandsias-vm-layer)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 10.81s
+     Running unittests src/lib.rs (/Users/tlatoani/claudia/tillandsias/target/debug/deps/tillandsias_vm_layer-e9f18e5f44dbdf00)
+
+running 4 tests
+test vz_entitlement::tests::vzs_own_entitlement_error_is_named_and_others_are_not ... ok
+test vz_entitlement::tests::a_present_or_unknown_entitlement_proceeds ... ok
+test vz_entitlement::tests::an_absent_entitlement_is_refused_by_name_with_why_and_remedy ... ok
+test vz_entitlement::tests::the_running_probe_reads_this_unentitled_test_binary_as_absent ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 135 filtered out; finished in 0.00s
+

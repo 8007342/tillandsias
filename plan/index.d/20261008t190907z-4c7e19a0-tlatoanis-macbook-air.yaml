@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# LWW correction of `context` (642-fedr): the original text verbatim, plus the
+# mutation harm measured while fixing it, on coordinator request.
+status:
+  - packet_id: unsigned-tray-build-cannot-boot-a-vm-and-does-not-say-why
+    field: context
+    value: |
+        HIT THIS CYCLE, first boot attempt, and it cost a boot. Running
+        
+          ./target/release/tillandsias-tray --exec-guest '...' < /dev/null
+        
+        printed:
+        
+          [exec-guest] starting VM…
+          {"error":"start: validate: Invalid virtual machine configuration.
+           The process doesn't have the "com.apple.security.virtualization"
+           entitlement."}
+        
+        CONFIRMED: `codesign -d --entitlements -` shows
+        com.apple.security.virtualization present on
+        dist/Tillandsias.app/Contents/MacOS/tillandsias-tray and ABSENT on
+        target/release/tillandsias-tray. scripts/build-macos-tray.sh does the
+        Info.plist substitution + ad-hoc codesign + entitlement; a bare
+        `cargo build` cannot and does not.
+        
+        WHY THIS IS WORTH A PACKET RATHER THAN A NOTE. `target/release/<binary>`
+        is the reflexive path for anyone who just built — every other binary in
+        this workspace is used that way, and the cross-platform habit is to avoid
+        the installed .app precisely because it may be stale. Here that instinct
+        is inverted and the diagnostic does not say so: it names an Apple API
+        constraint, not the project's own build step, and offers no next action.
+        The signed artifact is one directory away.
+        
+        MADE WORSE BY AN ADJACENT HAZARD (see the 701-kgvk event in this
+        fragment): the OTHER obvious candidate, /Applications/Tillandsias.app,
+        currently carries an OLDER embedded guest binary than dist/, so reaching
+        for it instead SILENTLY DOWNGRADES the staged guest binary. So of the
+        three plausible tray paths on this host, one cannot boot, one downgrades
+        the guest, and only dist/ is correct — and nothing tells you which is
+        which at the point of failure.
+        
+        SMALLEST FIX: match the entitlement error and print the working
+        invocation. A preflight that checks the entitlement before attempting the
+        boot is the fuller version, but the message alone converts a wasted boot
+        into a redirect.
+        
+        A SECOND HARM, MEASURED 2026-10-08 (tlatoanis-macbook-air, while fixing
+        this row): the refusal was not only unexplained but LATE. Before VZ's
+        validate failed, VzRuntime::start had already grown the guest disk,
+        created the swap image and rewritten cidata/nvram. Against a scratch
+        image root holding a 1 MiB rootfs.img, one refused start left rootfs.img
+        at 10 GiB (sparse) beside a 24 GiB vm-swap.img, nvram.bin, cidata.iso and
+        provision/ (plan/issues/evidence/811-j9fc-darwin-20261008/
+        image-root-touched-prefix-darwin.raw.txt). Against the REAL image root,
+        an unentitled tray mutates live VM state on every attempt. The fix
+        therefore refuses before the first write, not just with a better message.
+    ts: "2026-10-08T19:09:07Z"
+    host: tlatoanis-macbook-air

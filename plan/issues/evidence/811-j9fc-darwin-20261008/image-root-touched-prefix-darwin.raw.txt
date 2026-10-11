@@ -1,0 +1,26 @@
+   Compiling tillandsias-vm-layer v0.1.0 (/Users/tlatoani/claudia/wt-j9fc/crates/tillandsias-vm-layer)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.78s
+     Running tests/vz_entitlement_preflight.rs (/Users/tlatoani/claudia/tillandsias/target/debug/deps/vz_entitlement_preflight-7864388cfc97b059)
+
+running 1 test
+test an_unentitled_binary_is_refused_by_name_before_touching_the_image_root ... FAILED
+
+failures:
+
+---- an_unentitled_binary_is_refused_by_name_before_touching_the_image_root stdout ----
+[tillandsias-vz] guest disk grown 0 -> 10 GiB (0 GiB allocated; cap 50 GiB)
+[tillandsias-vz] guest sizing: 8 vCPU / 8 GiB (host: 10 cores / 16 GiB) — order 919-jii2 host-headroom-aware allocation
+
+thread 'an_unentitled_binary_is_refused_by_name_before_touching_the_image_root' (6846964) panicked at crates/tillandsias-vm-layer/tests/vz_entitlement_preflight.rs:52:5: <!-- cite-ok: raw compiler/test output, the location is part of the receipt -->
+assertion `left == right` failed: MEASUREMENT: image root after the refused start
+  left: {"cidata.iso": 921600, "nvram.bin": 131072, "provision": 64, "rootfs.img": 10738466816, "vm-swap.img": 25769803776}
+ right: {"rootfs.img": 1048576}
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    an_unentitled_binary_is_refused_by_name_before_touching_the_image_root
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.20s
+
+error: test failed, to rerun pass `-p tillandsias-vm-layer --test vz_entitlement_preflight`

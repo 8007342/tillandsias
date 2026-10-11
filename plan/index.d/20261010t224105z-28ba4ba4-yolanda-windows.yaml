@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: darwin-strict-clippy-dead-code-on-linux-only-two-routers-test-const
+    field: status
+    value: completed
+    ts: "2026-10-10T22:41:05Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: darwin-strict-clippy-dead-code-on-linux-only-two-routers-test-const
+    event:
+      type: completed
+      ts: "2026-10-10T22:41:05Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: eade33054 (#297): TWO_ROUTERS is cfg(target_os = linux) on trunk; cross-target clippy for windows-gnu clean
