@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: every-tray-quit-ends-in-a-force-stop-because-the-guest-never-shuts-itself-down-cleanly
+    field: next_action
+    value: 'RELEASED 2026-10-11 by tlatoanis-macbook-air (WIP sweep). Code landed in #246 (5d2bf290b): the guest replies IssueAck to VmShutdownRequest and powers itself off. Unit-pinned; what is left is LIVE only. To observe, on macOS AND on Windows, on a real VM: after a tray Quit, the tray log shows the guest''s clean shutdown ack, and no force-stop line appears.'
+    ts: "2026-10-11T06:30:59Z"
+    host: tlatoanis-macbook-air

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-tray-sends-set-vsock-forward-target-with-request-but-the-guest-is-silent-on-success-so-the-request-consumes-the-next-reply
+    field: status
+    value: completed
+    ts: "2026-10-11T06:30:42Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-tray-sends-set-vsock-forward-target-with-request-but-the-guest-is-silent-on-success-so-the-request-consumes-the-next-reply
+    event:
+      type: completed
+      ts: "2026-10-11T06:30:42Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: 19ba71d4a
+  - packet_id: the-tray-sends-set-vsock-forward-target-with-request-but-the-guest-is-silent-on-success-so-the-request-consumes-the-next-reply
+    event:
+      type: note
+      ts: "2026-10-11T06:30:42Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        Landed #239. Fix taken: the GUEST acks SetVsockForwardTarget, one frame per request as HostClockSync does. Pinned by vsock_server.rs set_vsock_forward_target_answers_one_frame_so_the_status_reply_reaches_its_caller (fake guest: SetVsockForwardTarget then VmStatusRequest, status read gets VmStatusReply); runs under --features listen-vsock in --check/--test (1074-w7qv).

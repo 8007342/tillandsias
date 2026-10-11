@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-macos-trays-bounded-security-spawn-deadlocks-on-output-larger-than-a-pipe-buffer-and-the-bound-kills-a-call-that-was-only-waiting-to-be-read
+    field: status
+    value: completed
+    ts: "2026-10-11T06:30:43Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-macos-trays-bounded-security-spawn-deadlocks-on-output-larger-than-a-pipe-buffer-and-the-bound-kills-a-call-that-was-only-waiting-to-be-read
+    event:
+      type: completed
+      ts: "2026-10-11T06:30:43Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: a291dd9db
+  - packet_id: the-macos-trays-bounded-security-spawn-deadlocks-on-output-larger-than-a-pipe-buffer-and-the-bound-kills-a-call-that-was-only-waiting-to-be-read
+    event:
+      type: note
+      ts: "2026-10-11T06:30:43Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        Landed #284. spawn_bounded drains stdout/stderr on reader threads while polling try_wait. Pinned by installation_uuid.rs output_larger_than_a_pipe_buffer_is_returned_whole (more than 64 KiB under an easy budget: Ok with the full count, pre-fix TimedOut), and a_bound_that_fires_leaves_no_surviving_child stays green.
