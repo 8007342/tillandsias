@@ -402,7 +402,6 @@ scripts scripts/check-litmus-mutation-arms-mutate.sh 3
 scripts scripts/check-litmus-pin-claims.sh 5
 scripts scripts/check-litmus-steps-can-fail.sh 2
 scripts scripts/check-litmus-yaml-parses.sh 1
-scripts scripts/check-local-expert-health.sh 1
 scripts scripts/check-long-running-view.sh 21
 scripts scripts/check-macos-stock-binaries.sh 7
 scripts scripts/check-markdown-distillation.sh 20
