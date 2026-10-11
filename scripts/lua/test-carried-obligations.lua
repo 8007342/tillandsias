@@ -379,6 +379,31 @@ local r_off = run({ PLAN, "script", "run", GUARD }, { cwd = R, env = { TILLANDSI
 check("STALE (offline): with no fetch the offer lines say snapshot=stale:<age>",
     grep(r_off.stderr or "", [[snapshot=stale:(\d+h\d\dm|unknown)]]) ~= nil, "err=[" .. (r_off.stderr or "") .. "]")
 
+-- 16b. DIVERGED (1607-8bq5): the mirror marks work/9997-late diverged
+-- (refs/tillandsias/diverged/work/9997-late, 1606-25nf). The fixed guard does
+-- NOT count it as taking check-y.sh: it prints taken-by-unknown and still
+-- offers check-y.sh. The guard with its BEGIN/END-1607 blocks stripped (the
+-- pre-fix shape) reports it taken-by, in the same run. Arm 9 is the negative
+-- control: an unmarked ref is still taken-by.
+local fixed_src = fs.read(GUARD_REL) or ""
+local pre1607 = fixed_src
+for _, tag in ipairs({ "1607%-FETCH", "1607%-DIVERGED", "1607%-SKIP", "1607%-SKIP%-END" }) do
+    pre1607 = pre1607:gsub("%s*%-%- BEGIN%-" .. tag .. "\n.-%-%- END%-" .. tag .. "\n", "\n")
+end
+fs.write(REL .. "/pre-1607-guard.lua", pre1607)
+local late_tip = text.trim(run({ "git", "-C", BARE, "rev-parse", "refs/heads/work/9997-late" }).stdout or "")
+run({ "git", "-C", BARE, "update-ref", "refs/tillandsias/diverged/work/9997-late", late_tip })
+local _, po7, pe7 = judge_with(R .. "/pre-1607-guard.lua")
+rc, o, e = judge_with(GUARD)
+check("DIVERGED (control): the pre-1607 guard counts the mirror-diverged ref as taking check-y.sh",
+    pre1607 ~= fixed_src and pe7:find("taken-by:work/9997-late scripts/check-y.sh", 1, true) ~= nil and po7:match("due:(%S+)") ~= "scripts/check-y.sh",
+    "pre err=[" .. pe7 .. "]")
+check("DIVERGED: a ref the mirror marks diverged prints taken-by-unknown and does not take its item",
+    rc == 0 and e:find("taken-by-unknown:work/9997-late:diverged", 1, true) ~= nil
+        and not e:find("taken-by:work/9997-late", 1, true) and o:match("due:(%S+)") == "scripts/check-y.sh",
+    "rc=" .. rc .. " offered=[" .. tostring(o:match("due:(%S+)")) .. "] err=[" .. e .. "]")
+run({ "git", "-C", BARE, "update-ref", "-d", "refs/tillandsias/diverged/work/9997-late" })
+
 -- 17. PAID BUT TAKEN (1589-hm2r, measured by yoga): taken-by filtered only the
 -- OFFER list, so a change porting an item another open work ref already
 -- deletes read as paid. Another host pushes work/9996-dup deleting check-w.sh

@@ -303,7 +303,13 @@ local function snapshot()
     if SNAPSHOT then return SNAPSHOT end
     if env.get("TILLANDSIAS_CARRIED_NO_FETCH") ~= "1" then
         local r = proc.run({ argv = { "git", "fetch", "--quiet", "--prune", "origin",
-            "+refs/heads/work/*:refs/remotes/origin/work/*" }, timeout_ms = 60000 })
+            "+refs/heads/work/*:refs/remotes/origin/work/*",
+            -- BEGIN-1607-FETCH
+            -- 1607-8bq5: the mirror's diverged markers (1606-25nf), into a
+            -- namespace of their own, pruned with the work refs.
+            "+refs/tillandsias/diverged/*:refs/remotes/origin-diverged/*",
+            -- END-1607-FETCH
+        }, timeout_ms = 60000 })
         if r.status == "exited" and r.code == 0 then
             -- time.iso_utc() is the compact 20261011t082608z; print ISO-8601.
             local c = time.iso_utc()
@@ -349,8 +355,28 @@ local function taken_items()
         local _, b = git({ "rev-parse", "--abbrev-ref", "HEAD" })
         own = text.trim(b)
     end
+    -- BEGIN-1607-DIVERGED
+    -- ORDER 1607-8bq5. A WORK REF THE MIRROR MARKS DIVERGED IS NOT EVIDENCE.
+    -- The mirror publishes refs/tillandsias/diverged/<ref> (1606-25nf) for a
+    -- work ref whose exported tip it could not prove upstream holds: un-relayed
+    -- work, or a rewrite with no twin history. Measured 2026-10-11: the mirror
+    -- served work/1590-j20f at a tip upstream had abandoned (337dc0df9 landed),
+    -- and this guard reported it as taking an item. A marked ref is neither
+    -- counted nor silently skipped: it is printed for a person to read.
+    local diverged = {}
+    local _, dref = git({ "for-each-ref", "--format=%(refname)", "refs/remotes/origin-diverged/" })
+    for _, d in ipairs(lines(dref)) do
+        diverged[(d:gsub("^refs/remotes/origin%-diverged/", ""))] = true
+    end
+    -- END-1607-DIVERGED
     local _, refs = git({ "for-each-ref", "--format=%(refname:short)", "refs/remotes/origin/work/" })
     for _, ref in ipairs(lines(refs)) do
+        -- BEGIN-1607-SKIP
+        local name = ref:gsub("^origin/", "")
+        if diverged[name] then
+            log.raw("  taken-by-unknown:" .. name .. ":diverged (the mirror could not prove upstream holds this tip; 1607-8bq5) snapshot=" .. snapshot())
+        else
+        -- END-1607-SKIP
         local merged = git({ "merge-base", "--is-ancestor", ref, BASE })
         local mine = (ref == "origin/" .. own) or git({ "merge-base", "--is-ancestor", ref, HEAD })
         if not merged and not mine then
@@ -363,6 +389,9 @@ local function taken_items()
                 end
             end
         end
+        -- BEGIN-1607-SKIP-END
+        end
+        -- END-1607-SKIP-END
     end
     return taken_cache
 end
