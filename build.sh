@@ -4653,6 +4653,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Carried-obligation fixture passed"
 
+    # ORDER 1588-27v3 — a claim names a fleet host. The WIP cap counts claims
+    # per host string, so `--host x` held nothing and passed it; set-field now
+    # refuses a host outside methodology packet_discipline.fleet_hosts.
+    _step "Checking a claim by an unlisted host is refused (1588-27v3)..."
+    if ! _run_lua_decider "scripts/lua/test-claim-unknown-host.lua" 2>&1; then
+        _error "set-field no longer refuses a claim by a host outside packet_discipline.fleet_hosts, or no longer admits a listed one — see the FAIL lines above (1588-27v3)"
+        exit 1
+    fi
+    _info "Unknown-host claim fixture passed"
+
     # ORDER 1581-d9ig — no fixture prunes or gcs the operator's checkout. Two
     # fixtures' teardown ran `git -C "$ROOT" worktree prune`, which inside the
     # WSL guest deletes every Windows worktree whose C:/ path the guest cannot

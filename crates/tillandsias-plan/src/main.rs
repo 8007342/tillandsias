@@ -1067,6 +1067,47 @@ fn wip_limit_of(index: &std::path::Path) -> (usize, String) {
     }
 }
 
+/// ORDER 1588-27v3 — the hosts a claim may name, from the methodology list
+/// `packet_discipline.fleet_hosts`. The WIP cap counts claims per host STRING,
+/// so a string that is no fleet host holds nothing and always passes it.
+enum FleetHosts {
+    /// No methodology file beside the ledger: a scratch ledger, not checked.
+    NoMethodology,
+    /// The file is there but the list is absent or not a list of labels.
+    Unreadable,
+    Listed(Vec<String>),
+}
+
+fn fleet_hosts_of(index: &std::path::Path) -> FleetHosts {
+    let Some(rule) = index
+        .parent()
+        .and_then(|plan| plan.parent())
+        .map(|root| root.join("methodology/distributed-work.yaml"))
+        .filter(|p| p.is_file())
+    else {
+        return FleetHosts::NoMethodology;
+    };
+    let listed = std::fs::read_to_string(&rule)
+        .ok()
+        .and_then(|s| serde_yaml::from_str::<serde_yaml::Value>(&s).ok())
+        .and_then(|doc| {
+            let list = doc
+                .get("distributed_work")
+                .unwrap_or(&doc)
+                .get("packet_discipline")?
+                .get("fleet_hosts")?
+                .as_sequence()?
+                .iter()
+                .map(|h| h.as_str().map(str::to_string))
+                .collect::<Option<Vec<String>>>()?;
+            (!list.is_empty()).then_some(list)
+        });
+    match listed {
+        Some(list) => FleetHosts::Listed(list),
+        None => FleetHosts::Unreadable,
+    }
+}
+
 fn resolve_writer_host() -> String {
     writer_host_from(std::env::var("TILLANDSIAS_HOST_KIND").ok())
 }
@@ -9315,6 +9356,48 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                     "error: --story applies only to a claim (status in_progress) — REFUSED before any write"
                 );
                 std::process::exit(2);
+            }
+            // ORDER 1588-27v3 — A CLAIM NAMES A FLEET HOST.
+            //
+            // The cap below counts claims per host STRING. Measured on
+            // tlatoanis-macbook-air 2026-10-11: the real host was refused at
+            // wip 16/3, and the same claim with `--host x` WROTE a fragment,
+            // because "x" holds nothing. The claim then reads as held by a host
+            // nobody can ask to let go. The hosts come from ONE reviewable list,
+            // packet_discipline.fleet_hosts, so a new host enters by a PR to
+            // methodology, not by typing a new string. There is no override: an
+            // unlisted host has no cap to go over, and --over-wip already exists
+            // for the cap itself.
+            if field == "status" && value == "in_progress" {
+                let claim_host = flagged("--host").unwrap_or_else(resolve_writer_host);
+                let refusal = match fleet_hosts_of(&index) {
+                    FleetHosts::NoMethodology => None,
+                    FleetHosts::Listed(ref hosts) if hosts.contains(&claim_host) => None,
+                    FleetHosts::Listed(hosts) => Some(format!(
+                        "refused:set-field:unknown-host:{claim_host} — '{claim_host}' is not in \
+                         methodology/distributed-work.yaml packet_discipline.fleet_hosts \
+                         ({}), so the WIP cap could not count this claim and no fleet host \
+                         would hold it (1588-27v3).",
+                        hosts.join(", ")
+                    )),
+                    FleetHosts::Unreadable => Some(format!(
+                        "refused:set-field:no-fleet-host-list — methodology/distributed-work.yaml \
+                         is beside this ledger but packet_discipline.fleet_hosts is absent or \
+                         not a non-empty list of host labels, so the claim by '{claim_host}' \
+                         cannot be checked (1588-27v3)."
+                    )),
+                };
+                if let Some(why) = refusal {
+                    eprintln!(
+                        "{why}\n\
+                         \n\
+                         REMEDY: claim as your fleet host (in a forge that is \
+                         $TILLANDSIAS_GIT_HOST, not the container hostname). A host that is \
+                         not listed yet is added to packet_discipline.fleet_hosts by a PR \
+                         before it claims. Nothing was written."
+                    );
+                    std::process::exit(2);
+                }
             }
             if field == "status" && value == "in_progress" {
                 let claim_host = flagged("--host").unwrap_or_else(resolve_writer_host);
