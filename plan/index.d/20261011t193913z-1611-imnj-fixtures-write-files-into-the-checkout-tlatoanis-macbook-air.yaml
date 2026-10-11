@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11, p3, the population form): the second instance of 1587-qqzs's shape, found by #333's preflight.
+packets:
+  - packet_id: fixtures-write-scratch-files-into-the-checkout-beside-the-scripts-so-a-killed-run-leaves-them-where-diff-scoped-guards-read-them-as-added-code
+    order: 1611-imnj
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [preflight, hygiene, fixtures, population-scan, darwin-regime]
+    estimated_hours: 3
+    owned_files:
+      - scripts/test-litmus-step-pipefail.sh
+      - scripts/test-litmus-structured-assert.sh
+      - scripts/test-litmus-parse-instruments-agree.sh
+      - scripts/test-order-citations-resolve.sh
+    title: |
+      Fixtures that write scratch files INTO the checkout (scripts/.<name>.$$.sh beside the code they exercise) instead of $TMPDIR leave them behind when the preflight door's TERM, 1 s, KILL lands. Untracked files under scripts/ are what diff-scoped guards read as added code. 1587-qqzs fixed one such fixture; this is the population.
+    context: |
+      OBSERVED on tlatoanis-macbook-air 2026-10-11 (darwin, taskpolicy -b ./build.sh --preflight on work/1600-nn5b): test-litmus-step-pipefail was deadline-skipped at 12 s and left `scripts/.wka4-prefix-runner.43858.sh` untracked in the checkout. Its only cleanup is `trap 'rm -rf "$TMP" "$PREFIX_RUNNER"' EXIT`, and PREFIX_RUNNER="$ROOT/scripts/.wka4-prefix-runner.$$.sh" (line 34).
+      HEURISTIC SCAN (grep, not the deliverable) for paths built under $ROOT/scripts/. or beside a script, on trunk 2026-10-11:
+      - test-litmus-step-pipefail.sh:34, .wka4-prefix-runner.$$.sh (observed leaking);
+      - test-litmus-structured-assert.sh:27, .znbn-prefix-runner.$$.sh;
+      - test-litmus-parse-instruments-agree.sh:148, .run-litmus-test.mutant-1303.$$.sh;
+      - test-order-citations-resolve.sh:29 and :62, .order-citation-probe{,2}-$$.sh;
+      - test-awk-float-lc-numeric.sh:99, .mutant-lcnum-* (already signal-safe since 1587-qqzs, 6c62b0e5e; it must stay beside the producers it copies, since they derive REPO_ROOT from BASH_SOURCE).
+      WHY $TMPDIR IS THE PREFERRED FIX (coordinator): since 1600-nn5b (#333), the preflight door gives each guard its own TMPDIR and deletes it after the guard, killed or not. A writer moved to ${TMPDIR:-/tmp} is cleaned up for free, and no trap has to survive a KILL, which none can. A file that must sit beside a script, because it resolves siblings or ROOT from its own path, keeps the 1587 shape: TERM/INT/HUP traps that exit, and long steps under `cmd & wait $!`.
+    exit_criteria:
+      - 'a population scan (a Lua guard in --check) of fixtures that create files inside the checkout (scripts/, or any tracked directory) rather than $TMPDIR prints scanned/writers/unsafe and ends at unsafe=0. "Safe" means the file is under ${TMPDIR:-/tmp}, or its cleanup survives a door KILL (the 1587 shape). Each writer is listed with which of the two applies, and a writer that must stay in the checkout carries a reason line.'
+      - 'test-litmus-step-pipefail.sh is shown, in ONE run, leaving its prefix runner in the checkout pre-fix and nothing post-fix, under the door kill sequence (TERM, 1 s grace, KILL)'
+    unscoreable: "unpinnable-until-the-guard-exists: the scan and the per-fixture moves are written together"
+    depends_on: []
+    next_action: >
+      Move each writer's scratch file to ${TMPDIR:-/tmp} where it does not need to sit beside a script (check each: the prefix runners and probes may resolve ROOT from their own path, as the lcnum mutants do). Write the scan with a planted-writer fixture, and show test-litmus-step-pipefail pre-fix and post-fix under the door kill in one run. Related: 1587-qqzs, 1600-nn5b.
+    provenance: |
+      Filed by tlatoanis-macbook-air on macuahuitl's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T19:39:13Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Fixtures write scratch files into scripts/ and leak them when the door kills them (test-litmus-step-pipefail left .wka4-prefix-runner.<pid>.sh; 5 writers by grep).

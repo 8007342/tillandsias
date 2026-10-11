@@ -14,23 +14,23 @@ severity: medium
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-git-mirror-seed-failure-surfaced.sh
+  - workspace contains scripts/lua/test-git-mirror-seed-failure-surfaced.lua
 
 critical_path:
-  - step: "fixture parses and is executable"
-    command: "bash -n scripts/test-git-mirror-seed-failure-surfaced.sh && test -x scripts/test-git-mirror-seed-failure-surfaced.sh && echo 'ok: parse'"
+  - step: "the Lua fixture is present"
+    command: "test -f scripts/lua/test-git-mirror-seed-failure-surfaced.lua && echo 'ok: present'"
     timeout_ms: 2000
-    expected_behavior: "ok: parse"
+    expected_behavior: "ok: present"
 
   - step: "the launcher's marker is what the mirror prints, and the gate surfaces it"
-    command: "bash scripts/test-git-mirror-seed-failure-surfaced.sh 2>&1 | tail -n 1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-git-mirror-seed-failure-surfaced.lua 2>&1"
     timeout_ms: 10000
-    expected_behavior: "PASS: git-mirror-seed-failure-surfaced"
+    expected_behavior: "ok:git-mirror-seed-failure-surfaced"
 
 observability:
   traces:
     - "@trace spec:git-mirror-service"
-  expected_log: "PASS: git-mirror-seed-failure-surfaced"
+  expected_log: "ok:git-mirror-seed-failure-surfaced"
   log_fields:
     spec: "git-mirror-service"
     test: "git-mirror-seed-failure-surfaced-shape"
@@ -40,4 +40,4 @@ rollback:
   on_failure: >
     If the mirror rewords its seed-failure line, update GIT_MIRROR_SEED_FAILURE_MARKER
     in the same change; a mismatch makes every failing seed look like a slow one.
-  command: "bash scripts/test-git-mirror-seed-failure-surfaced.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-git-mirror-seed-failure-surfaced.lua 2>&1"

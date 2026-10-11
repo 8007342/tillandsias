@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed and claimed at the coordinator's request (2026-10-11, p1): every Windows gate reds on it.
+packets:
+  - packet_id: the-lc-numeric-signal-fixture-waits-a-fixed-10-s-for-a-pid-file-the-subject-never-writes-when-it-ends-early-so-the-windows-wsl-gate-is-red
+    order: 1612-jp94
+    status: in_progress
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [gate, fixture, portability, wsl, preflight]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/test-awk-float-lc-numeric-signal.lua
+      - scripts/test-awk-float-lc-numeric.sh
+    title: |
+      scripts/lua/test-awk-float-lc-numeric-signal.lua (1587-qqzs, #322) is red 3/3 in Windows' WSL builder guest ("2 REAL the script reached its mutants — got: no pid file within 10 s"). The arm waited a FIXED 10 s for a pid file that the subject writes only after making its mutants, so a subject that ends early, or starts slowly, reads as a timeout with no cause.
+    context: |
+      REPORTED by the coordinator 2026-10-11: red 3/3 on untouched trunk 0c840e353, with a binary rebuilt from trunk, in yolanda-windows' WSL guest; green 3/3 on macuahuitl and on darwin.
+      HYPOTHESIS, UNVERIFIED until the guest's output is seen: a minimal guest has no comma-decimal locale. test-awk-float-lc-numeric.sh then prints `unscoreable:awk-float-lc-numeric:no-comma-locale-on-host` and exits 0 BEFORE making mutants, so the pid file never appears.
+      FIX on work/1612-jp94 (event-driven, not a longer wait):
+      - the subject writes its pid at START and `<pidfile>.ready` once its mutants exist;
+      - the fixture waits for ready OR the pid gone (capped at 120 s), and judges an early end by what the subject SAID;
+      - the sed shim's 5 s hold now keys off `.ready`.
+      MEASURED on darwin:
+      - unmodified, 3/3 ok;
+      - with the subject forced to find no comma locale: `skip:awk-float-lc-numeric-signal:no-comma-locale-on-host` (exit 0), the control arm still run;
+      - with a planted early `exit 2`: FAIL "it ended first, saying: ... fail:planted-early-exit" (exit 1).
+    exit_criteria:
+      - 'in the Windows WSL builder guest the fixture is no longer red: it ends ok, or with a NAMED skip whose reason is the subject''s own line, and the guest run''s output is recorded on this row'
+      - 'a subject that ends before its mutants for any other reason is a FAIL that quotes what it said (planted early exit shown red), never a timeout'
+      - 'darwin and util-linux hosts stay ok:awk-float-lc-numeric-signal:3 arms'
+    unscoreable: "unpinnable-until-the-guard-exists: the fixture change and the guest run are judged together"
+    depends_on: []
+    next_action: >
+      Push work/1612-jp94 and run the fixture in yolanda's WSL guest (through the coordinator). Record its output here; if it is neither the no-comma-locale skip nor ok, the quoted line names the real cause.
+    provenance: |
+      Filed and claimed by tlatoanis-macbook-air on macuahuitl's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T19:46:41Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          The lc-numeric signal fixture's fixed 10 s pid-file wait reds every Windows gate; replaced by an event wait that names an early end.

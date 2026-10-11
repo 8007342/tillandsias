@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11): a follow-up to 1602-3ave, folded into 1613-bpd3's push.
+packets:
+  - packet_id: land-queue-eviction-comment-quotes-every-non-ok-verdict-prefix-could-not-run-degraded-down-and-lowercase-fail-not-only-fail-refused-violation-blocked
+    order: 1615-qntb
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [land-queue, ci, gate-diagnostics]
+    estimated_hours: 0.5
+    owned_files:
+      - scripts/land-queue.sh
+      - scripts/lua/test-land-queue-eviction-comment.lua
+    title: |
+      land-queue's gate-failed eviction comment quotes every non-ok verdict prefix the runner emits (could-not-run:, degraded:, down:) and shell deciders' lowercase fail:, not only FAIL, [FAIL], refused:, violation: and blocked:
+    context: |
+      SEEN by macuahuitl-fedora 2026-10-11, live on #333's eviction: the failing step's verdict was `could-not-run:worktree-add-cleanup-fixture`. 1602-3ave's FAIL-lines builder (scripts/land-queue.sh, BEGIN/END-FAIL-LINES) matches only ^FAIL, ^[FAIL], ^refused:, ^violation:, ^blocked:, so the line reached the comment only because it happened to sit in the `tail -5`.
+      The runner's verdict grammar (crates/tillandsias-plan/src/script_run.rs, verdict.emit's kind_ok list) is ok: skip: refused: blocked: could-not-run: violation: degraded: down:. The non-ok ones the builder lacks: could-not-run:, degraded:, down:. A script-run timeout already prints `refused:timed-out:<name>`, so it is covered. The classifier's cannot-start / no-space are return tokens, never line prefixes.
+      Also lowercase `fail:`, which shell deciders print (e.g. `fail:cloudflare-token-rotation:fake-binary-missing:`); the builder's ^FAIL is case-sensitive and misses it.
+      Folded into 1613-bpd3's push at the coordinator's request, not a PR of its own.
+    exit_criteria:
+      - 'the FAIL-lines builder also quotes lines starting could-not-run:, degraded:, down: and fail: (still as a sum of single-pattern tests, no alternation `|`)'
+      - 'test-land-queue-eviction-comment.lua gains an arm: those four, planted above an 8-line tail, all appear in the comment, and planted ok:/skip: lines do not; the arm fails against the builder as it was'
+    unscoreable: "a diagnostics fix: the fixture arm is its evidence"
+    depends_on: []
+    related: [1602-3ave, 1613-bpd3]
+    next_action: >
+      Add the four tests to the awk verdict sum and the arm, on work/1613-bpd3; show the arm red on the old builder and green on the new.
+    provenance: |
+      Filed by yoga (forge) on macuahuitl-fedora's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T20:27:55Z"
+        host: yoga
+        summary: |-
+          Eviction comment misses could-not-run:/degraded:/down:/fail: verdict lines (seen live on #333); folded into 1613-bpd3.

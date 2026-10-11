@@ -172,6 +172,15 @@ pub const PROC_RUN_BASE_ENV_PASSTHROUGH: &[&str] = &[
     "USERPROFILE",
     "APPDATA",
     "LOCALAPPDATA",
+    // ORDER 1593-1ny6. Where this build's artifacts live, so a nested runner a
+    // Lua fixture starts (run-litmus-test.sh, plan-binary-probe.sh, cargo)
+    // finds the same plan binary the caller runs. Dropped, a linked worktree
+    // on a shared target has no ./target of its own and the nested runner
+    // reports blocked:litmus-no-plan-binary: test-litmus-verdict-reads-stdout-
+    // only.lua refused 5-of-5 there (the Mac, then yolanda-windows, 2026-10-11).
+    // A path, not a secret; deciders that pass --target-dir explicitly
+    // (check-cross-target-build.lua, 958-w4kq) now agree with the inherited one.
+    "CARGO_TARGET_DIR",
 ];
 
 /// Fixed values every child gets, so a verdict cannot depend on the caller's
