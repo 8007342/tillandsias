@@ -176,6 +176,35 @@ pr_comment() {
     fi
 }
 
+# gate_failed_comment <gate log> <rc> <head> <trunk> <base sha> — the body of a
+# gate-failed eviction comment, on stdout.
+#
+# ORDER 1602-3ave: the body quoted only `tail -5` of the gate log, and a failing
+# fixture's FAIL lines sit ABOVE the gate's closing summary. #319's run-17
+# eviction could not name its failing arm. The log already holds stderr (the
+# gate runs `> "$_glog" 2>&1`), so the verdict lines are there to quote: the
+# first 20 distinct lines that read as one (FAIL, [FAIL], refused:, violation:,
+# blocked:), colour codes and indentation stripped, ahead of the same tail.
+# Factored so test-land-queue-eviction-comment.lua can build it from a planted
+# log without a real gate.
+gate_failed_comment() {
+    local glog="$1" rc="$2" head="$3" trunk="$4" base="$5" fails="" tail5
+    # BEGIN-FAIL-LINES
+    fails="$(awk '
+        { line = $0; gsub(/\033\[[0-9;]*m/, "", line); sub(/^[ \t]+/, "", line) }
+        # A sum of single-pattern tests, not an alternation: no "|" for the pipe-site counter to misread.
+        { verdict = (line ~ /^FAIL/) + (line ~ /^\[FAIL\]/) + (line ~ /^refused:/) + (line ~ /^violation:/) + (line ~ /^blocked:/) }
+        verdict && !(line in seen) && n < 20 { seen[line] = 1; n++; print line }
+    ' "$glog" 2>/dev/null)"
+    # END-FAIL-LINES
+    tail5="$(tail -5 "$glog")"
+    printf 'Evicted from the landing queue: the gate failed (rc=%s) on the merge of `%s` into `%s` at `%s`.\n\n' "$rc" "$head" "$trunk" "${base:0:9}"
+    if [ -n "$fails" ]; then
+        printf 'Failing lines (first 20 distinct, from the gate log):\n\n```\n%s\n```\n\nLast lines of the gate log:\n\n' "$fails"
+    fi
+    printf '```\n%s\n```\n\nThe queue continued with the next candidate. Fix and the queue will pick it up again.\n' "$tail5"
+}
+
 # ── THE WORKING TREE MUST BE CLEAN ───────────────────────────────────────────
 # This script checks out and rewrites HEAD. Doing that over uncommitted work
 # destroys it, and `git checkout` would happily carry the changes across.
@@ -409,15 +438,8 @@ The queue continued with the next candidate."
     ( eval "$GATE" ) < /dev/null > "$_glog" 2>&1
     _grc=$?
     if [ "$_grc" -ne 0 ]; then
-        _tail="$(tail -5 "$_glog")"
         say "evict:land-queue:$num:gate-failed:rc=$_grc"
-        pr_comment "$num" "Evicted from the landing queue: the gate failed (rc=$_grc) on the merge of \`$head\` into \`$TRUNK\` at \`${base_sha:0:9}\`.
-
-\`\`\`
-$_tail
-\`\`\`
-
-The queue continued with the next candidate. Fix and the queue will pick it up again."
+        pr_comment "$num" "$(gate_failed_comment "$_glog" "$_grc" "$head" "$TRUNK" "$base_sha")"
         evicted=$((evicted + 1))
         rm -f "$_glog"
         continue
