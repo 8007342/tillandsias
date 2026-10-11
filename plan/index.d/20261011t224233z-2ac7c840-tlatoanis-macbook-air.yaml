@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-darwin-under-taskpolicy-b-the-preflight-front-door-runs-three-to-four-times-its-150-s-budget-so-test-preflight-front-door-is-red-there
+    event:
+      type: note
+      ts: "2026-10-11T22:42:33Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261011t224233z
+      host: tlatoanis-macbook-air
+      summary: |
+        PR #339 (work/1614-5x7m, 070923929). The door's deadline and grace are judged by wall clock (_pf_now: EPOCHREALTIME on bash >= 5 = wall-us, else $SECONDS = wall-s; no fork per poll; the poll stays 0.1 s). The summary names the clock as deadline-clock=.
+        POLL OVERHEAD UNDER -b, MEASURED here earlier: 50 polls of `sleep 0.1` took 12.8 s under taskpolicy -b vs 5.5 s plain (0.256 s vs 0.11 s per poll). That was the overrun, because the old deadline counted polls.
+        FIXTURE (gate step 458, test-preflight-wall-clock-deadline.lua; TERM-ignoring planted guard, 2 s deadline, bound 4 s = deadline + grace + 1), over 7 darwin runs, fixed vs pre-fix (poll-counting) door in the same run: under taskpolicy -b 2.5-3.1 s vs 6.9-8.0 s; with slowed polls 2.6-3.5 s vs 6.4-9.9 s; plain 2.7-3.3 s.
+        STANDALONE ./build.sh --preflight on the branch, darwin, nothing else running, 2026-10-11:
+        - taskpolicy -b: wall=376 s (394 s total), ran=162 skipped-by-deadline=69 refused=0, deadline-clock=wall-s. Before: 466-567 s. Deadline-skip labels are now 5-8 s (launcher whole seconds, including the sweep), where the old door's worst guards ran 13-15 s.
+        - plain: wall=179 s (182 s total), ran=202 skipped-by-deadline=29 refused=0.
+        PLAIN STILL EXCEEDS THE 150 s BUDGET (179 s; trunk plain was 166 s before this change, which barely affects plain). Per the ruling, this proposes a measured per-regime budget for the coordinator to decide; it is not implemented.
