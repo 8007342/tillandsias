@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11, p3). The two leaked worktrees are left in place as evidence.
+packets:
+  - packet_id: test-preflight-front-door-removes-its-scratch-worktree-only-on-normal-return-so-a-killed-run-leaves-a-registered-worktree-sharing-the-target
+    order: 1600-nn5b
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [fixtures, worktrees, cleanup, hermeticity]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-preflight-front-door.sh
+    title: |
+      scripts/test-preflight-front-door.sh's outer wrapper runs `git worktree add --detach target/plan-scratch/front-door.XXXXXX` and removes the worktree only after the inner run RETURNS, with no trap. A SIGTERM (a timeout, a deadline, an interrupt) leaves a registered git worktree under target/plan-scratch that shares the checkout's CARGO_TARGET_DIR
+    context: |
+      MEASURED on yoga's forge 2026-10-11 (trunk c5c574e81). `git worktree list` shows two leaked, registered, detached worktrees, both at 93cf854e6:
+        /home/forge/src/tillandsias/target/plan-scratch/front-door.OlKeGf   (last modified 09:27:48Z)
+        /home/forge/src/tillandsias/target/plan-scratch/front-door.X08ICs   (last modified 09:32:48Z)
+      THE CAUSE IS YOGA'S OWN RUN: a 1592-idmu fixture sweep (finished 09:31:51Z) ran every affected fixture twice under `timeout 300`. test-preflight-front-door.sh hit the timeout both times (rc 124 and 124), and SIGTERM killed the wrapper between `git worktree add` (line 19) and `git worktree remove --force "$SCR"` (line 30). Nothing traps it.
+      This differs from 1553-xs63, the general class where a deadline group-kill skips a fixture's EXIT trap. This wrapper has no trap at all, so a single SIGTERM, which a trap would catch, already leaks.
+      WHY IT MATTERS NOW: these worktrees share the checkout's cargo target, which is 1599-egzz's exposure (a gate can run code compiled from another worktree's source). Each leak also adds a stale entry to `git worktree list`.
+      LEFT IN PLACE as evidence, per the coordinator. Removing them is `git worktree remove --force <path>` on each.
+    exit_criteria:
+      - 'the wrapper removes its scratch worktree on EXIT, INT, TERM and HUP (a trap registered right after `git worktree add`), so a run killed with SIGTERM leaves no registered worktree and no target/plan-scratch/front-door.* directory'
+      - 'in the same run, the pre-fix wrapper is shown leaking a registered worktree when killed with SIGTERM, and the fixed wrapper is shown leaking none'
+    unscoreable: "unpinnable-until-the-guard-exists: the trap and its kill fixture are written together"
+    depends_on: []
+    related: [1553-xs63, 1599-egzz]
+    next_action: >
+      Register a trap right after the worktree add that removes the worktree and the .moved marker and kills the sampler. Pin it with a fixture that starts the wrapper, SIGTERMs it after the worktree exists, and checks `git worktree list`. Then the two leaked worktrees above can be removed.
+    provenance: |
+      Filed by yoga (forge) on macuahuitl-fedora's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T11:32:56Z"
+        host: yoga
+        summary: |-
+          Two registered front-door.* worktrees leaked when yoga's own timeout-300 sweep killed test-preflight-front-door.sh; its wrapper has no cleanup trap.
