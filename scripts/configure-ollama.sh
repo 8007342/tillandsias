@@ -48,7 +48,7 @@ OLLAMA="$BIN_DIR/ollama"
 ENDPOINT="${TILLANDSIAS_INFERENCE_ENDPOINT:-http://127.0.0.1:11434}"
 UNIT_DIR="$HOME/.config/systemd/user"
 # The models the tree itself names. Kept here rather than invented so this
-# script and scripts/check-local-expert-health.sh cannot drift apart.
+# script and scripts/lua/check-local-expert-health.lua cannot drift apart.
 MODELS="${TILLANDSIAS_OLLAMA_MODELS:-qwen2.5:0.5b nomic-embed-text qwen2.5:7b}"
 WANT_UNIT="${TILLANDSIAS_OLLAMA_INSTALL_UNIT:-1}"
 changed=0
@@ -214,7 +214,15 @@ for m in $MODELS; do
 done
 
 # ---- 5. verdict, verified against the tree's own health check ------------
-_health="$(bash "$REPO_ROOT/scripts/check-local-expert-health.sh" 2>&1 | tail -1)"
+# The check is Lua since 1584-ik5v, on the plan binary's `script run`, resolved
+# by execution; its line is byte-identical to the .sh it replaced.
+_plan="$(cd "$REPO_ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || _plan=""
+case "$_plan" in ./*) _plan="$REPO_ROOT/${_plan#./}" ;; esac
+if [ -n "$_plan" ]; then
+    _health="$(cd "$REPO_ROOT" && "$_plan" script run scripts/lua/check-local-expert-health.lua 2>&1 | tail -1)"
+else
+    _health="could-not-run:no-tillandsias-plan-to-run-the-health-check"
+fi
 case "$_health" in
     ok:*) ;;
     *) say "blocked:configure-ollama:api-unreachable"
@@ -222,7 +230,7 @@ case "$_health" in
        say "    $_health"
        say "  WHAT TO DO: that check is the authority, not this script. Run it"
        say "  directly and follow its verdict:"
-       say "    bash scripts/check-local-expert-health.sh"
+       say "    tillandsias-plan script run scripts/lua/check-local-expert-health.lua"
        exit 1 ;;
 esac
 

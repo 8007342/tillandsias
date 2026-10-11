@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-darwin-gate-is-red-because-an-mcp-tray-test-binds-a-unix-socket-under-the-long-macos-tmpdir-past-sun-len
+    field: status
+    value: completed
+    ts: "2026-10-11T04:32:29Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-darwin-gate-is-red-because-an-mcp-tray-test-binds-a-unix-socket-under-the-long-macos-tmpdir-past-sun-len
+    event:
+      type: completed
+      ts: "2026-10-11T04:32:29Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: #304 a79809604 (land 1dbf03ecb); darwin feature-gated 934/1 -> 935/0; sibling bind half runs on macOS
+  - packet_id: the-darwin-gate-is-red-because-an-mcp-tray-test-binds-a-unix-socket-under-the-long-macos-tmpdir-past-sun-len
+    event:
+      type: note
+      ts: "2026-10-11T04:32:29Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        LANDED: #304, merge a79809604 (land 1dbf03ecb). MEASURED on darwin (tlatoanis-macbook-air, rustc 1.99.0): - The feature-gated set (cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock) went from 934 passed / 1 failed on trunk eade33054 to 935 passed / 0 failed. - mcp_listener_failed_start_rolls_back_registry_for_retry: pre-fix FAILED ("failed to bind mcp socket: path must be shorter than SUN_LEN"), post-fix ok. - mcp_per_lane_socket_location_and_permissions_0600: pre-fix printed SKIP for the bind half; post-fix the bind and 0600 assertions RUN on macOS and pass. - Live in the gate: a full darwin ./build.sh --check on trunk 1dbf03ecb (with #304) got past the feature-gated pass. It failed later on an unrelated wall-clock flake in test-hook-phase-instrumentation, filed separately.
