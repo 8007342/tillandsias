@@ -4755,6 +4755,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus YAML parse gate passed"
 
+    # ORDER 1594-mtc3 — relay-preflight's phase 5 does not select a test-*.sh
+    # the diff deletes (every shell->lua port deletes one) as a touched fixture.
+    _step "Checking relay-preflight skips deleted fixtures (1594-mtc3)..."
+    if ! _run_lua_decider "scripts/lua/test-relay-preflight-deleted-fixture.lua" 2>&1; then
+        _error "relay-preflight phase 5 selects a fixture the diff deleted, or lost a present one — see the FAIL lines above (1594-mtc3)"
+        exit 1
+    fi
+    _info "Relay-preflight deleted-fixture check passed"
+
     _step "Checking the nix-capability probe's evidence survives a noisy shell (917-zkge)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-probe-nix-capability-evidence.sh" 2>&1; then
         _error "a capable row can carry shell noise as its proof that nix answered (917-zkge)"
