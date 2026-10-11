@@ -81,7 +81,7 @@ critical_path:
   # power-user text during install). The fixture RUNS the installer's own
   # reset block against a scratch HOME and a stub tray.
   - step: "install-macos.sh runs the SOFT reset quietly and logs the banner (1437-8c6p)"
-    command: "bash scripts/test-install-macos-setup-is-quiet.sh | tail -1"
+    command: "bash scripts/test-install-macos-setup-is-quiet.sh"
     timeout_ms: 30000
     expected_behavior: "ok:install-macos-setup-is-quiet:7 arms"
 

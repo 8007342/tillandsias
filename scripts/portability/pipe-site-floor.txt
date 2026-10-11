@@ -858,7 +858,6 @@ scripts scripts/test-session-tokens.sh 2
 scripts scripts/test-set-field-prose-guard.sh 1
 scripts scripts/test-set-field-refuses-unknown-flags.sh 8
 scripts scripts/test-set-field-yaml-shapes.sh 1
-scripts scripts/test-shell-ratchet.sh 3
 scripts scripts/test-shipped-diagnostic-tool-dispatch.sh 4
 scripts scripts/test-sidecar-arch-derivation.sh 1
 scripts scripts/test-sidecar-staleness-stamp.sh 2
