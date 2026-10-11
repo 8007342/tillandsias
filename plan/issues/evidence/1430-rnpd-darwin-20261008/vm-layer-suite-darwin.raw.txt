@@ -1,0 +1,164 @@
+   Compiling tillandsias-core v56.9.27 (/Users/tlatoani/claudia/wt-rnpd/crates/tillandsias-core)
+   Compiling tillandsias-logging v0.1.260513 (/Users/tlatoani/claudia/wt-rnpd/crates/tillandsias-logging)
+   Compiling tillandsias-control-wire v0.1.170 (/Users/tlatoani/claudia/wt-rnpd/crates/tillandsias-control-wire)
+   Compiling tillandsias-vm-layer v0.1.0 (/Users/tlatoani/claudia/wt-rnpd/crates/tillandsias-vm-layer)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 19.52s
+     Running unittests src/lib.rs (/Users/tlatoani/claudia/tillandsias/target/debug/deps/tillandsias_vm_layer-e9f18e5f44dbdf00)
+
+running 135 tests
+test readiness::tests::probe_puts_the_connect_address_first ... ok
+test readiness::tests::ready_unit_cannot_take_the_daemon_down_with_it ... ok
+test readiness::tests::probe_keeps_indeterminate_distinct_from_not_bound ... ok
+test readiness::tests::a_missing_probe_tool_is_not_reported_as_an_unbound_listener ... ok
+test readiness::tests::probe_has_a_failing_branch_at_all ... ok
+test host_vsock_forward::tests::the_relay_takes_ownership_of_the_fd ... ok
+test transport_macos::host_listener_tests::accepted_fd_is_duplicated_not_borrowed ... ok
+test transport_macos::host_listener_tests::a_failed_handoff_refuses_rather_than_accepting_into_nothing ... ok
+test host_vsock_forward::tests::an_unreachable_target_closes_the_guest_connection ... ok
+test transport_macos::host_listener_tests::dropping_the_listener_removes_it_from_the_port ... ok
+test transport_macos::host_listener_tests::the_listener_owns_its_delegate ... ok
+test host_vsock_forward::tests::a_guest_half_close_reaches_the_host_service ... ok
+test readiness::tests::start_limit_is_a_unit_section_directive ... ok
+test host_vsock_forward::tests::the_forwarder_stops_when_the_listener_is_dropped ... ok
+test transport_macos::tests::vsock_fd_is_send ... ok
+test transport_macos::tests::connect_error_implements_error ... ok
+test transport_macos::tests::vsock_stream_is_async_read_write ... ok
+test transport_macos::tests::vsock_stream_is_send_sync ... ok
+test host_vsock_forward::tests::bytes_cross_in_both_directions ... ok
+test transport_conformance::tests::all_pass_report_grammar ... ok
+test transport_conformance::tests::buffered_streaming_fails_the_incremental_fixture ... ok
+test transport_conformance::tests::conforming_mock_passes_exec_fixtures_and_reports_stream_failure ... ok
+test vsock_exec::tests::a_responsive_peer_is_not_killed_by_the_setup_deadline ... ok
+test vsock_exec::tests::a_guest_with_the_cap_proceeds_to_the_request ... ok
+test vsock_exec::tests::a_needle_split_across_frames_is_still_matched ... ok
+test vsock_exec::tests::a_guest_without_the_cap_is_refused_before_the_request_is_sent ... ok
+test vsock_exec::tests::a_talking_guest_produces_no_waiting_reports ... ok
+test vsock_exec::tests::a_draining_peer_is_not_killed_by_the_write_bound ... ok
+test vsock_exec::tests::a_blocked_guest_is_reported_immediately_not_waited_out ... ok
+test vsock_exec::tests::an_oversize_inbound_frame_is_refused_by_the_codec_bound ... ok
+test vsock_exec::tests::exec_idle_timeout_is_single_env_overridable_policy ... ok
+test vsock_exec::tests::exec_over_stream_collects_output_and_exit ... ok
+test vsock_exec::tests::every_driver_surfaces_a_guest_error_envelope ... ok
+test vsock_exec::tests::exec_over_stream_expect_drives_sequential_prompts ... ok
+test vsock_exec::tests::every_exec_entry_point_chooses_its_open_frame ... ok
+test vsock_exec::tests::a_v2_heartbeat_reports_the_guests_input_state ... ok
+test vsock_exec::tests::every_input_entry_point_sends_stdin_eof ... ok
+test vsock_exec::tests::every_heartbeat_version_combination_completes_the_exchange ... ok
+test vsock_exec::tests::exec_over_stream_rejects_empty_argv ... ok
+test vsock_exec::tests::exec_over_stream_expect_dynamic_defers_response_until_prompt ... ok
+test vsock_exec::tests::exec_over_stream_propagates_nonzero_exit ... ok
+test vsock_exec::tests::a_chatty_guest_does_not_flood_the_event_sink ... ok
+test vsock_exec::tests::exec_with_input_surfaces_guest_error_instead_of_hanging ... ok
+test vsock_exec::tests::exec_over_stream_with_input_delivers_stdin ... ok
+test vsock_exec::tests::expect_driver_normal_close_is_unaffected_by_the_error_arm ... ok
+test vsock_exec::tests::previews_escape_control_bytes_and_are_bounded ... ok
+test vsock_exec::tests::retain_tail_keeps_the_newest_bytes_and_leaves_short_output_whole ... ok
+test vsock_exec::tests::guest_output_is_surfaced_before_the_session_closes ... ok
+test vsock_exec::tests::heartbeats_report_what_the_host_is_waiting_for ... ok
+test vsock_exec::tests::a_working_or_undeterminable_guest_is_never_reported_as_deadlocked ... ok
+test vsock_exec::tests::scan_region_is_red_when_its_end_anchor_is_renamed ... ok
+test vsock_exec::tests::raw_output_sink_receives_guest_bytes_unescaped_while_the_log_stays_escaped ... ok
+test vsock_exec::tests::stdin_eof_is_only_sent_when_input_was_actually_delivered ... ok
+test vsock_exec::tests::the_deadlock_report_can_be_disabled ... ok
+test vsock_exec::tests::the_refusal_names_an_empty_advertisement_explicitly ... ok
+test vsock_exec::tests::stdin_eof_is_gated_on_the_advertised_capability_not_the_wire_version ... ok
+test vsock_exec::tests::the_specials_list_is_what_was_measured_not_the_whole_control_range ... ok
+test vsock_exec::tests::trimming_keeps_exactly_what_matching_still_needs ... ok
+test vsock_exec::tests::wall_clock_ceiling_error_names_the_pending_expect_and_bytes ... ok
+test vsock_exec::tests::wall_clock_ceiling_leaves_enormous_headroom_over_measured_first_run ... ok
+test vsock_exec::tests::two_frames_in_one_write_are_both_read_back ... ok
+test vsock_exec::tests::wall_clock_ceiling_parses_default_disable_and_floor ... ok
+test vz::tests::absent_console_log_rotates_without_error ... ok
+test vz::tests::built_user_data_orders_fetch_after_guest_bin_mount ... ok
+test vz::tests::cloud_init_persists_the_model_cache_mount ... ok
+test vz::tests::df_available_column_is_read_in_kib ... ok
+test vsock_exec::tests::no_test_mutates_the_deadlock_report_env ... ok
+test vz::tests::first_provision_refuses_below_the_space_it_needs_and_says_how_much ... ok
+test vz::tests::console_log_under_the_cap_is_left_alone ... ok
+test vsock_exec::tests::no_setup_read_is_left_unbounded ... ok
+test vz::tests::guest_disk_grows_in_steps_to_the_cap_and_never_shrinks ... ok
+test vz::tests::guest_sizing_gives_the_919_jii2_host_8gib_and_8_vcpu ... ok
+test vz::tests::guest_sizing_leaves_the_host_a_core ... ok
+test vz::tests::guest_sizing_leaves_the_host_its_reserve_and_caps_large_hosts ... ok
+test vz::tests::guest_sizing_lets_the_reserve_win_below_the_crossover ... ok
+test vz::tests::guest_sizing_never_exceeds_the_host ... ok
+test vz::tests::current_thread_guest_transport_opener_uses_endpoint_boundary ... ok
+test vz::tests::guest_transport_exit_code_preserves_unix_signal_convention ... ok
+test vz::tests::guest_sizing_obeys_the_2026_09_16_memory_ruling ... ok
+test vz::tests::fresh_runtime_is_not_provisioned ... ok
+test vz::tests::is_provisioned_documents_that_it_only_stats_a_file ... ok
+test vz::tests::macvz_endpoint_accepts_only_macos_vz ... ok
+test vz::tests::open_vsock_stream_errors_when_vm_not_started ... ok
+test vz::tests::no_shares_installs_no_directory_sharing_device ... ok
+test vz::tests::live_boot_spec_derives_sizing_from_the_host_not_a_literal ... ok
+test vz::tests::provision_user_data_sets_up_zram_and_disk_swap_non_fatally ... ok
+test vz::tests::provisioned_check_requires_root_disk ... ok
+test vz::tests::oversized_console_log_is_rotated_to_a_previous_generation ... ok
+test vz::tests::provisioning_never_spawns_a_binary_absent_from_the_minimal_path ... ok
+test vz::tests::provisioning_completed_distinguishes_complete_from_aborted_and_absent ... ok
+test vz::tests::convert_grows_raw_disk_before_first_boot ... ok
+test vz::tests::swap_image_size_follows_the_free_space_tiers ... ok
+test vz::tests::systemd_mount_unit_escapes_like_systemd ... ok
+test vz::tests::stop_makes_no_vz_call_outside_the_vm_queue ... ok
+test vz::tests::the_space_check_runs_before_the_image_download ... ok
+test vz::tests::two_shares_become_two_directory_sharing_devices ... ok
+test vz::tests::no_unimplemented_or_todo_placeholders_in_vz ... ok
+test vz::tests::vmruntime_exec_routes_through_guest_transport_exec ... ok
+test vz::tests::vz_artifact_paths_live_under_image_root ... ok
+test vz::tests::vz_cloud_init_fetch_script_names_why_it_skipped_the_staged_binary ... ok
+test vz::tests::vz_config_attaches_swap_image_after_root_disk ... ok
+test vz::tests::vz_cloud_init_headless_fetch_unit_is_idempotent ... ok
+test vz::tests::vz_exec_without_started_vm_fails_at_connect ... ok
+test vz::tests::vz_fetch_script_prefers_staged_binary_over_network ... ok
+test vz::tests::vz_fetch_script_installs_download_via_temp_file ... ok
+test vz::tests::vz_provisioning_forwards_the_journal_to_the_captured_console ... ok
+test vz::tests::vz_redundant_unit_start_does_not_abort_provisioning ... ok
+test vz::tests::vz_runtime_implements_guest_transport ... ok
+test vz::tests::vz_runtime_is_send_and_sync ... ok
+test vz::tests::vz_start_fails_clean_when_rootfs_missing ... ok
+test vz::tests::vz_stop_and_wait_ready_fail_clean_before_start ... ok
+test vz::tests::vz_cloud_init_headless_service_has_control_wire_preflight ... ok
+test vz::tests::wipe_provisioned_artifacts_is_idempotent_on_missing_files ... ok
+test wsl::tests::classified_short_status_matches_remediations ... ok
+test wsl::tests::classify_launch_stderr_names_kernel_disk_and_virtualization ... ok
+test wsl::tests::forge_user_setup_script_contract ... ok
+test wsl::tests::guest_root_headroom_verdict_boundaries ... ok
+test wsl::tests::parse_cim_bool_lines_shapes ... ok
+test wsl::tests::parse_df_avail_kib_handles_real_and_degenerate_output ... ok
+test wsl::tests::provisioning_asserts_guest_disk_headroom ... ok
+test vz::tests::wipe_provisioned_artifacts_resets_to_first_provision_state ... ok
+test wsl::tests::provisioning_ensures_forge_user_and_src ... ok
+test wsl::tests::wsl_platform_classifier_maps_captured_signatures ... ok
+test wsl::tests::wsl_platform_verdict_remediation_and_tokens ... ok
+test wsl::tests::provisioning_writers_use_stdin_delivery ... ok
+test vsock_exec::tests::streaming_exec_times_out_when_slow_guest_sends_no_frames ... ok
+test wsl::tests::wsl_provision_unit_pins_lock_namespace_env ... ok
+test wsl::tests::wsl_shutdown_recovery_owns_a_hard_process_bound ... ok
+test vz::tests::vz_instance_id_changes_when_the_provisioning_script_changes ... ok
+test vsock_exec::tests::a_peer_that_stops_draining_does_not_park_the_writer ... ok
+test vz::tests::provision_user_data_lets_chrony_step_on_any_large_offset ... ok
+test vsock_exec::tests::streaming_exec_heartbeats_survive_total_silence_beyond_idle_deadline ... ok
+test vsock_exec::tests::a_peer_that_goes_silent_during_setup_fails_bounded_and_named ... ok
+test vz::tests::pump_cf_loop_parks_instead_of_spinning_with_no_sources ... ok
+test vz::tests::swap_image_is_fresh_and_sparse_every_launch_and_removed_on_stop ... ok
+
+test result: ok. 135 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.90s
+
+     Running tests/qcow2_expand.rs (/Users/tlatoani/claudia/tillandsias/target/debug/deps/qcow2_expand-9f133dc44eae081f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/wsl_stdio_bridge_eof_enrichment.rs (/Users/tlatoani/claudia/tillandsias/target/debug/deps/wsl_stdio_bridge_eof_enrichment-31e03b11899f075e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tillandsias_vm_layer
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

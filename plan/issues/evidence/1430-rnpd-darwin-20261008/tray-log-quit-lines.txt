@@ -1,0 +1,38 @@
+2:[tillandsias-tray] ===== launch epoch=1790642191 tillandsias-tray 56.9.27.2 (git 1ffb606bc, built 2026-09-29T00:35:51Z) =====
+21:[tillandsias-tray] Quit (menu Quit): draining (timeout=60s)
+23:[tillandsias-tray] Quit: in-VM shutdown request got no reply within 10s (proceeding to VZ.requestStop)
+28:[tillandsias-tray] Quit: drain failed: VzRuntime::stop: drain_timeout (60s) expired; force-stop dispatched
+30:[tillandsias-tray] ===== launch epoch=1790646659 tillandsias-tray 56.9.27.2 (git 1ffb606bc, built 2026-09-29T00:35:51Z) =====
+45:[tillandsias-tray] Quit (menu Quit): draining (timeout=60s)
+47:[tillandsias-tray] Quit: in-VM shutdown request got no reply within 10s (proceeding to VZ.requestStop)
+50:[tillandsias-tray] ===== launch epoch=1790647010 tillandsias-tray 56.9.27.2 (git 1ffb606bc, built 2026-09-29T00:35:51Z) =====
+69:[tillandsias-tray] Quit (menu Quit): draining (timeout=60s)
+71:[tillandsias-tray] Quit: in-VM shutdown request got no reply within 10s (proceeding to VZ.requestStop)
+76:[tillandsias-tray] Quit: drain failed: VzRuntime::stop: drain_timeout (60s) expired; force-stop dispatched
+78:[tillandsias-tray] ===== launch epoch=1790649341 tillandsias-tray 56.9.27.2 (git 9a439f23b, built 2026-09-29T02:35:11Z) =====
+91:[tillandsias-tray] Quit (quit Apple event): draining (timeout=60s)
+93:[tillandsias-tray] Quit: in-VM shutdown request got no reply within 10s (proceeding to VZ.requestStop)
+99:[tillandsias-tray] Quit: drain failed: VzRuntime::stop: drain_timeout (60s) expired; force-stop dispatched
+101:2026-09-29T03:45:10.064Z [tillandsias-tray] ===== launch epoch=1790653510 tillandsias-tray 56.9.27.2+built.56.9.29 (git 0be6803ef, built 2026-09-29T03:44:44Z) =====
+129:2026-09-29T16:31:44.367Z [tillandsias-tray] Quit (menu Quit): draining (timeout=60s)
+131:2026-09-29T16:31:54.368Z [tillandsias-tray] Quit: in-VM shutdown request got no reply within 10s (proceeding to VZ.requestStop)
+137:2026-09-29T16:33:01.158Z [tillandsias-tray] Quit: drain failed: VzRuntime::stop: drain_timeout (60s) expired; force-stop dispatched
+139:2026-09-29T16:33:25.513Z [tillandsias-tray] ===== launch epoch=1790699605 tillandsias-tray 56.9.27.2+built.56.9.29 (git c2c0b7026, built 2026-09-29T16:08:09Z) =====
+153:2026-09-29T16:46:42.080Z [tillandsias-tray] Quit (menu Quit): draining (timeout=60s)
+155:2026-09-29T16:46:52.082Z [tillandsias-tray] Quit: in-VM shutdown request got no reply within 10s (proceeding to VZ.requestStop)
+156:2026-09-29T16:47:57.272Z [tillandsias-tray] Quit: drain failed: VzRuntime::stop: drain_timeout (60s) expired; force-stop dispatched
+158:2026-09-29T16:48:54.614Z [tillandsias-tray] ===== launch epoch=1790700534 tillandsias-tray 56.9.27.2+built.56.9.29 (git c2c0b7026, built 2026-09-29T16:08:09Z) =====
+173:2026-09-29T18:24:49.433Z [tillandsias-tray] Quit (menu Quit): draining (timeout=60s)
+175:2026-09-29T18:24:59.435Z [tillandsias-tray] Quit: in-VM shutdown request got no reply within 10s (proceeding to VZ.requestStop)
+181:2026-09-29T18:26:04.560Z [tillandsias-tray] Quit: drain failed: VzRuntime::stop: drain_timeout (60s) expired; force-stop dispatched
+183:2026-09-29T18:27:11.459Z [tillandsias-tray] ===== launch epoch=1790706431 tillandsias-tray 56.9.27.2+built.56.9.29 (git c2c0b7026, built 2026-09-29T16:08:09Z) =====
+208:2026-09-29T18:38:08.231Z [tillandsias-tray] Quit (menu Quit): draining (timeout=60s)
+210:2026-09-29T18:38:18.234Z [tillandsias-tray] Quit: in-VM shutdown request got no reply within 10s (proceeding to VZ.requestStop)
+217:2026-09-29T18:39:23.455Z [tillandsias-tray] Quit: drain failed: VzRuntime::stop: drain_timeout (60s) expired; force-stop dispatched
+219:2026-09-29T22:08:22.611Z [tillandsias-tray] ===== launch epoch=1790719702 tillandsias-tray 56.9.27.2+built.56.9.29 (git c2c0b7026, built 2026-09-29T16:08:09Z) =====
+257:2026-09-30T00:41:21.285Z [tillandsias-tray] Quit (menu Quit): draining (timeout=60s)
+259:2026-09-30T00:41:31.287Z [tillandsias-tray] Quit: in-VM shutdown request got no reply within 10s (proceeding to VZ.requestStop)
+265:2026-09-30T00:42:36.398Z [tillandsias-tray] Quit: drain failed: VzRuntime::stop: drain_timeout (60s) expired; force-stop dispatched
+267:2026-09-30T00:46:16.711Z [tillandsias-tray] ===== launch epoch=1790729176 tillandsias-tray 56.9.27.2+built.56.9.29 (git 6966cfd51, built 2026-09-29T23:47:08Z) =====
+300:2026-09-30T04:52:54.395Z [tillandsias-tray] Quit (menu Quit): draining (timeout=60s)
+302:2026-09-30T04:53:04.398Z [tillandsias-tray] Quit: in-VM shutdown request got no reply within 10s (proceeding to VZ.requestStop)

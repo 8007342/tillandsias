@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Corrections on the LWW `status:` channel (642-fedr), at the coordinator's request.
+status:
+  - packet_id: the-guest-powers-itself-off-when-the-tray-heartbeat-stops
+    field: context
+    value: >
+      Stage S3 of the coordinator-approved 1430-rnpd plan, filed only. SOURCE:
+      plan/issues/microsoft-mxc-learnings-2026-10-07.md section 4 item 6 ("Idle
+      watchdog on the guest session": MXC daemons tear a session down after an
+      idle timeout, on their own side), and its note event on 1430-rnpd in
+      plan/index.d/20261008t070000z-1553-mxc-learnings-macuahuitl.yaml ("a host
+      that stops asking does not depend on a stop request being honoured. A
+      guest-side shutdown watchdog keyed to the tray's heartbeat is the same
+      shape"). Evidence for the gap, from ~/Library/Logs/Tillandsias/tray.log on
+      tlatoanis-macbook-air (2026-09-28..30): 10 tray quits. 8 were
+      force-stopped after the 60 s drain. In 2 the tray itself was killed
+      mid-drain: the next line is a new launch, or the log ends, with no drain
+      outcome. S1 (the guest acks VmShutdownRequest and powers itself off)
+      covers a quit that reaches the guest. It cannot cover a tray that dies
+      first, because then nobody asks. The image root already holds
+      heartbeat.state.
+    ts: "2026-10-08T19:36:19Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: every-tray-quit-ends-in-a-force-stop-because-the-guest-never-shuts-itself-down-cleanly
+    event:
+      type: note
+      ts: "2026-10-08T19:36:19Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        CORRECTION to the S1 note above (coordinator): the RC smoke does NOT exercise S1. The RC tag v56.10.8.1 is cut from trunk BEFORE #246 lands, so the smoke's quit measures the PRE-fix behaviour. That is still recorded, as the baseline for the live arm and as the input that decides S2. S1's live arm is the first cut that contains #246, or a local build installed fresh on a freshly provisioned VM (cloud-init writes the opt-in unit on first boot). Nothing in the smoke report is S1 evidence.
