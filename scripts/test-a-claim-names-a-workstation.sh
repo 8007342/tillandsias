@@ -146,7 +146,16 @@ if command -v cargo >/dev/null 2>&1; then
     # MATCH can surface as a failure (792-ksr8) — the sibling of the 795-imz3
     # shape, and the same author wrote both in one day. The here-string producer
     # is bounded, which is the remedy the guard itself names.
-    _ut_out="$(cd "$ROOT" && cargo test --release -p tillandsias-plan writer_host_default_is_the_compiled_platform 2>&1)"
+    #
+    # DEV PROFILE, NOT --release (1604-se6w). The unit test reads the compiled
+    # platform, which both profiles compile identically; `--release` built a
+    # second, cold, LTO test profile of tillandsias-plan for this one assertion
+    # and nothing else in the gate reuses it. MEASURED on macuahuitl
+    # 2026-10-11 (.cache/metrics/tillandsias-timing.jsonl, the 1195 s --check):
+    # this step took 54,778 ms. The dev test profile is the one the workspace
+    # suite built minutes earlier in the same gate, so the filtered run is a
+    # warm link.
+    _ut_out="$(cd "$ROOT" && cargo test -p tillandsias-plan writer_host_default_is_the_compiled_platform 2>&1)"
     _ut_rc=$?
     if [ "$_ut_rc" -eq 0 ] && grep -q '1 passed' <<<"$_ut_out"; then
         ok "ARM 6: 772-4se9's writer_host_default unit test still passes, EXECUTED not grepped (rc=$_ut_rc)"

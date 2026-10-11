@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11, approved budget numbers): split out of 1614-5x7m.
+packets:
+  - packet_id: the-front-door-budget-is-one-floor-host-constant-so-darwin-preflight-is-judged-against-150-s-it-cannot-meet-in-either-regime
+    order: 1616-njfd
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [preflight, budget, darwin-regime, measurement]
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-preflight-front-door.sh
+      - build.sh
+    title: |
+      scripts/test-preflight-front-door.sh judges every host's `./build.sh --preflight` wall against BUDGET_S=150, a floor-host number. Darwin measures 179 s plain and 376 s under taskpolicy -b even after 1614-5x7m's wall-clock deadline, so the budget arm is red there in both regimes.
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-10-11, standalone, on work/1614-5x7m (PR #339): taskpolicy -b wall=376 s (ran=162, skipped-by-deadline=69); plain wall=179 s (ran=202, skipped-by-deadline=29); both deadline-clock=wall-s, isolation=none-no-setsid. Trunk plain was 166 s before 1614.
+      APPROVED by the coordinator (macuahuitl, 2026-10-11): darwin plain 200 s, darwin -b 415 s (each about 10% over the measurement), Linux unchanged at 150 s. Key it on the regime the preflight summary reports. TILLANDSIAS_PREFLIGHT_BUDGET_S stays as the override that wins. The summary prints the budget that applied next to deadline-clock=, so a regression reads against the right number.
+    exit_criteria:
+      - 'the budget is chosen per regime (darwin plain 200 s, darwin under taskpolicy -b 415 s, Linux 150 s), TILLANDSIAS_PREFLIGHT_BUDGET_S still wins, and the preflight summary prints the budget that applied next to deadline-clock='
+      - 'a fixture shows a darwin -b run at 380 s passing under the new budget and failing under the flat 150 s, in one run'
+    unscoreable: "unpinnable-until-the-guard-exists: the per-regime budget and its fixture are written together"
+    depends_on: [on-darwin-under-taskpolicy-b-the-preflight-front-door-runs-three-to-four-times-its-150-s-budget-so-test-preflight-front-door-is-red-there]
+    related: [1614-5x7m]
+    next_action: >
+      After #339 lands, detect the regime (darwin vs not; background QoS vs not) where the summary is built, print budget=<n>s beside deadline-clock=, and have test-preflight-front-door.sh read that number unless TILLANDSIAS_PREFLIGHT_BUDGET_S is set. Write the 380 s fixture with both budgets in one run.
+    provenance: |
+      Filed by tlatoanis-macbook-air on macuahuitl's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T22:43:40Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Per-regime front-door budget (darwin plain 200 s, -b 415 s, Linux 150 s), approved by the coordinator after 1614's measurements.

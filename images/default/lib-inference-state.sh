@@ -37,7 +37,10 @@
 #                        container, and no channel carries it across. Adding a
 #                        reason here that nothing can set would be a vocabulary
 #                        entry with no producer, so it is deliberately NOT added.
-#   endpoint-unreachable curl 6/7 — DNS or connect refused
+#   endpoint-unreachable curl 6/7 — DNS or connect refused; ALSO what an engine
+#                        the inference container refused to execute looks like
+#                        from here (order 521), so its detail names the
+#                        `reason=engine-*` log line to read
 #   endpoint-timeout     curl 28 — probe deadline exceeded
 #   endpoint-http-error  curl 22 — served a non-2xx
 #   probe-tool-missing   no curl in this image
@@ -78,6 +81,13 @@ tillandsias_inference_state() {
             *) TILLANDSIAS_INFERENCE_REASON="probe-error-${_tis_rc}" ;;
         esac
         TILLANDSIAS_INFERENCE_STATUS="NOT-READY (${TILLANDSIAS_INFERENCE_REASON}: ${_tis_out:-curl exit ${_tis_rc}})"
+        # Order 521: an engine the container REFUSED to execute (payload digest
+        # mismatch, a stale or tampered cached engine) also reads as an
+        # unreachable endpoint from here — the evidence is in the inference
+        # container, so name where it is rather than leave "unreachable" alone.
+        if [ "$TILLANDSIAS_INFERENCE_REASON" = "endpoint-unreachable" ]; then
+            TILLANDSIAS_INFERENCE_STATUS="${TILLANDSIAS_INFERENCE_STATUS%)} — if the engine refused its payload: \`podman logs tillandsias-inference | grep reason=engine-\`)"
+        fi
         _tillandsias_inference_emit
         return 0
     fi
