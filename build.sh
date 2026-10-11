@@ -465,9 +465,9 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, 
     _gtmp="$(mktemp -d "${TMPDIR:-/tmp}/pf-guard.XXXXXX" 2>/dev/null)" || _gtmp=""
     rm -f "$_out.swept"
     if [ -n "$_PF_SETSID" ]; then
-        ( cd "$SCRIPT_DIR" && { [ -z "$_gtmp" ] || export TMPDIR="$_gtmp"; } && exec setsid "${_runner[@]}" ${_a[@]+"${_a[@]}"} ) >"$_out" 2>&1 </dev/null &
+        ( { [ -z "$_gtmp" ] || export TMPDIR="$_gtmp"; }; cd "$SCRIPT_DIR" && exec setsid "${_runner[@]}" ${_a[@]+"${_a[@]}"} ) >"$_out" 2>&1 </dev/null &
     else
-        ( cd "$SCRIPT_DIR" && { [ -z "$_gtmp" ] || export TMPDIR="$_gtmp"; } && exec "${_runner[@]}" ${_a[@]+"${_a[@]}"} ) >"$_out" 2>&1 </dev/null &
+        ( { [ -z "$_gtmp" ] || export TMPDIR="$_gtmp"; }; cd "$SCRIPT_DIR" && exec "${_runner[@]}" ${_a[@]+"${_a[@]}"} ) >"$_out" 2>&1 </dev/null &
     fi
     _pid=$!
     while kill -0 "$_pid" 2>/dev/null; do
