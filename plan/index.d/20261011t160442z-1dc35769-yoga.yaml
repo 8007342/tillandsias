@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-git-mirror-keeps-serving-a-work-ref-at-its-old-tip-after-upstream-rewrites-it-non-fast-forward-while-sync-state-reads-heads-current
+    event:
+      type: note
+      ts: "2026-10-11T16:04:42Z"
+      agent_id: forge-forge-tillandsias-claude-20261011t160442z
+      host: yoga
+      summary: |
+        DECISION (coordinator macuahuitl-fedora, 2026-10-11): option (c), with (a) doing the work.
+        (a) FOLLOW UPSTREAM. The reconciler force-updates a work/* exported head to its tracking twin refs/remotes/origin/<ref> when EVERY commit in `head ^twin` is reachable from some refs/remotes/origin/* ref. The head then holds nothing upstream never had: it is a rebase or amend, not un-relayed work. Order 449's purpose holds, because un-relayed commits are never clobbered. Each follow prints `sync:work-ref-followed-upstream:<ref>:<old>..<new>`.
+        (b) REPORT WHEN (a) REFUSES. When the head carries commits that no upstream ref ever held, publish the divergence where forges read it: a `diverged` entry in the sync-state that taken-by and forge scans consult, not a note on stdout. The mirror is never heads-current while a work head differs from its twin.
+        EXIT CRITERIA (these supersede the declared two; set-field cannot edit a list field, per 1601-398e):
+        - against a scratch upstream and mirror, an upstream force-push of a work ref is served within one reconcile tick; the pre-fix behaviour (stale tip plus heads-current) is shown in the same run
+        - a head with an un-relayed local commit is NOT clobbered, and is reported diverged
+        - the scope count is printed: n heads compared, n followed, n diverged
+        PRIORITY: p2, taken by yoga when #328 (1605-42nh) lands, ahead of the p3 manifest-dir batch.
