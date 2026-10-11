@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11), found while paying 1588-27v3's carried item.
+packets:
+  - packet_id: carried-obligations-taken-by-judges-a-stale-local-snapshot-of-work-refs-so-two-hosts-port-the-same-item
+    order: 1589-hm2r
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [carried-obligations, shell-to-lua, git-mirror, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/check-carried-obligations.lua
+      - scripts/lua/test-carried-obligations.lua
+    title: |
+      check-carried-obligations.lua's taken-by reads only the checkout's existing refs/remotes/origin/work/* and never fetches, so an item another host's work ref already deletes is offered again; 1588-27v3 and 1585-hb8w (#309) both ported scripts/check-litmus-yaml-parses.sh
+    context: |
+      MEASURED on yoga's forge 2026-10-11, with GitHub push times confirmed by macuahuitl-fedora.
+      - taken_items() (scripts/lua/check-carried-obligations.lua:283-305) runs `git for-each-ref refs/remotes/origin/work/`, then diffs merge-base..tip with --diff-filter=D for each ref not already in BASE. It never fetches or calls ls-remote, and it never consults gh or open PRs. Its answer is only as fresh as the checkout's last fetch, and it does not say how old that is.
+      - 06:33:23Z: yoga fetched. 06:33:30Z: work/1585-hb8w was created on GitHub (branch_creation 5f889573c), deleting scripts/check-litmus-yaml-parses.sh. With the mirror's 120 s tick it was on the mirror by about 06:35:30.
+      - 06:45:06Z and 06:47:39Z: yoga ran the guard on work/1588-27v3. Both runs judged the 12-minute-old 06:33 snapshot, so both offered check-litmus-yaml-parses.sh as free. yoga ported it while #309 was gating the same port in land-queue run 9.
+      - 06:47:45Z: a later `fetch -q origin` stored origin/work/1585-hb8w, and taken-by would then have listed it.
+      So the forge is not blind (the mirror carries work refs). The guard trusts a stale snapshot without saying so.
+    exit_criteria:
+      - 'taken-by fetches the work refs (`git fetch origin "+refs/heads/work/*:refs/remotes/origin/work/*"`, or ls-remote when a fetch is not possible) before judging, and prints `snapshot=<iso time>` on its taken-by and offer lines'
+      - 'when it cannot refresh, it prints `snapshot=stale:<age>` instead of answering silently'
+      - 'in a scratch setup, a work ref that deletes X.sh is pushed AFTER the checkout''s last fetch: in the same run, the pre-fix guard offers X and the fixed guard reports `taken-by:work/<ref> X`'
+    unscoreable: "unpinnable-until-the-guard-exists: the refresh and its fixture are written together"
+    depends_on: []
+    next_action: >
+      Add the work-ref refresh and the snapshot= field to taken_items(), then an arm in scripts/lua/test-carried-obligations.lua: a scratch bare origin, a checkout fetched once, then a second clone pushes a work ref deleting the offered item. Show the pre-fix guard offering it and the fixed guard naming taken-by, in the same run.
+    provenance: |
+      Filed by yoga (forge) on macuahuitl-fedora's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T06:51:55Z"
+        host: yoga
+        summary: |-
+          The carried guard's taken-by judged a 12-minute-old work-ref snapshot, so yoga (1588-27v3) re-ported #309's item.

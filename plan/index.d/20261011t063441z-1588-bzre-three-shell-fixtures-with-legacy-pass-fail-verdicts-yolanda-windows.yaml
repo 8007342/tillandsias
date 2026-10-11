@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's direction (2026-10-11): the three items 1585-hb8w
+# skipped because their verdict lines are outside the Lua runner's grammar.
+packets:
+  - packet_id: three-small-shell-fixtures-end-on-pass-fail-verdicts-the-lua-runner-cannot-emit-so-their-port-rewrites-their-own-terminal-line-to-ok-refused
+    order: 1588-bzre
+    status: ready
+    kind: enhancement
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, carried-obligation, burndown, verdict-grammar, fixtures]
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-litmus-empty-spec-refused.sh
+      - scripts/test-slowest-span-marker.sh
+      - scripts/test-source-slice-bounds.sh
+      - scripts/gate-steps.d/600-1460-3gja.step
+      - openspec/litmus-tests/litmus-build-test-timing-telemetry-shape.yaml
+    title: |
+      Port test-litmus-empty-spec-refused.sh, test-slowest-span-marker.sh and test-source-slice-bounds.sh to Lua: their terminal lines (PASS:/FAILED:, fail:, FAIL:) are outside verdict.emit's grammar, and no reader parses those lines, so each port rewrites its own terminal line to the house ok:/refused: prefixes rather than widening the runner
+    context: |
+      Skipped by 1585-hb8w (PR #309) as needing a verdict-grammar change.
+      THE GRAMMAR. verdict.emit accepts ok: skip: refused: blocked:
+      could-not-run: violation: (and degraded:/down: since 1584-ik5v, for a
+      probe whose readers parse them). These three end on lines it refuses:
+        test-litmus-empty-spec-refused.sh   PASS: litmus-empty-spec-refused (1460-3gja) / FAILED: ...
+        test-slowest-span-marker.sh         ok:slowest-span-marker-fixture:3 / fail: slowest-span-marker scenarios failed
+        test-source-slice-bounds.sh         ok: source-slice-bounds 3/3 / FAIL: source-slice-bounds had failures
+      Per-arm detail lines (ok:/FAIL:) are printed with out.line and need no
+      change; only the terminal verdict does.
+      THE READERS, measured on linux-next 2026-10-11 (git grep, floor files
+      excluded):
+        test-litmus-empty-spec-refused.sh  gate step 600-1460-3gja (STEP_SCRIPT;
+          the gate decides on the exit code and the skip:/could-not-run: lines,
+          never on PASS:/FAILED:)
+        test-slowest-span-marker.sh  litmus-build-test-timing-telemetry-shape
+          step: '... 2>&1 | tail -1', expected_behavior
+          'ok:slowest-span-marker-fixture:3', the PASS line, unchanged
+        test-source-slice-bounds.sh  no live caller (one comment in
+          test-portability-idioms.sh)
+      So no reader depends on the lines that change: PASS: -> ok:, FAILED:/
+      fail:/FAIL: -> refused:, exit codes unchanged. Widening verdict.emit to
+      PASS:/FAIL: instead would add two more prefixes for lines nothing reads.
+    exit_criteria:
+      - 'each of the three is a scripts/lua/<name>.lua on tillandsias-plan script run with the same arms and exit codes; its terminal line is ok:/refused: (PASS:/FAILED:/fail:/FAIL: retired), and the per-arm lines are unchanged'
+      - 'every reader is repointed in the same change: gate step 600 to STEP_LUA (or an inline _run_lua_decider), the litmus step to the Lua path; the .sh files and their floor entries are deleted'
+      - 'parity on real inputs plus one planted failure each: the same per-arm lines and exit code as the .sh, differing only in the terminal prefix'
+    verifiable_closure: |
+      unscoreable: unpinnable-until-the-guard-exists — the parity runs are the
+      deliverable's evidence; the ports run where the .sh files ran.
+    events:
+      - type: filed
+        ts: "2026-10-11T06:34:41Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Filed at the coordinator's direction: the three grammar-change items skipped by 1585-hb8w, with their readers measured; none reads the lines that change.

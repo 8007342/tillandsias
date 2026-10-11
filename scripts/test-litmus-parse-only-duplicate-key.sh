@@ -272,7 +272,7 @@ fi
 # on saying something untrue in order to keep a fixture green. What survives
 # the change, and is the thing this arm was always really about, is that the
 # mode states its SCOPE and names the corpus-wide gate by path: --parse-only
-# answers for the files named on the command line, scripts/lua/check-litmus-yaml-parses.lua
+# answers for the files named on the command line, check-litmus-yaml-parses.lua
 # answers for the corpus.
 #
 # Kept deliberately loose — 'FILES NAMED' and the path — rather than pinning
@@ -280,8 +280,8 @@ fi
 # that changed nothing, which is the expression-pinning shape 634-39ik refuses
 # in litmus steps and which is no better in a fixture.
 out="$(run_runner bash "$RUNNER" --parse-only "$TMP/clean.yaml" 2>&1)"
-if printf '%s' "$out" | grep -Fq 'check-litmus-yaml-parses.lua' \
-   && printf '%s' "$out" | grep -Fqi 'FILES NAMED'; then
+if grep -Fq 'check-litmus-yaml-parses.lua' <<<"$out" \
+   && grep -Fqi 'FILES NAMED' <<<"$out"; then
     ok "ARM 7: --parse-only states its scope and names the corpus-wide gate by path"
 else
     bad "ARM 7: --parse-only does not say which question it answers"

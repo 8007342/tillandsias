@@ -96,17 +96,42 @@ esac
 # 1064-5hv2 and the volume evidence rather than flipping a threshold quietly.
 # Widen the budget so the same injected phase is inside 4x but over 1x: the
 # blind band. Exact-line swap, same reason as above.
-awk '
-    index($0, "_fixture_slow_phase)    echo 1 ;;") {
-        sub(/echo 1 ;;/, "echo 30 ;;"); print; next
-    }
-    { print }
-' "$W/hook.sh" > "$W/hook.next" && mv "$W/hook.next" "$W/hook.sh"
-out="$(cd "$ROOT" && bash "$W/hook.sh" 2>&1)"
-if printf '%s\n' "$out" | grep -q '_fixture_slow_phase took'; then
-    bad "a phase between 1x and 4x now warns — the band is closed; if that is intended, update this arm and 1064-5hv2 together with the two-host volume evidence"
+#
+# THE BUDGET IS CALIBRATED, NOT FIXED (1586-gway). It was a fixed 30ms, which
+# put `sleep 0.05` in the band only while the sleep took 30-120ms. Under
+# `taskpolicy -b` (how every macOS gate runs) the same sleep took ~243ms from
+# background-QoS timer coalescing, the phase landed past 4x, and this arm was
+# red on every darwin gate (5/5) while passing beside a CPU hog (5/5). So the
+# budget is set to HALF the phase's measured elapsed time, putting it near 2x,
+# mid-band, whatever the scheduler does. The assertion only counts a run that
+# the hook's own timing table places in the band (1x < multiple <= 4x); a run
+# that drifted out recalibrates from that run, up to three tries, and never
+# passes by default.
+cal="$(printf '%s\n' "$warn" | sed -n 's/.*_fixture_slow_phase took \([0-9][0-9]*\)ms.*/\1/p')"
+cp "$W/hook.sh" "$W/hook.base"
+banded=""
+for _try in 1 2 3; do
+    [ -n "$cal" ] || break
+    budget=$(( (cal + 1) / 2 )); [ "$budget" -ge 1 ] || budget=1
+    awk -v b="$budget" '
+        index($0, "_fixture_slow_phase)    echo 1 ;;") {
+            sub(/echo 1 ;;/, "echo " b " ;;"); print; next
+        }
+        { print }
+    ' "$W/hook.base" > "$W/hook.sh"
+    out="$(cd "$ROOT" && TILLANDSIAS_HOOK_PHASE_TIMING=1 bash "$W/hook.sh" 2>&1)"
+    el="$(printf '%s\n' "$out" | sed -n 's/.*OpenSpec phase: _fixture_slow_phase *\([0-9][0-9]*\)ms.*/\1/p' | head -1)"
+    if [ -n "$el" ] && [ "$el" -gt "$budget" ] && [ "$el" -le $((budget * 4)) ]; then
+        banded="$el/$budget"; break
+    fi
+    cal="$el"
+done
+if [ -z "$banded" ]; then
+    bad "could not place the injected phase inside the 1x-to-4x band in 3 tries (last: ${el:-none}ms against ${budget:-none}ms); arm 4 measured nothing"
+elif grep -q '_fixture_slow_phase took' <<<"$out"; then
+    bad "a phase between 1x and 4x now warns (${banded} ms) — the band is closed; if that is intended, update this arm and 1064-5hv2 together with the two-host volume evidence"
 else
-    ok "the 1x-to-4x blind band is still open (1064-5hv2 remains open with it)"
+    ok "the 1x-to-4x blind band is still open (${banded} ms; 1064-5hv2 remains open with it)"
 fi
 
 echo "hook-phase-instrumentation: $pass passed, $fail failed"

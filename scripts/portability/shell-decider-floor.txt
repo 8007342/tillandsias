@@ -164,7 +164,6 @@ scripts/test-centicolon-extract.sh
 scripts/test-centicolon-grade.sh
 scripts/test-centicolon-ratchet.sh
 scripts/test-change-class.sh
-scripts/test-cheatsheet-index-byte-order.sh
 scripts/test-cheatsheet-source-anchors.sh
 scripts/test-check-bash-dialect.sh
 scripts/test-check-carry-forward.sh
@@ -569,7 +568,6 @@ scripts/test-sigpipe-verdict-pipelines.sh
 scripts/test-silverblue-update-skew-probe.sh
 scripts/test-skill-canonicalization-remedy.sh
 scripts/test-skills-single-source.sh
-scripts/test-slowest-span-marker.sh
 scripts/test-smoke-agent-watch.sh
 scripts/test-smoke-consecutive-lanes.sh
 scripts/test-smoke-evidence-dir-is-fresh.sh

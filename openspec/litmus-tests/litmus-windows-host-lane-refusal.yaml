@@ -21,7 +21,7 @@
 #
 # THE CONTROLS ARE A SCRIPT, NOT INLINE `command:` TEXT, and that is a measured
 # decision. The move sabotage needs a multi-line awk program; embedding one in a
-# double-quoted YAML scalar produced a file that scripts/lua/check-litmus-yaml-parses.lua
+# double-quoted YAML scalar produced a file that check-litmus-yaml-parses.lua
 # rejected while the runner's own --parse-only still reported ok. An earlier
 # version used `python3 -c`, which the no-Python-runtime policy (1087-h2z9)
 # refuses and the gate caught, refusing the land.
