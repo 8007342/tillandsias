@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11): one manifest-dir-runtime burndown item, announced and confirmed free.
+packets:
+  - packet_id: manifest-dir-runtime-convert-tillandsias-plan-src-lib-rs-test-sites-that-read-the-real-ledger-to-a-runtime-manifest-dir-read
+    order: 1604-64q6
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [manifest-dir-runtime, rust, test-hermeticity, worktrees]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-plan/src/lib.rs
+      - scripts/portability/manifest-dir-env-floor.txt
+    title: |
+      manifest-dir-runtime item: crates/tillandsias-plan/src/lib.rs's 4 compile-time env!("CARGO_MANIFEST_DIR") test sites, each reading the REAL plan/index.yaml, read the manifest dir at runtime instead, and the file's floor line is removed
+    context: |
+      The manifest-dir-runtime backlog (methodology/convergence.yaml, opened by 1590-j20f / #321). All 4 sites are in lib.rs's main `mod tests`, at lines 1993, 2275, 2645 and 2706. Each builds `Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plan/index.yaml")`, so a test binary reused from another worktree on a shared CARGO_TARGET_DIR would judge THAT checkout's ledger. Floor line: `crates/tillandsias-plan/src/lib.rs 4`.
+      Announced to the coordinator and confirmed free. It is based on trunk after #325 (1603-muav) lands, because both remove adjacent lines of scripts/portability/manifest-dir-env-floor.txt.
+    exit_criteria:
+      - 'the 4 sites read `std::env::var("CARGO_MANIFEST_DIR")` through a manifest_dir() helper in the tests module, and lib.rs has 0 compile-time CARGO_MANIFEST_DIR sites in test code'
+      - 'the file''s floor line is removed in the same commit, and scripts/lua/check-manifest-dir-env.lua passes with the test count down by 4'
+      - 'the affected tillandsias-plan lib tests pass before and after, in the same run'
+    unscoreable: "a burndown item: the guard's count and the crate's tests are its evidence"
+    depends_on: []
+    related: [1590-j20f, 1603-muav]
+    next_action: >
+      Convert the 4 sites, remove the floor line, and run the lib tests and check-manifest-dir-env.lua before and after. After #325 lands, base on trunk, then preflight and push.
+    provenance: |
+      Filed by yoga (forge) on macuahuitl-fedora's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T14:27:55Z"
+        host: yoga
+        summary: |-
+          One manifest-dir-runtime item, tillandsias-plan src/lib.rs (4 sites reading the real ledger), announced and confirmed free by the coordinator.
