@@ -4088,11 +4088,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # ADVISORY on the 751-i9mb terms: a grown backlog is news for the next
     # coordination cycle, never a build break.
     _step "Checking the plan fragment backlog against the compaction cadence (941-trcf, advisory)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-backlog.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-fragment-backlog.lua" 2>&1; then
         _error "the fragment-backlog advisory could not run — that is a broken checkout, not a clean backlog"
         exit 1
     fi
     _info "Fragment-backlog advisory reported"
+
+    # Its fixture, written with the 1577-568c port (the shell original had
+    # none): a Lua fixture through the one runner, so no .step file.
+    _step "Checking the fragment-backlog advisory's fixture (941-trcf, 1577-568c)..."
+    if ! _run_lua_decider "scripts/lua/test-fragment-backlog.lua" 2>&1; then
+        _error "check-fragment-backlog.lua miscounts or misreports a constructed plan/index.d — see the FAIL lines above (941-trcf)"
+        exit 1
+    fi
+    _info "Fragment-backlog fixture passed"
 
     # Order 1395-ue3i. The CentiColon R line — obligations below
     # positively_tested, with the satisfied count, denominator, histogram and

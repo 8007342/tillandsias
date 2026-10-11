@@ -1,4 +1,4 @@
--- @trace order:1577-g96z, order:1570-k5yt, spec:ci-release
+-- @trace order:1577-g96z, order:1570-k5yt, order:1577-57u3, spec:ci-release
 -- @env TILLANDSIAS_PLAN_BIN TILLANDSIAS_SCRIPT_RUNNER_BIN
 --
 -- test-carried-obligations.lua — scripts/lua/check-carried-obligations.lua on
@@ -27,8 +27,17 @@
 --   9 TAKEN      an open origin/work/* ref that deletes the smallest item makes
 --                the guard skip it (`taken-by:work/<ref>` on stderr) and offer
 --                another; two hosts ported the same offered item on 2026-10-10.
---  10 WRAPPER    a tiny exec shim onto a big script is sized as the big one, is
---                not offered, and is named `wrapper-of:<callee>`.
+--  10 WRAPPER    a tiny exec shim is never offered as small: onto a population
+--                script it is no item of its own; onto any other script it is
+--                sized as the callee and named `wrapper-of:<callee>`.
+--  11 WIDENED    porting a scripts/audit-*.sh (a backlog `population` glob
+--                outside the ratchet's four prefixes) pays (1577-57u3).
+--  12 WRAPPED    a wrapper counts once with its callee: porting the callee
+--                alone does not pay; retiring both does.
+--  13 COUNTER    the ok: line ends counter=shell-to-lua:<n>.
+--  14 FIRED      --burndown over ten waived `Carried:` landings with a flat
+--                counter prints trigger=fired; a not-due landing is not counted.
+--  15 CLEAR      one paid landing that deletes an item clears the trigger.
 --
 -- PRE-GUARD CODE FAILS IT: with no check-carried-obligations.lua the first arm
 -- refuses the whole fixture, never a skip.
@@ -78,6 +87,7 @@ end
 for _, d in ipairs({ "", "/methodology", "/scripts", "/scripts/portability", "/scripts/lua", "/crates" }) do fs.mkdir(REL .. d) end
 write("methodology/convergence.yaml", table.concat({
     "carried_obligations:",
+    "  window_size: 10",
     "  backlogs:",
     "    - name: shell-to-lua",
     "      stage: gentle",
@@ -87,7 +97,15 @@ write("methodology/convergence.yaml", table.concat({
     "        - scripts/verify-*.sh",
     "        - scripts/guard-*.sh",
     "        - scripts/lua/**",
+    "        - scripts/audit-*.sh",
     "        - scripts/gate-steps.d/**",
+    "      population:",
+    "        - scripts/check-*.sh",
+    "        - scripts/test-*.sh",
+    "        - scripts/verify-*.sh",
+    "        - scripts/guard-*.sh",
+    "        - scripts/audit-*.sh",
+    "      population_excludes: scripts/portability/bootstrap-shell-allowlist.txt",
     "      item_ceiling_lines: 150", "" }, "\n"))
 write("scripts/portability/bootstrap-shell-allowlist.txt", "# the shell that stays shell\n")
 write("scripts/portability/shell-decider-floor.txt", "scripts/check-gone.sh\nscripts/check-x.sh\nscripts/check-y.sh\n")
@@ -96,6 +114,8 @@ write("scripts/check-x.sh", n_lines("x", 10))
 write("scripts/check-y.sh", n_lines("y", 4))
 write("scripts/check-w.sh", n_lines("w", 6))
 write("scripts/test-z.sh", n_lines("z", 2))
+-- Over the ceiling, so never offered, but counted (the widened population).
+write("scripts/audit-x.sh", n_lines("a", 160))
 write("crates/a.rs", "fn main() {}\n")
 -- proc.run's command-policy audit writes .cache/metrics/ under a repo root
 -- (1443-w9hf); gitignored in the real checkout, so ignored here too.
@@ -104,10 +124,11 @@ G({ "init", "-q", "-b", "base" })
 G({ "add", "-A" }); G({ "commit", "-qm", "base" })
 
 local function change(ref) G({ "checkout", "-q", "base" }); G({ "checkout", "-q", "-B", ref, "base" }) end
-local function judge(landing)
+local function judge(landing, base_ref, mode)
     local argv = { PLAN, "script", "run", GUARD }
     if landing then argv[#argv + 1] = "--"; argv[#argv + 1] = "--landing" end
-    local r = run(argv, { cwd = R, env = { TILLANDSIAS_REPO_ROOT = R, TILLANDSIAS_CARRIED_BASE = "base" } })
+    if mode then argv[#argv + 1] = "--"; argv[#argv + 1] = mode end
+    local r = run(argv, { cwd = R, env = { TILLANDSIAS_REPO_ROOT = R, TILLANDSIAS_CARRIED_BASE = base_ref or "base" } })
     return (r.status == "exited" and r.code or -1), (r.stdout or ""), (r.stderr or "")
 end
 local function has_line(s, want) for _, l in ipairs(text.lines(s)) do if l == want then return true end end return false end
@@ -204,17 +225,85 @@ check("TAKEN: the item another open work ref deletes is skipped with taken-by on
     "rc=" .. rc .. " offered=[" .. tostring(offered) .. "] err=[" .. e .. "]")
 G({ "update-ref", "-d", "refs/remotes/origin/work/9999-take" })
 
--- 10. WRAPPER: a tiny exec shim onto a big script is sized as the big one
+-- 10. WRAPPER: a tiny exec shim is never offered as small. Onto a POPULATION
+-- script (check-big.sh) it is not an item of its own (counted with its callee,
+-- arm 12). Onto a script OUTSIDE the population (tool-big.sh) it is that
+-- script's only representative, stays counted, is sized as its callee and is
+-- named wrapper-of.
 change("work/1001-wrap")
 write("scripts/check-big.sh", n_lines("b", 200))
 write("scripts/check-shim.sh", '#!/usr/bin/env bash\nexec "$(dirname "$0")/check-big.sh" "$@"\n')
+write("scripts/tool-big.sh", n_lines("t", 200))
+write("scripts/check-tshim.sh", '#!/usr/bin/env bash\nexec "$(dirname "$0")/tool-big.sh" "$@"\n')
 write("scripts/check-x.sh", n_lines("x", 10) .. "echo w\n")
-G({ "add", "-A" }); G({ "commit", "-qm", "a shim, a big script, and an edit" })
+G({ "add", "-A" }); G({ "commit", "-qm", "two shims, two big scripts, and an edit" })
 rc, o, e = judge(false)
-check("WRAPPER: a 2-line exec shim onto a 200-line script is not offered as small, and is named wrapper-of",
-    rc == 0 and not o:find("check-shim.sh", 1, true) and not e:find("    scripts/check-shim.sh (", 1, true)
-        and e:find("wrapper-of:scripts/check-big.sh scripts/check-shim.sh", 1, true) ~= nil,
+check("WRAPPER: neither exec shim is offered as small; the one onto a non-population script is named wrapper-of",
+    rc == 0 and not o:find("shim.sh", 1, true) and not e:find("    scripts/check-shim.sh (", 1, true)
+        and not e:find("    scripts/check-tshim.sh (", 1, true)
+        and e:find("wrapper-of:scripts/tool-big.sh scripts/check-tshim.sh", 1, true) ~= nil,
     "rc=" .. rc .. " out=[" .. o .. "] err=[" .. e .. "]")
+
+-- 11. WIDENED: a decider outside the four ratchet prefixes is counted, so its
+-- port pays (1577-57u3; 1570-25iq needed an uncounted-item waiver for this).
+change("work/1011-wide")
+G({ "rm", "-q", "scripts/audit-x.sh" })
+fs.mkdir(REL .. "/scripts/lua")
+write("scripts/lua/audit-x.lua", 'verdict.ok("audit-x")\n')
+G({ "add", "-A" }); G({ "commit", "-qm", "port audit-x to Lua" })
+rc, o = judge(true)
+check("WIDENED: porting scripts/audit-x.sh (a population glob outside check-/test-/verify-/guard-) prints paid",
+    rc == 0 and has_line(o, "carried:shell-to-lua:paid:scripts/audit-x.sh"), "rc=" .. rc .. " out=[" .. o .. "]")
+
+-- 12. WRAPPED: a wrapper counts ONCE with its callee. With work/1001-wrap
+-- (shim + big) as the base, porting big alone leaves the shim counted in its
+-- place and does not pay; porting both does.
+G({ "checkout", "-q", "work/1001-wrap" }); G({ "checkout", "-q", "-B", "work/1012-wrpd" })
+G({ "rm", "-q", "scripts/check-big.sh" })
+fs.mkdir(REL .. "/scripts/lua")
+write("scripts/lua/check-big.lua", 'verdict.ok("big")\n')
+G({ "add", "-A" }); G({ "commit", "-qm", "port the callee only" })
+local rc_a, o_a = judge(true, "work/1001-wrap")
+G({ "rm", "-q", "scripts/check-shim.sh" }); G({ "commit", "-qm", "and retire the shim" })
+local rc_b, o_b = judge(true, "work/1001-wrap")
+check("WRAPPED: porting a wrapped callee alone does not pay (the shim counts in its place); retiring both does",
+    rc_a == 1 and has_line(o_a, "violation:carried:shell-to-lua:silent")
+        and rc_b == 0 and has_line(o_b, "carried:shell-to-lua:paid:scripts/check-big.sh"),
+    "callee-only rc=" .. rc_a .. " out=[" .. o_a .. "]; both rc=" .. rc_b .. " out=[" .. o_b .. "]")
+
+-- 13. COUNTER: the ok: line carries the backlog's counter at HEAD.
+-- base: check-x, check-y, check-w, test-z, audit-x = 5 (check-gone is only a
+-- floor line).
+change("work/1013-cntr")
+write("crates/a.rs", 'fn main() { println!("c"); }\n')
+G({ "commit", "-qam", "crates only" })
+rc, o = judge(false)
+check("COUNTER: the ok: line ends counter=shell-to-lua:5 (the population at HEAD)",
+    rc == 0 and grep(o, [[^ok:carried-obligations:.* counter=shell-to-lua:5$]]) ~= nil, "rc=" .. rc .. " out=[" .. o .. "]")
+
+-- 14 + 15. BURNDOWN: land commits trailered `Carried:` on a first-parent
+-- history. Ten waived with a flat counter fire the stall trigger; a not-due
+-- landing inside the window is not counted. One paid landing that really
+-- deletes an item among the ten clears it.
+local function landing(msg, trailer) G({ "commit", "-q", "--allow-empty", "-m", msg, "-m", "Carried: " .. trailer }) end
+G({ "checkout", "-q", "base" }); G({ "checkout", "-q", "-B", "trunk-fired" })
+landing("land(0): an older one", "shell-to-lua paid scripts/check-older.sh")
+for i = 1, 5 do landing("land(" .. i .. ")", "shell-to-lua waived no-item-in-reach") end
+landing("land(n): crates only", "shell-to-lua not-due")
+for i = 6, 10 do landing("land(" .. i .. ")", "shell-to-lua waived no-item-in-reach") end
+rc, o, e = judge(false, "trunk-fired", "--burndown")
+check("FIRED: ten waived due landings and a flat counter print trigger=fired (the not-due landing is not counted)",
+    rc == 0 and has_line(o, "burndown:shell-to-lua:count=5:stage=gentle:window=10:paid=0:waived=10:silent=0:trigger=fired")
+        and has_line(o, "ok:carried-burndown:backlogs=1 fired=1"),
+    "rc=" .. rc .. " out=[" .. o .. "] err=[" .. e .. "]")
+G({ "checkout", "-q", "base" }); G({ "checkout", "-q", "-B", "trunk-clear" })
+for i = 1, 9 do landing("land(" .. i .. ")", "shell-to-lua waived no-item-in-reach") end
+G({ "rm", "-q", "scripts/check-w.sh" })
+G({ "commit", "-q", "-m", "land(10): port check-w", "-m", "Carried: shell-to-lua paid scripts/check-w.sh" })
+rc, o = judge(false, "trunk-clear", "--burndown")
+check("CLEAR: with one paid landing that deletes an item, the counter descends and trigger=clear",
+    rc == 0 and has_line(o, "burndown:shell-to-lua:count=4:stage=gentle:window=10:paid=1:waived=9:silent=0:trigger=clear"),
+    "rc=" .. rc .. " out=[" .. o .. "]")
 
 run({ "rm", "-rf", R })
 

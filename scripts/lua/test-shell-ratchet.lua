@@ -23,6 +23,9 @@
 --   7 FIXTURE    a NEW test-*.sh is counted and warned, not refused (coordinator
 --                scope 2026-10-01: fixtures stay shell until scripts/lua can spawn)
 --   8 PIPES      a NEW pipe site in a script is counted and warned, not refused
+--   9 STALE      deleting a floored decider without dropping its floor lines is
+--                refused as stale-floor, the remedy naming --dump-floors;
+--                dropping the lines is accepted (1577-57u3)
 --
 -- WHY ARMS 3, 4 AND 6 WERE RED ON TRUNK (1580-8hra, measured): one real tree
 -- file. openspec/litmus-tests/litmus-reset-state-contract.yaml piped a
@@ -228,6 +231,31 @@ check("PIPES: a new pipe site passes with a warn:shell-ratchet:new-pipes line",
     rc == 0 and grep(o, [[^ok:shell-ratchet:]]) ~= nil
         and e:find("warn:shell-ratchet:new-pipes:scripts/zzz-helper.sh:1>floor:0", 1, true) ~= nil,
     "rc=" .. rc .. " out=[" .. o .. "] err=[" .. e:sub(1, 300) .. "]")
+
+-- ── ARM 9: a floor line naming a deleted file is STALE (1577-57u3) ─────────
+-- Pre-57u3: ok:, and 9 such lines sat silent on the live floor (2026-10-10).
+seed("s9")
+local DF, PF = "scripts/portability/shell-decider-floor.txt", "scripts/portability/pipe-site-floor.txt"
+local sv
+for _, l in ipairs(text.lines(rd("s9", DF))) do
+    if l:match("^scripts/check%-[%w%-]+%.sh$") then sv = l; break end
+end
+if not sv then verdict.could_not_run("shell-ratchet-fixture", "ARM 9: no scripts/check-*.sh line in the decider floor to delete") end
+rm("s9", sv)
+local st_rc, st_o, st_e = ratchet("s9")
+local function drop(rel, keep)
+    local t = {}
+    for _, l in ipairs(text.lines(rd("s9", rel))) do if keep(l) then t[#t + 1] = l end end
+    wr("s9", rel, table.concat(t, "\n") .. "\n")
+end
+drop(DF, function(l) return l ~= sv end)
+drop(PF, function(l) return not (l:match("^scripts%s+(%S+)%s+%d+$") == sv) end)
+commit("s9", "port: drop " .. sv .. " and its floor lines")
+rc, o = ratchet("s9")
+check("STALE: deleting " .. sv .. " without lowering its floor is refused as stale-floor; dropping its lines is accepted",
+    st_rc == 1 and has_line(st_o, "violation:shell-ratchet:stale-floor:" .. sv) and st_e:find("--dump-floors", 1, true) ~= nil
+        and rc == 0 and grep(o, [[^ok:shell-ratchet:]]) ~= nil,
+    "stale rc=" .. st_rc .. " out=[" .. st_o .. "]; lowered rc=" .. rc .. " out=[" .. o .. "]")
 
 run({ "rm", "-rf", W })
 
