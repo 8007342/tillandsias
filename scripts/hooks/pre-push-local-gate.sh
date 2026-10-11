@@ -62,6 +62,31 @@ set -uo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 cd "$REPO_ROOT" || exit 0
 
+# ORDER 1592-idmu: freeze the diff-scoped guards' base before anything here can
+# fetch. A fetch moves origin/linux-next for every worktree, and a guard that
+# then diffs against it reads trunk's newer fixes as this push removing them.
+# build.sh keeps a base it inherits, so the gate this hook may run agrees. An
+# inherited base must be an ancestor of HEAD, as in build.sh: one frozen for
+# another branch is refused by name, never silently replaced. One frozen for
+# ANOTHER CHECKOUT (TILLANDSIAS_GATE_DIFF_BASE_ROOT, e.g. a gate whose fixture
+# runs this hook in a scratch repo) does not apply here; this repo freezes its own.
+if [ -n "${TILLANDSIAS_GATE_DIFF_BASE:-}" ] && [ -n "${TILLANDSIAS_GATE_DIFF_BASE_ROOT:-}" ] \
+   && [ "$TILLANDSIAS_GATE_DIFF_BASE_ROOT" != "$REPO_ROOT" ]; then
+    echo "note:gate-diff-base:other-checkout:$TILLANDSIAS_GATE_DIFF_BASE_ROOT (freezing $REPO_ROOT's own)" >&2
+    unset TILLANDSIAS_GATE_DIFF_BASE TILLANDSIAS_GATE_DIFF_BASE_ROOT
+fi
+if [ -n "${TILLANDSIAS_GATE_DIFF_BASE:-}" ]; then
+    if ! git merge-base --is-ancestor "$TILLANDSIAS_GATE_DIFF_BASE" HEAD 2>/dev/null; then
+        echo "refused:gate-diff-base:inherited-not-ancestor:$TILLANDSIAS_GATE_DIFF_BASE" >&2
+        echo "  why: TILLANDSIAS_GATE_DIFF_BASE came from the environment and is not an ancestor of HEAD (1592-idmu)" >&2
+        echo "  remedy: unset TILLANDSIAS_GATE_DIFF_BASE and push again" >&2
+        exit 1
+    fi
+else
+    TILLANDSIAS_GATE_DIFF_BASE="$(git merge-base HEAD origin/linux-next 2>/dev/null)" || TILLANDSIAS_GATE_DIFF_BASE=""
+    if [ -n "$TILLANDSIAS_GATE_DIFF_BASE" ]; then export TILLANDSIAS_GATE_DIFF_BASE TILLANDSIAS_GATE_DIFF_BASE_ROOT="$REPO_ROOT"; else unset TILLANDSIAS_GATE_DIFF_BASE; fi
+fi
+
 # Git supplies "<local ref> <local sha> <remote ref> <remote sha>" per pushed
 # ref on stdin; the installed composed hook captures it once and replays it to
 # every guard. Read it up front — the plan-only lane needs it to scope the

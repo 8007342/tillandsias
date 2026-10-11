@@ -1,5 +1,5 @@
 -- @trace order:1570-qutp, order:660-ryhn, order:1304-wbb2, order:958-b36m, order:1356-vv5m, spec:ci-release
--- @env LITMUS_BINDINGS_ROOT TILLANDSIAS_LITMUS_BIND_BASE
+-- @env LITMUS_BINDINGS_ROOT TILLANDSIAS_LITMUS_BIND_BASE TILLANDSIAS_GATE_DIFF_BASE
 -- @read-env LITMUS_BINDINGS_ROOT
 --
 -- check-litmus-bindings.lua — a litmus file that is not bound never runs, and
@@ -160,6 +160,7 @@ end
 
 -- ── the base ref, and the bindings ADDED since it (data, not a pipeline) ───
 local BASE = env.get("TILLANDSIAS_LITMUS_BIND_BASE")
+if not BASE or BASE == "" then BASE = env.get("TILLANDSIAS_GATE_DIFF_BASE") end
 if not BASE or BASE == "" then BASE = "origin/linux-next" end
 local function git(args)
     local argv = { "git", "-C", GIT_ROOT }

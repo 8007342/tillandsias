@@ -50,7 +50,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 2
 
 ISSUE_DIR="${TILLANDSIAS_ISSUE_CITATION_DIR:-plan/issues}"
-base_ref="${TILLANDSIAS_ISSUE_CITATION_BASE:-origin/linux-next}"
+base_ref="${TILLANDSIAS_ISSUE_CITATION_BASE:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}"
 
 # Source-ish extensions only. A citation into another markdown document is
 # prose-to-prose and is left alone; the rot this gate exists for is prose

@@ -18,6 +18,9 @@
 # PRE-FIX RESULT: FAILS — the guard did not exist, and an exact pin made the
 # first bump of the capability row unpublishable (lenovinha, 2026-09-02).
 set -uo pipefail
+# 1592-idmu: this fixture builds its own repo, so the gate's frozen base (a SHA of
+# the gated checkout) is not its base; its scratch origin/linux-next is.
+unset TILLANDSIAS_GATE_DIFF_BASE
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GUARD="$ROOT/scripts/check-exact-version-literal-added.sh"
 pass=0; total=6

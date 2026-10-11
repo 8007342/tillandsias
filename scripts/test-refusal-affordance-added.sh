@@ -22,6 +22,9 @@
 # PRE-FIX RESULT: FAILS — no guard existed, and 289 of 339 verdicts reached
 # trunk with no affordance (1247-amcu, measured per file, so a floor).
 set -uo pipefail
+# 1592-idmu: this fixture builds its own repo, so the gate's frozen base (a SHA of
+# the gated checkout) is not its base; its scratch origin/linux-next is.
+unset TILLANDSIAS_GATE_DIFF_BASE
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GUARD="$ROOT/scripts/check-refusal-affordance-added.sh"
 pass=0; total=8

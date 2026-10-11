@@ -912,6 +912,62 @@ EOF
     shift
 done
 
+# ORDER 1592-idmu — THE DIFF BASE IS FROZEN AT GATE START.
+#
+# The diff-scoped guards (`check-*-added.sh` and their kin) default their base
+# to origin/linux-next, which is ONE ref shared by every worktree of the
+# checkout. Measured on tlatoanis-macbook-air 2026-10-11: a fetch in the main
+# checkout mid-gate moved it past a fix trunk had made to a file the gated tree
+# still carried in its old form. `git diff <live ref>` then read the old line as
+# this change ADDING it, and check-sigpipe-verdict-pipelines-added refused a
+# gate whose 3069 tests were green.
+#
+# So the base is captured ONCE: the merge-base of HEAD and origin/linux-next,
+# as a SHA no fetch can move, exported for every guard and gate step this run
+# starts. Each guard reads its own override first, then this, then the live ref,
+# so a guard run by hand behaves as before.
+#
+# AN INHERITED BASE IS KEPT ONLY IF IT IS AN ANCESTOR OF HEAD. A caller that
+# froze it (the pre-push hook, a land queue) is honoured, but an env var
+# exported for one purpose can ride into a later unit: a base frozen for
+# another branch is not this tree's base, and diffing against it would judge
+# that branch's changes as this one's. That is refused by name, never silently
+# re-frozen, so the leak is seen where it happened.
+#
+# THE BASE NAMES ITS CHECKOUT. TILLANDSIAS_GATE_DIFF_BASE_ROOT is the toplevel
+# it was frozen for. A gate's fixtures build their own repos and run this
+# script or the pre-push hook inside them; there the inherited SHA belongs to
+# another repository and does not apply, so that repo freezes its own and the
+# note says so. Measured in --preflight: two pre-push fixtures refused until the
+# base carried its root.
+# BEGIN-GATE-DIFF-BASE
+_freeze_gate_diff_base() {
+    local _gdb="${TILLANDSIAS_GATE_DIFF_BASE:-}" _top=""
+    _top="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null)" || _top=""
+    if [ -n "$_gdb" ] && [ -n "${TILLANDSIAS_GATE_DIFF_BASE_ROOT:-}" ] && [ "$TILLANDSIAS_GATE_DIFF_BASE_ROOT" != "$_top" ]; then
+        echo "note:gate-diff-base:other-checkout:$TILLANDSIAS_GATE_DIFF_BASE_ROOT (the inherited base was frozen there, not for $_top; freezing this checkout's own)" >&2
+        _gdb=""; unset TILLANDSIAS_GATE_DIFF_BASE TILLANDSIAS_GATE_DIFF_BASE_ROOT
+    fi
+    if [ -n "$_gdb" ]; then
+        if git -C "$SCRIPT_DIR" merge-base --is-ancestor "$_gdb" HEAD 2>/dev/null; then
+            echo "note:gate-diff-base:inherited:$_gdb (an ancestor of HEAD, kept from the caller; 1592-idmu)" >&2
+            return 0
+        fi
+        echo "refused:gate-diff-base:inherited-not-ancestor:$_gdb"
+        echo "  why: TILLANDSIAS_GATE_DIFF_BASE came from the environment and is not an ancestor of HEAD, so it is some other tree's base; every diff-scoped guard would judge that tree's changes as this one's (1592-idmu)" >&2
+        echo "  remedy: unset TILLANDSIAS_GATE_DIFF_BASE and re-run; this gate then freezes its own base" >&2
+        return 1
+    fi
+    _gdb="$(git -C "$SCRIPT_DIR" merge-base HEAD origin/linux-next 2>/dev/null)" || _gdb=""
+    if [ -n "$_gdb" ]; then
+        export TILLANDSIAS_GATE_DIFF_BASE="$_gdb" TILLANDSIAS_GATE_DIFF_BASE_ROOT="$_top"
+        echo "note:gate-diff-base:frozen:$_gdb (merge-base of HEAD and origin/linux-next, frozen here at gate start; 1592-idmu)" >&2
+    fi
+}
+# END-GATE-DIFF-BASE
+# --preflight fetches first, so it freezes after its own fetch.
+if [[ "$FLAG_PREFLIGHT" != true ]]; then _freeze_gate_diff_base || exit 1; fi
+
 # ORDER 1305-udgs — `./build.sh --preflight`: every guard that can refuse a push,
 # before the SHA, in seconds.
 #
@@ -927,6 +983,7 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     # The `-added` family scopes itself against origin/linux-next; without a
     # fetch it scans nothing and prints a green that means nothing.
     git -C "$SCRIPT_DIR" fetch -q origin 2>/dev/null || true
+    _freeze_gate_diff_base || exit 1
 
     # ORDER 1247-9pr8 — A STALE PLAN BINARY IS ONE CAUSE, SO SAY IT ONCE. Measured
     # on yolanda 2026-09-28 (1462-trch): with a plan binary older than the tree,
@@ -4662,6 +4719,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Unknown-host claim fixture passed"
+
+    # ORDER 1592-idmu — the diff-scoped guards read the base frozen at gate
+    # start (TILLANDSIAS_GATE_DIFF_BASE), so a fetch mid-gate cannot move it.
+    _step "Checking the diff-scoped guards read a frozen base (1592-idmu)..."
+    if ! _run_lua_decider "scripts/lua/test-gate-diff-base-frozen.lua" 2>&1; then
+        _error "a diff-scoped guard reads the live origin/linux-next again, or the gate no longer freezes the base — see the FAIL lines above (1592-idmu)"
+        exit 1
+    fi
+    _info "Frozen diff-base fixture passed"
 
     # ORDER 1581-d9ig — no fixture prunes or gcs the operator's checkout. Two
     # fixtures' teardown ran `git -C "$ROOT" worktree prune`, which inside the
