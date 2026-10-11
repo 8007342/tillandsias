@@ -173,7 +173,8 @@ execution stays local
 execution
 
 ### test_shell_ratchet_refuses_new_shell_decider (binding: litmus:shell-ratchet)
-**Setup**: `scripts/test-shell-ratchet.sh` builds a scratch repo with seeded floors
+**Setup**: `scripts/lua/test-shell-ratchet.lua`, run by `./build.sh --check`,
+builds a scratch repo with seeded floors
 **Signal**: `tillandsias-plan script run scripts/lua/check-shell-ratchet.lua`
 over a tree that adds a `check-*.sh`, a raised floor, and a quoted pipe
 **Pass**: the new decider and the raised floor are refused by name; the

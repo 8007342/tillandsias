@@ -1,11 +1,17 @@
 # @trace spec:ci-release
-# @trace order:1252-r72q
+# @trace order:1252-r72q, order:1268-fx87
 name: litmus:bash-composition-hazards-advisory-shape
 spec: ci-release
 phase: pre-build
 size: instant
 description: The bash composition-hazard lint (1252-r72q) is ADVISORY by construction — invoked from this surface so the guard-activation audit sees it, and pinned to exit 0 so it can never silently become a gate
-# WHY THIS LITMUS EXISTS. scripts/check-bash-composition-hazards.sh is named
+# PORTED TO LUA (1268-fx87): scripts/lua/check-bash-composition-hazards.lua, run
+# on the plan binary's `script run`. Its last line is the binary's last shape
+# line plus " (advisory)" (the runner's advisory grammar), and every line it
+# prints starts advisory: or skip:, so the pattern below accepts advisory: — the
+# .sh-era pattern `^(ok|skip)` matched only the no-binary skip, so this step was
+# red on any host that HAD the binary.
+# WHY THIS LITMUS EXISTS. scripts/check-bash-composition-hazards.sh was named
 # check-*, which places it in scripts/audit-guard-activation.sh's population;
 # the 1252-r72q packet lands it in the ADVISORY tier on purpose (no gate-steps.d
 # entry, exits 0 always) — and an advisory guard that nothing invokes is refused
@@ -13,10 +19,10 @@ description: The bash composition-hazard lint (1252-r72q) is ADVISORY by constru
 # the advisory tier IS a litmus binding. This file is that binding.
 critical_path:
   - step: "the advisory lint runs and reports a verdict (ok on a host with the release binary, skip:no-binary elsewhere — both are valid advisory outcomes)"
-    command: "scripts/check-bash-composition-hazards.sh 2>&1 | tail -1"
-    success_pattern: "^(ok|skip):bash-hazards"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-bash-composition-hazards.lua 2>&1"
+    success_pattern: "^(advisory|skip):bash-hazards"
     timeout_ms: 60000
   - step: "ADVISORY BY CONSTRUCTION: the wrapper exits 0 whatever it finds, so a caller under set -e cannot turn it into a gate"
-    command: "scripts/check-bash-composition-hazards.sh >/dev/null 2>&1; echo rc=$?"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-bash-composition-hazards.lua >/dev/null 2>&1; echo rc=$?"
     expected_behavior: "rc=0"
     timeout_ms: 60000

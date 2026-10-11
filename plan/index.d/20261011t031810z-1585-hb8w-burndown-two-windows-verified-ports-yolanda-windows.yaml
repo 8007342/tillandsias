@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed and claimed at the coordinator's direction (2026-10-11): a small
+# shell-to-Lua burndown, items Windows is best placed to verify.
+packets:
+  - packet_id: burndown-check-litmus-yaml-parses-and-test-cheatsheet-index-byte-order-move-to-lua-with-parity-measured-on-windows
+    order: 1585-hb8w
+    status: in_progress
+    kind: enhancement
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [lua, carried-obligation, burndown, litmus, cheatsheets, windows]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/check-litmus-yaml-parses.lua
+      - scripts/lua/test-cheatsheet-index-byte-order.lua
+      - scripts/gate-steps.d/575-1459-b5fh.step
+      - scripts/run-litmus-test.sh
+      - scripts/test-litmus-parse-only-duplicate-key.sh
+    title: |
+      Burndown: port check-litmus-yaml-parses.sh and test-cheatsheet-index-byte-order.sh to Lua on tillandsias-plan script run, verdict lines unchanged, parity measured on the real corpus and real INDEX at the Windows locus (where the byte-order defect lived)
+    exit_criteria:
+      - 'both ports print the same verdict lines with the same exit codes as their .sh on the real inputs (the litmus corpus; cheatsheets/INDEX.md) and on a planted failure each, measured natively on Windows'
+      - 'every caller and every reader of the old paths is repointed (build.sh, gate step 575, the runner text and the fixture that pins it); both .sh files and their floor entries are deleted'
+    verifiable_closure: |
+      unscoreable: unpinnable-until-the-guard-exists — the parity runs are recorded on the PR; the ports run in the gate.
+    events:
+      - type: filed
+        ts: "2026-10-11T03:18:10Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Filed and claimed at the coordinator's direction (burndown, 2 items Windows verifies best; grammar-changing items skipped and named).

@@ -4566,6 +4566,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Shell ratchet passed"
 
+    # Its fixture (1580-8hra, the Lua port of the orphaned test-shell-ratchet.sh
+    # that nothing ran): the ratchet's verdicts in scratch repos — counts, a new
+    # decider refused, a piped litmus refused once steps: exists, floors only
+    # descend, an empty population could-not-run, fixtures and pipes warned.
+    _step "Checking the shell ratchet's fixture (1580-8hra)..."
+    if ! _run_lua_decider "scripts/lua/test-shell-ratchet.lua" 2>&1; then
+        _error "the shell ratchet no longer refuses or counts what its fixture constructs — see the FAIL lines above (1580-8hra)"
+        exit 1
+    fi
+    _info "Shell-ratchet fixture passed"
+
     # The guard-activation auditor's own fixture (1570-25iq), a Lua fixture on
     # the one runner: parity with the pre-port .sh, an orphan that refuses, the
     # 1087-h2z9 symlink-farm shape, an empty population refused. The auditor
@@ -4576,6 +4587,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Guard-activation auditor fixture passed"
+
+    # ORDER 1268-fx87. A litmus step's verdict is read from STDOUT only; its
+    # stderr is kept and named on failure. The fixture runs the REAL runner over
+    # a throwaway corpus with a manufactured stderr contaminant, plus a mutant
+    # runner with the merged capture restored, so the control cannot pass
+    # vacuously on a host whose build writes nothing to stderr.
+    _step "Checking a litmus verdict is read from stdout only (1268-fx87)..."
+    if ! _run_lua_decider "scripts/lua/test-litmus-verdict-reads-stdout-only.lua" 2>&1; then
+        _error "a litmus step's verdict again reads stderr, or a failing step no longer names its stderr log — see the FAIL lines above (1268-fx87)"
+        exit 1
+    fi
+    _info "Litmus stdout-verdict fixture passed"
 
     # The end-user-installer output guard's own fixture (1561-47a8), a Lua
     # fixture on the one runner: a flag-naming line refused by file:line, the

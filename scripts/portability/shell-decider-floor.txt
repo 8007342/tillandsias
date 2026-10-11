@@ -7,7 +7,6 @@ scripts/check-archive-answerability.sh
 scripts/check-arrival-routing.sh
 scripts/check-bare-metal-host-initialized.sh
 scripts/check-base-ledger-status-loss.sh
-scripts/check-bash-composition-hazards.sh
 scripts/check-build-cache-sweep.sh
 scripts/check-ca-bind-migration.sh
 scripts/check-capability-row.sh
@@ -561,7 +560,6 @@ scripts/test-session-tokens.sh
 scripts/test-set-field-prose-guard.sh
 scripts/test-set-field-refuses-unknown-flags.sh
 scripts/test-set-field-yaml-shapes.sh
-scripts/test-shell-ratchet.sh
 scripts/test-shipped-diagnostic-tool-dispatch.sh
 scripts/test-sidecar-arch-derivation.sh
 scripts/test-sidecar-staleness-stamp.sh

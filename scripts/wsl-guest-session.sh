@@ -42,6 +42,19 @@ set -u
 _gs_sup=$$
 _gs_relay=$PPID
 _gs_host="${TILLANDSIAS_WSL_HOST_WINPID:-}"
+# ORDER 1583-r9it: the host-process question goes to tasklist.exe through
+# interop; TILLANDSIAS_WSL_SESSION_TASKLIST replaces it (the fixture's stub,
+# a path relative to the checkout so no MSYS conversion touches it).
+_gs_tasklist="${TILLANDSIAS_WSL_SESSION_TASKLIST:-/mnt/c/Windows/System32/tasklist.exe}"
+# ORDER 1583-r9it: ONE LOG PER SESSION, so a teardown that did or did not
+# happen names its cause: every trigger, every change in the host poll's
+# answer, the teardown's end. Kept when the session was torn down (that is
+# when the cause matters); removed when the run ends on its own; logs older
+# than two days are swept at the next session's start.
+_gs_log="/tmp/tillandsias-session-$$.log"
+find /tmp -maxdepth 1 -name 'tillandsias-session-*.log' -mtime +2 -delete 2>/dev/null
+_gs_note() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$_gs_log" 2>/dev/null; }
+_gs_note "start sup=$$ relay=$PPID host-winpid=${_gs_host:-none} tasklist=$_gs_tasklist"
 _gs_root=/sys/fs/cgroup
 _gs_cg=""
 # TILLANDSIAS_WSL_SESSION_NO_CGROUP=1 forces the fallback (the fixture's seam).
@@ -106,13 +119,24 @@ _gs_teardown() {
 }
 
 # 0 only on a definite answer that the host process no longer exists.
+# BOUNDED (order 1583-r9it): an interop call that starts just before the host
+# wsl.exe dies never returns; unbounded, it held a watchdog for 26 h on yolanda
+# (2026-10-10), and a watchdog blocked here can tear nothing down. 5 s is ~15x a
+# normal answer (~0.3 s); a call that does not answer reads as UNKNOWN, never
+# as gone, and the loop's next tick runs.
+_gs_last_poll=""
 _gs_host_gone() {
-    local out
-    out="$(/mnt/c/Windows/System32/tasklist.exe /FI "PID eq $_gs_host" /NH /FO CSV 2>/dev/null)" || return 1
+    local out rc=0 ans
+    out="$(timeout -k 1 5 "$_gs_tasklist" /FI "PID eq $_gs_host" /NH /FO CSV 2>/dev/null)" || rc=$?
     out="$(printf '%s' "$out" | tr -d '\r')"
-    [ -n "$out" ] || return 1
-    case "$out" in *",\"$_gs_host\","*) return 1 ;; esac
-    return 0
+    if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then ans="unknown:timed-out"
+    elif [ "$rc" -ne 0 ]; then ans="unknown:rc=$rc"
+    elif [ -z "$out" ]; then ans="unknown:empty"
+    else case "$out" in *",\"$_gs_host\","*) ans="alive" ;; *) ans="gone" ;; esac
+    fi
+    [ "$ans" = "$_gs_last_poll" ] || _gs_note "poll host-winpid=$_gs_host: $ans"
+    _gs_last_poll="$ans"
+    [ "$ans" = "gone" ]
 }
 
 # The watchdog: outside the cgroup (started before the move), off the pty, and
@@ -128,13 +152,18 @@ _gs_host_gone() {
         if [ -n "$_gs_snap" ]; then
             _gs_tree > "$_gs_snap.tmp" 2>/dev/null && mv -f "$_gs_snap.tmp" "$_gs_snap" 2>/dev/null
         fi
-        if [ "$pp" != "$_gs_relay" ]; then _gs_teardown; break; fi
+        if [ "$pp" != "$_gs_relay" ]; then
+            _gs_note "trigger: relay-gone (supervisor ppid $_gs_relay -> $pp)"
+            _gs_teardown; _gs_note "teardown done by watchdog"; break
+        fi
         tick=$((tick + 1))
         if [ -n "$_gs_host" ] && [ $((tick % 5)) -eq 0 ] && _gs_host_gone; then
-            _gs_teardown
+            _gs_note "trigger: host-winpid-gone ($_gs_host)"
+            _gs_teardown; _gs_note "teardown done by watchdog"
             break
         fi
     done
+    [ ! -f "$_gs_log" ] || _gs_note "watchdog exit"
     [ -z "$_gs_cg" ] || rmdir "$_gs_cg" 2>/dev/null
     [ -z "$_gs_snap" ] || rm -f "$_gs_snap" "$_gs_snap.tmp"
 ) </dev/null >/dev/null 2>&1 &
@@ -157,8 +186,13 @@ fi
 # A trap that ran during the command fires here, after the foreground child
 # ended: the host is gone, so whatever the run left behind goes too.
 if [ "$_gs_sig" -ne 0 ]; then
+    _gs_note "trigger: signal $((_gs_sig - 128)) to the supervisor"
     _gs_teardown
+    _gs_note "teardown done by supervisor"
     exit "$_gs_sig"
 fi
 [ -z "$_gs_cg" ] || rmdir "$_gs_cg" 2>/dev/null
+# Ended on its own: nothing to diagnose. (The watchdog appends its exit line
+# only while the log exists, so it does not recreate it.)
+rm -f "$_gs_log"
 exit "$_gs_rc"

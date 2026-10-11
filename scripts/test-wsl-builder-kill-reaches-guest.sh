@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace order:1567-9fgi
+# @trace order:1567-9fgi, order:1583-r9it
 #
 # Fixture: killing the HOST side of the WSL2 builder hop ends the GUEST tree.
 #
@@ -21,6 +21,16 @@
 #   KILL on each path (nothing on the host can trap it): 0 within 30 s
 #   exec HUP and capture KILL again with the cgroup turned off
 #   (TILLANDSIAS_WSL_SESSION_NO_CGROUP=1), for wsl-guest-session.sh's fallback
+#   HUNG INTEROP (1583-r9it): the watchdog's host poll goes to a stub tasklist
+#   that never returns (TILLANDSIAS_WSL_SESSION_TASKLIST), and the host is
+#   killed while it is out: the tree AND the watchdog are gone within 30 s and
+#   the session log names the trigger. Pre-fix shape: a watchdog blocked in
+#   tasklist.exe for 26 h (yolanda 2026-10-10). Sabotage (the 5 s bound
+#   removed): FAIL, survivors=2, three session processes, no trigger logged.
+#   STOPPED PIPELINE (1583-r9it), recorded not asserted: the caller of
+#   `builder ... 2>&1 | cat > log` is killed and the builder's exec'd wsl.exe
+#   is not. Measured: OUTSIDE THE GUARD'S MODEL; the session log shows the
+#   watched host winpid polled "alive", so the session is attached and runs.
 # Each arm first checks the setsid child is in (or, for the fallback, out of)
 # the run's tillandsias-session cgroup, so a green arm cannot come from the
 # other mechanism.
@@ -137,6 +147,76 @@ done
 # The fallback without a cgroup: the hangup path and the winpid path.
 arm exec HUP 15 tree
 arm capture KILL 30 tree
+
+# ORDER 1583-r9it. A session's supervisor and watchdog, found by tag.
+sessions() { guest "pgrep -fc 'wsl-guest-session.sh bash -c .*$1-s' || true"; }
+
+# HUNG INTEROP: the watchdog's host poll never answers (a stub tasklist that
+# hangs, the shape measured on yolanda: a 26 h watchdog blocked in
+# tasklist.exe). The host is killed WHILE the poll is out. The guest tree must
+# still end, the watchdog must not be left behind, and the session log must
+# name the trigger. PRE-FIX: the watchdog stays blocked in the stub forever.
+STUB_REL="target/plan-scratch/fx-r9it-hang-tasklist.sh"
+mkdir -p "$REPO_ROOT/target/plan-scratch"
+printf '#!/bin/sh\n: > target/plan-scratch/fx-r9it-called\nexec sleep 3600\n' >"$REPO_ROOT/$STUB_REL"
+rm -f "$REPO_ROOT/target/plan-scratch/fx-r9it-called"
+t="${TAG}hung"
+cmd="setsid bash -c 'exec -a $t-s sleep 900' & bash -c 'exec -a $t-p sleep 900' & wait"
+( cd "$REPO_ROOT" && TILLANDSIAS_WSL_SESSION_TASKLIST="$STUB_REL" exec bash scripts/with-wsl2-builder.sh bash -c "$cmd" ) \
+    </dev/null >"$TMP/$t.out" 2>"$TMP/$t.err" &
+host=$!
+n=0; c=0
+until [ "$n" -ge 60 ]; do c="$(survivors "$t")"; [ "$c" = 2 ] && break; n=$((n + 1)); sleep 1; done
+supv="$(guest "pgrep -fo 'wsl-guest-session.sh bash -c .*$t-s' || true")"
+n=0
+until [ -f "$REPO_ROOT/target/plan-scratch/fx-r9it-called" ] || [ "$n" -ge 20 ]; do n=$((n + 1)); sleep 1; done
+if [ "$c" != 2 ] || [ ! -f "$REPO_ROOT/target/plan-scratch/fx-r9it-called" ]; then
+    echo "could-not-run: hung-interop: children=$c, the stub was never called"
+    cantrun=$((cantrun + 1))
+    kill -KILL "$host" 2>/dev/null
+else
+    kill -KILL "$host" 2>/dev/null
+    n=0; c=1; w=1
+    until [ "$n" -ge 30 ]; do
+        sleep 1; n=$((n + 1))
+        c="$(survivors "$t")"; w="$(sessions "$t")"
+        [ "$c" = 0 ] && [ "$w" = 0 ] && break
+    done
+    log="$(guest "cat /tmp/tillandsias-session-$supv.log 2>/dev/null")"
+    if [ "$c" = 0 ] && [ "$w" = 0 ] && grep -q 'trigger:' <<<"$log"; then # sigpipe-ok: herestring
+        echo "ok:   exec KILL hung-interop: tree and watchdog gone (${n}s), log names: $(grep -m1 'trigger:' <<<"$log" | cut -d' ' -f2-)" # sigpipe-ok: herestring
+    else
+        echo "FAIL: exec KILL hung-interop: survivors=$c session-procs=$w after ${n}s; log=[$(tr '\n' '|' <<<"$log")]"
+        fails=$((fails + 1))
+    fi
+fi
+guest "pkill -KILL -f '^$t-|wsl-guest-session.sh bash -c .*$t-s|fx-r9it-hang' || true" >/dev/null
+{ wait "$host"; } 2>/dev/null
+rm -f "$REPO_ROOT/$STUB_REL" "$REPO_ROOT/target/plan-scratch/fx-r9it-called"
+
+# STOPPED PIPELINE: what a harness stop does on Windows. The builder runs
+# under a caller (`... 2>&1 | cat > log`) and the CALLER is killed; the
+# builder's exec'd wsl.exe, the process the guard watches, is not. Recorded,
+# not asserted either way: the outcome and the session log's own account.
+t="${TAG}pipe"
+cmd="setsid bash -c 'exec -a $t-s sleep 900' & bash -c 'exec -a $t-p sleep 900' & wait"
+printf 'bash scripts/with-wsl2-builder.sh bash -c "$1" 2>&1 | cat > "$2"\n' >"$TMP/pipe.sh"
+( cd "$REPO_ROOT" && exec bash "$TMP/pipe.sh" "$cmd" "$TMP/$t.log" ) </dev/null &
+caller=$!
+n=0; c=0
+until [ "$n" -ge 60 ]; do c="$(survivors "$t")"; [ "$c" = 2 ] && break; n=$((n + 1)); sleep 1; done
+supv="$(guest "pgrep -fo 'wsl-guest-session.sh bash -c .*$t-s' || true")"
+kill -KILL "$caller" 2>/dev/null
+n=0
+until [ "$n" -ge 20 ]; do sleep 1; n=$((n + 1)); c="$(survivors "$t")"; [ "$c" = 0 ] && break; done
+log="$(guest "cat /tmp/tillandsias-session-$supv.log 2>/dev/null")"
+if [ "$c" = 0 ]; then
+    echo "ok:   stopped pipeline: the guard ended the guest tree (${n}s); log: $(tr '\n' '|' <<<"$log")"
+else
+    echo "note: stopped pipeline: OUTSIDE THE GUARD'S MODEL. Killing the caller left the builder's wsl.exe (the host process the guard watches) alive, so the session is attached and running; survivors=$c after ${n}s. Log: $(tr '\n' '|' <<<"$log")"
+fi
+guest "pkill -KILL -f '^$t-' || true" >/dev/null
+for p in $(ps | awk -v pp="$caller" '$2 == pp && /wsl/ { print $1 }'); do kill -KILL "$p" 2>/dev/null; done
 if [ "$cantrun" -gt 0 ]; then echo "could-not-run:wsl-builder-kill-fixture:arms=$cantrun"; exit 3; fi
 if [ "$fails" -gt 0 ]; then echo "refused:wsl-builder-kill-fixture:failed=$fails"; exit 1; fi
-echo "ok:wsl-builder-kill-fixture:10"
+echo "ok:wsl-builder-kill-fixture:11"
