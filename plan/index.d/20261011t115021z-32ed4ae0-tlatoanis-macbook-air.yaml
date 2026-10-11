@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: every-push-guard-including-the-release-freeze-is-enforced-only-by-a-client-side-hook-that-build-sh-installs-so-a-host-with-no-rust-toolchain-runs-with-zero-enforcement-and-nothing-anywhere-reports-it
+    field: next_action
+    value: |-
+      RELEASED by tlatoanis-macbook-air 2026-10-11 (to free WIP; the coordinator asked). What LANDED:
+      - S1 ensure-hooks (14f7cbc75 and its fixes; scripts/ensure-hooks.sh, test-ensure-hooks.sh 13/13);
+      - S2 the server-visible freeze audit (06be23bf3, 3bce0dd10; release-freeze.sh audit, release-preflight Gate 6, the land-queue freeze check);
+      - 2bf92ef4f, the fleet checker honouring core.hooksPath.
+      S3 is decision row 1564-frzr (needs-operator).
+      These exit criteria are covered by landed fixtures: 1 (detected and says so), 3 (install without a toolchain, PATH with no cargo), 4 (negative control, local hooksPath, no false gap), and 5 (aliases held, the 2026-09-26 decision).
+      LEFT for a stranger:
+      (a) Criterion 2 names the daily-maintenance gate (scripts/check-daily-maintenance.sh) and the meta-orchestration Start-Of-Cycle guards. Today ensure-hooks --prelude runs only from push-plan-fragments-to-trunk, claim-ledger-node, salvage-dirty-worktree and drain-queue. Wire a READ-ONLY hooks verdict into those two places, or record why the four preludes suffice.
+      (b) Criterion 6, the fleet survey: each fleet host (methodology/distributed-work.yaml packet_discipline.fleet_hosts) reports whether its checkout has the tillandsias pre-push marker installed (bash scripts/ensure-hooks.sh, or the 2bf92ef4f fleet checker). Record one line per host on this row. This is live-only: it needs each host's own run.
+    ts: "2026-10-11T11:50:21Z"
+    host: tlatoanis-macbook-air

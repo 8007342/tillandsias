@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11): the port yoga could not do (the forge has no script(1)).
+packets:
+  - packet_id: port-test-exit-pause-host-hold-to-lua-with-parity-on-a-host-that-has-script-and-a-pty
+    order: 1600-h359
+    status: in_progress
+    kind: port
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [shell-to-lua, pty, darwin-regime, litmus, parity]
+    estimated_hours: 3
+    owned_files:
+      - scripts/test-exit-pause-host-hold.sh
+      - scripts/lua/test-exit-pause-host-hold.lua
+      - openspec/litmus-tests/litmus-exit-pause-host-hold.yaml
+    title: |
+      Port scripts/test-exit-pause-host-hold.sh (1457-r8yi) to scripts/lua on `tillandsias-plan script run`, with parity measured on a host that has script(1) and a pty. The forge has no script(1), so there both sides skip, and a skip on both sides is not parity.
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-10-11, before the port:
+      - darwin has /usr/bin/script (BSD) and GNU timeout from Homebrew coreutils 9.12 (not stock macOS).
+      - The .sh calls the util-linux form `script -qec "cmd" /dev/null`, which BSD script refuses (`script: illegal option -- c`). So on darwin the .sh prints `fail:exit-pause-host-hold:0/6`, and the shell exits 0 because `[ "$fail" = 0 ]` is not its last status. Its litmus step 2 cannot pass on darwin.
+      - Lua's proc.run/proc.spawn give a child only /dev/null or fixed bytes on stdin, and proc.chain runs its stages one after another. So the open-stdin requirement needs a generated runner FILE in scratch (`bash <file>`, argv, not `bash -c`) that feeds script(1) from `< <(sleep N)`, as the .sh does. proc.run's timeout_ms replaces timeout(1).
+    exit_criteria:
+      - 'parity on darwin AND on a util-linux host: on the six real entrypoints the Lua port prints ok:exit-pause-host-hold:6/6, held (banner, no "Press any key", returns before the deadline) and unheld (still blocks until the deadline) per entrypoint; on darwin the .sh is shown failing 0/6 on BSD script in the same run'
+      - 'a planted failure is caught: an entrypoint copy whose exit_pause ignores TILLANDSIAS_HOST_HOLDS_WINDOW reds its held arm, and one that never pauses reds the unheld control'
+      - 'the litmus (litmus-exit-pause-host-hold.yaml) is repointed to the Lua port with the same verdict grammar; the .sh is deleted and both shell-ratchet floors are lowered in the same commit'
+    unscoreable: "unpinnable-until-the-guard-exists: the Lua port and its planted-failure arms are written together"
+    depends_on: []
+    next_action: >
+      Write scripts/lua/test-exit-pause-host-hold.lua. Probe the script(1) flavor (util-linux -qec, BSD -q file cmd), generate a per-arm runner file in target/plan-scratch, and use proc.run timeout_ms. Add the planted-failure arms, repoint the litmus, delete the .sh, and lower the floors. A Linux host with util-linux script confirms parity there.
+    provenance: |
+      Filed and claimed by tlatoanis-macbook-air on macuahuitl's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T11:51:35Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Port test-exit-pause-host-hold.sh to Lua; the .sh fails 0/6 on darwin's BSD script(1) today.
