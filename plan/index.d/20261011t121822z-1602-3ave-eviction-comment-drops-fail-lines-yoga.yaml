@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11, p3), after #319's run-17 eviction could not be diagnosed from its comment.
+packets:
+  - packet_id: the-land-queue-eviction-comment-quotes-only-the-last-five-gate-lines-so-the-failing-fixtures-fail-lines-never-reach-the-pr
+    order: 1602-3ave
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [land-queue, diagnosability, gate]
+    estimated_hours: 1
+    owned_files:
+      - scripts/land-queue.sh
+    title: |
+      scripts/land-queue.sh's gate-failed eviction comment quotes only `tail -5` of the gate log, so the failing fixture's FAIL: lines, which sit above the gate's closing summary, never reach the PR, and an eviction cannot be diagnosed after the fact
+    context: |
+      SEEN by macuahuitl-fedora 2026-10-11: #319 (work/1598-kgra) was evicted in land-queue run 17 (gate rc=1) by test-credential-cold-state-probe (8 passed, 1 failed). That is a host-dependent keychain-state fixture unrelated to the PR, and its re-run passed 9/0. The comment could not name the failing arm.
+      MEASURED at trunk 21274bc28 (yoga): the capture is NOT the cause. scripts/land-queue.sh:409 runs `( eval "$GATE" ) < /dev/null > "$_glog" 2>&1`, so stderr (where the fixture's bad() prints "FAIL: ...", test-credential-cold-state-probe.sh:25) IS in the log. The loss is at :412, `_tail="$(tail -5 "$_glog")"`: the comment quotes only the last five lines, the gate's closing summary and error lines, and the FAIL lines are further up.
+    exit_criteria:
+      - 'an evicted PR''s comment includes the FAIL: (and [FAIL] / refused: / violation:) lines of the failing step, bounded (e.g. the first 20), alongside the tail it quotes today'
+      - 'shown with a planted failing fixture that writes FAIL to stderr and then prints more than five lines of summary: in the same run, the pre-fix comment body lacks the FAIL line and the fixed one carries it (land-queue in dry-run, or its comment builder, on the planted log)'
+    unscoreable: "unpinnable-until-the-guard-exists: the comment builder change and its planted-log fixture are written together"
+    depends_on: []
+    next_action: >
+      Build the gate-failed comment from both the bounded FAIL/refused/violation lines of $_glog and the existing tail. Factor it into a function so a fixture can feed it a planted log. Pin it pre-fix and post-fix in one run.
+    provenance: |
+      Filed by yoga (forge) on macuahuitl-fedora's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T12:18:22Z"
+        host: yoga
+        summary: |-
+          #319's run-17 eviction comment could not name its failing arm: the queue quotes tail -5 of a log whose FAIL lines sit higher up.
