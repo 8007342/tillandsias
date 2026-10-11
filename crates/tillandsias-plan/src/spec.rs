@@ -1463,6 +1463,17 @@ pub fn corpus_coverage(root: &Path) -> Vec<(String, usize, String)> {
 mod tests {
     use super::*;
 
+    /// This package's directory in the checkout that RUNS the test, read at
+    /// runtime. Compile-time `env!("CARGO_MANIFEST_DIR")` names the checkout
+    /// that COMPILED the binary, and with a shared CARGO_TARGET_DIR cargo
+    /// reuses that binary from another worktree, because it does not track
+    /// the env-dep it set itself (1590-j20f, 1605-42nh).
+    fn manifest_dir() -> PathBuf {
+        PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo test sets CARGO_MANIFEST_DIR"),
+        )
+    }
+
     fn floor_chunk(id: usize, score: f32) -> ScoredChunk {
         ScoredChunk {
             chunk: Chunk {
@@ -2056,7 +2067,7 @@ mod tests {
     /// housekeeping — assert it rather than relying on today's extension list.
     #[test]
     fn pruned_prefixes_are_not_indexed() {
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let root = manifest_dir().join("../..");
         if !root.join("images/default/cheatsheets").is_dir() {
             return; // open-world: an off-Tillandsias checkout simply has no copy
         }
@@ -2180,7 +2191,7 @@ mod tests {
             "cheatsheet",
             text,
         );
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let root = manifest_dir().join("../..");
         let env = answer_cheatsheet_query(&root, &chunks, "three primitives CRDT");
         assert_eq!(env.confidence(), Confidence::Exact);
         assert_eq!(env.citations().len(), 1);
