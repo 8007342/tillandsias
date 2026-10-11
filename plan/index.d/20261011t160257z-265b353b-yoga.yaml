@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-git-mirror-keeps-serving-a-work-ref-at-its-old-tip-after-upstream-rewrites-it-non-fast-forward-while-sync-state-reads-heads-current
+    field: priority
+    value: p2
+    ts: "2026-10-11T16:02:57Z"
+    host: yoga
+
+events:
+  - packet_id: the-git-mirror-keeps-serving-a-work-ref-at-its-old-tip-after-upstream-rewrites-it-non-fast-forward-while-sync-state-reads-heads-current
+    event:
+      type: note
+      ts: "2026-10-11T16:02:57Z"
+      host: yoga
+      summary: |-
+        coordinator: a mirror reporting heads-current while serving a dead tip makes every forge judge work refs from stale data after any force-push (#321 and #322 were force-pushed today)

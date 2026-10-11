@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-git-mirror-keeps-serving-a-work-ref-at-its-old-tip-after-upstream-rewrites-it-non-fast-forward-while-sync-state-reads-heads-current
+    event:
+      type: note
+      ts: "2026-10-11T16:03:54Z"
+      agent_id: forge-forge-tillandsias-claude-20261011t160354z
+      host: yoga
+      summary: |
+        MECHANISM, MEASURED (yoga forge, 2026-10-11 ~16:10Z). Raised to p2 at the coordinator's request.
+        1. images/git/reconcile-exported-heads.sh fetches `refs/heads/*:refs/heads/*` NON-FORCED, by design (order 449), so a head carrying un-relayed agent commits is never clobbered. An upstream non-fast-forward rewrite of a work ref is therefore refused by the fetch, and the exported head stays at the old tip. It is not the pre-receive's "non-fast-forward branch update is disabled" refusal: that guards pushes from hosts, and this is the reconciler's own fetch.
+        2. The mirror DOES know upstream's truth. Over the git protocol it advertises refs/remotes/origin/work/1590-j20f = 337dc0df9 (the landed upstream tip), next to refs/heads/work/1590-j20f = c42a22b29 (the stale exported head forges fetch).
+        3. images/git/publish-sync-state.sh counts a work/* head that is both behind AND ahead of its tracking twin as diverged_work, and by design (1350-ku7v, 2026-09-23: "a diverged work/* head is information, not verdict") leaves it out of heads-behind. It reports it only as `note:sync-state:diverged-work-refs:<n>` on the publisher's own output, which no forge sees. So the published state is heads-current.
+        Scope now: of the 523 work heads the mirror exports, exactly 1 differs from its tracking twin (work/1590-j20f).
+        Effect: forges fetch refs/heads/* (default refspec), so every forge sees the dead tip. Taken-by, pre-push scans and any merge of a peer's work ref judge stale data, and nothing tells them.
+
+        POLICY QUESTION FOR THE COORDINATOR (yoga will not choose):
+        (a) FOLLOW UPSTREAM. The reconciler force-updates a work/* head to its tracking twin when the exported head holds nothing upstream never had, i.e. its commits were all once upstream (an author's rebase, not un-relayed agent work). It keeps refusing when the head carries commits no upstream ref ever held. The history-protection rule stays for pushes from hosts, not for upstream truth.
+        (b) REPORT IT. Leave the head as is, but publish the divergence where forges can read it, e.g. a refs/tillandsias/sync-state/... detail or a refs/tillandsias/diverged/<ref> marker, and have taken-by and forge scans read it (or read refs/remotes/origin/work/* directly).
+        (c) BOTH: follow when provably safe, report when not.
+        Measured facts relevant to the choice: the tracking twin exists and is current on the mirror; the divergence is visible to any forge that asks for refs/remotes/origin/work/* explicitly; fleet work refs are rebased routinely (1350-ku7v's own note).
