@@ -4843,6 +4843,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Eviction-comment fixture passed"
 
+    # ORDER 1606-25nf — the mirror follows a work ref upstream rewrote (when
+    # upstream provably held every commit it drops) and publishes the rest as
+    # diverged, instead of serving a dead tip under heads-current.
+    _step "Checking the mirror follows rewritten work refs (1606-25nf)..."
+    if ! _run_lua_decider "scripts/lua/test-mirror-follows-rewritten-work-refs.lua" 2>&1; then
+        _error "the mirror's reconcile pass no longer follows an upstream rewrite, clobbers an un-relayed head, or reports heads-current over a diverged work ref (1606-25nf)"
+        exit 1
+    fi
+    _info "Mirror rewrite-follow fixture passed"
+
     _step "Checking the nix-capability probe's evidence survives a noisy shell (917-zkge)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-probe-nix-capability-evidence.sh" 2>&1; then
         _error "a capable row can carry shell noise as its proof that nix answered (917-zkge)"

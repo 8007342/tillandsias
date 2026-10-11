@@ -144,7 +144,12 @@ fi
 # non-forced by design, and the publisher answered heads-behind with
 # linux-next current. THE FAILS CONTROL: on the pre-fix publisher this arm
 # answers heads-behind.
-echo "arm 13 — a rebased work ref with linux-next current answers heads-current, with a note"
+# 1606-25nf (coordinator's ruling, 2026-10-11) REVISES the unscoped half: the
+# whole-mirror verdict is never heads-current while a work head differs from
+# its twin, so it reads heads-diverged/1 and names the ref at
+# refs/tillandsias/diverged/<ref>. A push scoped to linux-next is still
+# answered for linux-next alone (1350-ku7v), so the scoped half stays current.
+echo "arm 13 — a rebased work ref: scoped to linux-next reads current; unscoped reads heads-diverged and names it"
 m13="$W/m13"; mk_mirror "$m13" 0 >/dev/null
 s13="$W/m13.src"
 git -C "$s13" checkout -q -b work/rebased
@@ -157,9 +162,11 @@ all13="$(sh "$PUB" "$m13" 2>/dev/null)"
 scoped13="$(sh "$PUB" "$m13" linux-next 2>/dev/null)"
 v13="$(printf '%s\n' "$all13" | grep '^sync-state:' | tail -1)"
 w13="$(printf '%s\n' "$scoped13" | grep '^sync-state:' | tail -1)"
-if [ "$(state_of "$v13")" = "heads-current" ] && [ "$(state_of "$w13")" = "heads-current" ] \
-   && grep -qx 'note:sync-state:diverged-work-refs:1' <<<"$all13"; then
-    ok "rebased work ref -> current, noted ($v13; scoped $w13)"
+m13_marker="$(git -C "$m13" rev-parse --verify --quiet refs/tillandsias/diverged/work/rebased 2>/dev/null)"
+if [ "$(state_of "$v13")" = "heads-diverged" ] && [ "$(state_of "$w13")" = "heads-current" ] \
+   && grep -qx 'note:sync-state:diverged-work-refs:1' <<<"$all13" \
+   && [ "$m13_marker" = "$(git -C "$m13" rev-parse refs/heads/work/rebased)" ]; then
+    ok "rebased work ref -> unscoped heads-diverged, marker names it; scoped current ($v13; scoped $w13)"
 else
     bad "arm13: a rebased work ref pinned the verdict: unscoped '$all13', scoped '$scoped13'"
 fi
