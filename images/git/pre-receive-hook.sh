@@ -193,7 +193,12 @@ DISC_MESSAGE=""
 DISC_SEED_PATH=".tillandsias/branch-discipline.yaml"
 
 discipline_parse() {   # <seed file>; prints key=value lines, rc 1 when unparseable
-    command -v ruby >/dev/null 2>&1 || { echo "reason=no-ruby"; return 1; }
+    # ORDER 1597-rrku: probe ruby by RUNNING it, never by `command -v`. In a
+    # forge, `ruby` on PATH is the Homebrew lazy-install shim, which exits 127,
+    # so a presence check passed, the parse below failed with its stderr
+    # discarded, and the warning read "present but unreadable ()". AUTOINSTALL=0
+    # keeps a shim from attempting a network install; a real ruby ignores it.
+    TILLANDSIAS_BREW_AUTOINSTALL=0 ruby -e 'exit 0' >/dev/null 2>&1 || { echo "reason=no-ruby"; return 1; }
     ruby -ryaml -e '
         d = YAML.safe_load(File.read(ARGV[0])) rescue (puts "reason=invalid-yaml"; exit 1)
         (puts "reason=not-a-mapping"; exit 1) unless d.is_a?(Hash)
