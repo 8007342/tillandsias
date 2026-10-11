@@ -202,7 +202,6 @@ scripts/test-compaction-coverage.sh
 scripts/test-competing-gate-consumer.sh
 scripts/test-competing-gate-no-dispatch-cause.sh
 scripts/test-concurrent-forge-shared-stack.sh
-scripts/test-configure-codex.sh
 scripts/test-convergence-dashboard-locale.sh
 scripts/test-convergence-dashboard.sh
 scripts/test-credential-and-proxy-confinement.sh
