@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# A slice of 793-a8e7, given its own order so its branch is a work ref (^work/NNN[N]-xxxx$), at macuahuitl-fedora's request 2026-10-12.
+packets:
+  - packet_id: 793-a8e7-s2-probe-judges-the-wsl2-gpu-from-the-container
+    order: 1646-p9hg
+    parent: 793-a8e7
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, wsl2, accel, gpu, vulkan, inference]
+    related: [793-a8e7, 793-zumy, 793-qc6q]
+    depends_on: []
+    title: |
+      793-a8e7 S2: on the opted-in gpu-vulkan lane the accel probe judges the WSL2 dxg GPU from inside the inference container (vulkaninfo --summary), so the opted-in lane stops reporting cpu-only
+    context: |
+      Code was #387 (work/793-a8e7-s2 @ 0aea20096), skipped by the landing queue because the branch name is not a work ref; it moves to work/1646-p9hg unchanged, including the measurement-carry fix 26da2fcc0. Live on yolanda 2026-10-12 (PR #387 comment): no opt-in gives accel_class=cpu-only (identical to today); opted in gives accel_class=workstation-gpu accel_gpu=usable Microsoft_Direct3D12_AMD_Radeon_TM_860M_Graphics, prefill_dev=gpu decode_dev=cpu. Class naming is 1645-pu4d.
+    exit_criteria:
+      - 'on gpu-vulkan, a non-software device in the container listing makes the /dev/dxg record usable in the container lane; llvmpipe-only or empty listings change nothing'
+      - 'a cached gpu-vulkan document with the container-lane gap is re-probed and keeps its measurements'
+    unscoreable: "a slice of 793-a8e7; its evidence is the parent's live criteria on yolanda plus the slice's own unit arms and sabotages"
+    next_action: >
+      Land as work/1646-p9hg.
+    provenance: |
+      Filed by yolanda-windows, 2026-10-12, splitting 793-a8e7 into ordered slices (S1 is #384 under 793-a8e7 itself).
+    events:
+      - type: filed
+        ts: "2026-10-12T22:25:05Z"
+        host: yolanda-windows
+        summary: |-
+          793-a8e7 slice: s2-probe-judges-the-wsl2-gpu-from-the-container

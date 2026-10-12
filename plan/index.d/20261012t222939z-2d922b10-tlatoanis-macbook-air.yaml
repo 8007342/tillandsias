@@ -1,0 +1,16 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-macos-install-keeps-a-damaged-vm-through-the-soft-reset-so-it-should-build-a-fresh-vm-and-carry-only-identity-forward
+    field: next_action
+    value: |-
+      Read install-macos.sh's BEGIN-SETUP-RESET block and reset_state.rs. Decide with the coordinator whether the installer calls the HARD guest reset while preserving the vault unlock key and a vault export, then write the identity-survives test first.
+
+
+      [2026-10-12T22:29:39Z tlatoanis-macbook-air] 5a done in PR #388 (token-verified clean power-off, 16 s quits). 5b decided by the coordinator 2026-10-12: B NOW, unclean previous stop (vm-running.marker, 23b013e54) -> the guest checks its disk early in boot, before headless; clean -> boot normally and log it; errors OR the check could not run (timeout, missing tool) -> 'unknown', never 'clean' -> the tray refuses to proceed and offers a rebuild, worded for an end user (no tool names; detail in the log). SWITCH TO C (automatic rebuild, no click) AS SOON AS criterion 2 makes identity survive a fresh VM: once a rebuild costs nothing, the click is friction the operator does not want. Then criterion 2 (fresh OS disk per install, images on a separate data disk, identity carried by the keyring unlock key plus vault content), then the git-name prompt and forge build progress.
+    ts: "2026-10-12T22:29:39Z"
+    host: tlatoanis-macbook-air
