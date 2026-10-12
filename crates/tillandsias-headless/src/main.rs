@@ -24947,7 +24947,9 @@ mod tests {
                 "{quarantine} quarantine tmpfs must be chowned to the forge user (U); got {spec}"
             );
             assert!(
-                !opts.iter().any(|o| o.starts_with("uid=") || o.starts_with("gid=")),
+                !opts
+                    .iter()
+                    .any(|o| o.starts_with("uid=") || o.starts_with("gid=")),
                 "{quarantine} quarantine tmpfs must not pass uid=/gid=, which podman rejects on --tmpfs; got {spec}"
             );
         }
@@ -29177,13 +29179,11 @@ esac
         // not be present depending on whether HOME is set in the test environment.
         assert!(has_arg(&args, "--tmpfs"));
         assert!(
-            args.iter()
-                .any(|arg| arg == FORGE_SSH_QUARANTINE_TMPFS),
+            args.iter().any(|arg| arg == FORGE_SSH_QUARANTINE_TMPFS),
             "opencode forge args must quarantine .ssh via tmpfs; got {args:?}"
         );
         assert!(
-            args.iter()
-                .any(|arg| arg == FORGE_GH_QUARANTINE_TMPFS),
+            args.iter().any(|arg| arg == FORGE_GH_QUARANTINE_TMPFS),
             "opencode forge args must quarantine .config/gh via tmpfs; got {args:?}"
         );
         assert!(
