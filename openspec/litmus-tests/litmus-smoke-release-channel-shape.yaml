@@ -32,24 +32,30 @@ critical_path:
   # so introducing the unstable channel broke it while every property it was
   # meant to protect still held. These steps run the resolution instead.
   - step: "installers default to the stable channel (/releases/latest)"
-    command: "for s in scripts/install.sh scripts/install-macos.sh; do test \"$(scripts/check-installer-channel.sh \"$s\")\" = 'base:https://github.com/8007342/tillandsias/releases/latest/download' || { echo \"FAIL $s\"; exit 1; }; done; echo 'ok: default stable'"
+    command: "for s in scripts/install.sh scripts/install-macos.sh; do test \"$(\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-installer-channel.lua -- \"$s\")\" = 'ok:installer-channel:base:https://github.com/8007342/tillandsias/releases/latest/download' || { echo \"FAIL $s\"; exit 1; }; done; echo 'ok: default stable'"
     timeout_ms: 3000
     expected_behavior: "ok: default stable"
 
   - step: "TILLANDSIAS_CHANNEL=unstable selects the rolling unstable channel"
-    command: "for s in scripts/install.sh scripts/install-macos.sh; do test \"$(scripts/check-installer-channel.sh \"$s\" unstable)\" = 'base:https://github.com/8007342/tillandsias/releases/download/unstable' || { echo \"FAIL $s\"; exit 1; }; done; echo 'ok: unstable channel'"
+    command: "for s in scripts/install.sh scripts/install-macos.sh; do test \"$(\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-installer-channel.lua -- \"$s\" unstable)\" = 'ok:installer-channel:base:https://github.com/8007342/tillandsias/releases/download/unstable' || { echo \"FAIL $s\"; exit 1; }; done; echo 'ok: unstable channel'"
     timeout_ms: 3000
     expected_behavior: "ok: unstable channel"
 
   - step: "TILLANDSIAS_RELEASE_BASE still overrides the channel (smoke pins one release)"
-    command: "for s in scripts/install.sh scripts/install-macos.sh; do test \"$(TILLANDSIAS_RELEASE_BASE=https://example.invalid/pinned scripts/check-installer-channel.sh \"$s\" unstable)\" = 'base:https://example.invalid/pinned' || { echo \"FAIL $s\"; exit 1; }; done; echo 'ok: base override wins'"
+    command: "for s in scripts/install.sh scripts/install-macos.sh; do test \"$(TILLANDSIAS_RELEASE_BASE=https://example.invalid/pinned \"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-installer-channel.lua -- \"$s\" unstable)\" = 'ok:installer-channel:base:https://example.invalid/pinned' || { echo \"FAIL $s\"; exit 1; }; done; echo 'ok: base override wins'"
     timeout_ms: 3000
     expected_behavior: "ok: base override wins"
 
   - step: "NEGATIVE CONTROL: an unknown channel is refused, not silently defaulted"
-    command: "scripts/check-installer-channel.sh scripts/install.sh bogus >/dev/null 2>&1 && { echo 'FAIL: bogus channel accepted'; exit 1; }; scripts/check-installer-channel.sh scripts/install.sh bogus 2>&1 | grep -q '^refused:unknown-channel:' && echo 'ok: bogus refused'"
+    command: "o=$(\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-installer-channel.lua -- scripts/install.sh bogus 2>/dev/null) && { echo 'FAIL: bogus channel accepted'; exit 1; }; case \"$o\" in refused:installer-channel:unknown-channel:*) echo 'ok: bogus refused' ;; esac"
     timeout_ms: 3000
     expected_behavior: "ok: bogus refused"
+
+  # 1614-5x7m ported the resolver to Lua; its two other refusals had no step.
+  - step: "NEGATIVE CONTROL: a missing installer and a file with no REPO=..RELEASE_BASE= range are refused by name"
+    command: "a=$(\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-installer-channel.lua -- scripts/no-such-installer.sh 2>/dev/null); b=$(\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-installer-channel.lua -- scripts/install-windows.ps1 2>/dev/null); case \"$a\" in refused:installer-channel:no-installer:*) case \"$b\" in refused:installer-channel:no-base-resolved:*) echo 'ok: missing and rangeless refused' ;; esac ;; esac"
+    timeout_ms: 3000
+    expected_behavior: "ok: missing and rangeless refused"
 
   - step: "the Windows installer carries the same two channels and stays pure ASCII"
     command: "grep -Fq 'TILLANDSIAS_CHANNEL' scripts/install-windows.ps1 && grep -Fq 'releases/download/unstable' scripts/install-windows.ps1 && grep -Fq 'releases/latest/download' scripts/install-windows.ps1 && ! grep -qP '[^\\x00-\\x7F]' scripts/install-windows.ps1 && echo 'ok: windows channels ascii'"

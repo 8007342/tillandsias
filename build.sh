@@ -431,8 +431,22 @@ _pf_sweep_late() {  # $1 = the preflight run dir
     [ ! -s "$1/late.swept" ] || cat "$1/late.swept"
 }
 
+# ORDER 1614-5x7m. THE DOOR'S CLOCK, read without a fork, because it is read
+# on every poll: perl's Time::HiRes costs 24 ms a read under -b. Sets _PF_NOW in
+# microseconds and _PF_CLOCK to name the method. bash 5's EPOCHREALTIME gives
+# wall-us; darwin's /bin/bash is 3.2, which has only $SECONDS (wall-s, scaled
+# so one comparison serves both). The version test keeps an EXPORTED
+# EPOCHREALTIME, a constant to bash 3.2, from freezing the clock.
+_pf_now() {
+    if [ "${BASH_VERSINFO[0]:-0}" -ge 5 ] && [ -n "${EPOCHREALTIME:-}" ]; then
+        _PF_CLOCK=wall-us; _PF_NOW=${EPOCHREALTIME//[!0-9]/}
+    else
+        _PF_CLOCK=wall-s; _PF_NOW=$(( SECONDS * 1000000 ))
+    fi
+}
+
 _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, $4 = args
-    local _p="$1" _d="$2" _out="$3" _pid _ticks=0 _tick _per_s _max
+    local _p="$1" _d="$2" _out="$3" _pid _tick
     # ORDER 1499-m9fj: THE GATE'S ARGUMENTS, WORD FOR WORD. A guard run without
     # the mode the gate gives it is a different guard: check-mcp-live-build with
     # no argument checks HOST state and refused a tree the gate passes (it runs
@@ -477,8 +491,15 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, 
         if command -v setsid >/dev/null 2>&1; then _PF_SETSID=setsid; else _PF_SETSID=""; fi
     fi
 
-    if sleep 0.1 2>/dev/null; then _tick=0.1; _per_s=10; else _tick=1; _per_s=1; fi
-    _max=$(( _d * _per_s ))
+    # ORDER 1614-5x7m: THE DEADLINE AND THE GRACE ARE WALL CLOCK, NOT A COUNT OF
+    # POLLS. The poll stays at a tenth; what changed is that `d` ticks of it no
+    # longer mean `d` seconds. MEASURED on darwin under taskpolicy -b
+    # (2026-10-11): 50 ticks of `sleep 0.1` took 12.8 s (5.5 s plain), because
+    # background QoS coalesces timers. Every guard reaching the 5 s deadline
+    # ran ~13 s, and the front door took 466-567 s against its 150 s budget.
+    # $SECONDS is read without a fork (whole seconds on bash 3.2); see _pf_now.
+    if sleep 0.1 2>/dev/null; then _tick=0.1; else _tick=1; fi
+    local _t0 _g0
     local _gtmp _rc=0
     _gtmp="$(mktemp -d "${TMPDIR:-/tmp}/pf-guard.XXXXXX" 2>/dev/null)" || _gtmp=""
     rm -f "$_out.swept"
@@ -488,10 +509,13 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, 
         ( { [ -z "$_gtmp" ] || export TMPDIR="$_gtmp"; }; cd "$SCRIPT_DIR" && exec "${_runner[@]}" ${_a[@]+"${_a[@]}"} ) >"$_out" 2>&1 </dev/null &
     fi
     _pid=$!
+    _pf_now; _t0=$_PF_NOW
     while kill -0 "$_pid" 2>/dev/null; do
-        if [ "$_d" -gt 0 ] && [ "$_ticks" -ge "$_max" ]; then break; fi
+        if [ "$_d" -gt 0 ]; then
+            _pf_now
+            [ $(( _PF_NOW - _t0 )) -lt $(( _d * 1000000 )) ] || break
+        fi
         sleep "$_tick"
-        _ticks=$((_ticks + 1))
     done
     if kill -0 "$_pid" 2>/dev/null; then
         kill -TERM "-$_pid" 2>/dev/null || kill -TERM "$_pid" 2>/dev/null
@@ -499,11 +523,15 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, 
         # `sleep 1` charged every deadline-skipped guard a full second even
         # when its group died on TERM at once, and with 11-14 guards reaching
         # the deadline that was 11-14 s of the front door's 150 s budget spent
-        # waiting on processes that were already gone. Same 1 s ceiling.
-        _grace=0
-        while kill -0 "$_pid" 2>/dev/null && [ "$_grace" -lt "$_per_s" ]; do
+        # waiting on processes that were already gone. Same 1 s ceiling, by the
+        # wall clock (1614-5x7m). On the whole-second clock the deadline breaks
+        # on the first poll after a second boundary, so TERM goes out just after
+        # one and "the next boundary" is a second away, give or take one poll.
+        _pf_now; _g0=$_PF_NOW
+        while kill -0 "$_pid" 2>/dev/null; do
+            _pf_now
+            [ $(( _PF_NOW - _g0 )) -lt 1000000 ] || break
             sleep "$_tick"
-            _grace=$((_grace + 1))
         done
         kill -KILL "-$_pid" 2>/dev/null || kill -KILL "$_pid" 2>/dev/null
         wait "$_pid" 2>/dev/null
@@ -1287,6 +1315,10 @@ PFEOF
     # degraded one.
     _pf_iso="isolation=session"
     command -v setsid >/dev/null 2>&1 || _pf_iso="isolation=none-no-setsid"
+    # ORDER 1614-5x7m: and which clock judged the deadlines, for the same
+    # reason. On wall-s a deadline of d seconds lands in (d-1, d] plus a poll.
+    _pf_now
+    _pf_iso="$_pf_iso deadline-clock=$_PF_CLOCK"
 
     # ORDER 1353-ryhq — THE VERDICT STATES ITS CATEGORIES AND THEIR SUM, AND
     # NEVER A FIXED COUNT. The guard set differs by checkout: two Macs measured
