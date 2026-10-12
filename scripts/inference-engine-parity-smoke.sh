@@ -273,9 +273,10 @@ run_lane() {
     id1="$(podman inspect --format '{{.Id}}' "$CTR")"
     ensure 2 || fail=1
     id2="$(podman inspect --format '{{.Id}}' "$CTR")"
-    mapfile -t count < <(podman ps -a --filter "name=^$CTR\$" --format '{{.Names}}')
-    log "  double ensure: id ${id1:0:12} -> ${id2:0:12}; containers named $CTR: ${#count[@]}"
-    [ "$id1" = "$id2" ] && [ "${#count[@]}" = 1 ] || { log "  FAIL: the second ensure did not reuse the running slot"; fail=1; }
+    count=0
+    while read -r _; do count=$((count + 1)); done < <(podman ps -a --filter "name=^$CTR\$" --format '{{.Names}}')
+    log "  double ensure: id ${id1:0:12} -> ${id2:0:12}; containers named $CTR: $count"
+    [ "$id1" = "$id2" ] && [ "$count" = 1 ] || { log "  FAIL: the second ensure did not reuse the running slot"; fail=1; }
     grep -q 'already running; reusing' "$OUT/$LANE.ensure-2.log" || { log "  FAIL: no reuse line"; fail=1; }
 
     snapshot "$OUT/$LANE.cache-pre.txt"
