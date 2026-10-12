@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: four-tillandsias-headless-unit-tests-fail-on-a-native-windows-host-on-bare-trunk-for-host-reasons-not-product-defects-so-a-windows-run-of-the-suite-is-never-green
+    event:
+      type: note
+      ts: "2026-10-12T11:16:06Z"
+      agent_id: windows-yolanda-opus5-20261012t111605z
+      host: yolanda-windows
+      summary: |
+        Diagnosis recorded 2026-10-12 (PR #372). Items 3 and 4 are test-side on Windows. resource_lock::try_lock is a documented no-op off unix, and the paths it guards run only in the Linux guest: launch markers guard podman lanes, and on a Windows host VaultGitHubTokenStore::read_bundle returns None (no Vault container) before any token exchange. Both tests are ignored off unix by name. resource_lock::tests::try_lock_is_a_no_op_off_unix fails if Windows ever gets a real lock, and its message says to un-ignore them.
+        RESIDUAL, for the record (not a defect today): resource_lock is per-host. The guest's lock dir and any Windows host process never share a lock file, so it never excluded a host process against a guest process, and was never designed to. If a Windows host binary ever gains a path that reaches the guest's Vault (and so a token exchange), host-vs-guest exclusion needs its own mechanism; a Windows try_lock would not provide it.

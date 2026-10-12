@@ -62,7 +62,6 @@ scripts/check-litmus-steps-can-fail.sh
 scripts/check-long-running-view.sh
 scripts/check-macos-only-sources-verified.sh
 scripts/check-macos-stock-binaries.sh
-scripts/check-markdown-distillation.sh
 scripts/check-mcp-expert-health.sh
 scripts/check-mcp-live-build.sh
 scripts/check-mcp-surface.sh
@@ -73,7 +72,6 @@ scripts/check-nix-builder-e2e.sh
 scripts/check-nix-deps-stability.sh
 scripts/check-no-competing-gate.sh
 scripts/check-no-fixture-writes-live-ledger.sh
-scripts/check-no-python-scripts.sh
 scripts/check-no-tracked-binaries.sh
 scripts/check-opsx-generated-dirt.sh
 scripts/check-order-citations-resolve.sh

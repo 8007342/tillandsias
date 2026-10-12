@@ -1,6 +1,8 @@
 # Scripts that make scratch files INSIDE the tracked tree, held by
-# scripts/lua/check-checkout-writers.lua (1611-imnj). `<path> <reason>`. Each one
+# scripts/lua/check-checkout-writers.lua (1611-imnj). `<path> [artifacts=<basename-glob>] <reason>`; the glob
+# names the untracked copies the preflight door removes when it KILLs the writer
+# or a guard that names it (1630-dwab). Each one
 # must also have 1587-qqzs's shape: an EXIT trap, a TERM trap that exits, and
 # long steps as `cmd & wait $!`. A line whose file is gone or no longer writes
 # scratch into the checkout is refused as stale.
-scripts/test-awk-float-lc-numeric.sh its .mutant-lcnum-* copies must sit beside the producers they copy, which derive REPO_ROOT from BASH_SOURCE and source siblings by relative path
+scripts/test-awk-float-lc-numeric.sh artifacts=.mutant-lcnum-* its .mutant-lcnum-* copies must sit beside the producers they copy, which derive REPO_ROOT from BASH_SOURCE and source siblings by relative path

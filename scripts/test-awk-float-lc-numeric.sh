@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# preflight: serial — writes .mutant-lcnum-* copies BESIDE three producers in scripts/ (the checkout's own sources), the same paths gate step 455 writes, and tree-scanning guards read them as added code (1630-dwab)
 # @trace order:1254-fdsu
 #
 # test-awk-float-lc-numeric.sh — the measurement producers must emit a DOT

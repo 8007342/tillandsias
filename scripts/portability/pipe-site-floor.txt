@@ -398,7 +398,6 @@ scripts scripts/check-litmus-pin-claims.sh 5
 scripts scripts/check-litmus-steps-can-fail.sh 2
 scripts scripts/check-long-running-view.sh 21
 scripts scripts/check-macos-stock-binaries.sh 7
-scripts scripts/check-markdown-distillation.sh 20
 scripts scripts/check-mcp-expert-health.sh 46
 scripts scripts/check-mcp-live-build.sh 4
 scripts scripts/check-mcp-surface.sh 4

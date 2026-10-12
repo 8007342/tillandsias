@@ -338,7 +338,7 @@ cases:
     query: "is Python allowed in a committed script?"
     why: >
       The hardest hard-no in the project. An expert that softened this answer
-      would license the exact class of commit scripts/check-no-python-scripts.sh
+      would license the exact class of commit scripts/lua/check-no-python-scripts.lua
       exists to reject.
     expect:
       confidence: exact
