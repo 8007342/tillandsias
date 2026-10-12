@@ -6151,6 +6151,37 @@ fn build_inference_run_args(
     for (name, value) in engine_slots::pin_backend_environment(effective_tier, cuda_major) {
         args.extend(["--env".into(), format!("{name}={value}")]);
     }
+    // Order 482b: the engine slot (ollama by default, SLOT-3). The llama-server
+    // slot is delivered the render nodes this user can open — on any tier,
+    // because its Vulkan lane needs no vendor stack (SLOT-4) — and an
+    // inaccessible node is reported, never chmod-ed (SLOT-5).
+    let (engine, engine_note) = engine_slots::selected_engine_kind(
+        std::env::var("TILLANDSIAS_INFERENCE_ENGINE")
+            .ok()
+            .as_deref(),
+    );
+    if let Some(note) = engine_note {
+        eprintln!("[tillandsias] WARNING: {note}");
+    }
+    let (usable_nodes, unusable_nodes) = if engine == engine_slots::EngineKind::LlamaServer {
+        engine_slots::usable_render_nodes(Path::new("/dev/dri"))
+    } else {
+        (Vec::new(), Vec::new())
+    };
+    for node in &unusable_nodes {
+        eprintln!(
+            "[tillandsias] llama-server slot: render node {} is not readable+writable by this user — not delivered; the slot runs on CPU unless another node is usable (SLOT-5)",
+            node.display()
+        );
+    }
+    args.extend(engine_slots::llama_server_run_args(
+        engine,
+        std::env::var("TILLANDSIAS_INFERENCE_LLAMA_BACKEND")
+            .ok()
+            .as_deref(),
+        effective_tier,
+        &usable_nodes,
+    ));
     args.extend(proxy_env_args());
     // Order 524: this env pair MUST be built before the mount/image tail.
     // It used to be spliced in afterwards with two `args.insert(args.len() - 2,

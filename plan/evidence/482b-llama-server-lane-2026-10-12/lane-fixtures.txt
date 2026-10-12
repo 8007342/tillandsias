@@ -1,0 +1,18 @@
+usable dri, auto:       vulkan render-node:renderD128
+no dri, auto:           cpu no-render-node
+unusable dri, auto:     cpu render-node-unusable:renderD128
+cuda, tier cpu:         vulkan cuda-refused:tier-cpu-not-gpu-cuda,render-node:renderD128
+cuda, gpu-cuda no node: cpu cuda-refused:no-nvidia0-in-container,no-render-node
+cuda, delivered v13:    cuda_v13 requested:cuda-lane-delivered
+rocm:                   vulkan rocm-refused:no-rocm-backend-in-payload,render-node:renderD128
+verdict vulkan pinned:  ok
+verdict set disagrees:  engine-integrity-refused:engine-set-disagrees:core+cuda_v13
+multi, pinned:          ok
+multi, unpinned:        engine-integrity-refused:multi-backend-unpinned:cuda_v12,vulkan
+cpu with dirs:          engine-integrity-refused:multi-backend-unpinned:cuda_v12,vulkan
+cpu clean:              ok
+vulkan missing lib:     engine-integrity-refused:backend-missing:vulkan/libggml-vulkan.so
+pin T0:                 Qwen/Qwen2.5-0.5B-Instruct-GGUF qwen2.5-0.5b-instruct-q4_k_m.gguf 74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db 491400032
+pin T2:                 unpinned:qwen2.5-7b-instruct
+check ok:               ok
+check 1-byte mutation:  gguf-digest-mismatch

@@ -633,6 +633,7 @@ specs:
   litmus_tests:
   - litmus:inference-engine-slot-boundary-shape
   - litmus:inference-tier-table-migration
+  - litmus:inference-llama-server-lane-shape
   - litmus:inference-policy-router-implementation
   - litmus:enclave-isolation
   coverage_ratio: 100
