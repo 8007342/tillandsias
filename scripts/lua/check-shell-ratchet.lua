@@ -1,4 +1,4 @@
--- @trace order:1384-bxhk, order:1577-57u3
+-- @trace order:1384-bxhk, order:1577-57u3, order:1624-bv73
 --
 -- check-shell-ratchet.lua — the Lua migration's forcing function and its score.
 --
@@ -11,7 +11,14 @@
 --   2 a NEW pipe site in a script, beyond that file's floor (standing debt is
 --     never reddened, 1130-i6xj)
 --   3 a NEW litmus `command:` with a pipe outside quotes, beyond that file's
---     floor, once the runner's `steps:` form exists (dormant before)
+--     floor. ACTIVE (1624-bv73): this arm used to wait for the runner's
+--     `steps:` form to exist (`if n_steps > 0`), and no real litmus file used
+--     it, so on the real tree the arm was DORMANT and answered ok at every
+--     head while scripts/lua/test-shell-ratchet.lua (which seeds a steps:
+--     file) refused the same tree. Authors saw green and the land queue
+--     evicted (#340 and #339, 2026-10-11). Capture-then-match is a working
+--     remedy today, so the arm is unconditional, and the ok line says so
+--     (litmus-arm=active:unconditional) so a reader never has to infer it.
 -- and (4) its floors only DESCEND, judged over each floor file's OWN git
 -- history, never against a moving ref (a fixture must not encode a moment).
 --
@@ -31,7 +38,7 @@
 --              quote kept off, nested quotes stripped, same counting
 --
 -- Verdicts:
---   ok:shell-ratchet:sh=<n>:floor:<f> pipes=<p>:floor:<pf> litmus-form:command=<c>:steps=<s>:rust_queries=<r> gate-steps:sh=<a>:lua=<b> shell-strings=<k>   exit 0
+--   ok:shell-ratchet:sh=<n>:floor:<f> pipes=<p>:floor:<pf> litmus-form:command=<c>:steps=<s>:rust_queries=<r> litmus-arm=active:unconditional gate-steps:sh=<a>:lua=<b> shell-strings=<k>   exit 0
 --   violation:shell-ratchet:new-decider:<path>            exit 1
 --   violation:shell-ratchet:new-pipes:<path>:<n>>floor:<f> exit 1
 --   violation:shell-ratchet:new-piped-command:<path>      exit 1
@@ -187,12 +194,17 @@ for f, n in pairs(script_pipes) do
         err(("warn:shell-ratchet:new-pipes:%s:%d>floor:%d — counted, not refused; capture then match (grep -q PAT <<<\"$var\"), or move the logic into scripts/lua"):format(f, n, fl))
     end
 end
-if n_steps > 0 then
-    for f, n in pairs(litmus_piped) do
-        if n > (pfloor["litmus " .. f] or 0) then
-            v("violation:shell-ratchet:new-piped-command:" .. f,
-              "  " .. f .. " adds a `command:` with a pipe outside quotes. Use the steps: form, or a fixture script.")
-        end
+-- 1624-bv73: UNCONDITIONAL. This loop used to sit inside `if n_steps > 0`
+-- (1384-bxhk, 8efafda19), because its remedy named the litmus `steps:` form
+-- (902-5bf9) and refusing before any file could use that form would have left
+-- no remedy. The runner still has no steps: support, but capture-then-match is
+-- a working remedy today, so the arm no longer waits for steps:.
+for f, n in pairs(litmus_piped) do
+    if n > (pfloor["litmus " .. f] or 0) then
+        v("violation:shell-ratchet:new-piped-command:" .. f,
+          "  " .. f .. " adds a `command:` with a pipe outside quotes. Capture then match"
+              .. " (out=$(cmd); grep -q PAT <<<\"$out\"), use a temp file, or call a fixture script;"
+              .. " the steps: form (902-5bf9) once the runner supports it.")
     end
 end
 
@@ -268,5 +280,5 @@ table.sort(violations)
 for i = 1, #violations - 1 do out.line(violations[i]) end
 if #violations > 0 then verdict.emit(violations[#violations], 1) end
 
-verdict.emit(("ok:shell-ratchet:sh=%d:floor:%d pipes=%d:floor:%d litmus-form:command=%d:steps=%d:rust_queries=%d gate-steps:sh=%d:lua=%d shell-strings=%d")
+verdict.emit(("ok:shell-ratchet:sh=%d:floor:%d pipes=%d:floor:%d litmus-form:command=%d:steps=%d:rust_queries=%d litmus-arm=active:unconditional gate-steps:sh=%d:lua=%d shell-strings=%d")
     :format(#deciders, dfloor_n, total_pipes, pfloor_total, n_commands, n_steps, n_rq, gs_sh, gs_lua, shell_strings), 0)

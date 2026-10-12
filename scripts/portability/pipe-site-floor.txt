@@ -363,7 +363,6 @@ scripts scripts/check-containers-conf-proxy-env.sh 4
 scripts scripts/check-convergence-velocity.sh 1
 scripts scripts/check-credential-channel.sh 15
 scripts scripts/check-cycle-flow-log-fresh.sh 6
-scripts scripts/check-cycle-scheduler.sh 2
 scripts scripts/check-daily-maintenance.sh 2
 scripts scripts/check-dead-env-branches.sh 41
 scripts scripts/check-decider-retirement.sh 3
