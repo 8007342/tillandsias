@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: llama-server-engine-parity-smoke
+    event:
+      type: list-replace
+      ts: "2026-10-12T09:50:53Z"
+      agent_id: linux-lenovinha-claude-20261012t095053z
+      host: lenovinha
+      field: exit_criteria
+      items:
+        - "ollama remains the selected default throughout the pre-evidence run"
+        - "both engines serve /v1/models and /v1/chat/completions through the unchanged endpoint, at T0, on CUDA and on Vulkan"
+        - "double ensure leaves exactly one engine and performs no model re-download"
+        - "readiness failure is DEGRADED and never blocks forge launch; teardown leaves no engine running"
+        - "free VRAM is recorded before each run, and the operator inference container is never stopped"
+        - "the quick/e2e closure fails for a seeded endpoint or idempotency regression and passes after byte-identical restoration"
+      summary: |-
+        Coordinator ruling 2026-10-12: 482c is T0 parity of ollama vs llama-server on CUDA and Vulkan. The 5690 MiB memory-guard criterion moves to 482c-2 (order 482-5f3t), which depends on 482-igky (7B pins), adds the ctx/fa/kv knobs from engine-tuning.sh, and needs 527 on the operator install or an operator window. Free VRAM recorded per run; the live inference is never stopped.
