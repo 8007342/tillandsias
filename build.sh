@@ -510,8 +510,23 @@ _pf_now() {
 # is read from the scheduler: under `taskpolicy -b` a process's priority reads
 # 4, against 31 plain (measured). One ps per preflight, no pipe. Sets
 # _PF_BUDGET (seconds) and _PF_BUDGET_REGIME (override|darwin-background|darwin|floor).
+#
+# ORDER 1636-6k6k (coordinator ruling 2026-10-12): AND THE PUSH-DECIDER
+# DEADLINE, per regime, in this one place. Sets _PF_DECIDER_DEADLINE (seconds),
+# the per-guard deadline for check-* deciders; fixtures keep the door's 5 s.
+# MEASURED on darwin-background (the distribution is in the 1636-6k6k row,
+# 7a990a936; the no-raise rule's re-measurement): the door's own launcher, no
+# deadline, taskpolicy -b, 250 guards. The 91 check-* deciders: p50 2 s, p90
+# 9 s, p95 15 s, and 13 of them were deadline-skipped at 5 s, so the gate
+# refused trees the door had passed (#371 on check-sigpipe-verdict-pipelines-
+# added). 15 s gives 9 of the 13 a verdict at a modelled ~433 s, so this
+# regime's budget moves 415 -> 450 s. Four take 43-170 s uncut
+# (fragment-keys-are-read, mo-full-attestations, added-test-is-referenced,
+# append-vs-origin-fold) and stay deadline-skipped, named. Plain darwin and
+# the floor are unchanged at 5 s until measured.
 _pf_budget() {
     local _pri
+    _PF_DECIDER_DEADLINE=5
     if [ -n "${TILLANDSIAS_PREFLIGHT_BUDGET_S:-}" ]; then
         _PF_BUDGET="$TILLANDSIAS_PREFLIGHT_BUDGET_S"; _PF_BUDGET_REGIME=override
         return 0
@@ -520,7 +535,7 @@ _pf_budget() {
         Darwin)
             _pri="$(ps -o pri= -p "$$" 2>/dev/null)"; _pri="${_pri// /}"
             if [ -n "$_pri" ] && [ "$_pri" -le 4 ] 2>/dev/null; then
-                _PF_BUDGET=415; _PF_BUDGET_REGIME=darwin-background
+                _PF_BUDGET=450; _PF_BUDGET_REGIME=darwin-background; _PF_DECIDER_DEADLINE=15
             else
                 _PF_BUDGET=200; _PF_BUDGET_REGIME=darwin
             fi ;;
@@ -744,8 +759,19 @@ _pf_predecide() {  # $1 = roster path, $2 = label
 # minimise is deadline SKIPS, not seconds; nproc/2 cost bash-dialect its
 # deadline on yoga) so a 4-core floor host is not overcommitted into deadline
 # skips; TILLANDSIAS_PREFLIGHT_JOBS overrides, and 1 is the old serial door.
-_pf_launcher() {  # $1 = work dir, $2 = deadline, $3 = jobs; roster on stdin
-    local _dir="$1" _dl="$2" _jobs="$3" _i=0 _line _p _args _pids="" _pid _live _n _pd _cap _t _r
+# ORDER 1636-6k6k: WHICH DEADLINE A GUARD GETS. A check-* push decider (the
+# guards a door exists to run) gets the regime's decider deadline
+# (_PF_DECIDER_DEADLINE, from _pf_budget); every other guard the door's own.
+# Sets _PF_GDL, without a fork: the launcher asks once per guard.
+_pf_guard_deadline() {  # $1 = roster path, $2 = the door's deadline, $3 = the decider deadline
+    case "$1" in
+        scripts/check-*|scripts/lua/check-*) _PF_GDL="$3" ;;
+        *) _PF_GDL="$2" ;;
+    esac
+}
+
+_pf_launcher() {  # $1 = work dir, $2 = deadline, $3 = jobs, $4 = decider deadline (default $2); roster on stdin
+    local _dir="$1" _dl="$2" _jobs="$3" _ddl="${4:-$2}" _i=0 _line _p _args _pids="" _pid _live _n _pd _cap _t _r
     while IFS= read -r _line; do
         [ -n "$_line" ] || continue
         _i=$((_i + 1))
@@ -767,11 +793,12 @@ _pf_launcher() {  # $1 = work dir, $2 = deadline, $3 = jobs; roster on stdin
             [ "$_n" -ge "$_cap" ] || break
             sleep 0.1 2>/dev/null || sleep 1
         done
+        _pf_guard_deadline "$_p" "$_dl" "$_ddl"
         if [ "$_pd" -eq 12 ]; then
             # ALONE: run in the foreground, so nothing launches until it ends.
             _t=$SECONDS
             _r=0
-            _pf_run_guard "$_p" "$_dl" "$_dir/$_i.out" "$_args" </dev/null || _r=$?
+            _pf_run_guard "$_p" "$_PF_GDL" "$_dir/$_i.out" "$_args" </dev/null || _r=$?
             echo "$_r $(( SECONDS - _t ))" > "$_dir/$_i.rc.tmp" && mv "$_dir/$_i.rc.tmp" "$_dir/$_i.rc"
             continue
         fi
@@ -780,7 +807,7 @@ _pf_launcher() {  # $1 = work dir, $2 = deadline, $3 = jobs; roster on stdin
             # `|| _r=$?`, never a bare call then `$?`: this runs under set -e,
             # and a guard that refuses would end the subshell before it wrote rc.
             _r=0
-            _pf_run_guard "$_p" "$_dl" "$_dir/$_i.out" "$_args" || _r=$?
+            _pf_run_guard "$_p" "$_PF_GDL" "$_dir/$_i.out" "$_args" || _r=$?
             echo "$_r $(( SECONDS - _t ))" > "$_dir/$_i.rc.tmp" && mv "$_dir/$_i.rc.tmp" "$_dir/$_i.rc"
         ) </dev/null &
         _pids="$_pids $!"
@@ -1236,10 +1263,19 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     # STANDING NO-RAISE RULE from the day this lands; re-measure the distribution
     # before either number moves, and never in the same cycle as the refusal that
     # made someone want to.
+    # ORDER 1636-6k6k: the check-* decider deadline is the regime's
+    # (_pf_budget), re-measured as this rule asks; an explicit
+    # TILLANDSIAS_PREFLIGHT_TIMEOUT still sets every guard's, and --full lifts both.
+    _pf_budget
     if [[ "$FLAG_PREFLIGHT_FULL" == true ]]; then
         _pf_deadline=0            # `timeout 0` means no limit
+        _pf_ddeadline=0
+    elif [ -n "${TILLANDSIAS_PREFLIGHT_TIMEOUT:-}" ]; then
+        _pf_deadline="$TILLANDSIAS_PREFLIGHT_TIMEOUT"
+        _pf_ddeadline="$TILLANDSIAS_PREFLIGHT_TIMEOUT"
     else
-        _pf_deadline="${TILLANDSIAS_PREFLIGHT_TIMEOUT:-5}"
+        _pf_deadline=5
+        _pf_ddeadline="$_PF_DECIDER_DEADLINE"
     fi
 
     _pf_dir="$(mktemp -d "${TMPDIR:-/tmp}/preflight.XXXXXX")" || _pf_dir=""
@@ -1255,7 +1291,7 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     fi
     _pf_roster="$(_preflight_roster | sort -u)"
     _pf_wall0=$SECONDS
-    printf '%s\n' "$_pf_roster" | _pf_launcher "$_pf_dir" "$_pf_deadline" "$_pf_jobs" &
+    printf '%s\n' "$_pf_roster" | _pf_launcher "$_pf_dir" "$_pf_deadline" "$_pf_jobs" "$_pf_ddeadline" &
     _pf_launcher_pid=$!
     trap 'kill "$_pf_launcher_pid" 2>/dev/null || true; wait "$_pf_launcher_pid" 2>/dev/null || true; _pf_sweep_late "$_pf_dir"; rm -rf "$_pf_dir"' EXIT
     # ORDER 1353-ryhq — FIVE CATEGORIES, NOT TWO. `skipped` conflated a guard
@@ -1337,7 +1373,8 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
             # it here, serially, rather than report a guard nobody ran.
             _pf_t=$SECONDS
             _pf_rc=0
-            _pf_run_guard "$_pf_path" "$_pf_deadline" "$_pf_tmp" "$_pf_args" || _pf_rc=$?
+            _pf_guard_deadline "$_pf_path" "$_pf_deadline" "$_pf_ddeadline"
+            _pf_run_guard "$_pf_path" "$_PF_GDL" "$_pf_tmp" "$_pf_args" || _pf_rc=$?
             _pf_el=$(( SECONDS - _pf_t ))
         fi
         _pf_t0=$(( SECONDS - _pf_el ))
@@ -1368,7 +1405,8 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
                     grep -E '^could-not-run:' "$_pf_tmp" | head -2
                     _pf_cantrun=$((_pf_cantrun + 1)) ;;
                 timed-out)
-                    echo "skip:preflight:$_pf_label:deadline:$(( SECONDS - _pf_t0 ))s — outlived the ${_pf_deadline}s front-door deadline; the gate still runs it"
+                    _pf_guard_deadline "$_pf_path" "$_pf_deadline" "$_pf_ddeadline"
+                    echo "skip:preflight:$_pf_label:deadline:$(( SECONDS - _pf_t0 ))s — outlived the ${_PF_GDL}s front-door deadline; the gate still runs it"
                     _pf_deadline_n=$((_pf_deadline_n + 1)) ;;
                 cannot-start)
                     # THE RUNNER COULD NOT START IT (macneo 2026-09-22: exec: setsid: not found).
@@ -1424,7 +1462,7 @@ PFEOF
     # ORDER 1616-njfd: and the budget that applies, so a regression reads
     # against the right number (test-preflight-front-door.sh judges by it).
     _pf_budget
-    _pf_iso="$_pf_iso budget=${_PF_BUDGET}s budget-regime=$_PF_BUDGET_REGIME"
+    _pf_iso="$_pf_iso budget=${_PF_BUDGET}s budget-regime=$_PF_BUDGET_REGIME decider-deadline=${_pf_ddeadline}s"
 
     # ORDER 1353-ryhq — THE VERDICT STATES ITS CATEGORIES AND THEIR SUM, AND
     # NEVER A FIXED COUNT. The guard set differs by checkout: two Macs measured

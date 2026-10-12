@@ -1,4 +1,4 @@
--- @trace order:1616-njfd
+-- @trace order:1616-njfd, order:1636-6k6k
 -- @env PATH
 --
 -- test-preflight-regime-budget.lua — the front door's budget is chosen per
@@ -8,8 +8,10 @@
 -- EXTRACTED at run time, not copied.
 --   1 REGIMES   _pf_budget, with `uname` and `ps` shims standing in for the
 --               host: Darwin at priority 4 (taskpolicy -b) is
---               415 darwin-background; Darwin at 31 is 200 darwin; Linux is
---               150 floor; TILLANDSIAS_PREFLIGHT_BUDGET_S=999 wins over all
+--               450 darwin-background with a 15 s check-* decider deadline
+--               (1636-6k6k, measured: the row at 7a990a936); Darwin at 31 is
+--               200 darwin and Linux 150 floor, both still 5 s;
+--               TILLANDSIAS_PREFLIGHT_BUDGET_S=999 wins over all, at 5 s
 --   2 PASS-NEW  a darwin -b summary at wall=380s that names its budget
 --               (budget=415s budget-regime=darwin-background) is judged ok
 --   3 FAIL-FLAT the same summary under the flat 150 s
@@ -22,6 +24,9 @@
 --               read as the run's wall
 --   6 CLOCK     the deadline clock this bash gives (_pf_now): wall-us on
 --               bash >= 5, wall-s otherwise, printed so a gate's log shows which
+--   7 DECIDER   (1636-6k6k) the extracted launcher gives a check-* decider the
+--               decider deadline and a fixture the door's: both take 3 s at
+--               1 s / 10 s; the trunk launcher (no 4th argument) cuts both
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-preflight-regime-budget.lua
 
@@ -65,15 +70,15 @@ end
 fs.write(REL .. "/shim/uname", "#!/bin/sh\necho \"$FAKE_UNAME\"\n")
 fs.write(REL .. "/shim/ps", "#!/bin/sh\necho \"  $FAKE_PRI\"\n")
 proc.run({ argv = { "chmod", "+x", ROOT .. "/" .. REL .. "/shim/uname", ROOT .. "/" .. REL .. "/shim/ps" }, timeout_ms = 10000 })
-fs.write(REL .. "/budget.sh", budget_fn .. '\nPATH="$SHIM:$PATH"\n_pf_budget\necho "$_PF_BUDGET $_PF_BUDGET_REGIME"\n')
+fs.write(REL .. "/budget.sh", budget_fn .. '\nPATH="$SHIM:$PATH"\n_pf_budget\necho "$_PF_BUDGET $_PF_BUDGET_REGIME $_PF_DECIDER_DEADLINE"\n')
 local function regime(uname, pri, override)
     local e = { SHIM = ROOT .. "/" .. REL .. "/shim", FAKE_UNAME = uname, FAKE_PRI = pri }
     if override then e.TILLANDSIAS_PREFLIGHT_BUDGET_S = override end
     return text.trim(proc.run({ argv = { "bash", ROOT .. "/" .. REL .. "/budget.sh" }, env = e, timeout_ms = 10000 }).stdout or "")
 end
 local bg, dw, lx, ov = regime("Darwin", "4"), regime("Darwin", "31"), regime("Linux", "20"), regime("Darwin", "4", "999")
-arm("1 REGIMES darwin -b 415, darwin 200, Linux 150, and the override wins",
-    bg == "415 darwin-background" and dw == "200 darwin" and lx == "150 floor" and ov == "999 override",
+arm("1 REGIMES darwin -b 450 with a 15 s decider deadline; darwin 200, Linux 150 and the override at 5 s",
+    bg == "450 darwin-background 15" and dw == "200 darwin 5" and lx == "150 floor 5" and ov == "999 override 5",
     "darwin-pri4=[" .. bg .. "] darwin-pri31=[" .. dw .. "] linux=[" .. lx .. "] override=[" .. ov .. "]")
 
 -- ── 2-5 the front door's judge ─────────────────────────────────────────────
@@ -120,8 +125,42 @@ else
         clock == want, "observed: deadline-clock=" .. tostring(clock) .. " on " .. os_ .. " bash " .. tostring(major))
 end
 
+-- ── 7 the decider deadline reaches the launcher (1636-6k6k) ────────────────
+-- build.sh's launcher and its helpers, extracted, over a scratch root with a
+-- check-* decider and a test-* fixture that each take 3 s: at a 1 s door
+-- deadline and a 10 s decider deadline the decider answers and the fixture is
+-- cut (124). Without the decider deadline (the trunk launcher's three
+-- arguments) both are cut, which is what darwin-background's door did to the
+-- 13 deciders in the row.
+local parts = { "_preflight_preconditions() { :; }" }
+for _, n in ipairs({ "_pf_sweep_under", "_pf_sweep_guard_tmp", "_pf_sweep_fixture_scratch",
+    "_pf_sweep_declared_artifacts", "_pf_now", "_pf_run_guard", "_pf_predecide", "_pf_guard_deadline", "_pf_launcher" }) do
+    local fn = extract(fs.read("build.sh"), n)
+    if fn == "" and n ~= "_pf_sweep_declared_artifacts" then
+        verdict.emit("violation:preflight-regime-budget:no-subject:" .. n, 1, "build.sh has no " .. n .. " (1636-6k6k)")
+    end
+    parts[#parts + 1] = fn
+end
+fs.write(REL .. "/door.sh", table.concat(parts, "\n") .. "\n")
+local D = REL .. "/door"
+fs.mkdir(D .. "/scripts")
+fs.write(D .. "/scripts/check-slow.sh", "#!/usr/bin/env bash\nsleep 3\necho ok:slow-decider\n")
+fs.write(D .. "/scripts/test-slow.sh", "#!/usr/bin/env bash\nsleep 3\necho ok:slow-fixture\n")
+local function launch(extra)
+    fs.write(REL .. "/launch.sh", table.concat({
+        'SCRIPT_DIR="$1"; . "$2"', 'W="$(mktemp -d)"',
+        "printf 'scripts/check-slow.sh\\nscripts/test-slow.sh\\n' | _pf_launcher \"$W\" 1 2 " .. extra,
+        'echo "decider=$(cut -d" " -f1 "$W/1.rc") fixture=$(cut -d" " -f1 "$W/2.rc")"', 'rm -rf "$W"', "" }, "\n"))
+    return text.trim(proc.run({ argv = { "bash", ROOT .. "/" .. REL .. "/launch.sh", ROOT .. "/" .. D, ROOT .. "/" .. REL .. "/door.sh" },
+        timeout_ms = 60000 }).stdout or "")
+end
+local post7, pre7 = launch("10"), launch("")
+arm("7 DECIDER a check-* decider gets the decider deadline and answers; a fixture keeps the door's and is cut",
+    post7 == "decider=0 fixture=124" and pre7 == "decider=124 fixture=124",
+    "with decider deadline [" .. post7 .. "] trunk launcher [" .. pre7 .. "]")
+
 proc.run({ argv = { "rm", "-rf", ROOT .. "/" .. REL }, timeout_ms = 30000 })
 if #failed > 0 then
     verdict.emit("violation:preflight-regime-budget:" .. #failed .. "-failed", 1)
 end
-verdict.ok("preflight-regime-budget", "6 arms")
+verdict.ok("preflight-regime-budget", "7 arms")
