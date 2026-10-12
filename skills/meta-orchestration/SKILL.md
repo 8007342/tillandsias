@@ -813,11 +813,12 @@ filing — not the prompt.
    it answers the question an operator otherwise has to read a transcript for:
 
    ```bash
-   scripts/check-cycle-scheduler.sh   # armed? last fire? next due?
+   tillandsias-plan script run scripts/lua/check-cycle-scheduler.lua   # armed? last fire? next due?
    ```
 
    ADVISORY, NEVER A GATE (order 856-s56y exit criterion 5, wired 865-j3kd).
-   `due:not-installed` is a true and acceptable answer: macuahuitl is driven by
+   `blocked:cycle-scheduler:not-installed` (exit 1; `due:not-installed` before
+   the 1624-bv73 Lua port) is a true and acceptable answer: macuahuitl is driven by
    an external hourly loop rather than a systemd timer, and a host with no
    durable timer is differently-scheduled, not broken. What the line buys is
    that "no scheduler is armed here" becomes a stated fact rather than something

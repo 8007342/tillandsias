@@ -23,7 +23,6 @@ scripts/check-containers-conf-proxy-env.sh
 scripts/check-convergence-velocity.sh
 scripts/check-credential-channel.sh
 scripts/check-cycle-flow-log-fresh.sh
-scripts/check-cycle-scheduler.sh
 scripts/check-daily-maintenance.sh
 scripts/check-dead-env-branches.sh
 scripts/check-decider-retirement.sh
