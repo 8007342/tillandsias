@@ -1,0 +1,370 @@
+[tillandsias] version: 56.10.9.1
+[tillandsias] --bash runtime lane: desktop-user-session
+[tillandsias] maintenance mode enabled
+[tillandsias] Project: /home/podman/src/macron.dev
+[tillandsias] Project path is valid: /home/podman/src/macron.dev
+[tillandsias] podman container: /usr/bin/podman rm <redacted>
+[tillandsias] podman container failed: status=1 stderr=Error: no container with ID or name "tillandsias-macron.dev-forge" found: no such container
+[tillandsias] podman container: /usr/bin/podman rm -f <redacted>
+[tillandsias] podman container: /usr/bin/podman rm -f <redacted>
+[tillandsias] podman container: /usr/bin/podman rm -f <redacted>
+[tillandsias] podman container: /usr/bin/podman volume rm -f <redacted>
+[tillandsias] podman container: /usr/bin/podman ps -a --filter name=^tillandsias- --format json
+[tillandsias] no active lane containers; cleaning project + shared stack for macron.dev (lane-scoped: tillandsias-inference; keeping application-lifetime: tillandsias-vault, tillandsias-proxy, tillandsias-router, tillandsias-nix-cache)
+[tillandsias] podman container: /usr/bin/podman rm <redacted>
+[tillandsias] podman container failed: status=1 stderr=Error: no container with ID or name "tillandsias-macron.dev-forge" found: no such container
+[tillandsias] podman container: /usr/bin/podman rm -f <redacted>
+[tillandsias] podman container: /usr/bin/podman rm -f <redacted>
+[tillandsias] podman container: /usr/bin/podman rm -f <redacted>
+[tillandsias] podman container: /usr/bin/podman volume rm -f <redacted>
+[tillandsias] podman container: /usr/bin/podman rm -f tillandsias-inference
+[tillandsias] podman network-exists: /usr/bin/podman network exists tillandsias-egress
+[tillandsias] podman network-exists: /usr/bin/podman network exists tillandsias-enclave
+[tillandsias] skipping host resolver update for vault: not root
+[tillandsias] podman network-exists: /usr/bin/podman network exists tillandsias-egress
+[tillandsias] enclave proxy already running
+[tillandsias-vault] skipping /etc/hosts update: not root
+[tillandsias-vault] container already running and unsealed (v=1.18.5)
+[tillandsias-vault] fresh-init handover present; capturing root token + Shamir share into keychain (overwriting any stale entries)
+[tillandsias-vault] creating podman secret tillandsias-vault-unseal (32 bytes from HKDF)
+[tillandsias-vault] note: OS keyring unavailable for vault-root-token-v1 (Platform secure storage failure: no secret service provider or dbus session found); using fallback file (expected in VM guest and headless environments)
+[tillandsias-vault] note: OS keyring unavailable for vault-shamir-share-v1 (Platform secure storage failure: no secret service provider or dbus session found); using fallback file (expected in VM guest and headless environments)
+[tillandsias-vault] root token + Shamir share handover complete (shredded from tmpfs)
+[tillandsias-vault] writing policy git-mirror-policy
+[tillandsias-vault] writing policy forge-policy
+[tillandsias-vault] writing policy tray-policy
+[tillandsias-vault] writing policy inference-policy
+[tillandsias-vault] writing policy github-login-policy
+[tillandsias-vault] writing policy claude-login-policy
+[tillandsias-vault] writing policy codex-login-policy
+[tillandsias-vault] writing policy codex-forge-policy
+[tillandsias-vault] writing policy claude-forge-policy
+[tillandsias-vault] writing policy antigravity-forge-policy
+[tillandsias-vault] writing policy antigravity-login-policy
+[tillandsias-vault] writing policy opencode-forge-policy
+[tillandsias-vault] provisioning AppRole role git-mirror -> git-mirror-policy
+[tillandsias-vault] provisioning AppRole role forge -> forge-policy
+[tillandsias-vault] provisioning AppRole role tray -> tray-policy
+[tillandsias-vault] provisioning AppRole role inference -> inference-policy
+[tillandsias-vault] provisioning AppRole role github-login -> github-login-policy
+[tillandsias-vault] provisioning AppRole role claude-login -> claude-login-policy
+[tillandsias-vault] provisioning AppRole role codex-login -> codex-login-policy
+[tillandsias-vault] provisioning AppRole role codex-forge -> codex-forge-policy
+[tillandsias-vault] provisioning AppRole role claude-forge -> claude-forge-policy
+[tillandsias-vault] provisioning AppRole role antigravity-forge -> antigravity-forge-policy
+[tillandsias-vault] provisioning AppRole role antigravity-login -> antigravity-login-policy
+[tillandsias-vault] provisioning AppRole role opencode-forge -> opencode-forge-policy
+[tillandsias-vault] provisioning long-running AppRole role git-mirror-agent -> git-mirror-policy
+[tillandsias] nix cache skip: no prep script (not a dev checkout)
+[tillandsias] runtime assets ready at /home/podman/.local/share/tillandsias/runtime/56.10.9.1 (a2aaec6418e0a139335735065d929f4a7b446adaf16bd4bb073a3f2997658e30)
+[tillandsias] detaching image ensure helper for router (log: /home/podman/.cache/tillandsias/image-build-router.log)
+[tillandsias] detaching image ensure helper for git (log: /home/podman/.cache/tillandsias/image-build-git.log)
+[tillandsias] detaching image ensure helper for inference (log: /home/podman/.cache/tillandsias/image-build-inference.log)
+[tillandsias] detaching image ensure helper for forge (log: /home/podman/.cache/tillandsias/image-build-forge.log)
+[tillandsias] [forge-launch] Project remote URL: https://github.com/8007342/macron.dev
+[tillandsias] [forge-launch] Host checkout branch: main
+[tillandsias] podman inspect: /usr/bin/podman inspect tillandsias-router --format json
+[tillandsias] selected router host port 8080
+[tillandsias] podman inspect: /usr/bin/podman inspect tillandsias-router --format json
+[tillandsias] router container found but not running (state=unknown); removing
+[tillandsias] podman container: /usr/bin/podman rm -f tillandsias-router
+[tillandsias] podman image: /usr/bin/podman image exists localhost/tillandsias-router:v56.10.9.1
+[tillandsias] starting router container
+[2026-10-12T18:16:49.297Z] event:container_launch stage=router state=starting container=tillandsias-router
+[tillandsias] podman container: /usr/bin/podman run --detach --rm --replace --name tillandsias-router --hostname router --network-alias router --network tillandsias-enclave --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --userns=keep-id --pids-limit=64 --read-only --tmpfs /tmp:size=64m --tmpfs /run/router:size=8m --env http_proxy= --env https_proxy= --env HTTP_PROXY= ...
+[2026-10-12T18:16:49.488Z] event:container_launch stage=router state=running container=tillandsias-router
+[tillandsias] podman inspect: /usr/bin/podman inspect tillandsias-router --format json
+[tillandsias] router container started
+[tillandsias-vault] keyring root token get failed/timed out (Platform secure storage failure: no secret service provider or dbus session found); checking file fallback
+[tillandsias-vault] recovered root token from host keychain or fallback
+[tillandsias-vault] minting mirror identity for macron.dev: rpkcp71lomsi89ibhuq0
+[tillandsias-vault] ensuring SSH signer mounts + per-project roles for mirror-id rpkcp71lomsi89ibhuq0
+[tillandsias-vault] keyring root token get failed/timed out (Platform secure storage failure: no secret service provider or dbus session found); checking file fallback
+[tillandsias-vault] recovered root token from host keychain or fallback
+[tillandsias-vault] creating podman secret tillandsias-vault-approle-git-mirror-agent-macron.dev-51148-d231ed09-ddaf-4a1e-9505-94dd354d8ceb (101 chars)
+[2026-10-12T18:16:49.846Z] event:container_launch stage=forge-launch-git state=starting container=tillandsias-git-macron.dev
+[tillandsias] podman container: /usr/bin/podman run --detach --rm --replace --name <redacted> --hostname <redacted> --network-alias <redacted> --network tillandsias-enclave --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --userns=keep-id --pids-limit=64 --read-only --tmpfs /tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777 --volume tillandsias-mirror-macron.dev:/srv/git --...
+[2026-10-12T18:16:50.124Z] event:container_launch stage=forge-launch-git state=running container=tillandsias-git-macron.dev
+[2026-10-12T18:16:50.154Z] event:container_launch stage=forge-launch-inference state=starting container=tillandsias-inference
+[tillandsias] podman container: /usr/bin/podman run --detach --replace --name tillandsias-inference --hostname inference --network-alias inference --network tillandsias-enclave --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --userns=keep-id --pids-limit=1024 --env OLLAMA_DEBUG=1 --env OLLAMA_KEEP_ALIVE=24h --env TILLANDSIAS_INFERENCE_TIER=cpu --env http_proxy=http://p...
+[2026-10-12T18:16:50.694Z] event:container_launch stage=forge-launch-inference state=running container=tillandsias-inference
+[tillandsias] podman container: /usr/bin/podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+[tillandsias] podman container failed: status=7 stderr=curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 1/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] podman container: /usr/bin/podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+[tillandsias] podman container failed: status=7 stderr=curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 2/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] podman container: /usr/bin/podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+[tillandsias] podman container failed: status=7 stderr=curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 3/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] podman container: /usr/bin/podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+[tillandsias] podman container failed: status=7 stderr=curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 4/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] podman container: /usr/bin/podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+[tillandsias] podman container failed: status=7 stderr=curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 5/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] podman container: /usr/bin/podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+[tillandsias] podman container failed: status=7 stderr=curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 6/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] podman container: /usr/bin/podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+[tillandsias] podman container failed: status=7 stderr=curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 7/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] podman container: /usr/bin/podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+[tillandsias] podman container failed: status=7 stderr=curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 8/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] podman container: /usr/bin/podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+[tillandsias] podman container failed: status=7 stderr=curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 9/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] podman container: /usr/bin/podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+[tillandsias] podman container failed: status=7 stderr=curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 10/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] podman container: /usr/bin/podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+[tillandsias] podman container failed: status=7 stderr=curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 11/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] podman container: /usr/bin/podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+[tillandsias] podman container failed: status=7 stderr=curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 12/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] podman container: /usr/bin/podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+[tillandsias] podman container failed: status=7 stderr=curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 13/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] podman container: /usr/bin/podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+[tillandsias] podman container failed: status=7 stderr=curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 14/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] podman container: /usr/bin/podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+[tillandsias] podman container failed: status=7 stderr=curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 15/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] podman container: /usr/bin/podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+[tillandsias] podman container failed: status=7 stderr=curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 16/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] podman container: /usr/bin/podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+[tillandsias] podman container failed: status=7 stderr=curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 17/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] podman container: /usr/bin/podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+[tillandsias] podman container failed: status=7 stderr=curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 18/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] podman container: /usr/bin/podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+[tillandsias] podman container failed: status=7 stderr=curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 19/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] podman container: /usr/bin/podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+[tillandsias] podman container failed: status=7 stderr=curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 20/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] podman container: /usr/bin/podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+[tillandsias] podman container failed: status=7 stderr=curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 21/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] podman container: /usr/bin/podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+[tillandsias] podman container failed: status=7 stderr=curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 22/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] podman container: /usr/bin/podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+[tillandsias] podman container failed: status=7 stderr=curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 23/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] podman container: /usr/bin/podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+[tillandsias] podman container failed: status=7 stderr=curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 24/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] podman container: /usr/bin/podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+[tillandsias] [forge-launch] inference ready on attempt 25/60
+[tillandsias] podman container: /usr/bin/podman exec <redacted> git -C /srv/git/macron.dev rev-parse --quiet --verify HEAD
+[tillandsias] podman container: /usr/bin/podman exec <redacted> git -C /srv/git/macron.dev show-ref --verify --quiet refs/heads/main
+[tillandsias] [forge-launch] git mirror seeded on attempt 1/1200 (refs/heads/main present)
+[tillandsias-vault] keyring root token get failed/timed out (Platform secure storage failure: no secret service provider or dbus session found); checking file fallback
+[tillandsias-vault] recovered root token from host keychain or fallback
+[tillandsias] ok:cloudflare-token-rotation:no-token
+[tillandsias-vault] keyring root token get failed/timed out (Platform secure storage failure: no secret service provider or dbus session found); checking file fallback
+[tillandsias-vault] recovered root token from host keychain or fallback
+[tillandsias] ok:github-token-rotation:no-token
+[tillandsias] running: "/usr/bin/podman" "volume" "create" "--driver" "local" "--opt" "type=tmpfs" "--opt" "device=tmpfs" "--opt" "o=size=256m,mode=0777" "--label" "tillandsias.source.options=size=256m,mode=0777" "--label" "tillandsias.source.launch=1791829036766411070" "--label" "tillandsias.source=ram-only" "tillandsias-source-e45669ff8b3c610f8201ac53bf8a984a464c69cb14ec5ff4d510c0225d13ee2c"
+[tillandsias] podman container: /usr/bin/podman rm <redacted>
+[tillandsias] podman stream:events: /usr/bin/podman events --format json --filter type=container
+[tillandsias] podman container failed: status=1 stderr=Error: no container with ID or name "tillandsias-macron.dev-forge-maintenance" found: no such container
+[tillandsias] swap: per-launch swap not installed — the forge runs without a disk swapfile. One-time, to enable it: tillandsias --swap on (1376-8zdz)
+[2026-10-12T18:17:17.840Z] event:container_launch stage=maintenance state=starting container=tillandsias-macron.dev-forge-maintenance detail=attached=true
+[tillandsias] podman run-attached:maintenance: /usr/bin/podman run --rm --init --name <redacted> --hostname forge-macron-dev --userns=keep-id --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --interactive --tty --memory=6144m --memory-reservation=2048m --cgroup-conf=memory.high=5475663872 --cgroup-conf=memory.swap.max=8589934592 --pids-limit=8192 --env TERM=xterm-256col...
+time="2026-10-12T18:17:17Z" level=warning msg="The input device is not a TTY. The --tty and --interactive flags might not work properly"
+[lifecycle] pull-cache | TILLANDSIAS_PULL_CACHE=/home/forge/.cache/tillandsias/cheatsheets-pulled/macron.dev
+[lifecycle] tools | on-demand brew shims ready (/home/forge/.local/share/tillandsias/brew-shims)
+[lifecycle] hot-paths | FAILED: cp /opt/cheatsheets-image/. -> /opt/cheatsheets/ (cp=1): cp: preserving times for '/opt/cheatsheets/.': Operation not permitted
+[lifecycle] hot-paths | no project-committed cheatsheets to merge (project_root=<none>)
+[lifecycle] entrypoint | terminal starting
+[lifecycle] git-mirror | cloning from git://git-rpkcp71lomsi89ibhuq0/macron.dev
+[2026-10-12T18:17:26.860Z] event:container_start container=tillandsias-macron.dev-forge-maintenance status=running
+Cloning into '/home/forge/src/macron.dev'...
+[Kremote: 18:17:27.122459 git.c:465               trace: built-in: git pack-objects --revs --thin --stdout --progress --delta-base-offset
+[Kremote: Enumerating objects: 12, done.
+[Kremote: Counting objects:   8% (1/12)[Kremote: Counting objects:  16% (2/12)[Kremote: Counting objects:  25% (3/12)[Kremote: Counting objects:  33% (4/12)[Kremote: Counting objects:  41% (5/12)[Kremote: Counting objects:  50% (6/12)[Kremote: Counting objects:  58% (7/12)[Kremote: Counting objects:  66% (8/12)[Kremote: Counting objects:  75% (9/12)[Kremote: Counting objects:  83% (10/12)[Kremote: Counting objects:  91% (11/12)[Kremote: Counting objects: 100% (12/12)[Kremote: Counting objects: 100% (12/12), done.
+[Kremote: Compressing objects:  14% (1/7)[Kremote: Compressing objects:  28% (2/7)[Kremote: Compressing objects:  42% (3/7)[Kremote: Compressing objects:  57% (4/7)[Kremote: Compressing objects:  71% (5/7)[Kremote: Compressing objects:  85% (6/7)[Kremote: Compressing objects: 100% (7/7)[Kremote: Compressing objects: 100% (7/7), done.
+[Kremote: Total 12 (delta 0), reused 0 (delta 0), pack-reused 0 (from 0)
+Receiving objects:   8% (1/12)Receiving objects:  16% (2/12)Receiving objects:  25% (3/12)Receiving objects:  33% (4/12)Receiving objects:  41% (5/12)Receiving objects:  50% (6/12)Receiving objects:  58% (7/12)Receiving objects:  66% (8/12)Receiving objects:  75% (9/12)Receiving objects:  83% (10/12)Receiving objects:  91% (11/12)Receiving objects: 100% (12/12)Receiving objects: 100% (12/12), done.
+[lifecycle] git-mirror | clone successful
+[lifecycle] git-identity | configured from project as tillandsia-xerographica on 9qyw-outer
+[lifecycle] git-hook | agent trailer hook installed (core.hooksPath=/home/forge/.cache/tillandsias/git-hooks)
+[lifecycle] git-hook | expert refresh hook installed (post-commit)
+[lifecycle] git-mirror | clone already on seed branch main
+[forge] All changes must be committed to persist. Uncommitted work is lost on stop.
+[lifecycle] spec-index | root repointed to /home/forge/.cache/tillandsias-project/spec-index (durable root /opt/tillandsias/spec-index is cold and read-only in-forge — 919-vvyv)
+[lifecycle] git-hook | discipline hooks skipped (no runnable tillandsias-plan) — not a Tillandsias checkout
+[lifecycle] harness | openspec missing — install latest
+[lifecycle] install | openspec: available (1.14.1)
+[lifecycle] config | opencode config overlay applied
+[lifecycle] tools | ensuring prebuilt cargo dev-tools (arch=x86_64) in /home/forge/.cache/tillandsias-project/cargo/bin
+[lifecycle] ssh | no SSH keys or agent detected
+[lifecycle] project-env | TILLANDSIAS_PROJECT_PATH=/home/forge/src/macron.dev/
+[lifecycle] project-env | TILLANDSIAS_PROJECT_GENUS=macron.dev
+[lifecycle] git-identity | configured from project as tillandsia-xerographica on 9qyw-outer
+[lifecycle] project | dir=/home/forge/src/macron.dev/
+[lifecycle] startup-context | written to /home/forge/src/macron.dev//.forge-startup-context.md (branch=main, version=unknown)
+[lifecycle] openspec | init skipped: openspec/ present (1422-w3p8)
+
+  [1;92m🌱 Tillandsias Forge[0m
+
+  [1;97mProject[0m   [1;96mmacron.dev[0m
+  [1;97mForge[0m     [3mFedora Linux 44 (Container Image)[0m  [2m+[0m  [3mUnknown OS[0m
+
+  [1;97mSecurity[0m
+    [1;92mNetwork[0m       [2menclave only (no internet, packages via proxy)[0m
+    [1;92mCredentials[0m   [2mnone (git auth via mirror service)[0m
+    [1;92mCode[0m          [2mcloned from git mirror (uncommitted work is ephemeral)[0m
+
+  [1;97mServices[0m
+    [1;96mproxy[0m         [2mcaching HTTP/S proxy (allowlisted domains)[0m
+    [1;96mtillandsias-git[0m   [2mgit mirror (git push origin routes through tillandsias-git:9418)[0m
+    [1;96minference[0m     [2mollama (local LLM)[0m
+
+  [1;97mMounts[0m
+    [1;92m/home/forge/.cache/tillandsias        [0m [2m←[0m [2m~/.cache/tillandsias      [0m [1;92mrw[0m
+
+  [1;97mRAM mounts[0m  [2m(HOT path — RAM-backed tmpfs; lost on container stop)[0m
+    [1;95m/opt/cheatsheets                      [0m [2m8 MB   ← knowledge bank (agent reads)[0m
+    [1;95m/home/forge/src/macron.dev            [0m [2m~1024 MB  ← project source[0m
+    [1;95m/tmp                                  [0m [2m256 MB ← scratch (capped, lost on stop)[0m
+    [1;95m/run/user/1000                        [0m [2m 64 MB ← XDG runtime / D-Bus[0m
+
+  [1;93m→[0m Project at [1;97m/home/forge/src/macron.dev[0m
+
+  [1;97mLanguages[0m    [2mrust, go, java 25, python 3.13, node 22, dart 3 (flutter)[0m
+  [1;97mBuild[0m        [2mcargo, maven, gradle, npm/yarn/pnpm, nix, make, cmake, ninja[0m
+  [1;97mTest[0m         [2mpytest, junit, cargo-test, chromium-headless, firefox, drivers[0m
+  [1;97mInventory[0m    [2mrun [1;96mtillandsias-inventory[0m[2m for the full list[0m
+  [1;97mServices[0m     [2mrun [1;96mtillandsias-services[0m[2m for enclave endpoints[0m
+  [1;97mPublish[0m      [2mMCP [1;96mpublish_local[0m[2m hosts this project in a sibling web container (www.<project>.localhost)[0m
+  [1;97mModels[0m       [2mrun [1;96mtillandsias-models[0m[2m for inference tiers[0m
+  [1;97mCheatsheets[0m  [2mrun [1;96mtellme about <topic>[0m[2m to query documentation[0m
+
+  📚 [1;97mCheatsheets[0m [2mrun [1;96mtellme about <topic>[0m [2mor query [1;96m/opt/cheatsheets/INDEX.md[0m
+
+  [1;93m🤖 Agent onboarding[0m [2mcat $TILLANDSIAS_CHEATSHEETS/welcome/readme-discipline.md for first-turn guide[0m
+
+  💡 Search history with Ctrl+R
+
+[lifecycle] entrypoint | terminal launching
+[lifecycle] exec | launching fish
+tillandsias: bootstrapping userspace Homebrew (4.5.8) for on-demand tools...
+[lifecycle] tools | installed prebuilt cargo-nextest (x86_64)
+[lifecycle] tools | installed prebuilt cargo-chef (x86_64)
+Turn off this advice by setting config variable advice.detachedHead to false
+
+tillandsias: installing 'direnv' in userspace via brew (signed formula index, checksum-verified bottle)...
+[34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/portable-ruby/portable-ruby/blobs/sha256:b5c9268815fbab7b7971307b2871f4206e081218b9deb4625d668d6c3563483b[0m
+[lifecycle] tools | installed prebuilt cargo-watch (x86_64)
+#=#=#                                                                          ##O#-#                                                                                                                                                    0.0%#                                                                          1.4%##                                                                         2.9%##                                                                         4.0%[lifecycle] tools | installed prebuilt cargo-audit (x86_64)
+####                                                                       6.0%######                                                                     9.2%#########                                                                 12.8%###########                                                               16.4%#############                                                             18.1%##############                                                            20.0%###############                                                           21.3%[lifecycle] tools | installed prebuilt wasm-pack (x86_64)
+################                                                          23.4%##################                                                        25.7%####################                                                      28.1%#####################                                                     30.5%#######################                                                   33.2%#########################                                                 35.7%###########################                                               37.6%[lifecycle] tools | installed prebuilt typos (x86_64)
+############################                                              40.2%##############################                                            42.8%#################################                                         45.9%###################################                                       49.1%#####################################                                     52.0%#######################################                                   55.1%#########################################                                 58.1%###########################################                               61.0%#############################################                             63.6%[lifecycle] tools | installed prebuilt watchexec (x86_64)
+################################################                          67.4%####################################################                      72.6%#######################################################                   77.2%############################################################              84.2%#################################################################         90.7%[lifecycle] tools | installed prebuilt cargo-upgrade (x86_64)
+#####################################################################     97.2%######################################################################## 100.0%
+[34m==>[0m [1mPouring portable-ruby-3.4.4.x86_64_linux.bottle.tar.gz[0m
+[lifecycle] tools | installed prebuilt cargo-expand (x86_64)
+[34m==>[0m [1mDownloading https://formulae.brew.sh/api/formula.jws.json[0m
+[lifecycle] tools | installed prebuilt cargo-criterion (x86_64)
+[34m==>[0m [1mDownloading https://formulae.brew.sh/api/formula_tap_migrations.jws.json[0m
+[lifecycle] tools | installed prebuilt cargo-wasi (x86_64)
+[34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/core/direnv/manifests/2.38.2[0m
+#=#=#                                                                          ###################################################################       93.5%######################################################################## 100.0%
+[32m==>[0m [1mFetching dependencies for direnv: [32mncurses[39m, [32mreadline[39m and [32mbash[39m[0m
+[34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/core/ncurses/manifests/6.6[0m
+#=#=#                                                                          [lifecycle] tools | installed prebuilt cargo-outdated (x86_64)
+###                                                                        4.6%######################################################################## 100.0%
+[32m==>[0m [1mFetching [32mncurses[39m[0m
+[34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/core/ncurses/blobs/sha256:12c037b176c3300398cc53f0f278ba14195ae525cb6188dc085fd07236e5db48[0m
+#=#=#                                                                                                                                                     0.4%###################################################                       72.0%######################################################################## 100.0%
+[34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/core/readline/manifests/8.3.6[0m
+#=#=#                                                                          #################                                                         24.0%[lifecycle] tools | installed prebuilt trunk (x86_64)
+######################################################################## 100.0%
+[32m==>[0m [1mFetching [32mreadline[39m[0m
+[34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/core/readline/blobs/sha256:4edcc5d53fb104818fd0e642f18edaace69e60c24b5e892df2bd437670c32857[0m
+#=#=#                                                                          ##O#-#                                                                         ############################################                              61.7%######################################################################## 100.0%
+[34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/core/bash/manifests/5.3.20[0m
+[lifecycle] tools | installed prebuilt cargo-llvm-cov (x86_64)
+#=#=#                                                                          ############################################                              62.3%######################################################################## 100.0%
+[32m==>[0m [1mFetching [32mbash[39m[0m
+[34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/core/bash/blobs/sha256:37c145e5e2616798e5351173d543454a26f3cf61edd3e832c57a32d46fb996e6[0m
+#=#=#                                                                                                                                                     0.0%[lifecycle] tools | installed prebuilt cargo-semver-checks (x86_64)
+######################################################################    98.1%######################################################################## 100.0%
+[32m==>[0m [1mFetching [32mdirenv[39m[0m
+[34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/core/direnv/blobs/sha256:cccbbfdc7d35b21af86d2c237707976ca4a290ac419d27c94d4d8c5a5d36759a[0m
+#=#=#                                                                                                                                                     0.0%[lifecycle] tools | installed prebuilt actionlint (x86_64)
+##################################                                        48.0%######################################################################## 100.0%
+[32m==>[0m [1mInstalling dependencies for direnv: [32mncurses[39m, [32mreadline[39m and [32mbash[39m[0m
+[32m==>[0m [1mInstalling direnv dependency: [32mncurses[39m[0m
+[34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/core/ncurses/manifests/6.6[0m
+Already downloaded: /home/forge/.cache/tillandsias-project/brew-cache/downloads/40b3748b8b6030c832b016714eee3f2018860e2a20eca25067c7568cbfe3b5e2--ncurses-6.6.bottle_manifest.json
+[34m==>[0m [1mPouring ncurses--6.6.x86_64_linux.bottle.tar.gz[0m
+[lifecycle] harness | claude curl-install OK (2.1.296 (Claude Code))
+[lifecycle] tools | installed prebuilt vale (x86_64)
+[34m==>[0m [1mDownloading https://formulae.brew.sh/api/cask.jws.json[0m
+[lifecycle] tools | installed prebuilt wasmtime (x86_64)
+🍺  /home/linuxbrew/.linuxbrew/Cellar/ncurses/6.6: 4,071 files, 10.9MB
+[32m==>[0m [1mInstalling direnv dependency: [32mreadline[39m[0m
+[34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/core/readline/manifests/8.3.6[0m
+Already downloaded: /home/forge/.cache/tillandsias-project/brew-cache/downloads/86390acc2bbeae5b2803050d5af9e2f6b7edb39e0b3b33519b4efec1ddb46b46--readline-8.3.6.bottle_manifest.json
+[34m==>[0m [1mPouring readline--8.3.6.x86_64_linux.bottle.tar.gz[0m
+🍺  /home/linuxbrew/.linuxbrew/Cellar/readline/8.3.6: 56 files, 2.9MB
+[32m==>[0m [1mInstalling direnv dependency: [32mbash[39m[0m
+[34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/core/bash/manifests/5.3.20[0m
+Already downloaded: /home/forge/.cache/tillandsias-project/brew-cache/downloads/4d5aa3dc31bca7c1a3cd311e820309d3dcd3f189ae0487927c513feb5e1ef2ff--bash-5.3.20.bottle_manifest.json
+[34m==>[0m [1mPouring bash--5.3.20.x86_64_linux.bottle.tar.gz[0m
+🍺  /home/linuxbrew/.linuxbrew/Cellar/bash/5.3.20: 172 files, 11.7MB
+[32m==>[0m [1mInstalling [32mdirenv[39m[0m
+[34m==>[0m [1mPouring direnv--2.38.2.x86_64_linux.bottle.tar.gz[0m
+🍺  /home/linuxbrew/.linuxbrew/Cellar/direnv/2.38.2: 12 files, 13MB
+[34m==>[0m [1mRunning `brew cleanup direnv`...[0m
+[31mdirenv: error command "/home/linuxbrew/.linuxbrew/bin/direnv timeout" not found[0m
+[?u[>0q]11;?\[?1049hP+q696e646e\P+q71756572792d6f732d6e616d65\[?1049l[0c[lifecycle] tools | installed dart SDK (x86_64)
+[lifecycle] tools | agy install attempt 1/3
+[lifecycle] tools | installed marksman (x86_64)
+[lifecycle] tools | prebuilt dev-tools ensured (arch=x86_64)
+[lifecycle] harness | agent harnesses up to date
+warning: fish could not read response to Primary Device Attribute query after waiting for 10 seconds. This is often due to a missing feature in your terminal. See 'help terminal-compatibility' or 'man fish-terminal-compatibility'. This fish process will no longer wait for outstanding queries, which disables some optional features.
+]7;file://forge-macron-dev/home/forge/src/macron.dev]0;~/s/macron.dev[m]11;?\[6n[0c[?2004h[?2031h[>4;1m=]133;A;click_events=1\[92mforge[m@[mforge-macron-dev[m [32m~/s/macron.dev[m (main)[m> ]133;B[K[46C[2026-10-12T18:18:26.521Z] event:container_exit container=tillandsias-router exit_code=0
+[2026-10-12T18:18:26.521Z] event:container_start container=tillandsias-router status=running
+[2026-10-12T18:18:26.772Z] event:container_start container=tillandsias-macron.dev-web-candidate-51148-1791829106482 status=running
+[tillandsias] wrote 1 router route(s) to /run/user/1000/tillandsias/router/dynamic.Caddyfile
+[2026-10-12T18:18:45.575Z] event:container_start container=tillandsias-macron.dev-web-candidate-51148-1791829125349 status=running
+[tillandsias] podman sync failed: status=timeout stderr=podman sync operation exceeded its 5s budget; termination was requested: podman rm --force tillandsias-macron.dev-web
+[tillandsias] podman sync failed: status=timeout stderr=podman sync operation exceeded its 5s budget; termination was requested: podman rm --force tillandsias-macron.dev-web-candidate-51148-1791829125349
+[?2004l[?2031l[>4;0m>[2026-10-12T18:19:05.627Z] event:container_signal container=tillandsias-macron.dev-forge-maintenance signal=SIGTERM
+[2026-10-12T18:19:05.627Z] event:container_exit container=tillandsias-macron.dev-forge-maintenance exit_code=143
+[tillandsias] podman run-attached:maintenance failed: status=143 stderr=(stderr inherited to terminal)
+[2026-10-12T18:19:06.015Z] event:container_launch stage=maintenance state=failed container=tillandsias-macron.dev-forge-maintenance detail="stage 'maintenance' attached command exited with status 143"

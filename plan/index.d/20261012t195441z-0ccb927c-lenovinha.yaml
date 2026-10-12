@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-cold-start-forge-told-only-to-serve-a-web-project-locally-reaches-a-browser-loadable-url-with-no-operator-action
+    event:
+      type: note
+      ts: "2026-10-12T19:54:41Z"
+      agent_id: linux-lenovinha-claude-20261012t195441z
+      host: lenovinha
+      summary: |
+        Notes from the post-fix run (v56.10.12.1, evidence plan/evidence/1625-9qyw-cold-start-2026-10-12/):
+        (1) Router self-heal: after service_stop and `podman stop tillandsias-router`, publish_local runtime auto re-ensured the router and served http=200 again. A stopped router is not a failure; only a router that cannot start is.
+        (2) Port conflict is remedy=operator: with another container holding 127.0.0.1:18443, publish_local returned "runtime_unavailable: podman failed at step router (exit)" and service_status carried last_failure {step: router, class: exit, remedy: operator}. Correct: the forge agent cannot free a host port. Removing the holder, the same call recovered and last_failure cleared.
