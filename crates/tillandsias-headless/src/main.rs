@@ -19426,6 +19426,10 @@ mod tray;
 #[cfg(feature = "tray")]
 mod local_web_preview;
 
+// @trace spec:host-browser-mcp (order 1649-xqet)
+#[cfg(feature = "tray")]
+mod browser_open;
+
 /// Spawn a terminal-launcher child and reap it on a detached thread.
 ///
 /// Order 385: Ptyxis's GApplication client exits in milliseconds after

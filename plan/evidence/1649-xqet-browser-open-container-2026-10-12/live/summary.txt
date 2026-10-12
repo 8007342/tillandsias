@@ -1,0 +1,33 @@
+test-binary /var/home/lenovinha/claudia/tillandsias/target/debug/deps/tillandsias-a69e54c5169d8f95
+version 56.10.12.1 host-ip 192.168.0.111
+images: localhost/tillandsias-chromium-framework:v56.10.12.1 localhost/e2e-fw-base:1 localhost/tillandsias-chromium-framework:v56.9.27.2 localhost/tillandsias-router:v56.10.12.1 localhost/tillandsias-router:v56.9.27.2 
+ca-spki BhAivAn1exWACHCz4Z767efy1UuuUUuPBMQkEtlouOs=
+router-self-check demo-preview: ok1
+live-test rc=0
+host-chrome-before []
+browser.open https://www.demo.localhost:18443/ -> {"window_id":"win-d2acc687-3319-4b62-9def-91295e21902e"}
+podman-ps tillandsias-browser-demo-d2acc6873319 tillandsias-browser-net-d2acc6873319 127.0.0.1:42497->9223/tcp
+router-networks e2e-enclave tillandsias-browser-net-d2acc6873319
+host-chrome-after [] contained-chrome-processes 9
+host-cdp-relay 127.0.0.1:42497/json/version -> "Browser": "Chrome/154.0.8037.57",
+browser.screenshot (pre-existing CDP client) -> {"content":[{"type":"text","text":"SCREENSHOT_FAILED: CDP connection failed: connection closed by remote (EOF during read)"}],"isError":true}
+probe window title="PREVIEW-DEMO" url=https://www.demo.localhost:18443/
+probe chromium-http-route title="PREVIEW-DEMO"
+probe chromium-other-project title="www.other.localhost"
+probe chromium-external-name title="example.com"
+probe chromium-external-ip title="1.1.1.1"
+probe chromium-host-ip title="192.168.0.111"
+probe net-route reach:10.89.1.2
+probe net-other-project-upstream unresolved:ENOTFOUND
+probe net-external-name unresolved:ENOTFOUND
+probe net-external-ip unreachable:1.1.1.1:ENETUNREACH
+probe net-host-lan unreachable:192.168.0.111:ENETUNREACH
+probe net-host-containers-internal unreachable:169.254.1.2:ENETUNREACH
+probe residual-raw-router-other-project status=200 title="PREVIEW-OTHER"
+browser.close -> {"ok":true}
+after-close containers="" networks="e2e-enclave\npodman" router-networks=e2e-enclave
+test browser_open::tests::live_browser_open_runs_the_container_on_its_own_network ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 951 filtered out; finished in 51.19s
+op: unchanged
+op-net: unchanged
+op-browser-dir: unchanged

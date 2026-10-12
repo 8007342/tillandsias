@@ -50,6 +50,9 @@ RUN microdnf install -y \
 USER root
 COPY chromium-framework-launch.sh /usr/local/bin/chromium-framework-launch.sh
 RUN chmod 0755 /usr/local/bin/chromium-framework-launch.sh
+# Order 1649-xqet: browser.open windows start through this entry, which relays
+# the container-local DevTools port to a port the host publishes.
+COPY browser-window-entry.js /usr/local/lib/tillandsias/browser-window-entry.js
 
 USER chromium
 

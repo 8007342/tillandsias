@@ -1,0 +1,80 @@
+# @trace spec:host-browser-mcp, spec:browser-isolation-tray-integration, spec:local-web-preview
+# @trace order:1649-xqet (browser.open runs the chromium-framework container)
+#
+# browser.open used to look for host Chromium under ~/.cache/tillandsias/chromium
+# (which nothing downloads, so every open answered BROWSER_UNAVAILABLE), and its
+# allowlist admitted only ports 8080/80, so the local preview
+# https://www.<p>.localhost:18443 was URL_NOT_ALLOWED. Now a window is the
+# chromium-framework container on a per-launch --internal network joined only by
+# the router, with host-resolver rules ending in `MAP * ~NOTFOUND` and the enclave
+# CA pinned by SPKI. The behaviour is pinned by unit tests
+# (tillandsias-browser-mcp server::tests browser_open_*, headless
+# browser_open::tests) and proven live by
+# browser_open::tests::live_browser_open_runs_the_container_on_its_own_network
+# (opt-in; evidence plan/evidence/1649-xqet-browser-open-container-2026-10-12/).
+# These steps pin the shape that keeps it so. Every step carries its own
+# negative control: the same check run on a seeded copy with the property
+# removed must FAIL. Pipe-free.
+name: litmus:browser-open-container-shape
+spec: host-browser-mcp
+phase: pre-build
+description: >
+  Pin browser.open's container path: no host-Chromium lookup or spawn in the
+  launcher; the window joins only its own --internal network with a resolver
+  catch-all and a CA SPKI pin; the local-preview TLS port is admitted for
+  https only; the router publishes the preview leaf as a full chain; the image
+  carries the CDP relay entry.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-browser-mcp/src/launcher.rs
+  - workspace contains crates/tillandsias-headless/src/browser_open.rs
+
+critical_path:
+  - step: "launcher has no host-Chromium path; negative control: a seeded Command::new spawn must FAIL the check"
+    command: "set -u; T=target/litmus-browser-open; mkdir -p \"$T\"; F=crates/tillandsias-browser-mcp/src/launcher.rs; nohost() { ! grep -qE 'Command::new|TILLANDSIAS_BROWSER_BIN|TILLANDSIAS_CHROMIUM_BIN|cache_root|tillandsias/chromium\"' \"$1\"; }; nohost \"$F\" || { echo 'FAIL: launcher.rs carries a host-Chromium path'; exit 1; }; cp \"$F\" \"$T/l.rs\"; printf '%s\\n' 'fn spawn() { std::process::Command::new(\"chrome\"); }' >> \"$T/l.rs\"; if nohost \"$T/l.rs\"; then echo 'FAIL: negative control passed'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: no host-Chromium path; seeded spawn caught'"
+    timeout_ms: 5000
+    expected_behavior: "ok: no host-Chromium path"
+
+  - step: "the window joins only its own --internal network, resolves nothing but the project, pins the CA; negative control: dropping the catch-all must FAIL"
+    command: "set -u; T=target/litmus-browser-open; mkdir -p \"$T\"; F=crates/tillandsias-headless/src/browser_open.rs; shape() { grep -qF '\"--internal\",' \"$1\" && grep -qF '.network(&handle.network_name)' \"$1\" && grep -qF 'MAP * ~NOTFOUND\"' \"$1\" && grep -qF -e '--ignore-certificate-errors-spki-list={ca_spki}' \"$1\" && grep -qF '\"--alias\",' \"$1\"; }; shape \"$F\" || { echo 'FAIL: browser_open.rs lost the network/resolver/pin shape'; exit 1; }; grep -vF 'MAP * ~NOTFOUND\"' \"$F\" > \"$T/b.rs\"; if shape \"$T/b.rs\"; then echo 'FAIL: negative control passed'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: internal network, resolver catch-all, CA pin; seeded removal caught'"
+    timeout_ms: 5000
+    expected_behavior: "ok: internal network, resolver catch-all, CA pin"
+
+  - step: "the local-preview TLS port is admitted for https only; negative control: admitting it for any scheme must FAIL"
+    command: "set -u; T=target/litmus-browser-open; mkdir -p \"$T\"; F=crates/tillandsias-browser-mcp/src/allowlist.rs; port() { grep -qF 'port == 8080 || port == 80 || (scheme == \"https\" && Some(port) == preview_tls_port)' \"$1\"; }; port \"$F\" || { echo 'FAIL: allowlist preview-port rule changed'; exit 1; }; sed 's/(scheme == \"https\" \\&\\& Some(port) == preview_tls_port)/Some(port) == preview_tls_port/' \"$F\" > \"$T/a.rs\"; if port \"$T/a.rs\"; then echo 'FAIL: negative control passed'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: preview port https-only; seeded widening caught'"
+    timeout_ms: 5000
+    expected_behavior: "ok: preview port https-only"
+
+  - step: "the router publishes the preview leaf as a full chain; negative control: a leaf-only publish must FAIL"
+    command: "set -u; T=target/litmus-browser-open; mkdir -p \"$T\"; F=crates/tillandsias-headless/src/local_web_preview.rs; chain() { grep -qF 'std::fs::write(&crt, chain)' \"$1\"; }; chain \"$F\" || { echo 'FAIL: the preview leaf is no longer published with the CA'; exit 1; }; grep -vF 'std::fs::write(&crt, chain)' \"$F\" > \"$T/p.rs\"; if chain \"$T/p.rs\"; then echo 'FAIL: negative control passed'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: full-chain leaf; seeded leaf-only caught'"
+    timeout_ms: 5000
+    expected_behavior: "ok: full-chain leaf"
+
+  - step: "the chromium-framework image carries the CDP relay entry the window starts through; negative control: an image without the COPY must FAIL"
+    command: "set -u; T=target/litmus-browser-open; mkdir -p \"$T\"; F=images/chromium/Containerfile.framework; relay() { grep -qF 'COPY browser-window-entry.js /usr/local/lib/tillandsias/browser-window-entry.js' \"$1\" && test -f images/chromium/browser-window-entry.js && grep -qF '/usr/local/lib/tillandsias/browser-window-entry.js' crates/tillandsias-headless/src/browser_open.rs; }; relay \"$F\" || { echo 'FAIL: the window entry is not shipped'; exit 1; }; grep -vF 'COPY browser-window-entry.js' \"$F\" > \"$T/C\"; if relay \"$T/C\"; then echo 'FAIL: negative control passed'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: window entry shipped; seeded omission caught'"
+    timeout_ms: 5000
+    expected_behavior: "ok: window entry shipped"
+
+observability:
+  traces:
+    - "@trace spec:host-browser-mcp"
+    - "@trace spec:browser-isolation-tray-integration"
+    - "@trace spec:local-web-preview"
+  expected_log: "launcher container-only + internal network/resolver/pin + https-only preview port + full-chain leaf + relay entry pinned, each with a seeded negative control"
+  log_fields:
+    spec: "host-browser-mcp"
+    test: "browser-open-container-shape"
+    artifact: "crates/tillandsias-browser-mcp/src/{launcher,allowlist}.rs + crates/tillandsias-headless/src/{browser_open,local_web_preview}.rs + images/chromium/Containerfile.framework"
+
+rollback:
+  on_failure: >
+    browser.open's container path drifted. A host-Chromium lookup in
+    launcher.rs reopens the unconfined window; losing --internal, the
+    `MAP * ~NOTFOUND` catch-all or the SPKI pin lets a window reach other
+    projects, the host or the internet, or trust the host store; admitting the
+    preview port for http or another port widens the allowlist; a leaf-only
+    preview chain breaks the pin (ERR_CERT_AUTHORITY_INVALID); dropping the
+    entry COPY breaks the window's start. Restore from order 1649-xqet.
+  command: "grep -nE 'Command::new|--internal|NOTFOUND|spki-list|preview_tls_port|fs::write\\(&crt|browser-window-entry' crates/tillandsias-browser-mcp/src/launcher.rs crates/tillandsias-browser-mcp/src/allowlist.rs crates/tillandsias-headless/src/browser_open.rs crates/tillandsias-headless/src/local_web_preview.rs images/chromium/Containerfile.framework"

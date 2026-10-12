@@ -1,0 +1,5 @@
+// Stand-in project dev server: plain http on :3000, a fixed <title> marker.
+require('http').createServer((req, res) => {
+  res.writeHead(200, { 'content-type': 'text/html' });
+  res.end(`<html><head><title>${process.argv[2]}</title></head><body>${process.argv[2]} host=${req.headers.host}</body></html>\n`);
+}).listen(3000, '0.0.0.0', () => console.log(`${process.argv[2]} listening 3000`));
