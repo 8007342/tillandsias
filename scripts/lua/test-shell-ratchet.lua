@@ -1,4 +1,4 @@
--- @trace order:1580-8hra, order:1384-bxhk
+-- @trace order:1580-8hra, order:1384-bxhk, order:1624-bv73
 -- @env TILLANDSIAS_PLAN_BIN TILLANDSIAS_SCRIPT_RUNNER_BIN
 --
 -- test-shell-ratchet.lua — scripts/lua/check-shell-ratchet.lua counts the
@@ -14,6 +14,10 @@
 --   3 LITMUS     once a steps: litmus exists, a new command: with `a | b` outside
 --                quotes is refused; the same pipe inside a single-quoted literal
 --                is accepted
+--  3a NOSTEPS    with NO steps: litmus anywhere (the real tree's state), the same
+--                piped command: is still refused, and the ok line says
+--                litmus-arm=active:unconditional (1624-bv73: the arm used to be dormant until a
+--                steps: file existed, so authors saw ok while this fixture refused)
 --   4 FLOORS     a commit RAISING a floor is refused; a commit LOWERING one (with
 --                the pipe really removed) is accepted
 --   5 EMPTY      an empty scan population is could-not-run (exit 3), never ok
@@ -124,7 +128,7 @@ local found = must(run({ "find", "scripts", "-maxdepth", "1", "(", "-name", "che
 local want = 0
 for _, l in ipairs(text.lines(found.stdout or "")) do if l ~= "" and not boot[l] then want = want + 1 end end
 check("COUNTS: the grammar line, with sh= equal to an independent find (" .. want .. ")",
-    rc == 0 and grep(o, [[^ok:shell-ratchet:sh=[0-9]+:floor:[0-9]+ pipes=[0-9]+:floor:[0-9]+ litmus-form:command=[0-9]+:steps=[0-9]+:rust_queries=[0-9]+ gate-steps:sh=[0-9]+:lua=[0-9]+ shell-strings=[0-9]+$]]) ~= nil
+    rc == 0 and grep(o, [[^ok:shell-ratchet:sh=[0-9]+:floor:[0-9]+ pipes=[0-9]+:floor:[0-9]+ litmus-form:command=[0-9]+:steps=[0-9]+:rust_queries=[0-9]+ litmus-arm=active:unconditional gate-steps:sh=[0-9]+:lua=[0-9]+ shell-strings=[0-9]+$]]) ~= nil
         and o:find("ok:shell-ratchet:sh=" .. want .. ":", 1, true) == 1,
     "rc=" .. rc .. " out=[" .. o .. "] want sh=" .. want)
 
@@ -137,10 +141,25 @@ check("DECIDER: a new scripts/check-zzz.sh is refused (exit 1), naming script ru
     "rc=" .. rc .. " out=[" .. o .. "]")
 rm("s1", "scripts/check-zzz.sh")
 
--- ── ARM 3: a NEW piped litmus command, once steps: exists ──────────────────
 -- The scratch litmus names are ASSEMBLED, never spelled whole, or
 -- check-litmus-pin-claims reads them as claims on litmus tests that do not exist.
 local LP = "litmus"
+
+-- ── ARM 3a: NO steps: file anywhere — the arm is still active (1624-bv73) ──
+local ns_steps = 0
+for _, f in ipairs(fs.walk(REL .. "/s1/openspec/litmus-tests", { suffix = ".yaml" })) do
+    if text.is_match(fs.read(f) or "", [[(?m)^steps:]]) then ns_steps = ns_steps + 1 end
+end
+local ns_rc, ns_o = ratchet("s1")
+wr("s1", "openspec/litmus-tests/zz-nosteps-piped.yaml", "name: " .. LP .. ":zz-nosteps-piped\ncritical_path:\n  - command: \"printf x | grep -q x\"\n")
+rc, o = ratchet("s1")
+check("NOSTEPS: with no steps: litmus anywhere, a new piped command: is still refused, and the ok line says litmus-arm=active:unconditional",
+    ns_steps == 0 and ns_rc == 0 and grep(ns_o, [[^ok:shell-ratchet:.* litmus-arm=active:unconditional ]]) ~= nil
+        and rc == 1 and has_line(o, "violation:shell-ratchet:new-piped-command:openspec/litmus-tests/zz-nosteps-piped.yaml"),
+    "steps files=" .. ns_steps .. " clean rc=" .. ns_rc .. " out=[" .. ns_o .. "]; piped rc=" .. rc .. " out=[" .. o .. "]")
+rm("s1", "openspec/litmus-tests/zz-nosteps-piped.yaml")
+
+-- ── ARM 3: a NEW piped litmus command, once steps: exists ──────────────────
 wr("s1", "openspec/litmus-tests/zz-steps.yaml", "name: " .. LP .. ":zz-steps\nsteps:\n  - run: x\n")
 commit("s1", "a steps: litmus exists")
 wr("s1", "openspec/litmus-tests/zz-quoted.yaml", "name: " .. LP .. ":zz-quoted\ncritical_path:\n  - command: \"echo 'a | b'\"\n")
