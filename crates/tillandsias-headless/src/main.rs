@@ -16298,35 +16298,72 @@ fn browser_profile_root() -> PathBuf {
     PathBuf::from("/tmp/tillandsias/browser")
 }
 
+/// The host graphical session the browser container may reach. WAYLAND ONLY
+/// (order 1641-xbvq, operator decision 2026-10-12): X11 is not offered, because
+/// handing a container /tmp/.X11-unix gives it every X client on the display.
 #[derive(Debug, Clone, Default)]
 struct BrowserDisplayContext {
-    display: Option<String>,
-    xauthority: Option<PathBuf>,
     wayland_display: Option<String>,
     xdg_runtime_dir: Option<PathBuf>,
 }
 
+/// Where the Wayland socket file is mounted inside the browser container: a
+/// private tmpfs runtime dir holding nothing else.
+const BROWSER_RUNTIME_DIR: &str = "/run/user/browser";
+
 impl BrowserDisplayContext {
     /// @trace spec:tray-cli-coexistence
     fn from_env() -> Result<Self, String> {
-        let display = std::env::var("DISPLAY").ok();
-        let xauthority = std::env::var_os("XAUTHORITY").map(PathBuf::from);
-        let wayland_display = std::env::var("WAYLAND_DISPLAY").ok();
-        let xdg_runtime_dir = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from);
-
-        if display.is_none() && wayland_display.is_none() {
-            return Err(
-                "OpenCode Web browser launch requires a graphical session (DISPLAY or WAYLAND_DISPLAY)"
-                    .to_string(),
-            );
-        }
-
         Ok(Self {
-            display,
-            xauthority,
-            wayland_display,
-            xdg_runtime_dir,
+            wayland_display: std::env::var("WAYLAND_DISPLAY")
+                .ok()
+                .filter(|v| !v.is_empty()),
+            xdg_runtime_dir: std::env::var_os("XDG_RUNTIME_DIR")
+                .filter(|v| !v.is_empty())
+                .map(PathBuf::from),
         })
+    }
+
+    /// The host Wayland socket FILE, or why there is none. WAYLAND_DISPLAY is
+    /// a socket name under XDG_RUNTIME_DIR, or an absolute path.
+    fn wayland_socket(&self) -> Result<(PathBuf, String), String> {
+        let refuse = |why: &str| {
+            format!(
+                "the browser opens on Wayland only, and {why}. Tillandsias does not hand a \
+                 browser container an X11 display (it would reach every X client on it). \
+                 Log in to a Wayland session and retry."
+            )
+        };
+        let Some(name) = self.wayland_display.as_deref() else {
+            return Err(refuse("this session has no WAYLAND_DISPLAY"));
+        };
+        let socket = if Path::new(name).is_absolute() {
+            PathBuf::from(name)
+        } else {
+            if name.contains('/') || name == "." || name == ".." {
+                return Err(refuse(&format!(
+                    "WAYLAND_DISPLAY={name:?} is not a socket name"
+                )));
+            }
+            let Some(runtime) = self.xdg_runtime_dir.as_deref() else {
+                return Err(refuse(
+                    "XDG_RUNTIME_DIR is not set, so the Wayland socket cannot be found",
+                ));
+            };
+            runtime.join(name)
+        };
+        if !socket.exists() {
+            return Err(refuse(&format!(
+                "the Wayland socket {} does not exist",
+                socket.display()
+            )));
+        }
+        let file_name = socket
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("wayland-0")
+            .to_string();
+        Ok((socket, file_name))
     }
 }
 
@@ -16390,41 +16427,23 @@ fn build_project_browser_spec(
         .arg(format!("--user-data-dir={}", profile_dir.display()))
         .arg(format!("--app={app_url}"));
 
-    if let Some(display_name) = &display.display {
-        spec = spec
-            .env("DISPLAY", display_name)
-            .volume("/tmp/.X11-unix", "/tmp/.X11-unix", MountMode::ReadWrite)
-            .arg("--ozone-platform=x11");
-
-        if let Some(xauthority_path) = &display.xauthority
-            && xauthority_path.exists()
-        {
-            spec = spec
-                .env("XAUTHORITY", "/home/chromium/.Xauthority")
-                .bind_mount(
-                    xauthority_path.display().to_string(),
-                    "/home/chromium/.Xauthority",
-                    true,
-                );
-        }
-    } else if let Some(wayland_display) = &display.wayland_display {
-        if let Some(xdg_runtime_dir) = &display.xdg_runtime_dir {
-            spec = spec
-                .env("XDG_RUNTIME_DIR", xdg_runtime_dir.display().to_string())
-                .env("WAYLAND_DISPLAY", wayland_display)
-                .volume(
-                    xdg_runtime_dir.display().to_string(),
-                    xdg_runtime_dir.display().to_string(),
-                    MountMode::ReadWrite,
-                )
-                .arg("--ozone-platform=wayland");
-        } else {
-            return Err(
-                "OpenCode Web browser launch requires XDG_RUNTIME_DIR for Wayland sessions"
-                    .to_string(),
-            );
-        }
-    }
+    // Order 1641-xbvq (p0): ONLY the Wayland socket file, into a private tmpfs
+    // runtime dir. Mounting the host's whole $XDG_RUNTIME_DIR handed the browser
+    // podman.sock (host code execution), the tray control socket and the D-Bus
+    // session bus (and through it the keyring). `-v …:rw`, not --mount
+    // relabel=shared: a relabel would rewrite the live compositor socket's
+    // SELinux label on the host.
+    let (socket, socket_name) = display.wayland_socket()?;
+    spec = spec
+        .tmpfs(format!("{BROWSER_RUNTIME_DIR}:size=1m,mode=0755"))
+        .volume(
+            socket.display().to_string(),
+            format!("{BROWSER_RUNTIME_DIR}/{socket_name}"),
+            MountMode::ReadWrite,
+        )
+        .env("XDG_RUNTIME_DIR", BROWSER_RUNTIME_DIR)
+        .env("WAYLAND_DISPLAY", &socket_name)
+        .arg("--ozone-platform=wayland");
 
     for device_flag in detect_gpu_devices() {
         if let Some(device) = device_flag.strip_prefix("--device=") {
@@ -31551,11 +31570,11 @@ esac
     fn opencode_web_browser_spec_is_built_with_typed_podman_flags() {
         let profile_dir = PathBuf::from("/tmp/tillandsias/browser/test-profile");
         let certs_dir = PathBuf::from("/tmp/tillandsias/ca");
+        let runtime = tempfile::tempdir().expect("runtime dir");
+        std::fs::write(runtime.path().join("wayland-1"), b"").expect("socket stand-in");
         let display = BrowserDisplayContext {
-            display: Some(":99".to_string()),
-            xauthority: None,
-            wayland_display: None,
-            xdg_runtime_dir: None,
+            wayland_display: Some("wayland-1".to_string()),
+            xdg_runtime_dir: Some(runtime.path().to_path_buf()),
         };
         let token = [7u8; 32];
         let expected_app_url = tillandsias_otp::build_login_data_url(
@@ -31612,7 +31631,185 @@ esac
             args.iter()
                 .any(|arg| arg == "--user-data-dir=/tmp/tillandsias/browser/test-profile")
         );
-        assert!(has_arg(&args, "--ozone-platform=x11"));
+        assert!(has_arg(&args, "--ozone-platform=wayland"));
+        assert!(has_arg(&args, "WAYLAND_DISPLAY=wayland-1"));
+        assert!(has_arg(&args, "XDG_RUNTIME_DIR=/run/user/browser"));
+    }
+
+    /// ORDER 1641-xbvq live probe helper, never run by default: writes the
+    /// browser's REAL run argv for this session (from_env + the builder) to
+    /// $TILLANDSIAS_BROWSER_PROBE_ARGS, one argument per line, so the live probe
+    /// runs exactly what the product would and not a hand-copied list.
+    /// `TILLANDSIAS_BROWSER_PROBE_ARGS=<file> TILLANDSIAS_BROWSER_PROBE_VERSION=<v>
+    ///  TILLANDSIAS_BROWSER_PROBE_CERTS=<dir> cargo test … -- --ignored browser_spec_live_probe_args`
+    #[test]
+    #[ignore = "live-probe helper: needs a Wayland session and probe env"]
+    fn browser_spec_live_probe_args() {
+        let out = std::env::var("TILLANDSIAS_BROWSER_PROBE_ARGS").expect("probe args path");
+        let version = std::env::var("TILLANDSIAS_BROWSER_PROBE_VERSION").expect("image version");
+        let certs =
+            PathBuf::from(std::env::var("TILLANDSIAS_BROWSER_PROBE_CERTS").expect("certs dir"));
+        let profile = PathBuf::from(&out).with_extension("profile");
+        std::fs::create_dir_all(&profile).expect("profile dir");
+        let display = BrowserDisplayContext::from_env().expect("display context");
+        let spec = build_project_browser_spec(
+            "data:text/html,<title>tillandsias-1641-probe</title><h1>1641-xbvq probe</h1>",
+            &version,
+            &profile,
+            &certs,
+            &display,
+            "tillandsias-browser-1641-probe",
+        )
+        .expect("browser spec for this session");
+        std::fs::write(&out, spec.build_run_args().join("\n")).expect("write args");
+    }
+
+    /// ORDER 1641-xbvq: with no Wayland session the browser REFUSES, naming why
+    /// and what to do; it never falls back to an X11 display.
+    #[test]
+    fn browser_spec_refuses_without_a_wayland_session() {
+        let runtime = tempfile::tempdir().expect("runtime dir");
+        let cases = [
+            (
+                BrowserDisplayContext {
+                    wayland_display: None,
+                    xdg_runtime_dir: Some(runtime.path().to_path_buf()),
+                },
+                "no WAYLAND_DISPLAY",
+            ),
+            (
+                BrowserDisplayContext {
+                    wayland_display: Some("wayland-0".to_string()),
+                    xdg_runtime_dir: None,
+                },
+                "XDG_RUNTIME_DIR is not set",
+            ),
+            (
+                BrowserDisplayContext {
+                    wayland_display: Some("wayland-9".to_string()),
+                    xdg_runtime_dir: Some(runtime.path().to_path_buf()),
+                },
+                "does not exist",
+            ),
+            (
+                BrowserDisplayContext {
+                    wayland_display: Some("../podman/podman.sock".to_string()),
+                    xdg_runtime_dir: Some(runtime.path().to_path_buf()),
+                },
+                "is not a socket name",
+            ),
+        ];
+        for (display, why) in cases {
+            let err = build_project_browser_spec(
+                "http://x.localhost/",
+                "1.2.3",
+                Path::new("/tmp/p"),
+                Path::new("/tmp/ca"),
+                &display,
+                "tillandsias-browser-x",
+            )
+            .expect_err("no usable Wayland socket must refuse");
+            assert!(
+                err.contains("Wayland only") && err.contains(why),
+                "{why}: {err}"
+            );
+            assert!(err.contains("Log in to a Wayland session"), "{err}");
+        }
+    }
+
+    /// Every host path the run argv mounts: `-v source:target[:mode]` and
+    /// `--mount type=bind,source=…,target=…`.
+    fn browser_mount_sources(args: &[String]) -> Vec<String> {
+        let mut sources = Vec::new();
+        for pair in args.windows(2) {
+            match pair[0].as_str() {
+                "-v" => {
+                    if let Some(src) = pair[1].split(':').next() {
+                        sources.push(src.to_string());
+                    }
+                }
+                "--mount" => {
+                    if let Some(src) = pair[1].split(',').find_map(|kv| kv.strip_prefix("source="))
+                    {
+                        sources.push(src.to_string());
+                    }
+                }
+                _ => {}
+            }
+        }
+        sources
+    }
+
+    /// ORDER 1641-xbvq (p0). The browser container must reach the compositor
+    /// through the ONE Wayland socket file, never the whole runtime dir (which
+    /// holds podman.sock, the tray control socket and the D-Bus bus) and never
+    /// /tmp/.X11-unix. Both DISPLAY and WAYLAND_DISPLAY are set here, as in
+    /// every XWayland session, because X11 used to win whenever DISPLAY was set.
+    #[test]
+    fn browser_spec_mounts_only_the_wayland_socket_file() {
+        let _guard = env_lock();
+        let runtime = tempfile::tempdir().expect("runtime dir");
+        let socket = runtime.path().join("wayland-0");
+        std::fs::write(&socket, b"").expect("socket stand-in");
+        let saved: Vec<(&str, Option<std::ffi::OsString>)> =
+            ["DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR"]
+                .into_iter()
+                .map(|k| (k, std::env::var_os(k)))
+                .collect();
+        // SAFETY: env_lock serialises every test that touches the environment.
+        unsafe {
+            std::env::set_var("DISPLAY", ":0");
+            std::env::set_var("WAYLAND_DISPLAY", "wayland-0");
+            std::env::set_var("XDG_RUNTIME_DIR", runtime.path());
+        }
+        let display = BrowserDisplayContext::from_env();
+        for (k, v) in saved {
+            // SAFETY: as above.
+            unsafe {
+                match v {
+                    Some(v) => std::env::set_var(k, v),
+                    None => std::env::remove_var(k),
+                }
+            }
+        }
+        let display = display.expect("a Wayland session yields a display context");
+        let spec = build_project_browser_spec(
+            "http://opencode.visual-chess.localhost/",
+            "1.2.3",
+            Path::new("/tmp/tillandsias/browser/test-profile"),
+            Path::new("/tmp/tillandsias/ca"),
+            &display,
+            "tillandsias-browser-visual-chess",
+        )
+        .expect("a Wayland session builds a browser spec");
+        let args = spec.build_run_args();
+
+        assert!(
+            has_arg(&args, "--ozone-platform=wayland"),
+            "Wayland must be the platform: {args:?}"
+        );
+        assert!(
+            !args.iter().any(|a| a.contains("ozone-platform=x11")),
+            "X11 is dropped (operator decision 2026-10-12): {args:?}"
+        );
+        let sources = browser_mount_sources(&args);
+        let socket_src = socket.display().to_string();
+        assert_eq!(
+            sources.iter().filter(|s| **s == socket_src).count(),
+            1,
+            "exactly one mount of the Wayland socket file: {sources:?}"
+        );
+        let runtime_src = runtime.path().display().to_string();
+        for forbidden in [runtime_src.as_str(), "/tmp/.X11-unix"] {
+            assert!(
+                !sources.iter().any(|s| s.trim_end_matches('/') == forbidden),
+                "no mount may expose {forbidden}: {sources:?}"
+            );
+        }
+        assert!(
+            !args.iter().any(|a| a.starts_with("DISPLAY=")),
+            "no X11 display is handed to the browser: {args:?}"
+        );
     }
 
     fn source_window<'a>(source: &'a str, signature: &str) -> &'a str {

@@ -1,0 +1,26 @@
+
+running 2 tests
+tests::browser_spec_refuses_without_a_wayland_session --- FAILED
+tests::browser_spec_mounts_only_the_wayland_socket_file --- FAILED
+
+failures:
+
+---- tests::browser_spec_refuses_without_a_wayland_session stdout ----
+
+thread 'tests::browser_spec_refuses_without_a_wayland_session' (4074428) panicked at crates/tillandsias-headless/src/main.rs:31750:14:
+no usable Wayland socket must refuse: ContainerSpec { image: "tillandsias-chromium-framework:v1.2.3", name: Some("tillandsias-browser-x"), hostname: None, detached: true, remove: true, init: true, interactive: false, tty: false, read_only: true, pull_never: true, userns_keep_id: true, cap_drop_all: true, no_new_privileges: true, label_disable: true, pids_limit: None, memory_budget: None, network: None, env: [("HOME", "/tmp"), ("TILLANDSIAS_CA_BUNDLE", "/etc/tillandsias/ca.crt"), ("SSL_CERT_FILE", "/etc/tillandsias/ca.crt"), ("XDG_CONFIG_HOME", "/tmp/chromium-config"), ("XDG_CACHE_HOME", "/tmp/chromium-cache")], env_passthrough: [], secrets: [], mounts: [Volume { source: "/tmp/p", target: "/tmp/p", mode: ReadWrite }, Bind { source: "/tmp/ca/intermediate.crt", target: "/etc/tillandsias/ca.crt", readonly: true }], tmpfs: ["/tmp:size=256m", "/tmp/chromium-config:size=128m", "/tmp/chromium-cache:size=512m", "/dev/shm:size=256m"], devices: ["/dev/nvidia0", "/dev/nvidiactl", "/dev/nvidia-uvm", "/dev/nvidia-uvm-tools", "/dev/kfd", "/dev/dri/renderD128", "/dev/dri/renderD129"], options: [], publish: [], entrypoint: None, command: ["--incognito", "--no-first-run", "--no-default-browser-check", "--user-data-dir=/tmp/p", "--app=http://x.localhost/"] }
+
+---- tests::browser_spec_mounts_only_the_wayland_socket_file stdout ----
+
+thread 'tests::browser_spec_mounts_only_the_wayland_socket_file' (4074427) panicked at crates/tillandsias-headless/src/main.rs:31674:9:
+Wayland must be the platform: ["-d", "--rm", "--init", "--pull=never", "--name", "tillandsias-browser-visual-chess", "--userns=keep-id", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--security-opt=label=disable", "--read-only", "--env", "HOME=/tmp", "--env", "TILLANDSIAS_CA_BUNDLE=/etc/tillandsias/ca.crt", "--env", "SSL_CERT_FILE=/etc/tillandsias/ca.crt", "--env", "XDG_CONFIG_HOME=/tmp/chromium-config", "--env", "XDG_CACHE_HOME=/tmp/chromium-cache", "--env", "DISPLAY=:0", "--env", "XAUTHORITY=/home/chromium/.Xauthority", "-v", "/tmp/tillandsias/browser/test-profile:/tmp/tillandsias/browser/test-profile:rw", "--mount", "type=bind,source=/tmp/tillandsias/ca/intermediate.crt,target=/etc/tillandsias/ca.crt,relabel=shared,readonly=true", "-v", "/tmp/.X11-unix:/tmp/.X11-unix:rw", "--mount", "type=bind,source=/run/user/1000/.mutter-Xwaylandauth.O40OW3,target=/home/chromium/.Xauthority,relabel=shared,readonly=true", "--tmpfs", "/tmp:size=256m", "--tmpfs", "/tmp/chromium-config:size=128m", "--tmpfs", "/tmp/chromium-cache:size=512m", "--tmpfs", "/dev/shm:size=256m", "--device", "/dev/nvidia0", "--device", "/dev/nvidiactl", "--device", "/dev/nvidia-uvm", "--device", "/dev/nvidia-uvm-tools", "--device", "/dev/kfd", "--device", "/dev/dri/renderD128", "--device", "/dev/dri/renderD129", "tillandsias-chromium-framework:v1.2.3", "--incognito", "--no-first-run", "--no-default-browser-check", "--user-data-dir=/tmp/tillandsias/browser/test-profile", "--app=http://opencode.visual-chess.localhost/", "--ozone-platform=x11"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tests::browser_spec_mounts_only_the_wayland_socket_file
+    tests::browser_spec_refuses_without_a_wayland_session
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 804 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p tillandsias-headless --bin tillandsias`
