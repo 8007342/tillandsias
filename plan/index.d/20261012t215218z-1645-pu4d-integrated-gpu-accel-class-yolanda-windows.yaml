@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-12) from 793-a8e7 S2's live evidence on yolanda-windows.
+packets:
+  - packet_id: an-integrated-gpu-that-becomes-container-usable-reports-accel-class-workstation-gpu-which-tells-agents-larger-models-are-cheap-here-so-the-vocabulary-needs-an-integrated-gpu-class
+    order: 1645-pu4d
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [accel, probe, envelope, vocabulary, igpu, inference]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-headless/src/accel_probe.rs
+      - images/default/lib-common.sh
+    related: [793-a8e7, 1254-pxw6, 855-wrr3]
+    depends_on: []
+    title: |
+      accel_envelope maps ANY container-usable GPU to accel_class=workstation-gpu, and lib-common.sh tells every forge agent that class means "a discrete GPU is deliverable to this container — larger models are cheap here"; an integrated GPU (measured: a WSL2 AMD Radeon 860M iGPU over Mesa Dozen, non-conformant Vulkan 1.2) then oversells and an agent picks too large a model
+    context: |
+      Measured on yolanda-windows 2026-10-12 with 793-a8e7 S1+S2 (PRs #384, #387) and the WSL2 Vulkan opt-in: the probe reported accel_class=workstation-gpu accel_gpu=usable accel_gpu_name=Microsoft_Direct3D12_AMD_Radeon_TM_860M_Graphics. The device is an INTEGRATED GPU (vulkaninfo deviceType PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) reached through Dozen, which self-reports as non-conformant (Vulkan 1.2, no shaderInt8). On the same stack, 793-a8e7 measured qwen2.5:0.5b decode 1.23x SLOWER on the iGPU and 3b prefill 2.04x faster.
+      The class match in accel_envelope (accel_probe.rs, the ("usable", _) => "workstation-gpu" arm) has no notion of integrated versus discrete. lib-common.sh's Accelerators bullet defines workstation-gpu as "a discrete GPU is deliverable to this container — larger models are cheap here". The fleet capability matrix renders the same token. All three read one vocabulary, so the fix spans all three.
+      Coordinator ruling 2026-10-12: the class must not oversell; an agent told "larger models are cheap here" on an iGPU over non-conformant dzn would pick the wrong model.
+      Evidence of integration that is already available: for the dxg path, the enumerated Vulkan deviceType (INTEGRATED_GPU = 1); for native Linux, memory_model unified (whose detection on non-amdgpu is itself broken, see 1254-pxw6). The row should say which evidence each platform uses, and what an iGPU with no integration evidence reports.
+    exit_criteria:
+      - 'a new class token (e.g. integrated-gpu) exists in accel_envelope, defined in lib-common.sh for agents without "larger models are cheap", and rendered by the fleet capability matrix'
+      - 'ARM: an integrated GPU never reports workstation-gpu. A unit test with a container-usable dxg device enumerated as PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU (the yolanda Radeon 860M fixture) asserts accel_class is not workstation-gpu; pre-fix it is workstation-gpu'
+      - 'NEGATIVE CONTROL: a discrete GPU that is container-usable (the rtx3070 fixtures) still reports workstation-gpu, and hybrid/mobile-npu/cpu-only are unchanged'
+      - 'the grammar change is reflected wherever the class vocabulary is pinned (envelope grammar comment, spec accel-capability-probe, any consumer that matches on workstation-gpu)'
+    unscoreable: "a vocabulary correctness fix: its evidence is the integrated arm red on trunk and green after, with the discrete negative control unchanged"
+    next_action: >
+      Grep every consumer of workstation-gpu first (probe, lib-common, fleet matrix, select-work-batch), then add the token with the integrated arm red on trunk.
+    provenance: |
+      Filed by yolanda-windows at macuahuitl-fedora's request, 2026-10-12, from 793-a8e7 S2's live probe run (PR #387 comment).
+    events:
+      - type: filed
+        ts: "2026-10-12T21:52:18Z"
+        host: yolanda-windows
+        summary: |-
+          An iGPU that becomes container-usable reports workstation-gpu, which tells agents larger models are cheap; add an integrated-gpu class.
