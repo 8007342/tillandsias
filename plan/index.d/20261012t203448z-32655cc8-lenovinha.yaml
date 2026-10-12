@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: a-cold-start-forge-told-only-to-serve-a-web-project-locally-reaches-a-browser-loadable-url-with-no-operator-action
+    event:
+      type: list-replace
+      ts: "2026-10-12T20:34:48Z"
+      agent_id: linux-lenovinha-claude-20261012t203448z
+      host: lenovinha
+      field: exit_criteria
+      items:
+        - "on a scratch substrate after a fresh install, a forge on a Wrangler project (8007342/macron.dev, static assets) publishes it with runtime auto; publish_local returns a URL; and an HTTPS fetch through the router returns the project's page. One run, no operator step between install and the fetch."
+        - "on the pre-fix release the same run fails without a URL (recorded: runtime_unavailable init refusal, empty service_status); on the fixed release a forced router-step failure returns a step-qualified reason with a last_failure record, and the same call recovers once the cause is removed"
+      summary: |-
+        fixture changed to macron.dev by operator decision 2026-10-12; the wasm build path is evidenced separately by 1625-grk8 and will be exercised again by 1637-5765

@@ -1,0 +1,108 @@
+[tillandsias] version: 56.10.12.1
+[tillandsias] --bash runtime lane: desktop-user-session
+[tillandsias] maintenance mode enabled
+[tillandsias] Project: /home/podman/src/macron.dev
+[tillandsias] Project path is valid: /home/podman/src/macron.dev
+[tillandsias] podman container: /usr/bin/podman rm <redacted>
+[tillandsias] podman container failed: status=1 stderr=Error: no container with ID or name "tillandsias-macron.dev-forge" found: no such container
+[tillandsias] podman container: /usr/bin/podman rm -f <redacted>
+[tillandsias] podman container: /usr/bin/podman rm -f <redacted>
+[tillandsias] podman container: /usr/bin/podman rm -f <redacted>
+[tillandsias] podman container: /usr/bin/podman volume rm -f <redacted>
+[tillandsias] podman container: /usr/bin/podman ps -a --filter name=^tillandsias- --format json
+[tillandsias] no active lane containers; cleaning project + shared stack for macron.dev (lane-scoped: tillandsias-inference; keeping application-lifetime: tillandsias-vault, tillandsias-proxy, tillandsias-router, tillandsias-nix-cache)
+[tillandsias] podman container: /usr/bin/podman rm <redacted>
+[tillandsias] podman container failed: status=1 stderr=Error: no container with ID or name "tillandsias-macron.dev-forge" found: no such container
+[tillandsias] podman container: /usr/bin/podman rm -f <redacted>
+[tillandsias] podman container: /usr/bin/podman rm -f <redacted>
+[tillandsias] podman container: /usr/bin/podman rm -f <redacted>
+[tillandsias] podman container: /usr/bin/podman volume rm -f <redacted>
+[tillandsias] podman container: /usr/bin/podman rm -f tillandsias-inference
+[tillandsias] podman network-exists: /usr/bin/podman network exists tillandsias-egress
+[tillandsias] podman network-exists failed: status=1 stderr=
+[tillandsias] running: "/usr/bin/podman" "network" "create" "--driver" "bridge" "tillandsias-egress"
+tillandsias-egress
+[tillandsias] podman network-exists: /usr/bin/podman network exists tillandsias-enclave
+[tillandsias] podman network-exists failed: status=1 stderr=
+[tillandsias] running: "/usr/bin/podman" "network" "create" "--internal" "--driver" "bridge" "--subnet" "10.0.42.0/24" "tillandsias-enclave"
+tillandsias-enclave
+[tillandsias] skipping host resolver update for vault: not root
+[tillandsias] podman network-exists: /usr/bin/podman network exists tillandsias-egress
+[tillandsias] running: "openssl" "req" "-x509" "-newkey" "rsa:2048" "-keyout" "/home/podman/.local/state/tillandsias/ca/intermediate.key.29566.1791832361761007257.tmp" "-out" "/home/podman/.local/state/tillandsias/ca/intermediate.crt.29566.1791832361761007257.tmp" "-days" "30" "-nodes" "-subj" "/C=US/ST=Privacy/L=Local/O=Tillandsias/CN=Tillandsias CA"
+[tillandsias] refreshed CA bundle at /home/podman/.local/state/tillandsias/ca/intermediate.crt
+[tillandsias] runtime assets ready at /home/podman/.local/share/tillandsias/runtime/56.10.12.1 (505770cc1f3098485aa7b83649d3185c8fee0f26a330aa22098d0b2218fe3c08)
+[tillandsias] podman network-exists: /usr/bin/podman network exists tillandsias-egress
+[tillandsias] podman network-exists: /usr/bin/podman network exists tillandsias-enclave
+[tillandsias] skipping host resolver update for vault: not root
+[tillandsias] detaching image ensure helper for proxy (log: /home/podman/.cache/tillandsias/image-build-proxy.log)
+[tillandsias-vault] refreshing podman secret tillandsias-ca-key from /home/podman/.local/state/tillandsias/ca/intermediate.key
+[2026-10-12T19:12:42.256Z] event:container_launch stage=ensure-proxy state=starting container=tillandsias-proxy
+[tillandsias] podman container: /usr/bin/podman run --detach --replace --name tillandsias-proxy --hostname proxy --network tillandsias-enclave,tillandsias-egress --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --userns=keep-id --pids-limit=32 --env DEBUG_PROXY=1 -v /home/podman/.local/state/tillandsias/ca/intermediate.crt:/etc/squid/certs/intermediate.crt:ro --secret <...
+[2026-10-12T19:12:42.704Z] event:container_launch stage=ensure-proxy state=running container=tillandsias-proxy
+[tillandsias] enclave proxy started, waiting for initialization...
+[tillandsias-vault] refreshing Vault TLS leaf certificate at /home/podman/.local/state/tillandsias/ca/vault.crt
+[tillandsias-vault] bootstrap starting (Phase 6.5 hardened)
+[tillandsias-vault] sanitize: failed/timed out deleting legacy vault-unseal-v1: Platform secure storage failure: no secret service provider or dbus session found
+[tillandsias] runtime assets ready at /home/podman/.local/share/tillandsias/runtime/56.10.12.1 (505770cc1f3098485aa7b83649d3185c8fee0f26a330aa22098d0b2218fe3c08)
+[tillandsias] podman image-exists: /usr/bin/podman image exists localhost/tillandsias-vault:sha256-13dfe28138d33dd386a948cbee85fa5365fc9d7b21c40aeb78b8beb54609a4d1
+[tillandsias-vault] image localhost/tillandsias-vault:sha256-13dfe28138d33dd386a948cbee85fa5365fc9d7b21c40aeb78b8beb54609a4d1 already built; skipping build
+[tillandsias-vault] refreshing podman secret tillandsias-vault-tls-cert from /home/podman/.local/state/tillandsias/ca/vault.crt
+[tillandsias-vault] refreshing podman secret tillandsias-vault-tls-key from /home/podman/.local/state/tillandsias/ca/vault.key
+[tillandsias-vault] refreshing podman secret tillandsias-vault-tls-ca from /home/podman/.local/state/tillandsias/ca/intermediate.crt
+[tillandsias-vault] keyring Shamir share get failed/timed out (Platform secure storage failure: no secret service provider or dbus session found); checking file fallback
+[tillandsias-vault] Shamir share not found; deriving first-boot dummy key K
+[tillandsias-vault] keyring anchor get failed/timed out (Platform secure storage failure: no secret service provider or dbus session found); checking file fallback
+[tillandsias-vault] creating podman secret tillandsias-vault-unseal (32 bytes from HKDF)
+[tillandsias] podman network-exists: /usr/bin/podman network exists tillandsias-egress
+[tillandsias] podman network-exists: /usr/bin/podman network exists tillandsias-enclave
+[tillandsias] skipping host resolver update for vault: not root
+[tillandsias-vault] getenforce reports not-enforcing but selinuxfs is not mounted in this container — the HOST's state is unknown from here; using label=disable, which is correct whether or not the host enforces
+[tillandsias-vault] launching container tillandsias-vault (alias vault:8200, native compatibility publish 127.0.0.1:8201:8200)
+[tillandsias-vault] waiting for podman health status=healthy
+[tillandsias] podman health: /usr/bin/podman wait --condition=healthy tillandsias-vault
+[tillandsias] podman health failed: status=timeout stderr=podman health operation exceeded its 60s budget and was killed: podman wait --condition=healthy tillandsias-vault
+[tillandsias-vault] container state: tillandsias-vault status=Up About a minute (starting) exit=0
+[tillandsias-vault] --- vault container logs (last 40 lines) ---
+[tillandsias-vault] | 2026-10-12T19:12:47.366Z [INFO]  core: pre-seal teardown complete
+[tillandsias-vault] | 2026-10-12T19:12:47.399Z [INFO]  core.cluster-listener.tcp: starting listener: listener_address=0.0.0.0:8201
+[tillandsias-vault] | 2026-10-12T19:12:47.399Z [INFO]  core.cluster-listener: serving cluster requests: cluster_listen_address=[::]:8201
+[tillandsias-vault] | 2026-10-12T19:12:47.399Z [INFO]  core: post-unseal setup starting
+[tillandsias-vault] | 2026-10-12T19:12:47.400Z [INFO]  core: loaded wrapping token key
+[tillandsias-vault] | 2026-10-12T19:12:47.400Z [INFO]  core: successfully setup plugin runtime catalog
+[tillandsias-vault] | 2026-10-12T19:12:47.400Z [INFO]  core: successfully setup plugin catalog: plugin-directory=""
+[tillandsias-vault] | 2026-10-12T19:12:47.401Z [INFO]  core: successfully mounted: type=system version="v1.18.5+builtin.vault" path=sys/ namespace="ID: root. Path: "
+[tillandsias-vault] | 2026-10-12T19:12:47.401Z [INFO]  core: successfully mounted: type=identity version="v1.18.5+builtin.vault" path=identity/ namespace="ID: root. Path: "
+[tillandsias-vault] | 2026-10-12T19:12:47.401Z [INFO]  core: successfully mounted: type=cubbyhole version="v1.18.5+builtin.vault" path=cubbyhole/ namespace="ID: root. Path: "
+[tillandsias-vault] | 2026-10-12T19:12:47.402Z [INFO]  core: successfully mounted: type=token version="v1.18.5+builtin.vault" path=token/ namespace="ID: root. Path: "
+[tillandsias-vault] | 2026-10-12T19:12:47.402Z [INFO]  rollback: Starting the rollback manager with 256 workers
+[tillandsias-vault] | 2026-10-12T19:12:47.402Z [INFO]  rollback: starting rollback manager
+[tillandsias-vault] | 2026-10-12T19:12:47.402Z [INFO]  core: restoring leases
+[tillandsias-vault] | 2026-10-12T19:12:47.403Z [INFO]  expiration: lease restore complete
+[tillandsias-vault] | 2026-10-12T19:12:47.403Z [INFO]  identity: entities restored
+[tillandsias-vault] | 2026-10-12T19:12:47.403Z [INFO]  identity: groups restored
+[tillandsias-vault] | 2026-10-12T19:12:47.403Z [INFO]  core: usage gauge collection is disabled
+[tillandsias-vault] | 2026-10-12T19:12:47.403Z [INFO]  core: post-unseal setup complete
+[tillandsias-vault] | 2026-10-12T19:12:47.403Z [INFO]  core: vault is unsealed
+[tillandsias-vault] | 2026-10-12T19:12:47.741Z [INFO]  core: enabled credential backend: path=approle/ type=approle version="v1.18.5+builtin.vault"
+[tillandsias-vault] | 2026-10-12T19:12:47.754Z [INFO]  core: successful mount: namespace="" path=secret/ type=kv version="v0.20.0+builtin"
+[tillandsias-vault] | 2026-10-12T19:12:47.766Z [INFO]  core: enabled audit backend: path=file/ type=file
+[tillandsias-vault] | 2026-10-12T19:12:47.778Z [INFO]  core: successful mount: namespace="" path=ssh-client-signer/ type=ssh version="v1.18.5+builtin.vault"
+[tillandsias-vault] | 2026-10-12T19:12:47.790Z [INFO]  core: successful mount: namespace="" path=ssh-host-signer/ type=ssh version="v1.18.5+builtin.vault"
+[tillandsias-vault] | 2026-10-12T19:12:47Z [vault-entrypoint] vault initialized (handover artifacts written to tmpfs)
+[tillandsias-vault] | 2026-10-12T19:12:47Z [vault-entrypoint] unsealing vault
+[tillandsias-vault] | 2026-10-12T19:12:47Z [vault-entrypoint] vault unsealed (sealed=false)
+[tillandsias-vault] | 2026-10-12T19:12:47Z [vault-entrypoint] loading policy: git-mirror-policy
+[tillandsias-vault] | 2026-10-12T19:12:47Z [vault-entrypoint] loading policy: forge-policy
+[tillandsias-vault] | 2026-10-12T19:12:47Z [vault-entrypoint] loading policy: tray-policy
+[tillandsias-vault] | 2026-10-12T19:12:47Z [vault-entrypoint] loading policy: inference-policy
+[tillandsias-vault] | 2026-10-12T19:12:47Z [vault-entrypoint] ensuring approle auth
+[tillandsias-vault] | 2026-10-12T19:12:47Z [vault-entrypoint] ensuring kv-v2 secret engine
+[tillandsias-vault] | 2026-10-12T19:12:47Z [vault-entrypoint] ensuring file audit device
+[tillandsias-vault] | 2026-10-12T19:12:47Z [vault-entrypoint] ensuring ssh client-signer CA engine
+[tillandsias-vault] | 2026-10-12T19:12:47Z [vault-entrypoint] ensuring ssh host-signer CA engine
+[tillandsias-vault] | 2026-10-12T19:12:47Z [vault-entrypoint] ensuring ssh client CA keypair (in-vault)
+[tillandsias-vault] | 2026-10-12T19:12:47Z [vault-entrypoint] ensuring ssh host CA keypair (in-vault)
+[tillandsias-vault] | 2026-10-12T19:12:47Z [vault-entrypoint] vault is fully configured (unsealed, policies loaded, approle+kv2+audit+ssh-CAs enabled)
+[tillandsias-vault] --- end vault container logs ---
+Error: [forge-launch] prerequisites: ensure tillandsias-forge-launch: tillandsias-vault not satisfied: vault container did not report healthy: Health command failed (status None, retry Unknown): podman wait --condition=healthy tillandsias-vault
+stderr: podman health operation exceeded its 60s budget and was killed: podman wait --condition=healthy tillandsias-vault
