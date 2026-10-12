@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: fixtures-write-scratch-files-into-the-checkout-beside-the-scripts-so-a-killed-run-leaves-them-where-diff-scoped-guards-read-them-as-added-code
+    event:
+      type: note
+      ts: "2026-10-12T00:52:56Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t005256z
+      host: tlatoanis-macbook-air
+      summary: |
+        Landed #342 as 9d0fb2de3 (land-queue run 35, gate green, after one Linux eviction that was fixed). The exit criteria, each exercised:
+        1. scripts/lua/check-checkout-writers.lua (gate step 459) prints scanned/writers/unsafe: ok:checkout-writers:scanned=891:writers=1:unsafe=0:ignored-scratch=11:fixture-scratch=3. Its one kept writer is listed with its reason (test-awk-float-lc-numeric, declared in scripts/portability/checkout-writers.txt, 1587 shape). On the pre-change trunk it named all 9 writers as unsafe; the population was 9, not the 5 the filing grep found. Following the coordinator's ruling, .tillandsias/fixture-scratch/ is a third safe kind, but only per run (<guard>.$$ with an EXIT trap). Arms 4b and 4c prove a flat name and a missing trap stay unsafe.
+        2. scripts/lua/test-checkout-writers.lua (gate step 461, 13 arms) runs test-litmus-step-pipefail.sh pre-fix (c1a390082) and post-fix in ONE run, each held in ARM 3 while its runner copy exists, then killed. Pre-fix leaves scripts/.wka4-prefix-runner.<pid>.sh; post-fix leaves nothing. The control sends KILL directly, standing in for the door's KILL landing, because no trap runs on any OS. The first version used TERM, 1 s, KILL and was evicted on Linux, where TERM runs the pre-fix EXIT trap. That sequence is kept as an unasserted `observed:` line (darwin: died-on-term=no, the copy is left).
+        Also measured: darwin's bare `mktemp -d` ignores TMPDIR, so the moved fixtures use explicit "${TMPDIR:-/tmp}/…XXXXXX" templates (population row 1619-7i9r). The door's sweep of fixture-scratch is 1618-baia.
