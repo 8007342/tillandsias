@@ -122,6 +122,26 @@ NPU list and a successful probe.
 - **THEN** the NPU list MUST be empty
 - **AND** the probe MUST exit successfully, not error
 
+#### Scenario: An opted-in WSL2 GPU is judged from inside the inference container
+- **WHEN** the effective tier is `gpu-vulkan` (the WSL2 opt-in, order
+  793-a8e7) and the inference container exists
+- **THEN** the probe MUST ask the container's own Vulkan loader
+  (`vulkaninfo --summary`), because the WSL2 guest has no loader and its
+  in-process enumeration cannot see what the container reaches
+- **AND** a listed device that is not a software rasterizer (not
+  `PHYSICAL_DEVICE_TYPE_CPU`, not `DRIVER_ID_MESA_LLVMPIPE`) MUST make the
+  `/dev/dxg` record usable in the `container` lane, so `accel_class` is not
+  `cpu-only`
+- **AND** a listing with only llvmpipe, or none, MUST leave the record as the
+  guest wrote it
+- **AND** on any other tier the container is not asked, and a cached
+  `gpu-vulkan` document carrying the `container-lane` gap MUST be re-probed
+  rather than served
+- Measurable: `accel_probe` tests
+  `container_enumeration_of_dozen_makes_the_dxg_gpu_usable_in_the_container_lane`,
+  `container_enumeration_of_llvmpipe_only_or_nothing_promotes_nothing`,
+  `vulkaninfo_summary_parses_each_gpu_block_and_drops_undecidable_ones`.
+
 ### Requirement: PROBE-3 — Engine inventory gates usability
 <!-- req-id: 5e5d39a6 -->
 
