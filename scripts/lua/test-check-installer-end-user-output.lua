@@ -1,4 +1,4 @@
--- @trace order:1561-47a8, order:1561-9f4x, order:1560-uam3, spec:host-state-lifecycle
+-- @trace order:1561-47a8, order:1561-9f4x, order:1560-uam3, order:1639-8gfw, spec:host-state-lifecycle
 -- @env TILLANDSIAS_PLAN_BIN TILLANDSIAS_SCRIPT_RUNNER_BIN
 --
 -- test-check-installer-end-user-output.lua — the end-user installers print
@@ -17,6 +17,11 @@
 --   4 the same line inside a retired PENDING-1560-UAM3 region -> refused (1560-uam3)
 --   5 install.sh gains a `say "... TILLANDSIAS_X ..."`       -> refused (above its floor)
 --   6 the text only in a comment                            -> ok
+--   7-15 power-user detail in install-windows.ps1 (paths, probe binary,
+--        shortcut, version line, registration, empty PENDING box, uninstall
+--        removal, -Param hint, order id)               -> refused (1639-8gfw)
+--   16 a failure line naming $InstallLog                     -> ok
+--   17 the detail vocabulary on install.sh                   -> ok (PowerShell-only)
 -- Each mutant asserts its own edit landed exactly once.
 -- Pre-fix (trunk 2026-10-08): arm 1 FAILS — install-windows.ps1 printed 21
 -- diagnostic lines (resolved-channel, --version/--diagnose verification,
@@ -120,6 +125,45 @@ if append_once(d .. "/scripts/install-windows.ps1", { "# " .. FLAG }) then
     rc, o = guard(d)
     check("6 a commented line does not count", rc == 0, "rc=" .. rc .. " out=[" .. o .. "]")
 else check("6 mutant landed once", false, "it did not") end
+
+-- 7-15 power-user DETAIL in the Windows installer (order 1639-8gfw): each line
+--   the v56.10.12.1 end-user install printed, plus its siblings, is refused by
+--   file:line. The pre-fix guard passed every one of them (its vocabulary was
+--   flags, TILLANDSIAS_, URLs, channel and base).
+local DETAIL = {
+    { "7 an install path",               'Say "Install path: $InstalledExe"' },
+    { "8 the capability probe binary",   'Say "  capability probe binary: $InstalledHeadless"' },
+    { "9 a Start Menu shortcut path",    'SayOk "Start Menu shortcut: $ShortcutPath"' },
+    { "10 the tray version line",        'SayOk $VerLine' },
+    { "11 Installed-Software registration", 'SayOk "Registered in Installed Software (v$InstalledVersion)."' },
+    { "12 an empty PENDING box",         "        $out += '  PENDING: none'" },
+    { "13 an uninstall removal detail",  'Say "  removed tray-icon settings entry: $p"' },
+    { "14 a -Param hint",                'SayOk "Uninstalled. (Use -Purge for full cleanup.)"' },
+    { "15 an order id",                  'Say "  note: no probe binary at this locus (1171-ccf2)"' },
+}
+for i, c in ipairs(DETAIL) do
+    d = scratch("detail" .. i)
+    if append_once(d .. "/scripts/install-windows.ps1", { c[2] }) then
+        rc, o = guard(d)
+        check(c[1] .. " is refused by file:line",
+            rc == 1 and text.contains(o, "scripts/install-windows.ps1:"), "rc=" .. rc .. " out=[" .. o .. "]")
+    else check(c[1] .. " mutant landed once", false, "it did not") end
+end
+
+-- 16 the log path on a failure line is allowed (the ruling: show the log by path).
+d = scratch("f")
+if append_once(d .. "/scripts/install-windows.ps1", { 'SayWn "Something went wrong. Details: $InstallLog"' }) then
+    rc, o = guard(d)
+    check("16 a failure line naming $InstallLog is allowed", rc == 0, "rc=" .. rc .. " out=[" .. o .. "]")
+else check("16 mutant landed once", false, "it did not") end
+
+-- 17 the detail vocabulary is PowerShell-only: the same path line in install.sh
+--    stays under its floor (its 1561 slice measures it).
+d = scratch("g")
+if append_once(d .. "/scripts/install.sh", { 'say "Install path: $InstalledExe"' }) then
+    rc, o = guard(d)
+    check("17 the detail vocabulary does not apply to the shell installers", rc == 0, "rc=" .. rc .. " out=[" .. o .. "]")
+else check("17 mutant landed once", false, "it did not") end
 
 run({ "rm", "-rf", ROOT .. "/" .. REL })
 if failed > 0 then

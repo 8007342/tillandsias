@@ -1,6 +1,6 @@
 -- @env TILLANDSIAS_INSTALLER_OUTPUT_ROOT
 -- @read-env TILLANDSIAS_INSTALLER_OUTPUT_ROOT
--- @trace order:1561-9f4x, order:1561-47a8, spec:host-state-lifecycle
+-- @trace order:1561-9f4x, order:1561-47a8, order:1639-8gfw, spec:host-state-lifecycle
 --
 -- check-installer-end-user-output.lua — the END-USER installers print only
 -- end-user lines. Operator ruling 2026-10-08, verbatim: "we do not need to print
@@ -13,7 +13,18 @@
 -- the shell-to-Lua backlog the carried obligation burns down).
 --
 -- A DIAGNOSTIC OUTPUT LINE is a user-facing output statement whose text names a
--- --flag, a TILLANDSIAS_* variable, a URL, a channel or a base. Output
+-- --flag, a TILLANDSIAS_* variable, a URL, a channel or a base. In a PowerShell
+-- installer it is ALSO one that prints power-user DETAIL (order 1639-8gfw, found
+-- on a real v56.10.12.1 install after 1561-47a8 had reached floor 0): a path,
+-- binary or version variable ($Installed*, $*Path, $*Exe, $*Dir, $*Lnk,
+-- $*Backup, $*Headless, $VerLine, $*Version), Installed-Software registration
+-- text, the capability probe, an order id, a "removed <thing>" uninstall
+-- detail, or a "Use -<Param>" hint. The log path ($InstallLog) is allowed: a
+-- failure line shows it by path. Also counted: the literal PENDING: none
+-- anywhere in code, because an empty PENDING ACTIONS box is not end-user
+-- output (the banner prints only when something is pending). This vocabulary
+-- is PowerShell-only: the shell installers keep their floors until their 1561
+-- slices measure them. Output
 -- statements: Say / SayOk / SayWn / Write-Host / Die in PowerShell; say / die /
 -- echo / printf in shell. Comments are stripped first (a `#` at the start of a
 -- line or after whitespace; PowerShell `<# ... #>` blocks whole). One
@@ -54,6 +65,8 @@ end
 local PS_OUT = [[(^|[\s;{(])(Say|SayOk|SayWn|Write-Host|Die)\s]]
 local SH_OUT = [[(^|[\s;{(|&])(say|die|echo|printf)\s]]
 local DIAG = [[--[a-z]|TILLANDSIAS_|https?:|[Cc]hannel|base:]]
+local PS_DETAIL = [=[\$\{?(Installed[A-Za-z]*|[A-Za-z]*(Path|Exe|Dir|Lnk|Backup|Headless)|VerLine|[A-Za-z]*Version)\b|Installed[ -]Software|capability probe|\(\d{3,4}-[a-z0-9]{4}\)|"\s*(removed|unregistered)\s|Use -[A-Z]]=]
+local PS_EMPTY_BANNER = "PENDING: none"
 
 -- The line with its comment removed: from the first `#` that starts the line
 -- or follows whitespace (the awk the first draft carried, kept exactly).
@@ -80,7 +93,8 @@ local function diagnostic_lines(f, src)
         elseif not text.is_match(line, [[#\s*power-user-only]]) then
             local code = strip_comment(line)
             local is_out = ps and text.is_match(code, PS_OUT) or (not ps and text.is_match(code, SH_OUT))
-            if is_out and text.is_match(code, DIAG) then
+            if (is_out and (text.is_match(code, DIAG) or (ps and text.is_match(code, PS_DETAIL))))
+                or (ps and text.contains(code, PS_EMPTY_BANNER)) then
                 hits[#hits + 1] = f .. ":" .. n
             end
         end
