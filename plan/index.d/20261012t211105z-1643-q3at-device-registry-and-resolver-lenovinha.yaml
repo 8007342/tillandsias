@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (macuahuitl, 2026-10-12): mobile first is first class (operator).
+packets:
+  - packet_id: a-vendored-device-catalogue-and-resolver-turn-iphone-12-pro-max-or-galaxy-s24-ultra-or-xperia-into-a-fixed-viewport-dpr-and-engine
+    order: 1643-q3at
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [browser, devices, mobile, emulation, catalogue]
+    estimated_hours: 8
+    title: |
+      A vendored device catalogue plus a resolver: "iphone", "iphone 12", "iphone 12 pro", "iphone 12 pro max", "galaxy s24 ultra", "xperia", "oneplus 12" and "desktop" each resolve to the right fixed viewport, screen, dpr, engine and UA. Exposed as `tillandsias devices resolve <query>`.
+    context: |
+      Operator direction (2026-10-12): mobile first is first class. The browser plan (containerized browser.open, CDP emulation, dev mode, WebKit engine) is filed separately by the coordinator and references this row.
+      Sources, each with its licence recorded in the data:
+      - Base: Playwright packages/isomorphic/deviceDescriptorsSource.json (Apache-2.0).
+      - Merged in: Chrome DevTools front_end EmulatedDevices.ts (BSD-3-Clause): safe-area insets, client-hint UA metadata, laptops.
+      - A hand-written overlay for Xperia, OnePlus and Xiaomi from manufacturer spec pages, with a source URL per entry.
+      - Not used: GSMArena scraping, WURFL, DeviceAtlas.
+      Schema: id, brand, family, model, aliases[], released (YYYY-MM), form (phone|tablet|foldable|laptop|desktop), os{name,version}, engine (webkit|blink|gecko), screen{w,h}, viewport{w,h} (portrait CSS px), dpr, ua, ua_metadata, mobile, touch, max_touch_points, safe_area{portrait,landscape}, source{kind,url,license}.
+      Resolution:
+      1. Normalise: lowercase; + becomes plus; split glued tokens (iphone12); s24u becomes s24 ultra; brand synonyms (sony→xperia, google→pixel, samsung→galaxy).
+      2. An exact alias wins.
+      3. Otherwise every requested token must be present, and the fewest extra tokens wins. Modifiers (pro, max, plus, ultra, mini, e, fold, flip, cover) always count.
+      4. A brand or family alone gives the newest base flagship by release date, excluding e/mini/fold/cover.
+      5. Ties or near misses return the best match plus alternatives, flagged as approximated. Never change brand.
+      6. A "landscape" suffix swaps the dimensions.
+    exit_criteria:
+      - '"iphone 12 pro max" resolves to a 428x926 portrait viewport, dpr 3, engine webkit'
+      - '"iphone" resolves to the newest iPhone in the data; "iphone 12", "iphone 12 pro" and "iphone 12 pro max" resolve to three distinct models'
+      - '"xperia" and "oneplus" resolve via the overlay; a nonsense query returns no match, never a different brand'
+      - 'red on the code before this row: there is no devices command'
+    unscoreable: "unpinnable-until-the-guard-exists: the resolver tests and their litmus are written with the catalogue"
+    next_action: >
+      Vendor the two pinned upstream sources and write the overlay. Build the merged catalogue with its licence records. Implement the resolver with tests for the exit criteria, then wire `tillandsias devices resolve`.
+    provenance: |
+      Filed by lenovinha-silverblue on macuahuitl's direction, 2026-10-12.
+    events:
+      - type: filed
+        ts: "2026-10-12T21:11:05Z"
+        host: lenovinha
+        summary: |-
+          Device catalogue (Playwright + DevTools + manufacturer overlay) and resolver behind `tillandsias devices resolve <query>`; mobile first.

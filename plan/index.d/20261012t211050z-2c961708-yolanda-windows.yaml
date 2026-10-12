@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: test-installers-quiet-progress-w3-is-red-because-its-harness-stubs-say-and-die-but-not-log-so-the-cut-sums-block-throws-before-it-reaches-invoke-webrequest
+    event:
+      type: note
+      ts: "2026-10-12T21:10:50Z"
+      agent_id: windows-yolanda-opus5-20261012t211049z
+      host: yolanda-windows
+      summary: |
+        Landed on linux-next via #381, run 55: land commit 21747cfd6 (first land 916fda346, code commit 796eb2dd5). The quiet-progress W3 harness now stubs Log. An empty Invoke-WebRequest record reports could-not-run:quiet-progress-fixture:W3-could-not-reach-invoke-webrequest (exit 3) naming the throw, never "progress bar live". Evidence on yolanda-windows: the fix gives ok ran=5. With the Log stub removed, it gives could-not-run exit 3 naming "The term 'Log' is not recognized". With the installer's SilentlyContinue changed to Continue, it is refused with "W3 prefs=Continue" (exit 1). Preflight on macuahuitl: rc=0, refused=0.
