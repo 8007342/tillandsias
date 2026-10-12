@@ -28,6 +28,17 @@
 --                widen windows the launcher must keep apart)
 --   7 OVERLAP    the same roster with the declaration absent overlaps, in
 --                the same run, so arm 6 is not passing because of timing
+--   8 RUNNER     (1635-ma2f) the door's stale-plan-binary block, run against
+--                a scratch root whose resolver answers the RELATIVE
+--                ./target/release/tillandsias-plan, hands guards an ABSOLUTE
+--                runner; the trunk block (normalisation removed) hands down
+--                the relative one, which a guard that cds cannot start
+--
+-- ORDER 1635-ma2f: the door handed this fixture the relative runner path, the
+-- launcher below cds into its scratch root, and the writer never started
+-- (marks=0 on every Linux preflight; darwin deadline-skipped it at the door,
+-- so it never ran there). PLAN is made absolute here too, and arms 6 and 7
+-- print the writer's own rc and output when it did not record both marks.
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-door-serial-lua-declaration.lua
 
@@ -40,6 +51,9 @@ local PLAN = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN") or ""
 if PLAN == "" then
     verdict.could_not_run("door-serial-lua-declaration", "TILLANDSIAS_SCRIPT_RUNNER_BIN is unset, so a .lua guard cannot be launched")
 end
+-- relative to the checkout (the door's ./target/... form); the launcher below
+-- runs it from a scratch root, where a relative path names nothing
+if PLAN:sub(1, 1) ~= "/" and not PLAN:match("^%a:") then PLAN = ROOT .. "/" .. PLAN:gsub("^%./", "") end
 local REL = "target/plan-scratch/door-serial-lua-" .. time.iso_utc() .. "-" .. tostring(math.random(100000, 999999))
 fs.mkdir(REL)
 
@@ -172,17 +186,63 @@ local function launch(name, serial)
         env = { TILLANDSIAS_SCRIPT_RUNNER_BIN = PLAN }, timeout_ms = 120000 })
     local ov, seq = judge(fs.read(REL .. "/sched.log"))
     local writes = select(2, seq:gsub("W:", ""))
-    return ov, seq, writes
+    -- 1635-ma2f: a writer that never marked says WHY, from its own rc and
+    -- output (roster entry 2), not only marks=0
+    local why = ""
+    if writes ~= 2 then
+        local okr, rc = pcall(fs.read, D .. "/work/2.rc")
+        local oko, o_ = pcall(fs.read, D .. "/work/2.out")
+        why = " writer-rc=[" .. text.trim(okr and rc or "absent") .. "] writer-output=[" .. text.trim(oko and o_ or "absent") .. "]"
+    end
+    return ov, seq, writes, why
 end
-local ov6, seq6, w6 = launch("alone", true)
+local ov6, seq6, w6, why6 = launch("alone", true)
 arm("6 ALONE the launcher (jobs=2) never runs a scan beside the serial .lua writer",
-    w6 == 2 and not ov6, "writer marks=" .. w6 .. " order: " .. seq6)
-local ov7, seq7, w7 = launch("overlap", false)
+    w6 == 2 and not ov6, "writer marks=" .. w6 .. " order: " .. seq6 .. why6)
+local ov7, seq7, w7, why7 = launch("overlap", false)
 arm("7 OVERLAP the same roster without the declaration runs them side by side",
-    w7 == 2 and ov7, "writer marks=" .. w7 .. " order: " .. seq7)
+    w7 == 2 and ov7, "writer marks=" .. w7 .. " order: " .. seq7 .. why7)
+
+-- ── 8 the runner the door hands down (1635-ma2f) ───────────────────────────
+-- The stale-plan-binary block is cut out of build.sh between its exact-once
+-- markers (as test-preflight-stale-plan-binary.sh does) and run with
+-- SCRIPT_DIR at a scratch root holding the real probe and a stub binary at
+-- ./target/release/tillandsias-plan, the resolver's own relative answer.
+local lb, le, blines = nil, nil, {}
+for i, l in ipairs(text.lines(build)) do
+    blines[i] = l
+    if l:find("BEGIN-STALE-PLAN-BINARY-CHECK", 1, true) then lb = i end
+    if l:find("END-STALE-PLAN-BINARY-CHECK", 1, true) then le = i end
+end
+if not lb or not le or lb >= le then
+    arm("8 RUNNER premise: the stale-plan-binary block is in build.sh", false, "markers " .. tostring(lb) .. ".." .. tostring(le))
+else
+    local blk = table.concat(blines, "\n", lb, le) .. "\n"
+    local NORM = '    case "$_pf_plan_bin" in\n        ""|/*|[A-Za-z]:*) ;;\n        *) _pf_plan_bin="$SCRIPT_DIR/${_pf_plan_bin#./}" ;;\n    esac\n'
+    local blk_pre, nn = blk:gsub(NORM:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0"), "")
+    local S = REL .. "/runner"
+    fs.mkdir(S .. "/scripts")
+    fs.mkdir(S .. "/target/release")
+    fs.write(S .. "/scripts/plan-binary-probe.sh", fs.read("scripts/plan-binary-probe.sh"))
+    fs.write(S .. "/target/release/tillandsias-plan",
+        '#!/bin/sh\ncase "$1" in validator-surface-hash) echo ok:validator-surface:stub ;; esac\nexit 0\n')
+    proc.run({ argv = { "chmod", "+x", ROOT .. "/" .. S .. "/target/release/tillandsias-plan" }, timeout_ms = 10000 })
+    local function hand(which, body)
+        fs.write(REL .. "/runner-" .. which .. ".sh", 'SCRIPT_DIR="$1"\n' .. body .. 'echo "runner=$_pf_plan_bin"\n')
+        local r = proc.run({ argv = { "bash", ROOT .. "/" .. REL .. "/runner-" .. which .. ".sh", ROOT .. "/" .. S },
+            cwd = ROOT, timeout_ms = 30000 })
+        return text.trim((r.stdout or "") .. (r.stderr or ""))
+    end
+    local post, pre_ = hand("post", blk), hand("pre", blk_pre)
+    local want = "runner=" .. ROOT .. "/" .. S .. "/target/release/tillandsias-plan"
+    arm("8 RUNNER the door hands guards an absolute runner; the trunk block hands down the relative one",
+        nn == 1 and post:find(want, 1, true) ~= nil
+        and pre_:find("runner=./target/release/tillandsias-plan", 1, true) ~= nil,
+        "removed=" .. nn .. " post [" .. post .. "] pre [" .. pre_ .. "]")
+end
 
 proc.run({ argv = { "rm", "-rf", ROOT .. "/" .. REL }, timeout_ms = 30000 })
 if #failed > 0 then
     verdict.emit("violation:door-serial-lua-declaration:" .. #failed .. "-failed", 1)
 end
-verdict.ok("door-serial-lua-declaration", "7 arms")
+verdict.ok("door-serial-lua-declaration", "8 arms")

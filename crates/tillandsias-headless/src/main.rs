@@ -27113,6 +27113,10 @@ mod tests {
     /// to sibling probes while held, excluded by exact name for the owning
     /// process, and vanish the moment the guard drops (flock-on-death).
     #[test]
+    #[cfg_attr(
+        not(unix),
+        ignore = "1635-hbvw: resource_lock is a no-op off unix (launch markers guard podman lanes, which run only in the Linux guest); resource_lock::tests::try_lock_is_a_no_op_off_unix flags the day that changes"
+    )]
     fn shared_stack_launch_marker_lifecycle_and_own_exclusion() {
         const CHILD_ENV: &str = "TILLANDSIAS_LAUNCH_MARKER_LIFECYCLE_CHILD";
         const TEST_NAME: &str = "tests::shared_stack_launch_marker_lifecycle_and_own_exclusion";
@@ -31740,9 +31744,13 @@ esac
         assert!(has_arg(&args, "HOME=/tmp"));
         assert!(has_arg(&args, "XDG_CONFIG_HOME=/tmp/chromium-config"));
         assert!(has_arg(&args, "XDG_CACHE_HOME=/tmp/chromium-cache"));
-        assert!(args.iter().any(|arg| {
-            arg == "type=bind,source=/tmp/tillandsias/ca/intermediate.crt,target=/etc/tillandsias/ca.crt,relabel=shared,readonly=true"
-        }));
+        // 1635-hbvw: the source is certs_dir joined with the platform
+        // separator, so build the expectation the same way.
+        let ca_mount = format!(
+            "type=bind,source={},target=/etc/tillandsias/ca.crt,relabel=shared,readonly=true",
+            certs_dir.join("intermediate.crt").display()
+        );
+        assert!(args.contains(&ca_mount), "no {ca_mount} in {args:?}");
         assert!(has_arg(
             &args,
             "TILLANDSIAS_CA_BUNDLE=/etc/tillandsias/ca.crt"

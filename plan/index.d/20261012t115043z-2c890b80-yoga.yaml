@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: research-cert-lifecycle-state-graph
+    event:
+      type: progress
+      ts: "2026-10-12T11:50:43Z"
+      agent_id: linux-yoga-claude-20261012t112507z
+      host: yoga
+      summary: |
+        Slice 7 on work/472 at b30610038 (PR 367, draft; slice 6 at e101cf6aa is on the same ref): exit criterion 5, the CA-trust witness on the forge-agent lanes. container_deps::CaTrusted is a projection of the two launch witnesses (Up<ForgeLaunchReady>::ca_trusted, Up<GitLoginReady>::ca_trusted), sound because both targets reach CaBundle in DEPS (pinned by ca_trusted_projects_only_from_targets_that_reach_ca_bundle). ensure_enclave_for_project returns it; the forge-agent lanes' CA mount is built by forge_ca_chain_mount(certs_dir, &Up<CaTrusted>) and nowhere else; build_forge_agent_run_args_with_vault / build_forge_agent_run_args / build_forge_agent_run_argv take the witness last; run_forge_agent_cli_mode and launch_forge_agent pass what the bring-up returned. Compile arm measured: cutting the CLI lane to the bare ensure_ca_bundle chain -> error[E0425] cannot find value `ca_trusted`. Test arm: every_forge_ca_mount_emitter_takes_the_ca_trusted_witness attributes every production emitter of /run/tillandsias/ca-chain.crt to its fn and requires the witness in the signature, with a ratchet (OUTSIDE_THE_MODEL) for lanes outside the model; controls red: witness parameter dropped, stale ratchet entry. launch_skipping_prerequisite_fails gains the CaBundle arm for both targets; control red: CaBundle unreachable from ForgeLaunch (direct, Proxy and NixCache rows). All restores byte-identical.
+        FINDING: run_opencode_mode, run_opencode_web_mode (via build_opencode_forge_args) and run_status_check (via build_stack_common_args) mount the CA into a forge OUTSIDE the dependency model (bare ensure_ca_bundle + ensure_enclave_network) and never run slice 4's ca_bundle_trustable, so on those lanes an unreadable certificate still reaches the container as a [trust] WARNING and vendor roots. Ratcheted with the lane that reaches each. Closing it is slice 8 and a decision: routing them through ensure_forge_launch starts Vault and the proxy on lanes that today start neither.
+        Collateral: liveness_steady_state_containers (order 477 helper) now anchors container_deps.rs's test boundary on `#[cfg(test)]\nmod tests` instead of the first cfg(test) text (two order-477 tests went red with a cfg(test) constructor above run_check; clippy items_after_test_module refused the other placement). Unchanged on purpose: forge_ca_chain_mount keeps the pre-existing exists() gate (criterion 3's territory).
+        Verification on yoga: headless bin tests under tray,listen-vsock 986 passed 0 failed 25 ignored; clippy -D warnings rc 0 in three feature sets; cargo fmt clean. Doc: research-cert-lifecycle-state-graph-2026-07-24.md "Slice 7". Criterion 5: met for the forge-agent lanes, OPEN for the three ratcheted lanes. REMAINING: slice 8 (the ratcheted lanes), criterion 3 (restart-on-rotation fan-out), the live arms of criterion 2. Row stays in_progress until PR 367 lands; close on the landed sha.
+        Relay preflight on work/472 at b30610038: refused:relay-preflight:litmus:default-image at litmus:opencode-vault-auth-content step 1 only, the host-dependent red filed as 1634-sab8 (opencode 2.0.25 serve --service pid 768050 still holds 127.0.0.1:49374 on yoga, measured with ss this cycle); the other 20 preflight items green (every decider, cargo fmt, cargo-test:tillandsias-headless); not re-filed.
