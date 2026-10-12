@@ -68,8 +68,12 @@ const PUBLISH_BUDGET: Duration = Duration::from_secs(90);
 /// reaches the build.
 async fn ensure_profile_image(profile: &Profile, debug: bool) -> Result<(), String> {
     let image = profile.image();
-    if podman(&["image", "exists", &image]).is_ok() {
-        return Ok(());
+    // `image exists` answers absence with exit 1. Only that means "build it";
+    // a transport failure or timeout is podman being unavailable (1625-6iwd).
+    match podman_output(&["image", "exists", &image]) {
+        Ok(out) if out.status.success() => return Ok(()),
+        Ok(_) => {}
+        Err(class) => return Err(podman_failure(Step::Image, class)),
     }
     let name = profile.image_name();
     let tag = image.clone();
@@ -81,23 +85,19 @@ async fn ensure_profile_image(profile: &Profile, debug: bool) -> Result<(), Stri
         Ok(Ok(Ok(()))) => {}
         Ok(Ok(Err(_))) | Ok(Err(_)) => {
             return Err(
-                "runtime_unavailable: the host could not build the managed runtime image; see the tray log"
+                "runtime_unavailable: image build failed on the host (exit); see the tray log"
                     .into(),
             );
         }
         // The build keeps running under its image lock; a retry finds the image.
         Err(_) => {
             return Err(format!(
-                "runtime_not_ready: the managed runtime image is still building on the host after {} s; retry publish_local",
+                "runtime_not_ready: image still building on the host after {} s (timeout); retry publish_local",
                 IMAGE_ENSURE_BUDGET.as_secs()
             ));
         }
     }
-    podman(&["image", "exists", &image])
-        .map(|_| ())
-        .map_err(|_| {
-            "runtime_unavailable: the managed runtime image is absent after the host build".into()
-        })
+    podman_at(Step::Image, &["image", "exists", &image]).map(|_| ())
 }
 
 fn select_profile(runtime: &str, configs: &[String]) -> Result<Profile, String> {
@@ -143,38 +143,125 @@ fn validate_components(project: &str, instance: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn podman(args: &[&str]) -> Result<String, String> {
+/// 1625-6iwd: the step vocabulary of spec local-web-preview "Publish failures
+/// name their step". Every podman call names one, so a failure says WHERE it
+/// failed. It used to say "Podman operation failed" for all of them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Step {
+    /// Container listing (`ps`).
+    List,
+    Inspect,
+    Image,
+    /// Source mounts: probes inside the live forge, the RAM volume, the config.
+    Source,
+    Router,
+    /// Container lifecycle: run, rename, remove.
+    Run,
+    Ready,
+}
+
+impl Step {
+    fn name(self) -> &'static str {
+        match self {
+            Self::List => "list",
+            Self::Inspect => "inspect",
+            Self::Image => "image",
+            Self::Source => "source",
+            Self::Router => "router",
+            Self::Run => "run",
+            Self::Ready => "ready",
+        }
+    }
+}
+
+/// The failure class of one podman call. `Absent` is decided by callers that
+/// ask an existence question; podman itself only reports the other three.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Class {
+    Transport,
+    Exit,
+    Timeout,
+}
+
+impl Class {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Transport => "transport",
+            Self::Exit => "exit",
+            Self::Timeout => "timeout",
+        }
+    }
+}
+
+/// The stable reason for a failed podman call. It names the step and the
+/// class and NOTHING else: inspect/log output can carry project secrets.
+fn podman_failure(step: Step, class: Class) -> String {
+    format!(
+        "runtime_unavailable: podman failed at step {} ({})",
+        step.name(),
+        class.name()
+    )
+}
+
+#[cfg(test)]
+type FakePodman = Box<dyn Fn(&[&str]) -> std::io::Result<std::process::Output>>;
+
+#[cfg(test)]
+thread_local! {
+    /// Fault-injection seam for this module's tests. It is THREAD-local on
+    /// purpose: TILLANDSIAS_PODMAN_BIN is process-wide and parallel tests that
+    /// swap it once reached the real podman (880-tdwn).
+    static FAKE_PODMAN: std::cell::RefCell<Option<FakePodman>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+fn podman_output(args: &[&str]) -> Result<std::process::Output, Class> {
+    #[cfg(test)]
+    if let Some(out) = FAKE_PODMAN.with(|fake| fake.borrow().as_ref().map(|f| f(args))) {
+        return out.map_err(|e| match e.kind() {
+            std::io::ErrorKind::TimedOut => Class::Timeout,
+            _ => Class::Transport,
+        });
+    }
     let mut cmd = crate::podman_command();
     cmd.args(args);
-    // Never echo raw diagnostics: inspect/log output can carry project secrets.
-    let out = cmd
-        .output_bounded(command_budget(Duration::from_secs(5))?)
-        .map_err(|_| "runtime_unavailable: Podman transport failed".to_string())?;
+    let budget = command_budget(Duration::from_secs(5)).map_err(|_| Class::Timeout)?;
+    cmd.output_bounded(budget).map_err(|e| match e.kind() {
+        std::io::ErrorKind::TimedOut => Class::Timeout,
+        _ => Class::Transport,
+    })
+}
+
+/// Run one podman command for `step`. Never echo raw diagnostics.
+fn podman_at(step: Step, args: &[&str]) -> Result<String, String> {
+    let out = podman_output(args).map_err(|class| podman_failure(step, class))?;
     if !out.status.success() {
-        return Err("runtime_unavailable: Podman operation failed".into());
+        return Err(podman_failure(step, Class::Exit));
     }
-    String::from_utf8(out.stdout)
-        .map_err(|_| "runtime_unavailable: invalid response encoding".into())
+    String::from_utf8(out.stdout).map_err(|_| podman_failure(step, Class::Exit))
 }
 
 fn inspect(name: &str) -> Result<Option<Value>, String> {
     // PodmanClient::inspect_container currently turns EVERY failed command into
     // NotFound. Enumerate successfully first so a transport failure is unknown,
     // never proof of absence. Inspect races fail unknown rather than stopped.
-    let names: Vec<String> = podman(&[
-        "ps",
-        "--all",
-        "--no-trunc",
-        "--format",
-        "{{.Names}} {{.ID}}",
-    ])?
+    let names: Vec<String> = podman_at(
+        Step::List,
+        &[
+            "ps",
+            "--all",
+            "--no-trunc",
+            "--format",
+            "{{.Names}} {{.ID}}",
+        ],
+    )?
     .lines()
     .flat_map(|line| line.split_whitespace().map(str::to_owned))
     .collect();
     if !names.iter().any(|n| n == name) {
         return Ok(None);
     }
-    let text = podman(&["inspect", name])?;
+    let text = podman_at(Step::Inspect, &["inspect", name])?;
     let rows: Vec<Value> = serde_json::from_str(&text)
         .map_err(|_| "runtime_unavailable: invalid inspect response".to_string())?;
     rows.into_iter()
@@ -247,26 +334,29 @@ fn resolve_live(project: &str, instance: &str) -> Result<LiveSource, String> {
     let guest = format!("/home/forge/src/{project}");
     // Reject symlink roots, including a project redirect into the forge's home
     // or a sibling project. realpath runs in the LIVE forge, not on host disks.
-    let actual = podman(&["exec", id, "realpath", "-e", "--", &guest])?;
+    let actual = podman_at(Step::Source, &["exec", id, "realpath", "-e", "--", &guest])?;
     if actual.trim() != guest {
         return Err("live_worktree_unavailable: project root escapes its lane".into());
     }
-    podman(&["exec", id, "test", "-d", &guest])?;
+    podman_at(Step::Source, &["exec", id, "test", "-d", &guest])?;
     let configs = ["wrangler.jsonc", "wrangler.json", "wrangler.toml"]
         .into_iter()
         .filter_map(|name| {
             let path = format!("{guest}/{name}");
             // Use a fixed script and positional arg; absence is successful
             // output, an exec failure is not silently treated as no config.
-            let result = podman(&[
-                "exec",
-                id,
-                "sh",
-                "-c",
-                "if [ -f \"$1\" ]; then printf present; fi",
-                "sh",
-                &path,
-            ]);
+            let result = podman_at(
+                Step::Source,
+                &[
+                    "exec",
+                    id,
+                    "sh",
+                    "-c",
+                    "if [ -f \"$1\" ]; then printf present; fi",
+                    "sh",
+                    &path,
+                ],
+            );
             match result {
                 Ok(text) if text == "present" => Some(Ok(name.to_string())),
                 Ok(_) => None,
@@ -276,8 +366,9 @@ fn resolve_live(project: &str, instance: &str) -> Result<LiveSource, String> {
         .collect::<Result<Vec<_>, _>>()?;
     let volume = live_mount_source(row, project, instance)?;
     // Verify the configured RAM backing, not just a suggestive volume name.
-    let info: Vec<Value> = serde_json::from_str(&podman(&["volume", "inspect", &volume])?)
-        .map_err(|_| "live_worktree_unavailable: invalid source volume inspect")?;
+    let info: Vec<Value> =
+        serde_json::from_str(&podman_at(Step::Source, &["volume", "inspect", &volume])?)
+            .map_err(|_| "live_worktree_unavailable: invalid source volume inspect")?;
     let options = &info
         .first()
         .ok_or("live_worktree_unavailable: missing RAM volume")?["Options"];
@@ -303,7 +394,10 @@ fn resolve_live(project: &str, instance: &str) -> Result<LiveSource, String> {
         .as_str()
         .ok_or("live_worktree_unavailable: RAM volume launch ownership missing")?
         .to_string();
-    let fs_type = podman(&["exec", id, "stat", "-f", "-c", "%T", "/home/forge/src"])?;
+    let fs_type = podman_at(
+        Step::Source,
+        &["exec", id, "stat", "-f", "-c", "%T", "/home/forge/src"],
+    )?;
     if fs_type.trim() != "tmpfs" {
         return Err("live_worktree_unavailable: source backing is not live tmpfs".into());
     }
@@ -332,7 +426,7 @@ fn live_mount_source(row: &Value, project: &str, instance: &str) -> Result<Strin
 pub(crate) fn unique_live_instance(project: &str) -> Result<String, String> {
     crate::local_projects::validate_project_label(project)?;
     let socket_root = crate::control_socket_host_dir().join("mcp");
-    let names = podman(&["ps", "--format", "{{.Names}}"])?;
+    let names = podman_at(Step::List, &["ps", "--format", "{{.Names}}"])?;
     let mut lanes = std::collections::BTreeSet::new();
     for name in names.lines() {
         // Inspect only managed forge-name candidates; do not touch unrelated
@@ -534,37 +628,43 @@ fn subset_mount(live: &LiveSource, path: &str, destination: &str) -> Result<Stri
 fn verify_subset(live: &LiveSource, path: &str) -> Result<(), String> {
     let relative = safe_relative(path)?;
     let expected = format!("/home/forge/src/{}/{relative}", live.project);
-    let actual = podman(&["exec", &live.forge_id, "realpath", "-e", "--", &expected])?;
+    let actual = podman_at(
+        Step::Source,
+        &["exec", &live.forge_id, "realpath", "-e", "--", &expected],
+    )?;
     if actual.trim() != expected {
         return Err("live_worktree_unavailable: selected source is a symlink escape".into());
     }
-    let forbidden = podman(&[
-        "exec",
-        &live.forge_id,
-        "find",
-        &expected,
-        "(",
-        "-type",
-        "l",
-        "-o",
-        "-name",
-        ".git",
-        "-o",
-        "-name",
-        ".env*",
-        "-o",
-        "-name",
-        "node_modules",
-        "-o",
-        "-name",
-        ".cache",
-        "-o",
-        "-name",
-        "credentials",
-        ")",
-        "-print",
-        "-quit",
-    ])?;
+    let forbidden = podman_at(
+        Step::Source,
+        &[
+            "exec",
+            &live.forge_id,
+            "find",
+            &expected,
+            "(",
+            "-type",
+            "l",
+            "-o",
+            "-name",
+            ".git",
+            "-o",
+            "-name",
+            ".env*",
+            "-o",
+            "-name",
+            "node_modules",
+            "-o",
+            "-name",
+            ".cache",
+            "-o",
+            "-name",
+            "credentials",
+            ")",
+            "-print",
+            "-quit",
+        ],
+    )?;
     if !forbidden.trim().is_empty() {
         return Err(
             "live_worktree_unavailable: selected source contains private paths or symlinks".into(),
@@ -590,10 +690,124 @@ const snapshot = '/tmp/approved/' + path.basename(process.argv[1]);
 fs.writeFileSync(snapshot, raw);
 const c = unstable_readConfig({config: snapshot});
 function remote(v) { return v && typeof v === 'object' && (v.remote === true || Object.values(v).some(remote)); }
-if (remote(c)) { console.log(JSON.stringify({error:'remote_binding_forbidden'})); process.exit(0); }
 function relative(p) { return p ? p.replace(/^\/tmp\/approved\//, '') : null; }
-console.log(JSON.stringify({assets:relative(c.assets?.directory), main:relative(c.main), raw}));
+const build = typeof c.build?.command === 'string' && c.build.command.trim() ? c.build.command.trim() : null;
+console.log(JSON.stringify({remote:remote(c), assets:relative(c.assets?.directory), main:relative(c.main), build, raw}));
 "#;
+
+/// 1625-6iwd: the static profile found nothing to serve. A SOURCE-SELECTION
+/// failure (step source, class absent), never a runtime or podman error. On
+/// yoga this used to surface as "Podman operation failed" because the root
+/// index.html probe (`realpath -e`) exits 1 when the file is absent.
+const NO_SERVABLE_ROOT: &str =
+    "source_not_found: no servable root (looked at var/html, public, dist, index.html)";
+
+/// Does `relative` exist under the live project root? Absence is an ANSWER
+/// (Ok(false)); only a failed probe is an error.
+fn source_exists(live: &LiveSource, relative: &str, test: &str) -> Result<bool, String> {
+    let path = format!("/home/forge/src/{}/{relative}", live.project);
+    let script = format!("if [ {test} \"$1\" ]; then printf present; fi");
+    let answer = podman_at(
+        Step::Source,
+        &["exec", &live.forge_id, "sh", "-c", &script, "sh", &path],
+    )?;
+    Ok(answer == "present")
+}
+
+/// What the pinned Wrangler parser reports about the root configuration.
+/// `raw` stays private to Rust: it never enters MCP responses or diagnostics.
+struct WranglerConfig {
+    remote: bool,
+    assets: Option<String>,
+    main: Option<String>,
+    build: Option<String>,
+    raw: String,
+}
+
+fn inspect_wrangler_config(live: &LiveSource, config: &str) -> Result<WranglerConfig, String> {
+    verify_subset(live, config)?;
+    let config_target = format!("/srv/preview/{config}");
+    let config_mount = subset_mount(live, config, &config_target)?;
+    let image = Profile::Wrangler(config.to_string()).image();
+    let text = podman_at(
+        Step::Source,
+        &[
+            "run",
+            "--rm",
+            "--pull=never",
+            "--network=none",
+            "--read-only",
+            "--security-opt=label=disable",
+            "--userns=keep-id",
+            "--tmpfs",
+            "/tmp:rw,mode=1777,size=64m",
+            "--workdir",
+            "/srv/preview",
+            "--env",
+            "HOME=/tmp",
+            "--env",
+            "WRANGLER_SEND_METRICS=false",
+            "--mount",
+            &config_mount,
+            "--entrypoint",
+            "node",
+            &image,
+            "-e",
+            CONFIG_INSPECTOR,
+            &config_target,
+        ],
+    )
+    .map_err(|e| {
+        // A parser that ran and refused is the config's fault; podman being
+        // unreachable or slow keeps its own step reason.
+        if e.ends_with("(exit)") {
+            "invalid_runtime: pinned Wrangler rejected configuration".to_string()
+        } else {
+            e
+        }
+    })?;
+    let parsed: Value = serde_json::from_str(text.trim().lines().last().unwrap_or(""))
+        .map_err(|_| "invalid_runtime: Wrangler configuration parser unavailable")?;
+    let text_field = |key: &str| parsed[key].as_str().map(str::to_owned);
+    Ok(WranglerConfig {
+        remote: parsed["remote"] == true,
+        assets: text_field("assets"),
+        main: text_field("main"),
+        build: text_field("build"),
+        raw: text_field("raw").ok_or("invalid_runtime: approved config unavailable")?,
+    })
+}
+
+/// A build command is echoed only when it is short and plainly a command.
+/// Anything that looks like it could carry a credential is named by key only.
+fn echoable_build_command(command: &str) -> bool {
+    let lower = command.to_ascii_lowercase();
+    command.len() <= 160
+        && command
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || " ._/:@+,=-&|;".contains(c))
+        && ![
+            "token", "secret", "password", "passwd", "apikey", "api_key", "auth",
+        ]
+        .iter()
+        .any(|w| lower.contains(w))
+}
+
+/// 1625-6iwd: the configured assets directory is not there (visual-chess:
+/// `"assets": {"directory": "./dist"}` with dist/ never built). Say so, name
+/// the directory and how to produce it, so the agent builds first.
+fn assets_absent(directory: &str, config: &str, build: Option<&str>) -> String {
+    let next = match build {
+        Some(command) if echoable_build_command(command) => {
+            format!("run its build.command first: {command}")
+        }
+        Some(_) => format!("run the build.command declared in {config} first"),
+        None => format!("{config} declares no build.command; build the project first"),
+    };
+    format!(
+        "source_not_found: assets directory {directory} (configured in {config}) does not exist yet; {next}"
+    )
+}
 
 fn source_mounts(live: &LiveSource, profile: &Profile) -> Result<Vec<String>, String> {
     match profile {
@@ -601,35 +815,45 @@ fn source_mounts(live: &LiveSource, profile: &Profile) -> Result<Vec<String>, St
             // Static compatibility selects a public document tree, never mounts
             // .git/.env/the forge root into a sibling. Assets-only layouts work
             // without a Wrangler config too. A root index is served individually.
+            //
+            // 1625-6iwd: a root Wrangler config's assets.directory comes FIRST.
+            // Static runs no Worker, so its bindings (remote or not) are moot.
+            if let [config] = live.configs.as_slice() {
+                let parsed = inspect_wrangler_config(live, config)?;
+                if let Some(assets) = parsed.assets {
+                    let relative = safe_relative(&assets)?;
+                    if !source_exists(live, &relative, "-d")? {
+                        return Err(assets_absent(&relative, config, parsed.build.as_deref()));
+                    }
+                    verify_subset(live, &relative)?;
+                    return Ok(vec![subset_mount(live, &relative, "/var/www")?]);
+                }
+            }
             for directory in ["var/html", "public", "dist"] {
-                let path = format!("/home/forge/src/{}/{directory}", live.project);
-                let exists = podman(&[
-                    "exec",
-                    &live.forge_id,
-                    "sh",
-                    "-c",
-                    "if [ -d \"$1\" ]; then printf present; fi",
-                    "sh",
-                    &path,
-                ])?;
-                if exists == "present" {
+                if source_exists(live, directory, "-d")? {
                     verify_subset(live, directory)?;
                     return Ok(vec![subset_mount(live, directory, "/var/www")?]);
                 }
             }
+            if !source_exists(live, "index.html", "-f")? {
+                return Err(NO_SERVABLE_ROOT.into());
+            }
             verify_subset(live, "index.html")?;
             let mut mounts = vec![subset_mount(live, "index.html", "/var/www/index.html")?];
             let root = format!("/home/forge/src/{}", live.project);
-            let files = podman(&[
-                "exec",
-                &live.forge_id,
-                "find",
-                &root,
-                "-maxdepth",
-                "1",
-                "-type",
-                "f",
-            ])?;
+            let files = podman_at(
+                Step::Source,
+                &[
+                    "exec",
+                    &live.forge_id,
+                    "find",
+                    &root,
+                    "-maxdepth",
+                    "1",
+                    "-type",
+                    "f",
+                ],
+            )?;
             for path in files.lines() {
                 let Some(file) = Path::new(path).file_name().and_then(|s| s.to_str()) else {
                     continue;
@@ -663,17 +887,7 @@ fn source_mounts(live: &LiveSource, profile: &Profile) -> Result<Vec<String>, St
                 }
             }
             for directory in ["assets", "css", "js", "images"] {
-                let path = format!("{root}/{directory}");
-                let exists = podman(&[
-                    "exec",
-                    &live.forge_id,
-                    "sh",
-                    "-c",
-                    "if [ -d \"$1\" ]; then printf present; fi",
-                    "sh",
-                    &path,
-                ])?;
-                if exists == "present" {
+                if source_exists(live, directory, "-d")? {
                     verify_subset(live, directory)?;
                     mounts.push(subset_mount(
                         live,
@@ -685,49 +899,18 @@ fn source_mounts(live: &LiveSource, profile: &Profile) -> Result<Vec<String>, St
             Ok(mounts)
         }
         Profile::Wrangler(config) => {
-            verify_subset(live, config)?;
-            let config_target = format!("/srv/preview/{config}");
-            let config_mount = subset_mount(live, config, &config_target)?;
-            let image = profile.image();
-            let text = podman(&[
-                "run",
-                "--rm",
-                "--pull=never",
-                "--network=none",
-                "--read-only",
-                "--security-opt=label=disable",
-                "--userns=keep-id",
-                "--tmpfs",
-                "/tmp:rw,mode=1777,size=64m",
-                "--workdir",
-                "/srv/preview",
-                "--env",
-                "HOME=/tmp",
-                "--env",
-                "WRANGLER_SEND_METRICS=false",
-                "--mount",
-                &config_mount,
-                "--entrypoint",
-                "node",
-                &image,
-                "-e",
-                CONFIG_INSPECTOR,
-                &config_target,
-            ])
-            .map_err(|_| "invalid_runtime: pinned Wrangler rejected configuration".to_string())?;
-            let parsed: Value = serde_json::from_str(text.trim().lines().last().unwrap_or(""))
-                .map_err(|_| "invalid_runtime: Wrangler configuration parser unavailable")?;
-            if parsed["error"] == "remote_binding_forbidden" {
+            let parsed = inspect_wrangler_config(live, config)?;
+            if parsed.remote {
                 return Err(
                     "remote_binding_forbidden: local preview refuses remote bindings".into(),
                 );
             }
-            let raw = parsed["raw"]
-                .as_str()
-                .ok_or("invalid_runtime: approved config unavailable")?;
-            let mut mounts = vec![format!("approved-config:{raw}")];
-            if let Some(assets) = parsed["assets"].as_str() {
+            let mut mounts = vec![format!("approved-config:{}", parsed.raw)];
+            if let Some(assets) = parsed.assets.as_deref() {
                 let relative = safe_relative(assets)?;
+                if !source_exists(live, &relative, "-d")? {
+                    return Err(assets_absent(&relative, config, parsed.build.as_deref()));
+                }
                 verify_subset(live, &relative)?;
                 mounts.push(subset_mount(
                     live,
@@ -735,8 +918,13 @@ fn source_mounts(live: &LiveSource, profile: &Profile) -> Result<Vec<String>, St
                     &format!("/srv/preview/{relative}"),
                 )?);
             }
-            if let Some(main) = parsed["main"].as_str() {
+            if let Some(main) = parsed.main.as_deref() {
                 let relative = safe_relative(main)?;
+                if !source_exists(live, &relative, "-e")? {
+                    return Err(format!(
+                        "source_not_found: Worker entry {relative} (configured in {config}) does not exist"
+                    ));
+                }
                 let parent = Path::new(&relative)
                     .parent()
                     .and_then(|s| s.to_str())
@@ -929,13 +1117,13 @@ async fn ensure_router(project: &str, debug: bool) -> Result<PathBuf, String> {
                 .any(|p| p["HostIp"] == "127.0.0.1" && p["HostPort"] == expected)
         });
         if !correct {
-            podman(&["rm", "--force", "tillandsias-router"])?;
+            podman_at(Step::Router, &["rm", "--force", "tillandsias-router"])?;
         } else {
             running = row["State"]["Status"] == "running";
         }
     }
     if !running {
-        podman(&["image", "exists", &router_image]).map_err(
+        podman_at(Step::Router, &["image", "exists", &router_image]).map_err(
             |_| "router_not_ready: managed router image must be initialized before publication",
         )?;
         let port = http_port
@@ -944,17 +1132,20 @@ async fn ensure_router(project: &str, debug: bool) -> Result<PathBuf, String> {
         let args = crate::build_router_run_args(&ca, &router_image, port);
         let mut command = vec!["run"];
         command.extend(args.iter().map(String::as_str));
-        podman(&command)?;
+        podman_at(Step::Router, &command)?;
     }
     Ok(ca)
 }
 
 fn strict_reload() -> Result<(), String> {
-    podman(&[
-        "exec",
-        "tillandsias-router",
-        "/usr/local/bin/router-reload.sh",
-    ])
+    podman_at(
+        Step::Router,
+        &[
+            "exec",
+            "tillandsias-router",
+            "/usr/local/bin/router-reload.sh",
+        ],
+    )
     .map(|_| ())
     .map_err(|_| "router_not_ready: Caddy rejected or could not reload configuration".into())
 }
@@ -1027,7 +1218,7 @@ async fn ready_backend_inner(name: &str) -> Result<(), String> {
         if row["State"]["Status"] != "running" {
             // Surface the guard's stable refusal without returning config/log
             // contents. Every other failed start remains runtime_not_ready.
-            if podman(&["logs", "--tail", "20", name])
+            if podman_at(Step::Ready, &["logs", "--tail", "20", name])
                 .is_ok_and(|s| s.contains("remote_binding_forbidden"))
             {
                 return Err(
@@ -1037,21 +1228,24 @@ async fn ready_backend_inner(name: &str) -> Result<(), String> {
             return Err("runtime_not_ready: managed runtime exited".into());
         }
         let endpoint = format!("http://{name}:8080/");
-        if let Ok(code) = podman(&[
-            "exec",
-            "tillandsias-router",
-            "curl",
-            "--noproxy",
-            "*",
-            "-s",
-            "-o",
-            "/dev/null",
-            "--max-time",
-            "2",
-            "-w",
-            "%{http_code}",
-            &endpoint,
-        ]) && code
+        if let Ok(code) = podman_at(
+            Step::Ready,
+            &[
+                "exec",
+                "tillandsias-router",
+                "curl",
+                "--noproxy",
+                "*",
+                "-s",
+                "-o",
+                "/dev/null",
+                "--max-time",
+                "2",
+                "-w",
+                "%{http_code}",
+                &endpoint,
+            ],
+        ) && code
             .trim()
             .parse::<u16>()
             .is_ok_and(|c| (200..500).contains(&c))
@@ -1098,6 +1292,11 @@ async fn publish_locked(
         .try_with(|deadline| deadline.saturating_duration_since(Instant::now()))
         .unwrap_or(PUBLISH_BUDGET);
     ensure_profile_image(&profile, debug).await?;
+    // 1625-6iwd: static reads a root Wrangler config's assets.directory through
+    // the pinned Wrangler parser, so that image must exist for static too.
+    if let (Profile::Static, [config]) = (&profile, live.configs.as_slice()) {
+        ensure_profile_image(&Profile::Wrangler(config.clone()), debug).await?;
+    }
     RPC_DEADLINE
         .scope(
             Instant::now() + remaining,
@@ -1125,12 +1324,12 @@ async fn publish_prepared(
     let args = build_local_preview_run_args(&candidate, &live, instance, &profile, &mounts);
     let mut command = vec!["run"];
     command.extend(args.iter().map(String::as_str));
-    if podman(&command).is_err() {
-        let _ = podman(&["rm", "--force", &candidate]);
-        return Err("live_worktree_unavailable: cannot launch sibling on live source".into());
+    if let Err(e) = podman_at(Step::Run, &command) {
+        let _ = podman_at(Step::Run, &["rm", "--force", &candidate]);
+        return Err(e);
     }
     if let Err(e) = ready_backend(&candidate).await {
-        let _ = podman(&["rm", "--force", &candidate]);
+        let _ = podman_at(Step::Run, &["rm", "--force", &candidate]);
         return Err(e);
     }
     // Recheck the exact forge launch after candidate startup (PID reuse cannot
@@ -1138,15 +1337,15 @@ async fn publish_prepared(
     if inspect(&live.forge_id)?
         .is_none_or(|r| !attributed_forge(&r, &crate::mcp_socket_host_dir(project, Some(instance))))
     {
-        let _ = podman(&["rm", "--force", &candidate]);
+        let _ = podman_at(Step::Run, &["rm", "--force", &candidate]);
         return Err("live_worktree_unavailable: source forge exited during startup".into());
     }
     let mut replacement_installed = false;
     let outcome = async {
         if old.is_some() {
-            podman(&["rm", "--force", &name])?;
+            podman_at(Step::Run, &["rm", "--force", &name])?;
         }
-        podman(&["rename", &candidate, &name])?;
+        podman_at(Step::Run, &["rename", &candidate, &name])?;
         replacement_installed = true;
         let _router_lock = crate::resource_lock::acquire(
             "preview-router",
@@ -1173,9 +1372,9 @@ async fn publish_prepared(
     }
     .await;
     if outcome.is_err() {
-        let _ = podman(&["rm", "--force", &candidate]);
+        let _ = podman_at(Step::Run, &["rm", "--force", &candidate]);
         if replacement_installed {
-            let _ = podman(&["rm", "--force", &name]);
+            let _ = podman_at(Step::Run, &["rm", "--force", &name]);
         }
         let _lock = crate::resource_lock::acquire(
             "preview-router",
@@ -1197,27 +1396,121 @@ async fn publish_prepared(
     outcome
 }
 
+/// 1625-6iwd: the last failed publish/reload of each lane, for service_status.
+/// In memory: it belongs to the process serving that lane's MCP socket.
+static LAST_FAILURE: std::sync::Mutex<std::collections::BTreeMap<(String, String), Value>> =
+    std::sync::Mutex::new(std::collections::BTreeMap::new());
+
+/// Who can act on a reason: the host by retrying, the agent by changing the
+/// project, or the operator. And which step/class it belongs to.
+fn classify_failure(reason: &str) -> (&'static str, &'static str, &'static str) {
+    if let Some(rest) = reason.strip_prefix("runtime_unavailable: podman failed at step ") {
+        let step = [
+            Step::List,
+            Step::Inspect,
+            Step::Image,
+            Step::Source,
+            Step::Router,
+            Step::Run,
+            Step::Ready,
+        ]
+        .into_iter()
+        .find(|s| rest.starts_with(&format!("{} (", s.name())))
+        .map(Step::name)
+        .unwrap_or("publish");
+        let (class, remedy) = if rest.ends_with("(transport)") {
+            ("transport", "host-retry")
+        } else if rest.ends_with("(timeout)") {
+            ("timeout", "host-retry")
+        } else {
+            ("exit", "operator")
+        };
+        return (step, class, remedy);
+    }
+    let head = reason.split(':').next().unwrap_or("");
+    match head {
+        "source_not_found" => ("source", "absent", "agent"),
+        "invalid_runtime" | "remote_binding_forbidden" => ("source", "exit", "agent"),
+        "live_worktree_unavailable"
+            if reason.contains("symlink")
+                || reason.contains("private paths")
+                || reason.contains("escapes") =>
+        {
+            ("source", "exit", "agent")
+        }
+        "live_worktree_unavailable" => ("source", "exit", "operator"),
+        "router_not_ready" => ("router", "exit", "operator"),
+        "runtime_not_ready" if reason.contains("image still building") => {
+            ("image", "timeout", "host-retry")
+        }
+        "runtime_not_ready" => ("ready", "timeout", "host-retry"),
+        "runtime_unavailable" if reason.contains("image build failed") => {
+            ("image", "exit", "operator")
+        }
+        _ => ("publish", "exit", "operator"),
+    }
+}
+
+fn record_outcome(project: &str, instance: &str, outcome: &Result<Value, String>) {
+    let key = (project.to_string(), instance.to_string());
+    let Ok(mut failures) = LAST_FAILURE.lock() else {
+        return;
+    };
+    match outcome {
+        Ok(_) => {
+            failures.remove(&key);
+        }
+        Err(reason) => {
+            let (step, class, remedy) = classify_failure(reason);
+            failures.insert(
+                key,
+                json!({
+                    "step": step, "class": class, "reason": reason,
+                    "at": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+                    "remedy": remedy,
+                }),
+            );
+        }
+    }
+}
+
+fn last_failure(project: &str, instance: &str) -> Option<Value> {
+    LAST_FAILURE
+        .lock()
+        .ok()?
+        .get(&(project.to_string(), instance.to_string()))
+        .cloned()
+}
+
 pub(crate) async fn publish(
     project: &str,
     instance: &str,
     runtime: &str,
     debug: bool,
 ) -> Result<Value, String> {
-    RPC_DEADLINE
+    let outcome = RPC_DEADLINE
         .scope(
             Instant::now() + PUBLISH_BUDGET,
             publish_inner(project, instance, runtime, debug),
         )
-        .await
+        .await;
+    record_outcome(project, instance, &outcome);
+    outcome
 }
 
 pub(crate) async fn status(project: &str, instance: &str) -> Result<Value, String> {
-    RPC_DEADLINE
+    let mut value = RPC_DEADLINE
         .scope(
             Instant::now() + Duration::from_secs(30),
             status_inner(project, instance),
         )
-        .await
+        .await?;
+    // 1625-6iwd: a failed publish leaves no container, so status used to say
+    // nothing. Report the last failure: step, class, reason, time, remedy.
+    if let Some(failure) = last_failure(project, instance) {
+        value["last_failure"] = failure;
+    }
+    Ok(value)
 }
 
 pub(crate) async fn stop(project: &str, instance: &str, debug: bool) -> Result<Value, String> {
@@ -1230,12 +1523,14 @@ pub(crate) async fn stop(project: &str, instance: &str, debug: bool) -> Result<V
 }
 
 pub(crate) async fn reload(project: &str, instance: &str, debug: bool) -> Result<Value, String> {
-    RPC_DEADLINE
+    let outcome = RPC_DEADLINE
         .scope(
             Instant::now() + PUBLISH_BUDGET,
             reload_inner(project, instance, debug),
         )
-        .await
+        .await;
+    record_outcome(project, instance, &outcome);
+    outcome
 }
 
 async fn publish_inner(
@@ -1265,15 +1560,7 @@ async fn status_inner(project: &str, instance: &str) -> Result<Value, String> {
     let row = match inspect(&format!("tillandsias-{project}-web")) {
         Ok(Some(row)) => row,
         Ok(None) => return Ok(result("stopped", None, None, false, "")),
-        Err(_) => {
-            return Ok(result(
-                "unknown",
-                None,
-                None,
-                false,
-                "runtime_unavailable: inspection failed",
-            ));
-        }
+        Err(reason) => return Ok(result("unknown", None, None, false, &reason)),
     };
     let runtime = label(&row, PROFILE);
     if check_owner(Some(&row), instance, None).is_err() {
@@ -1322,7 +1609,7 @@ async fn stop_inner(project: &str, instance: &str, debug: bool) -> Result<Value,
     let row = inspect(&name)?;
     check_owner(row.as_ref(), instance, None)?;
     if row.is_some() {
-        podman(&["rm", "--force", &name])?;
+        podman_at(Step::Run, &["rm", "--force", &name])?;
     }
     let _router_lock = crate::resource_lock::acquire(
         "preview-router",
@@ -1379,7 +1666,7 @@ pub(crate) fn cleanup_departed_lane(
         if label(&row, OWNER) != instance {
             return Ok(());
         }
-        podman(&["rm", "--force", &name])?;
+        podman_at(Step::Run, &["rm", "--force", &name])?;
     }
     let _router_lock =
         crate::resource_lock::acquire("preview-router", Duration::from_secs(120), debug)?;
@@ -1396,7 +1683,8 @@ fn watch_source_lifetime(
     std::thread::spawn(move || {
         loop {
             std::thread::sleep(Duration::from_secs(2));
-            let Ok(text) = podman(&["ps", "--no-trunc", "--format", "{{.ID}}"]) else {
+            let Ok(text) = podman_at(Step::List, &["ps", "--no-trunc", "--format", "{{.ID}}"])
+            else {
                 continue;
             };
             if text.lines().any(|id| id == forge_id) {
@@ -1421,7 +1709,7 @@ fn watch_source_lifetime(
                 Ok(Some(row))
                     if label(&row, OWNER) == instance && label(&row, FORGE) == forge_id =>
                 {
-                    if podman(&["rm", "--force", &name]).is_err() {
+                    if podman_at(Step::Run, &["rm", "--force", &name]).is_err() {
                         continue;
                     }
                 }
@@ -1437,13 +1725,14 @@ fn watch_source_lifetime(
             if remove_route(&project, false).is_err() {
                 continue;
             }
-            let Ok(volumes) = podman(&["volume", "ls", "--format", "{{.Name}}"]) else {
+            let Ok(volumes) = podman_at(Step::Source, &["volume", "ls", "--format", "{{.Name}}"])
+            else {
                 continue;
             };
             if !volumes.lines().any(|name| name == volume) {
                 break;
             }
-            let Ok(text) = podman(&["volume", "inspect", &volume]) else {
+            let Ok(text) = podman_at(Step::Source, &["volume", "inspect", &volume]) else {
                 continue;
             };
             let Ok(info) = serde_json::from_str::<Vec<Value>>(&text) else {
@@ -1456,7 +1745,7 @@ fn watch_source_lifetime(
                 break; // a new launch's volume must never be removed
             }
             // Non-force removal refuses if a replacement forge still uses it.
-            if podman(&["volume", "rm", &volume]).is_err() {
+            if podman_at(Step::Source, &["volume", "rm", &volume]).is_err() {
                 continue;
             }
             break;
@@ -1467,6 +1756,288 @@ fn watch_source_lifetime(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::process::ExitStatusExt;
+
+    /// The ignored live fixture below drives real podman directly.
+    fn podman(args: &[&str]) -> Result<String, String> {
+        podman_at(Step::Run, args)
+    }
+
+    fn output(code: i32, stdout: &str, stderr: &str) -> std::io::Result<std::process::Output> {
+        Ok(std::process::Output {
+            status: std::process::ExitStatus::from_raw(code << 8),
+            stdout: stdout.as_bytes().to_vec(),
+            stderr: stderr.as_bytes().to_vec(),
+        })
+    }
+
+    /// Install a fake podman for THIS thread only; removed on drop.
+    struct Fake;
+    impl Fake {
+        fn install(f: impl Fn(&[&str]) -> std::io::Result<std::process::Output> + 'static) -> Self {
+            FAKE_PODMAN.with(|fake| *fake.borrow_mut() = Some(Box::new(f)));
+            Fake
+        }
+    }
+    impl Drop for Fake {
+        fn drop(&mut self) {
+            FAKE_PODMAN.with(|fake| *fake.borrow_mut() = None);
+        }
+    }
+
+    const SECRET: &str = "CLOUDFLARE_API_TOKEN=s3cr3t-from-podman-stderr";
+
+    /// 1625-6iwd criterion 1: podman failing at listing, inspection, image,
+    /// run and router start yields a DIFFERENT reason per step, and none of
+    /// them carries podman's output. Trunk before this change mapped every one
+    /// of these to the single literal "runtime_unavailable: Podman operation failed".
+    #[test]
+    fn each_podman_step_fails_with_its_own_reason_and_withholds_output() {
+        let _fake = Fake::install(|_| output(125, SECRET, SECRET));
+        let reasons: Vec<String> = [
+            Step::List,
+            Step::Inspect,
+            Step::Image,
+            Step::Source,
+            Step::Router,
+            Step::Run,
+            Step::Ready,
+        ]
+        .into_iter()
+        .map(|step| podman_at(step, &["anything"]).unwrap_err())
+        .collect();
+        let distinct: std::collections::BTreeSet<_> = reasons.iter().collect();
+        assert_eq!(distinct.len(), reasons.len(), "{reasons:?}");
+        for reason in &reasons {
+            assert!(
+                !reason.contains("s3cr3t") && !reason.contains("CLOUDFLARE"),
+                "{reason}"
+            );
+            assert!(reason.ends_with("(exit)"), "{reason}");
+        }
+        assert_eq!(
+            reasons[0],
+            "runtime_unavailable: podman failed at step list (exit)"
+        );
+        let source = include_str!("local_web_preview.rs");
+        assert!(
+            !source.contains(&format!("{}{}", "Podman operation ", "failed\".into()")),
+            "the one-string-for-every-step literal is gone"
+        );
+    }
+
+    /// The real call sites carry their step: `inspect` lists first (list), then
+    /// inspects (inspect); classes separate transport, timeout and exit.
+    #[test]
+    fn call_sites_name_their_step_and_class() {
+        {
+            let _fake = Fake::install(|args| {
+                if args[0] == "ps" {
+                    Err(std::io::Error::other("socket gone"))
+                } else {
+                    output(0, "", "")
+                }
+            });
+            assert_eq!(
+                inspect("tillandsias-p-web").unwrap_err(),
+                "runtime_unavailable: podman failed at step list (transport)"
+            );
+        }
+        {
+            let _fake = Fake::install(|args| {
+                if args[0] == "ps" {
+                    output(0, "tillandsias-p-web abc\n", "")
+                } else {
+                    Err(std::io::Error::from(std::io::ErrorKind::TimedOut))
+                }
+            });
+            assert_eq!(
+                inspect("tillandsias-p-web").unwrap_err(),
+                "runtime_unavailable: podman failed at step inspect (timeout)"
+            );
+        }
+        {
+            // `image exists` unreachable is NOT "absent, so build it".
+            let _fake = Fake::install(|_| Err(std::io::Error::other("no podman")));
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            assert_eq!(
+                rt.block_on(ensure_profile_image(&Profile::Static, false))
+                    .unwrap_err(),
+                "runtime_unavailable: podman failed at step image (transport)"
+            );
+        }
+    }
+
+    /// 1625-6iwd criterion 2: the last failure survives for service_status, with
+    /// step, class, reason, time and remedy; a later success clears it.
+    #[test]
+    fn last_failure_is_recorded_with_step_and_remedy_and_cleared_by_success() {
+        let (project, instance) = ("rec-6iwd", "inst");
+        record_outcome(
+            project,
+            instance,
+            &Err("runtime_unavailable: podman failed at step run (exit)".into()),
+        );
+        let failure = last_failure(project, instance).expect("recorded");
+        assert_eq!(failure["step"], "run");
+        assert_eq!(failure["class"], "exit");
+        assert_eq!(failure["remedy"], "operator");
+        assert!(failure["at"].as_str().is_some_and(|t| t.ends_with('Z')));
+        record_outcome(project, instance, &Err(NO_SERVABLE_ROOT.into()));
+        let failure = last_failure(project, instance).unwrap();
+        assert_eq!(
+            (
+                failure["step"].as_str(),
+                failure["class"].as_str(),
+                failure["remedy"].as_str()
+            ),
+            (Some("source"), Some("absent"), Some("agent"))
+        );
+        record_outcome(project, instance, &Ok(json!({"state": "running"})));
+        assert!(last_failure(project, instance).is_none());
+        for (reason, expected) in [
+            (
+                "runtime_unavailable: podman failed at step list (transport)",
+                ("list", "transport", "host-retry"),
+            ),
+            (
+                "runtime_unavailable: podman failed at step ready (timeout)",
+                ("ready", "timeout", "host-retry"),
+            ),
+            (
+                "router_not_ready: initialize the existing local CA before publication",
+                ("router", "exit", "operator"),
+            ),
+            (
+                "runtime_not_ready: image still building on the host after 300 s (timeout); retry publish_local",
+                ("image", "timeout", "host-retry"),
+            ),
+            (
+                "remote_binding_forbidden: local preview refuses remote bindings",
+                ("source", "exit", "agent"),
+            ),
+        ] {
+            assert_eq!(classify_failure(reason), expected, "{reason}");
+        }
+    }
+
+    /// A fake live forge: `present` lists project-relative paths that exist;
+    /// `inspector` is the pinned-Wrangler parser's JSON line.
+    fn fake_forge(present: &'static [&'static str], inspector: &'static str) -> (Fake, LiveSource) {
+        let fake = Fake::install(move |args| {
+            let root = "/home/forge/src/proj/";
+            match args {
+                ["exec", _, "sh", "-c", script, "sh", path] => {
+                    let rel = path.strip_prefix(root).unwrap_or("");
+                    let is_dir = present.iter().any(|p| p.starts_with(&format!("{rel}/")));
+                    let is_file = present.contains(&rel);
+                    let hit = if script.contains("-d") {
+                        is_dir
+                    } else if script.contains("-f") {
+                        is_file
+                    } else {
+                        is_dir || is_file
+                    };
+                    output(0, if hit { "present" } else { "" }, "")
+                }
+                // verify_subset: realpath -e exits 1 on a missing path, which
+                // is exactly what trunk turned into "Podman operation failed".
+                ["exec", _, "realpath", "-e", "--", path] => {
+                    let rel = path.strip_prefix(root).unwrap_or("");
+                    if present
+                        .iter()
+                        .any(|p| *p == rel || p.starts_with(&format!("{rel}/")))
+                    {
+                        output(0, path, "")
+                    } else {
+                        output(1, "", "realpath: No such file or directory")
+                    }
+                }
+                ["exec", _, "find", ..] => output(0, "", ""),
+                ["run", ..] => output(0, inspector, ""),
+                _ => output(125, "", SECRET),
+            }
+        });
+        let live = LiveSource {
+            forge_id: "forge".into(),
+            volume: "vol".into(),
+            generation: "g".into(),
+            project: "proj".into(),
+            configs: vec![],
+        };
+        (fake, live)
+    }
+
+    /// 1625-6iwd criteria 3 and 4: the visual-chess static failure, replayed.
+    /// No var/html, public, dist or root index.html -> a source-selection
+    /// reason. Trunk reached `realpath -e .../index.html`, which exits 1.
+    #[test]
+    fn static_without_a_servable_root_is_source_not_found() {
+        let (_fake, live) = fake_forge(&["README.md", "src/main.rs"], "");
+        assert_eq!(
+            source_mounts(&live, &Profile::Static).unwrap_err(),
+            NO_SERVABLE_ROOT
+        );
+        // The exact exec trunk ran for this tree still exits non-zero here,
+        // and podman_at names it (it no longer says "Podman operation failed").
+        assert_eq!(
+            verify_subset(&live, "index.html").unwrap_err(),
+            "runtime_unavailable: podman failed at step source (exit)"
+        );
+    }
+
+    /// 1625-6iwd criterion 6: visual-chess's own shape. wrangler.jsonc says
+    /// assets.directory ./dist and dist/ was never built. Static AND Wrangler
+    /// both say so and point at the build, instead of a podman error.
+    #[test]
+    fn configured_assets_directory_absent_names_the_build_step() {
+        let (_fake, mut live) = fake_forge(
+            &["wrangler.jsonc", "src/lib.rs"],
+            r#"{"remote":false,"assets":"dist","main":null,"build":null,"raw":"{}"}"#,
+        );
+        live.configs = vec!["wrangler.jsonc".into()];
+        let expected = "source_not_found: assets directory dist (configured in wrangler.jsonc) does not exist yet; wrangler.jsonc declares no build.command; build the project first";
+        assert_eq!(
+            source_mounts(&live, &Profile::Static).unwrap_err(),
+            expected
+        );
+        assert_eq!(
+            source_mounts(&live, &Profile::Wrangler("wrangler.jsonc".into())).unwrap_err(),
+            expected
+        );
+        assert_eq!(
+            assets_absent("dist", "wrangler.toml", Some("npm run build")),
+            "source_not_found: assets directory dist (configured in wrangler.toml) does not exist yet; run its build.command first: npm run build"
+        );
+        // A command that could carry a credential is named by key, never echoed.
+        assert_eq!(
+            assets_absent("dist", "wrangler.toml", Some("API_TOKEN=x npm run build")),
+            "source_not_found: assets directory dist (configured in wrangler.toml) does not exist yet; run the build.command declared in wrangler.toml first"
+        );
+    }
+
+    /// 1625-6iwd criterion 5: static serves a root Wrangler config's
+    /// assets.directory ahead of the fixed list (www/ is none of them).
+    #[test]
+    fn static_honors_the_wrangler_assets_directory() {
+        let (_fake, mut live) = fake_forge(
+            &["wrangler.jsonc", "www/index.html", "public/old.html"],
+            r#"{"remote":true,"assets":"www","main":null,"build":null,"raw":"{}"}"#,
+        );
+        live.configs = vec!["wrangler.jsonc".into()];
+        // remote bindings are moot for static (no Worker runs); www wins over public.
+        assert_eq!(
+            source_mounts(&live, &Profile::Static).unwrap(),
+            vec!["type=volume,source=vol,target=/var/www,volume-subpath=proj/www,readonly=true"]
+        );
+        assert_eq!(
+            source_mounts(&live, &Profile::Wrangler("wrangler.jsonc".into())).unwrap_err(),
+            "remote_binding_forbidden: local preview refuses remote bindings"
+        );
+    }
 
     /// 1625-un54: the image publish_local checks (and builds on a miss) is the
     /// exact version alias init tags, never an untagged `:latest` resolution,
