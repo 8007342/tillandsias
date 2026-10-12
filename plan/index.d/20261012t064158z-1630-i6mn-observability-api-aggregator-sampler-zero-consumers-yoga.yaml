@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga-silverblue (tillandsias-a6) under the issue filing mandate, 2026-10-12: side finding of the 781-hseq disposition.
+packets:
+  - packet_id: observability-api-log-aggregator-and-cost-aware-sampler-have-zero-consumers-outside-the-logging-crate
+    order: 1630-i6mn
+    status: ready
+    kind: audit+decision
+    priority: p3
+    desired_release: v0.5
+    release_target: local-telemetry-for-bottleneck-finding-milestone
+    pickup_role: any
+    size: M
+    implementer_tier: sonnet
+    capability_tags: [logging, telemetry, freshness]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-logging/src/surface.rs
+      - crates/tillandsias-logging/src/aggregator.rs
+      - crates/tillandsias-logging/src/sampler.rs
+      - crates/tillandsias-logging/src/lib.rs
+      - docs/cheatsheets/observability-api.md
+    title: |
+      The rest of the OBS-023 observability surface is unwired the same way the query language was (781-hseq): ObservabilityAPI (surface.rs, 654 lines), LogAggregator (aggregator.rs, 1186 lines, spec:log-aggregation) and CostAwareSampler (sampler.rs, 440 lines, gap:OBS-006) have ZERO consumers outside crates/tillandsias-logging. Wire each to a surface with a test proving the wiring, or tombstone it with its spec, one decision per subsystem.
+    context: |
+      MEASURED on yoga 2026-10-12 at trunk 8e5550449 while disposing 781-hseq, with the same method macos used on 2026-09-17 (search every re-exported name, not the module path): ObservabilityAPI, LogAggregator, CostAwareSampler, AggregatedLogEntry, AggregationFilter and SamplingStatus each have 0 files outside the crate naming them. POSITIVE CONTROL in the same run: BudgetEnforcer 1, CardinalityAnalyzer 1, ImageBuildEvent 2 (tillandsias-core, tillandsias-headless metrics_server.rs and main.rs), so the crate is consumed and the search works; these three subsystems are the unconsumed part.
+      Shape: all three landed in the 2026-05-14 wave with the query language, were traced, tested and re-exported, and were never called. Each per-crate view reads healthy. docs/cheatsheets/observability-api.md (last updated 2026-05-14) documents all of them as the unified API; its Provenance links point at docs/specs/*.md paths that do not exist.
+      aggregator.rs is traced to spec:log-aggregation, which is ACTIVE: that spec's intent must be judged separately from the module (philosophy.obsolete_mechanism_live_intent.dispositions). sampler.rs and surface.rs carry only gap: traces.
+    exit_criteria:
+      - 'for each of ObservabilityAPI, LogAggregator and CostAwareSampler: either a consumer outside crates/tillandsias-logging exists with one end-to-end test proving the wiring, or the module (and its spec, where it has one) is tombstoned in one change'
+      - 'docs/cheatsheets/observability-api.md describes only what still exists and its Provenance links resolve'
+      - 'no spec-traced module in crates/tillandsias-logging remains that zero surfaces call'
+    unscoreable: "unpinnable-until-the-guard-exists: the wire-or-tombstone decision per subsystem is the work"
+    next_action: >
+      Decide LogAggregator first: spec:log-aggregation is active, so check whether container log merging has a live intent in the forge diagnostics lane (scripts/forge-diagnostics-*, the --diagnostics stream) before touching it. Then sampler and the unified API, which have only gap traces.
+    provenance: |
+      Filed by yoga-silverblue (session tillandsias-a6), 2026-10-12, side finding of the 781-hseq disposition.
+    events:
+      - type: filed
+        ts: "2026-10-12T06:41:58Z"
+        host: yoga
+        summary: |-
+          ObservabilityAPI, LogAggregator and CostAwareSampler have zero consumers outside the logging crate, measured with a positive control; same class as 781-hseq, one wire-or-tombstone decision each.

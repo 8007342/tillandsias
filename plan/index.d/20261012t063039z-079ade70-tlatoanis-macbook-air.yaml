@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-preflight-door-sweeps-a-killed-guards-tmpdir-but-not-its-tillandsias-fixture-scratch-subdir-so-a-repo-confined-fixture-killed-at-the-deadline-leaves-it-behind
+    event:
+      type: note
+      ts: "2026-10-12T06:30:39Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t063039z
+      host: tlatoanis-macbook-air
+      summary: |-
+        Landed #345 as 65a4f90f9 (land-queue run 39, gate green, first in the run). The door's killed path now calls _pf_sweep_fixture_scratch; scripts/lua/test-door-fixture-scratch-sweep.lua (gate step 464, 4 arms) exercises the exit criteria, and test-worktree-add-cleanup.lua arm 9 asserts the extracted door prints no 'command not found'.

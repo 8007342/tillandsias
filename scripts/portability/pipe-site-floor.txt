@@ -450,7 +450,6 @@ scripts scripts/check-version-bump-isolation.sh 2
 scripts scripts/check-windows-only-sources-verified.sh 12
 scripts scripts/check-windows-tray-clippy.sh 6
 scripts scripts/check-windows-tray-diagnose-surface.sh 2
-scripts scripts/check-wt-reparse-workarounds-deleted.sh 1
 scripts scripts/claim-ledger-node.sh 6
 scripts scripts/clamp-ca-material.sh 1
 scripts scripts/claude-delegate.sh 1

@@ -23,10 +23,19 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-UNDER_TEST="$ROOT/scripts/check-wt-reparse-workarounds-deleted.sh"
-[ -f "$UNDER_TEST" ] || { echo "SKIP: scan not present" >&2; exit 0; }
+# 1625-n3t3: the scan is Lua, run through the plan binary. A missing scan is
+# a failure, not a skip: the gate step binds this file to that scan.
+UNDER_TEST="scripts/lua/check-wt-reparse-workarounds-deleted.lua"
+[ -f "$ROOT/$UNDER_TEST" ] || { echo "violation:wt-reparse-scan:scan-missing:$UNDER_TEST"; exit 1; }
+plan_bin="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary)" || {
+    echo "could-not-run:wt-reparse-scan:no-plan-binary"
+    exit 3
+}
 
-WORK="$(mktemp -d)"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/wt-reparse-scan.XXXXXX")"
+# The fixture trees live outside the checkout; the scan reads them only under
+# its declared read root.
+export TILLANDSIAS_WT_REPARSE_SCAN_ROOT="$WORK"
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT INT TERM
 
@@ -43,7 +52,7 @@ _result() { # name expected actual
 
 _verdict() { # dir -> ok|violation|other
     local out
-    out="$(cd "$ROOT" && bash "$UNDER_TEST" "$1" 2>/dev/null)"
+    out="$(cd "$ROOT" && "$plan_bin" script run "$UNDER_TEST" -- "$1" 2>/dev/null)"
     case "$out" in
         ok:wt-reparse-workarounds-deleted:*) echo ok ;;
         violation:wt-reparse-workaround-live:*) echo violation ;;
