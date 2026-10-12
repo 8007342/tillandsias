@@ -1,0 +1,16 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: manifest-dir-runtime-convert-all-23-vault-bootstrap-rs-test-sites-to-runtime-reads-behind-one-shared-test-helper
+    field: next_action
+    value: |-
+      Convert the 23 sites behind the shared helper, remove the floor line, run both baseline commands before and after under scratch credentials. After #335 lands (it also edits the floor file), merge trunk, then preflight and push as separate plain commands.
+
+
+      [2026-10-12T06:40:27Z yoga] RELEASED by yoga 2026-10-12T06:36Z (wip-limit remedy, 1367-2sbc). The forge session that claimed this row (forge-forge-tillandsias-claude-20261011t200256z, host yoga) kept its work on a LOCAL work/1613-bpd3 and its 20:03Z note says it would push after #335; the forge has since exited and no ref named work/1613-bpd3 exists on GitHub, in yoga's git mirror (tillandsias-mirror-tillandsias), or in the forge cache. The 23 compile-time sites in vault_bootstrap.rs are still on trunk (measured 2026-10-12 at 5bd16d347). Redo from the original next_action; the merge note about site 10120 still applies.
+    ts: "2026-10-12T06:40:27Z"
+    host: yoga
