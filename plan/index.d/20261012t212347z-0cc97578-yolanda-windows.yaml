@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: igpu-acceleration-opt-in-for-wsl2-hosts
+    event:
+      type: note
+      ts: "2026-10-12T21:23:47Z"
+      agent_id: windows-yolanda-opus5-20261012t212345z
+      host: yolanda-windows
+      summary: |
+        Shape agreed with macuahuitl-fedora on 2026-10-12. The operator's direction did not supersede this row's opt-in rule. RECON on yolanda (v56.10.12.1, target/work/793/inspect-today.txt): tillandsias-inference already gets --device /dev/dxg, the /usr/lib/wsl mount and LD_LIBRARY_PATH=/usr/lib/wsl/lib (793-zumy), and the image already has vulkan-loader, mesa-vulkan-drivers and dzn_icd (917-zkge). It still ran "engine: set=core backends=[core-only]" with "inference compute id=cpu library=cpu", because TILLANDSIAS_INFERENCE_TIER=cpu. The missing piece is the tier, not the packages. The probe's "engine-missing_no-vulkan-loader" is the WSL guest's view, not the container's.
+        DECISIONS: (1) The unconditional dxg passthrough stays as it is: it is harmless while the engine set is core-only, and it is under the operator's qualified yes of 2026-09-19 (audit 1267-fj2z). (2) The default is conservative: until a host measures accel_decode_crossover_b, decode stays on the CPU, so the opt-in is prefill-only. (3) STATED LIMIT: dzn self-reports "not a conformant Vulkan implementation, testing use only", exposes only Vulkan 1.2, and lacks shaderInt8, storageBuffer8BitAccess and cooperative-matrix. The measured gains were achieved without them.
+        SLICES (the row closes only when all four land): S1, opt-in wiring: TILLANDSIAS_INFERENCE_GPU=vulkan, forwarded by the tray into the guest unit, lifts a cpu WSL2 host with dxg+tree to gpu-vulkan; vulkan-tools goes into the image; the default lane is byte-identical. S2, the probe reports the container-side enumeration (vulkaninfo --summary or the engine's own listing, rejecting llvmpipe/CPU), with the live criteria on yolanda: vulkaninfo lists "Microsoft Direct3D12 (...)" and accel_class is not cpu-only on the opted-in lane, red on today's image. S3, crossover routing: num_gpu=0 for models below the measured crossover, and all-CPU decode when unmeasured. S4, a GPU deadline with CPU fallback for the cold-load hang.
