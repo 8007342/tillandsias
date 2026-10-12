@@ -2,7 +2,7 @@
 
 Host: lenovinha, Fedora 44, kernel 7.2.7, podman rootless. GPUs: AMD Cezanne iGPU at
 renderD128 (RADV RENOIR, Mesa 26.2.3 in the image) and NVIDIA RTX 3070 at renderD129.
-No CDI spec is used here, so the NVIDIA GPU is not delivered to containers. The image
+These smoke runs passed devices to podman directly and never passed the NVIDIA CDI device, so llama-server saw only the iGPU. (CORRECTION: this host DOES have a CDI spec, ~/.config/cdi/nvidia.yaml and /var/run/cdi/nvidia.yaml, and the live tillandsias-inference has the RTX 3070. An earlier version of this file said there was none.) The image
 was built from this branch as `localhost/482b-inference:test`. The operator's enclave
 images and model cache were not touched; every run used a scratch models dir under /tmp.
 
@@ -38,5 +38,5 @@ CONTROL for the kill run: an earlier run of the same script found no `pgrep` in 
 Throughput on this hardware, T0 at 0.5B, single request, outside the slot via the plain llama-server image: Vulkan on the iGPU 48.9 tok/s, CPU 77.1 tok/s. For a 0.5B model the 16-thread CPU beats the integrated GPU. Larger rows need 482-igky's pins first.
 
 Not exercised here:
-- CUDA through the slot: this host has no CDI spec, so the cuda lane is undeliverable and correctly refused (fixtures show both refusals and the delivered case).
+- CUDA through the slot was NOT exercised live. The runs never requested `TILLANDSIAS_INFERENCE_LLAMA_BACKEND=cuda` or passed the CDI device. The fixtures cover both refusals and the delivered-lane selection. A live cuda run on this host's RTX 3070 belongs to 482c. (Corrected: an earlier version wrongly said this host had no CDI spec.)
 - Promotion of llama-server to the default: that is 482c.
