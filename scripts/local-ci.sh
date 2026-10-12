@@ -858,7 +858,8 @@ log_skip() {
 # that shape means renaming, moving, or deleting any guard script silently
 # DELETES that guard from CI while CI keeps printing "Safe to push!". The Python
 # ban — an explicit operator non-negotiable — evaporated if
-# scripts/check-no-python-scripts.sh was ever relocated, with no message anywhere.
+# its checker (now scripts/lua/check-no-python-scripts.lua) was ever relocated,
+# with no message anywhere.
 #
 # Fail closed instead: the guards are committed files, so their absence means the
 # tree is broken, not that the check is inapplicable. Environmental skips (no
@@ -1914,17 +1915,31 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     log_section "Policy Checkers"
 
     # Sub-check 8a: Python scripts ban
-    if [[ -f "scripts/check-no-python-scripts.sh" ]]; then
-        if bash scripts/check-no-python-scripts.sh 2>&1 | tee /tmp/no-python-check.log; then
-            log_pass "No Python scripts found in tracked files"
-            archive_check_log "no-python-scripts" "pass" /tmp/no-python-check.log
+    # PORTED to Lua (1630-dwab): the runner is resolved as the gate resolves it,
+    # TILLANDSIAS_SCRIPT_RUNNER_BIN first, then plan-binary-probe, never PATH;
+    # no runner is a could-not-run, never a pass.
+    if [[ -f "scripts/lua/check-no-python-scripts.lua" ]]; then
+        _np_bin="${TILLANDSIAS_SCRIPT_RUNNER_BIN:-}"
+        [[ -n "$_np_bin" ]] || _np_bin="$(cd "$REPO_ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _np_bin=""
+        case "$_np_bin" in ./*) _np_bin="$REPO_ROOT/${_np_bin#./}" ;; esac
+        [[ -n "$_np_bin" && -x "$_np_bin" ]] || _np_bin=""
+        if [[ -n "$_np_bin" ]]; then
+            if (cd "$REPO_ROOT" && "$_np_bin" script run scripts/lua/check-no-python-scripts.lua) 2>&1 | tee /tmp/no-python-check.log; then
+                log_pass "No Python scripts found in tracked files"
+                archive_check_log "no-python-scripts" "pass" /tmp/no-python-check.log
+            else
+                log_fail_tracked "no-python-scripts" "Python scripts detected in tracked files (see /tmp/no-python-check.log)"
+                [[ "$VERBOSE" == "1" ]] && cat /tmp/no-python-check.log >&2
+                archive_check_log "no-python-scripts" "fail" /tmp/no-python-check.log
+            fi
         else
-            log_fail_tracked "no-python-scripts" "Python scripts detected in tracked files (see /tmp/no-python-check.log)"
-            [[ "$VERBOSE" == "1" ]] && cat /tmp/no-python-check.log >&2
+            echo "could-not-run:no-python-scripts:no-script-runner" > /tmp/no-python-check.log
+            cat /tmp/no-python-check.log >&2
+            log_fail_tracked "no-python-scripts" "no tillandsias-plan with \`script run\` resolves; rebuild it (cargo build --release -p tillandsias-plan)"
             archive_check_log "no-python-scripts" "fail" /tmp/no-python-check.log
         fi
     else
-        log_fail_missing_guard "no-python-scripts" "scripts/check-no-python-scripts.sh"
+        log_fail_missing_guard "no-python-scripts" "scripts/lua/check-no-python-scripts.lua"
         archive_check_log "no-python-scripts" "skipped"
     fi
 

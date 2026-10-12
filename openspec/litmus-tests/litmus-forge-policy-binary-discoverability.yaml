@@ -12,13 +12,13 @@ phase: pre-build
 host_kind: forge
 description: >
   Pin CARGO_TARGET_DIR-aware binary resolution across script wrappers:
-  verify scripts/check-no-python-scripts.sh and scripts/tillandsias-policy
+  verify scripts/lua/check-no-python-scripts.lua (on the one runner) and scripts/tillandsias-policy
   succeed cleanly when CARGO_TARGET_DIR is redirected outside the repo root.
 severity: high
 size: instant
 
 preconditions:
-  - scripts/check-no-python-scripts.sh exists
+  - scripts/lua/check-no-python-scripts.lua exists
   - scripts/tillandsias-policy exists
 
 critical_path:

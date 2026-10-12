@@ -73,7 +73,6 @@ scripts/check-nix-builder-e2e.sh
 scripts/check-nix-deps-stability.sh
 scripts/check-no-competing-gate.sh
 scripts/check-no-fixture-writes-live-ledger.sh
-scripts/check-no-python-scripts.sh
 scripts/check-no-tracked-binaries.sh
 scripts/check-opsx-generated-dirt.sh
 scripts/check-order-citations-resolve.sh
