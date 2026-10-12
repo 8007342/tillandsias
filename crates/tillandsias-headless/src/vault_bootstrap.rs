@@ -6766,6 +6766,10 @@ mod tests {
     /// ONCE — the decision is made under the lock, so the loser sees the
     /// winner's new expiry.
     #[test]
+    #[cfg_attr(
+        not(unix),
+        ignore = "1635-hbvw: resource_lock is a no-op off unix (rotation runs only in the Linux guest; on a Windows host the Vault store reads None before any exchange); resource_lock::tests::try_lock_is_a_no_op_off_unix flags the day that changes"
+    )]
     fn github_token_auto_rotation_concurrent_checks_exchange_once() {
         let store = std::sync::Arc::new(SharedStore::with(&bundle_expiring_at(NOW + 60)));
         let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
