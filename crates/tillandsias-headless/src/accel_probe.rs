@@ -541,6 +541,9 @@ pub fn load_or_probe_at(
     freshness: Freshness,
 ) -> CapabilityDocument {
     let identity = probe_identity();
+    // ORDER 793-a8e7 S2: a cached opted-in document that predates its
+    // container is re-probed, and its MEASUREMENTS travel to the new one.
+    let mut carried_measurements = None;
     if freshness == Freshness::Cached
         && let Ok(content) = fs::read_to_string(cache_file)
         && let Ok(mut doc) = serde_json::from_str::<CapabilityDocument>(&content)
@@ -549,16 +552,26 @@ pub fn load_or_probe_at(
         // The check 852-dk9z adds. Without it a rebuilt binary republishes its
         // predecessor's document as if it had probed.
         && doc.probe_identity.as_deref() == Some(identity.as_str())
-        && !opted_in_doc_predates_its_container(&doc)
     {
-        // THE STAMP GOES ON THE COPY BEING RETURNED, not on the cache. The
-        // document is otherwise returned verbatim, `timestamp` included, so
-        // this field is the only thing distinguishing it from the run that
-        // produced it (order 1139-xe5m).
-        doc.envelope_source = Some(EnvelopeSource::Served);
-        return doc;
+        if !opted_in_doc_predates_its_container(&doc) {
+            // THE STAMP GOES ON THE COPY BEING RETURNED, not on the cache. The
+            // document is otherwise returned verbatim, `timestamp` included, so
+            // this field is the only thing distinguishing it from the run that
+            // produced it (order 1139-xe5m).
+            doc.envelope_source = Some(EnvelopeSource::Served);
+            return doc;
+        }
+        // Same tier, same probe code: the measurements still describe this
+        // configuration. Dropping them here would make the decode crossover
+        // (793-qc6q), which only record_measurement writes, impossible to keep
+        // on an opted-in host, since every probe before the container exists
+        // leaves the gap this re-probe exists to close.
+        carried_measurements = Some(doc.measurements);
     }
-    let doc = run_probe(effective_tier);
+    let mut doc = run_probe(effective_tier);
+    if let Some(measurements) = carried_measurements {
+        doc.measurements = measurements;
+    }
     let _ = write_capability_cache(cache_file, &doc);
     doc
 }
@@ -7343,6 +7356,28 @@ GPU1:
         assert!(super::opted_in_doc_predates_its_container(&doc));
         doc.legacy_tier = "cpu".to_string();
         assert!(!super::opted_in_doc_predates_its_container(&doc));
+    }
+
+    /// ORDER 793-a8e7 S2: the re-probe keeps the measurements. Without this an
+    /// opted-in host could never hold a decode crossover: record_measurement
+    /// writes into the cached document, and the next load re-probed it away.
+    #[test]
+    fn reprobing_an_opted_in_doc_keeps_its_measurements() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cache = dir.path().join("capabilities.json");
+        let mut stale = run_probe("gpu-vulkan");
+        stale.enumeration_gaps.push("container-lane".to_string());
+        stale.host.host_id = "STALE-CACHE-MARKER".to_string();
+        let rows = vec![decode_row("cpu", 3.0, 19.6), decode_row("gpu", 3.0, 27.0)];
+        stale.measurements = rows.clone();
+        fs::write(&cache, serde_json::to_string_pretty(&stale).unwrap()).unwrap();
+
+        let got = load_or_probe_at(&cache, "gpu-vulkan", Freshness::Cached);
+        assert_ne!(got.host.host_id, "STALE-CACHE-MARKER", "it must re-probe");
+        assert_eq!(got.measurements, rows, "and keep the measurements");
+        let written: CapabilityDocument =
+            serde_json::from_str(&fs::read_to_string(&cache).unwrap()).unwrap();
+        assert_eq!(written.measurements, rows, "in the cache it writes too");
     }
 
     /// 793-zumy CRITERION 3, pinned: "Devices of type PHYSICAL_DEVICE_TYPE_CPU
