@@ -8,7 +8,6 @@ scripts/check-arrival-routing.sh
 scripts/check-bare-metal-host-initialized.sh
 scripts/check-base-ledger-status-loss.sh
 scripts/check-build-cache-sweep.sh
-scripts/check-ca-bind-migration.sh
 scripts/check-capability-row.sh
 scripts/check-carry-forward.sh
 scripts/check-cheatsheet-frontmatter.sh

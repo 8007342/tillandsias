@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Split out of 1642-cc54 at the coordinator's request (2026-10-12): the guest kernel's own stall after systemd-shutdown's "Powering off.".
+packets:
+  - packet_id: the-macos-vz-guest-kernel-stalls-after-powering-off-so-vz-never-leaves-running-without-a-host-force-stop
+    order: 1646-8r7b
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [macos, vz, guest-kernel, shutdown]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-vm-layer/src/vz.rs
+    related: [1642-cc54, 1430-rnpd]
+    depends_on: []
+    title: |
+      On macOS VZ the Fedora guest kernel stalls after systemd-shutdown's "Powering off.", so VZ stays Running and only a host stop ends the VM
+    context: |
+      MEASURED on tlatoanis-macbook-air, 2026-10-12 (1642-cc54 diagnostics fdad16989: console=hvc0, VZ state in the drain timeout; one boot with initcall_debug):
+        - systemd-shutdown synced, unmounted every filesystem, remounted / read-only, detached loop/MD/DM and printed "Powering off." ~11 s after the tray's request.
+        - The kernel then shut down every virtio device in ~20 ms: kgdboc, serial8250, virtio_balloon, virtio_rng, vmw_vsock_virtio_transport, 4x virtiofs, 3x virtio_blk, and virtio_console LAST, so the console goes blind there.
+        - No "reboot: Power down" line. VZ read Running (1) at the 60 s drain timeout on three consecutive quits.
+      Candidates after the console stops: virtio_net (virtio0) shutdown, the PCI host bridge, or PSCI SYSTEM_OFF not reaching VZ.
+      IMPACT TODAY: none on disk safety. 1642-cc54 (PR #388) has the guest report a clean power-off with a per-boot token after the unmount, and the host finishes the stop (16 s instead of 65 s). This row is about the kernel itself reaching power-off, so the host need not finish it.
+    exit_criteria:
+      - 'the device or call the kernel stalls in after "Powering off." is named from a measurement (e.g. a console that survives virtio_console shutdown, or a kernel built/booted with a probe), not inferred'
+      - 'either the stall is removed (VZ reaches Stopped on its own within a few seconds of "Powering off." on two consecutive quits) or the row records why it cannot be, with the token path of 1642-cc54 as the standing remedy'
+    unscoreable: "a guest-kernel shutdown behaviour on macOS VZ measured by consecutive tray quits"
+    next_action: >
+      Try the cheapest discriminators first: blacklist virtio_net's shutdown path or boot one cycle without a network device, and check whether VZ then reaches Stopped; then look at PSCI SYSTEM_OFF on VZ for this kernel (6.19.10-300.fc44.aarch64).
+    provenance: |
+      Filed by tlatoanis-macbook-air at macuahuitl-fedora's request, 2026-10-12, from the 1642-cc54 measurements.
+    events:
+      - type: filed
+        ts: "2026-10-12T22:26:30Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          The VZ guest kernel stalls after "Powering off." (virtio_console shuts down last, then nothing), so VZ stays Running; split out of 1642-cc54.
