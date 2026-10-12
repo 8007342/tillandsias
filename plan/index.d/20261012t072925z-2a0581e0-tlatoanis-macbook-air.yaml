@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-front-door-budget-is-one-floor-host-constant-so-darwin-preflight-is-judged-against-150-s-it-cannot-meet-in-either-regime
+    event:
+      type: note
+      ts: "2026-10-12T07:29:25Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t072925z
+      host: tlatoanis-macbook-air
+      summary: |-
+        Landed #355 as c83a2cdee (land-queue run 41). Exit criteria, each exercised: (1) the per-regime budget, scripts/lua/test-preflight-regime-budget.lua (gate step 465, 6 arms): REGIMES (darwin -b 415, darwin 200, Linux 150, override wins), PASS-NEW and FAIL-FLAT (one 380 s summary passes at 415 and fails at a flat 150, in one run), OLD-DOOR (no budget= falls back to 150), LAST-LINE, and CLOCK (observed deadline-clock=wall-s on darwin bash 3.2). (2) The door measuring itself under taskpolicy -b on this branch's head f2ed9a087: partial:preflight:ran=168 could-not-run=0 refused=0 deadline-clock=wall-s budget=415s budget-regime=darwin-background wall=362s. The carried shell-to-lua obligation was paid in the same change by porting check-enclave-expect-none-is-fixture-only.sh to Lua (ok:expect-none-fixture-only:1, equal to the .sh).
