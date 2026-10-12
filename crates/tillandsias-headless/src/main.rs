@@ -5437,15 +5437,21 @@ async fn report_inference_readiness(client: &PodmanClient, debug: bool) -> bool 
                     .ok()
                     .as_deref(),
             );
-            eprintln!(
-                "[tillandsias] [forge-launch] DEGRADED: local inference not ready \
-                 (engine={}): {e}; continuing — local models are optional (harnesses \
-                 use cloud models).",
-                engine.as_str()
-            );
+            eprintln!("{}", inference_degraded_line(engine, &e));
             false
         }
     }
+}
+
+/// The SLOT-8 DEGRADED line for a slot that never became ready: names the
+/// engine and the last probe failure, and says the launch continues.
+fn inference_degraded_line(engine: engine_slots::EngineKind, reason: &str) -> String {
+    format!(
+        "[tillandsias] [forge-launch] DEGRADED: local inference not ready \
+         (engine={}): {reason}; continuing — local models are optional (harnesses \
+         use cloud models).",
+        engine.as_str()
+    )
 }
 
 /// Probe the served bare repository for a resolvable HEAD plus a concrete
@@ -27065,36 +27071,29 @@ mod tests {
         );
     }
 
-    /// Order 482c / SLOT-8 "Readiness failure is soft": the launch path reports
-    /// readiness through report_inference_readiness, which logs a DEGRADED line
-    /// naming the engine and never returns an error the launch could `?` on.
+    /// Order 482c / SLOT-8 "Readiness failure is soft": a never-ready slot logs
+    /// one DEGRADED line naming the selected engine and the probe failure. The
+    /// "never gates launch" half is structural; litmus:inference-engine-parity-shape
+    /// pins it with a seeded hard-gate regression.
     #[test]
-    fn inference_readiness_failure_is_degraded_and_never_gates_launch() {
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-        let report = source_window(source, "async fn report_inference_readiness(");
-        assert!(
-            report.contains("-> bool"),
-            "readiness report must not return a Result a launch could propagate"
-        );
-        assert!(
-            report.contains("DEGRADED: local inference not ready") && report.contains("engine={}"),
-            "a readiness failure must log DEGRADED and name the selected engine"
-        );
-        // Built at run time so this test's own text is not counted.
-        let needle = ["wait_for_inference", "_ready("].concat();
-        let calls: Vec<_> = source.match_indices(needle.as_str()).collect();
-        let callers = calls
-            .iter()
-            .filter(|(i, _)| !source[..*i].ends_with("async fn "))
-            .count();
-        assert_eq!(
-            callers, 1,
-            "wait_for_inference_ready must have exactly one caller (the soft report)"
-        );
-        assert!(
-            report.contains(&format!("{needle}client, debug)")),
-            "the one caller must be report_inference_readiness"
-        );
+    fn inference_degraded_line_names_engine_and_reason() {
+        for (engine, name) in [
+            (engine_slots::EngineKind::Ollama, "engine=ollama"),
+            (engine_slots::EngineKind::LlamaServer, "engine=llama-server"),
+        ] {
+            let line = inference_degraded_line(engine, "probe failed: exit 7");
+            assert!(
+                line.contains("DEGRADED: local inference not ready"),
+                "{line}"
+            );
+            assert!(line.contains(name), "{line}");
+            assert!(line.contains("probe failed: exit 7"), "{line}");
+            assert!(line.contains("continuing"), "{line}");
+            assert!(
+                !line.contains("WARNING"),
+                "SLOT-8 wants DEGRADED, not WARNING: {line}"
+            );
+        }
     }
 
     /// Order 443 fixture 1 (second-forge ensure leaves shared containers
