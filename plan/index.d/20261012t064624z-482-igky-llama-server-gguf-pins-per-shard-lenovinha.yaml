@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at 482b's claim, as agreed with the coordinator (macuahuitl, 2026-10-12): "482b-2".
+packets:
+  - packet_id: llama-server-tier-ggufs-beyond-t0-are-pinned-per-shard-so-the-fail-closed-refusal-lifts-row-by-row
+    order: 482-igky
+    status: ready
+    kind: implementation
+    priority: p2
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: linux
+    capability_tags: [inference, llama-cpp, supply-chain, models]
+    estimated_hours: 4
+    depends_on:
+      - llama-server-vulkan-image-variant
+      - llama-server-shared-tier-model-table
+    owned_files:
+      - images/inference/tiers/models.llama-server.tsv
+      - images/inference/entrypoint.sh
+    title: |
+      482b ships llama-server FAIL-CLOSED on models. Only the T0 GGUF (qwen2.5-0.5b-instruct-q4_k_m.gguf) carries a sha256 pin, and every other tier row is refused with reason=engine-integrity-refused:gguf-unpinned:<logical-id>, never downloaded unverified. This row pins the remaining rows' GGUFs, one sha256 PER SHARD (the larger Qwen GGUFs are split files), and lifts the refusal one row at a time.
+    context: |
+      Agreed split (macuahuitl, 2026-10-12): 482b must not ship an unverified download path in between, so it pins T0 only and refuses the rest. llama.cpp `-hf repo:quant` verifies nothing. Ollama's manifests are digest-addressed; GGUF downloads are not.
+      Pin provenance: trust-on-first-fetch from the Hugging Face API at pin time. The tree API's LFS oid IS the file's sha256 (checked for T0: 74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db, 491400032 bytes). Record the API URL, the fetch date and the size beside every pin.
+    exit_criteria:
+      - 'every models.llama-server.tsv row that is not refused names each shard file with its sha256 and size; a multi-shard row is complete only when ALL its shards are pinned'
+      - 'a download whose bytes do not match the pin is refused with reason=engine-integrity-refused:gguf-digest-mismatch:<logical-id> and the file is not served; shown by a planted one-byte mutation, then byte-identical restoration passing'
+      - 'each lifted row loads in llama-server on a host of its tier (or the largest tier the fleet has), with the pinned digests named in the log'
+    unscoreable: "unpinnable-until-the-guard-exists: per-shard pins and their mismatch fixture are written together"
+    next_action: >
+      For each tier row, list the GGUF shard files via the HF tree API, record sha256 (LFS oid) and size per shard, extend the
+      verifier from one file to N shards, and lift the refusal row by row.
+    provenance: |
+      Filed by lenovinha-silverblue at the 482b claim, on macuahuitl's direction, 2026-10-12.
+    events:
+      - type: filed
+        ts: "2026-10-12T06:46:24Z"
+        host: lenovinha
+        summary: |-
+          482b-2: pin the GGUFs beyond T0 per shard and lift llama-server's fail-closed gguf-unpinned refusal row by row.

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: manifest-dir-runtime-convert-six-single-site-files-across-plan-podman-vault-client-and-headless-to-a-runtime-manifest-dir-read
+    field: status
+    value: completed
+    ts: "2026-10-12T06:40:27Z"
+    host: yoga
+
+events:
+  - packet_id: manifest-dir-runtime-convert-six-single-site-files-across-plan-podman-vault-client-and-headless-to-a-runtime-manifest-dir-read
+    event:
+      type: completed
+      ts: "2026-10-12T06:40:27Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: landed in 9e25299e1 land(335) on origin/linux-next (adopted as f07e77e19); on trunk 5bd16d347 the six sites read CARGO_MANIFEST_DIR at runtime, scripts/portability/manifest-dir-env-floor.txt lost six lines, and the guard answers ok:manifest-dir-env:scanned=125:test=122:floor=122:non-test=3:files=15 via tillandsias-plan script run
+  - packet_id: manifest-dir-runtime-convert-six-single-site-files-across-plan-podman-vault-client-and-headless-to-a-runtime-manifest-dir-read
+    event:
+      type: note
+      ts: "2026-10-12T06:40:27Z"
+      host: yoga
+      summary: |-
+        row left in_progress by the yoga forge session whose checkout is gone; closed by yoga on the landed sha during the 1367-2sbc wip-limit remedy
