@@ -45,6 +45,10 @@ mod provision_console;
 // ORDER 1335-jz8c: VmPhase -> tray glyph. Mapping is platform-independent
 // (and unit-tested everywhere); the HICON construction inside is cfg-gated.
 mod tray_phase_icon;
+// ORDER 1560-uam3: the WSL swap and memory-reclaim keys, re-ensured at every
+// GUI startup. The rules are portable and tested everywhere; only the startup
+// step (path resolution, logging, the shared-VM restart) is Windows-only.
+mod wslconfig_ensure;
 
 // Linux stub modules so unit tests + portable code paths compile cleanly.
 #[cfg(not(target_os = "windows"))]
@@ -285,6 +289,11 @@ fn main() {
             std::process::exit(1);
         }
     };
+
+    // 1560-uam3: before the tray provisions or connects, so a shared-VM
+    // restart (only when ours is the sole running distro) happens before
+    // anything of ours is running inside it. Logs to tray.log; never fails.
+    wslconfig_ensure::ensure_at_startup();
 
     notify_icon::run();
 }
