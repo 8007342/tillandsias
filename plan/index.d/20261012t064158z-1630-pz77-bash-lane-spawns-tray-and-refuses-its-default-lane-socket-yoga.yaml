@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga-silverblue (tillandsias-a6) under the issue filing mandate, 2026-10-12: observed while joining the fleet (initialize-bare-metal-host §6.1).
+packets:
+  - packet_id: a-bash-lane-launch-spawns-the-tray-whose-default-lane-mcp-socket-the-lane-then-refuses-as-a-live-owner-so-the-shell-dies-after-the-whole-project-stack-is-up
+    order: 1630-pz77
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    size: M
+    implementer_tier: sonnet
+    capability_tags: [mcp-tool-socket, lane-launch, tray, git-mirror, diagnostics]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-headless/src/tray/mod.rs
+    title: |
+      `tillandsias --bash <project>` on a host with no tray running spawns `--tray` (the tray-ensure helper), the tray binds `<project>-default/mcp.sock` for every project under the root, and the lane's own `start_mcp_socket_server_for_lane` then refuses that socket as "already has a live owner". The shell dies with runtime_unavailable AFTER the mirror, router, inference and source volume are up, and the tray keeps the stack alive with no lane open.
+    context: |
+      MEASURED on yoga 2026-10-12 (installed v56.10.9.1), running skills/initialize-bare-metal-host §6.1 with TILLANDSIAS_HOST_PROJECT_ROOT=/var/home/tlatoani/claudia, TILLANDSIAS_MIRROR_SSHD=1 and TILLANDSIAS_HOST_PUSH_HOST=yoga, no tray running beforehand. The launch log reached "git mirror seeded on attempt 1/1200" and created the RAM-only source volume, then: "Error: runtime_unavailable: per-lane MCP listener failed: mcp socket already has a live owner; refusing to unlink: /run/user/1000/tillandsias/mcp/tillandsias-default/mcp.sock", exit 1. ss -xlp named the owner: pid 40887, `tillandsias --tray`, started by the launch (ppid 1, setsid). Three socket dirs appeared at launch time (se87-default, tillandsias-default, tillandsias.org-default): one per project under the root. Afterwards scripts/check-bare-metal-host-initialized.sh answered ok:bare-metal-host:yoga:enclave=up mirror=up router=up inference=up github=seeded lane=wired:til:host-push:yoga with no lane open.
+      CODE on trunk (symbols, not lines): main.rs tray-ensure helper (control_socket_is_listening on control.sock, else spawn current_exe --tray under setsid); main.rs lane bring-up calling tray::start_mcp_socket_server_for_lane after the containers exist, mapping errors to runtime_unavailable; tray/mod.rs start_mcp_socket_server_for_lane, whose lane_listener_registry is per-process so the tray's listener is a foreign "live owner" and the AddrInUse+connect-Ok arm refuses.
+      COMPLEMENT of 1626-r4xm (project outside the root: the CLI owns the socket, every call refused as not-a-known-project). Here the project is inside the root, the tray owns the socket, and the lane refuses to start. UNMEASURED: the same launch with a tray already running (operator desktop), and whether the tray's hold on the project stack is the refcounted teardown by design or a leak.
+      Full write-up: plan/issues/bash-lane-spawns-tray-and-refuses-its-default-lane-socket-2026-10-12.md
+    exit_criteria:
+      - 'on a host with no tray running, `tillandsias --bash <project>` for a project under the root brings the lane shell up and keeps it: the per-lane listener and the tray listener for the same (project, default) key have one owner by design and the other defers, pinned by a test that runs both bind paths for the same key in sequence and expects no refusal'
+      - 'when the per-lane bind cannot proceed, the refusal names the owner (--tray, pid) and happens BEFORE the mirror, router, inference and source volume are created, or the launch degrades to a lane without a local-preview MCP with a WARN naming the socket; never a dead shell behind a healthy stack'
+      - 'a launch whose shell exits non-zero leaves the substrate checker explained: the project stack is torn down with the lane, or lane= names the tray as the holder'
+    unscoreable: "unpinnable-until-the-guard-exists: the single-owner decision for <project>-default/mcp.sock and its two-bind-paths test are written together"
+    next_action: >
+      Decide the owner of <project>-default/mcp.sock. If the tray owns it, the lane bring-up must reuse it (connect, register the lane with the tray) instead of binding; if the lane owns it, the tray must not pre-bind projects that have no live lane. Then move the bind (or its refusal) ahead of the container bring-up so a refusal costs nothing. Measure the already-running-tray regime before choosing.
+    provenance: |
+      Filed by yoga-silverblue (session tillandsias-a6) under the issue filing mandate, 2026-10-12, observed while joining the fleet.
+    events:
+      - type: filed
+        ts: "2026-10-12T06:41:58Z"
+        host: yoga
+        summary: |-
+          A --bash lane launch spawns the tray, the tray binds the project's default-lane MCP socket, and the lane then refuses it as a live owner: the shell dies with runtime_unavailable after the whole project stack is up, and the tray keeps the stack alive with no lane open.
