@@ -3784,6 +3784,19 @@ pub(crate) const PROXY_CA_KEY_SECRET: &str = "tillandsias-ca-key";
 /// least-privilege while readable by exactly its consumer.
 pub(crate) const PROXY_CA_KEY_SECRET_OPTS: &str = "uid=1000,gid=1000,mode=0400";
 
+/// Credential-quarantine tmpfs overlays (orders 170/224) for the forge's
+/// `~/.ssh` and `~/.config/gh`. `uid=1000,gid=1000` is REQUIRED, not
+/// cosmetic: podman mounts a tmpfs `root:root` unless told otherwise, and the
+/// forge runs as uid/gid 1000 (`images/default/Containerfile`) under
+/// `--userns=keep-id`. Without it `~/.config/gh` was root-owned 0700 and
+/// `gh auth status` failed with "permission denied" instead of reporting
+/// "not logged in" (1625-bax2, measured on yoga). The overlays stay EMPTY:
+/// owning them gives the forge an empty directory, never a credential.
+pub(crate) const FORGE_SSH_QUARANTINE_TMPFS: &str =
+    "/home/forge/.ssh:size=1m,mode=0700,uid=1000,gid=1000";
+pub(crate) const FORGE_GH_QUARANTINE_TMPFS: &str =
+    "/home/forge/.config/gh:size=1m,mode=0700,uid=1000,gid=1000";
+
 fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
     let mut args: Vec<String> = vec![
         "--detach".into(),
@@ -8355,9 +8368,9 @@ fn build_opencode_forge_args(
         // tmpfs are empty — the forge has no business reading host SSH keys or
         // GitHub CLI tokens; all authenticated git traffic flows through the mirror.
         "--tmpfs".into(),
-        "/home/forge/.ssh:size=1m,mode=0700".into(),
+        FORGE_SSH_QUARANTINE_TMPFS.into(),
         "--tmpfs".into(),
-        "/home/forge/.config/gh:size=1m,mode=0700".into(),
+        FORGE_GH_QUARANTINE_TMPFS.into(),
         // Mount under `/home/forge/src/<project>/` (not directly at
         // `/home/forge/src`) so the in-container tree matches what the forge
         // entrypoint's clone path would produce
@@ -18405,8 +18418,8 @@ fn build_forge_agent_run_args_with_vault(
         // host $HOME, but the --volume source mount of Tllatoani's
         // ~/src/tillandsias is the host's own checkout, so its child
         // .ssh/.config would be visible). The tmpfs prevents that.
-        .tmpfs("/home/forge/.ssh:size=1m,mode=0700")
-        .tmpfs("/home/forge/.config/gh:size=1m,mode=0700")
+        .tmpfs(FORGE_SSH_QUARANTINE_TMPFS)
+        .tmpfs(FORGE_GH_QUARANTINE_TMPFS)
         .env("TILLANDSIAS_CHEATSHEETS", "/opt/cheatsheets")
         .entrypoint(mode.entrypoint());
     // Order 437: clone-only (default) selects the mirror network-clone
@@ -24853,6 +24866,20 @@ mod tests {
             found_gh_config,
             "must mount credential-quarantine tmpfs at /home/forge/.config/gh"
         );
+        // 1625-bax2: the overlays are FORGE-owned. podman mounts a tmpfs
+        // root:root unless told otherwise, and a root-owned 0700 ~/.config/gh
+        // makes `gh auth status` say "permission denied", not "not logged in".
+        for quarantine in ["/home/forge/.ssh:", "/home/forge/.config/gh:"] {
+            let spec = argv
+                .iter()
+                .find(|a| a.starts_with(quarantine))
+                .unwrap_or_else(|| panic!("no tmpfs for {quarantine}: {argv:?}"));
+            let opts: Vec<&str> = spec[quarantine.len()..].split(',').collect();
+            assert!(
+                opts.contains(&"uid=1000") && opts.contains(&"gid=1000"),
+                "{quarantine} quarantine tmpfs must be owned by the forge user (uid/gid 1000); got {spec}"
+            );
+        }
         assert!(
             found_git_config_ro,
             "must mount forge-owned gitconfig at /home/forge/.gitconfig (order 224)"
@@ -29080,12 +29107,12 @@ esac
         assert!(has_arg(&args, "--tmpfs"));
         assert!(
             args.iter()
-                .any(|arg| arg == "/home/forge/.ssh:size=1m,mode=0700"),
+                .any(|arg| arg == FORGE_SSH_QUARANTINE_TMPFS),
             "opencode forge args must quarantine .ssh via tmpfs; got {args:?}"
         );
         assert!(
             args.iter()
-                .any(|arg| arg == "/home/forge/.config/gh:size=1m,mode=0700"),
+                .any(|arg| arg == FORGE_GH_QUARANTINE_TMPFS),
             "opencode forge args must quarantine .config/gh via tmpfs; got {args:?}"
         );
         assert!(
