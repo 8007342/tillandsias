@@ -1049,6 +1049,7 @@ specs:
   - litmus:local-web-preview
   - litmus:cold-start-acceptance-shape
   - litmus:cold-start-acceptance-e2e
+  - litmus:device-catalogue-shape
   coverage_ratio: 0
   last_verified: null
 - spec_id: tools-overlay-fast-reuse
