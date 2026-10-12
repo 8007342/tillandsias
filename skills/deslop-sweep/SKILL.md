@@ -171,7 +171,9 @@ coordinator main-context tokens.
   in a script with no test (1170-e5im).
 - **Clean the worktrees** (`git worktree remove --force`, prune, delete the
   `worktree-wf_*` branches) after the diffs are taken; ten of them held
-  applied mutations.
+  applied mutations. (A record of that sweep. Since 1620-67ji, a sweep runs in
+  the one checkout on a work ref and opens no worktrees; see
+  methodology multi-host-development.yaml single_checkout_branching.)
 
 - **A mutation control run from a scratch COPY of the script re-roots itself.**
   Every fixture and detector here derives its root from its own location

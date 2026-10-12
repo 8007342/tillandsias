@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (macuahuitl, 2026-10-11): observed during 394e S4.
+packets:
+  - packet_id: a-projects-git-mirror-outlives-its-last-lane-whenever-another-projects-lane-is-up-because-lane-exit-cleanup-returns-before-the-per-project-half
+    order: 1622-p5fh
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lifecycle, git-mirror, teardown, ephemerality]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      When a lane exits while ANOTHER project's lane is up, cleanup_shared_stack_if_no_running_forge returns at "keeping shared stack alive; active lane container(s): ..." before any per-project cleanup. The exiting project's tillandsias-git-<project> mirror keeps running after its last lane, and the sibling's later exit cleans only its own project, so the mirror leaks until some future cold launch.
+    context: |
+      DESIGN (1448-yt96, completed): "the per-project mirror (and the rest of the project half of the stack) lives only while a lane of that project is active; the application-lifetime services (vault, proxy, router) survive." This is therefore a LEAK against the stated design, not a doc gap.
+      MEASURED on lenovinha 2026-10-11 (installed v56.9.27.2, order 394e S4): lane A (scratch-394e-hold) was held open, then lane B (scratch-394e) launched and exited at 23:50Z. B's log said "[tillandsias] keeping shared stack alive; active lane container(s): tillandsias-scratch-394e-hold-forge-maintenance" twice. After A was released, podman ps still showed "tillandsias-git-scratch-394e Up 6 minutes (healthy)", and vault logged "keeping AppRole material tillandsias-vault-approle-git-mirror-agent-scratch-394e-... alive; its container tillandsias-git-scratch-394e is still running". Removed by hand.
+      CODE: crates/tillandsias-headless/src/main.rs cleanup_shared_stack_if_no_running_forge (~7970-8020). The "if !running_lanes.is_empty() { ...; return; }" early return runs before the project-scoped removals (git mirror, browser, ssh sidecar). So "lanes of OTHER projects are up" suppresses THIS project's cleanup. For the project half the refcount should ask "is a lane of THIS project up", not "is any lane up".
+    exit_criteria:
+      - 'in one run, with lanes on two different projects A and B: A exits, then B exits. tillandsias-git-<A> is gone by the time B exits, and tillandsias-git-<B> by the time B''s last lane exits; the shared half survives until the last lane of any project'
+      - 'the per-project removal keys on lanes of the exiting project only, and an errored container listing still counts as held (leak-not-destroy, the existing rule)'
+    unscoreable: "unpinnable-until-the-guard-exists: the two-project teardown arm and the split refcount are written together"
+    next_action: >
+      Split the refcount. Gate the per-project removals on running lanes of THIS project (is_active_lane_container filtered by project), and keep the any-project count for the shared half. Add a FakeBackend unit test with two projects beside the order-477 one.
+    provenance: |
+      Filed by lenovinha-silverblue on macuahuitl's direction, 2026-10-11; observed during 394e S4.
+    events:
+      - type: filed
+        ts: "2026-10-11T23:53:02Z"
+        host: lenovinha
+        summary: |-
+          A project's git mirror leaks past its last lane while another project's lane is up: lane-exit cleanup returns before the per-project half. 1448-yt96's design says it should not.

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: hosts-work-in-sibling-git-worktrees-which-the-command-policy-hook-treats-as-outside-the-workspace-so-routine-cleanup-asks-the-operator-and-shared-targets-mix-checkouts
+    event:
+      type: note
+      ts: "2026-10-12T00:21:29Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t002129z
+      host: tlatoanis-macbook-air
+      summary: |
+        Landed #343 as 13a8514f0 (land-queue run 33, gate green). The exit criterion, read on trunk: methodology/multi-host-development.yaml has single_checkout_branching. It covers the rule (one checkout per repo, `git switch`, serialized concurrency), why (the command-policy bridge's workspace-destroy prompts, with the measured counts, plus 1599-egzz, 1590-j20f and 1603-iwh2), the procedure (start, commit before a switch, plan pushes from the integration branch, scratch and deletions inside the workspace, retiring existing worktrees) and the exceptions (the land queue's in-checkout gate, and fixture-made worktrees of scratch repos). The "Prefer separate `git worktree` directories" line is gone. skills/meta-orchestration (wait for the lock) and skills/deslop-sweep (note marked superseded) were swept with it. Closed straight from ready: the row was filed at the operator's direction while this host was at the WIP cap, which refused an in_progress claim at close (3/3: 1611, 1614, 1619); the coordinator ruled a closure with the PR as evidence is enough.
