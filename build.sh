@@ -439,6 +439,43 @@ _pf_sweep_fixture_scratch() {  # $1 = guard path, $2 = its pid, $3 = outfile
         echo "swept:fixture-scratch-failed:$_d" >> "$3.swept"
     fi
 }
+# ORDER 1630-dwab. A KILLed guard's DECLARED IN-CHECKOUT ARTIFACTS. A writer
+# that must keep its copies beside the scripts it copies is declared in
+# scripts/portability/checkout-writers.txt (1611-imnj), and its declaration may
+# name what it leaves: `<writer> artifacts=<basename-glob> <reason>`. Its traps
+# remove them, and a KILL runs no trap. The guard the door killed is that
+# writer, or names the writer's path in its own source (the lc-numeric signal
+# .lua runs scripts/test-awk-float-lc-numeric.sh). Only UNTRACKED files whose
+# basename matches are removed, each by its literal path, never a glob rm, so
+# a tracked file can never go. Recorded as `swept:declared-artifact:<path>`.
+_pf_sweep_declared_artifacts() {  # $1 = guard path (roster-relative), $2 = outfile
+    local _decl="$SCRIPT_DIR/scripts/portability/checkout-writers.txt" _w _a _rest _f _g
+    local -a _globs=()
+    [ -f "$_decl" ] && [ -f "$SCRIPT_DIR/$1" ] || return 0
+    while read -r _w _a _rest; do
+        case "$_w" in ''|'#'*) continue ;; esac
+        case "$_a" in artifacts=?*) ;; *) continue ;; esac
+        if [ "$_w" = "$1" ] || grep -qF "$_w" "$SCRIPT_DIR/$1" 2>/dev/null; then
+            _globs+=("${_a#artifacts=}")
+        fi
+    done < "$_decl"
+    [ "${#_globs[@]}" -gt 0 ] || return 0
+    while IFS= read -r _f; do
+        [ -n "$_f" ] || continue
+        for _g in "${_globs[@]}"; do
+            # an unquoted case pattern matches as a glob and is never expanded
+            case "${_f##*/}" in
+                $_g)
+                    if rm -f "$SCRIPT_DIR/$_f"; then
+                        echo "swept:declared-artifact:$SCRIPT_DIR/$_f" >> "$2.swept"
+                    else
+                        echo "swept:declared-artifact-failed:$SCRIPT_DIR/$_f" >> "$2.swept"
+                    fi
+                    break ;;
+            esac
+        done
+    done < <(git -C "$SCRIPT_DIR" ls-files --others --exclude-standard 2>/dev/null)
+}
 # The late sweep, from the preflight's EXIT trap: the recorded roots only.
 _pf_sweep_late() {  # $1 = the preflight run dir
     local _r
@@ -583,6 +620,7 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, 
         kill -KILL "-$_pid" 2>/dev/null || kill -KILL "$_pid" 2>/dev/null
         wait "$_pid" 2>/dev/null
         _pf_sweep_fixture_scratch "$_p" "$_pid" "$_out"
+        _pf_sweep_declared_artifacts "$_p" "$_out"
         _pf_sweep_guard_tmp "$_gtmp" "$_out"
         return 124
     fi
@@ -681,8 +719,12 @@ _pf_predecide() {  # $1 = roster path, $2 = label
     # shape as gate-only; the launcher then waits for every running guard,
     # runs it with nothing beside it, and only then launches the next. The
     # reason is required: a bare declaration runs concurrently, with a note.
-    if [ -n "$(sed -n '1,40{/^# preflight: serial/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
-        _reason="$(sed -n '1,40{s/^# preflight: serial[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
+    # ORDER 1630-dwab: a .lua guard comments with `--`, so `-- preflight:
+    # serial` is the same declaration. Matched only as `#` before this, which
+    # left a Lua guard no way to run alone: the lc-numeric signal fixture
+    # (step 455) wrote the same checkout paths as step 450 concurrently.
+    if [ -n "$(sed -n '1,40{/^# preflight: serial/p;/^-- preflight: serial/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
+        _reason="$(sed -n '1,40{s/^# preflight: serial[[:space:]]*//p;s/^-- preflight: serial[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
         if [ -n "$_reason" ]; then
             return 12
         fi
@@ -794,7 +836,7 @@ _preflight_roster() {
 # A guard is NEVER silently dropped: it is run, or it is named.
 _preflight_preconditions() {
     cat <<'PRECONDS'
-check-no-python-scripts.sh|policy-binary|compiles before it resolves (its first command is `cargo build -p tillandsias-policy`); runs only when that binary already exists
+check-no-python-scripts.lua|policy-binary|compiles before it resolves (its first command is `cargo build -p tillandsias-policy`); runs only when that binary already exists
 check-no-competing-gate.sh|gate-context|answers about a RUNNING gate's dispatch, not about the tree; it has no subject outside one
 check-tracked-files-unwritten.sh|gate-context|compares against a snapshot the gate takes at its own start; outside a gate there is nothing to compare
 PRECONDS
