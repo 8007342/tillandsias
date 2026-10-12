@@ -1,0 +1,66 @@
+# @trace spec:inference-engine-slots
+# @trace order:482c (llama-server-engine-parity-smoke)
+#
+# T0 engine parity between ollama and llama-server behind the one inference
+# endpoint. The mutable-host run (scripts/inference-engine-parity-smoke.sh: CUDA
+# and Vulkan, double ensure, no-egress warm recreate, DEGRADED, teardown) is
+# recorded in plan/evidence/482c-engine-parity-2026-10-12/. This quick closure
+# pins the code that evidence ran: every step checks a scratch copy, goes red
+# on ONE seeded regression, and goes green again after byte-identical
+# restoration (sha256 pre == post). The real tree is never written. Every step
+# is pipe-free (shell-ratchet LITMUS arm).
+name: litmus:inference-engine-parity-shape
+spec: inference-engine-slots
+phase: pre-build
+description: >
+  Pin order 482c's parity closure: ollama stays the default, double ensure
+  reuses the running slot through the launch path's own ensure, both engines
+  answer as inference:11434, a never-ready slot logs DEGRADED without gating
+  launch, and the mutable-host harness is fenced off the operator's enclave.
+  Each pin fails on a seeded endpoint, idempotency or soft-readiness regression
+  and passes after byte-identical restoration.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/inference-engine-parity-smoke.sh
+
+critical_path:
+  - step: "ollama stays the default engine: default_engine_kind returns Ollama and the entrypoint defaults to ollama (seeded promotion goes red)"
+    # Exit criterion 1 (SLOT-3). 482c records parity evidence; it promotes nothing.
+    # SEEDED: a scratch engine_slots.rs whose default is LlamaServer must fail.
+    command: "set -u; T=$(mktemp -d \"${TMPDIR:-/tmp}/parity-default.XXXXXX\"); chk() { awk '/^pub fn default_engine_kind\\(\\)/{on=1} on{print} on&&/^}/{exit}' \"$1\" > \"$T/w\"; grep -q '^    EngineKind::Ollama$' \"$T/w\" && grep -q 'TILLANDSIAS_INFERENCE_ENGINE=\"${TILLANDSIAS_INFERENCE_ENGINE:-ollama}\"' \"$2\"; }; cp crates/tillandsias-headless/src/engine_slots.rs \"$T/f0\"; cp images/inference/entrypoint.sh \"$T/f1\"; pre=$(sha256sum \"$T/f0\"); chk \"$T/f0\" \"$T/f1\" && g1=green || g1=red; sed -i 's/^    EngineKind::Ollama$/    EngineKind::LlamaServer/' \"$T/f0\"; chk \"$T/f0\" \"$T/f1\" && red=green || red=red; cp crates/tillandsias-headless/src/engine_slots.rs \"$T/f0\"; cp images/inference/entrypoint.sh \"$T/f1\"; post=$(sha256sum \"$T/f0\"); chk \"$T/f0\" \"$T/f1\" && g2=green || g2=red; rm -rf \"$T\"; [ \"$g1\" = green ] && [ \"$red\" = red ] && [ \"$g2\" = green ] && [ \"${pre%% *}\" = \"${post%% *}\" ] && echo \"ok: default engine is ollama; seeded regression red; restored ${post%% *} green\" || { echo \"FAIL: g1=$g1 seeded=$red g2=$g2 pre=${pre%% *} post=${post%% *}\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: default engine is ollama"
+
+  - step: "double ensure is a no-op: the launch ensure delegates to ensure_inference_for_launch, whose running-check precedes its only run site (seeded idempotency regression goes red)"
+    # Exit criterion 3 (SLOT-8). The parity harness drives this same fn through
+    # --internal-inference-slot ensure, so the live double-ensure evidence and this
+    # pin cover one code path. SEEDED: removing the running-check must fail.
+    command: "set -u; T=$(mktemp -d \"${TMPDIR:-/tmp}/parity-idem.XXXXXX\"); chk() { grep -q '^    ensure_inference_for_launch(client, certs_dir, version, debug).await?;$' \"$1\" || return 1; grep -q '^                    ensure_inference_for_launch($' \"$1\" || return 1; awk '/^async fn ensure_inference_for_launch\\(/{on=1} on{print} on&&/^}/{exit}' \"$1\" > \"$T/w\"; g=$(grep -n 'container_running(\"tillandsias-inference\")' \"$T/w\"); r=$(grep -n '\"forge-launch-inference\"' \"$T/w\"); [ -n \"$g\" ] && [ -n \"$r\" ] && [ \"${g%%:*}\" -lt \"${r%%:*}\" ]; }; cp crates/tillandsias-headless/src/main.rs \"$T/f0\"; pre=$(sha256sum \"$T/f0\"); chk \"$T/f0\" && g1=green || g1=red; sed -i 's/} else if crate::vault_bootstrap::container_running(\"tillandsias-inference\") {/} else if false {/' \"$T/f0\"; chk \"$T/f0\" && red=green || red=red; cp crates/tillandsias-headless/src/main.rs \"$T/f0\"; post=$(sha256sum \"$T/f0\"); chk \"$T/f0\" && g2=green || g2=red; rm -rf \"$T\"; [ \"$g1\" = green ] && [ \"$red\" = red ] && [ \"$g2\" = green ] && [ \"${pre%% *}\" = \"${post%% *}\" ] && echo \"ok: running-check precedes the inference run site; launch and harness share it; seeded regression red; restored ${post%% *} green\" || { echo \"FAIL: g1=$g1 seeded=$red g2=$g2 pre=${pre%% *} post=${post%% *}\"; exit 1; }"
+    timeout_ms: 8000
+    expected_behavior: "ok: running-check precedes the inference run site"
+
+  - step: "one unchanged endpoint: the slot container is reached as `inference` on :11434 for both engines (seeded endpoint regression goes red)"
+    # Exit criterion 2 (SLOT-1). build_inference_run_args names the container and
+    # its alias `inference` for every engine, and the llama-server shim owns :11434.
+    # SEEDED: a scratch Caddyfile listening on :11435 must fail.
+    command: "set -u; T=$(mktemp -d \"${TMPDIR:-/tmp}/parity-endpoint.XXXXXX\"); chk() { grep -q '^:11434 {$' \"$1\" || return 1; awk '/^fn build_inference_run_args\\(/{on=1} on{print} on&&/^}/{exit}' \"$2\" > \"$T/w\"; grep -A1 -F '\"--network-alias\".into(),' \"$T/w\" > \"$T/a\"; grep -q -F '\"inference\".into(),' \"$T/a\" && grep -q -F '\"tillandsias-inference\".into(),' \"$T/w\" && grep -q -F 'engine_slots::llama_server_run_args(' \"$T/w\"; }; cp images/inference/llama-server.Caddyfile \"$T/f0\"; cp crates/tillandsias-headless/src/main.rs \"$T/f1\"; pre=$(sha256sum \"$T/f0\"); chk \"$T/f0\" \"$T/f1\" && g1=green || g1=red; sed -i 's/^:11434 {$/:11435 {/' \"$T/f0\"; chk \"$T/f0\" \"$T/f1\" && red=green || red=red; cp images/inference/llama-server.Caddyfile \"$T/f0\"; cp crates/tillandsias-headless/src/main.rs \"$T/f1\"; post=$(sha256sum \"$T/f0\"); chk \"$T/f0\" \"$T/f1\" && g2=green || g2=red; rm -rf \"$T\"; [ \"$g1\" = green ] && [ \"$red\" = red ] && [ \"$g2\" = green ] && [ \"${pre%% *}\" = \"${post%% *}\" ] && echo \"ok: inference:11434 for both engines; seeded regression red; restored ${post%% *} green\" || { echo \"FAIL: g1=$g1 seeded=$red g2=$g2 pre=${pre%% *} post=${post%% *}\"; exit 1; }"
+    timeout_ms: 8000
+    expected_behavior: "ok: inference:11434 for both engines"
+
+  - step: "readiness failure is soft: the launch reports readiness through report_inference_readiness, which logs DEGRADED with the engine and cannot fail the launch (seeded hard gate goes red)"
+    # Exit criterion 4 (SLOT-8 'Readiness failure is soft'). SEEDED: a scratch
+    # main.rs whose launch propagates wait_for_inference_ready with `?` must fail.
+    command: "set -u; T=$(mktemp -d \"${TMPDIR:-/tmp}/parity-soft.XXXXXX\"); chk() { grep -q '^        report_inference_readiness(&client, debug).await;$' \"$1\" || return 1; grep -q 'wait_for_inference_ready(&client, debug).await?' \"$1\" && return 1; awk '/^async fn report_inference_readiness\\(/{on=1} on{print} on&&/^}/{exit}' \"$1\" > \"$T/w\"; grep -q -- '-> bool {' \"$T/w\" && grep -q -F 'eprintln!(\"{}\", inference_degraded_line(engine, &e));' \"$T/w\" || return 1; awk '/^fn inference_degraded_line\\(/{on=1} on{print} on&&/^}/{exit}' \"$1\" > \"$T/d\"; grep -q 'DEGRADED: local inference not ready' \"$T/d\" && grep -q -F '(engine={}): {reason}' \"$T/d\"; }; cp crates/tillandsias-headless/src/main.rs \"$T/f0\"; pre=$(sha256sum \"$T/f0\"); chk \"$T/f0\" && g1=green || g1=red; sed -i 's/^        report_inference_readiness(&client, debug).await;$/        wait_for_inference_ready(\\&client, debug).await?;/' \"$T/f0\"; chk \"$T/f0\" && red=green || red=red; cp crates/tillandsias-headless/src/main.rs \"$T/f0\"; post=$(sha256sum \"$T/f0\"); chk \"$T/f0\" && g2=green || g2=red; rm -rf \"$T\"; [ \"$g1\" = green ] && [ \"$red\" = red ] && [ \"$g2\" = green ] && [ \"${pre%% *}\" = \"${post%% *}\" ] && echo \"ok: readiness failure logs DEGRADED and never gates launch; seeded regression red; restored ${post%% *} green\" || { echo \"FAIL: g1=$g1 seeded=$red g2=$g2 pre=${pre%% *} post=${post%% *}\"; exit 1; }"
+    timeout_ms: 8000
+    expected_behavior: "ok: readiness failure logs DEGRADED"
+
+  - step: "the mutable-host harness cannot touch the operator's enclave: private store, runroot (netns, DNS, IPAM), tmp_dir, network config, registry auth and HOME, with a store guard before every mutation (seeded unguarded harness goes red)"
+    # Exit criterion 5. The product's container and network names are the live
+    # enclave's, and build_inference_run_args --replace-s; the harness is safe only
+    # while every podman mutation sits behind guard(). SEEDED: dropping guard() from
+    # ensure() must fail.
+    command: "set -u; T=$(mktemp -d \"${TMPDIR:-/tmp}/parity-harness.XXXXXX\"); chk() { grep -q '^    \\[ \"$g\" = \"$S/graph $R/run\" \\] ' \"$1\" && grep -q 'ABORT: HOME=$HOME is outside the substrate' \"$1\" && grep -q '^export HOME=\"$S/home-build\" XDG_CACHE_HOME=\"$S/home-build/.cache\"$' \"$1\" && grep -q '^export CONTAINERS_STORAGE_CONF=\"$S/storage.conf\" CONTAINERS_CONF=\"$S/containers.conf\" REGISTRY_AUTH_FILE=\"$S/auth.json\"$' \"$1\" && grep -q 'tmp_dir = ' \"$1\" && grep -q '^R=\"$(mktemp -d \"${XDG_RUNTIME_DIR:?}/tillandsias-parity.XXXXXX\")\"$' \"$1\" && grep -q 'network_config_dir = ' \"$1\" && grep -q '^OP_BEFORE=\"$(operator_inference)\"$' \"$1\" && grep -q 'vram \"$LANE:before\"' \"$1\" || return 1; for fn in ensure teardown net cleanup; do awk -v f=\"^$fn[(][)] {\" '$0 ~ f {on=1} on{print} on&&/^}/{exit}' \"$1\" > \"$T/w\"; [ \"$(grep -c '^    guard$' \"$T/w\")\" -ge 1 ] || return 1; done; }; cp scripts/inference-engine-parity-smoke.sh \"$T/f0\"; pre=$(sha256sum \"$T/f0\"); chk \"$T/f0\" && g1=green || g1=red; awk '/^ensure\\(\\) \\{/{on=1} on&&/^    guard$/{on=0; next} {print}' \"$T/f0\" > \"$T/x\"; mv \"$T/x\" \"$T/f0\"; chk \"$T/f0\" && red=green || red=red; cp scripts/inference-engine-parity-smoke.sh \"$T/f0\"; post=$(sha256sum \"$T/f0\"); chk \"$T/f0\" && g2=green || g2=red; rm -rf \"$T\"; [ \"$g1\" = green ] && [ \"$red\" = red ] && [ \"$g2\" = green ] && [ \"${pre%% *}\" = \"${post%% *}\" ] && echo \"ok: every mutating harness fn is guarded; operator inference only read; seeded regression red; restored ${post%% *} green\" || { echo \"FAIL: g1=$g1 seeded=$red g2=$g2 pre=${pre%% *} post=${post%% *}\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: every mutating harness fn is guarded"

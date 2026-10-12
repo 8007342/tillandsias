@@ -711,7 +711,6 @@ scripts scripts/test-image-usability-check.sh 1
 scripts scripts/test-inference-pull-failure-classification.sh 4
 scripts scripts/test-inference.sh 2
 scripts scripts/test-install-hooks-refuses-global-hookspath.sh 2
-scripts scripts/test-installer-merges-wslconfig-swap-keys.sh 5
 scripts scripts/test-installer-probes-by-attempt-not-by-help.sh 2
 scripts scripts/test-installers-quiet-progress.sh 3
 scripts scripts/test-join-the-fleet-idempotent.sh 8

@@ -1,0 +1,37 @@
+[inference] WARN: system trust store not updated (rc=1, expected as uid 1000 on this image) — relying on SSL_CERT_FILE/CURL_CA_BUNDLE
+[inference] ca-trust: store_rc=1 mode=system+enclave bundle=/tmp/tillandsias-ca-bundle.crt certs=122
+[inference] preload: policy=eager models=qwen2.5:0.5b expert_slots=1 max_loaded=2 ram_gb=13
+[inference] tuning: tier=gpu-cuda flash_attn=1 kv_cache=q8_0 num_parallel=2 vram_mb=8192 keep_alive=5m
+[inference] configured proxy 'proxy' does not resolve — running direct (non-enclave shape)
+[inference] engine=llama-server backend=vulkan reason=render-node:renderD128
+[inference] engine integrity: ok (core+vulkan v0.34.0 sha256:cf95886728959aa09910bb34de5cca1cc5a8f68003b5597197d3f2c2d57c0804)
+========================================
+  tillandsias inference
+  listening on :11434
+  models:  /home/ollama/.ollama/models/
+  GPU:     NVIDIA (1 device(s))
+  NPU:     none (passthrough not implemented — 1118-d3b6)
+========================================
+[inference] engine: set=core+vulkan backends=[vulkan ] llama-server=ok
+[inference] llama-server backend closure: ok (set=core+vulkan backend=vulkan pin=/home/ollama/.ollama/models/.tools/lib/ollama/vulkan/libggml-vulkan.so)
+[inference] llama-server: backend=vulkan ngl=99 model=qwen2.5-0.5b-instruct build='llama-server 0.3.0-dev (build 1, commit 0f3a71be1)' upstream=127.0.0.1:11435 shim=:11434
+{"level":"info","ts":1791817842.4792721,"msg":"maxprocs: Leaving GOMAXPROCS=16: CPU quota undefined"}
+{"level":"info","ts":1791817842.4798057,"msg":"GOMEMLIMIT is updated","package":"github.com/KimMachineGun/automemlimit/memlimit","GOMEMLIMIT":13034111385,"previous":9223372036854775807}
+{"level":"info","ts":1791817842.4798567,"msg":"using config from file","file":"/usr/local/share/tillandsias/llama-server.Caddyfile"}
+{"level":"info","ts":1791817842.4806802,"msg":"adapted config to JSON","adapter":"caddyfile"}
+{"level":"warn","ts":1791817842.480977,"logger":"admin","msg":"admin endpoint disabled"}
+{"level":"warn","ts":1791817842.4814835,"logger":"http","msg":"HTTP/2 skipped because it requires TLS","network":"tcp","addr":":11434"}
+{"level":"warn","ts":1791817842.4814906,"logger":"http","msg":"HTTP/3 skipped because it requires TLS","network":"tcp","addr":":11434"}
+{"level":"info","ts":1791817842.481522,"msg":"serving initial configuration"}
+0.00.041.288 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.041.396 W srv  llama_server: -----------------
+0.00.041.400 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.041.401 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.041.402 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.041.404 W srv  llama_server: -----------------
+0.00.042.607 I srv    load_model: loading model '/home/ollama/.ollama/models/.gguf/qwen2.5-0.5b-instruct-q4_k_m.gguf'
+0.00.324.078 W load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.529.922 I cmn          init: llama threadpool init, n_threads = 8
+0.00.909.448 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 4096, kv_unified = 'true'
+0.00.913.578 I srv  llama_server: model loaded
+0.00.913.586 I srv  llama_server: listening on http://127.0.0.1:11435

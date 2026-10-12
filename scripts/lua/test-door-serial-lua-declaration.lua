@@ -80,7 +80,7 @@ end
 local build = fs.read("build.sh")
 local parts = { "_preflight_preconditions() { :; }" }
 for _, n in ipairs({ "_pf_sweep_under", "_pf_sweep_guard_tmp", "_pf_sweep_fixture_scratch", "_pf_sweep_declared_artifacts", "_pf_now",
-    "_pf_run_guard", "_pf_predecide", "_pf_launcher" }) do
+    "_pf_run_guard", "_pf_predecide", "_pf_guard_deadline", "_pf_launcher" }) do
     local f = extract(build, n)
     if f ~= "" then parts[#parts + 1] = f end
 end

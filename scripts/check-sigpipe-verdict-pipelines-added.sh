@@ -270,9 +270,18 @@ while IFS= read -r f; do
     # ok read 0 whether one file or fifty had been read.
     checked=$((checked + 1))
 
+    # ORDER 1636-6k6k: WHICH PHYSICAL LINES WERE ADDED, IN ONE PASS. This used
+    # to fork `grep -Fxq` once per line of the FILE, so a diff touching build.sh
+    # paid one fork per build.sh line: 44-70 s under taskpolicy -b on #370,
+    # #371 and #374's diffs, against 1 s for a diff touching no large script,
+    # and the door deadline-skipped it. One awk now marks each line 1/0 by the
+    # same whole-line, fixed-string membership, read in step with the file.
+    _flags_f="$(mktemp "${TMPDIR:-/tmp}/sigpipe-flags.XXXXXX")" || { rm -f "$_added_f"; continue; }
+    awk 'NR == FNR { added[$0] = 1; next } { print (($0 in added) ? 1 : 0) }' "$_added_f" "$f" > "$_flags_f"
     _logical=""      # the folded line being accumulated
     _touched=0       # 1 when one of its physical lines was added
-    while IFS= read -r _phys || [ -n "$_phys" ]; do
+    while IFS= read -r _phys <&4 || [ -n "$_phys" ]; do
+        IFS= read -r _flag <&5 || _flag=0
         if [ -n "$_logical" ]; then
             # Continuations are joined with a single space: the regexes are
             # whitespace-tolerant and this keeps `\` out of the matched text.
@@ -280,7 +289,7 @@ while IFS= read -r f; do
         else
             _logical="$_phys"
         fi
-        if grep -Fxq -- "$_phys" "$_added_f" 2>/dev/null; then _touched=1; fi
+        if [ "$_flag" = 1 ]; then _touched=1; fi
         case "$_logical" in
             *'\') _logical="${_logical%\\}"; continue ;;
         esac
@@ -320,8 +329,8 @@ while IFS= read -r f; do
         echo "         so a MATCH can surface as a failure. Capture first, or use a" >&2
         echo "         here-string: grep -q PATTERN <<<\"\$var\"" >&2
         echo "         Reviewed and genuinely bounded? append: # sigpipe-ok: <reason>" >&2
-    done < "$f"
-    rm -f "$_added_f"
+    done 4< "$f" 5< "$_flags_f"
+    rm -f "$_added_f" "$_flags_f"
 done <<EOF
 $(
     # ORDER 1391-8ikx: the population is the change, INCLUDING untracked files.

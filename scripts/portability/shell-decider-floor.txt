@@ -340,7 +340,6 @@ scripts/test-install-macos-announces-its-pin.sh
 scripts/test-install-macos-swap-is-interruptible.sh
 scripts/test-install-macos-tray-stop.sh
 scripts/test-install-path.sh
-scripts/test-installer-merges-wslconfig-swap-keys.sh
 scripts/test-installer-probes-by-attempt-not-by-help.sh
 scripts/test-installer-reports-wsl-guest-shape.sh
 scripts/test-installer-reset-probe.sh

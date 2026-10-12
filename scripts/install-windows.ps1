@@ -336,11 +336,11 @@ if ($NoLaunchReason -and -not $NoLaunch) {
 # never killed once. The more capable machine was the unreliable one, and the
 # difference was entirely configuration.
 #
-# THIS BLOCK REPORTS AND OFFERS. IT NEVER WRITES .wslconfig SILENTLY. That
-# file is the user's and may carry settings for work that has nothing to do
-# with us; writing it behind their back would be a worse defect than the one
-# being fixed. Same consent discipline the destructive reset already follows.
-# The ONE write below (the swap keys, 2026-09-26) is behind an explicit yes.
+# THE SHAPE ADVICE (memory, processors) IS REPORTED, NEVER WRITTEN: those keys
+# are the user's choice and go to the install log. THE SWAP AND RECLAIM KEYS
+# ARE HARD REQUIREMENTS AND ARE ALWAYS ENSURED (order 1560-uam3). Operator,
+# 2026-10-12: "HyperV and SWAP should not be prompts, our install should add
+# them forcibly as they're hard requirements."
 #
 # SWAP KEYS (1339-r9xv, design plan/issues/forge-memory-swap-architecture-
 # design-2026-09-26.md section 4.2). WSL's default swap is 25% of the guest's
@@ -348,14 +348,24 @@ if ($NoLaunchReason -and -not $NoLaunch) {
 # forge that should spill to swap is reaped instead. Target: [wsl2] swap=8GB
 # and a swapFile under %LocalAppData%\tillandsias (a path we own; %Temp% is
 # purged by cleanup tools); [experimental] sparseVhd=true and
-# autoMemoryReclaim=gradual. ONLY ABSENT KEYS ARE ADDED, each under a
-# "# tillandsias:" comment. A present memory, swap, swapFile or processors is
-# never overwritten; a present key with another value is reported, not changed.
+# autoMemoryReclaim=gradual. An ABSENT key is added under a "# tillandsias:"
+# comment. A PRESENT key that breaks a hard requirement is replaced in place,
+# under a "# tillandsias: replaced" comment naming the old value: swap below the
+# 8 GB floor (swap=0 turns swap off), sparseVhd other than true,
+# autoMemoryReclaim other than gradual. A present swap at or above the floor
+# and a present swapFile are kept. memory and processors are never touched.
 #
-# Get-WslConfigMerge is PURE (lines in, lines out, no I/O) so the fixture
-# scripts/test-installer-merges-wslconfig-swap-keys.sh runs the real function
-# through PowerShell rather than reading its source. The two marker lines
-# around it are what that fixture cuts on; keep them.
+# .wslconfig IS GLOBAL. WSL2 runs ONE utility VM for every distro, so "our VM"
+# is that shared VM; swap and memory reclaim have no per-distro equivalent
+# (/etc/wsl.conf carries neither). The tray re-ensures the same keys at startup
+# (crates/tillandsias-windows-tray/src/wslconfig_ensure.rs); keep the two rule
+# sets identical.
+#
+# Get-WslConfigMerge is PURE (lines in, lines out, no I/O) and
+# Invoke-WslConfigEnsure does the one write (backup first), so the fixture
+# scripts/lua/test-installer-merges-wslconfig-swap-keys.lua runs the real functions
+# through PowerShell against scratch files rather than reading their source.
+# The two marker lines around them are what that fixture cuts on; keep them.
 # BEGIN-WSLCONFIG-MERGE
 # SWAP SIZE SCALES WITH FREE DISK (operator, 2026-09-26: "start at 8GB, but if
 # the host has generous amounts of diskspace ... 16 or 24gb. Disk is the
@@ -376,6 +386,23 @@ function Get-WslSwapSizeGB {
     }
     return [pscustomobject]@{ SizeGB = 8; Warn = (($FreeGB - 8) -lt $SwapReserveGB) }
 }
+# A .wslconfig size ("8GB", "4096MB", "1TB", a bare byte count) in GB; $null
+# when it does not parse. WSL reads the suffix case-insensitively.
+function ConvertTo-WslSizeGB {
+    param([string]$Value)
+    $v = "$Value".Trim()
+    if ($v -match '^(\d+(?:\.\d+)?)\s*([KMGT]?)B?$') {
+        $n = [double]$Matches[1]
+        switch ($Matches[2].ToUpperInvariant()) {
+            'T' { return $n * 1024 }
+            'G' { return $n }
+            'M' { return $n / 1024 }
+            'K' { return $n / 1048576 }
+            default { return $n / 1073741824 }
+        }
+    }
+    return $null
+}
 function Get-WslConfigMerge {
     param([string[]]$Lines, [string]$SwapFile, [int]$SwapSizeGB = 8)
     if ($null -eq $Lines) { $Lines = @() }
@@ -385,22 +412,37 @@ function Get-WslConfigMerge {
         'wsl2'         = [ordered]@{ 'swap' = "${SwapSizeGB}GB"; 'swapFile' = ($SwapFile -replace '\\', '\\') }
         'experimental' = [ordered]@{ 'sparseVhd' = 'true'; 'autoMemoryReclaim' = 'gradual' }
     }
-    # Pass 1: where each section ends, and which keys each section holds.
+    # Does a present value meet the hard requirement? $true keeps it.
+    $meets = {
+        param([string]$key, [string]$value)
+        switch ($key) {
+            'swap'              { $gb = ConvertTo-WslSizeGB $value; return ($null -ne $gb -and $gb -ge 8) }
+            'swapFile'          { return ($value.Trim() -ne '') }
+            'sparseVhd'         { return ($value.Trim() -ieq 'true') }
+            'autoMemoryReclaim' { return ($value.Trim() -ieq 'gradual') }
+        }
+        return $true
+    }
+    # Pass 1: where each section ends, and where each wanted key sits.
     $section = ''
-    $present = @{}
+    $present = @{}      # "sec/key" -> list of line indexes
     $lastLine = @{}
     for ($i = 0; $i -lt $Lines.Count; $i++) {
         $t = $Lines[$i].Trim()
         if ($t -match '^\[([^\]]+)\]$') { $section = $Matches[1].Trim().ToLowerInvariant(); $lastLine[$section] = $i; continue }
         if ($t -eq '' -or $t.StartsWith('#') -or $t.StartsWith(';')) { continue }
         if ($t -match '^([^=\s]+)\s*=\s*(.*)$') {
-            $present["$section/$($Matches[1].ToLowerInvariant())"] = $Matches[2].Trim()
+            $pk = "$section/$($Matches[1].ToLowerInvariant())"
+            if (-not $present.ContainsKey($pk)) { $present[$pk] = @() }
+            $present[$pk] += $i
             $lastLine[$section] = $i
         }
     }
     $added = @()
-    $differs = @()
-    $insertAfter = @{}   # line index -> lines to insert after it
+    $replaced = @()
+    $kept = @()
+    $replaceAt = @{}    # line index -> replacement lines
+    $insertAfter = @{}  # line index -> lines to insert after it
     $appendAtEnd = @()
     foreach ($sec in $want.Keys) {
         $block = @()
@@ -408,7 +450,15 @@ function Get-WslConfigMerge {
             $v = $want[$sec][$k]
             $pk = "$sec/$($k.ToLowerInvariant())"
             if ($present.ContainsKey($pk)) {
-                if ($present[$pk] -ne $v) { $differs += "[$sec] $k=$($present[$pk]) (tillandsias would use $v; left unchanged)" }
+                foreach ($idx in $present[$pk]) {
+                    $old = ($Lines[$idx].Trim() -replace '^[^=]*=\s*', '')
+                    if (& $meets $k $old) {
+                        if ($old -ne $v) { $kept += "[$sec] $k=$old" }
+                    } else {
+                        $replaceAt[$idx] = @("# tillandsias: replaced $k=$old (hard requirement, order 1560-uam3)", "$k=$v")
+                        $replaced += "[$sec] $k=$old -> $v"
+                    }
+                }
                 continue
             }
             $block += "# tillandsias: added by the Tillandsias installer (order 1339-r9xv)"
@@ -426,11 +476,59 @@ function Get-WslConfigMerge {
     }
     $out = New-Object System.Collections.Generic.List[string]
     for ($i = 0; $i -lt $Lines.Count; $i++) {
-        $out.Add($Lines[$i])
+        if ($replaceAt.ContainsKey($i)) { foreach ($l in $replaceAt[$i]) { $out.Add($l) } } else { $out.Add($Lines[$i]) }
         if ($insertAfter.ContainsKey($i)) { foreach ($l in $insertAfter[$i]) { $out.Add($l) } }
     }
     foreach ($l in $appendAtEnd) { $out.Add($l) }
-    return [pscustomobject]@{ Added = $added; Differs = $differs; Lines = $out.ToArray() }
+    # Differs is the old name for Kept; both are returned so a caller reading
+    # either sees the present-and-kept values.
+    return [pscustomobject]@{ Added = $added; Replaced = $replaced; Kept = $kept; Differs = $kept; Lines = $out.ToArray() }
+}
+# The ONE write of .wslconfig. Merges, and only when something changed writes
+# the backup FIRST (.wslconfig.tillandsias-bak beside it), then the file as
+# UTF-8 without a BOM (WSL's parser does not skip one). Returns the merge plus
+# Changed and Backup; throws on an I/O failure so the caller can log it.
+function Invoke-WslConfigEnsure {
+    param([string]$Path, [string]$SwapFile, [int]$SwapSizeGB = 8)
+    $lines = @()
+    if (Test-Path -LiteralPath $Path) { $lines = @(Get-Content -LiteralPath $Path -ErrorAction Stop) }
+    $m = Get-WslConfigMerge -Lines $lines -SwapFile $SwapFile -SwapSizeGB $SwapSizeGB
+    $changed = ($m.Added.Count + $m.Replaced.Count) -gt 0
+    $backup = ''
+    if ($changed) {
+        if (Test-Path -LiteralPath $Path) {
+            $backup = "$Path.tillandsias-bak"
+            Copy-Item -LiteralPath $Path -Destination $backup -Force -ErrorAction Stop
+        }
+        [System.IO.File]::WriteAllLines($Path, [string[]]$m.Lines, (New-Object System.Text.UTF8Encoding($false)))
+    }
+    return [pscustomobject]@{ Added = $m.Added; Replaced = $m.Replaced; Kept = $m.Kept; Changed = $changed; Backup = $backup; Lines = $m.Lines }
+}
+# Hyper-V access, decided for the user (order 1560-uam3). $Test answers "does
+# this account hold an ENABLED Administrators or Hyper-V Administrators
+# membership" (IsInRole); $Add performs the elevated group-add (Windows' own
+# UAC dialog is the only thing the user sees). Both are parameters so the
+# fixture can run the real decision without touching group membership.
+# Outcome: already | active | sign-out (added, but this logon token predates
+# it) | failed (the add threw: UAC declined, or no interactive desktop).
+function Invoke-HyperVAccessEnsure {
+    param([scriptblock]$Test, [scriptblock]$Add)
+    if (& $Test) { return [pscustomobject]@{ Outcome = 'already'; SignOut = $false; Error = '' } }
+    try { & $Add } catch { return [pscustomobject]@{ Outcome = 'failed'; SignOut = $false; Error = "$_" } }
+    if (& $Test) { return [pscustomobject]@{ Outcome = 'active'; SignOut = $false; Error = '' } }
+    return [pscustomobject]@{ Outcome = 'sign-out'; SignOut = $true; Error = '' }
+}
+# When may a changed .wslconfig be applied by restarting the shared WSL VM?
+# none-running: nothing to restart, the next VM boot reads it. restart: ours is
+# the ONLY running distro, so `wsl --shutdown` stops nothing of the user's.
+# deferred: another distro is running; never stop it, the keys apply at the
+# next WSL restart. $Running is the `wsl --list --running --quiet` names.
+function Get-WslRestartDecision {
+    param([string[]]$Running, [string]$Ours = 'tillandsias')
+    $names = @($Running | ForEach-Object { "$_".Trim() } | Where-Object { $_ })
+    if ($names.Count -eq 0) { return 'none-running' }
+    if (@($names | Where-Object { $_ -ine $Ours }).Count -eq 0) { return 'restart' }
+    return 'deferred'
 }
 # END-WSLCONFIG-MERGE
 $WslCfgPath = Join-Path $env:USERPROFILE '.wslconfig'
@@ -509,73 +607,60 @@ if ($HostLogicalCpus -le 0) {
         Log ""
         Log "  autoMemoryReclaim lives under [experimental]; appending it to [wsl2] does nothing."
         Log "  Edit $WslCfgPath yourself, then run: wsl --shutdown"
-        Log "  This installer does not modify that file -- it is yours and may hold other settings."
+        Log "  This installer sets only the swap and memory-reclaim keys there; memory and processors stay yours."
         Log ""
     }
 }
 
-# BEGIN-PENDING-1560-UAM3 (the swap-keys prompt, left "for now" by the operator; removal is 1560-uam3)
-# -- WSL2 swap keys: add the ABSENT ones, with consent (order 1339-r9xv) ------
-# Consent: interactive -> ask [y/N]. TILLANDSIAS_WSLCONFIG=apply answers yes
-# without a prompt; =skip, or any non-interactive run without =apply, adds
-# nothing and says so. The default is NO because the file is the user's.
+# -- WSL2 swap and memory-reclaim keys: always ensured (orders 1339-r9xv, 1560-uam3)
+# No prompt: these are hard requirements (operator, 2026-10-12). Every detail
+# goes to the install log; the screen gets one plain line at most.
 $SwapFileTarget = Join-Path $env:LOCALAPPDATA 'tillandsias\wsl-swap.vhdx'
 $SwapFreeGB = -1
 try { $SwapFreeGB = [math]::Round((Get-Item $env:LOCALAPPDATA -ErrorAction Stop).PSDrive.Free / 1GB, 1) } catch {}
 if ($SwapFreeGB -lt 0) {
     # Could not measure the volume: take the floor rather than guess upward.
     $SwapSize = [pscustomobject]@{ SizeGB = 8; Warn = $false }
-    Say "  wsl-swap: could not read free space for $SwapFileTarget; sizing swap at the 8 GB floor."
+    Log "  wsl-swap: could not read free space for $SwapFileTarget; sizing swap at the 8 GB floor."
 } else {
     $SwapSize = Get-WslSwapSizeGB -FreeGB $SwapFreeGB
-    Say "  wsl-swap: $SwapFreeGB GB free on the swap volume -> swap=$($SwapSize.SizeGB)GB (8 GB floor; 16 at 100+ GB free, 24 at 200+)."
-    if ($SwapSize.Warn) { SayWn "  wsl-swap: under $SwapReserveGB GB would remain free if the 8 GB swap filled; free some disk space." }
+    Log "  wsl-swap: $SwapFreeGB GB free on the swap volume -> swap=$($SwapSize.SizeGB)GB (8 GB floor; 16 at 100+ GB free, 24 at 200+)."
+    if ($SwapSize.Warn) { SayWn "Disk space is low. Free some space so Tillandsias has room to work." }
 }
-$WslCfgLines = @()
-if (Test-Path $WslCfgPath) { $WslCfgLines = @(Get-Content $WslCfgPath -ErrorAction SilentlyContinue) }
-$WslMerge = Get-WslConfigMerge -Lines $WslCfgLines -SwapFile $SwapFileTarget -SwapSizeGB $SwapSize.SizeGB
-foreach ($d in $WslMerge.Differs) { Say "  wsl-swap: present and kept: $d" }
-if ($WslMerge.Added.Count -eq 0) {
-    Say "  wsl-swap: .wslconfig already has swap, swapFile, sparseVhd and autoMemoryReclaim; nothing to add."
-} else {
-    Write-Host ""
-    SayWn "  WSL's default swap is 25% of the guest's memory (2 GB at memory=8GB), below what one"
-    SayWn "  Tillandsias forge spills. WSL creates the swap file fresh at each VM boot and deletes"
-    SayWn "  it at shutdown. These keys are ABSENT from $WslCfgPath"
-    foreach ($a in $WslMerge.Added) { Say "    + $a" }
-    Say "  Nothing already in the file is changed. A backup is written beside it first."
-    Say "  They take effect after 'wsl --shutdown', which STOPS every running WSL distro."
-    $doWsl = $false
-    if ($env:TILLANDSIAS_WSLCONFIG -eq 'apply') {
-        $doWsl = $true
-    } elseif ($env:TILLANDSIAS_WSLCONFIG -ne 'skip' -and [Environment]::UserInteractive) {
-        $resp = Read-Host "  Add these keys and run 'wsl --shutdown' now? [y/N]"
-        if ($resp -match '^[yY]') { $doWsl = $true }
-    }
-    if ($doWsl) {
-        try {
-            New-Item -ItemType Directory -Force -Path (Split-Path $SwapFileTarget -Parent) | Out-Null
-            if (Test-Path $WslCfgPath) { Copy-Item -LiteralPath $WslCfgPath -Destination "$WslCfgPath.tillandsias-bak" -Force }
-            # UTF-8 without a BOM: WSL's parser does not skip one.
-            [System.IO.File]::WriteAllLines($WslCfgPath, [string[]]$WslMerge.Lines, (New-Object System.Text.UTF8Encoding($false)))
-            SayOk "  wsl-swap: added $($WslMerge.Added.Count) key(s) to $WslCfgPath (backup: .wslconfig.tillandsias-bak)."
-            & wsl.exe --shutdown 2>$null
-            Say "  wsl-swap: ran 'wsl --shutdown'; WSL needs ~8 seconds before the new settings apply."
-        } catch {
-            SayWn "  wsl-swap: could not update ${WslCfgPath}: $($_.Exception.Message). Nothing else was changed."
-        }
+try {
+    New-Item -ItemType Directory -Force -Path (Split-Path $SwapFileTarget -Parent) | Out-Null
+    $WslEnsure = Invoke-WslConfigEnsure -Path $WslCfgPath -SwapFile $SwapFileTarget -SwapSizeGB $SwapSize.SizeGB
+    foreach ($a in $WslEnsure.Added)    { Log "  wsl-swap: added $a" }
+    foreach ($r in $WslEnsure.Replaced) { Log "  wsl-swap: replaced $r (hard requirement)" }
+    foreach ($k in $WslEnsure.Kept)     { Log "  wsl-swap: present and kept: $k" }
+    if (-not $WslEnsure.Changed) {
+        Log "  wsl-swap: $WslCfgPath already meets the swap and memory-reclaim requirements."
     } else {
-        Say "  wsl-swap: not applied. To apply later: set TILLANDSIAS_WSLCONFIG=apply and re-run, or add the keys above yourself."
+        if ($WslEnsure.Backup) { Log "  wsl-swap: backup written first: $($WslEnsure.Backup)" }
+        # .wslconfig is read when the shared WSL VM boots. Restart it only when
+        # that stops nothing but our own distro.
+        $prevUtf8 = $env:WSL_UTF8
+        $env:WSL_UTF8 = '1'
+        $running = @(& wsl.exe --list --running --quiet 2>$null | ForEach-Object { ($_ -replace "`0", '').Trim() } | Where-Object { $_ })
+        $env:WSL_UTF8 = $prevUtf8
+        switch (Get-WslRestartDecision -Running $running) {
+            'restart'  { & wsl.exe --shutdown 2>$null; Log "  wsl-swap: only the tillandsias distro was running; restarted WSL so the keys apply now." }
+            'deferred' { Log "  wsl-swap: other WSL distros are running ($($running -join ', ')); the keys apply at the next WSL restart." }
+            default    { Log "  wsl-swap: no WSL distro running; the keys apply when WSL next starts." }
+        }
+        SayOk "WSL memory settings are ready."
     }
-    Write-Host ""
+} catch {
+    Log "  wsl-swap: could not update ${WslCfgPath}: $($_.Exception.Message). Nothing else was changed."
+    SayWn "Tillandsias could not update its WSL memory settings. It will try again when it starts. Details: $InstallLog"
 }
-# END-PENDING-1560-UAM3
 
 # -- Hyper-V Administrators membership (order 312) ---------------------------
 # The tray's hvsocket VM lookup (hcsdiag) requires an ENABLED membership in
 # Administrators or 'Hyper-V Administrators' (BUILTIN SID S-1-5-32-578) --
 # standard-user installs can otherwise never connect to the VM (masked for
-# months by elevated dev shells). Offer a one-time elevated group-add.
+# months by elevated dev shells). The block below always runs the elevated
+# group-add when access is missing (1560-uam3).
 # SIDs, not names: group names are localized ("Administrateurs Hyper-V").
 # IsInRole, not token-group scan: it correctly ignores deny-only (UAC-
 # filtered) memberships, matching what hcsdiag actually enforces.
@@ -610,42 +695,36 @@ if (-not (Test-EventSourceRegistered)) {
     }
 }
 
-# BEGIN-PENDING-1560-UAM3 (the Hyper-V prompt, left "for now" by the operator; removal is 1560-uam3)
+# -- Hyper-V Administrators: always ensured (orders 312, 1560-uam3) ----------
+# No prompt: a hard requirement (operator, 2026-10-12). When the account lacks
+# access, the elevated group-add always runs; Windows' own UAC dialog is the
+# only thing the user is asked. The sign-out note appears only when IsInRole is
+# still false after a successful add (the logon token predates the membership).
 if (-not (Test-HcsAccess)) {
-    SayWn "Your account is not in 'Hyper-V Administrators' - Tillandsias cannot"
-    SayWn "reach its VM without it (https://aka.ms/hcsadmin)."
-    $doAdd = $true
-    if ([Environment]::UserInteractive -and -not $env:TILLANDSIAS_NO_GROUP_ADD) {
-        $resp = Read-Host "  Add your user to Hyper-V Administrators now? (one admin approval) [Y/n]"
-        if ($resp -match '^[nN]') { $doAdd = $false }
-    } elseif ($env:TILLANDSIAS_NO_GROUP_ADD) {
-        $doAdd = $false
+    $me = "${env:USERDOMAIN}\${env:USERNAME}"
+    Log "  hyperv: $me lacks an enabled Administrators / Hyper-V Administrators membership (https://aka.ms/hcsadmin); adding."
+    $HvResult = Invoke-HyperVAccessEnsure -Test { Test-HcsAccess } -Add {
+        # Single UAC prompt does double duty: group-add + (best-effort)
+        # Event Log source registration, so we never ask for admin twice.
+        Start-Process powershell -Verb RunAs -Wait -ArgumentList @(
+            '-NoProfile', '-Command',
+            "Add-LocalGroupMember -SID 'S-1-5-32-578' -Member '$me'; $RegisterEventSourceCmd"
+        ) -ErrorAction Stop
     }
-    if ($doAdd) {
-        $me = "${env:USERDOMAIN}\${env:USERNAME}"
-        try {
-            # Single UAC prompt does double duty: group-add + (best-effort)
-            # Event Log source registration, so we never ask for admin twice.
-            Start-Process powershell -Verb RunAs -Wait -ArgumentList @(
-                '-NoProfile', '-Command',
-                "Add-LocalGroupMember -SID 'S-1-5-32-578' -Member '$me'; $RegisterEventSourceCmd"
-            ) -ErrorAction Stop
-            if (Test-HcsAccess) {
-                SayOk "Membership active."
-            } else {
-                SayOk "Added to Hyper-V Administrators. SIGN OUT AND BACK IN before launching Tillandsias (new logon token required)."
-                $PendingActions.Add('SIGN OUT AND BACK IN: the Hyper-V Administrators membership needs a new logon token.')
-            }
-        } catch {
-            SayWn "Group add declined or failed ($_). Fix later from an elevated PowerShell:"
-            SayWn "  Add-LocalGroupMember -SID 'S-1-5-32-578' -Member '$me'"
+    Log "  hyperv: outcome=$($HvResult.Outcome) $($HvResult.Error)"
+    switch ($HvResult.Outcome) {
+        'active'   { SayOk "Hyper-V access is ready." }
+        'sign-out' {
+            SayOk "Hyper-V access added. SIGN OUT AND BACK IN before launching Tillandsias."
+            $PendingActions.Add('SIGN OUT AND BACK IN: Hyper-V access takes effect at your next sign-in.')
         }
-    } else {
-        SayWn "Skipped. Fix later from an elevated PowerShell:"
-        SayWn "  Add-LocalGroupMember -SID 'S-1-5-32-578' -Member '<your DOMAIN\username>'"
+        'failed'   {
+            Log "  hyperv: to add it by hand, from an elevated PowerShell: Add-LocalGroupMember -SID 'S-1-5-32-578' -Member '$me'"
+            SayWn "Windows did not grant Hyper-V access. Run this installer again and approve the Windows prompt. Details: $InstallLog"
+            $PendingActions.Add('Run the installer again and approve the Windows prompt, so Tillandsias can reach its VM.')
+        }
     }
 }
-# END-PENDING-1560-UAM3
 
 Write-Host ""
 Say "Tillandsias Installer"
