@@ -535,7 +535,6 @@ scripts scripts/probe-credential-cold-state.sh 4
 scripts scripts/probe-silverblue-update-skew.sh 4
 scripts scripts/promote-stable.sh 12
 scripts scripts/push-plan-fragments-to-trunk.sh 19
-scripts scripts/query-traces.sh 8
 scripts scripts/rank-refusal-hits.sh 9
 scripts scripts/reclaim-stranded-claims.sh 6
 scripts scripts/record-ci-phase-result.sh 10
