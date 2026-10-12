@@ -1259,6 +1259,18 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     # themselves.
     # BEGIN-STALE-PLAN-BINARY-CHECK
     _pf_plan_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _pf_plan_bin=""
+    # ORDER 1635-ma2f: AN ABSOLUTE PATH, because every guard is handed this as
+    # TILLANDSIAS_SCRIPT_RUNNER_BIN (1570-mxcg). resolve_plan_binary answers
+    # ./target/release/tillandsias-plan, relative to $SCRIPT_DIR, when
+    # CARGO_TARGET_DIR is unset; a guard that runs it from another directory
+    # cannot find it. The 1630-dwab serial fixture's nested launcher cds into
+    # its scratch root, so its .lua writer never started and every Linux
+    # preflight refused (darwin deadline-skipped the fixture, so it never ran
+    # there). _run_lua_decider normalises ./ the same way.
+    case "$_pf_plan_bin" in
+        ""|/*|[A-Za-z]:*) ;;
+        *) _pf_plan_bin="$SCRIPT_DIR/${_pf_plan_bin#./}" ;;
+    esac
     if [ -n "$_pf_plan_bin" ]; then
         _pf_vs="$(cd "$SCRIPT_DIR" && "$_pf_plan_bin" validator-surface-hash --check 2>&1)" || true
         case "$_pf_vs" in
