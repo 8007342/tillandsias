@@ -30,7 +30,6 @@ scripts/check-declared-closures-added.sh
 scripts/check-deslop-due.sh
 scripts/check-deslop-sweep-health.sh
 scripts/check-enclave-ca-consistency.sh
-scripts/check-enclave-expect-none-is-fixture-only.sh
 scripts/check-enclave-network-internal.sh
 scripts/check-enclave-service-health.sh
 scripts/check-engine-cpu-dispatch.sh

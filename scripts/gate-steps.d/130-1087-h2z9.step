@@ -5,10 +5,11 @@
 # Measured green and cheap on b026372ff (Enclave expect-none fixture scope), so the honest verdict is to run
 # it where every host lands rather than once a day on the release gate.
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf): a binding assembled
+# The step path is a LITERAL path on purpose (1063-nraf): a binding assembled
 # from a variable is invisible to every name-based scan.
 STEP_DESC="Checking expect-none stays fixture-only"
-STEP_SCRIPT="scripts/check-enclave-expect-none-is-fixture-only.sh"
+# Ported to Lua by 1616-njfd.
+STEP_LUA="scripts/lua/check-enclave-expect-none-is-fixture-only.lua"
 STEP_ERROR="an enclave expect-none escaped its fixture (1087-h2z9)"
 STEP_OK="Enclave expect-none fixture scope passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:expect-none-fixture-only:1"
