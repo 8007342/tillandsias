@@ -1,0 +1,3 @@
+{"result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"tillandsias-host-services","version":"56.10.12"}},"jsonrpc":"2.0","id":1}
+{"error":{"code":-32000,"message":"runtime_unavailable: podman failed at step router (exit)"},"jsonrpc":"2.0","id":2}
+{"result":{"state":"stopped","runtime":"unknown","watch":false,"route_ready":false,"tls":{"enabled":true,"host_trust":"unknown","diagnostic":"Local CA transport verification is separate from host-browser trust; no host trust store was changed."},"diagnostic":"","last_failure":{"step":"router","class":"exit","reason":"runtime_unavailable: podman failed at step router (exit)","at":"2026-10-12T20:35:54Z","remedy":"operator"}},"jsonrpc":"2.0","id":3}

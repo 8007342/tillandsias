@@ -1,0 +1,66 @@
+# @trace spec:local-web-preview
+# @trace order:1625-9qyw (a cold-start forge serves a web project with no operator action)
+#
+# Instant pins for scripts/lua/cold-start-acceptance.lua, the repeatable
+# cold-start acceptance. The live run (privileged podman-in-podman, a release
+# download) is litmus:cold-start-acceptance-e2e, opt-in. These pins keep the
+# properties that make the live run safe: it is opt-in, it proves the keychain
+# unreachable before installing, it never hands podman a D-Bus address or the
+# operator's store, it reads the host keychain as metadata only, and it starts
+# the healthcheck ticker after the install. Each step checks a scratch copy,
+# goes red on ONE seeded regression, and green after byte-identical
+# restoration. Pipe-free.
+name: litmus:cold-start-acceptance-shape
+spec: local-web-preview
+phase: pre-build
+description: >
+  Pin the cold-start acceptance driver's safety properties: opt-in only, a
+  fail-closed no-keychain structural proof, scratch-only podman with no D-Bus
+  address, a metadata-only host keychain read with no jq, and the healthcheck
+  ticker after the install.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/lua/cold-start-acceptance.lua
+
+critical_path:
+  - step: "opt-in: without --privileged-podman-in-podman the driver refuses to act, and the guard is the first thing it does (seeded removal goes red)"
+    # The live run needs privileged podman-in-podman and a release download; it
+    # must never start from a bare invocation. The real driver is RUN here with no
+    # flag (it must print the skip verdict and exit 0 before any podman call).
+    command: "set -u; out=$(tillandsias-plan script run scripts/lua/cold-start-acceptance.lua 2>&1); rc=$?; case \"$out\" in *\"skip:cold-start-acceptance:opt-in-required\"*) ;; *) echo \"FAIL: bare run said: $out\"; exit 1;; esac; [ \"$rc\" = 0 ] || { echo \"FAIL: bare run rc=$rc\"; exit 1; }; set -u; T=$(mktemp -d \"${TMPDIR:-/tmp}/cold-start-optin.XXXXXX\"); chk() { o=$(grep -n '^if not opted then$' \"$1\"); p=$(grep -n 'local function podman(' \"$1\"); grep -q 'verdict.emit(\"skip:cold-start-acceptance:opt-in-required' \"$1\" && [ -n \"$o\" ] && [ -n \"$p\" ] && [ \"${o%%:*}\" -lt \"${p%%:*}\" ]; }; cp scripts/lua/cold-start-acceptance.lua \"$T/f\"; pre=$(sha256sum \"$T/f\"); chk \"$T/f\" && g1=green || g1=red; sed -i 's/^if not opted then$/if false then/' \"$T/f\"; chk \"$T/f\" && red=green || red=red; cp scripts/lua/cold-start-acceptance.lua \"$T/f\"; post=$(sha256sum \"$T/f\"); chk \"$T/f\" && g2=green || g2=red; rm -rf \"$T\"; [ \"$g1\" = green ] && [ \"$red\" = red ] && [ \"$g2\" = green ] && [ \"${pre%% *}\" = \"${post%% *}\" ] && echo \"ok: bare run skips; opt-in guard precedes every podman call; seeded regression red; restored ${post%% *} green\" || { echo \"FAIL: g1=$g1 seeded=$red g2=$g2\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: bare run skips"
+
+  - step: "the no-keychain structural proof fails closed on every marker (seeded dropped marker goes red)"
+    # Inside the outer container: no D-Bus address, no bus socket, no keyrings
+    # dir, no session daemon, and active gdbus/busctl probes must fail. A
+    # missing marker refuses the run before the install.
+    command: "set -u; T=$(mktemp -d \"${TMPDIR:-/tmp}/cold-start-proof.XXXXXX\"); chk() { for m in 'DBUS_SESSION_BUS_ADDRESS=<unset>' 'bus sockets: none' 'keyrings dir: none' 'session daemons: 0'; do grep -q -F \"\\\"$m\\\"\" \"$1\" || return 1; done; grep -q -F 'fail(\"structural-proof:\" .. probe .. \"-reached-a-bus\")' \"$1\"; }; cp scripts/lua/cold-start-acceptance.lua \"$T/f\"; pre=$(sha256sum \"$T/f\"); chk \"$T/f\" && g1=green || g1=red; sed -i 's/\"bus sockets: none\", //' \"$T/f\"; chk \"$T/f\" && red=green || red=red; cp scripts/lua/cold-start-acceptance.lua \"$T/f\"; post=$(sha256sum \"$T/f\"); chk \"$T/f\" && g2=green || g2=red; rm -rf \"$T\"; [ \"$g1\" = green ] && [ \"$red\" = red ] && [ \"$g2\" = green ] && [ \"${pre%% *}\" = \"${post%% *}\" ] && echo \"ok: all four markers and both bus probes are required; seeded regression red; restored ${post%% *} green\" || { echo \"FAIL: g1=$g1 seeded=$red g2=$g2\"; exit 1; }"
+    timeout_ms: 8000
+    expected_behavior: "ok: all four markers"
+
+  - step: "the healthcheck ticker starts AFTER the install (seeded ticker-before-install goes red)"
+    # Measured 2026-10-12: a ticker started before the installer's `podman system
+    # reset` never drove vault's check, and the launch timed out at the 60 s
+    # health wait.
+    command: "set -u; T=$(mktemp -d \"${TMPDIR:-/tmp}/cold-start-ticker.XXXXXX\"); chk() { i=$(grep -n 'if inst.code ~= 0' \"$1\"); k=$(grep -n 'podman healthcheck run' \"$1\"); [ -n \"$i\" ] && [ -n \"$k\" ] && [ \"${i%%:*}\" -lt \"${k%%:*}\" ]; }; cp scripts/lua/cold-start-acceptance.lua \"$T/f\"; pre=$(sha256sum \"$T/f\"); chk \"$T/f\" && g1=green || g1=red; awk '/podman healthcheck run/{t=$0; next} /^-- .. 4. fresh install/{print \"-- \" t} {print}' \"$T/f\" > \"$T/x\"; mv \"$T/x\" \"$T/f\"; chk \"$T/f\" && red=green || red=red; cp scripts/lua/cold-start-acceptance.lua \"$T/f\"; post=$(sha256sum \"$T/f\"); chk \"$T/f\" && g2=green || g2=red; rm -rf \"$T\"; [ \"$g1\" = green ] && [ \"$red\" = red ] && [ \"$g2\" = green ] && [ \"${pre%% *}\" = \"${post%% *}\" ] && echo \"ok: ticker after install; seeded regression red; restored ${post%% *} green\" || { echo \"FAIL: g1=$g1 seeded=$red g2=$g2\"; exit 1; }"
+    timeout_ms: 8000
+    expected_behavior: "ok: ticker after install"
+
+  - step: "podman only ever sees the scratch store: the env carries no D-Bus address and every podman call goes through guard() (seeded D-Bus passthrough goes red)"
+    # proc.run starts from a cleared environment; the scratch env names the
+    # storage/containers/auth files and XDG_RUNTIME_DIR, nothing else. guard()
+    # refuses unless podman reports the scratch graphroot and runroot.
+    command: "set -u; T=$(mktemp -d \"${TMPDIR:-/tmp}/cold-start-scratch.XXXXXX\"); chk() { l=$(grep -n '^local PENV = ' \"$1\"); [ -n \"$l\" ] || return 1; n=${l%%:*}; sed -n \"${n},$((n+1))p\" \"$1\" > \"$1.penv\"; grep -q DBUS \"$1.penv\" && return 1; grep -q 'REGISTRY_AUTH_FILE = W' \"$1.penv\" || return 1; grep -q -F 'local function podman(args, opts)' \"$1\" && grep -q -F 'refused:cold-start-acceptance:guard' \"$1\" || return 1; [ \"$(grep -c 'run({ \"podman\"' \"$1\")\" = 1 ] && grep -q 'run({ \"podman\", \"info\"' \"$1\"; }; cp scripts/lua/cold-start-acceptance.lua \"$T/f\"; pre=$(sha256sum \"$T/f\"); chk \"$T/f\" && g1=green || g1=red; sed -i 's/^local PENV = { /local PENV = { DBUS_SESSION_BUS_ADDRESS = \"x\", /' \"$T/f\"; chk \"$T/f\" && red=green || red=red; cp scripts/lua/cold-start-acceptance.lua \"$T/f\"; post=$(sha256sum \"$T/f\"); chk \"$T/f\" && g2=green || g2=red; rm -rf \"$T\"; [ \"$g1\" = green ] && [ \"$red\" = red ] && [ \"$g2\" = green ] && [ \"${pre%% *}\" = \"${post%% *}\" ] && echo \"ok: scratch env has no D-Bus address; podman only via the guarded helper; seeded regression red; restored ${post%% *} green\" || { echo \"FAIL: g1=$g1 seeded=$red g2=$g2\"; exit 1; }"
+    timeout_ms: 8000
+    expected_behavior: "ok: scratch env has no D-Bus address"
+
+  - step: "the host keychain is read as metadata only, and nothing parses JSON with jq (seeded GetSecret and jq go red)"
+    # Item properties via org.freedesktop.DBus.Properties.Get (Label, Created,
+    # Modified, Locked, Attributes); GetSecret or secret-tool would read values.
+    # JSON is parsed with the runtime's json.parse, never jq.
+    command: "set -u; T=$(mktemp -d \"${TMPDIR:-/tmp}/cold-start-meta.XXXXXX\"); chk() { grep -q -F 'org.freedesktop.DBus.Properties.Get' \"$1\" || return 1; grep -q -E 'GetSecret\\\"|secret-tool' \"$1\" && return 1; grep -q -w jq \"$1\" && return 1; return 0; }; cp scripts/lua/cold-start-acceptance.lua \"$T/f\"; pre=$(sha256sum \"$T/f\"); chk \"$T/f\" && g1=green || g1=red; printf '%s\\n' 'local x = { \"gdbus\", \"--method\", \"org.freedesktop.Secret.Service.GetSecret\" }' 'local y = \"jq\"' >> \"$T/f\"; chk \"$T/f\" && red=green || red=red; cp scripts/lua/cold-start-acceptance.lua \"$T/f\"; post=$(sha256sum \"$T/f\"); chk \"$T/f\" && g2=green || g2=red; rm -rf \"$T\"; [ \"$g1\" = green ] && [ \"$red\" = red ] && [ \"$g2\" = green ] && [ \"${pre%% *}\" = \"${post%% *}\" ] && echo \"ok: metadata-only keychain read; no jq; seeded regression red; restored ${post%% *} green\" || { echo \"FAIL: g1=$g1 seeded=$red g2=$g2\"; exit 1; }"
+    timeout_ms: 8000
+    expected_behavior: "ok: metadata-only keychain read"
