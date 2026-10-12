@@ -1166,10 +1166,18 @@ if [ -n "${HOST_NAME:-}" ] && [ -n "${CAP_HOSTS:-}" ]; then
     _hs_orders="$(printf '%s\n' "$batch" | awk -F'\t' 'NF>=4 && $4 != "" {print $4}')"
     [ -n "$_hs_orders" ] && printf '%s\n' "$_hs_orders" | while read -r _hs_pid; do
         [ -n "$_hs_pid" ] || continue
-        # The packet's exit_criteria block: from its packet_id line to the next
-        # top-level key at the same depth. One pass per packet over the base plus
-        # fragments; the base is large, so the id match is anchored and exits early.
-        _hs_text="$(awk -v pid="$_hs_pid" '
+        # 1601-398e: the FOLDED exit_criteria, so a list-replace is what is read.
+        # A binary that predates --field prints the status line instead, which
+        # names the packet and could match a host, so only a JSON list counts.
+        _hs_text="$("$PLAN" status "$_hs_pid" --field exit_criteria 2>/dev/null)"
+        case "$_hs_text" in
+            '['*) _hs_text="$(printf '%s' "$_hs_text" | tr 'A-Z' 'a-z')" ;;
+            *) _hs_text="" ;;
+        esac
+        # Fallback for that stale binary: the declared exit_criteria block, from
+        # its packet_id line to the next top-level key at the same depth. One pass
+        # per packet over the base plus fragments; the id match is anchored.
+        [ -n "$_hs_text" ] || _hs_text="$(awk -v pid="$_hs_pid" '
             $0 ~ ("packet_id: " pid "$") { inpkt = 1; incrit = 0; next }
             inpkt && /^[[:space:]]*-[[:space:]]*packet_id:/ { inpkt = 0; incrit = 0 }
             inpkt && /^[[:space:]]*exit_criteria:/ { incrit = 1; next }

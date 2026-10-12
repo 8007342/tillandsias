@@ -106,6 +106,79 @@ pub fn lww_entries(doc: &Value) -> Vec<&Value> {
     out
 }
 
+/// ORDER 1601-398e — the list fields a `list-replace` event may replace.
+///
+/// A declaration is immutable once on trunk, set-field refuses lists
+/// (1184-tj2q), and re-declaring is a G-Set no-op, so before this event a
+/// list field could only be "superseded" by a note no reader folds. Named
+/// rather than open-ended: `events`, `packet_id` and every scalar stay out of
+/// reach of a channel that writes sequences.
+pub const LIST_REPLACE_FIELDS: &[&str] = &[
+    "exit_criteria",
+    "capability_tags",
+    "depends_on",
+    "owned_files",
+    "related",
+];
+
+/// One `list-replace` event, ready to contend for its field.
+pub struct ListReplace<'a> {
+    pub packet_id: &'a str,
+    pub field: &'a str,
+    pub ts: &'a str,
+    pub host: &'a str,
+    pub items: &'a Value,
+}
+
+/// ORDER 1601-398e. The `list-replace` events a fragment carries, each the
+/// WHOLE new list for one field of one packet. The fold and `compact_text`
+/// both read through here, so the two cannot disagree about which events
+/// count. An event naming a field outside [`LIST_REPLACE_FIELDS`], or whose
+/// `items` is not a sequence of scalars, is not a contender.
+///
+/// Each one is an LWW register write for `packet_id`/`field`, decided by
+/// `(ts, host)` exactly as the `fields:` channel is: the later ts wins, and on
+/// an equal ts the greater host id wins. The declaration's own list is the
+/// value until a replace exists, and is never edited.
+pub fn list_replace_entries(doc: &Value) -> Vec<ListReplace<'_>> {
+    let mut out = Vec::new();
+    let Some(evs) = doc.get("events").and_then(Value::as_sequence) else {
+        return out;
+    };
+    for entry in evs {
+        let (Some(packet_id), Some(event)) = (
+            entry.get("packet_id").and_then(Value::as_str),
+            entry.get("event"),
+        ) else {
+            continue;
+        };
+        if event.get("type").and_then(Value::as_str) != Some("list-replace") {
+            continue;
+        }
+        let (Some(field), Some(items)) = (
+            event.get("field").and_then(Value::as_str),
+            event.get("items"),
+        ) else {
+            continue;
+        };
+        let scalars = items.as_sequence().is_some_and(|s| {
+            s.iter()
+                .all(|v| !matches!(v, Value::Mapping(_) | Value::Sequence(_)))
+        });
+        if !LIST_REPLACE_FIELDS.contains(&field) || !scalars {
+            continue;
+        }
+        out.push(ListReplace {
+            packet_id,
+            field,
+            ts: event.get("ts").and_then(Value::as_str).unwrap_or(""),
+            host: event.get("host").and_then(Value::as_str).unwrap_or(""),
+            items,
+        });
+    }
+    out
+}
+
 /// Directory holding fragments, as a sibling of the base index.
 ///
 /// `plan/index.yaml` → `plan/index.d/`. The `.d` suffix is the long-standing
@@ -615,6 +688,30 @@ pub fn fold_with_sources(base: &Value, fragments: &[Fragment]) -> (Value, FoldPr
                 if better {
                     lww.insert(key, (ts, host, value.clone(), frag_idx));
                 }
+            }
+        }
+
+        // ORDER 1601-398e. A `list-replace` event contends for its list field
+        // in the SAME register as a `fields:` entry, by the same (ts, host)
+        // rule, so a replace has one winner however the fragments are ordered.
+        for r in list_replace_entries(&frag.doc) {
+            let key = format!("{}\u{1}{}", r.packet_id, r.field);
+            let better = match lww.get(&key) {
+                None => true,
+                Some((prev_ts, prev_host, _, _)) => {
+                    (r.ts, r.host) > (prev_ts.as_str(), prev_host.as_str())
+                }
+            };
+            if better {
+                lww.insert(
+                    key,
+                    (
+                        r.ts.to_string(),
+                        r.host.to_string(),
+                        r.items.clone(),
+                        frag_idx,
+                    ),
+                );
             }
         }
     }
@@ -1519,6 +1616,20 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
                 if !incoming.is_empty() && incoming != retained {
                     discarded_status.push((pid.to_string(), incoming, retained, host.clone()));
                 }
+            }
+        }
+        // ORDER 1601-398e — the fold's list-replace contention, mirrored, or
+        // compaction would delete the fragment and keep the declared list.
+        for r in list_replace_entries(&frag.doc) {
+            let key = format!("{}\u{1}{}", r.packet_id, r.field);
+            let better = match lww.get(&key) {
+                None => true,
+                Some((prev_ts, prev_host, _)) => {
+                    (r.ts, r.host) > (prev_ts.as_str(), prev_host.as_str())
+                }
+            };
+            if better {
+                lww.insert(key, (r.ts.to_string(), r.host.to_string(), r.items.clone()));
             }
         }
     }
@@ -5975,5 +6086,161 @@ events:
         let index = d.join("plan/index.yaml");
         assert_eq!(folded_status(&index), "implemented");
         assert_eq!(candidate_status(&index), "implemented");
+    }
+}
+
+/// ORDER 1601-398e — a `list-replace` event is an LWW register write for one
+/// list field: the latest (ts, host) wins, the declaration is never edited, and
+/// compaction carries the winner into the base instead of dropping it.
+#[cfg(test)]
+mod list_replace_tests {
+    use super::*;
+
+    const BASE: &str = "plan_index:\n  steps:\n    - packet_id: subject\n      order: 9990-aaaa\n      status: ready\n      title: t\n      exit_criteria:\n        - 'declared one'\n        - 'declared two'\n";
+
+    fn replace(ts: &str, host: &str, field: &str, items: &[&str]) -> String {
+        let mut s = format!(
+            "events:\n  - packet_id: subject\n    event:\n      type: list-replace\n      ts: \"{ts}\"\n      agent_id: a\n      host: {host}\n      field: {field}\n      items:\n"
+        );
+        for i in items {
+            s.push_str(&format!("        - \"{i}\"\n"));
+        }
+        s.push_str("      summary: why\n");
+        s
+    }
+
+    fn scratch(tag: &str, frags: &[(&str, String)]) -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!("tilland-398e-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(d.join("plan/index.d")).expect("mkdir");
+        std::fs::write(d.join("plan/index.yaml"), BASE).expect("base");
+        for (name, body) in frags {
+            std::fs::write(d.join("plan/index.d").join(name), body).expect("frag");
+        }
+        d.join("plan/index.yaml")
+    }
+
+    fn folded(index: &Path, field: &str) -> Value {
+        let base: Value = serde_yaml::from_str(&std::fs::read_to_string(index).unwrap()).unwrap();
+        let merged = fold(&base, &load_all(index));
+        let mut ps = Vec::new();
+        crate::collect_packets(&merged, &mut ps);
+        ps[0].get(field).cloned().unwrap_or(Value::Null)
+    }
+
+    fn list(items: &[&str]) -> Value {
+        Value::Sequence(items.iter().map(|s| Value::String(s.to_string())).collect())
+    }
+
+    #[test]
+    fn a_list_replace_changes_the_folded_list_and_leaves_the_declaration_alone() {
+        let index = scratch("basic", &[]);
+        // Control: before any replace the fold reads the declared list.
+        assert_eq!(
+            folded(&index, "exit_criteria"),
+            list(&["declared one", "declared two"])
+        );
+        let frag = replace("2026-10-11T10:00:00Z", "h1", "exit_criteria", &["replaced"]);
+        std::fs::write(
+            index
+                .with_file_name("index.d")
+                .join("20261011t100000z-aaaa-h1.yaml"),
+            &frag,
+        )
+        .unwrap();
+        assert_eq!(folded(&index, "exit_criteria"), list(&["replaced"]));
+        assert_eq!(
+            std::fs::read_to_string(&index).unwrap(),
+            BASE,
+            "the base was edited"
+        );
+    }
+
+    #[test]
+    fn concurrent_replaces_resolve_by_ts_then_host_whatever_the_fragment_order() {
+        // Later ts wins even from the earlier-sorting fragment.
+        let later = replace(
+            "2026-10-11T10:00:05Z",
+            "a-host",
+            "exit_criteria",
+            &["later"],
+        );
+        let earlier = replace(
+            "2026-10-11T10:00:00Z",
+            "z-host",
+            "exit_criteria",
+            &["earlier"],
+        );
+        let index = scratch("ts", &[("1-a.yaml", later), ("2-b.yaml", earlier)]);
+        assert_eq!(folded(&index, "exit_criteria"), list(&["later"]));
+
+        // Equal ts: the greater host id wins, in either fragment order.
+        let ts = "2026-10-11T10:00:00Z";
+        for (first, second) in [("alpha", "omega"), ("omega", "alpha")] {
+            let index = scratch(
+                &format!("tie-{first}"),
+                &[
+                    ("1-a.yaml", replace(ts, first, "exit_criteria", &[first])),
+                    ("2-b.yaml", replace(ts, second, "exit_criteria", &[second])),
+                ],
+            );
+            assert_eq!(
+                folded(&index, "exit_criteria"),
+                list(&["omega"]),
+                "order {first},{second}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_field_outside_the_list_set_or_a_nested_item_is_not_a_contender() {
+        let index = scratch(
+            "refused",
+            &[
+                ("1-a.yaml", replace("2026-10-11T10:00:00Z", "h", "status", &["done"])),
+                (
+                    "2-b.yaml",
+                    "events:\n  - packet_id: subject\n    event:\n      type: list-replace\n      ts: \"2026-10-11T11:00:00Z\"\n      agent_id: a\n      host: h\n      field: exit_criteria\n      items:\n        - {k: v}\n      summary: why\n".to_string(),
+                ),
+            ],
+        );
+        assert_eq!(folded(&index, "status"), Value::String("ready".into()));
+        assert_eq!(
+            folded(&index, "exit_criteria"),
+            list(&["declared one", "declared two"])
+        );
+    }
+
+    #[test]
+    fn compaction_writes_the_winning_list_into_the_base() {
+        let index = scratch(
+            "compact",
+            &[(
+                "1-a.yaml",
+                replace(
+                    "2026-10-11T10:00:00Z",
+                    "h",
+                    "exit_criteria",
+                    &["kept: yes", "two"],
+                ),
+            )],
+        );
+        let want = folded(&index, "exit_criteria");
+        let c = compact_text(&index).expect("compacts");
+        assert!(
+            c.refused.is_empty(),
+            "compaction refused the fragment: {:?}",
+            c.refused
+        );
+        let cand: Value = serde_yaml::from_str(&c.candidate).expect("candidate parses");
+        let mut ps = Vec::new();
+        crate::collect_packets(&cand, &mut ps);
+        assert_eq!(
+            ps[0].get("exit_criteria"),
+            Some(&want),
+            "candidate:\n{}",
+            c.candidate
+        );
+        assert_eq!(want, list(&["kept: yes", "two"]));
     }
 }
