@@ -1,0 +1,13 @@
+# Gate step 1618-baia — when the preflight door KILLs a guard, it removes the
+# guard's per-run fixture scratch, .tillandsias/fixture-scratch/<guard>.<pid>,
+# as it removes the guard's TMPDIR. build.sh's _pf_run_guard is extracted at run
+# time against a planted guard that ignores TERM, so the door's KILL lands on
+# every OS: the trunk door (sweep call removed) leaves the subdir, the fixed door
+# leaves none, and another run's subdir is untouched.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the door sweeps a killed guard's fixture scratch (1618-baia)"
+STEP_LUA="scripts/lua/test-door-fixture-scratch-sweep.lua"
+STEP_ERROR="the preflight door no longer removes a killed guard's .tillandsias/fixture-scratch/<guard>.<pid> (1618-baia) — see the FAIL lines above"
+STEP_OK="Door fixture-scratch sweep fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-12 darwin ok:door-fixture-scratch-sweep:4 arms"
