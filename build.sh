@@ -3380,6 +3380,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _events_land_rc=0
     _events_land_log="$(mktemp "${TMPDIR:-/tmp}/tillandsias-fel.XXXXXX")"
     if ! _events_land_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh && ensure_fresh_plan_binary)"; then
+        # affordance-ok: read by the exit-2 branch below, which prints it as the cause with the cycle-preflight remedy
         echo "blocked:fragment-events-land:no-fresh-plan-binary" | tee "$_events_land_log"
         _events_land_rc=2
     else
