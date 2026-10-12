@@ -3647,7 +3647,9 @@ fn build_stack_common_args(
     certs_dir: &Path,
     project_name: &str,
     project_path: &Path,
+    ca_trusted: &container_deps::Up<container_deps::CaTrusted>,
 ) -> Vec<String> {
+    let (ca_source, ca_target) = forge_ca_chain_mount_spec(certs_dir, ca_trusted);
     let mut args = vec![
         "--name".into(),
         container_name.into(),
@@ -3691,10 +3693,7 @@ fn build_stack_common_args(
         // One runtime trust input feeds lib-common.sh's rootless initializer.
         // Git, curl, Node, and Python then use the image's system-default path.
         "--mount".into(),
-        format!(
-            "type=bind,source={},target=/run/tillandsias/ca-chain.crt,readonly=true",
-            certs_dir.join("intermediate.crt").display()
-        ),
+        format!("type=bind,source={ca_source},target={ca_target},readonly=true"),
     ]);
     append_git_identity_env_args(&mut args, project_name);
     args
@@ -7669,6 +7668,7 @@ fn build_forge_common_args(
     project_path: &Path,
     project_name: &str,
     certs_dir: &Path,
+    ca_trusted: &container_deps::Up<container_deps::CaTrusted>,
 ) -> Vec<String> {
     build_stack_common_args(
         &forge_container_name(project_name),
@@ -7676,6 +7676,7 @@ fn build_forge_common_args(
         certs_dir,
         project_name,
         project_path,
+        ca_trusted,
     )
 }
 
@@ -8153,8 +8154,9 @@ fn build_status_check_forge_args(
     mirror_id: Option<&str>,
     certs_dir: &Path,
     version: &str,
+    ca_trusted: &container_deps::Up<container_deps::CaTrusted>,
 ) -> Vec<String> {
-    let mut args = build_forge_common_args(project_path, project_name, certs_dir);
+    let mut args = build_forge_common_args(project_path, project_name, certs_dir, ca_trusted);
 
     args.extend([
         "--rm".into(),
@@ -8289,7 +8291,9 @@ fn build_opencode_forge_args(
     opencode_vault_secret: Option<&str>,
     diagnostics: bool,
     debug: bool,
+    ca_trusted: &container_deps::Up<container_deps::CaTrusted>,
 ) -> Vec<String> {
+    let (ca_source, ca_target) = forge_ca_chain_mount_spec(certs_dir, ca_trusted);
     // CLI mode attaches stdio (--interactive --tty) for a real shell; Web
     // mode detaches the container so the run() call returns and the host
     // owns the lifecycle.
@@ -8458,10 +8462,7 @@ fn build_opencode_forge_args(
             forge_tool_cache_volume(project_name)
         ),
         "--mount".into(),
-        format!(
-            "type=bind,source={},target=/run/tillandsias/ca-chain.crt,readonly=true",
-            certs_dir.join("intermediate.crt").display()
-        ),
+        format!("type=bind,source={ca_source},target={ca_target},readonly=true"),
     ]);
     // Project source routing. Both branches mount under
     // `/home/forge/src/…` conventions (not flat at `/home/forge/src`) so the
@@ -11204,6 +11205,10 @@ fn run_status_check(debug: bool) -> Result<(), String> {
     // its launch in flight so a sibling exiting during our pre-create window
     // does not tear the shared stack down under us. Held to end of function.
     let (launch_marker, _launch_guard) = acquire_launch_in_flight_marker(project_name, debug)?;
+    // Order 472 slice 8: the trust check and the witness the probe-forge
+    // builder demands come from the model's CaBundle node; ensure_ca_bundle
+    // below is the idempotent read of the certs_dir the stack mounts need.
+    let ca_trusted = container_deps::ensure_ca_trusted(debug)?;
     let certs_dir = ensure_ca_bundle(debug)?;
     ensure_enclave_network(debug)?;
 
@@ -11342,6 +11347,7 @@ fn run_status_check(debug: bool) -> Result<(), String> {
             status_mirror_id.as_deref(),
             &certs_dir,
             version,
+            &ca_trusted,
         );
         let result = client
             .run_container_observed(
@@ -15523,6 +15529,10 @@ fn run_opencode_mode(
     let mut progress = crate::bringup_progress::BringUpProgress::new(5);
 
     progress.step();
+    // Order 472 slice 8: the secure-channel stage is the model's CaBundle
+    // node (existence AND trustability, minting the witness the forge
+    // builder demands); ensure_ca_bundle is then the idempotent certs_dir read.
+    let ca_trusted = container_deps::ensure_ca_trusted(debug)?;
     let certs_dir = ensure_ca_bundle(debug)?;
     progress.step();
     ensure_enclave_network(debug)?;
@@ -15785,6 +15795,7 @@ fn run_opencode_mode(
             opencode_vault_secret,
             diagnostics,
             debug,
+            &ca_trusted,
         );
         let run_container_name = forge_container_name(project_name);
         let result = run_agent_container_attached(
@@ -16819,6 +16830,9 @@ pub(crate) fn run_opencode_web_mode(
     // git reads below can gate on it instead of on `project_path_resolved`,
     // which is a relative bare project name in cloud mode.
     let project_path_resolved = canonical_path.clone().unwrap_or(dummy_path);
+    // Order 472 slice 8: trust check + witness from the model's CaBundle
+    // node; ensure_ca_bundle is the idempotent certs_dir read.
+    let ca_trusted = container_deps::ensure_ca_trusted(debug)?;
     let certs_dir = ensure_ca_bundle(debug)?;
     ensure_enclave_network(debug)?;
 
@@ -17042,6 +17056,7 @@ pub(crate) fn run_opencode_web_mode(
             opencode_vault_secret,
             false,
             debug,
+            &ca_trusted,
         );
         client
             .run_container_observed(
@@ -18324,8 +18339,9 @@ pub(crate) fn build_forge_agent_run_args(
 /// (slice 4 made the host refuse an untrustable certificate; this makes that
 /// refusal impossible to route around on these lanes).
 /// `every_forge_ca_mount_emitter_takes_the_ca_trusted_witness` enumerates
-/// every emitter of the target path and ratchets the lanes still outside the
-/// model (`build_stack_common_args`, `build_opencode_forge_args`).
+/// every emitter of the target path and requires the witness of each; since
+/// slice 8 the OpenCode and status-check builders take it too (through
+/// `forge_ca_chain_mount_spec` below), and no lane is outside the model.
 ///
 /// The `exists()` gate is unchanged from before the witness: a certificate
 /// the model checked at bring-up and that vanished before the run is still
@@ -18333,15 +18349,26 @@ pub(crate) fn build_forge_agent_run_args(
 /// loss), not this slice's.
 fn forge_ca_chain_mount(
     certs_dir: &Path,
-    _ca_trusted: &container_deps::Up<container_deps::CaTrusted>,
+    ca_trusted: &container_deps::Up<container_deps::CaTrusted>,
 ) -> Option<(String, &'static str)> {
-    let ca_cert = certs_dir.join("intermediate.crt");
-    ca_cert.exists().then(|| {
-        (
-            ca_cert.display().to_string(),
-            "/run/tillandsias/ca-chain.crt",
-        )
-    })
+    let (source, target) = forge_ca_chain_mount_spec(certs_dir, ca_trusted);
+    Path::new(&source).exists().then_some((source, target))
+}
+
+/// The forge-side CA mount as (host source, in-container target), and the
+/// ONLY production site that names the in-container path. Order 472 slice 8:
+/// the OpenCode and status-check builders mount unconditionally, as they
+/// always did (a missing source is podman's refusal on those lanes, not a
+/// silent skip), so they take this spec rather than the gated form above.
+/// Both forms demand the witness, which is what the scan test checks for.
+fn forge_ca_chain_mount_spec(
+    certs_dir: &Path,
+    _ca_trusted: &container_deps::Up<container_deps::CaTrusted>,
+) -> (String, &'static str) {
+    (
+        certs_dir.join("intermediate.crt").display().to_string(),
+        "/run/tillandsias/ca-chain.crt",
+    )
 }
 
 // All arguments are distinct, named forge-launch inputs; bundling them into a
@@ -21396,6 +21423,7 @@ mod tests {
             None,
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
 
         // `run` is prepended downstream by run_container_attached_observed, so
@@ -27557,26 +27585,18 @@ mod tests {
     /// on yoga 2026-10-12, issue slice 7). This arm covers what a type cannot:
     /// a NEW emitter of the forge-side CA path written without the parameter.
     /// Every production function whose body names the in-container path must
-    /// take the witness, except the lanes in `OUTSIDE_THE_MODEL`, which bring
-    /// the CA up by the bare `ensure_ca_bundle` call and so never run slice
-    /// 4's trust check. That list is a RATCHET: an entry that stops emitting
-    /// the path unwitnessed fails this test too, so the debt cannot outlive
-    /// its reason.
+    /// take the witness. Slice 7 carried a ratchet (`OUTSIDE_THE_MODEL`) for
+    /// the OpenCode and status-check builders, whose lanes brought the CA up
+    /// by the bare `ensure_ca_bundle` call and never ran slice 4's trust
+    /// check; slice 8 routed those lanes through
+    /// `container_deps::ensure_ca_trusted`, the builders took the witness,
+    /// and the ratchet emptied. It is gone rather than kept empty: an empty
+    /// allowlist is a list nobody can fail. The property is now total, and
+    /// any unwitnessed emitter fails this test by name.
     #[test]
     fn every_forge_ca_mount_emitter_takes_the_ca_trusted_witness() {
         const TARGET: &str = "/run/tillandsias/ca-chain.crt";
         const WITNESS: &str = "Up<container_deps::CaTrusted>";
-        // Lanes outside the dependency model as of slice 7, with the lane
-        // that reaches each. Routing them through `ensure_forge_launch` brings
-        // Vault and the proxy up on paths that today start neither, so it is
-        // a behaviour change and its own slice.
-        const OUTSIDE_THE_MODEL: &[(&str, &str)] = &[
-            ("build_stack_common_args", "run_status_check"),
-            (
-                "build_opencode_forge_args",
-                "run_opencode_mode / run_opencode_web_mode",
-            ),
-        ];
         fn is_fn_header(line: &str) -> bool {
             [
                 "fn ",
@@ -27672,28 +27692,16 @@ mod tests {
             }
         }
         assert!(
-            witnessed.iter().any(|n| n == "forge_ca_chain_mount"),
-            "forge_ca_chain_mount must build the forge-agent CA mount against the witness; witnessed={witnessed:?}"
+            witnessed.iter().any(|n| n == "forge_ca_chain_mount_spec"),
+            "forge_ca_chain_mount_spec must name the forge-side CA mount against the witness; witnessed={witnessed:?}"
         );
-        let allowed: Vec<&str> = OUTSIDE_THE_MODEL.iter().map(|(f, _)| *f).collect();
-        let drift: Vec<&String> = unwitnessed
-            .iter()
-            .filter(|n| !allowed.contains(&n.as_str()))
-            .collect();
         assert!(
-            drift.is_empty(),
-            "drift guardrail (472 criterion 5): {drift:?} name {TARGET} without a `{WITNESS}` \
-             parameter. Obtain the witness from the launch witness's ca_trusted() — or, for a \
-             lane that genuinely runs outside the dependency model, add it to OUTSIDE_THE_MODEL \
-             with the lane that reaches it"
+            unwitnessed.is_empty(),
+            "drift guardrail (472 criterion 5): {unwitnessed:?} name {TARGET} without a `{WITNESS}` \
+             parameter. Obtain the witness from a launch witness's ca_trusted(), or from \
+             container_deps::ensure_ca_trusted on a lane that sequences Vault and the proxy \
+             itself, and build the mount through forge_ca_chain_mount_spec"
         );
-        for (f, lane) in OUTSIDE_THE_MODEL {
-            assert!(
-                unwitnessed.iter().any(|n| n == f),
-                "ratchet: {f} (lane {lane}) no longer names {TARGET} unwitnessed; remove it from \
-                 OUTSIDE_THE_MODEL"
-            );
-        }
     }
 
     /// Drift litmus (order 229): every launch path that creates containers
@@ -27726,7 +27734,7 @@ mod tests {
 
         // Each function that dispatches a containerized launch must route
         // through the dependency model, directly or transitively.
-        let launch_fns: [(&str, Option<&[&str]>); 4] = [
+        let launch_fns: [(&str, Option<&[&str]>); 7] = [
             ("fn run_provider_login(", None),
             ("fn run_list_cloud_projects(debug: bool)", None),
             (
@@ -27736,6 +27744,20 @@ mod tests {
             (
                 "fn ensure_enclave_for_project(",
                 Some(&["container_deps::"]),
+            ),
+            // Order 472 slice 8: the lanes that mount the CA into a forge
+            // without a ForgeLaunch take the model's CaBundle node directly.
+            (
+                "fn run_status_check(debug: bool)",
+                Some(&["container_deps::ensure_ca_trusted(debug)?"]),
+            ),
+            (
+                "fn run_opencode_mode(",
+                Some(&["container_deps::ensure_ca_trusted(debug)?"]),
+            ),
+            (
+                "pub(crate) fn run_opencode_web_mode(",
+                Some(&["container_deps::ensure_ca_trusted(debug)?"]),
             ),
         ];
         for (fn_sig, expected_refs) in &launch_fns {
@@ -27882,6 +27904,7 @@ mod tests {
                 None,
                 false,
                 false,
+                &container_deps::ca_trusted_for_tests(),
             );
             assert!(
                 !has_arg(&argv, "--replace"),
@@ -28247,6 +28270,7 @@ mod tests {
             None,
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
+            &container_deps::ca_trusted_for_tests(),
         );
 
         assert!(has_arg(&args, "--rm"));
@@ -28307,6 +28331,7 @@ mod tests {
                 None,
                 false,
                 false,
+                &container_deps::ca_trusted_for_tests(),
             );
             let envelope = args
                 .iter()
@@ -28348,6 +28373,7 @@ mod tests {
             None,
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
         assert!(has_arg(&args, "--tty"));
         assert!(
@@ -28374,6 +28400,7 @@ mod tests {
             None,
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
         assert!(!prompted.iter().any(|a| a.starts_with("TERM=")));
     }
@@ -28412,6 +28439,7 @@ mod tests {
             None,
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
         let codex = build_forge_agent_run_args_with_vault(
             &project,
@@ -28459,6 +28487,7 @@ mod tests {
             None,
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
         assert!(
             !has_arg(&web, "TILLANDSIAS_AGENT_RESULT_FORMAT=json"),
@@ -28480,6 +28509,7 @@ mod tests {
             None,
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
         assert!(
             !has_arg(&unstructured, "TILLANDSIAS_AGENT_RESULT_FORMAT=json"),
@@ -28526,6 +28556,7 @@ mod tests {
             None,
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
         let agent = build_forge_agent_run_args_with_vault(
             &project,
@@ -28568,6 +28599,7 @@ mod tests {
             None,
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
         let agent = build_forge_agent_run_args_with_vault(
             &no_repo,
@@ -28671,6 +28703,7 @@ mod tests {
             None,
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
         let agent = build_forge_agent_run_args_with_vault(
             &project,
@@ -29017,6 +29050,7 @@ mod tests {
                 None,
                 false,
                 false,
+                &container_deps::ca_trusted_for_tests(),
             )
         };
 
@@ -29510,6 +29544,7 @@ esac
             None,
             false,
             true,
+            &container_deps::ca_trusted_for_tests(),
         );
 
         // Prompted mode is non-interactive; podman should not claim a TTY.
@@ -29624,6 +29659,7 @@ esac
             None,
             false,
             true,
+            &container_deps::ca_trusted_for_tests(),
         );
         assert!(
             args.iter().any(|arg| arg
@@ -29649,6 +29685,7 @@ esac
             Some("opencode-forge-lease"),
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
         assert!(has_arg(&args, "--secret"));
         assert!(has_arg(
@@ -29682,6 +29719,7 @@ esac
             None,
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
         assert!(!has_arg(&args, "--secret"));
         assert!(!has_arg(&args, "TILLANDSIAS_OPENCODE_AUTH_EXPECTED=1"));
@@ -29710,6 +29748,7 @@ esac
             None,
             true,
             true,
+            &container_deps::ca_trusted_for_tests(),
         );
 
         assert!(!has_arg(&args, "--interactive"));
@@ -30207,6 +30246,7 @@ esac
                 None,
                 false,
                 false,
+                &container_deps::ca_trusted_for_tests(),
             );
             let identity = format!("TILLANDSIAS_AGENT={expected}");
             assert!(
@@ -31532,6 +31572,7 @@ esac
             None,
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
         for args in [&agent_args, &raw_args] {
             let workspace = args
@@ -31612,6 +31653,7 @@ esac
             None,
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
         for args in [&fail_closed_agent, &fail_closed_raw] {
             assert!(
@@ -32008,8 +32050,14 @@ esac
             .and_then(|n| n.to_str())
             .unwrap_or("tillandsias");
         let certs_dir = ensure_ca_bundle(false).expect("ensure_ca_bundle");
-        let status_args =
-            build_status_check_forge_args(root.as_path(), project_name, None, &certs_dir, version);
+        let status_args = build_status_check_forge_args(
+            root.as_path(),
+            project_name,
+            None,
+            &certs_dir,
+            version,
+            &container_deps::ca_trusted_for_tests(),
+        );
         assert!(
             status_args.join(" ").contains("check_inference()"),
             "status-check plan should keep the inference probe"
@@ -34000,6 +34048,7 @@ esac
             None,
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
 
         let args_str = args.join(" ");
@@ -34582,6 +34631,7 @@ mod forge_budget_argv_tests {
             None,
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
+            &container_deps::ca_trusted_for_tests(),
         );
         assert_budget("build_status_check_forge_args", &args);
     }
@@ -34602,6 +34652,7 @@ mod forge_budget_argv_tests {
                 None,
                 false,
                 false,
+                &container_deps::ca_trusted_for_tests(),
             );
             assert_budget(&format!("build_opencode_forge_args({mode:?})"), &args);
         }

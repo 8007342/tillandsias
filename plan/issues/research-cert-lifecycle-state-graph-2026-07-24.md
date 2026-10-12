@@ -352,3 +352,77 @@ row: slice 8, criterion 3, the live arms of criterion 2. The split-trust TLS
 failure is still read-from-code.
 
 Verification on yoga (2026-10-12): `cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock` 986 passed, 0 failed, 25 ignored; `cargo clippy -p tillandsias-headless --bin tillandsias --tests -- -D warnings` rc 0 under no features, `tray`, and `tray,listen-vsock`; `cargo fmt --all` clean.
+
+## Slice 8 — criterion 5 on every lane: the ratchet empties (yoga, 2026-10-12)
+
+Slice 7 left three lanes outside the model, ratcheted: `run_status_check`
+(through `build_stack_common_args`), `run_opencode_mode` and
+`run_opencode_web_mode` (through `build_opencode_forge_args`). Each brought
+the CA up by the bare `ensure_ca_bundle` + `ensure_enclave_network` chain,
+which checks that the certificate EXISTS and nothing else, so slice 4's
+`ca_bundle_trustable` refusal never ran there and an unreadable certificate
+still reached the container as vendor roots plus a `[trust] WARNING` line.
+Slice 7 named the closing as a decision because routing those lanes through
+`ensure_forge_launch` would bring Vault and the proxy up on paths that
+sequence both themselves.
+
+**Decision: a third witness source, not a reroute.** `CaBundle` is a node of
+`DEPS` with no prerequisites and a satisfier (`satisfy_ca_bundle`) that is
+exactly `ensure_ca_bundle` + `ca_bundle_trustable`. So
+`container_deps::ensure_ca_trusted(debug)` runs `ensure_with(Service::CaBundle)`
+on the real satisfier and returns `Up<CaTrusted>`: the same refusal and the
+same witness as the launch lanes, touching the one node and nothing above it.
+The three lanes call it where they called the bare chain (the `ensure_ca_bundle`
+call stays, as the idempotent read of `certs_dir`), the two builders take the
+witness as their last parameter, and the forge-side mount literal now lives in
+one function, `forge_ca_chain_mount_spec(certs_dir, &Up<CaTrusted>)`, which the
+gated `forge_ca_chain_mount` (forge-agent lanes, `exists()` gate unchanged)
+and the two unconditional builders (unchanged: a missing source stays podman's
+refusal on those lanes) both call. `OUTSIDE_THE_MODEL` is deleted rather than
+left empty — an empty allowlist is a list nobody can fail — and the scan test
+now asserts the total property: no production fn names
+`/run/tillandsias/ca-chain.crt` without the witness in its signature.
+
+What the direct witness promises is narrower than a projection, and the
+`CaTrusted` doc says so: the certificate the consumer mounts is the one the
+model checked; nothing about the proxy having come up after that check, which
+is criterion 3's territory. `all_launch_paths_route_through_dependency_model`
+gains the three lanes, each pinned to `container_deps::ensure_ca_trusted(debug)?`.
+
+Behaviour change on the three lanes, and the one the row exists for: an
+unreadable or non-PEM `intermediate.crt` now refuses before any container is
+created (`ca-bundle unreadable: … refusing to start a consumer that would
+silently fall back to vendor roots`), where it previously mounted and warned.
+In a forge (`TILLANDSIAS_HOST_KIND=forge`) the satisfier exempts the check as
+before. The model's drain gate (`container_mutations_allowed`) now also covers
+the OpenCode Web lane's CA step, which is the correct answer under a stopping
+VM and was never reachable on the CLI lanes.
+
+Mutation controls, four arms, each restored byte-identical (`cmp`) before the
+next:
+
+- Compile arm: deleting the `ensure_ca_trusted` call in `run_status_check` →
+  `error[E0425]: cannot find value `ca_trusted` in this scope` at the
+  probe-forge builder call.
+- Scan arm: a new production fn naming the path without the witness →
+  `every_forge_ca_mount_emitter_takes_the_ca_trusted_witness` fails with
+  `drift guardrail (472 criterion 5): ["mutant_unwitnessed_ca_mount"] name
+  /run/tillandsias/ca-chain.crt without a Up<container_deps::CaTrusted>
+  parameter`.
+- Mint arm: `ensure_ca_trusted_with` returning the witness without
+  `ensure_with` → `ca_trusted_is_minted_only_after_the_ca_bundle_node_is_satisfied`
+  panics "a failed CaBundle node must not mint the witness".
+- Node arm: satisfying `ForgeLaunch` instead of `CaBundle` → the same test
+  fails on the recorded calls (`[EnclaveNetwork, EgressNetwork, CaBundle]`
+  against `[CaBundle]`).
+
+Status of criterion 5: MET on every lane that mounts the forge-side CA. The
+projection pin gains the direct constructor as a third fn-pointer pin.
+Remaining on the row: criterion 3 (reaction to rotation; the split-trust
+window is still read-from-code) and the live arms of criterion 2.
+
+Verification on yoga (2026-10-12): `cargo test -p tillandsias-headless --bin
+tillandsias --features tray,listen-vsock` 987 passed, 0 failed, 25 ignored;
+`cargo clippy -p tillandsias-headless --bin tillandsias --tests -- -D warnings`
+rc 0 under no features, `tray`, and `tray,listen-vsock`; `cargo fmt --all`
+clean.
