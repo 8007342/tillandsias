@@ -7461,6 +7461,17 @@ fn resolve_launch_project_identity(
             .and_then(|n| n.to_str())
             .unwrap_or(fallback_name)
             .to_string();
+        // 1626-r4xm: THE LANE ADMITS THE PROJECT IT WAS LAUNCHED FOR. Every
+        // lane that resolves here starts a per-lane MCP listener in this
+        // process (tray builds), and that listener admits a project only
+        // through validate_project_label, the order-505 equality guard
+        // (1031-q4pb). A path outside the host project root used to launch and
+        // then have EVERY MCP call refused as "not a known project" (measured
+        // on lenovinha 2026-10-12). Binding the label to this canonical path
+        // admits exactly this project; every other outside label stays refused.
+        #[cfg(feature = "tray")]
+        crate::local_projects::bind_launched_project(&name, &canonical)
+            .map_err(|reason| format!("refusing to launch '{}': {reason}", canonical.display()))?;
         Ok((name, Some(canonical)))
     } else if is_cloud {
         Ok((project_path.to_string(), None))
@@ -32022,10 +32033,26 @@ esac
     /// Lane: --opencode. A stale TILLANDSIAS_PROJECT_REMOTE_URL in the
     /// process environment (e.g. left over from an earlier --github-login)
     /// must NOT divert a plain local launch into the cloud arm.
+    /// 1626-r4xm: a local launch must be inside the host project root, as the
+    /// lane's MCP socket requires. These env names are captured by each test
+    /// that resolves a temp project, so its root is the temp dir.
+    const PROJECT_ROOT_ENVS: [&str; 3] = [
+        "TILLANDSIAS_PROJECT_REMOTE_URL",
+        "TILLANDSIAS_HOST_PROJECT_ROOT",
+        "TILLANDSIAS_CLOUD_PROJECT_CACHE",
+    ];
+    fn admit_temp_project_root(restore: &TestEnvRestore, root: &Path) {
+        restore.set("TILLANDSIAS_HOST_PROJECT_ROOT", root);
+        restore.set(
+            "TILLANDSIAS_CLOUD_PROJECT_CACHE",
+            root.join("no-cloud-cache"),
+        );
+    }
+
     #[test]
     fn cloud_mode_opencode_decision_ignores_stale_env_var() {
         let _guard = env_lock();
-        let restore = TestEnvRestore::capture(&["TILLANDSIAS_PROJECT_REMOTE_URL"]);
+        let restore = TestEnvRestore::capture(&PROJECT_ROOT_ENVS);
         restore.set(
             "TILLANDSIAS_PROJECT_REMOTE_URL",
             "https://github.com/stale/leftover.git",
@@ -32034,6 +32061,7 @@ esac
         let temp = tempfile::tempdir().expect("tempdir");
         let project_dir = temp.path().join("myproject");
         std::fs::create_dir_all(&project_dir).expect("mkdir");
+        admit_temp_project_root(&restore, temp.path());
         let path_str = project_dir.display().to_string();
 
         let (name, canonical) =
@@ -32057,7 +32085,7 @@ esac
     #[test]
     fn cloud_mode_opencode_web_decision_ignores_stale_env_var() {
         let _guard = env_lock();
-        let restore = TestEnvRestore::capture(&["TILLANDSIAS_PROJECT_REMOTE_URL"]);
+        let restore = TestEnvRestore::capture(&PROJECT_ROOT_ENVS);
         restore.set(
             "TILLANDSIAS_PROJECT_REMOTE_URL",
             "https://github.com/stale/leftover.git",
@@ -32066,6 +32094,7 @@ esac
         let temp = tempfile::tempdir().expect("tempdir");
         let project_dir = temp.path().join("webproject");
         std::fs::create_dir_all(&project_dir).expect("mkdir");
+        admit_temp_project_root(&restore, temp.path());
         let path_str = project_dir.display().to_string();
 
         let (name, canonical) =
@@ -32085,7 +32114,7 @@ esac
     #[test]
     fn cloud_mode_forge_agent_cli_decision_ignores_stale_env_var() {
         let _guard = env_lock();
-        let restore = TestEnvRestore::capture(&["TILLANDSIAS_PROJECT_REMOTE_URL"]);
+        let restore = TestEnvRestore::capture(&PROJECT_ROOT_ENVS);
         restore.set(
             "TILLANDSIAS_PROJECT_REMOTE_URL",
             "https://github.com/stale/leftover.git",
@@ -32094,6 +32123,7 @@ esac
         let temp = tempfile::tempdir().expect("tempdir");
         let project_dir = temp.path().join("dotproject");
         std::fs::create_dir_all(&project_dir).expect("mkdir");
+        admit_temp_project_root(&restore, temp.path());
         let path_str = project_dir.display().to_string();
 
         let (name, canonical) = resolve_launch_project_identity(&path_str, false, "forge-project")
@@ -32104,6 +32134,79 @@ esac
             "forge-agent CLI lane's local decision must not be diverted by the \
              stale env var"
         );
+    }
+
+    /// 1626-r4xm, criterion 1: a git project OUTSIDE the host project root
+    /// (the operator's ~/claudia/<x>, with nothing set) launches, and its lane's
+    /// MCP socket admits it. Measured on lenovinha before this: the lane
+    /// launched, and its MCP socket refused every call. RED first: the socket
+    /// refuses the label until the launch binds it.
+    #[cfg(feature = "tray")]
+    #[test]
+    fn launch_outside_host_project_root_is_admitted_by_its_lane() {
+        let _guard = env_lock();
+        let restore = TestEnvRestore::capture(&PROJECT_ROOT_ENVS);
+        restore.remove("TILLANDSIAS_PROJECT_REMOTE_URL");
+        let temp = tempfile::tempdir().expect("tempdir");
+        let root = temp.path().join("src");
+        std::fs::create_dir_all(root.join("some-other-project")).expect("mkdir");
+        let outside = temp.path().join("claudia").join("r4xm-claudia-project");
+        std::fs::create_dir_all(&outside).expect("mkdir");
+        let _ = std::process::Command::new("git")
+            .args(["init", "-q"])
+            .arg(&outside)
+            .status();
+        admit_temp_project_root(&restore, &root);
+
+        let before = crate::local_projects::validate_project_label("r4xm-claudia-project");
+        assert!(
+            before.is_err(),
+            "RED: the socket refuses it before launch: {before:?}"
+        );
+
+        let (name, canonical) =
+            resolve_launch_project_identity(&outside.display().to_string(), false, "forge-project")
+                .expect("a project outside the host project root launches");
+        assert_eq!(name, "r4xm-claudia-project");
+        assert_eq!(canonical, Some(outside.canonicalize().unwrap()));
+        crate::local_projects::validate_project_label(&name)
+            .expect("GREEN: the lane's socket admits the project it was launched for");
+    }
+
+    /// 1626-r4xm: LAUNCH AND THE LANE'S MCP SOCKET AGREE. The socket admits a
+    /// lane only through validate_project_label (order 505), so every project
+    /// that launches is admitted by its socket: never "launch ok, then every
+    /// MCP call refused". The guard is not opened wider than that: an outside
+    /// project no lane was launched for is still refused.
+    #[cfg(feature = "tray")]
+    #[test]
+    fn launch_admits_exactly_what_the_lane_socket_admits() {
+        let _guard = env_lock();
+        let restore = TestEnvRestore::capture(&PROJECT_ROOT_ENVS);
+        restore.remove("TILLANDSIAS_PROJECT_REMOTE_URL");
+        let temp = tempfile::tempdir().expect("tempdir");
+        let root = temp.path().join("src");
+        let inside = root.join("inside-project");
+        let outside = temp.path().join("elsewhere").join("outside-project");
+        let never = temp.path().join("elsewhere").join("r4xm-never-launched");
+        std::fs::create_dir_all(&inside).expect("mkdir");
+        std::fs::create_dir_all(&outside).expect("mkdir");
+        std::fs::create_dir_all(&never).expect("mkdir");
+        admit_temp_project_root(&restore, &root);
+
+        for (dir, label) in [(&inside, "inside-project"), (&outside, "outside-project")] {
+            let launched =
+                resolve_launch_project_identity(&dir.display().to_string(), false, "forge-project");
+            let socket = crate::local_projects::validate_project_label(label);
+            assert!(launched.is_ok(), "{label}: {launched:?}");
+            assert!(
+                socket.is_ok(),
+                "{label}: launch {launched:?} but the lane socket {socket:?}"
+            );
+        }
+        let err = crate::local_projects::validate_project_label("r4xm-never-launched")
+            .expect_err("NEGATIVE: an outside label no lane was launched for stays refused");
+        assert!(err.contains("is not a known project"), "{err}");
     }
 
     /// The flip side: is_cloud=true must resolve cloud even with the env var
