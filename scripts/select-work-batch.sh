@@ -438,7 +438,15 @@ rm -f "$query_err"
 # touches it — so every host of a role scores an IDENTICAL frontier and equal
 # ordinals cannot alias. The host's own filtered pool still decides what it
 # WORKS; it no longer decides where it is POINTED.
-ROUTING_ROWS="$rows"
+#
+# ORDER 1637-arwp: the frontier is taken AFTER the tier gate below, not here.
+# Only general-tier hosts route by rank, and every one of them subtracts the
+# same tier carriers (a function of ledger and role alone), so the frontier is
+# still identical on every routed host. Taken before the gate, an epic whose
+# only ready packets are tier-reserved held a frontier slot no routed host could
+# serve, and the host on that slot walked onto slot 1: measured 2026-10-12,
+# local-telemetry-for-bottleneck-finding-milestone (one low-end packet) put 8
+# hosts on 7 epics, which test-capability-routing.sh case 1 refused.
 
 # select-rows already applied: status ready, role claimability, release,
 # dependency-clearance (unresolvable ids count as BLOCKING, matching the
@@ -507,6 +515,7 @@ for tier_tag in $TIER_TAGS; do
         TIER_FILTERED=$((TIER_FILTERED + before_n - after_n))
     fi
 done
+ROUTING_ROWS="$rows"
 if [ "$HOST_TIER" = "low-end" ]; then
     rows="$(printf '%s\n' "${TIER_POOL:-}" | awk -F'\t' 'NF >= 4 && !seen[$4]++')"
     if [ -z "$rows" ]; then
@@ -1166,10 +1175,18 @@ if [ -n "${HOST_NAME:-}" ] && [ -n "${CAP_HOSTS:-}" ]; then
     _hs_orders="$(printf '%s\n' "$batch" | awk -F'\t' 'NF>=4 && $4 != "" {print $4}')"
     [ -n "$_hs_orders" ] && printf '%s\n' "$_hs_orders" | while read -r _hs_pid; do
         [ -n "$_hs_pid" ] || continue
-        # The packet's exit_criteria block: from its packet_id line to the next
-        # top-level key at the same depth. One pass per packet over the base plus
-        # fragments; the base is large, so the id match is anchored and exits early.
-        _hs_text="$(awk -v pid="$_hs_pid" '
+        # 1601-398e: the FOLDED exit_criteria, so a list-replace is what is read.
+        # A binary that predates --field prints the status line instead, which
+        # names the packet and could match a host, so only a JSON list counts.
+        _hs_text="$("$PLAN" status "$_hs_pid" --field exit_criteria 2>/dev/null)"
+        case "$_hs_text" in
+            '['*) _hs_text="$(printf '%s' "$_hs_text" | tr 'A-Z' 'a-z')" ;;
+            *) _hs_text="" ;;
+        esac
+        # Fallback for that stale binary: the declared exit_criteria block, from
+        # its packet_id line to the next top-level key at the same depth. One pass
+        # per packet over the base plus fragments; the id match is anchored.
+        [ -n "$_hs_text" ] || _hs_text="$(awk -v pid="$_hs_pid" '
             $0 ~ ("packet_id: " pid "$") { inpkt = 1; incrit = 0; next }
             inpkt && /^[[:space:]]*-[[:space:]]*packet_id:/ { inpkt = 0; incrit = 0 }
             inpkt && /^[[:space:]]*exit_criteria:/ { incrit = 1; next }

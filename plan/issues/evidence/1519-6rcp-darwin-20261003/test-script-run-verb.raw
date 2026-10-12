@@ -1,0 +1,11 @@
+command=TILLANDSIAS_PLAN_BIN=/Users/tlatoani/opencode/tillandsias/target/release/tillandsias-plan bash scripts/test-script-run-verb.sh
+timestamp_utc=2026-10-03T16:54:57Z
+ok:   ARM 1: verdict.ok("x", 3) prints exactly ok:x:3 and exits 0
+ok:   ARM 2: verdict.refused exits 1 with refused:x on stdout and the detail on stderr only
+ok:   ARM 3: a script ending without a verdict exits 1 with refused:no-verdict:silent
+ok:   ARM 4: a script outliving --timeout 300ms exits 124 printing status=timed_out, and never ok
+ok:   ARM 5: build.sh's loop runs a STEP_LUA-only step and shows its verdict; a missing .lua and a step naming both are refused
+ok:   ARM 6: the timing record lands in TILLANDSIAS_TIMING_LOG and /tmp/tillandsias-timing.jsonl did not grow
+ok:   ARM 7: advisory is verbatim only for successful runs; failure precedence survives and newline injection is refused
+script-run-verb: 7 passed, 0 failed
+exit=0

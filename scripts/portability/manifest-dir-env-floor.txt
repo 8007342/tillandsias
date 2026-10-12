@@ -1,0 +1,17 @@
+# Per-file compile-time env!("CARGO_MANIFEST_DIR") sites in Rust test code (1590-j20f).
+# May only DESCEND: convert a site to std::env::var("CARGO_MANIFEST_DIR") and lower its line.
+crates/tillandsias-headless/src/cloudflare_login.rs 1
+crates/tillandsias-headless/src/cloudflare_oauth.rs 1
+crates/tillandsias-headless/src/local_web_preview.rs 1
+crates/tillandsias-headless/src/main.rs 75
+crates/tillandsias-headless/src/remote_projects.rs 2
+crates/tillandsias-headless/src/tray/mod.rs 2
+crates/tillandsias-headless/src/vault_bootstrap.rs 23
+crates/tillandsias-headless/src/vsock_server.rs 2
+crates/tillandsias-headless/tests/signal_handling.rs 1
+crates/tillandsias-macos-tray/src/action_host.rs 1
+crates/tillandsias-macos-tray/src/diagnose.rs 6
+crates/tillandsias-macos-tray/src/main.rs 1
+crates/tillandsias-plan/src/lua_predicate.rs 2
+crates/tillandsias-plan/tests/lua_predicate_classes.rs 3
+crates/tillandsias-plan/tests/lua_proc.rs 1

@@ -41,6 +41,13 @@ RUN microdnf install -y bash curl ca-certificates zstd tar gzip pciutils \
 RUN microdnf install -y vulkan-loader mesa-vulkan-drivers \
     && microdnf clean all
 
+# @trace spec:inference-engine-slots — order 482b llama-server slot shim
+# caddy owns :11434 when TILLANDSIAS_INFERENCE_ENGINE=llama-server and answers the
+# /api/version readiness probe only while llama-server is healthy (SLOT-2).
+# Fedora's package, like the enclave router's Caddy; idle under the ollama engine.
+RUN microdnf install -y caddy \
+    && microdnf clean all
+
 # -- Create non-root user --
 # DISTRO: useradd (Fedora shadow-utils), NOT adduser -D (Alpine)
 RUN useradd -u 1000 -m -s /bin/bash ollama
@@ -83,6 +90,21 @@ COPY preload-policy.sh /usr/local/bin/tillandsias-preload-policy.sh
 # OLLAMA_NUM_PARALLEL, which ollama reads once at process start), and runnable
 # standalone so litmus can exercise every tier branch with stubbed inputs.
 COPY engine-tuning.sh /usr/local/bin/tillandsias-engine-tuning.sh
+# @trace spec:inference-container — order 521 installed-engine integrity
+# Same contract again: POSIX sh, sourced by the entrypoint before the engine is
+# installed or executed; runnable standalone so litmus can plant stale and
+# tampered engines in a scratch cache.
+COPY engine-integrity.sh /usr/local/bin/tillandsias-engine-integrity.sh
+# @trace spec:inference-engine-slots — order 482d shared T0-T5 tier table
+# Declarative data (tier-table.tsv + one adapter per engine) and its POSIX
+# resolver; the entrypoint sources tiers.sh instead of carrying inline rows.
+COPY tiers/ /usr/local/share/tillandsias/tiers/
+# @trace spec:inference-engine-slots — order 482b llama-server slot
+# Backend selection, the exactly-one-backend closure, GGUF pins and the supervised
+# llama-server + caddy pair. Same contract as the helpers above: functions only
+# when sourced, runnable standalone for litmus.
+COPY llama-server-lane.sh /usr/local/bin/tillandsias-llama-server-lane.sh
+COPY llama-server.Caddyfile /usr/local/share/tillandsias/llama-server.Caddyfile
 # @trace spec:external-logs-layer
 # Manifest of curated external log files published by this image.
 # The tray-side auditor reads this at /etc/tillandsias/external-logs.yaml
@@ -91,7 +113,9 @@ RUN mkdir -p /etc/tillandsias
 COPY external-logs.yaml /etc/tillandsias/external-logs.yaml
 RUN chmod +x /usr/local/bin/entrypoint.sh \
     /usr/local/bin/tillandsias-preload-policy.sh \
-    /usr/local/bin/tillandsias-engine-tuning.sh
+    /usr/local/bin/tillandsias-engine-tuning.sh \
+    /usr/local/bin/tillandsias-engine-integrity.sh \
+    /usr/local/bin/tillandsias-llama-server-lane.sh
 
 USER 1000:1000
 

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: carried-obligations-taken-by-judges-a-stale-local-snapshot-of-work-refs-so-two-hosts-port-the-same-item
+    field: status
+    value: completed
+    ts: "2026-10-11T09:38:20Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: carried-obligations-taken-by-judges-a-stale-local-snapshot-of-work-refs-so-two-hosts-port-the-same-item
+    event:
+      type: completed
+      ts: "2026-10-11T09:38:20Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: 692c1f088 (#313 landed, gate green) + same-run pre/post controls for STALE and PAID-BUT-TAKEN, 22/22 native and guest

@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-darwin-under-taskpolicy-b-the-preflight-front-door-runs-three-to-four-times-its-150-s-budget-so-test-preflight-front-door-is-red-there
+    event:
+      type: note
+      ts: "2026-10-11T20:41:26Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261011t204126z
+      host: tlatoanis-macbook-air
+      summary: |
+        NOTE (the coordinator asked for it here, not in the fix): the no-setsid ORPHAN problem, seen during the 1614 measurement. After the -b preflight ended, a `grep -rq ... spec:clickable-trace-index` started by a deadline-killed guard was still running when the plain rerun began. On darwin the door signals only the guard's pid (no setsid), so a killed guard's children outlive it. The same mechanism let orphans write into a guard's TMPDIR after #333's sweep (podman storage-run-501, land-push-class), and register worktrees after it, which #333's late re-sweep handles. Not fixed by 1614; it is the darwin isolation=none-no-setsid regime.
+        DESIGN NOTE for the wall-clock deadline (coordinator ruling: wall clock, not ticks, poll stays 0.1 s). On this host neither suggested clock is available: macOS /bin/bash is 3.2.57 (no EPOCHREALTIME), and BSD date has no %N, so build.sh's _now_ms degrades to WHOLE SECONDS here. MEASURED cost per clock read: perl Time::HiRes 4.7 ms plain / 24 ms under -b; `date +%s` 1.5 ms / 7 ms (seconds only). Plan: a _wall_ms helper probed once (EPOCHREALTIME, then GNU date %s%3N, then perl Time::HiRes, then seconds), read once per poll, with the method named in the preflight summary so a seconds-resolution door says so.

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-lua-guard-prints-what-a-change-owes-each-carried-obligation-backlog-not-due-paid-waived-or-due-with-the-smallest-item-and-the-waiver-line-to-paste
+    event:
+      type: note
+      ts: "2026-10-10T16:52:48Z"
+      agent_id: forge-forge-tillandsias-claude-20261009t193211z
+      host: yoga
+      summary: |-
+        PORTING GOTCHA for this guard to check (measured on yoga 2026-10-10 porting 1570-mxcg and 1570-g4rx): before a port deletes scripts/<x>.sh, grep the LITERAL path in scripts/hooks/*.sh, build.sh's FAST REFUSALS tier and scripts/gate-steps.d/*.step — comments included. build.sh _preflight_roster sources 1-3 scan those as literals ('scripts/check-[a-z0-9-]+.sh'), so a leftover COMMENT naming the deleted file becomes could-not-run:preflight:<x>:absent; both ports hit it. The Lua call site must use the QUOTED form _run_lua_decider "scripts/lua/<x>.lua": roster source 5 matches only that, so an unquoted call is never run at the door (1570-mxcg; class 1577-ct29). Guardable: (1) a deleted scripts/*.sh still named as a literal in those surfaces; (2) an unquoted _run_lua_decider call.

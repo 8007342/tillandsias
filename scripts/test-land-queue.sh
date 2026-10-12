@@ -488,7 +488,21 @@ GATE
 # when this arm was written. gh is invoked inside the loop with no such
 # redirect, so a hungry gh tests the fd the LIST is read on rather than one
 # subprocess's plumbing. Two guards, and the arm must fail if EITHER is removed.
-sed -i '2i cat >/dev/null 2>&1 || true' "$GH_BIN"
+#
+# 1553-x8js: this was GNU `sed -i '2i ...'`. BSD sed read the script as a
+# backup suffix and the path as the script, failed ("invalid command code f"),
+# and left gh NOT hungry — so on darwin ARM 9 ran with only the gate draining
+# stdin, the shape the paragraph above measured as passing even with the fd-3
+# read reverted. Built portably now, and the build is checked before the arm's
+# verdict is allowed to mean anything.
+_gh9_before="$(cat "$GH_BIN")"
+awk 'NR == 2 { print "cat >/dev/null 2>&1 || true" } { print }' "$GH_BIN" > "$GH_BIN.tmp" \
+    && mv "$GH_BIN.tmp" "$GH_BIN" && chmod +x "$GH_BIN"
+if [ ! -s "$GH_BIN" ] || [ "$(cat "$GH_BIN")" = "$_gh9_before" ] \
+   || [ "$(sed -n 2p "$GH_BIN")" != 'cat >/dev/null 2>&1 || true' ] \
+   || [ "$(sed -n 1p "$GH_BIN")" != '#!/usr/bin/env bash' ] || [ ! -x "$GH_BIN" ]; then
+    bad "ARM 9 SETUP: the stdin-hungry gh stub was NOT built (empty, unchanged, wrong line 2, or not executable) — ARM 9's verdict below proves nothing"
+fi
 
 # BOUNDED, BECAUSE THE DEFECT'S FAILURE MODE IS A HANG AND NOT A WRONG ANSWER.
 # Measured 2026-09-21: with the fd-3 read reverted and a stdin-hungry gh, this
@@ -593,6 +607,173 @@ case "$out10b" in
         bad "ARM 10b: a crates/ move was ADOPTED — the gate's verdict does NOT describe that tree, and this would ship a green about code the gate never saw" ;;
     *)  bad "ARM 10b: neither adopted nor re-queued (did the mover run?): $(printf '%s' "$out10b" | tail -2)" ;;
 esac
+
+# ──────────────────────────────────────────────────────────── ARM 11
+# A FROZEN TARGET HOLDS CODE, and the queue asks ORIGIN itself (1255-s4im).
+# The pre-push hook refuses this only on a hooked host; the queue must not
+# depend on which host runs it. Held BEFORE the gate: no gate is spent.
+# 11b is the NEGATIVE CONTROL: a plan-only candidate under the same live freeze
+# lands — the plan lane is how coordination keeps moving during a cut.
+scaffold arm11
+candidate arm11 1101-aaaa a.txt A
+cat > "$GH_PRS" <<JSON
+[{"number":1,"headRefName":"work/1101-aaaa","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo gated >> "$GATE_LOG"
+exit 0
+GATE
+frozen11="$(git -C "$WORK_DIR" rev-parse origin/linux-next)"
+git -C "$WORK_DIR" push -q origin "$frozen11:refs/tillandsias/freeze/linux-next/fixture/1700000000"
+out11="$(run_queue)"
+git -C "$WORK_DIR" fetch -q origin linux-next
+after11="$(git -C "$WORK_DIR" rev-parse origin/linux-next)"
+if grep -q '^hold:land-queue:1:frozen:refs/tillandsias/freeze/linux-next/fixture/1700000000' <<<"$out11" \
+   && [ "$after11" = "$frozen11" ] && [ ! -s "$GATE_LOG" ]; then
+    ok "ARM 11: a code candidate into a frozen trunk is HELD before the gate (gate not run, trunk unchanged), naming the marker"
+else
+    bad "ARM 11: wanted hold + no gate + unchanged trunk; gate=$(wc -l < "$GATE_LOG" | tr -d ' ') after=$after11 frozen=$frozen11
+$out11"
+fi
+mkdir -p "$WORK_DIR/plan/index.d"
+git -C "$WORK_DIR" checkout -q -B work/1102-bbbb origin/linux-next
+mkdir -p "$WORK_DIR/plan/index.d"; echo "x: 1" > "$WORK_DIR/plan/index.d/frag.yaml"
+git -C "$WORK_DIR" add -A && git -C "$WORK_DIR" commit -q -m "work(1102-bbbb): plan only"
+git -C "$WORK_DIR" push -q origin work/1102-bbbb
+git -C "$WORK_DIR" checkout -q linux-next
+cat > "$GH_PRS" <<JSON
+[{"number":2,"headRefName":"work/1102-bbbb","isDraft":false}]
+JSON
+out11b="$(run_queue)"
+case "$out11b" in
+    *"land:2 "*) ok "ARM 11b (control): a plan-only candidate lands under the same live freeze — the hold is about held paths, not about the freeze existing" ;;
+    *)           bad "ARM 11b (control): the plan-only candidate did not land under the freeze
+$out11b" ;;
+esac
+
+# ──────────────────────────────────────────────────────────── ARM 12
+# A FREEZE SET WHILE THE CANDIDATE GATES IS NOT PUSHED THROUGH. The gate is
+# green; the cut froze the branch inside the 40-minute window; the queue must
+# re-ask at push. The stub gate sets the freeze, exactly where the window is.
+scaffold arm12
+candidate arm12 1201-aaaa a.txt A
+cat > "$GH_PRS" <<JSON
+[{"number":1,"headRefName":"work/1201-aaaa","isDraft":false}]
+JSON
+before12="$(git -C "$WORK_DIR" rev-parse origin/linux-next)"
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+# The cut freezes the trunk while this candidate is gating.
+git --git-dir="$REMOTE_DIR" update-ref refs/tillandsias/freeze/linux-next/cut/1700000001 "$before12"
+exit 0
+GATE
+out12="$(run_queue)"
+git -C "$WORK_DIR" fetch -q origin linux-next
+after12="$(git -C "$WORK_DIR" rev-parse origin/linux-next)"
+if grep -q '^requeue:land-queue:1:frozen-mid-gate:refs/tillandsias/freeze/linux-next/cut/1700000001' <<<"$out12" \
+   && [ "$after12" = "$before12" ]; then
+    ok "ARM 12: a freeze set DURING the gate is honoured at push — re-queued, nothing pushed, the marker named"
+else
+    bad "ARM 12: wanted requeue frozen-mid-gate and an unchanged trunk; before=$before12 after=$after12
+$out12"
+fi
+# ARM 12b, NEGATIVE CONTROL: the same scaffold with the freeze cleared lands.
+git --git-dir="$REMOTE_DIR" update-ref -d refs/tillandsias/freeze/linux-next/cut/1700000001
+cat > "$GATE_BIN" <<'GATE'
+#!/usr/bin/env bash
+exit 0
+GATE
+out12b="$(run_queue)"
+case "$out12b" in
+    *"land:1 "*) ok "ARM 12b (control): with no freeze the same candidate lands — arm 12 detects the freeze, not refusing everything" ;;
+    *)           bad "ARM 12b (control): did not land with no freeze
+$out12b" ;;
+esac
+
+# ──────────────────────────────────────────────────────────── ARM 13
+# EVERY LANDING RECORDS WHAT IT OWED ITS CARRIED OBLIGATIONS (1577-568c): one
+# `Carried: <backlog> <state> [<item-or-reason>]` trailer per backlog on the land
+# commit, read from the guard on the merged tree. The trunk carries the real
+# rule and a decider in the shell-to-lua area. PRE-FIX: no land commit carries
+# a Carried trailer and the silent candidate lands.
+scaffold arm13
+mkdir -p "$WORK_DIR/methodology" "$WORK_DIR/scripts"
+cp "$ROOT/methodology/convergence.yaml" "$WORK_DIR/methodology/"
+printf '#!/usr/bin/env bash\necho ok:x\n' > "$WORK_DIR/scripts/check-x.sh"
+printf '.cache/\n' > "$WORK_DIR/.gitignore"
+git -C "$WORK_DIR" add -A && git -C "$WORK_DIR" commit -q -m "the rule and one decider"
+git -C "$WORK_DIR" push -q origin linux-next
+candidate arm13 1301-aaaa notes.txt "not in the area"
+candidate arm13 1302-bbbb scripts/check-x.sh "$(printf '#!/usr/bin/env bash\necho ok:x2')"
+git -C "$WORK_DIR" checkout -q -B work/1303-cccc origin/linux-next
+printf '#!/usr/bin/env bash\necho ok:x3\n' > "$WORK_DIR/scripts/check-x.sh"
+git -C "$WORK_DIR" add -A
+git -C "$WORK_DIR" commit -q -m "work(1303-cccc)" -m "Carried-Waiver: shell-to-lua no-item-in-reach"
+git -C "$WORK_DIR" push -q origin work/1303-cccc
+git -C "$WORK_DIR" checkout -q linux-next
+cat > "$GH_PRS" <<JSON
+[{"number":1,"headRefName":"work/1301-aaaa","isDraft":false},
+ {"number":2,"headRefName":"work/1302-bbbb","isDraft":false},
+ {"number":3,"headRefName":"work/1303-cccc","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated \$(git rev-parse HEAD)" >> "$GATE_LOG"
+exit 0
+GATE
+out13="$(run_queue)"
+git -C "$WORK_DIR" fetch -q origin linux-next
+tr13="$(git -C "$WORK_DIR" log --first-parent --format='%s|%(trailers:key=Carried,valueonly,separator=;)' origin/linux-next | grep '^land(')"
+# The trailer carries ONE entry per backlog in convergence.yaml, joined by `;`
+# (1590-j20f added manifest-dir-runtime, and arms that compared the WHOLE value
+# against `shell-to-lua ...` went red although land-queue was right). So 13a/13b
+# assert the shell-to-lua COMPONENT, and 13d asserts one entry per backlog.
+# carried_of <land(N) subject> -> that land commit's entries, one per line
+# (the subject is followed by one separator character, dropped by position).
+carried_of() {
+    local l
+    l="$(grep -m1 -F "$1" <<<"$tr13")"
+    l="${l#"$1"}"
+    tr ';' '\n' <<<"${l:1}"
+}
+if grep -qx 'shell-to-lua not-due' <<<"$(carried_of 'land(1): work/1301-aaaa into linux-next')"; then
+    ok "ARM 13a: a not-due candidate lands with 'Carried: shell-to-lua not-due'"
+else
+    bad "ARM 13a: wanted a land(1) commit with Carried: shell-to-lua not-due; got
+$tr13
+$out13"
+fi
+if grep -qx 'shell-to-lua waived no-item-in-reach' <<<"$(carried_of 'land(3): work/1303-cccc into linux-next')"; then
+    ok "ARM 13b: a due candidate carrying a Carried-Waiver trailer lands with 'Carried: shell-to-lua waived no-item-in-reach'"
+else
+    bad "ARM 13b: wanted a land(3) commit with Carried: shell-to-lua waived; got
+$tr13
+$out13"
+fi
+# ARM 13d: one Carried entry per backlog in the REAL convergence.yaml, so a
+# new backlog cannot silently drop out of the tally (or re-break 13a/13b).
+n_backlogs="$(awk '/^  backlogs:/{f=1; next} f && /^[^ ]/{f=0} f && /^    - name: /{n++} END{print n+0}' "$ROOT/methodology/convergence.yaml")"
+n_entries="$(grep -c . <<<"$(carried_of 'land(1): work/1301-aaaa into linux-next')")"
+if [ "$n_backlogs" -ge 1 ] && [ "$n_entries" = "$n_backlogs" ]; then
+    ok "ARM 13d: the land trailer carries one entry per backlog ($n_entries of $n_backlogs in convergence.yaml)"
+else
+    bad "ARM 13d: wanted $n_backlogs Carried entries (one per backlog), got $n_entries:
+$tr13"
+fi
+# ARM 13c: the due, SILENT candidate is evicted before any gate runs, the
+# trailer line to add is on stdout and in the PR comment, and it never lands.
+if grep -qx 'evict:land-queue:2:carried-silent:shell-to-lua' <<<"$out13" \
+   && grep -q 'Carried-Waiver: shell-to-lua <reason>' <<<"$out13" \
+   && grep -q '^2 --body Evicted' "$GH_COMMENTS" && grep -q '^Carried-Waiver: shell-to-lua' "$GH_COMMENTS" \
+   && ! grep -q '^land(2)' <<<"$tr13" \
+   && [ "$(grep -c . "$GATE_LOG")" -eq 2 ]; then
+    ok "ARM 13c: a due, silent candidate is EVICTED as carried-silent before its gate, with the waiver line on stdout and on the PR"
+else
+    bad "ARM 13c: wanted evict carried-silent for #2, the waiver line on stdout and the PR, 2 gates run; gates=$(grep -c . "$GATE_LOG")
+$out13
+comments: $(cat "$GH_COMMENTS")"
+fi
 
 printf '\n'
 if [ "$fail" -eq 0 ]; then

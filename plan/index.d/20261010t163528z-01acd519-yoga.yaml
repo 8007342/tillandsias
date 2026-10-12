@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: audit-guard-activation-enumerates-only-scripts-check-sh-so-every-shell-to-lua-port-silently-removes-a-guard-from-the-wiring-audit
+    event:
+      type: note
+      ts: "2026-10-10T16:35:28Z"
+      agent_id: forge-forge-tillandsias-claude-20261009t193211z
+      host: yoga
+      summary: |-
+        Correction to the filed context: scripts/lua/check-*.lua is 24 files on linux-next 5d03c1a53 (27 was the count of all scripts/lua/*.lua). Measured on yoga 2026-10-10.

@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (macuahuitl, 2026-10-11): split out of order 527's side note.
+packets:
+  - packet_id: the-litmus-podman-shim-probe-timeout-kills-a-rustup-toolchain-auto-install-midway-and-reports-it-as-a-stalled-podman-storage-lock
+    order: 1617-4mq6
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [litmus, podman-shim, rustup, toolchain, diagnostics]
+    estimated_hours: 2
+    owned_files:
+      - scripts/run-litmus-test.sh
+      - scripts/tillandsias-podman
+    title: |
+      On a host missing the pinned Rust toolchain, the litmus runner's podman preflight (timeout 5 podman ps) runs the shim, which builds scripts/tillandsias-podman through cargo; rustup's auto-install of the toolchain is killed at 5 s (20 s by hand) every run, and the runner reports ENV-FAIL "stalled storage lock" instead of naming the install.
+    context: |
+      MEASURED on lenovinha 2026-10-11 (Fedora Silverblue 44, bare metal, during order 527):
+      - scripts/run-litmus-test.sh ephemeral-guarantee --size e2e printed, twice:
+        [ENV-FAIL] podman did not answer 'podman ps' within 5s (timeout, exit 124) — consistent with a stalled storage lock or a dead runtime (plan/issues/podman-sqlite-lock-zombie-cascade-2026-07-15.md)
+      - A bare /usr/bin/podman ps answered in 0.02 s, three runs in a row, so neither storage nor the runtime was stalled.
+      - PATH=target/litmus-runtime/bin:$PATH timeout 20 podman ps (the runner's shim -> scripts/tillandsias-podman raw -> cargo) printed rustup's
+        "info: syncing channel updates for 1.99.0-x86_64-unknown-linux-gnu", "info: recovering from a partially installed toolchain",
+        "warn: the missing active toolchain 1.99.0-x86_64-unknown-linux-gnu has been auto-installed", and was killed at 20 s (rc=124, user 1m39s).
+        Each timeout killed the install partway through, so every later probe started the install over ("recovering from a partially installed toolchain").
+      - rustup toolchain install 1.99.0 --profile minimal finished the install. After that the shim's first podman ps took 13.5 s (one-time build of tillandsias-podman), and the litmus ran green.
+      The diagnosis text points at podman storage and plan/issues/podman-sqlite-lock-zombie-cascade-2026-07-15.md, away from the cause.
+    exit_criteria:
+      - 'on a host missing the pinned toolchain, the first litmus run either completes the toolchain install (and the shim build) before the 5 s preflight clock starts, or reports the install by name (e.g. could-not-run:litmus-podman-shim:toolchain-installing:<ver>), never "stalled storage lock"'
+      - 'a fixture with a rustup/cargo stub that sleeps past the deadline proves the named verdict, and a stalled real podman still yields the storage-lock ENV-FAIL (the two causes stay distinguishable)'
+    unscoreable: "unpinnable-until-the-guard-exists: the named verdict and its fixture are written together"
+    next_action: >
+      Make the shim build (scripts/tillandsias-podman -> cargo) a separate, unbounded or generously bounded warm-up step before the 5 s podman ps preflight, or detect a running rustup/cargo child at timeout and name it. Then write the stub fixture with both causes in one run.
+    provenance: |
+      Filed by lenovinha-silverblue on macuahuitl's go, 2026-10-11; observed while running litmus:forge-experts-teardown-ephemeral for order 527 (PR #340).
+    events:
+      - type: filed
+        ts: "2026-10-11T22:48:44Z"
+        host: lenovinha
+        summary: |-
+          Litmus podman-shim preflight kills an in-progress rustup toolchain auto-install and mislabels it as a stalled podman storage lock; measured on lenovinha during 527.

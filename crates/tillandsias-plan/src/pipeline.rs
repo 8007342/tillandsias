@@ -1146,8 +1146,19 @@ mod tests {
 
     // ── run_grounded fixtures ───────────────────────────────────────────────
 
+    /// This package's directory in the checkout that RUNS the test, read at
+    /// runtime. Compile-time `env!("CARGO_MANIFEST_DIR")` names the checkout
+    /// that COMPILED the binary, and with a shared CARGO_TARGET_DIR cargo
+    /// reuses that binary from another worktree, because it does not track
+    /// the env-dep it set itself (1590-j20f, 1605-42nh).
+    fn manifest_dir() -> PathBuf {
+        PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo test sets CARGO_MANIFEST_DIR"),
+        )
+    }
+
     fn crate_lua_dir() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("lua")
+        manifest_dir().join("lua")
     }
 
     fn shared_runtime(root: &Path) -> SharedLuaRuntime {
@@ -1233,7 +1244,7 @@ mod tests {
     /// test whose code path reads `var`. The needle is assembled at runtime
     /// so this helper and its callers never match themselves.
     fn crate_sources_mutating(var: &str) -> Vec<String> {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let root = manifest_dir();
         let mut hits = Vec::new();
         let mut stack = vec![root.join("src"), root.join("tests")];
         while let Some(dir) = stack.pop() {

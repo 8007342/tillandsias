@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: land-queue-eviction-comment-quotes-every-non-ok-verdict-prefix-could-not-run-degraded-down-and-lowercase-fail-not-only-fail-refused-violation-blocked
+    event:
+      type: note
+      ts: "2026-10-11T20:32:21Z"
+      agent_id: forge-forge-tillandsias-claude-20261011t203221z
+      host: yoga
+      summary: |-
+        CARRIED shell-to-lua READER CENSUS (2026-10-11, trunk after #331/#332), so the next due change need not redo it. Readers exclude plan/ and the .sh itself. The guard's offered candidates:
+        - check-cheatsheet-sources.sh (57 lines): 24 files (pre-commit-openspec, cheatsheets plus their images/default copies, 2 litmus, the policy crate). Too wide for a fold-in.
+        - check-no-python-scripts.sh (17): 16 files (gate step 155-1087-h2z9.step, local-ci.sh 1901, methodology.yaml checker path, a methodology.rs fixture literal, 2 litmus, gate-divergence-declared.txt). Tiny script, wide blast radius.
+        - check-ripgrep-available.sh (42): 4 files, but check-host-tools.sh runs every prover as `bash scripts/<prover>` and reads its last stdout line, so a Lua prover needs that runner changed. Its own header defers to 1578-7s8h (rg census, then retire). Retiring it is that row's work, not a port.
+        - check-forge-service-health.sh (41): 6 files (forge-validate.sh and its test, litmus-forge-validation-profile).
+        - check-fragment-events-land.sh (58): 5 files (build.sh:3118, where exit 2 means COULD NOT RUN; test-fragment-events-land-callsite.sh stubs the .sh path). NOT a plain port, per the coordinator: its ensure_fresh_plan_binary dependency (1526-gv3t) makes it a design change.
+        Free single-caller test-*.sh fixtures under 80 lines, all unclaimed and green on yoga:
+        - test-forge-findings-persisted.sh (22; build.sh:5596; a one-line exec wrapper over check-forge-findings-persisted.sh fixture)
+        - test-build-sh-forge-check-only.sh (33; build.sh:5586; greps build.sh plus bash -n)
+        - test-archiver-check-memo.sh (41; build.sh)
+        - test-forge-localization-staged.sh (49; one litmus)
+        - test-stale-ready-rows.sh (59; check-stale-ready-rows.sh)

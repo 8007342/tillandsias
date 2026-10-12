@@ -6423,24 +6423,15 @@ mod tests {
             sock_path
         );
 
-        // Order 831-wmn4: the path assertions above hold on every target and
-        // keep running there. The BIND below cannot: macOS caps
+        // Order 831-wmn4 skipped the BIND half off Linux: macOS caps
         // sockaddr_un.sun_path at 104 bytes and its per-user TMPDIR is a long
-        // /var/folders/<hash>/T/ path, so the derived socket path exceeds
-        // SUN_LEN and bind fails with "path must be shorter than SUN_LEN".
-        // That is an environment limit, not a defect in the code under test.
-        //
-        // SKIPPED LOUDLY rather than #[cfg]-gated, so the test still COMPILES
-        // on every target — a cfg-gated test rots silently, which is the whole
-        // failure this packet is about. The tray is Linux-deployed; Linux runs
-        // the assertion.
-        if !cfg!(target_os = "linux") {
-            eprintln!(
-                "SKIP mcp_per_lane_socket_location_and_permissions_0600: bind half is \
-                 Linux-only (macOS SUN_LEN 104 vs this host's TMPDIR). Path assertions ran."
-            );
-            return;
-        }
+        // /var/folders/<hash>/T/ path, so the derived socket path exceeded
+        // SUN_LEN. ORDER 1581-sunl: bind under a SHORT runtime root instead, so
+        // the bind half runs, and keeps covering, macOS too.
+        let _env_lock = crate::runtime_assets::env_lock();
+        let runtime = short_runtime_root();
+        let prior = std::env::var_os("XDG_RUNTIME_DIR");
+        unsafe { std::env::set_var("XDG_RUNTIME_DIR", runtime.path()) };
 
         // Test listener creation and permissions
         let res = start_mcp_socket_server_for_lane("testperlane", "w99");
@@ -6458,6 +6449,23 @@ mod tests {
             "socket permissions must be 0600, got: {:o}",
             mode
         );
+
+        match prior {
+            Some(value) => unsafe { std::env::set_var("XDG_RUNTIME_DIR", value) },
+            None => unsafe { std::env::remove_var("XDG_RUNTIME_DIR") },
+        }
+    }
+
+    /// ORDER 1581-sunl. A runtime root short enough for a unix socket on every
+    /// host: macOS caps sun_path at 104 bytes and its TMPDIR
+    /// (/var/folders/<hash>/T/, 49 chars) pushed the derived
+    /// tillandsias/mcp/<project>-<instance>/mcp.sock past it ("path must be
+    /// shorter than SUN_LEN"). /tmp keeps the socket path well inside the limit.
+    fn short_runtime_root() -> tempfile::TempDir {
+        tempfile::Builder::new()
+            .prefix("tm")
+            .tempdir_in("/tmp")
+            .expect("short runtime root under /tmp")
     }
 
     /// A failed bind/setup must not poison the in-memory idempotence registry:
@@ -6465,7 +6473,8 @@ mod tests {
     #[test]
     fn mcp_listener_failed_start_rolls_back_registry_for_retry() {
         let _env_lock = crate::runtime_assets::env_lock();
-        let temp = tempfile::tempdir().expect("temporary runtime root");
+        // 1581-sunl: short root, or the retry's bind exceeds macOS SUN_LEN.
+        let temp = short_runtime_root();
         let blocked = temp.path().join("not-a-directory");
         std::fs::write(&blocked, "file prevents mkdir below it").expect("blocked marker");
         let runtime = temp.path().join("runtime");

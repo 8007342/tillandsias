@@ -115,7 +115,7 @@ cp "$HELPER" scripts/push-plan-fragments-to-trunk.sh
 # after it instead: a missing source file is swallowed here, so the scratch ran
 # short and only the downstream arm noticed — by reporting nothing.
 for f in plan-binary-probe.sh gate-stamp.sh common.sh check-issue-citation-convention.sh \
-         check-fragment-status-loss.sh check-added-fragments-parse.sh check-fragment-ts-skew.sh \
+         check-added-fragments-parse.sh check-fragment-ts-skew.sh \
          check-scorable-obligation-added.sh \
          check-append-vs-origin-fold.sh agent-identity.sh; do
     cp "$ROOT/scripts/$f" "scripts/$f" 2>/dev/null || true
@@ -125,11 +125,11 @@ for f in plan-binary-probe.sh gate-stamp.sh common.sh check-issue-citation-conve
     # release-blocking litmus without any land noticing.
     [ -f "scripts/$f" ] || { echo "FAIL: fixture scratch is missing scripts/$f (source: $ROOT/scripts/$f)"; exit 2; }
 done
-# PORTED to Lua (1525-c6jm): the base64-injection checker the lane calls is
-# scripts/lua/check-no-base64-script-injection.lua, run through the one
-# runner; the .sh is gone, so it joins this list by its own path rather than
-# the bare-name loop above.
-for f in scripts/lua/check-no-base64-script-injection.lua; do
+# PORTED to Lua (1525-c6jm, 1570-mxcg): the base64-injection and status-loss
+# checkers the lane calls are scripts/lua/*.lua, run through the one runner;
+# their .sh files are gone, so they join this list by their own paths rather
+# than the bare-name loop above.
+for f in scripts/lua/check-no-base64-script-injection.lua scripts/lua/check-fragment-status-loss.lua; do
     cp "$ROOT/$f" "$f" 2>/dev/null || true
     [ -f "$f" ] || { echo "FAIL: fixture scratch is missing $f (source: $ROOT/$f)"; exit 2; }
 done

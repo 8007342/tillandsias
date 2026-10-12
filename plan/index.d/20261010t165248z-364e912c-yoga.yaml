@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-lua-guard-prints-what-a-change-owes-each-carried-obligation-backlog-not-due-paid-waived-or-due-with-the-smallest-item-and-the-waiver-line-to-paste
+    event:
+      type: note
+      ts: "2026-10-10T16:52:48Z"
+      agent_id: forge-forge-tillandsias-claude-20261009t193211z
+      host: yoga
+      summary: |-
+        CARRY BACKLOG (+1 candidates), measured on yoga 2026-10-10 over linux-next: unported deciders by code lines (comments/blanks excluded) with the tools they spawn. NO SPAWN (easiest): check-macos-only-sources-verified 4, check-vault-cli-gate-coverage 18, check-exec-argv-vector-workarounds 22, check-litmus-yaml-parses 22, check-bash-composition-hazards 23, check-fragment-events-land 24, check-litmus-grep-escapes 24, check-convergence-velocity 27, check-installer-channel 28, check-enclave-expect-none-is-fixture-only 32, check-fragment-keys-are-read 35, check-cycle-scheduler 35, check-unique-bin-names 36, check-plan-schema-divergence 37, check-proxy-permissive-port-routing 37, check-wt-reparse-workarounds-deleted 39, check-litmus-steps-can-fail 45. ONE TOOL via proc.run: check-ripgrep-available 8 (rg; see 1570-k4fx), check-no-python-scripts 10 (cargo/git), check-no-end-user-brew-instruction 13 (jq -> json.parse), check-fragment-backlog 15 (plan), check-cheatsheet-sources 21, check-local-expert-health 23 (curl/jq), check-release-uploads-gated 28 (gh: needs credentials, not for forges), check-cross-target-build 28 (cargo), verify-image-usable 29 (podman: not for forges), check-committable-branch 32 (git), check-cheatsheet-tiers 35, check-yaml-reader-availability 36, check-forge-expert-base 36, check-claim-protocol-agrees 37, check-landing-provenance 38 (git). SMALL BUT PIPE-HEAVY: check-markdown-distillation 39 lines/20 pipes, check-forge-service-health 35/6, check-order-citations-resolve 43/6. 36 deciders <= 45 code lines. Skip any an open work/* ref already deletes.

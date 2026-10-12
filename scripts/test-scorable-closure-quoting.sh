@@ -27,6 +27,9 @@
 #
 # Prints one PASS/FAIL summary line and exits 0/1.
 set -uo pipefail
+# 1592-idmu: this fixture builds its own repo, so the gate's frozen base (a SHA of
+# the gated checkout) is not its base; its scratch origin/linux-next is.
+unset TILLANDSIAS_GATE_DIFF_BASE
 ROOT="$(git rev-parse --show-toplevel)" || exit 1
 cd "$ROOT" || exit 1
 
@@ -41,7 +44,12 @@ cleanup() {
     [ -d "$wt" ] && git -C "$ROOT" worktree remove --force "$wt" >/dev/null 2>&1
     rm -rf "$tmp"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+# 1600-nn5b: a signal must EXIT, so the EXIT trap removes the worktree. A trap
+# that only ran cleanup on TERM returned and let the script carry on without its
+# worktree. A KILL that lands while bash waits on a long step is swept by the
+# preflight door (per-guard TMPDIR).
+trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP
 
 if ! git worktree add --detach -q "$wt" HEAD 2>"$tmp/wterr"; then
     echo "FAIL could not create a throwaway worktree: $(head -1 "$tmp/wterr")"

@@ -90,7 +90,7 @@ critical_path:
     # claim, so "refuse everything" cannot satisfy it.
     command: "bash scripts/test-ledger-node-claim-resolution.sh 2>&1 | tail -1"
     timeout_ms: 30000
-    expected_behavior: "ok:ledger-node-claim-resolution-fixture:8"
+    expected_behavior: "ok:ledger-node-claim-resolution-fixture:10"
 
   - step: "the meta-orchestration skill consults the claim probe before node closure"
     command: "grep -q 'claim-ledger-node.sh' skills/meta-orchestration/SKILL.md && echo 'ok: skill-consults-probe'"

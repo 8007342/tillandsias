@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: check-shell-ratchet-judges-piped-litmus-commands-only-when-a-steps-file-exists-so-on-the-real-tree-the-arm-is-dormant-and-every-author-sees-ok-while-the-gate-fixture-refuses
+    field: status
+    value: completed
+    ts: "2026-10-12T05:11:19Z"
+    host: lenovinha
+
+events:
+  - packet_id: check-shell-ratchet-judges-piped-litmus-commands-only-when-a-steps-file-exists-so-on-the-real-tree-the-arm-is-dormant-and-every-author-sees-ok-while-the-gate-fixture-refuses
+    event:
+      type: completed
+      ts: "2026-10-12T05:11:19Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: land(349) 638aa1b27 into linux-next, gate green (run 39); branch head d08ff400c. C1: in one run on the real tree, trunk check said ok and the fixed check said violation:shell-ratchet:new-piped-command (the litmus arm is now unconditional). C2: the ok line carries litmus-arm=active:unconditional (re-read on trunk 638aa1b27+: ok:shell-ratchet:... litmus-arm=active:unconditional); test-shell-ratchet.lua ARM 3a NOSTEPS asserts verdict and field with no steps: file, 10/10. Carried shell-to-lua item paid: scripts/check-cycle-scheduler.sh -> scripts/lua/check-cycle-scheduler.lua, parity across 10 stubbed scenarios + live host.

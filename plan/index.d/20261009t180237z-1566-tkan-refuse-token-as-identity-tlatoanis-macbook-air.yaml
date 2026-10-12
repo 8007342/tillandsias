@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# 1566-tkan fix on work/1566-tkan (coordinator: do this before 1437-8c6p).
+status:
+  - packet_id: macos-github-login-remedy-tells-users-to-pipe-the-token-first-which-the-device-flow-reads-as-the-git-author-name
+    field: status
+    value: in_progress
+    ts: "2026-10-09T18:02:37Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: macos-github-login-remedy-tells-users-to-pipe-the-token-first-which-the-device-flow-reads-as-the-git-author-name
+    event:
+      type: note
+      ts: "2026-10-09T18:02:37Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        Fix on work/1566-tkan (crates/tillandsias-macos-tray/src/diagnose.rs):
+        - prompt_line's piped-timeout refusal is now piped_timeout_remedy(). It says the sign-in is the device flow and that the host reads exactly two lines, printf '%s\n%s\n' "$NAME" "$EMAIL". It no longer mentions a token or a token-first order.
+        - Both identity closures go through identity_answer(field, answer). It refuses an answer carrying ghp_/gho_/ghu_/ghs_/ghr_/github_pat_ at the start or after a non-alphanumeric character, case-insensitive. Err from the closure aborts the expect before anything is written to the guest, so github_login_main exits 1. The refusal names why/remedy (revoke the token) and never echoes the answer.
+        MEASURED, cargo test -p tillandsias-macos-tray on darwin:
+        - Post-fix 4 new tests ok; the crate is 164 passed, 0 failed; clippy -D warnings clean.
+        - PRE-FIX emulation (the old remedy text restored and the refusal disabled, tests unchanged): the_piped_remedy_never_asks_for_a_token FAILED and a_credential_shaped_identity_answer_is_refused_unsent FAILED. NEGATIVE CONTROL an_ordinary_identity_answer_still_passes is ok in both runs (names "Ghpaul Ghosh" and "laughs_out", and a noreply email).
+        - The source-scan arm compiles against the pre-fix tree, so the remedy's red is a real red, not a compile error.
+        NOT MEASURED: a live piped --github-login. It needs a device-flow approval by a human.

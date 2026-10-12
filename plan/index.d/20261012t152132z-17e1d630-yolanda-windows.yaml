@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: remove-the-two-remaining-interactive-prompts-from-install-windows-ps1-per-the-end-user-installer-guideline
+    event:
+      type: note
+      ts: "2026-10-12T15:21:32Z"
+      agent_id: windows-yolanda-opus5-20261012t152131z
+      host: yolanda-windows
+      summary: |
+        SCHEDULED by the operator 2026-10-12 (relayed verbatim by coordinator macuahuitl-fedora): "HyperV and SWAP should not be prompts, our install should add them forcibly as they're hard requirements. Make sure the install paths add users to hyper-v as needed as well as enabling SWAP for our VM, those are signifficant configurations that are required, as well as the custom wsl.config file with progressive memory reap setting that we shouyd ensure is present in user's runtime, at least for our own VM."
+
+        Scope (coordinator, from that ruling); this row now supersedes 756-s8s8:
+        1. Hyper-V Administrators: no Read-Host. When Test-HcsAccess is false, always run the elevated group-add (Windows' own UAC dialog is unavoidable). The sign-out note shows only when IsInRole is still false afterwards. TILLANDSIAS_NO_GROUP_ADD is removed unless a test or CI path needs it as an env-only escape.
+        2. .wslconfig: no [y/N] and no consent branch. Always ensure swap, swapFile, sparseVhd and autoMemoryReclaim=gradual. Missing keys are added. A value conflicting with a hard requirement (swap=0, say) is replaced after the backup is written, and the change goes to the install log, not the screen.
+        3. Ensure present in the user's runtime: the tray checks those keys at startup and restores them, with a backup, if they were removed. They take effect at the next WSL VM restart. Never force wsl --shutdown while other distros are running; a restart is fine only when ours is the sole running distro.
+        4. .wslconfig is GLOBAL. WSL2 runs one utility VM for all distros, so "our VM" means that shared VM. There is no per-distro equivalent for swap or memory reclaim (wsl.conf inside a distro carries neither).
+        Decision made on the user's behalf, and why: both are hard requirements per the operator. Without the Hyper-V membership the tray cannot reach its VM (hcsdiag). Without swap and gradual reclaim, forges are reaped under memory pressure (1339-r9xv measurements).

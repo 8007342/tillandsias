@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: local-web-preview-image-mcp
+    field: next_action
+    value: 'The pinned Wrangler image (images/web-wrangler) and the MCP wiring are on trunk (d74d07f4b), and litmus:local-web-preview passed the target image/MCP path. What is LEFT is acceptance B/C/E evidence with negative controls: (1) an independent Worker-fixture and watch run on the pinned image; (2) refusals of a no-main assets config, a bad runtime type and a remote binding (including a live remote-binding edit, review B3); (3) static images/web and existing MCP tool-call compatibility. Record commands and results in plan/issues/local-web-preview-design-2026-10-07.md. No production credentials or deployment.'
+    ts: "2026-10-11T08:27:52Z"
+    host: yoga
+    replaces_sha256: "47e43bff1a14a1db3b1b11e64f294df6ed2457901a25fa70114a7773536393ed"
+
+events:
+  - packet_id: local-web-preview-image-mcp
+    event:
+      type: note
+      ts: "2026-10-11T08:27:52Z"
+      host: yoga
+      summary: |-
+        sweep of a stale 2026-10-07 yoga claim at the coordinator's request; the claiming OpenCode session is gone

@@ -207,6 +207,7 @@ specs:
   - litmus:validator-surface-currency
   - litmus:fragment-ts-skew
   - litmus:preflight-front-door
+  - litmus:preflight-declarations-host-sed
   - litmus:preflight-runs-or-names-the-capability
   - litmus:litmus-expression-pinning-enforcement-shape
   - litmus:litmus-bindings-reconciliation-shape
@@ -631,6 +632,8 @@ specs:
   status: active
   litmus_tests:
   - litmus:inference-engine-slot-boundary-shape
+  - litmus:inference-tier-table-migration
+  - litmus:inference-llama-server-lane-shape
   - litmus:inference-policy-router-implementation
   - litmus:enclave-isolation
   coverage_ratio: 100

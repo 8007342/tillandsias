@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: every-push-guard-including-the-release-freeze-is-enforced-only-by-a-client-side-hook-that-build-sh-installs-so-a-host-with-no-rust-toolchain-runs-with-zero-enforcement-and-nothing-anywhere-reports-it
+    event:
+      type: note
+      ts: "2026-10-09T01:39:41Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        S2 of the coordinator-ruled shape (work/1255-s4im-c, stacked on S1 work/1255-s4im-b): a SERVER-VISIBLE freeze audit, because any client-side hook can be bypassed by construction.
+        - scripts/lib-freeze-paths.sh holds the ONE freeze predicate plus the marker read, sourced by the pre-push hook, release-freeze.sh, release-preflight and land-queue. The hook fails STRICT when a hermetic copy lacks the lib (every path held), so a missing predicate can only tighten a freeze. Alias trees stay held (the 2026-09-26 decision).
+        - `release-freeze.sh audit <branch>` reads origin ONLY via ls-remote and fetch, so every host gets the same answer. The oldest marker's target..tip, filtered by the predicate, names each breach commit, its author and the held paths. Exit 1 on a breach, 3 when it could not ask. `status` prints the audit on stderr.
+        - release-preflight Gate 6 refuses a breached cut with blocked:freeze-breached. The remedy names the commits: revert them, or re-gate from the new tip and re-freeze there. No operator call is needed. An unreachable origin WARNS (the Gate 5 could-not-run rule); a missing origin is not checked.
+        - land-queue checks the freeze before the gate (hold, no gate spent) AND re-checks at push. A freeze set mid-gate re-queues and pushes nothing. Plan-only candidates still land during a freeze.
+        MEASURED:
+        - On the 1255-s4im red scratch (a hookless push into a frozen linux-next), audit named 80145ac21, its author and crates/tillandsias-core/src/lib.rs, exit 1.
+        - test-release-freeze-audit.sh is 9/9: red, same verdict from a clone that never fetched the breach, plan-only and pre-freeze controls, revert clears it, unreachable is exit 3 not clean, preflight refuses and then passes after the revert.
+        - test-land-queue.sh is 20/20 with 4 new arms (hold before gate, plan-only lands under freeze, freeze set mid-gate re-queues, control lands). Removing either check reds its arm; without the push re-check a mid-gate freeze is pushed straight through.
+        - It was bound by no gate, so it is now wired into build.sh (14 s), along with the audit fixture.
+        - The 13 fixtures that copy the hook hermetically are all green, and test-pre-push-honours-a-live-freeze is 21/21.

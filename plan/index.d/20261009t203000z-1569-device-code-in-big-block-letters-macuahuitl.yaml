@@ -1,0 +1,30 @@
+# Filed 2026-10-09 on macuahuitl from an operator report (yoga Linux forge, v56.10.9.1).
+packets:
+  - packet_id: github-device-login-draws-the-one-time-code-in-large-block-letters
+    order: 1569-bgcd
+    status: in_progress
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [github-login, terminal-ui, end-user, onboarding]
+    estimated_hours: 2
+    title: |
+      The GitHub device login prints its 8-character one-time code as one small line; the operator failed the login on a fresh yoga forge several times in a row because the code was "extremely hard to read". Draw it in large multi-line block letters above the plain, copyable line
+    context: |
+      Operator, 2026-10-09: "I had to run githublogin flow since I failed a few
+      times in a row, mostly the code was extremely hard to read. We need to
+      display those 8 characters in large multi-line blocky characters."
+      run_github_device_login (crates/tillandsias-headless) printed the code
+      through styled_user_code only. Fixed by big_user_code: 5x5 block glyphs
+      for A-Z, 0-9 and '-', a slashed zero, 54 columns for XXXX-XXXX, blush on
+      colour tiers, no escape bytes on the Plain tier. The plain line is kept.
+    exit_criteria:
+      - 'run_github_device_login prints the user code as BIG_GLYPH_ROWS rows of block letters before the plain line; pre-fix: only the one-line code is printed'
+      - 'every character of the user-code alphabet (A-Z, 0-9, -) has its own distinct 5-wide glyph, O and 0 differ, and the full code fits 80 columns; the Plain tier output has no escape bytes'
+      - 'the plain one-line code is still printed (copyable)'
+    verifiable_closure: "cargo test -p tillandsias-headless --bin tillandsias big_ — big_user_code_draws_five_block_rows_per_character and big_glyphs_are_distinct_and_cover_the_code_alphabet; pre-fix result: neither function exists (compile failure = red)."
+    depends_on: []
+    next_action: >
+      Land work/1569-bgcd through the queue; then ask the yoga forge operator
+      to confirm the code reads at a glance on the next login.

@@ -329,6 +329,13 @@ esac
 # long run is not a control: the summary names how many executed steps called
 # yq, so a reader can tell a sound green from a partial one. One line per such
 # step goes to a file (steps may run in a subshell), truncated at each run.
+# ORDER 1268-fx87: each step's STDERR is kept apart from the stdout its verdict
+# is read from, written here when non-empty (one file per step, reset at each
+# run), and named on the step's [FAIL] line so a contaminated or explanatory
+# stream stays one path away rather than silently authoritative.
+LITMUS_STEP_STDERR_DIR="$LITMUS_RUNTIME_DIR/step-stderr"
+rm -rf "$LITMUS_STEP_STDERR_DIR" 2>/dev/null || true
+mkdir -p "$LITMUS_STEP_STDERR_DIR" 2>/dev/null || true
 LITMUS_YQ_DEGRADED_LOG="$LITMUS_RUNTIME_DIR/yq-degraded-steps"
 LITMUS_YQ_DEGRADED=0
 : >"$LITMUS_YQ_DEGRADED_LOG" 2>/dev/null || true
@@ -1240,6 +1247,40 @@ size_matches_filter() {
 #
 # AND THE LINE MUST BE THE STEP'S OWN VERDICT, not a mention in passing: only the
 # LAST non-empty line is consulted, which is where a script states its outcome.
+# ORDER 1268-fx87. The step's verdict as a pure function of one output text:
+# prints P (pass), F (fail), S (skip) or A (advisory), mirroring the arms of the
+# step loop in order. It reads the step_* locals of its caller (bash scopes
+# dynamically) and prints nothing else, so the loop can ask it about stdout
+# alone and about stdout+stderr and log where the two answers differ
+# (LITMUS_VERDICT_DIFF_LOG). A timeout never reaches it: the loop decides 124
+# before any output is read.
+_lt_verdict_of() { # <output> <exit_code>
+    local out="$1" rc="$2" v=""
+    v="$(step_terminal_verdict "$out")"
+    if [[ -n "$v" && -n "$step_assert_exit" && "$rc" != "$step_assert_exit" ]]; then v=""; fi
+    case "$v" in skip) echo S; return 0 ;; advisory) echo A; return 0 ;; esac
+    if [[ -z "$step_structured" && "$rc" -ne 0 && -z "$step_success_pattern" && -z "$step_expected" ]]; then
+        [[ "${TILLANDSIAS_LITMUS_STRICT_EXIT:-1}" != "0" ]] && { echo F; return 0; }
+    fi
+    if [[ -n "$step_structured" ]]; then
+        structured_assert_matches "$out" "$rc" "$step_assert_exit" "$step_assert_contains" \
+            "$step_assert_matches" "$step_assert_nonempty" 2>/dev/null && echo P || echo F
+    elif [[ -n "$step_success_pattern" ]]; then
+        check_signal "$out" "$step_success_pattern" "$step_failure_pattern" 2>/dev/null && echo P || echo F
+    else
+        behavior_matches_output "$out" "$step_expected" "$rc" 2>/dev/null && echo P || echo F
+    fi
+}
+
+# ORDER 1268-fx87: the [FAIL] detail for a step's output, plus the stderr log
+# when the step wrote one. The verdict was read from stdout only.
+_lt_print_output() {
+    printf '%s\n' "         output=${step_output}" >&2
+    if [[ -n "${step_stderr_log:-}" ]]; then
+        printf '%s\n' "         stderr=${step_stderr_log} ($(grep -c '' "$step_stderr_log" 2>/dev/null || echo 0) lines; not read for the verdict, 1268-fx87)" >&2
+    fi
+}
+
 step_terminal_verdict() { # <output> -> prints skip|advisory|"" on stdout
     local out="$1" last=""
 
@@ -1311,14 +1352,14 @@ check_signal() {
 # failed while printing one of its own listed alternatives. A regex field is
 # matched AS a regex.
 #
-# WHAT THIS CANNOT DO, AND WHY IT IS NOT AN OVERSIGHT. There is no
-# assert_stdout_* / assert_stderr_* pair, because the runner redirects every
-# step with `>"$step_capture" 2>&1` — the two streams are MERGED before
-# adjudication can see them, so naming which stream matched is not information
-# this runner still has. Separating them is order 1252-fg9e's executor; when a
-# step's fds arrive separately these fields widen rather than change shape.
-# A field absent by CONSTRAINT reads identically to one nobody thought of
-# unless the code says which, so this paragraph is the difference.
+# EVERY FIELD HERE READS STDOUT (order 1268-fx87). The runner used to redirect
+# every step with `2>&1`, so the streams were MERGED before adjudication and a
+# write to stderr (rustc's warnings under `cargo build -q`) could become the
+# verdict. Each step now captures stderr apart, keeps it in
+# $LITMUS_STEP_STDERR_DIR when non-empty, and names it on the [FAIL] line; a
+# step that means to grade stderr writes `2>&1` into its own command. There is
+# still no assert_stderr_* field: none is needed yet, and adding one is a
+# widening, not a change of shape.
 #
 # A TIMEOUT IS NOT AN ASSERTION FAILURE. timeout(1) reserves 124, and the
 # runner already branches on it — but nothing in this tree is responsible for
@@ -1876,7 +1917,7 @@ run_litmus_test_file() {
             printf '%s\n' "         step '${dkstep}': key '${dkkey}' appears more than once" >&2
         done
         printf '%s\n' "         a YAML loader REJECTS this file; this parser would silently take the last occurrence" >&2
-        printf '%s\n' "         verify with: scripts/check-litmus-yaml-parses.sh" >&2
+        printf '%s\n' "         verify with: tillandsias-plan script run scripts/lua/check-litmus-yaml-parses.lua" >&2
         return 1
     fi
 
@@ -1968,8 +2009,10 @@ run_litmus_test_file() {
         # harmlessly after the step is scored. --kill-after: TERM first
         # (podman writers get a sqlite-rollback window), then KILL for
         # TERM-immune fixtures.
-        local step_capture
+        local step_capture step_errcap step_stderr step_stderr_log=""
         step_capture="$(mktemp "${TMPDIR:-/tmp}/litmus-step-capture.XXXXXX")"
+        # ORDER 1268-fx87: stderr to its own file. The verdict reads stdout.
+        step_errcap="$(mktemp "${TMPDIR:-/tmp}/litmus-step-stderr.XXXXXX")"
         # 956-llei: stall counter + wall clock at launch, diffed at kill time.
         local _lt_psi0 _lt_t0
         _lt_psi0="$(_lt_cpu_stall_us)"; _lt_t0="$(date +%s)"
@@ -2016,16 +2059,45 @@ run_litmus_test_file() {
         _lt_gsnap="$(mktemp -d "${TMPDIR:-/tmp}/litmus-gate-snap.XXXXXX")" && _lt_gate_snapshot "$_lt_gsnap"
         TILLANDSIAS_POLICY_REGIME=fixture TILLANDSIAS_FIXTURE_SCOPE="$LITMUS_FIXTURE_SCOPE" \
             TILLANDSIAS_FIXTURE_GIT_DIRS="$LITMUS_REAL_GIT_DIRS" \
-            LITMUS_STDLIB="${LITMUS_STDLIB}" timeout --kill-after=10s "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"${step_shell_prelude}${step_command}" </dev/null >"$step_capture" 2>&1 || exit_code=$?
+            LITMUS_STDLIB="${LITMUS_STDLIB}" timeout --kill-after=10s "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"${step_shell_prelude}${step_command}" </dev/null >"$step_capture" 2>"$step_errcap" || exit_code=$?
         local _lt_tampered=""
         if [[ -n "$_lt_gsnap" ]]; then
             _lt_tampered="$(_lt_gate_restore "$_lt_gsnap")"
             rm -rf "$_lt_gsnap"
         fi
         step_output="$(cat "$step_capture")"
+        step_stderr="$(cat "$step_errcap")"
         rm -f "$step_capture"
+        # ORDER 1268-fx87. THE VERDICT IS READ FROM STDOUT ONLY. Until this line
+        # the step ran with `2>&1`, so anything that wrote to stderr — rustc's
+        # warnings under `cargo build -q`, a CR, a tool's progress — became a
+        # candidate verdict: four arms were red only where the Windows build
+        # warned and the Linux build did not (yolanda 2026-09-19). A step that
+        # means to grade stderr says so with `2>&1` in its own command. A
+        # non-empty stderr is kept, and every [FAIL] line names it.
+        if [[ -n "$step_stderr" ]]; then
+            step_stderr_log="$LITMUS_STEP_STDERR_DIR/$(basename "${test_file%.yaml}")-step${step_index}.stderr"
+            mv -f "$step_errcap" "$step_stderr_log" 2>/dev/null || step_stderr_log=""
+        fi
+        rm -f "$step_errcap"
+        # Measurement seam (1268-fx87): the same step graded on stdout alone and
+        # on stdout+stderr; every disagreement is one line in the log. A timeout
+        # is decided below without reading output, so it is not compared.
+        if [[ -n "${LITMUS_VERDICT_DIFF_LOG:-}" && "$exit_code" -ne 124 ]]; then
+            local _lt_vo _lt_vm _lt_merged="$step_output"
+            [[ -n "$step_stderr" ]] && _lt_merged+=$'\n'"$step_stderr"
+            _lt_vo="$(_lt_verdict_of "$step_output" "$exit_code")"
+            _lt_vm="$(_lt_verdict_of "$_lt_merged" "$exit_code")"
+            if [[ "$_lt_vo" != "$_lt_vm" ]]; then
+                printf '%s\t%s\t%s\tmerged=%s\tstdout=%s\n' "${test_file#"$PROJECT_ROOT"/}" "$step_index" "${step_name}" "$_lt_vm" "$_lt_vo" \
+                    >>"$LITMUS_VERDICT_DIFF_LOG" 2>/dev/null || true
+            fi
+        fi
         _lt_step_record "$test_file" "$step_index" "$step_timeout_ms" "$_lt_t0_ms" "$exit_code"
+        # gating_points (test-level, below) still read every channel: the
+        # combined record carries both streams, stdout first.
         combined_output+=$'\n'"[${step_index}:${step_name}]${step_output}"
+        [[ -n "$step_stderr" ]] && combined_output+=$'\n'"$step_stderr"
 
         if [[ -n "$_lt_tampered" ]]; then
             printf ' %b[FAIL]%b rc=%s refused:policy:fixture-gate-stamp-write\n' "${RED}" "${NC}" "$exit_code" >&2
@@ -2150,7 +2222,7 @@ run_litmus_test_file() {
                 # "it is somewhere below, on some arms".
                 printf ' %b[FAIL]%b rc=%s\n' "${RED}" "${NC}" "$exit_code" >&2
                 printf '%s\n' "         exit_code=${exit_code} (no success_pattern/expected_behavior declared — non-zero exit fails the step; strict-exit mode)" >&2
-                printf '%s\n' "         output=${step_output}" >&2
+                _lt_print_output
                 return 1
             fi
             printf ' %b[DEAD-CHECK WARNING]%b\n' "${YELLOW}" "${NC}" >&2
@@ -2166,7 +2238,7 @@ run_litmus_test_file() {
                     "$step_assert_exit" "$step_assert_contains" "$step_assert_matches" \
                     "$step_assert_nonempty"; then
                 printf ' %b[FAIL]%b rc=%s\n' "${RED}" "${NC}" "$exit_code" >&2
-                printf '%s\n' "         output=${step_output}" >&2
+                _lt_print_output
                 return 1
             fi
         elif [[ -n "$step_success_pattern" ]]; then
@@ -2182,7 +2254,7 @@ run_litmus_test_file() {
                 printf ' %b[FAIL]%b rc=%s\n' "${RED}" "${NC}" "$exit_code" >&2
                 printf '%s\n' "         success_pattern=${step_success_pattern}" >&2
                 [[ -n "$step_failure_pattern" ]] && printf '%s\n' "         failure_pattern=${step_failure_pattern}" >&2
-                printf '%s\n' "         output=${step_output}" >&2
+                _lt_print_output
                 return 1
             fi
         elif ! behavior_matches_output "$step_output" "$step_expected" "$exit_code"; then
@@ -2192,7 +2264,7 @@ run_litmus_test_file() {
             # runner knew and what it told the reader.
             printf ' %b[FAIL]%b rc=%s\n' "${RED}" "${NC}" "$exit_code" >&2
             printf '%s\n' "         expected=${step_expected}" >&2
-            printf '%s\n' "         output=${step_output}" >&2
+            _lt_print_output
             # ORDER 868-p8xi. An expectation written as a regex alternation is
             # searched for VERBATIM — behavior_matches_output's fallback is
             # `grep -Fqi` — so it can never match and the step fails on every
@@ -2906,7 +2978,7 @@ parse_args() {
                 log_fail "Unknown option: $1"
                 echo "Use: $0 [spec-name] --timeout N --phase <name> --list --json" >&2
                 echo "     --parse-only <file>... loads each file as YAML and REFUSES if it does not load, then reports whether THIS RUNNER can extract its steps (order 1303-2d5g)" >&2
-                echo "                            scripts/check-litmus-yaml-parses.sh is the AUTHORITATIVE gate over the whole corpus; --parse-only answers for named files only" >&2
+                echo "                            scripts/lua/check-litmus-yaml-parses.lua is the AUTHORITATIVE gate over the whole corpus; --parse-only answers for named files only" >&2
                 exit 3
                 ;;
             *)
@@ -2994,7 +3066,7 @@ main() {
         # What remains true, and is the only thing worth saying here, is the
         # difference in SCOPE: this answers for the files named on the command
         # line, and the gate answers for the whole corpus.
-        printf 'note:parse-only judges the FILES NAMED HERE (loads each as YAML, then reports extractability); scripts/check-litmus-yaml-parses.sh is the corpus-wide gate\n' >&2
+        printf 'note:parse-only judges the FILES NAMED HERE (loads each as YAML, then reports extractability); scripts/lua/check-litmus-yaml-parses.lua is the corpus-wide gate\n' >&2
         # ORDER 1303-2d5g. LOAD THE DOCUMENT BEFORE EXTRACTING FROM IT.
         #
         # 1274-cbk7 added the note above, on the theory that naming the
@@ -3015,7 +3087,7 @@ main() {
         # and the two instruments cannot disagree about the same file again.
         #
         # NO READER IS ITS OWN NAMED STATE, not a pass — and the wording and
-        # the stand-aside both match scripts/check-litmus-yaml-parses.sh
+        # the stand-aside both match scripts/lua/check-litmus-yaml-parses.lua
         # deliberately, because two instruments answering the same question
         # must not differ on what "cannot answer" looks like. Extractability is
         # still reported, since that is this flag's own question and a fresh

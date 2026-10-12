@@ -1,0 +1,15 @@
+# @trace spec:inference-engine-slots (SLOT-7), order 482d
+# ADAPTER: logical model id (tier-table.tsv) -> llama-server GGUF reference,
+# as llama.cpp's `-hf <repo>:<quant>` takes it. Every logical id in the table
+# MUST have exactly one row here, and no row may name an id the table lacks
+# (litmus:inference-tier-table-migration).
+# Repos and the Q4_K_M quant were checked against the Hugging Face model API
+# on 2026-10-12 (each repo lists q4_k_m files; the 7B/14B/32B ones are split
+# into shards, which -hf resolves). Q4_K_M matches the quant the measured
+# 482c profile uses.
+#logical_id	hf_repo	quant
+qwen2.5-0.5b-instruct	Qwen/Qwen2.5-0.5B-Instruct-GGUF	Q4_K_M
+qwen2.5-7b-instruct	Qwen/Qwen2.5-7B-Instruct-GGUF	Q4_K_M
+qwen2.5-coder-7b-instruct	Qwen/Qwen2.5-Coder-7B-Instruct-GGUF	Q4_K_M
+qwen2.5-14b-instruct	Qwen/Qwen2.5-14B-Instruct-GGUF	Q4_K_M
+qwen2.5-coder-32b-instruct	Qwen/Qwen2.5-Coder-32B-Instruct-GGUF	Q4_K_M

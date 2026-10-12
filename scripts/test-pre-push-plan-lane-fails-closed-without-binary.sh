@@ -9,7 +9,7 @@
 # ALONE. That is correct for the per-blob validation — "is this YAML, is it a
 # map" is a question yq answers. It is wrong for the two checks further down,
 # which are the FOLD: `tillandsias-plan check --strict-fragments` reads every
-# fragment together, and check-fragment-status-loss.sh asks whether a status
+# fragment together, and check-fragment-status-loss.lua asks whether a status
 # transition a fragment DECLARES actually survives folding. Neither is a
 # property of any single blob and no YAML parser can compute either. So a host
 # with yq and no plan binary passed the fail-closed test, reached those checks,
@@ -92,11 +92,17 @@ cp "$GUARD" scripts/hooks/pre-push-local-gate.sh
 # check-issue-citation-convention.sh is needed by ARM 3: without it an
 # issues-only push is refused for a DIFFERENT missing validator, and arm 3
 # would report the lane over-refusing when the fixture simply arrived unarmed.
-for f in plan-binary-probe.sh gate-stamp.sh common.sh check-fragment-status-loss.sh check-issue-citation-convention.sh; do
+for f in plan-binary-probe.sh gate-stamp.sh common.sh check-issue-citation-convention.sh; do
     cp "$ROOT/scripts/$f" "scripts/$f" 2>/dev/null || true
 done
+# ORDER 1570-mxcg: the status-loss guard is Lua; the lane runs it from scripts/lua/.
+mkdir -p scripts/lua && cp "$ROOT/scripts/lua/check-fragment-status-loss.lua" scripts/lua/ 2>/dev/null || true
 chmod +x scripts/*.sh scripts/hooks/*.sh 2>/dev/null
 printf 'packets: []\n' > plan/index.yaml
+# The Lua status-loss guard runs through proc.run, whose command-policy gate
+# appends to .cache/metrics/command-policy-audit.jsonl (1443-w9hf) — gitignored
+# in the real checkout, so ignored here too or it reads as a non-plan change.
+printf '.cache/\n' > .gitignore
 printf 'base\n' > plan/issues/existing.md
 G add -A >/dev/null; G commit -q -m base
 git push -q -u origin linux-next

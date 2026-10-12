@@ -1,0 +1,15 @@
+# Gate step 1630-dwab — when the preflight door KILLs a declared checkout
+# writer, or a guard that names one, it removes the writer's declared
+# in-checkout artifacts (`artifacts=<basename-glob>` in
+# scripts/portability/checkout-writers.txt): untracked files only, each by its
+# literal path. build.sh's _pf_run_guard is extracted against a scratch git
+# repository whose planted writer IGNORES TERM, so the KILL lands on every OS:
+# the trunk door (sweep call removed) leaves the copies and check-bare-mktemp
+# refuses them, the fixed door leaves none and it says ok, in one run.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the door sweeps a killed writer's declared in-checkout artifacts (1630-dwab)"
+STEP_LUA="scripts/lua/test-door-declared-artifact-sweep.lua"
+STEP_ERROR="the preflight door no longer removes a killed checkout writer's declared artifacts, or removed a tracked or undeclared file (1630-dwab) — see the FAIL lines above"
+STEP_OK="Door declared-artifact sweep fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-12 darwin ok:door-declared-artifact-sweep:6 arms"

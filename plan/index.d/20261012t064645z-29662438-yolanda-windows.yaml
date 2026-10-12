@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: port-check-wt-reparse-workarounds-deleted-sh-to-lua-shell-to-lua-burndown
+    field: status
+    value: completed
+    ts: "2026-10-12T06:46:45Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: port-check-wt-reparse-workarounds-deleted-sh-to-lua-shell-to-lua-burndown
+    event:
+      type: completed
+      ts: "2026-10-12T06:46:45Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: Landed in run 40 as 94157a56f (PR #353, work/1625-n3t3 head 4d53e6e6c), gate green per macuahuitl-fedora. Verified on origin/linux-next: scripts/lua/check-wt-reparse-workarounds-deleted.lua present, scripts/check-wt-reparse-workarounds-deleted.sh deleted.

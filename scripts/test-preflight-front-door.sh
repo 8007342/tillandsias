@@ -9,13 +9,23 @@ ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; cd "$ROOT" || exit 1
 # ORDER 1516-wru4: NEVER PLANT IN THE LIVE CHECKOUT. The arms below plant
 # guards and gate steps and append to build.sh; run in place, a concurrent gate
 # or boundary snapshot in this checkout saw them. So the fixture re-execs itself
-# inside a detached scratch worktree (target/ is ignored, so the live status
-# does not move), overlaid with the live tracked files so uncommitted edits are
+# inside a detached scratch worktree under $TMPDIR (outside the checkout, so the
+# live status does not move; 1600-nn5b moved it out of target/plan-scratch so
+# the preflight door's per-guard TMPDIR sweep can remove it after a KILL),
+# overlaid with the live tracked files so uncommitted edits are
 # still what is tested. A sampler watches the live tree the whole run and the
 # outer half refuses if its status or build.sh moved.
 if [ -z "${FRONT_DOOR_SCRATCH:-}" ]; then
-    mkdir -p "$ROOT/target/plan-scratch"
-    SCR="$(mktemp -d "$ROOT/target/plan-scratch/front-door.XXXXXX")"
+    SCR="$(mktemp -d "${TMPDIR:-/tmp}/front-door.XXXXXX")"
+    sampler=""
+    # 1600-nn5b: the worktree is removed on EVERY exit, not only after a normal
+    # return. A signal exits, which runs this. A KILL is the door's sweep's job.
+    outer_cleanup() {
+        [ -z "$sampler" ] || kill "$sampler" 2>/dev/null
+        git worktree remove --force "$SCR" >/dev/null 2>&1; rm -rf "$SCR" "$SCR.moved"
+    }
+    trap outer_cleanup EXIT
+    trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP
     git worktree add -q --detach "$SCR" HEAD >/dev/null 2>&1 || { echo "FAIL: cannot create scratch worktree"; exit 1; }
     git diff --name-only -z HEAD | while IFS= read -r -d '' f; do
         if [ -e "$f" ]; then mkdir -p "$SCR/$(dirname "$f")"; cp -p "$f" "$SCR/$f"; else rm -f "$SCR/$f"; fi
@@ -296,16 +306,36 @@ fi
 # Ten seconds of headroom and not more, because pirria IS the floor host: there
 # is no slower machine for this number to be generous towards. 180 would be a
 # round number, not a measured one.
-BUDGET_S="${TILLANDSIAS_PREFLIGHT_BUDGET_S:-150}"
+#
+# ORDER 1616-njfd: THE BUDGET IS PER REGIME, and the door's own summary names
+# it (budget=<n>s budget-regime=<r>, set by build.sh's _pf_budget from a
+# measurement: darwin 200 s, darwin under taskpolicy -b 415 s, the floor 150 s).
+# The nested run inherits this run's regime, so judging by the number it prints
+# is judging by the regime it ran in. TILLANDSIAS_PREFLIGHT_BUDGET_S still wins.
+# A summary that names no budget (a door older than 1616) is judged against the
+# floor's 150 s, as before.
+judge_budget() {  # $1 = the preflight's output; prints one ok/bad line
+    local _out="$1" _line="" _l _wall="" _budget=150 _from="the floor default"
+    # The LAST summary line, never a guard's own output, which may say wall= too.
+    while IFS= read -r _l; do
+        case "$_l" in *:preflight:ran=*) _line="$_l" ;; esac
+    done <<< "$_out"
+    if [[ "$_line" =~ wall=([0-9]+)s ]]; then _wall="${BASH_REMATCH[1]}"; fi
+    if [ -n "${TILLANDSIAS_PREFLIGHT_BUDGET_S:-}" ]; then
+        _budget="$TILLANDSIAS_PREFLIGHT_BUDGET_S"; _from="TILLANDSIAS_PREFLIGHT_BUDGET_S"
+    elif [[ "$_line" =~ budget=([0-9]+)s\ budget-regime=([a-z-]+) ]]; then
+        _budget="${BASH_REMATCH[1]}"; _from="regime ${BASH_REMATCH[2]}"
+    fi
+    if [ -z "$_wall" ]; then
+        bad "the verdict does not report its wall clock"
+    elif [ "$_wall" -le "$_budget" ]; then
+        ok "the whole run completes inside the budget (${_wall}s <= ${_budget}s, $_from)"
+    else
+        bad "the run exceeded the budget (${_wall}s > ${_budget}s, $_from) — a guard grew slow, or the budget is wrong"
+    fi
+}
 out="$(./build.sh --preflight 2>&1)"; rc=$?
-wall="$(printf '%s' "$out" | grep -oE 'wall=[0-9]+s' | tail -1 | tr -cd '0-9')"
-if [ -z "$wall" ]; then
-    bad "the verdict does not report its wall clock"
-elif [ "$wall" -le "$BUDGET_S" ]; then
-    ok "the whole run completes inside the budget (${wall}s <= ${BUDGET_S}s)"
-else
-    bad "the run exceeded the budget (${wall}s > ${BUDGET_S}s) — a guard grew slow, or the budget is wrong"
-fi
+judge_budget "$out"
 
 # ── ARM 7: --full removes the deadline, and says so ────────────────────────
 if grep -q 'FLAG_PREFLIGHT_FULL' build.sh && grep -q 'deadline' build.sh; then

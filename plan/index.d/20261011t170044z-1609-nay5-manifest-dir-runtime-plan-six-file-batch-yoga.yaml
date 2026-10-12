@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11): one manifest-dir-runtime burndown batch, 6 files, 6 sites (the item ceiling).
+packets:
+  - packet_id: manifest-dir-runtime-convert-six-one-site-tillandsias-plan-files-answer-expert-serve-forgotten-fragments-groundtruth-methodology
+    order: 1609-nay5
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [manifest-dir-runtime, rust, test-hermeticity, worktrees]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-plan/src/answer.rs
+      - crates/tillandsias-plan/src/expert_serve.rs
+      - crates/tillandsias-plan/src/forgotten.rs
+      - crates/tillandsias-plan/src/fragments.rs
+      - crates/tillandsias-plan/src/groundtruth.rs
+      - crates/tillandsias-plan/src/methodology.rs
+      - scripts/portability/manifest-dir-env-floor.txt
+    title: |
+      manifest-dir-runtime batch: the single compile-time env!("CARGO_MANIFEST_DIR") test site in each of tillandsias-plan src/answer.rs, expert_serve.rs, forgotten.rs, fragments.rs, groundtruth.rs and methodology.rs reads the manifest dir at runtime, and the six floor lines are removed
+    context: |
+      The manifest-dir-runtime backlog (methodology/convergence.yaml, opened by 1590-j20f / #321). A dedicated burndown PR batched under item_ceiling_sites (6), at the coordinator's request.
+      Sites, each with floor line 1 at trunk:
+        src/answer.rs:2255        repo root via "../.."
+        src/expert_serve.rs:575   manifest dir
+        src/forgotten.rs:315      repo root
+        src/fragments.rs:4760     the real plan/index.yaml
+        src/groundtruth.rs:1158   repo root
+        src/methodology.rs:967    repo root
+      All six were clean in taken-by after a fetch. Based on trunk after #330 (1608-qb2c), because both remove lines of scripts/portability/manifest-dir-env-floor.txt.
+    exit_criteria:
+      - 'the 6 sites read `std::env::var("CARGO_MANIFEST_DIR")` (a manifest_dir() helper per test module, or an inline runtime read inside an existing helper), and none of the six files has a compile-time CARGO_MANIFEST_DIR site in test code'
+      - 'the six floor lines are removed in the same commit, and scripts/lua/check-manifest-dir-env.lua passes with the test count down by 6'
+      - 'tillandsias-plan --lib passes before and after, in the same run'
+    unscoreable: "a burndown batch: the guard's count and the crate's tests are its evidence"
+    depends_on: []
+    related: [1590-j20f, 1608-qb2c]
+    next_action: >
+      Convert the 6 sites, remove the six floor lines, run tillandsias-plan --lib and check-manifest-dir-env.lua before and after. After #330 lands, base on trunk, then preflight and push as separate plain commands.
+    provenance: |
+      Filed by yoga (forge) on macuahuitl-fedora's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T17:00:44Z"
+        host: yoga
+        summary: |-
+          A 6-file manifest-dir-runtime batch (tillandsias-plan answer, expert_serve, forgotten, fragments, groundtruth, methodology; 6 sites), at the coordinator's request.

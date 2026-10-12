@@ -6,6 +6,9 @@
 # used to read that exit code as "this tray predates --reset-state", skipping
 # the one repair the guest needed (measured on yolanda 2026-09-27, v56.9.27.2).
 # The probe now also reads the skip line (tillandsias-core's pinned phrase).
+# Since 1565-qtuk the probe IS the SOFT reset call (the opt-out probe also
+# provisioned, so every install provisioned twice), and the unclaimed-failure
+# arm reads SUPPORTED: the reset ran, and the installer Dies on its verdict.
 #
 # The fixture cuts the probe between exact-once markers and RUNS it in
 # PowerShell against four stub trays (.cmd): unknown flag, accepted-but-failed,

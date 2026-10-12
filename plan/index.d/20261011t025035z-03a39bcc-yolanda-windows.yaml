@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-litmus-fixture-that-runs-git-worktree-prune-on-the-operators-repo-inside-the-wsl-guest-deletes-every-windows-worktree-whose-c-path-the-guest-cannot-see
+    field: status
+    value: completed
+    ts: "2026-10-11T02:50:35Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: a-litmus-fixture-that-runs-git-worktree-prune-on-the-operators-repo-inside-the-wsl-guest-deletes-every-windows-worktree-whose-c-path-the-guest-cannot-see
+    event:
+      type: completed
+      ts: "2026-10-11T02:50:35Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: 64383d50e (#302: fixtures no longer prune the checkout; check-fixture-prunes-checkout.lua guards it) + Windows measurement 2026-10-11: a Git Bash worktree survives both litmus tests run in the guest; positive control (the old prune from the guest) deletes it

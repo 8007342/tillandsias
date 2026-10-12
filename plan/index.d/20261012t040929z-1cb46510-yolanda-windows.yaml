@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: port-check-wt-reparse-workarounds-deleted-sh-to-lua-shell-to-lua-burndown
+    field: status
+    value: in_progress
+    ts: "2026-10-12T04:09:29Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: port-check-wt-reparse-workarounds-deleted-sh-to-lua-shell-to-lua-burndown
+    event:
+      type: note
+      ts: "2026-10-12T04:09:29Z"
+      host: yolanda-windows
+      summary: |-
+        wip-override by yolanda-windows: coordinator-assigned shell-to-lua port 2026-10-11; the 20 held rows are older holds queued for a release review with the coordinator — admitted past: refused:set-field:wip-limit:20/3 — yolanda-windows already holds 20 in_progress packet(s) outside a story: 798-vxj5, 958-w4kq, 1268-fx87, 1437-3iux, 1553-gsp2, 1553-5x9x, 1553-6e3q, 1553-q3wi, 1554-prxf, 1556-b2tq, 1559-9uvb, 1559-sqzp, 1559-2uw3, 1560-g5d9, 1562-uxhc, 1563-ms7e, 1563-u2yx, 1565-qtuk, 1567-9fgi, 1583-r9it (1367-2sbc; the limit is 3, from methodology/distributed-work.yaml packet_discipline.wip_limit).

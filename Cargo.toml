@@ -34,6 +34,17 @@ edition = "2024"
 license = "GPL-3.0-or-later"
 authors = ["Tlatoani"]
 
+# 1572-dmus: clippy 1.99 (pinned in rust-toolchain.toml, 1562-tc7p) fires
+# double_must_use on the #[must_use] that async_trait's OWN expansion adds to
+# trait methods whose return type is already must-use (control-wire, core,
+# podman, vm-layer, ...). Nothing in our source asks for it. Declared ONCE here
+# and inherited by every member (`[lints] workspace = true`), so every clippy
+# run agrees: the `-A clippy::double_must_use` flag on build.sh's and
+# local-ci.sh's clippy steps never reached scripts/build-macos-tray.sh.
+# Remove when async-trait stops emitting the attribute.
+[workspace.lints.clippy]
+double_must_use = "allow"
+
 [workspace.dependencies]
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["codec"] }

@@ -28,7 +28,13 @@ else
     credential_cmd=(scripts/check-credential-channel.sh)
     workspace_cmd=(cargo check --workspace)
     headless_cmd=(cargo test -p tillandsias-headless --bin tillandsias --no-fail-fast)
-    services_cmd=(scripts/check-forge-service-health.sh)
+    # 1561-47a8: the service check is Lua now, run by the plan binary. A
+    # forge with no runnable plan binary reports that as the failure reason.
+    if plan_bin="$(. scripts/plan-binary-probe.sh && resolve_plan_binary)"; then
+        services_cmd=("$plan_bin" script run scripts/lua/check-forge-service-health.lua)
+    else
+        services_cmd=(printf 'failed:no-plan-binary\n')
+    fi
     eligibility_cmd=(scripts/e2e-preflight.sh eligibility)
 fi
 
@@ -124,7 +130,7 @@ elif [ "$services_rc" -eq 0 ] && [[ "$services_verdict" =~ ^skip:[a-z0-9-]+$ ]];
     skip=$((skip + 1))
 else
     case "$services_verdict" in
-        failed:*) services_reason="$services_verdict" ;;
+        failed:*|down:*) services_reason="$services_verdict" ;;
         *) services_reason="invalid-output" ;;
     esac
     printf 'FAIL service-health %s\n' "$services_reason"

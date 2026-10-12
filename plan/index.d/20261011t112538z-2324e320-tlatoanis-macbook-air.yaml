@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: with-a-shared-cargo-target-dir-a-test-that-reads-files-through-env-cargo-manifest-dir-runs-a-binary-compiled-in-another-worktree-and-reads-that-checkouts-files
+    event:
+      type: note
+      ts: "2026-10-11T11:25:38Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261011t112538z
+      host: tlatoanis-macbook-air
+      summary: |
+        FINGERPRINT QUESTION, MEASURED on tlatoanis-macbook-air 2026-10-11, cargo 1.99.0 (5f94df478 2026-08-27).
+        Probe: one tiny crate, two copies A and B, one CARGO_TARGET_DIR. main prints env!("CARGO_MANIFEST_DIR") and env!("J20F_PROBE").
+        - A, J20F_PROBE=1: compiled; it printed A's path.
+        - B, J20F_PROBE=1: NOT recompiled; it printed A's path.
+        - B, J20F_PROBE=2: recompiled; it printed B's path.
+        rustc's dep-info (target/debug/deps/*.d) carries BOTH `# env-dep:CARGO_MANIFEST_DIR=...` and `# env-dep:J20F_PROBE=2`. The dep-info cargo keeps in its fingerprint (.fingerprint/*/dep-bin-*) carries only `src/main.rs` and `J20F_PROBE`. On the real tree, .fingerprint/tillandsias-policy-a50457652de1bafe/dep-test-bin-tillandsias-policy (31 bytes) holds only `src/main.rs`.
+        ANSWER: cargo's env-dep tracking does NOT cover CARGO_MANIFEST_DIR. It drops the env-deps for variables cargo sets for rustc itself and keeps user variables.
+        Exposed the same way: other cargo-set variables whose value differs between worktrees, i.e. CARGO_MANIFEST_DIR and CARGO_MANIFEST_PATH. CARGO_PKG_* do not differ between worktrees of one tree. OUT_DIR, CARGO_TARGET_TMPDIR and CARGO_BIN_EXE_* point into the shared target, so they are correct.
+        NOT exposed: user-set env!() variables, which are fingerprinted (J20F_PROBE rebuilt).
+        The tree uses only CARGO_MANIFEST_DIR (159 sites) and CARGO_PKG_VERSION (8). One adjacent case is NOT fixed by this row: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../VERSION")) in tillandsias-secure-channel/src/lib.rs:127 is non-test code. It embeds A's VERSION at compile time, and a VERSION change only in B does not rebuild, if cargo records that dep by its absolute A path (inferred, not measured).
+        Fixture: scripts/lua/test-manifest-dir-env.lua arm 5 keeps the control (compile-time read follows A) live on every --check, so a cargo that starts tracking it fails that arm by name.
+
+        PR #321 (work/1590-j20f) carries the fix shape, the counting guard and fixture, and criterion 1 measured on tillandsias-policy. The remaining 154 test sites are the proposed advisory backlog manifest-dir-runtime.

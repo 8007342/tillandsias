@@ -106,7 +106,7 @@ passing, and nothing in that view reports whether anything else will ever call
 it. Care does not close a gap you cannot see — a checklist or a decider does.
 
 **Order 1325-ygq5 is the mechanical half**: a diff-scoped decider that refuses
-a newly added `test-*.sh` nothing invokes, the way `check-litmus-bindings.sh`
+a newly added `test-*.sh` nothing invokes, the way `check-litmus-bindings.lua`
 (660-ryhn) already refuses an unbound litmus. This page is the human half, and
 it is here because a decider lands on new work while a habit reaches the work
 that predates it.

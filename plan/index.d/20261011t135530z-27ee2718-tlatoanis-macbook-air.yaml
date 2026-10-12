@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: test-awk-float-lc-numeric-leaks-its-mutant-lcnum-copies-into-the-checkout-when-the-preflight-deadline-kills-it
+    event:
+      type: note
+      ts: "2026-10-11T13:55:30Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261011t135530z
+      host: tlatoanis-macbook-air
+      summary: |
+        Landed #322 as 6c62b0e5e, land gate green. The exit criteria, each exercised:
+        1. After a deadline-killed test-awk-float-lc-numeric run inside ./build.sh --preflight on darwin, `git status --porcelain --untracked-files=all` showed 0 mutant-lcnum entries. MEASURED on the #322 branch: deadline 11 s, 0 left. The three preflights before the fix each leaked 3.
+        2. The pre-fix script is shown leaking under the same kill in the same run, by the land's fixture scripts/lua/test-awk-float-lc-numeric-signal.lua (gate step 455):
+           - its CONTROL constructs the leak deterministically, with a shell that ignores TERM so the door's KILL always lands; green on darwin and on Linux, after the Linux eviction fix;
+           - its REAL arm TERMs the script while a sed shim holds its first producer, and requires an exit on TERM with no mutant left.
+           - Against the pre-fix script the fixture FAILed 3/3; post-fix it is ok on both platforms.
+        Mechanism: bash defers a trap behind a foreground $(...), so the EXIT trap had not run when the KILL landed. Fix: producers run under `cmd & wait $!`, with TERM/INT/HUP traps that exit.

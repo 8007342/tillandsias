@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: publish-local-collapses-every-failure-into-runtime-unavailable-and-service-status-cannot-say-why-a-publish-failed
+    event:
+      type: list-replace
+      ts: "2026-10-12T06:29:05Z"
+      agent_id: linux-lenovinha-claude-20261012t062859z
+      host: lenovinha
+      field: exit_criteria
+      items:
+        - "fault injection at each podman step (fake podman returning non-zero at ps, inspect, image exists, run, and router start) yields a DISTINCT, stable reason code naming the step, never raw podman output. The pre-fix code returns the same string for every step, in the same run"
+        - "after a failed publish, service_status reports the last failure: step, reason code, timestamp and who can remedy it (host-side retry vs operator action). Before the fix it is empty"
+        - "the visual-chess static failure is reproduced on a Linux host with a Wrangler-config project and named by its step code"
+        - "a static publish whose project has no servable root (no var/html, public, dist or root index.html) fails as a SOURCE-SELECTION failure, e.g. source_not_found: no servable root (looked at var/html, public, dist, index.html), never runtime_unavailable or a podman error. The pre-fix code answers \"runtime_unavailable: Podman operation failed\" for the same tree, in the same run (lenovinha replay: podman exec <forge> realpath -e -- <root>/index.html exits 1 when the root has no index.html)"
+        - "static honors a root Wrangler config's assets.directory when one exists, ahead of the fixed var/html, public, dist list: an assets-only fixture whose assets.directory is ./www (none of the fixed dirs present) publishes www/ statically"
+        - "when the root Wrangler config names an assets.directory that is absent (e.g. dist/ not built yet, as on visual-chess), the refusal says so, names the configured directory and the project's configured build command when one is declared, so the agent knows to build first. No raw config content reaches the response"
+      summary: |-
+        Coordinator-sharpened shape (macuahuitl, 2026-10-12): the yoga static failure is a source-selection failure, confirmed both ways. lenovinha replayed the exact verify_subset exec (realpath -e on a missing root index.html exits 1, mapped to Podman operation failed); macuahuitl read visual-chess (no root index.html, var/html or public; dist/ absent because the forge cannot build wasm32, 1625-grk8; wrangler.jsonc assets.directory=./dist). The three original criteria are kept; three are added: source_not_found, assets.directory honored, and absent-assets-dir names the build step.

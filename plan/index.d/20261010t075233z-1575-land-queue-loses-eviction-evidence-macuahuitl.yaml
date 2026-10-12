@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: land-queue-deletes-the-gate-log-on-eviction-even-when-the-pr-comment-carrying-its-tail-failed-so-the-failure-reason-survives-nowhere
+    order: 1575-lqev
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [land-queue, gate, evidence, fail-loud]
+    estimated_hours: 1
+    owned_files:
+      - scripts/land-queue.sh
+    title: |
+      On a gate failure, scripts/land-queue.sh puts the gate log's last 5 lines into a PR comment and then rm -f's the log. When the comment fails (advisory:land-queue:comment-failed), the reason for the eviction is recorded nowhere: stdout carries only evict:land-queue:<n>:gate-failed:rc=1.
+    context: |
+      Measured 2026-10-10 on macuahuitl: the queue evicted #282 (work/1570-k5yt) at 00:32:15 PDT with gate-failed:rc=1, the comment failed at 00:32:45, and the mktemp gate log had already been deleted. Recovering the reason took a full re-gate (~15 min of the operator desktop's IO budget). The comment usually fails because gh is down or the keyring is locked, which is also when the operator is least likely to be watching.
+    exit_criteria:
+      - 'on eviction the gate log is kept under target/land-queue/<pr>-<epoch>.log and its path is printed on the evict line; pre-fix: the log is removed'
+      - 'when pr_comment fails, the failing tail is printed to the queue''s own stdout as well'
+      - 'a test-land-queue arm with a failing fake gate and a failing fake gh asserts the kept log path exists and the tail appears on stdout; it fails on the pre-fix script'
+    verifiable_closure: |
+      bash scripts/test-land-queue.sh with the new arm red before the fix and green after.
+      unscoreable: unpinnable-until-the-guard-exists — the arm is the deliverable, written in the same commit as the fix.
+    depends_on: []
+    events:
+      - type: filed
+        ts: "2026-10-10T07:52:33Z"
+        agent_id: macuahuitl-fedora-claude
+        host: macuahuitl
+        summary: |-
+          Filed after the #282 eviction lost its reason; re-gating to recover it.
+    next_action: >
+      In land-queue.sh's gate-failed branch, move the log under target/land-queue/ instead of deleting it, and echo the tail on stdout when pr_comment fails. Add the test arm.

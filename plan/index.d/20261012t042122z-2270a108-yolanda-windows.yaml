@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: port-check-wt-reparse-workarounds-deleted-sh-to-lua-shell-to-lua-burndown
+    event:
+      type: note
+      ts: "2026-10-12T04:21:22Z"
+      agent_id: windows-yolanda-opus5-20261012t042122z
+      host: yolanda-windows
+      summary: |
+        QUIRKS KEPT IN THE PORT (PR #353, head 4d53e6e6c). The coordinator asked for these to be recorded here rather than fixed. Each was measured identical in the .sh and the Lua.
+        1. FALSE NEGATIVE: the comment part of a line is everything from the FIRST "//". On the line: let s = "http://x"; wt_safe_title(); the identifier sits after a // inside a string literal. It is treated as a comment, and both give ok:...:1 mention(s), all in comments. A re-introduced predicate on a line that holds a URL literal before it would pass.
+        2. FALSE POSITIVE: a /* */ block comment is not recognised. An identifier inside an inline or multi-line block comment counts as CODE, and both give violation:...:1. Today the tree has 4 mentions, all // comments, so the false positive is latent.
+        3. STDERR ONLY: when the .sh got an absolute Windows-style path (C:/...), its file and line split broke on the drive colon. The Lua prints path:line as given. No reader parses that stderr, and the verdict lines are unchanged.
+        A follow-up fix needs a Rust-aware comment stripper (string literals, block comments, raw strings), and it changes the verdict on cases 1 and 2. File it as its own row if wanted.

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-cheatsheet-refs-hard-requires-ripgrep-which-reddened-the-windows-gate-twenty-minutes-in-and-is-a-pure-reference-resolver-over-cheatsheets-and-sources-so-it-is-ported-to-scripts-lua-with-no-host-tool-at-all
+    event:
+      type: note
+      ts: "2026-10-10T16:52:56Z"
+      agent_id: forge-forge-tillandsias-claude-20261009t193211z
+      host: yoga
+      summary: |-
+        RE-SCOPED (yoga 2026-10-10, coordinator-approved): larger than filed. Three fixtures use check-cheatsheet-refs.sh as their SUBJECT for other machinery — test-gate-step-skip-exit.sh (pins STEP_SKIP_EXIT via the .sh's exit-2 no-rg path), test-tool-dispatch-rejects-unusable-host-tool.sh (runs it under a broken rg) and test-tool-dispatch-lib.sh (lists it as a tool-dispatch adopter). The Lua port removes rg entirely, so those three are RE-SUBJECTED onto a stub checker kept in each fixture's own data (not another real rg checker, which is also in the backlog and would strand them again). Whether check-ripgrep-available.sh and the rg row of check-host-tools.sh's SPEC are still needed once nothing uses rg is filed separately. Estimate raised from the filed size to ~6 h.

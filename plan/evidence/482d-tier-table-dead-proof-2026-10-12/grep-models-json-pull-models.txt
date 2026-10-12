@@ -1,0 +1,35 @@
+# git grep -n -E 'models\.json|pull-models' 1f50dcc3f -- ':!plan'   (order 482d dead-proof)
+cheatsheets/runtime/local-inference.md:17:# freshness: auditor=forge-tillandsias-20260913t0830z date=2026-09-13 verdict=updated scope=re-validated live: /api/version,/api/tags,/api/embed and the models.json tier table all verified; corrected the engine baseline (was "ollama 0.5.x" — the image pins v0.34.0 at images/inference/entrypoint.sh:308 and a live forge measured 0.33.2); noted OLLAMA_HOST was unset in the 2026-09-13 forge environment despite the pre-set claim
+cheatsheets/runtime/local-inference.md:28:- Tillandsias model tier definitions: `images/default/config-overlay/ollama/models.json` (canonical tier list, baked into every forge image).
+cheatsheets/runtime/local-inference.md:55:`images/default/config-overlay/ollama/models.json`. The inference
+cheatsheets/runtime/local-inference.md:56:container's `pull-models.sh` reads this file at first boot and pulls
+cheatsheets/runtime/local-inference.md:209:- `images/default/config-overlay/ollama/models.json` — canonical tier definitions; this file is the source of truth, this cheatsheet is a snapshot.
+cheatsheets/runtime/local-inference.md:210:- `images/default/config-overlay/ollama/pull-models.sh` — the GPU-aware tier puller; useful reference for what gets pulled when.
+images/default/cheatsheets/runtime/local-inference.md:17:# freshness: auditor=forge-tillandsias-20260913t0830z date=2026-09-13 verdict=updated scope=re-validated live: /api/version,/api/tags,/api/embed and the models.json tier table all verified; corrected the engine baseline (was "ollama 0.5.x" — the image pins v0.34.0 at images/inference/entrypoint.sh:308 and a live forge measured 0.33.2); noted OLLAMA_HOST was unset in the 2026-09-13 forge environment despite the pre-set claim
+images/default/cheatsheets/runtime/local-inference.md:28:- Tillandsias model tier definitions: `images/default/config-overlay/ollama/models.json` (canonical tier list, baked into every forge image).
+images/default/cheatsheets/runtime/local-inference.md:55:`images/default/config-overlay/ollama/models.json`. The inference
+images/default/cheatsheets/runtime/local-inference.md:56:container's `pull-models.sh` reads this file at first boot and pulls
+images/default/cheatsheets/runtime/local-inference.md:209:- `images/default/config-overlay/ollama/models.json` — canonical tier definitions; this file is the source of truth, this cheatsheet is a snapshot.
+images/default/cheatsheets/runtime/local-inference.md:210:- `images/default/config-overlay/ollama/pull-models.sh` — the GPU-aware tier puller; useful reference for what gets pulled when.
+images/default/config-overlay/ollama/pull-models.sh:3:# pull-models.sh — GPU-aware model tier puller for Tillandsias inference.
+images/default/config-overlay/ollama/pull-models.sh:5:# Reads models.json, detects available VRAM, and pulls models the
+images/default/config-overlay/ollama/pull-models.sh:10:#   pull-models.sh --init        Pull only pull_at_init=true models (T0+T1)
+images/default/config-overlay/ollama/pull-models.sh:11:#   pull-models.sh --background  Pull all models supported by hardware
+images/default/config-overlay/ollama/pull-models.sh:12:#   pull-models.sh --init /path/to/models.json   Use custom models.json path
+images/default/config-overlay/ollama/pull-models.sh:30:                echo "[pull-models] ERROR: unknown argument or missing file: $arg" >&2
+images/default/config-overlay/ollama/pull-models.sh:38:    echo "[pull-models] ERROR: specify --init or --background" >&2
+images/default/config-overlay/ollama/pull-models.sh:42:# ── Locate models.json ─────────────────────────────────────────
+images/default/config-overlay/ollama/pull-models.sh:45:    MODELS_JSON="$SCRIPT_DIR/models.json"
+images/default/config-overlay/ollama/pull-models.sh:49:    echo "[pull-models] ERROR: models.json not found at $MODELS_JSON" >&2
+images/default/config-overlay/ollama/pull-models.sh:66:echo "[pull-models] Detected VRAM: ${VRAM_GB}GB"
+images/default/config-overlay/ollama/pull-models.sh:75:            echo "[pull-models] ERROR: ollama not responding after ${max_attempts}s" >&2
+images/default/config-overlay/ollama/pull-models.sh:82:echo "[pull-models] Waiting for ollama..."
+images/default/config-overlay/ollama/pull-models.sh:84:echo "[pull-models] ollama ready"
+images/default/config-overlay/ollama/pull-models.sh:100:        echo "[pull-models] $TIER_ID ($MODEL_NAME) — skipped (needs ${VRAM_REQ}GB VRAM, have ${VRAM_GB}GB)"
+images/default/config-overlay/ollama/pull-models.sh:110:    echo "[pull-models] $TIER_ID ($MODEL_NAME) — pulling [role: $ROLE]..."
+images/default/config-overlay/ollama/pull-models.sh:112:        echo "[pull-models] $TIER_ID ($MODEL_NAME) — ready"
+images/default/config-overlay/ollama/pull-models.sh:115:        echo "[pull-models] $TIER_ID ($MODEL_NAME) — FAILED" >&2
+images/default/config-overlay/ollama/pull-models.sh:119:echo "[pull-models] Done. Pulled: $PULLED, Skipped (insufficient VRAM): $SKIPPED"
+openspec/changes/PLAN-from-java-audits.md:26:5. **`local_model_testrun.md`** confirms the empirical side: the model worked out `qwen2.5:0.5b` is fine for routing and `llama3.2:3b` is fine for analysis, but had to **discover this by trial and error against a live ollama server** — a `models.json` registry would have answered it in one read.
+openspec/litmus-tests/litmus-expert-serve-endpoint-shape.yaml:53:    command: "curl -s http://127.0.0.1:21436/v1/models > /tmp/.litmus-920e/models.json && test \"$(jq -r '.data[].id' /tmp/.litmus-920e/models.json | paste -sd ,)\" = 'all,spec,code,methodology,cheatsheet' && jq -e '.object == \"list\"' /tmp/.litmus-920e/models.json >/dev/null && echo 'ok: five-domain-models'"
+scripts/bench-inference-floor.sh:361:# Model set. Defaults to the models.json tier table; override with a

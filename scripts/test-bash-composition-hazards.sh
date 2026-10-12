@@ -31,6 +31,13 @@ if [ ! -x "$BIN" ]; then
     exit 0
 fi
 
+# The advisory itself is Lua since 1268-fx87 (scripts/lua/check-bash-composition-hazards.lua),
+# run on the plan binary's `script run`, resolved by execution like every caller.
+. "$ROOT/scripts/plan-binary-probe.sh"
+PLAN="$(resolve_plan_binary)" || { echo "FAIL: no runnable tillandsias-plan to run the advisory"; exit 1; }
+case "$PLAN" in /*|[A-Za-z]:*) ;; *) PLAN="$ROOT/${PLAN#./}" ;; esac
+advisory() { "$PLAN" script run "$ROOT/scripts/lua/check-bash-composition-hazards.lua"; }
+
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
@@ -95,13 +102,13 @@ case "$pos_out" in
 esac
 
 # --- ARM 3: advisory tier never fails the caller ----------------------------
-bash "$ROOT/scripts/check-bash-composition-hazards.sh" >/dev/null 2>&1
+advisory >/dev/null 2>&1
 rc=$?
 [ "$rc" -eq 0 ] && ok "ARM 3 advisory exits 0 over the live tree" \
                 || bad "ARM 3 advisory exited $rc — advisory tier must not gate"
 
 # --- ARM 4: per-pipeline granularity, not per-file --------------------------
-live="$(bash "$ROOT/scripts/check-bash-composition-hazards.sh" 2>/dev/null)"
+live="$(advisory 2>/dev/null)"
 p="$(printf '%s\n' "$live" | sed -n 's/.*pipefail-grep-q:pipelines=\([0-9]*\):.*/\1/p')"
 f="$(printf '%s\n' "$live" | sed -n 's/.*pipefail-grep-q:.*:files=\([0-9]*\).*/\1/p')"
 if [ -n "$p" ] && [ -n "$f" ] && [ "$p" -gt "$f" ]; then

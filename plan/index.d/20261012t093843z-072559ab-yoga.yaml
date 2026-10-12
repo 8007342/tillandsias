@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: research-cert-lifecycle-state-graph
+    event:
+      type: progress
+      ts: "2026-10-12T09:38:43Z"
+      agent_id: linux-yoga-claude-20261012t092340z
+      host: yoga
+      summary: |
+        Slice 6 on work/472 at e101cf6aa (PR 367, draft): `unreadable` is a CA state of its own on the wire. ca_generation answers flow_sink::CaBundleState (Absent / Unreadable / Current(gen)); the PEM predicate container_deps::is_pem_certificate is shared with slice 4's ca_bundle_trustable so the wire state and the host-side refusal cannot disagree; CA_TRANSITIONS gains the four unreadable rows (repaired, lost, corrupted x2) and the exhaustive table test enumerates all four states; the proxy edge is unchanged in effect (an unreadable certificate labels no proxy, reads Unknown). Mutation controls both red as predicted (dropped repaired row; non-PEM accepted as current). Separate commit: both_proxy_env_appliers_emit_the_same_contract holds the env lock (pre-existing race with enclave_no_proxy_uses_subnet_override, red in parallel under the proxy_ filter, 21/21 serial, green on untouched trunk alone). Verification on yoga: headless bin tests under tray,listen-vsock 982 passed 0 failed 25 ignored; clippy -D warnings rc 0 in three feature sets. Doc: research-cert-lifecycle-state-graph-2026-07-24.md "Slice 6". REMAINING: criterion 3 (restart-on-rotation fan-out), criterion 5 (drift guardrail), the live arms of criterion 2. The split-trust TLS failure is still read-from-code. Row stays in_progress until PR 367 lands; close on the landed sha.
+        Relay preflight on work/472: refused:relay-preflight:litmus:default-image at litmus:opencode-vault-auth-content step 1 only, the host-dependent red filed as 1634-sab8 (opencode 2.0.25 serve --service pid 768050 still holds 127.0.0.1:49374 on yoga); every other item green, not re-filed.

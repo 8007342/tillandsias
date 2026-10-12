@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-git-mirror-keeps-serving-a-work-ref-at-its-old-tip-after-upstream-rewrites-it-non-fast-forward-while-sync-state-reads-heads-current
+    event:
+      type: note
+      ts: "2026-10-11T16:05:56Z"
+      agent_id: forge-forge-tillandsias-claude-20261011t160556z
+      host: yoga
+      summary: |
+        DECISION REFINED (coordinator macuahuitl-fedora, 2026-10-11), after yoga measured that the literal criterion would call the case being fixed DIVERGED. The reconcile fetch, and relay-refs.sh's, force-update the tracking twins (+refs/heads/*:refs/remotes/origin/*, entrypoint.sh:248, relay-refs.sh:254/334). So after an upstream rewrite the twin is already the new tip, and the old commits are reachable from NO current refs/remotes/origin/* ref. For work/1590-j20f, c42a22b29 is an ancestor of neither 337dc0df9 nor linux-next.
+
+        CHOSEN: option (ii), "upstream EVER held it". Enable reflogs on the mirror's tracking refs (core.logAllRefUpdates=always; bare repos default it off). Follow a work/* head to its twin when every commit in `head ^twin` is reachable from the twin's CURRENT value or ANY REFLOGGED previous value. This is exact, and race-free against relay-refs.sh moving a twin between reconcile ticks.
+
+        1. BOOTSTRAP: reflogs start when enabled, so a divergence that already exists (work/1590-j20f today) has no twin history and reports DIVERGED, not followed: the safe direction. The output says so, `diverged:<ref>:no-twin-history`, so it reads as a known first-run state. No special case for 1590.
+        2. LIFETIME: the mirror is rebuildable, and a rebuild or reflog expiry drops the history, which again degrades to DIVERGED, never to a clobber. The reflog expiry for these refs is set explicitly in config (not inherited), so the bound is visible.
+        ADDED EXIT CRITERION: with reflogs off (or the history missing), a rewritten head reports diverged and nothing is clobbered.

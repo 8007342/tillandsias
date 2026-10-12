@@ -1,0 +1,15 @@
+# Gate step 1631-6w8z — the preflight door asks the gate's own cargo fmt and
+# clippy -D warnings refusals (#340 and #359 each lost a full gate run on one
+# the door had passed), through scripts/lua/check-rust-lints.lua, run in the
+# door's long lane against its whole budget. The fixture lints a SCRATCH
+# cargo workspace: an unformatted hunk and a collapsible_if are refused by
+# name, an untouched-crates change runs no cargo, and build.sh's extracted
+# lane turns an overrun into a deadline skip (rc 124, classified timed-out),
+# never a refusal; the trunk roster (source 6 removed) asks neither.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the preflight door asks cargo fmt and clippy (1631-6w8z)"
+STEP_LUA="scripts/lua/test-rust-lints.lua"
+STEP_ERROR="the preflight door no longer asks the gate's fmt or clippy refusals, or reports a slow one as refused (1631-6w8z) — see the FAIL lines above"
+STEP_OK="Door cargo-lints fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-12 darwin ok:rust-lints-fixture:10 arms"

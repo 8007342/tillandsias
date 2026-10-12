@@ -52,7 +52,7 @@ tillandsias_ledger_freshness() {
         --sort=-committerdate \
         --format='%(refname:short) %(committerdate:unix)' 2>/dev/null \
         | while read -r _ref _ts; do
-            case "$_ref" in origin | origin/HEAD) continue ;; esac
+            case "$_ref" in (origin | origin/HEAD) continue ;; esac
             printf '%s %s\n' "$_ref" "$_ts"
             break
         done)"

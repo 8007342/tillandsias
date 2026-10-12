@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: port-test-exit-pause-host-hold-to-lua-with-parity-on-a-host-that-has-script-and-a-pty
+    event:
+      type: note
+      ts: "2026-10-11T13:19:36Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261011t131936z
+      host: tlatoanis-macbook-air
+      summary: |
+        Landed #323 as e27348007, gate green. scripts/test-exit-pause-host-hold.sh is ported to scripts/lua/test-exit-pause-host-hold.lua, and the .sh is deleted.
+        The exit criteria, each exercised:
+        1. PARITY, same run per platform:
+           - darwin (BSD script, tlatoanis-macbook-air): the .sh gave fail:exit-pause-host-hold:0/6 and exit 0 (`script: illegal option -- c`); the port gave ok:exit-pause-host-hold:6/6.
+           - util-linux 2.41.5 (macuahuitl, fedora-toolbox:44, on 157c1fe67): the .sh gave ok 6/6, rc 0; the port gave ok 6/6, rc 0, flavor util-linux, with no leftover processes.
+        2. PLANTED FAILURES, in the port itself and on both platforms: an exit_pause that ignores the hold reds the held arm; one that never pauses reds the unheld control.
+        3. CALLER REPOINTED: litmus-exit-pause-host-hold.yaml runs the port with the same 6/6 grammar. Step 1 asserts the .lua is present and the .sh retired. Both steps pass when run verbatim from the YAML. The shell-decider floor line was removed; the litmus pipe count is unchanged.
+        Linux parity caught three port defects (unchecked repo root, the illegal `fail:` verdict, raw pty bytes crashing out.line), fixed in 559cf2f67. It also caught a platform quirk: util-linux script exits with its command only when timeout(1) is its direct parent; why is unpinned. Fixed in 157c1fe67. Carried: shell-to-lua paid by this port.

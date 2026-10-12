@@ -101,6 +101,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "grade",
     "hash",
     "json",
+    "list-replace",
     "loop-status",
     "loop-status-append",
     "loop-status-compact",
@@ -300,6 +301,8 @@ const USAGE: &str = concat!(
     "                                     with NO parseable activity timestamp is reported as\n",
     "                                     unknown-age and NEVER expired (fail conservative).\n",
     "           status <id|order>         one packet's status line\n",
+    "           status <id|order> --field <name>\n",
+    "                                     the FOLDED value of one field as JSON (1601-398e)\n",
     "           next-action <id|order>    the EFFECTIVE next_action — newest of the\n",
     "                                     packet field and any event carrying one. Reading\n",
     "                                     the field alone returns a stale queue, because\n",
@@ -541,6 +544,12 @@ const USAGE: &str = concat!(
     "                                     IS the active release) against the FOLDED ledger's release\n",
     "                                     counts, and fails loud on stale prose. --ledger overrides\n",
     "                                     plan/index.yaml; --render prints the canonical count line.\n",
+    "           list-replace <id|order> <field> (<item>... | --items-file <path> | --empty)\n",
+    "                        (--reason TEXT | --reason-file <path>) [--ts ISO] [--host H]\n",
+    "                                     ORDER 1601-398e. Replace a LIST field (exit_criteria,\n",
+    "                                     capability_tags, depends_on, owned_files, related) with\n",
+    "                                     the whole new list. The latest replace by (ts, host) is\n",
+    "                                     the folded value; the declaration is never edited.\n",
     "           set-field <id|order> <field> <value> [--ts ISO] [--host H] [--reason TEXT]\n",
     "                                     ORDER 636-9m79. Correct a packet field by writing the LWW\n",
     "                                     channel as a NEW fragment. USE THIS instead of hand-authoring:\n",
@@ -1064,6 +1073,47 @@ fn wip_limit_of(index: &std::path::Path) -> (usize, String) {
             DEFAULT,
             "the built-in default; no packet_discipline.wip_limit was readable".into(),
         ),
+    }
+}
+
+/// ORDER 1588-27v3 — the hosts a claim may name, from the methodology list
+/// `packet_discipline.fleet_hosts`. The WIP cap counts claims per host STRING,
+/// so a string that is no fleet host holds nothing and always passes it.
+enum FleetHosts {
+    /// No methodology file beside the ledger: a scratch ledger, not checked.
+    NoMethodology,
+    /// The file is there but the list is absent or not a list of labels.
+    Unreadable,
+    Listed(Vec<String>),
+}
+
+fn fleet_hosts_of(index: &std::path::Path) -> FleetHosts {
+    let Some(rule) = index
+        .parent()
+        .and_then(|plan| plan.parent())
+        .map(|root| root.join("methodology/distributed-work.yaml"))
+        .filter(|p| p.is_file())
+    else {
+        return FleetHosts::NoMethodology;
+    };
+    let listed = std::fs::read_to_string(&rule)
+        .ok()
+        .and_then(|s| serde_yaml::from_str::<serde_yaml::Value>(&s).ok())
+        .and_then(|doc| {
+            let list = doc
+                .get("distributed_work")
+                .unwrap_or(&doc)
+                .get("packet_discipline")?
+                .get("fleet_hosts")?
+                .as_sequence()?
+                .iter()
+                .map(|h| h.as_str().map(str::to_string))
+                .collect::<Option<Vec<String>>>()?;
+            (!list.is_empty()).then_some(list)
+        });
+    match listed {
+        Some(list) => FleetHosts::Listed(list),
+        None => FleetHosts::Unreadable,
     }
 }
 
@@ -7894,6 +7944,29 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
             let Some(reference) = args.get(1) else {
                 usage()
             };
+            // ORDER 1601-398e. `--field <name>` prints the FOLDED value of one
+            // field as JSON — a list-replace is visible here and in no
+            // hand-rolled scan of the declaration, which is the reader a
+            // script must use for exit_criteria and the other list fields.
+            if args.get(2).map(String::as_str) == Some("--field") {
+                let Some(field) = args.get(3) else { usage() };
+                let Some(p) = ledger.resolve(reference) else {
+                    eprintln!("error: {}", unresolved_reason(&ledger, reference));
+                    std::process::exit(1);
+                };
+                let value = p
+                    .get(field.as_str())
+                    .cloned()
+                    .unwrap_or(serde_yaml::Value::Null);
+                match serde_json::to_string(&value) {
+                    Ok(json) => println!("{json}"),
+                    Err(e) => {
+                        eprintln!("error: {reference}.{field} is not JSON-representable: {e}");
+                        std::process::exit(1);
+                    }
+                }
+                return;
+            }
             match ledger.resolve(reference) {
                 Some(p) => {
                     println!("{}", line(&ledger, p));
@@ -9014,6 +9087,233 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
         //
         // Named `set-field`, not `set-status`: the channel is field-generic, and
         // naming it for one field is exactly what hid it.
+        // ORDER 1601-398e. THE AMEND PATH FOR A LIST FIELD.
+        //
+        // set-field refuses lists (1184-tj2q), a changed copy of a trunk
+        // fragment is refused by the plan lane, and re-declaring a packet is a
+        // G-Set no-op, so until this a list field on trunk could only be
+        // "superseded" by a note — which no closure check reads. Measured on
+        // 1600-nn5b: the amended criteria went on trunk as a note (21274bc28)
+        // while the declared list still governed closure.
+        //
+        // This writes ONE `list-replace` event carrying the WHOLE new list. The
+        // fold treats each list field as an LWW register keyed by (ts, host);
+        // the declaration stays byte-unchanged and only the folded value moves.
+        "list-replace" => {
+            let mut positional: Vec<String> = Vec::new();
+            let mut ts: Option<String> = None;
+            let mut agent: Option<String> = None;
+            let mut host: Option<String> = None;
+            let mut reason: Option<String> = None;
+            let mut reason_file: Option<String> = None;
+            let mut items_file: Option<String> = None;
+            let mut empty = false;
+            let mut backfill = false;
+            let mut i = 1;
+            while i < args.len() {
+                let value = |i: &mut usize| -> String {
+                    *i += 1;
+                    args.get(*i).cloned().unwrap_or_else(|| {
+                        eprintln!("error: {} needs a value", args[*i - 1]);
+                        std::process::exit(2);
+                    })
+                };
+                match args[i].as_str() {
+                    "--ts" => ts = Some(value(&mut i)),
+                    "--agent" => agent = Some(value(&mut i)),
+                    "--host" => host = Some(value(&mut i)),
+                    "--reason" => reason = Some(value(&mut i)),
+                    "--reason-file" => reason_file = Some(value(&mut i)),
+                    "--items-file" => items_file = Some(value(&mut i)),
+                    "--empty" => empty = true,
+                    "--backfill" => backfill = true,
+                    other if other.starts_with("--") => {
+                        eprintln!(
+                            "error: unknown flag '{other}' for list-replace (usage: <ref> <field> \
+                             <item>... | --items-file <path> | --empty, then --reason TEXT or \
+                             --reason-file <path>, [--ts ISO] [--host H] [--agent A])"
+                        );
+                        std::process::exit(2);
+                    }
+                    other => positional.push(other.to_string()),
+                }
+                i += 1;
+            }
+            if positional.len() < 2 {
+                usage();
+            }
+            let reference = positional[0].clone();
+            let field = positional[1].clone();
+            if !fragments::LIST_REPLACE_FIELDS.contains(&field.as_str()) {
+                eprintln!(
+                    "refused:list-replace:not-a-list-field — '{field}' is not one of {} (1601-398e). \
+                     Scalars are written with set-field.",
+                    fragments::LIST_REPLACE_FIELDS.join(", ")
+                );
+                std::process::exit(2);
+            }
+            // Items come from argv OR a file (one per line), never both: a file
+            // is read by this process, so no shell can rewrite an item.
+            let mut items: Vec<String> = positional[2..].to_vec();
+            if let Some(path) = items_file.as_deref() {
+                if !items.is_empty() {
+                    eprintln!("error: pass items as arguments OR --items-file, not both");
+                    std::process::exit(2);
+                }
+                match read_prose_source(path) {
+                    Ok(text) => {
+                        items = text
+                            .lines()
+                            .map(str::trim)
+                            .filter(|l| !l.is_empty())
+                            .map(String::from)
+                            .collect()
+                    }
+                    Err(e) => {
+                        eprintln!("error: cannot read --items-file {path}: {e}");
+                        std::process::exit(2);
+                    }
+                }
+            } else {
+                for item in &items {
+                    reject_shell_mangled_prose(item);
+                }
+            }
+            // An empty list removes every entry, so it is accepted only when it
+            // is asked for by name; a forgotten argument must not clear a list.
+            if items.is_empty() != empty {
+                if empty {
+                    eprintln!("error: --empty takes no items — it replaces the list with []");
+                } else {
+                    eprintln!(
+                        "refused:list-replace:empty-list — no items given. To replace \
+                         {field} with an empty list, say so with --empty (1601-398e)."
+                    );
+                }
+                std::process::exit(2);
+            }
+            let reason = match (reason, reason_file) {
+                (Some(_), Some(_)) => {
+                    eprintln!("error: --reason and --reason-file are mutually exclusive");
+                    std::process::exit(2);
+                }
+                (Some(r), None) => {
+                    reject_shell_mangled_prose(&r);
+                    r
+                }
+                (None, Some(path)) => match read_prose_source(&path) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        eprintln!("error: cannot read --reason-file {path}: {e}");
+                        std::process::exit(2);
+                    }
+                },
+                (None, None) => String::new(),
+            };
+            if reason.trim().is_empty() {
+                eprintln!(
+                    "refused:list-replace:no-reason — a replace overrides a declaration, so it \
+                     says why: --reason TEXT or --reason-file <path>"
+                );
+                std::process::exit(2);
+            }
+            let ts = resolve_ts(ts, backfill, "list-replace");
+            let Some(packet) = ledger.resolve(&reference) else {
+                eprintln!("error: {}", unresolved_reason(&ledger, &reference));
+                std::process::exit(1);
+            };
+            let target = ledger.id_of(packet);
+            if ledger.is_archived(&target) {
+                eprintln!(
+                    "error: {reference} resolves to {target}, which is ARCHIVED — a replace \
+                     there lands in a fragment no reader folds"
+                );
+                std::process::exit(1);
+            }
+            // A scalar in the declaration is a different shape, not an older
+            // list; replacing it would change the field's type under its readers.
+            if packet.get(&field).is_some() && !field_is_list(packet, &field) {
+                eprintln!(
+                    "refused:list-replace:declared-scalar — {target}.{field} is declared as a \
+                     scalar, not a list; nothing was written"
+                );
+                std::process::exit(2);
+            }
+            // A dependency edge to nothing is a dangling reference `check`
+            // refuses, so it is refused here, before a byte is written.
+            if field == "depends_on" {
+                for item in &items {
+                    if ledger.resolve(item).is_none() {
+                        eprintln!(
+                            "refused:list-replace:unresolved-dependency — '{item}' resolves to \
+                             no packet; nothing was written"
+                        );
+                        std::process::exit(2);
+                    }
+                }
+            }
+            let agent = resolve_writer_agent(agent);
+            let host = host
+                .filter(|h| !h.trim().is_empty())
+                .map(require_acceptable_host)
+                .unwrap_or_else(resolve_writer_host);
+            let compact = loop_status::iso_to_compact(&ts);
+            let suffix = format!(
+                "{:08x}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.subsec_nanos())
+                    .unwrap_or(0)
+            );
+            let dir = fragments::fragment_dir(&index);
+            if let Err(e) = std::fs::create_dir_all(&dir) {
+                eprintln!("error: create {}: {e}", dir.display());
+                std::process::exit(1);
+            }
+            let path = dir.join(fragments::fragment_name(&compact, &suffix, &host));
+            let mut body = String::new();
+            body.push_str("# Ledger fragment — append-only, IMMUTABLE once written.\n");
+            body.push_str("# Written by: tillandsias-plan list-replace (order 1601-398e).\n");
+            body.push_str(
+                "#\n# The WHOLE new list for one field. The fold takes the latest replace\n\
+                 # by (ts, host) as the field's value; the declaration is never edited.\n",
+            );
+            body.push_str("events:\n");
+            body.push_str(&format!("  - packet_id: {target}\n"));
+            body.push_str("    event:\n");
+            body.push_str("      type: list-replace\n");
+            body.push_str(&format!("      ts: \"{ts}\"\n"));
+            body.push_str(&format!("      agent_id: {agent}\n"));
+            body.push_str(&format!("      host: {host}\n"));
+            body.push_str(&format!("      field: {field}\n"));
+            if items.is_empty() {
+                body.push_str("      items: []\n");
+            } else {
+                body.push_str("      items:\n");
+                for item in &items {
+                    // A JSON string is a valid YAML double-quoted scalar, so no
+                    // item can be read back as a number, a bool or a mapping.
+                    let quoted = serde_json::to_string(item).unwrap_or_default();
+                    body.push_str(&format!("        - {quoted}\n"));
+                }
+            }
+            body.push_str(&format!(
+                "      summary: {}",
+                prose_block_scalar(&reason, 8)
+            ));
+            if let Err(e) = std::fs::write(&path, body) {
+                eprintln!("error: write {}: {e}", path.display());
+                std::process::exit(1);
+            }
+            if let Err(e) = fragments::verify_written_parses(&path) {
+                reject_written_fragment(&path, &e);
+            }
+            println!(
+                "ok: {target}.{field} replaced with {} item(s) at {ts} by {host} ({})",
+                items.len(),
+                path.display()
+            );
+        }
         "set-field" => {
             // args[0] is the subcommand itself (same convention as the `status`
             // arm's args.get(1)); skip it or the subcommand name becomes the
@@ -9316,6 +9616,48 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 );
                 std::process::exit(2);
             }
+            // ORDER 1588-27v3 — A CLAIM NAMES A FLEET HOST.
+            //
+            // The cap below counts claims per host STRING. Measured on
+            // tlatoanis-macbook-air 2026-10-11: the real host was refused at
+            // wip 16/3, and the same claim with `--host x` WROTE a fragment,
+            // because "x" holds nothing. The claim then reads as held by a host
+            // nobody can ask to let go. The hosts come from ONE reviewable list,
+            // packet_discipline.fleet_hosts, so a new host enters by a PR to
+            // methodology, not by typing a new string. There is no override: an
+            // unlisted host has no cap to go over, and --over-wip already exists
+            // for the cap itself.
+            if field == "status" && value == "in_progress" {
+                let claim_host = flagged("--host").unwrap_or_else(resolve_writer_host);
+                let refusal = match fleet_hosts_of(&index) {
+                    FleetHosts::NoMethodology => None,
+                    FleetHosts::Listed(ref hosts) if hosts.contains(&claim_host) => None,
+                    FleetHosts::Listed(hosts) => Some(format!(
+                        "refused:set-field:unknown-host:{claim_host} — '{claim_host}' is not in \
+                         methodology/distributed-work.yaml packet_discipline.fleet_hosts \
+                         ({}), so the WIP cap could not count this claim and no fleet host \
+                         would hold it (1588-27v3).",
+                        hosts.join(", ")
+                    )),
+                    FleetHosts::Unreadable => Some(format!(
+                        "refused:set-field:no-fleet-host-list — methodology/distributed-work.yaml \
+                         is beside this ledger but packet_discipline.fleet_hosts is absent or \
+                         not a non-empty list of host labels, so the claim by '{claim_host}' \
+                         cannot be checked (1588-27v3)."
+                    )),
+                };
+                if let Some(why) = refusal {
+                    eprintln!(
+                        "{why}\n\
+                         \n\
+                         REMEDY: claim as your fleet host (in a forge that is \
+                         $TILLANDSIAS_GIT_HOST, not the container hostname). A host that is \
+                         not listed yet is added to packet_discipline.fleet_hosts by a PR \
+                         before it claims. Nothing was written."
+                    );
+                    std::process::exit(2);
+                }
+            }
             if field == "status" && value == "in_progress" {
                 let claim_host = flagged("--host").unwrap_or_else(resolve_writer_host);
                 let frag_dir = fragments::fragment_dir(&index);
@@ -9443,9 +9785,9 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                     "  after which the row matches NO tag query — including the entries it already has."
                 );
                 eprintln!(
-                    "  Edit a list in the packet's own declaration, or record the intent as an event and"
+                    "  Replace the whole list instead (1601-398e): tillandsias-plan list-replace {pid} {field} <item>... --reason TEXT"
                 );
-                eprintln!("  ask the row's owner to amend it. Nothing was written.");
+                eprintln!("  Nothing was written.");
                 std::process::exit(2);
             }
             let current = str_field(packet, &field).unwrap_or("<unset>").to_string();

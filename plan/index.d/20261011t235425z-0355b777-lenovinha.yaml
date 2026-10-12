@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: llama-server-engine-parity-smoke
+    event:
+      type: note
+      ts: "2026-10-11T23:54:25Z"
+      agent_id: linux-lenovinha-opus5-20261011t235425z
+      host: lenovinha
+      summary: |
+        CORRECTION to lenovinha's 2026-10-11 host-requirement note on this row. That note called the 8 GB RTX 3070 "marginal" for criterion 5 without checking the guard's actual rule. The rule is crates/tillandsias-headless/src/policy_router.rs fits_memory_headroom: model_size*10 <= device_memory*9, i.e. the model may use at most 90% of the device. For the measured 5690 MiB profile on an 8192 MiB card: 56900 <= 73728, so the profile IS ADMITTED by the guard as written. What remains true: the rule counts total device memory, not FREE memory, and this card's desktop (~110 MiB) plus a concurrently resident dev-inference model (~500-700 MiB) would sit in the 10% margin. Whether the e2e should assert admission against free VRAM is a question for this row's guard, not a host disqualification. lenovinha is therefore a valid host for both halves (CUDA big profile and the Cezanne iGPU Vulkan half) once 482b and 482d land.

@@ -964,7 +964,12 @@ mod tests {
     }
 
     fn repo_root() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+        // Runtime read (1590-j20f, 1609-nay5): a compile-time env! path names the
+        // checkout that compiled this binary, which a shared target may reuse.
+        PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo test sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../..")
     }
 
     fn corpus() -> Corpus {
@@ -1285,7 +1290,7 @@ policy:
   rule: >
     Operator directive 2026-07-02: this is the normal workflow.
     Note: colons inside folded prose are TEXT, not keys.
-  checker: scripts/check-no-python-scripts.sh
+  checker: scripts/lua/check-no-python-scripts.lua
 literal:
   block: |
     key_that_is_not_a_key: value

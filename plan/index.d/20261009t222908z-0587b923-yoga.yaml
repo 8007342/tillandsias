@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: proc-run-and-proc-spawn-on-tillandsias-exec-with-mlua-async-so-a-process-is-a-typed-result-a-stream-has-line-callbacks-and-no-os-pipe-exists-between-stages
+    event:
+      type: note
+      ts: "2026-10-09T22:29:08Z"
+      agent_id: forge-forge-tillandsias-claude-20261009t193211z
+      host: yoga
+      summary: |-
+        AUDIT MEASUREMENT (yoga 2026-10-09T22:00Z, linux-next 4b76eb15f, installed tillandsias-plan): in `script run` the proc table exposes all,chain,run,select,spawn; proc.run of a shell STRING returns status=policy_denied rule_id=no-shell-strings as data (argv-only; `bash path/script.sh` allowed); proc.spawn pcall ok=true. Children 1534-puyz, 1538-pwdr and the ten 1551-* fixes fold completed, so this parent's remaining open scope is NATIVE macOS/Windows conformance (1543-ffhg, 1544-cnae, 1543-f44v) and the 1539-dt84 trace slice, while its status still folds blocked. Two consumers quote the old state: scripts/lua/check-shell-ratchet.lua warns 'counted, not refused while scripts/lua cannot spawn (1384-aixy)' on 13 fixtures (filed as 1570-k5yt), and openspec/changes/lua-command-runtime-and-policies/tasks.md 4.2 still calls composition open. Linux ports needing proc.run (git diff, running a decider from a fixture) are unblocked today; 1570-g4rx/mxcg/25iq/k4fx need no proc at all.

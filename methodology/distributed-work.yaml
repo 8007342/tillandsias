@@ -1586,7 +1586,12 @@ distributed_work:
     rule: >
       `tillandsias-plan set-field <id|order> <field> <value> --reason "why"`.
       Never re-declare a packet under `packets:` to change it, and never rely on
-      an event alone to close one.
+      an event alone to close one. A LIST field (exit_criteria, capability_tags,
+      depends_on, owned_files, related) is replaced whole with
+      `tillandsias-plan list-replace <id|order> <field> <item>... --reason "why"`:
+      the latest replace by (ts, host) is the folded value, and the declaration
+      is never edited (1601-398e). A note saying a list is superseded is read by
+      no check.
     why: >
       Three hosts got this wrong on 2026-08-09, independently, within hours of
       each other AND of it being documented:
@@ -1614,7 +1619,7 @@ distributed_work:
       writing a fragment that applies to nothing, and reports a no-op instead of
       writing one.
     detectors: >
-      scripts/check-fragment-status-loss.sh (gates: a declared terminal status the
+      scripts/lua/check-fragment-status-loss.lua (gates: a declared terminal status the
       fold discards, and a `completed` event with no transition);
       scripts/check-stranded-in-progress.sh (advisory: claims that never produced
       an event); scripts/reclaim-stranded-claims.sh (returns claims older than the
@@ -1624,6 +1629,30 @@ distributed_work:
     # ORDER 1367-2sbc: read by tillandsias-plan set-field's claim path. The ONE
     # place the number lives; the WIP LIMIT rule below states it in prose.
     wip_limit: 3
+    # ORDER 1588-27v3: the hosts a claim may name, read by the same claim path.
+    # The cap counts claims per host STRING, so an unlisted string held nothing
+    # and a `--host x` claim passed it. A new host is added here by a PR before
+    # its first claim. Seeded 2026-10-11 from every host label that wrote an
+    # in_progress claim since 2026-09-21. Shared labels are left out on purpose:
+    # a platform or host kind (linux, macos, windows, forge, linux_mutable) and
+    # the forge container hostname (forge-tillandsias) name no one machine (1201-hsf9).
+    fleet_hosts:
+      - esme
+      - esmeraldinha
+      - lenovinha
+      - lenovinha-silverblue
+      - macbookair-macos
+      - macneo
+      - macuahuitl
+      - macuahuitl-forge
+      - pirria
+      - pirria-silverblue
+      - tlatoanis-macbook-air
+      - tlatoanis-macbook-neo
+      - yoga
+      - yoga-silverblue
+      - yolanda
+      - yolanda-windows
     authority: >
       Operator direction 2026-09-23: "we have started a lot of plan work at the
       same time and now they're all incomplete; we might need some packet
@@ -1662,6 +1691,7 @@ distributed_work:
         closeable rows before routing new claims.
     enforcement:
       - "1367-2sbc: set-field refuses a claim over the WIP limit and a new story while the previous one is open"
+      - "1588-27v3: set-field refuses a claim whose host is not in fleet_hosts (refused:set-field:unknown-host:<host>), so the cap cannot be passed under a new string"
       - "1367-emjg: scripts/check-landed-but-open.sh lists landed orders whose rows are still open"
     status: >
       Rules 1 and 2 are guidance until 1367-2sbc lands; rule 4's sweep until
@@ -2225,7 +2255,7 @@ distributed_work:
       UNBUILDABLE on darwin under -D dead-code until the fleet's one Apple
       host happened to compile. The author's own gates could not catch it:
       the Windows lane never compiles the non-Linux arm of files it edits,
-      check-cross-target-build.sh is single-target, and no Apple target is
+      check-cross-target-build.lua is single-target, and no Apple target is
       reachable from a non-Apple host. STATE THE STRUCTURAL FACT PLAINLY:
       for some platforms, ONE host is the sole detector of the entire
       compile surface. The cheap mitigation is a review-time convention,

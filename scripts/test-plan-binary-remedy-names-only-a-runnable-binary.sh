@@ -51,9 +51,11 @@ git init -q -b linux-next "$LW/wc"
 mkdir -p "$LW/wc/scripts/hooks" "$LW/wc/plan/index.d" "$LW/wc/crates/tillandsias-plan/src" \
          "$LW/wc/target/release" "$LW/wc/target/debug"
 cp "$ROOT/scripts/hooks/pre-push-local-gate.sh" "$LW/wc/scripts/hooks/"
-for f in plan-binary-probe.sh gate-stamp.sh common.sh check-fragment-status-loss.sh check-issue-citation-convention.sh; do
+for f in plan-binary-probe.sh gate-stamp.sh common.sh check-issue-citation-convention.sh; do
     cp "$ROOT/scripts/$f" "$LW/wc/scripts/" 2>/dev/null || true
 done
+# ORDER 1570-mxcg: the status-loss guard is Lua; the lane runs it from scripts/lua/.
+mkdir -p "$LW/wc/scripts/lua" && cp "$ROOT/scripts/lua/check-fragment-status-loss.lua" "$LW/wc/scripts/lua/" 2>/dev/null || true
 # The hook sources the probe; without it the lane cannot resolve a binary and
 # every arm below would measure the wrong refusal.
 [ -f "$LW/wc/scripts/plan-binary-probe.sh" ] || { echo "fail:plan-remedy-runnable:setup:probe-not-copied"; exit 1; }

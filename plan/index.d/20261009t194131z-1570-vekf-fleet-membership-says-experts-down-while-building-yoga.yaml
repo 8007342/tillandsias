@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found 2026-10-09 on yoga (first forge on stable v56.10.9.1), filed at the
+# coordinator's direction (p3, pickup linux).
+packets:
+  - packet_id: check-fleet-membership-reports-experts-down-while-the-forge-is-still-building-its-plan-binary-so-a-normal-first-minutes-state-reads-as-a-broken-expert
+    order: 1570-vekf
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, fleet-membership, experts, agent-ux]
+    estimated_hours: 1
+    owned_files:
+      - scripts/check-fleet-membership.sh
+      - scripts/check-mcp-expert-health.sh
+    title: |
+      In a freshly started forge, scripts/check-fleet-membership.sh prints "todo:join-the-fleet:experts:down:forge-plan:scripts/dev-host-experts.sh" while ensure_forge_experts is still compiling tillandsias-plan, although the forge-plan MCP itself answers "experts state: building(206s) ... TRANSIENT"; it should say building and point at waiting, not at dev-host-experts.sh
+    context: |
+      Measured on yoga 2026-10-09 ~19:20Z, forge on v56.10.9.1: the first
+      check-fleet-membership run printed experts:down:forge-plan; at the same
+      moment plan_answer returned "unsupported: ... experts state:
+      building(206s) ... TRANSIENT: the build is still running — retry in a
+      few seconds". The release build (LTO, codegen-units=1) took about 4 min
+      from forge start; after it finished the same checker printed
+      ok:join-the-fleet:experts:ok:experts-healthy. Section 8 of the checker
+      takes the last line of check-mcp-expert-health.sh and turns any non-zero
+      rc into a todo whose remedy is scripts/dev-host-experts.sh — a
+      bare-metal remedy, wrong inside a forge. lib-expert-capability.sh
+      already knows the state (_tec_build_in_flight, experts_state=building).
+    exit_criteria:
+      - 'while ensure_forge_experts is still building, check-fleet-membership prints an experts line that says building (not down) and names waiting/retrying as the action, not scripts/dev-host-experts.sh; pre-fix: "todo:join-the-fleet:experts:down:forge-plan:scripts/dev-host-experts.sh" on yoga 2026-10-09 ~19:20Z'
+      - 'NEGATIVE CONTROL: an expert that is really down (no build in flight, or a building stamp past its budget) still prints down as a todo'
+    unscoreable: "unpinnable-until-the-guard-exists: future fixture that runs check-fleet-membership's experts section with FORGE_EXPERTS_STATE_DIR holding a fresh building stamp and asserts 'building'; pre-fix result: experts:down. NEGATIVE CONTROL: with no stamp and the expert unreachable it still prints down."
+    depends_on: []
+    next_action: >
+      Have check-mcp-expert-health.sh (or section 8 of check-fleet-membership)
+      consult the experts state stamp and report building distinctly.
+    events:
+      - type: filed
+        ts: "2026-10-09T19:41:31Z"
+        agent_id: forge-forge-tillandsias-claude-20261009t193211z
+        host: yoga
+        summary: |-
+          Filed at the coordinator's direction (p3, pickup linux) from the first forge on stable v56.10.9.1 (yoga).

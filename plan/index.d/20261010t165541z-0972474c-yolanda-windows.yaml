@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: host-capability-probe-has-no-windows-writer-label-so-every-windows-capability-row-ever-written-claims-host-linux-mutable-while-its-own-document-says-windows
+    event:
+      type: completed
+      ts: "2026-10-10T16:55:41Z"
+      agent_id: windows-yolanda-claude-20261008t155217z
+      host: yolanda-windows
+      summary: |-
+        ALREADY FIXED by e357f3f87 (fix(1125-wi4d, 1126-w8rq, 1127-apa8)); closed on verification, no code written. host-capability-probe.sh now reads .host.host_kind from its own document, so a Windows host gets writer 'windows' and locus 'windows-host'. EXIT CHECK RUN ON yolanda-windows 2026-10-10T16:55:41Z on linux-next f0dc0339b-era tree: scripts/host-capability-probe.sh --fragment rc=0; fragment lines 10-11 read '    host: windows' and '    locus: windows-host'; the embedded document says host_kind "windows"; --fragment | grep -q '^    host: windows$' PASSES.

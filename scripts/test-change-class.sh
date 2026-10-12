@@ -17,7 +17,7 @@ ok()      { printf 'ok:   %s\n' "$1"; pass=$((pass + 1)); }
 bad()     { printf 'FAIL: %s\n' "$1"; fail=$((fail + 1)); }
 skiparm() { printf 'skip: %s\n' "$1"; skipped=$((skipped + 1)); }
 
-TMP="$(mktemp -d)"
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/test-change-class.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 
 # scaffold <name> — a repo with a trunk, the two real scripts copied in, and a

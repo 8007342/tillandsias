@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-forge-image-has-no-wasm32-target-so-a-wasm-pack-web-project-cannot-build-in-the-forge
+    field: status
+    value: in_progress
+    ts: "2026-10-12T07:05:54Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-forge-image-has-no-wasm32-target-so-a-wasm-pack-web-project-cannot-build-in-the-forge
+    event:
+      type: note
+      ts: "2026-10-12T07:05:54Z"
+      host: lenovinha
+      summary: |-
+        wip-override by lenovinha: the 3 held packets are code-complete and queued, awaiting land: 1625-un54 (#356, run 41), 1625-6iwd (#357, run 41), 482b (work/482-bvul 5542fb5b6, PR pending for the run after 41); grk8 is on the operator release path and the coordinator (macuahuitl) prioritized it, 2026-10-12 — admitted past: refused:set-field:wip-limit:3/3 — lenovinha already holds 3 in_progress packet(s) outside a story: 482b, 1625-un54, 1625-6iwd (1367-2sbc; the limit is 3, from methodology/distributed-work.yaml packet_discipline.wip_limit).

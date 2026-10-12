@@ -1,0 +1,26 @@
+record-failed
+head: cannot open '/tmp/482b-payload.GjadlG/models-vulkan/.tools/.engine-set' for reading: No such file or directory
+lane=vulkan /api/version=200 after 40s
+[inference] engine=llama-server backend=vulkan reason=render-node:renderD128
+[inference] engine payload: need 'core+vulkan v0.34.0 sha256:cf95886728959aa09910bb34de5cca1cc5a8f68003b5597197d3f2c2d57c0804' (have 'none'; check=engine-integrity-refused:unrecorded-engine)
+[inference] engine payload verified: v0.34.0/amd64 sha256 ok
+[inference] engine backends available: cuda_v12 cuda_v13 vulkan 
+[inference] engine integrity: ok (core+vulkan v0.34.0 sha256:cf95886728959aa09910bb34de5cca1cc5a8f68003b5597197d3f2c2d57c0804)
+[inference] engine: set=core+vulkan backends=[vulkan ] llama-server=ok
+[inference] llama-server backend closure: ok (set=core+vulkan backend=vulkan pin=/home/ollama/.ollama/models/.tools/lib/ollama/vulkan/libggml-vulkan.so)
+[inference] gguf qwen2.5-0.5b-instruct verified: qwen2.5-0.5b-instruct-q4_k_m.gguf sha256 ok (491400032 bytes)
+[inference] llama-server: backend=vulkan ngl=99 model=qwen2.5-0.5b-instruct build='llama-server 0.3.0-dev (build 1, commit 0f3a71be1)' upstream=127.0.0.1:11435 shim=:11434
+--- /api/version body + timing:
+{"version":"llama-server 0.3.0-dev (build 1, commit 0f3a71be1)"} http=200 t=0.000844s
+--- /v1/models:
+"id":"qwen2.5-0.5b-instruct"
+--- /v1/chat/completions via :11434:
+"content":"Alright."
+--- backend actually used (llama-server log):
+--- GGML_BACKEND_PATH in llama-server's env:
+GGML_BACKEND_PATH=/home/ollama/.ollama/models/.tools/lib/ollama/vulkan/libggml-vulkan.so
+=== SUPERVISION PROOF: kill llama-server, watch /api/version
+llama-server pid in container: 198
+container stopped after 164 ms
+exit code: 137
+[inference] FATAL: llama-server exited (rc=137) — stopping the other and exiting non-zero so the endpoint never outlives the engine

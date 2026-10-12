@@ -336,6 +336,50 @@ else
     fi
 fi
 
+# ── Gate 6: a live release freeze has HELD (order 1255-s4im) ──────────────────
+#
+# The pre-push hook refuses a code push to a frozen branch only on a host whose
+# hook is armed; `--no-verify`, a redirected hooksPath or a host that never ran
+# the installer bypasses it. Reproduced 2026-10-09: a fresh clone pushed code
+# into a frozen linux-next and was accepted. So the cut asks ORIGIN instead: the
+# freeze marker points at the branch as frozen, and `release-freeze.sh audit`
+# names every commit that brought a held path in since — the same answer from
+# any host, hooked or not. A breach REFUSES the cut: the tree that gated is not
+# the tree that would ship. The remedy is mechanical and needs no operator:
+# revert the breach, or re-gate from the new tip and re-freeze there.
+#
+# No origin (a scratch fixture) is not checked. An unreachable origin WARNS and
+# does not refuse, the same COULD-NOT-RUN rule Gate 5 follows (923-ws3r): the
+# cut's own tag push talks to the same remote and cannot proceed without it.
+if [[ -x "$REPO_ROOT/scripts/release-freeze.sh" || -f "$REPO_ROOT/scripts/release-freeze.sh" ]] \
+   && git remote get-url origin >/dev/null 2>&1; then
+    _frz_rc=0
+    _frz_refs="$(git ls-remote origin 'refs/tillandsias/freeze/*' 2>/dev/null)" || _frz_rc=$?
+    if [[ "$_frz_rc" -ne 0 ]]; then
+        echo "  WARNING freeze-audit-could-not-run (1255-s4im): git ls-remote origin failed (rc=$_frz_rc) — a live freeze was NOT audited" >&2
+    elif [[ -z "$_frz_refs" ]]; then
+        note "freeze-audit: no live freeze on origin"
+    else
+        for _frz_branch in $(printf '%s\n' "$_frz_refs" | cut -f2 | awk -F/ '{print $4}' | sort -u); do
+            _frz_arc=0
+            _frz_out="$(bash "$REPO_ROOT/scripts/release-freeze.sh" audit "$_frz_branch" 2>&1)" || _frz_arc=$?
+            if [[ "$_frz_arc" -eq 1 ]]; then
+                printf '%s\n' "$_frz_out" >&2
+                _frz_shas="$(printf '%s\n' "$_frz_out" | sed -n 's/^breach:[^:]*:\([0-9a-f][0-9a-f]*\):.*/\1/p' | tr '\n' ' ' | sed 's/ $//')"
+                _frz_tip="$(printf '%s\n' "$_frz_out" | sed -n 's/^violation:freeze-breached:.*:tip=\([0-9a-f]*\)$/\1/p')"
+                _afford "$_frz_branch was frozen for this cut and code arrived anyway (commits: ${_frz_shas:-see above}); the gate that passed describes a tree that would not ship" \
+                    "revert the breach (git revert ${_frz_shas:-<the commits above>}), or re-gate the cut from the new tip ${_frz_tip:-<tip>} and re-freeze there (scripts/release-freeze.sh clear $_frz_branch && scripts/release-freeze.sh set $_frz_branch); either clears this, and neither needs the operator"
+                echo "blocked:freeze-breached"
+                exit 1
+            elif [[ "$_frz_arc" -ne 0 ]]; then
+                echo "  WARNING freeze-audit-could-not-run (1255-s4im): $(printf '%s\n' "$_frz_out" | tail -n 1)" >&2
+            else
+                note "freeze-audit: $(printf '%s\n' "$_frz_out" | tail -n 1)"
+            fi
+        done
+    fi
+fi
+
 # ORDER 1218-25z3. Report the rows marked REQUIRED IN THE NEXT CUT whose fix is
 # not in the tree being cut. ON STDERR ONLY: this file's contract is ONE line on
 # stdout and nothing else, and an advisory that broke that grammar would be a

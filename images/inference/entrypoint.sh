@@ -162,7 +162,10 @@ else
     # container still starts (never fail-closed on a policy helper).
     echo "[inference] WARN: $ENGINE_TUNING_SH missing — falling back to untuned defaults" >&2
     export OLLAMA_NUM_PARALLEL=1
-    TUNING_LINE="tuning: tier=${TILLANDSIAS_INFERENCE_TIER:-cpu} flash_attn=0 kv_cache=f16 num_parallel=1 vram_mb=0"
+    # Order 527: never inherit ollama's residency default silently; the
+    # shortest policy value is the safe one for an unknown tier.
+    export OLLAMA_KEEP_ALIVE="${OLLAMA_KEEP_ALIVE:-5m}"
+    TUNING_LINE="tuning: tier=${TILLANDSIAS_INFERENCE_TIER:-cpu} flash_attn=0 kv_cache=f16 num_parallel=1 vram_mb=0 keep_alive=${OLLAMA_KEEP_ALIVE}"
 fi
 echo "[inference] $TUNING_LINE"
 
@@ -257,16 +260,103 @@ _engine_wanted_backends() {
     esac
 }
 OLLAMA_WANTED_BACKENDS="$(_engine_wanted_backends)"
+
+# ── Engine slot (order 482b) ──────────────────────────────────────
+# @trace spec:inference-engine-slots
+# TILLANDSIAS_INFERENCE_ENGINE selects the engine behind the unchanged :11434
+# endpoint. ollama stays the default (SLOT-3) until 482c records parity evidence.
+# llama-server runs the payload's own llama-server with EXACTLY ONE backend, chosen
+# here BEFORE the payload install so only that backend dir is installed and the
+# engine set (.engine-set line 1) names it. See llama-server-lane.sh.
+TILLANDSIAS_INFERENCE_ENGINE="${TILLANDSIAS_INFERENCE_ENGINE:-ollama}"
+case "$TILLANDSIAS_INFERENCE_ENGINE" in
+    ollama | llama-server) ;;
+    *)
+        echo "[inference] WARN: unknown TILLANDSIAS_INFERENCE_ENGINE='$TILLANDSIAS_INFERENCE_ENGINE' — using the default engine (ollama)" >&2
+        TILLANDSIAS_INFERENCE_ENGINE=ollama
+        ;;
+esac
+LLAMA_LANE_SH=/usr/local/bin/tillandsias-llama-server-lane.sh
+if [ "$TILLANDSIAS_INFERENCE_ENGINE" = "llama-server" ]; then
+    if [ ! -r "$LLAMA_LANE_SH" ]; then
+        echo "[inference] FATAL: engine=llama-server but $LLAMA_LANE_SH is missing from this image — refusing rather than serving a different engine" >&2
+        exit 1
+    fi
+    # shellcheck source=llama-server-lane.sh
+    . "$LLAMA_LANE_SH"
+    read -r LLAMA_BACKEND LLAMA_BACKEND_REASON <<EOF_SELECT
+$(tillandsias_llama_backend_select)
+EOF_SELECT
+    OLLAMA_WANTED_BACKENDS="$(tillandsias_llama_backend_dir "$LLAMA_BACKEND")"
+    echo "[inference] engine=llama-server backend=$LLAMA_BACKEND reason=$LLAMA_BACKEND_REASON"
+fi
+
+OLLAMA_ARCH=""
+case "$(uname -m)" in
+    x86_64 | amd64) OLLAMA_ARCH="amd64" ;;
+    aarch64 | arm64) OLLAMA_ARCH="arm64" ;;
+esac
+# ORDER 1118-bscs/1118-d3b6 — PINNED VERSION, VERIFIED DIGEST.
+#
+# This read `releases/latest/download/...`, which is not a version at
+# all: whatever GitHub resolved at CONTAINER START was downloaded,
+# extracted, and EXECUTED inside the enclave. Two containers from the
+# same image, started an hour apart, could run different code, and
+# nothing recorded which. There was no checksum of any kind.
+#
+# PROVENANCE (order 521): these digests are a PIN, not an attestation.
+# They were read from the GitHub release API by whoever bumped the version
+# (trust on first fetch, at bump time); they prove the bytes downloaded
+# now are the bytes the bumper saw, NOT that ollama signed them. The
+# transport cannot vouch either: inside the enclave the TLS chain ends at
+# the enclave's own CA (Squid bump). Whoever bumps OLLAMA_VERSION owns
+# both digests.
+#
+# TO BUMP: change OLLAMA_VERSION and both digests together. The
+# digests come from the release API and need no 1.4GB download:
+#   curl -fsS https://api.github.com/repos/ollama/ollama/releases/tags/<tag> \
+#     | jq -r '.assets[] | select(.name|test("ollama-linux-(amd64|arm64)\\.tar\\.zst$"))
+#              | "\(.name) \(.digest)"'
+# Leaving the version and a digest out of step fails closed below, so
+# a half-done bump cannot ship.
+OLLAMA_VERSION="v0.34.0"
+case "$OLLAMA_ARCH" in
+    amd64) OLLAMA_SHA256="cf95886728959aa09910bb34de5cca1cc5a8f68003b5597197d3f2c2d57c0804" ;;
+    arm64) OLLAMA_SHA256="6a9e5b3650c2024d8a78da86b23876f6eea238657a3262d7e5ec0f3688c5d28e" ;;
+    *)     OLLAMA_SHA256="" ;;
+esac
+
+# ── Installed-engine integrity (order 521) ─────────────────────────────
+# images/inference/engine-integrity.sh owns the manifest grammar and the
+# verdicts; see its header for what is and is not covered.
+ENGINE_INTEGRITY_SH=/usr/local/bin/tillandsias-engine-integrity.sh
+if [ -r "$ENGINE_INTEGRITY_SH" ]; then
+    # shellcheck source=engine-integrity.sh
+    . "$ENGINE_INTEGRITY_SH"
+else
+    # An image without the helper cannot vouch for the cache: refuse it, so the
+    # check below forces a verified reinstall rather than trusting the cache.
+    echo "[inference] WARN: $ENGINE_INTEGRITY_SH missing — the installed engine cannot be checked" >&2
+    tillandsias_engine_id() { printf '%s %s sha256:%s\n' "$1" "$2" "$3"; }
+    tillandsias_engine_record() { printf '%s\n' "$3" > "$2"; }
+    tillandsias_engine_check() { echo "engine-integrity-refused:no-integrity-helper"; }
+fi
 # Stable set id for the manifest: core plus the sorted wanted backends.
 OLLAMA_ENGINE_SET="core$(printf '%s' "$OLLAMA_WANTED_BACKENDS" | tr ' ' '\n' | sed '/^$/d' | sort | sed 's/^/+/' | tr -d '\n')"
-_engine_installed_set=""
-[ -f "$OLLAMA_ENGINE_MANIFEST" ] && _engine_installed_set="$(cat "$OLLAMA_ENGINE_MANIFEST" 2>/dev/null)"
-# Reinstall when the binary is missing, when llama-server is missing (the pre-406
-# payload), or when the host's required backend set changed (e.g. a CPU-only host
-# that gained a GPU, or a driver major bump).
+# Order 521: the engine ID is the set PLUS the pinned version and payload
+# digest, so a version bump on a warm cache reinstalls instead of silently
+# serving the old engine, and the installed version is on record.
+OLLAMA_ENGINE_ID="$(tillandsias_engine_id "$OLLAMA_ENGINE_SET" "$OLLAMA_VERSION" "${OLLAMA_SHA256:-none}")"
+_engine_installed_id=""
+[ -f "$OLLAMA_ENGINE_MANIFEST" ] && _engine_installed_id="$(sed -n '1p' "$OLLAMA_ENGINE_MANIFEST" 2>/dev/null)"
+_engine_verdict="$(tillandsias_engine_check "$OLLAMA_TOOLSROOT" "$OLLAMA_ENGINE_MANIFEST" "$OLLAMA_ENGINE_ID")"
+# Reinstall unless the installed engine is exactly the wanted, intact one: a
+# missing binary or llama-server (the pre-406 payload), a changed backend set
+# (a CPU-only host that gained a GPU, a driver major bump), a different
+# version/digest, or any integrity refusal.
 if [ ! -x "$OLLAMA_BIN" ] || [ ! -x "$OLLAMA_LIBDIR/llama-server" ] \
-    || [ "$_engine_installed_set" != "$OLLAMA_ENGINE_SET" ]; then
-    echo "[inference] engine payload: need '$OLLAMA_ENGINE_SET' (have '${_engine_installed_set:-none}')"
+    || [ "$_engine_verdict" != "ok" ]; then
+    echo "[inference] engine payload: need '$OLLAMA_ENGINE_ID' (have '${_engine_installed_id:-none}'; check=$_engine_verdict)"
     echo "[inference] Installing ollama binary (first run)..."
     # Order 313: NO error swallowing in this chain — the volume-ownership
     # EACCES (root-owned models bind-mount vs uid-1000 container) hid for
@@ -293,11 +383,6 @@ if [ ! -x "$OLLAMA_BIN" ] || [ ! -x "$OLLAMA_LIBDIR/llama-server" ] \
         echo "[inference]   macOS: virtiofs share ownership (order 1183-j9dk)." >&2
         exit 1
     fi
-    OLLAMA_ARCH=""
-    case "$(uname -m)" in
-        x86_64 | amd64) OLLAMA_ARCH="amd64" ;;
-        aarch64 | arm64) OLLAMA_ARCH="arm64" ;;
-    esac
     if [ -n "$OLLAMA_ARCH" ]; then
         TMP_O="$(mktemp -d 2>/dev/null)" || true
         if [ -n "$TMP_O" ]; then
@@ -311,27 +396,6 @@ if [ ! -x "$OLLAMA_BIN" ] || [ ! -x "$OLLAMA_LIBDIR/llama-server" ] \
             # Gate the download on a proven egress probe with bounded backoff;
             # an egress that never comes up fails loud but stays non-fatal
             # (the fail-loud guard below + launcher soft-degrade handle it).
-            # ORDER 1118-bscs/1118-d3b6 — PINNED VERSION, VERIFIED DIGEST.
-            #
-            # This read `releases/latest/download/...`, which is not a version at
-            # all: whatever GitHub resolved at CONTAINER START was downloaded,
-            # extracted, and EXECUTED inside the enclave. Two containers from the
-            # same image, started an hour apart, could run different code, and
-            # nothing recorded which. There was no checksum of any kind.
-            #
-            # TO BUMP: change OLLAMA_VERSION and both digests together. The
-            # digests come from the release API and need no 1.4GB download:
-            #   curl -fsS https://api.github.com/repos/ollama/ollama/releases/tags/<tag> \
-            #     | jq -r '.assets[] | select(.name|test("ollama-linux-(amd64|arm64)\\.tar\\.zst$"))
-            #              | "\(.name) \(.digest)"'
-            # Leaving the version and a digest out of step fails closed below, so
-            # a half-done bump cannot ship.
-            OLLAMA_VERSION="v0.34.0"
-            case "$OLLAMA_ARCH" in
-                amd64) OLLAMA_SHA256="cf95886728959aa09910bb34de5cca1cc5a8f68003b5597197d3f2c2d57c0804" ;;
-                arm64) OLLAMA_SHA256="6a9e5b3650c2024d8a78da86b23876f6eea238657a3262d7e5ec0f3688c5d28e" ;;
-                *)     OLLAMA_SHA256="" ;;
-            esac
             OLLAMA_URL="https://github.com/ollama/ollama/releases/download/${OLLAMA_VERSION}/ollama-linux-${OLLAMA_ARCH}.tar.zst"
             _egress_ok=0
             _egress_delay=2
@@ -369,15 +433,15 @@ if [ ! -x "$OLLAMA_BIN" ] || [ ! -x "$OLLAMA_LIBDIR/llama-server" ] \
             # the hosts whose tooling is unusual enough to lack sha256sum.
             if [ "$_ollama_dl" -eq 0 ]; then
                 if [ -z "$OLLAMA_SHA256" ]; then
-                    echo "[inference] FATAL: no pinned SHA-256 for arch '$OLLAMA_ARCH' — refusing to execute an unverified engine (1118-d3b6)" >&2
+                    echo "[inference] FATAL: no pinned SHA-256 for arch '$OLLAMA_ARCH' — refusing to execute an unverified engine (1118-d3b6) reason=engine-integrity-refused:no-pinned-digest" >&2
                     _ollama_dl=1
                 elif ! command -v sha256sum >/dev/null 2>&1; then
-                    echo "[inference] FATAL: sha256sum unavailable — cannot verify the engine payload, refusing to execute it (1118-d3b6)" >&2
+                    echo "[inference] FATAL: sha256sum unavailable — cannot verify the engine payload, refusing to execute it (1118-d3b6) reason=engine-integrity-refused:no-verifier" >&2
                     _ollama_dl=1
                 else
                     _got_sha="$(sha256sum "$TMP_O/ollama.tar.zst" 2>/dev/null | cut -d" " -f1)"
                     if [ "$_got_sha" != "$OLLAMA_SHA256" ]; then
-                        echo "[inference] FATAL: engine digest mismatch for $OLLAMA_VERSION/$OLLAMA_ARCH — refusing to execute (1118-d3b6)" >&2
+                        echo "[inference] FATAL: engine digest mismatch for $OLLAMA_VERSION/$OLLAMA_ARCH — refusing to execute (1118-d3b6) reason=engine-integrity-refused:payload-digest-mismatch" >&2
                         echo "[inference]   expected $OLLAMA_SHA256" >&2
                         echo "[inference]   got      ${_got_sha:-<none>}" >&2
                         rm -f "$TMP_O/ollama.tar.zst"
@@ -416,18 +480,39 @@ if [ ! -x "$OLLAMA_BIN" ] || [ ! -x "$OLLAMA_LIBDIR/llama-server" ] \
                         || echo "[inference] WARN: tier wants backend '$_w' but this ollama release does not ship it — inference will fall back to CPU" >&2
                 done
                 mkdir -p "$OLLAMA_LIBDIR" 2>/dev/null || true
+                # Order 482b: a reinstall must CONVERGE on the wanted set. Extraction
+                # adds files and never removes them, so a backend dir left by an
+                # earlier set (another engine, a host that lost its GPU) would stay
+                # beside the new one: two backends where the set names one.
+                for _old_backend in "$OLLAMA_LIBDIR"/*/; do
+                    [ -d "$_old_backend" ] || continue
+                    _old_backend="${_old_backend%/}"
+                    _keep=0
+                    for _w in $OLLAMA_WANTED_BACKENDS; do
+                        [ "${_old_backend##*/}" = "$_w" ] && _keep=1
+                    done
+                    if [ "$_keep" -eq 0 ]; then
+                        echo "[inference] removing backend dir '${_old_backend##*/}' not in the wanted set '$OLLAMA_ENGINE_SET'"
+                        rm -rf "$_old_backend"
+                    fi
+                done
                 # Pass 2: extract bin/ollama + the selected slice of lib/ollama.
                 if zstd -dc "$TMP_O/ollama.tar.zst" 2>/dev/null \
                     | tar -xf - -C "$OLLAMA_TOOLSROOT" "$@" bin/ollama lib/ollama \
                     && install -m 0755 "$OLLAMA_TOOLSROOT/bin/ollama" "$OLLAMA_BIN"; then
                     rm -rf "$OLLAMA_TOOLSROOT/bin"
-                    printf '%s\n' "$OLLAMA_ENGINE_SET" > "$OLLAMA_ENGINE_MANIFEST"
+                    if ! tillandsias_engine_record "$OLLAMA_TOOLSROOT" "$OLLAMA_ENGINE_MANIFEST" "$OLLAMA_ENGINE_ID"; then
+                        echo "[inference] reason=engine-integrity-refused:record-failed — the verified engine could not be recorded; it will be refused below" >&2
+                        rm -f "$OLLAMA_ENGINE_MANIFEST"
+                    fi
                     echo "[inference] ollama $OLLAMA_ARCH engine '$OLLAMA_ENGINE_SET' installed ($(du -sh "$OLLAMA_LIBDIR" 2>/dev/null | cut -f1) libs) into model cache"
                 else
                     echo "[inference] ollama install FAILED (see errors above) — will retry next launch (non-fatal)" >&2
                 fi
             else
-                echo "[inference] ollama download FAILED — will retry next launch (non-fatal)" >&2
+                # Order 521: this branch is reached by a failed download AND by a
+                # refused payload; the reason= line above says which.
+                echo "[inference] ollama engine NOT installed (download failed or payload refused, see reason= above) — will retry next launch (non-fatal)" >&2
             fi
             rm -rf "$TMP_O"
         fi
@@ -435,8 +520,27 @@ if [ ! -x "$OLLAMA_BIN" ] || [ ! -x "$OLLAMA_LIBDIR/llama-server" ] \
         echo "[inference] unsupported arch $(uname -m) — relying on system ollama" >&2
     fi
 fi
+# Order 521: execute ONLY an engine the integrity check vouches for. A stale
+# engine (fully recorded and intact, but not the pinned version — e.g. the
+# reinstall after a bump failed) is served and reported; anything refused is
+# NOT put on PATH, so the fail-loud guard below exits and the next launch
+# retries, while the forge launch itself proceeds degraded (order 486).
+_engine_verdict="$(tillandsias_engine_check "$OLLAMA_TOOLSROOT" "$OLLAMA_ENGINE_MANIFEST" "$OLLAMA_ENGINE_ID")"
+case "$_engine_verdict" in
+    ok)
+        echo "[inference] engine integrity: ok ($OLLAMA_ENGINE_ID)"
+        ;;
+    stale:*)
+        echo "[inference] WARN: reason=engine-stale — serving the previously verified engine '${_engine_verdict#stale:}', not the pinned '$OLLAMA_ENGINE_ID'" >&2
+        ;;
+    *)
+        echo "[inference] FATAL: reason=$_engine_verdict — refusing to execute the engine in $OLLAMA_TOOLSROOT" >&2
+        ;;
+esac
 if [ -x "$OLLAMA_BIN" ]; then
-    export PATH="$OLLAMA_BINDIR:$PATH"
+    case "$_engine_verdict" in
+        ok | stale:*) export PATH="$OLLAMA_BINDIR:$PATH" ;;
+    esac
 fi
 
 # CA certificate from podman secret for HTTPS trust.
@@ -519,7 +623,7 @@ fi
 # banner-then-die exit 127. Exit early with one clear line instead; the
 # container dying IS the "retry next launch" mechanism.
 if ! command -v ollama >/dev/null 2>&1; then
-    echo "[inference] FATAL: no ollama binary available (self-install failed above) — exiting so the next launch retries" >&2
+    echo "[inference] FATAL: no ollama binary available (self-install failed, or the engine was refused — see the reason= line above) — exiting so the next launch retries" >&2
     exit 1
 fi
 
@@ -541,6 +645,53 @@ fi
 # disk, not against the tier string alone.
 _installed_backends="$(find "$OLLAMA_LIBDIR" -maxdepth 1 -mindepth 1 -type d -printf '%f ' 2>/dev/null)"
 echo "[inference] engine: set=$OLLAMA_ENGINE_SET backends=[${_installed_backends:-core-only}] llama-server=ok"
+
+# ── llama-server slot handoff (order 482b) ────────────────────────
+# Everything below this block is the ollama slot (serve, pulls, inventory). The
+# llama-server slot replaces it: verify the exactly-one-backend closure against
+# what is INSTALLED, make the pinned T0 model available (verified), then hand off
+# to the supervised llama-server + caddy pair, which never returns.
+if [ "$TILLANDSIAS_INFERENCE_ENGINE" = "llama-server" ]; then
+    _llama_pin="$(tillandsias_llama_backend_pin "$OLLAMA_LIBDIR" "$LLAMA_BACKEND")"
+    if [ -n "$_llama_pin" ]; then
+        export GGML_BACKEND_PATH="$_llama_pin"
+    else
+        unset GGML_BACKEND_PATH
+    fi
+    _llama_set="$(sed -n '1p' "$OLLAMA_ENGINE_MANIFEST" 2>/dev/null | cut -d' ' -f1)"
+    _llama_verdict="$(tillandsias_llama_backend_verdict "$OLLAMA_LIBDIR" "$LLAMA_BACKEND" "$_llama_set" "${GGML_BACKEND_PATH:-}")"
+    if [ "$_llama_verdict" != "ok" ]; then
+        echo "[inference] FATAL: reason=$_llama_verdict — llama-server would not run exactly the selected backend '$LLAMA_BACKEND'; exiting so the next launch reinstalls" >&2
+        exit 1
+    fi
+    echo "[inference] llama-server backend closure: ok (set=$_llama_set backend=$LLAMA_BACKEND pin=${GGML_BACKEND_PATH:-none})"
+    TIERS_SH=/usr/local/share/tillandsias/tiers/tiers.sh
+    # shellcheck source=tiers/tiers.sh
+    [ -r "$TIERS_SH" ] && . "$TIERS_SH"
+    _llama_model_id=""
+    command -v tillandsias_tier_models >/dev/null 2>&1 \
+        && _llama_model_id="$(tillandsias_tier_models T0)"
+    if [ -z "$_llama_model_id" ]; then
+        echo "[inference] FATAL: reason=tier-table-unavailable — no T0 model id for the llama-server slot" >&2
+        exit 1
+    fi
+    # Tier models above T0 are pinned per shard by 482-igky; until a row is pinned it
+    # is refused by name, so an operator who opted into tier pulls sees why.
+    if [ "${TILLANDSIAS_INFERENCE_TIER_PULLS:-0}" = "1" ]; then
+        _llama_ram_gb=$(awk '/MemTotal/ {printf "%d", $2/1024/1024}' /proc/meminfo 2>/dev/null || echo 0)
+        _llama_tier="$(tillandsias_tier_classify 0 "$_llama_ram_gb" 2>/dev/null)" || _llama_tier=T1
+        for _llama_id in $(tillandsias_tier_models "${_llama_tier:-T1}"); do
+            [ "$_llama_id" = "$_llama_model_id" ] && continue
+            tillandsias_llama_gguf_pin "$_llama_id" >/dev/null \
+                || echo "[inference] reason=engine-integrity-refused:gguf-unpinned:$_llama_id — tier ${_llama_tier} row not served by llama-server until pinned (482-igky)" >&2
+        done
+    fi
+    if ! _llama_model="$(tillandsias_llama_gguf_ensure "$_llama_model_id" "${OLLAMA_MODELS}.gguf")"; then
+        echo "[inference] FATAL: no verified model for the llama-server slot — exiting so the next launch retries (forge launch degrades, order 486)" >&2
+        exit 1
+    fi
+    tillandsias_llama_serve "$OLLAMA_LIBDIR/llama-server" "$_llama_model" "$LLAMA_BACKEND" "$_llama_model_id"
+fi
 
 # @trace spec:inference-container
 # Start ollama in background so we can pre-pull models before going live.
@@ -574,11 +725,19 @@ RAM_GB=$(awk '/MemTotal/ {printf "%d", $2/1024/1024}' /proc/meminfo 2>/dev/null 
 VRAM_MB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 || echo 0)
 VRAM_GB=$(( ${VRAM_MB:-0} / 1024 ))
 
+# Order 482d: the ladder is DATA (images/inference/tiers/tier-table.tsv, the
+# one shared T0-T5 source both engine slots read); tiers.sh resolves it. No
+# tier row may be written inline here again — litmus:inference-tier-table-migration
+# refuses one.
+TIERS_SH=/usr/local/share/tillandsias/tiers/tiers.sh
 TIER="T1"
-if [ "$VRAM_GB" -ge 32 ]; then TIER="T5"
-elif [ "$VRAM_GB" -ge 16 ]; then TIER="T4"
-elif [ "$VRAM_GB" -ge 8 ] || [ "$RAM_GB" -ge 32 ]; then TIER="T3"
-elif [ "$VRAM_GB" -ge 4 ] || [ "$RAM_GB" -ge 16 ]; then TIER="T2"
+if [ -r "$TIERS_SH" ]; then
+    # shellcheck source=tiers/tiers.sh
+    . "$TIERS_SH"
+    TIER="$(tillandsias_tier_classify "$VRAM_GB" "$RAM_GB")" || TIER="T1"
+    [ -n "$TIER" ] || TIER="T1"
+else
+    echo "[inference] WARN: $TIERS_SH missing — tier table unavailable, classifying T1 and skipping tier pulls" >&2
 fi
 
 echo "[inference] tier=$TIER (RAM ${RAM_GB}GB, VRAM ${VRAM_GB}GB)"
@@ -797,36 +956,34 @@ elif [ "$PRELOAD_POLICY" != "eager" ]; then
 elif [ "${TILLANDSIAS_INFERENCE_TIER_PULLS:-0}" != "1" ]; then
     echo "[inference] tier pulls opt-in (set TILLANDSIAS_INFERENCE_TIER_PULLS=1) — skipping runtime tier pulls"
 else
-    # T2+ pull in background if tier permits.
-    case "$TIER" in
-        T5|T4|T3|T2)
-            (
-                [ "$TIER" != "T0" ] && [ "$TIER" != "T1" ] && \
-                    ollama pull qwen2.5:7b \
-                    && echo "[inference] T2 (qwen2.5:7b) ready" \
-                    || echo "[inference] T2 (qwen2.5:7b) pull failed (squid SSL-bump EOF likely; non-fatal)" >&2
-                case "$TIER" in T5|T4|T3)
-                    ollama pull qwen2.5-coder:7b \
-                        && echo "[inference] T3 (qwen2.5-coder:7b) ready" \
-                        || echo "[inference] T3 (qwen2.5-coder:7b) pull failed (non-fatal)" >&2
-                esac
-                case "$TIER" in T5|T4)
-                    ollama pull qwen2.5:14b \
-                        && echo "[inference] T4 (qwen2.5:14b) ready" \
-                        || echo "[inference] T4 (qwen2.5:14b) pull failed (non-fatal)" >&2
-                esac
-                case "$TIER" in T5)
-                    ollama pull qwen2.5-coder:32b \
-                        && echo "[inference] T5 (qwen2.5-coder:32b) ready" \
-                        || echo "[inference] T5 (qwen2.5-coder:32b) pull failed (non-fatal)" >&2
-                esac
-                echo "[inference] runtime tier pulls complete"
-            ) &
-            ;;
-        *)
-            echo "[inference] tier=T0/T1 only — no runtime pulls"
-            ;;
-    esac
+    # Order 482d: pull what the shared table says this tier adds above the T0
+    # baseline (the baseline is the DEFAULT_MODELS set, pulled above), smallest
+    # first, each resolved through the ollama adapter. A logical id the adapter
+    # cannot map is reported and skipped — never pulled under a guessed name.
+    _tier_extra=""
+    if command -v tillandsias_tier_models >/dev/null 2>&1; then
+        _tier_base=" $(tillandsias_tier_models T0) "
+        for _tier_id in $(tillandsias_tier_models "$TIER"); do
+            case "$_tier_base" in *" $_tier_id "*) continue ;; esac
+            _tier_extra="$_tier_id $_tier_extra"
+        done
+    fi
+    if [ -n "$_tier_extra" ]; then
+        (
+            for _tier_id in $_tier_extra; do
+                if ! _tier_tag="$(tillandsias_tier_artifact ollama "$_tier_id")"; then
+                    echo "[inference] tier $TIER: $_tier_tag — no ollama mapping, not pulled" >&2
+                    continue
+                fi
+                ollama pull "$_tier_tag" \
+                    && echo "[inference] $TIER ($_tier_tag) ready" \
+                    || echo "[inference] $TIER ($_tier_tag) pull failed (squid SSL-bump EOF likely; non-fatal)" >&2
+            done
+            echo "[inference] runtime tier pulls complete"
+        ) &
+    else
+        echo "[inference] tier=$TIER adds nothing above the T0 baseline — no runtime pulls"
+    fi
 fi
 
 # Hand off to ollama as the foreground process for signal handling.

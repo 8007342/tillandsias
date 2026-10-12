@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (macuahuitl, 2026-10-11): observed during 394e S4.
+packets:
+  - packet_id: when-the-checkouts-branch-is-not-a-branch-upstream-the-mirror-wait-polls-twenty-minutes-for-a-ref-that-can-never-appear-and-calls-it-seed-still-in-progress
+    order: 1623-8tea
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [git-mirror, launch, diagnostics, bounded-wait]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      A lane launch for a project whose local branch (master) does not exist upstream (default main) waits in wait_for_git_mirror_ready for refs/heads/master. The wait runs the full GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS (20 min), and every attempt says "HEAD resolvable but expected branch refs/heads/master is not concrete yet - seed still in progress". The ref can never appear, so the operator waits twenty minutes on a misdiagnosis.
+    context: |
+      MEASURED on lenovinha 2026-10-11 (installed v56.9.27.2, order 394e S4, first attempt). scratch-394e-hold was a local repo on branch master, with origin https://github.com/octocat/Spoon-Knife.git, whose only default is main (ls-remote: HEAD == refs/heads/main). The launch logged "[forge-launch] git mirror not ready yet (attempt 768/1200): HEAD resolvable but expected branch refs/heads/master is not concrete yet - seed still in progress" about 13 minutes in. It was killed by hand. Renaming the local branch to main made the identical launch seed on attempt 1.
+      ACCURACY NOTE: the coordinator's first description said "forever". The code bounds it: const GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS = 20 * 60 (main.rs ~5470, sized for a 12-15 min Windows pristine-volume seed). It then refuses with "did not become cloneable within 1200s ... common causes: the upstream seed fetch is still running or failed, upstream is empty, or the mirror's HEAD is unborn". The defect is the 20-minute misdiagnosis and a final message that never names the real cause. The wait itself is finite.
+      The mirror HAS the information early: its HEAD resolves (the seed finished) and its refs list shows what the upstream branches are. A branch that is absent from a seeded mirror is distinguishable from a seed that is still running.
+    exit_criteria:
+      - 'the same shape (local branch absent upstream, upstream default differs) either resolves to the upstream default branch with a stated message, or refuses within a stated short bound (seconds after the seed completes, not 20 min) naming the missing ref AND the branches the mirror does have'
+      - 'a genuinely slow cold seed (HEAD not yet resolvable) still gets the full 20-minute bound; the two cases are told apart and both are covered by a FakeBackend unit test'
+    unscoreable: "unpinnable-until-the-guard-exists: the seeded-but-ref-absent classification and its test are written together"
+    next_action: >
+      In wait_for_git_mirror_ready, once HEAD resolves (seed complete) and the expected ref is still absent, list the mirror's refs/heads. Decide by policy: refuse fast, naming them, or fall back to the mirror's HEAD branch with a WARN. Keep the 20-minute bound only for an unresolvable HEAD.
+    provenance: |
+      Filed by lenovinha-silverblue on macuahuitl's direction, 2026-10-11; observed during 394e S4.
+    events:
+      - type: filed
+        ts: "2026-10-11T23:53:15Z"
+        host: lenovinha
+        summary: |-
+          The mirror wait spends its full 20-minute bound on refs/heads/<local branch> when the upstream default differs, and calls it "seed still in progress". It is bounded, but it misdiagnoses.

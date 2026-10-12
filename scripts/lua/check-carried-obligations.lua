@@ -1,0 +1,527 @@
+-- @trace order:1577-g96z, order:1570-k5yt, order:1577-57u3, order:1589-hm2r, spec:ci-release
+-- @env TILLANDSIAS_CARRIED_BASE TILLANDSIAS_CARRIED_HEAD TILLANDSIAS_CARRIED_REF TILLANDSIAS_CARRIED_NO_FETCH TILLANDSIAS_GATE_DIFF_BASE
+--
+-- check-carried-obligations.lua — what does THIS change owe each carried
+-- obligation backlog? The rule is methodology/convergence.yaml
+-- `carried_obligations` (1570-k5yt; spec ci-release req-id ec267f02): a change
+-- that touches a backlog's AREA is DUE, and a due change carries ONE item (the
+-- backlog's counter at HEAD is below its counter at BASE) or ONE waiver line
+-- (`Carried-Waiver: <backlog> <reason>` as a commit trailer on the change).
+-- Silence is the only thing refused, and only at landing; a work-ref push
+-- warns. A change outside the area owes nothing and is never shown the
+-- obligation. An agent learns what it owes from THIS output, never from prose.
+--
+-- One stdout line per backlog, then one verdict:
+--   carried:<backlog>:not-due
+--   carried:<backlog>:paid:<item>
+--   carried:<backlog>:waived:<reason>
+--   carried:<backlog>:due:<item> (<n> lines)        + candidates and the exact
+--                                                     waiver line on stderr
+--   carried:<backlog>:unsupported-counter           (a backlog this guard cannot count)
+--   ok:carried-obligations:backlogs=<n> due=<n> silent=<n>          exit 0
+--   violation:carried:<backlog>:silent                              exit 1  (--landing only,
+--                                                                   stage gentle/enforced)
+--   violation:carried:<backlog>:waiver-not-a-trailer                exit 1  (--landing; a
+--                                                                   Carried-Waiver line git did not
+--                                                                   parse: not in the last paragraph)
+--   skip:carried-obligations:no-base:<ref>                          exit 0
+-- The ok: line ends ` counter=<backlog>:<n>` for each backlog it can count.
+-- --burndown prints one burndown:<backlog>:... line per backlog (the stall
+-- trigger, from the land commits' Carried trailers) and
+-- ok:carried-burndown:backlogs=<n> fired=<k>; see the --burndown block.
+--
+-- DUE is the change's own diff, `git diff --name-only BASE...HEAD` (BASE
+-- defaults to origin/linux-next, as the -added deciders do), against the
+-- backlog's `area` globs (`*` stays inside one path segment, `**` crosses).
+-- PAID means the counter of EXISTING items fell — for shell-to-lua, the
+-- population check-shell-ratchet.lua counts as `sh=` (top-level scripts/
+-- check-/test-/verify-/guard- .sh outside bootstrap-shell-allowlist.txt), read
+-- at the MERGE BASE and at HEAD with `git ls-tree` so both ends are measured
+-- the same way and the base is the change's own, not a trunk that moved. Removing a floor line for a file already gone changes nothing here,
+-- which is the point (convergence.yaml counter: slack is not debt).
+-- WAIVED is a trailer read with `git log --format=%(trailers:key=Carried-
+-- Waiver,valueonly) BASE..HEAD` (the Native-Lint precedent, 1235-rfub);
+-- reasons are COUNTED, NOT JUDGED at the gentle stage.
+--
+-- THE SUGGESTION is the backlog's smallest existing items at or under
+-- `item_ceiling_lines`, deciders before fixtures (fixtures stay shell longest:
+-- native process conformance is open, 1543-ffhg/1544-cnae), up to five, and
+-- the one offered is picked by the work ref's order modulo five so two
+-- concurrent changes are not steered onto the same file.
+--
+-- WRAPPERS are sized as their exec'd callee, so a 4-line exec shim onto a
+-- 450-line script is not offered as small (`wrapper-of:<callee>` on stderr).
+--
+-- TAKEN ITEMS are skipped: a .sh another open origin/work/* ref deletes is
+-- never offered, and each skip prints `taken-by:work/<ref> <item>` on stderr
+-- (two hosts ported the same offered item on 2026-10-10). Since 1589-hm2r the
+-- work refs are FETCHED right before they are judged, and each taken-by and
+-- offer line says which snapshot it judged (snapshot=<iso>, or
+-- snapshot=stale:<age> when it could not fetch): the guard used to judge
+-- whatever the last fetch left. The item a change PAYS is held to the same
+-- test: one another open work ref already deletes is refused on every push as
+-- refused:carried:paid-but-taken-by:work/<ref>:<item>, and a
+-- `Carried-Waiver: <backlog> conflict:<item> (#<pr>)` trailer clears it.
+--
+-- WHAT IT CANNOT SEE: uncommitted work (it reads BASE...HEAD, the change as it
+-- will be pushed); a port on a ref not yet pushed or fetched;
+-- whether a waiver's reason is TRUE (gentle stage: counted, not judged). Only
+-- the shell-to-lua counter is implemented; any other backlog prints
+-- unsupported-counter rather than a guess.
+--
+-- Arguments: --landing  refuse a due, silent change (the land queue's mode).
+
+local BASE = env.get("TILLANDSIAS_CARRIED_BASE")
+if not BASE or BASE == "" then BASE = env.get("TILLANDSIAS_GATE_DIFF_BASE") end
+if not BASE or BASE == "" then BASE = "origin/linux-next" end
+local HEAD = env.get("TILLANDSIAS_CARRIED_HEAD")
+if not HEAD or HEAD == "" then HEAD = "HEAD" end
+local LANDING = false
+local BURNDOWN = false
+for i = 1, #arg do
+    if arg[i] == "--landing" then LANDING = true end
+    if arg[i] == "--burndown" then BURNDOWN = true end
+end
+
+local function git(args)
+    local argv = { "git" }
+    for _, a in ipairs(args) do argv[#argv + 1] = a end
+    local r = proc.run({ argv = argv, timeout_ms = 120000 })
+    return (r.status == "exited" and r.code == 0), (r.stdout or "")
+end
+local function lines(s)
+    local out = {}
+    for _, l in ipairs(text.lines(s)) do if l ~= "" then out[#out + 1] = l end end
+    return out
+end
+
+local base_ok = git({ "rev-parse", "--verify", "--quiet", BASE .. "^{commit}" })
+if not base_ok then
+    verdict.skip("carried-obligations", "no-base:" .. BASE)
+end
+
+local _, mb = git({ "merge-base", BASE, HEAD })
+local MERGE_BASE = text.trim(mb)
+if MERGE_BASE == "" then MERGE_BASE = BASE end
+
+-- ── the rule, read from methodology ────────────────────────────────────────
+local ok_m, mtext = pcall(fs.read, "methodology/convergence.yaml")
+local ok_y, conv = false, nil
+if ok_m then ok_y, conv = pcall(yaml.parse, mtext) end
+local backlogs = (ok_y and type(conv) == "table" and type(conv.carried_obligations) == "table"
+    and conv.carried_obligations.backlogs) or nil
+if type(backlogs) ~= "table" or #backlogs == 0 then
+    verdict.emit("blocked:carried-obligations:no-backlog-table", 2,
+        "methodology/convergence.yaml carried_obligations.backlogs did not parse to a non-empty list; nothing can be judged")
+end
+
+-- ── the change ─────────────────────────────────────────────────────────────
+local _, diff = git({ "diff", "--name-only", BASE .. "..." .. HEAD })
+local changed = lines(diff)
+local _, tr = git({ "log", "--format=%(trailers:key=Carried-Waiver,valueonly)", BASE .. ".." .. HEAD })
+local waivers = {} -- backlog -> first reason
+for _, l in ipairs(lines(tr)) do
+    local b, reason = text.trim(l):match("^(%S+)%s+(.+)$")
+    if b and not waivers[b] then waivers[b] = text.trim(reason) end
+end
+-- A `Carried-Waiver:` line git did NOT parse as a trailer: git reads trailers
+-- ONLY from a message's LAST paragraph, so a waiver written above the
+-- Co-Authored-By block is invisible to %(trailers) (measured on 1570-25iq,
+-- 2026-10-10). Found in the raw messages, it is NAMED rather than ignored.
+local _, raw = git({ "log", "--format=%B", BASE .. ".." .. HEAD })
+local unparsed = {} -- backlog -> the raw line
+for _, l in ipairs(lines(raw)) do
+    local b = l:match("^Carried%-Waiver:%s*(%S+)")
+    if b and not waivers[b] and not unparsed[b] then unparsed[b] = l end
+end
+
+local function glob_to_pattern(g)
+    local p = g:gsub("[%^%$%(%)%%%.%[%]%+%-%?]", "%%%0")
+    p = p:gsub("%*%*", "\1"):gsub("%*", "[^/]*"):gsub("\1", ".*")
+    return "^" .. p .. "$"
+end
+local function in_area(area)
+    for _, path in ipairs(changed) do
+        for _, g in ipairs(area) do
+            if path:match(glob_to_pattern(g)) then return path end
+        end
+    end
+    return nil
+end
+
+-- ── the shell-to-lua counter, at a ref ─────────────────────────────────────
+-- The POPULATION is data on the backlog (convergence.yaml `population` globs,
+-- `population_excludes` allowlist), so the guard, the burndown and any reader
+-- count one set (1577-57u3). Read at a REF with `git ls-tree -l`/`git show`,
+-- so the merge base, the head and every burndown window end are measured the
+-- same way. A backlog with no `population` keeps the four ratchet prefixes.
+local DEFAULT_POPULATION = { "scripts/check-*.sh", "scripts/test-*.sh", "scripts/verify-*.sh", "scripts/guard-*.sh" }
+
+-- A WRAPPER is at most WRAPPER_MAX_CODE code lines (not blank, not a comment)
+-- whose exec names another population file. It is counted ONCE, with its
+-- callee: porting the callee alone leaves the wrapper, which then counts in
+-- the callee's place, so only porting (or retiring) both pays. A wrapper onto
+-- a script OUTSIDE the population is that script's only representative and
+-- stays counted (test-mo-full-attest.sh -> mo-full-attest.sh).
+local WRAPPER_MAX_CODE, WRAPPER_MAX_BYTES = 10, 4096
+local function exec_callee_of(content)
+    local code, callee = 0, nil
+    for _, l in ipairs(text.lines(content)) do
+        if l:match("%S") and not l:match("^%s*#") then
+            code = code + 1
+            callee = callee or l:match("^%s*exec%s.-([%w%-_.]+%.sh)")
+        end
+    end
+    if code <= WRAPPER_MAX_CODE and callee then return "scripts/" .. callee end
+    return nil
+end
+
+local function shell_population(ref, b)
+    local globs = (type(b) == "table" and type(b.population) == "table" and #b.population > 0) and b.population or DEFAULT_POPULATION
+    local pats = {}
+    for _, g in ipairs(globs) do pats[#pats + 1] = glob_to_pattern(g) end
+    local excl = (type(b) == "table" and type(b.population_excludes) == "string") and b.population_excludes
+        or "scripts/portability/bootstrap-shell-allowlist.txt"
+    local _, allow = git({ "show", ref .. ":" .. excl })
+    local boot = {}
+    for _, l in ipairs(text.lines(allow)) do
+        local f = l:match("^%s*(%S+)")
+        if f and not f:find("^#") then boot[f] = true end
+    end
+    local _, tree = git({ "ls-tree", "-l", ref, "scripts/" })
+    local set, sizes = {}, {}
+    for _, row in ipairs(lines(tree)) do
+        local size, f = row:match("^%S+%s+blob%s+%S+%s+(%d+)\t(.+)$")
+        if f and f:match("^scripts/[^/]+$") and not boot[f] then
+            for _, pat in ipairs(pats) do
+                if f:match(pat) then set[f] = true; sizes[f] = tonumber(size); break end
+            end
+        end
+    end
+    local pop = {}
+    for f in pairs(set) do
+        local wrapped = false
+        if sizes[f] and sizes[f] <= WRAPPER_MAX_BYTES then
+            local _, c = git({ "show", ref .. ":" .. f })
+            local callee = exec_callee_of(c)
+            wrapped = callee ~= nil and callee ~= f and set[callee] == true
+        end
+        if not wrapped then pop[#pop + 1] = f end
+    end
+    table.sort(pop)
+    return pop
+end
+local COUNTERS = { ["shell-to-lua"] = shell_population }
+
+-- ── --burndown: has the stall trigger fired? (1577-57u3) ──────────────────
+-- Per backlog, the last `window_size` DUE integrations on BASE's first-parent
+-- history, read from the `Carried:` trailers the land queue writes (1577-568c):
+--   burndown:<b>:count=<n>:stage=<s>:window=<k>:paid=<p>:waived=<v>:silent=<q>:trigger=<fired|clear>
+-- count is the counter at BASE. The trigger FIRES when the window is full
+-- (k = window_size) and the counter at BASE is not below the counter at the
+-- first parent of the window's oldest landing, at stage advisory or gentle
+-- (triggers.advisory_to_gentle / gentle_to_enforced). A short window is clear:
+-- landings before 1577-568c carry no trailer and are not counted, never
+-- guessed. A fired trigger is not a failure (exit 0); the coordinator turns it
+-- into one plain ask to the operator (governance).
+if BURNDOWN then
+    local W = tonumber(conv.carried_obligations.window_size) or 10
+    local _, hist = git({ "log", "--first-parent", "--format=%H%x1f%(trailers:key=Carried,valueonly,separator=%x1e)", BASE })
+    local fired = 0
+    for _, b in ipairs(backlogs) do
+        local name = tostring(b.name)
+        local stage = tostring(b.stage or "gentle")
+        local counter = COUNTERS[name]
+        local k, paid, waived, silent_n, oldest = 0, 0, 0, 0, nil
+        for _, row in ipairs(lines(hist)) do
+            if k >= W then break end
+            local sha, tr = row:match("^(%x+)\31(.*)$")
+            for entry in ((tr or "") .. "\30"):gmatch("(.-)\30") do
+                local bn, state = text.trim(entry):match("^(%S+)%s+(%S+)")
+                if bn == name and (state == "paid" or state == "waived" or state == "due") then
+                    k = k + 1; oldest = sha
+                    if state == "paid" then paid = paid + 1
+                    elseif state == "waived" then waived = waived + 1
+                    else silent_n = silent_n + 1 end
+                    break
+                end
+            end
+        end
+        if not counter then
+            out.line("burndown:" .. name .. ":count=unsupported:stage=" .. stage .. ":window=" .. k .. ":paid=" .. paid ..
+                ":waived=" .. waived .. ":silent=" .. silent_n .. ":trigger=clear")
+        else
+            local n_end = #counter(BASE, b)
+            local n_start = n_end
+            if oldest then
+                local has_parent = git({ "rev-parse", "--verify", "--quiet", oldest .. "^1" })
+                if has_parent then n_start = #counter(oldest .. "^1", b) end
+            end
+            local trig = (k >= W and n_end >= n_start and (stage == "advisory" or stage == "gentle")) and "fired" or "clear"
+            if trig == "fired" then fired = fired + 1 end
+            out.line("burndown:" .. name .. ":count=" .. n_end .. ":stage=" .. stage .. ":window=" .. k .. ":paid=" .. paid ..
+                ":waived=" .. waived .. ":silent=" .. silent_n .. ":trigger=" .. trig)
+            if trig == "fired" then
+                log.raw("  " .. name .. ": the counter did not descend across the last " .. W .. " due integrations (" .. n_start ..
+                    " -> " .. n_end .. "). Propose the next stage to the operator as one plain ask with these numbers (carried_obligations.governance).")
+            end
+        end
+    end
+    verdict.ok("carried-burndown", "backlogs=" .. #backlogs .. " fired=" .. fired)
+end
+
+local function line_count(path)
+    local ok_r, c = pcall(fs.read, path)
+    if not ok_r then return nil end
+    local _, n = c:gsub("\n", "") -- newline count, as `wc -l` counts
+    return n
+end
+
+local function ref_order()
+    local name = env.get("TILLANDSIAS_CARRIED_REF")
+    if not name or name == "" then
+        local _, b = git({ "rev-parse", "--abbrev-ref", "HEAD" })
+        name = text.trim(b)
+    end
+    return tonumber(name:match("work/(%d+)%-") or "") or 0
+end
+
+-- ORDER 1589-hm2r. JUDGE A FRESH SNAPSHOT, OR SAY HOW OLD IT IS. taken-by
+-- reads refs/remotes/origin/work/*, which is only as new as this clone's last
+-- fetch. Measured: work/1585-hb8w was created on GitHub at 06:33:30Z, yoga had
+-- fetched at 06:33:23Z, and the guard ran at 06:45 on that snapshot, so it
+-- offered check-litmus-yaml-parses.sh, which hb8w already ported: two hosts
+-- ported the same item. So the work refs are fetched (and pruned, in that
+-- namespace only) right before they are judged, and every taken-by and offer
+-- line says which snapshot it judged: snapshot=<iso> when the fetch
+-- succeeded, snapshot=stale:<age> when it could not fetch (offline, no
+-- origin), the age read from the newest remote-tracking update in the reflog.
+-- TILLANDSIAS_CARRIED_NO_FETCH=1 skips the fetch (the fixture's pre-snapshot
+-- control and an offline host); the line then says stale.
+local SNAPSHOT
+local function snapshot()
+    if SNAPSHOT then return SNAPSHOT end
+    if env.get("TILLANDSIAS_CARRIED_NO_FETCH") ~= "1" then
+        local r = proc.run({ argv = { "git", "fetch", "--quiet", "--prune", "origin",
+            "+refs/heads/work/*:refs/remotes/origin/work/*",
+            -- BEGIN-1607-FETCH
+            -- 1607-8bq5: the mirror's diverged markers (1606-25nf), into a
+            -- namespace of their own, pruned with the work refs.
+            "+refs/tillandsias/diverged/*:refs/remotes/origin-diverged/*",
+            -- END-1607-FETCH
+        }, timeout_ms = 60000 })
+        if r.status == "exited" and r.code == 0 then
+            -- time.iso_utc() is the compact 20261011t082608z; print ISO-8601.
+            local c = time.iso_utc()
+            local y, mo, d, h, mi, s = c:match("^(%d%d%d%d)(%d%d)(%d%d)[tT](%d%d)(%d%d)(%d%d)")
+            SNAPSHOT = y and string.format("%s-%s-%sT%s:%s:%sZ", y, mo, d, h, mi, s) or c
+            return SNAPSHOT
+        end
+    end
+    -- How old is what we have? The newest reflog entry among the remote-
+    -- tracking refs records the last fetch that moved one (reflogs are on by
+    -- default in a non-bare clone); "@{<unix>}" with --date=unix.
+    local newest = 0
+    local _, refs = git({ "for-each-ref", "--format=%(refname)", "refs/remotes/origin/" })
+    for _, ref in ipairs(lines(refs)) do
+        local _, lg = git({ "reflog", "show", "--date=unix", "-n", "1", ref })
+        local t = tonumber(lg:match("@{(%d+)}") or "")
+        if t and t > newest then newest = t end
+    end
+    if newest == 0 then
+        SNAPSHOT = "stale:unknown"
+    else
+        local age = math.floor(time.now_ms() / 1000) - newest
+        if age < 0 then age = 0 end
+        SNAPSHOT = string.format("stale:%dh%02dm", math.floor(age / 3600), math.floor((age % 3600) / 60))
+    end
+    return SNAPSHOT
+end
+
+-- Items another open work ref already deletes (ported or retired there): one
+-- `git diff --name-only --diff-filter=D merge-base..tip` per origin/work/*
+-- ref not yet contained in BASE. Measured 2026-10-10: two hosts ported the
+-- same offered item half a day after the rule went live. Computed only when
+-- a backlog is due.
+local taken_cache
+local function taken_items()
+    if taken_cache then return taken_cache end
+    taken_cache = {}
+    snapshot() -- 1589-hm2r: refresh the work refs before judging them
+    -- This change's own ref, once pushed, deletes what this change pays: it is
+    -- never "another" ref (by name, or because HEAD already contains its tip).
+    local own = env.get("TILLANDSIAS_CARRIED_REF")
+    if not own or own == "" then
+        local _, b = git({ "rev-parse", "--abbrev-ref", "HEAD" })
+        own = text.trim(b)
+    end
+    -- BEGIN-1607-DIVERGED
+    -- ORDER 1607-8bq5. A WORK REF THE MIRROR MARKS DIVERGED IS NOT EVIDENCE.
+    -- The mirror publishes refs/tillandsias/diverged/<ref> (1606-25nf) for a
+    -- work ref whose exported tip it could not prove upstream holds: un-relayed
+    -- work, or a rewrite with no twin history. Measured 2026-10-11: the mirror
+    -- served work/1590-j20f at a tip upstream had abandoned (337dc0df9 landed),
+    -- and this guard reported it as taking an item. A marked ref is neither
+    -- counted nor silently skipped: it is printed for a person to read.
+    local diverged = {}
+    local _, dref = git({ "for-each-ref", "--format=%(refname)", "refs/remotes/origin-diverged/" })
+    for _, d in ipairs(lines(dref)) do
+        diverged[(d:gsub("^refs/remotes/origin%-diverged/", ""))] = true
+    end
+    -- END-1607-DIVERGED
+    local _, refs = git({ "for-each-ref", "--format=%(refname:short)", "refs/remotes/origin/work/" })
+    for _, ref in ipairs(lines(refs)) do
+        -- BEGIN-1607-SKIP
+        local name = ref:gsub("^origin/", "")
+        if diverged[name] then
+            log.raw("  taken-by-unknown:" .. name .. ":diverged (the mirror could not prove upstream holds this tip; 1607-8bq5) snapshot=" .. snapshot())
+        else
+        -- END-1607-SKIP
+        local merged = git({ "merge-base", "--is-ancestor", ref, BASE })
+        local mine = (ref == "origin/" .. own) or git({ "merge-base", "--is-ancestor", ref, HEAD })
+        if not merged and not mine then
+            local _, mbr = git({ "merge-base", BASE, ref })
+            mbr = text.trim(mbr)
+            if mbr ~= "" then
+                local _, del = git({ "diff", "--name-only", "--diff-filter=D", mbr, ref })
+                for _, f in ipairs(lines(del)) do
+                    if not taken_cache[f] then taken_cache[f] = ref:gsub("^origin/", "") end
+                end
+            end
+        end
+        -- BEGIN-1607-SKIP-END
+        end
+        -- END-1607-SKIP-END
+    end
+    return taken_cache
+end
+
+-- A WRAPPER is sized as what it execs: check-macos-only-sources-verified.sh
+-- is 4 lines that `exec` the 450-line, unported windows-only sibling, so it
+-- cannot be ported alone (measured by the Mac, 2026-10-10). A candidate whose
+-- code lines `exec` a scripts/*.sh is given its callee's size, and when that
+-- puts it over the ceiling it is skipped with `wrapper-of:<callee>`.
+local function wrapper_callee(path)
+    local ok_r, c = pcall(fs.read, path)
+    if not ok_r then return nil end
+    for _, l in ipairs(text.lines(c)) do
+        if not l:match("^%s*#") then
+            local callee = l:match("^%s*exec%s.-([%w%-_.]+%.sh)")
+            if callee and fs.exists("scripts/" .. callee) and "scripts/" .. callee ~= path then return "scripts/" .. callee end
+        end
+    end
+    return nil
+end
+
+local function candidates(pop, ceiling)
+    local items = {}
+    local taken = taken_items()
+    for _, f in ipairs(pop) do
+        local n = line_count(f)
+        local callee = n and n <= ceiling and wrapper_callee(f) or nil
+        if callee then
+            local cn = line_count(callee) or 0
+            if cn > n then n = cn end
+            if n > ceiling then log.raw("  wrapper-of:" .. callee .. " " .. f .. " (sized as its callee, " .. cn .. " lines)") end
+        end
+        if n and n <= ceiling and taken[f] then
+            log.raw("  taken-by:" .. taken[f] .. " " .. f .. " snapshot=" .. snapshot())
+        elseif n and n <= ceiling then
+            items[#items + 1] = { f, n, f:match("^scripts/test%-") and 1 or 0 }
+        end
+    end
+    table.sort(items, function(a, b)
+        if a[3] ~= b[3] then return a[3] < b[3] end
+        if a[2] ~= b[2] then return a[2] < b[2] end
+        return a[1] < b[1]
+    end)
+    local top = {}
+    for i = 1, math.min(5, #items) do top[i] = items[i] end
+    return top
+end
+
+-- ── judge each backlog ─────────────────────────────────────────────────────
+local n_due, silent = 0, {}
+local paid_taken -- "<ref>:<item>" of the first paid item another open ref already deletes
+for _, b in ipairs(backlogs) do
+    local name = tostring(b.name)
+    local area = type(b.area) == "table" and b.area or {}
+    local counter = COUNTERS[name]
+    local touched = in_area(area)
+    if not touched then
+        out.line("carried:" .. name .. ":not-due")
+    elseif not counter then
+        out.line("carried:" .. name .. ":unsupported-counter")
+        log.raw("  " .. name .. ": this guard has no counter for it; it judges only " .. table.concat({ "shell-to-lua" }, ","))
+    else
+        n_due = n_due + 1
+        -- At the MERGE BASE, never the base ref's tip: the diff (BASE...HEAD)
+        -- is already the change's own, and a trunk that landed other ports
+        -- since this change branched would otherwise read as this change
+        -- paying nothing (measured on this guard's own change, 2026-10-10).
+        local base_pop, head_pop = counter(MERGE_BASE, b), counter(HEAD, b)
+        local head_set = {}
+        for _, f in ipairs(head_pop) do head_set[f] = true end
+        local removed = nil
+        for _, f in ipairs(base_pop) do if not head_set[f] then removed = f; break end end
+        -- 1589-hm2r (measured by yoga): taken-by used to filter only the
+        -- OFFER, so a port duplicating another open work ref read as paid.
+        -- After the refresh, an item another open ref already deletes is not
+        -- this change's to pay with, unless the change carries a waiver.
+        local paid_by = (#head_pop < #base_pop and removed) and taken_items()[removed] or nil
+        if paid_by and not waivers[name] then
+            paid_taken = paid_taken or (paid_by .. ":" .. removed)
+            log.raw("  " .. removed .. " is already deleted by another open work ref (" .. paid_by .. ", snapshot=" .. snapshot() ..
+                "): two changes paid with the same item. Land one; on this one write `Carried-Waiver: " .. name ..
+                " conflict:" .. removed .. " (#<pr>)` in the message's last paragraph.")
+        elseif #head_pop < #base_pop and removed and not paid_by then
+            out.line("carried:" .. name .. ":paid:" .. removed)
+        elseif waivers[name] then
+            out.line("carried:" .. name .. ":waived:" .. waivers[name])
+        else
+            local ceiling = tonumber(b.item_ceiling_lines) or 150
+            local top = candidates(head_pop, ceiling)
+            if #top == 0 then
+                out.line("carried:" .. name .. ":due:(no item at or under " .. ceiling .. " lines)")
+                log.raw("  nothing in reach (every small item is taken or none exists): write `Carried-Waiver: " .. name .. " no-item-in-reach` in the message's last paragraph")
+            else
+                local pick = top[(ref_order() % #top) + 1]
+                out.line("carried:" .. name .. ":due:" .. pick[1] .. " (" .. pick[2] .. " lines)")
+                log.raw("  " .. name .. " is DUE: this change touches its area (" .. touched .. ") and neither pays an item nor waives.")
+                log.raw("  candidates (smallest existing items at or under " .. ceiling .. " lines; the offered one is picked by the work ref's order) snapshot=" .. snapshot() .. ":")
+                for _, c in ipairs(top) do log.raw("    " .. c[1] .. " (" .. c[2] .. " lines)") end
+                log.raw("  pay it: port one to scripts/lua/ on `tillandsias-plan script run`, delete the .sh, lower both floors with check-shell-ratchet.lua --dump-floors;")
+                log.raw("  or put this trailer on any commit in the change, in the message's LAST paragraph next to Co-Authored-By (git reads trailers only there); one line; reasons too-big:<item>:<lines>, blocked-by:<order>, no-item-in-reach, conflict:<work-ref>, uncounted-item:<path>:")
+                log.raw("Carried-Waiver: " .. name .. " <reason>")
+            end
+            if unparsed[name] then
+                log.raw("  waiver present but not a trailer: move it to the last paragraph — " .. unparsed[name])
+            end
+            local stage = tostring(b.stage or "gentle")
+            if stage == "gentle" or stage == "enforced" then silent[#silent + 1] = name end
+        end
+    end
+end
+
+if paid_taken then
+    verdict.emit("refused:carried:paid-but-taken-by:" .. paid_taken, 1,
+        "  a refusal on every push, not only at landing: the waiver line above clears it (1589-hm2r).")
+end
+if LANDING and #silent > 0 and unparsed[silent[1]] then
+    verdict.emit("violation:carried:" .. silent[1] .. ":waiver-not-a-trailer", 1,
+        "  waiver present but not a trailer: move it to the last paragraph (git reads trailers only from a message's last paragraph): " .. unparsed[silent[1]])
+end
+if LANDING and #silent > 0 then
+    verdict.emit("violation:carried:" .. silent[1] .. ":silent", 1,
+        "  a due change landed with neither a ported item nor a `Carried-Waiver: " .. silent[1] ..
+        " <reason>` trailer (methodology/convergence.yaml carried_obligations, stage gentle).")
+end
+-- The counter of every backlog this guard can count, at HEAD, on every run:
+-- the one integer the convergence counter clause asks to see on each --check.
+local counts = {}
+for _, b in ipairs(backlogs) do
+    local c = COUNTERS[tostring(b.name)]
+    if c then counts[#counts + 1] = tostring(b.name) .. ":" .. #c(HEAD, b) end
+end
+verdict.ok("carried-obligations", "backlogs=" .. #backlogs .. " due=" .. n_due .. " silent=" .. #silent ..
+    (#counts > 0 and (" counter=" .. table.concat(counts, ",")) or ""))

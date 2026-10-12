@@ -88,12 +88,29 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: healthcheck asserts llama-server"
 
-  - step: "engine payload is reinstalled when the required backend set changes"
+  - step: "engine payload is reinstalled when the engine ID changes — backend set, version or digest (order 521)"
     # A CPU-only host that gains a GPU (or a driver major bump) must not keep
-    # serving from a payload whose backend it can no longer use.
-    command: "grep -q 'OLLAMA_ENGINE_MANIFEST' images/inference/entrypoint.sh && grep -q '_engine_installed_set. != .\\$OLLAMA_ENGINE_SET' images/inference/entrypoint.sh && echo 'ok: reinstall on set change'"
+    # serving from a payload whose backend it can no longer use; since order 521 a
+    # version bump on a warm cache must not either. The ID is set + version + digest.
+    command: "grep -q 'OLLAMA_ENGINE_MANIFEST' images/inference/entrypoint.sh && grep -Fq 'OLLAMA_ENGINE_ID=\"$(tillandsias_engine_id \"$OLLAMA_ENGINE_SET\" \"$OLLAMA_VERSION\"' images/inference/entrypoint.sh && grep -Fq '|| [ \"$_engine_verdict\" != \"ok\" ]; then' images/inference/entrypoint.sh && echo 'ok: reinstall on engine-id change'"
     timeout_ms: 3000
-    expected_behavior: "ok: reinstall on set change"
+    expected_behavior: "ok: reinstall on engine-id change"
+
+  - step: "installed-engine integrity: planted, stale, tampered and unverifiable engines are refused or flagged (order 521)"
+    # Runs the REAL helper against a scratch cache. The download is verified by
+    # 1118-d3b6; this is the cache the engine runs FROM, which outlives the
+    # container. The CONTROL arm at the end proves the refusals are about the
+    # planted bytes, not a check that refuses everything.
+    command: "set -u; H=images/inference/engine-integrity.sh; T=$(mktemp -d \"${TMPDIR:-/tmp}/engine-integrity.XXXXXX\"); M=\"$T/.engine-set\"; fail() { echo \"FAIL: $1 (got [$2])\"; rm -rf \"$T\"; exit 1; }; ID=$(sh $H id core+cuda_v13 v0.34.0 cf95886728959aa09910bb34de5cca1cc5a8f68003b5597197d3f2c2d57c0804); v=$(sh $H check \"$T\" \"$M\" \"$ID\"); [ \"$v\" = engine-integrity-refused:no-engine ] || fail \"empty cache must be no-engine\" \"$v\"; mkdir -p \"$T/ollama\" \"$T/lib/ollama\"; printf real > \"$T/ollama/ollama\"; printf llama > \"$T/lib/ollama/llama-server\"; printf \"core+cuda_v13\\n\" > \"$M\"; v=$(sh $H check \"$T\" \"$M\" \"$ID\"); [ \"$v\" = engine-integrity-refused:unrecorded-engine ] || fail \"a pre-521 set-only manifest must be refused\" \"$v\"; v=$(sh $H record \"$T\" \"$M\" \"$ID\"); [ \"$v\" = recorded ] || fail \"record\" \"$v\"; v=$(sh $H check \"$T\" \"$M\" \"$ID\"); [ \"$v\" = ok ] || fail \"a freshly recorded engine must be ok\" \"$v\"; v=$(sh $H check \"$T\" \"$M\" \"core+cuda_v13 v9.9.9 sha256:00\"); [ \"$v\" = \"stale:$ID\" ] || fail \"a version bump must read stale, not ok\" \"$v\"; printf PLANTED > \"$T/ollama/ollama\"; v=$(sh $H check \"$T\" \"$M\" \"$ID\"); [ \"$v\" = engine-integrity-refused:executable-digest-mismatch:ollama/ollama ] || fail \"a swapped ollama must be refused\" \"$v\"; printf real > \"$T/ollama/ollama\"; printf TAMPERED > \"$T/lib/ollama/llama-server\"; v=$(sh $H check \"$T\" \"$M\" \"$ID\"); [ \"$v\" = engine-integrity-refused:executable-digest-mismatch:lib/ollama/llama-server ] || fail \"a swapped llama-server must be refused\" \"$v\"; rm \"$T/lib/ollama/llama-server\"; v=$(sh $H check \"$T\" \"$M\" \"$ID\"); [ \"$v\" = engine-integrity-refused:executable-missing:lib/ollama/llama-server ] || fail \"a missing llama-server must be refused\" \"$v\"; printf llama > \"$T/lib/ollama/llama-server\"; mkdir \"$T/bin\"; ln -s \"$(command -v sh)\" \"$T/bin/sh\"; ln -s \"$(command -v sed)\" \"$T/bin/sed\"; v=$(PATH=\"$T/bin\" sh $H check \"$T\" \"$M\" \"$ID\"); [ \"$v\" = engine-integrity-refused:no-verifier ] || fail \"no sha256sum must refuse, never trust\" \"$v\"; v=$(sh $H check \"$T\" \"$M\" \"$ID\"); [ \"$v\" = ok ] || fail \"CONTROL: the restored engine must be ok again\" \"$v\"; rm -rf \"$T\"; echo \"ok: installed-engine verdicts (no-engine, unrecorded, ok, stale, 2x tampered, missing, no-verifier)\""
+    timeout_ms: 15000
+    expected_behavior: "ok: installed-engine verdicts"
+
+  - step: "the entrypoint executes only an engine the integrity check vouches for (order 521)"
+    # Only ok or stale:* may put OLLAMA_BINDIR on PATH; every refusal logs a
+    # reason=engine-integrity-refused:<why> line the forge's unreachable detail points at.
+    command: "E=images/inference/entrypoint.sh; grep -Fq '. \"$ENGINE_INTEGRITY_SH\"' $E && grep -Fq 'ok | stale:*) export PATH=\"$OLLAMA_BINDIR:$PATH\" ;;' $E && grep -Fq 'echo \"[inference] FATAL: reason=$_engine_verdict' $E && grep -Fq 'reason=engine-integrity-refused:payload-digest-mismatch' $E && grep -Fq 'tillandsias_engine_record \"$OLLAMA_TOOLSROOT\"' $E && grep -Fq 'grep reason=engine-' images/default/lib-inference-state.sh && grep -q 'COPY engine-integrity.sh /usr/local/bin/tillandsias-engine-integrity.sh' images/inference/Containerfile && echo 'ok: integrity wiring'"
+    timeout_ms: 3000
+    expected_behavior: "ok: integrity wiring"
 
   # ── Tier-keyed backend selection ────────────────────────────────────────
   - step: "backend selection is derived from the tier, corroborated by devices"
@@ -147,16 +164,34 @@ critical_path:
 
   # ── Tuning policy: grammar + every branch, stubbed ──────────────────────
   - step: "tuning helper exists and documents the pinned one-line grammar"
-    command: "test -f images/inference/engine-tuning.sh && grep -Fq 'tuning: tier=<tier> flash_attn=<0|1> kv_cache=<f16|q8_0> num_parallel=<N> vram_mb=<N>' images/inference/engine-tuning.sh && echo 'ok: tuning grammar documented'"
+    command: "test -f images/inference/engine-tuning.sh && grep -Fq 'tuning: tier=<tier> flash_attn=<0|1> kv_cache=<f16|q8_0> num_parallel=<N> vram_mb=<N> keep_alive=<dur>' images/inference/engine-tuning.sh && echo 'ok: tuning grammar documented'"
     timeout_ms: 3000
     expected_behavior: "ok: tuning grammar documented"
 
   - step: "24GB CUDA host emits the exact pinned line"
     # Asserted verbatim once, so a field rename or reorder fails here rather
     # than silently breaking downstream parsers.
-    command: "out=$(env -u OLLAMA_FLASH_ATTENTION -u OLLAMA_KV_CACHE_TYPE -u OLLAMA_NUM_PARALLEL TILLANDSIAS_INFERENCE_TIER=gpu-cuda TILLANDSIAS_TUNING_VRAM_MB=24564 sh images/inference/engine-tuning.sh); echo \"$out\"; [ \"$out\" = 'tuning: tier=gpu-cuda flash_attn=1 kv_cache=q8_0 num_parallel=4 vram_mb=24564' ] && echo 'ok: pinned line'"
+    command: "out=$(env -u OLLAMA_FLASH_ATTENTION -u OLLAMA_KV_CACHE_TYPE -u OLLAMA_NUM_PARALLEL -u OLLAMA_KEEP_ALIVE -u TILLANDSIAS_INFERENCE_KEEP_ALIVE TILLANDSIAS_INFERENCE_TIER=gpu-cuda TILLANDSIAS_TUNING_VRAM_MB=24564 sh images/inference/engine-tuning.sh); echo \"$out\"; [ \"$out\" = 'tuning: tier=gpu-cuda flash_attn=1 kv_cache=q8_0 num_parallel=4 vram_mb=24564 keep_alive=5m' ] && echo 'ok: pinned line'"
     timeout_ms: 5000
     expected_behavior: "ok: pinned line"
+
+  - step: "model residency follows the tier: every GPU tier 5m, cpu and unknown 10m — never a day (order 527)"
+    # OLLAMA_KEEP_ALIVE=24h used to be a bare launcher literal that pinned a
+    # departed forge's models in VRAM for a day while another lane kept the
+    # LaneScoped inference container up. VRAM is not swappable; RAM is.
+    command: "set -e; for pair in 'gpu-cuda 5m' 'gpu-rocm 5m' 'gpu-vulkan 5m' 'cpu 10m' 'metal 10m' 'totally-unknown 10m'; do set -- $pair; out=$(env -u OLLAMA_KEEP_ALIVE -u TILLANDSIAS_INFERENCE_KEEP_ALIVE TILLANDSIAS_INFERENCE_TIER=$1 TILLANDSIAS_TUNING_VRAM_MB=8192 sh images/inference/engine-tuning.sh); case \"$out\" in *\" keep_alive=$2\") ;; *) echo \"FAIL: tier $1 expected keep_alive=$2, got: $out\"; exit 1;; esac; done; echo 'ok: residency follows tier'"
+    timeout_ms: 8000
+    expected_behavior: "ok: residency follows tier"
+
+  - step: "keep-alive overrides: OLLAMA_KEEP_ALIVE outranks TILLANDSIAS_INFERENCE_KEEP_ALIVE; non-durations are ignored and never execute"
+    command: "set -e; o() { env -u OLLAMA_KEEP_ALIVE -u TILLANDSIAS_INFERENCE_KEEP_ALIVE TILLANDSIAS_INFERENCE_TIER=gpu-cuda TILLANDSIAS_TUNING_VRAM_MB=8192 \"$@\" sh images/inference/engine-tuning.sh; }; grep -q ' keep_alive=30m$' <<<\"$(o OLLAMA_KEEP_ALIVE=30m)\"; grep -q ' keep_alive=2m$' <<<\"$(o TILLANDSIAS_INFERENCE_KEEP_ALIVE=2m)\"; grep -q ' keep_alive=30m$' <<<\"$(o TILLANDSIAS_INFERENCE_KEEP_ALIVE=2m OLLAMA_KEEP_ALIVE=30m)\"; grep -q ' keep_alive=0$' <<<\"$(o OLLAMA_KEEP_ALIVE=0)\"; for bad in abc 5x -5m m '; touch /tmp/litmus-ka-pwned'; do grep -q ' keep_alive=5m$' <<<\"$(o OLLAMA_KEEP_ALIVE=\"$bad\")\" || { echo \"FAIL: bad override [$bad] not ignored\"; exit 1; }; done; test ! -e /tmp/litmus-ka-pwned; echo 'ok: keep-alive overrides'"
+    timeout_ms: 8000
+    expected_behavior: "ok: keep-alive overrides"
+
+  - step: "the launcher carries no keep-alive literal; it only forwards the operator override (order 527)"
+    command: "B=$(awk '/^fn build_inference_run_args/{f=1} f{print} f&&/^}/{exit}' crates/tillandsias-headless/src/main.rs); test -n \"$B\" || { echo 'FAIL: build_inference_run_args not found'; exit 1; }; if grep -q '\"OLLAMA_KEEP_ALIVE=' <<<\"$B\"; then echo 'FAIL: launcher pins OLLAMA_KEEP_ALIVE again'; exit 1; fi; grep -q 'TILLANDSIAS_INFERENCE_KEEP_ALIVE' <<<\"$B\" && echo 'ok: no launcher keep-alive literal'"
+    timeout_ms: 5000
+    expected_behavior: "ok: no launcher keep-alive literal"
 
   - step: "CUDA lane enables the MEASURED wins (flash attention + q8_0 KV cache)"
     # Measured on macuahuitl: 8098 MiB -> 5690 MiB VRAM at 32768 ctx with
@@ -228,7 +263,7 @@ critical_path:
     expected_behavior: "ok: shipped"
 
   - step: "helpers are POSIX sh and invoke no python (tlatoani_hard_no_python)"
-    command: "for f in images/inference/engine-tuning.sh; do sh -n \"$f\" || { echo \"FAIL: $f is not valid POSIX sh\"; exit 1; }; if grep -vE '^[[:space:]]*#' \"$f\" | grep -qE '(^|[^a-zA-Z])python[0-9]?([^a-zA-Z]|$)'; then echo \"FAIL: $f invokes python\"; exit 1; fi; done; echo 'ok: POSIX sh, no python'"
+    command: "for f in images/inference/engine-tuning.sh images/inference/engine-integrity.sh; do sh -n \"$f\" || { echo \"FAIL: $f is not valid POSIX sh\"; exit 1; }; if grep -vE '^[[:space:]]*#' \"$f\" | grep -qE '(^|[^a-zA-Z])python[0-9]?([^a-zA-Z]|$)'; then echo \"FAIL: $f invokes python\"; exit 1; fi; done; echo 'ok: POSIX sh, no python'"
     timeout_ms: 8000
     expected_behavior: "ok: POSIX sh, no python"
 

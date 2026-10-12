@@ -1,0 +1,652 @@
+timestamp_utc=2026-10-03T16:54:24Z
+worktree=/Users/tlatoani/tillandsias-worktrees/1519-6rcp
+parent=/Users/tlatoani/opencode/tillandsias
+worktree_head=050f4fb21002d0481975a4425e1cad58da2ccebc
+parent_head=d6c84fcd94fcc72d68d4677aa5036a3b41604759
+worktree_status:
+?? plan/issues/evidence/1519-6rcp-darwin-20261003/
+parent_status:
+host:
+Darwin Tlatoanis-MacBook-Air.local 27.0.0 Darwin Kernel Version 27.0.0: Tue Aug 11 21:02:59 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T8142 arm64
+ProductName:		macOS
+ProductVersion:		27.0.1
+BuildVersion:		26A434
+toolchain:
+rustc 1.96.1 (31fca3adb 2026-06-26)
+binary: rustc
+commit-hash: 31fca3adb283cc9dfd56b49cdee9a96eb9c96ffd
+commit-date: 2026-06-26
+host: aarch64-apple-darwin
+release: 1.96.1
+LLVM version: 22.1.2
+cargo 1.96.1 (356927216 2026-06-26)
+GNU bash, version 3.2.57(1)-release (arm64-apple-darwin26)
+binary:
+-rwxr-xr-x  1 tlatoani  staff  6505616  3 oct.  09:50 /Users/tlatoani/opencode/tillandsias/target/release/tillandsias-plan
+18aff8475d8fa979c46e529be2628f536afde7f244e242a46dc5da44f90fce7b  /Users/tlatoani/opencode/tillandsias/target/release/tillandsias-plan
+binary_version:
+error: unknown subcommand '--version' — this tillandsias-plan was built from sources that do not provide it.
+  this binary can do: answer, append-event, arrival-routing-check, blocked-by, blocked-closure, blocking-counts, build-id, burndown, capabilities, capability-matrix, carry-forward-check, carry-forward-check-batch, check, closure-evidence-check, collect, compact, corpus-coverage, declared-closures, declared-closures-check, decompose, dependencies-of, discipline, expert-serve, experts-probe, expire-claims, forgotten, fragment-event-packets, fragment-misplaced-definitions, fragment-terminal-events, fragments, grade, hash, json, loop-status, loop-status-append, loop-status-compact, loop-status-fragments, loop-status-verify, lua, methodology, methodology-ask, methodology-index, metrics-log-path, msg, next, next-order, parked-blocks, pipeline, plan-events, policy, predicate, query, ready, run, score-checks, script, select-rows, session-tokens, set-field, source-revision, spec-envelope, spec-floor, spec-index, spec-retrieve, split-parents, status, time, validate-yaml, validator-surface-hash, verify-answer, yaml, yaml-get, yaml-json, yaml-type
+  if you expected '--version' to exist, the ARTIFACT is stale relative to the checkout: rebuild it (cargo build --release -p tillandsias-plan) or relaunch the forge.
+usage: tillandsias-plan [--index <path>] <command>
+         commands:
+           capabilities              ORDER 569. Print this binary's subcommand capability set,
+                                     one token per line on stdout and nothing else. The set is
+                                     embedded at COMPILE time, so it describes the sources this
+                                     artifact was built from. A binary WITHOUT this subcommand
+                                     predates order 569 and its capabilities are unknowable —
+                                     that absence is itself the stale-binary signal the forge
+                                     wrapper branches on.
+           capability-matrix         ORDER 808-7yrd. The FLEET HARDWARE matrix, folded from the
+                                     `capabilities:` fragment channel: one row per host_id, its
+                                     schedulable (device_class, lane, engine) triples, and its
+                                     present-but-unusable devices. Distinct from `capabilities`
+                                     above, which reports THIS BINARY's subcommands.
+                                     `--by-hardware` (805-r98w) re-keys it on (fingerprint,
+                                     substrate) and reports control=yes|no per hardware group,
+                                     so a caller can ASK whether a substrate control exists
+                                     rather than assume one; unidentified rows are listed, never
+                                     bucketed together.
+           experts-probe             ORDER 718-ja7g. Which expert TIER is live on this host, as
+                                     ONE line: l0 (file-backed, always ready) / l1 (retrieval —
+                                     needs BOTH an embeddings endpoint and a built index) / l2
+                                     (synthesis). Closed vocabulary per tier: ready | unset |
+                                     unreachable | no-index | scheme-unsupported | malformed.
+                                     `advice=` names ONE next action. Exit 0 when every
+                                     configured tier answers, 1 otherwise — ADVISORY, not a
+                                     gate: a dev host with no endpoint is a supported state and
+                                     L0 still answers with citations. Both MCP servers consume
+                                     this instead of each re-deriving reachability.
+           corpus-coverage           Which repository file types the spec/answer corpus indexes,
+                                     which it DECLINES and why. Read-only. The declined list is
+                                     explicit so an answer's absence can be attributed to a
+                                     deliberate boundary rather than mistaken for a retrieval
+                                     miss — the two look identical from the asking side.
+           check [--strict-fragments]
+                                     integrity + schema validation (exit 1 on violations).
+                                     ORDER 796-4ydb. A fragment the fold could not parse is
+                                     always named on stdout as `malformed: <path>` and the
+                                     verdict says `incomplete:` instead of `ok:` — the checks
+                                     that passed were run over less than the plan. It exits 0
+                                     anyway, because build.sh runs this on every host and a
+                                     fleet-wide refusal makes one host's typo every host's red
+                                     build (699-dycj). --strict-fragments arms that refusal for
+                                     a caller that cannot tolerate a partial corpus: exit 3,
+                                     distinct from 1 so 'incomplete' and 'unsound' never blur.
+           closure-evidence-check <fragment.yaml>
+                                     exit 1 if the fragment sets a closure rung
+                                     (completed/verified/done) with no evidence event (686-7qcm)
+           declared-closures [--] | declared-closures-check <fragment.yaml>
+                                     ORDER 885-92iu. A `verifiable_closure` that NAMES a
+                                     litmus test must name one that exists AND that some
+                                     spec binds — execution is binding-driven, so an unbound
+                                     test runs in no suite and is as inert as a missing one.
+                                     Bare form REPORTS over the folded ledger (exit 0, there
+                                     is standing debt); `-check` GATES one fragment (exit 1),
+                                     so new debt is refused when it is FILED.
+           fragment-misplaced-definitions <fragment.yaml>
+                                     ORDER 812-d45t. Print the packet_ids of `events:`
+                                     entries that carry DEFINITION fields but no `event:` —
+                                     a packet written under the wrong key, which every gate
+                                     accepts and the fold then drops entirely.
+           fragment-event-packets <fragment.yaml>
+                                     ORDER 797-qm4t. Print EVERY packet_id an events block
+                                     addresses, whatever the event type, one per line, exit 0.
+                                     The terminal-only sibling below cannot see a `note` or
+                                     `progress` event aimed at a packet_id that does not exist,
+                                     so such work is discarded in silence. Same YAML parse and
+                                     the same exit 3 on an unparseable fragment.
+           fragment-terminal-events <fragment.yaml>
+                                     ORDER 752-pst5. Print the packet_ids whose events block
+                                     DECLARES a terminal `completed` event (inline packet
+                                     `events:` or the top-level `events:` form), one per
+                                     line, exit 0. A YAML parse bounds attribution to the
+                                     events block, so PROSE that quotes the marker inside a
+                                     block scalar is never read as a declaration. Backs the
+                                     closure-event pass of check-fragment-status-loss.sh.
+           carry-forward-check-batch <fragment.yaml>...
+                                     ORDER 1500-gu5r. carry-forward-check over MANY
+                                     fragments in one process: one tab-separated line per
+                                     result — `<path>\tparsed`, `<path>\tgap\t<id>`,
+                                     `<path>\tunreadable\t2`, `<path>\tunparseable\t3` —
+                                     in argument order, exit 0. The per-file arm below is
+                                     unchanged; a caller probes for this name and falls back.
+           carry-forward-check <fragment.yaml>
+                                     ORDER 831-ezea. Print the packet_ids this fragment
+                                     TOUCHED (has an event for) and LEFT OPEN (no terminal
+                                     event, status: value, or declared status) while naming
+                                     no `next_action` — one per line, exit 0. Closures are
+                                     EXEMPT: a carry-forward note on a terminal row is a dead
+                                     letter no selector reads again. Same YAML parse and the
+                                     same exit 3 on an unparseable fragment as its three
+                                     fragment-* siblings. ADVISORY today (adoption 4.6%),
+                                     see scripts/check-carry-forward.sh for the promotion bar.
+           arrival-routing-check <fragment.yaml>...
+                                     ORDER 831-ezea, the ARRIVAL half of carry-forward.
+                                     Print `population|<n>` (rows the named fragments NEWLY
+                                     DEFINE, by origin, so a G-Set re-declaration is not an
+                                     arrival) then one `overlap|<id>|<predicate>|<sentence>`
+                                     per collision with an OPEN row. Predicates: owned_files
+                                     (the rule as written, from the same fold answer_next
+                                     uses for claim exclusion, at OpenRows scope), and
+                                     deliverable / title (normalized string EQUALITY only —
+                                     the re-filing class, never semantic sameness). Does NOT
+                                     decide the pickup_role disjunct: both roles are printed
+                                     for the reader. Exit 0 with overlaps (ADVISORY, bar in
+                                     scripts/check-arrival-routing.sh), 3 on a named fragment
+                                     the fold could not read.
+           next-order [prefix]       mint a COLLISION-FREE order token for a new packet
+           validator-surface-hash    what this binary was BUILT from; --current what the
+                                     checkout holds now; --check compares them (0 same,
+                                     3 different, 4 cannot ask) — 1287-h6qn
+           build-id                  which SOURCES this binary was compiled from (984-i4k2)
+           source-revision [dir]     what a rebuild from a checkout would bake (984-i4k2)
+                                     (<seq>-<suffix>, e.g. 581-k3f9). Never compute the
+                                     'next free order' yourself: that reads a ledger snapshot
+                                     which is stale the moment another host commits, so
+                                     concurrent filers pick the SAME number. The minted token
+                                     is PERMANENT — never renumber it. A prefix shared by two
+                                     packets is normal. See methodology/distributed-work.yaml
+                                     -> order_id_allocation.
+           plan-events <packet_id|order>
+                                     ORDER 882-vqe4. Print a packet's FOLDED events —
+                                     base PLUS fragment overlay — one per line as
+                                     <type>\t<ts>. Exists because callers were counting
+                                     activity by grepping plan/index.d/ alone, which goes
+                                     blind the moment compaction folds a fragment into
+                                     the base. Exit 1 only for an unresolvable id; an
+                                     existing packet with no events prints nothing and
+                                     exits 0, which is what a stranded claim looks like.
+           expire-claims [--ttl-hours N] [--write] [--dry-run] [--list-live] [--now-epoch S] [--host H]
+                         (default DRY-RUN: writing requires --write; 1067-24q6)
+                                     ORDER 672-bz7u. Return stranded in_progress claims to
+                                     ready: any packet whose LAST recorded event activity is
+                                     older than the TTL (default 24h) gets a status fragment
+                                     flipping it back to ready with a progress event naming
+                                     the expiry. --dry-run lists without writing. A packet
+                                     with NO parseable activity timestamp is reported as
+                                     unknown-age and NEVER expired (fail conservative).
+           status <id|order>         one packet's status line
+           next-action <id|order>    the EFFECTIVE next_action — newest of the
+                                     packet field and any event carrying one. Reading
+                                     the field alone returns a stale queue, because
+                                     `packets:` is a G-Set and cycles append events
+                                     rather than re-declaring the packet (864-r9wt).
+           blocked-by <id|order>     packets directly blocked by X
+           dependencies-of <id|order> X's direct unsatisfied depends_on prerequisites
+           blocked-closure <id|order> everything transitively downstream of X
+           parked-blocks [id|order]  dependents invisibly blocked behind a PARKED
+                                     packet (implemented/needs_clarification/blocked/
+                                     failed); no arg = whole ledger (order 686-7qcm)
+           split-parents             ORDER 750-zrt4. Packets SPLIT INTO children that
+                                     are still `ready`, so the selector keeps offering
+                                     them: 722-ecne was ranked urgent= on four
+                                     consecutive cycles and claimed by nobody, and
+                                     606-bvnp ranked #1 claimable with all four slices
+                                     already spoken for. One TSV row per parent, NAMING
+                                     the children and their statuses so a host reading
+                                     the exclusion knows where the work went. A parent
+                                     that legitimately keeps direct work of its own
+                                     declares `retains_direct_work: true` and is never
+                                     reported; an unresolvable child is skipped, so a
+                                     typo cannot make a parent unclaimable. REPORTS
+                                     ONLY (exit 0) — auto-obsoleting a split parent
+                                     would satisfy its dependents and turn a selection
+                                     nuisance into a false green.
+           ready [role]              ready packets (optionally for a pickup role)
+           next [role] [--release V] [--limit N]
+                                     ORDER 606-xu52. The cold-start selector: at most FIVE
+                                     cited, release-aware, role-compatible, dependency-clear,
+                                     unleased claimable packets, ranked deterministically
+                                     (priority, release-targeted first, order). Release
+                                     defaults from the folded '## ACTIVE RELEASE' heading;
+                                     no release anywhere is a typed refusal. Milestones and
+                                     criteria holders are never offered as claims. Natural
+                                     aliases via `answer`: "what's next?" and
+                                     "what v0.5 work can I do on linux?".
+           blocking-counts [--release V] [--limit N]
+                                     ORDER 632-retq. `<packet_id>\t<count>` — how many READY
+                                     packets each id blocks, counted over EVERY ready packet
+                                     rather than one role's, because a packet in another column
+                                     is frequently the thing this one waits on.
+           forgotten [--limit N] [--min-age-days N] [--now-epoch S]
+                                     ORDER 718-jqt5. READY packets the fleet has stopped
+                                     noticing, as TSV: order, packet_id, age_days, leased,
+                                     blocking. Eventless first (oldest ORDER first, since
+                                     next-order mints monotonically), then stalest, then
+                                     fewest dependents — a leaf is what a residual-maximising
+                                     selector never reaches. Milestones excluded: they are
+                                     containers, not claimable work. Total order, no seed:
+                                     the same ledger yields the same list on every host.
+           select-rows [--claimable-by R] [--release V] [--limit N]
+                                     ORDER 632-retq. The batch selector's projection, as TSV:
+                                     rank, release_target, order, packet_id, urgency, release.
+                                     Already filtered to ready + claimable + release +
+                                     dependency-clear + unleased, so the caller needs no jq.
+                                     scripts/select-work-batch.sh needed NINETEEN jq calls to
+                                     build this, which is why it could not run on a host without
+                                     jq; satisfying that dependency per host repeats the yq/ruby
+                                     exposure, so the projection moves to the binary that already
+                                     owns the ledger.
+           query [--status S] [--role R] [--release V] [--tag T]... [--limit N] [--json]
+                                     ORDER 582-26mm. THE generic filtered reader over the
+                                     FOLDED ledger (base ⊕ plan/index.d/ fragments): the only
+                                     correct way to enumerate packets by status / pickup_role /
+                                     desired_release / capability_tags. Release matching is exact;
+                                     an unknown release is an error, never an ignored constraint.
+                                     project-info plan_query and drain-queue
+                                     both route here; a reader that forgets fragments reports a
+                                     stale ledger with total confidence. TSV by default
+                                     (order<TAB>packet_id<TAB>desired_release<TAB>tags); --json
+                                     emits the plan_query projection array.
+           burndown <milestone>      release-target children with statuses
+           answer <question...>      the CITED answer envelope as JSON (order 394b)
+           decompose <query...>      adversarial query decomposition via LLM
+                                     (order 920-pxg6). Returns a JSON array of
+                                     {prompt, kind} variants for concurrent dispatch.
+           pipeline <query...> [--domain D]
+                                     ORDER 920-pxg6. THE grounded pipeline, CLI front-end:
+                                     tier -> decompose -> per-variant domain-filtered
+                                     retrieval from the published spec index -> synthesis
+                                     over retrieved context -> only-if-used citations ->
+                                     Rust validation -> collect merge. Emits the ratified
+                                     answer envelope: cited, or the typed unsupported:
+                                     refusal — never raw model prose. Same function as
+                                     expert-serve (one pipeline, two front-ends).
+           expert-serve [--port N] [--root D]
+                                     ORDER 920-pxg6. OpenAI-compatible loopback front-end
+                                     over the SAME grounded pipeline: 127.0.0.1:11436 by
+                                     default, POST /v1/chat/completions (non-stream and
+                                     stream:true SSE ending 'data: [DONE]'; the model id
+                                     IS the domain: all|spec|code|methodology|cheatsheet),
+                                     GET /v1/models, 404 JSON otherwise. Refusals are
+                                     rendered VERBATIM as completion content (HTTP 200,
+                                     finish_reason stop). Serves until stdin EOF —
+                                     </dev/null exits immediately. One pinned stderr line
+                                     on start; nothing on stdout.
+           collect                   first-wins dedup of responses via Lua runtime
+                                     (order 920-pxg6). Reads JSON array from stdin,
+                                     returns collected envelope on stdout.
+           validate-yaml <file>...   ORDER 746-htj9. Load each file with serde_yaml and
+                                     report ok:yaml-loads / blocked:yaml-load-failed /
+                                     blocked:yaml-unreadable. THE sanctioned YAML reader:
+                                     no interpreter (yq, ruby) exists in all three
+                                     environments the gates run in; this binary does.
+           yaml-get <file> <path>    ORDER 746-htj9. Read a dotted path and print the
+                                     sequence space-joined. Missing key is EMPTY, not an
+                                     error; unparseable stays its own verdict (720-24u6).
+           yaml-json <file>          ORDER 746-htj9. Emit the document as JSON on stdout,
+                                     so rich queries compose with jq — the one query tool
+                                     present in ALL THREE environments: yaml-json f | jq '…'.
+                                     The yq filters this retires are already jq syntax.
+           yaml-type <file>          ORDER 746-htj9. Top-level node kind in yq spelling
+                                     (!!map, !!seq, !!str, …), so pre-push can assert
+                                     fragment shape without yq.
+           verify-answer [--root D]  read an envelope on stdin; exit 1 if any citation
+                                     does not resolve or its span does not contain the claim.
+                                     ORDER 801-g9nn: also derives caller-relation
+                                     (same|behind|ahead|diverged|unfetched|unknown) between D's
+                                     HEAD and the answer's commit, and exits 3 — not 1 — when a
+                                     citation is SOUND at its own commit but stale here.
+           methodology [--root D] [--file S] <yaml.path>
+                                     ORDER 394c. YAML path query over methodology.yaml and
+                                     methodology/**/*.yaml. Prints the 394b envelope: the
+                                     matched block plus a resolvable file:line. An unknown
+                                     path is confidence=unsupported, never a guess.
+           methodology-ask [--root D] [--file S] <question...>
+                                     route a canonical discipline question to its YAML path,
+                                     then answer it. Unrouted questions are unsupported.
+           methodology-index [--root D]
+                                     every indexed path with its file:line (the query surface)
+           session-tokens [--since <utc>] [--transcript <path>]
+                                     ORDER 1437-3pj7. This session's BILLED tokens from the harness
+                                     transcript (message.usage, deduplicated by message.id), plus the
+                                     sub-agent totals; source=absent or absent:schema-drift:<field>
+                                     with zeros when it cannot measure. Never a guess.
+           discipline show [--json] | target --platform <p> | check-ref <ref> | derive [--json]  [--root D] [--seed F]
+                                     ORDER 1446-664f: derive observes the project (origin HEAD, integration
+                                     branches, work refs, author emails, PR merges, hooks) and prints
+                                     derived=<n> seed=<n|none> effective=<n>; an enforced rule refuses only
+                                     when its qualifier is observed, else warns :seed-ahead-of-reality.
+                                     Observations read the checkout's refs as of its LAST FETCH:
+                                     `git fetch origin` first (a note: line says when nothing was fetched).
+                                     ORDER 1443-w79y. The branch-discipline seed
+                                     (.tillandsias/branch-discipline.yaml): level, per-rule
+                                     enforcement, integration branch per platform, ref grammar.
+                                     No seed = level 0 advised: nothing is refused. check-ref exits
+                                     1 only when an ENFORCED rule refuses the ref.
+           policy eval [--host-kind bare-metal|forge|ci] [--regime R] [--caller C] [--cwd D]
+                       [--root D] [--seed F] -- <argv...>  |  policy show [--root D] [--seed F]
+                                     ORDER 1443-isrk. The command policy: allow | deny | consent for
+                                     one argv, from a compiled-in floor (no-shell-strings,
+                                     no-credential-mutation, soft-/hard-reset, workspace-destroy,
+                                     force-push) plus .tillandsias/command-policies.yaml, which can
+                                     only tighten it. Token on stdout, why:/remedy: on stderr;
+                                     exit 0 allow, 1 deny, 4 consent.
+           msg whoami|send|recv|list|status|lint|gc [--lane <lane>]
+                                     ORDER 1506-nvqt. The fleet message bus's LOCAL store: send
+                                     (body on stdin or --body-file, never argv) checks the 600-byte/
+                                     8-line shape, refuses secret-shaped bodies and out-of-bounds
+                                     --ttl (60..604800, default 86400), resolves --to lists and
+                                     @groups from plan/fleet/, and prints ok:msg:queued:<id> at once;
+                                     status reads the receipt (pending | acked:<mailbox>@<ts> +
+                                     via:<rung> | undelivered:<reason>). There is no ack verb: the
+                                     ack is the infrastructure's. `msg` alone prints the grammar.
+           metrics-log-path <basename> [repo-root]
+                                     ORDER 1125-92xa. Where THIS BINARY would put a metrics log:
+                                     <checkout>/.cache/metrics/<basename>, falling back to /tmp when
+                                     there is no writable checkout. Mirrors scripts/metrics-log-path.sh,
+                                     which a Rust binary cannot source — this subcommand exists so the
+                                     two implementations can be COMPARED by a gate (arm 1b of
+                                     scripts/test-metrics-log-path-agreement.sh) instead of drifting.
+                                     Before it, the CLI wrote usage records to a hardcoded /tmp while
+                                     every shell reader looked in .cache/metrics: 901 records written,
+                                     0 readable. Reads no ledger, so it answers on a broken one.
+           append-event <id|order> <type> (--summary-file <path>|-) --ts <ISO> [--agent A] [--host H]
+                                     Prose comes from a FILE or stdin so the shell cannot expand it (971-7muc).
+                                     A literal <summary> argument still works but is REFUSED when it carries
+                                     shell-expansion residue; a balanced substitution is invisible by then.
+                                     append an event, VALIDATED before flush (refuses a broken ledger).
+                                     --agent defaults from TILLANDSIAS_AGENT_ID and REFUSES when both
+                                     are absent; --host defaults to the compiled platform (772-4se9).
+                                     WRITE TARGET differs from set-field's, invisibly at the call
+                                     site: a NEW plan/index.d/ fragment when the packet was DECLARED
+                                     in one, the folded plan/index.yaml otherwise — both print ok:.
+                                     Stage plan/ wholesale (git add plan/) BEFORE the gate, or the
+                                     event stays local while the ok: line reads as landed (746-htj9;
+                                     measured twice on 2026-08-29, on two hosts).
+           grade [--root D] [--case ID] [--envelope F|-] [--list-engines] [SET.yaml ...]
+                                     ORDER 394d. Grade the experts against the COMMITTED ground
+                                     truth. Defaults to openspec/litmus-tests/groundtruth/
+                                     expert-groundtruth-rung1.yaml; pass more query sets (or a
+                                     glob) to grade further corpora with the same harness.
+                                     --envelope grades ONE case against an envelope captured
+                                     elsewhere (e.g. off the MCP server). Exit 1 = graded RED,
+                                     exit 2 = the harness could not run at all.
+           spec-index --out <dir> [--root D]
+                                     ORDER 547. Chunk the whole-spec corpus into <dir>/chunks.jsonl
+           spec-retrieve --index-dir <dir> --query-vec <f> [--k N]
+                                     network-free cosine top-k over caller-supplied embeddings
+           score-checks
+                                     ORDER 977-j6qu. THE centicolon scorer. Reads
+                                     `<check-id> <weight> <pass|fail>` lines on stdin and
+                                     prints {earned,denominator,residual,regime} — one
+                                     ranking function over the obligation lattice, so
+                                     local-ci.sh stops accumulating a second score under
+                                     the same name. `regime` names when the score left the
+                                     monotone band (a tombstone changes the denominator),
+                                     because a bare number cannot say which side it is on.
+                                     A malformed line REFUSES rather than scoring a partial
+                                     denominator, which would raise the percentage.
+           spec-floor --chunks-json <f>
+                                     ORDER 821-73es. Apply the grounded pipeline's retrieval
+                                     floors (TILLANDSIAS_RETRIEVE_REFUSAL_FLOOR on the best
+                                     score, TILLANDSIAS_RETRIEVE_MIN_SCORE per chunk) to a
+                                     spec-retrieve result: the kept array, or a typed
+                                     out-of-coverage refusal object with the reason ready
+           spec-envelope --chunks-json <f> [--answer-file F] [--root D]
+                         [--corpus-commit SHA]
+                                     build a VERIFIED envelope keeping only the citations the
+                                     answer actually used. --corpus-commit stamps the frame the
+                                     INDEX was built at onto every citation (order 801-g9nn)
+           fragments                 report the append-only plan/index.d/ overlay: which
+                                     fragments are live, which are malformed, and whether
+                                     compaction is eligible
+           compact                   fold every fragment into the base ledger and delete
+                                     exactly the ones folded (refuses a lossy rewrite)
+           loop-status [--index plan/loop_status.md]
+                                     ORDER 582-nqw5. THE loop_status reader: the folded view
+                                     (base ⊕ loop_status.d/ fragments). The only correct way to
+                                     read loop_status — a reader that forgets fragments reports
+                                     a stale status with total confidence.
+           loop-status-fragments      ORDER 582-nqw5. Report the loop_status.d/ overlay: live
+                                     fragments, malformed ones, and whether compaction is eligible
+           loop-status-verify [--ledger P] [--render]
+                                     ORDER 626-zmhz. The deterministic ACTIVE-RELEASE + count gate:
+                                     cross-checks the FOLDED loop_status prose (exactly one ACTIVE
+                                     RELEASE heading, exactly one `— ACTIVE` bullet, and that bullet
+                                     IS the active release) against the FOLDED ledger's release
+                                     counts, and fails loud on stale prose. --ledger overrides
+                                     plan/index.yaml; --render prints the canonical count line.
+           set-field <id|order> <field> <value> [--ts ISO] [--host H] [--reason TEXT]
+                                     ORDER 636-9m79. Correct a packet field by writing the LWW
+                                     channel as a NEW fragment. USE THIS instead of hand-authoring:
+                                     re-declaring a packet under `packets:` is a G-Set no-op that
+                                     parses, validates and silently does nothing — three hosts hit
+                                     that on 2026-08-09 and 11 of 21 completions were discarded.
+                                     Field-generic despite the channel's `status:` name (642-fedr).
+                                     Resolves against the FOLDED ledger, so unlike append-event it
+                                     reaches fragment-only packets (600-c266). Refuses an unknown
+                                     reference; reports a no-op instead of writing one.
+           loop-status-append [--ts ISO] [--host H] [--suffix S] [--file F]
+                                     ORDER 582-nqw5. Append ONE `## Cycle …` section (stdin or
+                                     --file) as a NEW fragment file — concurrent hosts each write
+                                     their own path, so appending status no longer conflicts.
+                                     Refuses `## Direction` and every other non-cycle heading.
+           loop-status-compact        ORDER 582-nqw5. Fold fragments into loop_status and delete
+                                     exactly the ones folded, gated on: nothing dropped, nothing
+                                     lost, operator-owned sections byte-identical, fold idempotent
+           loop-status-fragments      ORDER 582-nqw5. Report the loop_status.d/ overlay: live
+                                     fragments, malformed ones, and whether compaction is eligible
+           lua [--class cacheable|observing | --unsandboxed] <script.lua | -e code> [args...]
+                                     1375-btuf: SANDBOXED by default (observing env + json/yaml/hash/path/time);
+                                     --unsandboxed is the named raw-VM opt-in (archive-plan-packets.sh only).
+                                     Run a Lua script or snippet with the embedded, tillandsias-managed
+                                     Lua 5.4 runtime (eliminates heterogeneous external script dependencies).
+           predicate <script.lua> [arg] [--class cacheable|observing] [--name fn_name]
+                                     Default class: cacheable (no shell, no clock); observing is opt-in.
+                                     ORDER 1252-hsrz. Evaluate a Lua predicate with the capability-bounded
+                                     predicate runtime (pure shims fs.read/expect.*, shell only in observing class).
+                                     Enables forge agents to validate uncommitted specs without host recompilation.
+
+binary_build_id:
+0.1.0+4cc00de89bbe7de7
+binary_capabilities:
+answer
+append-event
+arrival-routing-check
+blocked-by
+blocked-closure
+blocking-counts
+build-id
+burndown
+capabilities
+capability-matrix
+carry-forward-check
+carry-forward-check-batch
+check
+closure-evidence-check
+collect
+compact
+corpus-coverage
+declared-closures
+declared-closures-check
+decompose
+dependencies-of
+discipline
+expert-serve
+experts-probe
+expire-claims
+forgotten
+fragment-event-packets
+fragment-misplaced-definitions
+fragment-terminal-events
+fragments
+grade
+hash
+json
+loop-status
+loop-status-append
+loop-status-compact
+loop-status-fragments
+loop-status-verify
+lua
+methodology
+methodology-ask
+methodology-index
+metrics-log-path
+msg
+next
+next-order
+parked-blocks
+pipeline
+plan-events
+policy
+predicate
+query
+ready
+run
+score-checks
+script
+select-rows
+session-tokens
+set-field
+source-revision
+spec-envelope
+spec-floor
+spec-index
+spec-retrieve
+split-parents
+status
+time
+validate-yaml
+validator-surface-hash
+verify-answer
+yaml
+yaml-get
+yaml-json
+yaml-type
+validator_surface_diff:
+warning: Limiting comparison with pathspecs is only supported if both paths are directories.
+usage: git diff --no-index [<options>] <path> <path> [<pathspec>...]
+
+Diff output format options
+    -p, --patch           generate patch
+    -s, --no-patch        suppress diff output
+    -u                    generate patch
+    -U, --unified[=<n>]   generate diffs with <n> lines context
+    -W, --[no-]function-context
+                          generate diffs with <n> lines context
+    --raw                 generate the diff in raw format
+    --patch-with-raw      synonym for '-p --raw'
+    --patch-with-stat     synonym for '-p --stat'
+    --numstat             machine friendly --stat
+    --shortstat           output only the last line of --stat
+    -X, --dirstat[=<param1>,<param2>...]
+                          output the distribution of relative amount of changes for each sub-directory
+    --cumulative          synonym for --dirstat=cumulative
+    --dirstat-by-file[=<param1>,<param2>...]
+                          synonym for --dirstat=files,<param1>,<param2>...
+    --check               warn if changes introduce conflict markers or whitespace errors
+    --summary             condensed summary such as creations, renames and mode changes
+    --name-only           show only names of changed files
+    --name-status         show only names and status of changed files
+    --stat[=<width>[,<name-width>[,<count>]]]
+                          generate diffstat
+    --stat-width <width>  generate diffstat with a given width
+    --stat-name-width <width>
+                          generate diffstat with a given name width
+    --stat-graph-width <width>
+                          generate diffstat with a given graph width
+    --stat-count <count>  generate diffstat with limited lines
+    --[no-]compact-summary
+                          generate compact summary in diffstat
+    --binary              output a binary diff that can be applied
+    --[no-]full-index     show full pre- and post-image object names on the "index" lines
+    --[no-]color[=<when>] show colored diff
+    --ws-error-highlight <kind>
+                          highlight whitespace errors in the 'context', 'old' or 'new' lines in the diff
+    -z                    do not munge pathnames and use NULs as output field terminators in --raw or --numstat
+    --[no-]abbrev[=<n>]   use <n> digits to display object names
+    --src-prefix <prefix> show the given source prefix instead of "a/"
+    --dst-prefix <prefix> show the given destination prefix instead of "b/"
+    --line-prefix <prefix>
+                          prepend an additional prefix to every line of output
+    --no-prefix           do not show any source or destination prefix
+    --default-prefix      use default prefixes a/ and b/
+    --inter-hunk-context <n>
+                          show context between diff hunks up to the specified number of lines
+    --output-indicator-new <char>
+                          specify the character to indicate a new line instead of '+'
+    --output-indicator-old <char>
+                          specify the character to indicate an old line instead of '-'
+    --output-indicator-context <char>
+                          specify the character to indicate a context instead of ' '
+
+Diff rename options
+    -B, --break-rewrites[=<n>[/<m>]]
+                          break complete rewrite changes into pairs of delete and create
+    -M, --find-renames[=<n>]
+                          detect renames
+    -D, --irreversible-delete
+                          omit the preimage for deletes
+    -C, --find-copies[=<n>]
+                          detect copies
+    --[no-]find-copies-harder
+                          use unmodified files as source to find copies
+    --no-renames          disable rename detection
+    --[no-]rename-empty   use empty blobs as rename source
+    --[no-]follow         continue listing the history of a file beyond renames
+    -l <n>                prevent rename/copy detection if the number of rename/copy targets exceeds given limit
+
+Diff algorithm options
+    --minimal             produce the smallest possible diff
+    -w, --ignore-all-space
+                          ignore whitespace when comparing lines
+    -b, --ignore-space-change
+                          ignore changes in amount of whitespace
+    --ignore-space-at-eol ignore changes in whitespace at EOL
+    --ignore-cr-at-eol    ignore carrier-return at the end of line
+    --ignore-blank-lines  ignore changes whose lines are all blank
+    -I, --[no-]ignore-matching-lines <regex>
+                          ignore changes whose all lines match <regex>
+    --[no-]indent-heuristic
+                          heuristic to shift diff hunk boundaries for easy reading
+    --patience            generate diff using the "patience diff" algorithm
+    --histogram           generate diff using the "histogram diff" algorithm
+    --diff-algorithm <algorithm>
+                          choose a diff algorithm
+    --anchored <text>     generate diff using the "anchored diff" algorithm
+    --word-diff[=<mode>]  show word diff, using <mode> to delimit changed words
+    --word-diff-regex <regex>
+                          use <regex> to decide what a word is
+    --color-words[=<regex>]
+                          equivalent to --word-diff=color --word-diff-regex=<regex>
+    --[no-]color-moved[=<mode>]
+                          moved lines of code are colored differently
+    --[no-]color-moved-ws <mode>
+                          how white spaces are ignored in --color-moved
+
+Other diff options
+    --[no-]relative[=<prefix>]
+                          when run from subdir, exclude changes outside and show relative paths
+    -a, --[no-]text       treat all files as text
+    -R                    swap two inputs, reverse the diff
+    --[no-]exit-code      exit with 1 if there were differences, 0 otherwise
+    --[no-]quiet          disable all output of the program
+    --[no-]ext-diff       allow an external diff helper to be executed
+    --[no-]textconv       run external text conversion filters when comparing binary files
+    --ignore-submodules[=<when>]
+                          ignore changes to submodules in the diff generation
+    --submodule[=<format>]
+                          specify how differences in submodules are shown
+    --ita-invisible-in-index
+                          hide 'git add -N' entries from the index
+    --ita-visible-in-index
+                          treat 'git add -N' entries as real in the index
+    -S <string>           look for differences that change the number of occurrences of the specified string
+    -G <regex>            look for differences that change the number of occurrences of the specified regex
+    --pickaxe-all         show all changes in the changeset with -S or -G
+    --pickaxe-regex       treat <string> in -S as extended POSIX regular expression
+    -O <file>             control the order in which files appear in the output
+    --rotate-to <path>    show the change in the specified path first
+    --skip-to <path>      skip the output to the specified path
+    --find-object <object-id>
+                          look for differences that change the number of occurrences of the specified object
+    --diff-filter [(A|C|D|M|R|T|U|X|B)...[*]]
+                          select files by diff type
+    --max-depth <depth>   maximum tree depth to recurse
+    --output <file>       output to a specific file
+
+validator_surface_diff_rc=129
+reuse_provenance_rc=0

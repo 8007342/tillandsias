@@ -222,7 +222,10 @@ License rollups (initial allowlist):
 
 Audit existing cheatsheets:
 ```bash
-scripts/audit-cheatsheet-sources.sh > /tmp/audit.csv
+cargo build -p tillandsias-policy
+target/debug/tillandsias-policy audit-cheatsheet-sources --repo-root . > /tmp/audit.csv
+# (scripts/audit-cheatsheet-sources.sh, the shell wrapper over this subcommand,
+#  was retired on 2026-10-10 by 1577-57u3 as a shell-to-lua carried item)
 # columns: cheatsheet_path, source_url, in_index_json, license_allowlisted, sha256_present
 ```
 

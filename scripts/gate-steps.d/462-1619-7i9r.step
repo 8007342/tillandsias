@@ -1,0 +1,12 @@
+# Gate step 1619-7i9r — on darwin a mktemp without a template ignores TMPDIR, so
+# the preflight door's per-guard TMPDIR sweep never sees it. The count of such
+# sites in scripts/**/*.sh is ratcheted per file against
+# scripts/portability/bare-mktemp-floor.txt: a new site is refused, and a
+# converted one lowers the floor in the same commit.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking no new mktemp without a template (1619-7i9r)"
+STEP_LUA="scripts/lua/check-bare-mktemp.lua"
+STEP_ERROR="a script adds a mktemp without a template, which ignores TMPDIR on darwin (1619-7i9r) — see the violation lines above"
+STEP_OK="No new mktemp without a template"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-11 darwin ok:bare-mktemp"

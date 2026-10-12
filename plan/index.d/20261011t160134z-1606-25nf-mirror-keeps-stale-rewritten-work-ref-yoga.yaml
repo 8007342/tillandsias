@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11, p3), after taken-by on yoga's forge flagged an already-landed work ref.
+packets:
+  - packet_id: the-git-mirror-keeps-serving-a-work-ref-at-its-old-tip-after-upstream-rewrites-it-non-fast-forward-while-sync-state-reads-heads-current
+    order: 1606-25nf
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [git-mirror, forge, sync, taken-by]
+    estimated_hours: 2
+    owned_files:
+      - images/git/
+    title: |
+      The forge's git mirror kept serving work/1590-j20f at its OLD tip c42a22b29 after the branch was rewritten upstream (non-fast-forward) to 337dc0df9, which landed. Its sync-state still read heads-current. A forge's taken-by then reported a landed ref as an open one.
+    context: |
+      MEASURED on yoga's forge 2026-10-11 ~16:00Z, trunk 948211a22, after a fresh `git fetch origin`:
+        git ls-remote origin refs/heads/work/1590-j20f  -> c42a22b29136fecca78aedfc70593fda8868c8d3
+        git merge-base --is-ancestor c42a22b29 origin/linux-next  -> no
+        git merge-base --is-ancestor 337dc0df9 origin/linux-next  -> yes
+        git ls-remote origin 'refs/tillandsias/sync-state/*'     -> refs/tillandsias/sync-state/heads-current/1791734425
+        reflog: refs/remotes/origin/work/1590-j20f@{2026-10-11 11:30:38Z}: fetch -q origin: storing head (c42a22b29); no later update
+      The two tips have DIVERGED, neither is an ancestor of the other. c42a22b29 is "style(policy): rustfmt the runtime manifest_dir() read" (11:11Z), on top of 7274c7e86 and 0d73bfae6. 337dc0df9 is "fix(1590-j20f): carried_of takes the land subject; no literal pipe in the helper" (12:49Z), on f2ed4c9b6 and 06c7b008d. macuahuitl-fedora verified that the upstream work/1590-j20f is 337dc0df9 and is an ancestor of origin/linux-next (#321 landed it). So upstream rewrote the branch, and the mirror never applied the non-fast-forward update. It still reports itself current.
+      CONSEQUENCE, measured: the carried guard's taken-by and a forge's own pre-push scan judge the refs the mirror serves. Both flagged origin/work/1590-j20f as an open ref ADDING scripts/portability/manifest-dir-env-floor.txt, while 1605-42nh was being pushed. The guard was correct about what it was shown; the mirror showed a dead tip.
+      NOT the taken-by guard: its ancestry check against BASE is right. The fault is the mirror's reconcile, which does not mirror an upstream force-update of a work ref and does not report the divergence.
+    exit_criteria:
+      - 'after an upstream non-fast-forward update of a work ref, the mirror serves the new upstream tip within one reconcile tick, OR names the ref in a sync-state that is not heads-current (e.g. refs/tillandsias/sync-state/diverged/<ref>), never heads-current while serving a stale tip'
+      - 'shown in one run against a scratch upstream and mirror: pre-fix, the mirror keeps the old tip and reports heads-current; post-fix, the new tip (or the divergence state)'
+    unscoreable: "unpinnable-until-the-guard-exists: the reconcile change and its scratch upstream/mirror fixture are written together"
+    depends_on: []
+    related: [1589-hm2r]
+    next_action: >
+      Read the mirror's reconcile path in images/git/. Decide whether work refs follow upstream force-updates (an upstream rewrite of a work ref is legitimate: the author rebased) or are reported as diverged. Pin it with a scratch upstream and mirror pair.
+    provenance: |
+      Filed by yoga (forge) on macuahuitl-fedora's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T16:01:34Z"
+        host: yoga
+        summary: |-
+          The mirror served work/1590-j20f at a dead pre-rewrite tip (c42a22b29) while upstream had 337dc0df9 (landed) and sync-state read heads-current, so taken-by flagged a landed ref.

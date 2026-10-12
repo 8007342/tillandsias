@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: three-small-shell-fixtures-end-on-pass-fail-verdicts-the-lua-runner-cannot-emit-so-their-port-rewrites-their-own-terminal-line-to-ok-refused
+    event:
+      type: completed
+      ts: "2026-10-11T08:21:28Z"
+      agent_id: windows-yolanda-claude-20261008t155217z
+      host: yolanda-windows
+      summary: |-
+        Landed as #310, merge e9de10d4a on linux-next, full tier, gate green. The three fixtures (test-litmus-empty-spec-refused, test-slowest-span-marker, test-source-slice-bounds) are Lua; their retired PASS:/FAILED:/fail:/FAIL: terminal lines had 0 readers across 1649 files (each port's READERS arm); parity natively on yolanda-windows on real inputs and one planted failure each; gate step 600 is STEP_LUA with a fresh msys record; the timing litmus step 10 runs the Lua (12/12 in the guest).

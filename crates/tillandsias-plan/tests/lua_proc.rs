@@ -161,6 +161,39 @@ mod managed_script {
         );
     }
 
+    // ORDER 1593-1ny6. CARGO_TARGET_DIR is on the allowlist, so a nested runner
+    // finds the caller's build artifacts (a linked worktree on a shared target
+    // has no ./target of its own); a variable NOT on it still never reaches the
+    // child. Both through the proc.run door, the one fixtures use.
+    #[test]
+    fn cargo_target_dir_reaches_the_child_and_an_unlisted_variable_does_not() {
+        let f = ScriptFixture::new();
+        let script = f.write(
+            "probe.lua",
+            r#"
+            local a = proc.run{argv={'printenv','CARGO_TARGET_DIR'}}
+            assert(a.status == 'exited' and a.code == 0, 'CARGO_TARGET_DIR did not reach the child: '..tostring(a.status)..' '..tostring(a.code))
+            assert(a.stdout:gsub('[\r\n]+$', '') == 'target-dir-1593', 'CARGO_TARGET_DIR arrived as ['..a.stdout..']')
+            local b = proc.run{argv={'printenv','UNLISTED_1593_PROBE'}}
+            assert(b.stdout == '', 'an unlisted variable reached the child: ['..b.stdout..']')
+            verdict.ok('allowlist')
+        "#,
+        );
+        let out = f
+            .runner(&script)
+            .args(["--timeout", "20s"])
+            .env("CARGO_TARGET_DIR", "target-dir-1593")
+            .env("UNLISTED_1593_PROBE", "must-not-leak")
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
     // ORDER 1551-pemw, 1551-8gkg. What the instruction hook cannot follow, and
     // what no restriction survives, is not in the environment at all.
     #[test]
@@ -579,14 +612,16 @@ mod managed_script {
             while true do end
         "#
             ),
-            "2s",
+            "20s",
         );
         let elapsed = t0.elapsed();
         assert_acknowledged_tasks_stopped(&f);
         assert_eq!(out.status.code(), Some(0));
         assert_eq!(out.stdout, b"scope-probe (advisory)\n");
+        // 1568-wclk: outer deadline 20 s, bound 10 s (was 2 s / 1 s, a 1 s margin
+        // a loaded gate can eat); waiting for the deadline still fails it.
         assert!(
-            elapsed < Duration::from_millis(1000),
+            elapsed < Duration::from_secs(10),
             "advisory waited for outer deadline: {elapsed:?}"
         );
     }
@@ -610,15 +645,17 @@ mod managed_script {
             verdict.ok("wrong")
         "#
             ),
-            "2s",
+            "20s",
         );
         let elapsed = t0.elapsed();
         assert_acknowledged_tasks_stopped(&f);
         assert_eq!(out.status.code(), Some(0));
         assert_eq!(out.stdout, b"callback scope-probe (advisory)\n");
         assert!(!f.dir.path().join("escaped").exists());
+        // 1568-wclk: outer deadline 20 s, bound 10 s (was 2 s / 1 s, a 1 s margin
+        // a loaded gate can eat); waiting for the deadline still fails it.
         assert!(
-            elapsed < Duration::from_millis(1000),
+            elapsed < Duration::from_secs(10),
             "callback advisory waited for deadline: {elapsed:?}"
         );
     }
@@ -1961,7 +1998,8 @@ fn arm2_both_fds_drain_concurrently_in_full() {
     assert_eq!((o, e, ok), (1_048_576, 1_048_576, true));
 }
 
-/// ARM 3: a deadline kills the GROUP: timed_out, no code, under 2 s, and the
+/// ARM 3: a deadline kills the GROUP: timed_out, no code, well under the
+/// fixture's 30 s sleep, and the
 /// grandchild never writes its marker. The control runs the same fixture with
 /// group = false, and the grandchild survives, which proves the grouped arm
 /// is not passing because the grandchild never started.
@@ -1988,9 +2026,16 @@ fn arm3_a_deadline_kills_the_whole_group() {
             !has_code,
             "a timed-out child produced no exit code (group={group})"
         );
+        // A CEILING, NOT A LATENCY TARGET (1568-wclk). This was `< 2 s`, a
+        // wall-clock bound on a 500 ms deadline: under the landing queue's
+        // CPUWeight=20 scope with gate steps beside it, it took 2.27 s and
+        // evicted a shell-only PR (#272) twice. The PROPERTY is that the
+        // deadline fires at all (status timed_out above) and takes the group
+        // (the marker asserts below). A deadline that never fired would wait
+        // out the fixture's `sleep 30`, so 15 s still separates the two.
         assert!(
-            elapsed < Duration::from_secs(2),
-            "deadline took {elapsed:?}"
+            elapsed < Duration::from_secs(15),
+            "deadline took {elapsed:?}: the fixture sleeps 30 s, so this means the deadline never fired"
         );
         std::thread::sleep(Duration::from_secs(6));
         assert_eq!(
@@ -2161,8 +2206,12 @@ fn a_piped_caller_is_not_held_by_a_leaked_grandchild() {
         out.contains("timed_out"),
         "the deadline must have fired: {out:?}"
     );
+    // A CEILING, NOT A LATENCY TARGET (1568-wclk): `< 3 s` failed at 4.04 s
+    // under the landing queue's CPUWeight=20 scope and evicted #275 (no
+    // lua_proc change). The defect this pins holds the pipe for the
+    // grandchild's whole `sleep 30` (30.4 s measured), so 15 s still splits them.
     assert!(
-        eof_after < Duration::from_secs(3),
+        eof_after < Duration::from_secs(15),
         "the caller's pipe stayed open {eof_after:?}: a leaked grandchild holds it"
     );
 }

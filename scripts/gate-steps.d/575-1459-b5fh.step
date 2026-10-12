@@ -12,9 +12,9 @@
 # and the bundled-tier fetch key) read no locale and spawn nothing; the unit
 # test no_external_sort_is_spawned pins that for the whole crate.
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+# STEP_LUA is a LITERAL path on purpose (1063-nraf). Ported to Lua by 1585-hb8w.
 STEP_DESC="Checking the cheatsheet INDEX is byte-ordered and locale-independent (1459-b5fh)"
-STEP_SCRIPT="scripts/test-cheatsheet-index-byte-order.sh"
+STEP_LUA="scripts/lua/test-cheatsheet-index-byte-order.lua"
 STEP_ERROR="the cheatsheet INDEX order depends on the host locale again, or is stale (1459-b5fh); regenerate with scripts/regenerate-cheatsheet-index.sh and see which arm failed above"
 STEP_OK="cheatsheet INDEX is byte-ordered under C and en_US.UTF-8"
 STEP_SECOND_REGIME="yolanda 2026-09-28 msys ok:cheatsheet-index-byte-order:3"

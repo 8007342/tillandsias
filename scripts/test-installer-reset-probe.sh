@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
-# @trace order:1449-4qqu
+# @trace order:1449-4qqu, order:1565-qtuk
 #
 # Fixture for install-windows.ps1's --reset-state probe. The installer carries
 # the probe between two exact-once marker lines; this cuts that block and RUNS
 # it in PowerShell against stub trays (.cmd files, which the probe's cmd.exe
 # line runs like the real exe), then reads $HasResetState.
+#
+# SINCE 1565-qtuk THE PROBE IS THE SOFT RESET CALL ITSELF: the separate probe
+# ran with the opt-out, which skips the wipe but still provisions, so every
+# install provisioned twice. $HasResetState now means "the parser took the
+# flag" (anything but exit 2), and a non-zero verdict of a reset that RAN is
+# the installer's Die, not "this tray predates the flag".
 #
 #   0  both markers exactly once (could-not-run otherwise)
 #   A  unknown flag: prints a refusal, exit 2          -> unsupported
@@ -12,8 +18,11 @@
 #      PRE-FIX RESULT: FAILS (read as "predates --reset-state"; measured on
 #      yolanda 2026-09-27 with v56.9.27.2)
 #   C  flag accepted, re-init ok: skip line, exit 0    -> supported
-#   D  some other failure, no skip line, exit 1        -> unsupported (the
-#      conservative direction is kept for everything the binary did not claim)
+#   D  some other failure, no skip line, exit 1        -> SUPPORTED since
+#      1565-qtuk (was unsupported: the conservative direction then refused to
+#      authorise a LATER destructive call; there is no later call now, and
+#      reading a failed reset as "old tray" would hide it behind a restart
+#      hint instead of the Die that names the setup log)
 #
 # Needs Windows PowerShell or pwsh AND cmd.exe; skips by name without them.
 set -u
@@ -59,7 +68,7 @@ PS
 fails=0
 expect() { # expect <stub> <True|False> <label>
     local got
-    got="$("$PWSH" -NoProfile -ExecutionPolicy Bypass -File "$(win "$TMP/run.ps1")" -Probe "$(win "$TMP/probe.ps1")" -Exe "$(win "$TMP/$1.cmd")" 2>&1 | tr -d '\r' | grep '^has=' || true)"
+    got="$(TEMP="$(win "$TMP")" "$PWSH" -NoProfile -ExecutionPolicy Bypass -File "$(win "$TMP/run.ps1")" -Probe "$(win "$TMP/probe.ps1")" -Exe "$(win "$TMP/$1.cmd")" 2>&1 | tr -d '\r' | grep '^has=' || true)"
     if [ "$got" = "has=$2" ]; then
         echo "ok:   $3 ($got)"
     else
@@ -70,6 +79,6 @@ expect() { # expect <stub> <True|False> <label>
 expect unknown False "A unknown flag is unsupported"
 expect failed True "B flag accepted, re-init failed, is SUPPORTED"
 expect ok True "C flag accepted, re-init ok, is supported"
-expect other False "D an unclaimed failure stays unsupported"
+expect other True "D a failure of a reset that ran is SUPPORTED (the installer Dies on it)"
 if [ "$fails" -gt 0 ]; then echo "refused:reset-probe-fixture:failed=$fails"; exit 1; fi
 echo "ok:reset-probe-fixture:4"

@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11), found while preflighting 1586-gway.
+packets:
+  - packet_id: test-awk-float-lc-numeric-leaks-its-mutant-lcnum-copies-into-the-checkout-when-the-preflight-deadline-kills-it
+    order: 1587-qqzs
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [preflight, darwin-regime, hygiene, mutation-fixture]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-awk-float-lc-numeric.sh
+    title: |
+      A deadline-killed test-awk-float-lc-numeric leaves scripts/.mutant-lcnum-freshness-inventory.sh, scripts/.mutant-lcnum-select-work-batch.sh and scripts/refusal-calibration/.mutant-lcnum-measure-bands.sh untracked in the checkout, where the next diff-scoped guard reads them as added code
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-10-11, worktree work/1586-gway:
+      - 2 of 2 `taskpolicy -b ./build.sh --preflight` runs ended with the guard listed as `skip:preflight:test-awk-float-lc-numeric:deadline:12s/13s` (5s deadline). Both left the same 3 untracked .mutant-lcnum-* files.
+      - They sit BESIDE the originals in the checkout, not under $TMPDIR (mpath(), scripts/test-awk-float-lc-numeric.sh:74), so `ls $TMPDIR/.mutant-lcnum-*` cannot see them.
+      - Consequence observed: a standalone check-sigpipe-verdict-pipelines-added then refused 12 "added" pipelines, all in the leaked mutants.
+      NOT REPRODUCED outside preflight. A script that copies the door's no-setsid kill (TERM to the guard pid, 1s grace polled in tenths, then KILL; build.sh _pf_run_guard) left 0 leaks in 3 of 3 runs. That held plain and again at taskpolicy -b beside 20x `yes`. A bare SIGTERM also cleaned up: the EXIT trap ran (rc=143).
+      Open hypotheses, unverified:
+      - a SIGKILL landing while the cleanup trap is deferred behind a foreground child;
+      - the window between make_mutant's copy and its MUTANTS+= append;
+      - the door's concurrency.
+      macOS has no setsid, so the door signals only the guard pid, never its group.
+    exit_criteria:
+      - 'after a deadline-killed test-awk-float-lc-numeric run inside ./build.sh --preflight on darwin, `git status --porcelain --untracked-files=all | grep mutant-lcnum` finds nothing (the coordinator asked for `ls $TMPDIR/.mutant-lcnum-*`; the files live beside the originals in the checkout, so check there, or under $TMPDIR if the fix moves them)'
+      - 'the pre-fix script is shown leaking under the same kill in the same run, so the fix is measured, not assumed'
+    unscoreable: "unpinnable-until-the-guard-exists: no guard asserts a clean tree after a deadline kill"
+    depends_on: []
+    next_action: >
+      First build a repro that leaks outside the door, or instrument one preflight run with the guard's pid, signals and timestamps. Then fix. Candidate shapes: write the mutants under a mktemp dir that the copy step itself records before it writes, or register the path in MUTANTS before the cp. Taken after 1276-mugq closes (coordinator).
+    provenance: |
+      Filed by tlatoanis-macbook-air on macuahuitl's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T06:27:05Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Preflight's deadline kill leaks the lcnum mutants into the checkout (2/2 preflights; 0/6 standalone repros).

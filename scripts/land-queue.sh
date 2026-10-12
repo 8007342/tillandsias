@@ -110,6 +110,10 @@ set -uo pipefail
 # directory for any relative invocation — the exact defect landed tonight as
 # 1337-3tk6's follow-up, arriving here from the opposite direction.
 _SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# The freeze predicate and marker read, shared with the hook, release-freeze.sh
+# and release-preflight (1255-s4im).
+# shellcheck source=lib-freeze-paths.sh
+. "$_SELF_DIR/lib-freeze-paths.sh"
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
     echo "fail:land-queue:not-a-git-repo — run this from the checkout you are landing into" >&2
@@ -170,6 +174,35 @@ pr_comment() {
     if ! "$GH" pr comment "$n" --body "$body" >/dev/null 2>&1; then
         say "advisory:land-queue:comment-failed:$n — the eviction stands; the PR was not annotated"
     fi
+}
+
+# gate_failed_comment <gate log> <rc> <head> <trunk> <base sha> — the body of a
+# gate-failed eviction comment, on stdout.
+#
+# ORDER 1602-3ave: the body quoted only `tail -5` of the gate log, and a failing
+# fixture's FAIL lines sit ABOVE the gate's closing summary. #319's run-17
+# eviction could not name its failing arm. The log already holds stderr (the
+# gate runs `> "$_glog" 2>&1`), so the verdict lines are there to quote: the
+# first 20 distinct lines that read as one (FAIL, [FAIL], refused:, violation:,
+# blocked:), colour codes and indentation stripped, ahead of the same tail.
+# Factored so test-land-queue-eviction-comment.lua can build it from a planted
+# log without a real gate.
+gate_failed_comment() {
+    local glog="$1" rc="$2" head="$3" trunk="$4" base="$5" fails="" tail5
+    # BEGIN-FAIL-LINES
+    fails="$(awk '
+        { line = $0; gsub(/\033\[[0-9;]*m/, "", line); sub(/^[ \t]+/, "", line) }
+        # A sum of single-pattern tests, not an alternation: no "|" for the pipe-site counter to misread.
+        { verdict = (line ~ /^FAIL/) + (line ~ /^\[FAIL\]/) + (line ~ /^refused:/) + (line ~ /^violation:/) + (line ~ /^blocked:/) }
+        verdict && !(line in seen) && n < 20 { seen[line] = 1; n++; print line }
+    ' "$glog" 2>/dev/null)"
+    # END-FAIL-LINES
+    tail5="$(tail -5 "$glog")"
+    printf 'Evicted from the landing queue: the gate failed (rc=%s) on the merge of `%s` into `%s` at `%s`.\n\n' "$rc" "$head" "$trunk" "${base:0:9}"
+    if [ -n "$fails" ]; then
+        printf 'Failing lines (first 20 distinct, from the gate log):\n\n```\n%s\n```\n\nLast lines of the gate log:\n\n' "$fails"
+    fi
+    printf '```\n%s\n```\n\nThe queue continued with the next candidate. Fix and the queue will pick it up again.\n' "$tail5"
 }
 
 # ── THE WORKING TREE MUST BE CLEAN ───────────────────────────────────────────
@@ -314,6 +347,86 @@ Rebase or merge \`$TRUNK\` into \`$head\` and the queue will pick it up again. T
     rm -f "$_mlog"
     merge_sha="$(git rev-parse HEAD)"
 
+    # ── A FROZEN TARGET HOLDS CODE (1255-s4im) ───────────────────────────────
+    # Asked BEFORE the gate, so no gate is spent on a landing the freeze would
+    # refuse, and asked of ORIGIN by the tool itself: the pre-push hook refuses
+    # this only on a host whose hook is armed. A candidate that carries only
+    # paths the freeze exempts (ledger, docs, skills, cheatsheets) still lands —
+    # that is how coordination keeps moving during a cut. HOLD is not EVICT: the
+    # candidate is fine, the branch is closed; it lands after the freeze clears.
+    _held="$(freeze_held_paths "$base_sha" "$merge_sha" | head -n 1)"
+    if [ -n "$_held" ]; then
+        _frc=0; _fm="$(freeze_markers "$REMOTE" "$TRUNK")" || _frc=$?
+        if [ "$_frc" -ne 0 ]; then
+            say "hold:land-queue:$num:freeze-unknown — git ls-remote $REMOTE failed, and this candidate carries held code ($_held); not gating into a branch whose freeze state is unknown"
+            skipped=$((skipped + 1))
+            continue
+        fi
+        if [ -n "$_fm" ]; then
+            say "hold:land-queue:$num:frozen:$(printf '%s\n' "$_fm" | head -n 1 | cut -f2) — carries held code ($_held); it lands after the freeze clears"
+            skipped=$((skipped + 1))
+            continue
+        fi
+    fi
+
+    # ── WHAT THE CANDIDATE OWES ITS CARRIED OBLIGATIONS (1577-568c) ──────────
+    # methodology/convergence.yaml carried_obligations escalates only on a
+    # MEASURED stall, so every landing records, per backlog, whether it paid,
+    # waived, owed nothing or stayed silent: one `Carried: <backlog> <state>
+    # [<item-or-reason>]` trailer each on the land commit, which makes the tally
+    # one `git log --first-parent --format=%(trailers:key=Carried,valueonly)`.
+    # Asked BEFORE the gate, so no gate is spent on a candidate this evicts.
+    # The guard is THIS script's sibling; the rule it reads is the merged tree's.
+    #
+    # A guard that cannot judge (no runner, no backlog table) is NOT an
+    # eviction: the obligation is gentle and the gate runs the same guard. The
+    # land commit then carries no Carried trailer and says so here.
+    # A tree with no rule (methodology/convergence.yaml absent) is not asked:
+    # the runner writes its audit under the repo root, and a repo that does not
+    # ignore it would then read dirty to the next landing.
+    _cout="$(mktemp)"; _cerr="$(mktemp)"
+    if [ -f methodology/convergence.yaml ]; then
+        env TILLANDSIAS_REPO_ROOT="$ROOT" TILLANDSIAS_CARRIED_BASE="$base_sha" \
+            TILLANDSIAS_CARRIED_HEAD="$head_sha" TILLANDSIAS_CARRIED_REF="$head" \
+            "$PLAN" script run "$_SELF_DIR/lua/check-carried-obligations.lua" -- --landing \
+            < /dev/null > "$_cout" 2> "$_cerr"
+        _crc=$?
+    else
+        printf 'skip:carried-obligations:no-rule-in-tree\n' > "$_cout"
+        _crc=0
+    fi
+    _carried="$(sed -n 's/^carried:\([^:]*\):\([^:]*\):\{0,1\}\(.*\)$/Carried: \1 \2 \3/p' "$_cout" | sed 's/ *$//')"
+    _cverdict="$(tail -n 1 "$_cout")"
+    _cwaiver="$(grep '^Carried-Waiver: ' "$_cerr" | head -n 1)"
+    rm -f "$_cout" "$_cerr"
+    if [ "$_crc" -eq 1 ]; then
+        # violation:carried:<backlog>:<silent|waiver-not-a-trailer>
+        _cb="$(printf '%s' "$_cverdict" | cut -d: -f3)"
+        _ck="$(printf '%s' "$_cverdict" | cut -d: -f4)"
+        _cdue="$(printf '%s\n' "$_carried" | grep "^Carried: $_cb due " | head -n 1 | sed "s/^Carried: $_cb due //")"
+        say "evict:land-queue:$num:carried-$_ck:$_cb"
+        say "  add to the LAST paragraph of a commit on $head: ${_cwaiver:-Carried-Waiver: $_cb <reason>}  (or port ${_cdue:-one item})"
+        pr_comment "$num" "Evicted from the landing queue: \`$head\` touches the \`$_cb\` carried-obligation area and neither pays an item nor carries a waiver trailer git can read ($_ck). See methodology/convergence.yaml → carried_obligations.
+
+Pay it: port ${_cdue:-one item} to scripts/lua/ and delete the .sh. Or waive it with this line in the LAST paragraph of a commit message on \`$head\` (git reads trailers only there):
+
+\`\`\`
+${_cwaiver:-Carried-Waiver: $_cb <reason>}
+\`\`\`
+
+The queue continued with the next candidate."
+        evicted=$((evicted + 1))
+        continue
+    fi
+    if [ "$_crc" -eq 0 ] && [ -n "$_carried" ]; then
+        git -c user.name=land-queue -c user.email=land-queue@localhost \
+            commit -q --amend -m "land($num): $head into $TRUNK" -m "$_carried" >/dev/null 2>&1 \
+            || say "advisory:land-queue:$num:carried-trailer-not-written — the landing proceeds without it"
+        merge_sha="$(git rev-parse HEAD)"
+    else
+        say "advisory:land-queue:$num:carried-unjudged:rc=$_crc:${_cverdict:-no-verdict} — no Carried trailer on this landing"
+    fi
+
     # ── GATE THE MERGE RESULT ────────────────────────────────────────────────
     if [ "$DRY_RUN" -eq 1 ]; then
         say "dry-run: would gate ${merge_sha:0:9} then push to $TRUNK"
@@ -325,15 +438,8 @@ Rebase or merge \`$TRUNK\` into \`$head\` and the queue will pick it up again. T
     ( eval "$GATE" ) < /dev/null > "$_glog" 2>&1
     _grc=$?
     if [ "$_grc" -ne 0 ]; then
-        _tail="$(tail -5 "$_glog")"
         say "evict:land-queue:$num:gate-failed:rc=$_grc"
-        pr_comment "$num" "Evicted from the landing queue: the gate failed (rc=$_grc) on the merge of \`$head\` into \`$TRUNK\` at \`${base_sha:0:9}\`.
-
-\`\`\`
-$_tail
-\`\`\`
-
-The queue continued with the next candidate. Fix and the queue will pick it up again."
+        pr_comment "$num" "$(gate_failed_comment "$_glog" "$_grc" "$head" "$TRUNK" "$base_sha")"
         evicted=$((evicted + 1))
         rm -f "$_glog"
         continue
@@ -398,6 +504,21 @@ The queue continued with the next candidate. Fix and the queue will pick it up a
         else
             say "requeue:land-queue:$num:target-moved:gated-on=${base_sha:0:9} now=${base_now:0:9} classes=$(printf '%s' "${_delta_classes:-unreadable}" | tr '\n' ',' | sed 's/,$//')"
             pr_comment "$num" "Re-queued, not landed: \`$TRUNK\` moved from \`${base_sha:0:9}\` to \`${base_now:0:9}\` while this candidate was gating, and the move touched classes \`$(printf '%s' "${_delta_classes:-unreadable}" | tr '\n' ',' | sed 's/,$//')\` — not ledger fragments alone, so the green verdict no longer describes the tree being pushed. Nothing was pushed. The queue will re-gate against the new target."
+            requeued=$((requeued + 1))
+            continue
+        fi
+    fi
+
+    # ── A FREEZE SET WHILE THIS GATED IS NOT PUSHED THROUGH (1255-s4im) ──────
+    # The gate takes 40 minutes and a cut can freeze the branch inside that
+    # window. The hook re-asks at push on a hooked host; the tool re-asks here
+    # so the answer does not depend on which host runs the queue. Recomputed
+    # from the CURRENT base, because an adopt above may have moved it.
+    _held="$(freeze_held_paths "$base_sha" "$merge_sha" | head -n 1)"
+    if [ -n "$_held" ]; then
+        _frc=0; _fm="$(freeze_markers "$REMOTE" "$TRUNK")" || _frc=$?
+        if [ "$_frc" -ne 0 ] || [ -n "$_fm" ]; then
+            say "requeue:land-queue:$num:frozen-mid-gate:$( [ "$_frc" -ne 0 ] && echo "freeze-unknown" || printf '%s\n' "$_fm" | head -n 1 | cut -f2) — the gate was green but $TRUNK froze while it ran and this carries held code ($_held); nothing was pushed"
             requeued=$((requeued + 1))
             continue
         fi

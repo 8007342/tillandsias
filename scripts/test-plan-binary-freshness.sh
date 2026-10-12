@@ -93,11 +93,15 @@ run_case() {
     )
 }
 
+# 1637-arwp: the resolver returns a probed candidate ABSOLUTE ($PWD at resolve
+# time, here $TMPD), not ./target/... — 38 callers hand-normalised ./ and the
+# release-tier fixtures that cd'd elsewhere were the callers that never got one.
+# The healed path (case C) is made absolute the same way.
 # ── case A: binary newer than every source → fresh, no cargo consulted ──────
 set_mtimes 202601020000 202601010000
 out="$(run_case none)"
 ck "fresh binary resolves"            "rc=0" "$(printf '%s' "$out" | tail -1)"
-ck "fresh binary prints its path"     "./target/release/tillandsias-plan" \
+ck "fresh binary prints its path"     "$TMPD/target/release/tillandsias-plan" \
    "$(printf '%s' "$out" | head -1)"
 
 # ── case B: source newer, rebuild fails → rc 2, silent ──────────────────────
@@ -110,7 +114,7 @@ ck "stale + failed rebuild is silent" ""     "$(printf '%s' "$out" | head -1)"
 set_mtimes 202601020000 202601030000
 out="$(run_case touch)"
 ck "stale + rebuild-in-locus heals"   "rc=0" "$(printf '%s' "$out" | tail -1)"
-ck "healed binary prints its path"    "./target/release/tillandsias-plan" \
+ck "healed binary prints its path"    "$TMPD/target/release/tillandsias-plan" \
    "$(printf '%s' "$out" | head -1)"
 
 # ── case D: no binary at all, rebuild fails → rc 1 (resolve contract) ───────
@@ -160,9 +164,11 @@ git init -q -b linux-next "$LW/wc"
 ( cd "$LW/wc" && git remote add origin "$LW/bare.git" && git config core.hooksPath .git/hooks )
 mkdir -p "$LW/wc/scripts/hooks" "$LW/wc/plan/index.d" "$LW/wc/crates/tillandsias-plan/src" "$LW/wc/target/release"
 cp "$_LANE_ROOT/scripts/hooks/pre-push-local-gate.sh" "$LW/wc/scripts/hooks/"
-for f in plan-binary-probe.sh gate-stamp.sh common.sh check-fragment-status-loss.sh check-issue-citation-convention.sh; do
+for f in plan-binary-probe.sh gate-stamp.sh common.sh check-issue-citation-convention.sh; do
     cp "$_LANE_ROOT/scripts/$f" "$LW/wc/scripts/" 2>/dev/null || true
 done
+# ORDER 1570-mxcg: the status-loss guard is Lua; the lane runs it from scripts/lua/.
+mkdir -p "$LW/wc/scripts/lua" && cp "$_LANE_ROOT/scripts/lua/check-fragment-status-loss.lua" "$LW/wc/scripts/lua/" 2>/dev/null || true
 chmod +x "$LW/wc/scripts"/*.sh "$LW/wc/scripts/hooks"/*.sh 2>/dev/null
 printf 'packets: []\n' > "$LW/wc/plan/index.yaml"
 echo 'fn main() {}' > "$LW/wc/crates/tillandsias-plan/src/main.rs"

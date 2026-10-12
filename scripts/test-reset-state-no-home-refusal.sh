@@ -58,7 +58,8 @@ fi
 # and then refused, which is already the false report.
 R="$(grep -n 'image_root_for_destruction()' "$SRC" | grep -v '^\s*//' | head -1 | cut -d: -f1)"
 A="$(grep -n 'announce_reset_plan(&d, &p)' "$SRC" | head -1 | cut -d: -f1)"
-D="$(grep -n 'wipe_provisioned_artifacts()' "$SRC" | head -1 | cut -d: -f1)"
+# 1437-8c6p: the SOFT body's first destructive call is apply_soft_reset.
+D="$(grep -n '^    apply_soft_reset(' "$SRC" | head -1 | cut -d: -f1)"
 if [ -n "$R" ] && [ -n "$A" ] && [ -n "$D" ] && [ "$R" -lt "$A" ] && [ "$A" -lt "$D" ]; then
     ok "ARM3 refusal ($R) precedes announcement ($A) precedes destruction ($D)"
 else

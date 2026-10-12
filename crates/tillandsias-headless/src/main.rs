@@ -2401,6 +2401,9 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         "git" => "images/git",
         "inference" => "images/inference",
         "web" => "images/web",
+        // 1625-un54: the local Wrangler preview profile. runtime_assets already
+        // shipped its context; without this arm nothing could build it.
+        "web-wrangler" => "images/web-wrangler",
         "router" => "images/router",
         "chromium-core" => "images/chromium",
         "chromium-framework" => "images/chromium",
@@ -3783,6 +3786,20 @@ pub(crate) const PROXY_CA_KEY_SECRET: &str = "tillandsias-ca-key";
 /// unreadable to that entrypoint. uid/gid 1000 + `mode=0400` keeps the key
 /// least-privilege while readable by exactly its consumer.
 pub(crate) const PROXY_CA_KEY_SECRET_OPTS: &str = "uid=1000,gid=1000,mode=0400";
+
+/// Credential-quarantine tmpfs overlays (orders 170/224) for the forge's
+/// `~/.ssh` and `~/.config/gh`. The trailing `U` is REQUIRED, not cosmetic:
+/// podman mounts a tmpfs `root:root` unless told otherwise, and the forge runs
+/// as its image user under `--userns=keep-id`. Without it `~/.config/gh` was
+/// root-owned 0700, and `gh auth status` failed with "permission denied"
+/// instead of reporting "not logged in" (1625-bax2, measured on yoga).
+/// `U` is podman's chown-to-the-container-user option, so it follows keep-id
+/// without hard-coding a uid. NOT `uid=1000,gid=1000`: podman rejects those on
+/// `--tmpfs` ("unknown mount option"), so the forge would not start at all
+/// (exit 125, measured on macuahuitl with podman 5.8.7). The overlays stay
+/// EMPTY: owning them gives the forge an empty directory, never a credential.
+pub(crate) const FORGE_SSH_QUARANTINE_TMPFS: &str = "/home/forge/.ssh:size=1m,mode=0700,U";
+pub(crate) const FORGE_GH_QUARANTINE_TMPFS: &str = "/home/forge/.config/gh:size=1m,mode=0700,U";
 
 fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
     let mut args: Vec<String> = vec![
@@ -5748,6 +5765,23 @@ const VSOCK_FORWARDER_NAME: &str = "tillandsias-vsock-forwarder";
 /// first-boot problem this row rejected twice.
 const VSOCK_FORWARD_DIR: &str = "/run/tillandsias";
 
+/// Where the forward target is written and read. A per-process temp dir in
+/// test builds, so the SetVsockForwardTarget success path is reachable from a
+/// unit test on any host (1509-kf4d); /run/tillandsias otherwise.
+pub(crate) fn vsock_forward_dir() -> PathBuf {
+    #[cfg(test)]
+    {
+        std::env::temp_dir().join(format!(
+            "tillandsias-vsock-forward-test-{}",
+            std::process::id()
+        ))
+    }
+    #[cfg(not(test))]
+    {
+        PathBuf::from(VSOCK_FORWARD_DIR)
+    }
+}
+
 /// The host endpoint an in-guest forwarder should relay to, or None when the
 /// lane is off.
 ///
@@ -5767,7 +5801,7 @@ fn vsock_forward_target() -> Option<(u32, u32)> {
     if let Ok(v) = std::env::var("TILLANDSIAS_GUEST_VSOCK_FORWARD_TO") {
         return parse(&v);
     }
-    let path = Path::new(VSOCK_FORWARD_DIR).join("vsock-forward");
+    let path = vsock_forward_dir().join("vsock-forward");
     parse(&std::fs::read_to_string(path).ok()?)
 }
 
@@ -6050,9 +6084,20 @@ fn build_inference_run_args(
         "--pids-limit=1024".into(),
         "--env".into(),
         "OLLAMA_DEBUG=1".into(),
-        "--env".into(),
-        "OLLAMA_KEEP_ALIVE=24h".into(),
     ];
+    // Order 527: no OLLAMA_KEEP_ALIVE here. It was a bare `24h` that pinned
+    // every model a departed forge had loaded for a day while any other lane
+    // kept this LaneScoped container up. The residency policy is tier-derived
+    // inside the container (images/inference/engine-tuning.sh, which documents
+    // the rationale); the launcher only forwards an operator override.
+    if let Ok(keep_alive) = std::env::var("TILLANDSIAS_INFERENCE_KEEP_ALIVE")
+        && !keep_alive.is_empty()
+    {
+        args.extend([
+            "--env".into(),
+            format!("TILLANDSIAS_INFERENCE_KEEP_ALIVE={keep_alive}"),
+        ]);
+    }
 
     // Order 392: tier-appropriate GPU delivery. Hardware truth comes from
     // detect_inference_tier(); deliverability is gated separately (CDI for
@@ -6123,6 +6168,37 @@ fn build_inference_run_args(
     for (name, value) in engine_slots::pin_backend_environment(effective_tier, cuda_major) {
         args.extend(["--env".into(), format!("{name}={value}")]);
     }
+    // Order 482b: the engine slot (ollama by default, SLOT-3). The llama-server
+    // slot is delivered the render nodes this user can open — on any tier,
+    // because its Vulkan lane needs no vendor stack (SLOT-4) — and an
+    // inaccessible node is reported, never chmod-ed (SLOT-5).
+    let (engine, engine_note) = engine_slots::selected_engine_kind(
+        std::env::var("TILLANDSIAS_INFERENCE_ENGINE")
+            .ok()
+            .as_deref(),
+    );
+    if let Some(note) = engine_note {
+        eprintln!("[tillandsias] WARNING: {note}");
+    }
+    let (usable_nodes, unusable_nodes) = if engine == engine_slots::EngineKind::LlamaServer {
+        engine_slots::usable_render_nodes(Path::new("/dev/dri"))
+    } else {
+        (Vec::new(), Vec::new())
+    };
+    for node in &unusable_nodes {
+        eprintln!(
+            "[tillandsias] llama-server slot: render node {} is not readable+writable by this user — not delivered; the slot runs on CPU unless another node is usable (SLOT-5)",
+            node.display()
+        );
+    }
+    args.extend(engine_slots::llama_server_run_args(
+        engine,
+        std::env::var("TILLANDSIAS_INFERENCE_LLAMA_BACKEND")
+            .ok()
+            .as_deref(),
+        effective_tier,
+        &usable_nodes,
+    ));
     args.extend(proxy_env_args());
     // Order 524: this env pair MUST be built before the mount/image tail.
     // It used to be spliced in afterwards with two `args.insert(args.len() - 2,
@@ -8310,6 +8386,17 @@ fn build_opencode_forge_args(
         format!("TILLANDSIAS_PROJECT={project_name}"),
         "--env".into(),
         format!("TILLANDSIAS_AGENT={}", mode.agent_identity()),
+        // ORDER 776-drwr: the same accel claim build_forge_agent_run_args_with_vault
+        // hands every other lane (orders 392 and 480). This builder never had it,
+        // so OpenCode lanes ran with no envelope and lib-common.sh printed no
+        // "Accelerators" line (measured on a tray-launched Windows lane, 2026-08-16).
+        "--env".into(),
+        format!("TILLANDSIAS_INFERENCE_TIER={}", effective_inference_tier()),
+        "--env".into(),
+        format!(
+            "TILLANDSIAS_ACCEL_ENVELOPE={}",
+            accel_probe::accel_envelope(&accel_probe::load_or_probe(effective_inference_tier()))
+        ),
         "--env".into(),
         "TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets".into(),
         "--tmpfs".into(),
@@ -8327,9 +8414,9 @@ fn build_opencode_forge_args(
         // tmpfs are empty — the forge has no business reading host SSH keys or
         // GitHub CLI tokens; all authenticated git traffic flows through the mirror.
         "--tmpfs".into(),
-        "/home/forge/.ssh:size=1m,mode=0700".into(),
+        FORGE_SSH_QUARANTINE_TMPFS.into(),
         "--tmpfs".into(),
-        "/home/forge/.config/gh:size=1m,mode=0700".into(),
+        FORGE_GH_QUARANTINE_TMPFS.into(),
         // Mount under `/home/forge/src/<project>/` (not directly at
         // `/home/forge/src`) so the in-container tree matches what the forge
         // entrypoint's clone path would produce
@@ -9951,7 +10038,7 @@ pub(crate) fn build_image_with_logging(
         "proxy" => "Routing Proxy",
         "git" => "Setting up Git",
         "router" => "Routing Traffic",
-        "web" => "Serving Web",
+        "web" | "web-wrangler" => "Serving Web",
         "vault" => "Securing Vault",
         _ => "Setting up containers",
     };
@@ -10179,7 +10266,7 @@ fn podman_build_argv(
 /// init — and every curl install, since install.sh runs `--reset-state
 /// --debug` — left /tmp/tillandsias-init-vault.log behind (measured on yoga
 /// 2026-09-27, mode 644).
-const INIT_IMAGES: [&str; 10] = [
+const INIT_IMAGES: [&str; 11] = [
     "proxy",
     "git",
     "vault",
@@ -10190,6 +10277,9 @@ const INIT_IMAGES: [&str; 10] = [
     "forge-base",
     "forge",
     "web",
+    // 1625-un54: publish_local's Wrangler profile image, tagged with the same
+    // version alias local_web_preview::Profile::image checks.
+    "web-wrangler",
 ];
 
 fn cleanup_init_logs() {
@@ -10563,6 +10653,111 @@ fn reset_state_plan(
         "the installed tillandsias binary itself",
     ];
     (destroyed, preserved)
+}
+
+/// The nonce of a macOS SOFT reset request this guest has not acted on yet,
+/// or `None` (order 1437-8c6p / 1437-av8u). Pure, so the once-per-request rule
+/// is tested without a guest: an absent or empty request is no request, and a
+/// request whose nonce equals the last handled one was already applied.
+#[cfg(any(target_os = "linux", test))]
+fn pending_soft_reset_nonce(request: Option<&str>, handled: Option<&str>) -> Option<String> {
+    let nonce = request.map(str::trim).filter(|n| !n.is_empty())?;
+    if handled.map(str::trim) == Some(nonce) {
+        return None;
+    }
+    Some(nonce.to_string())
+}
+
+/// The guest half of the macOS SOFT reset (order 1437-8c6p / 1437-av8u,
+/// host-state-lifecycle "macOS SOFT reset keeps the guest, the store and the
+/// downloads"). The host tray cannot run a command in the guest (order 272),
+/// so its `--reset-state` leaves a request with a nonce in the read-only
+/// guest-bin share, and the daemon applies it HERE, once per nonce, before it
+/// binds the control wire.
+///
+/// DERIVED state only, the Linux SOFT reset's destroyed set without its
+/// trailing init: `podman system reset --force`, the build markers, and the
+/// enclave resolver drop-in (derived from the network the reset destroys;
+/// left behind it points every lookup at an address that answers nothing —
+/// measured on yolanda's Windows guest 2026-10-08). The Vault store is a
+/// directory under the cache dir that the podman reset cannot reach.
+///
+/// NO INIT HERE, for the reason Windows' `soft_wipe_guest` gives: an init
+/// before the tray has delivered the Keychain share meets the "store without
+/// its share is rebuilt" guard and destroys the very store SOFT keeps. Running
+/// before the bind means the tray connects to a daemon that has already wiped,
+/// delivers the share, and only then does the vault bootstrap.
+///
+/// A failed wipe is reported and the nonce is NOT recorded, so the next start
+/// retries; the daemon still starts, because a guest that cannot serve the wire
+/// cannot be reached by the tray at all.
+#[cfg(target_os = "linux")]
+fn apply_pending_soft_reset(request: &Path, handled: &Path, debug: bool) {
+    let read = |p: &Path| fs::read_to_string(p).ok();
+    let Some(nonce) = pending_soft_reset_nonce(read(request).as_deref(), read(handled).as_deref())
+    else {
+        return;
+    };
+    eprintln!("[tillandsias] soft-reset request {nonce}: podman system reset --force ...");
+    let mut reset_cmd = podman_command();
+    reset_cmd.args(["system", "reset", "--force"]);
+    if let Err(e) = run_podman_command(reset_cmd, debug) {
+        eprintln!(
+            "[tillandsias] soft-reset request {nonce}: podman system reset failed ({e}); \
+             will retry at the next start"
+        );
+        return;
+    }
+    if let Err(e) = run_cache_clear(debug) {
+        eprintln!("[tillandsias] soft-reset request {nonce}: build markers: {e}");
+    }
+    if fs::remove_file(ENCLAVE_RESOLVED_CONF).is_ok() {
+        let mut restart = Command::new("systemctl");
+        restart.args(["try-restart", "systemd-resolved"]);
+        let _ = run_command(restart, debug);
+    }
+    if let Some(parent) = handled.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    match fs::write(handled, format!("{nonce}\n")) {
+        Ok(()) => eprintln!(
+            "[tillandsias] soft-reset request {nonce}: derived state wiped \u{2713} — Vault store kept"
+        ),
+        Err(e) => eprintln!(
+            "[tillandsias] soft-reset request {nonce}: wiped, but recording {} failed: {e}",
+            handled.display()
+        ),
+    }
+}
+
+#[cfg(test)]
+mod soft_reset_request_tests {
+    use super::pending_soft_reset_nonce as pending;
+
+    /// Once per request: a new nonce is pending, the same nonce after it was
+    /// handled is not, and no request (or an empty one) never wipes anything.
+    /// Pre-fix: no guest half existed, so a macOS SOFT reset could not wipe the
+    /// guest's derived state at all.
+    #[test]
+    fn a_request_is_applied_once_per_nonce() {
+        assert_eq!(pending(Some("n1\n"), None), Some("n1".to_string()));
+        assert_eq!(pending(Some("n2\n"), Some("n1\n")), Some("n2".to_string()));
+        assert_eq!(pending(Some("n1\n"), Some("n1\n")), None);
+        assert_eq!(pending(None, Some("n1\n")), None);
+        assert_eq!(pending(Some("  \n"), None), None);
+    }
+
+    /// The guest reads the request where the host writes it: the guest-bin
+    /// share, under the core constant both sides use.
+    #[test]
+    fn the_guest_reads_the_request_from_the_guest_bin_share() {
+        use tillandsias_core::guest_bin_path as g;
+        assert_eq!(
+            g::GUEST_SOFT_RESET_REQUEST,
+            format!("{}/{}", g::GUEST_BIN_MOUNT, g::SOFT_RESET_REQUEST_FILE)
+        );
+        assert!(!g::GUEST_SOFT_RESET_HANDLED.starts_with(g::GUEST_BIN_MOUNT));
+    }
 }
 
 fn run_reset_guest(debug: bool) -> Result<(), String> {
@@ -11430,6 +11625,82 @@ impl CodexDeviceQrScanner {
     }
 }
 
+/// Rows in one [`big_glyph`].
+const BIG_GLYPH_ROWS: usize = 5;
+
+/// A 5x5 block glyph for one device-code character (order 1569-bgcd).
+/// GitHub user codes are `XXXX-XXXX` over upper-case letters and digits; a
+/// lower-case letter is drawn as its capital, and anything else as `?` so a
+/// surprise character is visible instead of silently blank. Zero is slashed
+/// so it can never be read as O.
+fn big_glyph(c: char) -> [&'static str; BIG_GLYPH_ROWS] {
+    match c.to_ascii_uppercase() {
+        'A' => [" ### ", "#   #", "#####", "#   #", "#   #"],
+        'B' => ["#### ", "#   #", "#### ", "#   #", "#### "],
+        'C' => [" ####", "#    ", "#    ", "#    ", " ####"],
+        'D' => ["#### ", "#   #", "#   #", "#   #", "#### "],
+        'E' => ["#####", "#    ", "#### ", "#    ", "#####"],
+        'F' => ["#####", "#    ", "#### ", "#    ", "#    "],
+        'G' => [" ####", "#    ", "#  ##", "#   #", " ####"],
+        'H' => ["#   #", "#   #", "#####", "#   #", "#   #"],
+        'I' => ["#####", "  #  ", "  #  ", "  #  ", "#####"],
+        'J' => ["#####", "   # ", "   # ", "#  # ", " ##  "],
+        'K' => ["#   #", "#  # ", "###  ", "#  # ", "#   #"],
+        'L' => ["#    ", "#    ", "#    ", "#    ", "#####"],
+        'M' => ["#   #", "## ##", "# # #", "#   #", "#   #"],
+        'N' => ["#   #", "##  #", "# # #", "#  ##", "#   #"],
+        'O' => [" ### ", "#   #", "#   #", "#   #", " ### "],
+        'P' => ["#### ", "#   #", "#### ", "#    ", "#    "],
+        'Q' => [" ### ", "#   #", "# # #", "#  # ", " ## #"],
+        'R' => ["#### ", "#   #", "#### ", "#  # ", "#   #"],
+        'S' => [" ####", "#    ", " ### ", "    #", "#### "],
+        'T' => ["#####", "  #  ", "  #  ", "  #  ", "  #  "],
+        'U' => ["#   #", "#   #", "#   #", "#   #", " ### "],
+        'V' => ["#   #", "#   #", "#   #", " # # ", "  #  "],
+        'W' => ["#   #", "#   #", "# # #", "## ##", "#   #"],
+        'X' => ["#   #", " # # ", "  #  ", " # # ", "#   #"],
+        'Y' => ["#   #", " # # ", "  #  ", "  #  ", "  #  "],
+        'Z' => ["#####", "   # ", "  #  ", " #   ", "#####"],
+        '0' => [" ### ", "#  ##", "# # #", "##  #", " ### "],
+        '1' => ["  #  ", " ##  ", "  #  ", "  #  ", " ### "],
+        '2' => [" ### ", "#   #", "  ## ", " #   ", "#####"],
+        '3' => ["#### ", "    #", " ### ", "    #", "#### "],
+        '4' => ["#   #", "#   #", "#####", "    #", "    #"],
+        '5' => ["#####", "#    ", "#### ", "    #", "#### "],
+        '6' => [" ### ", "#    ", "#### ", "#   #", " ### "],
+        '7' => ["#####", "    #", "   # ", "  #  ", "  #  "],
+        '8' => [" ### ", "#   #", " ### ", "#   #", " ### "],
+        '9' => [" ### ", "#   #", " ####", "    #", " ### "],
+        '-' => ["     ", "     ", " ### ", "     ", "     "],
+        _ => [" ### ", "#   #", "  ## ", "     ", "  #  "],
+    }
+}
+
+/// The one-time code drawn in large block letters (order 1569-bgcd): the
+/// operator failed a GitHub device login several times on 2026-10-09 because
+/// the one-line code was too hard to read. Five rows of `█`, blush on a colour
+/// tier; the Plain tier carries no escape bytes, matching the QR beside it.
+/// The caller still prints the plain one-line code, so it stays copyable.
+fn big_user_code(code: &str, tier: tillandsias_progress_tty::Tier) -> String {
+    let open = qr_sgr(tier, tillandsias_progress_tty::palette::TIP_BLUSH, None);
+    let mut out = String::new();
+    for row in 0..BIG_GLYPH_ROWS {
+        let mut line = String::from("  ");
+        for c in code.chars() {
+            line.push_str(&big_glyph(c)[row].replace('#', "█"));
+            line.push(' ');
+        }
+        let line = line.trim_end();
+        if open.is_empty() {
+            out.push_str(line);
+        } else {
+            out.push_str(&format!("{open}{line}\x1b[0m"));
+        }
+        out.push('\n');
+    }
+    out
+}
+
 /// The one-time code, in blush on a colour tier and plain otherwise.
 fn styled_user_code(code: &str, tier: tillandsias_progress_tty::Tier) -> String {
     let open = qr_sgr(tier, tillandsias_progress_tty::palette::TIP_BLUSH, None);
@@ -11662,6 +11933,9 @@ fn run_github_device_login(container: &str, debug: bool) -> Result<(), String> {
     print!("{qr_code_str}");
     println!();
     println!("  Or in any browser, visit: {}", dc.verification_uri);
+    println!("  Enter this one-time code:\n");
+    print!("{}", big_user_code(&dc.user_code, tier));
+    println!();
     println!(
         "  Enter one-time code:      {}\n",
         styled_user_code(&dc.user_code, tier)
@@ -12283,6 +12557,35 @@ fn run_codex_device_login_with_qr(
     }
 }
 
+/// ORDER 1571-lgex. What an end user sees, and what the tray's status label
+/// becomes, when a provider's interactive sign-in step ends without a
+/// credential — most often because its window expired (Claude closes it at
+/// 300 s). One plain line: no flag or variable names (operator rule,
+/// 2026-10-08), and it says what to do next.
+#[derive(Debug, PartialEq, Eq)]
+struct SignInUnfinished {
+    terminal_line: String,
+    status_event: &'static str,
+}
+
+impl SignInUnfinished {
+    /// The tray paints this as the VM status event, replacing the last build
+    /// label; `run_provider_login` pushes it before the login container is
+    /// removed, so the tray recovers at once instead of staying on
+    /// "Building Forge" (measured 2026-10-09: 170 s and counting).
+    const STATUS_EVENT: &'static str = "Sign-in did not finish";
+
+    fn for_provider(provider_name: &str) -> Self {
+        Self {
+            terminal_line: format!(
+                "{provider_name} sign-in did not finish (it may have timed out). \
+                 Choose it again in the Tillandsias menu to try again."
+            ),
+            status_event: Self::STATUS_EVENT,
+        }
+    }
+}
+
 fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), String> {
     let provider_name = config.provider.name();
     let flag = format!("--{}-login", config.provider.id_str());
@@ -12484,12 +12787,25 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             &config.token_script,
             config.input_mode,
         ));
-        if matches!(config.provider, ProviderId::Codex)
+        let interactive = if matches!(config.provider, ProviderId::Codex)
             && matches!(config.input_mode, LoginInputMode::Terminal)
         {
-            run_codex_device_login_with_qr(login, debug)?;
+            run_codex_device_login_with_qr(login, debug)
         } else {
-            run_podman_command(login, debug)?;
+            run_podman_command(login, debug)
+        };
+        // ORDER 1571-lgex. This step waits on the PERSON: the provider CLI
+        // holds its sign-in window open (Claude's closes at 300 s) and exits
+        // non-zero when it expires. Its raw error is a podman exec line, and
+        // the tray's status label was left on whatever the last build pushed
+        // ("Building Forge"), so an expired window read as a wedge. Name it.
+        if let Err(detail) = interactive {
+            let unfinished = SignInUnfinished::for_provider(provider_name);
+            if debug {
+                eprintln!("[tillandsias] {provider_name} sign-in step failed: {detail}");
+            }
+            push_udp_event(unfinished.status_event);
+            return Err(unfinished.terminal_line);
         }
     }
 
@@ -16844,6 +17160,23 @@ impl ForgeAgentMode {
         }
     }
 
+    /// ORDER 1576-lbst. The tray's status label is the last event the CLI
+    /// pushed, and the last push before a session was the image build's start
+    /// ("Building Forge"). The guest daemon's `podman events` cannot see the
+    /// CLI's rootless containers, so nothing moved the label for the whole
+    /// session. These are pushed around the attached session: (open, ended).
+    fn session_status_events(self) -> (&'static str, &'static str) {
+        match self {
+            ForgeAgentMode::Claude => ("Claude session open", "Claude session ended"),
+            ForgeAgentMode::Codex => ("Codex session open", "Codex session ended"),
+            ForgeAgentMode::OpenCode => ("OpenCode session open", "OpenCode session ended"),
+            ForgeAgentMode::Antigravity => {
+                ("Antigravity session open", "Antigravity session ended")
+            }
+            ForgeAgentMode::Maintenance => ("Terminal open", "Terminal closed"),
+        }
+    }
+
     /// Stable in-container harness identity. Keep this distinct from `slug`:
     /// the maintenance lane's historical container name is `maintenance`,
     /// while the runtime environment contract calls that lane `terminal`.
@@ -18134,8 +18467,8 @@ fn build_forge_agent_run_args_with_vault(
         // host $HOME, but the --volume source mount of Tllatoani's
         // ~/src/tillandsias is the host's own checkout, so its child
         // .ssh/.config would be visible). The tmpfs prevents that.
-        .tmpfs("/home/forge/.ssh:size=1m,mode=0700")
-        .tmpfs("/home/forge/.config/gh:size=1m,mode=0700")
+        .tmpfs(FORGE_SSH_QUARANTINE_TMPFS)
+        .tmpfs(FORGE_GH_QUARANTINE_TMPFS)
         .env("TILLANDSIAS_CHEATSHEETS", "/opt/cheatsheets")
         .entrypoint(mode.entrypoint());
     // Order 437: clone-only (default) selects the mirror network-clone
@@ -18735,6 +19068,9 @@ fn run_forge_agent_cli_mode(
         let _diag_logs_handle: Option<tillandsias_podman::DiagnosticsHandle> = None;
 
         let run_container_name = forge_container_name_for_mode(project_name, mode);
+        // 1576-lbst: move the tray's label off the last build status.
+        let (session_open, session_ended) = mode.session_status_events();
+        push_udp_event(session_open);
         let result = run_agent_container_attached(
             &client,
             mode.slug(),
@@ -18744,6 +19080,7 @@ fn run_forge_agent_cli_mode(
             delegated.as_ref(),
         )
         .await;
+        push_udp_event(session_ended);
         cleanup_forge_ram_workspace(project_name, debug)?;
         cleanup_shared_stack_if_no_running_forge(
             &client,
@@ -18947,6 +19284,8 @@ pub(crate) fn spawn_terminal_and_reap(mut child: Command) -> Result<(), String> 
 /// host — `pty_handler` is gated on the `listen-vsock`+unix combo that order
 /// 254 recorded as never linted or tested in CI.
 pub mod exec_allowlist;
+#[cfg(feature = "listen-vsock")]
+mod guest_poweroff;
 #[cfg(all(feature = "listen-vsock", unix))]
 mod pty_handler;
 /// Order 723-54zj. Declared unconditionally: the classification half is pure
@@ -19466,6 +19805,10 @@ fn maybe_spawn_vsock_listener(
                 let mut buf = [0; 1024];
                 while let Ok((len, _)) = socket.recv_from(&mut buf).await {
                     if let Ok(msg) = std::str::from_utf8(&buf[..len]) {
+                        // ORDER 1571-lgex: name every pushed status in the
+                        // guest log. An expired sign-in used to leave no
+                        // trace here at all.
+                        eprintln!("[tillandsias] status event: {msg}");
                         udp_state.set_last_event(msg.to_string());
                     }
                 }
@@ -19602,6 +19945,19 @@ async fn run_headless_async(
             "[tillandsias] preflight vsock_loopback {}",
             probe_vsock_loopback()
         );
+        // 1437-8c6p: a host SOFT reset's guest half runs BEFORE the bind (see
+        // apply_pending_soft_reset for why the order matters).
+        #[cfg(target_os = "linux")]
+        {
+            let _ = tokio::task::spawn_blocking(|| {
+                apply_pending_soft_reset(
+                    Path::new(tillandsias_core::guest_bin_path::GUEST_SOFT_RESET_REQUEST),
+                    Path::new(tillandsias_core::guest_bin_path::GUEST_SOFT_RESET_HANDLED),
+                    false,
+                )
+            })
+            .await;
+        }
     }
     // @trace spec:vsock-transport — when `--listen-vsock <PORT>` was supplied,
     // bind the control wire on virtio-vsock instead of the Linux Unix socket.
@@ -21951,6 +22307,38 @@ mod tests {
     }
 
     #[test]
+    fn inference_run_args_pin_no_keep_alive_and_forward_the_override() {
+        // Order 527: the launcher used to pin OLLAMA_KEEP_ALIVE=24h, holding a
+        // departed forge's models in VRAM for a day. Residency is now decided by
+        // the tier policy in images/inference/engine-tuning.sh; the launcher may
+        // only forward the operator's TILLANDSIAS_INFERENCE_KEEP_ALIVE.
+        let _guard = env_lock();
+        let restore = TestEnvRestore::capture(&["TILLANDSIAS_INFERENCE_KEEP_ALIVE"]);
+        let certs = Path::new("/tmp/tilland-test-certs");
+        let image = "localhost/tillandsias-inference:test";
+
+        restore.set("TILLANDSIAS_INFERENCE_KEEP_ALIVE", "");
+        let args = build_inference_run_args(certs, image, false);
+        assert!(
+            !args.iter().any(|a| a.contains("KEEP_ALIVE")),
+            "no keep-alive may be pinned without an override; args: {args:?}"
+        );
+
+        restore.set("TILLANDSIAS_INFERENCE_KEEP_ALIVE", "2m");
+        let args = build_inference_run_args(certs, image, false);
+        let at = args
+            .iter()
+            .position(|a| a == "TILLANDSIAS_INFERENCE_KEEP_ALIVE=2m")
+            .unwrap_or_else(|| panic!("override must be forwarded; args: {args:?}"));
+        assert_eq!(args.get(at - 1).map(String::as_str), Some("--env"));
+        assert!(
+            !args.iter().any(|a| a.starts_with("OLLAMA_KEEP_ALIVE=")),
+            "the launcher must not translate the override into an ollama literal; args: {args:?}"
+        );
+        drop(restore);
+    }
+
+    #[test]
     fn inference_run_args_gate_gpu_delivery_on_tier_and_cdi() {
         // Order 392: hardware truth (detect_inference_tier) decides the
         // tier; DELIVERY is gated separately — cuda needs a CDI spec and
@@ -23532,6 +23920,7 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "linux")] // its only users are the linux-only tests below (958-w4kq)
     const TWO_ROUTERS: &str = "default proto ra metric 20600 pref medium\n\
         \tnexthop via fe80::1 dev wlp3s0 weight 1\n\
         \tnexthop via fe80::2 dev wlp3s0 weight 1\n";
@@ -24473,6 +24862,69 @@ mod tests {
         }
     }
 
+    /// 1625-bax2: the quarantine tmpfs options must be ones podman ACCEPTS.
+    /// The first fix passed `uid=1000,gid=1000`, which every argv assertion
+    /// accepted and podman refuses ("unknown mount option", exit 125), so the
+    /// forge would not have started. Only a real podman can judge this.
+    ///
+    /// With a tillandsias forge image present, both overlays are mounted at
+    /// their real paths under --userns=keep-id, and each must be EMPTY and
+    /// owned by the container user. With any other local image, `true` must
+    /// start with both option strings. With no reachable podman or no local
+    /// image, the test skips with the reason (never pulls).
+    #[test]
+    fn forge_quarantine_tmpfs_options_are_accepted_by_podman() {
+        let _lock = podman_seam_lock();
+        let info = podman_cmd_sync()
+            .args(["info", "--format", "{{.Host.Arch}}"])
+            .output_bounded(OperationKind::Availability.default_budget());
+        if !info.as_ref().is_ok_and(|o| o.status.success()) {
+            eprintln!("skip: no reachable podman here (podman info failed)");
+            return;
+        }
+        let images = podman_cmd_sync()
+            .args(["images", "--format", "{{.Repository}}:{{.Tag}}"])
+            .output_bounded(OperationKind::Inspect.default_budget())
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+            .unwrap_or_default();
+        let images: Vec<&str> = images
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty() && !l.contains("<none>"))
+            .collect();
+        let forge = images.iter().find(|i| i.contains("tillandsias-forge"));
+        let Some(image) = forge.or(images.first()) else {
+            eprintln!("skip: no local image to run (this test never pulls)");
+            return;
+        };
+        let mut cmd = podman_cmd_sync();
+        cmd.args(["run", "--rm", "--pull=never", "--userns=keep-id"])
+            .args(["--tmpfs", FORGE_SSH_QUARANTINE_TMPFS])
+            .args(["--tmpfs", FORGE_GH_QUARANTINE_TMPFS]);
+        if forge.is_some() {
+            cmd.args(["--entrypoint", "/bin/sh", image, "-c"]).arg(
+                "for d in /home/forge/.ssh /home/forge/.config/gh; do \
+                   [ \"$(stat -c %u \"$d\")\" = \"$(id -u)\" ] || { echo \"$d owner $(stat -c %U:%G \"$d\")\"; exit 3; }; \
+                   [ -z \"$(ls -A \"$d\")\" ] || { echo \"$d not empty\"; exit 4; }; \
+                 done",
+            );
+        } else {
+            cmd.args(["--entrypoint", "true", image]);
+        }
+        let out = cmd
+            .output_bounded(OperationKind::Container.default_budget())
+            .expect("podman run did not finish within its budget");
+        assert!(
+            out.status.success(),
+            "podman must accept the forge quarantine tmpfs options {FORGE_SSH_QUARANTINE_TMPFS} / \
+             {FORGE_GH_QUARANTINE_TMPFS} on {image} (forge image: {}); exit {:?}, stdout {:?}, stderr {:?}",
+            forge.is_some(),
+            out.status.code(),
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
     #[test]
     fn forge_credential_quarantine_mounts_present() {
         let _pseam = podman_false_seam();
@@ -24526,6 +24978,29 @@ mod tests {
             found_gh_config,
             "must mount credential-quarantine tmpfs at /home/forge/.config/gh"
         );
+        // 1625-bax2: the overlays are FORGE-owned. podman mounts a tmpfs
+        // root:root unless told otherwise, and a root-owned 0700 ~/.config/gh
+        // makes `gh auth status` say "permission denied", not "not logged in".
+        // `U` chowns to the container user; podman REJECTS uid=/gid= on
+        // --tmpfs, which forge_quarantine_tmpfs_options_are_accepted_by_podman
+        // proves against a real podman (an argv check cannot).
+        for quarantine in ["/home/forge/.ssh:", "/home/forge/.config/gh:"] {
+            let spec = argv
+                .iter()
+                .find(|a| a.starts_with(quarantine))
+                .unwrap_or_else(|| panic!("no tmpfs for {quarantine}: {argv:?}"));
+            let opts: Vec<&str> = spec[quarantine.len()..].split(',').collect();
+            assert!(
+                opts.contains(&"U"),
+                "{quarantine} quarantine tmpfs must be chowned to the forge user (U); got {spec}"
+            );
+            assert!(
+                !opts
+                    .iter()
+                    .any(|o| o.starts_with("uid=") || o.starts_with("gid=")),
+                "{quarantine} quarantine tmpfs must not pass uid=/gid=, which podman rejects on --tmpfs; got {spec}"
+            );
+        }
         assert!(
             found_git_config_ro,
             "must mount forge-owned gitconfig at /home/forge/.gitconfig (order 224)"
@@ -25068,6 +25543,124 @@ mod tests {
         );
     }
 
+    /// ORDER 1571-lgex. The interactive sign-in step waits on the person and
+    /// its window expires (Claude: 300 s). Pre-fix its error propagated raw
+    /// with `?` — a podman exec line on the user's terminal and no status
+    /// push, so the tray stayed on "Building Forge". Scanned in the SOURCE so
+    /// this arm compiles, and fails, against the pre-fix tree.
+    #[test]
+    fn an_unfinished_sign_in_step_is_named_and_pushed_not_propagated_raw() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let login_window = source_window(
+            source,
+            "fn run_provider_login(config: &ProviderLoginConfig, debug: bool)",
+        );
+        for raw in [
+            "run_podman_command(login, debug)?",
+            "run_codex_device_login_with_qr(login, debug)?",
+        ] {
+            assert!(
+                !login_window.contains(raw),
+                "the interactive sign-in step must not propagate its raw error ({raw}); \
+                 an expired window must reach the user as one plain line (1571-lgex)"
+            );
+        }
+        assert!(
+            login_window.contains("push_udp_event(unfinished.status_event)"),
+            "an unfinished sign-in must push a status event so the tray leaves the last \
+             build label (1571-lgex)"
+        );
+    }
+
+    /// ORDER 1576-lbst. The forge session's attach must be bracketed by status
+    /// pushes, or the tray's label stays on the last build event ("Building
+    /// Forge") for the whole session. The attach needs podman and a TTY, so the
+    /// bracketing is pinned by source; it compiles, and fails, pre-fix.
+    #[test]
+    fn the_forge_session_attach_is_bracketed_by_status_pushes() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn run_forge_agent_cli_mode(");
+        let attach = window
+            .find("run_agent_container_attached(")
+            .expect("the CLI lane attaches the agent");
+        // source-pin-ok: the attached session needs podman and a TTY, so the push ORDER around it is the contract a unit test can reach
+        let open = window.find("push_udp_event(session_open)");
+        // source-pin-ok: same reason as above, the closing half of the bracket
+        let ended = window.find("push_udp_event(session_ended)");
+        assert!(
+            open.is_some_and(|o| o < attach),
+            "a status push must precede the forge attach so the tray leaves the last \
+             build label (1576-lbst)"
+        );
+        assert!(
+            ended.is_some_and(|e| e > attach),
+            "a status push must follow the forge session so the tray does not keep \
+             saying the session is open (1576-lbst)"
+        );
+    }
+
+    /// ORDER 1576-lbst. The session events are distinct per mode, plain, and
+    /// never a build label (which is exactly what they must replace).
+    #[test]
+    fn forge_session_events_are_plain_and_never_a_build_label() {
+        let build_labels = [
+            "Building Forge",
+            "Polishing Chromium",
+            "Thinkering Chromium Dev",
+            "Loading Inference",
+            "Routing Proxy",
+            "Setting up Git",
+            "Routing Traffic",
+            "Serving Web",
+            "Securing Vault",
+            "Setting up containers",
+        ];
+        let mut seen = std::collections::HashSet::new();
+        for mode in [
+            ForgeAgentMode::Claude,
+            ForgeAgentMode::Codex,
+            ForgeAgentMode::OpenCode,
+            ForgeAgentMode::Antigravity,
+            ForgeAgentMode::Maintenance,
+        ] {
+            let (open, ended) = mode.session_status_events();
+            for e in [open, ended] {
+                assert!(!e.is_empty() && !e.contains('\n'), "{e:?}");
+                assert!(!build_labels.contains(&e), "{e:?} is a build label");
+                for banned in ["--", "TILLANDSIAS_", "podman"] {
+                    assert!(!e.contains(banned), "{e:?} carries {banned}");
+                }
+                assert!(seen.insert(e), "{e:?} is not unique");
+            }
+        }
+    }
+
+    /// ORDER 1571-lgex. The end-user line: one line, names the provider, says
+    /// what to do, and carries no flag, variable or podman text.
+    #[test]
+    fn the_sign_in_unfinished_line_is_plain_and_actionable() {
+        for provider in [
+            ProviderId::Claude,
+            ProviderId::Codex,
+            ProviderId::Antigravity,
+            ProviderId::GitHub,
+        ] {
+            let u = SignInUnfinished::for_provider(provider.name());
+            let line = &u.terminal_line;
+            assert!(!line.contains('\n'), "one line: {line:?}");
+            assert!(line.starts_with(provider.name()), "{line:?}");
+            assert!(line.contains("try again"), "{line:?}");
+            for banned in ["--", "TILLANDSIAS_", "podman", "exec"] {
+                assert!(
+                    !line.contains(banned),
+                    "{banned:?} in an end-user line: {line:?}"
+                );
+            }
+            assert_eq!(u.status_event, "Sign-in did not finish");
+            assert_ne!(u.status_event, "Building Forge");
+        }
+    }
+
     #[test]
     fn provider_login_persists_only_provider_scoped_tool_cache() {
         let codex = provider_login_tool_cache_mount(&ProviderId::Codex).expect("codex cache mount");
@@ -25352,6 +25945,50 @@ mod tests {
             styled_user_code("ABCD-1234", tillandsias_progress_tty::Tier::TrueColor),
             "\x1b[38;2;232;99;122mABCD-1234\x1b[0m"
         );
+    }
+
+    /// Order 1569-bgcd: the device code is drawn as five rows of block
+    /// letters, one 5-wide glyph per character, and the Plain tier carries no
+    /// escape bytes.
+    #[test]
+    fn big_user_code_draws_five_block_rows_per_character() {
+        use tillandsias_progress_tty::Tier;
+        let code = "WDJB-MJHT";
+        let plain = super::big_user_code(code, Tier::Plain);
+        let rows: Vec<&str> = plain.lines().collect();
+        assert_eq!(rows.len(), super::BIG_GLYPH_ROWS);
+        assert!(!plain.contains('\x1b'), "Plain tier must carry no escapes");
+        assert!(plain.contains('█'));
+        // Two leading spaces, then 9 glyphs of 5 columns with a 1-column gap.
+        let widest = rows.iter().map(|r| r.chars().count()).max().unwrap();
+        assert_eq!(widest, 2 + 9 * 6 - 1);
+        assert!(widest <= 80, "must fit an 80-column terminal");
+        let coloured = super::big_user_code(code, Tier::Ansi256);
+        assert!(coloured.contains("\x1b[0m"));
+        assert_eq!(coloured.lines().count(), super::BIG_GLYPH_ROWS);
+    }
+
+    /// Every character GitHub can put in a user code has its own glyph, and
+    /// no two of them are drawn the same, so the big code can never be more
+    /// ambiguous than the small one (O and 0 in particular).
+    #[test]
+    fn big_glyphs_are_distinct_and_cover_the_code_alphabet() {
+        let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-";
+        let unknown = super::big_glyph('?');
+        let mut seen = std::collections::HashMap::new();
+        for c in alphabet.chars() {
+            let g = super::big_glyph(c);
+            assert_ne!(g, unknown, "{c} fell through to the unknown glyph");
+            assert!(
+                g.iter().all(|r| r.chars().count() == 5),
+                "{c} is not 5 wide"
+            );
+            if let Some(prev) = seen.insert(g, c) {
+                panic!("{c} and {prev} share a glyph");
+            }
+        }
+        assert_eq!(super::big_glyph('a'), super::big_glyph('A'));
+        assert_ne!(super::big_glyph('O'), super::big_glyph('0'));
     }
 
     /// The tier decision itself: NO_COLOR and a non-TTY each force Plain.
@@ -25994,7 +26631,9 @@ mod tests {
                 .unwrap_or_else(|| panic!("run_provider_login must contain {needle:?}"))
         };
         let stdin_identity_idx = find("Some(resolve_existing_git_identity()?)");
-        let login_exec_idx = find("run_podman_command(login, debug)?");
+        // 1571-lgex: the exec's error is mapped, not `?`-propagated, so anchor
+        // on the call itself.
+        let login_exec_idx = find("run_podman_command(login, debug)");
         let verify_persisted_idx = find("in-container vault write verification failed");
         let terminal_identity_idx = find("None => prompt_and_store_git_identity()");
         let stdin_store_idx = find("store_git_identity(&name, &email)");
@@ -26336,6 +26975,10 @@ mod tests {
     /// to sibling probes while held, excluded by exact name for the owning
     /// process, and vanish the moment the guard drops (flock-on-death).
     #[test]
+    #[cfg_attr(
+        not(unix),
+        ignore = "1635-hbvw: resource_lock is a no-op off unix (launch markers guard podman lanes, which run only in the Linux guest); resource_lock::tests::try_lock_is_a_no_op_off_unix flags the day that changes"
+    )]
     fn shared_stack_launch_marker_lifecycle_and_own_exclusion() {
         const CHILD_ENV: &str = "TILLANDSIAS_LAUNCH_MARKER_LIFECYCLE_CHILD";
         const TEST_NAME: &str = "tests::shared_stack_launch_marker_lifecycle_and_own_exclusion";
@@ -27357,6 +28000,42 @@ mod tests {
             "Error: cannot set up namespace: newuidmap returned exit status 1"
         ));
         assert!(!podman_runtime_blocker("podman run exited with status 125"));
+    }
+
+    /// ORDER 776-drwr. The OpenCode builder (the OpenCode and OpenCode Web
+    /// lanes) must hand the forge the same accel claim the agent builder does:
+    /// TILLANDSIAS_ACCEL_ENVELOPE (lib-common.sh's "Accelerators" line and
+    /// accel_class read it) and TILLANDSIAS_INFERENCE_TIER. Measured live on
+    /// windows/yolanda 2026-08-16: a tray-launched lane through this path ran
+    /// with neither, so its agent saw no accel claim at all.
+    #[test]
+    fn opencode_forge_args_carry_the_accel_envelope_and_inference_tier() {
+        for mode in [ForgeMode::Cli, ForgeMode::Web] {
+            let args = build_opencode_forge_args(
+                &PathBuf::from("/tmp/project"),
+                Some(&PathBuf::from("/tmp/project")),
+                None,
+                "alpha",
+                None,
+                None,
+                &PathBuf::from("/tmp/ca"),
+                "1.2.3",
+                mode,
+                None,
+                false,
+                false,
+            );
+            let envelope = args
+                .iter()
+                .find_map(|a| a.strip_prefix("TILLANDSIAS_ACCEL_ENVELOPE="))
+                .unwrap_or_else(|| panic!("{mode:?}: no TILLANDSIAS_ACCEL_ENVELOPE in {args:?}"));
+            assert!(
+                envelope.contains("accel_class="),
+                "{mode:?}: the envelope must name the accel class, got {envelope:?}"
+            );
+            let tier = format!("TILLANDSIAS_INFERENCE_TIER={}", effective_inference_tier());
+            assert!(args.contains(&tier), "{mode:?}: no {tier} in {args:?}");
+        }
     }
 
     /// Order-491 probe-4 pin: the interactive forge run must carry an
@@ -28588,13 +29267,11 @@ esac
         // not be present depending on whether HOME is set in the test environment.
         assert!(has_arg(&args, "--tmpfs"));
         assert!(
-            args.iter()
-                .any(|arg| arg == "/home/forge/.ssh:size=1m,mode=0700"),
+            args.iter().any(|arg| arg == FORGE_SSH_QUARANTINE_TMPFS),
             "opencode forge args must quarantine .ssh via tmpfs; got {args:?}"
         );
         assert!(
-            args.iter()
-                .any(|arg| arg == "/home/forge/.config/gh:size=1m,mode=0700"),
+            args.iter().any(|arg| arg == FORGE_GH_QUARANTINE_TMPFS),
             "opencode forge args must quarantine .config/gh via tmpfs; got {args:?}"
         );
         assert!(
@@ -30769,9 +31446,13 @@ esac
         assert!(has_arg(&args, "HOME=/tmp"));
         assert!(has_arg(&args, "XDG_CONFIG_HOME=/tmp/chromium-config"));
         assert!(has_arg(&args, "XDG_CACHE_HOME=/tmp/chromium-cache"));
-        assert!(args.iter().any(|arg| {
-            arg == "type=bind,source=/tmp/tillandsias/ca/intermediate.crt,target=/etc/tillandsias/ca.crt,relabel=shared,readonly=true"
-        }));
+        // 1635-hbvw: the source is certs_dir joined with the platform
+        // separator, so build the expectation the same way.
+        let ca_mount = format!(
+            "type=bind,source={},target=/etc/tillandsias/ca.crt,relabel=shared,readonly=true",
+            certs_dir.join("intermediate.crt").display()
+        );
+        assert!(args.contains(&ca_mount), "no {ca_mount} in {args:?}");
         assert!(has_arg(
             &args,
             "TILLANDSIAS_CA_BUNDLE=/etc/tillandsias/ca.crt"
@@ -32363,6 +33044,46 @@ esac
             image_specs(&root, "web").expect("web image specs should be resolvable");
         assert!(containerfile.ends_with("images/web/Containerfile"));
         assert!(context.ends_with("images/web"));
+
+        // 1625-un54: the Wrangler preview image builds from its own context.
+        let (containerfile, context) = image_specs(&root, "web-wrangler")
+            .expect("web-wrangler image specs should be resolvable");
+        assert!(containerfile.ends_with("images/web-wrangler/Containerfile"));
+        assert!(context.ends_with("images/web-wrangler"));
+    }
+
+    /// 1625-un54: an image the runtime can name but init never builds is the
+    /// defect class. Every INIT_IMAGES entry must resolve through image_specs
+    /// (the build) to the same context runtime_assets hashes (the identity),
+    /// and both preview profile images must be in INIT_IMAGES.
+    #[test]
+    fn init_images_build_from_the_context_their_identity_hashes() {
+        let root = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../..");
+        for image in INIT_IMAGES {
+            let (_, context) = image_specs(&root, image)
+                .unwrap_or_else(|e| panic!("INIT_IMAGES entry {image} has no build spec: {e}"));
+            let identity = runtime_assets::image_identity(
+                &root,
+                image,
+                "0.0.0",
+                BTreeMap::new(),
+                BTreeMap::new(),
+            );
+            assert!(
+                identity.is_ok(),
+                "INIT_IMAGES entry {image} has no runtime identity context"
+            );
+            assert!(context.is_dir(), "{image}: {}", context.display());
+        }
+        for preview in ["web", "web-wrangler"] {
+            assert!(
+                INIT_IMAGES.contains(&preview),
+                "publish_local profile image {preview} is never built by init"
+            );
+        }
     }
 
     #[test]

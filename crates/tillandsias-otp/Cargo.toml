@@ -22,3 +22,6 @@ subtle = "2"
 tracing = { workspace = true }
 # spawn_eviction_task drives the 1Hz pending-TTL sweep; needs rt + time.
 tokio = { workspace = true }
+
+[lints]
+workspace = true

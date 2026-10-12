@@ -2,6 +2,10 @@
 # freshness: refreshed 2026-07-24 forge-bigpickle-20260724
 set -uo pipefail
 
+# ORDER 1255-s4im: a floor host's first plan-lane action arms its push guards
+# (bash-only, silent when they already are, never fails this script).
+bash "$(dirname "${BASH_SOURCE[0]}")/ensure-hooks.sh" --prelude || true
+
 # @trace spec:meta-orchestration
 #
 ##Agent-Affordance:
@@ -158,7 +162,10 @@ lease_is_stale() {
   fi
   # No usable holder yet: fall back to the dir's age. Live during the write
   # window; reclaimable only once it has sat orphaned for a full TTL.
-  mtime="$(stat -c %Y "$dir" 2>/dev/null || echo '')"
+  # GNU `stat -c %Y`, else BSD `stat -f %m`: with GNU only, darwin read an
+  # empty mtime and an orphan stayed live forever (1553-kvmf). No `set -e` in
+  # this file, so a failing substitution cannot exit before the chain runs.
+  mtime="$(stat -c %Y "$dir" 2>/dev/null || stat -f %m "$dir" 2>/dev/null || echo '')"
   [[ "$mtime" =~ ^[0-9]+$ ]] || return 1    # cannot age it => assume live
   [ "$(now_epoch)" -ge "$((mtime + LEASE_TTL))" ]
 }

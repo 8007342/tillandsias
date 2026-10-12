@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-merge-that-commits-only-stamp-excluded-plan-paths-moves-the-code-digest-so-every-host-that-must-merge-before-pushing-pays-a-full-gate-for-other-hosts-ledger-traffic
+    event:
+      type: note
+      ts: "2026-10-11T10:45:04Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261011t104504z
+      host: tlatoanis-macbook-air
+      summary: |
+        Fixed by e55e358ea (land85). The fixture is extended to the merge case in scripts/test-gate-stamp-memoization.sh (darwin arm 6), so the first two exit criteria are exercised in the land. The 1463-7kb6 movers verb covers the third criterion (a stale verdict names its movers).
+        LIVE-VERIFIED on tlatoanis-macbook-air 2026-10-11:
+        - A full darwin `taskpolicy -b ./build.sh --check` on e28050992 (+ a README-only scratch commit) gave GATE_RC=0 (3069 tests, new-red=0) and recorded the stamp. 08:53-10:44Z, 5196s of phases.
+        - gate-stamp.sh verify gave ok:gate-fresh.
+        - I then merged a plan-only branch: 3 plan/index.d fragments + 1 plan/issues file, and the diff vs the first parent is exactly those 4 paths. verify still gave ok:gate-fresh, and compute was identical before and after (861a63018898...). The pre-fix result was stale:tree-changed-since-gate.
+        REGIME NOTE: the gate ran in a linked worktree with a real target/ dir and ONLY target/release symlinked to the shared CARGO_TARGET_DIR release dir. This is the interim workaround for 1593-1ny6. A whole-target symlink breaks the Lua repo confinement, and TILLANDSIAS_PLAN_BIN reddens plan-binary-locus-native.

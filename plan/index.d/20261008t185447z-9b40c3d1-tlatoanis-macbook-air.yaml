@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by hand on the LWW `status:` channel (corrects any field, 642-fedr).
+status:
+  - packet_id: unsigned-tray-build-cannot-boot-a-vm-and-does-not-say-why
+    field: status
+    value: in_progress
+    ts: "2026-10-08T18:54:47Z"
+    host: tlatoanis-macbook-air
+  - packet_id: unsigned-tray-build-cannot-boot-a-vm-and-does-not-say-why
+    field: verifiable_closure
+    value: >
+      cargo test -p tillandsias-vm-layer --test vz_entitlement_preflight: the
+      live arm on a deliberately unsigned build. A cargo test binary on macOS
+      carries no entitlements, which a codesign cross-check confirms inside the
+      test. VzRuntime::start against a scratch image root must refuse with
+      refused:vm-start:missing-virtualization-entitlement, why and remedy
+      (naming scripts/build-macos-tray.sh and dist/Tillandsias.app), and leave
+      the image root UNTOUCHED. Darwin pre-fix it FAILS: "got: validate:
+      Invalid virtual machine configuration. The process doesn’t have the
+      “com.apple.security.virtualization” entitlement." after 4.5 s, and the
+      scratch root grew from {rootfs.img: 1 MiB} to rootfs.img 10 GiB +
+      vm-swap.img 24 GiB + nvram.bin + cidata.iso + provision/. Post-fix it
+      passes in 0.3 s. The unit arms (cargo test -p tillandsias-vm-layer --lib
+      vz_entitlement) inject Absent, Present and Unknown and name VZ's own
+      error. Receipts are in plan/issues/evidence/811-j9fc-darwin-20261008/.
+    ts: "2026-10-08T18:54:47Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: unsigned-tray-build-cannot-boot-a-vm-and-does-not-say-why
+    event:
+      type: note
+      ts: "2026-10-08T18:54:47Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        Claimed and fixed by macbookair-macos on coordinator assignment. The fuller version the row named: a preflight, not only message matching.
+        vz_entitlement.rs asks Security.framework about the RUNNING process (SecTaskCreateFromSelf + SecTaskCopyValueForEntitlement), not about a file's signature, because the running task is what macOS enforces. The answer is Present, Absent, or Unknown(why). Absent refuses by name, with why and remedy. Present and Unknown proceed, and when the probe could not answer, VZ's own entitlement error from validate is still mapped to the same named refusal.
+        Placement: in VzRuntime::start, after the read-only rootfs and double-start checks (the existing vz_start_fails_clean_when_rootfs_missing contract is kept) and BEFORE the first write to the image root. A NEW HARM, measured and not in the row: pre-fix, an unentitled start grew the guest disk, created a 24 GiB swap image, and rewrote cidata/nvram before failing. Against the real image root, that mutates live VM state.
+        The probe agrees with codesign both ways, checked on a throwaway probe binary in a scratch dir: unsigned reads Absent; ad-hoc signed with crates/tillandsias-macos-tray/assets/Tillandsias.entitlements reads Present. Nothing installed was signed or touched, and /Applications was never touched.
+        Darwin: vm-layer suite 140/140, strict clippy (vm-layer + macos-tray) 0, fmt clean.

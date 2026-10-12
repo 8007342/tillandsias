@@ -8,6 +8,17 @@
 
 use tillandsias_plan::lua_predicate::{PredicateClass, build_environment};
 
+/// This package's directory in the checkout that RUNS the test, read at
+/// runtime. Compile-time `env!("CARGO_MANIFEST_DIR")` names the checkout that
+/// COMPILED the binary, and with a shared CARGO_TARGET_DIR cargo reuses that
+/// binary from another worktree, because it does not track the env-dep it set
+/// itself (1590-j20f, 1605-42nh).
+fn manifest_dir() -> std::path::PathBuf {
+    std::path::PathBuf::from(
+        std::env::var("CARGO_MANIFEST_DIR").expect("cargo test sets CARGO_MANIFEST_DIR"),
+    )
+}
+
 fn eval_str(class: PredicateClass, code: &str) -> String {
     let lua = build_environment(class).expect("environment");
     lua.load(code).eval::<String>().expect(code)
@@ -172,7 +183,7 @@ fn the_lua_cli_unsandboxed_opt_in_keeps_the_raw_vm() {
 /// file or main.rs, which name the flag.
 #[test]
 fn no_caller_of_the_unsandboxed_opt_in_remains() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let root = manifest_dir().join("../..");
     let out = std::process::Command::new("git")
         .current_dir(&root)
         .args([
@@ -207,7 +218,7 @@ fn no_caller_of_the_unsandboxed_opt_in_remains() {
 /// "attempt to call a nil value (field 'execute')".
 #[test]
 fn the_archiver_sweeps_in_the_default_sandbox() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let root = manifest_dir().join("../..");
     let bash_ok = std::process::Command::new("bash")
         .arg("--version")
         .output()

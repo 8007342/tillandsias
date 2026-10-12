@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: preflight-header-sed-blocks-fail-on-bsd-and-lose-gate-only-and-serial-classification
+    field: status
+    value: completed
+    ts: "2026-10-11T06:30:42Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: preflight-header-sed-blocks-fail-on-bsd-and-lose-gate-only-and-serial-classification
+    event:
+      type: completed
+      ts: "2026-10-11T06:30:42Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: ae8158150
+  - packet_id: preflight-header-sed-blocks-fail-on-bsd-and-lose-gate-only-and-serial-classification
+    event:
+      type: note
+      ts: "2026-10-11T06:30:42Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        Landed #230. Pinned by scripts/test-preflight-declarations-host-sed.sh; MEASURED on darwin BSD sed 2026-10-11: preflight-declarations-host-sed: 5 passed, 0 failed (bsd-sed), ok:preflight-declarations-host-sed:5.

@@ -192,16 +192,14 @@ fn main() {
              FLAGS:\n    \
              (no flags)    Launch the menu-bar tray and auto-boot the VM\n    \
              --provision   Provision the VM disk from the manifest, then exit\n    \
-             --reset-guest EPHEMERAL RESET: wipe the guest disk (and with it the\n                  \
-             in-VM vault) and reprovision from scratch. Destructive by design;\n                  \
-             you'll re-authenticate once\n    \
-             --reset-state FULL LOCAL RESET (order 1286-4437): everything\n                  \
-             --reset-guest destroys, plus the host-held vault credentials and\n                  \
-             the app caches, then reprovisions. PRESERVES the installation\n                  \
-             identity. The installer runs it by default after an upgrade.\n                  \
-             TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 skips the destruction (and only\n                  \
-             the destruction); TILLANDSIAS_RESET_KEEP_MODELS=1 spares the model\n                  \
-             cache\n    \
+             --reset-guest HARD RESET: wipe the guest disk (and with it the\n                  \
+             in-VM vault), clear the vault Keychain items, and reprovision\n                  \
+             from scratch. Needs a per-run approval: add --approve-hard-reset\n                  \
+             (or set TILLANDSIAS_HARD_RESET_APPROVED=1). You'll sign in again\n    \
+             --reset-state SOFT RESET (order 1437-8c6p): keeps the VM, its guest\n                  \
+             and Vault store, your sign-ins and the downloads; the guest\n                  \
+             rebuilds its containers at its next boot. The installer runs it on\n                  \
+             every install. TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 skips it\n    \
              --exec-guest <cmd...>  Boot the VM, run a command in the guest over\n                  \
              the control wire, print its output + exit, then stop. An ABSOLUTE\n                  \
              argv[0] is sent as a verbatim argv vector with no shell in the\n                  \
@@ -278,15 +276,13 @@ fn main() {
         require_no_live_tray("--reset-guest");
         std::process::exit(diagnose::reset_guest_main());
     }
-    // ORDER 1286-4437 — the same flag name and the same meaning on all three
-    // platforms. It is a DELTA over --reset-guest, not a rename of it: the guest
-    // wipe above is reused verbatim, and the host-held credentials and caches
-    // that macOS never cleared are this body's own steps.
+    // ORDER 1286-4437, re-scoped by 1437-8c6p — the same flag name and the same
+    // meaning on all three platforms: the SOFT reset. It keeps the VM, the
+    // guest's Vault store and the Keychain items; HARD is --reset-guest above.
     //
-    // IT TAKES THE SAME ORDER-277 GUARD AS --reset-guest AND MUST. It destroys
-    // strictly more than the alias does, so a version that skipped the live-tray
-    // check would pull the disk out from under a running VM in exactly the case
-    // the guard was written for.
+    // IT TAKES THE SAME ORDER-277 GUARD AS --reset-guest. It leaves the guest a
+    // wipe request and reprovisions, and a live tray owning the VM would boot
+    // through that underneath it.
     //
     // Err => exit 1, one convention across the fleet. See reset_state.rs's note
     // on why this returns Result while its three siblings return i32.
@@ -806,10 +802,10 @@ mod tests {
             // windows-260717-4: the destructive reset must never wipe the
             // disk out from under a running tray's VM.
             ("--reset-guest", "diagnose::reset_guest_main()"),
-            // 1286-4437: --reset-state destroys strictly MORE than the alias
-            // above, so order 277's guard applies to it a fortiori. Asserted
-            // here rather than trusted, because the two dispatches sit side by
-            // side and a copy that drops the guard line still compiles.
+            // 1286-4437 / 1437-8c6p: --reset-state reprovisions too, so order
+            // 277's guard applies to it. Asserted here rather than trusted,
+            // because the two dispatches sit side by side and a copy that drops
+            // the guard line still compiles.
             ("--reset-state", "reset_state::run_reset_state()"),
         ] {
             let guard_call = format!("require_no_live_tray(\"{mode}\")");

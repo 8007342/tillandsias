@@ -34,9 +34,27 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CHECKER="$ROOT/scripts/check-litmus-bindings.sh"
+# ORDER 1570-qutp: the checker is Lua on `tillandsias-plan script run`; the
+# mutants below are edits of its one-line refusal conditions, written into
+# this fixture's own scratch dir (never into the checkout).
+CHECKER="$ROOT/scripts/lua/check-litmus-bindings.lua"
 
 command -v git >/dev/null 2>&1 || { echo "skip:no-git"; exit 0; }
+# shellcheck source=scripts/plan-binary-probe.sh
+. "$ROOT/scripts/plan-binary-probe.sh"
+plan_from_checkout() {
+    local p
+    p="$(cd "$ROOT" && resolve_plan_binary)" || return 1
+    case "$p" in
+        /*) printf '%s\n' "$p" ;;
+        *)  printf '%s/%s\n' "$ROOT" "${p#./}" ;;
+    esac
+}
+PLAN="$(plan_from_checkout)" || PLAN=""
+if [ -z "$PLAN" ] || ! grep -qx script <<<"$("$PLAN" capabilities 2>/dev/null)"; then
+    echo "skip:no-script-runner"
+    exit 0
+fi
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/binding-truth.XXXXXX")"
 MUTANT=""
@@ -119,7 +137,7 @@ bind_under() {
 run_checker() { # dir, checker-path -> prints verdict, sets RC
     local d="$1" c="$2"
     LITMUS_BINDINGS_ROOT="$d" TILLANDSIAS_LITMUS_BIND_BASE=HEAD \
-        bash "$c" 2>/dev/null | tail -1
+        "$PLAN" script run "$c" 2>/dev/null | tail -1
 }
 
 # ---------------------------------------------------------------- ARM 1 (2a)
@@ -142,13 +160,11 @@ fi
 # ANYWAY, because the cross-check was then gated behind the runner's presence
 # and never ran in this fixture at all: a false pass sitting on top of a
 # skipped check, which is the pair of defects this row exists for.
-MUTANT="$ROOT/scripts/.binding-truth-mutant.$$.sh"
-sed 's|^ *if \[ -n "\$misbound" \]; then|    if false; then # MUTATED-NO-CROSSCHECK|' \
+MUTANT="$W/binding-truth-mutant.lua"
+sed 's|^    if #misbound > 0 then$|    if false then -- MUTATED-NO-CROSSCHECK|' \
     "$CHECKER" > "$MUTANT"
 if ! grep -q 'MUTATED-NO-CROSSCHECK' "$MUTANT"; then
     fail "arm 2: the mutation did not apply; the refusal line has been reworded"
-elif ! bash -n "$MUTANT" 2>/dev/null; then
-    fail "arm 2: the mutant does not parse"
 else
     out="$(run_checker "$A" "$MUTANT")"
     if printf '%s' "$out" | grep -q '^ok:litmus-bindings:'; then
@@ -175,13 +191,11 @@ fi
 # "violation:unbound-litmus:…"` line, which sits INSIDE `if [ -n "$unbound" ];
 # then … exit 1; fi` — so the mutant still exited 1 with an empty stdout and
 # the arm failed for the wrong reason. Mutate the CONDITION.
-MUTANT="$ROOT/scripts/.binding-truth-mutant.$$.sh"
-sed 's|^if \[ -n "\$unbound" \]; then|if false; then # MUTATED-NO-UNBOUND|' \
+MUTANT="$W/binding-truth-mutant.lua"
+sed 's|^if #unbound > 0 then$|if false then -- MUTATED-NO-UNBOUND|' \
     "$CHECKER" > "$MUTANT"
 if ! grep -q 'MUTATED-NO-UNBOUND' "$MUTANT"; then
     fail "arm 4: the mutation did not apply; the unbound refusal has been reworded"
-elif ! bash -n "$MUTANT" 2>/dev/null; then
-    fail "arm 4: the mutant does not parse"
 else
     out="$(run_checker "$B" "$MUTANT")"
     if printf '%s' "$out" | grep -q '^ok:litmus-bindings:'; then

@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: fixtures-write-scratch-files-into-the-checkout-beside-the-scripts-so-a-killed-run-leaves-them-where-diff-scoped-guards-read-them-as-added-code
+    event:
+      type: note
+      ts: "2026-10-11T23:09:39Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261011t230939z
+      host: tlatoanis-macbook-air
+      summary: |
+        PR #342 (work/1611-imnj; d21584a19, trunk merge bc71c2cd3, waiver commit after it). THE POPULATION IS 9, NOT 5: the scan found four more writers at the checkout root (test-if-not-pipeline-guard, test-pilot-lua-ports, test-gate-memory-refusal, check-jq-callsite-ratchet), which the filing grep did not cover. Each writer and where it went:
+        - To ${TMPDIR:-/tmp}:
+          - test-litmus-step-pipefail, test-litmus-structured-assert, test-litmus-parse-instruments-agree: the runner copy's own-path lookups are pinned to $ROOT.
+          - test-order-citations-resolve: a scratch tree with the guard copied and plan/ linked.
+          - check-jq-callsite-ratchet.
+        - To .tillandsias/fixture-scratch/ (gitignored, in the repo; their Lua subjects are repo-confined and target/ can be a symlink): the three root dotdir fixtures. This is a THIRD kind beside the row's two, flagged for the coordinator.
+        - Kept and declared: test-awk-float-lc-numeric.
+        ALSO FOUND: a bare `mktemp -d` on darwin ignores TMPDIR (measured), so it escapes the door's per-guard sweep. The moved fixtures now use explicit ${TMPDIR:-/tmp} templates.
+        EXIT CRITERIA:
+        1. check-checkout-writers.lua (gate step 459): trunk = 9 unsafe, branch = ok:checkout-writers:scanned=891:writers=1:unsafe=0:ignored-scratch=14, with a note per kept writer.
+        2. test-checkout-writers.lua (gate step 461; 11 arms, plain and under -b): in one run, the pre-fix test-litmus-step-pipefail (c1a390082) and the current file are each held in ARM 3, then TERM to the pid, 1 s, KILL. Pre-fix leaves scripts/.wka4-prefix-runner.<pid>.sh; post-fix leaves nothing. Mechanism: with an EXIT trap set, bash does not die on TERM while it waits in $(...), so the darwin door's KILL lands.
+        Standalone taskpolicy -b preflight on the ref: refused=0, tree clean.

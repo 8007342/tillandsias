@@ -30,8 +30,6 @@
 1 scripts/build-image.sh
 1 scripts/check-bare-metal-host-initialized.sh
 1 scripts/check-claim-confirmed.sh
-1 scripts/check-forge-service-health.sh
-2 scripts/check-local-expert-health.sh
 18 scripts/check-mcp-expert-health.sh
 2 scripts/check-must-ship-rows.sh
 2 scripts/check-nix-deps-stability.sh

@@ -9,7 +9,7 @@
 # THEY LIVE IN A SCRIPT, NOT IN THE LITMUS `command:`, for two measured
 # reasons. First, the move sabotage needs a multi-line awk program, and
 # embedding one in a double-quoted YAML scalar produced a file that
-# scripts/check-litmus-yaml-parses.sh rejected while the runner's own
+# scripts/lua/check-litmus-yaml-parses.lua rejected while the runner's own
 # --parse-only still said ok — two instruments disagreeing about the same
 # file, with the stricter one right. Second, the first version of that step
 # used `python3 -c`, which the no-Python-runtime policy (1087-h2z9) correctly

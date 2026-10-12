@@ -19,7 +19,7 @@
 # lint, and this check can only require that SOME host did. It says so in its
 # verdict: an attestation is the author's word, bound to content, not a run.
 # If the builder later lints darwin, replace this with a real clippy arm in
-# scripts/check-cross-target-build.sh (656-spux).
+# scripts/lua/check-cross-target-build.lua (656-spux).
 #
 # THE ATTESTATION is a commit trailer written ONLY by scripts/attest-native-lint.sh,
 # after its clippy run exits 0:
@@ -59,7 +59,7 @@ if [ "${1:-}" = "--list" ]; then
     exit 0
 fi
 
-base="${TILLANDSIAS_NATIVE_LINT_BASE:-origin/linux-next}"
+base="${TILLANDSIAS_NATIVE_LINT_BASE:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}"
 if [ "${1:-}" = "--base" ]; then base="${2:?--base needs a ref}"; fi
 
 if ! git rev-parse --verify --quiet "$base^{commit}" >/dev/null 2>&1; then

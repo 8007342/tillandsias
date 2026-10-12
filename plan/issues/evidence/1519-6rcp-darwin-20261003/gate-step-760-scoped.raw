@@ -1,0 +1,32 @@
+scope=isolated evidence-only clone; gate root contains only 760-1384-bqhy.step
+gate_root=/Users/tlatoani/tillandsias-worktrees/1519-6rcp/plan/issues/evidence/1519-6rcp-darwin-20261003/gate-root
+gate_step_count=1
+command=TILLANDSIAS_PLAN_BIN=/Users/tlatoani/opencode/tillandsias/target/release/tillandsias-plan ./build.sh --gate-steps /Users/tlatoani/tillandsias-worktrees/1519-6rcp/plan/issues/evidence/1519-6rcp-darwin-20261003/gate-root
+timestamp_utc=2026-10-03T16:56:57Z
+[0;32m[build][0m Git hooks installed (pre-push gate is now active)
+[podman-registries] Setting up podman registries configuration...
+[podman-registries] already current — no change (no backup written)
+[podman-registries] Verifying podman configuration...
+[podman-registries] short-name-mode: OS: darwin/arm64
+buildOrigin: brew
+provider: applehv
+version: 6.1.3
+
+unknown
+[podman-registries] ✓ Setup complete
+[0;36m[build][0m Using standard squid image for dev caching: docker.io/library/squid:6.1
+[0;36m[build][0m Starting dev proxy container...
+[0;32m[build][0m Dev proxy unavailable (container builds will be uncached — normal in CI/VMs)
+[0;36m[build][0m Staging router sidecar (build artifact — not committed)...
+[build-sidecar] up-to-date: /Users/tlatoani/tillandsias-worktrees/1519-6rcp/images/router/tillandsias-router-sidecar
+[0;36m[build][0m Checking tillandsias-plan script run's Lua verdict, timeout, gate-step, timing, and classifier contracts (1384-bqhy)...
+ok:   ARM 1: verdict.ok("x", 3) prints exactly ok:x:3 and exits 0
+ok:   ARM 2: verdict.refused exits 1 with refused:x on stdout and the detail on stderr only
+ok:   ARM 3: a script ending without a verdict exits 1 with refused:no-verdict:silent
+ok:   ARM 4: a script outliving --timeout 300ms exits 124 printing status=timed_out, and never ok
+ok:   ARM 5: build.sh's loop runs a STEP_LUA-only step and shows its verdict; a missing .lua and a step naming both are refused
+ok:   ARM 6: the timing record lands in TILLANDSIAS_TIMING_LOG and /tmp/tillandsias-timing.jsonl did not grow
+ok:   ARM 7: advisory is verbatim only for successful runs; failure precedence survives and newline injection is refused
+script-run-verb: 7 passed, 0 failed
+[0;32m[build][0m tillandsias-plan script run preserves its Lua verdict and classifier contracts
+exit=0

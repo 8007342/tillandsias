@@ -19,7 +19,11 @@
 # Usage:
 #   curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install-macos.sh | bash
 #   curl -fsSL …/install-macos.sh | bash -s -- --login-item
-#   TILLANDSIAS_VERSION=v0.2.260523.6 curl … | bash       # pin a version
+#   curl -fsSL …/install-macos.sh | TILLANDSIAS_VERSION=v0.2.260523.6 bash   # pin a version
+#
+# The pin goes on BASH, not on curl: `TILLANDSIAS_VERSION=… curl … | bash`
+# sets it for curl only and installs the latest release (measured on the
+# v56.10.9.1 smoke, 2026-10-09).
 #
 # @trace spec:macos-tray-build-and-release
 # =============================================================================
@@ -274,29 +278,40 @@ _INSTALL_RESTORE_TO=""
 rm -rf "$STAGE"
 _INSTALL_STAGE=""
 
-# ── ORDER 1286-4437: reset the local state, with the NEW app in place ────
-# By default, and SYNCHRONOUSLY, before the tray is launched below. Two
-# reasons it sits exactly here and not elsewhere:
-#   * AFTER the swap, because the binary that reprovisions must be the new
-#     one — resetting first would reprovision with the outgoing version;
+# ── ORDER 1286-4437 / 1437-8c6p: the SOFT reset, with the NEW app in place ─
+# SYNCHRONOUSLY, before the tray is launched below:
+#   * AFTER the swap, because the binary that resets must be the new one;
 #   * BEFORE `open -a`, because the reset refuses to run against a live tray
 #     (order 277) and this is the last point where none is running.
-# NO INSTALLER-LEVEL OPT-OUT. TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 is the one
-# and only escape hatch and the tray reads it itself; a second variable here
-# was proposed, agreed by three hosts and approved before anyone read the
-# source, and tillandsias-core's guard documents why it must not exist.
-# TILLANDSIAS_RESET_KEEP_MODELS is passed through by the environment for the
-# same reason: it narrows the reset, it does not skip it.
-say "resetting local state (--reset-state); TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 skips the destruction"
+# It is the SOFT reset, always (host-state-lifecycle): it keeps the VM, the
+# Vault store, the sign-ins and the downloads. HARD is never reachable from
+# here, and nothing here asks.
+#
+# QUIET, operator ruling 2026-10-08, verbatim: "we do not need to print any
+# power user messages during install, at all. Install should be for END USER
+# (NOT POWER USER) and be a pretty installer, rather than an
+# informational/debugging installer." So the tray's own reset output (its
+# announcement names flags and variables) goes to the setup log, the way
+# install-windows.ps1 keeps it in tillandsias-setup.log, and this installer
+# names only the log. Unlike Windows the log is KEPT on success: it is the one
+# record of what the reset kept and removed. TILLANDSIAS_DESTRUCTIVE_RESET_OK
+# and TILLANDSIAS_RESET_KEEP_MODELS reach the tray through the environment;
+# there is no installer-level variable (tillandsias-core says why).
+# BEGIN-SETUP-RESET (scripts/test-install-macos-setup-is-quiet.sh runs this block)
+SETUP_LOG_DIR="$HOME/Library/Logs/Tillandsias"
+SETUP_LOG="$SETUP_LOG_DIR/setup.log"
+mkdir -p "$SETUP_LOG_DIR" 2>/dev/null || true
+say "Getting Tillandsias ready..."
 set +e
-"$DEST/Contents/MacOS/tillandsias-tray" --reset-state
+"$DEST/Contents/MacOS/tillandsias-tray" --reset-state </dev/null >"$SETUP_LOG" 2>&1
 RESET_EXIT=$?
 set -e
-# Fail LOUD. A failed reset has already destroyed the local state and left the
-# guest unprovisioned; carrying on to `open -a` would hand the operator a tray
-# booting against nothing, with the installer's last word being "Installed".
+# Fail LOUD, by path. Carrying on to `open -a` after a failed reset would hand
+# the operator a tray booting against nothing, with the last word "Installed".
 [[ -n "${RESET_EXIT:-}" && $RESET_EXIT -eq 0 ]] || \
-    die "tillandsias-tray --reset-state failed (exit ${RESET_EXIT:-<empty>}); the local state may be cleared and the guest unprovisioned — re-run this installer"
+    die "Tillandsias could not finish setting up (exit ${RESET_EXIT:-<empty>}). Details: $SETUP_LOG — re-run this installer"
+say "Setup details: $SETUP_LOG"
+# END-SETUP-RESET
 
 # ── login item (opt-in) ──────────────────────────────────────────────────
 if (( LOGIN_ITEM )); then
@@ -367,7 +382,7 @@ fi
 # bundle — a truncated download, or a tarball that lost bits in transit — and
 # it is far better to say so now than to let the app fail obscurely at launch.
 if ! codesign --verify --deep --strict "$DEST" 2>/dev/null; then
-    say "WARNING: codesign --verify failed for $DEST"
+    say "WARNING: the code signature of $DEST did not verify"
     say "         The bundle may be incomplete; re-run the installer."
 fi
 # ── post-install sanity check ───────────────────────────────────────────
@@ -383,7 +398,7 @@ fi
 #       provisioned tray; first install is "2 / not provisioned" + ok).
 #   2 — degraded but bits intact (the expected first-install state).
 #   1 — hard failure (binary missing, codesign broken).
-say "verifying installed binary via --diagnose --json"
+say "verifying the installed app"
 TRAY_BIN="$DEST/Contents/MacOS/tillandsias-tray"
 if [[ -x "$TRAY_BIN" ]]; then
     set +e
@@ -391,7 +406,7 @@ if [[ -x "$TRAY_BIN" ]]; then
     DIAG_EXIT=$?
     set -e
     if [[ $DIAG_EXIT -eq 1 ]]; then
-        die "tillandsias-tray --diagnose --json hard-failed (exit 1); install bits broken"
+        die "the installed app failed its self-check (exit 1); re-run this installer"
     fi
     # Best-effort breadcrumb: surface version + manifest pin so the
     # user has a one-liner for support if the GUI doesn't appear.
@@ -409,7 +424,7 @@ else
     die "$TRAY_BIN missing or not executable; tarball extracted but binary is broken"
 fi
 
-say "Launching Tillandsias (--init / VM provisioning runs automatically on first launch)..."
+say "Launching Tillandsias (its VM sets itself up on first launch)..."
 open -a "$DEST" || say "warning: open returned non-zero — right-click Tillandsias.app in $INSTALL_DIR and choose Open"
 say "Tray started. Look for the Tillandsias icon in the menu bar."
 say "(Provisioning runs in the background on first launch — no extra step needed.)"

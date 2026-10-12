@@ -59,9 +59,12 @@ Bare metal (all three OSes):
 
 1. **Platform branch checked out** (table above). `git fetch origin` first;
    record the sibling heads of `main`, `linux-next`, `windows-next`, `osx-next`.
-2. **Hooks installed**: `scripts/install-hooks.sh` (idempotent). The pre-push
-   hook is the local gate; a checkout without it can push what the gate would
-   refuse.
+2. **Hooks installed**: `scripts/ensure-hooks.sh` (idempotent, bash-only — no
+   Rust toolchain needed, 1255-s4im). The pre-push hook is the local gate and
+   the release freeze; a checkout without it can push what the gate would
+   refuse. It installs or upgrades our hook and REFUSES to overwrite a
+   pre-push hook this project did not write. The plan-lane scripts run it
+   silently before their first push, so a fresh floor-host clone arms itself.
 3. **Builder toolbox** (Linux): `scripts/with-tillandsias-builder.sh true`
    creates or reuses `tillandsias-builder` (methodology `toolbox_first_scripts`).
    macOS and Windows hosts have no toolbox; the checker skips this by name.

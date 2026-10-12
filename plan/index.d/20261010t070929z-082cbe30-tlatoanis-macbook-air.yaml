@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-macos-tray-github-login-waits-for-a-token-paste-prompt-the-device-flow-never-prints-so-login-hangs-and-the-qr-is-never-shown
+    field: status
+    value: completed
+    ts: "2026-10-10T07:09:29Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-macos-tray-github-login-waits-for-a-token-paste-prompt-the-device-flow-never-prints-so-login-hangs-and-the-qr-is-never-shown
+    event:
+      type: completed
+      ts: "2026-10-10T07:09:29Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: 18ae18ae5; github_login_expect_order 5/5 on 33db38d97, 3 FAILED on 3b08809e9; operator tray login 2026-10-09T21:26:43Z->21:27:33Z
+  - packet_id: the-macos-tray-github-login-waits-for-a-token-paste-prompt-the-device-flow-never-prints-so-login-hangs-and-the-qr-is-never-shown
+    event:
+      type: note
+      ts: "2026-10-10T07:09:29Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        OBSOLETE, already fixed by 18ae18ae5 (fix(1383-dkxi)). The row was never closed. Coordinator item 3 asked for darwin test evidence, not prose. MEASURED 2026-10-10 on tlatoanis-macbook-air: - cargo test -p tillandsias-macos-tray --test github_login_expect_order on trunk 33db38d97 (rustc 1.99.0): 5 passed, 0 failed. - The SAME current test file on the pre-fix tree 18ae18ae5^ = 3b08809e9 (rustc 1.96.1): 2 passed, 3 FAILED. host_waits_for_no_prompt_the_device_flow_never_prints failed at :85 (the host still waits for "authentication token"); host_shows_the_guest_output_raw failed at :122; extraction_discriminates_the_live_path_from_the_retired_one failed at :151. - The operator-run arm, observed on v56.10.9.1 (d3e8c8729) in the operator's own tray.log on 2026-10-09: 21:26:43Z click id=github-login (the device flow showed the code on the operator's terminal and the operator approved it), then 21:27:33Z github-login menu_state updated and cloud-projects menu_state updated (15 entries). The tray login completed with no token-paste step. 1566-tkan (#279) later removed the token from the piped remedy, and 8c6p does not touch the login path.

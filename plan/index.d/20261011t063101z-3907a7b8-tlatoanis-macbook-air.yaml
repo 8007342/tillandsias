@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-vault-store-and-download-cache-are-host-persistent-across-reset
+    field: next_action
+    value: |-
+      Released by tlatoanis-macbook-air 2026-10-11 (WIP cap). The code landed with 1437-8c6p (soft reset, quiet installer). What is left is live only, on the next macOS release smoke, and needs the operator's per-release OK for the destructive default install. (1) A default reinstall over a signed-in install leaves vault-shamir-share-v1 present, and the Vault says "persisted from a prior boot". (2) The guest runs podman system reset once at the next boot from the soft-reset nonce, and the vault unseals over the kept store. Also: the virtiofs/evacuate measurement for HARD survival.
+
+      [2026-10-11T06:31:01Z tlatoanis-macbook-air] Earlier next_action, restored verbatim: measure Vault file backend on a virtiofs share (write, reboot guest, read); if it passes, add the vault-store share to VzRuntime and point the guest cache dir at it
+    ts: "2026-10-11T06:31:01Z"
+    host: tlatoanis-macbook-air

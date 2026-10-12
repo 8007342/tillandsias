@@ -11,7 +11,7 @@
 //! does NOT go through the `keyring` crate (that backend is only linked by
 //! the in-VM `tillandsias-headless` Vault bootstrap on Linux). So the RC1
 //! keyring-backend persistence fix does not cover this path; its cross-run
-//! persistence is proven by the test at the bottom of this file, which runs
+//! persistence is proven by the OPT-IN test at the bottom of this file, which runs
 //! on a real Windows host (Linux CI never compiles this module).
 //!
 //! @trace spec:windows-native-tray, spec:host-shell-architecture, spec:tillandsias-vault
@@ -72,59 +72,12 @@ pub fn ensure_installation_uuid() -> Result<Uuid, String> {
 
 /// Read a generic string credential stored under `target` from Windows Credential Manager.
 pub fn read_credential_string(target: &str) -> Result<Option<String>, String> {
-    let target_w = to_pwstr(target);
-    let mut cred_ptr = std::ptr::null_mut::<CREDENTIALW>();
-    let result = unsafe {
-        CredReadW(
-            PWSTR(target_w.as_ptr() as *mut _),
-            CRED_TYPE_GENERIC,
-            0,
-            &mut cred_ptr,
-        )
-    };
-    if let Err(err) = result {
-        if err.code().0 as u32 == HRESULT_ERROR_NOT_FOUND {
-            return Ok(None);
-        }
-        return Err(format!("CredReadW failed for {target}: {err:?}"));
-    }
-    if cred_ptr.is_null() {
-        return Ok(None);
-    }
-    let cred = unsafe { &*cred_ptr };
-    let blob = unsafe {
-        std::slice::from_raw_parts(cred.CredentialBlob, cred.CredentialBlobSize as usize)
-    };
-    let text = std::str::from_utf8(blob)
-        .map_err(|e| format!("credential blob for {target} is not UTF-8: {e}"))?
-        .to_string();
-    unsafe {
-        CredFree(cred_ptr as *mut _);
-    }
-    Ok(Some(text.trim().to_string()))
+    store::read(target)
 }
 
 /// Persist a generic string credential `value` under `target` in Windows Credential Manager.
 pub fn write_credential_string(target: &str, value: &str) -> Result<(), String> {
-    let target_w = to_pwstr(target);
-    let value_bytes = value.as_bytes();
-
-    let cred = CREDENTIALW {
-        Flags: CRED_FLAGS(0),
-        Type: CRED_TYPE_GENERIC,
-        TargetName: PWSTR(target_w.as_ptr() as *mut _),
-        Comment: PWSTR::null(),
-        LastWritten: FILETIME::default(),
-        CredentialBlobSize: value_bytes.len() as u32,
-        CredentialBlob: value_bytes.as_ptr() as *mut u8,
-        Persist: CRED_PERSIST_LOCAL_MACHINE,
-        AttributeCount: 0,
-        Attributes: std::ptr::null_mut(),
-        TargetAlias: PWSTR::null(),
-        UserName: PWSTR::null(),
-    };
-    let result = unsafe { CredWriteW(&cred, 0) };
-    result.map_err(|err| format!("CredWriteW failed for {target}: {err:?}"))
+    store::write(target, value)
 }
 
 /// Read the UUID stored under an arbitrary `target`. The public
@@ -148,19 +101,189 @@ fn write_installation_uuid_to(target: &str, uuid: Uuid) -> Result<(), String> {
 
 /// Remove the credential stored under `target` from Windows Credential
 /// Manager. Idempotent: an already-absent credential is treated as success,
-/// so this is safe to call on uninstall or key rotation. Tests use it to
-/// clean up their unique target; the eventual step-36 keychain rotation /
-/// uninstall flow can reuse it.
+/// so this is safe to call on uninstall or key rotation. The eventual step-36
+/// keychain rotation / uninstall flow can reuse it.
 pub fn delete_installation_uuid_for(target: &str) -> Result<(), String> {
-    let target_w = to_pwstr(target);
-    let result = unsafe { CredDeleteW(PCWSTR(target_w.as_ptr()), CRED_TYPE_GENERIC, 0) };
-    if let Err(err) = result {
-        if err.code().0 as u32 == HRESULT_ERROR_NOT_FOUND {
-            return Ok(());
+    store::delete(target)
+}
+
+// ORDER 1562-uxhc — THE STORE SEAM. Every read, write and delete above goes
+// through `store`, which is the real Credential Manager in the product and an
+// in-memory scratch store in the test build. The tests used to write the real
+// store under `...-test-<uuid>` targets and remove them in a Drop guard, and a
+// Drop guard never runs when the test process is killed, times out or aborts:
+// three such targets leaked into yolanda's real store (v56.10.8.1 Windows
+// smoke, 2026-10-08). A scratch store cannot leak, whatever ends the process.
+#[cfg(test)]
+use scratch as store;
+#[cfg(not(test))]
+use win32 as store;
+
+/// The real Windows Credential Manager. In the test build every entry point
+/// first asks [`real_store_guard`], which refuses (panics) unless the calling
+/// thread opted in through `RealStoreOptIn` AND the target is a `-test-` one,
+/// so a test can neither write the real store by accident nor touch a
+/// production target on purpose.
+mod win32 {
+    use super::*;
+
+    pub(super) fn read(target: &str) -> Result<Option<String>, String> {
+        #[cfg(test)]
+        real_store_guard("read", target);
+        let target_w = to_pwstr(target);
+        let mut cred_ptr = std::ptr::null_mut::<CREDENTIALW>();
+        let result = unsafe {
+            CredReadW(
+                PWSTR(target_w.as_ptr() as *mut _),
+                CRED_TYPE_GENERIC,
+                0,
+                &mut cred_ptr,
+            )
+        };
+        if let Err(err) = result {
+            if err.code().0 as u32 == HRESULT_ERROR_NOT_FOUND {
+                return Ok(None);
+            }
+            return Err(format!("CredReadW failed for {target}: {err:?}"));
         }
-        return Err(format!("CredDeleteW failed: {err:?}"));
+        if cred_ptr.is_null() {
+            return Ok(None);
+        }
+        let cred = unsafe { &*cred_ptr };
+        let blob = unsafe {
+            std::slice::from_raw_parts(cred.CredentialBlob, cred.CredentialBlobSize as usize)
+        };
+        let text = std::str::from_utf8(blob)
+            .map_err(|e| format!("credential blob for {target} is not UTF-8: {e}"))?
+            .to_string();
+        unsafe {
+            CredFree(cred_ptr as *mut _);
+        }
+        Ok(Some(text.trim().to_string()))
     }
-    Ok(())
+
+    pub(super) fn write(target: &str, value: &str) -> Result<(), String> {
+        #[cfg(test)]
+        real_store_guard("write", target);
+        let target_w = to_pwstr(target);
+        let value_bytes = value.as_bytes();
+
+        let cred = CREDENTIALW {
+            Flags: CRED_FLAGS(0),
+            Type: CRED_TYPE_GENERIC,
+            TargetName: PWSTR(target_w.as_ptr() as *mut _),
+            Comment: PWSTR::null(),
+            LastWritten: FILETIME::default(),
+            CredentialBlobSize: value_bytes.len() as u32,
+            CredentialBlob: value_bytes.as_ptr() as *mut u8,
+            Persist: CRED_PERSIST_LOCAL_MACHINE,
+            AttributeCount: 0,
+            Attributes: std::ptr::null_mut(),
+            TargetAlias: PWSTR::null(),
+            UserName: PWSTR::null(),
+        };
+        let result = unsafe { CredWriteW(&cred, 0) };
+        result.map_err(|err| format!("CredWriteW failed for {target}: {err:?}"))
+    }
+
+    pub(super) fn delete(target: &str) -> Result<(), String> {
+        #[cfg(test)]
+        real_store_guard("delete", target);
+        let target_w = to_pwstr(target);
+        let result = unsafe { CredDeleteW(PCWSTR(target_w.as_ptr()), CRED_TYPE_GENERIC, 0) };
+        if let Err(err) = result {
+            if err.code().0 as u32 == HRESULT_ERROR_NOT_FOUND {
+                return Ok(());
+            }
+            return Err(format!("CredDeleteW failed: {err:?}"));
+        }
+        Ok(())
+    }
+
+    /// The names of the generic credentials matching `filter` (Credential
+    /// Manager's own syntax: a trailing `*` is the only wildcard). Only the
+    /// opt-in round trip uses it, to find what earlier aborted runs left.
+    #[cfg(test)]
+    pub(super) fn list(filter: &str) -> Result<Vec<String>, String> {
+        real_store_guard("list", filter);
+        let filter_w = to_pwstr(filter);
+        let mut count = 0u32;
+        let mut creds = std::ptr::null_mut::<*mut CREDENTIALW>();
+        let result = unsafe {
+            windows::Win32::Security::Credentials::CredEnumerateW(
+                PCWSTR(filter_w.as_ptr()),
+                windows::Win32::Security::Credentials::CRED_ENUMERATE_FLAGS(0),
+                &mut count,
+                &mut creds,
+            )
+        };
+        if let Err(err) = result {
+            if err.code().0 as u32 == HRESULT_ERROR_NOT_FOUND {
+                return Ok(Vec::new());
+            }
+            return Err(format!("CredEnumerateW failed for {filter}: {err:?}"));
+        }
+        let mut names = Vec::new();
+        for i in 0..count as usize {
+            let cred = unsafe { &**creds.add(i) };
+            if let Ok(name) = unsafe { cred.TargetName.to_string() } {
+                names.push(name);
+            }
+        }
+        unsafe {
+            CredFree(creds as *mut _);
+        }
+        Ok(names)
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Set only by `RealStoreOptIn`, on the thread of the one opt-in test.
+    static REAL_STORE_OPT_IN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// The guard. A test reaching the real store outside the opt-in, or naming a
+/// target without `-test-` in it even inside the opt-in, panics: an `Err`
+/// could be swallowed by a `let _ =`, a panic fails the test.
+#[cfg(test)]
+fn real_store_guard(op: &str, target: &str) {
+    let opted_in = REAL_STORE_OPT_IN.with(|c| c.get());
+    if !opted_in || !target.contains("-test-") {
+        panic!(
+            "refused:real-credential-store-in-test:{op}:{target} — tests use the scratch store; \
+             only the opt-in round trip may reach the real Credential Manager, and only for \
+             -test- targets (order 1562-uxhc)"
+        );
+    }
+}
+
+/// The scratch store the test build uses: per thread, so every test starts
+/// empty and no two tests see each other, and in memory, so nothing outlives
+/// the process however it ends. Same contract as the real store: a missing
+/// target reads `None`, a delete of one is success, values come back trimmed.
+#[cfg(test)]
+mod scratch {
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+
+    thread_local! {
+        static STORE: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
+    }
+
+    pub(super) fn read(target: &str) -> Result<Option<String>, String> {
+        Ok(STORE.with(|s| s.borrow().get(target).map(|v| v.trim().to_string())))
+    }
+
+    pub(super) fn write(target: &str, value: &str) -> Result<(), String> {
+        STORE.with(|s| s.borrow_mut().insert(target.to_string(), value.to_string()));
+        Ok(())
+    }
+
+    pub(super) fn delete(target: &str) -> Result<(), String> {
+        STORE.with(|s| s.borrow_mut().remove(target));
+        Ok(())
+    }
 }
 
 /// Clear the host's copy of the guest Vault's identity — the Shamir unseal
@@ -351,21 +474,15 @@ fn to_pwstr(s: &str) -> Vec<u16> {
 mod tests {
     use super::*;
 
-    /// RAII cleanup so the test's unique target credential is removed even if
-    /// an assertion panics mid-test — the test must never leak a credential
-    /// into the operator's real Credential Manager store.
-    struct CredCleanup(String);
-    impl Drop for CredCleanup {
-        fn drop(&mut self) {
-            let _ = delete_installation_uuid_for(&self.0);
-        }
-    }
+    // ORDER 1562-uxhc: every test here runs against the scratch store (see
+    // `store`), so none needs a cleanup guard and none can leak a credential
+    // into the real Credential Manager, however the test process ends.
 
     /// 803-49re, the half that decides the bug: a host-side share that
     /// survives a guest wipe is delivered into the fresh guest unconditionally
     /// and permanently breaks GitHub login. The wipe must clear it.
     ///
-    /// Exercised against unique throwaway targets — never the public
+    /// Exercised on the scratch store and unique throwaway targets — never the public
     /// [`clear_guest_vault_credentials`], whose targets are the operator's
     /// real credentials.
     ///
@@ -380,8 +497,6 @@ mod tests {
             Box::leak(format!("vault-shamir-share-v1-test-{run}").into_boxed_str());
         let token: &'static str =
             Box::leak(format!("vault-root-token-v1-test-{run}").into_boxed_str());
-        let _c1 = CredCleanup(share.to_string());
-        let _c2 = CredCleanup(token.to_string());
 
         // The state a guest wipe leaves behind today: the host still holds
         // the dead guest's vault identity.
@@ -480,7 +595,7 @@ mod tests {
     /// Pre-fix: FAILS — the tray returned Err on any non-Accepted outcome
     /// BEFORE the handover, so after a reset that cleared the host credentials
     /// the first launch failed and Credential Manager never got the share back
-    /// (v56.10.8.1 Windows smoke, 2026-10-08). Scratch targets only.
+    /// (v56.10.8.1 Windows smoke, 2026-10-08). Runs on the scratch store.
     #[tokio::test]
     async fn a_superseded_delivery_reads_the_guests_handover() {
         let run = Uuid::new_v4();
@@ -488,11 +603,6 @@ mod tests {
             format!("tillandsias-vm-uuid-test-{run}"),
             format!("vault-shamir-share-v1-test-{run}"),
             format!("vault-root-token-v1-test-{run}"),
-        );
-        let _c = (
-            CredCleanup(uuid_t.clone()),
-            CredCleanup(share_t.clone()),
-            CredCleanup(token_t.clone()),
         );
         let targets = CredTargets {
             uuid: &uuid_t,
@@ -532,11 +642,6 @@ mod tests {
             format!("tillandsias-vm-uuid-test-{run}"),
             format!("vault-shamir-share-v1-test-{run}"),
             format!("vault-root-token-v1-test-{run}"),
-        );
-        let _c = (
-            CredCleanup(uuid_t.clone()),
-            CredCleanup(share_t.clone()),
-            CredCleanup(token_t.clone()),
         );
         let targets = CredTargets {
             uuid: &uuid_t,
@@ -582,54 +687,225 @@ mod tests {
         );
     }
 
+    /// The store contract every caller relies on, pinned on the seam the
+    /// tests run against: absent reads `None`, a later read sees an earlier
+    /// write, an overwrite replaces, a delete clears and is idempotent. The
+    /// same contract against the REAL store is
+    /// `credential_manager_persists_uuid_across_calls`, which is opt-in.
+    #[test]
+    fn the_store_round_trips_a_uuid() {
+        let target = format!("tillandsias-vm-uuid-test-{}", Uuid::new_v4());
+        assert_eq!(read_installation_uuid_from(&target).unwrap(), None);
+        let first = Uuid::new_v4();
+        write_installation_uuid_to(&target, first).unwrap();
+        assert_eq!(read_installation_uuid_from(&target).unwrap(), Some(first));
+        let second = Uuid::new_v4();
+        write_installation_uuid_to(&target, second).unwrap();
+        assert_eq!(read_installation_uuid_from(&target).unwrap(), Some(second));
+        delete_installation_uuid_for(&target).unwrap();
+        assert_eq!(read_installation_uuid_from(&target).unwrap(), None);
+        delete_installation_uuid_for(&target).unwrap();
+    }
+
+    /// The panic message of `f`, or `None` when it returned normally.
+    fn refusal_of<R>(f: impl FnOnce() -> R + std::panic::UnwindSafe) -> Option<String> {
+        let err = std::panic::catch_unwind(f).err()?;
+        err.downcast_ref::<String>()
+            .cloned()
+            .or_else(|| err.downcast_ref::<&str>().map(|s| s.to_string()))
+    }
+
+    /// ORDER 1562-uxhc, the guard. A test that reaches the REAL Credential
+    /// Manager outside the opt-in is refused before any Win32 call, and inside
+    /// the opt-in a production target still is. Pre-fix: four tests wrote the
+    /// real store and nothing refused them.
+    ///
+    /// The write arm names a `-test-` target, so a broken guard would leave a
+    /// scratch-named credential behind, never clobber a real one; the
+    /// production-target arm only READS.
+    #[test]
+    fn a_test_reaching_the_real_store_is_refused() {
+        let probe = format!("tillandsias-guard-probe-test-{}", Uuid::new_v4());
+        for (op, msg) in [
+            (
+                "write",
+                refusal_of(|| win32::write(&probe, "must-not-land")),
+            ),
+            ("read", refusal_of(|| win32::read(&probe))),
+            ("delete", refusal_of(|| win32::delete(&probe))),
+        ] {
+            let msg = msg.unwrap_or_else(|| panic!("the real-store {op} was NOT refused"));
+            assert!(
+                msg.starts_with(&format!("refused:real-credential-store-in-test:{op}:")),
+                "unexpected refusal for {op}: {msg}"
+            );
+        }
+        // Opted in, a production target is still refused.
+        let _opt_in = RealStoreOptIn::enter();
+        let msg = refusal_of(|| win32::read(TARGET_NAME))
+            .expect("the opt-in must not open production targets");
+        assert!(msg.contains(&format!(":read:{TARGET_NAME} ")), "{msg}");
+    }
+
+    /// ORDER 1562-uxhc, the guard's static half: the runtime guard sits in
+    /// `mod win32`, so a Win32 credential call anywhere else (a test calling
+    /// CredWriteW directly) would bypass it. Every such call in the crate's
+    /// sources must sit inside `mod win32`. Comments are stripped before the
+    /// scan, and the needles are assembled so this test cannot match itself.
+    #[test]
+    fn win32_credential_calls_live_only_behind_the_guard() {
+        let needles: Vec<String> = ["Write", "Read", "Delete", "Enumerate"]
+            .iter()
+            .map(|op| format!("Cred{op}W("))
+            .collect();
+        let code = |src: &str| -> Vec<String> {
+            src.lines()
+                .map(|l| l.split("//").next().unwrap_or("").to_string())
+                .collect()
+        };
+        let others = [
+            ("main.rs", include_str!("main.rs")),
+            ("notify_icon.rs", include_str!("notify_icon.rs")),
+            ("wsl_lifecycle.rs", include_str!("wsl_lifecycle.rs")),
+            ("eventlog.rs", include_str!("eventlog.rs")),
+            ("hvsocket.rs", include_str!("hvsocket.rs")),
+            ("provision_console.rs", include_str!("provision_console.rs")),
+            ("tray_phase_icon.rs", include_str!("tray_phase_icon.rs")),
+            ("tray_registry.rs", include_str!("tray_registry.rs")),
+            ("wsl_probe_policy.rs", include_str!("wsl_probe_policy.rs")),
+        ];
+        let mut offenders = Vec::new();
+        for (name, src) in others {
+            for (i, line) in code(src).iter().enumerate() {
+                if needles.iter().any(|n| line.contains(n.as_str())) {
+                    offenders.push(format!("{name}:{}", i + 1));
+                }
+            }
+        }
+        let own = code(include_str!("installation_uuid.rs"));
+        let start = own
+            .iter()
+            .position(|l| l.trim_end() == "mod win32 {")
+            .expect("mod win32 is where the guarded calls live");
+        let end = start
+            + own[start..]
+                .iter()
+                .position(|l| l.trim_end() == "}")
+                .expect("mod win32 closes at column 0");
+        let mut inside = 0;
+        for (i, line) in own.iter().enumerate() {
+            if needles.iter().any(|n| line.contains(n.as_str())) {
+                if i > start && i < end {
+                    inside += 1;
+                } else {
+                    offenders.push(format!("installation_uuid.rs:{}", i + 1));
+                }
+            }
+        }
+        assert!(
+            offenders.is_empty(),
+            "unguarded Win32 credential calls: {offenders:?}"
+        );
+        // Cardinality, so a scan that sees nothing cannot pass: read, write,
+        // delete and the opt-in's enumerate.
+        assert_eq!(
+            inside, 4,
+            "expected exactly the 4 guarded calls in mod win32"
+        );
+    }
+
+    /// Opens the real store to the current thread for as long as it lives.
+    struct RealStoreOptIn;
+    impl RealStoreOptIn {
+        fn enter() -> Self {
+            REAL_STORE_OPT_IN.with(|c| c.set(true));
+            RealStoreOptIn
+        }
+    }
+    impl Drop for RealStoreOptIn {
+        fn drop(&mut self) {
+            REAL_STORE_OPT_IN.with(|c| c.set(false));
+        }
+    }
+
+    /// The prefixes of every scratch target a test of this file has ever used
+    /// against the real store. All of them carry `-test-`.
+    const STALE_TEST_PREFIXES: [&str; 3] = [
+        "tillandsias-vm-uuid-test-",
+        "vault-shamir-share-v1-test-",
+        "vault-root-token-v1-test-",
+    ];
+
+    /// Removes the `-test-` targets earlier aborted runs left in the REAL
+    /// store, by name, and returns them. Never anything else: the enumeration
+    /// is by prefix, and each name is checked again for the prefix AND for
+    /// `-test-` before it is deleted.
+    fn remove_stale_test_targets() -> Vec<String> {
+        let mut removed = Vec::new();
+        for prefix in STALE_TEST_PREFIXES {
+            for name in win32::list(&format!("{prefix}*")).unwrap() {
+                if name.starts_with(prefix) && name.contains("-test-") {
+                    win32::delete(&name).unwrap();
+                    removed.push(name);
+                }
+            }
+        }
+        removed
+    }
+
     /// Round-trip proof against the *real* Windows Credential Manager: a value
     /// written in one call is read back by a separate later call (persisting
     /// across calls is the in-process proxy for persisting across process
-    /// runs), an overwrite replaces it, and delete clears it. Uses a unique
-    /// per-run target so it never reads or clobbers the production
-    /// `tillandsias-vm-uuid` credential. This is the automated coverage that
-    /// the long-empty `installation_uuid_roundtrips_via_credential_manager`
-    /// placeholder in `tests/portable_smoke.rs` always pointed at but never
-    /// implemented — Linux CI cannot compile this `#[cfg(windows)]` module.
+    /// runs), an overwrite replaces it, and delete clears it.
+    ///
+    /// OPT-IN (order 1562-uxhc): it writes the real store, so it is
+    /// `#[ignore]`d AND needs TILLANDSIAS_REAL_CREDENTIAL_STORE_TEST=1. A
+    /// person runs it deliberately:
+    ///   TILLANDSIAS_REAL_CREDENTIAL_STORE_TEST=1 cargo test -p tillandsias-windows-tray \
+    ///     credential_manager_persists_uuid_across_calls -- --ignored
+    /// It first removes, by name, the `-test-` targets earlier aborted runs
+    /// left behind (see `remove_stale_test_targets`), and removes its own
+    /// before asserting anything about the result. It lives here rather than
+    /// in tests/ because this crate is a binary with no library target.
     ///
     /// @trace spec:tillandsias-vault, spec:windows-native-tray
     #[test]
+    #[ignore = "writes the real Credential Manager; opt-in, see the doc comment"]
     fn credential_manager_persists_uuid_across_calls() {
+        if std::env::var("TILLANDSIAS_REAL_CREDENTIAL_STORE_TEST").as_deref() != Ok("1") {
+            eprintln!("skip:real-credential-store:TILLANDSIAS_REAL_CREDENTIAL_STORE_TEST is not 1");
+            return;
+        }
+        let _opt_in = RealStoreOptIn::enter();
+        for name in remove_stale_test_targets() {
+            eprintln!("removed stale test target: {name}");
+        }
         let target = format!("tillandsias-vm-uuid-test-{}", Uuid::new_v4());
-        let _cleanup = CredCleanup(target.clone());
+        let read =
+            |t: &str| win32::read(t).map(|v| v.map(|s| Uuid::parse_str(&s).expect("a UUID")));
 
-        // Absent before the first write.
-        assert_eq!(
-            read_installation_uuid_from(&target).unwrap(),
-            None,
-            "fresh target should have no credential yet"
-        );
-
-        // Write, then read it back in a *separate* call — the persistence proof.
+        let absent = read(&target).unwrap();
         let first = Uuid::new_v4();
-        write_installation_uuid_to(&target, first).unwrap();
-        assert_eq!(
-            read_installation_uuid_from(&target).unwrap(),
-            Some(first),
-            "value written in one call must be readable in a later call"
-        );
-
-        // Overwrite replaces the stored value.
+        win32::write(&target, &first.to_string()).unwrap();
+        let after_first = read(&target).unwrap();
         let second = Uuid::new_v4();
-        write_installation_uuid_to(&target, second).unwrap();
-        assert_eq!(
-            read_installation_uuid_from(&target).unwrap(),
-            Some(second),
-            "overwrite must replace the previously stored value"
-        );
+        win32::write(&target, &second.to_string()).unwrap();
+        let after_second = read(&target).unwrap();
+        win32::delete(&target).unwrap();
+        let after_delete = read(&target).unwrap();
+        win32::delete(&target).unwrap();
 
-        // Delete clears it; a second delete is idempotent (already absent).
-        delete_installation_uuid_for(&target).unwrap();
+        assert_eq!(absent, None, "fresh target should have no credential yet");
         assert_eq!(
-            read_installation_uuid_from(&target).unwrap(),
-            None,
-            "delete must remove the credential"
+            after_first,
+            Some(first),
+            "a later call must read the earlier write"
         );
-        delete_installation_uuid_for(&target).unwrap();
+        assert_eq!(
+            after_second,
+            Some(second),
+            "overwrite must replace the stored value"
+        );
+        assert_eq!(after_delete, None, "delete must remove the credential");
     }
 }

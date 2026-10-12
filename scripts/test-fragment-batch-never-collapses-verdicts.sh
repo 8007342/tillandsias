@@ -2,7 +2,7 @@
 # @trace spec:ci-release
 # @trace order:1307-kic6
 #
-# THE GUARD THE CHECKER'S OWN COMMENT DESCRIBES. check-fragment-status-loss.sh
+# THE GUARD THE CHECKER'S OWN COMMENT DESCRIBES. check-fragment-status-loss.lua
 # says of its fallback: "Slower is acceptable; checking NOTHING is not, and an
 # empty map would silently pass every packet." Batching its three per-fragment
 # plan-binary calls into three batched calls is a performance change on exactly

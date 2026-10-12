@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Finding from yolanda-windows 2026-10-10 (the 1268-fx87 corpus run), filed at
+# the coordinator's direction; taken by the same host after #226 and 1268-fx87.
+packets:
+  - packet_id: the-wsl-guest-session-watchdog-can-block-forever-in-a-tasklist-interop-call-and-a-stopped-host-pipeline-left-the-guest-run-alive
+    order: 1583-r9it
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, wsl, process-lifecycle, gate, memory, watchdog]
+    estimated_hours: 3
+    owned_files:
+      - scripts/wsl-guest-session.sh
+      - scripts/test-wsl-builder-kill-reaches-guest.sh
+    title: |
+      scripts/wsl-guest-session.sh (1567-9fgi) asks tasklist.exe through interop whether the host shell still exists, unbounded: a call that starts just before the host wsl.exe dies never returns, the watchdog blocks in it forever and can tear nothing down; and a TaskStop of a host pipeline wrapping the builder left the guest corpus run alive until its orphaned wsl.exe was killed by hand
+    context: |
+      MEASURED on yolanda-windows 2026-10-10.
+      (a) THE HUNG INTEROP CALL. A watchdog left by the 1567-9fgi fixture's
+      exec+INT arm (2026-10-09) was still alive 26 h later: bash pid 70 (the
+      watchdog subshell, stdio on /dev/null, wchan anon_pipe_read) inside
+      `$(_gs_host_gone)`, its command-substitution child 157 in do_wait, and
+      158 = /init /mnt/c/Windows/System32/tasklist.exe /FI "PID eq ..." in
+      poll_schedule_timeout on a socket that never answers. The supervisor
+      itself had exited cleanly; the leak is one bash plus one interop process
+      per occurrence, and while blocked the watchdog cannot run any teardown.
+      The arm's host wsl.exe was killed while the 5-second tasklist poll was
+      in flight, which is the window: the relay check comes before the poll
+      in the loop, so the next tick that would have noticed never came.
+      (b) THE STOPPED PIPELINE. The corpus run was started as
+      `scripts/with-wsl2-builder.sh bash <script> 2>&1 | tail -3` from a
+      Claude Code background task. TaskStop ended the host shell side, but the
+      Windows wsl.exe child (MSYS pid 633) survived, and the guest run kept
+      going: supervisor, watchdog, run-litmus-test.sh all alive in cgroup
+      tillandsias-session-<pid> until wsl.exe was killed, after which the
+      session tore down normally. Whether the watchdog's winpid poll missed the
+      host shell's death (e.g. the exported winpid named a process that was
+      still alive) or was itself blocked in (a) cannot be told from what was
+      left: nothing logged it.
+    exit_criteria:
+      - 'the tasklist interop call is bounded (e.g. `timeout 10`): a call that does not answer reads as "unknown", never as "gone", and the next tick runs; the relay/ppid check and the snapshot keep running while it is out'
+      - 'a fixture arm fails when a hung interop call blocks teardown: a stub tasklist that never returns (seam) plus a host-session loss must still end the guest tree within 30 s and leave no watchdog behind (pre-fix: the watchdog blocks forever)'
+      - 'the watchdog LOGS each trigger and each poll outcome (relay-gone, host-winpid-gone, poll-unknown/timeout, the winpid it asked about) to a per-session file in the guest, so the next (b) names its cause instead of being guessed; the log is reaped with the session'
+      - 'a stopped host pipeline is reproduced in the kill fixture (a parent shell killed while the exec''d wsl.exe survives) and its outcome recorded: ended by the guard, or documented as outside the guard''s model with the reason'
+    verifiable_closure: |
+      unscoreable: unpinnable-until-the-guard-exists — the hung-call arm and the
+      pipeline arm are part of the deliverable (scripts/test-wsl-builder-kill-reaches-guest.sh).
+    events:
+      - type: filed
+        ts: "2026-10-11T00:47:39Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Filed at the coordinator's direction as one row for both mechanisms (separate from 1581-d9ig); a 26 h stale watchdog found blocked in tasklist, and a TaskStopped corpus run that the guard did not end.

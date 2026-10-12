@@ -12,6 +12,9 @@
 #   ARM 4  a change that does not touch the crate skips by name; touching it
 #          (an untracked file under the crate) makes it run and refuse.
 set -uo pipefail
+# 1592-idmu: this fixture builds its own repo, so the gate's frozen base (a SHA of
+# the gated checkout) is not its base; its scratch origin/linux-next is.
+unset TILLANDSIAS_GATE_DIFF_BASE
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEC="$ROOT/scripts/check-windows-tray-clippy.sh"
 [ -f "$DEC" ] || { echo "skip:windows-tray-clippy-fixture:decider-absent"; exit 0; }

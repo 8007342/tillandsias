@@ -40,7 +40,7 @@ export CALL_LOG="$TMP/calls.log"
 
 bash "$SCRIPT" restore
 cmp "$EXPECTED_AUTH" "$HOME/.codex/auth.json"
-[[ "$(stat -c %a "$HOME/.codex/auth.json")" == 600 ]]
+[[ "$(stat -c %a "$HOME/.codex/auth.json" 2>/dev/null || stat -f %Lp "$HOME/.codex/auth.json")" == 600 ]]
 "$TMP/bin/codex" --fixture
 
 for secret in fixture-access fixture-refresh; do

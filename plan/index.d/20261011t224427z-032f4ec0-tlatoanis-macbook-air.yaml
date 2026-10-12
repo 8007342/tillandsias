@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: test-preflight-front-door-removes-its-scratch-worktree-only-on-normal-return-so-a-killed-run-leaves-a-registered-worktree-sharing-the-target
+    event:
+      type: note
+      ts: "2026-10-11T22:44:27Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261011t224427z
+      host: tlatoanis-macbook-air
+      summary: |
+        REAL-GUARD INSTANCE (2026-10-11, standalone taskpolicy -b preflight on work/1614-5x7m): test-scorable-closure-quoting was deadline-killed and the door recorded swept:worktree-failed:<pf-guard>/scorable-quoting.*/wt, labelled deadline:30s, so the door spent about 23 s past the kill. Nothing was left registered afterwards. INFERRED, not traced: this is the same mid-add KILL shape. The guard adds a worktree of the real checkout (11084 files; 3.85 s alone under -b, more with parallel guards), and without setsid the orphaned git races the sweep. PR #339's scratch-repo change covers only the fixture's door arms, not this guard. This is the home for the next instance.

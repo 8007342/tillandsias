@@ -12,7 +12,7 @@
 # and asserts every branch. No python, no eval of untrusted text.
 #
 # PINNED GRAMMAR — exactly one line, always exit 0:
-#   tuning: tier=<tier> flash_attn=<0|1> kv_cache=<f16|q8_0> num_parallel=<N> vram_mb=<N>
+#   tuning: tier=<tier> flash_attn=<0|1> kv_cache=<f16|q8_0> num_parallel=<N> vram_mb=<N> keep_alive=<dur>
 #
 # ── Why these values (MEASURED, not assumed) ─────────────────────────────
 # Live A/B on macuahuitl 2026-07-29 (RTX A5000 24 GB, driver 610.43.03,
@@ -38,6 +38,35 @@
 # OLLAMA_NUM_PARALLEL is respected VERBATIM and reported in the line, so the
 # emitted state always describes what ollama will actually run.
 # TILLANDSIAS_TUNING_VRAM_MB stubs the VRAM reading (litmus/dev only).
+#
+# ── Model residency: OLLAMA_KEEP_ALIVE (order 527) ──────────────────────
+# How long ollama keeps a model loaded after its LAST request. This used to be
+# a bare `OLLAMA_KEEP_ALIVE=24h` in the launcher, which contradicts milestone
+# 391 ("experts … die on shutdown"): tillandsias-inference is LaneScoped, so it
+# outlives any forge while ANOTHER lane is up, and every model the departed
+# forge loaded stayed pinned for a day. Policy, by tier:
+#
+#   gpu-cuda / gpu-rocm / gpu-vulkan -> 5m
+#       VRAM is not swappable, and on a mobile GPU it is the whole card.
+#       MEASURED on lenovinha 2026-10-11 (RTX 3070 Laptop 8 GB, product image
+#       v56.9.27.2): under the old 24h, qwen2.5:0.5b's llama-server held
+#       726 MiB with no consumer for 330 s and ollama scheduled its release a
+#       day out; under this policy ollama scheduled it 5m out and the reload
+#       after expiry cost load_duration 2.45 s. A few seconds per cold forge
+#       request is the price of not holding the card for a stack that is gone.
+#   cpu / metal / unknown           -> 10m
+#       Weights are ordinary RAM the kernel accounts and can reclaim under
+#       pressure, so the idle window is a little longer (not measured) — still
+#       minutes, never a day.
+#
+# Residency after the LAST lane exits is not this knob's job: teardown removes
+# the LaneScoped container and the driver frees its VRAM
+# (litmus:forge-experts-teardown-ephemeral asserts it on a GPU tier).
+# Overrides, highest first: an OLLAMA_KEEP_ALIVE already in the environment
+# (the dev-loop container, scripts/dev-inference-ensure.sh, passes its own 30m
+# deliberately — it serves the bare-metal agent, not an ephemeral stack), then
+# TILLANDSIAS_INFERENCE_KEEP_ALIVE (forwarded by the launcher). Either must be
+# an ollama duration (N, Ns, Nm, Nh, 0 or -1); anything else is ignored.
 
 # ── Inputs ──────────────────────────────────────────────────────────────
 TUNING_TIER="${TILLANDSIAS_INFERENCE_TIER:-cpu}"
@@ -145,8 +174,26 @@ OLLAMA_KV_CACHE_TYPE="$_tuning_kv"
 OLLAMA_NUM_PARALLEL="$_tuning_parallel"
 export OLLAMA_FLASH_ATTENTION OLLAMA_KV_CACHE_TYPE OLLAMA_NUM_PARALLEL
 
+# ── Model residency (order 527, see header) ─────────────────────────────
+case "$TUNING_TIER" in
+    gpu-cuda | gpu-rocm | gpu-vulkan) _tuning_keep_alive=5m ;;
+    *) _tuning_keep_alive=10m ;;
+esac
+# Later wins: OLLAMA_KEEP_ALIVE outranks TILLANDSIAS_INFERENCE_KEEP_ALIVE.
+for _tuning_ka in "${TILLANDSIAS_INFERENCE_KEEP_ALIVE:-}" "${OLLAMA_KEEP_ALIVE:-}"; do
+    _tuning_ka_num="${_tuning_ka%[smh]}"
+    case "$_tuning_ka_num" in
+        -1) _tuning_keep_alive="$_tuning_ka" ;;
+        '' | *[!0-9]*) ;;
+        *) _tuning_keep_alive="$_tuning_ka" ;;
+    esac
+done
+unset _tuning_ka _tuning_ka_num
+OLLAMA_KEEP_ALIVE="$_tuning_keep_alive"
+export OLLAMA_KEEP_ALIVE
+
 # ── Compose the pinned line ─────────────────────────────────────────────
-TUNING_LINE="tuning: tier=${TUNING_TIER} flash_attn=${_tuning_flash} kv_cache=${_tuning_kv} num_parallel=${_tuning_parallel} vram_mb=${TUNING_VRAM_MB}"
+TUNING_LINE="tuning: tier=${TUNING_TIER} flash_attn=${_tuning_flash} kv_cache=${_tuning_kv} num_parallel=${_tuning_parallel} vram_mb=${TUNING_VRAM_MB} keep_alive=${_tuning_keep_alive}"
 
 # Run directly (litmus / operator diagnostics) vs sourced by entrypoint.sh:
 # when this file IS the program, $0 ends in its own basename. Sourced, it stays

@@ -1,0 +1,6 @@
+  [FAIL] gate-only was not read: got rc/out '0|', want 10 and the named skip
+  [FAIL] gate-only-decider was not read: got rc/out '0|', want 10 and the named skip
+  [FAIL] serial was not read: got rc/out '0|', want rc 12
+  [OK]   NEGATIVE CONTROL: an undeclared guard is run (rc 0, nothing printed)
+  [FAIL] the host sed complained while the door read headers: sed: 1: "1,40{/^# preflight: gat ...": bad flag in substitute command: '}'
+preflight-declarations-host-sed: 1 passed, 4 failed (bsd-sed)

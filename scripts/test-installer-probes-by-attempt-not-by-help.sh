@@ -3,8 +3,9 @@
 # @trace order:1323-5taw
 #
 # Pin 1323-5taw: install-windows.ps1 decides whether the tray supports
-# --reset-state by ATTEMPTING it under the non-destructive guard and reading
-# the outcome, never by grepping --help.
+# --reset-state by ATTEMPTING it and reading the outcome, never by grepping
+# --help. (Until 1565-qtuk the attempt ran under the non-destructive guard;
+# it is now the real SOFT reset call, see ARM 2.)
 #
 # PRE-FIX RESULT, and it has a real specimen. The probe used to be:
 #     $ResetHelp = & cmd.exe /c "`"$InstalledExe`" --help 2>&1"
@@ -48,21 +49,37 @@ else
     _ok "the decision is not a pattern match on the flag name"
 fi
 
-# ARM 2 -- THE REPLACEMENT. The attempt must be present, guarded, and the
-# decision must be taken from its EXIT CODE.
+# ARM 2 -- THE REPLACEMENT. The attempt must be present and the decision must
+# be taken from its EXIT CODE.
 # CARDINALITY, not presence. The first version of this arm asked only whether
 # the guard string and `ProbeExit` appeared ANYWHERE, and it stayed GREEN
 # against a reconstructed pre-fix installer -- the reporting lines that
 # mention $ProbeExit outlive the probe they report on. Presence of a name is
-# not presence of the call. Require exactly one line that both sets the guard
-# and passes the flag: that line IS the attempt.
-_attempts=$(grep -c 'TILLANDSIAS_DESTRUCTIVE_RESET_OK=0.*--reset-state' "$CODE")
+# not presence of the call. Require exactly one line that passes the flag:
+# that line IS the attempt.
+#
+# 1565-qtuk (58d5f65c8) RETIRED THE SEPARATE GUARDED PROBE. Running
+# --reset-state under TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 skipped only the
+# wipe, so every install provisioned the guest twice (yolanda 2026-10-09).
+# The real SOFT reset call is now the attempt: exit 2 is the parser's refusal
+# (nothing ran, the tray predates the flag), anything else is the reset's own
+# verdict. So the arm asks for exactly ONE --reset-state call, NO guarded
+# second call, and the capability read from that call's exit code by the
+# `-ne 2` rule.
+_attempts=$(grep -c 'cmd\.exe /c .*--reset-state' "$CODE")
 if [ "$_attempts" -eq 1 ]; then
-    _ok "the probe attempts the flag under the non-destructive guard (exactly 1 such call)"
+    _ok "the installer attempts the flag (exactly 1 --reset-state call)"
 else
-    _bad "expected exactly 1 guarded --reset-state attempt, found $_attempts; the probe must run the flag, not read about it"
+    _bad "expected exactly 1 --reset-state attempt, found $_attempts; the probe must run the flag, not read about it, and must not run it twice"
 fi
-if grep -qE '\$HasResetState *= *\(\$ProbeExit -eq 0\)' "$CODE"; then
+_guarded=$(grep -c 'TILLANDSIAS_DESTRUCTIVE_RESET_OK=0.*--reset-state' "$CODE")
+if [ "$_guarded" -eq 0 ]; then
+    _ok "no separate guarded probe call (1565-qtuk: one provisioning per install)"
+else
+    _bad "a guarded --reset-state probe is back ($_guarded); it provisions the guest a second time"
+fi
+if grep -qE '^[[:space:]]*\$ResetExit *= *\$LASTEXITCODE' "$CODE" \
+   && grep -qE '\$HasResetState *= *\(\$ResetExit -ne 2\)' "$CODE"; then
     _ok "the capability decision is taken from the attempt's exit code"
 else
     _bad "the decision is not taken from the attempt's exit code"
@@ -100,8 +117,9 @@ case "$(uname -s)" in
     export MSYS_NO_PATHCONV=1
     # The OLD rule, for contrast: does --help mention it?
     _help_says() { cmd.exe /c "$(cygpath -w "$1") --help" 2>&1 | grep -qF -- '--reset-state'; }
-    # The NEW rule: attempt under the guard, read the exit code.
-    _attempt_ok() { cmd.exe /c "set TILLANDSIAS_DESTRUCTIVE_RESET_OK=0&& $(cygpath -w "$1") --reset-state" >/dev/null 2>&1; }
+    # The NEW rule, as the installer applies it since 1565-qtuk: attempt the
+    # flag, and only exit 2 (the parser's refusal) means unsupported.
+    _attempt_ok() { cmd.exe /c "$(cygpath -w "$1") --reset-state" >/dev/null 2>&1; [ "$?" -ne 2 ]; }
 
     # SELF-CHECK before the arms: if the stubs are not actually running, the
     # arms are vacuous and the liar arm passes for the wrong reason.

@@ -46,6 +46,10 @@
 #   heads-current                every exported head is at or ahead of its
 #                                tracking twin
 #   heads-behind/<n>             <n> exported heads are behind theirs
+#   heads-diverged/<n>           whole-mirror only (no branch named): <n> work
+#                                heads differ from their twins and the reconcile
+#                                pass could not prove upstream held them (1606-25nf);
+#                                each is named at refs/tillandsias/diverged/<ref>
 #   heads-unknown/no-tracking-data
 #                                the mirror has no tracking refs at all, so the
 #                                question CANNOT be answered here
@@ -119,6 +123,7 @@ behind_heads=0
 tracked_heads=0
 tracking_total=0
 diverged_work=0
+diverged_list=""
 
 for _tr in $(git -C "$MIRROR" for-each-ref --format='%(refname)' refs/remotes/origin 2>/dev/null); do
     tracking_total=$((tracking_total + 1))
@@ -138,7 +143,10 @@ for _ref in $(git -C "$MIRROR" for-each-ref --format='%(refname)' refs/heads 2>/
     case "$_short" in
         work/*) [ "$_ahead" -gt 0 ] && _diverged_work=1 ;;
     esac
-    [ "$_diverged_work" -eq 1 ] && diverged_work=$((diverged_work + 1))
+    if [ "$_diverged_work" -eq 1 ]; then
+        diverged_work=$((diverged_work + 1))
+        diverged_list="${diverged_list} ${_short}"
+    fi
     if [ -n "$BRANCH" ]; then
         [ "$_short" = "$BRANCH" ] && behind_heads=$((behind_heads + 1))
     elif [ "$_diverged_work" -eq 0 ]; then
@@ -159,6 +167,17 @@ if [ "$tracking_total" -eq 0 ]; then
 elif [ "$behind_heads" -gt 0 ]; then
     STATE="heads-behind"
     DETAIL="$behind_heads"
+# BEGIN-1606-DIVERGED
+elif [ -z "$BRANCH" ] && [ "$diverged_work" -gt 0 ]; then
+    # ORDER 1606-25nf: the whole-mirror verdict is never heads-current while a
+    # work head differs from its twin. The reconcile pass follows every
+    # rewrite upstream provably held, so what remains here is a head carrying
+    # commits no upstream value ever held, or one with no twin history to
+    # judge by. A push scoped to one branch (1350-ku7v) is still answered for
+    # that branch alone.
+    STATE="heads-diverged"
+    DETAIL="$diverged_work"
+# END-1606-DIVERGED
 else
     STATE="heads-current"
     DETAIL=""
@@ -185,6 +204,24 @@ else
     # stale sync-state the same way it treats an absent upstream-auth verdict:
     # as not-current, which fails closed.
     log_msg "WARNING: could not publish $NEW_REF in $MIRROR"
+fi
+
+# ORDER 1606-25nf: each diverged work ref is also named where a forge can read
+# it, refs/tillandsias/diverged/<work-ref> -> the exported head's commit, so
+# taken-by and forge scans can tell a dead or un-relayed tip from a live one.
+# Markers for refs no longer diverged are pruned in the same pass. A
+# branch-scoped call does not touch them: it answers for one branch.
+if [ -z "$BRANCH" ]; then
+    for _d in $diverged_list; do
+        _dh="$(git -C "$MIRROR" rev-parse --verify --quiet "refs/heads/${_d}" 2>/dev/null)" || continue
+        git -C "$MIRROR" update-ref "refs/tillandsias/diverged/${_d}" "$_dh" 2>/dev/null \
+            || log_msg "WARNING: could not publish refs/tillandsias/diverged/${_d}"
+    done
+    for _old in $(git -C "$MIRROR" for-each-ref --format='%(refname)' refs/tillandsias/diverged 2>/dev/null); do
+        _o="${_old#refs/tillandsias/diverged/}"
+        case " $diverged_list " in *" $_o "*) continue ;; esac
+        git -C "$MIRROR" update-ref -d "$_old" 2>/dev/null || true
+    done
 fi
 
 if [ "$diverged_work" -gt 0 ]; then

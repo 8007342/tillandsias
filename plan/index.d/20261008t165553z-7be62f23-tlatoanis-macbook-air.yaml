@@ -1,0 +1,76 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: bash-dialect-gate-refuses-bsd-fatal-sed-braces-suffixless-sed-i-and-stat-c-without-fallback
+    order: 1553-x8js
+    title: The bash-dialect gate refuses BSD-fatal sed brace groups, suffixless sed -i and stat -c with no stat -f fallback; the live darwin false passes they caused are fixed
+    status: in_progress
+    kind: bug
+    priority: p1
+    pickup_role: macos
+    capability_tags: [bash, sed, macos, lua, portability]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/check-bash-dialect.lua
+      - scripts/test-check-bash-dialect.sh
+      - scripts/test-plan-only-lane-structural.sh
+      - scripts/test-land-queue.sh
+      - scripts/gate-steps.d/286-1461-5rm6.step
+      - scripts/test-ssh-lane-refuses-when-unwired.sh
+      - scripts/test-smoke-consecutive-lanes.sh
+      - scripts/test-shell-ratchet.sh
+      - scripts/test-codex-oauth-restore.sh
+      - scripts/test-provider-device-auth.sh
+      - scripts/update-convergence-dashboard.sh
+      - scripts/bump-version.sh
+      - scripts/native-scratch-dir.sh
+      - scripts/research-warp-sidecar-rootless.sh
+      - scripts/materialize-macos-tar-to-img.sh
+    context: >
+      The sed brace-group defect fixed under 1545-qdb5 was not a one-off. GNU
+      sed accepts three forms that BSD sed (the sed macOS ships) rejects: a
+      brace group whose last command has no ';' before '}'; 'sed -i' with no
+      backup suffix; and 'stat -c' with no 'stat -f' fallback. Linux gates
+      cannot see any of them. Several fixtures turned the failure into a FALSE
+      PASS on darwin.
+      (1) test-plan-only-lane-structural.sh:99 wrote an EMPTY mutant D. cmp
+      read it as a real strip, an empty file parses, and an empty hook accepts
+      every push. "arm D has teeth" passed 14/14 with no mutation at all.
+      (2) test-land-queue.sh:491 ran 'sed -i 2i ...', which failed with
+      "invalid command code f". ARM 9's stdin-hungry gh stub was never built,
+      so ARM 9 passed. Measured: the pre-fix fixture still reported
+      ok:land-queue:16/16 against a land-queue.sh whose fd-3 read was reverted.
+      GATE STEP 286's darwin STEP_SECOND_REGIME was therefore INVALID for ARM 9
+      until the stub was actually built. The old record, verbatim, was
+      STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:land-queue:16/16".
+      It is replaced in this same change by the 2026-10-08 re-measurement.
+      (3) The suffixless sed -i in test-ssh-lane-refuses-when-unwired.sh,
+      test-smoke-consecutive-lanes.sh and test-shell-ratchet.sh failed loudly
+      on darwin. (4) The stat -c in scripts/claim-ledger-node.sh is left
+      alone: it is being ported to Lua under slice C, and the gate allowlists
+      it with that reason.
+      check-bash-dialect.lua now refuses all three forms in every scanned shell
+      source. It takes a per-line marker with a reason, or a SITE_ALLOWLIST
+      entry with a reason for a file that must not be edited.
+    depends_on: []
+    exit_criteria:
+      - check-bash-dialect.lua refuses each of the three forms, and its fixture shows each rule RED on a planted violation and GREEN on the portable form.
+      - The live tree is ok:bash-dialect-clean. Every remaining site is fixed, or carries a marker or SITE_ALLOWLIST entry with a reason.
+      - Each fixture that mutates checks that the mutation applied (non-empty, differs, intended line changed) before its red result counts.
+      - Gate step 286 carries a darwin STEP_SECOND_REGIME measured with ARM 9's stub actually built.
+    verifiable_closure: >
+      scripts/test-check-bash-dialect.sh (gate step 427) passes 69/69 on
+      darwin. With the sed-brace, sed-i or stat-c rule neutered in turn, it
+      goes red on that rule's planted arms (5, 5 and 2 arms). Its host-reality
+      arms confirm on darwin that BSD sed rejects every brace form the rule
+      refuses and accepts every form it passes. The tree scan reads
+      ok:bash-dialect-clean.
+    next_action: Land work/1553-x8js after work/1545-qdb5.
+
+events:
+  - packet_id: bash-dialect-gate-refuses-bsd-fatal-sed-braces-suffixless-sed-i-and-stat-c-without-fallback
+    event:
+      type: note
+      ts: "2026-10-08T16:55:53Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        Measured on darwin (BSD sed). Pre-fix, plan-only-lane-structural reported 14/14 with an empty MUT_D. Post-fix it reports 15/15, and its new CONTROL D refuses with the unmutated hook. The pre-fix '#}' sed now fails MUTATION SETUP MUT_D. Pre-fix, land-queue reported 16/16 against a reverted fd-3 read. Post-fix it reports 16/16 on the real queue and ARM 9 FAILS against the revert. Gate step 286's 2026-09-28 darwin record was invalid for ARM 9. smoke-consecutive-lanes went from 5/6 to 6/6, and ssh-lane-refuses-when-unwired from fail to PASS. In shell-ratchet, the ARM 4 floor went from 5->5 (mutation not applied) to 5->3. ARMs 3, 4 and 6 still fail on unrelated new-piped-command tree state, which is not chased here.

@@ -1075,10 +1075,16 @@ mod tests {
     /// the satisfier (so the graph only knows "the file exists") fails here.
     #[test]
     fn the_ca_satisfier_refuses_what_it_cannot_trust() {
-        let src = include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/src/container_deps.rs"
-        ));
+        // Runtime read (1590-j20f, 1610-d6ra): the source of THIS checkout, not the
+        // one an embedded include_str! captured when a shared target built it.
+        let src = std::fs::read_to_string(
+            std::path::Path::new(
+                &std::env::var("CARGO_MANIFEST_DIR").expect("cargo test sets CARGO_MANIFEST_DIR"),
+            )
+            .join("src/container_deps.rs"),
+        )
+        .expect("read src/container_deps.rs");
+        let src = src.as_str();
         let start = src.find("fn satisfy_ca_bundle(").expect("satisfier");
         let body = &src[start..start + src[start..].find("\n}\n").expect("end")];
         assert!(

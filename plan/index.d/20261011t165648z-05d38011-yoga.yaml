@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-git-mirror-keeps-serving-a-work-ref-at-its-old-tip-after-upstream-rewrites-it-non-fast-forward-while-sync-state-reads-heads-current
+    field: status
+    value: completed
+    ts: "2026-10-11T16:56:48Z"
+    host: yoga
+
+events:
+  - packet_id: the-git-mirror-keeps-serving-a-work-ref-at-its-old-tip-after-upstream-rewrites-it-non-fast-forward-while-sync-state-reads-heads-current
+    event:
+      type: completed
+      ts: "2026-10-11T16:56:48Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: febbcf79b
+  - packet_id: the-git-mirror-keeps-serving-a-work-ref-at-its-old-tip-after-upstream-rewrites-it-non-fast-forward-while-sync-state-reads-heads-current
+    event:
+      type: note
+      ts: "2026-10-11T16:56:48Z"
+      host: yoga
+      summary: |-
+        landed as #329 (merge febbcf79b, gate green). The mirror's reconcile pass enables reflogs on the tracking twins (explicit 30-day expiry) and follows a diverged work/* head to its twin when every commit in head ^twin is reachable from the twin's current or any reflogged value; otherwise it reports diverged:<ref>:unrelayed-commits or :no-twin-history and publishes refs/tillandsias/diverged/<ref> with a whole-mirror heads-diverged/<n> verdict (scoped verdicts unchanged; 1350-ku7v narrowed). scripts/lua/test-mirror-follows-rewritten-work-refs.lua 5/5 shows pre-fix (dead tip under heads-current) and post-fix (followed in one pass) in one run. Deploys on each host's next git-service image rebuild.

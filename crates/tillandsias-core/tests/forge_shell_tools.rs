@@ -4,9 +4,14 @@
 use std::fs;
 use std::path::PathBuf;
 
+// Read at RUNTIME (1590-j20f, 1608-qb2c): compile-time env!("CARGO_MANIFEST_DIR")
+// names the checkout that compiled this binary, and a shared CARGO_TARGET_DIR
+// reuses that binary from another worktree.
 fn repo_root() -> PathBuf {
     // CARGO_MANIFEST_DIR points at crates/tillandsias-core; walk up two levels.
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let manifest = PathBuf::from(
+        std::env::var("CARGO_MANIFEST_DIR").expect("cargo test sets CARGO_MANIFEST_DIR"),
+    );
     manifest
         .parent()
         .and_then(|p| p.parent())

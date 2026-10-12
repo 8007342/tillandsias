@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: diff-scoped-gate-guards-diff-against-the-live-origin-linux-next-so-a-fetch-during-a-gate-moves-their-base-and-flips-the-verdict
+    field: status
+    value: completed
+    ts: "2026-10-11T10:49:41Z"
+    host: yoga
+
+events:
+  - packet_id: diff-scoped-gate-guards-diff-against-the-live-origin-linux-next-so-a-fetch-during-a-gate-moves-their-base-and-flips-the-verdict
+    event:
+      type: completed
+      ts: "2026-10-11T10:49:41Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 2a22c0653
+  - packet_id: diff-scoped-gate-guards-diff-against-the-live-origin-linux-next-so-a-fetch-during-a-gate-moves-their-base-and-flips-the-verdict
+    event:
+      type: note
+      ts: "2026-10-11T10:49:41Z"
+      host: yoga
+      summary: |-
+        landed as #314 (merge 2a22c0653, full tier, gate green). build.sh and the pre-push hook freeze TILLANDSIAS_GATE_DIFF_BASE (merge-base of HEAD and origin/linux-next) once at gate start, with its checkout root; an inherited base for the same checkout must be an ancestor of HEAD or is refused by name, and another checkout's base is set aside. All 22 measured live-ref diff bases fall back through it. scripts/lua/test-gate-diff-base-frozen.lua 6/6: in one scratch run the pre-fix guard refuses falsely after the live ref moves and the fixed guard keeps its ok; population=22 printed. Carried shell-to-lua paid by porting test-cycle-metrics-mix-label.sh.

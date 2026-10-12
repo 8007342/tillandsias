@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11): one manifest-dir-runtime burndown batch, 3 files, 6 sites (the item ceiling).
+packets:
+  - packet_id: manifest-dir-runtime-convert-tillandsias-plan-spec-rs-pipeline-rs-and-tests-lua-std-rs-test-sites-to-a-runtime-manifest-dir-read
+    order: 1605-42nh
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [manifest-dir-runtime, rust, test-hermeticity, worktrees]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-plan/src/spec.rs
+      - crates/tillandsias-plan/src/pipeline.rs
+      - crates/tillandsias-plan/tests/lua_std.rs
+      - scripts/portability/manifest-dir-env-floor.txt
+    title: |
+      manifest-dir-runtime batch: the compile-time env!("CARGO_MANIFEST_DIR") test sites of tillandsias-plan src/spec.rs (2), src/pipeline.rs (2) and tests/lua_std.rs (2) read the manifest dir at runtime, and their three floor lines are removed
+    context: |
+      The manifest-dir-runtime backlog (methodology/convergence.yaml, opened by 1590-j20f / #321). The coordinator chose to batch these three two-site files into one PR: 6 sites, exactly item_ceiling_sites. "One file per PR" is the unit for a CARRIED payment; a dedicated burndown PR may carry several items under the ceiling, since queue time (~20 min per PR plus the gate touch) is the scarce resource.
+      Floor lines, at trunk after #326:
+        crates/tillandsias-plan/src/pipeline.rs 2   (pipeline.rs:1150 lua dir, :1236 manifest root)
+        crates/tillandsias-plan/src/spec.rs 2       (spec.rs:2059, :2183, the repo root via "../..")
+        crates/tillandsias-plan/tests/lua_std.rs 2  (lua_std.rs:175, :210, the repo root via "../..")
+      All three are clean in taken-by after a fetch. src/lua_predicate.rs (2) is skipped because the stale work/1367-lua-predicate-shims ref modifies it.
+    exit_criteria:
+      - 'the 6 sites read `std::env::var("CARGO_MANIFEST_DIR")` (a manifest_dir() helper per test module, or per test file for tests/lua_std.rs), and none of the three files has a compile-time CARGO_MANIFEST_DIR site in test code'
+      - 'the three floor lines are removed in the same commit, and scripts/lua/check-manifest-dir-env.lua passes with the test count down by 6'
+      - 'the affected tillandsias-plan tests (lib, and the lua_std integration test) pass before and after, in the same run'
+    unscoreable: "a burndown batch: the guard's count and the crate's tests are its evidence"
+    depends_on: []
+    related: [1590-j20f, 1603-muav, 1604-64q6]
+    next_action: >
+      Convert the 6 sites, remove the three floor lines, run the lib and lua_std tests and check-manifest-dir-env.lua before and after, then preflight and push as separate plain commands.
+    provenance: |
+      Filed by yoga (forge) on macuahuitl-fedora's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T15:48:16Z"
+        host: yoga
+        summary: |-
+          A 3-file manifest-dir-runtime batch (spec.rs, pipeline.rs, tests/lua_std.rs; 6 sites), at the coordinator's request.

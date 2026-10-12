@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: engine-payload-download-integrity
+    event:
+      type: note
+      ts: "2026-10-11T22:58:08Z"
+      agent_id: linux-lenovinha-opus5-20261011t225808z
+      host: lenovinha
+      summary: |
+        CORRECTION TO THIS ROW'S OUTCOME TEXT: download verification has been on trunk since 1118-d3b6. images/inference/entrypoint.sh pins OLLAMA_VERSION (v0.34.0) and a per-arch payload sha256, verifies before extracting, and fails closed on a mismatch, a missing digest or a missing sha256sum. Criterion 1 for the DOWNLOAD was therefore met before this row was picked up, and the "latest URL, no checksum" description no longer holds. Provenance: the digest is a PIN read from the GitHub release API at bump time (trust on first fetch). It is not a signature or an attestation, and whoever bumps OLLAMA_VERSION owns both digests. What 521 adds (work/521-epdi): the INSTALLED engine on the writable cache. The manifest records "<set> <version> sha256:<payload digest>" plus install-time sha256 of the two executables (ollama, llama-server), re-checked at every start (0.02 s measured). Tampering-at-rest choice (a) applies to the executables only. The ~850 MB of lib/ollama .so files, and a writer able to rewrite the manifest and the executables together, are out of scope and stated so in images/inference/engine-integrity.sh. On-host before/after on lenovinha: trunk executed a planted engine whose manifest named only the set. Post-fix refused it (unrecorded-engine) and an after-install swap (executable-digest-mismatch), each with a reason=engine-integrity-refused:<why> line.

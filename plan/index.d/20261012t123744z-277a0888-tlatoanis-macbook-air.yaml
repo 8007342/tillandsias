@@ -1,0 +1,16 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-preflight-doors-per-guard-deadline-does-not-scale-with-the-budget-regime-so-darwin-deadline-skips-push-deciders-the-gate-refuses-on
+    field: next_action
+    value: |-
+      Measure the per-guard elapsed distribution on darwin-background (the door's own `<rc> <elapsed>` files), pick the scale from it, put the per-guard deadline in _pf_budget beside the budget, and record the before/after pair.
+
+
+      [2026-10-12T12:37:44Z tlatoanis-macbook-air] After the darwin-background change lands: measure plain darwin (no taskpolicy -b) the same way, with the door's own launcher, no deadline, full roster, at the door's jobs. Then set its check-* decider deadline in _pf_budget from that distribution, not from a guess.
+    ts: "2026-10-12T12:37:44Z"
+    host: tlatoanis-macbook-air

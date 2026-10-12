@@ -91,12 +91,23 @@ switch ($Channel) {
     default    { throw "Unknown TILLANDSIAS_CHANNEL '$Channel' (want stable or unstable)" }
 }
 
-# ORDER 1369-sjbc. Resolved channel, its source and base URL, printed before
+# ORDER 1561-47a8. THE INSTALL LOG. Operator ruling 2026-10-08: "we do not need
+# to print any power user messages during install, at all ... a pretty
+# installer, rather than an informational/debugging installer." Diagnostic
+# detail (channel, base URL, verification output, the WSL platform installer's
+# own lines) goes HERE, and the screen gets plain end-user lines; a failure
+# names this file. scripts/check-installer-end-user-output.sh holds the line.
+$InstallLog = Join-Path $env:TEMP 'tillandsias-install.log'
+function Log { param([string]$msg) try { Add-Content -Path $InstallLog -Value $msg -ErrorAction Stop } catch {} }
+
+# ORDER 1369-sjbc. Resolved channel, its source and base URL, recorded before
 # anything is downloaded and long before the reset, so a mismatch can still be
-# stopped. TILLANDSIAS_INSTALL_RESOLVE_ONLY=1 stops here (fixture seam).
+# stopped. It goes to the install log; it is printed only under
+# TILLANDSIAS_INSTALL_RESOLVE_ONLY=1, the fixture seam, which stops here.
 $ResolvedBase = if ($env:TILLANDSIAS_VERSION) { "https://github.com/$Repo/releases/download/v$($env:TILLANDSIAS_VERSION.TrimStart('v'))" } else { $ChannelBase }
-Write-Host "  resolved-channel: $Channel ($ChannelSource) base: $ResolvedBase"
-if ($env:TILLANDSIAS_INSTALL_RESOLVE_ONLY -eq '1') { return }
+$ResolvedLine = "resolved-channel: $Channel ($ChannelSource) base: $ResolvedBase"
+Log $ResolvedLine
+if ($env:TILLANDSIAS_INSTALL_RESOLVE_ONLY -eq '1') { Write-Host "  $ResolvedLine"; return }  # power-user-only: the resolve-only seam
 # windows-260722-3: the tray (and thus its child processes, e.g. the WSL
 # keepalive) must NEVER run with the INSTALL dir as CWD -- children that
 # outlive a hard-killed tray hold the directory handle and block the next
@@ -277,9 +288,9 @@ switch ($WslState) {
         SayWn "WSL is not installed. Running the one-time platform install now"
         SayWn "(idempotent; you may see a Windows approval prompt)..."
         try {
-            & wsl --install --no-distribution 2>&1 | ForEach-Object { Say "  $($_ -replace "`0", '')" }
+            & wsl --install --no-distribution 2>&1 | ForEach-Object { Log ($_ -replace "`0", '') }
         } catch {
-            SayWn "wsl --install did not complete ($_)."
+            Log "wsl --install did not complete ($_)."
         }
         $WslState = Get-WslPlatformState
         switch ($WslState) {
@@ -290,10 +301,9 @@ switch ($WslState) {
                 $NoLaunchReason = 'restart Windows first, then launch Tillandsias from the Start Menu'
             }
             default {
-                SayWn "WSL is still not available. Install it manually with:"
-                SayWn "  wsl --install --no-distribution"
-                SayWn "(restart Windows if the installer asks), then launch Tillandsias."
-                $NoLaunchReason = 'install WSL2 (wsl --install --no-distribution) first, then launch Tillandsias'
+                SayWn "Windows could not finish setting up WSL automatically."
+                SayWn "Restart Windows, then run this installer again. Details: $InstallLog"
+                $NoLaunchReason = 'restart Windows, then run the installer again'
             }
         }
     }
@@ -431,10 +441,12 @@ try {
     $HostMemGiB = [math]::Round((Get-CimInstance Win32_OperatingSystem -ErrorAction Stop).TotalVisibleMemorySize / 1MB, 2)
 } catch {}
 
+# ORDER 1561-47a8: this guest-shape advice is power-user detail, so it goes to
+# the install log, not the screen (operator ruling 2026-10-08).
 if ($HostLogicalCpus -le 0) {
     # COULD-NOT-MEASURE IS NOT A VERDICT. Say so rather than reporting a shape
     # derived from a host reading we do not have.
-    SayWn "  wsl-shape: could not read this host's CPU/memory; no guest-shape advice given."
+    Log "  wsl-shape: could not read this host's CPU/memory; no guest-shape advice given."
 } else {
     $CfgProcessors = ''
     $CfgMemory = ''
@@ -456,8 +468,8 @@ if ($HostLogicalCpus -le 0) {
     elseif ($CfgMemory -match '^(\d+)\s*MB$')         { $EffMemGiB = [math]::Round([double]$Matches[1] / 1024, 2) }
     else { $EffMemGiB = [math]::Round($HostMemGiB / 2, 2) }
 
-    Say "  wsl-shape: guest will take $EffCpus vCPU(s) of $HostLogicalCpus and about $EffMemGiB GiB of $HostMemGiB GiB."
-    if (-not (Test-Path $WslCfgPath)) { Say "  wsl-shape: no .wslconfig found; these are WSL defaults." }
+    Log "  wsl-shape: guest will take $EffCpus vCPU(s) of $HostLogicalCpus and about $EffMemGiB GiB of $HostMemGiB GiB."
+    if (-not (Test-Path $WslCfgPath)) { Log "  wsl-shape: no .wslconfig found; these are WSL defaults." }
 
     # THE KNOWN-BAD RATIO, NAMED WITH ITS NUMBERS. A generality here would be
     # useless: the user needs to see their own figures next to the measured
@@ -477,31 +489,32 @@ if ($HostLogicalCpus -le 0) {
     $AlreadyRecommended = ($CfgMemory -ieq '8GB' -and $CfgProcessors -eq "$HostLogicalCpus" -and -not $ReclaimOff)
 
     if (($RatioBad -or $ReclaimOff) -and -not $AlreadyRecommended) {
-        Write-Host ""
-        SayWn "  Your WSL2 guest is shaped in a way that has killed builds on a host like this."
+        Log ""
+        Log "  Your WSL2 guest is shaped in a way that has killed builds on a host like this."
         if ($RatioBad) {
-            SayWn "    $EffCpus vCPUs sharing $EffMemGiB GiB is about $MbPerCpu MB per vCPU."
-            SayWn "    Measured: ~320 MB per vCPU killed four consecutive builds on a 16-core host."
+            Log "    $EffCpus vCPUs sharing $EffMemGiB GiB is about $MbPerCpu MB per vCPU."
+            Log "    Measured: ~320 MB per vCPU killed four consecutive builds on a 16-core host."
         }
         if ($ReclaimOff) {
-            SayWn "    autoMemoryReclaim is not set, so the guest never returns memory to Windows."
+            Log "    autoMemoryReclaim is not set, so the guest never returns memory to Windows."
         }
-        SayWn "  Recommended .wslconfig for this host (processors = ALL of them, not a copied number):"
-        Write-Host ""
-        Say "    [wsl2]"
-        Say "    memory=8GB"
-        Say "    processors=$HostLogicalCpus"
-        Say ""
-        Say "    [experimental]"
-        Say "    autoMemoryReclaim=gradual"
-        Write-Host ""
-        SayWn "  autoMemoryReclaim lives under [experimental]; appending it to [wsl2] does nothing."
-        SayWn "  Edit $WslCfgPath yourself, then run: wsl --shutdown"
-        SayWn "  This installer does not modify that file -- it is yours and may hold other settings."
-        Write-Host ""
+        Log "  Recommended .wslconfig for this host (processors = ALL of them, not a copied number):"
+        Log ""
+        Log "    [wsl2]"
+        Log "    memory=8GB"
+        Log "    processors=$HostLogicalCpus"
+        Log ""
+        Log "    [experimental]"
+        Log "    autoMemoryReclaim=gradual"
+        Log ""
+        Log "  autoMemoryReclaim lives under [experimental]; appending it to [wsl2] does nothing."
+        Log "  Edit $WslCfgPath yourself, then run: wsl --shutdown"
+        Log "  This installer does not modify that file -- it is yours and may hold other settings."
+        Log ""
     }
 }
 
+# BEGIN-PENDING-1560-UAM3 (the swap-keys prompt, left "for now" by the operator; removal is 1560-uam3)
 # -- WSL2 swap keys: add the ABSENT ones, with consent (order 1339-r9xv) ------
 # Consent: interactive -> ask [y/N]. TILLANDSIAS_WSLCONFIG=apply answers yes
 # without a prompt; =skip, or any non-interactive run without =apply, adds
@@ -556,6 +569,7 @@ if ($WslMerge.Added.Count -eq 0) {
     }
     Write-Host ""
 }
+# END-PENDING-1560-UAM3
 
 # -- Hyper-V Administrators membership (order 312) ---------------------------
 # The tray's hvsocket VM lookup (hcsdiag) requires an ENABLED membership in
@@ -596,6 +610,7 @@ if (-not (Test-EventSourceRegistered)) {
     }
 }
 
+# BEGIN-PENDING-1560-UAM3 (the Hyper-V prompt, left "for now" by the operator; removal is 1560-uam3)
 if (-not (Test-HcsAccess)) {
     SayWn "Your account is not in 'Hyper-V Administrators' - Tillandsias cannot"
     SayWn "reach its VM without it (https://aka.ms/hcsadmin)."
@@ -630,6 +645,7 @@ if (-not (Test-HcsAccess)) {
         SayWn "  Add-LocalGroupMember -SID 'S-1-5-32-578' -Member '<your DOMAIN\username>'"
     }
 }
+# END-PENDING-1560-UAM3
 
 Write-Host ""
 Say "Tillandsias Installer"
@@ -645,15 +661,16 @@ Write-Host ""
 if ($env:TILLANDSIAS_VERSION) {
     $Version = $env:TILLANDSIAS_VERSION.TrimStart('v')
     $Base = "https://github.com/$Repo/releases/download/v$Version"
-    Say "Pinned to v$Version"
+    Log "Pinned to v$Version"
 } else {
     $Base = $ChannelBase
-    Say "Channel: $Channel"
+    Log "Channel: $Channel"
     if ($Channel -eq 'unstable') {
-        Say "  !! UNSTABLE channel - newest daily build, NOT promoted to stable."
-        Say "     Expect breakage. Clear TILLANDSIAS_CHANNEL for the stable build."
+        # The end user is told what it means, not which variable chose it.
+        SayWn "  !! Preview build: the newest daily version, not yet released as stable."
+        SayWn "     It may have problems."
     }
-    Say "Resolving latest release..."
+    Log "Resolving latest release..."
 }
 
 # -- Temp workspace ------------------------------------------------------------
@@ -664,7 +681,12 @@ try {
     # -- Download SHA256SUMS-windows -------------------------------------------
 # BEGIN-SUMS-DOWNLOAD
     $SumsUrl = "$Base/SHA256SUMS-windows"
-    Say "Fetching SHA256SUMS-windows..."
+    # ONE end-user line for resolve, fetch, download and verify (coordinator
+    # ruling 2026-10-10 under the SOFT installer rule): the steps, the URLs, the
+    # asset name and the digest go to the install log; a failure says what
+    # happened in plain words and shows the log by path.
+    Say "Getting Tillandsias ready..."
+    Log "Fetching $SumsUrl"
     try {
         # ORDER 1420-jmp4: Invoke-WebRequest's own bar is slow and flickers on
         # PowerShell 5, so it runs silenced in a child scope; the script's
@@ -674,7 +696,8 @@ try {
             Invoke-WebRequest -Uri $SumsUrl -OutFile "$Tmp\SHA256SUMS-windows" -UseBasicParsing -ErrorAction Stop
         }
     } catch {
-        Die "Could not download SHA256SUMS-windows from $SumsUrl -- check network or version."
+        Log "Could not download $SumsUrl ($_)"
+        Die "Tillandsias could not be downloaded. Check your internet connection and try again. Details: $InstallLog"
     }
 # END-SUMS-DOWNLOAD
 
@@ -682,12 +705,15 @@ try {
     $SumsContent = Get-Content "$Tmp\SHA256SUMS-windows" -Raw
     $ZipName = ($SumsContent -split "`n" | Where-Object { $_ -match 'tillandsias-tray-.*-windows-x64\.zip' } |
                 Select-Object -First 1 | ForEach-Object { ($_ -split '\s+')[1] }).Trim()
-    if (-not $ZipName) { Die "No tillandsias-tray-*-windows-x64.zip entry in SHA256SUMS-windows." }
-    Say "Asset: $ZipName"
+    if (-not $ZipName) {
+        Log "No tillandsias-tray-*-windows-x64.zip entry in $SumsUrl"
+        Die "This Tillandsias release is incomplete, so nothing was installed. Details: $InstallLog"
+    }
+    Log "Asset: $ZipName"
 
     # -- Download zip ----------------------------------------------------------
     $ZipUrl = "$Base/$ZipName"
-    Say "Downloading $ZipUrl..."
+    Log "Downloading $ZipUrl"
 # BEGIN-PROGRESS-DOWNLOAD
     # ORDER 1420-jmp4: one clean progress bar for the release zip. The download
     # is streamed here and reported with Write-Progress once per whole percent,
@@ -738,19 +764,20 @@ try {
     try {
         Save-WithProgress -Url $ZipUrl -OutFile "$Tmp\$ZipName" -Activity "Downloading Tillandsias"
     } catch {
-        Die "Download failed: $_"
+        Log "Download of $ZipUrl failed ($_)"
+        Die "Tillandsias could not be downloaded. Check your internet connection and try again. Details: $InstallLog"
     }
 # END-PROGRESS-DOWNLOAD
 
     # -- Verify SHA-256 --------------------------------------------------------
-    Say "Verifying SHA-256..."
     $Expected = ($SumsContent -split "`n" | Where-Object { $_ -match [regex]::Escape($ZipName) } |
                  Select-Object -First 1 | ForEach-Object { ($_ -split '\s+')[0] }).ToLower()
     $Actual = (Get-FileHash "$Tmp\$ZipName" -Algorithm SHA256).Hash.ToLower()
     if ($Expected -ne $Actual) {
-        Die "SHA-256 mismatch: expected $Expected, got $Actual"
+        Log "SHA-256 mismatch for ${ZipName}: expected $Expected, got $Actual"
+        Die "The download was damaged, so nothing was installed. Please try again. Details: $InstallLog"
     }
-    SayOk "sha256: ok ($Expected)"
+    Log "sha256: ok ($Expected)"
 
     # -- Stop running tray + back up --------------------------------------------
     Get-Process -Name 'tillandsias-tray' -ErrorAction SilentlyContinue | Stop-Process -Force
@@ -792,14 +819,15 @@ try {
     }
 
     # -- Verify installation ---------------------------------------------------
-    Say "Verifying installation via --version..."
+    Say "Checking Tillandsias..."
     $VerTmp = Join-Path $env:TEMP "tillandsias-ver-$([guid]::NewGuid().ToString('N')).txt"
     & cmd.exe /c "`"$InstalledExe`" --version > `"$VerTmp`" 2>nul"
     $VerExit = $LASTEXITCODE
     $VerLine = (Get-Content $VerTmp -Raw -ErrorAction SilentlyContinue) -replace '\s+$', ''
     Remove-Item $VerTmp -ErrorAction SilentlyContinue
     if ($VerExit -ne 0 -or -not $VerLine) {
-        Die "tillandsias-tray --version failed (exit $VerExit); binary is broken."
+        Log "tillandsias-tray --version failed (exit $VerExit)."
+        Die "The downloaded Tillandsias does not start (exit $VerExit). Details: $InstallLog"
     }
     SayOk $VerLine
 
@@ -837,14 +865,15 @@ try {
     # Captured through cmd.exe for the same reason as --version above: the
     # release tray is GUI-subsystem and PowerShell's direct stdout capture is
     # unreliable for large writes.
-    Say "Verifying install bits via --diagnose --json..."
+    Log "Verifying install bits via --diagnose --json..."
     $DiagTmp = Join-Path $env:TEMP "tillandsias-install-diag-$([guid]::NewGuid().ToString('N')).json"
     & cmd.exe /c "`"$InstalledExe`" --diagnose --json > `"$DiagTmp`" 2>nul"
     $DiagExit = $LASTEXITCODE
     $DiagJson = Get-Content $DiagTmp -Raw -ErrorAction SilentlyContinue
     Remove-Item $DiagTmp -ErrorAction SilentlyContinue
     if ($DiagExit -eq 1) {
-        Die "tillandsias-tray --diagnose --json hard-failed (exit $DiagExit); install bits broken."
+        Log "tillandsias-tray --diagnose --json hard-failed (exit $DiagExit)."
+        Die "The downloaded Tillandsias failed its self-check (exit $DiagExit). Details: $InstallLog"
     }
     if ($DiagJson) {
         try {
@@ -852,13 +881,13 @@ try {
             $DiagCommit = if ($DiagReport.build_commit) { $DiagReport.build_commit } else { '(unknown)' }
             $DiagOsVer  = if ($DiagReport.os_version)   { $DiagReport.os_version }   else { '(not detected)' }
             $DiagWslVer = if ($DiagReport.wsl_version)  { $DiagReport.wsl_version }  else { '(not detected -- run wsl --install)' }
-            SayOk "diagnose: version=$($DiagReport.version) commit=$DiagCommit (--diagnose exit $DiagExit)"
-            SayOk "host:     OS=$DiagOsVer; WSL=$DiagWslVer"
+            Log "diagnose: version=$($DiagReport.version) commit=$DiagCommit (--diagnose exit $DiagExit)"
+            Log "host:     OS=$DiagOsVer; WSL=$DiagWslVer"
         } catch {
-            SayWn "--diagnose ran (exit $DiagExit) but its JSON did not parse; the binary may still be sound."
+            Log "--diagnose ran (exit $DiagExit) but its JSON did not parse; the binary may still be sound."
         }
     } else {
-        SayWn "--diagnose ran (exit $DiagExit) but captured no JSON output."
+        Log "--diagnose ran (exit $DiagExit) but captured no JSON output."
     }
 
     # -- Reset and reprovision the local state (order 1286-4437) --------------
@@ -890,60 +919,33 @@ try {
     # bare call does not wait and records no exit status (see the OUTPUT NOTE
     # in `tillandsias-tray.exe --help`).
     Write-Host ""
-    # CAPABILITY PROBE BEFORE THE CALL, and it is not belt-and-braces. This
-    # installer always DOWNLOADS the tray, and TILLANDSIAS_VERSION can pin an
-    # older tag -- which is exactly what the release smoke does. A tray from
-    # before 1286-4437 does not know --reset-state and exits 2 with
-    # "unknown flag", so an unconditional call would turn every pinned-older
-    # install into a hard failure at a step that did not exist when that tag
-    # shipped.
+    # THE RESET IS ITS OWN CAPABILITY PROBE (order 1565-qtuk). This installer
+    # always DOWNLOADS the tray, and TILLANDSIAS_VERSION can pin an older tag --
+    # which is exactly what the release smoke does. A tray from before
+    # 1286-4437 does not know --reset-state and exits 2 with "unknown flag",
+    # so an exit 2 here means "installed, but this tray cannot reset": say so
+    # and do not Die. Every tray that knows the flag exits 0 (Ready) or 1
+    # (failed), and a 1 is a real failure of the reset that RAN.
     #
-    # PROBE BY ATTEMPT, NOT BY ADVERTISEMENT (order 1323-5taw). This asked
-    # `--help` whether the flag existed, which is defeated by exactly the
-    # defect it was written to survive: a binary whose --help MENTIONS a flag
-    # its parser REJECTS. That binary is not hypothetical -- v56.9.20.1's
-    # published Linux headless does precisely this (its allow-list at
-    # crates/tillandsias-headless/src/main.rs:612-651 carries no entry, and
-    # pirria's install died on `Unsupported option: --reset-state`,
-    # install_exit=2). Against such a tray the --help probe answers YES, the
-    # installer proceeds, and it Dies on the exit 2 the probe existed to avoid.
+    # PROBE BY ATTEMPT, NOT BY ADVERTISEMENT (1323-5taw) still holds: the call
+    # below IS the attempt. A --help that mentions a flag its parser rejects
+    # (v56.9.20.1's Linux headless did) gets the same exit 2 and the same
+    # outcome, and a refusing parser has done nothing at all.
     #
-    # So attempt the flag and read the OUTCOME. The attempt is non-destructive
-    # BY CONSTRUCTION: TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 is the flag's own
-    # documented opt-out, honoured inside the binary, so a supporting tray
-    # announces the skip and provisions the existing state (exit 0) while a
-    # tray that does not know the flag refuses with "unknown flag" (exit 2).
-    # That distinguishes a parser that honours the flag from a --help that
-    # merely mentions it, which is the fleet's standing rule for stale
-    # binaries: probe a refusal by asking for the refusal.
-    #
-    # NOT a version comparison: that would have to know which tag first
-    # carried the flag and would be wrong for any build off that line.
+    # WHY THERE IS NO SEPARATE PROBE ANY MORE. Until 1565-qtuk the installer
+    # first ran --reset-state with TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 and read
+    # its outcome (1323-5taw; 1449-4qqu added the skip line). But that opt-out
+    # skips only the WIPE: the tray still provisions the existing state to
+    # Ready, so every install provisioned the guest TWICE. Measured on yolanda
+    # 2026-10-09, two v56.10.9.1 SOFT installs: tray.log carried two
+    # "reset-state (SOFT): VM Ready" cycles per install (17:18:13Z and
+    # 17:18:59Z; 17:42:52Z and 17:43:28Z), ~35 s of the install each time. The
+    # probe never guarded against destruction, only against Dying on exit 2,
+    # and the real call answers that question itself. 1449-4qqu's case (the
+    # flag accepted, the re-init of a broken state failed) is gone with the
+    # probe: the SOFT reset that was the repair now runs first.
 # BEGIN-RESET-PROBE
-    $ProbeLog = Join-Path $env:TEMP "tillandsias-reset-probe.log"
-    & cmd.exe /c "set TILLANDSIAS_DESTRUCTIVE_RESET_OK=0&& `"$InstalledExe`" --reset-state > `"$ProbeLog`" 2>&1"
-    $ProbeExit = $LASTEXITCODE
-    $ProbeOut = if (Test-Path $ProbeLog) { (Get-Content $ProbeLog -Raw) } else { "" }
-    Remove-Item $ProbeLog -Force -ErrorAction SilentlyContinue
-    # Exit 0 means the parser accepted it. An unknown-flag refusal is exit 2
-    # and names itself; anything else is treated as unsupported too, because a
-    # probe that cannot get a clean acceptance must not authorise a
-    # destructive call.
-    #
-    # ORDER 1449-4qqu: EXCEPT when the binary SAYS it accepted the flag. With
-    # the opt-out set, a supporting tray prints the skip line (the phrase
-    # tillandsias-core pins byte-exact in reset_state::RESET_SKIPPED_LINE) and
-    # then re-inits the EXISTING state. When that state is broken the re-init
-    # fails (exit 1), and reading the exit code alone called it "predates
-    # --reset-state" and skipped the one repair the guest needed (measured on
-    # yolanda 2026-09-27, v56.9.27.2). The skip line proves the parser took the
-    # flag, so the flag ran and failed: proceed to the full reset.
-    $ProbeAccepted = $ProbeOut -match [regex]::Escape('reset skipped by TILLANDSIAS_DESTRUCTIVE_RESET_OK=0')
-    $HasResetState = ($ProbeExit -eq 0) -or $ProbeAccepted
-    # The probe's outcome is a decision, not news for the end user: it prints
-    # nothing (operator ruling 2026-10-08, below).
-# END-RESET-PROBE
-    # @trace spec:host-state-lifecycle, order:1559-sqzp, order:1437-3iux
+    # @trace spec:host-state-lifecycle, order:1559-sqzp, order:1437-3iux, order:1565-qtuk
     # SOFT, ALWAYS, AND QUIET. Operator ruling 2026-10-08, verbatim: "we do not
     # ask end users to do power user stuff. That's our guideline. An install
     # prompt asking for destructive cases should not be an acceptable case. End
@@ -958,20 +960,25 @@ try {
     # sign-ins and the downloads), no reset kind, no prompt, no flag names, and
     # the tray's own reset log stays in a file, shown by path only on failure.
     # stdin is NUL so the GUI-subsystem tray can never wait on a prompt nobody
-    # can see. scripts/test-installer-reset-kind.sh pins all of it.
-    if (-not $HasResetState) {
-        SayWn "Tillandsias is installed. Restart it from the Start menu to finish setting up."
-    }
-    if ($HasResetState) {
-    Say "Getting Tillandsias ready..."
+    # can see. scripts/test-installer-reset-kind.sh pins all of it, and
+    # scripts/test-installer-provisions-once.sh pins ONE provisioning per
+    # install, through the SOFT reset. No line of its own: "Getting Tillandsias
+    # ready..." was said once, before the download, and covers this step too.
     $ResetLog = Join-Path $env:TEMP "tillandsias-setup.log"
     & cmd.exe /c "`"$InstalledExe`" --reset-state < NUL > `"$ResetLog`" 2>&1"
     $ResetExit = $LASTEXITCODE
-    if ($ResetExit -ne 0) {
+    # Exit 2 is the parser's refusal and nothing ran; everything else is the
+    # reset's own verdict.
+    $HasResetState = ($ResetExit -ne 2)
+# END-RESET-PROBE
+    if (-not $HasResetState) {
+        Remove-Item $ResetLog -Force -ErrorAction SilentlyContinue
+        SayWn "Tillandsias is installed. Restart it from the Start menu to finish setting up."
+    } elseif ($ResetExit -ne 0) {
         Die "Tillandsias could not finish setting up (exit $ResetExit). Details: $ResetLog"
-    }
-    Remove-Item $ResetLog -Force -ErrorAction SilentlyContinue
-    SayOk "Tillandsias is ready."
+    } else {
+        Remove-Item $ResetLog -Force -ErrorAction SilentlyContinue
+        SayOk "Tillandsias is ready."
     }
 
     # -- Installed-Software registration (windows-260722-3) -------------------
@@ -1031,12 +1038,12 @@ try {
     # -- Launch (triggers WSL2 provisioning = tillandsias --init) -------------
     Write-Host ""
     if (-not $NoLaunch) {
-        Say "Launching Tillandsias (WSL2 provisioning = --init will run automatically)..."
+        Say "Starting Tillandsias..."
         Start-Process -FilePath $InstalledExe -WorkingDirectory $DataRootDir
         SayOk "Tray started. Look for the Tillandsias icon in the notification area."
         SayOk "(Right-click the icon for the menu; provisioning runs in the background.)"
     } else {
-        Say "Installation complete. Run $InstalledExe to provision WSL2 (--init)."
+        Say "Installation complete. Start Tillandsias from the Start menu."
         if ($NoLaunchReason) {
             SayWn "Reminder: $NoLaunchReason."
         }

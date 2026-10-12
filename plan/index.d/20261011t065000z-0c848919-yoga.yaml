@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: set-field-status-in-progress-accepts-any-host-string-so-a-mistyped-or-dummy-host-claims-past-the-wip-cap
+    event:
+      type: note
+      ts: "2026-10-11T06:50:00Z"
+      agent_id: forge-forge-tillandsias-claude-20261011t065000z
+      host: yoga
+      summary: |
+        DESIGN (1588-27v3), the host-list source: option (a), a methodology list. methodology/distributed-work.yaml packet_discipline.fleet_hosts sits beside wip_limit and is read by the same set-field claim path (fleet_hosts_of, next to wip_limit_of). It is explicit and reviewable, and a new host enters by a PR before its first claim. No methodology schema change was needed, because packet_discipline has no schema and the reader is new. Seeded with the 16 labels that wrote an in_progress claim since 2026-09-21. Shared labels are left out on purpose: platform names and host kinds (linux, macos, windows, forge, linux_mutable) and the forge container hostname forge-tillandsias (last claimed 2026-09-28). Option (b) was declined: hosts seen in ledger fragments include x-style accidents once written, and that is the defect itself.
+        Behaviour: a claim whose host is unlisted gets refused:set-field:unknown-host:<host> (rc 2, the list named, nothing written). A methodology with no readable list gets refused:set-field:no-fleet-host-list. A ledger with no methodology beside it (scratch fixtures) is not checked. Non-claim status writes are unaffected. There is no override flag: an unlisted host has no cap to go over.
+        Evidence: scripts/lua/test-claim-unknown-host.lua 8/8, wired in build.sh --check. In the same run, ARM 8 ran the pre-fix binary (via TILLANDSIAS_PLAN_PREFIX_BIN) on a scratch ledger, and it WROTE the --host x claim fragment that ARM 1 refuses. With the pre-fix binary as the binary under test, 4 arms fail. On the real tree, `set-field 1587-qqzs status in_progress --host x` printed the refusal and git status showed nothing new. A listed host still claims, and at the cap it is still refused wip-limit (ARM 3).
+        Carried shell-to-lua: due (the change adds scripts/lua/test-claim-unknown-host.lua); paid by porting scripts/check-litmus-yaml-parses.sh to scripts/lua (parity 527/527 live and 2/2 blocked on a scratch mutant).

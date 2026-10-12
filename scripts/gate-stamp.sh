@@ -613,8 +613,8 @@ stamp_field() {
 # plan/mo-full-attestations.d/*.md (930-i6x4, and that exclusion is right: it
 # stopped every sibling landing from staling a stamp that remained true of every
 # byte of code). Its SIDE EFFECT is that those are exactly the paths
-# check-fragment-status-loss.sh and `tillandsias-plan check --strict-fragments`
-# exist to validate — so a commit touching only them cannot stale the stamp, the
+# scripts/lua/check-fragment-status-loss.lua and `tillandsias-plan check
+# --strict-fragments` exist to validate — so a commit touching only them cannot stale the stamp, the
 # memo returns ok:gate-fresh, and the guards written for that change class never
 # run. The exclusion and the guards cover the same paths in opposite directions.
 #
@@ -1094,7 +1094,7 @@ case "${1:-verify}" in
         # Same shape as the mode-drift block above, one axis over: the memo keys
         # on a digest that DELIBERATELY excludes plan/index.d/*.yaml and its
         # siblings (930-i6x4), and those are precisely what
-        # check-fragment-status-loss.sh and `check --strict-fragments` read. So a
+        # check-fragment-status-loss.lua and `check --strict-fragments` read. So a
         # plan-only commit could not stale the stamp and the guards written for
         # it never ran.
         #
