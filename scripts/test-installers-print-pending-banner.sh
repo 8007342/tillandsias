@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace order:1380-zmpi
+# @trace order:1380-zmpi, order:1639-8gfw
 #
 # Fixture for the PENDING ACTIONS banner every installer ends with (design:
 # plan/issues/forge-memory-swap-architecture-design-2026-09-26.md section 9.4).
@@ -20,7 +20,9 @@
 #   M1 macOS: PENDING: none, printed rather than omitted
 #   E  the banner is the LAST block of each POSIX installer (END marker is the
 #      last non-blank line)
-#   W1 Windows formatter, no items: PENDING: none
+#   W1 Windows formatter, no items: NOTHING (order 1639-8gfw: the end-user
+#      installer prints the box only when something is pending; the macOS and
+#      Linux banners keep PENDING: none until their own 1561 slices)
 #   W2 Windows formatter, items: one ">> " line per item, and no "none"
 #   W3 Windows wiring: reboot-pending maps to RESTART REQUIRED, and the
 #      banner is printed after the install's finally block
@@ -117,7 +119,8 @@ PS
     none="$(sed -n '/^---none---$/,/^---items---$/p' <<<"$out")"
     items="$(sed -n '/^---items---$/,$p' <<<"$out")"
     ran=$((ran + 1))
-    case "$none" in *"PENDING ACTIONS"*"PENDING: none"*) ;; *) fail "W1 no items — got: $none" ;; esac
+    extra="$(grep -cv -e '^---none---$' -e '^---items---$' -e '^[[:space:]]*$' <<<"$none")" || true
+    [ "$extra" = "0" ] || fail "W1 no items — printed $extra line(s), want none: $none"
     ran=$((ran + 1))
     n="$(grep -c '^  >> ' <<<"$items")" || true
     [ "$n" = "2" ] || fail "W2 two items — got $n '>> ' lines: $items"
