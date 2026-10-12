@@ -1,4 +1,4 @@
--- @trace order:1561-47a8, order:1561-9f4x, spec:host-state-lifecycle
+-- @trace order:1561-47a8, order:1561-9f4x, order:1560-uam3, spec:host-state-lifecycle
 -- @env TILLANDSIAS_PLAN_BIN TILLANDSIAS_SCRIPT_RUNNER_BIN
 --
 -- test-check-installer-end-user-output.lua — the end-user installers print
@@ -14,7 +14,7 @@
 --   1 the real tree, at the floors                          -> ok
 --   2 install-windows.ps1 gains `Say "... --some-flag ..."` -> refused by file:line
 --   3 the same line marked `# power-user-only`              -> ok
---   4 the same line inside a PENDING-1560-UAM3 region        -> ok
+--   4 the same line inside a retired PENDING-1560-UAM3 region -> refused (1560-uam3)
 --   5 install.sh gains a `say "... TILLANDSIAS_X ..."`       -> refused (above its floor)
 --   6 the text only in a comment                            -> ok
 -- Each mutant asserts its own edit landed exactly once.
@@ -97,11 +97,13 @@ if append_once(d .. "/scripts/install-windows.ps1", { FLAG .. "  # power-user-on
     check("3 a power-user-only line is exempt", rc == 0, "rc=" .. rc .. " out=[" .. o .. "]")
 else check("3 mutant landed once", false, "it did not") end
 
--- 4 the same line inside the pending-prompt region.
+-- 4 the same line inside a retired PENDING-1560-UAM3 region (1560-uam3 removed
+--   the exemption with the regions): refused like any other.
 d = scratch("c")
 if append_once(d .. "/scripts/install-windows.ps1", { "# BEGIN-PENDING-1560-UAM3", FLAG, "# END-PENDING-1560-UAM3" }) then
     rc, o = guard(d)
-    check("4 a line in the pending-prompt region is exempt", rc == 0, "rc=" .. rc .. " out=[" .. o .. "]")
+    check("4 a retired pending-prompt marker exempts nothing",
+        rc == 1 and text.contains(o, "scripts/install-windows.ps1:"), "rc=" .. rc .. " out=[" .. o .. "]")
 else check("4 mutant landed once", false, "it did not") end
 
 -- 5 install.sh above its floor.

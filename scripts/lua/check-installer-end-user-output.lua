@@ -16,13 +16,13 @@
 -- --flag, a TILLANDSIAS_* variable, a URL, a channel or a base. Output
 -- statements: Say / SayOk / SayWn / Write-Host / Die in PowerShell; say / die /
 -- echo / printf in shell. Comments are stripped first (a `#` at the start of a
--- line or after whitespace; PowerShell `<# ... #>` blocks whole). Two
--- exemptions, both visible in the source:
+-- line or after whitespace; PowerShell `<# ... #>` blocks whole). One
+-- exemption, visible in the source:
 --   - a line marked `# power-user-only`: reachable only when a power user passes
---     a bad flag (usage and argument errors), never on the normal path;
---   - a region between `# BEGIN-PENDING-1560-UAM3` and `# END-PENDING-1560-UAM3`:
---     the .wslconfig and Hyper-V prompt blocks the operator left "for now";
---     their removal (1560-uam3) removes the markers and the text with them.
+--     a bad flag (usage and argument errors), never on the normal path.
+-- (A second exemption, the BEGIN/END-PENDING-1560-UAM3 regions around the two
+-- prompts the operator left "for now", went with those regions in 1560-uam3,
+-- 2026-10-12; a marker of that name now exempts nothing.)
 -- Diagnostics belong in the installer's log file, shown by path on failure.
 --
 -- FLOORS: scripts/portability/installer-end-user-output-floor.txt, one
@@ -72,16 +72,12 @@ end
 local function diagnostic_lines(f, src)
     local ps = text.is_match(f, [[\.ps1$]])
     local hits = {}
-    local blk, pend = false, false
+    local blk = false
     for n, line in ipairs(text.lines(src)) do
         if text.is_match(line, [[^<#]]) then blk = true end
         if blk then
             if string.find(line, "#>", 1, true) then blk = false end
-        elseif text.is_match(line, [[#\s*BEGIN-PENDING-1560-UAM3]]) then
-            pend = true
-        elseif text.is_match(line, [[#\s*END-PENDING-1560-UAM3]]) then
-            pend = false
-        elseif not pend and not text.is_match(line, [[#\s*power-user-only]]) then
+        elseif not text.is_match(line, [[#\s*power-user-only]]) then
             local code = strip_comment(line)
             local is_out = ps and text.is_match(code, PS_OUT) or (not ps and text.is_match(code, SH_OUT))
             if is_out and text.is_match(code, DIAG) then

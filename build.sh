@@ -5005,7 +5005,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
 
     # The end-user-installer output guard's own fixture (1561-47a8), a Lua
     # fixture on the one runner: a flag-naming line refused by file:line, the
-    # power-user-only and PENDING-1560-UAM3 exemptions, a comment not counted,
+    # power-user-only exemption, a retired PENDING-1560-UAM3 marker exempting
+    # nothing (1560-uam3), a comment not counted,
     # install.sh above its floor refused. The guard itself runs as gate step 800.
     _step "Checking the end-user installer output guard's fixture (1561-47a8)..."
     if ! _run_lua_decider "scripts/lua/test-check-installer-end-user-output.lua" 2>&1; then
