@@ -118,7 +118,6 @@ scripts/check-version-bump-isolation.sh
 scripts/check-windows-only-sources-verified.sh
 scripts/check-windows-tray-clippy.sh
 scripts/check-windows-tray-diagnose-surface.sh
-scripts/check-wt-reparse-workarounds-deleted.sh
 scripts/check-yaml-reader-availability.sh
 scripts/test-a-claim-names-a-workstation.sh
 scripts/test-added-test-is-referenced.sh
