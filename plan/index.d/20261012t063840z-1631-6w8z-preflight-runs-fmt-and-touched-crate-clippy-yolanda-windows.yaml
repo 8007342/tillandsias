@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-12): two gate refusals the door could have caught.
+packets:
+  - packet_id: the-preflight-door-runs-neither-cargo-fmt-check-nor-the-gates-clippy-lines-so-a-formatting-or-clippy-miss-costs-a-full-gate-run
+    order: 1631-6w8z
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [preflight, gate, rust, door-deadline]
+    estimated_hours: 3
+    owned_files:
+      - build.sh
+    related: [1437-664a, 1630-dwab]
+    depends_on: []
+    title: |
+      ./build.sh --preflight runs neither cargo fmt --check nor the gate's clippy lines, yet the gate refuses on both, so a formatting or clippy miss costs a full gate run
+    context: |
+      Reported by macuahuitl-fedora (coordinator), 2026-10-12.
+      COST: on 2026-10-11/12, PR #340 spent a full gate run (about 23 min) on clippy collapsible_if. PR #356's fmt miss was caught by lenovinha just before land run 41, by luck rather than by any check.
+      WHERE THE GATE CHECKS: build.sh's check path runs `cargo fmt --check --all` (build.sh:2858, "Checking Rust formatting...") and two clippy lines with -D warnings: `cargo clippy --all-targets` (build.sh:3146) and `cargo clippy --all-targets -p tillandsias-headless --features listen-vsock` (build.sh:3150). The --preflight roster (build.sh _preflight_roster) runs neither.
+      PRIOR ART: scripts/relay-preflight.sh phase 4 (1437-664a) already runs `cargo fmt --check` when the diff touches *.rs, but that is the relay lane, not ./build.sh --preflight.
+      PROPOSAL: (1) the preflight runs `cargo fmt --all -- --check`, which takes seconds and needs no build. (2) When the diff touches crates/, it runs the gate's clippy line scoped to the touched packages (-p <pkg> for each touched crate, with the listen-vsock line when tillandsias-headless is touched). Clippy runs under the door deadline and is deadline-skipped, not refused, when it is slow.
+    exit_criteria:
+      - 'on a branch with one unformatted hunk, the trunk ./build.sh --preflight says ok and the fixed preflight refuses with a fmt verdict naming the file, in one run'
+      - 'on a branch with one clippy -D warnings hit (e.g. collapsible_if) in a touched crate, the trunk preflight says ok and the fixed preflight refuses with a clippy verdict naming the crate and lint, in one run'
+      - 'when the clippy step overruns the door deadline it is reported deadline-skipped, never refused, and a diff that does not touch crates/ runs no clippy at all'
+    unscoreable: "a door change measured by planted branches: its evidence is the trunk-ok vs fixed-refused pair for the unformatted hunk and for the clippy hit, each from one preflight run"
+    next_action: >
+      Add the fmt check to the --preflight roster first (cheap and unconditional), then the touched-package clippy under the door deadline. Plant both branches and record the trunk-vs-fixed verdict pairs.
+    provenance: |
+      Filed by yolanda-windows at macuahuitl-fedora's request, 2026-10-12. Cites #340 (clippy collapsible_if, full gate lost) and #356 (fmt miss caught before run 41).
+    events:
+      - type: filed
+        ts: "2026-10-12T06:38:40Z"
+        host: yolanda-windows
+        summary: |-
+          The preflight door skips cargo fmt --check and the gate's clippy lines, both of which the gate refuses on (#340, #356).
