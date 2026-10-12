@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: port-check-yaml-reader-availability-sh-to-lua-shell-to-lua-burndown
+    field: next_action
+    value: |-
+      RELEASED and NOT TO BE PICKED UP AS A PORT (coordinator ruling, 2026-10-12). This check's job is to prove the plan binary is runnable where the gates run, and the Lua runner IS the plan binary, so a port cannot run its one interesting verdict (blocked:yaml-reader-absent) on itself. The only workaround is to probe a separately resolved binary and print the absent verdict from the bash test. That deletes a .sh but leaves the real decision in shell. It pays the shell-to-lua counter without moving the decision. Nothing was started; no work ref exists.
+      PROPOSED EXEMPTION, not applied (the coordinator decides): the shell-to-lua population skips what scripts/portability/bootstrap-shell-allowlist.txt lists (convergence.yaml population_excludes). That file admits a path only when plan/issues/scripting-runtime-lua-no-pipes-design-2026-09-26.md section 6.5 says it cannot move. The proposed line, under the section 6.5 row 2 heading ("the binary cannot build itself"), extended to "the binary cannot vouch for itself":
+        # A probe of the plan binary's own availability cannot run on that binary (1627-hg3t).
+        scripts/check-yaml-reader-availability.sh
+      If adopted, the same commit should add the matching sentence to section 6.5, because the allowlist header forbids entries the design does not name. check-decider-retirement.sh then counts it as bootstrap.
+    ts: "2026-10-12T04:34:11Z"
+    host: yolanda-windows
+    replaces_sha256: "96a46f5096ae0a42d27df3ac6b1e89317d4d0ec509b581d12924137989a2b02a"
