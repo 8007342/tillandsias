@@ -369,7 +369,6 @@ scripts scripts/check-decider-retirement.sh 3
 scripts scripts/check-declared-closures-added.sh 2
 scripts scripts/check-deslop-due.sh 5
 scripts scripts/check-deslop-sweep-health.sh 4
-scripts scripts/check-enclave-expect-none-is-fixture-only.sh 2
 scripts scripts/check-enclave-network-internal.sh 5
 scripts scripts/check-enclave-service-health.sh 16
 scripts scripts/check-engine-cpu-dispatch.sh 6

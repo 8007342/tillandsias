@@ -306,16 +306,36 @@ fi
 # Ten seconds of headroom and not more, because pirria IS the floor host: there
 # is no slower machine for this number to be generous towards. 180 would be a
 # round number, not a measured one.
-BUDGET_S="${TILLANDSIAS_PREFLIGHT_BUDGET_S:-150}"
+#
+# ORDER 1616-njfd: THE BUDGET IS PER REGIME, and the door's own summary names
+# it (budget=<n>s budget-regime=<r>, set by build.sh's _pf_budget from a
+# measurement: darwin 200 s, darwin under taskpolicy -b 415 s, the floor 150 s).
+# The nested run inherits this run's regime, so judging by the number it prints
+# is judging by the regime it ran in. TILLANDSIAS_PREFLIGHT_BUDGET_S still wins.
+# A summary that names no budget (a door older than 1616) is judged against the
+# floor's 150 s, as before.
+judge_budget() {  # $1 = the preflight's output; prints one ok/bad line
+    local _out="$1" _line="" _l _wall="" _budget=150 _from="the floor default"
+    # The LAST summary line, never a guard's own output, which may say wall= too.
+    while IFS= read -r _l; do
+        case "$_l" in *:preflight:ran=*) _line="$_l" ;; esac
+    done <<< "$_out"
+    if [[ "$_line" =~ wall=([0-9]+)s ]]; then _wall="${BASH_REMATCH[1]}"; fi
+    if [ -n "${TILLANDSIAS_PREFLIGHT_BUDGET_S:-}" ]; then
+        _budget="$TILLANDSIAS_PREFLIGHT_BUDGET_S"; _from="TILLANDSIAS_PREFLIGHT_BUDGET_S"
+    elif [[ "$_line" =~ budget=([0-9]+)s\ budget-regime=([a-z-]+) ]]; then
+        _budget="${BASH_REMATCH[1]}"; _from="regime ${BASH_REMATCH[2]}"
+    fi
+    if [ -z "$_wall" ]; then
+        bad "the verdict does not report its wall clock"
+    elif [ "$_wall" -le "$_budget" ]; then
+        ok "the whole run completes inside the budget (${_wall}s <= ${_budget}s, $_from)"
+    else
+        bad "the run exceeded the budget (${_wall}s > ${_budget}s, $_from) — a guard grew slow, or the budget is wrong"
+    fi
+}
 out="$(./build.sh --preflight 2>&1)"; rc=$?
-wall="$(printf '%s' "$out" | grep -oE 'wall=[0-9]+s' | tail -1 | tr -cd '0-9')"
-if [ -z "$wall" ]; then
-    bad "the verdict does not report its wall clock"
-elif [ "$wall" -le "$BUDGET_S" ]; then
-    ok "the whole run completes inside the budget (${wall}s <= ${BUDGET_S}s)"
-else
-    bad "the run exceeded the budget (${wall}s > ${BUDGET_S}s) — a guard grew slow, or the budget is wrong"
-fi
+judge_budget "$out"
 
 # ── ARM 7: --full removes the deadline, and says so ────────────────────────
 if grep -q 'FLAG_PREFLIGHT_FULL' build.sh && grep -q 'deadline' build.sh; then

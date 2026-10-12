@@ -1,0 +1,40 @@
+substrate=/var/tmp/grk8-substrate.0yuliv graphroot=/var/tmp/grk8-substrate.0yuliv/graph
+built localhost/grk8-prefix-base in 135s
+built localhost/grk8-prefix-forge in 17s
+built localhost/grk8-fixed-base in 48s
+built localhost/grk8-fixed-forge in 16s
+== sizes (podman image inspect .Size, bytes)
+grk8-prefix-base     3123237614
+grk8-fixed-base      3302275953
+grk8-prefix-forge    3130901065
+grk8-fixed-forge     3309939406
+delta base:  179038339 bytes (170 MiB)
+delta forge: 179038341 bytes (170 MiB)
+== the added layer (history of the fixed base, newest first)
+0B /bin/sh -c #(nop) ENV CARGO_HOME=/usr/loca...
+131MB /bin/sh -c pip3 install --timeout 120 --no...
+################ grk8-prefix-forge (--network=none)
+rustc: rustc 1.98.1 (48a229cea 2026-09-01) (Fedora 1.98.1-1.fc44)
+wasm32 std rpm: package rust-std-static-wasm32-unknown-unknown is not installed
+== cargo build --target wasm32-unknown-unknown (minimal lib crate, offline)
+error[E0463]: can't find crate for `std`
+error: could not compile `grk8-lib` (lib) due to 1 previous error
+CARGO_WASM32=fail
+== wasm-pack build (minimal wasm-bindgen crate, vendored deps, offline)
+Error: `cargo metadata` exited with an error:     Updating crates.io index
+warning: spurious network error (3 tries remaining): [6] Could not resolve hostname (Could not resolve host: index.crates.io)
+warning: spurious network error (2 tries remaining): [6] Could not resolve hostname (Could not resolve host: index.crates.io)
+warning: spurious network error (1 try remaining): [6] Could not resolve hostname (Could not resolve host: index.crates.io)
+WASM_PACK=fail
+################ grk8-fixed-forge (--network=none)
+rustc: rustc 1.98.1 (48a229cea 2026-09-01) (Fedora 1.98.1-1.fc44)
+wasm32 std rpm: rust-std-static-wasm32-unknown-unknown-1.98.1-1.fc44.noarch
+== cargo build --target wasm32-unknown-unknown (minimal lib crate, offline)
+-rwxr-xr-x. 2 forge forge 377 Oct 12 07:12 /tmp/libcrate/target/wasm32-unknown-unknown/release/grk8_lib.wasm
+CARGO_WASM32=ok
+== wasm-pack build (minimal wasm-bindgen crate, vendored deps, offline)
+Error: `cargo metadata` exited with an error:     Updating crates.io index
+warning: spurious network error (3 tries remaining): [6] Could not resolve hostname (Could not resolve host: index.crates.io)
+warning: spurious network error (2 tries remaining): [6] Could not resolve hostname (Could not resolve host: index.crates.io)
+warning: spurious network error (1 try remaining): [6] Could not resolve hostname (Could not resolve host: index.crates.io)
+WASM_PACK=fail

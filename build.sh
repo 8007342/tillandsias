@@ -439,6 +439,43 @@ _pf_sweep_fixture_scratch() {  # $1 = guard path, $2 = its pid, $3 = outfile
         echo "swept:fixture-scratch-failed:$_d" >> "$3.swept"
     fi
 }
+# ORDER 1630-dwab. A KILLed guard's DECLARED IN-CHECKOUT ARTIFACTS. A writer
+# that must keep its copies beside the scripts it copies is declared in
+# scripts/portability/checkout-writers.txt (1611-imnj), and its declaration may
+# name what it leaves: `<writer> artifacts=<basename-glob> <reason>`. Its traps
+# remove them, and a KILL runs no trap. The guard the door killed is that
+# writer, or names the writer's path in its own source (the lc-numeric signal
+# .lua runs scripts/test-awk-float-lc-numeric.sh). Only UNTRACKED files whose
+# basename matches are removed, each by its literal path, never a glob rm, so
+# a tracked file can never go. Recorded as `swept:declared-artifact:<path>`.
+_pf_sweep_declared_artifacts() {  # $1 = guard path (roster-relative), $2 = outfile
+    local _decl="$SCRIPT_DIR/scripts/portability/checkout-writers.txt" _w _a _rest _f _g
+    local -a _globs=()
+    [ -f "$_decl" ] && [ -f "$SCRIPT_DIR/$1" ] || return 0
+    while read -r _w _a _rest; do
+        case "$_w" in ''|'#'*) continue ;; esac
+        case "$_a" in artifacts=?*) ;; *) continue ;; esac
+        if [ "$_w" = "$1" ] || grep -qF "$_w" "$SCRIPT_DIR/$1" 2>/dev/null; then
+            _globs+=("${_a#artifacts=}")
+        fi
+    done < "$_decl"
+    [ "${#_globs[@]}" -gt 0 ] || return 0
+    while IFS= read -r _f; do
+        [ -n "$_f" ] || continue
+        for _g in "${_globs[@]}"; do
+            # an unquoted case pattern matches as a glob and is never expanded
+            case "${_f##*/}" in
+                $_g)
+                    if rm -f "$SCRIPT_DIR/$_f"; then
+                        echo "swept:declared-artifact:$SCRIPT_DIR/$_f" >> "$2.swept"
+                    else
+                        echo "swept:declared-artifact-failed:$SCRIPT_DIR/$_f" >> "$2.swept"
+                    fi
+                    break ;;
+            esac
+        done
+    done < <(git -C "$SCRIPT_DIR" ls-files --others --exclude-standard 2>/dev/null)
+}
 # The late sweep, from the preflight's EXIT trap: the recorded roots only.
 _pf_sweep_late() {  # $1 = the preflight run dir
     local _r
@@ -461,6 +498,35 @@ _pf_now() {
     else
         _PF_CLOCK=wall-s; _PF_NOW=$(( SECONDS * 1000000 ))
     fi
+}
+
+# ORDER 1616-njfd. THE FRONT DOOR'S BUDGET, PER REGIME, from measurement. The
+# old budget was one constant: 150 s, the floor host's 140 s plus ten
+# (1305-udgs). Darwin cannot meet it, with the 1614-5x7m wall-clock door in
+# place. MEASURED standalone on an M5 MacBook Air, 2026-10-11:
+# 179 s plain and 376 s under taskpolicy -b. The coordinator approved about
+# 10% over each: darwin 200 s, darwin background QoS 415 s, everything else
+# unchanged at 150 s. TILLANDSIAS_PREFLIGHT_BUDGET_S still wins. Background QoS
+# is read from the scheduler: under `taskpolicy -b` a process's priority reads
+# 4, against 31 plain (measured). One ps per preflight, no pipe. Sets
+# _PF_BUDGET (seconds) and _PF_BUDGET_REGIME (override|darwin-background|darwin|floor).
+_pf_budget() {
+    local _pri
+    if [ -n "${TILLANDSIAS_PREFLIGHT_BUDGET_S:-}" ]; then
+        _PF_BUDGET="$TILLANDSIAS_PREFLIGHT_BUDGET_S"; _PF_BUDGET_REGIME=override
+        return 0
+    fi
+    case "$(uname -s 2>/dev/null)" in
+        Darwin)
+            _pri="$(ps -o pri= -p "$$" 2>/dev/null)"; _pri="${_pri// /}"
+            if [ -n "$_pri" ] && [ "$_pri" -le 4 ] 2>/dev/null; then
+                _PF_BUDGET=415; _PF_BUDGET_REGIME=darwin-background
+            else
+                _PF_BUDGET=200; _PF_BUDGET_REGIME=darwin
+            fi ;;
+        *)
+            _PF_BUDGET=150; _PF_BUDGET_REGIME=floor ;;
+    esac
 }
 
 _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, $4 = args
@@ -554,6 +620,7 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, 
         kill -KILL "-$_pid" 2>/dev/null || kill -KILL "$_pid" 2>/dev/null
         wait "$_pid" 2>/dev/null
         _pf_sweep_fixture_scratch "$_p" "$_pid" "$_out"
+        _pf_sweep_declared_artifacts "$_p" "$_out"
         _pf_sweep_guard_tmp "$_gtmp" "$_out"
         return 124
     fi
@@ -652,8 +719,12 @@ _pf_predecide() {  # $1 = roster path, $2 = label
     # shape as gate-only; the launcher then waits for every running guard,
     # runs it with nothing beside it, and only then launches the next. The
     # reason is required: a bare declaration runs concurrently, with a note.
-    if [ -n "$(sed -n '1,40{/^# preflight: serial/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
-        _reason="$(sed -n '1,40{s/^# preflight: serial[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
+    # ORDER 1630-dwab: a .lua guard comments with `--`, so `-- preflight:
+    # serial` is the same declaration. Matched only as `#` before this, which
+    # left a Lua guard no way to run alone: the lc-numeric signal fixture
+    # (step 455) wrote the same checkout paths as step 450 concurrently.
+    if [ -n "$(sed -n '1,40{/^# preflight: serial/p;/^-- preflight: serial/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
+        _reason="$(sed -n '1,40{s/^# preflight: serial[[:space:]]*//p;s/^-- preflight: serial[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
         if [ -n "$_reason" ]; then
             return 12
         fi
@@ -765,7 +836,7 @@ _preflight_roster() {
 # A guard is NEVER silently dropped: it is run, or it is named.
 _preflight_preconditions() {
     cat <<'PRECONDS'
-check-no-python-scripts.sh|policy-binary|compiles before it resolves (its first command is `cargo build -p tillandsias-policy`); runs only when that binary already exists
+check-no-python-scripts.lua|policy-binary|compiles before it resolves (its first command is `cargo build -p tillandsias-policy`); runs only when that binary already exists
 check-no-competing-gate.sh|gate-context|answers about a RUNNING gate's dispatch, not about the tree; it has no subject outside one
 check-tracked-files-unwritten.sh|gate-context|compares against a snapshot the gate takes at its own start; outside a gate there is nothing to compare
 PRECONDS
@@ -1338,6 +1409,10 @@ PFEOF
     # reason. On wall-s a deadline of d seconds lands in (d-1, d] plus a poll.
     _pf_now
     _pf_iso="$_pf_iso deadline-clock=$_PF_CLOCK"
+    # ORDER 1616-njfd: and the budget that applies, so a regression reads
+    # against the right number (test-preflight-front-door.sh judges by it).
+    _pf_budget
+    _pf_iso="$_pf_iso budget=${_PF_BUDGET}s budget-regime=$_PF_BUDGET_REGIME"
 
     # ORDER 1353-ryhq — THE VERDICT STATES ITS CATEGORIES AND THEIR SUM, AND
     # NEVER A FIXED COUNT. The guard set differs by checkout: two Macs measured

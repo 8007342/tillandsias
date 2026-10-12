@@ -1,0 +1,14 @@
+# Gate step 1616-njfd — the preflight front door's budget is chosen per regime
+# from measurement (darwin 200 s, darwin under taskpolicy -b 415 s, the floor
+# 150 s; TILLANDSIAS_PREFLIGHT_BUDGET_S wins), the summary names it, and the
+# front door judges by it. build.sh's _pf_budget and the front door's
+# judge_budget are extracted at run time: a darwin -b run at 380 s passes under
+# its regime's budget and fails under the flat 150 s, in one run. The deadline
+# clock this host's bash gives is printed, so the gate's log shows it.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the front door's per-regime budget (1616-njfd)"
+STEP_LUA="scripts/lua/test-preflight-regime-budget.lua"
+STEP_ERROR="the front door's per-regime budget no longer does what its fixture constructs (1616-njfd) — see the FAIL lines above"
+STEP_OK="Front-door per-regime budget fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-12 darwin ok:preflight-regime-budget:6 arms"

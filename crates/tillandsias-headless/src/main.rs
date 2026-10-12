@@ -2401,6 +2401,9 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         "git" => "images/git",
         "inference" => "images/inference",
         "web" => "images/web",
+        // 1625-un54: the local Wrangler preview profile. runtime_assets already
+        // shipped its context; without this arm nothing could build it.
+        "web-wrangler" => "images/web-wrangler",
         "router" => "images/router",
         "chromium-core" => "images/chromium",
         "chromium-framework" => "images/chromium",
@@ -6165,6 +6168,37 @@ fn build_inference_run_args(
     for (name, value) in engine_slots::pin_backend_environment(effective_tier, cuda_major) {
         args.extend(["--env".into(), format!("{name}={value}")]);
     }
+    // Order 482b: the engine slot (ollama by default, SLOT-3). The llama-server
+    // slot is delivered the render nodes this user can open — on any tier,
+    // because its Vulkan lane needs no vendor stack (SLOT-4) — and an
+    // inaccessible node is reported, never chmod-ed (SLOT-5).
+    let (engine, engine_note) = engine_slots::selected_engine_kind(
+        std::env::var("TILLANDSIAS_INFERENCE_ENGINE")
+            .ok()
+            .as_deref(),
+    );
+    if let Some(note) = engine_note {
+        eprintln!("[tillandsias] WARNING: {note}");
+    }
+    let (usable_nodes, unusable_nodes) = if engine == engine_slots::EngineKind::LlamaServer {
+        engine_slots::usable_render_nodes(Path::new("/dev/dri"))
+    } else {
+        (Vec::new(), Vec::new())
+    };
+    for node in &unusable_nodes {
+        eprintln!(
+            "[tillandsias] llama-server slot: render node {} is not readable+writable by this user — not delivered; the slot runs on CPU unless another node is usable (SLOT-5)",
+            node.display()
+        );
+    }
+    args.extend(engine_slots::llama_server_run_args(
+        engine,
+        std::env::var("TILLANDSIAS_INFERENCE_LLAMA_BACKEND")
+            .ok()
+            .as_deref(),
+        effective_tier,
+        &usable_nodes,
+    ));
     args.extend(proxy_env_args());
     // Order 524: this env pair MUST be built before the mount/image tail.
     // It used to be spliced in afterwards with two `args.insert(args.len() - 2,
@@ -9993,7 +10027,7 @@ pub(crate) fn build_image_with_logging(
         "proxy" => "Routing Proxy",
         "git" => "Setting up Git",
         "router" => "Routing Traffic",
-        "web" => "Serving Web",
+        "web" | "web-wrangler" => "Serving Web",
         "vault" => "Securing Vault",
         _ => "Setting up containers",
     };
@@ -10221,7 +10255,7 @@ fn podman_build_argv(
 /// init — and every curl install, since install.sh runs `--reset-state
 /// --debug` — left /tmp/tillandsias-init-vault.log behind (measured on yoga
 /// 2026-09-27, mode 644).
-const INIT_IMAGES: [&str; 10] = [
+const INIT_IMAGES: [&str; 11] = [
     "proxy",
     "git",
     "vault",
@@ -10232,6 +10266,9 @@ const INIT_IMAGES: [&str; 10] = [
     "forge-base",
     "forge",
     "web",
+    // 1625-un54: publish_local's Wrangler profile image, tagged with the same
+    // version alias local_web_preview::Profile::image checks.
+    "web-wrangler",
 ];
 
 fn cleanup_init_logs() {
@@ -32952,6 +32989,46 @@ esac
             image_specs(&root, "web").expect("web image specs should be resolvable");
         assert!(containerfile.ends_with("images/web/Containerfile"));
         assert!(context.ends_with("images/web"));
+
+        // 1625-un54: the Wrangler preview image builds from its own context.
+        let (containerfile, context) = image_specs(&root, "web-wrangler")
+            .expect("web-wrangler image specs should be resolvable");
+        assert!(containerfile.ends_with("images/web-wrangler/Containerfile"));
+        assert!(context.ends_with("images/web-wrangler"));
+    }
+
+    /// 1625-un54: an image the runtime can name but init never builds is the
+    /// defect class. Every INIT_IMAGES entry must resolve through image_specs
+    /// (the build) to the same context runtime_assets hashes (the identity),
+    /// and both preview profile images must be in INIT_IMAGES.
+    #[test]
+    fn init_images_build_from_the_context_their_identity_hashes() {
+        let root = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../..");
+        for image in INIT_IMAGES {
+            let (_, context) = image_specs(&root, image)
+                .unwrap_or_else(|e| panic!("INIT_IMAGES entry {image} has no build spec: {e}"));
+            let identity = runtime_assets::image_identity(
+                &root,
+                image,
+                "0.0.0",
+                BTreeMap::new(),
+                BTreeMap::new(),
+            );
+            assert!(
+                identity.is_ok(),
+                "INIT_IMAGES entry {image} has no runtime identity context"
+            );
+            assert!(context.is_dir(), "{image}: {}", context.display());
+        }
+        for preview in ["web", "web-wrangler"] {
+            assert!(
+                INIT_IMAGES.contains(&preview),
+                "publish_local profile image {preview} is never built by init"
+            );
+        }
     }
 
     #[test]

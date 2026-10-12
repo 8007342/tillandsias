@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: publish-local-collapses-every-failure-into-runtime-unavailable-and-service-status-cannot-say-why-a-publish-failed
+    field: status
+    value: completed
+    ts: "2026-10-12T07:58:01Z"
+    host: lenovinha
+
+events:
+  - packet_id: publish-local-collapses-every-failure-into-runtime-unavailable-and-service-status-cannot-say-why-a-publish-failed
+    event:
+      type: completed
+      ts: "2026-10-12T07:58:01Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: land(357) 8adaa7dd2 into linux-next, gate green (run 41); branch head 73dab6ea9 (6iwd commit 488b1e392). C1: podman_at(step) names one of list|inspect|image|source|router|run|ready and its class transport|exit|timeout, raw output withheld; each_podman_step_fails_with_its_own_reason_and_withholds_output gives 7 distinct reasons, and trunk had one literal for all 42 call sites (by construction). C2: publish/reload record last_failure (step, class, reason, RFC 3339 time, remedy host-retry|agent|operator); service_status reports it and a success clears it (unit-tested). C3: the visual-chess static failure (no var/html|public|dist|root index.html, wrangler assets.directory ./dist unbuilt) replayed on a fake forge; trunk exec realpath -e on the missing index.html exits 1, now named source_not_found. C4: no servable root -> source_not_found naming var/html, public, dist, index.html. C5: static honors a root Wrangler assets.directory ahead of the fixed list (www over public). C6: an absent configured assets dir names the dir, the config and the build.command (by key when it could carry a credential). MCP-level publish proven under 1625-9qyw, not here.

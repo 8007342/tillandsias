@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (macuahuitl, 2026-10-12): 482c planning finding 3.
+packets:
+  - packet_id: under-the-llama-server-engine-the-forge-reads-api-tags-and-reports-no-models-so-the-shim-must-answer-api-tags-from-v1-models-ollama-shaped-and-health-gated
+    order: 482-ksqx
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: linux
+    capability_tags: [inference, llama-cpp, caddy, forge, compatibility]
+    estimated_hours: 2
+    depends_on:
+      - llama-server-vulkan-image-variant
+    owned_files:
+      - images/inference/llama-server.Caddyfile
+      - images/inference/llama-server-lane.sh
+    title: |
+      With TILLANDSIAS_INFERENCE_ENGINE=llama-server, the forge sees no models. Two readers call /api/tags: images/default/cli/tillandsias-models:47 and images/default/lib-inference-state.sh:74 (inference_warm). The 482b caddy shim answers /api/version, /v1/models and /v1/chat/completions, but not /api/tags, which llama-server does not serve. So an engine that is serving the T0 model looks empty to every forge consumer.
+    context: |
+      482b (PR #360) put the llama-server slot behind the unchanged :11434 endpoint. SLOT-2 requires the OpenAI surface plus the /api/version probe, and 482b delivers those. The forge's model inventory is ollama-native, and nothing translates it. Found while planning 482c; the coordinator ruled it a separate row, not part of 482c.
+      Shape: the shim answers GET /api/tags from llama-server's /v1/models, re-shaped to ollama's {"models":[{"name":...,"model":...}]}. It is health-gated like /api/version: no 200 unless llama-server's /health is 200, inside the one-second bound. The model name is the slot's alias (the logical id, e.g. qwen2.5-0.5b-instruct). Whether tillandsias-models should also map that id to its tier through the table is part of this row.
+    exit_criteria:
+      - 'in one run on the same host: with engine=llama-server serving T0, tillandsias-models lists the T0 model, and lib-inference-state reports it warm; the same run against trunk (482b only) lists none'
+      - '/api/tags answers only while llama-server /health is 200 (killed or loading engine gives no 200), within the one-second probe bound; ollama-engine behaviour is unchanged'
+    unscoreable: "unpinnable-until-the-guard-exists: the /api/tags shim and its trunk-vs-fixed fixture are written together"
+    next_action: >
+      Add a health-gated /api/tags handle to llama-server.Caddyfile that reshapes /v1/models (or have the lane write a static tags body from the alias it serves, gated the same way). Prove it with tillandsias-models against a running slot, next to trunk.
+    provenance: |
+      Filed by lenovinha-silverblue on macuahuitl's direction, 2026-10-12 (482c planning, finding 3).
+    events:
+      - type: filed
+        ts: "2026-10-12T07:24:45Z"
+        host: lenovinha
+        summary: |-
+          Under engine=llama-server the forge reads /api/tags and sees no models; the shim must answer /api/tags, ollama-shaped and health-gated.
