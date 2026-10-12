@@ -315,7 +315,6 @@ log_step "Starting inference container (non-blocking)..."
         --userns=keep-id \
         --pids-limit=1024 \
         --env "OLLAMA_DEBUG=1" \
-        --env "OLLAMA_KEEP_ALIVE=24h" \
         "${inference_env_args[@]}" \
         -v "$HOME/.cache/tillandsias/models:/home/ollama/.ollama/models:rw" \
         --mount "type=bind,source=$CERTS_DIR/intermediate.crt,target=/etc/tillandsias/ca.crt,readonly=true" \

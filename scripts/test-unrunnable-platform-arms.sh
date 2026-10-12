@@ -41,7 +41,7 @@ _P1="check-credential"; _P2="channel.sh"; PROVER="${_P1}-${_P2}"
 {
   printf 'required_tools() {\ncat <<SPEC\n'
   printf 'timeout|binary|gate|macos|%s|x|why|remedy\n' "$PROVER"
-  printf 'rg|binary|gate|linux|check-ripgrep-available.sh|x|why|remedy\n'
+  printf 'rg|binary|gate|linux|lua/check-ripgrep-available.lua|x|why|remedy\n'
   printf 'cargo|binary|gate|macos,linux,windows|-|x|why|remedy\n'
   printf 'SPEC\n}\n'
 } > "$TMP/spec.sh"

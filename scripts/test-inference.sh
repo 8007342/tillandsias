@@ -49,7 +49,6 @@ if ! podman run \
   --security-opt=no-new-privileges \
   --userns=keep-id \
   --env "OLLAMA_DEBUG=1" \
-  --env "OLLAMA_KEEP_ALIVE=24h" \
   -v "$MODEL_CACHE:/home/ollama/.ollama/models:rw" \
   "$IMAGE" \
   /usr/bin/ollama serve >"$INFERENCE_LOG" 2>&1; then
