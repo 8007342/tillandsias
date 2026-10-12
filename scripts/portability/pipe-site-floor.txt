@@ -382,7 +382,6 @@ scripts scripts/check-fragment-events-land.sh 1
 scripts scripts/check-fragment-keys-are-read.sh 1
 scripts scripts/check-fragment-ts-skew.sh 4
 scripts scripts/check-gate-memory-floor.sh 3
-scripts scripts/check-gate-step-prefix-across-refs.sh 4
 scripts scripts/check-gate-step-regimes.sh 1
 scripts scripts/check-groundtruth-mutable-status-pins.sh 4
 scripts scripts/check-groundtruth-regime-invariance.sh 3
