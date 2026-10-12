@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-12): the defect found while porting 1628-re39.
+packets:
+  - packet_id: a-gate-step-collision-on-an-08x-or-09x-prefix-passes-the-cross-ref-prefix-check-and-hides-every-later-collision-because-bash-reads-the-prefix-as-octal
+    order: 1629-xtfw
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate-steps, lua, false-negative]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/check-gate-step-prefix-across-refs.lua
+      - scripts/check-gate-step-prefix-across-refs.sh
+      - scripts/test-gate-step-prefix-across-refs.sh
+    related: [1512-3afc, 1628-re39]
+    depends_on: []
+    title: |
+      A newly added gate step whose prefix collides on 08x or 09x PASSES the cross-ref prefix check (1512-3afc), and so does every colliding step added after it: bash reads the prefix as octal, the arithmetic error aborts the loop, and the check prints ok
+    context: |
+      Measured on yolanda-windows 2026-10-12 while porting the check (1628-re39, PR #354). The port kept the defect on purpose, so the .sh and the Lua behave identically.
+      MECHANISM: free=$(( (pfx / 10 + 1) * 10 )) with pfx=085 is an invalid octal literal ("value too great for base"). In bash the expansion error aborts the enclosing while loop, not the script, and execution continues to the final echo, which prints ok:gate-step-prefix-across-refs:<n> added, <m> refs scanned with exit 0.
+      MASKING: steps after the crashing one are never examined. A change adding 085-m.step (085 held by another ref) and 110-m.step (110 held too) gets "1 added", ok.
+      SIBLING QUIRKS from the same root: a collision on 020 suggests free prefix 20 (octal 16, then the next ten), and prefixes compare as text, so 010 does not collide with a held 10. The live tree already has 005, 010 and 020, so leading-zero prefixes are real names.
+      FIX: compare prefixes and compute the free prefix in base 10: 10#$n in shell, tonumber(s, 10) in the Lua port. Decide whether 010 and 10 are the same prefix (base-10 says yes), and pin that decision with a fixture arm.
+    exit_criteria:
+      - 'in one run on the same planted repo, a change adding 085-m.step and 110-m.step (both prefixes held by another recent unlanded ref) is REFUSED by the fixed check, while the trunk check says ok'
+      - 'a collision on 020 suggests a base-10 free prefix (30, or the next free ten), not 20'
+      - 'the fixture gains arms for 08x/09x, for a leading-zero collision, and for the 010-vs-10 decision, and each arm is red against the trunk check'
+    unscoreable: "a fixture-pinned fix: its evidence is the three new arms of scripts/test-gate-step-prefix-across-refs.sh (run by gate step 740), each red against the trunk check"
+    next_action: >
+      Wait for #354 (1628-re39) to land, so the fix goes into the Lua. Then switch the prefix compare and free-prefix arithmetic to base 10, and add the three fixture arms.
+    provenance: |
+      Filed by yolanda-windows on macuahuitl-fedora's ruling, 2026-10-12.
+    events:
+      - type: filed
+        ts: "2026-10-12T05:02:27Z"
+        host: yolanda-windows
+        summary: |-
+          Follow-up to 1628-re39: the octal false negative in the gate-step prefix check, measured identical in the .sh and its Lua port.
