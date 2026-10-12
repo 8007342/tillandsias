@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: selinux-from-audit-to-enforcement-starting-with-the-forge-container-because-the-policy-sources-already-exist-unloaded-while-one-spec-mandates-label-disable-as-a-security-default-and-another-spec-asserts-guarantees-that-cannot-hold-under-it
+    event:
+      type: note
+      ts: "2026-10-12T21:05:24Z"
+      agent_id: linux-lenovinha-claude-20261012t210524z
+      host: lenovinha
+      summary: |
+        Browser container data point from 1641-xbvq (lenovinha, 2026-10-12; evidence plan/evidence/1641-xbvq-browser-wayland-socket-2026-10-12/, PR #383).
+        - ContainerSpec sets --security-opt=label=disable for EVERY container (constructor default, no setter).
+        - Spike on the chromium-framework browser with the fixed argv (only the Wayland socket file mounted), SELinux enforcing:
+          - Without label=disable, chromium could not read its profile dir.
+          - Giving only the throwaway profile a private :Z label gets past that, but then chromium logs "Failed to connect to Wayland display: Permission denied (13)".
+        - So a confined container_t cannot connect to the host compositor socket. That needs either a relabel of the live socket on the host or a root-installed policy module.
+        - The browser is therefore a justified per-container exception for this row. The other containers are not shown to need label=disable by this spike.
