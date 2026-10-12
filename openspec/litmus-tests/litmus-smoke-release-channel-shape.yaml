@@ -62,8 +62,14 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: windows channels ascii"
 
+  # Order 1561-47a8 retired a literal-string grep for "UNSTABLE channel", the
+  # same way 621-2re2 retired the channel-default grep above. 4504c6fd9 gave the
+  # Windows installer the operator's soft end-user wording ("Preview build ...")
+  # inside the same unstable branch, and the grep went red while the property
+  # held. The checker asserts the property, whatever the wording: each
+  # installer's unstable branch prints a non-empty line.
   - step: "every installer warns before installing an unstable build"
-    command: "grep -Fq 'UNSTABLE channel' scripts/install.sh && grep -Fq 'UNSTABLE channel' scripts/install-macos.sh && grep -Fq 'UNSTABLE channel' scripts/install-windows.ps1 && echo 'ok: unstable banner'"
+    command: "out=$(\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-installer-unstable-warning.lua 2>&1); case \"$out\" in ok:installer-unstable-warning:*) echo 'ok: unstable banner';; *) echo \"FAIL: $out\"; exit 1;; esac"
     timeout_ms: 3000
     expected_behavior: "ok: unstable banner"
 
