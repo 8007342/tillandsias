@@ -1420,11 +1420,13 @@ mod tests {
         assert!(m.source.join("outbox/new").is_dir() && m.source.join("inbox/new").is_dir());
         let args = m.podman_args();
         assert_eq!(args[0], "--mount");
+        // 1635-hbvw: the source is joined with the platform separator, so the
+        // expectation is built the same way (lane_dir) rather than with '/'.
         assert_eq!(
             args[1],
             format!(
-                "type=bind,source={}/lanes/alpha-w1,target=/run/host/tillandsias-msg,relabel=shared",
-                t.path().display()
+                "type=bind,source={},target=/run/host/tillandsias-msg,relabel=shared",
+                lane_dir(t.path(), "alpha-w1").display()
             )
         );
         assert_eq!(args[3], "TILLANDSIAS_MSG_LANE=alpha-w1");
