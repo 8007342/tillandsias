@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (macuahuitl, 2026-10-12): p0 security finding from today's browser research.
+packets:
+  - packet_id: the-browser-container-bind-mounts-the-whole-xdg-runtime-dir-read-write-exposing-the-podman-socket-dbus-and-keyring-so-it-must-mount-only-the-wayland-socket
+    order: 1641-xbvq
+    status: ready
+    kind: bug
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [security, browser, chromium, wayland, podman, isolation]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      The chromium-framework browser container gets the host's whole $XDG_RUNTIME_DIR read-write on Wayland: the podman socket (host code execution), the tray control socket, the D-Bus session bus and the keyring. On X11 it gets all of /tmp/.X11-unix read-write, and X11 wins whenever DISPLAY is set. The container also runs with --security-opt=label=disable. It must mount only the Wayland socket file, Wayland only.
+    context: |
+      Found by research on 2026-10-12 in build_project_browser_spec and BrowserDisplayContext::from_env (crates/tillandsias-headless/src/main.rs):
+      - Wayland: .volume(xdg_runtime_dir, xdg_runtime_dir, ReadWrite) mounts the WHOLE runtime dir. That includes podman/podman.sock (any process in the browser can drive the host's podman, i.e. host code execution), the tray control socket, the D-Bus session bus (bus), and with the bus the keyring that holds Vault's unseal share.
+      - X11: DISPLAY wins over WAYLAND_DISPLAY whenever both are set (every XWayland session), and mounts all of /tmp/.X11-unix read-write.
+      - ContainerSpec always adds --security-opt=label=disable.
+      OPERATOR DECISION (2026-10-12): Wayland only. Drop X11 and refuse with a clear message when there is no Wayland session.
+      Fix shape:
+      - mount only the $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY socket FILE into a private runtime dir inside the container (e.g. /run/user/browser/wayland-0), with XDG_RUNTIME_DIR and WAYLAND_DISPLAY pointing there;
+      - pass --ozone-platform=wayland;
+      - remove label=disable for the browser if a spike shows the socket works under a targeted SELinux label. If it does not, record why and keep the exception scoped to the browser container only.
+      The broader "open it" plan (containerized browser.open, preview-port allowlist, device modes, dev-mode CDP broker) is the coordinator's, filed separately after more research.
+    exit_criteria:
+      - 'a unit test with DISPLAY and WAYLAND_DISPLAY both set finds --ozone-platform=wayland, exactly one socket-file mount, and no mount whose source is $XDG_RUNTIME_DIR or /tmp/.X11-unix; red on the code before this row'
+      - 'a live probe from inside the browser container cannot see podman.sock, the D-Bus bus or the keyring, and the browser window still appears'
+    unscoreable: "unpinnable-until-the-guard-exists: the browser-mount unit test and its litmus are written with the fix"
+    next_action: >
+      Write the red unit test against today's build_project_browser_spec. Then make BrowserDisplayContext Wayland-only (refuse without WAYLAND_DISPLAY and XDG_RUNTIME_DIR), mount only the socket file, and run the SELinux label spike plus the live in-container probe.
+    provenance: |
+      Filed by lenovinha-silverblue on macuahuitl's direction, 2026-10-12 (p0 security).
+    events:
+      - type: filed
+        ts: "2026-10-12T20:45:21Z"
+        host: lenovinha
+        summary: |-
+          p0: the browser container mounts the whole XDG_RUNTIME_DIR read-write (podman.sock, tray socket, D-Bus, keyring), or all of /tmp/.X11-unix; Wayland-only, socket-file mount.
