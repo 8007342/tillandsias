@@ -23799,6 +23799,13 @@ mod tests {
     /// lists agree in VALUE, only that a token appears in both.
     #[test]
     fn both_proxy_env_appliers_emit_the_same_contract() {
+        // Both appliers read `enclave_subnet()` from the process environment,
+        // at two different moments. `enclave_no_proxy_uses_subnet_override`
+        // sets the variable under the env lock, so without the lock here one
+        // read can land inside its override window and the two lists
+        // disagree on the subnet alone (measured on yoga 2026-10-12 under the
+        // `proxy_` filter: red in parallel, 21/21 green with one thread).
+        let _guard = env_lock();
         // The raw-args path.
         let raw = proxy_env_args();
         let mut from_args: Vec<String> = raw
