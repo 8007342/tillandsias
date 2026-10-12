@@ -92,28 +92,28 @@ drive() {   # $1 = exit code the decider returns, $2 = stdout line it prints
 
 # ---- ARM 1: exit 2 is could-not-run, and says so --------------------------
 out2="$(drive 2 'could-not-run:fragment-events-land:compact-did-not-run')"
-if printf '%s' "$out2" | grep -q 'COULD NOT RUN'; then
+if grep -q 'COULD NOT RUN' <<<"$out2"; then
     ok "exit 2 -> named as could-not-run"
 else
     bad "exit 2 -> not named as could-not-run; got: $out2"
 fi
 
 # THE DEFECT ITSELF. The exit-2 run must NOT claim anything about the ledger.
-if printf '%s' "$out2" | grep -q 'an event is attached to no packet'; then
+if grep -q 'an event is attached to no packet' <<<"$out2"; then
     bad "exit 2 still claims 'an event is attached to no packet' — the 1021-a944 defect"
 else
     ok "exit 2 makes NO substantive claim about the ledger"
 fi
 
 # The decider's own verdict line must be surfaced, not paraphrased away.
-if printf '%s' "$out2" | grep -q 'compact-did-not-run'; then
+if grep -q 'compact-did-not-run' <<<"$out2"; then
     ok "exit 2 surfaces the decider's own verdict line"
 else
     bad "exit 2 hides which could-not-run cause fired; got: $out2"
 fi
 
 # And the remedy has to be actionable in the locus that hit it.
-if printf '%s' "$out2" | grep -q 'cycle-preflight'; then
+if grep -q 'cycle-preflight' <<<"$out2"; then
     ok "exit 2 names the cycle-preflight remedy"
 else
     bad "exit 2 gives the operator no remedy; got: $out2"
@@ -121,7 +121,7 @@ fi
 
 # exit 3 is _run_lua_decider's own could-not-run (no script runner)
 out3="$(drive 3 'could-not-run:lua-decider:check-fragment-events-land.lua:no-script-runner')"
-if printf '%s' "$out3" | grep -q 'COULD NOT RUN' && ! printf '%s' "$out3" | grep -q 'an event is attached to no packet'; then
+if grep -q 'COULD NOT RUN' <<<"$out3" && ! grep -q 'an event is attached to no packet' <<<"$out3"; then
     ok "exit 3 (no script runner) -> could-not-run, no ledger claim"
 else
     bad "exit 3 (no script runner) was not routed to could-not-run; got: $out3"
@@ -132,12 +132,12 @@ fi
 # would pass every assertion above and destroy the check. This is the arm that
 # forbids that.
 out1="$(drive 1 'blocked:fragment-events-land:2 event(s) attached to no packet')"
-if printf '%s' "$out1" | grep -q 'an event is attached to no packet'; then
+if grep -q 'an event is attached to no packet' <<<"$out1"; then
     ok "exit 1 still reports the substantive violation"
 else
     bad "exit 1 no longer reports the violation — the check has been hollowed out; got: $out1"
 fi
-if printf '%s' "$out1" | grep -q 'COULD NOT RUN'; then
+if grep -q 'COULD NOT RUN' <<<"$out1"; then
     bad "exit 1 mislabelled as could-not-run — the two arms are swapped"
 else
     ok "exit 1 is NOT labelled could-not-run"
@@ -145,7 +145,7 @@ fi
 
 # ---- ARM 3: exit 0 passes -------------------------------------------------
 out0="$(drive 0 'ok:fragment-events-land:12 fragment(s) checked')"
-if printf '%s' "$out0" | grep -q 'All fragment events land'; then
+if grep -q 'All fragment events land' <<<"$out0"; then
     ok "exit 0 -> passes"
 else
     bad "exit 0 no longer passes; got: $out0"
@@ -160,7 +160,7 @@ if [ -z "$_plan" ]; then
 else
     real_out="$(env -u TILLANDSIAS_SCRIPT_RUNNER_BIN "$_plan" script run scripts/lua/check-fragment-events-land.lua 2>&1)"
     real_rc=$?
-    if [ "$real_rc" -eq 2 ] && printf '%s' "$real_out" | grep -q 'could-not-run:fragment-events-land:no-plan-binary'; then
+    if [ "$real_rc" -eq 2 ] && grep -q 'could-not-run:fragment-events-land:no-plan-binary' <<<"$real_out"; then
         ok "the real decider reaches exit 2 with its documented verdict"
     else
         bad "the real decider did not produce exit 2 / no-plan-binary (rc=$real_rc, out=$real_out)"
@@ -171,7 +171,7 @@ fi
 stub_probe fail
 out5="$(STUB_DIR="$work/stub" STUB_RC=0 STUB_LINE='ok:fragment-events-land:1 fragment(s) checked' \
     bash "$work/drive.sh" "$work/harness.sh" "$work/branch.sh" 2>&1)"
-if printf '%s' "$out5" | grep -q 'COULD NOT RUN' && printf '%s' "$out5" | grep -q 'no-fresh-plan-binary' \
+if grep -q 'COULD NOT RUN' <<<"$out5" && grep -q 'no-fresh-plan-binary' <<<"$out5" \
    && [ ! -f "$work/stub/invoked" ]; then
     ok "no fresh plan binary -> could-not-run, and the decider was never invoked"
 else
@@ -206,7 +206,7 @@ if git show "$_pre_ref:scripts/check-fragment-events-land.sh" > "$stale/scripts/
     pre_out="$(cd "$stale" && env -u TILLANDSIAS_PLAN_BIN -u CARGO_TARGET_DIR PATH=/usr/bin:/bin \
         bash scripts/check-fragment-events-land.sh 2>&1)"
     pre_rc=$?
-    if [ "$pre_rc" -eq 2 ] && printf '%s' "$pre_out" | grep -q 'no-fresh-plan-binary'; then
+    if [ "$pre_rc" -eq 2 ] && grep -q 'no-fresh-plan-binary' <<<"$pre_out"; then
         ok "pre-port: the .sh refuses a stale binary it cannot rebuild (exit 2, no-fresh-plan-binary)"
     else
         bad "pre-port: the .sh did not refuse the stale binary (rc=$pre_rc, out=$pre_out)"
@@ -218,7 +218,7 @@ rm -f "$stale/invoked"
 post_out="$(cd "$stale" && env -u TILLANDSIAS_PLAN_BIN -u CARGO_TARGET_DIR PATH=/usr/bin:/bin \
     STUB_DIR="$stale" STUB_RC=0 STUB_LINE='ok:fragment-events-land:1 fragment(s) checked' \
     /bin/bash "$work/drive.sh" "$work/harness.sh" "$work/branch.sh" 2>&1)"
-if printf '%s' "$post_out" | grep -q 'COULD NOT RUN' && printf '%s' "$post_out" | grep -q 'no-fresh-plan-binary' \
+if grep -q 'COULD NOT RUN' <<<"$post_out" && grep -q 'no-fresh-plan-binary' <<<"$post_out" \
    && [ ! -f "$stale/invoked" ]; then
     ok "post-port: the call site refuses the same stale binary before invoking the decider"
 else
