@@ -9,7 +9,11 @@
 # selects every fixture that names it, listed before any of them run; a
 # merge conflict refuses and restores the tree; and a dirty worktree is
 # refused before any fetch (the negative control); and a fixture that
-# drains stdin cannot end the fixture loop early (1520-zjmk).
+# drains stdin cannot end the fixture loop early (1520-zjmk). 1577-568c added
+# arms 9-11 (7956d90e2, b92799a55): a due, silent ref refuses at
+# check-carried-obligations; the same change with a Carried-Waiver trailer
+# passes; and after the re-exec a selected fixture does not inherit
+# TILLANDSIAS_RELAY_PREFLIGHT_REEXEC. The count below was left at 8 then.
 name: litmus:relay-preflight-shape
 spec: ci-release
 phase: pre-build
@@ -35,7 +39,7 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: relay-preflight-parses"
 
-  - step: "eight arms, exit 0"
-    command: "out=$(TILLANDSIAS_RELAY_PREFLIGHT_STUB=1 bash scripts/test-relay-preflight.sh); rc=$?; case \"$out\" in (*'ok:relay-preflight:8/8'*) [ \"$rc\" = 0 ] && echo 'ok: relay-preflight 8/8' ;; (*) printf '%s\\n' \"$out\"; exit 1 ;; esac"
+  - step: "eleven arms, exit 0"
+    command: "out=$(TILLANDSIAS_RELAY_PREFLIGHT_STUB=1 bash scripts/test-relay-preflight.sh); rc=$?; case \"$out\" in (*'ok:relay-preflight:11/11'*) [ \"$rc\" = 0 ] && echo 'ok: relay-preflight 11/11' ;; (*) printf '%s\\n' \"$out\"; exit 1 ;; esac"
     timeout_ms: 90000
-    expected_behavior: "ok: relay-preflight 8/8"
+    expected_behavior: "ok: relay-preflight 11/11"
