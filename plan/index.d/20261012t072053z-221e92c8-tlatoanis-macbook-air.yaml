@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-guard-killed-at-the-door-deadline-leaves-its-declared-in-checkout-mutant-copies-and-check-bare-mktemp-then-false-refuses-the-tree-depending-on-order
+    event:
+      type: note
+      ts: "2026-10-12T07:20:53Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t072053z
+      host: tlatoanis-macbook-air
+      summary: |-
+        CORRECTION to this row's filing context (the filer's own misreading). could-not-run:awk-float-lc-numeric-signal in the 1616 preflight was NOT a door kill: that fixture refuses to run when a .mutant-lcnum-* copy exists at its start (scripts/lua/test-awk-float-lc-numeric-signal.lua:33). WHAT IS ESTABLISHED: the door runs BOTH writers of those paths as guards: gate step 450 runs scripts/test-awk-float-lc-numeric.sh directly, and step 455 runs the signal .lua, which runs the same .sh as its child. Both write the SAME three paths (.mutant-lcnum-<producer> beside each producer). The door runs guards concurrently (_pf_jobs = cores/4, min 2), and in every darwin -b preflight on this host both are killed at the 5 s deadline (skip:preflight:...:deadline:5s for each, two runs on 2026-10-12). So without any leak, (1) step 450's live copies make step 455 could-not-run, (2) a concurrent tree-scanning guard (check-bare-mktemp) sees live copies and refuses, and (3) a deadline kill can leave copies (unobserved here). NOT ESTABLISHED: that the copies pre-existed the preflight (the git status that showed them was taken while that local-ci + preflight run was in flight), or any leak from another runner (no litmus test runs this fixture; its only runners are gate steps 450 and 455). Also: _pf_predecide matches the 1499-m9fj serial declaration only as '^# preflight: serial', so a .lua guard cannot declare itself serial. Scope widened by the coordinator (2026-10-12): (a) the kill sweep, (b) .lua serial declarations, (c) both writers run alone; exit criteria list-replaced to match.

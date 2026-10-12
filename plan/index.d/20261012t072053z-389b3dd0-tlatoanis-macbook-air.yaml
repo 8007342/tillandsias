@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: a-guard-killed-at-the-door-deadline-leaves-its-declared-in-checkout-mutant-copies-and-check-bare-mktemp-then-false-refuses-the-tree-depending-on-order
+    event:
+      type: list-replace
+      ts: "2026-10-12T07:20:53Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t072053z
+      host: tlatoanis-macbook-air
+      field: exit_criteria
+      items:
+        - "(a) KILL-direct: a planted guard that names a declared checkout writer writes that writer's declared in-checkout artifacts, IGNORES TERM and is KILLed at the deadline. On the fixed door no artifact is left and the sweep is recorded; on the trunk door (the same function with the new sweep removed) the artifacts are left; a check-bare-mktemp run after the fixed-door kill says ok. All in one run, and only untracked files matching the declaration are removed (a tracked file and a non-matching untracked file are untouched)."
+        - "(b) a .lua guard whose header carries `-- preflight: serial — <reason>` is predecided serial (12) by the fixed door, and the trunk door predecides the same file as parallel (0), in one run; the `#` spelling for a .sh guard still returns 12."
+        - "(c) both writers of the .mutant-lcnum-* paths (gate step 450's scripts/test-awk-float-lc-numeric.sh and step 455's scripts/lua/test-awk-float-lc-numeric-signal.lua) are declared serial, and the door's own scheduling (its launcher, not a sleep race) never runs another guard beside either: a run with a recording guard beside them shows no overlap with either serial guard's window, and the same roster with the declarations absent shows overlap, in one run."
+      summary: |-
+        scope widened by the coordinator 2026-10-12: (a) kill sweep KILL-direct, (b) .lua serial declaration, (c) both writers of the mutant paths run alone; see the correction note
