@@ -1214,6 +1214,17 @@ MaxLevelConsole=info
 EOF
 systemctl restart systemd-journald || true
 
+# ORDER 1642-cc54. THE KERNEL'S OWN MESSAGES REACH hvc0 TOO, from the next boot.
+# The journal forward above stops when journald stops, so the last phase of a
+# shutdown (systemd-shutdown unmounting, swapoff, the kernel's power-off) never
+# reached console.log. MEASURED 2026-10-12: a tray Quit whose guest printed
+# "Shutting down." 12 s after the request still left VZ short of Stopped for
+# ~53 s more, and nothing on the console said where those seconds went.
+# console=hvc0 is appended LAST, so /dev/console is hvc0: kernel and
+# systemd-shutdown messages are captured. It takes effect at the next boot,
+# which is why the journal forward above stays.
+grubby --update-kernel=ALL --args="console=hvc0" || true
+
 # Write tillandsias-headless-fetch.service
 cat > /etc/systemd/system/tillandsias-headless-fetch.service << 'EOF'
 [Unit]
@@ -2006,6 +2017,34 @@ impl std::error::Error for OpenVsockError {}
 /// macOS-only (the 690-w94k / 804-deux shape: green on osx-next, E0433 on
 /// linux-next). See plan/issues/forge-memory-swap-architecture-design-2026-09-26.md §4.3.
 pub const SWAP_IMAGE_FILE: &str = "vm-swap.img";
+
+/// VZVirtualMachineState by its raw value, for logs.
+pub fn vz_state_name(state: isize) -> &'static str {
+    match state {
+        0 => "Stopped",
+        1 => "Running",
+        2 => "Paused",
+        3 => "Error",
+        4 => "Starting",
+        5 => "Pausing",
+        6 => "Resuming",
+        7 => "Stopping",
+        8 => "Saving",
+        9 => "Restoring",
+        _ => "Unknown",
+    }
+}
+
+/// The drain-timeout refusal, naming the VZ state the drain gave up in
+/// (1642-cc54): 0 of 13 tray quits on darwin drained cleanly, and the old
+/// message could not say whether the guest or the host was the one waiting.
+pub fn drain_timeout_message(drain_timeout: std::time::Duration, state: isize) -> String {
+    format!(
+        "VzRuntime::stop: drain_timeout ({}s) expired in VZ state {} ({state}); force-stop dispatched",
+        drain_timeout.as_secs(),
+        vz_state_name(state)
+    )
+}
 
 #[cfg(target_os = "macos")]
 pub mod boot {
@@ -3199,10 +3238,11 @@ impl VmRuntime for VzRuntime {
                     }
                     wait_for_vz(Duration::from_millis(100));
                 }
-                break Err(format!(
-                    "VzRuntime::stop: drain_timeout ({}s) expired; force-stop dispatched",
-                    drain_timeout.as_secs()
-                ));
+                // 1642-cc54: name the state VZ was in when the drain gave up.
+                // A guest that already printed "Shutting down." while VZ still
+                // reads Running is a guest kernel stuck in its power-off; one
+                // VZ reads Stopping is the host waiting on VZ.
+                break Err(drain_timeout_message(drain_timeout, state));
             }
             wait_for_vz(Duration::from_millis(250));
         };
@@ -4988,6 +5028,39 @@ mod tests {
             script.contains(std_console),
             "the units must still request console output; forwarding alone \
              carries only what something asks to send"
+        );
+    }
+
+    /// 1642-cc54: a drain that times out says which VZ state it gave up in,
+    /// so a log tells a guest stuck in power-off (Running) from the host
+    /// waiting on VZ (Stopping).
+    #[test]
+    fn drain_timeout_names_the_vz_state() {
+        let running = drain_timeout_message(Duration::from_secs(60), 1);
+        assert!(running.contains("drain_timeout (60s)"), "{running}");
+        assert!(running.contains("VZ state Running (1)"), "{running}");
+        assert!(running.contains("force-stop dispatched"), "{running}");
+        assert!(drain_timeout_message(Duration::from_secs(60), 7).contains("Stopping (7)"));
+        assert_eq!(vz_state_name(0), "Stopped");
+        assert_eq!(vz_state_name(42), "Unknown");
+    }
+
+    /// 1642-cc54: the kernel's console is hvc0 too, so the end of a shutdown
+    /// (after journald stops) reaches console.log. Without it a guest that
+    /// printed "Shutting down." and then left VZ short of Stopped for ~53 s
+    /// gave no account of those seconds.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn vz_provisioning_puts_the_kernel_console_on_hvc0() {
+        let script = provision_user_data_for_test();
+        let arg = concat!("--args=\"console=", "hvc0\"");
+        let line = script
+            .lines()
+            .find(|l| l.trim_start().starts_with("grubby ") && l.contains(arg))
+            .unwrap_or_else(|| panic!("provisioning must run grubby with {arg}"));
+        assert!(
+            line.contains("--update-kernel=ALL"),
+            "every installed kernel, so a kernel update keeps it: {line}"
         );
     }
 
