@@ -465,6 +465,20 @@ first line naming the kind.)
 - Pre-fix result: FAILS — the 2026-09-27 shape offered a HARD kind through
   `TILLANDSIAS_INSTALL_RESET=hard` and printed a reset-kind first line.
 
+#### Scenario: The Windows installer keeps install detail in its log
+- **WHEN** `scripts/install-windows.ps1` installs or uninstalls on the normal
+  path
+- **THEN** it SHALL NOT print install or shortcut paths, the capability probe
+  binary, the tray version line with its commit hash, the Installed-Software
+  registration, uninstall removal details, `-Param` hints or order ids; that
+  detail SHALL go to the install log, which a failure line names by path
+- **AND** the PENDING ACTIONS banner SHALL print only when at least one action
+  is pending (order 1639-8gfw; this supersedes the 1380-zmpi "PENDING: none"
+  box for Windows)
+- Measurable: `scripts/lua/check-installer-end-user-output.lua` refuses each
+  by file:line (fixture `scripts/lua/test-check-installer-end-user-output.lua`
+  arms 7-15). Pre-fix result: FAILS — 22 lines on trunk 2026-10-12.
+
 #### Scenario: The opt-out still opts out of everything
 - **WHEN** `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0` is set and either reset runs
 - **THEN** nothing in either set SHALL be removed

@@ -124,8 +124,12 @@ function SayWn { param([string]$msg) Write-Host "  $msg" -ForegroundColor Yellow
 # Operator, 2026-09-26: "print some big text with what's pending, like a
 # restart for windows hosts where WSL was just enabled." Steps below APPEND to
 # $PendingActions as they discover something the user must still do; the
-# banner is the script's LAST output. "PENDING: none" is printed rather than
-# omitted, because silence and "nothing pending" produce the same bytes.
+# banner is the script's LAST output, and it prints ONLY when something is
+# pending (order 1639-8gfw). 1380-zmpi printed an empty box reading "nothing
+# pending" so that silence and nothing-pending differed; the end-user ruling
+# (2026-10-08) outranks that, and the line before the banner ("Tray started.
+# ...") already tells the user the install finished. With no items this returns
+# an empty list.
 # Format-PendingBanner is pure (items in, lines out) so the fixture
 # scripts/test-installers-print-pending-banner.sh runs it through PowerShell;
 # the marker lines around it are what that fixture cuts on.
@@ -133,13 +137,10 @@ $PendingActions = New-Object System.Collections.Generic.List[string]
 # BEGIN-PENDING-BANNER
 function Format-PendingBanner {
     param([string[]]$Items)
+    if ($null -eq $Items -or $Items.Count -eq 0) { return ,@() }
     $rule = '=' * 64
     $out = @('', $rule, '  PENDING ACTIONS', $rule)
-    if ($null -eq $Items -or $Items.Count -eq 0) {
-        $out += '  PENDING: none'
-    } else {
-        foreach ($i in $Items) { $out += "  >> $i" }
-    }
+    foreach ($i in $Items) { $out += "  >> $i" }
     $out += $rule
     $out += ''
     return ,$out
@@ -166,14 +167,14 @@ if ($Uninstall -or $Purge) {
     Say "$action $AppName..."
     Get-Process -Name 'tillandsias-tray' -ErrorAction SilentlyContinue | Stop-Process -Force
     foreach ($p in @($ShortcutPath, $StartupLnk)) {
-        if (Test-Path $p) { Remove-Item $p -Force; Say "  removed $p" }
+        if (Test-Path $p) { Remove-Item $p -Force; Log "  removed $p" }
     }
-    if (Test-Path $InstallDir) { Remove-Item $InstallDir -Recurse -Force; Say "  removed $InstallDir" }
+    if (Test-Path $InstallDir) { Remove-Item $InstallDir -Recurse -Force; Log "  removed $InstallDir" }
     # windows-260722-3: Installed-Software entry + every Tillandsias
     # tray-icon settings entry go with the app (uninstall AND purge -- a
     # removed app must vanish from Settings surfaces entirely).
     $UninstKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Tillandsias'
-    if (Test-Path $UninstKey) { Remove-Item $UninstKey -Recurse -Force -ErrorAction SilentlyContinue; Say "  removed Installed-Software entry" }
+    if (Test-Path $UninstKey) { Remove-Item $UninstKey -Recurse -Force -ErrorAction SilentlyContinue; Log "  removed Installed-Software entry" }
     try {
         $nis = 'HKCU:\Control Panel\NotifyIconSettings'
         if (Test-Path $nis) {
@@ -181,7 +182,7 @@ if ($Uninstall -or $Purge) {
                 $p = (Get-ItemProperty -Path $_.PSPath -Name 'ExecutablePath' -ErrorAction SilentlyContinue).ExecutablePath
                 if ($p -and ($p -like '*tillandsias-tray.exe')) {
                     Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue
-                    Say "  removed tray-icon settings entry: $p"
+                    Log "  removed tray-icon settings entry: $p"
                 }
             }
         }
@@ -190,7 +191,7 @@ if ($Uninstall -or $Purge) {
     # per-distro folders that `wsl --unregister` leaves behind).
     foreach ($d in @('tillandsias', 'tillandsias-build') | ForEach-Object { Join-Path $StartMenuDir $_ }) {
         if ((Test-Path $d) -and -not (Get-ChildItem $d -ErrorAction SilentlyContinue)) {
-            Remove-Item $d -Force -ErrorAction SilentlyContinue; Say "  removed empty $d"
+            Remove-Item $d -Force -ErrorAction SilentlyContinue; Log "  removed empty $d"
         }
     }
     if ($Purge) {
@@ -199,11 +200,11 @@ if ($Uninstall -or $Purge) {
             $listed = (& wsl --list --quiet 2>$null) | ForEach-Object { ($_ -replace "`0", '').Trim() } | Where-Object { $_ }
             if ($listed -contains 'tillandsias') {
                 & wsl --unregister tillandsias 2>$null
-                Say "  unregistered WSL distro 'tillandsias'"
+                Log "  unregistered WSL distro 'tillandsias'"
             }
         }
         foreach ($d in @('cache', 'logs', 'wsl') | ForEach-Object { Join-Path $DataRoot $_ }) {
-            if (Test-Path $d) { Remove-Item $d -Recurse -Force -ErrorAction SilentlyContinue; Say "  removed $d" }
+            if (Test-Path $d) { Remove-Item $d -Recurse -Force -ErrorAction SilentlyContinue; Log "  removed $d" }
         }
         # 803-49re: unregistering the distro destroys the guest Vault, which
         # makes the host's copy of THAT vault's identity worse than useless
@@ -221,11 +222,11 @@ if ($Uninstall -or $Purge) {
         # events stay in the Application log by design (they are the record).
         try {
             Remove-EventLog -Source 'Tillandsias' -ErrorAction Stop
-            Say "  removed Event Log source 'Tillandsias'"
+            Log "  removed Event Log source 'Tillandsias'"
         } catch {}
         SayOk "Purged."
     } else {
-        SayOk "Uninstalled. (Use -Purge for full cleanup including WSL distro + cache.)"
+        SayOk "Uninstalled."
     }
     return
 }
@@ -730,7 +731,7 @@ Write-Host ""
 Say "Tillandsias Installer"
 Say "====================="
 Say "Target: Windows x64"
-Say "Install path: $InstalledExe"
+Log "Install path: $InstalledExe"
 Write-Host ""
 
 # -- Resolve version and base URL ---------------------------------------------
@@ -863,38 +864,41 @@ try {
     if (Test-Path $InstallDir) {
         $Backup = "$InstallDir.bak"
         Remove-Item -Recurse -Force $Backup -ErrorAction SilentlyContinue
-        Say "Backing up existing install to $(Split-Path $Backup -Leaf)..."
+        Log "Backing up existing install to $Backup..."
         Rename-Item $InstallDir $Backup
     }
 
     # -- Extract ----------------------------------------------------------------
-    Say "Extracting to $InstallDir..."
+    Log "Extracting to $InstallDir..."
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
     Expand-Archive -Path "$Tmp\$ZipName" -DestinationPath $InstallDir -Force
     if (-not (Test-Path $InstalledExe)) {
-        Die "Extraction did not produce $InstalledExe -- zip may be corrupt."
+        Log "Extraction did not produce $InstalledExe -- zip may be corrupt."
+        Die "The download was damaged, so nothing was installed. Please try again. Details: $InstallLog"
     }
     # ORDER 1171-ccf2. Expand-Archive already places everything the zip carries,
     # so the headless probe binary needs no copy step -- only a word about
     # whether it arrived. Best-effort and NEVER fatal: a release cut before
     # 1171-ccf2 carries no tillandsias.exe and must still install its tray.
-    # Said out loud because its ABSENCE is the condition that left a Windows
-    # host unable to publish a capability row at all, and silence is what made
-    # that hard to see.
+    # Recorded because its ABSENCE is the condition that left a Windows host
+    # unable to publish a capability row at all, and silence is what made that
+    # hard to see. It goes to the install log, not the screen (order 1639-8gfw:
+    # an end user cannot act on it).
     $InstalledHeadless = Join-Path $InstallDir $HeadlessName
     if (Test-Path $InstalledHeadless) {
-        Say "  capability probe binary: $InstalledHeadless"
+        Log "  capability probe binary: $InstalledHeadless"
     } else {
-        Say "  note: this release carries no $HeadlessName; the capability probe will have no runnable binary at this locus (1171-ccf2)"
+        Log "  note: this release carries no $HeadlessName; the capability probe will have no runnable binary at this locus (1171-ccf2)"
     }
 
     # -- Start Menu shortcut ---------------------------------------------------
     New-Shortcut -LinkPath $ShortcutPath -Target $InstalledExe -Arguments '' -WorkDir $DataRootDir
-    SayOk "Start Menu shortcut: $ShortcutPath"
+    Log "Start Menu shortcut: $ShortcutPath"
+    SayOk "Added Tillandsias to the Start menu."
 
     if ($LoginItem) {
         New-Shortcut -LinkPath $StartupLnk -Target $InstalledExe -Arguments '' -WorkDir $DataRootDir
-        SayOk "Startup entry: $StartupLnk"
+        Log "Startup entry: $StartupLnk"
     }
 
     # -- Verify installation ---------------------------------------------------
@@ -908,7 +912,7 @@ try {
         Log "tillandsias-tray --version failed (exit $VerExit)."
         Die "The downloaded Tillandsias does not start (exit $VerExit). Details: $InstallLog"
     }
-    SayOk $VerLine
+    Log "tillandsias-tray --version: $VerLine"
 
     # -- Verify the install bits via --diagnose --json (order 1258-8wfb) ------
     # RESTORED. Added by d7bfcdd9f (2026-05-28), extended by 567009f68
@@ -1082,9 +1086,9 @@ try {
         Set-ItemProperty -Path $UninstKey -Name 'NoRepair' -Value 1 -Type DWord
         $sizeKb = [int]((Get-Item $InstalledExe).Length / 1KB)
         Set-ItemProperty -Path $UninstKey -Name 'EstimatedSize' -Value $sizeKb -Type DWord
-        SayOk "Registered in Installed Software (v$InstalledVersion)."
+        Log "Registered in Installed Software (v$InstalledVersion)."
     } catch {
-        SayWn "Installed-Software registration failed ($_) - continuing."
+        Log "Installed-Software registration failed ($_) - continuing."
     }
 
     # -- Tray-icon settings hygiene (windows-260722-3) ------------------------
@@ -1108,7 +1112,7 @@ try {
                         New-ItemProperty -Path 'HKCU:\Software\Tillandsias' -Name 'TrayIconPromoted' -Value 1 -PropertyType DWord -Force | Out-Null
                     }
                     Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue
-                    Say "  removed stale tray-icon entry: $p"
+                    Log "  removed stale tray-icon entry: $p"
                 }
             }
         }
@@ -1142,5 +1146,5 @@ if ($WslState -eq 'reboot-pending') {
     $PendingActions.Insert(0, "BEFORE FIRST LAUNCH: $NoLaunchReason.")
 }
 foreach ($l in (Format-PendingBanner -Items $PendingActions.ToArray())) {
-    if ($PendingActions.Count -gt 0) { Write-Host $l -ForegroundColor Yellow } else { Write-Host $l }
+    Write-Host $l -ForegroundColor Yellow
 }
