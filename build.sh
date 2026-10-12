@@ -445,6 +445,35 @@ _pf_now() {
     fi
 }
 
+# ORDER 1616-njfd. THE FRONT DOOR'S BUDGET, PER REGIME, from measurement. The
+# old budget was one constant: 150 s, the floor host's 140 s plus ten
+# (1305-udgs). Darwin cannot meet it, with the 1614-5x7m wall-clock door in
+# place. MEASURED standalone on an M5 MacBook Air, 2026-10-11:
+# 179 s plain and 376 s under taskpolicy -b. The coordinator approved about
+# 10% over each: darwin 200 s, darwin background QoS 415 s, everything else
+# unchanged at 150 s. TILLANDSIAS_PREFLIGHT_BUDGET_S still wins. Background QoS
+# is read from the scheduler: under `taskpolicy -b` a process's priority reads
+# 4, against 31 plain (measured). One ps per preflight, no pipe. Sets
+# _PF_BUDGET (seconds) and _PF_BUDGET_REGIME (override|darwin-background|darwin|floor).
+_pf_budget() {
+    local _pri
+    if [ -n "${TILLANDSIAS_PREFLIGHT_BUDGET_S:-}" ]; then
+        _PF_BUDGET="$TILLANDSIAS_PREFLIGHT_BUDGET_S"; _PF_BUDGET_REGIME=override
+        return 0
+    fi
+    case "$(uname -s 2>/dev/null)" in
+        Darwin)
+            _pri="$(ps -o pri= -p "$$" 2>/dev/null)"; _pri="${_pri// /}"
+            if [ -n "$_pri" ] && [ "$_pri" -le 4 ] 2>/dev/null; then
+                _PF_BUDGET=415; _PF_BUDGET_REGIME=darwin-background
+            else
+                _PF_BUDGET=200; _PF_BUDGET_REGIME=darwin
+            fi ;;
+        *)
+            _PF_BUDGET=150; _PF_BUDGET_REGIME=floor ;;
+    esac
+}
+
 _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, $4 = args
     local _p="$1" _d="$2" _out="$3" _pid _tick
     # ORDER 1499-m9fj: THE GATE'S ARGUMENTS, WORD FOR WORD. A guard run without
@@ -1319,6 +1348,10 @@ PFEOF
     # reason. On wall-s a deadline of d seconds lands in (d-1, d] plus a poll.
     _pf_now
     _pf_iso="$_pf_iso deadline-clock=$_PF_CLOCK"
+    # ORDER 1616-njfd: and the budget that applies, so a regression reads
+    # against the right number (test-preflight-front-door.sh judges by it).
+    _pf_budget
+    _pf_iso="$_pf_iso budget=${_PF_BUDGET}s budget-regime=$_PF_BUDGET_REGIME"
 
     # ORDER 1353-ryhq — THE VERDICT STATES ITS CATEGORIES AND THEIR SUM, AND
     # NEVER A FIXED COUNT. The guard set differs by checkout: two Macs measured
