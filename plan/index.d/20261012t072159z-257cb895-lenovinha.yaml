@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-forge-image-has-no-wasm32-target-so-a-wasm-pack-web-project-cannot-build-in-the-forge
+    event:
+      type: note
+      ts: "2026-10-12T07:21:59Z"
+      agent_id: linux-lenovinha-claude-20261012t062859z
+      host: lenovinha
+      summary: |-
+        IMAGE SIZE DELTA (exit criterion 2), measured on an isolated podman store, lenovinha 2026-10-12: forge-base 3,123,237,614 -> 3,242,617,078 bytes (+119,379,464 = 113 MiB); forge 3,133,879,369 -> 3,250,280,526 bytes (+116,401,157 = 111 MiB). The package rust-std-static-wasm32-unknown-unknown-1.98.1-1.fc44 installs 112,808,759 bytes. A separate RUN layer would have cost 170 MiB because it duplicates the 56 MB rpm database, so the std was folded into the main microdnf layer. Branch work/1625-grk8 head 43460c103; evidence in plan/evidence/1625-grk8-wasm32-2026-10-12/.
