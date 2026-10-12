@@ -29,7 +29,7 @@
 --   7 OVERLAP    the same roster with the declaration absent overlaps, in
 --                the same run, so arm 6 is not passing because of timing
 --   8 RUNNER     (1635-ma2f) the door's stale-plan-binary block, run against
---                a scratch root whose resolver answers the RELATIVE
+--                a scratch root whose (stub) resolver answers the RELATIVE
 --                ./target/release/tillandsias-plan, hands guards an ABSOLUTE
 --                runner; the trunk block (normalisation removed) hands down
 --                the relative one, which a guard that cds cannot start
@@ -223,7 +223,13 @@ else
     local S = REL .. "/runner"
     fs.mkdir(S .. "/scripts")
     fs.mkdir(S .. "/target/release")
-    fs.write(S .. "/scripts/plan-binary-probe.sh", fs.read("scripts/plan-binary-probe.sh"))
+    -- 1637-arwp: the real resolver now answers an ABSOLUTE path, so it can
+    -- no longer stand in for the relative answer this arm needs. A stub probe
+    -- answers the relative spelling (the pre-1637 resolver, and still what a
+    -- relative CARGO_TARGET_DIR or a caller-named path can produce), so the
+    -- door's own normalisation is what this arm measures.
+    fs.write(S .. "/scripts/plan-binary-probe.sh",
+        'resolve_plan_binary() { echo ./target/release/tillandsias-plan; }\n')
     fs.write(S .. "/target/release/tillandsias-plan",
         '#!/bin/sh\ncase "$1" in validator-surface-hash) echo ok:validator-surface:stub ;; esac\nexit 0\n')
     proc.run({ argv = { "chmod", "+x", ROOT .. "/" .. S .. "/target/release/tillandsias-plan" }, timeout_ms = 10000 })

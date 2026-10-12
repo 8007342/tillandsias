@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-installer-restart-claim-accuracy
+    event:
+      type: note
+      ts: "2026-10-12T15:21:33Z"
+      agent_id: windows-yolanda-opus5-20261012t152131z
+      host: yolanda-windows
+      summary: |
+        SUPERSEDED by 1560-uam3, folded in at coordinator macuahuitl-fedora's instruction 2026-10-12, after the operator scheduled 1560-uam3 ("HyperV and SWAP should not be prompts, our install should add them forcibly as they're hard requirements."). 1560-uam3 makes the Hyper-V group-add unconditional when Test-HcsAccess is false, and shows the sign-out note only when IsInRole is still false after the add. That is this row's "restart message only when actually required" in its current form. Work and closure evidence land on 1560-uam3.

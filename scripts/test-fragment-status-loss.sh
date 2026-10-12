@@ -92,8 +92,13 @@ assert() {
 
 # run_guard: the guard over the sandbox in the CURRENT directory (each arm cd's
 # into $S first, exactly as it used to before `bash scripts/...sh`).
+# PROJECT_ROOT is unset too (1637-arwp): the Lua runner's repo-root lookup
+# honours it before the cwd, and run-litmus-test.sh EXPORTS it, so under the
+# litmus every arm read the REAL ledger instead of its sandbox and the run went
+# red on real fragments (masked in the release gate until the plan-binary path
+# stopped being relative).
 run_guard() {
-    env -u TILLANDSIAS_REPO_ROOT -u TILLANDSIAS_PLAN_BIN \
+    env -u TILLANDSIAS_REPO_ROOT -u PROJECT_ROOT -u TILLANDSIAS_PLAN_BIN \
         "$REAL_PLAN" script run "$GUARD" -- --plan "$PWD/target/release/tillandsias-plan"
 }
 
