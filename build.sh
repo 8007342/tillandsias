@@ -519,11 +519,17 @@ _pf_now() {
 # deadline, taskpolicy -b, 250 guards. The 91 check-* deciders: p50 2 s, p90
 # 9 s, p95 15 s, and 13 of them were deadline-skipped at 5 s, so the gate
 # refused trees the door had passed (#371 on check-sigpipe-verdict-pipelines-
-# added). 15 s gives 9 of the 13 a verdict at a modelled ~433 s, so this
-# regime's budget moves 415 -> 450 s. Four take 43-170 s uncut
-# (fragment-keys-are-read, mo-full-attestations, added-test-is-referenced,
-# append-vs-origin-fold) and stay deadline-skipped, named. Plain darwin and
-# the floor are unchanged at 5 s until measured.
+# added). That distribution was taken on bare trunk, an EMPTY diff, so it read
+# the diff-scoped deciders as free. Re-measured alone on four landed PRs' real
+# diffs (#369 #370 #371 #374, 1-10 files): only sigpipe-verdict-added scaled
+# (1-70 s, one fork per line of each touched file; now one awk pass, 2-8 s),
+# and the nine deciders this deadline is for then cost at most 18 s, constant
+# across diffs (script-exec-bits 16-18 s, skills-single-source 14 s). So the
+# decider deadline is 20 s, and this regime's budget moves 415 -> 450 s. Four
+# take 40-173 s whatever the diff (fragment-keys-are-read,
+# mo-full-attestations, added-test-is-referenced, append-vs-origin-fold) and
+# stay deadline-skipped, named. Plain darwin and the floor are unchanged at
+# 5 s until measured.
 _pf_budget() {
     local _pri
     _PF_DECIDER_DEADLINE=5
@@ -535,7 +541,7 @@ _pf_budget() {
         Darwin)
             _pri="$(ps -o pri= -p "$$" 2>/dev/null)"; _pri="${_pri// /}"
             if [ -n "$_pri" ] && [ "$_pri" -le 4 ] 2>/dev/null; then
-                _PF_BUDGET=450; _PF_BUDGET_REGIME=darwin-background; _PF_DECIDER_DEADLINE=15
+                _PF_BUDGET=450; _PF_BUDGET_REGIME=darwin-background; _PF_DECIDER_DEADLINE=20
             else
                 _PF_BUDGET=200; _PF_BUDGET_REGIME=darwin
             fi ;;

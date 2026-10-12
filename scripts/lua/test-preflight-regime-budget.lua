@@ -8,7 +8,7 @@
 -- EXTRACTED at run time, not copied.
 --   1 REGIMES   _pf_budget, with `uname` and `ps` shims standing in for the
 --               host: Darwin at priority 4 (taskpolicy -b) is
---               450 darwin-background with a 15 s check-* decider deadline
+--               450 darwin-background with a 20 s check-* decider deadline
 --               (1636-6k6k, measured: the row at 7a990a936); Darwin at 31 is
 --               200 darwin and Linux 150 floor, both still 5 s;
 --               TILLANDSIAS_PREFLIGHT_BUDGET_S=999 wins over all, at 5 s
@@ -77,8 +77,8 @@ local function regime(uname, pri, override)
     return text.trim(proc.run({ argv = { "bash", ROOT .. "/" .. REL .. "/budget.sh" }, env = e, timeout_ms = 10000 }).stdout or "")
 end
 local bg, dw, lx, ov = regime("Darwin", "4"), regime("Darwin", "31"), regime("Linux", "20"), regime("Darwin", "4", "999")
-arm("1 REGIMES darwin -b 450 with a 15 s decider deadline; darwin 200, Linux 150 and the override at 5 s",
-    bg == "450 darwin-background 15" and dw == "200 darwin 5" and lx == "150 floor 5" and ov == "999 override 5",
+arm("1 REGIMES darwin -b 450 with a 20 s decider deadline; darwin 200, Linux 150 and the override at 5 s",
+    bg == "450 darwin-background 20" and dw == "200 darwin 5" and lx == "150 floor 5" and ov == "999 override 5",
     "darwin-pri4=[" .. bg .. "] darwin-pri31=[" .. dw .. "] linux=[" .. lx .. "] override=[" .. ov .. "]")
 
 -- ── 2-5 the front door's judge ─────────────────────────────────────────────
