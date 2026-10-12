@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (macuahuitl, 2026-10-12).
+packets:
+  - packet_id: browser-open-runs-the-chromium-framework-container-never-host-chromium-and-admits-the-local-preview-port
+    order: 1649-xqet
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [browser, mcp, containers, network, local-web-preview, security]
+    estimated_hours: 10
+    depends_on:
+      - the-browser-container-bind-mounts-the-whole-xdg-runtime-dir-read-write-exposing-the-podman-socket-dbus-and-keyring-so-it-must-mount-only-the-wayland-socket
+    owned_files:
+      - crates/tillandsias-browser-mcp/src/launcher.rs
+      - crates/tillandsias-browser-mcp/src/allowlist.rs
+      - crates/tillandsias-browser-mcp/src/server.rs
+    title: |
+      browser.open runs the chromium-framework container, never host Chromium, and admits the local preview port.
+    context: |
+      Today browser.open cannot open the local preview at all:
+      - launcher::spawn_browser (crates/tillandsias-browser-mcp/src/launcher.rs) starts host Chromium from the cache root ~/.cache/tillandsias/chromium (or XDG_CACHE_HOME, or /tmp/tillandsias/chromium). Nothing downloads into it, so browser.open returns "BROWSER_UNAVAILABLE: bundled chromium not yet downloaded" (server.rs).
+      - allowlist::validate and BrowserAllowlist::is_allowed (allowlist.rs) admit only ports 8080 and 80, so the https://www.<project>.localhost:18443 preview URL is refused with URL_NOT_ALLOWED.
+      Design (coordinator, 2026-10-12):
+      - browser.open starts the container through build_project_browser_spec, which is Wayland-only and mounts only the compositor socket since 1641-xbvq (#383).
+      - Each launch gets its own --internal podman network, joined only by the router.
+      - Chromium runs with --host-resolver-rules="MAP *.<project>.localhost router:8443, MAP * ~NOTFOUND". Verify that a port remap inside a MAP rule works; if it does not, find the equivalent.
+      - The router CA is trusted through --ignore-certificate-errors-spki-list, never through the host trust store.
+      - The host-download path (cache_root and the bundled-chromium lookup) is retired.
+    exit_criteria:
+      - 'with TILLANDSIAS_BROWSER_BIN unset and no host Chromium, browser.open on https://www.<p>.localhost:18443 leaves a running tillandsias-browser-* container and no host chrome process'
+      - 'a live probe from that container reaches the project route, and fails to reach another project''s host, an external address, and the host'
+      - 'the 18443 preview URL is admitted by allowlist::validate and BrowserAllowlist::is_allowed, while other localhost ports stay refused'
+    unscoreable: "unpinnable-until-the-guard-exists: litmus-browser-open-container-shape.yaml (allowlist ports, no host-chromium path, resolver rules and internal network in the spec) is written in the same commit as the change; the live reach probe is evidence, not a litmus"
+    next_action: >
+      Red first: a test that browser.open with no host Chromium returns BROWSER_UNAVAILABLE, and an allowlist test that refuses the 18443 URL. Then prove the MAP-with-port resolver rule in a throwaway chromium-framework container on a private store, and wire spawn_browser to build_project_browser_spec.
+    provenance: |
+      Filed by lenovinha-silverblue on macuahuitl's direction, 2026-10-12. Code facts re-read on linux-next before filing: launcher.rs cache_root candidates, server.rs BROWSER_UNAVAILABLE, allowlist.rs port check (8080 or 80).
+    events:
+      - type: filed
+        ts: "2026-10-12T23:14:26Z"
+        host: lenovinha
+        summary: |-
+          browser.open must run the chromium-framework container on a per-launch internal network and admit the 18443 preview port.
