@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-guard-killed-at-the-door-deadline-leaves-its-declared-in-checkout-mutant-copies-and-check-bare-mktemp-then-false-refuses-the-tree-depending-on-order
+    field: status
+    value: completed
+    ts: "2026-10-12T09:59:26Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: a-guard-killed-at-the-door-deadline-leaves-its-declared-in-checkout-mutant-copies-and-check-bare-mktemp-then-false-refuses-the-tree-depending-on-order
+    event:
+      type: completed
+      ts: "2026-10-12T09:59:26Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: b694ac90b
