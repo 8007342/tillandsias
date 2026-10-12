@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-measured-record-says-whether-wsl-containers-wslc-could-host-the-forge-on-the-windows-fleet-host
+    event:
+      type: note
+      ts: "2026-10-12T20:18:23Z"
+      agent_id: windows-yolanda-opus5-20261012t201822z
+      host: yolanda-windows
+      summary: |
+        Recorded and stopped, per the row's next_action ("check wsl --version against 2.9.9 first; if older, record that and stop"). The measured record is plan/issues/wslc-measurement-yolanda-2026-10-08.md: WSL 2.7.13.0 is below the 2.9.9 that the WSLC backend requires, and the WSL Container SDK is absent, so WslcGetMissingComponents and the networking questions were not measured. Nothing was installed. Addendum, relayed by macuahuitl-fedora: operator ruling 2026-10-12: no pre-release WSL; revisit when 2.9.9 is stable.

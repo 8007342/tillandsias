@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-windows-installer-prints-install-paths-a-probe-binary-path-a-commit-hash-a-registration-line-and-an-empty-pending-actions-box-that-a-non-technical-user-should-not-see
+    field: status
+    value: completed
+    ts: "2026-10-12T19:56:50Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: the-windows-installer-prints-install-paths-a-probe-binary-path-a-commit-hash-a-registration-line-and-an-empty-pending-actions-box-that-a-non-technical-user-should-not-see
+    event:
+      type: completed
+      ts: "2026-10-12T19:56:50Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: 8db936e95 (#379, run 54): check-installer-end-user-output ok at floor 0 (22 refused pre-fix), fixture 17/17 with arms 7-15 red on the pre-fix guard, banner fixture 10/10
