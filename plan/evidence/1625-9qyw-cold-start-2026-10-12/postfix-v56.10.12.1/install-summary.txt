@@ -1,0 +1,54 @@
+  Verifying SHA256 checksum...
+tillandsias-linux-x86_64: OK
+  Installed /home/podman/.local/bin/tillandsias
+  Running tillandsias --reset-state (resets local state, then reprovisions — may take a minute)...
+[tillandsias] version: 56.10.12.1
+[tillandsias] --reset-state: resetting local state before reprovisioning.
+[tillandsias] --reset-state: podman system reset --force ...
+[tillandsias] --reset-state: local state reset ✓ — reprovisioning ...
+BUILD proxy (DigestMissing)
+[tillandsias] build-proxy: STEP 14/14: LABEL "io.tillandsias.image.layer-policy"="squash-new" "io.tillandsias.image.name"="proxy" "io.tillandsias.image.source-digest"="sha256:d5e8e3ab98e202cc1bc9343721edc93a3e3e39bce67ef4cc08278ce8cc0e0dd5" "io.tillandsias.image.version"="56.10.12.1" "org.opencontainers.image.version"="56.10.12.1"
+SUCCESS proxy
+BUILD git (DigestMissing)
+[tillandsias] build-git: [2/2] STEP 33/33: LABEL "io.tillandsias.image.layer-policy"="squash-new" "io.tillandsias.image.name"="git" "io.tillandsias.image.source-digest"="sha256:e9bbb5bcac75d00f17fcb9892fa9f980676803d14cd618ce80f3d8eb465f88ca" "io.tillandsias.image.version"="56.10.12.1" "org.opencontainers.image.version"="56.10.12.1"
+SUCCESS git
+BUILD vault (DigestMissing)
+[tillandsias] build-vault: STEP 17/17: LABEL "io.tillandsias.image.layer-policy"="squash-new" "io.tillandsias.image.name"="vault" "io.tillandsias.image.source-digest"="sha256:13dfe28138d33dd386a948cbee85fa5365fc9d7b21c40aeb78b8beb54609a4d1" "io.tillandsias.image.version"="56.10.12.1" "org.opencontainers.image.version"="56.10.12.1"
+SUCCESS vault
+BUILD inference (DigestMissing)
+[tillandsias] build-inference: STEP 21/24: HEALTHCHECK --interval=5s --timeout=10s --start-period=30s --retries=12     CMD curl -sf http://127.0.0.1:11434/api/version >/dev/null         && test -x /home/ollama/.ollama/models/.tools/lib/ollama/llama-server         || exit 1
+[tillandsias] build-inference: STEP 24/24: LABEL "io.tillandsias.image.layer-policy"="squash-new" "io.tillandsias.image.name"="inference" "io.tillandsias.image.source-digest"="sha256:bc94c00b2e9ede25a072c95305d4334cba722538cbd65e1e945d9164c317dce0" "io.tillandsias.image.version"="56.10.12.1" "org.opencontainers.image.version"="56.10.12.1"
+SUCCESS inference
+BUILD router (DigestMissing)
+[tillandsias] build-router: STEP 14/14: LABEL "io.tillandsias.image.layer-policy"="squash-new" "io.tillandsias.image.name"="router" "io.tillandsias.image.source-digest"="sha256:71d957cd4a5457d499ba3c00acc37eed9f510dd7a3537ebf8a246456449e2382" "io.tillandsias.image.version"="56.10.12.1" "org.opencontainers.image.version"="56.10.12.1"
+SUCCESS router
+BUILD chromium-core (DigestMissing)
+[tillandsias] build-chromium-core:  double-conversion                       x86_64 0:3.4.0-3.fc44                    fedora                101.8 KiB
+[tillandsias] build-chromium-core:  python-unversioned-command              noarch 0:3.14.8-1.fc44                   updates                23.0   B
+[tillandsias] build-chromium-core: [  5/242] double-conversion-0:3.4.0-3.f 100% |  74.5 KiB/s |  53.9 KiB |  00m01s
+[tillandsias] build-chromium-core: [197/242] python-unversioned-command-0: 100% | 192.8 KiB/s |  11.6 KiB |  00m00s
+[tillandsias] build-chromium-core: [220/244] Installing double-conversion- 100% |  33.7 MiB/s | 103.5 KiB |  00m00s
+[tillandsias] build-chromium-core: [231/244] Installing python-unversioned 100% |  37.6 KiB/s | 424.0   B |  00m00s
+[tillandsias] build-chromium-core: STEP 11/11: LABEL "io.tillandsias.image.layer-policy"="squash-new" "io.tillandsias.image.name"="chromium-core" "io.tillandsias.image.source-digest"="sha256:a942ce41744528a0fb797f1b6da4a9c54319acd5feb5e1f42f96f78e6461f88b" "io.tillandsias.image.version"="56.10.12.1" "org.opencontainers.image.version"="56.10.12.1"
+SUCCESS chromium-core
+BUILD chromium-framework (DigestMissing)
+[tillandsias] build-chromium-framework: STEP 14/14: LABEL "io.tillandsias.image.layer-policy"="squash-new" "io.tillandsias.image.name"="chromium-framework" "io.tillandsias.image.source-digest"="sha256:b08a91a05af5d6b0bac68112650be7dbbbcdba1a237ee48ccc5b8aa377710b94" "io.tillandsias.image.version"="56.10.12.1" "org.opencontainers.image.version"="56.10.12.1"
+SUCCESS chromium-framework
+BUILD forge-base (DigestMissing)
+[tillandsias] build-forge-base:  double-conversion                       x86_64 0:3.4.0-3.fc44                   fedora                101.8 KiB
+[tillandsias] build-forge-base: [268/574] double-conversion-0:3.4.0-3.f 100% | 673.7 KiB/s |  53.9 KiB |  00m00s
+[tillandsias] build-forge-base: [ 61/576] Installing double-conversion- 100% |  50.6 MiB/s | 103.5 KiB |  00m00s
+[tillandsias] build-forge-base: STEP 5/5: LABEL "io.tillandsias.image.layer-policy"="squash-new" "io.tillandsias.image.name"="forge-base" "io.tillandsias.image.source-digest"="sha256:5f0381e93b66034a90d2484494229c52d2a6447f8245b44fd7a353ea0e922e93" "io.tillandsias.image.version"="56.10.12.1" "org.opencontainers.image.version"="56.10.12.1"
+SUCCESS forge-base
+BUILD forge (DigestMissing)
+[tillandsias] build-forge: STEP 78/78: LABEL "io.tillandsias.image.layer-policy"="squash-new" "io.tillandsias.image.name"="forge" "io.tillandsias.image.source-digest"="sha256:7a663c65609a1d359578dad35c9c70b5701b5c17ba19e1b27ba4dbdef54262bd" "io.tillandsias.image.version"="56.10.12.1" "org.opencontainers.image.version"="56.10.12.1"
+SUCCESS forge
+BUILD web (DigestMissing)
+[tillandsias] build-web: STEP 8/8: LABEL "io.tillandsias.image.layer-policy"="squash-new" "io.tillandsias.image.name"="web" "io.tillandsias.image.source-digest"="sha256:ba31f7655a77c0619e094f80b28ddf0aac4d3f0490a26c309778067c9c4730a9" "io.tillandsias.image.version"="56.10.12.1" "org.opencontainers.image.version"="56.10.12.1"
+SUCCESS web
+BUILD web-wrangler (DigestMissing)
+[tillandsias] build-web-wrangler: STEP 3/14: LABEL io.tillandsias.wrangler.version="4.42.0"
+[tillandsias] build-web-wrangler: STEP 6/14: RUN npm ci --omit=dev --no-audit --no-fund     && ./node_modules/.bin/wrangler --version     && ln -s /tmp/wrangler-miniflare node_modules/.mf     && mkdir -p /srv/preview/node_modules     && ln -s /tmp/wrangler-miniflare /srv/preview/node_modules/.mf     && ln -s /tmp/wrangler-project /srv/preview/.wrangler
+[tillandsias] build-web-wrangler: npm notice New major version of npm available! 10.9.3 -> 12.2.0
+[tillandsias] build-web-wrangler: STEP 14/14: LABEL "io.tillandsias.image.layer-policy"="squash-new" "io.tillandsias.image.name"="web-wrangler" "io.tillandsias.image.source-digest"="sha256:589586effed52f52a828d216ab49c7f25ebbbf6d0dc293e525ce8546d4b5f7c8" "io.tillandsias.image.version"="56.10.12.1" "org.opencontainers.image.version"="56.10.12.1"
+SUCCESS web-wrangler

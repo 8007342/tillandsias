@@ -1,0 +1,19 @@
+forge: tillandsias-macron.dev-forge-maintenance
+/home/forge/src/macron.dev
+.forge-startup-context.md
+.git
+openspec
+plan
+public
+README.md
+wrangler.jsonc
+{"name":"macron-dev","compatibility_date":"2026-10-01","assets":{"directory":"./public"}}
+runtime=auto
+mcp rc=0
+{"result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"tillandsias-host-services","version":"56.10.12"}},"jsonrpc":"2.0","id":1}
+{"result":{"state":"running","runtime":"wrangler","watch":true,"route_ready":true,"tls":{"enabled":true,"host_trust":"unknown","diagnostic":"Local CA transport verification is separate from host-browser trust; no host trust store was changed."},"diagnostic":"Assets/Worker directories are live and watched. Config is pinned to the validated publication generation; config edits and atomic replacement of root-file mounts require service_reload.","url":"https://www.macron.dev.localhost:18443"},"jsonrpc":"2.0","id":2}
+{"result":{"state":"running","runtime":"wrangler","watch":true,"route_ready":true,"tls":{"enabled":true,"host_trust":"unknown","diagnostic":"Local CA transport verification is separate from host-browser trust; no host trust store was changed."},"diagnostic":"Assets/Worker directories are live and watched. Config is pinned to the validated publication generation; config edits and atomic replacement of root-file mounts require service_reload.","url":"https://www.macron.dev.localhost:18443"},"jsonrpc":"2.0","id":3}
+fetch https://www.macron.dev.localhost:18443 (host side, through the router, --cacert /home/podman/.local/state/tillandsias/ca/intermediate.crt)
+http=200 bytes=1276 ssl_verify=0
+<title>macron.dev — under construction</title>
+construction-banner matches: 1
