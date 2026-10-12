@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-darwin-under-taskpolicy-b-the-preflight-front-door-runs-three-to-four-times-its-150-s-budget-so-test-preflight-front-door-is-red-there
+    event:
+      type: note
+      ts: "2026-10-12T02:52:23Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t025223z
+      host: tlatoanis-macbook-air
+      summary: |
+        Landed #339 as 888222dd2 (land-queue run 38, gate green, after evictions in runs 32 (carried-silent, paid by porting check-installer-channel.sh to Lua) and 36 (litmus pipes, rewritten capture-then-match)). The exit criteria, each exercised:
+        1. The front-door wall on darwin, measured standalone, with and without taskpolicy -b (recorded on this row 2026-10-11):
+           - before the fix: -b 466-567 s;
+           - with the fix: -b 376 s and plain 179 s.
+           - On the merged branch, its own door measuring itself under -b: partial:preflight:ran=162 refused=0 deadline-clock=wall-s wall=360 s, and later wall=376 s.
+        2. The door's deadline and grace are wall clock (_pf_now: EPOCHREALTIME on bash >= 5 is wall-us; else $SECONDS is wall-s; no fork per poll), and the summary names it as deadline-clock=. scripts/lua/test-preflight-wall-clock-deadline.lua (gate step 458) kills a planted TERM-ignoring guard under a 2 s deadline within the 4 s bound (deadline + grace + 1). Over 7 darwin runs, fixed vs the poll-counting pre-fix door in the same run: -b 2.5-3.1 s vs 6.9-8.0 s; slowed polls 2.6-3.5 s vs 6.4-9.9 s; plain 2.7-3.3 s.
+        NOT OBSERVED: the wall-us branch passed on the Linux gate, but the land queue deletes a green gate's log, so its deadline-clock=wall-us line was never seen. 1616-njfd's fixture can assert deadline-clock= per regime so the Linux gate shows it.
+        The per-regime budget (the second half of this row's criterion 2) is 1616-njfd, split out at the coordinator's request.
