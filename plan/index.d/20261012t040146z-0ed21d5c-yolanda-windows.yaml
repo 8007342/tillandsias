@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-windows-installer-prints-only-end-user-lines
+    field: status
+    value: completed
+    ts: "2026-10-12T04:01:46Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: the-windows-installer-prints-only-end-user-lines
+    event:
+      type: completed
+      ts: "2026-10-12T04:01:46Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: landed in run 38 as 8bb6d1dc5 (PR #346, green gate on macuahuitl-fedora): scripts/lua/check-installer-unstable-warning.lua asserts each installer's unstable branch prints a non-empty warning line; litmus smoke-release-channel-shape step now runs it (14/14); controls refuse a blanked Windows warning, a removed branch and a silenced install.sh branch; carried obligation paid by porting check-forge-service-health.sh to Lua
