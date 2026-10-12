@@ -231,8 +231,16 @@ pub fn validate_project_label(label: &str) -> Result<(), String> {
             cloud_label_cache_path().display()
         ))
     } else {
+        // 1626-r4xm: name WHERE the host looked, and the variable that moves it.
+        // A forge agent that hits this cannot see the host; this sentence is
+        // what it can relay to the operator.
         Err(format!(
-            "Project '{label}' is not a known project on this host"
+            "Project '{label}' is not a known project on this host: local projects \
+             are the directories directly under {} (set {HOST_PROJECT_ROOT_ENV} to \
+             the directory that holds it, or move the project there), and cloud \
+             projects come from the confirmed list at {}",
+            host_project_root().display(),
+            cloud_label_cache_path().display()
         ))
     }
 }
@@ -382,6 +390,22 @@ mod tests {
             err.contains("is not a known project"),
             "a non-empty set must give the wrong-label reason, not the empty one: {err}"
         );
+    }
+
+    /// 1626-r4xm, criterion 2: the wrong-label refusal names the root it scanned
+    /// and the variable that moves it, so a forge agent that hits it on a lane
+    /// socket can tell the operator what to change. It still refuses.
+    #[cfg(feature = "tray")]
+    #[test]
+    fn unknown_label_refusal_names_the_scanned_root_and_its_variable() {
+        let _s = scoped(&["known-project"], None);
+        let err = super::validate_project_label("scratch-6iwd").unwrap_err();
+        assert!(err.contains("is not a known project"), "{err}");
+        assert!(
+            err.contains(&super::host_project_root().display().to_string()),
+            "names the scanned root: {err}"
+        );
+        assert!(err.contains(super::HOST_PROJECT_ROOT_ENV), "names the variable: {err}");
     }
 
     /// The local half still works, and the two halves union rather than one
