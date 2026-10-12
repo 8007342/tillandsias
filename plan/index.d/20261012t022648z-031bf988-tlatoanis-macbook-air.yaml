@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-darwin-a-mktemp-without-a-template-ignores-tmpdir-so-scratch-made-that-way-escapes-the-preflight-doors-per-guard-tmpdir-sweep
+    event:
+      type: note
+      ts: "2026-10-12T02:26:48Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t022648z
+      host: tlatoanis-macbook-air
+      summary: |
+        Landed #344 as 32cd4b1a6 (land-queue run 37, gate green). The exit criteria, each exercised:
+        1. scripts/lua/check-bare-mktemp.lua (gate step 462) counts mktemp calls without a template in scripts/**/*.sh. It ratchets them per file against scripts/portability/bare-mktemp-floor.txt, recorded from the count on the day it landed: ok:bare-mktemp:sites=301:floor=301:files=237:templated=386. That is 310 found, minus 6 converted here, minus 3 converted by #342; before regenerating, the merged tree refused with stale-floor on exactly those 3 files. A new site is refused, and its refusal prints why:, remedy: (mktemp -d "${TMPDIR:-/tmp}/<name>.XXXXXX") and site: lines on stdout (fixture arm 4). A floor above the count is refused as stale, so the floor only falls (arm 3).
+        2. test-bare-mktemp.lua (gate step 463) arm 7 runs test-capture-helper's mktemp call before the conversion (699a7d767) and after it, each with TMPDIR set, in one run. On darwin the bare call landed in /var/folders/.../T and the converted call inside TMPDIR. On GNU the arm reports that the bare call lands there too, rather than counting it as the defect.
+        Converted: added-test-is-referenced, base-ledger-status-loss, bound-litmus-is-runnable, brew-shim-reentrancy, capture-helper and change-class. Measured on darwin 27.0.1: `mktemp`, `mktemp -d` and both `-t` forms ignore TMPDIR. Cleaning what already leaked is 1621-bvb2.
