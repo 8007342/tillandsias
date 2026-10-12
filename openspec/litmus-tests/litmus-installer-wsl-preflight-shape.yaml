@@ -54,8 +54,13 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: absent-runs-install"
 
+  # 1561-47a8 (4504c6fd9) reworded the reason for end users ("restart Windows,
+  # then run the installer again"). The pin is now the structure, not the
+  # sentence: after the absent arm's `wsl --install`, the re-classify switch's
+  # default arm sets a non-empty $NoLaunchReason (which step 5 couples to
+  # $NoLaunch).
   - step: "absent that stays unhealthy after the install suppresses auto-launch"
-    command: "grep -q 'install WSL2 (wsl --install --no-distribution) first' scripts/install-windows.ps1 && echo 'ok: absent-no-launch'"
+    command: "awk '/& wsl --install --no-distribution/{a=1} a && /default [{]/{d=1} d && /[}]/{exit} d && /.NoLaunchReason = .[A-Za-z]/{found=1; exit} END{exit !found}' scripts/install-windows.ps1 && echo 'ok: absent-no-launch'"
     timeout_ms: 3000
     expected_behavior: "ok: absent-no-launch"
 
