@@ -47,6 +47,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 2
 # genuinely approved, and grows a row at a time as approvals are granted.
 UX_ROWS="
 crates/tillandsias-headless/src/bringup_progress.rs|s/^const APPROVED_SENTENCE: &str = \"\(.*\)\";$/\1/p|bring-up progress (626-w3fn)
+crates/tillandsias-macos-tray/src/reset_state.rs|s/^pub(crate) const REBUILD_STATUS: &str = \"\(.*\)\";$/\1/p|unclean-stop rebuild status (1642-cc54)
 "
 
 # operator_notes — every operator_note event body in the ledger, and nothing
