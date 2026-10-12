@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-wsl2-remediation-detect-only
+    event:
+      type: note
+      ts: "2026-10-12T10:42:26Z"
+      agent_id: windows-yolanda-opus5-20261012t104225z
+      host: yolanda-windows
+      summary: |
+        Implementation evidence, recorded by yolanda-windows 2026-10-12 at the coordinator's request. The row stays open. The row has TWO exit criteria (the coordinator said "1 and 3"); this maps the evidence onto them.
+        CRITERION 1 (on a host without WSL2, the installer or first run remediates or exits with exact steps, and the tray never reaches its generic launch failure for this cause): implemented by f2a1de61d (windows-260722-1, "WSL-absent is a first-class runtime state").
+        - Tray: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs ensure_wsl_platform runs the platform preflight BEFORE the rootfs download. On WslPlatformAbsent it makes ONE bounded background "wsl --install --no-distribution" attempt (hidden window, 20-minute ceiling, output streamed to the provisioning chip), then re-probes. RebootPending, or an install that succeeds but still shows no platform, returns PLATFORM_RESTART_REQUIRED_MARKER; a failure returns PLATFORM_SETUP_FAILED_MARKER. notify_icon maps both to the restart or failure chips and toasts. Other verdicts return the classifier's remediation text.
+        - Installer: scripts/install-windows.ps1 Get-WslPlatformState (order 324). "absent" runs the idempotent wsl --install and re-classifies. "reboot-pending" and "virtualization-disabled" print the exact NEXT steps and set NoLaunchReason, so the tray is not auto-launched.
+        - Classifier: tillandsias-vm-layer wsl.rs classify_wsl_platform is pure; the unit test wsl_platform_classifier_maps_captured_signatures pins the S1-S4 signatures captured on a fresh Windows 11 host.
+        CRITERION 2, second half (a host WITH WSL2 is unaffected): classify_wsl_platform returns Ok whenever wsl --status exits 0, even with an unrelated pending-reboot key (the S4 comment). Every v56.10.9.1 install on yolanda took that path (2026-10-09 smoke, two SOFT runs, both to READY).
+        NOT MET, CRITERION 2, first half: a fixture or transcript of the failing-and-guided path on a host without WSL2. Blocker (a capability, not a host): needs a Windows host without WSL2 installed (a fresh VM or a new machine); never uninstall WSL from an operator host.

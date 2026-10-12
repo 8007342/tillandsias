@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-12): four headless unit tests are red on native Windows, on bare trunk.
+packets:
+  - packet_id: four-tillandsias-headless-unit-tests-fail-on-a-native-windows-host-on-bare-trunk-for-host-reasons-not-product-defects-so-a-windows-run-of-the-suite-is-never-green
+    order: 1635-hbvw
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, tests, portability, headless]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-headless/src/msg_serve.rs
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-headless/src/vault_bootstrap.rs
+    related: [776-drwr]
+    depends_on: []
+    title: |
+      Four tillandsias-headless unit tests fail on a native Windows host on bare trunk (path separators, a launch-marker probe, a token-rotation count), so `cargo test -p tillandsias-headless --bin tillandsias` on Windows is never green
+    context: |
+      Measured on yolanda-windows 2026-10-12, natively (cargo test -j 2 -p tillandsias-headless --bin tillandsias), on bare trunk 1e3d977ba. Found while running the suite for 776-drwr (PR #369): 721 passed, 4 failed, and the same four fail one at a time on bare trunk, so they predate that change.
+        1. msg_serve::tests::forge_lane_labels_and_mount_args (msg_serve.rs:1423): the expected mount string joins the temp dir with '/' ("...\.tmpX/lanes/alpha-w1"); the code builds it with the platform separator ("...\.tmpX\lanes\alpha-w1").
+        2. tests::opencode_web_browser_spec_is_built_with_typed_podman_flags (main.rs:31398 on trunk): expects source=/tmp/tillandsias/ca/intermediate.crt; on Windows the CA path is built with '\'.
+        3. tests::shared_stack_launch_marker_lifecycle_and_own_exclusion (main.rs:26991): "sibling probe must see the held marker launch-marker-test-<pid>, got []". The marker the test holds is invisible to the probe on Windows (locking/visibility differs).
+        4. vault_bootstrap::tests::github_token_auto_rotation_concurrent_checks_exchange_once (vault_bootstrap.rs:6797): "exactly one exchange", got 2. The concurrency guard does not serialise on Windows, or the test's harness does not.
+      None of these is known to be a product defect on Linux, where the gate runs them. Items 3 and 4 may hide real Windows behaviour (marker visibility, token-exchange dedup), which is worth deciding before any of them is cfg-skipped.
+    exit_criteria:
+      - 'on a native Windows host, cargo test -p tillandsias-headless --bin tillandsias reports 0 failures, with each of the four either fixed (separator-agnostic assertion or code) or skipped by name off Linux with the reason in the skip'
+      - 'items 3 and 4 each record whether the Windows behaviour is a product defect (and file it if so) before any skip'
+    unscoreable: "a test-parity fix: its evidence is a green native Windows run of the headless test binary, plus the Linux gate unchanged"
+    next_action: >
+      Start with 1 and 2 (separator-agnostic assertions). For 3 and 4, first decide whether Windows really behaves differently in the product, then fix or skip by name.
+    provenance: |
+      Filed by yolanda-windows at macuahuitl-fedora's request, 2026-10-12. Each test was run on its own on bare trunk 1e3d977ba to confirm it fails there.
+    events:
+      - type: filed
+        ts: "2026-10-12T10:38:36Z"
+        host: yolanda-windows
+        summary: |-
+          Four headless unit tests are red on native Windows on bare trunk; not caused by 776-drwr.
