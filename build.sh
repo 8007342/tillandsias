@@ -1442,8 +1442,11 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
                 refused)
                     _pf_failed=$((_pf_failed + 1))
                     cat "$_pf_tmp" >&2
+                    # 1631-6w8z: a .lua guard is confirmed through its runner, not bash
+                    _pf_alone="bash $_pf_path${_pf_args:+ $_pf_args}"
+                    case "$_pf_path" in *.lua) _pf_alone="tillandsias-plan script run $_pf_path${_pf_args:+ -- $_pf_args}" ;; esac
                     _afford "the guard $_pf_label refused this tree; its own output is printed just above" \
-                        "fix what that output names, then confirm with the guard alone: bash $_pf_path${_pf_args:+ $_pf_args} (a full re-check is ./build.sh --preflight)"
+                        "fix what that output names, then confirm with the guard alone: $_pf_alone (a full re-check is ./build.sh --preflight)"
                     echo "refused:preflight:$_pf_label" >&2 ;;
                 *)
                     # No classifier answered (no plan binary, or one too old to
@@ -3367,12 +3370,25 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # grammar has exactly one cause — and is a second place for the two to
     # disagree the moment it gains another. The archiver's branch reads its
     # cause out of the log for the same reason (965-sxec).
+    # ORDER 1631-6w8z: the decider is Lua now, and runs INSIDE a tillandsias-plan,
+    # so it cannot judge that binary's currency (a stale binary vouching for
+    # itself). The .sh called ensure_fresh_plan_binary before `compact`; that
+    # call is HERE now, before any plan binary runs, and the decider is handed
+    # the fresh binary through TILLANDSIAS_PLAN_BIN, which _run_lua_decider's
+    # resolver honours. No fresh binary is the same exit-2 could-not-run.
+    # Exit 3 is _run_lua_decider's own could-not-run (no script runner).
     _events_land_rc=0
     _events_land_log="$(mktemp "${TMPDIR:-/tmp}/tillandsias-fel.XXXXXX")"
-    _run bash "$SCRIPT_DIR/scripts/check-fragment-events-land.sh" 2>&1         | tee "$_events_land_log" || true
-    _events_land_rc="${PIPESTATUS[0]}"
-    if [ "$_events_land_rc" -eq 2 ]; then
-        _error "check-fragment-events-land COULD NOT RUN (exit 2) — this says NOTHING about whether any event lands on a packet; the instrument is what needs repair (1021-a944). Verdict: $(tr -d '
+    if ! _events_land_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh && ensure_fresh_plan_binary)"; then
+        echo "blocked:fragment-events-land:no-fresh-plan-binary" | tee "$_events_land_log"
+        _events_land_rc=2
+    else
+        case "$_events_land_bin" in ./*) _events_land_bin="$SCRIPT_DIR/${_events_land_bin#./}" ;; esac
+        TILLANDSIAS_PLAN_BIN="$_events_land_bin" _run_lua_decider "scripts/lua/check-fragment-events-land.lua" 2>&1 | tee "$_events_land_log" || true
+        _events_land_rc="${PIPESTATUS[0]}"
+    fi
+    if [ "$_events_land_rc" -eq 2 ] || [ "$_events_land_rc" -eq 3 ]; then
+        _error "check-fragment-events-land COULD NOT RUN (exit $_events_land_rc) — this says NOTHING about whether any event lands on a packet; the instrument is what needs repair (1021-a944). Verdict: $(tr -d '
 ' < "$_events_land_log" | tail -n 1)"
         _error "remedy: scripts/cycle-preflight.sh rebuilds the plan binary for this tree, or run 'cargo build --release -p tillandsias-plan' in this locus"
         rm -f "$_events_land_log"
