@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-ratchet-refuses-any-new-interactive-prompt-in-the-end-user-installers-with-the-floor-at-the-two-the-operator-left-for-now
+    field: status
+    value: completed
+    ts: "2026-10-12T04:25:47Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: a-ratchet-refuses-any-new-interactive-prompt-in-the-end-user-installers-with-the-floor-at-the-two-the-operator-left-for-now
+    event:
+      type: completed
+      ts: "2026-10-12T04:25:47Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: landed on linux-next as b3998a52c (land(251): work/1560-g5d9 into linux-next); no unlanded commits on origin/work/1560-g5d9; closed in the yolanda-windows WIP reconciliation 2026-10-12 at the coordinator's request

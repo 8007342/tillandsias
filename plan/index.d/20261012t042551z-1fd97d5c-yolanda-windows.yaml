@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: windows-installer-provisions-the-guest-twice-per-install-because-the-reset-probe-runs-a-full-init-before-the-soft-reset-runs-another
+    field: status
+    value: completed
+    ts: "2026-10-12T04:25:51Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: windows-installer-provisions-the-guest-twice-per-install-because-the-reset-probe-runs-a-full-init-before-the-soft-reset-runs-another
+    event:
+      type: completed
+      ts: "2026-10-12T04:25:51Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: landed on linux-next as 4d0c0b153 (land(273): work/1565-qtuk into linux-next); no unlanded commits on origin/work/1565-qtuk; closed in the yolanda-windows WIP reconciliation 2026-10-12 at the coordinator's request

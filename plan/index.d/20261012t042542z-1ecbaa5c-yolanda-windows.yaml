@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: test-pre-push-main-branch-affordance-arm-2-plants-an-empty-file-as-a-non-runnable-plan-binary-but-on-the-wsl2-guests-9p-mount-every-file-is-mode-777-and-an-empty-file-executes-as-an-empty-script-with-rc-0
+    field: status
+    value: completed
+    ts: "2026-10-12T04:25:42Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: test-pre-push-main-branch-affordance-arm-2-plants-an-empty-file-as-a-non-runnable-plan-binary-but-on-the-wsl2-guests-9p-mount-every-file-is-mode-777-and-an-empty-file-executes-as-an-empty-script-with-rc-0
+    event:
+      type: completed
+      ts: "2026-10-12T04:25:42Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: landed on linux-next as 3be1b6ce9 (land(250): work/1556-b2tq into linux-next); no unlanded commits on origin/work/1556-b2tq; closed in the yolanda-windows WIP reconciliation 2026-10-12 at the coordinator's request

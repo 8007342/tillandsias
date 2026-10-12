@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: windows-vault-store-and-download-cache-are-host-persistent-across-reset
+    field: next_action
+    value: 'RELEASED by yolanda-windows 2026-10-12 in the WIP reconciliation (coordinator''s request). LANDED: S1 as land(243) 1a4016c03 (windows-tray reset plumbing), S2 1559-9uvb land(245) 9c9ac27b7, S3 1559-sqzp land(247) b545fb456 (installer SOFT by default, HARD on request with approval), S4 1559-2uw3 land(249) 2926bf271 (purge guard negative arm). Those cover exit criteria 3 and 4. LEFT: criteria 1 and 2 were never started. scripts/test-windows-reset-keeps-vault-store.sh does not exist. Nothing yet measures a sentinel KV secret surviving --reset-state, or %LOCALAPPDATA%\tillandsias\cache staying byte-identical with models present without a re-pull. The design question is still open: measure the Vault file backend and ollama model loads on a drvfs mount, then choose share vs evacuate/rehydrate. Needs a Windows host that can afford a reset cycle.'
+    ts: "2026-10-12T04:26:19Z"
+    host: yolanda-windows
+    replaces_sha256: "55bc5198a9aa1afb2ad20f7ac0147e487469866f21df7365fb243251acfdf90a"

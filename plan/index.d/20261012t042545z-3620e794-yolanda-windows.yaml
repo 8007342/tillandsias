@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: 1437-3iux-s4-check-purge-clears-vault-credentials-gains-a-negative-arm-proving-the-soft-body-calls-no-clearer
+    field: status
+    value: completed
+    ts: "2026-10-12T04:25:45Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: 1437-3iux-s4-check-purge-clears-vault-credentials-gains-a-negative-arm-proving-the-soft-body-calls-no-clearer
+    event:
+      type: completed
+      ts: "2026-10-12T04:25:45Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: landed on linux-next as 2926bf271 (land(249): work/1559-2uw3 into linux-next); no unlanded commits on origin/work/1559-2uw3; closed in the yolanda-windows WIP reconciliation 2026-10-12 at the coordinator's request

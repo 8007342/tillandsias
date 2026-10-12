@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11): one shell->lua burndown item, assigned by the coordinator.
+packets:
+  - packet_id: port-check-yaml-reader-availability-sh-to-lua-shell-to-lua-burndown
+    order: 1627-hg3t
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [shell-to-lua, lua, yaml-reader]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-yaml-reader-availability.sh
+      - scripts/lua/check-yaml-reader-availability.lua
+      - scripts/test-yaml-reader-availability.sh
+      - methodology/multi-host-development.yaml
+      - scripts/portability/shell-decider-floor.txt
+      - scripts/portability/jq-callsite-floor.txt
+    related: [746-htj9]
+    title: |
+      Port scripts/check-yaml-reader-availability.sh (746-htj9: prove the sanctioned YAML reader and the yaml-json|jq composition RUN where the gates run, and name the environment) to scripts/lua/check-yaml-reader-availability.lua
+    context: |
+      Shell-to-lua burndown (methodology convergence.yaml carried_obligations). The item is 79 lines, not a wrapper. It execs only the plan binary (validate-yaml and yaml-json on plan/index.yaml) and jq. It runs no podman, services or network.
+      Its one caller is scripts/test-yaml-reader-availability.sh:32, which build.sh:3269 runs. Arm 1 reads the first line with ok:yaml-reader:*. methodology/multi-host-development.yaml:1320 names the .sh in prose.
+      CIRCULARITY: the check proves the plan binary runs, and the Lua runner IS the plan binary. So the port probes the binary the test resolved (passed as arg[1]) by proc.run, and the test prints blocked:yaml-reader-absent:<env> itself when resolution fails. That keeps the absent verdict reachable. The jq half becomes proc.run jq with the yaml-json stdout as stdin, with no pipe.
+    exit_criteria:
+      - 'in the same run as the .sh, the Lua prints the identical two success lines (ok:yaml-reader:<env>:<path>, ok:yaml-json-jq:<env>) on the real tree'
+      - 'planted cases give identical first lines and exit codes from the .sh and the Lua: a forge and a toolbox env, an absent reader, a reader that gives a non-ok validate-yaml verdict, jq absent, and jq yielding a non-object'
+      - 'scripts/test-yaml-reader-availability.sh runs the Lua and passes, and fails when the Lua is sabotaged'
+      - 'the .sh is deleted, its floor lines are dropped, the methodology line names the .lua, and check-carried-obligations, check-shell-ratchet and test-shell-ratchet.lua pass'
+    unscoreable: "a port: the parity run, the planted cases and the sabotaged test are its evidence"
+    depends_on: []
+    next_action: >
+      Port the check with the reader passed as arg[1], run the parity matrix against the .sh, repoint the test and the methodology line, delete the .sh, drop the floors, and run the three ratchet and obligation checks.
+    provenance: |
+      Filed by yolanda-windows on macuahuitl-fedora's assignment, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-12T04:31:34Z"
+        host: yolanda-windows
+        summary: |-
+          One shell->lua burndown item, check-yaml-reader-availability.sh, assigned by the coordinator after 1625-n3t3.
