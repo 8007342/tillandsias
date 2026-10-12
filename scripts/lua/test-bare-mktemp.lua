@@ -10,7 +10,9 @@
 --             calls: sites=6, templated=2
 --   2 NEW     the same file over its floor (5) is refused, named
 --   3 STALE   a floor above the count (7) is refused, so the floor only falls
---   4 ABSENT  a file with sites and no floor line is new at floor 0
+--   4 ABSENT  a file with sites and no floor line is new at floor 0, and the
+--             refusal says, on stdout, the darwin reason, the exact remedy and
+--             the offending line, so the peer it bounces can fix it unaided
 --   5 EMPTY   no scripts: could-not-run, exit 3
 --   6 DUMP    --dump-floor prints the file at its count
 -- THE CONVERSION, on this host, in one run: the mktemp call from
@@ -44,6 +46,10 @@ fs.mkdir(REL)
 
 local failed = {}
 local function arm(name, cond, got)
+    -- The subject's output is evidence, kept on this arm's ONE line: a
+    -- refusal's own `violation:` line at the start of a line would read as
+    -- this fixture's verdict to anything that greps for one.
+    got = got and tostring(got):gsub("\n", " | ") or nil
     if cond then out.line("ok:   " .. name .. (got and (" — " .. got) or "")) else
         out.line("FAIL: " .. name .. " — got: " .. tostring(got))
         failed[#failed + 1] = name
@@ -101,8 +107,11 @@ arm("3 STALE a floor above the count is refused, so the floor only falls",
 
 d = root_with("absent", { ["test-b.sh"] = 'x="$(mktemp -d)"\n' }, "")
 rc, o = count(d)
-arm("4 ABSENT a file with sites and no floor line is new at floor 0",
-    rc == 1 and o:find("new-site:" .. d .. "/scripts/test-b.sh:1>floor:0", 1, true) ~= nil, rc .. " " .. o)
+arm("4 ABSENT a file with sites and no floor line is new at floor 0, and the refusal names why, the remedy and the site",
+    rc == 1 and o:find("new-site:" .. d .. "/scripts/test-b.sh:1>floor:0", 1, true) ~= nil
+    and o:find("why: on darwin a mktemp without a template ignores TMPDIR", 1, true) ~= nil
+    and o:find('remedy: give the call a template, e.g. mktemp -d "${TMPDIR:-/tmp}/<name>.XXXXXX"', 1, true) ~= nil
+    and o:find("site: " .. d .. '/scripts/test-b.sh:1: x="$(mktemp -d)"', 1, true) ~= nil, rc .. " " .. o)
 
 fs.mkdir(REL .. "/empty/x")
 fs.write(REL .. "/empty/floor.txt", "")

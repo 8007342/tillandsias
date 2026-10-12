@@ -157,9 +157,7 @@ scripts/test-litmus-grep-escapes.sh 1
 scripts/test-litmus-item-opener-refused.sh 1
 scripts/test-litmus-mutation-arm-guard.sh 1
 scripts/test-litmus-runner-reports-rc.sh 2
-scripts/test-litmus-step-pipefail.sh 1
 scripts/test-litmus-steps-can-fail.sh 1
-scripts/test-litmus-structured-assert.sh 1
 scripts/test-litmus-tracked-file-kill-safety.sh 2
 scripts/test-loop-status-audit-reads-current-emitter.sh 1
 scripts/test-macos-model-share-writable.sh 1
@@ -175,7 +173,6 @@ scripts/test-opencode-entrypoint-prompt.sh 1
 scripts/test-opencode-render-probe.sh 1
 scripts/test-opencode-tool-start-follower.sh 1
 scripts/test-opencode-vault-auth-content.sh 1
-scripts/test-order-citations-resolve.sh 1
 scripts/test-plan-binary-probe-usage-determinism.sh 2
 scripts/test-plan-binary-probe-usage-population.sh 1
 scripts/test-plan-binary-probe.sh 1
