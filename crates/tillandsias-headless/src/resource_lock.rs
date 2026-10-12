@@ -432,3 +432,36 @@ mod tests {
         assert!(acquire(&resource, Duration::from_millis(500), false).is_ok());
     }
 }
+
+// 1635-hbvw: off unix, try_lock is the documented no-op above, and two tests
+// that exercise real locking are ignored there because of it. This pins the
+// no-op, so the day resource_lock gains a real Windows implementation the
+// ignores are flagged instead of quietly hiding a regression.
+#[cfg(all(test, not(unix)))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn try_lock_is_a_no_op_off_unix() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("resource-no-op-probe.lock");
+        let open = || {
+            File::options()
+                .create(true)
+                .truncate(false)
+                .write(true)
+                .open(&path)
+                .unwrap()
+        };
+        let (first, second) = (open(), open());
+        let held = try_lock(&first, LockMode::Exclusive);
+        let contended = try_lock(&second, LockMode::Exclusive);
+        assert!(
+            matches!((&held, &contended), (Ok(true), Ok(true))),
+            "resource_lock gained a real Windows implementation: un-ignore \
+             tests::shared_stack_launch_marker_lifecycle_and_own_exclusion (main.rs) and \
+             vault_bootstrap::tests::github_token_auto_rotation_concurrent_checks_exchange_once \
+             (1635-hbvw). Got {held:?} then {contended:?}"
+        );
+    }
+}
