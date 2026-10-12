@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-12) so a pre-existing red fixture does not stay silent.
+packets:
+  - packet_id: test-installers-quiet-progress-w3-is-red-because-its-harness-stubs-say-and-die-but-not-log-so-the-cut-sums-block-throws-before-it-reaches-invoke-webrequest
+    order: 1640-rutw
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [installer, tests, windows, fixture]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-installers-quiet-progress.sh
+    related: [1420-jmp4, 1561-47a8, 1639-8gfw]
+    depends_on: []
+    title: |
+      scripts/test-installers-quiet-progress.sh arm W3 is red wherever PowerShell exists ("W3 prefs=" empty): the harness stubs Say and Die but not Log, and since 9f0be25fa (1561-47a8) the cut SUMS-DOWNLOAD block calls Log before Invoke-WebRequest, so it throws, the throw is swallowed, and the recorder never runs. The product is fine; the test no longer reaches its subject
+    context: |
+      Measured on yolanda-windows 2026-10-12 (Windows PowerShell 5.1.26100), at trunk 4b0305aed with trunk's own installer: refused:quiet-progress-fixture:failed=1 ran=5, FAIL "W3 Invoke-WebRequest ran with its own progress bar live: W3 prefs=". It is identical with and without 1639-8gfw (#379).
+      The failure text is misleading. An EMPTY prefs list means the Invoke-WebRequest recorder was never CALLED; it does not mean the bar was live. The harness (lines ~95-108) defines Say and Die stubs and runs the cut inside try { . $CutSums } catch { }, which swallows the error. 9f0be25fa (2026-10-10, 1561-47a8) added Log "Fetching $SumsUrl" at the top of BEGIN-SUMS-DOWNLOAD. Log is undefined in the harness, so the cut throws there.
+      Confirmed on a scratch copy: adding "function Log { param([string]$m) }" beside the Say stub gives ok:quiet-progress-fixture:ran=5 skipped=0. The installer's SilentlyContinue scope (1420-jmp4) is intact.
+      The Linux gate does not see this: W1-W3 skip by name where no PowerShell exists.
+    exit_criteria:
+      - 'the harness stubs Log (and anything else the cut blocks call), and W3 reads "W3 prefs=SilentlyContinue" on a PowerShell host'
+      - 'an empty prefs list is reported as could-not-reach (the recorder never ran), not as "progress bar live", so the next undefined helper fails by name instead of looking like a product defect'
+      - 'shell-to-Lua: port the fixture, or carry a Carried-Waiver trailer on the commit'
+    unscoreable: "a fixture-reachability fix: its evidence is W3 green on a PowerShell host and a named could-not-reach on a harness with a missing stub"
+    next_action: >
+      Add the Log stub, and split W3's empty-prefs case into could-not-reach.
+    provenance: |
+      Filed by yolanda-windows at macuahuitl-fedora's request, 2026-10-12, after it appeared during 1639-8gfw's fixture sweep. The cause was attributed with git log on the introducing commit (9f0be25fa) and confirmed by a one-line stub on a scratch copy.
+    events:
+      - type: filed
+        ts: "2026-10-12T19:24:38Z"
+        host: yolanda-windows
+        summary: |-
+          quiet-progress W3 red: the harness has no Log stub, so the cut SUMS block throws before Invoke-WebRequest; the product is fine.
