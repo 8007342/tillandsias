@@ -49,8 +49,10 @@ if [ -z "$READER" ] || [ ! -x "$READER" ]; then
 fi
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/litmus-parse-agree.XXXXXX")"
+# 1611-imnj: the mutant lives in $W, never beside the scripts (a copy in
+# scripts/ outlived the preflight door's KILL); its own-path lookups are pinned.
 MUTANT=""
-cleanup() { rm -rf "$W"; [ -n "$MUTANT" ] && rm -f "$MUTANT"; }
+cleanup() { rm -rf "$W"; }
 trap cleanup EXIT
 
 # 933-4gm8's recorded shape: a plain-scalar list item carrying ": " and
@@ -128,9 +130,10 @@ else
 fi
 
 # --- Arm 3 (mutation): remove the load, arm 1 must stop holding --------------
-# The mutant lives in scripts/ because PROJECT_ROOT is derived from
-# ${BASH_SOURCE[0]}/.. — a copy anywhere else resolves a different repo root
-# and would fail for the wrong reason.
+# The runner derives PROJECT_ROOT from ${BASH_SOURCE[0]}/.., so a copy anywhere
+# else resolves a different repo root. The mutant used to live in scripts/ for
+# that reason. Since 1611-imnj it lives in $W with that lookup pinned to $ROOT,
+# and a BASH_SOURCE left in the copy is a loud failure, not a wrong root.
 #
 # The mutation is SURGICAL rather than a range delete: it makes the load's
 # guard unreachable while leaving every block balanced. A range delete of
@@ -145,9 +148,15 @@ fi
 # caught only because the guard below fails loudly on an unapplied mutation.
 # Both fixtures now mutate the SAME named line, so a future reflow breaks both
 # visibly instead of leaving one quietly inert.
-MUTANT="$ROOT/scripts/.run-litmus-test.mutant-1303.$$.sh"
-sed 's|^ *local _parse_load_enabled=1 .*|                local _parse_load_enabled=0 # neutralised for arm 3|' \
+MUTANT="$W/run-litmus-test.mutant-1303.sh"
+sed -e 's|^ *local _parse_load_enabled=1 .*|                local _parse_load_enabled=0 # neutralised for arm 3|' \
+    -e 's|\$(dirname "\${BASH_SOURCE\[0\]}")|'"$ROOT"'/scripts|g' \
     "$RUNNER" > "$MUTANT"
+if grep -q 'BASH_SOURCE' "$MUTANT"; then
+    fail "arm 3: the mutant still resolves a path from its own location (BASH_SOURCE), so it cannot run from \$W; pin the new lookup"
+    echo "violation:litmus-parse-instruments-agree:$passed/3"
+    exit 1
+fi
 if ! grep -q '_parse_load_enabled=0 # neutralised for arm 3' "$MUTANT"; then
     fail "arm 3: the mutation did not apply; the LOAD-GATE-1303 anchor line has been reworded"
     echo "violation:litmus-parse-instruments-agree:$passed/3"

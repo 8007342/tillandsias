@@ -1,0 +1,340 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed 2026-10-11 on macuahuitl while evaluating Codex's research branch
+# research/litmus-lua-performance-20261011 at the coordinator's request.
+# Evidence: plan/issues/gate-performance-research-distillation-2026-10-11.md
+# (the measured 1,195 s --check of 21:48Z, per-step records).
+packets:
+  - packet_id: evaluate-and-integrate-the-2026-10-11-litmus-lua-performance-research-distill-its-verdicts-against-the-measured-gate-and-stop-the-source-agreements-test-evaluating-its-manifest-nine-times
+    order: 1604-fsxu
+    status: in_progress
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    size: S
+    implementer_tier: sonnet
+    capability_tags: [ci-gate, research, plan, lua, test]
+    estimated_hours: 3
+    owned_files:
+      - plan/issues/gate-performance-research-distillation-2026-10-11.md
+      - plan/issues/research/research-gate-costs-2026-10-11.md
+      - plan/issues/research/research-runtime-testing-performance-2026-10-11.md
+      - plan/issues/research/research-lua-index-runtime-2026-10-11.md
+      - plan/issues/research/research-litmus-scan-inventory-2026-10-11.md
+      - plan/issues/research/research-fleet-runtime-infra-2026-10-11.md
+      - crates/tillandsias-plan/tests/lua_source_agreements.rs
+    title: |
+      Codex's five research reports on slow tests (branch research/litmus-lua-performance-20261011, frame cdba630ce) are brought onto trunk verbatim under plan/issues/research/ with a distillation that re-verifies each claim against trunk and the measured 2026-10-11 gate; the one in-scope cleanup, explicit_manifest_cases_match_their_expected_guard_verdicts evaluating the whole Lua manifest nine times, is fixed in the same change
+    context: |
+      The research ranked static Lua/shell scanning first and proposed a Rust
+      snapshot/index runtime with a ">=10x target". The gating checkout's own
+      timing log (282,944 records, which the research did not have: it read a
+      six-record cache in another checkout) attributes the 1,195 s --check of
+      21:48Z: cargo test passes 157 s, fixtures that re-run heavy production
+      machinery (nested litmus runs, a second cargo profile, a second archiver
+      pass) about 300 s, ledger-bound checks about 220 s, the unrecorded
+      preamble (1599-egzz touch, memo, setup) about 242 s. The three static
+      guards the research benchmarked sum to 3 s. The fixes worth filing are
+      the fixture ones (1604-se6w, 1604-8uae, 1604-c5a5, 1604-7mgk, 1604-8jbj)
+      and the telemetry gap (1604-runj). Nothing filed removes or narrows the
+      1599-egzz touch.
+    exit_criteria:
+      - 'explicit_manifest_cases_match_their_expected_guard_verdicts asserts, with a thread-local evaluator-run counter, that one assertion set performs exactly ONE full evaluator run; the pre-fix body (one run plus one per negative control) fails that assertion with "not 9 times" in the same target, shown in one run'
+      - 'cargo test -p tillandsias-plan --test lua_source_agreements passes unfiltered, with the eight negative controls still asserted non-zero from the single captured outcome map'
+      - 'the five research reports are on trunk under plan/issues/research/ byte-identical to the branch apart from a one-line banner naming the distillation; scripts/check-issue-citation-convention.sh accepts them (their pinned spans carry cite-ok reasons)'
+      - 'plan/issues/gate-performance-research-distillation-2026-10-11.md names, per report, keep/trim/drop with a reason, and per finding the measured step duration from the 21:48Z gate record it came from'
+    verifiable_closure: 'cargo test -p tillandsias-plan --test lua_source_agreements -- --test-threads=1 passes'
+    depends_on: []
+    related: [1484-uf29, 1599-egzz, 1604-se6w, 1604-8uae, 1604-c5a5, 1604-7mgk, 1604-runj, 1604-8jbj]
+    events:
+      - type: filed
+        ts: "2026-10-11T22:20:38Z"
+        agent_id: macuahuitl-fedora-claude
+        host: macuahuitl
+        summary: |-
+          Filed with the evaluation on work/1604-fsxu. The research's static-scan priority is contradicted by the gating host's own per-step timing log; the fixture and telemetry packets 1604-se6w/8uae/c5a5/7mgk/runj/8jbj carry the real savings.
+          MEASURED in the builder toolbox, private CARGO_TARGET_DIR, 2026-10-11: with the loop restored to re-evaluating per control, the counter assertion fails "the explicit manifest is evaluated once per assertion set, not 9 times"; with the fix, lua_source_agreements is 7 passed in 0.05 s, rustfmt clean, clippy -D warnings clean. writer_host_default_is_the_compiled_platform_never_a_fabricated_linux passes under the dev profile (1604-se6w). scorable-obligation, packet-tier, added-fragments-parse and issue-citation guards all ok.
+    next_action: >
+      Coordinator: land work/1604-fsxu (docs, the nine-to-one evaluator fix, and
+      1604-se6w's one-line profile change). Then pick up 1604-7mgk and 1604-8jbj,
+      the two largest per-check savings that touch only fixtures.
+
+  - packet_id: test-a-claim-names-a-workstation-arm-6-builds-a-second-cold-lto-release-test-profile-of-tillandsias-plan-for-one-unit-test-54-s-of-every-check-on-macuahuitl-when-the-dev-profile-is-already-warm
+    order: 1604-se6w
+    status: implemented
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    size: S
+    implementer_tier: haiku
+    capability_tags: [ci-gate, cargo, fixture, timing]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-a-claim-names-a-workstation.sh
+    title: |
+      scripts/test-a-claim-names-a-workstation.sh ARM 6 runs `cargo test --release -p tillandsias-plan writer_host_default_is_the_compiled_platform`, a cold LTO test-profile build of the plan crate that nothing else in the gate reuses, for a unit test with no profile dependence; MEASURED 54,778 ms as data step 375 in the 1,195 s --check of 2026-10-11 21:48Z on macuahuitl
+    context: |
+      The unit test (crates/tillandsias-plan/src/main.rs,
+      writer_host_default_is_the_compiled_platform_never_a_fabricated_linux)
+      asserts the compiled platform string, identical under both profiles.
+      The workspace suite builds the dev test profile minutes earlier in the
+      same gate, so a dev-profile filtered run is a warm link. Fix on
+      work/1604-fsxu: drop --release, keep the executed-not-grepped arm.
+      The research (research-gate-costs, "data-step release re-entry") named
+      the mechanism without a measurement; the timing log supplies it.
+    exit_criteria:
+      - 'in a ./build.sh --check on macuahuitl where the workspace suite ran first, the record step:checking-a-claim-names-a-workstation-not-the-compiled-platform-1 has duration_ms under 15,000 (pre-fix 54,778 ms, 2026-10-11 21:48Z gate, same host)'
+      - 'ARM 6 still prints "EXECUTED not grepped" and the fixture verdict is unchanged: bash scripts/test-a-claim-names-a-workstation.sh passes'
+      - 'NEGATIVE CONTROL: with the unit test renamed in a scratch copy, ARM 6 reports bad (the arm still executes the test rather than matching the source)'
+    verifiable_closure: 'bash scripts/test-a-claim-names-a-workstation.sh passes, and the next macuahuitl --check timing record for step 375 is under 15 s'
+    depends_on: []
+    related: [1201-hsf9, 772-4se9, 1604-fsxu]
+    events:
+      - type: filed
+        ts: "2026-10-11T22:20:38Z"
+        agent_id: macuahuitl-fedora-claude
+        host: macuahuitl
+        summary: |-
+          Found in the 21:48Z gate's step records: 54.8 s for one unit test under --release. Fixed on work/1604-fsxu by dropping --release; the dev profile is warm from the workspace suite. The timing criterion is measured by the first --check after landing.
+    next_action: >
+      After work/1604-fsxu lands, read step 375's duration in the next macuahuitl
+      --check timing record; under 15 s closes it, with the fixture still passing.
+
+  - packet_id: the-release-gates-litmus-fixture-waits-out-90-s-and-40-s-wall-clock-timeouts-on-real-nested-build-sh-check-children-that-also-re-touch-every-tracked-file-of-the-gating-checkout-mid-gate
+    order: 1604-8uae
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    size: M
+    implementer_tier: sonnet
+    capability_tags: [ci-gate, litmus, fixture, cargo, timing]
+    estimated_hours: 4
+    owned_files:
+      - scripts/test-gate-stamp-memoization.sh
+      - build.sh
+    title: |
+      litmus:release-gates-run-locally step 7 runs scripts/test-gate-stamp-memoization.sh, whose cases 12 and 13 start a REAL `build.sh --check` and `--check --install` on the gating checkout and accept `timeout 90` / `timeout 40` killing them (rc 124) as proof of real work, so the fixture spends about 130 s of its MEASURED 142-144 s waiting on wall clocks; each forced child also runs the 1599-egzz tracked-file touch over the parent's checkout mid-gate, so every cargo step after it recompiles
+    context: |
+      Measured: litmus:release-gates-run-locally 144,434 / 142,682 / 143,350 /
+      143,377 ms on macuahuitl 2026-10-08/09 (timing log). The fixture's own
+      comments explain the 124 acceptance ("the forced run re-execs into the
+      builder toolbox, and that entry alone can eat the whole bound"). On trunk
+      ed7a73185 build.sh dispatches `_touch_gating_checkout` whenever
+      FLAG_CHECK/TEST/CI/CI_FULL/RELEASE/INSTALL is set, with no nesting guard,
+      so cases 12, 13 and 14's children each touch every tracked file of the
+      real root while the parent gate still has cargo-using data steps ahead
+      of it (375-1201-hsf9, check-no-python's cargo build, 590's release
+      helper). The research (research-gate-costs, "real nested gates in
+      release litmus") named the children and their ceilings; it did not
+      notice the touch re-entry, which postdates its frame.
+      Shape of a fix, to be measured: (1) case 12/13 poll the child's log and
+      kill it at the FIRST banner that proves the memo was not taken and real
+      work started, keeping the timeout as the ceiling only; (2) a nested
+      child (parent gate pid or an explicit env the fixture sets) skips the
+      touch or the parent re-establishes it, with a negative control showing
+      a non-nested forced gate still touches. Keep the real nested gate; it
+      is what the fixture is for (1442-22d2's lesson stands: never mint a stamp
+      to shortcut it).
+    exit_criteria:
+      - 'litmus:release-gates-run-locally timing record on macuahuitl under 60,000 ms (pre-fix 142,682-144,434 ms across four runs, 2026-10-08/09)'
+      - 'cases 12 and 13 report ok as soon as the child prints its first post-memo real-work banner, shown by the fixture log naming the banner it matched and the child exiting by signal before its timeout; a child that takes the memo still fails case 12 (negative control, run with TILLANDSIAS_FORCE_CHECK unset in the child)'
+      - 'the mtime of a sampled tracked file in the gating checkout (stat before and after the fixture) is unchanged by the fixture; pre-fix it advances during each forced child (1599-egzz touch re-entry)'
+      - 'NEGATIVE CONTROL: a non-nested TILLANDSIAS_FORCE_CHECK=1 ./build.sh --check still prints note:gate-touch and advances the sampled mtime'
+    verifiable_closure: 'bash scripts/test-gate-stamp-memoization.sh passes, and the next macuahuitl release-gates litmus record is under 60 s'
+    depends_on: []
+    related: [1442-22d2, 1599-egzz, 599-4wzr, 1604-runj]
+    events:
+      - type: filed
+        ts: "2026-10-11T22:20:38Z"
+        agent_id: macuahuitl-fedora-claude
+        host: macuahuitl
+        summary: |-
+          Four measured runs at 143 s; about 130 s of it is `timeout 90` and `timeout 40` expiring on real nested gates. The nested children's 1599-egzz touch over the parent's checkout is a second, unmeasured cost.
+    next_action: >
+      Read run_child and the case 12/13 assertions in test-gate-stamp-memoization.sh;
+      replace wait-for-timeout with kill-at-first-real-work-banner; decide the
+      nested-touch rule in build.sh with its negative control; measure.
+
+  - packet_id: the-capability-manifest-guard-fixture-cold-builds-tillandsias-plan-twice-with-release-lto-in-a-private-target-to-check-a-compile-time-warning-that-the-dev-profile-reproduces-101-107-s-measured
+    order: 1604-c5a5
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    size: S
+    implementer_tier: haiku
+    capability_tags: [ci-gate, litmus, fixture, cargo, timing]
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-capability-manifest-guard.sh
+    title: |
+      scripts/test-capability-manifest-guard.sh copies Cargo.toml, Cargo.lock, crates, assets and images into a scratch repo and runs `cargo build --release -p tillandsias-plan` TWICE in a fresh CARGO_TARGET_DIR (drifted manifest, then restored) to check the 583-dv9n dispatch-arm drift warning, a compile-time capabilities.txt comparison that a dev-profile build reproduces; MEASURED litmus:capability-manifest-guard 101,485-106,992 ms on macuahuitl 2026-10-08/09
+    context: |
+      The root release profile uses LTO and one codegen unit; a dev build of
+      the same crate in the same private target is a fraction of that, and
+      the second (restored) build becomes incremental in the same target.
+      Keep the private scratch copy and private target: the fixture mutates a
+      source file and must never share production's target (1599-egzz class).
+      The three arms (drift-warns-on-stderr-no-gate, under-report-failsafe,
+      clean-tree-silent) and the lib-expert-capability.sh probe take a binary
+      path and do not care about the profile. The research (research-gate-costs
+      "private cold release mutation build") named this; the timing log
+      measures it.
+    exit_criteria:
+      - 'litmus:capability-manifest-guard timing record on macuahuitl under 50,000 ms (pre-fix 101,485-106,992 ms across four runs)'
+      - 'all three ok lines (fixture-drifted-built, drift-warns-on-stderr-no-gate, under-report-failsafe, clean-tree-silent) still print and the drifted binary still warns "dispatch arm query is not listed" on stderr'
+      - 'NEGATIVE CONTROL: with the restore step removed in a scratch copy, the clean-tree arm fails (the second build still proves the restored manifest, not a cached drifted binary)'
+    verifiable_closure: 'bash scripts/test-capability-manifest-guard.sh passes, and the next macuahuitl capability-manifest litmus record is under 50 s'
+    depends_on: []
+    related: [583-dv9n, 1599-egzz]
+    events:
+      - type: filed
+        ts: "2026-10-11T22:20:38Z"
+        agent_id: macuahuitl-fedora-claude
+        host: macuahuitl
+        summary: |-
+          Two cold LTO release builds for a compile-time manifest warning; four measured runs at 101-107 s.
+    next_action: >
+      Drop --release from both cargo build lines and point DRIFTED/CLEAN at
+      target/debug; run the fixture; record the litmus duration.
+
+  - packet_id: the-1375-6pnd-selection-parity-fixture-proves-the-litmus-runner-selects-the-same-tests-with-and-without-jq-by-executing-the-whole-git-mirror-service-spec-twice-76-s-per-check-because-the-runner-has-no-selection-only-mode
+    order: 1604-7mgk
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    size: M
+    implementer_tier: sonnet
+    capability_tags: [ci-gate, litmus, fixture, timing]
+    estimated_hours: 4
+    owned_files:
+      - scripts/test-litmus-runner-reads-without-jq.sh
+      - scripts/run-litmus-test.sh
+    title: |
+      scripts/test-litmus-runner-reads-without-jq.sh (1375-6pnd, data step 530) compares the runner's SELECTION with and without jq/yq/toolbox by running `run-litmus-test.sh git-mirror-service --phase pre-build --size instant` end to end twice, so every test of that spec executes twice inside the fixture; MEASURED 76,002 ms in the 1,195 s --check of 2026-10-11 21:48Z on macuahuitl, with the spec's litmus records appearing twice (22:05:35Z and 22:06:12Z). The runner's --list lists suites, not a selection; nothing stops after selection
+    context: |
+      The fixture's assertion reads only the "Executing litmus:" and "Total:"
+      lines out of the two logs; the executions are a by-product. A
+      selection-only mode of the runner (apply phase/size/host/retired/inputs
+      filters, print the ordered selection and the total line, run no step,
+      need no plan binary beyond metadata reads) would let the fixture compare
+      exactly what it compares today in a few seconds, and would be the same
+      seam the gate's own change-class selection could later reuse. The
+      t-plain/t-quoted/t-runtime synthetic spec arm stays as the negative
+      control that the awk tier drops t-quoted. The research
+      (research-lua-index-runtime, "litmus metadata: _yaml_jq spawns plan yaml
+      get per query") describes the per-field metadata reads this mode would
+      also exercise; the timing log measures the fixture.
+    exit_criteria:
+      - 'step:checking-the-litmus-runner-selects-identically-with-and-without- timing record on macuahuitl under 15,000 ms (pre-fix 76,002 ms, 2026-10-11 21:48Z)'
+      - 'during the fixture no litmus:<name> record for the git-mirror-service spec is written to the timing log (pre-fix: one full set per run, two per fixture)'
+      - 'the fixture still passes with selection=<n> tests byte-identical, and the t-quoted negative control still differs when the plan binary is stubbed away (the awk tier drops it)'
+      - 'NEGATIVE CONTROL: a selection-only run whose selection differs between the two tool regimes makes the fixture FAIL with the diff printed'
+    verifiable_closure: 'bash scripts/test-litmus-runner-reads-without-jq.sh passes, and the next macuahuitl --check record for step 530 is under 15 s'
+    depends_on: []
+    related: [1375-6pnd, 1419-zydw]
+    events:
+      - type: filed
+        ts: "2026-10-11T22:20:38Z"
+        agent_id: macuahuitl-fedora-claude
+        host: macuahuitl
+        summary: |-
+          The second-largest single step of the measured --check; it executes a real spec twice to compare two text selections.
+    next_action: >
+      Add a selection-only flag to run-litmus-test.sh (prints the Executing/Total
+      lines after selection, exits before _litmus_require_plan_binary), switch
+      the fixture's two runs to it, keep the synthetic t-quoted arm, measure.
+
+  - packet_id: the-gate-preamble-including-the-1599-egzz-tracked-file-touch-has-no-timing-record-so-242-s-of-the-measured-1195-s-check-20-percent-is-unattributed-and-the-touch-s-cost-exists-only-as-a-stderr-note
+    order: 1604-runj
+    status: ready
+    kind: enhancement
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    size: S
+    implementer_tier: sonnet
+    capability_tags: [ci-gate, timing, telemetry, cargo]
+    estimated_hours: 3
+    owned_files:
+      - build.sh
+      - scripts/lua/test-gate-touch.lua
+    title: |
+      build.sh's --check preamble (the 1599-egzz touch of every tracked file, memo lookup, tool setup, sidecar staging) runs before `_run` attribution starts, so it writes no step record; in the 2026-10-11 21:48Z --check on macuahuitl the 361 step records sum to 953,025 ms against a build-check of 1,195,036 ms, leaving ~242 s (20%) unattributed, and the touch's cost (reported ~170 s on this host) exists only as `note:gate-touch:... touched in Ns` on stderr
+    context: |
+      Every decision about the touch (keep, narrow, parallelise, nest-guard
+      per 1604-8uae) needs its cost as a record with the gate's root, host and
+      exit, in the same grammar the other steps use, so cycle-metrics and the
+      research's attribution reconcile. The research's telemetry contract
+      (run/span/parent ids, monotonic clocks) is larger than this; this packet
+      is the one record that is missing. Do NOT change what the touch does.
+    exit_criteria:
+      - 'after a ./build.sh --check, the checkout timing log holds a record named for the gate touch (e.g. step:touching-tracked-files-1599-egzz) with duration_ms, exit and root; pre-fix no such record exists (grep of the 21:48Z run shows only the 17 ms test-gate-touch.lua decider record)'
+      - 'the sum of step records plus the named preamble records reconciles to the build-check record within 10% on the same run (pre-fix 80%)'
+      - 'NEGATIVE CONTROL: ./build.sh --preflight, which does not touch, writes no touch record'
+      - 'scripts/lua/test-gate-touch.lua still passes: the touch itself is unchanged'
+    unscoreable: "unpinnable-until-the-guard-exists: the fixture asserting the touch record (a scratch --check with TILLANDSIAS_TIMING_LOG redirected) is written with the record; pre-fix result: no record for the preamble."
+    depends_on: []
+    related: [1599-egzz, 1204-3s2s, 1437-gbwi, 1604-8uae]
+    events:
+      - type: filed
+        ts: "2026-10-11T22:20:38Z"
+        agent_id: macuahuitl-fedora-claude
+        host: macuahuitl
+        summary: |-
+          The per-step log attributes 80% of the gate; the preamble, where the touch lives, is the other 20% and has no record.
+    next_action: >
+      Wrap _touch_gating_checkout's dispatch in the timing emitter build.sh already
+      uses for steps; add the preflight negative control; reconcile one run.
+
+  - packet_id: the-archiver-runs-twice-per-check-831-ezea-s-memoized-step-misses-after-every-land-46-s-and-965-sxec-s-missing-ruby-fixture-runs-archive-plan-packets-check-again-as-its-positive-control-37-s
+    order: 1604-8jbj
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    size: S
+    implementer_tier: sonnet
+    capability_tags: [ci-gate, plan, archiver, fixture, timing]
+    estimated_hours: 3
+    owned_files:
+      - scripts/test-archiver-ruby-could-not-run.sh
+      - scripts/archiver-check-memo.sh
+      - build.sh
+    title: |
+      scripts/test-archiver-ruby-could-not-run.sh (965-sxec) proves a missing ruby routes to could-not-run with stub-PATH arms, then runs the REAL `./scripts/archive-plan-packets.sh --check` as its positive control, a second full archiver pass over the same ledger bytes the memoized 831-ezea step already judged minutes earlier in the same gate; MEASURED 46,023 ms (831-ezea, a memo miss, as after every land) plus 37,608 ms (965-sxec) in the 2026-10-11 21:48Z --check on macuahuitl. The fixture's own NOTE already says the earlier run is the likely owner of the scratch state it finds
+    context: |
+      The positive control needs "the archiver passes on a host with ruby",
+      which the gate established with the same instrument on the same inputs.
+      Reuse the 831-ezea verdict (its memo digest, scripts/archiver-check-memo.sh,
+      covers ledger + archiver + checker + plan binary) when it is fresh, and
+      run the archiver only when no fresh verdict exists (standalone runs,
+      negative control). The stub-PATH arms are the fixture's point and stay.
+      The research named the live-ledger fragments.rs test as the ledger
+      scaling cost; on this host the ledger-bound shell steps (this pair,
+      fragment-events-land 51 s, fleet-activity 47 s) are the larger population.
+    exit_criteria:
+      - 'step:checking-a-missing-ruby-reads-as-could-not-run-not-as-a-ledger-v timing record on macuahuitl under 10,000 ms in a --check where 831-ezea ran first (pre-fix 37,608 ms)'
+      - 'the stub-PATH arms still prove rc 3 / "no usable ruby" routes to could-not-run, and the positive control still asserts a PASS verdict, reused from a fresh 831-ezea memo and named as such in the fixture output'
+      - 'NEGATIVE CONTROL: run standalone with the memo absent (scratch memo dir), the fixture runs the archiver itself and passes; with the archiver made to fail in a scratch copy, the positive control fails'
+    verifiable_closure: 'bash scripts/test-archiver-ruby-could-not-run.sh passes, and the next macuahuitl --check record for the 965-sxec step is under 10 s'
+    depends_on: []
+    related: [965-sxec, 831-ezea, 911-m7js]
+    events:
+      - type: filed
+        ts: "2026-10-11T22:20:38Z"
+        agent_id: macuahuitl-fedora-claude
+        host: macuahuitl
+        summary: |-
+          Two full archiver passes per gate over the same bytes, 84 s together in the measured --check; the second is a positive control that the first already supplied.
+    next_action: >
+      Teach the fixture's positive control to read a fresh archiver-check memo
+      verdict (same digest the 831-ezea step writes) before running the archiver;
+      keep the stub arms; add the memo-absent negative control; measure.

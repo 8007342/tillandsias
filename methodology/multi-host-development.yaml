@@ -1009,7 +1009,43 @@ multi_host_development:
       - "git push origin <active-branch>. On rejection: `git fetch && git rebase origin/<active-branch> && ./build.sh --check` and retry up to 3 times."
       - "Do not exit a skill successfully with local-only commits or uncommitted tracked changes."
       - "Incomplete but coherent work must be checkpoint-committed, pushed, and recorded in the owning plan item."
-      - "Prefer separate `git worktree` directories for concurrent platform branches instead of switching branches with dirty state."
+      - "Work in ONE checkout and move between branches with `git switch` (single_checkout_branching, below). Never carry a dirty tree across a switch: commit it to your own work ref first."
+
+  single_checkout_branching:
+    rule: >
+      OPERATOR DIRECTION 2026-10-11 (order 1620-67ji). A host works in ONE
+      checkout per repository, and moves between units of work by switching
+      branches in it, the way git is designed to be used. An agent does NOT
+      create sibling `git worktree` directories (or temp clones) to run work in
+      parallel on one host. Concurrency on one host is serialized: a second
+      agent waits for the checkout rather than opening another one.
+    why: >
+      Every sibling worktree is outside the agent session's workspace, so the
+      command-policy bridge (1443-we89) asks the OPERATOR to approve any
+      recursive rm there (consent:bash-policy:workspace-destroy). Measured
+      2026-10-11: 9 prompts in 7 days, of 4,903 decisions, all of that one
+      class. The three that day that could be traced to their commands were a
+      recursive rm in a sibling worktree (the one the operator denied) and two
+      in leaked darwin temp scratch. The audit keeps only digests, so the five
+      on 2026-10-08 are not attributed.
+      The operator runs without approvals so that the convergence methods carry
+      the work; a prompt to judge a compound command defeats that. The same root
+      produced 1599-egzz (a gate ran another worktree's code through the shared
+      CARGO_TARGET_DIR), 1590-j20f (test binaries embed another checkout's
+      path) and 1603-iwh2 (`.git` is a file in a linked worktree, so the tray
+      rebuilds every time). It also produced a fixture that fails in a linked
+      worktree before any change (test-bash-composition-hazards).
+    procedure:
+      - "Start a unit of work from the integration branch: `git fetch origin && git switch -c work/<order> origin/<integration>`."
+      - "Commit and push the work ref as often as you like (work_ref_lane). Before every push, `git merge origin/<integration>` (pull_merge_cadence)."
+      - "To change units mid-flight, commit everything to the current work ref first, even as a WIP commit, then `git switch <other>`. Never switch with a dirty tree, and never `git stash` work you will not come back to; salvage-dirty-worktree.sh is the panic case."
+      - "Plan fragments go to trunk from the integration branch: `git switch <integration> && git pull --ff-only`, write or append the fragment, run `scripts/push-plan-fragments-to-trunk.sh`, then switch back."
+      - "Builds share the checkout's own target/. A switch changes file mtimes, and cargo rebuilds only what changed. That cost is the price of one checkout, and it is cheaper than a gate that measured another tree."
+      - "Scratch lives inside the workspace (target/, .tillandsias/fixture-scratch/<guard>.<pid>) or in $TMPDIR given as an explicit template, never a bare mktemp (1619-7i9r). Delete only there, by literal path. A recursive rm outside the workspace goes to the operator, and that is a defect in the agent's plan, not a question for the operator."
+      - "Existing sibling worktrees are retired: once a worktree's branch has landed or been switched to in the main checkout, `git worktree remove` it, and create no new ones."
+    exceptions:
+      - "The land queue's own detached-HEAD gate runs IN the main checkout and is not a sibling worktree; nothing else may write to that checkout while it gates, so other work on that host waits."
+      - "A fixture may create and remove a worktree of a SCRATCH repository it built itself (test-worktree-add-cleanup.lua); that is test data, not a place to work."
 
   product_topology_invariant:
     rule: >

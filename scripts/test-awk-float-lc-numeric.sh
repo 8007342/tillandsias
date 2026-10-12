@@ -30,6 +30,9 @@
 # consumer parses, so it is checked here only statically (pin present).
 
 set -uo pipefail
+# 1612-jp94: the signal fixture learns our pid FIRST, so it can tell a run that
+# ended early (e.g. unscoreable: no comma locale) from one still starting.
+[ -z "${TILLANDSIAS_AWKLC_PIDFILE:-}" ] || echo "$$" >"$TILLANDSIAS_AWKLC_PIDFILE"
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 1
 
@@ -108,8 +111,8 @@ for s in scripts/freshness-inventory.sh scripts/refusal-calibration/measure-band
     make_mutant "$s"
 done
 # The signal fixture (scripts/lua/test-awk-float-lc-numeric-signal.lua) sends
-# TERM once this file names our pid: the mutants exist from here on.
-[ -n "${TILLANDSIAS_AWKLC_PIDFILE:-}" ] && echo "$$" >"$TILLANDSIAS_AWKLC_PIDFILE"
+# TERM once <pidfile>.ready exists: the mutants exist from here on.
+[ -z "${TILLANDSIAS_AWKLC_PIDFILE:-}" ] || : >"$TILLANDSIAS_AWKLC_PIDFILE.ready"
 
 # every_dot <label> <values...> — all values match the dot grammar (and exist).
 every_dot() {

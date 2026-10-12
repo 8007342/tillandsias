@@ -9,13 +9,23 @@ ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; cd "$ROOT" || exit 1
 # ORDER 1516-wru4: NEVER PLANT IN THE LIVE CHECKOUT. The arms below plant
 # guards and gate steps and append to build.sh; run in place, a concurrent gate
 # or boundary snapshot in this checkout saw them. So the fixture re-execs itself
-# inside a detached scratch worktree (target/ is ignored, so the live status
-# does not move), overlaid with the live tracked files so uncommitted edits are
+# inside a detached scratch worktree under $TMPDIR (outside the checkout, so the
+# live status does not move; 1600-nn5b moved it out of target/plan-scratch so
+# the preflight door's per-guard TMPDIR sweep can remove it after a KILL),
+# overlaid with the live tracked files so uncommitted edits are
 # still what is tested. A sampler watches the live tree the whole run and the
 # outer half refuses if its status or build.sh moved.
 if [ -z "${FRONT_DOOR_SCRATCH:-}" ]; then
-    mkdir -p "$ROOT/target/plan-scratch"
-    SCR="$(mktemp -d "$ROOT/target/plan-scratch/front-door.XXXXXX")"
+    SCR="$(mktemp -d "${TMPDIR:-/tmp}/front-door.XXXXXX")"
+    sampler=""
+    # 1600-nn5b: the worktree is removed on EVERY exit, not only after a normal
+    # return. A signal exits, which runs this. A KILL is the door's sweep's job.
+    outer_cleanup() {
+        [ -z "$sampler" ] || kill "$sampler" 2>/dev/null
+        git worktree remove --force "$SCR" >/dev/null 2>&1; rm -rf "$SCR" "$SCR.moved"
+    }
+    trap outer_cleanup EXIT
+    trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP
     git worktree add -q --detach "$SCR" HEAD >/dev/null 2>&1 || { echo "FAIL: cannot create scratch worktree"; exit 1; }
     git diff --name-only -z HEAD | while IFS= read -r -d '' f; do
         if [ -e "$f" ]; then mkdir -p "$SCR/$(dirname "$f")"; cp -p "$f" "$SCR/$f"; else rm -f "$SCR/$f"; fi

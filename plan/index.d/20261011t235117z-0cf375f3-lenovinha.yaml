@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: plan-methodology-experts-rung1/expert-launch-state-and-ephemerality
+    event:
+      type: note
+      ts: "2026-10-11T23:51:17Z"
+      agent_id: linux-lenovinha-opus5-20261011t235117z
+      host: lenovinha
+      summary: |
+        CRITERION (ii) CLOSED, with an explicit restatement. As written ("a COLD launch with inference genuinely NOT SERVING still reaches the agent prompt"), the shape is UNREACHABLE. A cold launch (no other lane up) first runs "[tillandsias] no active lane containers; cleaning project + shared stack for <project> (lane-scoped: tillandsias-inference; ...)" and "podman rm -f tillandsias-inference". It then starts a fresh, real inference. At cold launch, inference is therefore either ABSENT or SERVING, never a live non-server. The criterion was met by the two reachable shapes, S2 + S4. S4 does NOT stand in for "cold".
+
+        MEASURED on lenovinha 2026-10-11 (installed tillandsias v56.9.27.2; scratch project scratch-394e, upstream octocat/Hello-World; `tillandsias --bash` driven on a pty; the forge shell is fish; evidence read from the forge's own .forge-startup-context.md and a live tillandsias_inference_state call). Before the runs: tillandsias-vault was Exited (0) 10 days ago and was started by `tillandsias --ensure-enclave` at about 23:05Z, with no operator input. The proxy was already up.
+        - S1 CONTROL, a STOPPED tillandsias-inference pre-created. FINDING: the launcher replaces it ("inference ready on attempt 2/60") and the context says READY (models=3). A stopped container never reaches the not-serving path. That is why the 2026-07-29 sharpening was needed: the stopped case passed while the real failure was untested.
+        - S2, inference ABSENT (TILLANDSIAS_NO_LOCAL_INFERENCE=1): prompt REACHED. Context: "NOT-READY (endpoint-unreachable: curl: (6) Could not resolve host: inference)", inference_state=not-ready inference_reason=endpoint-unreachable, experts: degraded(no-plan-crate). PASS.
+        - S3, a pre-placed running decoy (holds the name and the inference alias, nothing on :11434) at a cold launch. FINDING: it was rm -f'd by the cold-launch cleanup above and replaced by a serving engine (READY). This confirms the unreachability.
+        - S4, a RUNNING NON-SERVER reached through the only path that keeps one: the order-443 reuse path, with a sibling lane up (scratch-394e-hold). The serving inference was swapped for the decoy, then scratch-394e was launched. Log: "inference already running; reusing (order 443)", then 60 failed probes and "[forge-launch] WARNING: local inference not ready (inference did not become ready within 60s ...)". The launch continued and the prompt was REACHED (lane wall 380 s, exit 0). Context: "NOT-READY (endpoint-unreachable: curl: (7) Failed to connect to inference port 11434 ...)", inference_state=not-ready inference_reason=endpoint-unreachable, experts: degraded(no-plan-crate). The decoy was still the running container afterwards. PASS.
+        Criteria (i) (the experts: grammar, lib-common.sh:1395-1411) and (iii) (litmus:forge-experts-teardown-ephemeral, green 2026-10-11 with the 527 VRAM steps) were closed earlier and re-checked.
+        Side observation, not filed: in S4, when scratch-394e's lane exited while the sibling was still up, tillandsias-git-scratch-394e stayed running ("keeping shared stack alive"), and the sibling's later exit cleaned only its own project. A project's git mirror can outlive its last lane while any other lane is up. Raised with the coordinator.

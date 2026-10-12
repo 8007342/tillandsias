@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11, found while building 1611-imnj): the population form.
+packets:
+  - packet_id: on-darwin-a-mktemp-without-a-template-ignores-tmpdir-so-scratch-made-that-way-escapes-the-preflight-doors-per-guard-tmpdir-sweep
+    order: 1619-7i9r
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [preflight, hygiene, fixtures, population-scan, darwin-regime, ratchet]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/check-bare-mktemp.lua
+    title: |
+      On darwin, `mktemp` and `mktemp -d` without a template, and both -t forms, ignore TMPDIR. The preflight door's per-guard TMPDIR (1600-nn5b) therefore does not contain scratch made that way, and a killed guard's scratch is not swept. Only an explicit "${TMPDIR:-/tmp}/<name>.XXXXXX" template lands in TMPDIR.
+    context: |
+      MEASURED on tlatoanis-macbook-air, darwin 27.0.1, 2026-10-11, with TMPDIR exported through env(1) (a child /bin/sh printed it back):
+        env TMPDIR=<dir> mktemp            -> /var/folders/.../T/tmp.ivWphlqg68
+        env TMPDIR=<dir> mktemp -d         -> /var/folders/.../T/tmp.xEP2gFcZS0
+        env TMPDIR=<dir> mktemp -t x       -> /var/folders/.../T/x.EeboT0Dpvo
+        env TMPDIR=<dir> mktemp -d -t x    -> /var/folders/.../T/x.PwzCzHTlSG
+        mktemp "${TMPDIR:-/tmp}/x.XXXXXX"  -> <dir>/x.x5bXqN
+      On GNU coreutils, bare mktemp honours TMPDIR, so this is darwin-only. That is why the door's sweep is complete on Linux and partial on darwin.
+      POPULATION, heuristic (grep, not the deliverable), on trunk 2333e87e9: about 303 bare-template mktemp lines in 242 files under scripts/**/*.sh, out of 703 mktemp lines. The heuristic includes a few non-calls, such as a mktemp named inside a regex string. The guard counts the real number.
+      Found on 1611-imnj (PR #342), which converted the four fixtures it moved to explicit templates.
+    exit_criteria:
+      - 'a guard (scripts/lua/check-bare-mktemp.lua, in --check) counts mktemp sites without a template in scripts/**/*.sh and ratchets them against a floor recorded from the count on the day it lands: a new bare site is refused, and the floor only goes down'
+      - 'at least one converted site is shown, on darwin, landing in the TMPDIR it was given, beside the bare form landing outside it, in one run'
+    unscoreable: "unpinnable-until-the-guard-exists: the counter, its floor and its fixture are written together"
+    depends_on: []
+    related: [1611-imnj, 1600-nn5b]
+    next_action: >
+      Write the counter with a planted-site fixture (bare -d, bare file, -t, a template, a comment, a string), record the floor, convert at most 6 sites (the burndown ceiling), and show one converted site landing in TMPDIR on darwin beside the bare form landing outside it.
+    provenance: |
+      Filed by tlatoanis-macbook-air on macuahuitl's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T23:13:12Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Darwin's mktemp without a template ignores TMPDIR (measured, 4 forms); about 303 such sites by grep. Guard, floor and first conversions.

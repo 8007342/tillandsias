@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-darwin-under-taskpolicy-b-the-preflight-front-door-runs-three-to-four-times-its-150-s-budget-so-test-preflight-front-door-is-red-there
+    event:
+      type: note
+      ts: "2026-10-11T20:40:01Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261011t204001z
+      host: tlatoanis-macbook-air
+      summary: |
+        MEASURED standalone on tlatoanis-macbook-air (M5 MacBook Air, darwin), 2026-10-11. `./build.sh --preflight` at trunk 323098bc6 in a scratch worktree with the router sidecar staged. build.sh was instrumented with ONE uncommitted echo per guard (pftime:<guard>:<elapsed s>:<rc>), measurement only.
+        - PLAIN (no taskpolicy), run alone: wall 159 s, ran=209, skipped-by-deadline=20, refused=0; 21 of 230 guards took >=5 s. An earlier plain run (166 s, 22 skipped) overlapped ~20 s of other work and is not the number.
+          Top 10 by elapsed: test-trace-coverage 7, test-pending-capability-row-does-not-wedge 7, test-a-claim-names-a-workstation 7, test-scorable-closure-quoting 6, test-purge-guard-soft-arm 6, test-project-info-grep-code-recall 6, test-memo-hit-observability 6, test-credential-channel-survives-a-killed-probe 6, test-credential-channel-affordances 6, test-awk-float-lc-numeric 6.
+        - taskpolicy -b: wall 496 s, ran=193, skipped-by-deadline=35, refused=0; 70 of 230 took >=5 s.
+          Top 10 by elapsed: test-set-field-refuses-unknown-flags 15, test-project-info-grep-code-recall 15, test-project-discipline-skill 15, check-append-vs-origin-fold 15, test-a-claim-names-a-workstation 14, check-added-test-is-referenced 14, test-trace-coverage 13, test-sigpipe-guard-sees-paths-and-continuations 13, test-plan-fragments-lane-carries-status 13, test-memo-hit-observability 13.
+        WHY -b IS 3x: the door's deadline is a TICK COUNT (_max = deadline * 10 ticks of `sleep 0.1`; the 1 s grace is 10 more ticks), and background QoS coalesces timers. Measured, the door's 5 s deadline (50 x `sleep 0.1`) takes 5.52/5.57/5.61 s plain and 12.83/12.77/12.70 s under -b. So every deadline-killed guard costs ~15 s instead of ~6.5 s: 35 kills x ~9 s is about 300 s of the 337 s gap. The top-10 elapsed under -b are deadline kills, not guard cost.
+        IMPLICATION for the decision: plain darwin is 159 s against a 150 s budget, nearly within it. Under -b, the deadline itself is wrong: it is not 5 s of wall time. A door that measures its deadline and grace on the WALL CLOCK (e.g. $SECONDS or a timestamp, polling stays at 0.1 s) would bound each kill at ~6 s under -b too. That is a faster door, not a bigger budget, and the same QoS effect as 1586-gway.

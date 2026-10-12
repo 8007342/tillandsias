@@ -44,6 +44,11 @@ scratch="$(mktemp -d "${TMPDIR:-/tmp}/sidecar-gate.XXXXXX")"
 wt="$scratch/wt"
 cleanup() { git -C "$ROOT" worktree remove --force "$wt" >/dev/null 2>&1; rm -rf "$scratch"; }
 trap cleanup EXIT
+# 1600-nn5b: a signal must EXIT, so the EXIT trap removes the worktree. A trap
+# that only ran cleanup on TERM returned and let the script carry on without its
+# worktree. A KILL that lands while bash waits on a long step is swept by the
+# preflight door (per-guard TMPDIR).
+trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP
 git -C "$ROOT" worktree add -q --detach "$wt" HEAD 2>/dev/null || { bad "could not create a scratch worktree"; exit 1; }
 # Carry this tree's uncommitted build.rs, so the fixture tests what is on disk.
 cp "$ROOT/crates/tillandsias-headless/build.rs" "$wt/crates/tillandsias-headless/build.rs"

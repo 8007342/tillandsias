@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11, condition (c) of the fixture-scratch ruling on 1611-imnj).
+packets:
+  - packet_id: the-preflight-door-sweeps-a-killed-guards-tmpdir-but-not-its-tillandsias-fixture-scratch-subdir-so-a-repo-confined-fixture-killed-at-the-deadline-leaves-it-behind
+    order: 1618-baia
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [preflight, hygiene, fixtures, darwin-regime]
+    estimated_hours: 2
+    owned_files:
+      - build.sh
+    title: |
+      When the preflight door KILLs a guard, it deletes the guard's own TMPDIR (1600-nn5b) but not .tillandsias/fixture-scratch/<guard>.<pid>, the per-run scratch subdir that repo-confined fixtures use since 1611-imnj. A fixture killed at the deadline leaves that subdir behind.
+    context: |
+      RULING (macuahuitl, 2026-10-11, on PR #342): .tillandsias/fixture-scratch/ is a third safe kind of fixture scratch, beside ${TMPDIR:-/tmp} and the 1587-qqzs shape. It is for fixtures whose Lua subject reads through repo-confined fs (target/ can be a symlink out of the repo). Conditions:
+      (a) each fixture writes only under .tillandsias/fixture-scratch/<guard>.<pid>/, and its EXIT trap removes that subdir;
+      (b) check-checkout-writers.lua treats only that per-pid shape as safe;
+      (c) this row: the door sweeps that subdir for a killed guard.
+      (a) and (b) are in #342. Users today: test-if-not-pipeline-guard, test-pilot-lua-ports and test-gate-memory-refusal (scan: fixture-scratch=3).
+      WHY IT LEAKS: no trap survives the door's KILL, and with an EXIT trap set, bash does not die on TERM while it waits in $(...) (measured on 1611-imnj's fixture). The directory is gitignored, so a leftover is invisible to diff-scoped guards, but it accumulates per killed run. The door already knows the guard's pid ($_pid in _pf_run_guard) and name, which are exactly the subdir's.
+    exit_criteria:
+      - 'on a killed guard (rc 124), the door removes .tillandsias/fixture-scratch/<guard>.<pid> the way it removes the guard TMPDIR, and reports it like the swept:worktree lines'
+      - 'a fixture runs the ARM-3 shape (TERM, 1 s grace, KILL) against a fixture-scratch writer held while its subdir exists: on the fixed door nothing is left, and on the trunk door (the same function with the new sweep removed) the subdir is left, in one run'
+    unscoreable: "unpinnable-until-the-guard-exists: the sweep and its kill fixture are written together"
+    depends_on: []
+    related: [1611-imnj, 1600-nn5b]
+    next_action: >
+      After #342 lands, in _pf_run_guard's killed path, remove "$SCRIPT_DIR/.tillandsias/fixture-scratch/<guard>.$_pid" when it exists. Check what <guard> is for a .lua guard versus a .sh one. Write the kill fixture by extracting _pf_run_guard, as test-worktree-add-cleanup.lua does.
+    provenance: |
+      Filed by tlatoanis-macbook-air on macuahuitl's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-11T23:12:56Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          The door should sweep a killed guard's .tillandsias/fixture-scratch/<guard>.<pid> as it sweeps its TMPDIR (condition (c) of the fixture-scratch ruling).

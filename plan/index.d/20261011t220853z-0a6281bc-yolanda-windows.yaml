@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: in-a-linked-worktree-both-tray-build-scripts-track-a-git-head-path-that-does-not-exist-so-every-build-reruns-them-and-rebuilds-both-tray-crates
+    field: status
+    value: completed
+    ts: "2026-10-11T22:08:53Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: in-a-linked-worktree-both-tray-build-scripts-track-a-git-head-path-that-does-not-exist-so-every-build-reruns-them-and-rebuilds-both-tray-crates
+    event:
+      type: completed
+      ts: "2026-10-11T22:08:53Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: PR 337 landed on linux-next as merge ed7a73185, gate green (coordinator relay). Tray build scripts track git rev-parse --git-path HEAD, the named ref and packed-refs; linked-worktree no-op rebuild compiles 0 crates.

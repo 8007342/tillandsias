@@ -1,0 +1,12 @@
+# Gate step 1600-nn5b — the fixture for both layers: the scan's arms on
+# constructed roots, and the preflight door's per-guard TMPDIR sweep, driven by
+# extracting _pf_run_guard from build.sh against a planted guard that adds a
+# worktree and ignores TERM. Pre-fix (the sweep removed) leaves the
+# registration; post-fix leaves 0 and records swept:worktree:<path>.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the worktree-cleanup scan and the door's sweep (1600-nn5b)"
+STEP_LUA="scripts/lua/test-worktree-add-cleanup.lua"
+STEP_ERROR="the worktree-cleanup scan or the door's sweep no longer does what its fixture constructs (1600-nn5b) — see the FAIL lines above"
+STEP_OK="Worktree-cleanup scan and door sweep fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-11 darwin ok:worktree-add-cleanup-fixture:10 arms"

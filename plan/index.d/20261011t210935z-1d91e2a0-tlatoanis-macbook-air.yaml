@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-lc-numeric-signal-fixture-waits-a-fixed-10-s-for-a-pid-file-the-subject-never-writes-when-it-ends-early-so-the-windows-wsl-gate-is-red
+    event:
+      type: note
+      ts: "2026-10-11T21:09:35Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261011t210936z
+      host: tlatoanis-macbook-air
+      summary: |
+        Landed #336 as 6d96f5cca, land gate green; Windows gates are no longer red on test-awk-float-lc-numeric-signal.lua. The exit criteria, each exercised:
+        1. In the Windows WSL builder guest the fixture is no longer red: it ends with the NAMED skip skip:awk-float-lc-numeric-signal:no-comma-locale-on-host (rc 0), whose reason is the subject's own unscoreable line. The guest's output is recorded on this row (yolanda's note, trunk 9cef72228: locale -a = C, C.utf8, POSIX).
+        2. A subject that ends before its mutants for any other reason is a FAIL that quotes what it said. Measured on darwin with a planted early `exit 2`: "it ended first, saying: ... fail:planted-early-exit", rc 1.
+        3. darwin stays ok 3 arms (3/3); util-linux is unaffected by the change (the event wait only ends earlier on an early exit).
+        Coverage gap kept visible (separate note): the REAL arm is unexercised on Windows gates until the guest image gains a comma-decimal locale.

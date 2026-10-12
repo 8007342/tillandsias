@@ -23,9 +23,11 @@ set -uo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
 RUNNER="$ROOT/scripts/run-litmus-test.sh"
-TMP="$(mktemp -d)"
-PREFIX_RUNNER="$ROOT/scripts/.znbn-prefix-runner.$$.sh"
-trap 'rm -rf "$TMP" "$PREFIX_RUNNER"' EXIT
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/litmus-structured-assert.XXXXXX")"
+# 1611-imnj: the pre-fix copy lives in $TMP, never beside the scripts (a copy in
+# scripts/ outlived the preflight door's KILL); its own-path lookups are pinned.
+PREFIX_RUNNER="$TMP/znbn-prefix-runner.sh"
+trap 'rm -rf "$TMP"' EXIT
 pass=0; fail=0
 ok()  { printf 'ok:   %s\n' "$1"; pass=$((pass+1)); }
 bad() { printf 'FAIL: %s\n' "$1"; fail=$((fail+1)); }
@@ -70,12 +72,14 @@ run_with() { # <runner> -> rc
 # The pre-fix control: HEAD's adjudication, this branch's discovery.
 git show HEAD:scripts/run-litmus-test.sh \
   | sed 's|^readonly LITMUS_BINDINGS="${PROJECT_ROOT}/openspec/litmus-bindings.yaml"|readonly LITMUS_BINDINGS="${TILLANDSIAS_LITMUS_BINDINGS:-${PROJECT_ROOT}/openspec/litmus-bindings.yaml}"|; s|^readonly LITMUS_TESTS_DIR="${PROJECT_ROOT}/openspec/litmus-tests"|readonly LITMUS_TESTS_DIR="${TILLANDSIAS_LITMUS_TESTS_DIR:-${PROJECT_ROOT}/openspec/litmus-tests}"|' \
-  > "$PREFIX_RUNNER" 2>/dev/null
+  | sed 's|\$(dirname "\${BASH_SOURCE\[0\]}")|'"$ROOT"'/scripts|g' > "$PREFIX_RUNNER" 2>/dev/null
 
 # ── ARM 0: the control is genuinely equalized ───────────────────────────────
 # Asserted BEFORE any verdict is read from it. An unequalized control cannot
 # find the suite and returns 1 for a reason unrelated to adjudication.
-if [ -s "$PREFIX_RUNNER" ] && [ "$(grep -c 'TILLANDSIAS_LITMUS_' "$PREFIX_RUNNER")" -ge 2 ]; then
+if grep -q 'BASH_SOURCE' "$PREFIX_RUNNER" 2>/dev/null; then
+    bad "ARM 0: the control still resolves a path from its own location (BASH_SOURCE), so it cannot run from \$TMP; pin the new lookup"
+elif [ -s "$PREFIX_RUNNER" ] && [ "$(grep -c 'TILLANDSIAS_LITMUS_' "$PREFIX_RUNNER")" -ge 2 ]; then
     write_case "hello" ""
     if run_with "$PREFIX_RUNNER"; then
         ok "ARM 0: pre-fix control reaches the throwaway suite (discovery equalized)"

@@ -1,0 +1,4 @@
+# Files whose `git worktree add` is NOT executed, so check-worktree-add-cleanup.lua
+# does not hold them to the trap rule (1600-nn5b). `<path> <reason>`; a line whose file
+# is gone or no longer mentions an add is refused as stale.
+scripts/test-no-fixture-writes-live-ledger.sh the add is checker INPUT inside a single-quoted string (arm 2, flags j), never executed
