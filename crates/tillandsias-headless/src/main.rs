@@ -8372,6 +8372,17 @@ fn build_opencode_forge_args(
         format!("TILLANDSIAS_PROJECT={project_name}"),
         "--env".into(),
         format!("TILLANDSIAS_AGENT={}", mode.agent_identity()),
+        // ORDER 776-drwr: the same accel claim build_forge_agent_run_args_with_vault
+        // hands every other lane (orders 392 and 480). This builder never had it,
+        // so OpenCode lanes ran with no envelope and lib-common.sh printed no
+        // "Accelerators" line (measured on a tray-launched Windows lane, 2026-08-16).
+        "--env".into(),
+        format!("TILLANDSIAS_INFERENCE_TIER={}", effective_inference_tier()),
+        "--env".into(),
+        format!(
+            "TILLANDSIAS_ACCEL_ENVELOPE={}",
+            accel_probe::accel_envelope(&accel_probe::load_or_probe(effective_inference_tier()))
+        ),
         "--env".into(),
         "TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets".into(),
         "--tmpfs".into(),
@@ -27885,6 +27896,42 @@ mod tests {
             "Error: cannot set up namespace: newuidmap returned exit status 1"
         ));
         assert!(!podman_runtime_blocker("podman run exited with status 125"));
+    }
+
+    /// ORDER 776-drwr. The OpenCode builder (the OpenCode and OpenCode Web
+    /// lanes) must hand the forge the same accel claim the agent builder does:
+    /// TILLANDSIAS_ACCEL_ENVELOPE (lib-common.sh's "Accelerators" line and
+    /// accel_class read it) and TILLANDSIAS_INFERENCE_TIER. Measured live on
+    /// windows/yolanda 2026-08-16: a tray-launched lane through this path ran
+    /// with neither, so its agent saw no accel claim at all.
+    #[test]
+    fn opencode_forge_args_carry_the_accel_envelope_and_inference_tier() {
+        for mode in [ForgeMode::Cli, ForgeMode::Web] {
+            let args = build_opencode_forge_args(
+                &PathBuf::from("/tmp/project"),
+                Some(&PathBuf::from("/tmp/project")),
+                None,
+                "alpha",
+                None,
+                None,
+                &PathBuf::from("/tmp/ca"),
+                "1.2.3",
+                mode,
+                None,
+                false,
+                false,
+            );
+            let envelope = args
+                .iter()
+                .find_map(|a| a.strip_prefix("TILLANDSIAS_ACCEL_ENVELOPE="))
+                .unwrap_or_else(|| panic!("{mode:?}: no TILLANDSIAS_ACCEL_ENVELOPE in {args:?}"));
+            assert!(
+                envelope.contains("accel_class="),
+                "{mode:?}: the envelope must name the accel class, got {envelope:?}"
+            );
+            let tier = format!("TILLANDSIAS_INFERENCE_TIER={}", effective_inference_tier());
+            assert!(args.contains(&tier), "{mode:?}: no {tier} in {args:?}");
+        }
     }
 
     /// Order-491 probe-4 pin: the interactive forge run must carry an
