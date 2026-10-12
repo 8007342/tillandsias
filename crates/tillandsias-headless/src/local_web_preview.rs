@@ -93,9 +93,11 @@ async fn ensure_profile_image(profile: &Profile, debug: bool) -> Result<(), Stri
             ));
         }
     }
-    podman(&["image", "exists", &image]).map(|_| ()).map_err(|_| {
-        "runtime_unavailable: the managed runtime image is absent after the host build".into()
-    })
+    podman(&["image", "exists", &image])
+        .map(|_| ())
+        .map_err(|_| {
+            "runtime_unavailable: the managed runtime image is absent after the host build".into()
+        })
 }
 
 fn select_profile(runtime: &str, configs: &[String]) -> Result<Profile, String> {
@@ -1888,7 +1890,10 @@ mod tests {
             || s.starts_with("--publish")
             || s.contains("TOKEN")
             || s == "deploy"));
-        assert!(args.contains(&crate::versioned_image_tag("web-wrangler", crate::VERSION.trim())));
+        assert!(args.contains(&crate::versioned_image_tag(
+            "web-wrangler",
+            crate::VERSION.trim()
+        )));
         assert!(joined.contains("dev --local --ip 0.0.0.0 --port 8080"));
         assert!(safe_relative(".").is_err());
         assert!(safe_relative("../other").is_err());
