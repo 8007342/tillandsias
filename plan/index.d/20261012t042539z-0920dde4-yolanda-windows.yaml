@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: on-native-windows-a-timed-out-command-whose-grandchild-holds-the-pipe-leaks-a-blocking-reader-thread-and-the-orphan-so-a-400ms-timeout-test-takes-120s-to-finish
+    field: status
+    value: completed
+    ts: "2026-10-12T04:25:39Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: on-native-windows-a-timed-out-command-whose-grandchild-holds-the-pipe-leaks-a-blocking-reader-thread-and-the-orphan-so-a-400ms-timeout-test-takes-120s-to-finish
+    event:
+      type: completed
+      ts: "2026-10-12T04:25:39Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: landed on linux-next as 3bcdcdf4d (land(229): work/1553-6e3q into linux-next); no unlanded commits on origin/work/1553-6e3q; closed in the yolanda-windows WIP reconciliation 2026-10-12 at the coordinator's request

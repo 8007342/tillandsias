@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: killing-a-windows-host-build-sh-leaves-its-guest-build-running-in-tillandsias-build-so-a-memory-reap-frees-nothing-and-the-orphan-keeps-compiling
+    field: status
+    value: completed
+    ts: "2026-10-12T04:25:52Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: killing-a-windows-host-build-sh-leaves-its-guest-build-running-in-tillandsias-build-so-a-memory-reap-frees-nothing-and-the-orphan-keeps-compiling
+    event:
+      type: completed
+      ts: "2026-10-12T04:25:52Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: landed on linux-next as 202229cf3 (land(278): work/1567-9fgi into linux-next); no unlanded commits on origin/work/1567-9fgi; closed in the yolanda-windows WIP reconciliation 2026-10-12 at the coordinator's request

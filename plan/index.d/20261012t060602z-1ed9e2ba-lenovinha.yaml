@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: llama-server-shared-tier-model-table
+    field: status
+    value: completed
+    ts: "2026-10-12T06:06:02Z"
+    host: lenovinha
+
+events:
+  - packet_id: llama-server-shared-tier-model-table
+    event:
+      type: completed
+      ts: "2026-10-12T06:06:02Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: land(351) 74b677f97 into linux-next, gate green (run 39); branch head 6782b1c23 (first pushed as work/482d-ttbl, #348, skipped as not-a-work-ref; same head re-pushed to work/482-dtbl). One T0-T5 tier table + two engine adapters under images/inference/tiers/ (tiers.sh classify/models/artifact); entrypoint inline ladder and pull chain removed, ladder parity at 12 boundary points and pull parity per tier (plan/evidence/482d-tier-table-dead-proof-2026-10-12/); dead config-overlay/ollama/{models.json,pull-models.sh} deleted with no-reader proof; tillandsias-models tier_for reads byte-identical CLI copies; OpenSpec change models-cli-tiers-from-canonical-table; litmus inference-tier-table-migration 7/7.

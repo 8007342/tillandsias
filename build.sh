@@ -421,6 +421,24 @@ _pf_sweep_guard_tmp() {  # $1 = the guard's TMPDIR, $2 = outfile
     fi
     rm -rf "$_gt"
 }
+# ORDER 1618-baia. A KILLed guard's per-run FIXTURE SCRATCH. The third safe kind
+# of scratch (1611-imnj, the coordinator's ruling) is
+# .tillandsias/fixture-scratch/<guard>.<pid>, for fixtures whose Lua subject
+# reads through repo-confined fs. Its guard's EXIT trap removes it, and a KILL
+# runs no trap. The door knows both names: the guard's file stem, and the pid
+# it started (the guard's own $$, since the subshell execs it). Recorded like a
+# worktree sweep, as `swept:fixture-scratch:<path>` in <outfile>.swept.
+_pf_sweep_fixture_scratch() {  # $1 = guard path, $2 = its pid, $3 = outfile
+    local _n _d
+    _n="$(basename "$1")"; _n="${_n%.sh}"; _n="${_n%.lua}"
+    _d="$SCRIPT_DIR/.tillandsias/fixture-scratch/$_n.$2"
+    [ -n "$_n" ] && [ -n "$2" ] && [ -d "$_d" ] || return 0
+    if rm -rf "$_d"; then
+        echo "swept:fixture-scratch:$_d" >> "$3.swept"
+    else
+        echo "swept:fixture-scratch-failed:$_d" >> "$3.swept"
+    fi
+}
 # The late sweep, from the preflight's EXIT trap: the recorded roots only.
 _pf_sweep_late() {  # $1 = the preflight run dir
     local _r
@@ -564,6 +582,7 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, 
         done
         kill -KILL "-$_pid" 2>/dev/null || kill -KILL "$_pid" 2>/dev/null
         wait "$_pid" 2>/dev/null
+        _pf_sweep_fixture_scratch "$_p" "$_pid" "$_out"
         _pf_sweep_guard_tmp "$_gtmp" "$_out"
         return 124
     fi

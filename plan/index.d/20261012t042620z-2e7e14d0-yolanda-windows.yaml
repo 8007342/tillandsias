@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-measured-record-says-whether-wsl-containers-wslc-could-host-the-forge-on-the-windows-fleet-host
+    field: next_action
+    value: 'RELEASED by yolanda-windows 2026-10-12 in the WIP reconciliation (coordinator''s request). LANDED: plan/issues/wslc-measurement-yolanda-2026-10-08.md as land(233) 28e8aa82e. It records wsl --version (2.7.13 < 2.9.9) and why WslcGetMissingComponents and both networking probes could not run. LEFT: the criterion''s two yes/no answers (a WSLC container reaching a TCP listener on the distro loopback, and two WSLC containers on an internal-only network) are recorded as "not measured". Next: on a Windows host with WSL >= 2.9.9 (wsl --update --pre-release is an operator decision), run the record''s steps 2-4 and fill in the two answers.'
+    ts: "2026-10-12T04:26:20Z"
+    host: yolanda-windows
+    replaces_sha256: "4b4d0d320d69e62cc0d37deed720c7412dc45bbd3f363ac7f58098bf07ccca41"

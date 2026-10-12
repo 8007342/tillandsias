@@ -1586,7 +1586,12 @@ distributed_work:
     rule: >
       `tillandsias-plan set-field <id|order> <field> <value> --reason "why"`.
       Never re-declare a packet under `packets:` to change it, and never rely on
-      an event alone to close one.
+      an event alone to close one. A LIST field (exit_criteria, capability_tags,
+      depends_on, owned_files, related) is replaced whole with
+      `tillandsias-plan list-replace <id|order> <field> <item>... --reason "why"`:
+      the latest replace by (ts, host) is the folded value, and the declaration
+      is never edited (1601-398e). A note saying a list is superseded is read by
+      no check.
     why: >
       Three hosts got this wrong on 2026-08-09, independently, within hours of
       each other AND of it being documented:

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-list-valued-packet-field-has-no-amend-path-once-its-declaration-is-on-trunk-so-exit-criteria-can-only-be-superseded-by-a-note-no-check-reads
+    event:
+      type: note
+      ts: "2026-10-12T04:01:55Z"
+      agent_id: windows-yolanda-opus5-20261012t040155z
+      host: yolanda-windows
+      summary: |
+        CORRECTION to this row's criterion 1 and context (coordinator agreed, 2026-10-11). Both said closure-evidence-check, and "the other closure checks", read the declared exit_criteria. They do not. closure-evidence-check only verifies that a closure in one fragment carries an evidence event, and no Rust code in tillandsias-plan reads exit_criteria by name. The measured reader is the selector's host-scoped advisory in scripts/select-work-batch.sh (1199-aw6m), which used to scan the declaration text. It now reads the folded value through status --field exit_criteria. Measured on the selector fixture: after a list-replace drops the criterion naming yoga and macuahuitl, the new binary stops flagging row 990-hs01 and the trunk binary still flags it.

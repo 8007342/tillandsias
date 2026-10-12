@@ -121,8 +121,12 @@ local function extract(text_, name)
     return table.concat(acc, "\n")
 end
 local build = fs.read("build.sh")
+-- Every helper _pf_run_guard calls is extracted with it (1618-baia added
+-- _pf_sweep_fixture_scratch to the killed path): an absent one would print
+-- "command not found" there and pass only because nothing checks that call.
 local fns = extract(build, "_pf_sweep_under") .. "\n" .. extract(build, "_pf_sweep_guard_tmp") .. "\n" ..
-    extract(build, "_pf_now") .. "\n" .. extract(build, "_pf_run_guard") .. "\n"
+    extract(build, "_pf_sweep_fixture_scratch") .. "\n" .. extract(build, "_pf_now") .. "\n" ..
+    extract(build, "_pf_run_guard") .. "\n"
 if not fns:find("_pf_sweep_guard_tmp \"$_gtmp\" \"$_out\"", 1, true) then
     arm("8/9 DOOR premise: build.sh's _pf_run_guard calls _pf_sweep_guard_tmp", false, "the call is not in the extracted function")
 else
@@ -172,9 +176,10 @@ else
         pre_out:find("rc=124", 1, true) ~= nil and pre_out:find("left=1", 1, true) ~= nil,
         pre_out:gsub("\n", " ") .. " " .. pre_err:sub(1, 200))
     local post_out, post_err = door("post")
-    arm("9 POST-FIX the door sweeps it: 0 left, swept:worktree: recorded",
+    arm("9 POST-FIX the door sweeps it: 0 left, swept:worktree: recorded, no helper missing on the killed path",
         post_out:find("rc=124", 1, true) ~= nil and post_out:find("left=0", 1, true) ~= nil
-        and post_out:find("swept:worktree:", 1, true) ~= nil,
+        and post_out:find("swept:worktree:", 1, true) ~= nil
+        and post_err:find("command not found", 1, true) == nil,
         post_out:gsub("\n", " ") .. " " .. post_err:sub(1, 200))
     local one_out = door("oneforce", true)
     local two_out, two_err = door("post", true)

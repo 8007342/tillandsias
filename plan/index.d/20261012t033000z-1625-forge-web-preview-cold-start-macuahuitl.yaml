@@ -1,0 +1,173 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the coordinator (macuahuitl) at the operator's request, 2026-10-12:
+# make durable the fixes a cold-start forge needed to serve a web project.
+# Evidence: plan/issues/research/forge-web-preview-cold-start-2026-10-12.md
+packets:
+  - packet_id: the-wrangler-preview-runtime-image-is-never-built-so-publish-local-auto-or-wrangler-always-refuses-with-an-init-step-nothing-can-run
+    order: 1625-un54
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [rust, podman, web, images, init]
+    estimated_hours: 3
+    related: [local-web-preview-image-mcp, local-web-preview-runtime]
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-headless/src/local_web_preview.rs
+    title: |
+      host-browser publish_local with runtime auto (on a project with a root Wrangler config) or wrangler always returns "runtime_unavailable: initialize the managed runtime image before publication". No code path ever builds tillandsias-web-wrangler: INIT_IMAGES omits web-wrangler and main.rs image_specs has no arm for it. The refusal names a step that neither the agent nor init performs.
+    context: |
+      MEASURED by a forge agent on yoga, 2026-10-12 (visual-chess, commit 56ba0858a in that repo; distilled in plan/issues/research/forge-web-preview-cold-start-2026-10-12.md): every auto and wrangler attempt, retried after 20 s and 45 s, got the same refusal.
+      CODE (origin/linux-next): local_web_preview.rs publish_locked runs `podman image exists <profile.image()>`, which is "tillandsias-web-wrangler" for the Wrangler profile, and maps a miss to the init refusal. main.rs INIT_IMAGES has ten images and no web-wrangler. main.rs image_specs has no "web-wrangler" arm; runtime_assets.rs image_context_rel does, and build.rs embeds images/web-wrangler/*. So the image's inputs ship, but nothing builds it.
+      The forge cannot build images by design, but publish_local runs on the HOST, which can.
+    exit_criteria:
+      - 'on a host where `podman image exists` for the Wrangler profile image is false, publish_local runtime=wrangler on an assets-only Wrangler fixture returns a preview URL in one call, building the image within a stated bound. The pre-fix binary returns the init refusal for the same call, in the same run'
+      - 'init (or the first forge launch) materializes the Wrangler image alongside web, and the image name publish_local checks is the name init tags. Show `podman image exists` true for exactly that name after init on a scratch substrate'
+      - 'the build is host-side only: no new MCP argument, path, command or image name is accepted from the agent'
+    unscoreable: "unpinnable-until-the-guard-exists: the materialization arm and its fixture are written together"
+    next_action: >
+      Add web-wrangler to main.rs image_specs and INIT_IMAGES, and reconcile the tag publish_local probes with versioned_image_tag / latest_alias. Then make publish_locked ensure the profile image host-side (bounded) instead of refusing. Prove both on a scratch substrate.
+    provenance: |
+      Filed by the macuahuitl coordinator at the operator's request, 2026-10-12, from the visual-chess forge research.
+    events:
+      - type: filed
+        ts: "2026-10-12T03:30:00Z"
+        host: macuahuitl
+        summary: |-
+          The Wrangler preview image is never built, so publish_local auto/wrangler always refuses with an init step nothing runs.
+
+  - packet_id: publish-local-collapses-every-failure-into-runtime-unavailable-and-service-status-cannot-say-why-a-publish-failed
+    order: 1625-6iwd
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [rust, mcp, web, diagnostics]
+    estimated_hours: 3
+    related: [local-web-preview-runtime]
+    owned_files:
+      - crates/tillandsias-headless/src/local_web_preview.rs
+    title: |
+      local_web_preview.rs maps every failed podman command to "runtime_unavailable: Podman operation failed", so a static-runtime publish on yoga failed with no way to tell image-absent from podman-down, router-start, run or readiness. service_status {} returns nothing after a failed publish. An agent hits a hard stop with no diagnosis.
+    context: |
+      MEASURED (visual-chess forge on yoga, 2026-10-12): runtime=static returned "runtime_unavailable: Podman operation failed", and service_status {} was empty in every state. The static image passed the existence check, so the failure came later and its step is unknown.
+      Raw podman output is withheld on purpose (it can carry project secrets), and that rule stays. What's missing is a STEP-QUALIFIED reason: which operation failed (ps, inspect, image, mounts, router, run, ready) and its class (transport, exit, timeout, absent), plus who can act (host, operator, agent). A failed publish should also leave a status record.
+    exit_criteria:
+      - 'fault injection at each podman step (fake podman returning non-zero at ps, inspect, image exists, run, and router start) yields a DISTINCT, stable reason code naming the step, never raw podman output. The pre-fix code returns the same string for every step, in the same run'
+      - 'after a failed publish, service_status reports the last failure: step, reason code, timestamp and who can remedy it (host-side retry vs operator action). Before the fix it is empty'
+      - 'the visual-chess static failure is reproduced on a Linux host with a Wrangler-config project and named by its step code'
+    unscoreable: "unpinnable-until-the-guard-exists: the step vocabulary and its fault-injection fixture are written together"
+    next_action: >
+      Thread a step label through podman() and its callers in local_web_preview.rs; keep output withheld. Record the last publish failure per project for service_status. Then reproduce the yoga static failure.
+    provenance: |
+      Filed by the macuahuitl coordinator at the operator's request, 2026-10-12, from the visual-chess forge research.
+    events:
+      - type: filed
+        ts: "2026-10-12T03:30:00Z"
+        host: macuahuitl
+        summary: |-
+          publish_local collapses every failure into runtime_unavailable and service_status cannot say why.
+
+  - packet_id: the-forge-gh-credential-quarantine-tmpfs-is-root-owned-so-gh-fails-with-permission-denied-instead-of-not-logged-in
+    order: 1625-bax2
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [rust, forge, credentials, specs]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - openspec/specs/forge-offline/spec.md
+      - images/default/
+    title: |
+      The forge's ~/.config/gh credential-quarantine tmpfs (size=1m,mode=0700, order 224) has no uid=, so it is root:root inside the forge and `gh auth status` fails with "permission denied" rather than "not logged in". It contradicts default-image ("forge-owned empty overlays"), while forge-offline says the path "SHALL NOT exist". The agent also has no stated route for filing an upstream issue from a credential-free forge.
+    context: |
+      MEASURED (visual-chess forge on yoga, 2026-10-12): ~/.config/gh was root:root 0700; `gh auth status` said "failed to read configuration: open /home/forge/.config/gh/config.yml: permission denied".
+      The forge stays credential-free (forge-offline, podman-idiomatic-patterns). This packet does NOT give the forge a token. The defects are the misleading error and two specs that disagree with each other and with the code.
+      The route that actually worked: the agent pushed its findings to a research/ branch through the mirror, and that is how the report reached the coordinator.
+    exit_criteria:
+      - 'in a launched forge, ~/.config/gh is owned by the forge user and empty, and `gh auth status` reports not logged in (no "permission denied"). The pre-fix launch shows the root-owned mode and the permission error, in the same run'
+      - 'no token or credential appears in the forge; the existing credential-quarantine tests stay green'
+      - 'forge-offline and default-image state one consistent rule for ~/.config/gh, and the forge''s instructions name the sanctioned route for upstream findings (push a research/ branch through the mirror)'
+    unscoreable: "unpinnable-until-the-guard-exists: the ownership arm and the reconciled spec scenario are written together"
+    next_action: >
+      Add uid/gid of the forge user to the .config/gh (and .ssh) quarantine tmpfs options at both launch sites. Reconcile forge-offline's scenario with default-image through the forge-web-preview-cold-start change. Add one line to the forge instructions about research/ branches.
+    provenance: |
+      Filed by the macuahuitl coordinator at the operator's request, 2026-10-12, from the visual-chess forge research.
+    events:
+      - type: filed
+        ts: "2026-10-12T03:30:00Z"
+        host: macuahuitl
+        summary: |-
+          The forge gh quarantine tmpfs is root-owned, so gh says permission denied instead of not logged in; the specs disagree.
+
+  - packet_id: the-forge-image-has-no-wasm32-target-so-a-wasm-pack-web-project-cannot-build-in-the-forge
+    order: 1625-grk8
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, images, rust, wasm, web]
+    estimated_hours: 2
+    owned_files:
+      - images/default/
+    title: |
+      The forge ships Fedora's system rustc with no wasm32-unknown-unknown std and no rustup, so wasm-pack (present) cannot build a wasm web project. A project like visual-chess cannot produce the assets the preview runtime would serve.
+    context: |
+      MEASURED (visual-chess forge on yoga, 2026-10-12): rustc/cargo 1.98.1 (Fedora build, no rustup), wasm-pack 0.15.0, no wasm32-unknown-unknown target. `./build.sh --dev` cannot complete.
+      Fedora packages the target std as rust-std-static-wasm32-unknown-unknown, matching the system rustc, so no rustup is needed. Check the image-size cost and record it.
+    exit_criteria:
+      - 'in a launched forge, `cargo build --target wasm32-unknown-unknown` of a minimal lib crate succeeds and `wasm-pack build` of a minimal wasm-bindgen crate produces pkg/. The pre-fix forge image fails the cargo build with the missing-target error, in the same run'
+      - 'the forge image size delta is measured and recorded in the row'
+    unscoreable: "unpinnable-until-the-guard-exists: the toolchain arm is written with the image change"
+    next_action: >
+      Add rust-std-static-wasm32-unknown-unknown to the forge image (version-matched to its rustc), build, and run the two-crate check in a launched forge.
+    provenance: |
+      Filed by the macuahuitl coordinator at the operator's request, 2026-10-12, from the visual-chess forge research.
+    events:
+      - type: filed
+        ts: "2026-10-12T03:30:00Z"
+        host: macuahuitl
+        summary: |-
+          The forge image has no wasm32 target, so wasm-pack web projects cannot build in the forge.
+
+  - packet_id: a-cold-start-forge-told-only-to-serve-a-web-project-locally-reaches-a-browser-loadable-url-with-no-operator-action
+    order: 1625-9qyw
+    status: ready
+    kind: test
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [e2e, web, forge, mcp, acceptance]
+    estimated_hours: 3
+    depends_on:
+      - the-wrangler-preview-runtime-image-is-never-built-so-publish-local-auto-or-wrangler-always-refuses-with-an-init-step-nothing-can-run
+      - publish-local-collapses-every-failure-into-runtime-unavailable-and-service-status-cannot-say-why-a-publish-failed
+      - the-forge-image-has-no-wasm32-target-so-a-wasm-pack-web-project-cannot-build-in-the-forge
+    related: [local-web-preview-live-acceptance]
+    owned_files:
+      - openspec/litmus-tests/
+    title: |
+      Release acceptance: on a freshly provisioned host, a cold-start forge given only "serve this web project locally" for a Wrangler + wasm project builds it, publishes it through host-browser publish_local, and returns a URL the host browser loads, with no operator action.
+    context: |
+      The operator ran exactly this against visual-chess on 2026-10-12 and it failed (plan/issues/research/forge-web-preview-cold-start-2026-10-12.md). This row is the property the stable release must have. It is the outcome test that 1625-un54/6iwd/grk8 and the 1552 local-web-preview rows serve. Those 1552 rows are still `ready` although their code is on trunk.
+    exit_criteria:
+      - 'on a scratch substrate after a fresh install, a forge on a Wrangler + wasm fixture project builds the assets and publishes them; publish_local returns a URL; and an HTTPS fetch of it through the router returns the fixture''s page. One run, no operator step between install and the fetch'
+      - 'the same run on the pre-fix release fails, and its failure is named by a step-qualified reason (1625-6iwd), not a bare runtime_unavailable'
+    unscoreable: "unpinnable-until-the-guard-exists: the acceptance litmus is written with its fixture project"
+    next_action: >
+      After un54, 6iwd and grk8 land, write the cold-start acceptance litmus on a minimal Wrangler + wasm fixture and run it on a scratch substrate. Record the result against the 1552-e3wf acceptance matrix.
+    provenance: |
+      Filed by the macuahuitl coordinator at the operator's request, 2026-10-12, from the visual-chess forge research.
+    events:
+      - type: filed
+        ts: "2026-10-12T03:30:00Z"
+        host: macuahuitl
+        summary: |-
+          Release acceptance: a cold-start forge serves a Wrangler + wasm web project locally with no operator action.
