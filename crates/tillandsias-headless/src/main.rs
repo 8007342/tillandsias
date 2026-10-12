@@ -410,6 +410,65 @@ fn main() {
         }
     }
 
+    // Order 482c: hidden harness mode for the engine-parity smoke. `ensure`
+    // runs the launch path's own inference ensure plus its soft readiness
+    // report; `teardown` runs the shutdown path's shared-stack cleanup. Both
+    // act on whatever podman store the environment names, so the harness
+    // (scripts/inference-engine-parity-smoke.sh) points it at an isolated one.
+    // Not operator surface; absent from --help like --internal-ensure-image.
+    if let Some(i) = user_args
+        .iter()
+        .position(|a| a == "--internal-inference-slot")
+    {
+        let debug = user_args.iter().any(|a| a == "--debug");
+        let action = user_args.get(i + 1).map(String::as_str);
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime");
+        let client = PodmanClient::new();
+        match (action, user_args.get(i + 2)) {
+            (Some("ensure"), Some(certs_dir)) => {
+                let outcome = rt.block_on(async {
+                    ensure_inference_for_launch(
+                        &client,
+                        Path::new(certs_dir),
+                        VERSION.trim(),
+                        debug,
+                    )
+                    .await?;
+                    Ok::<bool, String>(report_inference_readiness(&client, debug).await)
+                });
+                match outcome {
+                    Ok(ready) => {
+                        println!("inference-slot: ensure ready={ready}");
+                        std::process::exit(0);
+                    }
+                    Err(e) => {
+                        eprintln!("[tillandsias] --internal-inference-slot ensure failed: {e}");
+                        std::process::exit(1);
+                    }
+                }
+            }
+            (Some("teardown"), _) => {
+                rt.block_on(cleanup_shared_stack_if_no_running_forge(
+                    &client,
+                    "inference-slot",
+                    None,
+                    debug,
+                ));
+                println!("inference-slot: teardown done");
+                std::process::exit(0);
+            }
+            _ => {
+                eprintln!(
+                    "Error: --internal-inference-slot requires `ensure <certs-dir>` or `teardown`"
+                );
+                std::process::exit(2);
+            }
+        }
+    }
+
     // @trace spec:vsock-transport — `--listen-vsock <PORT>` switches the
     // headless service from binding the Linux Unix control socket to
     // binding a vsock listener on `VMADDR_CID_ANY:<PORT>`. Only available
@@ -5376,6 +5435,37 @@ async fn wait_for_inference_ready(client: &PodmanClient, debug: bool) -> Result<
          Inspect `podman logs tillandsias-inference` for ollama startup errors \
          (common: ollama binary self-install failed, or model cache volume missing)."
     ))
+}
+
+/// Wait for inference readiness WITHOUT gating the caller on it (order 392:
+/// best-effort). A slot that never becomes ready logs one DEGRADED line naming
+/// the selected engine and the caller continues (SLOT-8 "Readiness failure is
+/// soft"). Returns whether the slot answered.
+/// @trace spec:inference-engine-slots
+async fn report_inference_readiness(client: &PodmanClient, debug: bool) -> bool {
+    match wait_for_inference_ready(client, debug).await {
+        Ok(()) => true,
+        Err(e) => {
+            let (engine, _) = engine_slots::selected_engine_kind(
+                std::env::var("TILLANDSIAS_INFERENCE_ENGINE")
+                    .ok()
+                    .as_deref(),
+            );
+            eprintln!("{}", inference_degraded_line(engine, &e));
+            false
+        }
+    }
+}
+
+/// The SLOT-8 DEGRADED line for a slot that never became ready: names the
+/// engine and the last probe failure, and says the launch continues.
+fn inference_degraded_line(engine: engine_slots::EngineKind, reason: &str) -> String {
+    format!(
+        "[tillandsias] [forge-launch] DEGRADED: local inference not ready \
+         (engine={}): {reason}; continuing — local models are optional (harnesses \
+         use cloud models).",
+        engine.as_str()
+    )
 }
 
 /// Probe the served bare repository for a resolvable HEAD plus a concrete
@@ -17564,12 +17654,7 @@ pub(crate) fn ensure_enclave_for_project(
         // inference-ollama-selfinstall-tls-uid1000-2026-07-24) must NOT abort
         // the forge — warn and continue so cloud-model harnesses launch
         // regardless. When local models land, re-gate behind an opt-in.
-        if let Err(e) = wait_for_inference_ready(&client, debug).await {
-            eprintln!(
-                "[tillandsias] [forge-launch] WARNING: local inference not ready ({e}); \
-                 continuing — local models are optional (harnesses use cloud models)."
-            );
-        }
+        report_inference_readiness(&client, debug).await;
 
         // Order 452 slice 2: the clone-only forge clones from the mirror the
         // instant it boots — block until the mirror actually serves a
@@ -17869,6 +17954,20 @@ async fn ensure_shared_git_and_inference_for_launch(
         )
         .await?;
     }
+    ensure_inference_for_launch(client, certs_dir, version, debug).await?;
+    Ok(mirror_identity)
+}
+
+/// The inference half of the launch ensure, on its own so the engine-parity
+/// harness (order 482c, `--internal-inference-slot ensure`) drives the SAME
+/// guard and run site a forge launch does, not a copy of it.
+/// @trace spec:inference-engine-slots (SLOT-8: double ensure is a no-op)
+async fn ensure_inference_for_launch(
+    client: &PodmanClient,
+    certs_dir: &Path,
+    version: &str,
+    debug: bool,
+) -> Result<(), String> {
     // Order 443: inference is nearly stateless but --replacing it on every
     // launch drops loaded models and interrupts a sibling's inference.
     // Recreate-if-not-running (ephemerality/idempotency), not always.
@@ -17901,7 +18000,7 @@ async fn ensure_shared_git_and_inference_for_launch(
             .await
             .map_err(|e| format!("[forge-launch] failed to start inference: {e}"))?;
     }
-    Ok(mirror_identity)
+    Ok(())
 }
 
 /// Build the forge `podman run` args for an interactive launch.
@@ -27064,10 +27163,17 @@ mod tests {
         let git_run_idx = window
             .find("\"forge-launch-git\"")
             .expect("git mirror create site present");
-        let inference_guard_idx = window
+        assert!(
+            window.contains("ensure_inference_for_launch(client, certs_dir, version, debug)"),
+            "the launch ensure must delegate inference to ensure_inference_for_launch"
+        );
+        // Order 482c: the inference half is its own fn so the parity harness
+        // drives the same guard; pin the guard order in THAT window.
+        let inference = source_window(source, "async fn ensure_inference_for_launch(");
+        let inference_guard_idx = inference
             .find("container_running(\"tillandsias-inference\")")
             .expect("inference ensure must check container_running first");
-        let inference_run_idx = window
+        let inference_run_idx = inference
             .find("\"forge-launch-inference\"")
             .expect("inference create site present");
         assert!(
@@ -27078,6 +27184,31 @@ mod tests {
             inference_guard_idx < inference_run_idx,
             "inference running-check must precede its run site"
         );
+    }
+
+    /// Order 482c / SLOT-8 "Readiness failure is soft": a never-ready slot logs
+    /// one DEGRADED line naming the selected engine and the probe failure. The
+    /// "never gates launch" half is structural; litmus:inference-engine-parity-shape
+    /// pins it with a seeded hard-gate regression.
+    #[test]
+    fn inference_degraded_line_names_engine_and_reason() {
+        for (engine, name) in [
+            (engine_slots::EngineKind::Ollama, "engine=ollama"),
+            (engine_slots::EngineKind::LlamaServer, "engine=llama-server"),
+        ] {
+            let line = inference_degraded_line(engine, "probe failed: exit 7");
+            assert!(
+                line.contains("DEGRADED: local inference not ready"),
+                "{line}"
+            );
+            assert!(line.contains(name), "{line}");
+            assert!(line.contains("probe failed: exit 7"), "{line}");
+            assert!(line.contains("continuing"), "{line}");
+            assert!(
+                !line.contains("WARNING"),
+                "SLOT-8 wants DEGRADED, not WARNING: {line}"
+            );
+        }
     }
 
     /// Order 443 fixture 1 (second-forge ensure leaves shared containers
@@ -30703,7 +30834,7 @@ esac
             .find("ensure_ssh_lane_sidecar(")
             .expect("launch path must ensure the ssh lane sidecar");
         let inference_at = launch
-            .find("forge-launch-inference")
+            .find("ensure_inference_for_launch(")
             .expect("launch window names the inference start");
         assert!(
             sidecar_at < inference_at,

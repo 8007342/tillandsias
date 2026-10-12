@@ -1,0 +1,42 @@
+[2026-10-12T15:09:03.579Z] event:container_launch stage=forge-launch-inference state=starting container=tillandsias-inference
+[2026-10-12T15:09:03.789Z] event:container_launch stage=forge-launch-inference state=running container=tillandsias-inference
+[tillandsias] [forge-launch] inference not ready yet (attempt 1/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 2/60): probe failed: Container command failed (status Some(22), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (22) The requested URL returned error: 503
+[tillandsias] [forge-launch] inference not ready yet (attempt 3/60): probe failed: Container command failed (status Some(22), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (22) The requested URL returned error: 503
+[tillandsias] [forge-launch] inference not ready yet (attempt 4/60): probe failed: Container command failed (status Some(22), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (22) The requested URL returned error: 503
+[tillandsias] [forge-launch] inference not ready yet (attempt 5/60): probe failed: Container command failed (status Some(22), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (22) The requested URL returned error: 503
+[tillandsias] [forge-launch] inference not ready yet (attempt 6/60): probe failed: Container command failed (status Some(22), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (22) The requested URL returned error: 503
+[tillandsias] [forge-launch] inference not ready yet (attempt 7/60): probe failed: Container command failed (status Some(22), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (22) The requested URL returned error: 503
+[tillandsias] [forge-launch] inference not ready yet (attempt 8/60): probe failed: Container command failed (status Some(22), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (22) The requested URL returned error: 503
+[tillandsias] [forge-launch] inference not ready yet (attempt 9/60): probe failed: Container command failed (status Some(22), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (22) The requested URL returned error: 503
+[tillandsias] [forge-launch] inference not ready yet (attempt 10/60): probe failed: Container command failed (status Some(22), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (22) The requested URL returned error: 503
+[tillandsias] [forge-launch] inference not ready yet (attempt 11/60): probe failed: Container command failed (status Some(22), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (22) The requested URL returned error: 503
+[tillandsias] [forge-launch] inference not ready yet (attempt 12/60): probe failed: Container command failed (status Some(22), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (22) The requested URL returned error: 503
+[tillandsias] [forge-launch] inference not ready yet (attempt 13/60): probe failed: Container command failed (status Some(22), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (22) The requested URL returned error: 503
+[tillandsias] [forge-launch] inference not ready yet (attempt 14/60): probe failed: Container command failed (status Some(22), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (22) The requested URL returned error: 503
+[tillandsias] [forge-launch] inference not ready yet (attempt 15/60): probe failed: Container command failed (status Some(22), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (22) The requested URL returned error: 503
+[tillandsias] [forge-launch] inference not ready yet (attempt 16/60): probe failed: Container command failed (status Some(22), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (22) The requested URL returned error: 503
+[tillandsias] [forge-launch] inference not ready yet (attempt 17/60): probe failed: Container command failed (status Some(22), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (22) The requested URL returned error: 503
+[tillandsias] [forge-launch] inference not ready yet (attempt 18/60): probe failed: Container command failed (status Some(22), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (22) The requested URL returned error: 503
+[tillandsias] [forge-launch] inference not ready yet (attempt 19/60): probe failed: Container command failed (status Some(22), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (22) The requested URL returned error: 503
+[tillandsias] [forge-launch] inference ready on attempt 20/60
+inference-slot: ensure ready=true

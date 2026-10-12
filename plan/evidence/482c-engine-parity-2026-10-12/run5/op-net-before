@@ -1,0 +1,17 @@
+/run/user/1000/containers/networks 120 1791757313.0460952480
+/run/user/1000/containers/networks/aardvark.lock 0 1791778319.7897794100
+/run/user/1000/containers/networks/aardvark-dns 100 1791757313.0630953600
+/run/user/1000/containers/networks/aardvark-dns/aardvark.pid 5 1791757313.0630953600
+/run/user/1000/containers/networks/aardvark-dns/tillandsias-egress 123 1791757313.0460952480
+/run/user/1000/containers/networks/aardvark-dns/tillandsias-enclave%int 628 1791778483.9769427450
+/run/user/1000/containers/networks/ipam.db 65536 1791778483.9958412470
+/run/user/1000/containers/networks/rootless-netns 160 1791757313.0660953790
+/run/user/1000/containers/networks/rootless-netns/ref-count 1 1791778483.9958412470
+/run/user/1000/containers/networks/rootless-netns/run 80 1791757312.9533743580
+/run/user/1000/containers/networks/rootless-netns/run/systemd 40 1791757312.9533175760
+/run/user/1000/containers/networks/rootless-netns/run/user 60 1791757312.9533175760
+/run/user/1000/containers/networks/rootless-netns/run/user/1000 40 1791757312.9533175760
+/run/user/1000/containers/networks/rootless-netns/info.json 96 1791757312.9520946320
+/run/user/1000/containers/networks/rootless-netns/resolv.conf 71 1791757312.9520946320
+/run/user/1000/containers/networks/rootless-netns/rootless-netns-conn.pid 6 1791757312.9320945010
+/run/user/1000/containers/networks/rootless-netns/rootless-netns 0 1791757312.9221456300

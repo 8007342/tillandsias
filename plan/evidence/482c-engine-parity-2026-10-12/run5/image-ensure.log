@@ -1,0 +1,1 @@
+[tillandsias] image inference ensure still running in its detached helper; this may take several minutes (log: /var/tmp/482c-parity.lYXeEa/home-build/.cache/tillandsias/image-build-inference.log)

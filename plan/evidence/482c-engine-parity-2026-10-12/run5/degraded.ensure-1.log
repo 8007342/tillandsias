@@ -1,0 +1,125 @@
+[2026-10-12T15:10:45.829Z] event:container_launch stage=forge-launch-inference state=starting container=tillandsias-inference
+[2026-10-12T15:10:46.039Z] event:container_launch stage=forge-launch-inference state=running container=tillandsias-inference
+[tillandsias] [forge-launch] inference not ready yet (attempt 1/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 2/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 3/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 4/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 5/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 6/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 7/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 8/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 9/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 10/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 11/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 12/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 13/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 14/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 15/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 16/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 17/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 18/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 19/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 20/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 21/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 22/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 23/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 24/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 25/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 26/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 27/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 28/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 29/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference not ready yet (attempt 30/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 31/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 32/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 33/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 34/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 35/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 36/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 37/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 38/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 39/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 40/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 41/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 42/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 43/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 44/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 45/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 46/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 47/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 48/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 49/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 50/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 51/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 52/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 53/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 54/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 55/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 56/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 57/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 58/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 59/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] inference not ready yet (attempt 60/60): probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper
+[tillandsias] [forge-launch] DEGRADED: local inference not ready (engine=llama-server): inference did not become ready within 60s. Last probe: probe failed: Container command failed (status Some(255), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: Error: can only create exec sessions on running containers: container state improper. Inspect `podman logs tillandsias-inference` for ollama startup errors (common: ollama binary self-install failed, or model cache volume missing).; continuing — local models are optional (harnesses use cloud models).
+inference-slot: ensure ready=false
