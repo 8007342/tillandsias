@@ -5286,9 +5286,51 @@ fn detect_inference_tier() -> &'static str {
 // @trace spec:inference-policy-router: Hardware-aware tier routing and fallback chain.
 fn effective_inference_tier() -> &'static str {
     let hardware = detect_inference_tier();
-    match hardware {
+    let delivered = match hardware {
         "gpu-cuda" if !nvidia_cdi_available() => "cpu",
         other => other,
+    };
+    wsl2_vulkan_opt_in_tier(
+        delivered,
+        std::env::var(INFERENCE_GPU_ENV).ok().as_deref(),
+        Path::new("/dev/dxg").exists(),
+        Path::new(WSL_HOST_TREE).exists(),
+    )
+}
+
+/// ORDER 793-a8e7: the operator opt-in that turns a WSL2 paravirtual GPU into
+/// the inference container's Vulkan lane. Forwarded from the tray's
+/// environment into the guest unit, like TILLANDSIAS_NO_LOCAL_INFERENCE.
+const INFERENCE_GPU_ENV: &str = "TILLANDSIAS_INFERENCE_GPU";
+
+/// ORDER 793-a8e7. A WSL2 host is classified `cpu` and stays that way unless
+/// the operator opts in with `TILLANDSIAS_INFERENCE_GPU=vulkan`; only then, and
+/// only when BOTH halves of the dxg delivery exist (the same two facts
+/// `wsl2_dxg_container_args` requires), does the tier become `gpu-vulkan`. The
+/// inference entrypoint maps that tier to the vulkan backend set
+/// (`_engine_wanted_backends`), and `engine_slots` pins `OLLAMA_LLM_LIBRARY`.
+///
+/// WHY OPT-IN AND NOT DETECTED. Measured with this exact stack (dzn over
+/// /dev/dxg, ollama 0.32.9): qwen2.5:3b prefill 2.04x and decode 1.37x faster
+/// on the iGPU, but qwen2.5:0.5b decode 1.23x SLOWER and nomic-embed 1.16x
+/// slower. A detected default would move every WSL2 host onto the regression.
+/// dzn also self-reports as non-conformant (Vulkan 1.2, no shaderInt8), and a
+/// cold GPU load once hung silently for >9 minutes. Without the opt-in this
+/// returns its input unchanged, so every existing host keeps byte-identical
+/// inference wiring.
+///
+/// Pure, so every arm runs on hosts that have neither /dev/dxg nor the tree.
+fn wsl2_vulkan_opt_in_tier(
+    delivered: &'static str,
+    opt_in: Option<&str>,
+    dxg_present: bool,
+    wsl_tree_present: bool,
+) -> &'static str {
+    let wants_vulkan = opt_in.is_some_and(|v| v.trim().eq_ignore_ascii_case("vulkan"));
+    if delivered == "cpu" && wants_vulkan && dxg_present && wsl_tree_present {
+        "gpu-vulkan"
+    } else {
+        delivered
     }
 }
 
@@ -22534,10 +22576,22 @@ mod tests {
         // launch a cpu-only "GPU tier".
         let effective = effective_inference_tier();
         assert!(
-            ["gpu-cuda", "gpu-rocm", "metal", "unmeasured", "cpu"].contains(&effective),
+            [
+                "gpu-cuda",
+                "gpu-rocm",
+                "gpu-vulkan",
+                "metal",
+                "unmeasured",
+                "cpu"
+            ]
+            .contains(&effective),
             "effective tier grammar violated: {effective}"
         );
-        if tier == "gpu-cuda" && !nvidia_cdi_available() {
+        // 793-a8e7: an operator who opted in on a WSL2 host sees gpu-vulkan;
+        // its arms are pinned in wsl2_vulkan_opt_in_is_explicit_and_needs_both_halves.
+        if effective == "gpu-vulkan" {
+            assert_eq!(tier, "cpu", "only a cpu host can be lifted to gpu-vulkan");
+        } else if tier == "gpu-cuda" && !nvidia_cdi_available() {
             assert_eq!(
                 effective, "cpu",
                 "gpu-cuda hardware without a CDI spec must downgrade to cpu, \
@@ -22581,6 +22635,62 @@ mod tests {
             forge.contains("TILLANDSIAS_INFERENCE_TIER")
                 && forge.contains("effective_inference_tier()"),
             "effective tier must be exported into the forge env for agents/startup context"
+        );
+    }
+
+    /// ORDER 793-a8e7: the WSL2 Vulkan lane is an explicit opt-in. Without it
+    /// the tier is returned unchanged, which is what keeps every existing
+    /// host's inference wiring byte-identical (the measured 0.5B decode
+    /// regression is why this is not detected).
+    ///
+    /// REGIME: pure function, no IO, no host state, no wall-clock.
+    #[test]
+    fn wsl2_vulkan_opt_in_is_explicit_and_needs_both_halves() {
+        // THE DEFAULT LANE: no opt-in, on a fully equipped WSL2 host.
+        assert_eq!(wsl2_vulkan_opt_in_tier("cpu", None, true, true), "cpu");
+        for not_vulkan in ["", "  ", "0", "1", "true", "cuda", "gpu"] {
+            assert_eq!(
+                wsl2_vulkan_opt_in_tier("cpu", Some(not_vulkan), true, true),
+                "cpu",
+                "{not_vulkan:?} is not the opt-in"
+            );
+        }
+        // THE ONLY ARM THAT LIFTS THE TIER.
+        assert_eq!(
+            wsl2_vulkan_opt_in_tier("cpu", Some("vulkan"), true, true),
+            "gpu-vulkan"
+        );
+        assert_eq!(
+            wsl2_vulkan_opt_in_tier("cpu", Some(" Vulkan "), true, true),
+            "gpu-vulkan"
+        );
+        // NEITHER HALF ALONE: the node without the tree is the measured
+        // lavapipe-instead-of-GPU configuration, and off WSL2 neither exists.
+        assert_eq!(
+            wsl2_vulkan_opt_in_tier("cpu", Some("vulkan"), true, false),
+            "cpu"
+        );
+        assert_eq!(
+            wsl2_vulkan_opt_in_tier("cpu", Some("vulkan"), false, true),
+            "cpu"
+        );
+        assert_eq!(
+            wsl2_vulkan_opt_in_tier("cpu", Some("vulkan"), false, false),
+            "cpu"
+        );
+        // A HOST THAT ALREADY HAS A BETTER LANE KEEPS IT.
+        for tier in ["gpu-cuda", "gpu-rocm", "unmeasured"] {
+            assert_eq!(
+                wsl2_vulkan_opt_in_tier(tier, Some("vulkan"), true, true),
+                tier
+            );
+        }
+        // THE LIFTED TIER IS ONE THE REST OF THE ENCLAVE ALREADY SPEAKS: the
+        // engine pins the vulkan library for it.
+        let pinned = engine_slots::pin_backend_environment("gpu-vulkan", None);
+        assert!(
+            pinned.contains(&("OLLAMA_LLM_LIBRARY".to_string(), "vulkan".to_string())),
+            "{pinned:?}"
         );
     }
 
