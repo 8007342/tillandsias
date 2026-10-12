@@ -272,6 +272,7 @@ SHALL remain valid regardless of which slot is bound.
   containers
 
 ### Requirement: The WSL2 Vulkan opt-in keeps small models' decode on the CPU
+<!-- req-id: 80b3dfd5 -->
 <!-- order: 1647-fb52 (793-a8e7 S3) -->
 On the WSL2 Vulkan opt-in lane (`TILLANDSIAS_INFERENCE_TIER=gpu-vulkan`), the
 inference container SHALL pin every local model below the decode floor to the

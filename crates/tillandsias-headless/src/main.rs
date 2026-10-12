@@ -22623,22 +22623,18 @@ mod tests {
             on(DecodeCrossover::Unmeasured),
             Some(("3".to_string(), "provisional"))
         );
-        // Off the opt-in lane nothing enforces a floor, so nothing is passed.
+        // Off the opt-in lane nothing enforces a floor, so nothing is passed:
+        // build_inference_run_args emits the env only when this is Some, which
+        // is the gate (asserted on the value, not the launcher's text).
         for tier in ["cpu", "gpu-cuda", "gpu-rocm", "unmeasured"] {
-            assert_eq!(
-                engine_decode_floor(tier, DecodeCrossover::Unmeasured),
-                None,
-                "{tier}"
-            );
+            for c in [
+                DecodeCrossover::Unmeasured,
+                DecodeCrossover::CpuWinsThroughout,
+                DecodeCrossover::AtOrAbove(3.0),
+            ] {
+                assert_eq!(engine_decode_floor(tier, c), None, "{tier} {c:?}");
+            }
         }
-        let source = include_str!("main.rs");
-        let window = source_window(source, "fn build_inference_run_args(");
-        assert!(
-            window.contains("if effective_tier == \"gpu-vulkan\"")
-                && window.contains("accel_probe::engine_decode_floor(")
-                && window.contains("TILLANDSIAS_DECODE_FLOOR_B={floor}"),
-            "the decode floor must be gated on the opt-in tier"
-        );
     }
 
     /// ORDER 793-zumy: the WSL2 dxg delivery, pinned as a pure function so
