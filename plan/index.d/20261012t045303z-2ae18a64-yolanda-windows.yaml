@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: port-check-gate-step-prefix-across-refs-sh-to-lua-shell-to-lua-burndown
+    event:
+      type: note
+      ts: "2026-10-12T04:53:03Z"
+      agent_id: windows-yolanda-opus5-20261012t045303z
+      host: yolanda-windows
+      summary: |
+        QUIRKS KEPT IN THE PORT (PR #354, head f7516d3b1), measured identical in the .sh and the Lua and recorded here, not fixed, as the coordinator asked:
+        1. FALSE NEGATIVE, worth a follow-up row: a newly added step whose prefix collides on a leading-zero number containing 8 or 9 (08x, 09x) PASSES. bash's $(( pfx / 10 )) reads 085 as an invalid octal literal. The expansion error aborts the whole while loop, and the script then prints ok:gate-step-prefix-across-refs:<n> added, ... with exit 0. It also hides every later added step: 085-m plus a colliding 110-m in one change gives "1 added" and ok. The live tree has steps 005, 010 and 020 today, so 08x/09x are reachable names.
+        2. OCTAL SUGGESTION: a collision on a leading-zero prefix such as 020 suggests free prefix 20 (octal 16, then the next ten), not 30.
+        3. STRING COMPARE: prefixes compare as text, so a new 010-x does not collide with a held 10-y.
+        FIX OUTLINE for a follow-up: compare prefixes numerically in base 10 and compute the free prefix in base 10. That changes verdicts on cases 1-3, so it is a behaviour change with its own fixture arms, not a port.
+        FIXTURE FINDING: the plan runner's proc.run audit log defaults to <checkout>/.cache/metrics/ (1443-w9hf). In a fixture whose scratch clone is the cwd, add -A commits it and a later checkout aborts. The arms still passed, but by a different path. Any fixture that runs a Lua decider from inside a scratch git repo needs TILLANDSIAS_POLICY_AUDIT_LOG (or a .gitignore), as test-claims-fleet-visible.sh already does.
