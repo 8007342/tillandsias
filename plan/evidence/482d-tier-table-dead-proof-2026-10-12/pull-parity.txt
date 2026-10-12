@@ -1,0 +1,6 @@
+extracted 45 lines
+T1  old=[]  new=[]  same
+T2  old=[qwen2.5:7b]  new=[qwen2.5:7b]  same
+T3  old=[qwen2.5:7b qwen2.5-coder:7b]  new=[qwen2.5:7b qwen2.5-coder:7b]  same
+T4  old=[qwen2.5:7b qwen2.5-coder:7b qwen2.5:14b]  new=[qwen2.5:7b qwen2.5-coder:7b qwen2.5:14b]  same
+T5  old=[qwen2.5:7b qwen2.5-coder:7b qwen2.5:14b qwen2.5-coder:32b]  new=[qwen2.5:7b qwen2.5-coder:7b qwen2.5:14b qwen2.5-coder:32b]  same

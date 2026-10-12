@@ -117,13 +117,16 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "[inference] tier="
 
-  - step: "Req 5 tier table: entrypoint maps RAM/VRAM thresholds to T2/T3/T4/T5"
-    # Spec § Req 5 tier table mandates the GPU/RAM thresholds.
-    # Pin each branch literal so a regression silently lowering a
-    # threshold (e.g. T3 at GPU 4GB instead of 8GB) surfaces.
-    command: "COUNT=$(grep -cE 'TIER=\"T[2-5]\"' images/inference/entrypoint.sh); if [ \"$COUNT\" -ge 4 ]; then echo \"ok: $COUNT TIER=T[2-5] branches\"; else echo \"FAIL: $COUNT branches (expected >=4)\"; exit 1; fi"
-    timeout_ms: 3000
-    expected_behavior: "ok:"
+  - step: "Req 5 tier table: the RAM/VRAM thresholds for T2/T3/T4/T5 hold, through the shared tier table (order 482d)"
+    # Spec § Req 5 tier table mandates the GPU/RAM thresholds. Since order
+    # 482d the ladder is DATA (images/inference/tiers/tier-table.tsv), not
+    # inline TIER= branches, so the thresholds are pinned at their boundary
+    # points through the resolver the entrypoint itself calls. A regression
+    # silently lowering one (e.g. T3 at GPU 4GB instead of 8GB) still
+    # surfaces here.
+    command: "set -u; for c in '32 0 T5' '31 0 T4' '16 0 T4' '15 0 T3' '8 0 T3' '0 32 T3' '7 31 T2' '4 0 T2' '0 16 T2' '3 15 T1'; do set -- $c; got=$(sh images/inference/tiers/tiers.sh classify $1 $2); [ \"$got\" = \"$3\" ] || { echo \"FAIL: vram=$1 ram=$2 classified $got, spec threshold says $3\"; exit 1; }; done; grep -Fq 'tillandsias_tier_classify \"$VRAM_GB\" \"$RAM_GB\"' images/inference/entrypoint.sh || { echo 'FAIL: entrypoint does not classify through the tier table'; exit 1; }; echo 'ok: T2-T5 thresholds (vram 4/8/16/32 GB, ram 16/32 GB) hold through the tier table the entrypoint classifies with'"
+    timeout_ms: 8000
+    expected_behavior: "ok: T2-T5 thresholds"
 
   - step: "Req 4 pull-failure-non-fatal: entrypoint logs a non-fatal pull FAILED then continues (Squid EOF tolerance)"
     # Spec § Req 4 § Scenario `Squid manifest-pull EOF is non-fatal` mandates pull

@@ -21,17 +21,27 @@ esac
 
 INFERENCE_URL="${TILLANDSIAS_INFERENCE_URL:-http://inference:11434}"
 
-# Tier mapping mirrors the planner doc — keep in sync.
+# Order 482d: the tier a model prints is the CANONICAL table's tier, read from
+# byte-identical copies of images/inference/tiers/{tier-table,models.ollama}.tsv
+# (this image's build context cannot reach that directory, so the copies ship
+# here and litmus:inference-tier-table-migration asserts they are identical).
+# The previous hard-coded map ("keep in sync") had drifted from what the
+# inference container actually runs. A model the table does not name prints --.
+TIERS_DIR="${TILLANDSIAS_CLI_TIERS_DIR:-$(cd "$(dirname "$(readlink -f "$0")")/../share/tiers" 2>/dev/null && pwd)}"
 tier_for() {
-    case "$1" in
-        qwen2.5:0.5b)         printf 'T0' ;;
-        llama3.2:3b)          printf 'T1' ;;
-        qwen2.5-coder:7b)     printf 'T2' ;;
-        qwen2.5-coder:14b)    printf 'T3' ;;
-        gpt-oss:20b)          printf 'T4' ;;
-        qwen2.5-coder:32b)    printf 'T5' ;;
-        *)                    printf '%s' '--' ;;
-    esac
+    local tag="$1" id="" tier="" vram ram models
+    [ -r "$TIERS_DIR/models.ollama.tsv" ] && [ -r "$TIERS_DIR/tier-table.tsv" ] || { printf '%s' '--'; return; }
+    while IFS=$'\t' read -r lid otag; do
+        case "$lid" in ''|'#'*) continue ;; esac
+        [ "$otag" = "$tag" ] && { id="$lid"; break; }
+    done < "$TIERS_DIR/models.ollama.tsv"
+    if [ -n "$id" ]; then
+        while IFS=$'\t' read -r t vram ram models; do
+            case "$t" in ''|'#'*) continue ;; esac
+            case ",$models," in *",$id,"*) tier="$t"; break ;; esac
+        done < "$TIERS_DIR/tier-table.tsv"
+    fi
+    printf '%s' "${tier:---}"
 }
 
 raw="$(curl -fsS --max-time 3 "${INFERENCE_URL%/}/api/tags" 2>/dev/null || true)"

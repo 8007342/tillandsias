@@ -1,0 +1,10 @@
+# @trace spec:inference-engine-slots (SLOT-7), order 482d
+# ADAPTER: logical model id (tier-table.tsv) -> ollama tag. Every logical id in
+# the table MUST have exactly one row here, and no row may name an id the
+# table lacks (litmus:inference-tier-table-migration).
+#logical_id	ollama_tag
+qwen2.5-0.5b-instruct	qwen2.5:0.5b
+qwen2.5-7b-instruct	qwen2.5:7b
+qwen2.5-coder-7b-instruct	qwen2.5-coder:7b
+qwen2.5-14b-instruct	qwen2.5:14b
+qwen2.5-coder-32b-instruct	qwen2.5-coder:32b
