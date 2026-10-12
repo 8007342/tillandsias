@@ -1,6 +1,6 @@
 # Forge Discovery
 
-@trace spec:forge-opencode-onboarding, spec:forge-environment-discoverability
+@trace spec:forge-opencode-onboarding, spec:forge-environment-discoverability, spec:forge-offline
 @cheatsheet runtime/cheatsheet-architecture-v2.md, agents/openspec.md
 
 You've just attached to a development environment. Before writing code, discover what's available.
@@ -102,6 +102,7 @@ User: "Cargo builds take 3 minutes"
 | "What OpenSpec workflow step am I on?" | `cheatsheets/agents/openspec.md` |
 | "What changes are in flight?" | `openspec status` or `ls openspec/changes/` |
 | "How do I query plan/index.yaml or methodology?" | Use the `forge-plan` MCP tools (`plan_answer`, `methodology_path`, `plan_blocked_by`, etc.) before grepping — see startup context |
+| "How do I report a finding upstream (an issue, a bug in a dependency)?" | Commit the write-up to a `research/<topic>` branch and `git push` it: the push goes through the enclave mirror and needs no credentials. The forge holds no GitHub token by design (`~/.config/gh` is an empty, forge-owned directory, so `gh auth status` says not logged in), so do not try `gh issue create` |
 | "What's the project status / what's next?" | `plan_answer` / `plan_next` / `plan_status`; cross-spec joins → `spec_answer`; generic projects → `project_answer`; conversational → Local Experts mode (needs index + inference — see `experts_state`); when degraded or `unsupported`, read the `plan/` files and record the fallback |
 
 ## Sources of Truth

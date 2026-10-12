@@ -376,7 +376,6 @@ scripts scripts/check-exact-version-literal-added.sh 5
 scripts scripts/check-fleet-membership.sh 8
 scripts scripts/check-forge-findings-persisted.sh 3
 scripts scripts/check-fragment-closure-evidence-added.sh 5
-scripts scripts/check-fragment-events-land.sh 1
 scripts scripts/check-fragment-keys-are-read.sh 1
 scripts scripts/check-fragment-ts-skew.sh 4
 scripts scripts/check-gate-memory-floor.sh 3
@@ -398,7 +397,6 @@ scripts scripts/check-litmus-pin-claims.sh 5
 scripts scripts/check-litmus-steps-can-fail.sh 2
 scripts scripts/check-long-running-view.sh 21
 scripts scripts/check-macos-stock-binaries.sh 7
-scripts scripts/check-markdown-distillation.sh 20
 scripts scripts/check-mcp-expert-health.sh 46
 scripts scripts/check-mcp-live-build.sh 4
 scripts scripts/check-mcp-surface.sh 4

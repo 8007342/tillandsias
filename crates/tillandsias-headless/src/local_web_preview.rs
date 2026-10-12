@@ -2156,8 +2156,8 @@ mod tests {
             .tmpfs("/tmp:rw,size=256m,mode=1777")
             .tmpfs("/run/user/1000:rw,size=64m,mode=0700")
             .tmpfs("/opt/cheatsheets:rw,size=8m,mode=0755")
-            .tmpfs("/home/forge/.ssh:rw,size=1m,mode=0700")
-            .tmpfs("/home/forge/.config/gh:rw,size=1m,mode=0700")
+            .tmpfs(crate::FORGE_SSH_QUARANTINE_TMPFS)
+            .tmpfs(crate::FORGE_GH_QUARANTINE_TMPFS)
             .entrypoint("/bin/sh");
         let mut args = vec![
             "run".to_string(),
