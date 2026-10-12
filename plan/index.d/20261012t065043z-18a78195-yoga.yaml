@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: log-query-language-has-zero-consumers
+    event:
+      type: progress
+      ts: "2026-10-12T06:50:43Z"
+      agent_id: linux-yoga-claude-20261012t052412z
+      host: yoga
+      summary: |
+        DECIDED: TOMBSTONE, and executed in one change (the packet's second arm). Both implementations of the query language were orphans of the same May wave (plan/archive/2026-06-05/issues/wave-21-p3-backlog-orchestration-2026-05-14.md, "Team D: scripts/query-traces.sh + crates/tillandsias-logging/src/query.rs"):
+        - crates/tillandsias-logging/src/query.rs (747 lines, 16 tests): zero consumers outside the crate, re-measured 2026-09-17 by macos through the re-export, re-confirmed 2026-10-12 (grep over crates/ for tillandsias_logging::query, the re-exported names, and ObservabilityAPI: none outside the crate).
+        - scripts/query-traces.sh (425 lines): the CLI that was meant to drive it. Its execute_query_rust wrote a stub .rs it never compiled and fell through to a jq re-implementation of the grammar (4 jq call sites on the 1375-tsfu floor); ensure_query_binary built a LIB crate and looked for a tillandsias-query binary nothing ships. Zero callers in scripts/, skills/, build.sh, docs/ or methodology (only archived wave prose).
+        - ObservabilityAPI::query / QueryResult / query_history in surface.rs: the in-crate wrapper, itself unconsumed outside the crate.
+        - The spec (26 lines, one requirement, no litmus binding) governed tooling that never existed.
+        METHODOLOGY RULING APPLIED: philosophy.obsolete_mechanism_live_intent.dispositions -> mechanism_live_intent_dead: "Retire deliberately, but check for dependents first: shipping code whose purpose lapsed is removal work". Dependents enumerated above and every one is in this change; the owning milestone 682-u3si names append-log telemetry and a bucketed distillation (682-43mi), never a query DSL; the project's jq ratchet (1375-tsfu) routes structured reads to tillandsias-plan json, so a second query dialect runs against the grain. Wiring was the other arm and was rejected on those grounds, not on size.
+        WHAT THE CHANGE DOES: deletes query.rs and scripts/query-traces.sh; drops the re-export and the query/history surface from ObservabilityAPI (its sampler, budget and aggregator surfaces are untouched); rewrites openspec/specs/structured-query-language/spec.md as a tombstone (Status obsolete, the convention of persistent-git-service); removes the Querying Logs section and the spec reference from docs/cheatsheets/observability-api.md; drops the deleted script from the jq-callsite (--ratchet), bare-mktemp and pipe-site floors in the same commit, as those deciders require for a deleted file.
+        VERIFIABLE CLOSURE (row): grep -rl 'tillandsias_logging::query' crates/ finds nothing AND module and spec are gone in the same commit — both halves hold at work-ref sha f99256dcb; the landed sha goes on the closing event.
+        FOLLOW-UP OBSERVED, NOT FIXED HERE: ObservabilityAPI (surface.rs), LogAggregator and CostAwareSampler also have zero consumers outside the crate (the positive control from 2026-09-17 names BudgetEnforcer, CardinalityAnalyzer and ImageBuildEvent as the only consumed exports). Same class as this row; filed as 1630-i6mn.
+        HANDOFF 2026-10-12T06:50Z (yoga): work/781-hseq at f99256dcb pushed; draft PR https://github.com/8007342/tillandsias/pull/358 against linux-next; scripts/relay-preflight.sh answered ok:relay-preflight:259e37a4b:refs=1 deciders=17 fmt=ok fixtures=0 crates=1 litmus=0/0; cargo test -p tillandsias-logging 146+22+11 green; cargo check --workspace ok. The row stays in_progress until the landing queue puts the merge on origin/linux-next; the closing event cites that landed sha, never f99256dcb.
