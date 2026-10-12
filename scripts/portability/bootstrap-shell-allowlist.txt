@@ -26,6 +26,9 @@ scripts/tray-diagnose.ps1
 launch.sh
 # The cargo bootstrap: the binary cannot build itself (§6.5 row 2).
 build.sh
+# ...nor vouch for itself: a probe of the plan binary's own availability
+# cannot run on that binary (§6.5 row 2, 1627-hg3t).
+scripts/check-yaml-reader-availability.sh
 # Git execs hooks with sh; each becomes a one-line stub, but stays shell (§6.5 row 3).
 scripts/hooks/post-commit-dashboard-refresh.sh
 scripts/hooks/post-commit-expert-refresh.sh

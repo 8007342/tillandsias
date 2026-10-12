@@ -262,7 +262,7 @@ Phase 1 (this design): build.sh keeps flags and `cargo build --release -p tillan
 | Stays | Why | Implication |
 |---|---|---|
 | `install-macos.sh`, `scripts/*.ps1`, `launch.sh`'s first lines, the curl-install path | runs before any of our binaries exist | these are the ONLY scripts allowed a pipe; they are excluded from the ratchet by path, and each must be bash-3.2/PowerShell-5 clean (check-bash-dialect.sh keeps scanning them) |
-| `cargo build` bootstrap in build.sh | the binary cannot build itself | the launcher's shell part is under 200 lines and has no verdict logic |
+| `cargo build` bootstrap in build.sh; `scripts/check-yaml-reader-availability.sh` | the binary cannot build itself, nor vouch for itself | the launcher's shell part is under 200 lines and has no verdict logic. The availability probe proves the plan binary RUNS where the gates run, and the Lua runner is that binary, so run on it the one verdict that matters (`blocked:yaml-reader-absent`) is unreachable; a port probing a separately resolved binary would keep that verdict in a bash wrapper and pay the shell-to-lua counter without moving the decision (1627-hg3t) |
 | scripts/hooks/* entry stubs | git execs them with `sh` | each stub is `exec "$PLAN_BIN" hook <name> "$@"`; the logic moves |
 | images/*/entrypoint*.sh until the image ships the binary | the container starts before anything else | migrate after the image build copies the plan binary; `lib-*.sh` first |
 | `scripts/ensure_toolbox.sh` | it creates the toolbox that carries tools | stays; its callers stop needing it as tools move into the binary |
