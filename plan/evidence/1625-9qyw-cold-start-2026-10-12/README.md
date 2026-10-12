@@ -88,4 +88,22 @@ litmus:cold-start-acceptance-shape (instant, five seeded negative controls).
 The live run is litmus:cold-start-acceptance-e2e (size e2e, never in the
 default gate).
 
-LUA-RUN-RESULT
+### Driver run: v56.10.12.1 (`lua-driver-v56.10.12.1/`, run 20261012195203)
+
+The in-repo driver reproduced the whole post-fix result in one unattended run.
+Verdict:
+`ok:cold-start-acceptance:v56.10.12.1:served:https://www.macron.dev.localhost:18443:http=200:router-failure=step-qualified:recovered`.
+
+- **Structural proof:** all markers present; both probes fail.
+- **Install:** the installer sha matches SHA256SUMS. 11 images, including web-wrangler, v56.10.12.1.
+- **Forge:** up on attempt 1 after 55 s. The ticker started after the install, so there was no vault health timeout.
+- **`publish_local` auto:** runtime=wrangler. The host-side fetch returned http=200, ssl_verify=0, and the macron.dev title.
+- **Forced port conflict:** `runtime_unavailable: podman failed at step router (exit)`, with last_failure step=router, class=exit, remedy=operator.
+- **Recovery:** http=200 and last_failure cleared.
+- **Host keychain:** the item metadata is identical before and after (`keychain-before.txt`, `keychain-after.txt`).
+
+One fix came out of this run. Every podman invocation recreates an empty storage
+skeleton, including the cleanup's own `podman unshare`. The driver now ends with
+a podman-free `find <graph> <runtime-dir> -delete`. `rm` outside the repository
+needs consent under `proc.run`'s policy; `find` does not.
+

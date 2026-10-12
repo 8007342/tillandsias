@@ -166,6 +166,10 @@ local function down()
     podman({ "unshare", "bash", "-c", 'for d in "$1" "$2"; do grep -F "$d" /proc/self/mountinfo > "$1/mounts.$$" 2>/dev/null; ' ..
         'while read -r _ _ _ _ m _; do umount -l "$m"; done < "$1/mounts.$$"; done; rm -rf "$1/graph" "$2"',
         "_", W, R }, { timeout_ms = 600000 })
+    -- Every podman invocation (the unshare above included) recreates an empty
+    -- storage skeleton; with podman done, remove it without podman. find, not
+    -- rm: proc.run's policy asks consent for an rm outside the repository.
+    run({ "find", W .. "/graph", R, "-delete" })
     log_line("substrate removed: " .. W .. "/graph and " .. R .. " (evidence kept in " .. OUT .. ")")
 end
 local function fail(what)
