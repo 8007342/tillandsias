@@ -317,6 +317,16 @@ fn satisfy_ca_bundle(debug: bool) -> Result<(), String> {
     ca_bundle_trustable(&certs_dir)
 }
 
+/// The PEM test the forge's `init_runtime_ca_trust` applies: a BEGIN and an
+/// END CERTIFICATE line. One predicate for the refusal below AND for the
+/// generation read that names the state on the wire (`ca_generation`, order
+/// 472 slice 6), so `unreadable` is announced exactly when a consumer would
+/// be refused.
+pub(crate) fn is_pem_certificate(text: &str) -> bool {
+    let has = |marker: &str| text.lines().any(|l| l.trim_end() == marker);
+    has("-----BEGIN CERTIFICATE-----") && has("-----END CERTIFICATE-----")
+}
+
 /// Whether the published CA certificate can be handed to consumers: it
 /// reads, and it is a PEM certificate by the same test the forge's
 /// `init_runtime_ca_trust` applies (a BEGIN and an END CERTIFICATE line), so
@@ -330,8 +340,7 @@ pub(crate) fn ca_bundle_trustable(certs_dir: &std::path::Path) -> Result<(), Str
             crt.display()
         )
     })?;
-    let has = |marker: &str| text.lines().any(|l| l.trim_end() == marker);
-    if has("-----BEGIN CERTIFICATE-----") && has("-----END CERTIFICATE-----") {
+    if is_pem_certificate(&text) {
         Ok(())
     } else {
         Err(format!(

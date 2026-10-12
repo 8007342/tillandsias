@@ -3465,9 +3465,9 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     }
     let crt = certs_dir.join("intermediate.crt");
     let key = certs_dir.join("intermediate.key");
-    // Order 472 slice 3: the generation before any refresh, so a mint or a
+    // Order 472 slice 3: the state before any refresh, so a mint or a
     // rotation below is announced as a transition rather than inferred later.
-    let generation_before = ca_generation(&certs_dir);
+    let state_before = ca_generation(&certs_dir);
     std::fs::create_dir_all(&certs_dir)
         .map_err(|e| format!("Failed to create CA directory: {e}"))?;
 
@@ -3620,10 +3620,9 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         let _ = enforce_ca_key_mode(&key);
     }
 
-    if let Some((from, to, reason)) = flow_sink::ca_transition(
-        generation_before.as_deref(),
-        ca_generation(&certs_dir).as_deref(),
-    ) {
+    if let Some((from, to, reason)) =
+        flow_sink::ca_transition(&state_before, &ca_generation(&certs_dir))
+    {
         // Order 472 criterion 1: only a declared transition may reach the wire.
         debug_assert!(
             flow_sink::ca_transition_declared(&from, &to, reason),
@@ -3820,7 +3819,9 @@ fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
     ];
     // Order 472: record WHICH CA this proxy was started with, so a running
     // proxy can be compared against the certificate on disk after a rotation.
-    if let Some(generation) = ca_generation(certs_dir) {
+    // An absent or unreadable certificate labels nothing: there is no
+    // generation to record, and the satisfier refuses consumers anyway.
+    if let Some(generation) = ca_generation(certs_dir).into_generation() {
         args.push("--label".into());
         args.push(format!("{PROXY_CA_GENERATION_LABEL}={generation}"));
     }
@@ -3831,15 +3832,32 @@ fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
 /// Label on the proxy container naming the CA generation it signs with (order 472).
 const PROXY_CA_GENERATION_LABEL: &str = "tillandsias.ca-generation";
 
-/// The CA generation: the first 16 hex digits of the SHA-256 of the published
-/// `intermediate.crt`. A rotation publishes a new certificate by rename, so the
-/// generation changes exactly when the certificate does. `None` when the file
-/// cannot be read.
-fn ca_generation(certs_dir: &Path) -> Option<String> {
+/// The CA bundle's state as the generation read sees it (order 472, slice 6):
+/// `Absent` when `intermediate.crt` does not exist, `Unreadable` when it
+/// exists but cannot be read or is not a PEM certificate (the predicate
+/// slice 4's `container_deps::ca_bundle_trustable` refuses on, shared so the
+/// wire and the refusal can never disagree), and otherwise `Current` with the
+/// generation: the first 16 hex digits of the SHA-256 of the file. A rotation
+/// publishes a new certificate by rename, so the generation changes exactly
+/// when the certificate does.
+///
+/// Before slice 6 this returned `Option<String>` and every non-current case
+/// read as `absent` on the wire; a present-but-unreadable certificate (the
+/// SELinux relabel incident) therefore announced the wrong state.
+fn ca_generation(certs_dir: &Path) -> flow_sink::CaBundleState {
     use sha2::{Digest, Sha256};
-    let bytes = std::fs::read(certs_dir.join("intermediate.crt")).ok()?;
+    let bytes = match std::fs::read(certs_dir.join("intermediate.crt")) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return flow_sink::CaBundleState::Absent;
+        }
+        Err(_) => return flow_sink::CaBundleState::Unreadable,
+    };
+    if !container_deps::is_pem_certificate(&String::from_utf8_lossy(&bytes)) {
+        return flow_sink::CaBundleState::Unreadable;
+    }
     let hex = format!("{:x}", Sha256::digest(&bytes));
-    Some(hex[..16].to_string())
+    flow_sink::CaBundleState::Current(hex[..16].to_string())
 }
 
 /// Whether a RUNNING proxy still signs with the CA consumers are given.
@@ -3853,8 +3871,9 @@ enum ProxyCaCheck {
         running: Option<String>,
         on_disk: String,
     },
-    /// Nothing to compare against (the certificate or the container could not
-    /// be read). Keep the serving proxy rather than restart on a guess.
+    /// Nothing to compare against (the certificate is absent or unreadable,
+    /// or the container could not be inspected). Keep the serving proxy
+    /// rather than restart on a guess.
     Unknown,
 }
 
@@ -3963,7 +3982,7 @@ fn ensure_proxy_running(debug: bool) -> Result<(), String> {
         // last CA rotation signs with a key no new consumer trusts.
         match proxy_ca_check(
             running_proxy_ca_generation(),
-            ca_generation(&PathBuf::from(ca_dir())),
+            ca_generation(&PathBuf::from(ca_dir())).into_generation(),
         ) {
             ProxyCaCheck::Stale { running, on_disk } => {
                 // LOUD, on both streams (767-nkkq: launchers capture different
@@ -25084,12 +25103,19 @@ mod tests {
 
     // ---- order 472: the CaBundle -> Proxy generation edge -------------------
 
+    /// A PEM-shaped certificate body for the CA fixtures: the generation read
+    /// (slice 6) classifies anything else as `unreadable`, as the satisfier
+    /// would refuse it.
+    fn pem_cert(body: &str) -> String {
+        format!("-----BEGIN CERTIFICATE-----\n{body}\n-----END CERTIFICATE-----\n")
+    }
+
     #[test]
     fn proxy_args_label_the_ca_generation_and_keep_the_image_last() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("intermediate.crt"), "CERT-A").unwrap();
+        std::fs::write(dir.path().join("intermediate.crt"), pem_cert("CERT-A")).unwrap();
         let args = build_proxy_run_args(dir.path(), "tillandsias-proxy:v1");
-        let gen_a = ca_generation(dir.path()).unwrap();
+        let gen_a = ca_generation(dir.path()).into_generation().unwrap();
         assert_eq!(gen_a.len(), 16);
         assert!(has_arg(
             &args,
@@ -25100,8 +25126,54 @@ mod tests {
             Some("tillandsias-proxy:v1")
         );
         // A rotation publishes different bytes, so the generation moves.
-        std::fs::write(dir.path().join("intermediate.crt"), "CERT-B").unwrap();
-        assert_ne!(ca_generation(dir.path()).unwrap(), gen_a);
+        std::fs::write(dir.path().join("intermediate.crt"), pem_cert("CERT-B")).unwrap();
+        assert_ne!(ca_generation(dir.path()).into_generation().unwrap(), gen_a);
+    }
+
+    /// Order 472 slice 6: the generation read answers three ways. A missing
+    /// certificate is `absent`; one that is present but not a PEM certificate
+    /// (or, where the OS refuses the read, present but unreadable) is
+    /// `unreadable`, never `absent`; and only a current one labels the proxy.
+    #[test]
+    fn a_present_but_untrustable_certificate_reads_unreadable_not_absent() {
+        use flow_sink::CaBundleState;
+        let dir = tempfile::tempdir().unwrap();
+        let crt = dir.path().join("intermediate.crt");
+        assert_eq!(ca_generation(dir.path()), CaBundleState::Absent);
+
+        std::fs::write(&crt, "CERT-A").unwrap();
+        assert_eq!(ca_generation(dir.path()), CaBundleState::Unreadable);
+        let args = build_proxy_run_args(dir.path(), "tillandsias-proxy:v1");
+        assert!(
+            !args
+                .iter()
+                .any(|a| a.starts_with(&format!("{PROXY_CA_GENERATION_LABEL}="))),
+            "an unreadable certificate must not label the proxy: {args:?}"
+        );
+        // The satisfier's refusal and the wire state agree by construction:
+        // the same predicate decides both.
+        assert!(container_deps::ca_bundle_trustable(dir.path()).is_err());
+
+        std::fs::write(&crt, pem_cert("CERT-A")).unwrap();
+        assert!(matches!(
+            ca_generation(dir.path()),
+            CaBundleState::Current(ref g) if g.len() == 16
+        ));
+        assert!(container_deps::ca_bundle_trustable(dir.path()).is_ok());
+
+        // The OS-level arm (the SELinux relabel incident's shape): a mode-000
+        // file. Asserted only where the read actually fails, since a
+        // privileged test runner reads anything; the non-PEM arm above is the
+        // unconditional one.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&crt, std::fs::Permissions::from_mode(0o000)).unwrap();
+            if std::fs::read(&crt).is_err() {
+                assert_eq!(ca_generation(dir.path()), CaBundleState::Unreadable);
+            }
+            std::fs::set_permissions(&crt, std::fs::Permissions::from_mode(0o644)).unwrap();
+        }
     }
 
     #[test]

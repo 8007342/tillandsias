@@ -226,3 +226,41 @@ tell an unreadable certificate from an absent one, so the wire reports it as
 `absent`. It is not in the table because no code path can announce it. Adding
 it means making the generation read return a three-way answer first; the test
 above then fails until the row is declared, which is the order to do it in.
+
+## Slice 6 — `unreadable` is a state of its own (yoga, 2026-10-12)
+
+`ca_generation` now answers `flow_sink::CaBundleState`: `Absent` (no
+`intermediate.crt`), `Unreadable` (the file exists but cannot be read, or is
+not a PEM certificate by `container_deps::is_pem_certificate`, the predicate
+slice 4's `ca_bundle_trustable` refuses on, now shared by both), or
+`Current(generation)`. The wire state is `unreadable`. Before this slice it was
+`absent`, which names the wrong remedy for the SELinux-relabel incident
+(1dda3032): a re-mint where a repair of the existing file was what it needed.
+
+`CA_TRANSITIONS` gained four rows: `unreadable → current` (`repaired`),
+`unreadable → absent` (`lost`), `absent → unreadable` and `current →
+unreadable` (both `corrupted`). The exhaustive test now enumerates `[Absent,
+Unreadable, Current(aa), Current(bb)]`. `repaired` is reachable in practice
+only through the 25-day refresh, because `ca_bundle_needs_refresh` reads
+mtimes: a young unreadable certificate is not refreshed, stays `unreadable`,
+the satisfier refuses consumers, and nothing is announced, which is the
+correct silence. The two `corrupted` rows and `unreadable → absent` are
+reachable by the pure function and, in practice, only by another writer
+changing the file between the two reads, the kind of event the wire exists to
+show.
+
+The proxy edge is unchanged in effect: an unreadable certificate is `None` to
+`proxy_ca_check` (`Unknown`, the serving proxy is kept) and labels no proxy,
+exactly as an absent one did.
+
+Mutation controls, both run on yoga: dropping the `repaired` row fails
+`every_announced_transition_is_declared_and_every_row_is_reachable` with
+"undeclared CA transition unreadable -> current:aa (repaired)"; making the read
+accept a non-PEM file as current fails
+`a_present_but_untrustable_certificate_reads_unreadable_not_absent` with
+`left: Current("0fa00ca59cbbed9c") right: Unreadable`. Both files were
+restored byte-identical afterwards.
+
+Remaining on the row: criterion 3 (restart-on-rotation fan-out for
+long-running forges), criterion 5 (the drift guardrail), and the live arms of
+criterion 2. The split-trust TLS failure is still read-from-code.
