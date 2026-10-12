@@ -108,8 +108,14 @@ critical_path:
   # exit 3 means "converging". Asserting a failure on any non-zero would fail
   # every clean install; the phrase above is attached to the -eq 1 branch, so
   # this conjunct pins the narrow test rather than the broad one.
+  #
+  # 1561-47a8 (4504c6fd9, operator ruling 2026-10-08: end-user lines only)
+  # reworded that exit-1 throw to "The downloaded Tillandsias failed its
+  # self-check" and moved the os_version / wsl_version / build_commit lines to
+  # the install log via Log. The check itself is intact, so the pin now names
+  # the -eq 1 branch directly plus the new wording, keeping it narrow.
   - step: "install-windows.ps1 contains the post-install --version + --diagnose sanity checks AND surfaces OS + WSL versions"
-    command: "grep -F 'cmd.exe' scripts/install-windows.ps1 && grep -Fe '--diagnose --json' scripts/install-windows.ps1 && grep -Fe '--version' scripts/install-windows.ps1 && grep -F 'install bits broken' scripts/install-windows.ps1 && grep -F 'build_commit' scripts/install-windows.ps1 && grep -F 'os_version' scripts/install-windows.ps1 && grep -F 'wsl_version' scripts/install-windows.ps1"
+    command: "grep -F 'cmd.exe' scripts/install-windows.ps1 && grep -Fe '--diagnose --json' scripts/install-windows.ps1 && grep -Fe '--version' scripts/install-windows.ps1 && grep -F 'if ($DiagExit -eq 1) {' scripts/install-windows.ps1 && grep -F 'failed its self-check (exit $DiagExit)' scripts/install-windows.ps1 && grep -F 'build_commit' scripts/install-windows.ps1 && grep -F 'os_version' scripts/install-windows.ps1 && grep -F 'wsl_version' scripts/install-windows.ps1"
     expected_behavior: "grep succeeds"
     assert_exit: 0
     timeout_ms: 3000
