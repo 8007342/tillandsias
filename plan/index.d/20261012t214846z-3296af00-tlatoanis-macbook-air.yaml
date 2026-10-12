@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-macos-install-keeps-a-damaged-vm-through-the-soft-reset-so-it-should-build-a-fresh-vm-and-carry-only-identity-forward
+    event:
+      type: note
+      ts: "2026-10-12T21:48:46Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |-
+        5a MEASURED with fdad16989 (drain-timeout names the VZ state; grubby console=hvc0), fresh VM, two tray quit cycles 2026-10-12: (1) 21:38:52Z request acked, guest 'Shutting down.' ~11 s later, drain failed 21:39:57Z 'in VZ state Running (1)'. (2) with console=hvc0 live: systemd-shutdown synced, unmounted, deactivated swaps, detached loop/MD/DM and printed 'Powering off.' at guest t=420.855 s (~11 s after the 21:47:09Z request); no kernel 'reboot: Power down' line followed; drain failed 21:48:14Z 'in VZ state Running (1)'. So the guest kernel stalls AFTER systemd-shutdown's 'Powering off.' (device_shutdown or the PSCI SYSTEM_OFF never reaching VZ), and VZ never leaves Running; the host is not missing a stop. Correction to the earlier lead: the poweroff opt-in was not the cause (the fresh VM has it and still force-stops). Also: --exec-guest cuts the guest off mid-shutdown (its console ends at guest t=8.38 s in the middle of unit stops), a second unclean-stop path. Next: initcall_debug for one cycle to name the device whose shutdown hangs.
