@@ -17445,7 +17445,14 @@ pub(crate) fn ensure_enclave_for_project(
     project_path: Option<&Path>,
     own_launch_marker: Option<&str>,
     debug: bool,
-) -> Result<(PathBuf, Option<String>), String> {
+) -> Result<
+    (
+        PathBuf,
+        Option<String>,
+        container_deps::Up<container_deps::CaTrusted>,
+    ),
+    String,
+> {
     // Idempotent re-attach wipe FIRST, prerequisites AFTER. The shared-stack
     // cleanup removes tillandsias-proxy whenever no lane container is live —
     // and on a FIRST launch none is — so running it after ensure_forge_launch
@@ -17479,7 +17486,7 @@ pub(crate) fn ensure_enclave_for_project(
     // Prerequisites: enclave/egress networks, CA bundle, proxy — satisfied
     // through the container_deps topological model (order 252).  The proxy
     // image is verified by ensure_proxy_running inside the satisfier.
-    let _witness = container_deps::ensure_forge_launch(debug)
+    let witness = container_deps::ensure_forge_launch(debug)
         .map_err(|e| format!("[forge-launch] prerequisites: {e}"))?;
 
     let version = VERSION.trim();
@@ -17621,7 +17628,10 @@ pub(crate) fn ensure_enclave_for_project(
     #[cfg(feature = "vault")]
     crate::vault_bootstrap::spawn_cloudflare_token_rotation_scheduler(debug);
 
-    Ok((certs_dir, mirror_identity))
+    // Order 472 criterion 5: the launch witness leaves this function as the
+    // CA-trust projection the forge arg builders demand, so a lane that did
+    // not come through here has nothing to hand them.
+    Ok((certs_dir, mirror_identity, witness.ca_trusted()))
 }
 /// Ensure the project's git mirror and the shared inference container for a
 /// forge launch, per the operator's order-443 per-component concurrency rule:
@@ -18280,6 +18290,8 @@ pub(crate) fn build_forge_agent_run_args(
     // build_forge_agent_run_args_with_vault. The victim test reaches the cache
     // root THROUGH this function, so this is where it must be injectable.
     cache_root: &Path,
+    // ORDER 472 criterion 5: the CA-trust witness, passed through.
+    ca_trusted: &container_deps::Up<container_deps::CaTrusted>,
 ) -> Vec<String> {
     build_forge_agent_run_args_with_vault(
         project_path,
@@ -18298,7 +18310,38 @@ pub(crate) fn build_forge_agent_run_args(
         None,
         host_mount,
         cache_root,
+        ca_trusted,
     )
+}
+
+/// ORDER 472, exit criterion 5 (drift guardrail). The forge-side CA mount —
+/// the ONE runtime trust input lib-common.sh's rootless initializer reads —
+/// is built here and nowhere else on the forge-agent lanes, and building it
+/// takes the `CaTrusted` witness. The witness is a projection of the launch
+/// witness `container_deps::ensure_forge_launch` returns, so a launch path
+/// that skipped the dependency model has no value to pass: the omission is a
+/// compile error at the builder, not a `[trust] WARNING` inside the container
+/// (slice 4 made the host refuse an untrustable certificate; this makes that
+/// refusal impossible to route around on these lanes).
+/// `every_forge_ca_mount_emitter_takes_the_ca_trusted_witness` enumerates
+/// every emitter of the target path and ratchets the lanes still outside the
+/// model (`build_stack_common_args`, `build_opencode_forge_args`).
+///
+/// The `exists()` gate is unchanged from before the witness: a certificate
+/// the model checked at bring-up and that vanished before the run is still
+/// skipped here, which is criterion 3's territory (reaction to rotation and
+/// loss), not this slice's.
+fn forge_ca_chain_mount(
+    certs_dir: &Path,
+    _ca_trusted: &container_deps::Up<container_deps::CaTrusted>,
+) -> Option<(String, &'static str)> {
+    let ca_cert = certs_dir.join("intermediate.crt");
+    ca_cert.exists().then(|| {
+        (
+            ca_cert.display().to_string(),
+            "/run/tillandsias/ca-chain.crt",
+        )
+    })
 }
 
 // All arguments are distinct, named forge-launch inputs; bundling them into a
@@ -18345,6 +18388,10 @@ fn build_forge_agent_run_args_with_vault(
     // is the one that CALLS the reader, so the seam has to sit where that caller
     // can inject it.
     cache_root: &Path,
+    // ORDER 472 criterion 5: the CA-trust witness, threaded to the mount
+    // (`forge_ca_chain_mount`). Production lanes get it from
+    // `ensure_enclave_for_project`; tests from `ca_trusted_for_tests`.
+    ca_trusted: &container_deps::Up<container_deps::CaTrusted>,
 ) -> Vec<String> {
     let image = forge_image_tag(version);
     // A prompt-driven Codex run is non-interactive (`codex exec "<prompt>"`):
@@ -18610,13 +18657,8 @@ fn build_forge_agent_run_args_with_vault(
         }
     }
 
-    let ca_cert = certs_dir.join("intermediate.crt");
-    if ca_cert.exists() {
-        spec = spec.bind_mount(
-            ca_cert.display().to_string(),
-            "/run/tillandsias/ca-chain.crt",
-            true,
-        );
+    if let Some((source, target)) = forge_ca_chain_mount(certs_dir, ca_trusted) {
+        spec = spec.bind_mount(source, target, true);
     }
 
     // Order 505: mount only the per-lane MCP tool socket directory
@@ -18833,6 +18875,8 @@ pub(crate) fn build_forge_agent_run_argv(
     // build_forge_agent_run_args_with_vault. The victim test reaches the cache
     // root THROUGH this function, so this is where it must be injectable.
     cache_root: &Path,
+    // ORDER 472 criterion 5: the CA-trust witness, passed through.
+    ca_trusted: &container_deps::Up<container_deps::CaTrusted>,
 ) -> Vec<String> {
     let mut argv = vec!["podman".to_string()];
     argv.push("run".to_string());
@@ -18869,6 +18913,7 @@ pub(crate) fn build_forge_agent_run_argv(
         debug,
         host_mount,
         cache_root,
+        ca_trusted,
     ));
     argv
 }
@@ -19003,7 +19048,7 @@ fn run_forge_agent_cli_mode(
     // during our pre-create window keeps the shared stack up for us. Held for
     // the whole session; the exit cleanup below excludes it by name.
     let (launch_marker, _launch_guard) = acquire_launch_in_flight_marker(project_name, debug)?;
-    let (certs_dir, mirror_identity) = ensure_enclave_for_project(
+    let (certs_dir, mirror_identity, ca_trusted) = ensure_enclave_for_project(
         project_name,
         canonical_path.as_deref(),
         Some(&launch_marker),
@@ -19061,6 +19106,7 @@ fn run_forge_agent_cli_mode(
         // ORDER 776-jcf3: and grant it only with a real checkout.
         forge_host_mount_granted(forge_uses_host_mount(), canonical_path.as_deref()),
         &tillandsias_core::cache_root::cache_root(),
+        &ca_trusted,
     );
 
     let rt = podman_runtime()?;
@@ -19198,7 +19244,7 @@ pub(crate) fn launch_forge_agent(
         // concern from the slice-2 progress note. Credentialed modes are
         // covered: they re-exec the CLI lane, which holds its own marker.
         let (launch_marker, _launch_guard) = acquire_launch_in_flight_marker(project_name, debug)?;
-        let (certs_dir, mirror_identity) = ensure_enclave_for_project(
+        let (certs_dir, mirror_identity, ca_trusted) = ensure_enclave_for_project(
             project_name,
             Some(&canonical),
             Some(&launch_marker),
@@ -19216,6 +19262,7 @@ pub(crate) fn launch_forge_agent(
             // launcher, and nowhere a test can reach concurrently.
             forge_uses_host_mount(),
             &tillandsias_core::cache_root::cache_root(),
+            &ca_trusted,
         )
     };
 
@@ -23091,8 +23138,13 @@ mod tests {
         let set_at = liveness_src
             .find("let services = [")
             .expect("run_check must declare its steady-state `services` array");
+        // The boundary is the TEST MODULE, not the first `cfg(test)`
+        // attribute: order 472 slice 7 put a `#[cfg(test)]` constructor
+        // (`ca_trusted_for_tests`) among the production items above
+        // `run_check`, and anchoring on the attribute read the steady-state
+        // set as test scaffolding.
         let tests_at = liveness_src
-            .find("#[cfg(test)]")
+            .find("#[cfg(test)]\nmod tests")
             .unwrap_or(liveness_src.len());
         assert!(
             run_check_at < set_at && set_at < tests_at,
@@ -24296,6 +24348,7 @@ mod tests {
             true,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
 
         assert_eq!(argv.first().map(|s| s.as_str()), Some("podman"));
@@ -24735,6 +24788,7 @@ mod tests {
                 false,
                 false,
                 &test_cache_root(),
+                &container_deps::ca_trusted_for_tests(),
             );
             assert!(
                 !has_arg(&argv, "--replace"),
@@ -24813,6 +24867,7 @@ mod tests {
             false,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
 
         // Source-scoped guard: forbid a HOST .cache/.config directory as a mount
@@ -24975,6 +25030,7 @@ mod tests {
             false,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
 
         let mut found_ssh = false;
@@ -25078,6 +25134,7 @@ mod tests {
             false,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
         let joined = argv.join(" ");
         assert!(
@@ -25114,6 +25171,7 @@ mod tests {
             false,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
         let joined = argv.join(" ");
         assert!(
@@ -25172,6 +25230,7 @@ mod tests {
             true,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
         eprintln!("=== SAMPLE ARGV (Claude, tillandsias project) ===");
         for (i, a) in argv.iter().enumerate() {
@@ -27488,6 +27547,151 @@ mod tests {
         );
     }
 
+    /// ORDER 472, exit criterion 5 — the drift guardrail's TEST arm. The
+    /// compile arm is the witness parameter itself: a lane that skipped
+    /// `ensure_forge_launch` has no `Up<CaTrusted>` to pass (mutation measured
+    /// on yoga 2026-10-12, issue slice 7). This arm covers what a type cannot:
+    /// a NEW emitter of the forge-side CA path written without the parameter.
+    /// Every production function whose body names the in-container path must
+    /// take the witness, except the lanes in `OUTSIDE_THE_MODEL`, which bring
+    /// the CA up by the bare `ensure_ca_bundle` call and so never run slice
+    /// 4's trust check. That list is a RATCHET: an entry that stops emitting
+    /// the path unwitnessed fails this test too, so the debt cannot outlive
+    /// its reason.
+    #[test]
+    fn every_forge_ca_mount_emitter_takes_the_ca_trusted_witness() {
+        const TARGET: &str = "/run/tillandsias/ca-chain.crt";
+        const WITNESS: &str = "Up<container_deps::CaTrusted>";
+        // Lanes outside the dependency model as of slice 7, with the lane
+        // that reaches each. Routing them through `ensure_forge_launch` brings
+        // Vault and the proxy up on paths that today start neither, so it is
+        // a behaviour change and its own slice.
+        const OUTSIDE_THE_MODEL: &[(&str, &str)] = &[
+            ("build_stack_common_args", "run_status_check"),
+            (
+                "build_opencode_forge_args",
+                "run_opencode_mode / run_opencode_web_mode",
+            ),
+        ];
+        fn is_fn_header(line: &str) -> bool {
+            [
+                "fn ",
+                "pub fn ",
+                "pub(crate) fn ",
+                "async fn ",
+                "pub async fn ",
+                "pub(crate) async fn ",
+            ]
+            .iter()
+            .any(|p| line.starts_with(p))
+        }
+        fn is_item_start(line: &str) -> bool {
+            let bare = line
+                .strip_prefix("pub(crate) ")
+                .or_else(|| line.strip_prefix("pub "))
+                .unwrap_or(line);
+            [
+                "impl ",
+                "impl<",
+                "struct ",
+                "enum ",
+                "const ",
+                "static ",
+                "mod ",
+                "trait ",
+                "type ",
+                "use ",
+                "macro_rules!",
+            ]
+            .iter()
+            .any(|p| bare.starts_with(p))
+        }
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let production = source.split("\nmod tests {").next().unwrap_or(source);
+        let lines: Vec<&str> = production.lines().collect();
+
+        // Attribute every emitting line to the top-level fn that owns it.
+        let mut current: Option<usize> = None;
+        let mut emitters: Vec<usize> = Vec::new();
+        for (i, line) in lines.iter().enumerate() {
+            if is_fn_header(line) {
+                current = Some(i);
+            } else if is_item_start(line) {
+                // Another top-level item (impl, const, struct…): no fn owns
+                // the lines below it until the next header. A column-0 `)`
+                // is the end of a multi-line signature and keeps the owner
+                // (the first draft reset on it and attributed every mount in
+                // a multi-line-signature builder to nobody).
+                current = None;
+            }
+            if line.contains(TARGET) && !line.trim_start().starts_with("//") {
+                let owner = current.unwrap_or_else(|| {
+                    panic!(
+                        "line {}: {TARGET} named outside any top-level fn: {line}",
+                        i + 1
+                    )
+                });
+                if !emitters.contains(&owner) {
+                    emitters.push(owner);
+                }
+            }
+        }
+        assert!(
+            !emitters.is_empty(),
+            "no production function names {TARGET}; the scan is reading the wrong file"
+        );
+
+        let mut witnessed: Vec<String> = Vec::new();
+        let mut unwitnessed: Vec<String> = Vec::new();
+        for &i in &emitters {
+            let header = lines[i];
+            let name = header
+                .split("fn ")
+                .nth(1)
+                .and_then(|s| s.split('(').next())
+                .unwrap_or_else(|| panic!("unparseable fn header: {header}"))
+                .to_string();
+            // The signature: the header alone when it closes on one line,
+            // else every line down to the column-0 `)` that ends the list.
+            let mut signature = String::new();
+            for l in &lines[i..] {
+                signature.push_str(l);
+                signature.push('\n');
+                if l.starts_with(')') || (*l == header && l.contains('{')) {
+                    break;
+                }
+            }
+            if signature.contains(WITNESS) {
+                witnessed.push(name);
+            } else {
+                unwitnessed.push(name);
+            }
+        }
+        assert!(
+            witnessed.iter().any(|n| n == "forge_ca_chain_mount"),
+            "forge_ca_chain_mount must build the forge-agent CA mount against the witness; witnessed={witnessed:?}"
+        );
+        let allowed: Vec<&str> = OUTSIDE_THE_MODEL.iter().map(|(f, _)| *f).collect();
+        let drift: Vec<&String> = unwitnessed
+            .iter()
+            .filter(|n| !allowed.contains(&n.as_str()))
+            .collect();
+        assert!(
+            drift.is_empty(),
+            "drift guardrail (472 criterion 5): {drift:?} name {TARGET} without a `{WITNESS}` \
+             parameter. Obtain the witness from the launch witness's ca_trusted() — or, for a \
+             lane that genuinely runs outside the dependency model, add it to OUTSIDE_THE_MODEL \
+             with the lane that reaches it"
+        );
+        for (f, lane) in OUTSIDE_THE_MODEL {
+            assert!(
+                unwitnessed.iter().any(|n| n == f),
+                "ratchet: {f} (lane {lane}) no longer names {TARGET} unwitnessed; remove it from \
+                 OUTSIDE_THE_MODEL"
+            );
+        }
+    }
+
     /// Drift litmus (order 229): every launch path that creates containers
     /// MUST route through the container dependency model.  A launch that
     /// skips a prerequisite must fail — this is proven at the crate level
@@ -28220,6 +28424,7 @@ mod tests {
             Some("delegated codex"),
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
         for (lane, args) in [("opencode", opencode), ("codex", codex)] {
             assert!(
@@ -28333,6 +28538,7 @@ mod tests {
             None,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
         for (lane, args) in [("opencode", &opencode), ("agent", &agent)] {
             assert!(
@@ -28374,6 +28580,7 @@ mod tests {
             None,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
         for (lane, args) in [("opencode", &opencode), ("agent", &agent)] {
             assert!(
@@ -28476,6 +28683,7 @@ mod tests {
             None,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
         for (lane, args) in [("opencode", &opencode), ("agent", &agent)] {
             assert!(
@@ -29743,6 +29951,7 @@ esac
             false,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
 
         assert!(has_arg(&argv, "PROJECT=alpha"));
@@ -29780,6 +29989,7 @@ esac
                 None,
                 false,
                 &test_cache_root(),
+                &container_deps::ca_trusted_for_tests(),
             );
             assert!(
                 has_arg(&args, "--secret"),
@@ -29808,6 +30018,7 @@ esac
                 None,
                 false,
                 &test_cache_root(),
+                &container_deps::ca_trusted_for_tests(),
             );
             assert!(
                 !args.iter().any(|arg| arg.contains("must-not-mount")),
@@ -29840,6 +30051,7 @@ esac
             Some(prompt),
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
         assert!(
             has_arg(&with_prompt, &format!("TILLANDSIAS_CODEX_PROMPT={prompt}")),
@@ -29866,6 +30078,7 @@ esac
             None,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
         assert!(
             has_arg(&no_prompt, "--tty") && has_arg(&no_prompt, "--interactive"),
@@ -29946,6 +30159,7 @@ esac
                 false,
                 false,
                 &test_cache_root(),
+                &container_deps::ca_trusted_for_tests(),
             );
             let identity = format!("TILLANDSIAS_AGENT={expected}");
             assert!(
@@ -30018,6 +30232,7 @@ esac
             true,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
 
         assert_eq!(args.first().map(|s| s.as_str()), Some("--rm"));
@@ -30061,6 +30276,7 @@ esac
                 false,
                 false,
                 &test_cache_root(),
+                &container_deps::ca_trusted_for_tests(),
             );
             assert!(
                 has_arg(&args, "--tty"),
@@ -30374,6 +30590,7 @@ esac
             Some("do the thing"), // prompt — this is the arg that matters,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
         assert!(
             !has_arg(&args, "--tty"),
@@ -31295,6 +31512,7 @@ esac
             // process-global that every concurrently-running test could read.
             true,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
         let raw_args = build_opencode_forge_args(
             &project_path,
@@ -31374,6 +31592,7 @@ esac
             // ORDER 1021-hf9e: host_mount — this whole test exercises the opt-in lane.
             true,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
         let fail_closed_raw = build_opencode_forge_args(
             &project_path,
@@ -33682,6 +33901,7 @@ esac
             None,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
 
         let args_str = args.join(" ");
@@ -34399,6 +34619,7 @@ mod forge_budget_argv_tests {
                     false,
                     host_mount,
                     &test_cache_root(),
+                    &container_deps::ca_trusted_for_tests(),
                 );
                 assert_budget(
                     &format!("build_forge_agent_run_args({mode:?}, host_mount={host_mount})"),

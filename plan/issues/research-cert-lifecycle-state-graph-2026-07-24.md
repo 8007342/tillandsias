@@ -264,3 +264,91 @@ restored byte-identical afterwards.
 Remaining on the row: criterion 3 (restart-on-rotation fan-out for
 long-running forges), criterion 5 (the drift guardrail), and the live arms of
 criterion 2. The split-trust TLS failure is still read-from-code.
+
+## Slice 7 — exit criterion 5: the CA-trust witness on the forge-agent lanes (yoga, 2026-10-12)
+
+`container_deps::CaTrusted` is a new marker. `Up<CaTrusted>` has no
+constructor of its own: it is a projection, `ca_trusted()`, of the two launch
+witnesses `Up<ForgeLaunchReady>` and `Up<GitLoginReady>`, whose targets both
+reach `CaBundle` in `DEPS` (pinned by
+`ca_trusted_projects_only_from_targets_that_reach_ca_bundle`). So holding one
+means the certificate a consumer is about to mount is the one
+`satisfy_ca_bundle` checked — current by `ensure_ca_bundle`, trustable by
+`ca_bundle_trustable` (slice 4) — and that the proxy came up after that check.
+`ensure_enclave_for_project` now returns the projection as a third element.
+On the forge-agent lanes the forge-side CA mount
+(`/run/tillandsias/ca-chain.crt`) is built by one function,
+`forge_ca_chain_mount(certs_dir, &Up<CaTrusted>)`, and nowhere else;
+`build_forge_agent_run_args_with_vault`, `build_forge_agent_run_args` and
+`build_forge_agent_run_argv` take the witness as their last parameter, and
+`run_forge_agent_cli_mode` and `launch_forge_agent` pass what the bring-up
+returned. Unit tests mint it through `ca_trusted_for_tests`, which exists under
+`cfg(test)` only.
+
+Criterion 5 asks for the skip litmus "extended so a launch path mounting
+`ca-chain.crt` without the witness is a compile error or test failure". Both
+arms exist, each with its mutation control run on yoga:
+
+- Compile arm. A lane that never ran the dependency model has no
+  `Up<CaTrusted>` to pass. Control: replacing `run_forge_agent_cli_mode`'s
+  `ensure_enclave_for_project` call with the bare `ensure_ca_bundle` chain →
+  `error[E0425]: cannot find value `ca_trusted` in this scope` at the builder
+  call.
+- Test arm, for what a type cannot see (a NEW emitter written without the
+  parameter): `every_forge_ca_mount_emitter_takes_the_ca_trusted_witness`
+  attributes every production line naming the in-container path to its
+  top-level fn and requires `Up<container_deps::CaTrusted>` in that fn's
+  signature, with a RATCHET for the lanes still outside the model. Controls:
+  dropping the helper's witness parameter → "forge_ca_chain_mount must build
+  the forge-agent CA mount against the witness; witnessed=[]"; a stale ratchet
+  entry (`build_router_run_args`) → "ratchet: build_router_run_args (…) no
+  longer names /run/tillandsias/ca-chain.crt unwitnessed; remove it from
+  OUTSIDE_THE_MODEL".
+- The skip litmus the criterion names, `launch_skipping_prerequisite_fails`,
+  gained the CaBundle arm for both launch targets (the error names
+  `ca-bundle`, neither the proxy nor the target is attempted). Control:
+  making `CaBundle` unreachable from `ForgeLaunch` — its direct edge, Proxy's
+  and NixCache's, since it reaches the target three ways — fails the arm
+  (`unwrap_err` on an `Ok`) and the projection pin: "tillandsias-forge-launch
+  projects a CaTrusted witness but does not reach CaBundle: [EnclaveNetwork,
+  EgressNetwork, Proxy, Vault, NixCache, ForgeLaunch]".
+
+All mutated files were restored byte-identical (`cmp`) between arms.
+
+**Finding — the drift this guardrail exists for was already there.** Three
+lanes mount the CA into a forge OUTSIDE the dependency model, by the bare
+`ensure_ca_bundle` + `ensure_enclave_network` chain: `run_opencode_mode` and
+`run_opencode_web_mode` (through `build_opencode_forge_args`) and
+`run_status_check` (through `build_stack_common_args`). None of them runs
+slice 4's `ca_bundle_trustable`, so on those lanes an unreadable certificate
+still reaches the container as a `[trust] WARNING` and vendor roots — the
+failure slice 4 closed for the forge-agent lanes only. They are ratcheted in
+the scan test's `OUTSIDE_THE_MODEL` with the lane that reaches each, so the
+list cannot grow silently and cannot outlive its reason. Closing it is slice
+8 and is a decision, not a mechanical change: routing those lanes through
+`ensure_forge_launch` brings Vault and the proxy up on paths that today start
+neither (a behaviour change on the OpenCode and status-check lanes), while the
+smaller alternative — call `ca_bundle_trustable` on those lanes and project a
+witness from a GitLogin/ForgeLaunch-independent check — would need a third
+witness source and its own soundness pin.
+
+Collateral: `liveness_steady_state_containers` (the order-477 helper in
+main.rs) anchored container_deps.rs's test boundary on the first
+`#[cfg(test)]` text in the file; the `cfg(test)` constructor above
+`run_check` made two order-477 agreement tests read the steady-state set as
+test scaffolding, and clippy's `items_after_test_module` refused the
+alternative of placing it after the module. The helper now anchors on
+`#[cfg(test)]\nmod tests`, which is what it meant.
+
+Unchanged on purpose: `forge_ca_chain_mount` keeps the pre-existing
+`exists()` gate, so a certificate the model checked at bring-up and that
+vanished before the run is still skipped silently on this lane. That is
+criterion 3's territory (reaction to rotation and loss), named here so it is
+not mistaken for closed.
+
+Status of criterion 5: met for the forge-agent lanes (both arms, both
+controlled); OPEN for the three ratcheted lanes (slice 8). Remaining on the
+row: slice 8, criterion 3, the live arms of criterion 2. The split-trust TLS
+failure is still read-from-code.
+
+Verification on yoga (2026-10-12): `cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock` 986 passed, 0 failed, 25 ignored; `cargo clippy -p tillandsias-headless --bin tillandsias --tests -- -D warnings` rc 0 under no features, `tray`, and `tray,listen-vsock`; `cargo fmt --all` clean.

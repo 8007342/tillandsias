@@ -245,6 +245,49 @@ pub fn ensure_forge_launch(debug: bool) -> Result<Up<ForgeLaunchReady>, String> 
     Ok(Up::new(ForgeLaunchReady))
 }
 
+/// Marker: the CA bundle came up THROUGH THE DEPENDENCY MODEL, so the
+/// certificate a consumer mounts is the one `satisfy_ca_bundle` checked —
+/// current by `ensure_ca_bundle`, trustable by `ca_bundle_trustable` (order
+/// 472 slice 4) — and every node ordered after `CaBundle`, the proxy among
+/// them, came up after that check.
+///
+/// Order 472, exit criterion 5. The forge-side CA mount is built only against
+/// this witness, and the witness exists only as a projection of a launch
+/// witness whose target depends on `CaBundle`: a launch path that never ran
+/// the model has no value of this type to hand the mount builder, so skipping
+/// the prerequisite is a compile error at the builder rather than a
+/// `[trust] WARNING` line inside the container. `Up::new` is module-private;
+/// `ca_trusted_for_tests` below is the only other constructor and exists
+/// under `cfg(test)` alone.
+pub struct CaTrusted;
+
+impl Up<ForgeLaunchReady> {
+    /// `ForgeLaunch` reaches `CaBundle` (directly and through `Proxy` in
+    /// `DEPS`; pinned by `ca_trusted_projects_only_from_targets_that_reach_ca_bundle`).
+    pub fn ca_trusted(&self) -> Up<CaTrusted> {
+        Up::new(CaTrusted)
+    }
+}
+
+impl Up<GitLoginReady> {
+    /// `GitLogin` reaches `CaBundle` (same pin as above).
+    pub fn ca_trusted(&self) -> Up<CaTrusted> {
+        Up::new(CaTrusted)
+    }
+}
+
+/// Test-only constructor for the arg builders' unit tests, which never run
+/// the satisfier (a unit test must not mutate host container state, audit
+/// 2026-07-09). Compiled out of every non-test build, so production code has
+/// exactly one way to obtain the witness: a launch witness's `ca_trusted()`.
+/// (`liveness_steady_state_containers` in main.rs anchors this file's test
+/// boundary on `#[cfg(test)]\nmod tests`, not on the first `cfg(test)`
+/// attribute, precisely so an item like this can live where it belongs.)
+#[cfg(test)]
+pub(crate) fn ca_trusted_for_tests() -> Up<CaTrusted> {
+    Up::new(CaTrusted)
+}
+
 pub struct CatalogServiceReady;
 
 pub fn ensure_service_catalog(debug: bool) -> Result<Up<CatalogServiceReady>, String> {
@@ -829,6 +872,55 @@ mod tests {
             !s2.calls.contains(&Service::GitLogin),
             "drift litmus: GitLogin must not be attempted when Vault prereq failed"
         );
+
+        // Order 472, exit criterion 5: the CA bundle is reached by BOTH launch
+        // targets that project a `CaTrusted` witness, and failing it must stop
+        // the bring-up before the proxy (which mounts the CA) and before the
+        // target. Mutation control: `CaBundle` reaches `ForgeLaunch` directly
+        // AND through `Proxy`, so the control removes it from both rows of
+        // DEPS; `unwrap_err` then panics because nothing fails.
+        for target in [Service::ForgeLaunch, Service::GitLogin] {
+            let mut s3 = RecordingSatisfier::new();
+            s3.fail_on = Some(Service::CaBundle);
+            let err = ensure_with(target, &mut s3).unwrap_err();
+            assert!(
+                err.contains("ca-bundle"),
+                "drift litmus: skipping the CA bundle before {} must fail naming it: {err}",
+                target.name()
+            );
+            assert!(
+                !s3.calls.contains(&Service::Proxy),
+                "drift litmus: the proxy must not be attempted after the CA bundle failed ({})",
+                target.name()
+            );
+            assert!(
+                !s3.calls.contains(&target),
+                "drift litmus: {} must not be attempted when the CA bundle failed",
+                target.name()
+            );
+        }
+    }
+
+    /// Order 472, exit criterion 5. `Up<CaTrusted>` is a projection of the two
+    /// launch witnesses, which is sound only while both targets reach
+    /// `CaBundle` in the declared graph. Same mutation control as the arm
+    /// above (both rows).
+    #[test]
+    fn ca_trusted_projects_only_from_targets_that_reach_ca_bundle() {
+        for target in [Service::ForgeLaunch, Service::GitLogin] {
+            let order = topo_order(target).unwrap();
+            assert!(
+                order.contains(&Service::CaBundle),
+                "{} projects a CaTrusted witness but does not reach CaBundle: {order:?}",
+                target.name()
+            );
+        }
+        // Compile-time pins, same shape as `ensure_git_login_returns_up_gitloginready`:
+        // the only projections to `CaTrusted` are from these two witnesses.
+        let _from_forge_launch: fn(&Up<ForgeLaunchReady>) -> Up<CaTrusted> =
+            Up::<ForgeLaunchReady>::ca_trusted;
+        let _from_git_login: fn(&Up<GitLoginReady>) -> Up<CaTrusted> =
+            Up::<GitLoginReady>::ca_trusted;
     }
 
     /// Structural proof: all non-trivial launch targets have prerequisites.
