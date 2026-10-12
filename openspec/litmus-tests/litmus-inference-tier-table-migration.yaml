@@ -1,0 +1,94 @@
+# @trace spec:inference-engine-slots
+# @trace order:482d (llama-server-shared-tier-model-table)
+#
+# The T0-T5 model tier table is DATA (images/inference/tiers/tier-table.tsv),
+# the ONLY shared tier-row source (SLOT-7, req-id e52fc9d8). Both engine slots
+# resolve it through their adapters (models.ollama.tsv, models.llama-server.tsv)
+# via the POSIX resolver tiers.sh. The inference entrypoint no longer carries
+# the ladder or the pull list inline, and the forge's tillandsias-models reads
+# byte-identical copies (images/default/cli/tiers/) because its build context
+# cannot reach images/inference.
+#
+# Every step is pipe-free (shell-ratchet LITMUS arm, 1624-bv73) and every
+# guard has a red arm on scratch copies, so a green here is falsifiable.
+name: litmus:inference-tier-table-migration
+spec: inference-engine-slots
+phase: pre-build
+description: >
+  Pin the order-482d migration: one declarative tier table, two engine
+  adapters that cover it exactly, no inline tier row in the entrypoint, the
+  CLI's copies byte-identical (sha256) with a one-byte red case, ladder parity
+  with the retired inline classifier, and a closure that goes red on a
+  reintroduced inline row or a diverging adapter and green after
+  byte-identical restoration.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains images/inference/tiers/tier-table.tsv
+
+critical_path:
+  - step: "the CLI copies are byte-identical to the canonical table and adapter (sha256), and one changed byte is detected"
+    # The forge image cannot COPY from images/inference (per-directory build
+    # context), so tillandsias-models reads copies. A copy that drifts is the
+    # exact failure the old hard-coded CLI map had. The red arm changes ONE
+    # byte in a scratch copy and proves the comparison sees it.
+    command: "set -u; for f in tier-table.tsv models.ollama.tsv; do a=$(sha256sum images/inference/tiers/$f); b=$(sha256sum images/default/cli/tiers/$f); [ \"${a%% *}\" = \"${b%% *}\" ] || { echo \"FAIL: images/default/cli/tiers/$f differs from images/inference/tiers/$f (${a%% *} vs ${b%% *})\"; exit 1; }; echo \"identical $f ${a%% *}\"; done; T=$(mktemp -d \"${TMPDIR:-/tmp}/tier-copy.XXXXXX\"); cp images/default/cli/tiers/tier-table.tsv \"$T/t\"; sed -i 's/^T2\\t4\\t/T2\\t5\\t/' \"$T/t\"; a=$(sha256sum images/inference/tiers/tier-table.tsv); m=$(sha256sum \"$T/t\"); [ \"${a%% *}\" != \"${m%% *}\" ] || { rm -rf \"$T\"; echo 'BROKEN WITNESS: a one-byte change was not detected'; exit 1; }; cp images/default/cli/tiers/tier-table.tsv \"$T/t\"; r=$(sha256sum \"$T/t\"); [ \"${a%% *}\" = \"${r%% *}\" ] || { rm -rf \"$T\"; echo 'FAIL: restoration not byte-identical'; exit 1; }; rm -rf \"$T\"; echo \"ok: copies identical; one-byte change detected (mutated ${m%% *}), restored ${r%% *}\""
+    timeout_ms: 8000
+    expected_behavior: "ok: copies identical"
+
+  - step: "both engine adapters resolve every logical id the table names, and neither carries an id the table lacks"
+    # SLOT-7: both engines resolve the same rows; an adapter that diverges fails here.
+    command: "set -u; cover() { d=\"$1\"; ids=\"\"; while IFS=\"$(printf '\\t')\" read -r t v r m; do [ -z \"$t\" ] && continue; case \"$t\" in \"#\"*) continue;; esac; [ \"$m\" = \"-\" ] && continue; o=$IFS; IFS=,; for x in $m; do ids=\"$ids $x\"; done; IFS=$o; done < \"$d/tier-table.tsv\"; for e in ollama llama-server; do for id in $ids; do TILLANDSIAS_TIERS_DIR=\"$d\" sh images/inference/tiers/tiers.sh artifact \"$e\" \"$id\" >/dev/null || { echo \"unmapped:$e:$id\"; return 1; }; done; while IFS=\"$(printf '\\t')\" read -r id rest; do [ -z \"$id\" ] && continue; case \"$id\" in \"#\"*) continue;; esac; case \" $ids \" in *\" $id \"*) ;; *) echo \"orphan:$e:$id\"; return 1;; esac; done < \"$d/models.$e.tsv\"; done; echo covered; }; out=$(cover images/inference/tiers); [ \"$out\" = covered ] && echo 'ok: adapters cover the table exactly' || { echo \"FAIL: $out\"; exit 1; }"
+    timeout_ms: 8000
+    expected_behavior: "ok: adapters cover the table exactly"
+
+  - step: "no tier row is written inline in the inference entrypoint any more"
+    # The ladder and the pulls are resolved from the table; a reintroduced literal fails here.
+    command: "set -u; inline() { n=$(grep -c -E 'ollama pull qwen|TIER=\"T[02-5]\"|VRAM_GB\" -ge|RAM_GB\" -ge' \"$1\" || true); echo \"$n\"; }; n=$(inline images/inference/entrypoint.sh); [ \"$n\" = 0 ] && grep -Fq '. \"$TIERS_SH\"' images/inference/entrypoint.sh && grep -Fq 'COPY tiers/ /usr/local/share/tillandsias/tiers/' images/inference/Containerfile && echo 'ok: no inline tier rows; entrypoint sources the shipped resolver' || { echo \"FAIL: $n inline tier row(s) in images/inference/entrypoint.sh, or the resolver is not wired\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: no inline tier rows"
+
+  - step: "negative control + closure: a reintroduced inline row and a diverging adapter both go RED, and byte-identical restoration goes GREEN (sha256 pre/post)"
+    # Exit criterion 4, in one run, on scratch copies (the real files are never touched).
+    # This is the NEGATIVE CONTROL for the inline-row grep above: it plants a row
+    # and proves the same check sees it, so that grep cannot pass vacuously.
+    command: "set -u; cover() { d=\"$1\"; ids=\"\"; while IFS=\"$(printf '\\t')\" read -r t v r m; do [ -z \"$t\" ] && continue; case \"$t\" in \"#\"*) continue;; esac; [ \"$m\" = \"-\" ] && continue; o=$IFS; IFS=,; for x in $m; do ids=\"$ids $x\"; done; IFS=$o; done < \"$d/tier-table.tsv\"; for e in ollama llama-server; do for id in $ids; do TILLANDSIAS_TIERS_DIR=\"$d\" sh images/inference/tiers/tiers.sh artifact \"$e\" \"$id\" >/dev/null || { echo \"unmapped:$e:$id\"; return 1; }; done; while IFS=\"$(printf '\\t')\" read -r id rest; do [ -z \"$id\" ] && continue; case \"$id\" in \"#\"*) continue;; esac; case \" $ids \" in *\" $id \"*) ;; *) echo \"orphan:$e:$id\"; return 1;; esac; done < \"$d/models.$e.tsv\"; done; echo covered; }; inline() { n=$(grep -c -E 'ollama pull qwen|TIER=\"T[02-5]\"|VRAM_GB\" -ge|RAM_GB\" -ge' \"$1\" || true); echo \"$n\"; }; T=$(mktemp -d \"${TMPDIR:-/tmp}/tier-closure.XXXXXX\"); cp images/inference/entrypoint.sh \"$T/ep\"; pre=$(sha256sum \"$T/ep\"); printf '    ollama pull qwen2.5:7b\\n' >> \"$T/ep\"; [ \"$(inline \"$T/ep\")\" != 0 ] || { rm -rf \"$T\"; echo 'BROKEN: a reintroduced inline pull was not detected'; exit 1; }; cp images/inference/entrypoint.sh \"$T/ep\"; post=$(sha256sum \"$T/ep\"); [ \"${pre%% *}\" = \"${post%% *}\" ] && [ \"$(inline \"$T/ep\")\" = 0 ] || { rm -rf \"$T\"; echo 'FAIL: restored entrypoint not clean'; exit 1; }; mkdir \"$T/d\"; cp images/inference/tiers/*.tsv \"$T/d/\"; apre=$(sha256sum \"$T/d/models.llama-server.tsv\"); grep -v '^qwen2.5-14b-instruct' images/inference/tiers/models.llama-server.tsv > \"$T/d/models.llama-server.tsv\"; red=$(cover \"$T/d\"); [ \"$red\" = 'unmapped:llama-server:qwen2.5-14b-instruct' ] || { rm -rf \"$T\"; echo \"BROKEN: diverging adapter not detected ($red)\"; exit 1; }; cp images/inference/tiers/models.llama-server.tsv \"$T/d/\"; apost=$(sha256sum \"$T/d/models.llama-server.tsv\"); [ \"${apre%% *}\" = \"${apost%% *}\" ] && [ \"$(cover \"$T/d\")\" = covered ] || { rm -rf \"$T\"; echo 'FAIL: restored adapter not green'; exit 1; }; rm -rf \"$T\"; echo \"ok: closure red on inline row and on adapter divergence ($red); green after restoration (entrypoint ${pre%% *}, adapter ${apre%% *})\""
+    timeout_ms: 15000
+    expected_behavior: "ok: closure red on inline row"
+
+  - step: "classification matches the ladder the entrypoint used to inline; T0 is never a classification result"
+    # Behaviour is unchanged by the migration: these are the old inline ladder's boundaries.
+    command: "set -u; for c in '40 0 T5' '32 0 T5' '31 0 T4' '16 0 T4' '15 0 T3' '8 0 T3' '0 32 T3' '7 31 T2' '4 0 T2' '0 16 T2' '3 15 T1' '0 0 T1'; do set -- $c; got=$(sh images/inference/tiers/tiers.sh classify $1 $2); [ \"$got\" = \"$3\" ] || { echo \"FAIL: vram=$1 ram=$2 -> $got, want $3\"; exit 1; }; done; echo 'ok: ladder parity (12 boundary points), T0 never selected'"
+    timeout_ms: 8000
+    expected_behavior: "ok: ladder parity"
+
+  - step: "the entrypoint's DEFAULT_MODELS literal is the T0 baseline the table names"
+    # The literal stays (order 168, pinned by litmus:zen-default-with-ollama-shape); it must equal the table's T0 row through the ollama adapter.
+    command: "set -u; t0=$(sh images/inference/tiers/tiers.sh models T0); tag=$(sh images/inference/tiers/tiers.sh artifact ollama \"$t0\"); want=\"DEFAULT_MODELS=\\\"\\${TILLANDSIAS_DEFAULT_MODELS:-$tag}\\\"\"; grep -Fq \"$want\" images/inference/entrypoint.sh || { echo \"FAIL: DEFAULT_MODELS default is not $tag\"; exit 1; }; T=$(mktemp -d \"${TMPDIR:-/tmp}/tier-default.XXXXXX\"); sed 's/TILLANDSIAS_DEFAULT_MODELS:-qwen2.5:0.5b/TILLANDSIAS_DEFAULT_MODELS:-llama3.2:3b/' images/inference/entrypoint.sh > \"$T/ep\"; if grep -Fq \"$want\" \"$T/ep\"; then rm -rf \"$T\"; echo 'BROKEN: negative control - a changed default still matched'; exit 1; fi; rm -rf \"$T\"; echo \"ok: DEFAULT_MODELS default ($tag) is the table's T0 ($t0); negative control: a changed default is caught\""
+    timeout_ms: 5000
+    expected_behavior: "ok: DEFAULT_MODELS default"
+
+  - step: "the resolver and the table are POSIX sh / plain data, no python"
+    command: "sh -n images/inference/tiers/tiers.sh || { echo 'FAIL: tiers.sh is not POSIX sh'; exit 1; }; code=$(grep -vE '^[[:space:]]*#' images/inference/tiers/tiers.sh); if grep -qE '(^|[^a-zA-Z])python[0-9]?([^a-zA-Z]|$)' <<<\"$code\"; then echo 'FAIL: tiers.sh invokes python'; exit 1; fi; echo 'ok: POSIX resolver, data table'"
+    timeout_ms: 5000
+    expected_behavior: "ok: POSIX resolver"
+
+observability:
+  traces:
+    - "@trace spec:inference-engine-slots"
+    - "@trace order:482d"
+  expected_log: "one shared tier table, two adapters covering it exactly, no inline rows, byte-identical CLI copies, ladder parity"
+  log_fields:
+    spec: "inference-engine-slots"
+    test: "inference-tier-table-migration"
+    artifact: "images/inference/tiers/ + images/default/cli/tiers/ + images/inference/entrypoint.sh"
+
+rollback:
+  on_failure: >
+    If the copies differ, re-copy images/inference/tiers/{tier-table,models.ollama}.tsv
+    over images/default/cli/tiers/ (the canonical side wins). If an adapter is
+    short or carries an orphan id, add or remove the row in that adapter so it
+    covers tier-table.tsv exactly. If an inline row came back, delete it and
+    resolve the tier through tiers.sh. Never edit the CLI copy by hand.
+  command: "sha256sum images/inference/tiers/*.tsv images/default/cli/tiers/*.tsv; sh images/inference/tiers/tiers.sh models T5"

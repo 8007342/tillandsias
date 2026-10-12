@@ -200,6 +200,9 @@ RUN mkdir -p /opt/agents/tillandsias-cli/bin
 COPY cli/tillandsias-inventory /opt/agents/tillandsias-cli/bin/tillandsias-inventory
 COPY cli/tillandsias-services /opt/agents/tillandsias-cli/bin/tillandsias-services
 COPY cli/tillandsias-models /opt/agents/tillandsias-cli/bin/tillandsias-models
+# Order 482d: byte-identical copies of the canonical tier table + ollama
+# adapter (images/inference/tiers/); tillandsias-models' tier_for reads them.
+COPY cli/tiers/ /opt/agents/tillandsias-cli/share/tiers/
 COPY cli/tellme /opt/agents/tillandsias-cli/bin/tellme
 RUN chmod +x /opt/agents/tillandsias-cli/bin/* \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-inventory /usr/local/bin/tillandsias-inventory \

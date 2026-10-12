@@ -88,6 +88,10 @@ COPY engine-tuning.sh /usr/local/bin/tillandsias-engine-tuning.sh
 # installed or executed; runnable standalone so litmus can plant stale and
 # tampered engines in a scratch cache.
 COPY engine-integrity.sh /usr/local/bin/tillandsias-engine-integrity.sh
+# @trace spec:inference-engine-slots — order 482d shared T0-T5 tier table
+# Declarative data (tier-table.tsv + one adapter per engine) and its POSIX
+# resolver; the entrypoint sources tiers.sh instead of carrying inline rows.
+COPY tiers/ /usr/local/share/tillandsias/tiers/
 # @trace spec:external-logs-layer
 # Manifest of curated external log files published by this image.
 # The tray-side auditor reads this at /etc/tillandsias/external-logs.yaml

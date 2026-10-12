@@ -233,7 +233,6 @@ scripts/test-windows-host-lane-refusal.sh 1
 scripts/test-windows-only-sources-verified.sh 1
 scripts/test-windows-tray-clippy.sh 1
 scripts/test-wsl-builder-kill-reaches-guest.sh 1
-scripts/test-wt-reparse-scan.sh 1
 scripts/test-yaml-reader-availability.sh 1
 scripts/update-convergence-dashboard.sh 2
 scripts/validate-traces.sh 1

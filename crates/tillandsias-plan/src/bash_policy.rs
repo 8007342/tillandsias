@@ -743,6 +743,22 @@ pub fn classify(cmd: &str, ctx: &Context) -> Classification {
 /// The context the hook runs in: cwd from the hook input, host kind from the
 /// policy engine's three sources, scratch roots from TMPDIR and the env.
 pub fn context_for(cwd: &Path) -> Context {
+    context_from(
+        cwd,
+        std::env::var("TMPDIR").ok(),
+        std::env::var("TILLANDSIAS_PRETOOLUSE_SCRATCH").ok(),
+        darwin_user_temp_dir(),
+    )
+}
+
+/// [`context_for`] with its environment passed in, so a test can name the
+/// scratch roots instead of inheriting the test process's own TMPDIR.
+pub fn context_from(
+    cwd: &Path,
+    tmpdir: Option<String>,
+    extra: Option<String>,
+    darwin_temp: Option<PathBuf>,
+) -> Context {
     let root = crate::branch_discipline::find_root(cwd).unwrap_or_else(|| cwd.to_path_buf());
     // Scratch roots: $TMPDIR, and /tmp and /private/tmp on every platform
     // (coordinator ruling 2026-09-28, from macbookair's darwin run: TMPDIR is
@@ -750,12 +766,25 @@ pub fn context_for(cwd: &Path) -> Context {
     // for /tmp as on Linux). Paths BENEATH a root are scratch; the roots
     // themselves still ask (the floor treats target == root as a destroy).
     let mut scratch = vec![PathBuf::from("/tmp"), PathBuf::from("/private/tmp")];
-    if let Ok(t) = std::env::var("TMPDIR")
+    if let Some(t) = tmpdir
         && !t.is_empty()
     {
         scratch.push(PathBuf::from(t.trim_end_matches('/')));
     }
-    if let Ok(extra) = std::env::var("TILLANDSIAS_PRETOOLUSE_SCRATCH") {
+    // ORDER 1621-bvb2. darwin's per-user temp dir is the OS's own TMPDIR, the
+    // same class as /tmp (coordinator ruling 2026-10-11). An agent session can
+    // run with TMPDIR elsewhere, and there, cleaning what a bare mktemp leaked
+    // into /var/folders/…/T (1619-7i9r) went to the OPERATOR as a
+    // workspace-destroy consent: 2 of the 3 real prompts measured 2026-10-11.
+    // Beneath it is scratch; the dir itself, and /var/folders, still ask. Both
+    // spellings: confstr says /var/…, a resolved path says /private/var/….
+    if let Some(d) = darwin_temp {
+        if let Ok(rest) = d.strip_prefix("/var") {
+            scratch.push(Path::new("/private/var").join(rest));
+        }
+        scratch.push(d);
+    }
+    if let Some(extra) = extra {
         scratch.extend(
             extra
                 .split(':')
@@ -769,6 +798,37 @@ pub fn context_for(cwd: &Path) -> Context {
         scratch,
         protected: cp::protected_refs(&root),
     }
+}
+
+/// `getconf DARWIN_USER_TEMP_DIR`, read with confstr(3) and no fork: the hook
+/// runs on every Bash call. Trailing `/` trimmed; None off darwin or on error.
+#[cfg(target_vendor = "apple")]
+pub fn darwin_user_temp_dir() -> Option<PathBuf> {
+    let mut buf = vec![0u8; 1024];
+    // SAFETY: buf is valid for buf.len() bytes, and confstr writes at most that
+    // many, NUL-terminated; a return of 0 (error) or more than the buffer
+    // (truncated) is rejected before the bytes are read.
+    let n = unsafe {
+        libc::confstr(
+            libc::_CS_DARWIN_USER_TEMP_DIR,
+            buf.as_mut_ptr().cast(),
+            buf.len(),
+        )
+    };
+    if n == 0 || n > buf.len() {
+        return None;
+    }
+    let s = std::ffi::CStr::from_bytes_until_nul(&buf)
+        .ok()?
+        .to_str()
+        .ok()?;
+    let s = s.trim_end_matches('/');
+    (!s.is_empty()).then(|| PathBuf::from(s))
+}
+
+#[cfg(not(target_vendor = "apple"))]
+pub fn darwin_user_temp_dir() -> Option<PathBuf> {
+    None
 }
 
 /// Where the bridge's decisions go: the per-host policy AUDIT (1443-w9hf),
@@ -886,6 +946,57 @@ mod tests {
         );
         assert_eq!(classify("rm -rf /etc/x", &c).verdict, Verdict::Ask);
         assert_eq!(classify("git status", &c).verdict, Verdict::Allow);
+    }
+
+    /// ORDER 1621-bvb2, with the roots named rather than inherited: beneath the
+    /// darwin per-user temp dir is scratch (both spellings), and the dir itself
+    /// and /var/folders still ask. Without the root (the pre-fix context), the
+    /// same rm beneath it asked: the operator prompts measured 2026-10-11.
+    #[test]
+    fn darwin_user_temp_dir_is_a_scratch_root() {
+        let t = "/var/folders/ab/cdef/T";
+        let with = context_from(Path::new("/work/proj"), None, None, Some(PathBuf::from(t)));
+        let without = context_from(Path::new("/work/proj"), None, None, None);
+        let rm = |p: &str| format!("rm -rf {p}");
+        assert_eq!(
+            classify(&rm(&format!("{t}/x.abc")), &with).verdict,
+            Verdict::Allow
+        );
+        assert_eq!(
+            classify(&rm(&format!("/private{t}/x.abc")), &with).verdict,
+            Verdict::Allow
+        );
+        assert_eq!(classify(&rm(t), &with).verdict, Verdict::Ask);
+        assert_eq!(classify(&rm("/var/folders"), &with).verdict, Verdict::Ask);
+        assert_eq!(
+            classify(&rm(&format!("{t}/x.abc")), &without).verdict,
+            Verdict::Ask
+        );
+    }
+
+    /// The real confstr answer, on darwin: the exit criterion's own form,
+    /// `rm -rf "$(getconf DARWIN_USER_TEMP_DIR)/x.abc"`, allows, while the dir
+    /// and /var/folders ask, in one run. getconf is asked independently.
+    #[cfg(target_vendor = "apple")]
+    #[test]
+    fn darwin_user_temp_dir_matches_getconf() {
+        let out = std::process::Command::new("getconf")
+            .arg("DARWIN_USER_TEMP_DIR")
+            .output()
+            .expect("getconf runs on darwin");
+        let g = String::from_utf8_lossy(&out.stdout)
+            .trim()
+            .trim_end_matches('/')
+            .to_string();
+        let d = darwin_user_temp_dir().expect("confstr answers on darwin");
+        assert_eq!(d, PathBuf::from(&g));
+        let c = context_from(Path::new("/work/proj"), None, None, Some(d));
+        assert_eq!(
+            classify(&format!("rm -rf {g}/x.abc"), &c).verdict,
+            Verdict::Allow
+        );
+        assert_eq!(classify(&format!("rm -rf {g}"), &c).verdict, Verdict::Ask);
+        assert_eq!(classify("rm -rf /var/folders", &c).verdict, Verdict::Ask);
     }
 
     #[test]

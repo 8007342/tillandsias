@@ -632,11 +632,19 @@ RAM_GB=$(awk '/MemTotal/ {printf "%d", $2/1024/1024}' /proc/meminfo 2>/dev/null 
 VRAM_MB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 || echo 0)
 VRAM_GB=$(( ${VRAM_MB:-0} / 1024 ))
 
+# Order 482d: the ladder is DATA (images/inference/tiers/tier-table.tsv, the
+# one shared T0-T5 source both engine slots read); tiers.sh resolves it. No
+# tier row may be written inline here again — litmus:inference-tier-table-migration
+# refuses one.
+TIERS_SH=/usr/local/share/tillandsias/tiers/tiers.sh
 TIER="T1"
-if [ "$VRAM_GB" -ge 32 ]; then TIER="T5"
-elif [ "$VRAM_GB" -ge 16 ]; then TIER="T4"
-elif [ "$VRAM_GB" -ge 8 ] || [ "$RAM_GB" -ge 32 ]; then TIER="T3"
-elif [ "$VRAM_GB" -ge 4 ] || [ "$RAM_GB" -ge 16 ]; then TIER="T2"
+if [ -r "$TIERS_SH" ]; then
+    # shellcheck source=tiers/tiers.sh
+    . "$TIERS_SH"
+    TIER="$(tillandsias_tier_classify "$VRAM_GB" "$RAM_GB")" || TIER="T1"
+    [ -n "$TIER" ] || TIER="T1"
+else
+    echo "[inference] WARN: $TIERS_SH missing — tier table unavailable, classifying T1 and skipping tier pulls" >&2
 fi
 
 echo "[inference] tier=$TIER (RAM ${RAM_GB}GB, VRAM ${VRAM_GB}GB)"
@@ -855,36 +863,34 @@ elif [ "$PRELOAD_POLICY" != "eager" ]; then
 elif [ "${TILLANDSIAS_INFERENCE_TIER_PULLS:-0}" != "1" ]; then
     echo "[inference] tier pulls opt-in (set TILLANDSIAS_INFERENCE_TIER_PULLS=1) — skipping runtime tier pulls"
 else
-    # T2+ pull in background if tier permits.
-    case "$TIER" in
-        T5|T4|T3|T2)
-            (
-                [ "$TIER" != "T0" ] && [ "$TIER" != "T1" ] && \
-                    ollama pull qwen2.5:7b \
-                    && echo "[inference] T2 (qwen2.5:7b) ready" \
-                    || echo "[inference] T2 (qwen2.5:7b) pull failed (squid SSL-bump EOF likely; non-fatal)" >&2
-                case "$TIER" in T5|T4|T3)
-                    ollama pull qwen2.5-coder:7b \
-                        && echo "[inference] T3 (qwen2.5-coder:7b) ready" \
-                        || echo "[inference] T3 (qwen2.5-coder:7b) pull failed (non-fatal)" >&2
-                esac
-                case "$TIER" in T5|T4)
-                    ollama pull qwen2.5:14b \
-                        && echo "[inference] T4 (qwen2.5:14b) ready" \
-                        || echo "[inference] T4 (qwen2.5:14b) pull failed (non-fatal)" >&2
-                esac
-                case "$TIER" in T5)
-                    ollama pull qwen2.5-coder:32b \
-                        && echo "[inference] T5 (qwen2.5-coder:32b) ready" \
-                        || echo "[inference] T5 (qwen2.5-coder:32b) pull failed (non-fatal)" >&2
-                esac
-                echo "[inference] runtime tier pulls complete"
-            ) &
-            ;;
-        *)
-            echo "[inference] tier=T0/T1 only — no runtime pulls"
-            ;;
-    esac
+    # Order 482d: pull what the shared table says this tier adds above the T0
+    # baseline (the baseline is the DEFAULT_MODELS set, pulled above), smallest
+    # first, each resolved through the ollama adapter. A logical id the adapter
+    # cannot map is reported and skipped — never pulled under a guessed name.
+    _tier_extra=""
+    if command -v tillandsias_tier_models >/dev/null 2>&1; then
+        _tier_base=" $(tillandsias_tier_models T0) "
+        for _tier_id in $(tillandsias_tier_models "$TIER"); do
+            case "$_tier_base" in *" $_tier_id "*) continue ;; esac
+            _tier_extra="$_tier_id $_tier_extra"
+        done
+    fi
+    if [ -n "$_tier_extra" ]; then
+        (
+            for _tier_id in $_tier_extra; do
+                if ! _tier_tag="$(tillandsias_tier_artifact ollama "$_tier_id")"; then
+                    echo "[inference] tier $TIER: $_tier_tag — no ollama mapping, not pulled" >&2
+                    continue
+                fi
+                ollama pull "$_tier_tag" \
+                    && echo "[inference] $TIER ($_tier_tag) ready" \
+                    || echo "[inference] $TIER ($_tier_tag) pull failed (squid SSL-bump EOF likely; non-fatal)" >&2
+            done
+            echo "[inference] runtime tier pulls complete"
+        ) &
+    else
+        echo "[inference] tier=$TIER adds nothing above the T0 baseline — no runtime pulls"
+    fi
 fi
 
 # Hand off to ollama as the foreground process for signal handling.

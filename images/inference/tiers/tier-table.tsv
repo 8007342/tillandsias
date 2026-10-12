@@ -1,0 +1,44 @@
+# @trace spec:inference-engine-slots (SLOT-7, req-id e52fc9d8), order 482d
+# ORDER MATTERS: rows are highest tier first; classify takes the first match.
+# Do not reorder (litmus:inference-tier-table-migration checks ladder parity).
+#
+# THE T0-T5 MODEL TIER TABLE — the ONLY shared tier-row source. Declarative
+# data: tab-separated, read with the shell's own `read`, no interpreter.
+# Both engine slots resolve these rows through their adapters
+# (models.ollama.tsv, models.llama-server.tsv); the rows themselves name only
+# ENGINE-NEUTRAL logical model ids, never an ollama tag or a GGUF file.
+#
+# Columns (TAB-separated; '-' = not applicable):
+#   tier        T0..T5
+#   min_vram_gb a host with VRAM_GB >= this is at least this tier
+#   min_ram_gb  OR a host with RAM_GB >= this is at least this tier
+#   models      logical ids this tier ADDS (comma-separated, '-' none);
+#               a tier's model set is its own plus every LOWER row's
+#
+# Classification: rows are scanned top (T5) to bottom; the FIRST row whose
+# vram OR ram floor is met is the host's tier. T1 (floors 0/0) is the
+# fallback every host meets.
+#
+# T0 IS NEVER A CLASSIFICATION RESULT. Its floors are '-' so no host is ever
+# classified T0. It is the ALWAYS-PRESENT BASELINE: its models belong to
+# every tier's set, and they are the DEFAULT_MODELS set the entrypoint pulls
+# on every host (order 168 narrowed that set to qwen2.5:0.5b to fix an OOM).
+# "No local inference at all" is TILLANDSIAS_NO_LOCAL_INFERENCE, not a tier.
+#
+# Larger-tier pulls stay OPT-IN (TILLANDSIAS_INFERENCE_TIER_PULLS=1, order
+# 392a); this table says WHAT each tier would pull, not WHETHER.
+#
+# The router's model_tier value "tier-s" (images/inference/policy-router.toml,
+# policy_router.rs is_small_resident_tier) is NOT a row here: it is a routing
+# alias for "a small CPU-resident model" on the router's own axis.
+#
+# A byte-identical copy lives at images/default/cli/tier-table.tsv for the
+# forge's tillandsias-models (separate build context);
+# litmus:inference-tier-table-migration asserts the two are identical.
+#tier	min_vram_gb	min_ram_gb	models
+T5	32	-	qwen2.5-coder-32b-instruct
+T4	16	-	qwen2.5-14b-instruct
+T3	8	32	qwen2.5-coder-7b-instruct
+T2	4	16	qwen2.5-7b-instruct
+T1	0	0	-
+T0	-	-	qwen2.5-0.5b-instruct
