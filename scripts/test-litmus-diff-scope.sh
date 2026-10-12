@@ -282,12 +282,16 @@ fi
 # ── F. dead-glob guard: negative control ───────────────────────────────────
 # 634-39ik: a guard that has never been seen to fail is not known to work. This
 # builds a throwaway repo where one glob is deliberately dead and proves
-# check-litmus-dead-inputs.sh refuses it — and that it passes on the live case.
+# check-litmus-dead-inputs.lua refuses it — and that it passes on the live case.
 printf '\nF. dead-glob guard (negative control)\n'
 
 ctl="$suite_tmp/deadglob"
-mkdir -p "$ctl/openspec/litmus-tests" "$ctl/scripts" "$ctl/crates/real/src"
-cp "$ROOT/scripts/check-litmus-dead-inputs.sh" "$ctl/scripts/"
+mkdir -p "$ctl/openspec/litmus-tests" "$ctl/scripts/lua" "$ctl/crates/real/src"
+cp "$ROOT/scripts/lua/check-litmus-dead-inputs.lua" "$ctl/scripts/lua/"
+# The guard is Lua since 1643-q3at; run it with the repo's own plan binary.
+DI_PLAN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || DI_PLAN=""
+case "$DI_PLAN" in ./*) DI_PLAN="$ROOT/${DI_PLAN#./}" ;; esac
+dead_inputs() { (cd "$ctl" && "$DI_PLAN" script run scripts/lua/check-litmus-dead-inputs.lua 2>&1); }
 printf 'fn main(){}\n' > "$ctl/crates/real/src/main.rs"
 git -C "$ctl" init -q
 git -C "$ctl" config user.email t@example.com
@@ -308,7 +312,9 @@ YAML
 git -C "$ctl" add -A
 git -C "$ctl" -c commit.gpgsign=false commit -qm seed
 
-if out="$(bash "$ctl/scripts/check-litmus-dead-inputs.sh" 2>&1)"; then
+if [[ -z "$DI_PLAN" ]]; then
+    bad "no runnable tillandsias-plan to run the dead-glob guard"
+elif out="$(dead_inputs)"; then
     ok "passes when every glob resolves (${out##*:})"
 else
     bad "guard refused a healthy annotation: $out"
@@ -325,7 +331,7 @@ YAML
 git -C "$ctl" add -A
 git -C "$ctl" -c commit.gpgsign=false commit -qm dead
 
-if out="$(bash "$ctl/scripts/check-litmus-dead-inputs.sh" 2>&1)"; then
+if out="$(dead_inputs)"; then
     bad "guard PASSED a dead glob 'crate/**' — it cannot detect the class it exists for"
 else
     if grep -q "violation:litmus-dead-inputs:1" <<<"$out" && grep -q "crate/\*\*" <<<"$out"; then

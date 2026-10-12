@@ -1,0 +1,63 @@
+{
+  "query": "iphone 12 pro max",
+  "id": "apple-iphone-12-pro-max",
+  "model": "iPhone 12 Pro Max",
+  "brand": "apple",
+  "orientation": "portrait",
+  "viewport": {
+    "w": 428,
+    "h": 926
+  },
+  "screen": {
+    "w": 428,
+    "h": 926
+  },
+  "dpr": 3.0,
+  "engine": "webkit",
+  "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 14_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.2 Mobile/15E148 Safari/604.1",
+  "mobile": true,
+  "touch": true,
+  "rule": "alias",
+  "approximated": false,
+  "alternatives": [],
+  "device": {
+    "id": "apple-iphone-12-pro-max",
+    "brand": "apple",
+    "family": "iphone",
+    "model": "iPhone 12 Pro Max",
+    "aliases": [
+      "iphone 12 pro max"
+    ],
+    "released": "2020-11",
+    "flagship": false,
+    "form": "phone",
+    "os": {
+      "name": "ios",
+      "version": "14.4"
+    },
+    "engine": "webkit",
+    "screen": {
+      "w": 428,
+      "h": 926
+    },
+    "viewport": {
+      "w": 428,
+      "h": 926
+    },
+    "browser_viewport": {
+      "w": 428,
+      "h": 746
+    },
+    "dpr": 3.0,
+    "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 14_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.2 Mobile/15E148 Safari/604.1",
+    "mobile": true,
+    "touch": true,
+    "max_touch_points": 5,
+    "source": {
+      "kind": "playwright",
+      "url": "https://github.com/microsoft/playwright/blob/606f017a1b51530df6a0f711babcf2c6add21bc5/packages/isomorphic/deviceDescriptorsSource.json",
+      "license": "Apache-2.0"
+    }
+  },
+  "match": true
+}

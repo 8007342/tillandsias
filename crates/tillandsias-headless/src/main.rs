@@ -354,6 +354,12 @@ fn main() {
         std::process::exit(msg_serve::run_cli(&user_args));
     }
 
+    // Order 1643-q3at: `devices resolve <query...>` / `devices list`. The
+    // device catalogue is pure data; dispatched early, it touches nothing.
+    if user_args.first().map(String::as_str) == Some("devices") {
+        std::process::exit(run_devices_cli(&user_args[1..]));
+    }
+
     // Order 828-h7kw: `--hold-window -- <command...>`. The terminal a lane
     // opens runs THIS, so the window closes only after the operator has seen
     // how the lane ended. Hidden helper mode, like --internal-ensure-image.
@@ -17395,6 +17401,53 @@ pub(crate) fn hold_window_line(status: &std::process::ExitStatus) -> String {
 /// name (1457-r8yi): tells the entrypoint's exit_pause the host already holds
 /// the window.
 pub(crate) const HOLD_WINDOW_ENV: &str = "TILLANDSIAS_HOST_HOLDS_WINDOW";
+
+/// Order 1643-q3at: `tillandsias devices resolve <query...>` prints the
+/// resolved device as JSON (exit 0), or `{"match":false,…}` (exit 1).
+/// `tillandsias devices list` prints one `id<TAB>model<TAB>w×h@dpr` line per
+/// catalogue device.
+fn run_devices_cli(args: &[String]) -> i32 {
+    use tillandsias_core::devices;
+    match args.first().map(String::as_str) {
+        Some("resolve") if args.len() > 1 => {
+            let query = args[1..].join(" ");
+            match devices::resolve(&query) {
+                Some(found) => {
+                    let mut out = serde_json::to_value(&found).unwrap_or_default();
+                    if let Some(obj) = out.as_object_mut() {
+                        obj.insert("match".into(), serde_json::Value::Bool(true));
+                    }
+                    println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
+                    0
+                }
+                None => {
+                    println!(
+                        "{}",
+                        serde_json::json!({
+                            "match": false,
+                            "query": query,
+                            "reason": "no catalogue device matches, and the query names no brand to approximate within",
+                        })
+                    );
+                    1
+                }
+            }
+        }
+        Some("list") => {
+            for d in devices::all() {
+                println!(
+                    "{}\t{}\t{}x{}@{}",
+                    d.id, d.model, d.viewport.w, d.viewport.h, d.dpr
+                );
+            }
+            0
+        }
+        _ => {
+            eprintln!("usage: tillandsias devices resolve <query...> | tillandsias devices list");
+            2
+        }
+    }
+}
 
 pub(crate) fn run_hold_window(args: &[String]) -> i32 {
     let argv: Vec<&String> = match args.first().map(String::as_str) {
