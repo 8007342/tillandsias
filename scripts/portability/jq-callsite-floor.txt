@@ -53,7 +53,6 @@
 2 scripts/nix-toolbox.sh
 2 scripts/probe-complement-selfcheck.sh
 1 scripts/probe-nix-capability.sh
-4 scripts/query-traces.sh
 1 scripts/record-ci-phase-result.sh
 3 scripts/record-expert-accuracy.sh
 1 scripts/record-nix-cache-metrics.sh
