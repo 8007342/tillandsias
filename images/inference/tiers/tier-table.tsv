@@ -1,4 +1,6 @@
 # @trace spec:inference-engine-slots (SLOT-7, req-id e52fc9d8), order 482d
+# ORDER MATTERS: rows are highest tier first; classify takes the first match.
+# Do not reorder (litmus:inference-tier-table-migration checks ladder parity).
 #
 # THE T0-T5 MODEL TIER TABLE — the ONLY shared tier-row source. Declarative
 # data: tab-separated, read with the shell's own `read`, no interpreter.
