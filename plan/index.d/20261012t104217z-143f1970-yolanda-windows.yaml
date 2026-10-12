@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: windows-wsl2-remediation-detect-only
+    field: next_action
+    value: 'Needs a Windows host without WSL2 installed (a fresh VM or a new machine); never uninstall WSL from an operator host. On such a host, record a transcript of the curl install and the first tray launch: the wsl --install attempt, then the restart-required guidance, and no generic launch failure. That closes criterion 2. Criterion 1 is implemented (f2a1de61d); see the 2026-10-12 note.'
+    ts: "2026-10-12T10:42:17Z"
+    host: yolanda-windows
