@@ -108,10 +108,25 @@ critical_path:
   # exit 3 means "converging". Asserting a failure on any non-zero would fail
   # every clean install; the phrase above is attached to the -eq 1 branch, so
   # this conjunct pins the narrow test rather than the broad one.
+  #
+  # 1561-47a8 (4504c6fd9, operator ruling 2026-10-08: end-user lines only)
+  # reworded that exit-1 throw to "The downloaded Tillandsias failed its
+  # self-check" and moved the os_version / wsl_version / build_commit lines to
+  # the install log via Log. The check itself is intact, so the pin now names
+  # the -eq 1 branch directly plus the new wording, keeping it narrow.
   - step: "install-windows.ps1 contains the post-install --version + --diagnose sanity checks AND surfaces OS + WSL versions"
-    command: "grep -F 'cmd.exe' scripts/install-windows.ps1 && grep -Fe '--diagnose --json' scripts/install-windows.ps1 && grep -Fe '--version' scripts/install-windows.ps1 && grep -F 'install bits broken' scripts/install-windows.ps1 && grep -F 'build_commit' scripts/install-windows.ps1 && grep -F 'os_version' scripts/install-windows.ps1 && grep -F 'wsl_version' scripts/install-windows.ps1"
+    command: "grep -F 'cmd.exe' scripts/install-windows.ps1 && grep -Fe '--diagnose --json' scripts/install-windows.ps1 && grep -Fe '--version' scripts/install-windows.ps1 && grep -F 'if ($DiagExit -eq 1) {' scripts/install-windows.ps1 && grep -F 'failed its self-check (exit $DiagExit)' scripts/install-windows.ps1 && grep -F 'build_commit' scripts/install-windows.ps1 && grep -F 'os_version' scripts/install-windows.ps1 && grep -F 'wsl_version' scripts/install-windows.ps1"
     expected_behavior: "grep succeeds"
     assert_exit: 0
+    timeout_ms: 3000
+
+  # NEGATIVE CONTROL for the -eq 1 conjunct above (1637-arwp): a copy of the
+  # installer whose diagnose failure test is broadened to any non-zero exit
+  # (which would Die on every first install, where exit 2 is expected) must
+  # FAIL that conjunct.
+  - step: "negative control: an installer that dies on any non-zero --diagnose exit fails the narrow -eq 1 pin"
+    command: "T=$(mktemp); sed 's/if ([$]DiagExit -eq 1) {/if ($DiagExit -ne 0) {/' scripts/install-windows.ps1 > \"$T\"; if grep -qF 'if ($DiagExit -eq 1) {' \"$T\"; then rm -f \"$T\"; echo 'FAIL: the broadened exit test still matched the narrow pin'; exit 1; fi; grep -qF 'if ($DiagExit -ne 0) {' \"$T\" || { rm -f \"$T\"; echo 'FAIL: the mutation did not apply, so this control proves nothing'; exit 1; }; rm -f \"$T\"; echo 'ok: broadened diagnose exit test rejected'"
+    expected_behavior: "ok: broadened diagnose exit test rejected"
     timeout_ms: 3000
 
   - step: "tray-diagnose.ps1 consumer script surfaces the 16-key JSON + both binary + script verdicts"

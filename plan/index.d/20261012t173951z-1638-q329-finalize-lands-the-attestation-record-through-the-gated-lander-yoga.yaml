@@ -1,0 +1,89 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# Filed by yoga 2026-10-12 from its own cycle-3 finalize refusal (loop-status
+# 20261012t112433z-283b275c-yoga.md) and its cycle-6 counter-measurement
+# (b626494f0).
+packets:
+  - packet_id: finalize-lands-the-attestation-record-through-the-gated-lander-although-the-plan-only-lane-admits-it-ungated
+    order: 1638-q329
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [attestation, finalize, land, push-lane, gate-cost, fleet]
+    estimated_hours: 2
+    owned_files:
+      - scripts/finalize-cycle.sh
+      - scripts/test-mo-full-record-precedes-marker.sh
+    related: [1422-8wzb, 1335-2nzf, 1228-xc6c]
+    title: |
+      scripts/finalize-cycle.sh lands the mo-full attestation record — an append under plan/mo-full-attestations.d/ that the pre-push hook's plan-only lane admits without a gate — through scripts/land-on-platform-branch.sh, so on a busy trunk a three-line record pays up to four full gates and then refuses, and the host reads as wedged
+    context: |
+      MEASURED on yoga 2026-10-12, cycle-3 exit (loop-status
+      20261012t112433z-283b275c-yoga.md): the cycle's work was already on
+      trunk, the stamp was stale for the tree, and finalize's "land the
+      ledger record" step — `scripts/land-on-platform-branch.sh "$BRANCH" 4`
+      right after `git add plan/mo-full-attestations.d && git commit` —
+      exhausted its four attempts between 09:59Z and 11:21Z on a commit whose
+      diff was one appended record, sibling plan-lane pushes moving origin
+      during each gate. It ended `refused:finalize:ledger-land-failed`:
+      record committed, marker withheld. The remedy that worked took
+      seconds: `git rebase origin/linux-next && git push origin linux-next`
+      — the plan-only lane (record landed as e3be61ce5) — then
+      `scripts/meta-orchestration-worktree-guard.sh verify <boundary>` and
+      `scripts/mo-full-attest.sh self` derived the marker.
+      THE LANE ALREADY ADMITS THIS SHAPE. The pre-push hook's plan-only lane
+      lists plan/mo-full-attestations.d/?*.md as an append-only ledger
+      validated by scripts/check-mo-full-attestations.sh (its own refusal
+      text names the directory, quoted in 1228-xc6c). The record carries no
+      code by construction. The gate the lander runs is for the TREE; the
+      outgoing DIFF is one record the hook would accept ungated.
+      COUNTER-MEASUREMENT, same host, cycle 6 (b626494f0, 15:45Z): with a
+      valid full-scope stamp in the tree the lander adopted it
+      (ok:land-adopts-valid-stamp) and the whole finalize took 14 s. So the
+      cost appears exactly when code landed on trunk during the cycle — the
+      normal state of a busy day — and 1335-2nzf (adopt on plan-only
+      movement) does not reach it, because the stamp is then legitimately
+      stale for the tree.
+      CONSEQUENCE: the fleet heartbeat reads a host that commits without
+      attesting as wedged; a transport choice turns an obedient cycle into a
+      wedged-looking host, and the worker then hand-pushes with no guard
+      asserting the remote proof the lander would have given.
+      WHY NOT 1422-8wzb: that row is the WORK-land step pushing an
+      integration product a cut freeze reads as code; this row is the
+      RECORD-land step on any trunk, freeze or not. Both own
+      scripts/finalize-cycle.sh and both resolve to "classify by the
+      outgoing diff", so one change may close both; they are independently
+      schedulable because the record step has its own fixture
+      (scripts/test-mo-full-record-precedes-marker.sh) and its own measured
+      failure, and either may land first. A note event on 1422-8wzb in this
+      fragment says so.
+      NOT ARGUING FOR A LOOSER LANE: the hook is unchanged; the change is
+      finalize's choice of transport for a diff the hook already admits.
+    exit_criteria:
+      - 'a finalize whose outgoing diff against origin is only plan/mo-full-attestations.d/<host>.md pushes the record on the plan-only lane with no gate, and the marker follows it only after `git ls-remote` shows the record sha on the branch (the remote proof is no weaker than the lander''s); pre-fix result: FAILS — the lander gates'
+      - 'on a scratch remote that a code commit moves during the finalize, the record still lands in seconds and the marker follows; pre-fix result: the lander re-gates and, after its attempts, refused:finalize:ledger-land-failed'
+      - 'NEGATIVE CONTROL: an outgoing diff carrying any path outside plan/mo-full-attestations.d/ still goes through scripts/land-on-platform-branch.sh and its gate, so the record lane cannot become a side door'
+      - 'scripts/test-mo-full-record-precedes-marker.sh carries the three arms above, red against pre-fix finalize-cycle.sh and green after'
+    verifiable_closure: scripts/test-mo-full-record-precedes-marker.sh
+    next_action: >
+      In finalize-cycle.sh's "land the ledger record" step, compute the outgoing diff against origin after the record commit; when it is record-only, fetch, rebase, push and prove by ls-remote, else keep the lander; add the three arms to the fixture.
+    events:
+      - type: filed
+        ts: "2026-10-12T17:38:05Z"
+        agent_id: "linux-yoga-claude-20261012t172428z"
+        host: yoga
+        summary: |-
+          Filed from yoga's own cycle-3 finalize refusal (four gates on a three-line append, hand-pushed as e3be61ce5) and the cycle-6 counter-measurement (stamp adopted, 14 s). The candidate fix was noted in the cycle-3 loop-status and not filed until now.
+
+events:
+  - packet_id: during-a-cut-freeze-a-plan-only-cycle-cannot-attest-because-finalizes-land-path-pushes-a-union-debt-head-the-freeze-reads-as-code
+    event:
+      type: note
+      ts: "2026-10-12T17:38:05Z"
+      agent_id: "linux-yoga-claude-20261012t172428z"
+      host: yoga
+      summary: |-
+        Sibling filed: 1638-q329 is the RECORD-land step of the same script gating a lane-admitted append on any busy trunk (yoga 2026-10-12, four gates then ledger-land-failed). Both resolve to classifying by the outgoing diff; one change may close both, and both rows name scripts/finalize-cycle.sh on purpose.

@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: remove-the-two-remaining-interactive-prompts-from-install-windows-ps1-per-the-end-user-installer-guideline
+    field: next_action
+    value: 'Draft PR #377 (work/1560-uam3, 1b11d57a1) is waiting on the coordinator preflight (after run 51) and lands after the v56.10.12.1 back-merge. Once it lands: set this row completed with the fixture evidence from the PR, and set 756-s8s8 obsolete (superseded). OPERATOR-WINDOW ITEM, the live GUI-startup check, which needs the operator''s running tray stopped: install the release carrying #377. Quit the tray, set TILLANDSIAS_WSLCONFIG_PATH to a scratch copy of ~/.wslconfig with swap=0 and autoMemoryReclaim removed, and start the tray. Confirm that tray.log shows "wslconfig: replaced [wsl2] swap=0 -> 8GB", "added [experimental] autoMemoryReclaim=gradual", the backup line, and the scratch-path no-restart line; that the scratch copy holds the keys; and that the real ~/.wslconfig hash is unchanged. On the next curl install, also confirm that no prompt appears and that the install log carries the wsl-swap and hyperv lines.'
+    ts: "2026-10-12T15:50:31Z"
+    host: yolanda-windows
+    replaces_sha256: "8a847df9ef40ed23781cda6e136210bab6308567249199ae79c5bce8e10da60c"

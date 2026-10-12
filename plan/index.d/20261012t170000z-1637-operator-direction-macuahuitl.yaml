@@ -1,0 +1,140 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the coordinator (macuahuitl), 2026-10-12, from operator direction
+# given in session: development scratch stays inside the checkout; the forge
+# cache grew unbounded; macron.dev is the AI-built living example, which needs
+# Tillandsias project templates, opt-in Flutter, and deploy parity.
+packets:
+  - packet_id: development-scratch-and-worktrees-live-inside-the-checkout-under-one-ignored-dir-that-every-scanner-skips
+    order: 1637-cnxq
+    status: ready
+    kind: process
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [methodology, scripts, scratch, gitignore, fleet]
+    estimated_hours: 3
+    title: |
+      Operator direction 2026-10-12: in the DEVELOPMENT runtime all scratch, private podman stores, logs and any worktree live inside the checkout under nested .gitignored dirs. Bypass-mode sessions that remove dirs outside their cwd trigger an operator approval prompt, which "completely halts the fleet". Today only /target/ is ignored; ./work is not, and fixtures and hosts still write to mktemp, $TMPDIR, sibling worktrees and ../agent-target.
+    context: |
+      Operator, verbatim: "ALL work should be done INSIDE the checkout folder, add .gitignored dirs like ./work or ./temp or ./worktrees or something like that, agents running in "bypass permissions" have been asking for permissions to remove those dirs, which completely halts the fleet. Use nested dirs for clear permissions. Note that this is the DEVELOPMENT RUNTIME. At USER RUNTIME (when the forge is running) forges are ephemeral by design and absolute paths like /tmp and others should be allowed, since they're automatically destroyed on teardown."
+      Interim (fleet, 2026-10-12): ./target/work/<what>, already ignored and skipped by scanners. Tension: worktrees nested in the checkout have poisoned live scans before, so the chosen dir must be excluded by every tree scanner (grep -r, find, ripgrep-based guards). Exceptions measured on lenovinha: a podman runroot/tmp_dir cannot live in a home-labelled checkout under SELinux (pasta: rootless-netns-conn.pid Permission denied), so it stays in a script-owned $XDG_RUNTIME_DIR subdir that the script removes.
+    exit_criteria:
+      - 'one canonical ignored scratch dir is named in methodology/ and .gitignore; `git check-ignore <dir>/x` succeeds'
+      - 'a guard refuses a NEW script or fixture that creates scratch outside the checkout (bare mktemp, $TMPDIR, ../) unless it names a recorded exception; red on a planted bare mktemp, green on trunk after migration'
+      - 'every tree scanner skips the canonical dir: a planted file under it carrying a refused pattern does not red any guard'
+    unscoreable: "unpinnable-until-the-guard-exists: the scratch-location guard and its fixture are written together"
+    next_action: >
+      Pick the dir (target/work is the interim), record it in methodology with the user-runtime exemption, then write the guard and migrate the worst offenders.
+    events:
+      - type: filed
+        ts: "2026-10-12T17:00:00Z"
+        host: macuahuitl
+        summary: |-
+          Development scratch and worktrees live inside the checkout under one ignored dir every scanner skips (operator direction).
+
+  - packet_id: the-forge-cache-volume-grows-without-bound-77-gb-on-the-operator-desktop
+    order: 1637-tpz3
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [podman, forge, cache, disk]
+    estimated_hours: 3
+    title: |
+      tillandsias-forge-cache-tillandsias reached 76.85 GB on macuahuitl (2026-10-12) with nothing trimming it; the disk was 97% full and the operator desktop froze for minutes (the known full-disk + btrfs failure). Nothing bounds or ages the forge cache volume.
+    context: |
+      MEASURED: `podman system df -v` on macuahuitl: tillandsias-forge-cache-tillandsias 76.85 GB, LINKS 0. Removing it freed 47 GB of filesystem (97% -> 92%). The cache is rebuildable by design. The coordinator removed it with no forge running.
+    exit_criteria:
+      - 'the forge cache has a stated size bound and a trim that runs host-side (at forge launch or teardown); a fixture with an over-bound cache shows it trimmed below the bound, and pre-fix code leaves it untouched'
+      - 'measure which subtree grew (cargo target, registry, npm, pub) on a real host before choosing the trim, and record it'
+    unscoreable: "unpinnable-until-the-guard-exists: the bound and its fixture are written together"
+    next_action: >
+      On a host with a grown forge cache, measure its subtrees (podman unshare du), then bound the dominant one.
+    events:
+      - type: filed
+        ts: "2026-10-12T17:00:00Z"
+        host: macuahuitl
+        summary: |-
+          The forge cache volume grows without bound (77 GB on the operator desktop).
+
+  - packet_id: tillandsias-ships-project-templates-static-wrangler-by-default-and-flutter-flame-opt-in
+    order: 1637-yrz8
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [templates, web, wrangler, flutter, forge]
+    estimated_hours: 6
+    title: |
+      A user should start a web project in a forge from a Tillandsias template: the default is a plain static site served by wrangler (no build step); Flutter + Flame is an opt-in template. Templates carry the local-preview wiring, so "launch this project locally" works with no setup.
+    context: |
+      Operator direction 2026-10-12 (macron.dev): the long-term living example is 8007342/macron.dev, built entirely by AI in Tillandsias forges. Flutter + Flame is the comics' stack, but stays OPT-IN for users "until we figure out a frictionless way" because a deploy needs a Cloudflare token stored as a GitHub secret. "the tillandsias infra should provide templates and other stuff."
+    exit_criteria:
+      - 'a forge agent asked to start a static web project from the default template gets a project whose publish_local returns a URL with no further edits; shown on a scratch substrate'
+      - 'the Flutter + Flame template exists and is selected only when asked for; it is never the default'
+    unscoreable: "unpinnable-until-the-guard-exists: templates and their scaffold fixture are written together"
+    depends_on:
+      - a-cold-start-forge-told-only-to-serve-a-web-project-locally-reaches-a-browser-loadable-url-with-no-operator-action
+    next_action: >
+      After 1625-9qyw passes on macron.dev, extract the static template from it.
+    events:
+      - type: filed
+        ts: "2026-10-12T17:00:00Z"
+        host: macuahuitl
+        summary: |-
+          Project templates: static wrangler by default, Flutter + Flame opt-in.
+
+  - packet_id: an-opt-in-flutter-web-toolchain-reaches-forges-through-a-sibling-image-with-pub-dev-and-flutter-artifacts-allowed
+    order: 1637-5765
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [flutter, dart, images, proxy, forge, web]
+    estimated_hours: 8
+    title: |
+      Forges cannot build Flutter today: the forge image has no Flutter/Dart SDK and the proxy does not allow pub.dev or Flutter's artifact storage. An opt-in sibling Flutter image (the same pattern as the Wrangler preview image) should build `flutter build web` for a forge project, with Flame from pub.dev, and its output preview through publish_local.
+    context: |
+      Operator direction 2026-10-12: macron.dev comics use Flutter + the Flame engine; long-term, Flutter remote hot reload on test devices "pre-wired for free". Opt-in only (see 1637-yrz8). Same image must be usable for the deploy build (1637-qmmd) so local and live cannot drift.
+    exit_criteria:
+      - 'on a scratch substrate, a forge project using Flutter + Flame builds for web through the sibling image and publish_local serves it; without the opt-in nothing Flutter is pulled'
+      - 'the proxy allowlist admits exactly the hosts the build needed (named and measured), nothing broader'
+    unscoreable: "unpinnable-until-the-guard-exists: the image, its allowlist and the build fixture are written together"
+    next_action: >
+      Measure the hosts a clean `flutter build web` with flame fetches, then design the sibling image.
+    events:
+      - type: filed
+        ts: "2026-10-12T17:00:00Z"
+        host: macuahuitl
+        summary: |-
+          Opt-in Flutter web toolchain via a sibling image with pub.dev and Flutter artifacts allowed.
+
+  - packet_id: deploys-build-in-the-same-image-the-forge-previewed-with-so-local-and-live-cannot-drift
+    order: 1637-qmmd
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [ci, deploy, wrangler, cloudflare, parity]
+    estimated_hours: 4
+    title: |
+      A project previewed in a forge should deploy from the same build image: a GitHub Actions workflow template runs the image's build and `wrangler deploy`, reading a Cloudflare token from a GitHub secret. No Cloudflare credential ever enters a forge.
+    context: |
+      Operator, 2026-10-12: "on push to remote it actually goes to a real wrangler image, there's no 'it works on my machine but fails on remote' anymore." Cloudflare's own build environment lacks Flutter. Setting the token as a GitHub secret is a one-time user step, and the operator wants a future macron.dev comic about it.
+    exit_criteria:
+      - 'a workflow template deploys a static template project and a Flutter template project using the same images the forge used; the token is read only from a GitHub secret'
+    unscoreable: "unpinnable-until-the-guard-exists: needs a real Cloudflare account and an operator-provided secret to verify"
+    depends_on:
+      - tillandsias-ships-project-templates-static-wrangler-by-default-and-flutter-flame-opt-in
+    next_action: >
+      After the templates exist, write the workflow template and verify on macron.dev once the operator wires Cloudflare.
+    events:
+      - type: filed
+        ts: "2026-10-12T17:00:00Z"
+        host: macuahuitl
+        summary: |-
+          Deploys build in the same image the forge previewed with.

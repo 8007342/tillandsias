@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: research-cert-lifecycle-state-graph
+    event:
+      type: progress
+      ts: "2026-10-12T15:44:04Z"
+      agent_id: linux-yoga-claude-20261012t152326z
+      host: yoga
+      summary: |
+        Slice 9 (yoga, cycle 6): criterion 3, the consumer side. Reading lib-common.sh's init_runtime_ca_trust (trust bundle composed once at start from the single mounted certificate) against slice 2's CaBundle→Proxy edge (stale proxy replaced with the rotated key at once) shows the edge inverted the split-trust window rather than closing it: every forge alive at the replacement instant fails TLS on bumped hosts until restarted, silently. Change on work/472 at 7cf44bf8c (PR 367, draft): forge_ca_chain_mount_spec returns a ForgeCaMount whose two emitters (run_args for the status-check and OpenCode argv, apply for the forge-agent typed spec) emit the bind mount and `--label tillandsias.ca-generation=<gen>` together, the proxy's own label (constant renamed CA_GENERATION_LABEL); ContainerSpec::label() is new and typed because option("--label=…") is dropped by the --device=-only allowlist; ensure_proxy_running's Stale arm calls announce_stale_ca_consumers before the --replace launch (podman ps by label, every container not on the on-disk generation, proxy excluded, unlabelled = stale; LOUD on both streams and on the accountability log as rotation_consumers_stale). Restarting the stranded consumers is NOT done: it kills the agent inside a forge and is a policy put to the coordinator (restart all / restart idle / report only / two-phase rotation with a {new, old} consumer bundle and a deferred proxy switch, which the note records as the reading's answer). Verification on yoga: headless suite 992/0/25 under tray,listen-vsock; podman crate tests rc 0 (new test by name); clippy -D warnings rc 0 for the headless bin ×3 feature sets and the podman crate; fmt clean; four mutation arms (raw emitter, typed emitter, stale set, announcement site) red with byte-identical restores. Relay preflight: `refused:relay-preflight:litmus:default-image` with 22 of 23 items ok (every decider, fmt, the headless and podman crate tests, 18 of 19 litmus); the one red is `litmus:opencode-vault-auth-content` step 1, the known host-dependent 1634-sab8 fixture (opencode serve still holds 127.0.0.1:49374 by `ss`), the same step as cycles 4 and 5, not re-filed. Remaining on the row: the restart policy (asked), the live arms of criteria 2 and 3 on a disposable enclave. Blind spot named: a consumer started by a pre-slice-9 binary carries no label until restarted.
