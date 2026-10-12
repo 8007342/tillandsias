@@ -3649,7 +3649,7 @@ fn build_stack_common_args(
     project_path: &Path,
     ca_trusted: &container_deps::Up<container_deps::CaTrusted>,
 ) -> Vec<String> {
-    let (ca_source, ca_target) = forge_ca_chain_mount_spec(certs_dir, ca_trusted);
+    let ca = forge_ca_chain_mount_spec(certs_dir, ca_trusted);
     let mut args = vec![
         "--name".into(),
         container_name.into(),
@@ -3690,11 +3690,11 @@ fn build_stack_common_args(
             "{}:/home/forge/src/{project_name}:rw",
             project_path.display()
         ),
-        // One runtime trust input feeds lib-common.sh's rootless initializer.
-        // Git, curl, Node, and Python then use the image's system-default path.
-        "--mount".into(),
-        format!("type=bind,source={ca_source},target={ca_target},readonly=true"),
     ]);
+    // One runtime trust input feeds lib-common.sh's rootless initializer.
+    // Git, curl, Node, and Python then use the image's system-default path.
+    // Order 472 slice 9: the mount and the generation label travel together.
+    args.extend(ca.run_args());
     append_git_identity_env_args(&mut args, project_name);
     args
 }
@@ -3836,14 +3836,19 @@ fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
     // generation to record, and the satisfier refuses consumers anyway.
     if let Some(generation) = ca_generation(certs_dir).into_generation() {
         args.push("--label".into());
-        args.push(format!("{PROXY_CA_GENERATION_LABEL}={generation}"));
+        args.push(format!("{CA_GENERATION_LABEL}={generation}"));
     }
     args.push(image.into());
     args
 }
 
-/// Label on the proxy container naming the CA generation it signs with (order 472).
-const PROXY_CA_GENERATION_LABEL: &str = "tillandsias.ca-generation";
+/// Label naming the CA generation a container was started with (order 472).
+/// On the proxy it is the key the proxy signs with; on a consumer (slice 9,
+/// through [`ForgeCaMount`]) it is the certificate the consumer composed into
+/// its trust bundle at start. One name for both parties to a rotation, so
+/// `podman ps --filter label=` enumerates every container the rotation
+/// touches and `stale_ca_consumers` can name the ones it strands.
+const CA_GENERATION_LABEL: &str = "tillandsias.ca-generation";
 
 /// The CA bundle's state as the generation read sees it (order 472, slice 6):
 /// `Absent` when `intermediate.crt` does not exist, `Unreadable` when it
@@ -3922,7 +3927,7 @@ fn running_proxy_ca_generation() -> Result<Option<String>, ()> {
             "container",
             "inspect",
             "--format",
-            &format!("{{{{index .Config.Labels \"{PROXY_CA_GENERATION_LABEL}\"}}}}"),
+            &format!("{{{{index .Config.Labels \"{CA_GENERATION_LABEL}\"}}}}"),
             "tillandsias-proxy",
         ])
         .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
@@ -3935,6 +3940,103 @@ fn running_proxy_ca_generation() -> Result<Option<String>, ()> {
         "" | "<no value>" => None,
         _ => Some(value),
     })
+}
+
+/// The running consumers a rotation strands (order 472 slice 9): every
+/// labelled container whose generation is not `on_disk`. The proxy is
+/// excluded because it is the party being replaced, not a consumer of the
+/// replacement. An unlabelled entry counts as stale by the proxy's own rule:
+/// its generation is unknowable.
+fn stale_ca_consumers(on_disk: &str, running: &[(String, Option<String>)]) -> Vec<String> {
+    running
+        .iter()
+        .filter(|(name, _)| name != "tillandsias-proxy")
+        .filter(|(_, generation)| generation.as_deref() != Some(on_disk))
+        .map(|(name, _)| name.clone())
+        .collect()
+}
+
+/// `podman ps` rows as (name, generation label), one per running container
+/// carrying [`CA_GENERATION_LABEL`]. An empty or `<no value>` label reads as
+/// none.
+fn parse_ca_consumer_generations(stdout: &str) -> Vec<(String, Option<String>)> {
+    stdout
+        .lines()
+        .filter_map(|line| {
+            let mut parts = line.splitn(2, '\t');
+            let name = parts.next()?.trim();
+            if name.is_empty() {
+                return None;
+            }
+            let generation = parts
+                .next()
+                .map(str::trim)
+                .filter(|value| !value.is_empty() && *value != "<no value>")
+                .map(String::from);
+            Some((name.to_string(), generation))
+        })
+        .collect()
+}
+
+/// Every running container labelled with a CA generation, by name. A
+/// consumer started by a binary older than slice 9 has no label and is not
+/// enumerable here; that is the one blind spot, and it closes by itself as
+/// those containers are restarted.
+fn running_ca_consumer_generations() -> Result<Vec<(String, Option<String>)>, String> {
+    let out = podman_cmd_sync()
+        .args([
+            "ps",
+            "--filter",
+            &format!("label={CA_GENERATION_LABEL}"),
+            "--format",
+            &format!("{{{{.Names}}}}\t{{{{index .Labels \"{CA_GENERATION_LABEL}\"}}}}"),
+        ])
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
+        .map_err(|e| format!("podman ps: {e:?}"))?;
+    if !out.status.success() {
+        return Err(format!("podman ps exited {}", out.status));
+    }
+    Ok(parse_ca_consumer_generations(&String::from_utf8_lossy(
+        &out.stdout,
+    )))
+}
+
+/// Name the consumers the proxy replacement is about to strand (order 472
+/// slice 9), LOUD on both streams (767-nkkq) and on the accountability log.
+/// Before this, the inverse of the split-trust window was silent: the
+/// launcher said "replacing the proxy" and every running forge that had
+/// composed the previous certificate began failing TLS on bumped hosts with
+/// nothing, anywhere, naming the cause.
+fn announce_stale_ca_consumers(on_disk: &str) {
+    match running_ca_consumer_generations() {
+        Ok(running) => {
+            let stale = stale_ca_consumers(on_disk, &running);
+            if stale.is_empty() {
+                return;
+            }
+            let line = format!(
+                "[tillandsias] {} running consumer(s) composed the previous CA into their trust bundle and will fail TLS through the replaced proxy until restarted: {}",
+                stale.len(),
+                stale.join(", ")
+            );
+            println!("{line}");
+            eprintln!("{line}");
+            warn!(
+                accountability = true,
+                category = "secrets",
+                spec = "secret-rotation",
+                secret_name = "tillandsias-ca-cert",
+                operation = "rotation_consumers_stale",
+                consumers = %stale.join(","),
+                "running consumers trust the previous CA"
+            );
+        }
+        Err(e) => {
+            eprintln!(
+                "[tillandsias] could not enumerate CA consumers before replacing the proxy: {e}"
+            );
+        }
+    }
 }
 
 /// Refresh the `tillandsias-ca-key` podman secret from the CA bundle.
@@ -4006,6 +4108,12 @@ fn ensure_proxy_running(debug: bool) -> Result<(), String> {
                 );
                 println!("{line}");
                 eprintln!("{line}");
+                // Order 472 slice 9: the replacement strands every running
+                // consumer whose trust bundle holds the previous certificate.
+                // Name them here, where the stranding is decided; restarting
+                // them is a policy the operator owns (it kills the agent
+                // inside a forge), not a side effect of a proxy ensure.
+                announce_stale_ca_consumers(&on_disk);
                 // Fall through: the launch below uses --replace.
             }
             ProxyCaCheck::Current | ProxyCaCheck::Unknown => {
@@ -8293,7 +8401,7 @@ fn build_opencode_forge_args(
     debug: bool,
     ca_trusted: &container_deps::Up<container_deps::CaTrusted>,
 ) -> Vec<String> {
-    let (ca_source, ca_target) = forge_ca_chain_mount_spec(certs_dir, ca_trusted);
+    let ca = forge_ca_chain_mount_spec(certs_dir, ca_trusted);
     // CLI mode attaches stdio (--interactive --tty) for a real shell; Web
     // mode detaches the container so the run() call returns and the host
     // owns the lifecycle.
@@ -8461,9 +8569,9 @@ fn build_opencode_forge_args(
             "{}:/home/forge/.cache/tillandsias-project:rw",
             forge_tool_cache_volume(project_name)
         ),
-        "--mount".into(),
-        format!("type=bind,source={ca_source},target={ca_target},readonly=true"),
     ]);
+    // Order 472 slice 9: the mount and the generation label travel together.
+    args.extend(ca.run_args());
     // Project source routing. Both branches mount under
     // `/home/forge/src/…` conventions (not flat at `/home/forge/src`) so the
     // in-container tree matches the entrypoint clone path and
@@ -18350,25 +18458,78 @@ pub(crate) fn build_forge_agent_run_args(
 fn forge_ca_chain_mount(
     certs_dir: &Path,
     ca_trusted: &container_deps::Up<container_deps::CaTrusted>,
-) -> Option<(String, &'static str)> {
-    let (source, target) = forge_ca_chain_mount_spec(certs_dir, ca_trusted);
-    Path::new(&source).exists().then_some((source, target))
+) -> Option<ForgeCaMount> {
+    let ca = forge_ca_chain_mount_spec(certs_dir, ca_trusted);
+    Path::new(&ca.source).exists().then_some(ca)
 }
 
-/// The forge-side CA mount as (host source, in-container target), and the
-/// ONLY production site that names the in-container path. Order 472 slice 8:
-/// the OpenCode and status-check builders mount unconditionally, as they
-/// always did (a missing source is podman's refusal on those lanes, not a
-/// silent skip), so they take this spec rather than the gated form above.
-/// Both forms demand the witness, which is what the scan test checks for.
+/// The forge-side CA as a consumer receives it (order 472): the bind mount
+/// of the host certificate at the in-container path `lib-common.sh` composes
+/// into the trust bundle once, at start, and, since slice 9, the generation
+/// label naming WHICH certificate that was. The two are minted together and
+/// emitted together (`run_args` for the builders that assemble argv by hand,
+/// `apply` for the typed spec), so no consumer carries the mount without the
+/// label. The label is how a rotation finds the consumers it strands
+/// (`stale_ca_consumers`): a consumer's trust bundle is fixed at its start,
+/// so after the proxy is replaced with the rotated key every consumer still
+/// labelled with the previous generation fails TLS on bumped hosts until it
+/// is restarted. The generation is read at arg-build time by the same
+/// `ca_generation` the proxy labels itself with; absent or unreadable labels
+/// nothing, exactly as on the proxy.
+struct ForgeCaMount {
+    source: String,
+    target: &'static str,
+    generation: Option<String>,
+}
+
+impl ForgeCaMount {
+    fn label_arg(&self) -> Option<String> {
+        self.generation
+            .as_ref()
+            .map(|generation| format!("{CA_GENERATION_LABEL}={generation}"))
+    }
+
+    /// `--mount …` and, when there is a generation, `--label …`.
+    fn run_args(&self) -> Vec<String> {
+        let mut args = vec![
+            "--mount".to_string(),
+            format!(
+                "type=bind,source={},target={},readonly=true",
+                self.source, self.target
+            ),
+        ];
+        if let Some(label) = self.label_arg() {
+            args.push("--label".to_string());
+            args.push(label);
+        }
+        args
+    }
+
+    /// The same two facts on a typed spec.
+    fn apply(&self, spec: ContainerSpec) -> ContainerSpec {
+        let spec = spec.bind_mount(self.source.clone(), self.target, true);
+        match &self.generation {
+            Some(generation) => spec.label(CA_GENERATION_LABEL, generation.clone()),
+            None => spec,
+        }
+    }
+}
+
+/// The forge-side CA mount, and the ONLY production site that names the
+/// in-container path. Order 472 slice 8: the OpenCode and status-check
+/// builders mount unconditionally, as they always did (a missing source is
+/// podman's refusal on those lanes, not a silent skip), so they take this
+/// spec rather than the gated form above. Both forms demand the witness,
+/// which is what the scan test checks for.
 fn forge_ca_chain_mount_spec(
     certs_dir: &Path,
     _ca_trusted: &container_deps::Up<container_deps::CaTrusted>,
-) -> (String, &'static str) {
-    (
-        certs_dir.join("intermediate.crt").display().to_string(),
-        "/run/tillandsias/ca-chain.crt",
-    )
+) -> ForgeCaMount {
+    ForgeCaMount {
+        source: certs_dir.join("intermediate.crt").display().to_string(),
+        target: "/run/tillandsias/ca-chain.crt",
+        generation: ca_generation(certs_dir).into_generation(),
+    }
 }
 
 // All arguments are distinct, named forge-launch inputs; bundling them into a
@@ -18684,8 +18845,8 @@ fn build_forge_agent_run_args_with_vault(
         }
     }
 
-    if let Some((source, target)) = forge_ca_chain_mount(certs_dir, ca_trusted) {
-        spec = spec.bind_mount(source, target, true);
+    if let Some(ca) = forge_ca_chain_mount(certs_dir, ca_trusted) {
+        spec = ca.apply(spec);
     }
 
     // Order 505: mount only the per-lane MCP tool socket directory
@@ -25322,10 +25483,7 @@ mod tests {
         let args = build_proxy_run_args(dir.path(), "tillandsias-proxy:v1");
         let gen_a = ca_generation(dir.path()).into_generation().unwrap();
         assert_eq!(gen_a.len(), 16);
-        assert!(has_arg(
-            &args,
-            &format!("{PROXY_CA_GENERATION_LABEL}={gen_a}")
-        ));
+        assert!(has_arg(&args, &format!("{CA_GENERATION_LABEL}={gen_a}")));
         assert_eq!(
             args.last().map(String::as_str),
             Some("tillandsias-proxy:v1")
@@ -25333,6 +25491,199 @@ mod tests {
         // A rotation publishes different bytes, so the generation moves.
         std::fs::write(dir.path().join("intermediate.crt"), pem_cert("CERT-B")).unwrap();
         assert_ne!(ca_generation(dir.path()).into_generation().unwrap(), gen_a);
+    }
+
+    // ---- order 472 slice 9: the consumer side of a rotation ----------------
+
+    /// The mount and the generation label are one artefact: a consumer that
+    /// mounts the forge-side CA is labelled with the generation it mounted,
+    /// by both emitters, and an absent certificate labels nothing.
+    #[test]
+    fn forge_ca_mount_labels_the_generation_it_mounts() {
+        let witness = container_deps::ca_trusted_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        let absent = forge_ca_chain_mount_spec(dir.path(), &witness);
+        assert!(absent.generation.is_none());
+        assert!(
+            !has_arg(&absent.run_args(), "--label"),
+            "an absent certificate must not label: {:?}",
+            absent.run_args()
+        );
+        assert!(
+            forge_ca_chain_mount(dir.path(), &witness).is_none(),
+            "the gated form skips a missing source"
+        );
+
+        std::fs::write(dir.path().join("intermediate.crt"), pem_cert("CERT-A")).unwrap();
+        let expected = format!(
+            "{CA_GENERATION_LABEL}={}",
+            ca_generation(dir.path()).into_generation().unwrap()
+        );
+        let ca = forge_ca_chain_mount(dir.path(), &witness).expect("a present source mounts");
+        let raw = ca.run_args();
+        assert_eq!(raw[0], "--mount");
+        assert!(
+            raw[1].contains("target=/run/tillandsias/ca-chain.crt"),
+            "{raw:?}"
+        );
+        assert!(
+            has_arg(&raw, "--label") && has_arg(&raw, &expected),
+            "the raw emitter mounted without labelling: {raw:?}"
+        );
+        let typed = ca.apply(ContainerSpec::new("forge:v1")).build_run_args();
+        assert!(
+            typed
+                .iter()
+                .any(|a| a.contains("target=/run/tillandsias/ca-chain.crt")),
+            "{typed:?}"
+        );
+        assert!(
+            has_arg(&typed, "--label") && has_arg(&typed, &expected),
+            "the typed emitter mounted without labelling: {typed:?}"
+        );
+    }
+
+    /// Every builder that mounts the forge-side CA labels the container with
+    /// the generation it mounted: the status-check and OpenCode lanes (raw
+    /// argv) and the forge-agent lane (typed spec). This is the set
+    /// `stale_ca_consumers` enumerates after a rotation; a builder that
+    /// mounted without labelling would be invisible to it.
+    #[test]
+    fn every_ca_consumer_builder_labels_the_generation_it_mounts() {
+        let _env = env_lock();
+        let witness = container_deps::ca_trusted_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("intermediate.crt"), pem_cert("CERT-A")).unwrap();
+        let expected = format!(
+            "{CA_GENERATION_LABEL}={}",
+            ca_generation(dir.path()).into_generation().unwrap()
+        );
+        let project = PathBuf::from("/tmp/project");
+        let status = build_status_check_forge_args(
+            &PathBuf::from("/tmp/workspace"),
+            "alpha",
+            None,
+            dir.path(),
+            "1.2.3",
+            &witness,
+        );
+        let opencode = build_opencode_forge_args(
+            &project,
+            Some(&project),
+            None,
+            "alpha",
+            None,
+            None,
+            dir.path(),
+            "1.2.3",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+            &witness,
+        );
+        let agent = build_forge_agent_run_args_with_vault(
+            &project,
+            Some(&project),
+            None,
+            "alpha",
+            None,
+            dir.path(),
+            "1.2.3",
+            ForgeAgentMode::Codex,
+            false,
+            None,
+            None,
+            false,
+            &test_cache_root(),
+            &witness,
+        );
+        for (lane, args) in [
+            ("status-check", status),
+            ("opencode", opencode),
+            ("forge-agent", agent),
+        ] {
+            assert!(
+                args.iter()
+                    .any(|a| a.contains("target=/run/tillandsias/ca-chain.crt")),
+                "{lane}: no forge-side CA mount in {args:?}"
+            );
+            assert!(
+                has_arg(&args, &expected),
+                "{lane}: mounted the CA without labelling its generation: {args:?}"
+            );
+        }
+    }
+
+    /// The stale set after a rotation: every labelled consumer whose
+    /// generation is not the one on disk. The proxy is excluded (it is the
+    /// party being replaced), an unlabelled consumer counts as stale (its
+    /// generation is unknowable, the proxy's own rule), and a current one
+    /// does not.
+    #[test]
+    fn stale_ca_consumers_are_the_ones_not_on_the_disk_generation() {
+        let running = vec![
+            (
+                "tillandsias-forge-alpha".to_string(),
+                Some("aaaa".to_string()),
+            ),
+            (
+                "tillandsias-forge-beta".to_string(),
+                Some("bbbb".to_string()),
+            ),
+            ("tillandsias-forge-gamma".to_string(), None),
+            ("tillandsias-proxy".to_string(), Some("aaaa".to_string())),
+        ];
+        assert_eq!(
+            stale_ca_consumers("bbbb", &running),
+            vec!["tillandsias-forge-alpha", "tillandsias-forge-gamma"]
+        );
+        assert_eq!(
+            stale_ca_consumers("aaaa", &running),
+            vec!["tillandsias-forge-beta", "tillandsias-forge-gamma"]
+        );
+        assert!(stale_ca_consumers("bbbb", &[]).is_empty());
+    }
+
+    #[test]
+    fn ca_consumer_generations_parse_names_and_labels_from_podman_ps() {
+        let parsed = parse_ca_consumer_generations(
+            "tillandsias-forge-alpha\taaaa\ntillandsias-proxy\t<no value>\n\nbare\n",
+        );
+        assert_eq!(
+            parsed,
+            vec![
+                (
+                    "tillandsias-forge-alpha".to_string(),
+                    Some("aaaa".to_string())
+                ),
+                ("tillandsias-proxy".to_string(), None),
+                ("bare".to_string(), None),
+            ]
+        );
+    }
+
+    /// The announcement sits where the stranding is decided: after the stale
+    /// verdict and before the replacement launch. Moving it after the launch
+    /// would name consumers the proxy has already abandoned; deleting it
+    /// returns the inverse split-trust window to silence.
+    #[test]
+    fn ensure_proxy_running_announces_stale_consumers_before_replacing() {
+        let body = source_window(
+            include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs")),
+            "fn ensure_proxy_running(",
+        );
+        let stale = body.find("ProxyCaCheck::Stale").expect("the stale arm");
+        let announce = body
+            .find("announce_stale_ca_consumers(")
+            .expect("the announcement");
+        let replace = body
+            .find("build_proxy_run_args(")
+            .expect("the replacement launch");
+        assert!(
+            stale < announce && announce < replace,
+            "the stranded consumers must be named before the proxy is replaced"
+        );
     }
 
     /// Order 472 slice 6: the generation read answers three ways. A missing
@@ -25352,7 +25703,7 @@ mod tests {
         assert!(
             !args
                 .iter()
-                .any(|a| a.starts_with(&format!("{PROXY_CA_GENERATION_LABEL}="))),
+                .any(|a| a.starts_with(&format!("{CA_GENERATION_LABEL}="))),
             "an unreadable certificate must not label the proxy: {args:?}"
         );
         // The satisfier's refusal and the wire state agree by construction:

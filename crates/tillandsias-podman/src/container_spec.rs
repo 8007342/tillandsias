@@ -109,6 +109,11 @@ pub struct ContainerSpec {
     /// (measured, 1457-r8yi). The builder never reads the process env.
     env_passthrough: Vec<String>,
     secrets: Vec<String>,
+    /// `--label KEY=VALUE` pairs. Typed rather than a passthrough option
+    /// (order 472 slice 9): `option("--label=…")` is silently dropped by the
+    /// `--device=`-only allowlist, and a consumer's CA generation label is a
+    /// fact a rotation enumerates by, not decoration.
+    labels: Vec<(String, String)>,
     mounts: Vec<MountSpec>,
     tmpfs: Vec<String>,
     devices: Vec<String>,
@@ -141,6 +146,7 @@ impl ContainerSpec {
             env: Vec::new(),
             env_passthrough: Vec::new(),
             secrets: Vec::new(),
+            labels: Vec::new(),
             mounts: Vec::new(),
             tmpfs: Vec::new(),
             devices: Vec::new(),
@@ -252,6 +258,12 @@ impl ContainerSpec {
         self
     }
 
+    /// A `--label KEY=VALUE` on the container (order 472 slice 9).
+    pub fn label(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.labels.push((key.into(), value.into()));
+        self
+    }
+
     pub fn option(mut self, value: impl Into<String>) -> Self {
         let value = value.into();
         if crate::policy::is_allowlisted_passthrough_option(&value) {
@@ -358,6 +370,10 @@ impl ContainerSpec {
         for key in &self.env_passthrough {
             args.push("--env".to_string());
             args.push(key.clone());
+        }
+        for (key, value) in &self.labels {
+            args.push("--label".to_string());
+            args.push(format!("{key}={value}"));
         }
 
         for secret in &self.secrets {
@@ -678,6 +694,38 @@ mod tests {
         assert!(!args.contains(&"--privileged".to_string()));
         assert!(!args.contains(&"--network=host".to_string()));
         assert!(args.contains(&"--device=/dev/dri/renderD128".to_string()));
+    }
+
+    /// Order 472 slice 9: a typed label, emitted before the image like every
+    /// other launch option and accepted by the hardening validator, so a CA
+    /// consumer can carry the generation it mounted. `option("--label=…")`
+    /// is DROPPED by the `--device=` allowlist, silently, which is why the
+    /// label is typed rather than passed through.
+    #[test]
+    fn labels_are_typed_and_emitted_before_the_image() {
+        let spec = ContainerSpec::new("example:v1").label("tillandsias.ca-generation", "aaaa");
+        let args = spec.build_run_args();
+        let label = args
+            .iter()
+            .position(|a| a == "--label")
+            .expect("--label emitted");
+        assert_eq!(args[label + 1], "tillandsias.ca-generation=aaaa");
+        let image = args.iter().position(|a| a == "example:v1").unwrap();
+        assert!(
+            label < image,
+            "a label is a launch option, before the image"
+        );
+        assert!(
+            spec.build_run_argv().is_ok(),
+            "the hardening validator must accept a label"
+        );
+        let passthrough = ContainerSpec::new("example:v1")
+            .option("--label=tillandsias.ca-generation=aaaa")
+            .build_run_args();
+        assert!(
+            !passthrough.iter().any(|a| a.contains("--label")),
+            "the passthrough allowlist drops a label, so label() must be typed: {passthrough:?}"
+        );
     }
 
     #[test]

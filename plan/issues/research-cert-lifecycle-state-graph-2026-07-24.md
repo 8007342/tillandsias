@@ -426,3 +426,111 @@ tillandsias --features tray,listen-vsock` 987 passed, 0 failed, 25 ignored;
 `cargo clippy -p tillandsias-headless --bin tillandsias --tests -- -D warnings`
 rc 0 under no features, `tray`, and `tray,listen-vsock`; `cargo fmt --all`
 clean.
+
+## Slice 9 — criterion 3, the consumer side: a rotation can now name what it strands (yoga, 2026-10-12)
+
+Read before writing, on the slice 8 ref at fd60ffc4d:
+
+1. `images/default/lib-common.sh` `init_runtime_ca_trust` composes the trust
+   bundle ONCE, at container start, from the vendor roots plus the single
+   mounted `/run/tillandsias/ca-chain.crt`. Nothing re-reads it.
+2. Slice 2's CaBundle→Proxy edge (`proxy_ca_check`, `ensure_proxy_running`)
+   replaces a running proxy whose label is not the on-disk generation, and
+   the proxy signs bumped leaves with the key it was started with.
+
+So the edge did not close the split-trust window, it inverted it. Before
+slice 2 the first launch after day 25 rotated the certificate and started a
+forge trusting only the NEW one against a proxy signing with the OLD key:
+every new forge failed TLS on bumped hosts until the next host boot. After
+slice 2 that launch replaces the proxy with the new key, and every forge
+ALIVE at that instant, whose bundle holds only the OLD certificate, fails TLS
+on bumped hosts until it is restarted. The exposure shrank from "every new
+forge for hours or days" to "every running forge for a moment every 25
+days", which is the right trade, but the stranded set was silent: the
+launcher printed "replacing the proxy" and the stranded forge saw bare TLS
+failures with nothing naming the cause. That is the shape
+`the-faults-output-is-well-formed` describes, and criterion 3's "compare
+each declared consumer" cannot even begin without a way to enumerate them.
+
+**Decision: make the stranded set enumerable and announced; leave the
+restart policy to the operator.** Two changes.
+
+The label every consumer carries. `forge_ca_chain_mount_spec` now returns a
+`ForgeCaMount` (source, target, generation), and both of its emitters,
+`run_args` for the builders that assemble argv by hand (status-check,
+OpenCode) and `apply` for the typed spec (forge-agent), emit the bind mount
+AND `--label tillandsias.ca-generation=<gen>` together, the same generation
+read (`ca_generation`) and the same label the proxy carries since slice 2
+(the constant is renamed `CA_GENERATION_LABEL`; it names a fact about any
+container, not the proxy). `ContainerSpec` gained a typed `label()`; its
+`option()` passthrough is `--device=`-only and would have dropped a label
+silently, which its new test pins. Criterion 3's "each declared consumer" is
+now `podman ps --filter label=tillandsias.ca-generation`, and "the CA
+mounted inside each" is the label value, which is the generation the
+launcher checked and mounted (`ca-path.rs`'s rename publication means the
+inode and the bytes change together, so a byte generation is the inode
+comparison the criterion asks for, readable from the host without a `stat`
+in-container).
+
+The announcement at the stranding site. `ensure_proxy_running`'s `Stale` arm
+calls `announce_stale_ca_consumers(on_disk)` between the verdict and the
+`--replace` launch: `running_ca_consumer_generations` lists the labelled
+containers, `stale_ca_consumers` keeps those whose label is not the on-disk
+generation (the proxy excluded; unlabelled counts as stale, the proxy's own
+rule), and a non-empty set is printed LOUD on both streams and written to
+the accountability log (`operation = rotation_consumers_stale`). An
+enumeration failure is printed and the replacement proceeds: the proxy must
+not stay stale because `podman ps` hiccupped.
+
+Why not restart them here. A restart of a forge kills the agent inside it,
+mid-task, with no checkpoint; that is a policy (restart all, restart idle,
+report and let the next launch replace, or the two-phase rotation below),
+and the row's own investigation item names thrash and `container_mutations_allowed()`
+as constraints on it. An ensure of the proxy is the wrong place to make that
+choice silently. The choice is put to the coordinator in this slice's
+hand-off.
+
+What the reading suggests the full answer is, for the record and not
+implemented: a two-phase rotation. At day 25 mint the new pair and publish
+the consumer bundle as {new, old} (the target is literally `ca-chain.crt`;
+`init_runtime_ca_trust` concatenates whatever it is given) while the proxy
+keeps signing with the old key; switch the proxy to the new key only when no
+running consumer is labelled old-only, or at the old certificate's expiry,
+whichever comes first. New consumers trust both, running consumers keep
+working, and the proxy switch strands nobody. Under that design the slice 2
+edge compares the proxy against the SIGNING generation, not the published
+one, and criterion 3's assertion is "every running consumer verifies a leaf
+signed by the current signing key after the reaction", which an inode match
+cannot express (an old consumer correctly keeps its old inode and still
+works). The criterion names a mechanism; the output it needs is the TLS
+verification, and that is what the live arm should measure.
+
+Mutation controls, four arms, each restored byte-identical (`cmp`) before
+the next:
+
+- Raw emitter arm: `run_args` without the label push →
+  `forge_ca_mount_labels_the_generation_it_mounts` ("the raw emitter mounted
+  without labelling") and `every_ca_consumer_builder_labels_the_generation_it_mounts`
+  on the status-check lane.
+- Typed emitter arm: `apply` without the label →
+  the same two tests, on the typed and forge-agent arms.
+- Stale-set arm: `stale_ca_consumers` returning the empty set →
+  `stale_ca_consumers_are_the_ones_not_on_the_disk_generation`.
+- Site arm: the `announce_stale_ca_consumers` call deleted from the `Stale`
+  arm → `ensure_proxy_running_announces_stale_consumers_before_replacing`
+  ("the announcement"), and `clippy -D warnings` on the now-dead function.
+
+Status of criterion 3: the enumerable consumer set and the reaction site
+exist; the reaction itself (restart or two-phase) is an operator decision,
+asked. The one blind spot is a consumer started by a binary older than this
+slice, which has no label and is not enumerable; it closes as those
+containers are restarted. `run_provider_login` mounts the same certificate
+at `/etc/tillandsias/ca.crt` for Vault TLS in a one-shot login container;
+it is outside the scan's target literal and outside the label on purpose,
+since a container that lives seconds cannot be stranded by a 25-day
+rotation. Remaining on the row: the restart policy, the live arms of
+criteria 2 and 3 (a disposable enclave: age the files past 25 days, launch
+with the proxy running, read the announcement, then measure TLS from a
+stranded forge before and after its restart).
+
+Verification on yoga (2026-10-12): `cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock` 992 passed, 0 failed, 25 ignored (the five new tests run by name first, 9 of 9 with the slice 2, 6 and 8 pins); `cargo test -p tillandsias-podman` rc 0 with `labels_are_typed_and_emitted_before_the_image` run by name; `cargo clippy -p tillandsias-headless --bin tillandsias --tests -- -D warnings` rc 0 under no features, `tray`, and `tray,listen-vsock`, and `cargo clippy -p tillandsias-podman --tests -- -D warnings` rc 0; `cargo fmt --all` clean; the four mutation arms above each red (rc 101) with the premise diff printed and the restore `cmp`-identical.
