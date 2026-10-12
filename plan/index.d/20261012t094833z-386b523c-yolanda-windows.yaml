@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-gate-step-collision-on-an-08x-or-09x-prefix-passes-the-cross-ref-prefix-check-and-hides-every-later-collision-because-bash-reads-the-prefix-as-octal
+    field: status
+    value: completed
+    ts: "2026-10-12T09:48:33Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: a-gate-step-collision-on-an-08x-or-09x-prefix-passes-the-cross-ref-prefix-check-and-hides-every-later-collision-because-bash-reads-the-prefix-as-octal
+    event:
+      type: completed
+      ts: "2026-10-12T09:48:33Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: Landed in run 42 as 9f7a3ecca (PR #363, work/1629-xtfw head 8dac64c2b, fix commit 1e443d574), per macuahuitl-fedora. Verified on origin/linux-next: scripts/lua/check-gate-step-prefix-across-refs.lua compares prefixes base 10 (tonumber(pfx, 10)); fixture arms 7-9 (085 masking, 020 suggests 30, 010 == 10) 11/11 fixed vs 8/11 on the prior check. Carried-Waiver: shell-to-lua conflict:work/1632-y3ir (approved).
