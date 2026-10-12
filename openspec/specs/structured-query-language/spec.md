@@ -10,7 +10,7 @@ obsolete
 
 This spec and its only implementation, the Loki-style log query language in
 `crates/tillandsias-logging/src/query.rs` (parser, executor, 16 unit tests)
-and the `scripts/query-traces.sh` CLI that re-implemented the same grammar in
+and the `scripts/query-traces.sh` CLI that re-implemented the same grammar in <!-- spec-path-absent: ok (retired with 781-hseq) -->
 jq, were retired together under packet 781-hseq
 (`log-query-language-has-zero-consumers`) on 2026-10-12.
 
