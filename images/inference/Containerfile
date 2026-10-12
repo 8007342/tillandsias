@@ -38,7 +38,12 @@ RUN microdnf install -y bash curl ca-certificates zstd tar gzip pciutils \
 # vulkan-loader is small; mesa-vulkan-drivers carries radv and is the bulk. Kept
 # unconditional rather than tier-gated: the image is one artifact shared by every
 # host, and a CPU-only host loading no ICD costs nothing at runtime.
-RUN microdnf install -y vulkan-loader mesa-vulkan-drivers \
+#
+# vulkan-tools (order 793-a8e7) carries `vulkaninfo`: the enumeration that
+# tells a real device (Dozen's "Microsoft Direct3D12 (...)" on a WSL2 host
+# that opted in with TILLANDSIAS_INFERENCE_GPU=vulkan) from llvmpipe, which the
+# loader offers without complaint when the GPU cannot be reached.
+RUN microdnf install -y vulkan-loader mesa-vulkan-drivers vulkan-tools \
     && microdnf clean all
 
 # @trace spec:inference-engine-slots — order 482b llama-server slot shim

@@ -39,9 +39,21 @@ consumer may re-derive capability by re-running ad-hoc vendor tool probes.
 
 The document MUST retain a derived `legacy_tier` string field whose value is
 exactly what `effective_inference_tier()` returns today
-(`metal` | `gpu-cuda` | `gpu-rocm` | `cpu`), so the CDI-absence downgrade
+(`metal` | `gpu-cuda` | `gpu-rocm` | `gpu-vulkan` | `unmeasured` | `cpu`), so the CDI-absence downgrade
 behaviour established by order 392 and the `TILLANDSIAS_INFERENCE_TIER`
 container env contract keep working unchanged during and after the migration.
+
+`gpu-vulkan` is reachable ONLY by operator opt-in (order 793-a8e7): a WSL2
+host whose tier would be `cpu` becomes `gpu-vulkan` when
+`TILLANDSIAS_INFERENCE_GPU=vulkan` is set AND both `/dev/dxg` and
+`/usr/lib/wsl` exist. Without the opt-in the tier is unchanged, so every
+existing host keeps byte-identical inference wiring. It is not detected
+because the measured lane is a regression for small models (qwen2.5:0.5b
+decode 1.23x slower, nomic-embed 1.16x slower on the iGPU), and the Dozen
+driver reports itself non-conformant (Vulkan 1.2, no shaderInt8). Until a host
+measures its decode crossover, decode SHALL stay on the CPU and the opt-in is
+prefill-only. That routing, and a GPU deadline with CPU fallback, are later
+slices of 793-a8e7; until they land the opt-in is experimental.
 
 The probe and the document MUST NOT be produced by, or require, a Python
 interpreter.
