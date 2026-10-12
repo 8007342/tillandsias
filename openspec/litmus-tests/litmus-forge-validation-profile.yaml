@@ -10,7 +10,7 @@ size: quick
 
 preconditions:
   - workspace contains scripts/forge-validate.sh
-  - workspace contains scripts/check-forge-service-health.sh
+  - workspace contains scripts/lua/check-forge-service-health.lua
   - workspace contains scripts/test-forge-validate.sh
 
 critical_path:
@@ -21,7 +21,7 @@ critical_path:
     assert_output_contains: "PASS: forge validation profile classifies PASS/SKIP/FAIL deterministically"
 
   - step: "validate production profile shell syntax"
-    command: "bash -n scripts/forge-validate.sh scripts/check-forge-service-health.sh scripts/test-forge-validate.sh && echo 'ok: validation scripts parse successfully'"
+    command: "bash -n scripts/forge-validate.sh scripts/test-forge-validate.sh && test -f scripts/lua/check-forge-service-health.lua && echo 'ok: validation scripts parse successfully'"
     timeout_ms: 2000
     expected_behavior: "ok: validation scripts parse successfully"
 

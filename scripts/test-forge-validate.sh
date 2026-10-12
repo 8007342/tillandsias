@@ -152,6 +152,11 @@ EOF
     exit 1
 }
 
+# 1561-47a8: the service check is Lua, run through the plan binary.
+plan_bin="$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" || {
+    echo "FAIL: no runnable tillandsias-plan for scripts/lua/check-forge-service-health.lua" >&2
+    exit 1
+}
 health_checks="$tmp/health"
 mkdir -p "$health_checks"
 write_stub "$health_checks/services" '{"services":[{"name":"proxy","status":"up"},{"name":"git-service","status":"up"},{"name":"inference","status":"up"}]}' 0
@@ -160,7 +165,7 @@ write_stub "$health_checks/outbound" "outbound healthy" 0
 health_output="$(
     TILLANDSIAS_HOST_KIND=forge \
     FORGE_SERVICE_HEALTH_CHECK_DIR="$health_checks" \
-    scripts/check-forge-service-health.sh
+    "$plan_bin" script run scripts/lua/check-forge-service-health.lua
 )"
 [ "$health_output" = "ok:forge-services" ] || {
     echo "FAIL: healthy forge service fixture did not pass" >&2
@@ -170,11 +175,11 @@ write_stub "$health_checks/services" '{"services":[{"name":"proxy","status":"up"
 if health_output="$(
     TILLANDSIAS_HOST_KIND=forge \
     FORGE_SERVICE_HEALTH_CHECK_DIR="$health_checks" \
-    scripts/check-forge-service-health.sh
+    "$plan_bin" script run scripts/lua/check-forge-service-health.lua
 )"; then
     echo "FAIL: unreachable forge service fixture returned success" >&2
     exit 1
 fi
-[ "$health_output" = "failed:enclave-services" ]
+[ "$health_output" = "down:enclave-services" ]
 
 echo "PASS: forge validation profile classifies PASS/SKIP/FAIL deterministically"
