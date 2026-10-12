@@ -38,12 +38,66 @@ impl Profile {
         }
     }
 
-    fn image(&self) -> &'static str {
+    /// The INIT_IMAGES / image_specs name init builds this profile from.
+    fn image_name(&self) -> &'static str {
         match self {
-            Self::Static => "tillandsias-web",
-            Self::Wrangler(_) => "tillandsias-web-wrangler",
+            Self::Static => "web",
+            Self::Wrangler(_) => "web-wrangler",
         }
     }
+
+    /// 1625-un54: exactly the version alias init (and ensure_image_exists)
+    /// tags, the router's convention. The untagged name used to resolve to
+    /// `:latest`, a tag nothing on the preview path ever promised to move.
+    fn image(&self) -> String {
+        crate::versioned_image_tag(self.image_name(), crate::VERSION.trim())
+    }
+}
+
+/// 1625-un54: bound for building a missing profile image on the host during
+/// publish_local. A cold web-wrangler build (base pull + `npm ci`) measured 12 s
+/// on lenovinha (2026-10-12); 300 s leaves room for a slow link. It is spent
+/// OUTSIDE the publish deadline, so a build never starves readiness or routing.
+const IMAGE_ENSURE_BUDGET: Duration = Duration::from_secs(300);
+
+/// The publish/reload operation deadline, excluding any IMAGE_ENSURE_BUDGET spent.
+const PUBLISH_BUDGET: Duration = Duration::from_secs(90);
+
+/// Build the profile's managed image host-side when it is absent. The name,
+/// context and tag come from the profile alone; nothing from the MCP request
+/// reaches the build.
+async fn ensure_profile_image(profile: &Profile, debug: bool) -> Result<(), String> {
+    let image = profile.image();
+    if podman(&["image", "exists", &image]).is_ok() {
+        return Ok(());
+    }
+    let name = profile.image_name();
+    let tag = image.clone();
+    let build = tokio::task::spawn_blocking(move || {
+        let root = crate::resolve_runtime_asset_root(crate::VERSION.trim(), debug)?;
+        crate::ensure_image_exists(&root, name, &tag, debug)
+    });
+    match tokio::time::timeout(IMAGE_ENSURE_BUDGET, build).await {
+        Ok(Ok(Ok(()))) => {}
+        Ok(Ok(Err(_))) | Ok(Err(_)) => {
+            return Err(
+                "runtime_unavailable: the host could not build the managed runtime image; see the tray log"
+                    .into(),
+            );
+        }
+        // The build keeps running under its image lock; a retry finds the image.
+        Err(_) => {
+            return Err(format!(
+                "runtime_not_ready: the managed runtime image is still building on the host after {} s; retry publish_local",
+                IMAGE_ENSURE_BUDGET.as_secs()
+            ));
+        }
+    }
+    podman(&["image", "exists", &image])
+        .map(|_| ())
+        .map_err(|_| {
+            "runtime_unavailable: the managed runtime image is absent after the host build".into()
+        })
 }
 
 fn select_profile(runtime: &str, configs: &[String]) -> Result<Profile, String> {
@@ -420,7 +474,7 @@ fn build_local_preview_run_args(
             "node".into(),
         ]);
     }
-    args.push(profile.image().into());
+    args.push(profile.image());
     if let Profile::Wrangler(config) = profile {
         args.extend([
             "-e".into(),
@@ -634,6 +688,7 @@ fn source_mounts(live: &LiveSource, profile: &Profile) -> Result<Vec<String>, St
             verify_subset(live, config)?;
             let config_target = format!("/srv/preview/{config}");
             let config_mount = subset_mount(live, config, &config_target)?;
+            let image = profile.image();
             let text = podman(&[
                 "run",
                 "--rm",
@@ -654,7 +709,7 @@ fn source_mounts(live: &LiveSource, profile: &Profile) -> Result<Vec<String>, St
                 &config_mount,
                 "--entrypoint",
                 "node",
-                profile.image(),
+                &image,
                 "-e",
                 CONFIG_INSPECTOR,
                 &config_target,
@@ -1036,9 +1091,30 @@ async fn publish_locked(
     let old = inspect(&name)?;
     check_owner(old.as_ref(), instance, Some(&live.forge_id))?;
     // Resolve source/profile/image/TLS before touching the previous runtime.
-    podman(&["image", "exists", profile.image()]).map_err(
-        |_| "runtime_unavailable: initialize the managed runtime image before publication",
-    )?;
+    // 1625-un54: a missing profile image is BUILT here, host-side and bounded,
+    // instead of refused with an init step nothing ever ran. The build spends
+    // its own budget; the rest of the publish keeps what it had left.
+    let remaining = RPC_DEADLINE
+        .try_with(|deadline| deadline.saturating_duration_since(Instant::now()))
+        .unwrap_or(PUBLISH_BUDGET);
+    ensure_profile_image(&profile, debug).await?;
+    RPC_DEADLINE
+        .scope(
+            Instant::now() + remaining,
+            publish_prepared(project, instance, debug, live, profile, old),
+        )
+        .await
+}
+
+async fn publish_prepared(
+    project: &str,
+    instance: &str,
+    debug: bool,
+    live: LiveSource,
+    profile: Profile,
+    old: Option<Value>,
+) -> Result<Value, String> {
+    let name = format!("tillandsias-{project}-web");
     let mounts = source_mounts(&live, &profile)?;
     let ca = ensure_router(project, debug).await?;
     let candidate = format!(
@@ -1129,7 +1205,7 @@ pub(crate) async fn publish(
 ) -> Result<Value, String> {
     RPC_DEADLINE
         .scope(
-            Instant::now() + Duration::from_secs(90),
+            Instant::now() + PUBLISH_BUDGET,
             publish_inner(project, instance, runtime, debug),
         )
         .await
@@ -1156,7 +1232,7 @@ pub(crate) async fn stop(project: &str, instance: &str, debug: bool) -> Result<V
 pub(crate) async fn reload(project: &str, instance: &str, debug: bool) -> Result<Value, String> {
     RPC_DEADLINE
         .scope(
-            Instant::now() + Duration::from_secs(90),
+            Instant::now() + PUBLISH_BUDGET,
             reload_inner(project, instance, debug),
         )
         .await
@@ -1391,6 +1467,34 @@ fn watch_source_lifetime(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 1625-un54: the image publish_local checks (and builds on a miss) is the
+    /// exact version alias init tags, never an untagged `:latest` resolution,
+    /// and the build name is one image_specs knows. The ensure takes no MCP
+    /// input: its only argument is the profile.
+    #[test]
+    fn profile_images_are_the_init_version_aliases() {
+        let version = crate::VERSION.trim();
+        assert_eq!(
+            Profile::Static.image(),
+            format!("localhost/tillandsias-web:v{version}")
+        );
+        assert_eq!(
+            Profile::Wrangler("wrangler.jsonc".into()).image(),
+            format!("localhost/tillandsias-web-wrangler:v{version}")
+        );
+        assert_eq!(Profile::Static.image_name(), "web");
+        assert_eq!(Profile::Wrangler("x".into()).image_name(), "web-wrangler");
+        assert!(IMAGE_ENSURE_BUDGET > PUBLISH_BUDGET);
+        let source = include_str!("local_web_preview.rs");
+        assert!(
+            !source.contains(&format!(
+                "{}{}",
+                "initialize the managed runtime image ", "before publication"
+            )),
+            "the init refusal names a step nothing runs; publish builds instead"
+        );
+    }
 
     /// Explicit operator-authorized fallback when the normal launcher cannot
     /// pass its version/auth gates. Uses the REAL confirmed project cache,
@@ -1786,7 +1890,10 @@ mod tests {
             || s.starts_with("--publish")
             || s.contains("TOKEN")
             || s == "deploy"));
-        assert!(args.contains(&"tillandsias-web-wrangler".into()));
+        assert!(args.contains(&crate::versioned_image_tag(
+            "web-wrangler",
+            crate::VERSION.trim()
+        )));
         assert!(joined.contains("dev --local --ip 0.0.0.0 --port 8080"));
         assert!(safe_relative(".").is_err());
         assert!(safe_relative("../other").is_err());
