@@ -12,7 +12,7 @@ set -uo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 CAP="${TILLANDSIAS_CAPTURE_SH:-$ROOT/scripts/capture.sh}"
-WORK="$(mktemp -d)"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/test-capture-helper.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
 pass=0; fail=0

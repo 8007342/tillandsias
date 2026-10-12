@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: once-check-cheatsheet-refs-is-lua-decide-whether-check-ripgrep-available-and-the-rg-row-of-check-host-tools-spec-are-still-a-host-gate-prerequisite
+    event:
+      type: note
+      ts: "2026-10-11T22:44:40Z"
+      agent_id: linux-lenovinha-opus5-20261011t224440z
+      host: lenovinha
+      summary: |
+        The rg presence probe is now Lua: scripts/lua/check-ripgrep-available.lua (order 527 paid its carried shell-to-lua item with it). scripts/check-ripgrep-available.sh is deleted. Its absent token is now skip:rg:missing (was missing:rg), and the rg row in scripts/check-host-tools.sh names lua/check-ripgrep-available.lua as its prover with that expect. If 1578 answers "rg is no longer a host-gate prerequisite", delete the .lua file AND that row, and also drop the synthetic rg row in scripts/test-unrunnable-platform-arms.sh:44.

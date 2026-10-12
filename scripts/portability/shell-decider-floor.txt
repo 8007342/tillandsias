@@ -50,7 +50,6 @@ scripts/check-gate-step-regimes.sh
 scripts/check-groundtruth-mutable-status-pins.sh
 scripts/check-groundtruth-regime-invariance.sh
 scripts/check-host-tools.sh
-scripts/check-installer-channel.sh
 scripts/check-issue-citation-convention.sh
 scripts/check-jq-callsite-ratchet.sh
 scripts/check-jq-multiline-capture-strips-cr.sh
@@ -95,7 +94,6 @@ scripts/check-refusal-affordance-added.sh
 scripts/check-release-asset-integrity.sh
 scripts/check-release-tier-freshness.sh
 scripts/check-resumable-claim-dirt.sh
-scripts/check-ripgrep-available.sh
 scripts/check-running-image-freshness.sh
 scripts/check-rust-source-pin-added.sh
 scripts/check-salvage-refs-ledger.sh

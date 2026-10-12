@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: expert-keepalive-contradicts-ephemerality
+    field: status
+    value: completed
+    ts: "2026-10-12T01:29:07Z"
+    host: lenovinha
+
+events:
+  - packet_id: expert-keepalive-contradicts-ephemerality
+    event:
+      type: completed
+      ts: "2026-10-12T01:29:07Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: PR #340 landed as 98317ea89 in land-queue run 36, gate green; measurements in 3c7824f83 (24h pins VRAM; 5m policy unloads at expires_at without rm)
+  - packet_id: expert-keepalive-contradicts-ephemerality
+    event:
+      type: note
+      ts: "2026-10-12T01:29:07Z"
+      host: lenovinha
+      summary: |-
+        landed

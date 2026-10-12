@@ -15,9 +15,10 @@
 --              not this checkout's: ok, adders=1, real=0
 --   6 EXEMPT   a reasoned exemption is honoured (exempt=1); a stale one is refused
 --   7 EMPTY    no scripts/ is could-not-run, exit 3
--- THE DOOR (build.sh _pf_run_guard + _pf_sweep_guard_tmp, extracted at run time,
--- not copied) against a planted guard that adds a worktree to THIS checkout and
--- ignores TERM, so the deadline KILL always lands and no trap of its own runs:
+-- THE DOOR (build.sh _pf_now, _pf_run_guard and _pf_sweep_guard_tmp, extracted
+-- at run time, not copied) against a planted guard that adds a worktree to a
+-- one-file scratch repo and ignores TERM, so the deadline KILL always lands and
+-- no trap of its own runs:
 --   8 PRE-FIX  the same function with its sweep calls removed leaves the
 --              registration behind (the defect, constructed)
 --   9 POST-FIX the real function leaves 0 and records swept:worktree:<path>
@@ -124,7 +125,8 @@ local build = fs.read("build.sh")
 -- _pf_sweep_fixture_scratch to the killed path): an absent one would print
 -- "command not found" there and pass only because nothing checks that call.
 local fns = extract(build, "_pf_sweep_under") .. "\n" .. extract(build, "_pf_sweep_guard_tmp") .. "\n" ..
-    extract(build, "_pf_sweep_fixture_scratch") .. "\n" .. extract(build, "_pf_run_guard") .. "\n"
+    extract(build, "_pf_sweep_fixture_scratch") .. "\n" .. extract(build, "_pf_now") .. "\n" ..
+    extract(build, "_pf_run_guard") .. "\n"
 if not fns:find("_pf_sweep_guard_tmp \"$_gtmp\" \"$_out\"", 1, true) then
     arm("8/9 DOOR premise: build.sh's _pf_run_guard calls _pf_sweep_guard_tmp", false, "the call is not in the extracted function")
 else
@@ -135,23 +137,30 @@ else
     -- The harness: everything under one base dir in the door's own TMPDIR, so
     -- this fixture's worktrees are swept even if IT is killed. It reports the
     -- worktrees registered under the base after the guard ends, then removes them.
+    -- The guard adds a worktree of a ONE-FILE scratch repo, never the checkout:
+    -- adding the checkout (11084 files) took 3.85 s under taskpolicy -b against
+    -- the 2 s deadline, so the KILL landed mid-add and arm 9 read
+    -- swept:worktree-failed one run in five (1600-nn5b's close note). The repo
+    -- sits OUTSIDE the base, or the sweep would try to remove it too.
     fs.write(REL .. "/harness.sh", table.concat({
         "set -u",
         "ROOT=\"$1\"; FN=\"$2\"",
+        "REPO=\"$(mktemp -d \"${TMPDIR:-/tmp}/wtsweep-repo.XXXXXX\")\"",
+        "git init -q \"$REPO\" && echo x > \"$REPO/f\" && git -C \"$REPO\" add f && git -C \"$REPO\" -c user.name=t -c user.email=t@t commit -qm x || { echo no-scratch-repo; exit 3; }",
         "BASE=\"$(mktemp -d \"${TMPDIR:-/tmp}/wtsweep.XXXXXX\")\"; export TMPDIR=\"$BASE\"",
-        "SCRIPT_DIR=\"$ROOT\"",
+        "SCRIPT_DIR=\"$REPO\"",
         ". \"$FN\"",
         "G=\"$BASE/plant.sh\"",
         "printf '%s\\n' 'git -C \"$1\" worktree add --detach -q \"$TMPDIR/wt\" HEAD' > \"$G\"",
         "[ -z \"${LOCK:-}\" ] || printf '%s\\n' 'git -C \"$1\" worktree lock \"$TMPDIR/wt\"' >> \"$G\"",
         "printf '%s\\n' \"trap '' TERM\" 'sleep 6' >> \"$G\"",
-        "rc=0; _pf_run_guard \"$G\" 2 \"$BASE/out\" \"$ROOT\" || rc=$?",
+        "rc=0; _pf_run_guard \"$G\" 2 \"$BASE/out\" \"$REPO\" || rc=$?",
         "echo \"rc=$rc\"",
         "real=\"$(cd \"$BASE\" && pwd -P)\"; n=0",
-        "while read -r k v; do [ \"$k\" = worktree ] || continue; case \"$v\" in \"$real\"/*|\"$BASE\"/*) n=$((n+1)); git -C \"$ROOT\" worktree remove -f -f \"$v\" >/dev/null 2>&1;; esac; done < <(git -C \"$ROOT\" worktree list --porcelain)",
+        "while read -r k v; do [ \"$k\" = worktree ] || continue; case \"$v\" in \"$real\"/*|\"$BASE\"/*) n=$((n+1)); git -C \"$REPO\" worktree remove -f -f \"$v\" >/dev/null 2>&1;; esac; done < <(git -C \"$REPO\" worktree list --porcelain)",
         "echo \"left=$n\"",
         "[ ! -f \"$BASE/out.swept\" ] || cat \"$BASE/out.swept\"",
-        "rm -rf \"$BASE\"",
+        "rm -rf \"$BASE\" \"$REPO\"",
         "",
     }, "\n"))
     -- The single-force variant: what the sweep did before it learned that a

@@ -31,6 +31,23 @@ tmp="$(mktemp -d "${TMPDIR:-/tmp}/host-tools.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
 pass=0; fail=0; unverified=0
 _spec="$(awk '/cat <<.SPEC.$/{f=1;next} /^SPEC$/{f=0} f' "$CHECK")"
+
+# A prover is a bash script under scripts/, or (since order 527 paid the
+# shell-to-lua item for check-ripgrep-available) a Lua decider under
+# scripts/lua/, run on the plan binary's `script run`. The runner is resolved
+# the way the gate resolves it (TILLANDSIAS_SCRIPT_RUNNER_BIN, then
+# plan-binary-probe.sh) and by ABSOLUTE path, because the falsification arm
+# below farms PATH down to a handful of tools that does not include it.
+PLAN_BIN="${TILLANDSIAS_SCRIPT_RUNNER_BIN:-}"
+if [ -z "$PLAN_BIN" ]; then
+    PLAN_BIN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || PLAN_BIN=""
+fi
+run_prover() { # <prover> — its stdout; the caller's PATH is the one it sees
+    case "$1" in
+        *.lua) TILLANDSIAS_SCRIPT_RUNNER_BIN="$PLAN_BIN" "$PLAN_BIN" script run "$ROOT/scripts/$1" 2>/dev/null ;;
+        *) bash "$ROOT/scripts/$1" 2>/dev/null ;;
+    esac
+}
 check() {
     if [ "$1" = ok ]; then pass=$((pass + 1)); printf 'ok   %s\n' "$2"
     else fail=$((fail + 1)); printf 'FAIL %s\n' "$2"; [ -n "${3:-}" ] && printf '     %s\n' "$3"; fi
@@ -120,7 +137,15 @@ while IFS='|' read -r tool kind scope platforms prover expect why remedy; do
     if [ "$prover" = "-" ]; then
         unverified=$((unverified + 1)); continue
     fi
-    [ -x "$ROOT/scripts/$prover" ] || { check FAIL "prover for $tool exists: $prover"; continue; }
+    case "$prover" in
+        *.lua)
+            [ -f "$ROOT/scripts/$prover" ] || { check FAIL "prover for $tool exists: $prover"; continue; }
+            # No runner is a FAIL, not a skip: with none, both runs below print
+            # nothing, agree, and the arm would read as "precondition did not hold".
+            [ -n "$PLAN_BIN" ] && [ -x "$PLAN_BIN" ] || { check FAIL "a script runner resolves for the Lua prover $prover" "remedy: cargo build --release -p tillandsias-plan, or set TILLANDSIAS_SCRIPT_RUNNER_BIN"; continue; }
+            ;;
+        *) [ -x "$ROOT/scripts/$prover" ] || { check FAIL "prover for $tool exists: $prover"; continue; } ;;
+    esac
 
     # ORDER 1004-x9ua — THE CONTROL RUN, AND WHY THIS ARM NEEDED ONE.
     #
@@ -146,11 +171,11 @@ while IFS='|' read -r tool kind scope platforms prover expect why remedy; do
     # prover rather than special-casing this one entry. NOTE THE ASYMMETRY: a
     # skip here is NOT a pass. It is counted and named, because "the precondition
     # did not hold" and "the tool is genuinely not required" must not read alike.
-    ctl="$(bash "$ROOT/scripts/$prover" 2>/dev/null | tail -1)"
+    ctl="$(run_prover "$prover" | tail -1)"
 
     # coreutils ships both names; hiding one leaves the fallback in place.
     if [ "$tool" = timeout ]; then farm "$tmp/f2" timeout gtimeout; else farm "$tmp/f2" "$tool"; fi
-    got="$(PATH="$tmp/f2" bash "$ROOT/scripts/$prover" 2>/dev/null | tail -1)"
+    got="$(PATH="$tmp/f2" run_prover "$prover" | tail -1)"
 
     if printf '%s' "$got" | grep -q "^$expect"; then
         check ok "without $tool, $prover reports $expect"
