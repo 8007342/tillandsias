@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace order:1512-3afc
+# @trace order:1512-3afc, order:1629-xtfw
 #
 # scripts/lua/check-gate-step-prefix-across-refs.lua against a scratch repo with a bare
 # remote. Trunk holds 100-a.step. The branch under test adds 110-mine.step.
@@ -12,6 +12,9 @@
 #   4  a holder ref whose last commit is OLDER than the window -> ignored
 #   5  a holder ref already merged into trunk -> ignored
 #   6  no new steps -> ok:no-new-steps
+#   7  a collision on 085 is refused (pre-1629-xtfw: an octal error, then ok)
+#   8  a collision on 020 suggests 30, the base-10 next ten (pre-fix: 20)
+#   9  010 collides with a held 10: one prefix in base 10 (pre-fix: passed)
 set -uo pipefail
 # 1592-idmu: this fixture builds its own repo, so the gate's frozen base (a SHA of
 # the gated checkout) is not its base; its scratch origin/linux-next is.
@@ -105,6 +108,32 @@ case "$rc:$out" in 0:ok:*) ok "arm 5 (control): unrelated free prefixes are acce
 step 140-dup.step; G add -A; G commit -qm dup
 out="$(run)"; rc=$?
 case "$rc:$out" in 1:refused:gate-step-prefix-across-refs:140-dup.step:origin/linux-next:140-landed.step) ok "arm 5: a prefix on trunk is refused against trunk, not the merged work ref";; *) bad "arm 5b: rc=$rc [$out]";; esac
+
+# 7, 8, 9 (1629-xtfw): prefixes are read in BASE 10. A rival recent ref holds
+# 085, 020 and 10; each arm starts a fresh branch from trunk.
+G checkout -q linux-next; G checkout -q -b work/octal
+step 085-r.step; step 020-r.step; step 10-r.step; G add -A; G commit -qm octal; git push -q origin work/octal
+git fetch -q origin
+# 7: a collision on 085 is refused, and it is the FIRST added step, so 110-m
+# behind it (held by work/other2) is no longer hidden. Pre-fix: bash read 085 as
+# octal, the error aborted the loop, and the check said ok:...:1 added.
+G checkout -q -B work/mine2 linux-next; step 085-m.step; step 110-m.step; G add -A; G commit -qm arm7
+out="$(run)"; rc=$?
+case "$rc:$out" in 1:refused:gate-step-prefix-across-refs:085-m.step:origin/work/octal:085-r.step) ok "arm 7: a collision on 085 is refused, not passed as an octal error";; *) bad "arm 7: rc=$rc [$out] err=[$(tr '\n' ' ' < "$W/err")]";; esac
+# 8: a collision on 020 suggests 30, the next base-10 ten. Pre-fix: 20 (octal 16).
+G checkout -q -B work/mine2 linux-next; step 020-m.step; G add -A; G commit -qm arm8
+out="$(run)"; rc=$?
+if [ "$rc" -eq 1 ] && [ "$out" = "refused:gate-step-prefix-across-refs:020-m.step:origin/work/octal:020-r.step" ] \
+   && grep -q '^  remedy: .*/30-m\.step ' "$W/err"; then
+    ok "arm 8: a collision on 020 suggests the base-10 free prefix 30"
+else
+    bad "arm 8: rc=$rc [$out] err=[$(tr '\n' ' ' < "$W/err")]"
+fi
+# 9: THE DECISION: 010 and 10 are the same prefix (base 10), so they collide.
+# Pre-fix they compared as strings and passed.
+G checkout -q -B work/mine2 linux-next; step 010-m.step; G add -A; G commit -qm arm9
+out="$(run)"; rc=$?
+case "$rc:$out" in 1:refused:gate-step-prefix-across-refs:010-m.step:origin/work/octal:10-r.step) ok "arm 9: 010 collides with a held 10 (one prefix, base 10)";; *) bad "arm 9: rc=$rc [$out] err=[$(tr '\n' ' ' < "$W/err")]";; esac
 
 total=$((pass+fail))
 if [ "$fail" -eq 0 ]; then echo "ok:gate-step-prefix-across-refs-fixture:$pass/$total"; exit 0; fi

@@ -135,6 +135,23 @@ resolve_plan_binary() {
         # only on a binary built from sources carrying order 569, and its
         # output is the capability set the caller may want next.
         if "$candidate" capabilities >/dev/null 2>&1; then
+            # ORDER 1637-arwp: a PROBED candidate is returned ABSOLUTE. The
+            # ./target/... spelling is relative to the caller's cwd at resolve
+            # time, and every caller that later cd's (a scratch repo, a fake
+            # tree) or hands it to a child that does got "spawn failed" or
+            # `env: './target/release/tillandsias-plan': No such file`. 38
+            # callers hand-normalised ./ themselves (their `./*)` arms are now
+            # no-ops); the release-tier fixtures that cd'd elsewhere were the
+            # ones that never got one, and they went red only in the release
+            # gate (shell-ratchet, fragment-status-loss-attribution-shape).
+            # $PWD, not `pwd -P`: the spelling must stay comparable with
+            # ensure_fresh_plan_binary's readlink -f under a symlinked checkout.
+            # A relative CARGO_TARGET_DIR was given a ./ prefix above, so this
+            # covers it too. The TILLANDSIAS_PLAN_BIN override is NOT rewritten:
+            # it is returned verbatim on purpose (704-zcgi).
+            case "$candidate" in
+                ./*) candidate="$PWD/${candidate#./}" ;;
+            esac
             printf '%s\n' "$candidate"
             return 0
         fi
@@ -304,12 +321,14 @@ ensure_fresh_plan_binary() {
         if [ -n "$_pbp_built" ]; then
             # Prefer the RESOLVER'S SPELLING of that same file. Callers treat
             # this return value as a path and 851-cduu pins its form — it
-            # expects ./target/release/tillandsias-plan, and returning the
-            # constructed ${CARGO_TARGET_DIR:-target}/... spelling reds it with
-            # "expected ./target/..., got target/...". The two are the same
-            # FILE; only the string differs. What must agree is the artefact,
-            # which readlink -f settles; the string should stay the one every
-            # other caller already sees.
+            # expects the resolver's ABSOLUTE $PWD/target/release/... spelling
+            # (1637-arwp; it was ./target/... before), and returning the
+            # constructed ${CARGO_TARGET_DIR:-target}/... spelling reds it. The
+            # two are the same FILE; only the string differs. What must agree
+            # is the artefact, which readlink -f settles; the string should
+            # stay the one every other caller already sees. When the resolver
+            # disagrees, the built path is used and is made absolute the same
+            # way, so neither branch hands a caller a cwd-relative path.
             # REFUSE ON AN EMPTY SIDE — this compare used to pass SILENTLY when
             # both substitutions failed. `readlink -f` is GNU-only on older BSD,
             # and where it is missing BOTH sides are "" and `[ "" = "" ]` is
@@ -329,6 +348,11 @@ ensure_fresh_plan_binary() {
                 bin="$_pbp_r"
             else
                 bin="$_pbp_built"
+                case "$bin" in
+                    /*|[A-Za-z]:*) ;;
+                    ./*) bin="$PWD/${bin#./}" ;;
+                    *) bin="$PWD/$bin" ;;
+                esac
             fi
         else
             bin="$(resolve_plan_binary)" || return 1

@@ -88,12 +88,16 @@ critical_path:
     expected_behavior: "ok: old two-state name absent"
     timeout_ms: 3000
 
+  # 1437-8c6p (34d5c8804) reworded the hard-failure die for end users ("the
+  # installed app failed its self-check") — installers are SOFT, no power-user
+  # output. The check itself is unchanged: --diagnose --json runs and exit 1
+  # dies. The pin follows the wording and still requires the exit-1 die.
   - step: "install-macos.sh contains the post-install --diagnose sanity check"
-    command: "grep -Fe '--diagnose --json' scripts/install-macos.sh && grep -F 'install bits broken' scripts/install-macos.sh"
+    command: "grep -Fe '--diagnose --json' scripts/install-macos.sh && grep -F 'if [[ $DIAG_EXIT -eq 1 ]]; then' scripts/install-macos.sh && grep -F 'die \"the installed app failed its self-check (exit 1)' scripts/install-macos.sh"
     expected_behavior: "grep succeeds"
     assert_exit: 0
     assert_output_nonempty: true
-    assert_output_contains: "install bits broken"
+    assert_output_contains: "failed its self-check (exit 1)"
     timeout_ms: 3000
 
   - step: "Gatekeeper hint is quarantine-gated, not unconditional (order 421)"

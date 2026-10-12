@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: the-preflight-doors-per-guard-deadline-does-not-scale-with-the-budget-regime-so-darwin-deadline-skips-push-deciders-the-gate-refuses-on
+    event:
+      type: list-replace
+      ts: "2026-10-12T13:57:00Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      field: exit_criteria
+      items:
+        - "the 9 deciders that cost at most 20 s alone on real diffs get a verdict at the door on darwin-background; the 4 slow ones (fragment-keys-are-read, mo-full-attestations, added-test-is-referenced, append-vs-origin-fold) stay deadline-skipped and are named in the verdict line"
+        - "on the Linux floor regime the per-guard deadline (5 s) and the budget (150 s) are unchanged, and plain darwin stays at 5 s until it is measured"
+        - "the verdict line names the decider deadline in force beside budget= and budget-regime="
+      summary: |-
+        The 15 s came from a distribution measured on bare trunk (7a990a936), an empty diff, which read the diff-scoped deciders as free; at 15 s the door still cut script-exec-bits, sigpipe-verdict-pipelines-added and skills-single-source. Re-measured alone under taskpolicy -b on four landed PRs' real diffs (369, 370, 371, 374): only sigpipe-verdict-added scaled with the diff, 1-70 s from one fork per line of each touched file, fixed to 2-8 s with verdict parity on all five samples including 371's pre-fix head (violation 6 both). The nine then cost at most 18 s, constant across diffs, so the deadline is 20 s. Measured after the change at 012bb7638: all nine got verdicts, the four were skipped by name, wall 440 s against 450, refused 0.

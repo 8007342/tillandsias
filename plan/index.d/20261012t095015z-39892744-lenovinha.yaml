@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-forge-image-has-no-wasm32-target-so-a-wasm-pack-web-project-cannot-build-in-the-forge
+    field: status
+    value: completed
+    ts: "2026-10-12T09:50:15Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-forge-image-has-no-wasm32-target-so-a-wasm-pack-web-project-cannot-build-in-the-forge
+    event:
+      type: completed
+      ts: "2026-10-12T09:50:15Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: land(362) 54de005fb into linux-next, gate green (run 42); branch work/1625-grk8 head 43460c103. Evidence plan/evidence/1625-grk8-wasm32-2026-10-12/ on an isolated store, one run, both images, --network=none: C1 cargo build --target wasm32-unknown-unknown of a minimal lib crate: pre-fix (origin/linux-next Containerfile.base) error[E0463] cannot find crate for std, fixed produces grk8_lib.wasm; wasm-pack build --target web of a minimal wasm-bindgen 0.2.100 crate: pre-fix wasm32 target not found in sysroot, fixed produces pkg/. C2 size delta forge-base +119,379,464 bytes (113 MiB), forge +116,401,157 bytes (111 MiB), recorded on the row. Litmus default-image-containerfile-shape Req wasm32 target with a negative control, 14/14.

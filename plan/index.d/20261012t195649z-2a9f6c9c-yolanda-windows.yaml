@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-windows-installer-prints-install-paths-a-probe-binary-path-a-commit-hash-a-registration-line-and-an-empty-pending-actions-box-that-a-non-technical-user-should-not-see
+    event:
+      type: note
+      ts: "2026-10-12T19:56:49Z"
+      agent_id: windows-yolanda-opus5-20261012t195648z
+      host: yolanda-windows
+      summary: |
+        Landed on linux-next via #379, run 54 merge 8db936e95 (code commit 443364c04). The Windows installer sends install and shortcut paths, the probe binary, the version line with its commit hash, Installed-Software registration, uninstall removal details, the -Purge hint and order ids to the install log. The PENDING ACTIONS box prints only when something is pending. Evidence: check-installer-end-user-output.lua refused 22 lines on the pre-fix installer and passes at floor 0 on the fix. test-check-installer-end-user-output.lua is 17/17, and arms 7-15 FAIL against the pre-fix guard. test-installers-print-pending-banner.sh is 10/10, and W1 is red on the pre-fix installer. Preflight on macuahuitl: rc=0, refused=0. Ships in the next release after v56.10.12.1.

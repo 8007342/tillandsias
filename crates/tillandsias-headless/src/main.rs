@@ -410,6 +410,65 @@ fn main() {
         }
     }
 
+    // Order 482c: hidden harness mode for the engine-parity smoke. `ensure`
+    // runs the launch path's own inference ensure plus its soft readiness
+    // report; `teardown` runs the shutdown path's shared-stack cleanup. Both
+    // act on whatever podman store the environment names, so the harness
+    // (scripts/inference-engine-parity-smoke.sh) points it at an isolated one.
+    // Not operator surface; absent from --help like --internal-ensure-image.
+    if let Some(i) = user_args
+        .iter()
+        .position(|a| a == "--internal-inference-slot")
+    {
+        let debug = user_args.iter().any(|a| a == "--debug");
+        let action = user_args.get(i + 1).map(String::as_str);
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime");
+        let client = PodmanClient::new();
+        match (action, user_args.get(i + 2)) {
+            (Some("ensure"), Some(certs_dir)) => {
+                let outcome = rt.block_on(async {
+                    ensure_inference_for_launch(
+                        &client,
+                        Path::new(certs_dir),
+                        VERSION.trim(),
+                        debug,
+                    )
+                    .await?;
+                    Ok::<bool, String>(report_inference_readiness(&client, debug).await)
+                });
+                match outcome {
+                    Ok(ready) => {
+                        println!("inference-slot: ensure ready={ready}");
+                        std::process::exit(0);
+                    }
+                    Err(e) => {
+                        eprintln!("[tillandsias] --internal-inference-slot ensure failed: {e}");
+                        std::process::exit(1);
+                    }
+                }
+            }
+            (Some("teardown"), _) => {
+                rt.block_on(cleanup_shared_stack_if_no_running_forge(
+                    &client,
+                    "inference-slot",
+                    None,
+                    debug,
+                ));
+                println!("inference-slot: teardown done");
+                std::process::exit(0);
+            }
+            _ => {
+                eprintln!(
+                    "Error: --internal-inference-slot requires `ensure <certs-dir>` or `teardown`"
+                );
+                std::process::exit(2);
+            }
+        }
+    }
+
     // @trace spec:vsock-transport — `--listen-vsock <PORT>` switches the
     // headless service from binding the Linux Unix control socket to
     // binding a vsock listener on `VMADDR_CID_ANY:<PORT>`. Only available
@@ -3787,6 +3846,20 @@ pub(crate) const PROXY_CA_KEY_SECRET: &str = "tillandsias-ca-key";
 /// least-privilege while readable by exactly its consumer.
 pub(crate) const PROXY_CA_KEY_SECRET_OPTS: &str = "uid=1000,gid=1000,mode=0400";
 
+/// Credential-quarantine tmpfs overlays (orders 170/224) for the forge's
+/// `~/.ssh` and `~/.config/gh`. The trailing `U` is REQUIRED, not cosmetic:
+/// podman mounts a tmpfs `root:root` unless told otherwise, and the forge runs
+/// as its image user under `--userns=keep-id`. Without it `~/.config/gh` was
+/// root-owned 0700, and `gh auth status` failed with "permission denied"
+/// instead of reporting "not logged in" (1625-bax2, measured on yoga).
+/// `U` is podman's chown-to-the-container-user option, so it follows keep-id
+/// without hard-coding a uid. NOT `uid=1000,gid=1000`: podman rejects those on
+/// `--tmpfs` ("unknown mount option"), so the forge would not start at all
+/// (exit 125, measured on macuahuitl with podman 5.8.7). The overlays stay
+/// EMPTY: owning them gives the forge an empty directory, never a credential.
+pub(crate) const FORGE_SSH_QUARANTINE_TMPFS: &str = "/home/forge/.ssh:size=1m,mode=0700,U";
+pub(crate) const FORGE_GH_QUARANTINE_TMPFS: &str = "/home/forge/.config/gh:size=1m,mode=0700,U";
+
 fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
     let mut args: Vec<String> = vec![
         "--detach".into(),
@@ -5364,6 +5437,37 @@ async fn wait_for_inference_ready(client: &PodmanClient, debug: bool) -> Result<
     ))
 }
 
+/// Wait for inference readiness WITHOUT gating the caller on it (order 392:
+/// best-effort). A slot that never becomes ready logs one DEGRADED line naming
+/// the selected engine and the caller continues (SLOT-8 "Readiness failure is
+/// soft"). Returns whether the slot answered.
+/// @trace spec:inference-engine-slots
+async fn report_inference_readiness(client: &PodmanClient, debug: bool) -> bool {
+    match wait_for_inference_ready(client, debug).await {
+        Ok(()) => true,
+        Err(e) => {
+            let (engine, _) = engine_slots::selected_engine_kind(
+                std::env::var("TILLANDSIAS_INFERENCE_ENGINE")
+                    .ok()
+                    .as_deref(),
+            );
+            eprintln!("{}", inference_degraded_line(engine, &e));
+            false
+        }
+    }
+}
+
+/// The SLOT-8 DEGRADED line for a slot that never became ready: names the
+/// engine and the last probe failure, and says the launch continues.
+fn inference_degraded_line(engine: engine_slots::EngineKind, reason: &str) -> String {
+    format!(
+        "[tillandsias] [forge-launch] DEGRADED: local inference not ready \
+         (engine={}): {reason}; continuing — local models are optional (harnesses \
+         use cloud models).",
+        engine.as_str()
+    )
+}
+
 /// Probe the served bare repository for a resolvable HEAD plus a concrete
 /// target-project head. The separate seam keeps the reachable-but-unseeded
 /// state deterministic in unit tests without consuming the bounded wait.
@@ -6154,6 +6258,37 @@ fn build_inference_run_args(
     for (name, value) in engine_slots::pin_backend_environment(effective_tier, cuda_major) {
         args.extend(["--env".into(), format!("{name}={value}")]);
     }
+    // Order 482b: the engine slot (ollama by default, SLOT-3). The llama-server
+    // slot is delivered the render nodes this user can open — on any tier,
+    // because its Vulkan lane needs no vendor stack (SLOT-4) — and an
+    // inaccessible node is reported, never chmod-ed (SLOT-5).
+    let (engine, engine_note) = engine_slots::selected_engine_kind(
+        std::env::var("TILLANDSIAS_INFERENCE_ENGINE")
+            .ok()
+            .as_deref(),
+    );
+    if let Some(note) = engine_note {
+        eprintln!("[tillandsias] WARNING: {note}");
+    }
+    let (usable_nodes, unusable_nodes) = if engine == engine_slots::EngineKind::LlamaServer {
+        engine_slots::usable_render_nodes(Path::new("/dev/dri"))
+    } else {
+        (Vec::new(), Vec::new())
+    };
+    for node in &unusable_nodes {
+        eprintln!(
+            "[tillandsias] llama-server slot: render node {} is not readable+writable by this user — not delivered; the slot runs on CPU unless another node is usable (SLOT-5)",
+            node.display()
+        );
+    }
+    args.extend(engine_slots::llama_server_run_args(
+        engine,
+        std::env::var("TILLANDSIAS_INFERENCE_LLAMA_BACKEND")
+            .ok()
+            .as_deref(),
+        effective_tier,
+        &usable_nodes,
+    ));
     args.extend(proxy_env_args());
     // Order 524: this env pair MUST be built before the mount/image tail.
     // It used to be spliced in afterwards with two `args.insert(args.len() - 2,
@@ -8356,6 +8491,17 @@ fn build_opencode_forge_args(
         format!("TILLANDSIAS_PROJECT={project_name}"),
         "--env".into(),
         format!("TILLANDSIAS_AGENT={}", mode.agent_identity()),
+        // ORDER 776-drwr: the same accel claim build_forge_agent_run_args_with_vault
+        // hands every other lane (orders 392 and 480). This builder never had it,
+        // so OpenCode lanes ran with no envelope and lib-common.sh printed no
+        // "Accelerators" line (measured on a tray-launched Windows lane, 2026-08-16).
+        "--env".into(),
+        format!("TILLANDSIAS_INFERENCE_TIER={}", effective_inference_tier()),
+        "--env".into(),
+        format!(
+            "TILLANDSIAS_ACCEL_ENVELOPE={}",
+            accel_probe::accel_envelope(&accel_probe::load_or_probe(effective_inference_tier()))
+        ),
         "--env".into(),
         "TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets".into(),
         "--tmpfs".into(),
@@ -8373,9 +8519,9 @@ fn build_opencode_forge_args(
         // tmpfs are empty — the forge has no business reading host SSH keys or
         // GitHub CLI tokens; all authenticated git traffic flows through the mirror.
         "--tmpfs".into(),
-        "/home/forge/.ssh:size=1m,mode=0700".into(),
+        FORGE_SSH_QUARANTINE_TMPFS.into(),
         "--tmpfs".into(),
-        "/home/forge/.config/gh:size=1m,mode=0700".into(),
+        FORGE_GH_QUARANTINE_TMPFS.into(),
         // Mount under `/home/forge/src/<project>/` (not directly at
         // `/home/forge/src`) so the in-container tree matches what the forge
         // entrypoint's clone path would produce
@@ -17523,12 +17669,7 @@ pub(crate) fn ensure_enclave_for_project(
         // inference-ollama-selfinstall-tls-uid1000-2026-07-24) must NOT abort
         // the forge — warn and continue so cloud-model harnesses launch
         // regardless. When local models land, re-gate behind an opt-in.
-        if let Err(e) = wait_for_inference_ready(&client, debug).await {
-            eprintln!(
-                "[tillandsias] [forge-launch] WARNING: local inference not ready ({e}); \
-                 continuing — local models are optional (harnesses use cloud models)."
-            );
-        }
+        report_inference_readiness(&client, debug).await;
 
         // Order 452 slice 2: the clone-only forge clones from the mirror the
         // instant it boots — block until the mirror actually serves a
@@ -17828,6 +17969,20 @@ async fn ensure_shared_git_and_inference_for_launch(
         )
         .await?;
     }
+    ensure_inference_for_launch(client, certs_dir, version, debug).await?;
+    Ok(mirror_identity)
+}
+
+/// The inference half of the launch ensure, on its own so the engine-parity
+/// harness (order 482c, `--internal-inference-slot ensure`) drives the SAME
+/// guard and run site a forge launch does, not a copy of it.
+/// @trace spec:inference-engine-slots (SLOT-8: double ensure is a no-op)
+async fn ensure_inference_for_launch(
+    client: &PodmanClient,
+    certs_dir: &Path,
+    version: &str,
+    debug: bool,
+) -> Result<(), String> {
     // Order 443: inference is nearly stateless but --replacing it on every
     // launch drops loaded models and interrupts a sibling's inference.
     // Recreate-if-not-running (ephemerality/idempotency), not always.
@@ -17860,7 +18015,7 @@ async fn ensure_shared_git_and_inference_for_launch(
             .await
             .map_err(|e| format!("[forge-launch] failed to start inference: {e}"))?;
     }
-    Ok(mirror_identity)
+    Ok(())
 }
 
 /// Build the forge `podman run` args for an interactive launch.
@@ -18426,8 +18581,8 @@ fn build_forge_agent_run_args_with_vault(
         // host $HOME, but the --volume source mount of Tllatoani's
         // ~/src/tillandsias is the host's own checkout, so its child
         // .ssh/.config would be visible). The tmpfs prevents that.
-        .tmpfs("/home/forge/.ssh:size=1m,mode=0700")
-        .tmpfs("/home/forge/.config/gh:size=1m,mode=0700")
+        .tmpfs(FORGE_SSH_QUARANTINE_TMPFS)
+        .tmpfs(FORGE_GH_QUARANTINE_TMPFS)
         .env("TILLANDSIAS_CHEATSHEETS", "/opt/cheatsheets")
         .entrypoint(mode.entrypoint());
     // Order 437: clone-only (default) selects the mirror network-clone
@@ -24821,6 +24976,69 @@ mod tests {
         }
     }
 
+    /// 1625-bax2: the quarantine tmpfs options must be ones podman ACCEPTS.
+    /// The first fix passed `uid=1000,gid=1000`, which every argv assertion
+    /// accepted and podman refuses ("unknown mount option", exit 125), so the
+    /// forge would not have started. Only a real podman can judge this.
+    ///
+    /// With a tillandsias forge image present, both overlays are mounted at
+    /// their real paths under --userns=keep-id, and each must be EMPTY and
+    /// owned by the container user. With any other local image, `true` must
+    /// start with both option strings. With no reachable podman or no local
+    /// image, the test skips with the reason (never pulls).
+    #[test]
+    fn forge_quarantine_tmpfs_options_are_accepted_by_podman() {
+        let _lock = podman_seam_lock();
+        let info = podman_cmd_sync()
+            .args(["info", "--format", "{{.Host.Arch}}"])
+            .output_bounded(OperationKind::Availability.default_budget());
+        if !info.as_ref().is_ok_and(|o| o.status.success()) {
+            eprintln!("skip: no reachable podman here (podman info failed)");
+            return;
+        }
+        let images = podman_cmd_sync()
+            .args(["images", "--format", "{{.Repository}}:{{.Tag}}"])
+            .output_bounded(OperationKind::Inspect.default_budget())
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+            .unwrap_or_default();
+        let images: Vec<&str> = images
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty() && !l.contains("<none>"))
+            .collect();
+        let forge = images.iter().find(|i| i.contains("tillandsias-forge"));
+        let Some(image) = forge.or(images.first()) else {
+            eprintln!("skip: no local image to run (this test never pulls)");
+            return;
+        };
+        let mut cmd = podman_cmd_sync();
+        cmd.args(["run", "--rm", "--pull=never", "--userns=keep-id"])
+            .args(["--tmpfs", FORGE_SSH_QUARANTINE_TMPFS])
+            .args(["--tmpfs", FORGE_GH_QUARANTINE_TMPFS]);
+        if forge.is_some() {
+            cmd.args(["--entrypoint", "/bin/sh", image, "-c"]).arg(
+                "for d in /home/forge/.ssh /home/forge/.config/gh; do \
+                   [ \"$(stat -c %u \"$d\")\" = \"$(id -u)\" ] || { echo \"$d owner $(stat -c %U:%G \"$d\")\"; exit 3; }; \
+                   [ -z \"$(ls -A \"$d\")\" ] || { echo \"$d not empty\"; exit 4; }; \
+                 done",
+            );
+        } else {
+            cmd.args(["--entrypoint", "true", image]);
+        }
+        let out = cmd
+            .output_bounded(OperationKind::Container.default_budget())
+            .expect("podman run did not finish within its budget");
+        assert!(
+            out.status.success(),
+            "podman must accept the forge quarantine tmpfs options {FORGE_SSH_QUARANTINE_TMPFS} / \
+             {FORGE_GH_QUARANTINE_TMPFS} on {image} (forge image: {}); exit {:?}, stdout {:?}, stderr {:?}",
+            forge.is_some(),
+            out.status.code(),
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
     #[test]
     fn forge_credential_quarantine_mounts_present() {
         let _pseam = podman_false_seam();
@@ -24874,6 +25092,29 @@ mod tests {
             found_gh_config,
             "must mount credential-quarantine tmpfs at /home/forge/.config/gh"
         );
+        // 1625-bax2: the overlays are FORGE-owned. podman mounts a tmpfs
+        // root:root unless told otherwise, and a root-owned 0700 ~/.config/gh
+        // makes `gh auth status` say "permission denied", not "not logged in".
+        // `U` chowns to the container user; podman REJECTS uid=/gid= on
+        // --tmpfs, which forge_quarantine_tmpfs_options_are_accepted_by_podman
+        // proves against a real podman (an argv check cannot).
+        for quarantine in ["/home/forge/.ssh:", "/home/forge/.config/gh:"] {
+            let spec = argv
+                .iter()
+                .find(|a| a.starts_with(quarantine))
+                .unwrap_or_else(|| panic!("no tmpfs for {quarantine}: {argv:?}"));
+            let opts: Vec<&str> = spec[quarantine.len()..].split(',').collect();
+            assert!(
+                opts.contains(&"U"),
+                "{quarantine} quarantine tmpfs must be chowned to the forge user (U); got {spec}"
+            );
+            assert!(
+                !opts
+                    .iter()
+                    .any(|o| o.starts_with("uid=") || o.starts_with("gid=")),
+                "{quarantine} quarantine tmpfs must not pass uid=/gid=, which podman rejects on --tmpfs; got {spec}"
+            );
+        }
         assert!(
             found_git_config_ro,
             "must mount forge-owned gitconfig at /home/forge/.gitconfig (order 224)"
@@ -26848,6 +27089,10 @@ mod tests {
     /// to sibling probes while held, excluded by exact name for the owning
     /// process, and vanish the moment the guard drops (flock-on-death).
     #[test]
+    #[cfg_attr(
+        not(unix),
+        ignore = "1635-hbvw: resource_lock is a no-op off unix (launch markers guard podman lanes, which run only in the Linux guest); resource_lock::tests::try_lock_is_a_no_op_off_unix flags the day that changes"
+    )]
     fn shared_stack_launch_marker_lifecycle_and_own_exclusion() {
         const CHILD_ENV: &str = "TILLANDSIAS_LAUNCH_MARKER_LIFECYCLE_CHILD";
         const TEST_NAME: &str = "tests::shared_stack_launch_marker_lifecycle_and_own_exclusion";
@@ -26933,10 +27178,17 @@ mod tests {
         let git_run_idx = window
             .find("\"forge-launch-git\"")
             .expect("git mirror create site present");
-        let inference_guard_idx = window
+        assert!(
+            window.contains("ensure_inference_for_launch(client, certs_dir, version, debug)"),
+            "the launch ensure must delegate inference to ensure_inference_for_launch"
+        );
+        // Order 482c: the inference half is its own fn so the parity harness
+        // drives the same guard; pin the guard order in THAT window.
+        let inference = source_window(source, "async fn ensure_inference_for_launch(");
+        let inference_guard_idx = inference
             .find("container_running(\"tillandsias-inference\")")
             .expect("inference ensure must check container_running first");
-        let inference_run_idx = window
+        let inference_run_idx = inference
             .find("\"forge-launch-inference\"")
             .expect("inference create site present");
         assert!(
@@ -26947,6 +27199,31 @@ mod tests {
             inference_guard_idx < inference_run_idx,
             "inference running-check must precede its run site"
         );
+    }
+
+    /// Order 482c / SLOT-8 "Readiness failure is soft": a never-ready slot logs
+    /// one DEGRADED line naming the selected engine and the probe failure. The
+    /// "never gates launch" half is structural; litmus:inference-engine-parity-shape
+    /// pins it with a seeded hard-gate regression.
+    #[test]
+    fn inference_degraded_line_names_engine_and_reason() {
+        for (engine, name) in [
+            (engine_slots::EngineKind::Ollama, "engine=ollama"),
+            (engine_slots::EngineKind::LlamaServer, "engine=llama-server"),
+        ] {
+            let line = inference_degraded_line(engine, "probe failed: exit 7");
+            assert!(
+                line.contains("DEGRADED: local inference not ready"),
+                "{line}"
+            );
+            assert!(line.contains(name), "{line}");
+            assert!(line.contains("probe failed: exit 7"), "{line}");
+            assert!(line.contains("continuing"), "{line}");
+            assert!(
+                !line.contains("WARNING"),
+                "SLOT-8 wants DEGRADED, not WARNING: {line}"
+            );
+        }
     }
 
     /// Order 443 fixture 1 (second-forge ensure leaves shared containers
@@ -27869,6 +28146,42 @@ mod tests {
             "Error: cannot set up namespace: newuidmap returned exit status 1"
         ));
         assert!(!podman_runtime_blocker("podman run exited with status 125"));
+    }
+
+    /// ORDER 776-drwr. The OpenCode builder (the OpenCode and OpenCode Web
+    /// lanes) must hand the forge the same accel claim the agent builder does:
+    /// TILLANDSIAS_ACCEL_ENVELOPE (lib-common.sh's "Accelerators" line and
+    /// accel_class read it) and TILLANDSIAS_INFERENCE_TIER. Measured live on
+    /// windows/yolanda 2026-08-16: a tray-launched lane through this path ran
+    /// with neither, so its agent saw no accel claim at all.
+    #[test]
+    fn opencode_forge_args_carry_the_accel_envelope_and_inference_tier() {
+        for mode in [ForgeMode::Cli, ForgeMode::Web] {
+            let args = build_opencode_forge_args(
+                &PathBuf::from("/tmp/project"),
+                Some(&PathBuf::from("/tmp/project")),
+                None,
+                "alpha",
+                None,
+                None,
+                &PathBuf::from("/tmp/ca"),
+                "1.2.3",
+                mode,
+                None,
+                false,
+                false,
+            );
+            let envelope = args
+                .iter()
+                .find_map(|a| a.strip_prefix("TILLANDSIAS_ACCEL_ENVELOPE="))
+                .unwrap_or_else(|| panic!("{mode:?}: no TILLANDSIAS_ACCEL_ENVELOPE in {args:?}"));
+            assert!(
+                envelope.contains("accel_class="),
+                "{mode:?}: the envelope must name the accel class, got {envelope:?}"
+            );
+            let tier = format!("TILLANDSIAS_INFERENCE_TIER={}", effective_inference_tier());
+            assert!(args.contains(&tier), "{mode:?}: no {tier} in {args:?}");
+        }
     }
 
     /// Order-491 probe-4 pin: the interactive forge run must carry an
@@ -29100,13 +29413,11 @@ esac
         // not be present depending on whether HOME is set in the test environment.
         assert!(has_arg(&args, "--tmpfs"));
         assert!(
-            args.iter()
-                .any(|arg| arg == "/home/forge/.ssh:size=1m,mode=0700"),
+            args.iter().any(|arg| arg == FORGE_SSH_QUARANTINE_TMPFS),
             "opencode forge args must quarantine .ssh via tmpfs; got {args:?}"
         );
         assert!(
-            args.iter()
-                .any(|arg| arg == "/home/forge/.config/gh:size=1m,mode=0700"),
+            args.iter().any(|arg| arg == FORGE_GH_QUARANTINE_TMPFS),
             "opencode forge args must quarantine .config/gh via tmpfs; got {args:?}"
         );
         assert!(
@@ -30538,7 +30849,7 @@ esac
             .find("ensure_ssh_lane_sidecar(")
             .expect("launch path must ensure the ssh lane sidecar");
         let inference_at = launch
-            .find("forge-launch-inference")
+            .find("ensure_inference_for_launch(")
             .expect("launch window names the inference start");
         assert!(
             sidecar_at < inference_at,
@@ -31281,9 +31592,13 @@ esac
         assert!(has_arg(&args, "HOME=/tmp"));
         assert!(has_arg(&args, "XDG_CONFIG_HOME=/tmp/chromium-config"));
         assert!(has_arg(&args, "XDG_CACHE_HOME=/tmp/chromium-cache"));
-        assert!(args.iter().any(|arg| {
-            arg == "type=bind,source=/tmp/tillandsias/ca/intermediate.crt,target=/etc/tillandsias/ca.crt,relabel=shared,readonly=true"
-        }));
+        // 1635-hbvw: the source is certs_dir joined with the platform
+        // separator, so build the expectation the same way.
+        let ca_mount = format!(
+            "type=bind,source={},target=/etc/tillandsias/ca.crt,relabel=shared,readonly=true",
+            certs_dir.join("intermediate.crt").display()
+        );
+        assert!(args.contains(&ca_mount), "no {ca_mount} in {args:?}");
         assert!(has_arg(
             &args,
             "TILLANDSIAS_CA_BUNDLE=/etc/tillandsias/ca.crt"

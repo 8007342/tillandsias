@@ -1,4 +1,4 @@
--- @trace order:1512-3afc, order:1628-re39
+-- @trace order:1512-3afc, order:1628-re39, order:1629-xtfw
 -- @env TILLANDSIAS_STEP_PREFIX_TRUNK TILLANDSIAS_GATE_DIFF_BASE TILLANDSIAS_STEP_PREFIX_REFS TILLANDSIAS_STEP_PREFIX_WINDOW_DAYS
 --
 -- Refuse a NEWLY ADDED gate step whose numeric prefix another host already
@@ -31,16 +31,17 @@
 -- TILLANDSIAS_GATE_DIFF_BASE when set), TILLANDSIAS_STEP_PREFIX_REFS (default
 -- refs/remotes/origin/work/), TILLANDSIAS_STEP_PREFIX_WINDOW_DAYS (default 14).
 --
--- PORTED from check-gate-step-prefix-across-refs.sh (1628-re39), quirks kept:
---   * the suggested free prefix is computed the way bash's $(( )) read the
---     prefix: a leading zero makes it OCTAL, so a collision on 020 suggests 20,
---     not 30;
---   * prefixes compare as STRINGS (awk's q == p), so 010 and 10 are different;
---   * the "used" set is the raw prefix text, checked by exact match (grep -x).
---   * a collision on a leading-zero prefix holding an 8 or a 9 (08x, 09x)
---     PASSES: bash's octal $(( )) fails, the error aborts the loop, and the
---     .sh prints ok with the steps counted so far. That is a false negative,
---     recorded on 1628-re39 and kept here, not fixed.
+-- PORTED from check-gate-step-prefix-across-refs.sh (1628-re39). The port kept
+-- the .sh's octal quirks; 1629-xtfw fixed them. Prefixes are now read in BASE
+-- 10 everywhere:
+--   * a collision on 020 suggests the next free ten, 30 (bash's octal read
+--     said 20);
+--   * prefixes compare as NUMBERS, so 010 and 10 are the same prefix and
+--     collide (they compared as strings before);
+--   * the "used" set holds numbers, so a free prefix skips 030 as well as 30;
+--   * a collision on 08x or 09x is REFUSED. Before 1629-xtfw bash's octal
+--     $(( )) failed on it, the error aborted the loop, and the check printed
+--     ok, hiding every later collision too (a false negative).
 
 local function env_or(name, default)
     local v = env.get(name)
@@ -100,48 +101,29 @@ end
 
 local used = {}
 for _, h in ipairs(holders) do
-    local p = h[2]:match("^[0-9]+")
+    local p = tonumber(h[2]:match("^[0-9]+") or "", 10)
     if p then used[p] = true end
 end
 for _, f in ipairs(added) do
-    local p = basename(f):match("^[0-9]+")
+    local p = tonumber(basename(f):match("^[0-9]+") or "", 10)
     if p then used[p] = true end
-end
-
--- bash's $(( pfx )): a leading zero reads octal; 8 or 9 in an octal literal is
--- an error (nil here).
-local function bash_int(s)
-    if #s > 1 and s:sub(1, 1) == "0" then
-        if s:find("[89]") then return nil end
-        return tonumber(s, 8)
-    end
-    return tonumber(s)
 end
 
 local n_added = 0
 for _, f in ipairs(added) do
     local base = basename(f)
     local pfx = base:match("^[^-]*")
+    local n = tonumber(pfx, 10)
     n_added = n_added + 1
     local hit
     for _, h in ipairs(holders) do
-        local q = h[2]:gsub("%-.*", "")
-        if q == pfx and h[2] ~= base then hit = h; break end
+        local q = tonumber((h[2]:gsub("%-.*", "")), 10)
+        if q and q == n and h[2] ~= base then hit = h; break end
     end
     if hit then
         local holder_ref, holder_file = hit[1], hit[2]
-        local n = bash_int(pfx)
-        if not n then
-            -- KEPT QUIRK (1628-re39): bash's $(( 08x / 10 )) is an expansion
-            -- error that aborts the whole while loop, after which the .sh goes
-            -- on to print ok with the steps counted so far. A collision on an
-            -- 08x or 09x prefix therefore PASSES. Measured, recorded on the
-            -- row, kept rather than fixed in the port.
-            log.raw("check-gate-step-prefix-across-refs.sh: " .. pfx .. ": value too great for base (error token is \"" .. pfx .. "\")")
-            break
-        end
         local free = (n // 10 + 1) * 10
-        while used[tostring(free)] do free = free + 10 end
+        while used[free] do free = free + 10 end
         local remedy = "rename it to a free prefix, e.g. git mv " .. f .. " " .. DIR .. "/" .. free .. "-" .. base:gsub("^[^-]*%-", "", 1)
             .. " (checked against " .. TRUNK .. " and " .. n_refs .. " unlanded work refs)"
         local detail = { NAME .. ": " .. base .. " takes prefix " .. pfx .. ", which " .. holder_ref .. " already holds as " .. holder_file }

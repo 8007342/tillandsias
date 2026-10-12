@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace order:1560-g5d9, spec:host-state-lifecycle
+# @trace order:1560-g5d9, order:1560-uam3, spec:host-state-lifecycle
 #
 # test-check-installer-prompts.sh — the end-user installer prompt ratchet.
 # Operator ruling 2026-10-08: "we do not ask end users to do power user stuff
@@ -12,7 +12,7 @@
 #   2 a `read -r -p ... [y/N]` added to install.sh      -> refused, naming file:line
 #   3 a Read-Host added to install-windows.ps1          -> refused, naming file:line
 #   4 a prompt quoted only in a comment                 -> ok (comments are stripped)
-#   5 one existing prompt removed (below the floor)     -> ok, with the lower-the-floor note
+#   5 a scratch floor above the real count (below it)  -> ok, with the lower-the-floor note
 #   6 prose "could not read this host's ... guest-shape" -> ok (the false positive
 #     the first shell version had, install-windows.ps1:437, 2026-10-08)
 # Each mutant asserts its own edit landed exactly once.
@@ -85,13 +85,13 @@ if append_once "$TMP/c/scripts/install.sh" '# never do: read -p "Continue? [y/N]
     if [ "$RC" -eq 0 ]; then pass "4 a commented prompt does not count"; else bad "4 comment counted: rc=$RC out=[$OUT]"; fi
 else bad "4 mutant did not land once"; fi
 
-# 5 — one prompt removed: below the floor passes, and says to lower it.
+# 5 — below the floor passes, and says to lower it. The real installers have
+# no prompt left (1560-uam3 took the floor to 0), so the scratch floor is
+# raised to 1 instead of a prompt being removed.
 scratch "$TMP/d"
-before="$(grep -c 'Read-Host' "$TMP/d/scripts/install-windows.ps1")"
-awk 'done != 1 && /Read-Host/ { done = 1; next } { print }' "$ROOT/scripts/install-windows.ps1" > "$TMP/d/scripts/install-windows.ps1"
-after="$(grep -c 'Read-Host' "$TMP/d/scripts/install-windows.ps1")"
-if [ "$after" -ne $((before - 1)) ]; then
-    bad "5 mutant did not remove exactly one Read-Host ($before -> $after)"
+printf '%s\n' '# scratch floor for arm 5' '1' > "$TMP/d/scripts/portability/installer-prompt-floor.txt"
+if [ "$(grep -cx '1' "$TMP/d/scripts/portability/installer-prompt-floor.txt")" != "1" ]; then
+    bad "5 the scratch floor did not land"
 else
     guard "$TMP/d"
     case "$RC:$OUT" in

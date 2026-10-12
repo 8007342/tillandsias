@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: log-query-language-has-zero-consumers
+    event:
+      type: progress
+      ts: "2026-10-12T19:30:38Z"
+      agent_id: linux-yoga-claude-20261012t192339z
+      host: yoga
+      summary: |
+        Cycle 8 (yoga): the landing queue evicted PR 358 at 17:59Z — the gate's spec-script-paths arm refused the tombstone spec (openspec/specs/structured-query-language/spec.md line 13) for naming scripts/query-traces.sh, which this change deletes; the coordinator converted the PR to draft at 18:25Z and asked (18:27Z) for the line to carry `<!-- spec-path-absent: ok (retired with 781-hseq) -->`, confirmed by `bash scripts/check-spec-script-paths.sh` on a merge with origin/linux-next, then un-draft. Done on work/781-hseq at 0433a7389 (trunk ebb5648a8 merged first): the decider answers ok:spec-script-paths:93-resolved,10-baselined,1-exempt on the merged ref; the gate's own fixture scripts/test-spec-script-paths.sh PASS 6/6 on the merged ref (5/6 at the eviction); pre-ready check one merge base, two-dot==three-dot, 9 files, the 2 D lines are the retirement. Relay preflight on the merged ref: ok:relay-preflight:1f63c7470:refs=1 deciders=17 fmt=ok fixtures=0 crates=1 litmus=0/0 (19:26Z). PR 358 un-drafted by this host at 19:27Z (draft=false, head 0433a7389); evidence posted on the PR. The relay preflight's 17 deciders do not include check-spec-script-paths, which is why two green preflights (3cf112297, b672ee60a) preceded the eviction. Closure follows on the LANDED sha, never 0433a7389.

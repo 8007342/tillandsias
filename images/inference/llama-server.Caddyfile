@@ -1,0 +1,40 @@
+# @trace spec:inference-engine-slots (SLOT-1, SLOT-2), order 482b
+# The compatibility shim in front of the llama-server slot. It owns the unchanged
+# enclave endpoint (:11434); llama-server itself binds loopback only
+# ({$TILLANDSIAS_LLAMA_UPSTREAM}, set by llama-server-lane.sh).
+#
+# /api/version is the readiness probe every consumer already uses (SLOT-2). It
+# answers 200 ONLY while llama-server's /health answers 200: the probe is
+# rewritten to /health and the healthy response is replaced with the version body.
+# A loading engine (503) passes through as 503; a dead one is a 502. The dial and
+# header timeouts keep the answer inside the one-second probe bound.
+# Everything else (/v1/models, /v1/chat/completions, ...) is proxied verbatim.
+{
+	admin off
+	auto_https off
+	persist_config off
+	log {
+		output stderr
+		level WARN
+	}
+}
+
+:11434 {
+	handle /api/version {
+		rewrite * /health
+		reverse_proxy {$TILLANDSIAS_LLAMA_UPSTREAM} {
+			transport http {
+				dial_timeout 250ms
+				response_header_timeout 700ms
+			}
+			@healthy status 200
+			handle_response @healthy {
+				header Content-Type application/json
+				respond `{"version":"{$TILLANDSIAS_LLAMA_SERVER_BUILD}"}` 200
+			}
+		}
+	}
+	handle {
+		reverse_proxy {$TILLANDSIAS_LLAMA_UPSTREAM}
+	}
+}

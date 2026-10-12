@@ -52,7 +52,7 @@ critical_path:
     expected_behavior: "ok: absent literal"
 
   - step: "mf_literal_count returns correct count"
-    command: "c=\\$(mf_literal_count /tmp/_litmus_stdlib_test 'hello'); [ \"\\$c\" = '1' ] && echo 'ok: count=1'"
+    command: "c=$(mf_literal_count /tmp/_litmus_stdlib_test 'hello'); [ \"$c\" = '1' ] && echo 'ok: count=1'"
     timeout_ms: 3000
     expected_behavior: "ok: count=1"
 
@@ -62,7 +62,7 @@ critical_path:
     expected_behavior: "ok: regex alternation match"
 
   - step: "mf_regex_count returns correct count with regex"
-    command: "c=\\$(mf_regex_count /tmp/_litmus_stdlib_test '^(hello|foo)'); [ \"\\$c\" = '2' ] && echo 'ok: regex_count=2'"
+    command: "c=$(mf_regex_count /tmp/_litmus_stdlib_test '^(hello|foo)'); [ \"$c\" = '2' ] && echo 'ok: regex_count=2'"
     timeout_ms: 3000
     expected_behavior: "ok: regex_count=2"
 

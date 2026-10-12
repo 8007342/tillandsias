@@ -1,0 +1,65 @@
+[inference] WARN: system trust store not updated (rc=1, expected as uid 1000 on this image) — relying on SSL_CERT_FILE/CURL_CA_BUNDLE
+[inference] ca-trust: store_rc=1 mode=system+enclave bundle=/tmp/tillandsias-ca-bundle.crt certs=122
+[inference] preload: policy=eager models=qwen2.5:0.5b expert_slots=1 max_loaded=2 ram_gb=13
+[inference] tuning: tier=gpu-cuda flash_attn=1 kv_cache=q8_0 num_parallel=2 vram_mb=8192 keep_alive=5m
+[inference] configured proxy 'proxy' does not resolve — running direct (non-enclave shape)
+[inference] engine integrity: ok (core+cuda_v13 v0.34.0 sha256:cf95886728959aa09910bb34de5cca1cc5a8f68003b5597197d3f2c2d57c0804)
+========================================
+  tillandsias inference
+  listening on :11434
+  models:  /home/ollama/.ollama/models/
+  GPU:     NVIDIA (1 device(s))
+  NPU:     none (passthrough not implemented — 1118-d3b6)
+========================================
+[inference] engine: set=core+cuda_v13 backends=[cuda_v13 ] llama-server=ok
+Couldn't find '/home/ollama/.ollama/id_ed25519'. Generating new private key.
+Your new public key is: 
+
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIONJ1sK4rbRsMRxhEvOqIq0e6PIvtEQS29czJBod+YJF
+
+time=2026-10-12T15:06:22.887Z level=INFO source=routes.go:1965 msg="server config" env="map[CUDA_VISIBLE_DEVICES: GGML_VK_VISIBLE_DEVICES: GPU_DEVICE_ORDINAL: HIP_VISIBLE_DEVICES: HSA_OVERRIDE_GFX_VERSION: HTTPS_PROXY: HTTP_PROXY: LLAMA_ARG_FIT: LLAMA_ARG_FIT_TARGET: NO_PROXY:localhost,127.0.0.1,0.0.0.0,::1,vault,tillandsias-vault,inference,proxy,nix-cache,10.0.42.0/24 OLLAMA_CONTEXT_LENGTH:0 OLLAMA_DEBUG:DEBUG OLLAMA_DEBUG_LOG_REQUESTS:false OLLAMA_EDITOR: OLLAMA_FLASH_ATTENTION:true OLLAMA_GO_TEMPLATE:true OLLAMA_GPU_OVERHEAD:0 OLLAMA_HOST:http://0.0.0.0:11434 OLLAMA_IGPU_ENABLE: OLLAMA_KEEP_ALIVE:5m0s OLLAMA_KV_CACHE_TYPE:q8_0 OLLAMA_LLM_LIBRARY:cuda_v13 OLLAMA_LOAD_TIMEOUT:5m0s OLLAMA_MAX_LOADED_MODELS:2 OLLAMA_MAX_QUEUE:512 OLLAMA_MAX_TRANSFER_STREAMS:4 OLLAMA_MODELS:/home/ollama/.ollama/models/ OLLAMA_NOHISTORY:false OLLAMA_NOPRUNE:false OLLAMA_NO_CLOUD:false OLLAMA_NUM_PARALLEL:2 OLLAMA_ORIGINS:[http://localhost https://localhost http://localhost:* https://localhost:* http://127.0.0.1 https://127.0.0.1 http://127.0.0.1:* https://127.0.0.1:* http://0.0.0.0 https://0.0.0.0 http://0.0.0.0:* https://0.0.0.0:* app://* file://* tauri://* vscode-webview://* vscode-file://*] OLLAMA_REMOTES:[ollama.com] OLLAMA_SCHED_SPREAD:false OLLAMA_VULKAN:false ROCR_VISIBLE_DEVICES: http_proxy: https_proxy: no_proxy:localhost,127.0.0.1,0.0.0.0,::1,vault,tillandsias-vault,inference,proxy,nix-cache,10.0.42.0/24]"
+time=2026-10-12T15:06:22.887Z level=INFO source=routes.go:1967 msg="Ollama cloud disabled: false"
+time=2026-10-12T15:06:22.887Z level=INFO source=images.go:957 msg="total blobs: 0"
+time=2026-10-12T15:06:22.888Z level=INFO source=images.go:964 msg="total unused blobs removed: 0"
+time=2026-10-12T15:06:22.888Z level=DEBUG source=model_recommendations.go:57 msg="starting model recommendations cache" default_recommendations=6 refresh_interval=4h0m0s fetch_timeout=3s
+time=2026-10-12T15:06:22.888Z level=DEBUG source=model_show_cache.go:128 msg="starting model show cache"
+time=2026-10-12T15:06:22.888Z level=DEBUG source=model_list_cache.go:71 msg="starting model list cache"
+time=2026-10-12T15:06:22.888Z level=INFO source=routes.go:2022 msg="Listening on [::]:11434 (version 0.34.0)"
+time=2026-10-12T15:06:22.888Z level=DEBUG source=model_recommendations.go:247 msg="model recommendations snapshot not found" path=/home/ollama/.ollama/cache/model-recommendations.json
+time=2026-10-12T15:06:22.888Z level=DEBUG source=model_recommendations.go:192 msg="refreshing model recommendations from remote" url=https://ollama.com/api/experimental/model-recommendations
+time=2026-10-12T15:06:22.888Z level=DEBUG source=sched.go:215 msg="starting llm scheduler"
+time=2026-10-12T15:06:22.889Z level=INFO source=runner.go:60 msg="discovering available GPUs..."
+time=2026-10-12T15:06:22.890Z level=WARN source=model_show_cache.go:142 msg="model show cloud cache hydration failed" error="Get \"https://ollama.com:443/api/tags?ts=1791817582\": dial tcp: lookup ollama.com on 10.89.0.1:53: no such host"
+time=2026-10-12T15:06:22.890Z level=WARN source=model_recommendations.go:168 msg="model recommendations refresh failed" error="Get \"https://ollama.com/api/experimental/model-recommendations?ts=1791817582\": dial tcp: lookup ollama.com on 10.89.0.1:53: no such host"
+time=2026-10-12T15:06:22.890Z level=INFO source=model_recommendations.go:177 msg="model recommendations cache sleep scheduled" wait=5m39.227470698s consecutive_failures=1
+time=2026-10-12T15:06:22.891Z level=INFO source=model_list_cache.go:112 msg="model list cache hydration complete" models=2 failures=0 elapsed=2.739925ms
+time=2026-10-12T15:06:23.052Z level=DEBUG source=llama_server.go:121 msg="llama-server discovery: stopped subprocess after collecting GPU info" exit=unknown libDirs="[/home/ollama/.ollama/models/.tools/lib/ollama /home/ollama/.ollama/models/.tools/lib/ollama/cuda_v13]"
+time=2026-10-12T15:06:23.676Z level=DEBUG source=llama_server.go:52 msg="llama-server device discovery took" duration=786.374446ms libDirs="[/home/ollama/.ollama/models/.tools/lib/ollama /home/ollama/.ollama/models/.tools/lib/ollama/cuda_v13]"
+time=2026-10-12T15:06:23.677Z level=DEBUG source=runner.go:494 msg="bootstrap discovery took" duration=787.173794ms OLLAMA_LIBRARY_PATH="[/home/ollama/.ollama/models/.tools/lib/ollama /home/ollama/.ollama/models/.tools/lib/ollama/cuda_v13]" extra_envs=map[]
+time=2026-10-12T15:06:23.677Z level=DEBUG source=runner.go:131 msg="evaluating which, if any, devices to filter out" initial_count=1
+time=2026-10-12T15:06:23.677Z level=DEBUG source=runner.go:153 msg="verifying if device is supported" library=/home/ollama/.ollama/models/.tools/lib/ollama/cuda_v13 description="NVIDIA GeForce RTX 3070 Laptop GPU" compute=8.6 id=0 pci_id=0000:01:00.0
+time=2026-10-12T15:06:23.793Z level=DEBUG source=llama_server.go:121 msg="llama-server discovery: stopped subprocess after collecting GPU info" exit=unknown libDirs="[/home/ollama/.ollama/models/.tools/lib/ollama /home/ollama/.ollama/models/.tools/lib/ollama/cuda_v13]"
+time=2026-10-12T15:06:24.444Z level=DEBUG source=llama_server.go:52 msg="llama-server device discovery took" duration=767.301759ms libDirs="[/home/ollama/.ollama/models/.tools/lib/ollama /home/ollama/.ollama/models/.tools/lib/ollama/cuda_v13]"
+time=2026-10-12T15:06:24.444Z level=DEBUG source=runner.go:494 msg="bootstrap discovery took" duration=767.62988ms OLLAMA_LIBRARY_PATH="[/home/ollama/.ollama/models/.tools/lib/ollama /home/ollama/.ollama/models/.tools/lib/ollama/cuda_v13]" extra_envs="map[CUDA_VISIBLE_DEVICES:0 GGML_CUDA_INIT:1]"
+time=2026-10-12T15:06:24.444Z level=DEBUG source=runner.go:200 msg="adjusting filtering IDs" FilterID=0 new_ID=0
+time=2026-10-12T15:06:24.444Z level=DEBUG source=runner.go:42 msg="GPU bootstrap discovery took" duration=1.555967042s
+time=2026-10-12T15:06:24.444Z level=INFO source=types.go:32 msg="inference compute" id=0 filter_id=0 library=CUDA compute=8.6 name=CUDA0 description="NVIDIA GeForce RTX 3070 Laptop GPU" libdirs=ollama,cuda_v13 driver=13.4 pci_id=0000:01:00.0 type=discrete total="7.7 GiB" available="2.7 GiB"
+time=2026-10-12T15:06:24.444Z level=INFO source=routes.go:2072 msg="vram-based default context" total_vram="7.7 GiB" default_num_ctx=4096
+[GIN] 2026/10/12 - 15:06:24 | 200 |      71.589µs |       127.0.0.1 | HEAD     "/"
+[GIN] 2026/10/12 - 15:06:24 | 200 |       88.77µs |       127.0.0.1 | GET      "/api/version"
+[GIN] 2026/10/12 - 15:06:24 | 200 |      488.13µs |       127.0.0.1 | GET      "/api/tags"
+[inference] tier=T3 (RAM 13GB, VRAM 8GB)
+[inference] preload checkpoint: warm volume (nomic-embed-text:latest qwen2.5:0.5b)
+[GIN] 2026/10/12 - 15:06:24 | 200 |      26.191µs |       127.0.0.1 | HEAD     "/"
+[GIN] 2026/10/12 - 15:06:24 | 200 |       230.9µs |       127.0.0.1 | GET      "/api/tags"
+[inference] default model qwen2.5:0.5b ready (cached)
+[GIN] 2026/10/12 - 15:06:24 | 200 |      77.804µs |       127.0.0.1 | HEAD     "/"
+[GIN] 2026/10/12 - 15:06:24 | 200 |     378.477µs |       127.0.0.1 | GET      "/api/tags"
+[inference] embed model nomic-embed-text ready (cached)
+[GIN] 2026/10/12 - 15:06:24 | 200 |      28.146µs |       127.0.0.1 | HEAD     "/"
+[GIN] 2026/10/12 - 15:06:24 | 200 |     272.805µs |       127.0.0.1 | GET      "/api/tags"
+[inference] preload-state: warm=2 models=nomic-embed-text:latest,qwen2.5:0.5b policy=eager expert_slots=1 max_loaded=2 checkpoint=written
+[GIN] 2026/10/12 - 15:06:24 | 200 |      38.553µs |       127.0.0.1 | HEAD     "/"
+[GIN] 2026/10/12 - 15:06:24 | 200 |     285.098µs |       127.0.0.1 | GET      "/api/tags"
+[inference] embed model nomic-embed-text ready (cached)
+[inference] tier pulls opt-in (set TILLANDSIAS_INFERENCE_TIER_PULLS=1) — skipping runtime tier pulls

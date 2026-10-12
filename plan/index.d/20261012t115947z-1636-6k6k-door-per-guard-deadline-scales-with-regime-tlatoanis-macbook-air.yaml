@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-12): darwin's door deadline-skips push deciders the gate then refuses on.
+packets:
+  - packet_id: the-preflight-doors-per-guard-deadline-does-not-scale-with-the-budget-regime-so-darwin-deadline-skips-push-deciders-the-gate-refuses-on
+    order: 1636-6k6k
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [preflight, door-deadline, darwin, budget-regime]
+    estimated_hours: 2
+    owned_files:
+      - build.sh
+    related: [1616-njfd, 1614-5x7m, 1631-6w8z, 1635-ma2f]
+    depends_on: []
+    title: |
+      The preflight door's 5 s per-guard deadline is one constant while its budget scales by regime (1616-njfd), so on darwin-background it deadline-skips push deciders that the gate then refuses on
+    context: |
+      Measured on tlatoanis-macbook-air 2026-10-12, ./build.sh --preflight under taskpolicy -b (darwin-background, budget 415 s) on work/1631-6w8z at c3b73a748: 13 check-* push deciders were `skip:preflight:<guard>:deadline:5-6s`:
+        check-added-test-is-referenced (6 s), check-append-vs-origin-fold (5 s), check-approved-ux-strings (5 s),
+        check-fragment-keys-are-read (5 s), check-litmus-line-windows (5 s), check-litmus-pin-claims (6 s),
+        check-mo-full-attestations (5 s), check-plan-binary-probe-usage (5 s), check-purge-clears-vault-credentials (5 s),
+        check-script-exec-bits (5 s), check-sigpipe-verdict-pipelines-added (6 s), check-skills-single-source (5 s),
+        check-source-slice-bounds (5 s).
+      COST: #371 (1631-6w8z) was evicted from land run 46 by check-sigpipe-verdict-pipelines-added (violation:sigpipe-verdict-added:6), which this door ran and deadline-skipped. The same blind spot hid the 1630-dwab serial fixture's Linux failure from darwin (1635-ma2f).
+      WHY: 1616-njfd scaled the door's BUDGET per regime from measurement (darwin 200 s, darwin-background 415 s, floor 150 s) because background QoS coalesces timers (1614-5x7m: 50 ticks of sleep 0.1 took 12.8 s under -b against 5.5 s plain), but left the PER-GUARD deadline at one constant 5 s (TILLANDSIAS_PREFLIGHT_TIMEOUT), set from the pirria distribution (1305-udgs).
+      SHAPE (coordinator's choice, 2026-10-12): the per-guard deadline scales with the budget regime in the same one place _pf_budget decides it, rather than a second lane. TILLANDSIAS_PREFLIGHT_TIMEOUT still overrides; --full still lifts it. The standing no-raise rule (build.sh, 1305-udgs) asks for a re-measured distribution before the number moves: measure the darwin-background per-guard distribution first and set the scale from it.
+    exit_criteria:
+      - 'on darwin-background, a ./build.sh --preflight run gives each of the 13 deciders named in context a verdict at the door (ran, declared-skip, could-not-run or refused), not skip:preflight:<guard>:deadline; the trunk door on the same tree deadline-skips them'
+      - 'on the Linux floor regime the per-guard deadline is unchanged, and the door wall time stays within its 150 s budget'
+      - 'the verdict line names the per-guard deadline in force, beside budget= and budget-regime=, so a reader sees which deadline judged the run'
+    unscoreable: "a door-deadline change measured by a before/after preflight pair on darwin-background, plus a floor-regime wall-time run"
+    next_action: >
+      Measure the per-guard elapsed distribution on darwin-background (the door's own `<rc> <elapsed>` files), pick the scale from it, put the per-guard deadline in _pf_budget beside the budget, and record the before/after pair.
+    provenance: |
+      Filed by tlatoanis-macbook-air at macuahuitl-fedora's request, 2026-10-12. Evidence: the 1631-6w8z branch preflight log (13 deadline-skipped push deciders) and #371's run-46 eviction.
+    events:
+      - type: filed
+        ts: "2026-10-12T11:59:47Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          darwin-background's door deadline-skips 13 push deciders at the constant 5 s per-guard deadline; the gate then refuses on them (#371, run 46).

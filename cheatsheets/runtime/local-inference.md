@@ -147,6 +147,28 @@ fi
 `tillandsias-services` (baked into every forge image) lists the enclave
 services and their reachability status — see `cheatsheets/agents/`.
 
+## Engine slot: ollama (default) or llama-server
+
+The endpoint never changes: `http://inference:11434`. What answers behind it is
+an operator choice on the HOST (order 482b, spec `inference-engine-slots`):
+
+- `TILLANDSIAS_INFERENCE_ENGINE` — unset or `ollama` (the default until order
+  482c records parity evidence), or `llama-server`.
+- `TILLANDSIAS_INFERENCE_LLAMA_BACKEND` — `auto` (default: `vulkan` when a DRM
+  render node is readable and writable, otherwise `cpu`), `cpu`, `vulkan`,
+  `cuda` (only on a delivered CUDA lane), or `rocm` (always refused: the payload
+  ships no ROCm backend; AMD runs through `vulkan`).
+
+Under `llama-server` the slot speaks the OpenAI surface (`/v1/models`,
+`/v1/chat/completions`) plus `/api/version`, which answers 200 only while the
+engine is healthy. The ollama-native routes (`/api/tags`, `/api/generate`,
+`/api/pull`) are NOT served there. Models fail closed: only a model with a sha256
+pin in `images/inference/tiers/gguf-pins.tsv` is served (today T0,
+`qwen2.5-0.5b-instruct`). Any other tier row logs
+`reason=engine-integrity-refused:gguf-unpinned:<id>` and is never downloaded
+unverified. Read the selection in `podman logs tillandsias-inference`:
+`[inference] engine=llama-server backend=<b> reason=<why>`.
+
 ## Common pitfalls
 
 - **Hard-coding `localhost:11434`** — agents that hard-code `localhost` instead of `$OLLAMA_HOST` (= `http://inference:11434`) won't reach the inference container. The DNS alias is what works on the enclave network.

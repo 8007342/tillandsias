@@ -359,7 +359,9 @@ _run_decider() { # name -> sets DEC_OUT, returns rc
         check-added-test-is-referenced) DEC_OUT="$(TILLANDSIAS_ADDED_TEST_BASE="$BASE" bash "$SELF_DIR/check-added-test-is-referenced.sh" 2>&1)"; return $? ;;
         check-refusal-affordance-added) DEC_OUT="$(TILLANDSIAS_AFFORDANCE_BASE="$BASE" bash "$SELF_DIR/check-refusal-affordance-added.sh" 2>&1)"; return $? ;;
         check-rust-source-pin-added) DEC_OUT="$(TILLANDSIAS_RUST_PIN_BASE="$BASE" bash "$SELF_DIR/check-rust-source-pin-added.sh" 2>&1)"; return $? ;;
-        check-no-python-scripts) _cap bash "$SELF_DIR/check-no-python-scripts.sh" ;;
+        check-no-python-scripts)
+            _lua_runner "$name" || return 3
+            _cap env TILLANDSIAS_REPO_ROOT="$ROOT" "$_lb" script run "$SELF_DIR/lua/check-no-python-scripts.lua" ;;
         check-jq-callsite-ratchet) _cap bash "$SELF_DIR/check-jq-callsite-ratchet.sh" ;;
         preflight-fixtures-default-target) DEC_OUT="$(TILLANDSIAS_DEFAULT_TARGET_BASE="$BASE" bash "$SELF_DIR/preflight-fixtures-default-target.sh" 2>&1)"; return $? ;;
         check-issue-citation-convention) DEC_OUT="$(TILLANDSIAS_ISSUE_CITATION_BASE="$BASE" bash "$SELF_DIR/check-issue-citation-convention.sh" 2>&1)"; return $? ;;
@@ -382,7 +384,7 @@ for name in $DECIDER_NAMES; do
         decider_n=$((decider_n + 1))
         continue
     fi
-    # check-no-python-scripts.sh is unlike its siblings: it unconditionally
+    # check-no-python-scripts, in scripts/lua/ since 1630-dwab, is unlike its siblings: it unconditionally
     # `cargo build`s tillandsias-policy before it can even ask its question
     # (its own header names this — "preflight: serial — cargo-builds ...").
     # That is a CARGO phase by the packet's own definition, so it is stubbed

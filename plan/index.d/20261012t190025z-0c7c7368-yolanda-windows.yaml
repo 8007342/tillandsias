@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-tray-lane-launch-omits-accel-envelope
+    event:
+      type: note
+      ts: "2026-10-12T19:00:25Z"
+      agent_id: windows-yolanda-opus5-20261012t190024z
+      host: yolanda-windows
+      summary: |
+        Live tray-lane check passed on yolanda-windows, v56.10.12.1 (95874de57, contains 0a8a4e698), installed the end-user way (irm|iex, TILLANDSIAS_CHANNEL=unstable, exit 0). Launched an OpenCode lane through the tray's own launch_pty path: tillandsias-tray.exe --forge 8007342/tillandsias.org --opencode returned ok:forge-launch, and tray.log shows the PTY spawn with intent=Agent(OpenCode). The container tillandsias-tillandsias.org-forge (image tillandsias-forge:v56.10.12.1, entrypoint entrypoint-forge-opencode.sh) carries TILLANDSIAS_ACCEL_ENVELOPE in podman inspect .Config.Env and in /proc/1/environ, with accel_class=cpu-only accel_gpu=present-unusable accel_reason=engine-missing_no-vulkan-loader accel_side=wsl2-guest, plus TILLANDSIAS_INFERENCE_TIER=cpu. The Accelerators line is present with the same envelope, not the envelope-not-exported fallback. CORRECTION to the check as written: that line is not in podman logs. lib-common.sh inject_startup_context writes it to the project's .forge-startup-context.md (line 18 here), and that file is where it was verified; /tmp/forge-lifecycle.log also records lane-observed: agent=OpenCode accel_class=cpu-only.

@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: remove-the-two-remaining-interactive-prompts-from-install-windows-ps1-per-the-end-user-installer-guideline
+    field: next_action
+    value: 'Draft PR #377 (work/1560-uam3, 1b11d57a1) is waiting on the coordinator preflight and land, after the cut freeze. Once it lands: set this row completed with the fixture evidence from the PR; set 756-s8s8 obsolete (superseded); and on the next curl install, check that no prompt appears and that the install log carries the wsl-swap and hyperv lines.'
+    ts: "2026-10-12T15:47:46Z"
+    host: yolanda-windows

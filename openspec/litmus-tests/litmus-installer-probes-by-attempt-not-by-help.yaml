@@ -30,14 +30,18 @@
 # stayed green against a reconstructed pre-fix installer, because the
 # reporting lines that mention $ProbeExit outlive the probe they report on.
 # It now asserts CARDINALITY: exactly one line both sets the guard and passes
-# the flag. That line is the attempt.
+# the flag. That line is the attempt. (1565-qtuk retired the guarded probe:
+# the one real SOFT reset call is the attempt now, so the cardinality is
+# one --reset-state call and zero guarded ones.)
 name: litmus:installer-probes-by-attempt-not-by-help
 spec: ci-release
 phase: pre-build
 description: >
-  Pin 1323-5taw: install-windows.ps1 decides whether to run --reset-state by
-  ATTEMPTING it under TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 and reading the
-  outcome -- never by grepping --help -- and a binary whose --help mentions
+  Pin 1323-5taw: install-windows.ps1 decides whether the tray supports
+  --reset-state by ATTEMPTING it and reading the exit code (2 = the parser
+  refused, unsupported) -- never by grepping --help. Since 1565-qtuk the
+  attempt is the one real SOFT reset call, with no separate guarded probe
+  (that probe provisioned the guest twice per install). A binary whose --help mentions
   the flag while its parser rejects it is treated as UNSUPPORTED. The
   behavioural arm builds that liar as a cmd stub and requires the attempt
   rule to reject it while demonstrating that the old --help rule accepts it.
@@ -57,17 +61,17 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "ok: installer-probe-fixture-parses"
 
-  - step: "every arm passes against the real installer: no --help decision, exactly one guarded attempt, the decision taken from its exit code, and the liar stub rejected while the old --help rule accepts it"
+  - step: "every arm passes against the real installer: no --help decision, exactly one attempt and no guarded second one, the decision taken from its exit code, and the liar stub rejected while the old --help rule accepts it"
     command: "bash scripts/test-installer-probes-by-attempt-not-by-help.sh"
     timeout_ms: 120000
     expected_behavior: "ok:installer-probes-by-attempt-not-by-help:all"
 
-  - step: "SOURCE PIN: the installer carries no --help-derived capability decision, and exactly one guarded attempt -- asserted on the file directly so a fixture that stopped looking cannot hide it"
+  - step: "SOURCE PIN: the installer carries no --help-derived capability decision, exactly one attempt, and no guarded probe -- asserted on the file directly so a fixture that stopped looking cannot hide it"
     # `|| true` ON EVERY COUNT IS LOAD-BEARING, and its absence fails the
     # PASSING case only: grep -c exits 1 when the count is 0, so the
     # help-matches=0 we WANT broke the && chain and reported red on a correct
     # tree. A guard that is red exactly when the code is right is worse than
     # no guard. Counts are read as numbers here, never as exit codes.
-    command: "sed 's/#.*//' scripts/install-windows.ps1 > /tmp/ipa.$$ && n=$(grep -c 'TILLANDSIAS_DESTRUCTIVE_RESET_OK=0.*--reset-state' /tmp/ipa.$$ || true) && h=$(grep -c \"match *'--reset-state'\" /tmp/ipa.$$ || true) && rm -f /tmp/ipa.$$ && test \"$n\" -eq 1 && test \"$h\" -eq 0 && echo \"ok: attempts=$n help-matches=$h\""
+    command: "sed 's/#.*//' scripts/install-windows.ps1 > /tmp/ipa.$$ && n=$(grep -c 'cmd[.]exe /c .*--reset-state' /tmp/ipa.$$ || true) && g=$(grep -c 'TILLANDSIAS_DESTRUCTIVE_RESET_OK=0.*--reset-state' /tmp/ipa.$$ || true) && h=$(grep -c \"match *'--reset-state'\" /tmp/ipa.$$ || true) && rm -f /tmp/ipa.$$ && test \"$n\" -eq 1 && test \"$g\" -eq 0 && test \"$h\" -eq 0 && echo \"ok: attempts=$n guarded=$g help-matches=$h\""
     timeout_ms: 15000
-    expected_behavior: "ok: attempts=1 help-matches=0"
+    expected_behavior: "ok: attempts=1 guarded=0 help-matches=0"

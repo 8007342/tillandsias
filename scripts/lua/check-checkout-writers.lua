@@ -29,7 +29,8 @@
 --
 -- A writer that must stay in the tracked tree, because the copy resolves its
 -- siblings or ROOT from its own path, is DECLARED in
--- scripts/portability/checkout-writers.txt (`<path> <reason>`). It must also
+-- scripts/portability/checkout-writers.txt (`<path> [artifacts=<basename-glob>] <reason>`;
+-- the glob is what the preflight door sweeps when it KILLs the writer, 1630-dwab). It must also
 -- have 1587-qqzs's shape:
 --   1 an EXIT trap,
 --   2 a TERM trap that EXITS, directly or through a handler function that does,
@@ -63,7 +64,10 @@ table.sort(files)
 local declared = {}
 for _, l in ipairs(lines(read(DECLARED))) do
     local f, why = l:match("^%s*(%S+)%s+(%S.*)$")
-    if f and not f:find("^#") then declared[f] = why end
+    -- 1630-dwab: an optional `artifacts=<basename-glob>` token names what the
+    -- writer leaves, for the preflight door to sweep when it KILLs the writer.
+    if why then why = why:gsub("^artifacts=%S+%s*", "") end
+    if f and not f:find("^#") and why ~= "" then declared[f] = why end
 end
 
 local ROOT_VARS = { "$ROOT/", "${ROOT}/", "$REPO_ROOT/", "${REPO_ROOT}/", "$PROJECT_ROOT/", "${PROJECT_ROOT}/" }
