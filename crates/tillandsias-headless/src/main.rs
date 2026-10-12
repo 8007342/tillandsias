@@ -7419,21 +7419,17 @@ fn resolve_launch_project_identity(
             .and_then(|n| n.to_str())
             .unwrap_or(fallback_name)
             .to_string();
-        // 1626-r4xm: LAUNCH AGREES WITH THE LANE'S MCP SOCKET. Every lane that
-        // resolves here starts a per-lane MCP listener (tray builds), and that
-        // listener admits a project only through validate_project_label, the
-        // order-505 equality guard (1031-q4pb). A path outside the host project
-        // root used to launch fine and then have EVERY MCP call refused as "not
-        // a known project" (measured on lenovinha 2026-10-12). So the same
-        // guard runs here, before any forge or mirror container exists, and the
-        // guard is NOT widened: the launch refuses what the socket would refuse.
+        // 1626-r4xm: THE LANE ADMITS THE PROJECT IT WAS LAUNCHED FOR. Every
+        // lane that resolves here starts a per-lane MCP listener in this
+        // process (tray builds), and that listener admits a project only
+        // through validate_project_label, the order-505 equality guard
+        // (1031-q4pb). A path outside the host project root used to launch and
+        // then have EVERY MCP call refused as "not a known project" (measured
+        // on lenovinha 2026-10-12). Binding the label to this canonical path
+        // admits exactly this project; every other outside label stays refused.
         #[cfg(feature = "tray")]
-        if let Err(reason) = crate::local_projects::validate_project_label(&name) {
-            return Err(format!(
-                "refusing to launch '{}': its lane's MCP tool socket would refuse every call. {reason}",
-                canonical.display()
-            ));
-        }
+        crate::local_projects::bind_launched_project(&name, &canonical)
+            .map_err(|reason| format!("refusing to launch '{}': {reason}", canonical.display()))?;
         Ok((name, Some(canonical)))
     } else if is_cloud {
         Ok((project_path.to_string(), None))
@@ -31937,7 +31933,10 @@ esac
     ];
     fn admit_temp_project_root(restore: &TestEnvRestore, root: &Path) {
         restore.set("TILLANDSIAS_HOST_PROJECT_ROOT", root);
-        restore.set("TILLANDSIAS_CLOUD_PROJECT_CACHE", root.join("no-cloud-cache"));
+        restore.set(
+            "TILLANDSIAS_CLOUD_PROJECT_CACHE",
+            root.join("no-cloud-cache"),
+        );
     }
 
     #[test]
@@ -32027,20 +32026,21 @@ esac
         );
     }
 
-    /// 1626-r4xm, criterion 1: a git project OUTSIDE the host project root is
-    /// refused at launch, before any forge or mirror container exists, naming
-    /// the root and TILLANDSIAS_HOST_PROJECT_ROOT. Measured on lenovinha before
-    /// this: the lane launched, and its MCP socket refused every call.
+    /// 1626-r4xm, criterion 1: a git project OUTSIDE the host project root
+    /// (the operator's ~/claudia/<x>, with nothing set) launches, and its lane's
+    /// MCP socket admits it. Measured on lenovinha before this: the lane
+    /// launched, and its MCP socket refused every call. RED first: the socket
+    /// refuses the label until the launch binds it.
     #[cfg(feature = "tray")]
     #[test]
-    fn launch_outside_host_project_root_is_refused_naming_the_root() {
+    fn launch_outside_host_project_root_is_admitted_by_its_lane() {
         let _guard = env_lock();
         let restore = TestEnvRestore::capture(&PROJECT_ROOT_ENVS);
         restore.remove("TILLANDSIAS_PROJECT_REMOTE_URL");
         let temp = tempfile::tempdir().expect("tempdir");
         let root = temp.path().join("src");
         std::fs::create_dir_all(root.join("some-other-project")).expect("mkdir");
-        let outside = temp.path().join("claudia").join("scratch-6iwd");
+        let outside = temp.path().join("claudia").join("r4xm-claudia-project");
         std::fs::create_dir_all(&outside).expect("mkdir");
         let _ = std::process::Command::new("git")
             .args(["init", "-q"])
@@ -32048,25 +32048,26 @@ esac
             .status();
         admit_temp_project_root(&restore, &root);
 
-        let err = resolve_launch_project_identity(&outside.display().to_string(), false, "forge-project")
-            .expect_err("a project outside the host project root must be refused at launch");
-        assert!(err.contains("refusing to launch"), "names the refusal: {err}");
-        assert!(err.contains("scratch-6iwd"), "names the project: {err}");
+        let before = crate::local_projects::validate_project_label("r4xm-claudia-project");
         assert!(
-            err.contains(&root.display().to_string()),
-            "names the scanned root so the operator knows where it looked: {err}"
+            before.is_err(),
+            "RED: the socket refuses it before launch: {before:?}"
         );
-        assert!(
-            err.contains("TILLANDSIAS_HOST_PROJECT_ROOT"),
-            "names the variable that moves the root: {err}"
-        );
+
+        let (name, canonical) =
+            resolve_launch_project_identity(&outside.display().to_string(), false, "forge-project")
+                .expect("a project outside the host project root launches");
+        assert_eq!(name, "r4xm-claudia-project");
+        assert_eq!(canonical, Some(outside.canonicalize().unwrap()));
+        crate::local_projects::validate_project_label(&name)
+            .expect("GREEN: the lane's socket admits the project it was launched for");
     }
 
     /// 1626-r4xm: LAUNCH AND THE LANE'S MCP SOCKET AGREE. The socket admits a
-    /// lane only through validate_project_label (order 505), so for the same
-    /// project a launch succeeds exactly when the socket would admit it: never
-    /// "launch ok, then every MCP call refused". The guard itself is not
-    /// widened: the outside project stays refused by it.
+    /// lane only through validate_project_label (order 505), so every project
+    /// that launches is admitted by its socket: never "launch ok, then every
+    /// MCP call refused". The guard is not opened wider than that: an outside
+    /// project no lane was launched for is still refused.
     #[cfg(feature = "tray")]
     #[test]
     fn launch_admits_exactly_what_the_lane_socket_admits() {
@@ -32077,23 +32078,25 @@ esac
         let root = temp.path().join("src");
         let inside = root.join("inside-project");
         let outside = temp.path().join("elsewhere").join("outside-project");
+        let never = temp.path().join("elsewhere").join("r4xm-never-launched");
         std::fs::create_dir_all(&inside).expect("mkdir");
         std::fs::create_dir_all(&outside).expect("mkdir");
+        std::fs::create_dir_all(&never).expect("mkdir");
         admit_temp_project_root(&restore, &root);
 
-        for (dir, label, expect_ok) in [
-            (&inside, "inside-project", true),
-            (&outside, "outside-project", false),
-        ] {
-            let launched = resolve_launch_project_identity(&dir.display().to_string(), false, "forge-project");
+        for (dir, label) in [(&inside, "inside-project"), (&outside, "outside-project")] {
+            let launched =
+                resolve_launch_project_identity(&dir.display().to_string(), false, "forge-project");
             let socket = crate::local_projects::validate_project_label(label);
-            assert_eq!(
-                launched.is_ok(),
+            assert!(launched.is_ok(), "{label}: {launched:?}");
+            assert!(
                 socket.is_ok(),
-                "{label}: launch {launched:?} and the lane socket {socket:?} must agree"
+                "{label}: launch {launched:?} but the lane socket {socket:?}"
             );
-            assert_eq!(launched.is_ok(), expect_ok, "{label}: {launched:?}");
         }
+        let err = crate::local_projects::validate_project_label("r4xm-never-launched")
+            .expect_err("NEGATIVE: an outside label no lane was launched for stays refused");
+        assert!(err.contains("is not a known project"), "{err}");
     }
 
     /// The flip side: is_cloud=true must resolve cloud even with the env var

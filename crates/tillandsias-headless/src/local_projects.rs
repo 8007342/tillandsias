@@ -208,12 +208,75 @@ pub fn known_project_labels() -> std::collections::BTreeSet<String> {
     set
 }
 
+/// 1626-r4xm: the local projects THIS process launched a lane for, each bound
+/// to the canonical path it was launched from. The lane listener runs in the
+/// launching process, so the binding lives exactly as long as the lane.
+#[cfg(feature = "tray")]
+fn launched_bindings() -> std::sync::MutexGuard<'static, std::collections::BTreeMap<String, PathBuf>>
+{
+    static BINDINGS: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::BTreeMap<String, PathBuf>>,
+    > = std::sync::OnceLock::new();
+    BINDINGS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// A binding holds while its path is still a directory that canonicalizes to
+/// itself. A project moved, deleted or swapped for a symlink stops admitting.
+#[cfg(feature = "tray")]
+fn binding_holds(path: &Path) -> bool {
+    path.is_dir() && path.canonicalize().ok().as_deref() == Some(path)
+}
+
+/// 1626-r4xm: admit the one project a lane was launched for, wherever it lives
+/// (e.g. `~/claudia/<x>`, outside the host project root), with nothing for the
+/// operator to set. `canonical` must already be canonical and `label` must be
+/// its last component, so the label names exactly the launched directory.
+///
+/// Refuses to rebind a label that still holds a DIFFERENT path: two projects
+/// with one label would make the lane's identity ambiguous.
+#[cfg(feature = "tray")]
+pub fn bind_launched_project(label: &str, canonical: &Path) -> Result<(), String> {
+    if canonical.file_name().and_then(|n| n.to_str()) != Some(label) || !binding_holds(canonical) {
+        return Err(format!(
+            "cannot bind lane '{label}' to {}: the label must be the last component \
+             of the project's canonical directory",
+            canonical.display()
+        ));
+    }
+    let mut bindings = launched_bindings();
+    if let Some(bound) = bindings.get(label)
+        && bound != canonical
+        && binding_holds(bound)
+    {
+        return Err(format!(
+            "lane '{label}' is already bound to {}; refusing to bind it to {} as well",
+            bound.display(),
+            canonical.display()
+        ));
+    }
+    bindings.insert(label.to_string(), canonical.to_path_buf());
+    Ok(())
+}
+
 /// Order 505: validate a project label by EQUALITY against the known set.
 ///
 /// FAILS CLOSED. An empty set denies, which is the defect this replaces.
 /// Never sanitizes: the label is either known verbatim or refused.
+///
+/// 1626-r4xm: the known set also holds the projects this process launched a
+/// lane for ([`bind_launched_project`]), while their bound path holds. Every
+/// other label outside the root is still refused.
 #[cfg(feature = "tray")]
 pub fn validate_project_label(label: &str) -> Result<(), String> {
+    if launched_bindings()
+        .get(label)
+        .is_some_and(|bound| binding_holds(bound))
+    {
+        return Ok(());
+    }
     let known = known_project_labels();
     if known.contains(label) {
         return Ok(());
@@ -237,8 +300,9 @@ pub fn validate_project_label(label: &str) -> Result<(), String> {
         Err(format!(
             "Project '{label}' is not a known project on this host: local projects \
              are the directories directly under {} (set {HOST_PROJECT_ROOT_ENV} to \
-             the directory that holds it, or move the project there), and cloud \
-             projects come from the confirmed list at {}",
+             the directory that holds it, or move the project there) plus the one \
+             project a lane was launched for, and cloud projects come from the \
+             confirmed list at {}",
             host_project_root().display(),
             cloud_label_cache_path().display()
         ))
@@ -405,7 +469,73 @@ mod tests {
             err.contains(&super::host_project_root().display().to_string()),
             "names the scanned root: {err}"
         );
-        assert!(err.contains(super::HOST_PROJECT_ROOT_ENV), "names the variable: {err}");
+        assert!(
+            err.contains(super::HOST_PROJECT_ROOT_ENV),
+            "names the variable: {err}"
+        );
+    }
+
+    /// 1626-r4xm: a project outside the root is refused until a lane is
+    /// launched for it (red), then admitted bound to its canonical path
+    /// (green). Another outside label is still refused, and the binding stops
+    /// admitting once its directory is gone.
+    #[cfg(feature = "tray")]
+    #[test]
+    fn launched_project_outside_the_root_is_admitted_and_no_other() {
+        let _s = scoped(&["known-project"], None);
+        let elsewhere = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(elsewhere.path().join("r4xm-launched")).unwrap();
+        std::fs::create_dir_all(elsewhere.path().join("r4xm-other")).unwrap();
+        let launched = elsewhere
+            .path()
+            .join("r4xm-launched")
+            .canonicalize()
+            .unwrap();
+
+        let before = super::validate_project_label("r4xm-launched");
+        assert!(
+            before.is_err(),
+            "RED: refused before its lane is launched: {before:?}"
+        );
+
+        super::bind_launched_project("r4xm-launched", &launched).expect("bind");
+        assert!(
+            super::validate_project_label("r4xm-launched").is_ok(),
+            "GREEN: the launched project is admitted outside the root"
+        );
+        let other = super::validate_project_label("r4xm-other").unwrap_err();
+        assert!(
+            other.contains("is not a known project"),
+            "NEGATIVE: {other}"
+        );
+        assert!(super::validate_project_label("known-project").is_ok());
+
+        std::fs::remove_dir(&launched).unwrap();
+        assert!(
+            super::validate_project_label("r4xm-launched").is_err(),
+            "a binding follows its directory: gone means refused"
+        );
+    }
+
+    /// 1626-r4xm: a binding names exactly the launched directory. A label that
+    /// is not the path's last component is refused, and a label that still
+    /// holds one path cannot be rebound to another.
+    #[cfg(feature = "tray")]
+    #[test]
+    fn launched_binding_refuses_a_mismatched_label_and_a_second_path() {
+        let elsewhere = tempfile::tempdir().expect("tempdir");
+        let first = elsewhere.path().join("a").join("r4xm-twin");
+        let second = elsewhere.path().join("b").join("r4xm-twin");
+        std::fs::create_dir_all(&first).unwrap();
+        std::fs::create_dir_all(&second).unwrap();
+        let first = first.canonicalize().unwrap();
+        let second = second.canonicalize().unwrap();
+
+        assert!(super::bind_launched_project("not-the-name", &first).is_err());
+        super::bind_launched_project("r4xm-twin", &first).expect("first bind");
+        super::bind_launched_project("r4xm-twin", &first).expect("same path rebinds");
+        let err = super::bind_launched_project("r4xm-twin", &second).unwrap_err();
+        assert!(err.contains("already bound"), "{err}");
     }
 
     /// The local half still works, and the two halves union rather than one
