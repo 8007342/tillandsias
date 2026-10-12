@@ -4,7 +4,7 @@
 # not routed through scripts/scratch-dir.sh, a /tmp or $TMPDIR path, a
 # `git worktree add` elsewhere, a write to ../) carries, on the SAME line,
 #     # scratch-exception:<key>
-# with a <key> from this file. scripts/check-scratch-location-added.sh refuses
+# with a <key> from this file. scripts/lua/check-scratch-location-added.lua refuses
 # a key that is not listed here, so an exception is always a recorded one.
 # Adding a key is a decision about where the fleet may make scratch: record
 # the measurement that forces it.

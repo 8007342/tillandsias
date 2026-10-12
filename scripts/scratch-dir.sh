@@ -12,7 +12,7 @@
 #   scripts/scratch-dir.sh podman         -> <checkout>/scratch/podman
 #   scripts/scratch-dir.sh logs           -> <checkout>/scratch/logs
 #
-# The idiom a new script uses (check-scratch-location-added.sh names it):
+# The idiom a new script uses (check-scratch-location-added.lua names it):
 #
 #   tmp="$(mktemp -d "$(scripts/scratch-dir.sh fixtures)/<name>.XXXXXX")"
 #

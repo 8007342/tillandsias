@@ -2,7 +2,8 @@
 # @trace order:1637-cnxq
 #
 # test-check-scratch-location-added.sh — the fixture for
-# scripts/check-scratch-location-added.sh: a planted site outside the checkout
+# scripts/lua/check-scratch-location-added.lua (run through tillandsias-plan
+# script run): a planted site outside the checkout
 # is refused with its path and line; a site routed through
 # scripts/scratch-dir.sh, a recorded exception and a comment are admitted; an
 # unrecorded exception key is refused; the real tree is green at its own HEAD.
@@ -23,10 +24,16 @@
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd -P)" || exit 2
-GUARD="$ROOT/scripts/check-scratch-location-added.sh"
+SUT="$ROOT/scripts/lua/check-scratch-location-added.lua"
+PLAN_BIN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || PLAN_BIN=""
+case "$PLAN_BIN" in ./*) PLAN_BIN="$ROOT/${PLAN_BIN#./}" ;; esac
+if [ -z "$PLAN_BIN" ] || ! grep -qx script <<<"$("$PLAN_BIN" capabilities 2>/dev/null)"; then
+    echo "skip:scratch-location-fixture:no-script-runner — no tillandsias-plan with \`script run\` resolves; rebuild it (cargo build --release -p tillandsias-plan)"
+    exit 0
+fi
 HELPER="$ROOT/scripts/scratch-dir.sh"
 EXC="$ROOT/scripts/portability/scratch-exceptions.txt"
-[ -x "$GUARD" ] || { echo "FAIL: $GUARD is not executable"; exit 1; }
+[ -f "$SUT" ] || { echo "FAIL: $SUT is missing"; exit 1; }
 [ -x "$HELPER" ] || { echo "FAIL: $HELPER is not executable"; exit 1; }
 
 SCRATCH="$("$HELPER" fixtures)" || { echo "FAIL: scratch-dir.sh refused"; exit 1; }
@@ -36,6 +43,7 @@ trap 'rm -rf "$T"' EXIT
 
 MK=mktemp
 TD=TMPDIR
+WT=worktree
 pass=0; fail=0
 _ok()   { pass=$((pass + 1)); echo "PASS: $1"; }
 _fail() { fail=$((fail + 1)); echo "FAIL: $1"; }
@@ -64,7 +72,7 @@ BASE="$(git -C "$R" rev-parse HEAD)"
 run_planted() {
     local name="$1"; shift
     printf "$@" > "$R/scripts/$name"
-    OUT="$(cd "$R" && TILLANDSIAS_SCRATCH_LOCATION_BASE="$BASE" "$GUARD" 2>"$T/err")"; RC=$?
+    OUT="$(cd "$R" && TILLANDSIAS_REPO_ROOT="$R" TILLANDSIAS_SCRATCH_LOCATION_BASE="$BASE" "$PLAN_BIN" script run "$SUT" 2>"$T/err")"; RC=$?
     rm -f "$R/scripts/$name"
 }
 
@@ -101,7 +109,7 @@ case "$OUT" in
 esac
 
 # ARM 5 — a worktree outside scratch is refused.
-run_planted new-wt.sh 'git worktree add --detach ../wt HEAD\n'
+run_planted new-wt.sh 'git %s add --detach ../wt HEAD\n' "$WT"
 case "$OUT" in
     *"violation:scratch-location-added:worktree:scripts/new-wt.sh:1"*) _ok "arm 5: a worktree outside scratch/ is refused" ;;
     *) _fail "arm 5: expected violation worktree, got rc=$RC '$OUT'" ;;
@@ -140,7 +148,7 @@ fi
 
 # ARM 10 — an unstaged addition to a TRACKED file is refused at its real line.
 printf 't="$(%s -d)"\n' "$MK" >> "$R/scripts/base.sh"
-OUT="$(cd "$R" && TILLANDSIAS_SCRATCH_LOCATION_BASE="$BASE" "$GUARD" 2>/dev/null)"; RC=$?
+OUT="$(cd "$R" && TILLANDSIAS_REPO_ROOT="$R" TILLANDSIAS_SCRATCH_LOCATION_BASE="$BASE" "$PLAN_BIN" script run "$SUT" 2>/dev/null)"; RC=$?
 git -C "$R" checkout -q -- scripts/base.sh
 case "$OUT" in
     *"violation:scratch-location-added:mktemp:scripts/base.sh:5"*) _ok "arm 10: an addition to a tracked file is refused at line 5" ;;
@@ -148,7 +156,7 @@ case "$OUT" in
 esac
 
 # ARM 11 — no added shell: ok with files=0.
-OUT="$(cd "$R" && TILLANDSIAS_SCRATCH_LOCATION_BASE="$BASE" "$GUARD" 2>/dev/null)"; RC=$?
+OUT="$(cd "$R" && TILLANDSIAS_REPO_ROOT="$R" TILLANDSIAS_SCRATCH_LOCATION_BASE="$BASE" "$PLAN_BIN" script run "$SUT" 2>/dev/null)"; RC=$?
 if [ "$RC" -eq 0 ] && [ "$OUT" = "ok:scratch-location-added:files=0:sites=0:exempt=0" ]; then
     _ok "arm 11: an empty change is ok with files=0"
 else
@@ -156,7 +164,7 @@ else
 fi
 
 # ARM 12 — a base that does not resolve is a refusal, not an ok.
-OUT="$(cd "$R" && TILLANDSIAS_SCRATCH_LOCATION_BASE=no-such-ref "$GUARD" 2>/dev/null)"; RC=$?
+OUT="$(cd "$R" && TILLANDSIAS_REPO_ROOT="$R" TILLANDSIAS_SCRATCH_LOCATION_BASE=no-such-ref "$PLAN_BIN" script run "$SUT" 2>/dev/null)"; RC=$?
 if [ "$RC" -eq 2 ] && [ "$OUT" = "refused:scratch-location-added:no-base:no-such-ref" ]; then
     _ok "arm 12: an unresolvable base is refused"
 else
@@ -165,7 +173,7 @@ fi
 
 # ARM 13 — the real tree at its own HEAD: green (nothing added relative to HEAD
 # is the trunk condition; the guard is diff-scoped, so the corpus is not flagged).
-OUT="$(cd "$ROOT" && TILLANDSIAS_SCRATCH_LOCATION_BASE=HEAD "$GUARD" 2>/dev/null)"; RC=$?
+OUT="$(cd "$ROOT" && TILLANDSIAS_REPO_ROOT="$ROOT" TILLANDSIAS_SCRATCH_LOCATION_BASE=HEAD "$PLAN_BIN" script run "$SUT" 2>/dev/null)"; RC=$?
 case "$OUT" in
     ok:scratch-location-added:*) [ "$RC" -eq 0 ] && _ok "arm 13: the real tree is green at HEAD ($OUT)" || _fail "arm 13: rc=$RC" ;;
     *) _fail "arm 13: expected ok on the real tree at HEAD, got rc=$RC '$OUT'" ;;

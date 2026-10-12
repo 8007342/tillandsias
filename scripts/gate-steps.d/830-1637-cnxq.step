@@ -5,7 +5,7 @@
 # checkout under one ignored dir, scratch/, reached through
 # scripts/scratch-dir.sh. A recursive rm outside the workspace asks the
 # operator for consent (1443-we89), and a bypass-mode session waiting on that
-# prompt halts the fleet. scripts/check-scratch-location-added.sh refuses a
+# prompt halts the fleet. scripts/lua/check-scratch-location-added.lua refuses a
 # NEWLY ADDED shell line that makes scratch elsewhere (bare mktemp, /tmp or
 # $TMPDIR, a worktree outside scratch/, a write to ../) unless the line names
 # a key recorded in scripts/portability/scratch-exceptions.txt. User runtime

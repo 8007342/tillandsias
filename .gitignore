@@ -175,7 +175,7 @@ node_modules/
 # Development-runtime scratch: the ONE canonical ignored dir for temp trees,
 # logs, private podman stores and any worktree (operator direction 2026-10-12,
 # order 1637-cnxq), nested: scratch/fixtures, scratch/worktrees, scratch/podman,
-# scratch/logs. scripts/scratch-dir.sh prints it; check-scratch-location-added.sh
+# scratch/logs. scripts/scratch-dir.sh prints it; check-scratch-location-added.lua
 # refuses a new site elsewhere. Not target/: the build-cache sweep's `cargo clean`
 # wipes that whole. User runtime (inside a forge) is exempt: /tmp is fine there.
 /scratch/
