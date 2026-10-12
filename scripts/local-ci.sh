@@ -1820,8 +1820,16 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # above. A dead `inputs:` glob is silent by construction: it cannot make a
     # test run, only skip, so nothing else in this suite would ever go red for
     # it. Verified passing before wiring: 51 glob(s) across 11 annotated test(s).
-    if [[ -f "scripts/check-litmus-dead-inputs.sh" ]]; then
-        if bash scripts/check-litmus-dead-inputs.sh 2>&1 | tee /tmp/litmus-dead-inputs.log; then
+    # Ported to Lua (1643-q3at): same runner resolution as the guard above.
+    if [[ -f "scripts/lua/check-litmus-dead-inputs.lua" ]]; then
+        _di_bin="${TILLANDSIAS_SCRIPT_RUNNER_BIN:-}"
+        [[ -n "$_di_bin" ]] || _di_bin="$(cd "$REPO_ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _di_bin=""
+        case "$_di_bin" in ./*) _di_bin="$REPO_ROOT/${_di_bin#./}" ;; esac
+        [[ -n "$_di_bin" && -x "$_di_bin" ]] || _di_bin=""
+        if [[ -z "$_di_bin" ]]; then
+            log_fail_missing_guard "litmus-dead-inputs" "a runnable tillandsias-plan for scripts/lua/check-litmus-dead-inputs.lua"
+            archive_check_log "litmus-dead-inputs" "skipped"
+        elif (cd "$REPO_ROOT" && "$_di_bin" script run scripts/lua/check-litmus-dead-inputs.lua) 2>&1 | tee /tmp/litmus-dead-inputs.log; then
             log_pass "Every litmus inputs: glob resolves to a tracked file"
             archive_check_log "litmus-dead-inputs" "pass" /tmp/litmus-dead-inputs.log
         else
@@ -1829,7 +1837,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "litmus-dead-inputs" "fail" /tmp/litmus-dead-inputs.log
         fi
     else
-        log_fail_missing_guard "litmus-dead-inputs" "scripts/check-litmus-dead-inputs.sh"
+        log_fail_missing_guard "litmus-dead-inputs" "scripts/lua/check-litmus-dead-inputs.lua"
         archive_check_log "litmus-dead-inputs" "skipped"
     fi
 
