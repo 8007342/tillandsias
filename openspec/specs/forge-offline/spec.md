@@ -13,7 +13,7 @@ Forge containers operate offline -- no credentials, no project mounts, no direct
 
 ### Requirement: Forge containers have zero credentials
 <!-- req-id: 8343173a -->
-Forge containers SHALL NOT have any credential mounts. No GitHub token file, no Claude directory, no D-Bus socket. Credentials are exclusively owned by the git service container.
+Forge containers SHALL NOT have any credential mounts. No GitHub token file, no Claude directory, no D-Bus socket. Credentials are exclusively owned by the git service container. `~/.config/gh` and `~/.ssh` exist only as EMPTY quarantine directories owned by the forge user (consistent with `default-image`'s forge-owned empty overlays), so tools report "not logged in" instead of a permission error.
 
 @trace spec:forge-offline
 
@@ -22,10 +22,16 @@ Forge containers SHALL NOT have any credential mounts. No GitHub token file, no 
 - **THEN** no volume mount SHALL contain tokens, keys, or authentication files
 - **AND** the environment SHALL NOT contain `GIT_ASKPASS`, `ANTHROPIC_API_KEY`, or `GH_TOKEN`
 
-#### Scenario: Agent attempts to read secrets
-- **WHEN** an AI agent inside the forge attempts to access `/run/secrets/` or `~/.config/gh/`
-- **THEN** these paths SHALL NOT exist
-- **AND** the agent SHALL receive a "file not found" error
+#### Scenario: Agent inspects credential paths
+- **WHEN** an AI agent inside the forge inspects `~/.config/gh/` or `~/.ssh/`
+- **THEN** each is an empty directory owned by the forge user
+- **AND** `gh auth status` reports that no host is logged in, not a permission error
+- **AND** `/run/secrets/` SHALL NOT exist
+
+#### Scenario: Agent reports an upstream finding
+- **WHEN** an AI agent inside the forge needs to report a finding upstream
+- **THEN** the forge instructions name the sanctioned route: commit the write-up to a `research/` branch and push it through the mirror
+- **AND** no GitHub credential is required in the forge
 
 ### Requirement: Forge containers have no direct project mount
 <!-- req-id: 125c928a -->

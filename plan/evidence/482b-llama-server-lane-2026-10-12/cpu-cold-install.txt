@@ -1,0 +1,21 @@
+record-failed
+head: cannot open '/tmp/482b-payload.GjadlG/models-cpu/.tools/.engine-set' for reading: No such file or directory
+lane=cpu /api/version=200 after 30s
+[inference] engine=llama-server backend=cpu reason=no-render-node
+[inference] engine payload: need 'core v0.34.0 sha256:cf95886728959aa09910bb34de5cca1cc5a8f68003b5597197d3f2c2d57c0804' (have 'none'; check=engine-integrity-refused:unrecorded-engine)
+[inference] engine payload verified: v0.34.0/amd64 sha256 ok
+[inference] engine backends available: cuda_v12 cuda_v13 vulkan 
+[inference] engine integrity: ok (core v0.34.0 sha256:cf95886728959aa09910bb34de5cca1cc5a8f68003b5597197d3f2c2d57c0804)
+[inference] engine: set=core backends=[core-only] llama-server=ok
+[inference] llama-server backend closure: ok (set=core backend=cpu pin=none)
+[inference] llama-server: backend=cpu ngl=0 model=qwen2.5-0.5b-instruct build='llama-server 0.3.0-dev (build 1, commit 0f3a71be1)' upstream=127.0.0.1:11435 shim=:11434
+--- /api/version body + timing:
+{"version":"llama-server 0.3.0-dev (build 1, commit 0f3a71be1)"} http=200 t=0.000881s
+--- /v1/models:
+"id":"qwen2.5-0.5b-instruct"
+--- /v1/chat/completions via :11434:
+"content":"Ok, speak again."
+--- backend actually used (llama-server log):
+[inference] engine backends available: cuda_v12 cuda_v13 vulkan 
+--- GGML_BACKEND_PATH in llama-server's env:
+GGML_BACKEND_PATH unset

@@ -1290,7 +1290,7 @@ policy:
   rule: >
     Operator directive 2026-07-02: this is the normal workflow.
     Note: colons inside folded prose are TEXT, not keys.
-  checker: scripts/check-no-python-scripts.sh
+  checker: scripts/lua/check-no-python-scripts.lua
 literal:
   block: |
     key_that_is_not_a_key: value

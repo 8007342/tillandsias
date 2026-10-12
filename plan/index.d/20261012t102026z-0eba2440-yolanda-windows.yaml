@@ -1,0 +1,16 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: durable-scheduler-task-scheduler-windows
+    field: next_action
+    value: |-
+      Code is in PR (work/858-3v74): packaging/windows/install-cycle-task.ps1 plus the Windows branch of scripts/lua/check-cycle-scheduler.lua. Criteria 3, 4 and 5 were demonstrated on yolanda 2026-10-12 with a stub cycle and a scratch task, which was then removed. Criteria 1 and 2 need two OPERATOR ASKS on the Windows host:
+      (1) "store a password or allow S4U for the cycle task". S4U has no network credentials, so the real cycle cannot push to GitHub under it. The real logged-off cycle therefore needs the Password logon type: install-cycle-task.ps1 -Interval <n>h -LogonType Password, which prompts once for the password and stores it with Task Scheduler.
+      (2) "reboot once with the task armed". Then show a fire nobody launched in ~/.cache/tillandsias/cycle-scheduler.jsonl, and the answer of tillandsias-plan script run scripts/lua/check-cycle-scheduler.lua.
+      Arming the real driver is the operator's decision. The operator's standing instruction to this host is that there are no cron jobs and the coordinator drives the cycles.
+    ts: "2026-10-12T10:20:26Z"
+    host: yolanda-windows

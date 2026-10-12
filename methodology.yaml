@@ -197,7 +197,7 @@ methodology:
       exception_process: >
         Anything else requires explicit approval from The Tlatoani before it is
         committed or used by recurring automation.
-      checker: scripts/check-no-python-scripts.sh
+      checker: scripts/lua/check-no-python-scripts.lua
 
     base64_script_injection_ban:
       severity: CRITICAL_VIOLATION

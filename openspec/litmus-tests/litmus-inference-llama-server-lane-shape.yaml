@@ -1,0 +1,72 @@
+# @trace spec:inference-engine-slots
+# @trace order:482b (llama-server-vulkan-image-variant)
+#
+# The llama-server engine slot (TILLANDSIAS_INFERENCE_ENGINE=llama-server) in the
+# SAME inference image: the pinned ollama payload's own llama-server, exactly one
+# backend (vulkan on a usable render node, else cpu; cuda/rocm only on their
+# delivered lane), pinned with GGML_BACKEND_PATH and agreeing with .engine-set,
+# models fail-closed on sha256 pins (T0 only; 482-igky pins the rest), and the
+# unchanged :11434 endpoint served by a caddy shim whose /api/version answers
+# only from a healthy llama-server.
+#
+# Quick-size and container-free: images/inference/llama-server-lane.sh runs
+# standalone against fixtures. The image build and the Vulkan/CPU smoke on a
+# mutable podman host are recorded in the 482b evidence. Every step is pipe-free
+# (shell-ratchet LITMUS arm), and every text check carries a negative control.
+name: litmus:inference-llama-server-lane-shape
+spec: inference-engine-slots
+phase: pre-build
+description: >
+  Pin order 482b's llama-server slot: render-node-driven exactly-one backend
+  selection with cuda/rocm refused off their lane, the unpinned multi-backend
+  closure (red, then green after byte-identical restoration), fail-closed GGUF
+  pins, the /api/version-from-/health shim inside the one-second bound, and the
+  entrypoint handoff that keeps ollama the default.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains images/inference/llama-server-lane.sh
+
+critical_path:
+  - step: "backend selection is exactly one backend: a usable render node selects vulkan, a missing or unusable one selects cpu, and cuda/rocm are refused unless their lane is delivered"
+    # Exit criteria 1-3 on device-node FIXTURES (TILLANDSIAS_LLAMA_DEV_ROOT stands in
+    # for the container's /dev; no host GPU or vendor stack is consulted).
+    command: "set -u; T=$(mktemp -d \"${TMPDIR:-/tmp}/llama-sel.XXXXXX\"); mkdir -p \"$T/gpu/dri\" \"$T/none\" \"$T/locked/dri\" \"$T/cuda\"; : > \"$T/gpu/dri/renderD128\"; chmod 0666 \"$T/gpu/dri/renderD128\"; : > \"$T/locked/dri/renderD128\"; chmod 0000 \"$T/locked/dri/renderD128\"; : > \"$T/cuda/nvidia0\"; sel() { env \"$@\" bash images/inference/llama-server-lane.sh select; }; fail=0; want() { got=$(sel $2); [ \"$got\" = \"$3\" ] || { echo \"FAIL $1: got '$got' want '$3'\"; fail=1; }; }; want usable \"TILLANDSIAS_LLAMA_DEV_ROOT=$T/gpu\" \"vulkan render-node:renderD128\"; want absent \"TILLANDSIAS_LLAMA_DEV_ROOT=$T/none\" \"cpu no-render-node\"; want cuda-off-lane \"TILLANDSIAS_LLAMA_DEV_ROOT=$T/gpu TILLANDSIAS_INFERENCE_LLAMA_BACKEND=cuda TILLANDSIAS_INFERENCE_TIER=cpu\" \"vulkan cuda-refused:tier-cpu-not-gpu-cuda,render-node:renderD128\"; want cuda-no-node \"TILLANDSIAS_LLAMA_DEV_ROOT=$T/none TILLANDSIAS_INFERENCE_LLAMA_BACKEND=cuda TILLANDSIAS_INFERENCE_TIER=gpu-cuda\" \"cpu cuda-refused:no-nvidia0-in-container,no-render-node\"; want cuda-delivered \"TILLANDSIAS_LLAMA_DEV_ROOT=$T/cuda TILLANDSIAS_INFERENCE_LLAMA_BACKEND=cuda TILLANDSIAS_INFERENCE_TIER=gpu-cuda OLLAMA_LLM_LIBRARY=cuda_v13\" \"cuda_v13 requested:cuda-lane-delivered\"; want rocm \"TILLANDSIAS_LLAMA_DEV_ROOT=$T/gpu TILLANDSIAS_INFERENCE_LLAMA_BACKEND=rocm\" \"vulkan rocm-refused:no-rocm-backend-in-payload,render-node:renderD128\"; if [ \"$(id -u)\" != 0 ]; then want unusable \"TILLANDSIAS_LLAMA_DEV_ROOT=$T/locked\" \"cpu render-node-unusable:renderD128\"; fi; rm -rf \"$T\"; [ \"$fail\" = 0 ] && echo \"ok: vulkan|cpu chosen by render-node usability; cuda/rocm refused off their lane\" || exit 1"
+    timeout_ms: 8000
+    expected_behavior: "ok: vulkan|cpu chosen by render-node usability"
+
+  - step: "closure: an unpinned multi-backend payload is refused, and byte-identical restoration passes (sha256 pre/post)"
+    # Exit criteria 4 and 6. A scratch lib/ollama with the selected vulkan backend
+    # passes; planting cuda_v12 beside it with NO GGML_BACKEND_PATH pin goes red;
+    # removing the plant restores a byte-identical tree (sha256 of its listing) and
+    # goes green. An engine set that disagrees with the selection is refused too.
+    command: "set -u; T=$(mktemp -d \"${TMPDIR:-/tmp}/llama-closure.XXXXXX\"); L=\"$T/lib\"; mkdir -p \"$L/vulkan\"; printf 'vk\\n' > \"$L/vulkan/libggml-vulkan.so\"; v() { bash images/inference/llama-server-lane.sh verdict \"$L\" vulkan \"$1\" \"$2\"; }; ls -lR \"$L\" > \"$T/pre\"; pre=$(sha256sum \"$T/pre\"); g1=$(v core+vulkan \"$L/vulkan/libggml-vulkan.so\"); mkdir -p \"$L/cuda_v12\"; printf 'cu\\n' > \"$L/cuda_v12/libggml-cuda.so\"; red=$(v core+vulkan \"\"); pinned=$(v core+vulkan \"$L/vulkan/libggml-vulkan.so\"); rm -rf \"$L/cuda_v12\"; ls -lR \"$L\" > \"$T/post\"; post=$(sha256sum \"$T/post\"); g2=$(v core+vulkan \"$L/vulkan/libggml-vulkan.so\"); set_red=$(v core+cuda_v13 \"$L/vulkan/libggml-vulkan.so\"); rm -rf \"$T\"; [ \"$g1\" = ok ] && [ \"$red\" = \"engine-integrity-refused:multi-backend-unpinned:cuda_v12,vulkan\" ] && [ \"$pinned\" = ok ] && [ \"${pre%% *}\" = \"${post%% *}\" ] && [ \"$g2\" = ok ] && [ \"$set_red\" = \"engine-integrity-refused:engine-set-disagrees:core+cuda_v13\" ] && echo \"ok: red=$red; restored ${post%% *} (pre ${pre%% *}) green; set mismatch refused\" || { echo \"FAIL: g1=$g1 red=$red pinned=$pinned g2=$g2 set=$set_red pre=${pre%% *} post=${post%% *}\"; exit 1; }"
+    timeout_ms: 8000
+    expected_behavior: "ok: red=engine-integrity-refused:multi-backend-unpinned"
+
+  - step: "models fail closed: only a pinned GGUF is served, an unpinned tier row is refused by name, and one changed byte is refused (sha256 pre/post)"
+    # 482b pins T0 alone (gguf-pins.tsv); every other tier row must be refused
+    # with reason=engine-integrity-refused:gguf-unpinned:<id> and never downloaded.
+    # The digest check sees a one-byte mutation and passes after restoration.
+    command: "set -u; export TILLANDSIAS_TIERS_DIR=images/inference/tiers; p0=$(bash images/inference/llama-server-lane.sh pin qwen2.5-0.5b-instruct); set -- $p0; [ \"$3\" = 74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db ] && [ \"$4\" = 491400032 ] || { echo \"FAIL: T0 pin is '$p0'\"; exit 1; }; fail=0; for id in qwen2.5-7b-instruct qwen2.5-coder-7b-instruct qwen2.5-14b-instruct qwen2.5-coder-32b-instruct; do r=$(bash images/inference/llama-server-lane.sh pin \"$id\"); [ \"$r\" = \"unpinned:$id\" ] || { echo \"FAIL: $id should be unpinned, got '$r'\"; fail=1; }; done; T=$(mktemp -d \"${TMPDIR:-/tmp}/llama-gguf.XXXXXX\"); err=$(bash -c '. images/inference/llama-server-lane.sh; tillandsias_llama_gguf_ensure qwen2.5-7b-instruct \"$1\"' _ \"$T\" 2>&1 >/dev/null) && fail=1; case \"$err\" in *\"reason=engine-integrity-refused:gguf-unpinned:qwen2.5-7b-instruct\"*) ;; *) echo \"FAIL: unpinned ensure said: $err\"; fail=1;; esac; [ -z \"$(ls -A \"$T\")\" ] || { echo 'FAIL: an unpinned model left files behind'; fail=1; }; printf 'gguf-fixture-bytes\\n' > \"$T/m\"; pre=$(sha256sum \"$T/m\"); ok1=$(bash images/inference/llama-server-lane.sh check \"$T/m\" \"${pre%% *}\" 19); printf 'gguf-fixture-bytez\\n' > \"$T/m\"; red=$(bash images/inference/llama-server-lane.sh check \"$T/m\" \"${pre%% *}\" 19); printf 'gguf-fixture-bytes\\n' > \"$T/m\"; post=$(sha256sum \"$T/m\"); ok2=$(bash images/inference/llama-server-lane.sh check \"$T/m\" \"${pre%% *}\" 19); rm -rf \"$T\"; [ \"$fail\" = 0 ] && [ \"$ok1\" = ok ] && [ \"$red\" = gguf-digest-mismatch ] && [ \"$ok2\" = ok ] && [ \"${pre%% *}\" = \"${post%% *}\" ] && echo \"ok: T0 pinned; 4 rows refused unpinned; one-byte mutation -> $red; restored ${post%% *}\" || { echo \"FAIL: ok1=$ok1 red=$red ok2=$ok2\"; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: T0 pinned; 4 rows refused unpinned"
+
+  - step: "the endpoint shim answers /api/version only from a healthy /health, inside the one-second probe bound, with a negative control"
+    # SLOT-1/SLOT-2: caddy owns :11434; /api/version is rewritten to llama-server's
+    # /health and only a 200 is replaced by the version body; dial + header
+    # timeouts sum below 1 s. NEGATIVE CONTROL: the same check on a scratch
+    # Caddyfile that answers /api/version unconditionally must fail.
+    command: "set -u; shim() { f=\"$1\"; grep -q 'handle /api/version' \"$f\" && grep -q 'rewrite \\* /health' \"$f\" && grep -q '@healthy status 200' \"$f\" && grep -q 'handle_response @healthy' \"$f\" && grep -q 'dial_timeout 250ms' \"$f\" && grep -q 'response_header_timeout 700ms' \"$f\" && grep -q 'reverse_proxy {\\$TILLANDSIAS_LLAMA_UPSTREAM}' \"$f\"; }; shim images/inference/llama-server.Caddyfile || { echo 'FAIL: the shim does not gate /api/version on /health within the bound'; exit 1; }; T=$(mktemp -d \"${TMPDIR:-/tmp}/llama-shim.XXXXXX\"); printf ':11434 {\\n\\thandle /api/version {\\n\\t\\trespond `{\"version\":\"x\"}` 200\\n\\t}\\n}\\n' > \"$T/Caddyfile\"; if shim \"$T/Caddyfile\"; then rm -rf \"$T\"; echo 'BROKEN: an unconditional /api/version passed the shim check'; exit 1; fi; rm -rf \"$T\"; grep -q '127.0.0.1:$TILLANDSIAS_LLAMA_UPSTREAM_PORT' images/inference/llama-server-lane.sh && grep -q 'COPY llama-server.Caddyfile' images/inference/Containerfile && grep -q 'microdnf install -y caddy' images/inference/Containerfile && echo 'ok: /api/version gated on /health (250ms dial + 700ms header); unconditional shim rejected; llama-server on loopback' || { echo 'FAIL: the lane is not wired into the image'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: /api/version gated on /health"
+
+  - step: "the entrypoint keeps ollama the default and hands off to llama-server before ollama would serve, with a negative control"
+    # SLOT-3: unset TILLANDSIAS_INFERENCE_ENGINE stays ollama. The llama-server
+    # handoff must come AFTER the engine integrity verdict and BEFORE `ollama serve`.
+    # NEGATIVE CONTROL: a scratch entrypoint with the handoff moved below
+    # `ollama serve` must fail the same ordering check.
+    command: "set -u; order() { f=\"$1\"; d=$(grep -n 'TILLANDSIAS_INFERENCE_ENGINE=\"${TILLANDSIAS_INFERENCE_ENGINE:-ollama}\"' \"$f\"); i=$(grep -n '^_engine_verdict=\"$(tillandsias_engine_check' \"$f\"); h=$(grep -n 'tillandsias_llama_serve \"$OLLAMA_LIBDIR/llama-server\"' \"$f\"); s=$(grep -n '^ollama serve &' \"$f\"); [ -n \"$d\" ] && [ -n \"$i\" ] && [ -n \"$h\" ] && [ -n \"$s\" ] || return 1; i=\"${i##*$'\\n'}\"; [ \"${d%%:*}\" -lt \"${h%%:*}\" ] && [ \"${i%%:*}\" -lt \"${h%%:*}\" ] && [ \"${h%%:*}\" -lt \"${s%%:*}\" ]; }; order images/inference/entrypoint.sh || { echo 'FAIL: the llama-server handoff is not between the integrity verdict and ollama serve, or the default is not ollama'; exit 1; }; T=$(mktemp -d \"${TMPDIR:-/tmp}/llama-ep.XXXXXX\"); grep -v 'tillandsias_llama_serve \"$OLLAMA_LIBDIR/llama-server\"' images/inference/entrypoint.sh > \"$T/ep\"; printf '    tillandsias_llama_serve \"$OLLAMA_LIBDIR/llama-server\" x y z\\n' >> \"$T/ep\"; if order \"$T/ep\"; then rm -rf \"$T\"; echo 'BROKEN: a handoff after ollama serve passed the ordering check'; exit 1; fi; rm -rf \"$T\"; echo 'ok: default ollama; llama-server handoff after the integrity verdict and before ollama serve; misplaced handoff rejected'"
+    timeout_ms: 5000
+    expected_behavior: "ok: default ollama; llama-server handoff"

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-wrangler-preview-runtime-image-is-never-built-so-publish-local-auto-or-wrangler-always-refuses-with-an-init-step-nothing-can-run
+    field: status
+    value: completed
+    ts: "2026-10-12T07:58:00Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-wrangler-preview-runtime-image-is-never-built-so-publish-local-auto-or-wrangler-always-refuses-with-an-init-step-nothing-can-run
+    event:
+      type: completed
+      ts: "2026-10-12T07:58:00Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: land(356) 3111558b3 into linux-next, gate green (run 41); branch head 62a742adc (2e8d027d8 + rustfmt fix). C1: isolated-store ensure, same run: pre-fix trunk 97efa9f05 --internal-ensure-image web-wrangler refused "Unknown image type: web-wrangler"; fixed built localhost/tillandsias-web-wrangler:v56.10.9.1 in 11 s, a second ensure 0 s, image runs wrangler 4.42.0; publish_locked ensures the profile image (IMAGE_ENSURE_BUDGET 300 s, outside the 90 s PUBLISH_BUDGET) instead of refusing. C2: fixed --init on an isolated substrate built web-wrangler after web; podman image exists rc=0 for exactly localhost/tillandsias-web:v56.10.9.1 and localhost/tillandsias-web-wrangler:v56.10.9.1 (the names Profile::image() probes); same sha256-589586ef identity as the ensure. C3: the ensure takes only the Profile; no MCP input reaches the build. MCP-level publish proven under 1625-9qyw, not here (coordinator ruling: no enclave upgrade or isolated Vault on lenovinha).

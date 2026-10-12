@@ -105,9 +105,199 @@ pub fn pin_backend_environment(
     envs
 }
 
+/// Order 482b: the engine the operator selected with TILLANDSIAS_INFERENCE_ENGINE.
+/// Unset is the default (SLOT-3: ollama). A value that names no container engine
+/// falls back to the default WITH the reason, never to a guess.
+// @trace spec:inference-engine-slots
+pub fn selected_engine_kind(requested: Option<&str>) -> (EngineKind, Option<String>) {
+    match requested.map(str::trim) {
+        None | Some("") => (default_engine_kind(), None),
+        Some("ollama") => (EngineKind::Ollama, None),
+        Some("llama-server") => (EngineKind::LlamaServer, None),
+        Some(other) => (
+            default_engine_kind(),
+            Some(format!(
+                "TILLANDSIAS_INFERENCE_ENGINE='{other}' names no container engine (ollama | llama-server); using {}",
+                default_engine_kind().as_str()
+            )),
+        ),
+    }
+}
+
+/// Order 482b (SLOT-4/SLOT-5): render nodes under `dri` that THIS user can open
+/// read-write, sorted. A node that exists but is not accessible is skipped and
+/// named in the second list, never chmod-ed or escalated (SLOT-5).
+// @trace spec:inference-engine-slots
+pub fn usable_render_nodes(
+    dri: &std::path::Path,
+) -> (Vec<std::path::PathBuf>, Vec<std::path::PathBuf>) {
+    let mut usable = Vec::new();
+    let mut unusable = Vec::new();
+    let Ok(entries) = std::fs::read_dir(dri) else {
+        return (usable, unusable);
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let is_render = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.starts_with("renderD"));
+        if !is_render {
+            continue;
+        }
+        if read_write_accessible(&path) {
+            usable.push(path);
+        } else {
+            unusable.push(path);
+        }
+    }
+    usable.sort();
+    unusable.sort();
+    (usable, unusable)
+}
+
+#[cfg(unix)]
+fn read_write_accessible(path: &std::path::Path) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
+        return false;
+    };
+    // SAFETY: access(2) reads a NUL-terminated path and touches nothing else.
+    unsafe { libc::access(c_path.as_ptr(), libc::R_OK | libc::W_OK) == 0 }
+}
+
+#[cfg(not(unix))]
+fn read_write_accessible(_path: &std::path::Path) -> bool {
+    false
+}
+
+/// Order 482b: the inference run args the llama-server slot adds. Pure, so the
+/// selection is testable without a host. `engine` and `backend` are the raw
+/// operator env values; `tier` is the EFFECTIVE tier; `usable` are the render
+/// nodes this user can open. The container makes the final, exactly-one backend
+/// choice (llama-server-lane.sh); the launcher only delivers what is usable.
+// @trace spec:inference-engine-slots
+pub fn llama_server_run_args(
+    engine: EngineKind,
+    backend: Option<&str>,
+    tier: &str,
+    usable: &[std::path::PathBuf],
+) -> Vec<String> {
+    let mut args = vec![
+        "--env".to_string(),
+        format!("TILLANDSIAS_INFERENCE_ENGINE={}", engine.as_str()),
+    ];
+    if engine != EngineKind::LlamaServer {
+        return args;
+    }
+    if let Some(backend) =
+        backend.filter(|b| matches!(*b, "auto" | "vulkan" | "cpu" | "cuda" | "rocm"))
+    {
+        args.extend([
+            "--env".to_string(),
+            format!("TILLANDSIAS_INFERENCE_LLAMA_BACKEND={backend}"),
+        ]);
+    }
+    // gpu-rocm already delivers the whole /dev/dri (order 392); never twice.
+    if tier != "gpu-rocm" && !usable.is_empty() {
+        for node in usable {
+            args.extend(["--device".to_string(), node.display().to_string()]);
+        }
+        // A 0660 root:render node is usable on the host only through the user's
+        // render group; keep it inside the user namespace instead of chmod-ing.
+        args.extend(["--group-add".to_string(), "keep-groups".to_string()]);
+    }
+    args
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    // @trace spec:inference-engine-slots
+    fn test_engine_selection_defaults_to_ollama_and_names_a_bad_value() {
+        assert_eq!(selected_engine_kind(None), (EngineKind::Ollama, None));
+        assert_eq!(selected_engine_kind(Some("")), (EngineKind::Ollama, None));
+        assert_eq!(
+            selected_engine_kind(Some("llama-server")),
+            (EngineKind::LlamaServer, None)
+        );
+        let (kind, why) = selected_engine_kind(Some("vllm"));
+        assert_eq!(kind, EngineKind::Ollama);
+        assert!(why.unwrap().contains("'vllm' names no container engine"));
+    }
+
+    #[test]
+    // @trace spec:inference-engine-slots
+    fn test_llama_server_run_args_deliver_usable_render_nodes_only() {
+        let nodes = vec![std::path::PathBuf::from("/dev/dri/renderD128")];
+        // ollama: the engine is named and nothing else changes.
+        assert_eq!(
+            llama_server_run_args(EngineKind::Ollama, Some("vulkan"), "gpu-cuda", &nodes),
+            vec!["--env", "TILLANDSIAS_INFERENCE_ENGINE=ollama"]
+        );
+        // llama-server on a CUDA-tier host still gets the iGPU's render node:
+        // the vulkan lane needs no vendor stack (SLOT-4).
+        let args = llama_server_run_args(EngineKind::LlamaServer, None, "gpu-cuda", &nodes);
+        assert_eq!(
+            args,
+            vec![
+                "--env",
+                "TILLANDSIAS_INFERENCE_ENGINE=llama-server",
+                "--device",
+                "/dev/dri/renderD128",
+                "--group-add",
+                "keep-groups",
+            ]
+        );
+        // No usable node: CPU lane, no device args, launch proceeds (SLOT-4).
+        assert_eq!(
+            llama_server_run_args(EngineKind::LlamaServer, Some("cpu"), "cpu", &[]),
+            vec![
+                "--env",
+                "TILLANDSIAS_INFERENCE_ENGINE=llama-server",
+                "--env",
+                "TILLANDSIAS_INFERENCE_LLAMA_BACKEND=cpu",
+            ]
+        );
+        // gpu-rocm already passes /dev/dri; an unknown backend request is dropped.
+        let rocm =
+            llama_server_run_args(EngineKind::LlamaServer, Some("metal"), "gpu-rocm", &nodes);
+        assert!(
+            !rocm
+                .iter()
+                .any(|a| a == "--device" || a.contains("LLAMA_BACKEND"))
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    // @trace spec:inference-engine-slots
+    fn test_usable_render_nodes_skip_inaccessible_and_non_render_nodes() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let open = dir.path().join("renderD128");
+        let locked = dir.path().join("renderD129");
+        let card = dir.path().join("card0");
+        for p in [&open, &locked, &card] {
+            std::fs::write(p, b"").unwrap();
+        }
+        std::fs::set_permissions(&open, std::fs::Permissions::from_mode(0o666)).unwrap();
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let (usable, unusable) = usable_render_nodes(dir.path());
+        if unsafe { libc::geteuid() } == 0 {
+            // root bypasses mode bits; only the card0 exclusion is meaningful.
+            assert!(!usable.contains(&card));
+            return;
+        }
+        assert_eq!(usable, vec![open]);
+        assert_eq!(unusable, vec![locked]);
+        assert_eq!(
+            usable_render_nodes(&dir.path().join("absent")),
+            (vec![], vec![])
+        );
+    }
 
     #[test]
     // @trace spec:inference-engine-slots

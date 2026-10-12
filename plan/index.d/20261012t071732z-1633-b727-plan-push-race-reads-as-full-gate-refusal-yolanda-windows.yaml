@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-12): a plan-only push that raced trunk met a full-gate refusal.
+packets:
+  - packet_id: a-plan-only-fragment-push-that-races-trunk-meets-a-full-gate-refusal-because-the-pre-push-hook-cannot-see-the-moved-remote-base-locally
+    order: 1633-b727
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [plan-lane, pre-push, race, push-plan-fragments]
+    estimated_hours: 2
+    owned_files:
+      - scripts/push-plan-fragments-to-trunk.sh
+    related: [1266-dh2d, 1631-6w8z]
+    depends_on: []
+    title: |
+      When trunk moves between push-plan-fragments-to-trunk.sh's fetch and its push, the pre-push hook cannot see the remote base locally, drops the plan-only lane, and refuses as a full-gate push, so a plan-only push reaches a full-gate refusal
+    context: |
+      Measured on yolanda-windows 2026-10-12 while filing 1631-6w8z: one fragment, three attempts.
+      ATTEMPT 1: "[remote rejected] ... cannot lock ref 'refs/heads/linux-next': is at 07cd3602f but expected 0533b77d0". The script refetched and rebuilt.
+      ATTEMPT 2: the hook printed "plan-only lane: not applicable — remote base ca19ba66061d36d710b470885dcf8249b8d98973 is not present locally (full gate required)", then "✗ pre-push refused: the tree changed since ./build.sh --check last passed". It listed "CONTENT DIFFERS FROM THE STAMPED TREE (12948 path(s)) — THIS IS THE CAUSE", with remedies naming ./build.sh --check, salvage-dirty-worktree.sh and git push --no-verify. None of these applies to a one-fragment plan push.
+      ATTEMPT 3: plan-only lane clean, pushed 876916c0f.
+      This was not a fast-forward of a local branch (the relay-lane shape): the script's own commit was built on a base that trunk left before the push reached the hook.
+      THE SCRIPT ALREADY KNOWS THE SHAPE: its header (RACES, lines 72-76) says the hook refuses with "remote base … not present locally" and that the script detects the race by refetching and comparing tips, three attempts. So it recovered by design. The defects: (1) the refusal the operator sees is a full-gate refusal whose stated cause and remedies are wrong, and a reader who acts on them (--no-verify, salvage) does real harm; (2) each such refusal spends one of only three attempts, so a busy trunk ends in refused:fragments-to-trunk:raced with a full-gate refusal in the log.
+      SHAPES OF A FIX (either meets the exit criterion): the script fetches the remote tip immediately before the push, so the hook finds the base locally; or the script treats the hook's "not present locally" as a race and suppresses or relabels the hook's full-gate output, reporting a retryable verdict that names the moved base.
+    exit_criteria:
+      - 'in a fixture where trunk moves between the script fetch and its push, the fixed script either fetches the new base before rebuilding (so the hook sees it locally and takes the plan-only lane) or reports a retryable verdict naming the moved base; the same fixture against the trunk script shows the full-gate refusal'
+      - 'no run of the fixed script on a plan-only push prints a full-gate refusal (the "pre-push refused: the tree changed since ./build.sh --check last passed" block)'
+    unscoreable: "a race fix pinned by a fixture: its evidence is the moved-trunk fixture, red against the trunk script and green against the fixed one"
+    next_action: >
+      Build the moved-trunk fixture first (a bare remote, a second clone pushing between the script fetch and push), confirm it reproduces the full-gate refusal, then pick one of the two fix shapes.
+    provenance: |
+      Filed by yolanda-windows at macuahuitl-fedora's request, 2026-10-12. Evidence: the three-attempt push of 1631-6w8z (876916c0f).
+    events:
+      - type: filed
+        ts: "2026-10-12T07:17:32Z"
+        host: yolanda-windows
+        summary: |-
+          A plan-only fragment push that raced trunk met a full-gate pre-push refusal (remote base not present locally); the script retried and landed on attempt 3.

@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-10-12 as the named follow-up of packet 539, criterion 5.
+packets:
+  - packet_id: claude-forge-workers-share-one-config-dir-so-concurrent-delegated-claude-runs-are-gated-to-sequential-until-the-credential-and-approvals-writers-follow-claude-config-dir
+    order: 1634-9suq
+    status: ready
+    kind: implementation
+    priority: p3
+    desired_release: v0.5
+    release_target: v06-automation-milestone
+    pickup_role: linux
+    capability_tags: [forge, harness, claude, delegation, credentials]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - images/default/provider-oauth-vault
+      - images/default/claude-approvals-vault
+      - images/default/entrypoint-forge-claude.sh
+    title: |
+      Claude forge workers share one config dir, so concurrent delegated Claude runs on a host are gated to sequential until the credential and approvals writers follow CLAUDE_CONFIG_DIR
+    context: |
+      Order 539 made the Claude lane delegable (claude --print under TILLANDSIAS_AGENT_RESULT_FORMAT=json). Its criterion 5 asked for concurrent-worker safety proven or explicitly gated; it is GATED, and the reason is stated on forge_worker_state_env in crates/tillandsias-headless/src/main.rs: that function emits CODEX_HOME and XDG_DATA_HOME/XDG_STATE_HOME per worker but nothing for Claude. claude reads CLAUDE_CONFIG_DIR (default ~/.claude) for config AND .credentials.json; the forge's OAuth restore (provider-oauth-vault, TILLANDSIAS_CLAUDE_AUTH_FILE defaults to $HOME/.claude/.credentials.json) and the approvals harvester (claude-approvals-vault, launched from entrypoint-forge-claude.sh) both write that default location. Redirecting the dir per worker without moving both writers starts a worker with no credential and harvests nothing.
+      The gate today is a statement in code and in openspec/specs/forge-as-only-runtime/spec.md, not a refusal: no dispatcher launches concurrent Claude workers yet, so nothing can trip it.
+    exit_criteria:
+      - 'forge_worker_state_env emits a per-worker CLAUDE_CONFIG_DIR (and the matching TILLANDSIAS_CLAUDE_AUTH_FILE) when an instance is set, and provider-oauth-vault restore plus claude-approvals-vault watch read and write under that directory'
+      - 'two delegated Claude workers with distinct TILLANDSIAS_FORGE_INSTANCE values each restore their own credential and harvest their own approvals, shown by a fixture that runs both writers against two scratch config dirs with no cross-write'
+      - 'the sequential-only statement on forge_worker_state_env and in the forge-as-only-runtime spec is replaced by the isolation it describes, in the same change'
+    unscoreable: "the two-worker fixture is the evidence; a single-worker launch stays byte-identical"
+    depends_on: []
+    related: [539, 428]
+    next_action: >
+      Read how provider-oauth-vault resolves TILLANDSIAS_CLAUDE_AUTH_FILE and where claude-approvals-vault reads the approvals file; add CLAUDE_CONFIG_DIR to forge_worker_state_env beside CODEX_HOME; make both writers honour it; write the two-worker fixture.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+    provenance: |
+      Filed by yoga (linux-yoga-claude-20261012t072342z) on 2026-10-12 while landing 539's first slice; the gap is named in that slice's commit and spec text.
+    events:
+      - type: filed
+        ts: "2026-10-12T07:44:14Z"
+        host: yoga
+        summary: |-
+          Concurrent delegated Claude workers share ~/.claude because the forge's credential and approvals writers do not follow CLAUDE_CONFIG_DIR; 539 gated them to sequential and this row removes the gate.

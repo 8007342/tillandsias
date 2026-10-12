@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: four-tillandsias-headless-unit-tests-fail-on-a-native-windows-host-on-bare-trunk-for-host-reasons-not-product-defects-so-a-windows-run-of-the-suite-is-never-green
+    field: status
+    value: completed
+    ts: "2026-10-12T12:19:26Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: four-tillandsias-headless-unit-tests-fail-on-a-native-windows-host-on-bare-trunk-for-host-reasons-not-product-defects-so-a-windows-run-of-the-suite-is-never-green
+    event:
+      type: completed
+      ts: "2026-10-12T12:19:26Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: Landed in run 47 as 86090f431 (PR #372, fix fb2168e6b), per macuahuitl-fedora. Verified on origin/linux-next: resource_lock::tests::try_lock_is_a_no_op_off_unix is present. Criterion 1: native Windows run of cargo test -p tillandsias-headless --bin tillandsias gave 724 passed, 0 failed, 22 ignored (was 721 passed, 4 failed). Items 1 and 2 were fixed with separator-agnostic expectations. Items 3 and 4 are ignored off unix by name. Criterion 2: items 3 and 4 were decided as test-side, not product defects, before the skip: resource_lock is a documented no-op off unix, and on a Windows host the guarded paths (podman lane launch markers, a Vault token exchange) are unreachable. The guard test fails if Windows ever gets a real lock (sabotage-verified).

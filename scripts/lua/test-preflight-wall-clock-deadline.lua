@@ -62,10 +62,10 @@ if now_fn == "" or guard_fn == "" then
     verdict.emit("violation:preflight-wall-clock-deadline:no-subject", 1,
         "build.sh has no _pf_now or no _pf_run_guard to extract (1614-5x7m)")
 end
--- The sweeps are 1600-nn5b's and 1618-baia's and have their own fixtures;
+-- The sweeps are 1600-nn5b's, 1618-baia's and 1630-dwab's and have their own fixtures;
 -- no-ops keep them out of this one's timing. Every helper the killed path
 -- calls needs one, or it prints "command not found" there.
-local stubs = "_pf_sweep_guard_tmp() { :; }\n_pf_sweep_fixture_scratch() { :; }\n"
+local stubs = "_pf_sweep_guard_tmp() { :; }\n_pf_sweep_fixture_scratch() { :; }\n_pf_sweep_declared_artifacts() { :; }\n"
 fs.write(REL .. "/door-post.sh", stubs .. now_fn .. "\n" .. guard_fn .. "\n")
 fs.write(REL .. "/door-pre.sh", stubs .. guard_fn .. "\n" ..
     "_pf_now() { _PF_N=$(( ${_PF_N:-0} + 100000 )); _PF_NOW=$_PF_N; _PF_CLOCK=ticks; }\n")

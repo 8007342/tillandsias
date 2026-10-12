@@ -22,6 +22,7 @@ RUN microdnf install -y --nogpgcheck --setopt=install_weak_deps=0 \
         java-25-openjdk-headless maven \
         golang gopls \
         rust cargo clippy rustfmt rust-analyzer cargo-deny \
+        rust-std-static-wasm32-unknown-unknown \
         python3-pip python3-mypy python3-pytest python3-lsp-server \
         ruff poetry pipx uv black pylint yamllint \
         pnpm yarnpkg \
@@ -32,7 +33,23 @@ RUN microdnf install -y --nogpgcheck --setopt=install_weak_deps=0 \
         diffutils patch file gettext diffstat \
         iproute iputils socat nmap-ncat sqlite \
     && git lfs install --system \
-    && microdnf clean all
+    && microdnf clean all \
+    && rustc_v="$(rpm -q --qf '%{VERSION}-%{RELEASE}' rust)" \
+    && std_v="$(rpm -q --qf '%{VERSION}-%{RELEASE}' rust-std-static-wasm32-unknown-unknown)" \
+    && if [ "$rustc_v" != "$std_v" ]; then \
+           echo "FATAL: rust-std-static-wasm32-unknown-unknown $std_v does not match rust $rustc_v" >&2; \
+           exit 1; \
+       fi \
+    && test -d "$(rustc --print sysroot)/lib/rustlib/wasm32-unknown-unknown/lib"
+# ↑ rust-std-static-wasm32-unknown-unknown (order 1625-grk8). The forge's Rust is
+# Fedora's system rustc (no rustup), so `rustup target add` does not exist here and
+# wasm-pack (FIRST_RUN, lib-common) could not build a wasm web project: `cargo build
+# --target wasm32-unknown-unknown` failed "can't find crate for `std`" (visual-chess
+# on yoga, 2026-10-12). Fedora builds the target std from the SAME rust source, so it
+# must match the installed rustc exactly: the build refuses a mismatch rather than
+# ship a std the compiler rejects (E0514), and checks the sysroot really has it.
+# It is in THIS layer on purpose: a separate RUN rewrote the 56 MB rpm database
+# into its own layer (measured 179 MB layer for a 113 MB package).
 
 # ── Agent binaries ─────────────────────────────────────────────
 # Agent harnesses are installed EVERY_LAUNCH by ensure_forge_harnesses

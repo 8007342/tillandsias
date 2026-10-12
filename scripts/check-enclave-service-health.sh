@@ -223,7 +223,7 @@ _age() { # <seconds>
 # that CANNOT FAIL on a deleted service — precisely the class the order just
 # removed, reintroduced through the door built to fix it.
 #
-# Enforced, not merely requested: scripts/check-enclave-expect-none-is-fixture-only.sh
+# Enforced, not merely requested: scripts/lua/check-enclave-expect-none-is-fixture-only.lua
 # refuses any caller outside the fixture, and it is wired into local-ci.sh. The
 # rule is deliberately a LINT rather than a runtime guard keyed on a test-only
 # environment variable — such a variable is itself settable from production, so

@@ -1091,7 +1091,7 @@ attempt_plan_only_lane() {
     # RESOLVED IS NOT THE SAME AS CURRENT, and this lane was the one consumer
     # that never asked. It calls resolve_plan_binary and nothing on this path
     # called plan_binary_is_stale — while SIX other consumers
-    # (check-fragment-events-land.sh, check-mo-full-attestations.sh,
+    # (build.sh's fragment-events-land call site, check-mo-full-attestations.sh,
     # check-resumable-claim-dirt.sh, archive-plan-packets.sh and two fixtures)
     # call ensure_fresh_plan_binary. The lane standing in front of the trunk
     # skipped the freshness check that the scripts behind it all run.

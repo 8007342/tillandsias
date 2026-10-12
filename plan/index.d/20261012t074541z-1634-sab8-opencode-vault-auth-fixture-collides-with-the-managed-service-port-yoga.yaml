@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-10-12: a host red met by 539's relay preflight, with its control.
+packets:
+  - packet_id: test-opencode-vault-auth-content-is-red-wherever-an-opencode-managed-service-already-holds-port-49374-because-its-isolated-probe-never-isolates-the-service-port
+    order: 1634-sab8
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [litmus, fixtures, opencode, host-dependent, default-image]
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-opencode-vault-auth-content.sh
+      - images/default/lib-common.sh
+    title: |
+      scripts/test-opencode-vault-auth-content.sh is red wherever an OpenCode managed service already holds port 49374, because opencode_auth_contract_ok isolates XDG dirs and the DB but not the service port, so opencode 2.0.25 "auth list" dies on "port already in use" and the fixture reports "installed OpenCode rejected the isolated sentinel contract"
+    context: |
+      MEASURED on yoga 2026-10-12 while running scripts/relay-preflight.sh work/539 (refused:relay-preflight:litmus:default-image). CONTROL: the same fixture fails the same way on untouched trunk 3111558b3 in a scratch worktree, rc=1, so the red is the host's, not the change's.
+      The probe in images/default/lib-common.sh (opencode_auth_contract_ok) runs "opencode auth list" under XDG_DATA_HOME/XDG_STATE_HOME scratch dirs, OPENCODE_DB=:memory: and OPENCODE_AUTH_CONTENT, and treats any non-zero exit as a contract rejection. Replayed by hand with the same environment, the installed linuxbrew opencode v2.0.25 answered: "Server process exited with code 1 / Error: Managed service port 49374 on 127.0.0.1 is already in use by another process. Configure another port with opencode service set port <port>". The holder was opencode's own "opencode serve --service" (pid 768050, ss -ltnp), which 2.0.x starts for itself. The fixture's isolation never reaches the service port, so one running OpenCode on the host turns the contract probe red, and the fixture then blames the binary's contract.
+      The message the fixture prints ("rejected the isolated sentinel contract") hides the real cause; the one-line stderr the litmus runner does not read (1268-fx87) carried it.
+    exit_criteria:
+      - 'opencode_auth_contract_ok runs the probe with the managed service isolated (a free port or the service disabled for the probe, whichever opencode 2.0.x documents), so a host with a running OpenCode service answers the same verdict as one without'
+      - 'the fixture distinguishes "the binary rejected the contract" from "the probe could not run" (a port collision is the second), naming the port and the holder in its FAIL line'
+      - 'scripts/test-opencode-vault-auth-content.sh exits 0 on yoga with opencode serve --service running, and still exits 1 against a stub opencode that writes auth.json or omits the probe key (the existing negative arms stay red)'
+    unscoreable: "the fixture is the evidence; the positive and negative arms are named above"
+    depends_on: []
+    related: [1437-5hpv, 1268-fx87, 539]
+    next_action: >
+      Read opencode 2.0.25's "opencode service" help for the port setting or an env override; thread it through opencode_auth_contract_ok and the fixture; add the port-collision arm.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    provenance: |
+      Filed by yoga (linux-yoga-claude-20261012t072342z) on 2026-10-12 from the 539 relay preflight; probe replayed by hand, holder read from ss.
+    events:
+      - type: filed
+        ts: "2026-10-12T07:45:41Z"
+        host: yoga
+        summary: |-
+          The OpenCode vault-auth fixture's contract probe collides with the host's own opencode managed service on port 49374 and reports a contract rejection instead; red on yoga with the same message on untouched trunk.

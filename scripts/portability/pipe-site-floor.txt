@@ -369,7 +369,6 @@ scripts scripts/check-decider-retirement.sh 3
 scripts scripts/check-declared-closures-added.sh 2
 scripts scripts/check-deslop-due.sh 5
 scripts scripts/check-deslop-sweep-health.sh 4
-scripts scripts/check-enclave-expect-none-is-fixture-only.sh 2
 scripts scripts/check-enclave-network-internal.sh 5
 scripts scripts/check-enclave-service-health.sh 16
 scripts scripts/check-engine-cpu-dispatch.sh 6
@@ -377,11 +376,9 @@ scripts scripts/check-exact-version-literal-added.sh 5
 scripts scripts/check-fleet-membership.sh 8
 scripts scripts/check-forge-findings-persisted.sh 3
 scripts scripts/check-fragment-closure-evidence-added.sh 5
-scripts scripts/check-fragment-events-land.sh 1
 scripts scripts/check-fragment-keys-are-read.sh 1
 scripts scripts/check-fragment-ts-skew.sh 4
 scripts scripts/check-gate-memory-floor.sh 3
-scripts scripts/check-gate-step-prefix-across-refs.sh 4
 scripts scripts/check-gate-step-regimes.sh 1
 scripts scripts/check-groundtruth-mutable-status-pins.sh 4
 scripts scripts/check-groundtruth-regime-invariance.sh 3
@@ -400,7 +397,6 @@ scripts scripts/check-litmus-pin-claims.sh 5
 scripts scripts/check-litmus-steps-can-fail.sh 2
 scripts scripts/check-long-running-view.sh 21
 scripts scripts/check-macos-stock-binaries.sh 7
-scripts scripts/check-markdown-distillation.sh 20
 scripts scripts/check-mcp-expert-health.sh 46
 scripts scripts/check-mcp-live-build.sh 4
 scripts scripts/check-mcp-surface.sh 4

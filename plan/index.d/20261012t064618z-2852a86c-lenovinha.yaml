@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: llama-server-vulkan-image-variant
+    event:
+      type: note
+      ts: "2026-10-12T06:46:18Z"
+      agent_id: linux-lenovinha-claude-20261012t062859z
+      host: lenovinha
+      summary: |
+        DEVIATION at claim (agreed with macuahuitl, 2026-10-12). Shape: NO new Containerfile variant. The llama-server slot is the SAME inference image, selected by TILLANDSIAS_INFERENCE_ENGINE=llama-server (default stays ollama). It runs the llama-server that the digest-verified ollama payload already ships (lib/ollama/llama-server, upstream llama.cpp 0f3a71be1, already hashed by the 521 engine-integrity manifest), so there is no new trust root. Mesa/Vulkan userspace is already in the image (order 482). Each exit criterion maps as follows. (1) A usable, probe-reported, container-reachable /dev/dri render node selects vulkan, with no CUDA/ROCm stack needed. (2) A missing or unusable /dev/dri selects CPU and launch succeeds. (3) cuda/rocm are refused unless their exact probe lane is usable and reachable. (4) Exactly one backend: only its dir is on the search path, and .engine-set names it. (5) llama-server binds 127.0.0.1:11435 behind a caddy shim on :11434. /api/version answers 200 {"version":"<llama-server build>"} only while llama-server /health is 200, within the 1 s bound, and everything else is proxied. The entrypoint supervises both, and the container exits non-zero if either dies; evidence is a kill of llama-server showing /api/version stop answering 200 within a stated bound, next to the healthy case. (6) The closure is red for an unpinned multi-backend payload and green after byte-identical restoration. MODELS FAIL CLOSED: only the T0 GGUF is pinned (qwen2.5-0.5b-instruct-q4_k_m.gguf, sha256 74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db, 491400032 bytes) and verified after download. Any other tier row is refused with reason=engine-integrity-refused:gguf-unpinned:<logical-id>, and a mismatch gives gguf-digest-mismatch. Pin provenance: trust-on-first-fetch from the HF tree API (LFS oid = sha256) at pin time. Multi-shard pins and lifting the refusal are 482-igky (482b-2).

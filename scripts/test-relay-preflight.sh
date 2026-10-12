@@ -48,7 +48,7 @@ case "$_pb" in ./*) _pb="$ROOT/${_pb#./}" ;; esac
 # The deciders relay-preflight.sh shells out to, by their OWN relative
 # location — copied into every scratch repo's scripts/ dir so they judge the
 # SCRATCH tree, never this checkout's.
-DECIDER_FILES="timing-log.sh plan-binary-probe.sh check-sigpipe-verdict-pipelines-added.sh check-plan-binary-probe-usage.sh check-litmus-pin-claims.sh check-script-exec-bits.sh check-added-fragments-parse.sh check-scorable-obligation-added.sh check-gate-step-regimes.sh check-added-test-is-referenced.sh check-refusal-affordance-added.sh check-rust-source-pin-added.sh check-no-python-scripts.sh check-jq-callsite-ratchet.sh preflight-fixtures-default-target.sh check-issue-citation-convention.sh trace-coverage.sh litmus-covering-specs.sh"
+DECIDER_FILES="timing-log.sh plan-binary-probe.sh check-sigpipe-verdict-pipelines-added.sh check-plan-binary-probe-usage.sh check-litmus-pin-claims.sh check-script-exec-bits.sh check-added-fragments-parse.sh check-scorable-obligation-added.sh check-gate-step-regimes.sh check-added-test-is-referenced.sh check-refusal-affordance-added.sh check-rust-source-pin-added.sh check-jq-callsite-ratchet.sh preflight-fixtures-default-target.sh check-issue-citation-convention.sh trace-coverage.sh litmus-covering-specs.sh"
 
 # _seed <dir>: a fresh repo at <dir> with relay-preflight.sh and every decider
 # it calls, one base commit, branch "linux-next".
@@ -78,6 +78,8 @@ _seed() {
     cp "$ROOT/scripts/lua/check-bash-dialect.lua" "$d/scripts/lua/"
     # 1577-568c: the carried-obligation guard and the rule it reads.
     cp "$ROOT/scripts/lua/check-carried-obligations.lua" "$d/scripts/lua/"
+    # 1630-dwab: check-no-python-scripts is a Lua decider since its port.
+    cp "$ROOT/scripts/lua/check-no-python-scripts.lua" "$d/scripts/lua/"
     mkdir -p "$d/methodology"
     cp "$ROOT/methodology/convergence.yaml" "$d/methodology/"
     # The runner's command-policy audit writes .cache/metrics/ under the repo
@@ -357,11 +359,15 @@ fi
 CLONE_H="$W/clone-h"
 _clone "$BASE_BARE" "$CLONE_H"
 git -C "$CLONE_H" "${GC[@]}" checkout -qb work/port
-git -C "$CLONE_H" "${GC[@]}" rm -q scripts/check-no-python-scripts.sh
-sed -i.bak -e 's/ check-no-python-scripts / /' -e '/^        check-no-python-scripts) /d' "$CLONE_H/scripts/relay-preflight.sh"
+# The retired decider is a .sh, as a real port's is: deleting one pays the
+# shell-to-lua carried obligation, so the landing switch (arms 9-10) does not
+# refuse this ref for an unrelated reason. It was check-no-python-scripts until
+# 1630-dwab ported that one to Lua; deleting a .lua pays nothing.
+git -C "$CLONE_H" "${GC[@]}" rm -q scripts/check-jq-callsite-ratchet.sh
+sed -i.bak -e 's/ check-jq-callsite-ratchet / /' -e '/^        check-jq-callsite-ratchet) /d' "$CLONE_H/scripts/relay-preflight.sh"
 rm -f "$CLONE_H/scripts/relay-preflight.sh.bak"
 git -C "$CLONE_H" "${GC[@]}" add -A
-git -C "$CLONE_H" "${GC[@]}" commit -qm "port: retire check-no-python-scripts and repoint the tool"
+git -C "$CLONE_H" "${GC[@]}" commit -qm "port: retire check-jq-callsite-ratchet and repoint the tool"
 git -C "$CLONE_H" "${GC[@]}" checkout -q linux-next
 _run "$CLONE_H" work/port --base origin/linux-next
 if [ "$RC" = 0 ] && grep -q '^ok:relay-preflight:' <<<"$OUT" && grep -q '^item: reexec:merged-copy ok' <<<"$ERR" \

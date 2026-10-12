@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: windows-tray-lane-launch-omits-accel-envelope
+    field: next_action
+    value: 'Code landed in run 46 as 0a8a4e698 (PR #369): build_opencode_forge_args now passes TILLANDSIAS_ACCEL_ENVELOPE and TILLANDSIAS_INFERENCE_TIER, pinned by opencode_forge_args_carry_the_accel_envelope_and_inference_tier, which was red on trunk before the fix. LEFT, the live criterion, which waits on a release containing 0a8a4e698: on a Windows host running that release, launch an OpenCode lane from the tray. Then show TILLANDSIAS_ACCEL_ENVELOPE in podman inspect .Config.Env and in /proc/1/environ of the forge container, with the first line naming the host''s accel class (cpu-only on yolanda), and the lib-common.sh "Accelerators" line in podman logs. Then move this row to completed.'
+    ts: "2026-10-12T11:53:11Z"
+    host: yolanda-windows
