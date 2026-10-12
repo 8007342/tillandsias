@@ -4556,7 +4556,7 @@ pub fn accel_envelope(doc: &CapabilityDocument) -> String {
          accel_side={} accel_gpu_path={} accel_gpu_engine={} \
          accel_mem_model={} accel_mem_budget_gb={} \
          accel_prefill_dev={} accel_decode_dev={} accel_decode_crossover_b={} \
-         accel_source={}",
+         accel_source={} accel_decode_floor_b={} accel_decode_floor_source={}",
         class,
         gpu_state,
         gpu.map(|d| slug(&d.name))
@@ -4602,6 +4602,13 @@ pub fn accel_envelope(doc: &CapabilityDocument) -> String {
             Some(EnvelopeSource::Served) => "served",
             None => "unknown",
         },
+        // ORDER 1647-fb52, APPENDED after accel_source for the same reason:
+        // the floor the opt-in lane's engine enforces (`-` wherever no engine
+        // enforces one) and whether it is measured, cpu-wins or provisional.
+        // With accel_decode_dev=gpu it reads: models at or above this many
+        // billion parameters decode on the GPU, smaller ones on the CPU.
+        routing.floor_b,
+        routing.floor_source,
     )
 }
 
@@ -5129,6 +5136,35 @@ struct RoutingSummary {
     prefill: &'static str,
     decode: &'static str,
     crossover: String,
+    /// ORDER 1647-fb52: the floor the ENGINE enforces, and where it came from.
+    floor_b: String,
+    floor_source: &'static str,
+}
+
+/// ORDER 1647-fb52 (793-a8e7 S3): the decode floor the opt-in lane's inference
+/// container pins models below (images/inference/decode-floor-pin.sh), and its
+/// source. `None` off the opt-in lane: nothing enforces a per-model floor there.
+///
+/// ollama cannot split a model by phase (measured on yolanda 2026-10-12: with
+/// num_gpu=0 prefill falls to CPU speed), so the per-phase policy is applied per
+/// model. A measured crossover is used as is, `all` means the CPU won at every
+/// size, and an unmeasured host gets 3, the smallest size MEASURED to gain on
+/// this stack (qwen2.5:3b decode 1.37x; 0.5b regressed 1.23x), a PROVISIONAL
+/// floor by coordinator ruling (2026-10-12), labelled so wherever it travels.
+/// The launcher passes this pair to the container and the envelope renders the
+/// same pair, so what agents read is what the engine does.
+pub fn engine_decode_floor(
+    effective_tier: &str,
+    crossover: DecodeCrossover,
+) -> Option<(String, &'static str)> {
+    if effective_tier != "gpu-vulkan" {
+        return None;
+    }
+    Some(match crossover {
+        DecodeCrossover::AtOrAbove(b) => (format!("{b}"), "measured"),
+        DecodeCrossover::CpuWinsThroughout => ("all".to_string(), "cpu-wins"),
+        DecodeCrossover::Unmeasured => ("3".to_string(), "provisional"),
+    })
 }
 
 /// WHY `accel_decode_dev` IS NOT A PER-MODEL ANSWER: the envelope is rendered
@@ -5149,9 +5185,21 @@ fn routing_summary(doc: &CapabilityDocument) -> RoutingSummary {
     let locus = RoutingLocus::Container;
     let prefill = route_phase(doc, Phase::Prefill, None, locus).device;
     let crossover = decode_crossover_b(doc);
+    // ORDER 1647-fb52: on the opt-in lane the engine pins models below a floor
+    // to the CPU and lets the rest decode on the GPU, a provisional floor
+    // included. Saying `cpu` there would undersell exactly as `workstation-gpu`
+    // oversells an iGPU (1645-pu4d): agents choose models from this line, so
+    // it states the floor the engine enforces.
+    let floor = engine_decode_floor(&doc.legacy_tier, crossover);
+    let gpu_usable = phase_device_usable(doc, "gpu", locus);
     let decode = match crossover {
-        DecodeCrossover::AtOrAbove(_) if phase_device_usable(doc, "gpu", locus) => "gpu",
+        DecodeCrossover::AtOrAbove(_) if gpu_usable => "gpu",
+        DecodeCrossover::Unmeasured if gpu_usable && floor.is_some() => "gpu",
         _ => "cpu",
+    };
+    let (floor_b, floor_source) = match &floor {
+        Some((b, src)) if gpu_usable => (b.clone(), *src),
+        _ => ("-".to_string(), "-"),
     };
     let crossover = match crossover {
         DecodeCrossover::Unmeasured => "unmeasured".to_string(),
@@ -5162,6 +5210,8 @@ fn routing_summary(doc: &CapabilityDocument) -> RoutingSummary {
         prefill,
         decode,
         crossover,
+        floor_b,
+        floor_source,
     }
 }
 
@@ -6876,8 +6926,11 @@ mod tests {
                 "accel_prefill_dev",
                 "accel_decode_dev",
                 "accel_decode_crossover_b",
-                // Order 1139-xe5m, appended last.
+                // Order 1139-xe5m, appended.
                 "accel_source",
+                // Order 1647-fb52, appended last.
+                "accel_decode_floor_b",
+                "accel_decode_floor_source",
             ],
             "every field must survive a hostile name: {env}"
         );
@@ -8853,6 +8906,61 @@ mod tests {
         assert_eq!(field(&env, "accel_decode_crossover_b"), "3", "{env}");
         assert_eq!(field(&env, "accel_gpu_path"), "dxg-d3d12", "{env}");
         assert_eq!(field(&env, "accel_side"), "wsl2-guest", "{env}");
+    }
+
+    #[test]
+    // @trace order:1647-fb52, spec:accel-capability-probe
+    /// ORDER 1647-fb52: on the opt-in lane the envelope states the floor the
+    /// engine enforces. Pre-fix an opted-in, unmeasured host read
+    /// accel_decode_dev=cpu while every model of 3B and up decoded on the GPU.
+    fn the_opt_in_envelope_states_the_floor_the_engine_enforces() {
+        // Off the opt-in lane: unchanged, and no floor.
+        let env = accel_envelope(&schedulable_gpu_doc());
+        assert_eq!(field(&env, "accel_decode_dev"), "cpu", "{env}");
+        assert_eq!(field(&env, "accel_decode_floor_b"), "-", "{env}");
+        assert_eq!(field(&env, "accel_decode_floor_source"), "-", "{env}");
+
+        // Opted in, unmeasured: the provisional floor, said as provisional,
+        // and the crossover key still reports only what was measured.
+        let mut opted = schedulable_gpu_doc();
+        opted.legacy_tier = "gpu-vulkan".to_string();
+        let env = accel_envelope(&opted);
+        assert_eq!(field(&env, "accel_decode_dev"), "gpu", "{env}");
+        assert_eq!(field(&env, "accel_decode_floor_b"), "3", "{env}");
+        assert_eq!(
+            field(&env, "accel_decode_floor_source"),
+            "provisional",
+            "{env}"
+        );
+        assert_eq!(
+            field(&env, "accel_decode_crossover_b"),
+            "unmeasured",
+            "{env}"
+        );
+
+        // Opted in, measured: the floor IS the crossover.
+        let mut measured = opted.clone();
+        measured.measurements = vec![decode_row("cpu", 1.5, 30.0), decode_row("gpu", 1.5, 33.0)];
+        let env = accel_envelope(&measured);
+        assert_eq!(field(&env, "accel_decode_floor_b"), "1.5", "{env}");
+        assert_eq!(
+            field(&env, "accel_decode_floor_source"),
+            "measured",
+            "{env}"
+        );
+
+        // Opted in, but the GPU is not usable in the container: no floor is
+        // claimed, because nothing decodes on the GPU.
+        let mut unusable = opted.clone();
+        for d in &mut unusable.devices {
+            if d.device_class == "gpu" {
+                d.lanes.clear();
+                d.unusable_reason = Some("engine-missing:no-vulkan-loader".to_string());
+            }
+        }
+        let env = accel_envelope(&unusable);
+        assert_eq!(field(&env, "accel_decode_dev"), "cpu", "{env}");
+        assert_eq!(field(&env, "accel_decode_floor_b"), "-", "{env}");
     }
 
     // ================================================================

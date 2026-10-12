@@ -284,6 +284,11 @@ PROVISIONAL until a host measures. On any other tier the container SHALL
 restore every recorded pin and remove the record, so an opt-out leaves no
 residue. A model already carrying the operator's own `num_gpu` SHALL be left
 alone. A model pulled while the container runs is pinned at the next start.
+The capability envelope SHALL state the floor the engine enforces
+(`accel_decode_floor_b`, `accel_decode_floor_source`, with
+`accel_decode_dev=gpu`) on that lane, so agents choosing models read what
+the engine does; `accel_decode_crossover_b` keeps reporting only what was
+measured.
 
 @trace spec:inference-container
 
