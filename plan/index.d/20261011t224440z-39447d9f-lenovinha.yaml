@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: expert-keepalive-contradicts-ephemerality
+    event:
+      type: note
+      ts: "2026-10-11T22:44:40Z"
+      agent_id: linux-lenovinha-opus5-20261011t224440z
+      host: lenovinha
+      summary: |
+        Two keep-alive policies exist; one was the bug. Observed on lenovinha 2026-10-11: tillandsias-dev-inference (scripts/dev-inference-ensure.sh) runs with OLLAMA_KEEP_ALIVE=30m (TILLANDSIAS_DEV_INFERENCE_KEEP_ALIVE default), while the product launcher pinned 24h. DECISION (approved by the coordinator): the dev container stays deliberately SEPARATE at 30m. It serves the bare-metal agent's own expert system across cycles, not an ephemeral forge stack, so the stack-ephemerality rule does not bind it. The new policy in images/inference/engine-tuning.sh honours an explicit OLLAMA_KEEP_ALIVE verbatim, so the dev container keeps its 30m by construction. Product policy: GPU tiers 5m, cpu/metal/unknown 10m, operator override TILLANDSIAS_INFERENCE_KEEP_ALIVE. Evidence on the RTX 3070 Laptop 8 GB: pre-fix 24h, qwen2.5:0.5b stayed resident after 330 s idle with expires_at a day out. Post-fix, expires_at was at +5m, and at expires_at+15s the still-running container had api/ps empty and its llama-server pid (664 MiB at load) gone from the card, with no rm.

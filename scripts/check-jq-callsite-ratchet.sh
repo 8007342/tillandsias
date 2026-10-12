@@ -157,6 +157,10 @@ resolve_plan() {
 }
 
 blocked=0
+# 1611-imnj: the per-file report is scratch in $TMPDIR, never a dotfile at the
+# checkout root, where a run killed mid-loop left it for diff-scoped guards.
+_jqr="$(mktemp "${TMPDIR:-/tmp}/jq-ratchet.XXXXXX")" || exit 3
+trap 'rm -f "$_jqr"' EXIT
 while read -r path n f; do
     [ -n "$path" ] || continue
     if [ "$f" -lt 0 ]; then new=$n; else new=$((n - f)); fi
@@ -173,10 +177,10 @@ while read -r path n f; do
         else
             echo "warn:jq-callsite-added-unsupported:$path:${flt:-<no literal filter>}"
         fi
-    done > "$ROOT/.jq-ratchet.$$" 2>&1
-    cat "$ROOT/.jq-ratchet.$$"
-    grep -q '^blocked:' "$ROOT/.jq-ratchet.$$" && blocked=1
-    rm -f "$ROOT/.jq-ratchet.$$"
+    done > "$_jqr" 2>&1
+    cat "$_jqr"
+    grep -q '^blocked:' "$_jqr" && blocked=1
+    rm -f "$_jqr"
 done <<EOF
 $joined
 EOF

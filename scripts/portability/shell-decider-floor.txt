@@ -94,7 +94,6 @@ scripts/check-refusal-affordance-added.sh
 scripts/check-release-asset-integrity.sh
 scripts/check-release-tier-freshness.sh
 scripts/check-resumable-claim-dirt.sh
-scripts/check-ripgrep-available.sh
 scripts/check-running-image-freshness.sh
 scripts/check-rust-source-pin-added.sh
 scripts/check-salvage-refs-ledger.sh

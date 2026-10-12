@@ -162,7 +162,10 @@ else
     # container still starts (never fail-closed on a policy helper).
     echo "[inference] WARN: $ENGINE_TUNING_SH missing — falling back to untuned defaults" >&2
     export OLLAMA_NUM_PARALLEL=1
-    TUNING_LINE="tuning: tier=${TILLANDSIAS_INFERENCE_TIER:-cpu} flash_attn=0 kv_cache=f16 num_parallel=1 vram_mb=0"
+    # Order 527: never inherit ollama's residency default silently; the
+    # shortest policy value is the safe one for an unknown tier.
+    export OLLAMA_KEEP_ALIVE="${OLLAMA_KEEP_ALIVE:-5m}"
+    TUNING_LINE="tuning: tier=${TILLANDSIAS_INFERENCE_TIER:-cpu} flash_attn=0 kv_cache=f16 num_parallel=1 vram_mb=0 keep_alive=${OLLAMA_KEEP_ALIVE}"
 fi
 echo "[inference] $TUNING_LINE"
 
