@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-front-door-budget-is-one-floor-host-constant-so-darwin-preflight-is-judged-against-150-s-it-cannot-meet-in-either-regime
+    field: status
+    value: in_progress
+    ts: "2026-10-12T03:06:58Z"
+    host: tlatoanis-macbook-air
