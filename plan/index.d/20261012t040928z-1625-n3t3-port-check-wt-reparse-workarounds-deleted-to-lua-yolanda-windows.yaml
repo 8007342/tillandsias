@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-11): one shell->lua burndown item, announced and confirmed free.
+packets:
+  - packet_id: port-check-wt-reparse-workarounds-deleted-sh-to-lua-shell-to-lua-burndown
+    order: 1625-n3t3
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [shell-to-lua, lua, wt-reparse]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-wt-reparse-workarounds-deleted.sh
+      - scripts/lua/check-wt-reparse-workarounds-deleted.lua
+      - scripts/test-wt-reparse-scan.sh
+      - scripts/portability/shell-decider-floor.txt
+      - scripts/portability/pipe-site-floor.txt
+    related: [823-u5zf]
+    title: |
+      Port scripts/check-wt-reparse-workarounds-deleted.sh (823-u5zf: the wt.exe re-parse predicates stay deleted, and a comment naming them does not count) to scripts/lua/check-wt-reparse-workarounds-deleted.lua, matching the .sh exactly, quirks included
+    context: |
+      Shell-to-lua burndown (methodology convergence.yaml carried_obligations). The item is a 77-line check-*, not a wrapper, and is static: it greps crates/**/*.rs for argv_survives_wt_reparse and wt_safe_title, and counts a hit as live only when the identifier is in the text before the first // on its line.
+      Its one caller is scripts/test-wt-reparse-scan.sh:26 (UNDER_TEST). That test runs from scripts/gate-steps.d/020-823-u5zf.step and is listed in scripts/lua/audit-guard-activation.lua:98.
+      Both verdict prefixes (ok:, violation:) are runner-legal and are kept byte-identical, so no reader changes.
+      Announced to the coordinator and approved 2026-10-11. The coordinator asked for two parity cases beyond the existing fixture: an identifier after a // that sits inside a string literal, and an identifier inside a /* */ block comment. A quirk that looks like a bug is recorded here, not fixed in the port.
+    exit_criteria:
+      - 'in the same run as the .sh, the Lua check prints the identical verdict line on the real tree'
+      - 'planted cases (code hit, comment-only hit, // inside a string literal before the identifier, identifier inside a /* */ block comment, a non-.rs file) give identical verdicts and exit codes from the .sh and the Lua, and the direction of each quirk is recorded'
+      - 'scripts/test-wt-reparse-scan.sh runs the Lua and passes, and fails when the Lua is sabotaged'
+      - 'the .sh is deleted, its floor lines are lowered via --dump-floors, and check-carried-obligations, check-shell-ratchet and test-shell-ratchet.lua pass'
+    unscoreable: "a port: the parity run, the planted cases and the sabotaged test are its evidence"
+    depends_on: []
+    next_action: >
+      Port the check with the optional scan-dir argument kept, run the parity matrix against the .sh, repoint test-wt-reparse-scan.sh, delete the .sh, lower the floors, and run the three ratchet and obligation checks.
+    provenance: |
+      Filed by yolanda-windows on macuahuitl-fedora's go, 2026-10-11.
+    events:
+      - type: filed
+        ts: "2026-10-12T04:09:27Z"
+        host: yolanda-windows
+        summary: |-
+          One shell->lua burndown item, check-wt-reparse-workarounds-deleted.sh, named to the coordinator and approved.
