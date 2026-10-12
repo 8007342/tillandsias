@@ -1047,6 +1047,8 @@ specs:
   status: draft
   litmus_tests:
   - litmus:local-web-preview
+  - litmus:cold-start-acceptance-shape
+  - litmus:cold-start-acceptance-e2e
   coverage_ratio: 0
   last_verified: null
 - spec_id: tools-overlay-fast-reuse

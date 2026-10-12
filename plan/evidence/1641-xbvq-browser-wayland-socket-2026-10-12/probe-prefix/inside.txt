@@ -1,0 +1,63 @@
+== /run/user/browser:
+ls: cannot access '/run/user/browser': No such file or directory
+== mounts mentioning run/user, X11, wayland, bus, keyring:
+2519 2547 0:110 / /run/user/1000 rw,nosuid,nodev,relatime - tmpfs tmpfs rw,seclabel,size=1414288k,nr_inodes=353572,mode=700,uid=1000,gid=1000,inode64
+2520 2519 0:111 / /run/user/1000/gvfs rw,nosuid,nodev,relatime - fuse.gvfsd-fuse gvfsd-fuse rw,user_id=1000,group_id=1000
+2521 2519 0:124 / /run/user/1000/doc rw,nosuid,nodev,relatime - fuse.portal portal rw,user_id=1000,group_id=1000
+2522 2519 0:110 /netns /run/user/1000/netns rw,nosuid,nodev,relatime - tmpfs tmpfs rw,seclabel,size=1414288k,nr_inodes=353572,mode=700,uid=1000,gid=1000,inode64
+2523 2522 0:5 net:[4026532966] /run/user/1000/netns/netns-56533dbf-141a-79e5-cb08-2d046f442ced rw - nsfs nsfs rw
+2524 2522 0:5 net:[4026533159] /run/user/1000/netns/netns-17f3dc72-f7a3-572c-d2b6-c60cd3ad205a rw - nsfs nsfs rw
+2525 2522 0:5 net:[4026533323] /run/user/1000/netns/netns-767eae4a-1b4a-a950-8b0d-7b13edce5d7a rw - nsfs nsfs rw
+2538 2522 0:5 net:[4026533564] /run/user/1000/netns/netns-21c6129c-6bb2-b318-3655-9a5b4fea0f1d rw - nsfs nsfs rw
+2539 2522 0:5 net:[4026533394] /run/user/1000/netns/netns-ddf98f43-afdd-5e8a-de8f-f2162c963885 rw - nsfs nsfs rw
+2540 2522 0:5 net:[4026533636] /run/user/1000/netns/netns-46b2b3e2-68ff-59f5-e0de-d776812cee08 rw - nsfs nsfs rw
+2541 2519 0:5 net:[4026533230] /run/user/1000/containers/networks/rootless-netns/rootless-netns rw - nsfs nsfs rw
+2544 2519 0:110 /1641-probe-args.Mkb4xs/args.profile /run/user/1000/1641-probe-args.Mkb4xs/args.profile rw,nosuid,nodev,relatime - tmpfs tmpfs rw,seclabel,size=1414288k,nr_inodes=353572,mode=700,uid=1000,gid=1000,inode64
+2686 2549 0:168 /bus /proc/bus ro,nosuid,nodev,noexec,relatime - proc proc rw
+VISIBLE /run/user/1000
+absent  /run/user/1000/podman/podman.sock
+VISIBLE /run/user/1000/bus
+VISIBLE /run/user/1000/keyring
+VISIBLE /run/user/1000/tillandsias
+absent  /run/user/browser/podman
+absent  /run/user/browser/bus
+absent  /run/user/browser/keyring
+absent  /run/dbus/system_bus_socket
+absent  /tmp/.X11-unix
+== sockets anywhere outside /proc /sys:
+/run/user/1000/tillandsias/mcp/alpha-forge-alpha-codex-20260723T070000Z/mcp.sock
+/run/user/1000/tillandsias/mcp/testproj-default/mcp.sock
+/run/user/1000/tillandsias/mcp/alpha-web-scope-gate/mcp.sock
+/run/user/1000/tillandsias/mcp/probe-project-default/mcp.sock
+/run/user/1000/tillandsias/mcp/alpha-default/mcp.sock
+/run/user/1000/tillandsias/mcp/scratch-394e-hold-default/mcp.sock
+/run/user/1000/tillandsias/mcp/scratch-394e-default/mcp.sock
+/run/user/1000/tillandsias/mcp/tillandsias.org-default/mcp.sock
+/run/user/1000/tillandsias/mcp/tillandsias-default/mcp.sock
+/run/user/1000/toolbox/pkcs11
+/run/user/1000/cc-socks/48288.sock
+/run/user/1000/libpod/tmp/rootlessport2750296496/.bp.sock
+/run/user/1000/libpod/tmp/rootlessport2320514573/.bp.sock
+/run/user/1000/libpod/tmp/rootlessport1010875920/.bp.sock
+/run/user/1000/libpod/tmp/rp/f26a8ffd9f92856718391878f4dc17578ce2c4ea0052abf6e11727f762896cc6
+/run/user/1000/libpod/tmp/rp/6d7a987c601efeb2735e37f2ccc03e64b3295a945cae4982e595efd70bcb145d
+/run/user/1000/libpod/tmp/rp/a069aea7d52485efad5808bb6cc1180c6a5d0969194598568ed110fa889b8540
+/run/user/1000/.flatpak-helper/pkcs11-flatpak-6937
+/run/user/1000/wayland-0
+/run/user/1000/at-spi/bus
+/run/user/1000/gcr/ssh
+/run/user/1000/keyring/control
+/run/user/1000/pipewire-0-manager
+/run/user/1000/pipewire-0
+/run/user/1000/pulse/native
+/run/user/1000/bus
+/run/user/1000/systemd/machine/io.systemd.MachineImage
+/run/user/1000/systemd/machine/io.systemd.Machine
+/run/user/1000/systemd/io.systemd.Import
+/run/user/1000/systemd/io.systemd.AskPassword
+/run/user/1000/systemd/io.systemd.Manager
+/run/user/1000/systemd/private
+/run/user/1000/systemd/notify
+/run/user/1000/systemd/inaccessible/sock
+/tmp/org.chromium.Chromium.JJjudd/SingletonSocket
+== env DBUS: <unset> DISPLAY: <unset>

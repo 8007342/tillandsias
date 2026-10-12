@@ -1,0 +1,12 @@
+pci id for fd 5: 10de:24dd, driver (null)
+pci id for fd 6: 10de:24dd, driver (null)
+pci id for fd 7: 10de:24dd, driver (null)
+pci id for fd 6: 10de:24dd, driver (null)
+pci id for fd 7: 10de:24dd, driver (null)
+[2:2:1012/205412.573666:ERROR:chrome/browser/process_singleton_posix.cc:474] readlink failed: Permission denied (13)
+[2:2:1012/205412.573739:ERROR:chrome/common/process_singleton_lock_posix.cc:22] readlink(/run/user/1000/1641-probe-args.48Tvjg/args.profile/SingletonLock) failed: Permission denied (13)
+[2:2:1012/205412.573777:ERROR:chrome/browser/process_singleton_posix.cc:323] readlink(/run/user/1000/1641-probe-args.48Tvjg/args.profile/SingletonLock) failed: Permission denied (13)
+[2:2:1012/205412.573783:ERROR:chrome/browser/process_singleton_posix.cc:347] Failed to create /run/user/1000/1641-probe-args.48Tvjg/args.profile/SingletonLock: File exists (17)
+[2:2:1012/205412.573816:ERROR:chrome/browser/process_singleton_posix.cc:474] readlink failed: Permission denied (13)
+[2:2:1012/205412.573830:ERROR:chrome/common/process_singleton_lock_posix.cc:22] readlink(/run/user/1000/1641-probe-args.48Tvjg/args.profile/SingletonLock) failed: Permission denied (13)
+[2:2:1012/205412.573849:ERROR:chrome/app/chrome_main_delegate.cc:562] Failed to create a ProcessSingleton for your profile directory. This means that running multiple instances would start multiple browser processes rather than opening a new window in the existing process. Aborting now to avoid profile corruption.

@@ -47,37 +47,47 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
+# ORDER 1641-xbvq (p0): WAYLAND ONLY, and ONLY the socket file. This used to
+# mount the host's whole $XDG_RUNTIME_DIR read-write on Wayland (podman.sock,
+# the tray and lane MCP sockets, the D-Bus bus and the keyring dir) and all of
+# /tmp/.X11-unix on X11, and X11 won whenever DISPLAY was set (every XWayland
+# session). The socket goes into a private tmpfs runtime dir, without a
+# relabel option, which would rewrite the live compositor socket's label.
+# label=disable stays (below) because a confined container_t is denied
+# connecting to the compositor socket ("Failed to connect to Wayland display:
+# Permission denied", measured 2026-10-12).
+BROWSER_RUNTIME_DIR=/run/user/browser
 configure_display_forwarding() {
-    if [[ -n "${DISPLAY:-}" ]]; then
-        PODMAN_ARGS+=(
-            "--env=DISPLAY=${DISPLAY}"
-            "--volume=/tmp/.X11-unix:/tmp/.X11-unix:rw"
-        )
-        if [[ -n "${XAUTHORITY:-}" && -f "${XAUTHORITY}" ]]; then
-            PODMAN_ARGS+=(
-                "--env=XAUTHORITY=/home/chromium/.Xauthority"
-                "--volume=${XAUTHORITY}:/home/chromium/.Xauthority:ro"
-            )
-        fi
-        BROWSER_ARGS+=("--ozone-platform=x11")
-        return 0
+    if [[ -z "${WAYLAND_DISPLAY:-}" ]]; then
+        echo "ERROR: launch-chromium.sh opens the browser on Wayland only, and this session has no WAYLAND_DISPLAY. It never hands a container an X11 display (that reaches every X client on it). Log in to a Wayland session and retry." >&2
+        return 1
     fi
-
-    if [[ -n "${WAYLAND_DISPLAY:-}" && -n "${XDG_RUNTIME_DIR:-}" ]]; then
-        local wayland_socket="${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}"
-        if [[ -S "$wayland_socket" ]]; then
-            PODMAN_ARGS+=(
-                "--env=XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}"
-                "--env=WAYLAND_DISPLAY=${WAYLAND_DISPLAY}"
-                "--volume=${XDG_RUNTIME_DIR}:${XDG_RUNTIME_DIR}:rw"
-            )
-            BROWSER_ARGS+=("--ozone-platform=wayland")
-            return 0
-        fi
+    local wayland_socket
+    case "$WAYLAND_DISPLAY" in
+        /*) wayland_socket="$WAYLAND_DISPLAY" ;;
+        */*) echo "ERROR: launch-chromium.sh: WAYLAND_DISPLAY=${WAYLAND_DISPLAY} is not a socket name. Log in to a Wayland session and retry." >&2; return 1 ;;
+        .) echo "ERROR: launch-chromium.sh: WAYLAND_DISPLAY=. is not a socket name. Log in to a Wayland session and retry." >&2; return 1 ;;
+        ..) echo "ERROR: launch-chromium.sh: WAYLAND_DISPLAY=.. is not a socket name. Log in to a Wayland session and retry." >&2; return 1 ;;
+        *)
+            if [[ -z "${XDG_RUNTIME_DIR:-}" ]]; then
+                echo "ERROR: launch-chromium.sh opens the browser on Wayland only, and XDG_RUNTIME_DIR is not set, so the Wayland socket cannot be found. Log in to a Wayland session and retry." >&2
+                return 1
+            fi
+            wayland_socket="${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}" ;;
+    esac
+    if [[ ! -S "$wayland_socket" ]]; then
+        echo "ERROR: launch-chromium.sh opens the browser on Wayland only, and the Wayland socket ${wayland_socket} does not exist. Log in to a Wayland session and retry." >&2
+        return 1
     fi
-
-    echo "ERROR: launch-chromium.sh requires a graphical session (DISPLAY or WAYLAND_DISPLAY)." >&2
-    return 1
+    local socket_name="${wayland_socket##*/}"
+    PODMAN_ARGS+=(
+        "--tmpfs=${BROWSER_RUNTIME_DIR}:size=1m,mode=0755"
+        "--volume=${wayland_socket}:${BROWSER_RUNTIME_DIR}/${socket_name}:rw"
+        "--env=XDG_RUNTIME_DIR=${BROWSER_RUNTIME_DIR}"
+        "--env=WAYLAND_DISPLAY=${socket_name}"
+    )
+    BROWSER_ARGS+=("--ozone-platform=wayland")
+    return 0
 }
 
 # Build base podman command with security flags
