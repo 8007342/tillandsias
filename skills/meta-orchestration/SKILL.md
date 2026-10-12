@@ -866,9 +866,12 @@ filing — not the prompt.
    The script's own default is one shell too deep and dies with the tool call.
 
    DECIDED (873-zcim criterion 4): a second agent NEVER works in a locked
-   checkout. The sanctioned path for concurrent work on one host is a separate
-   git worktree or a clean temp clone — the technique yoga used to file its
-   wedge record and 873-zcim itself while another cycle held its checkout.
+   checkout. It WAITS for the lock: concurrent work on one host is serialized,
+   never moved to a sibling git worktree or a temp clone (operator direction
+   2026-10-11, methodology multi-host-development.yaml
+   single_checkout_branching; order 1620-67ji). The worktree/clone technique
+   yoga once used here is retired: every sibling checkout sits outside the
+   session's workspace and puts its cleanup in front of the operator.
    Release at Finalization (step 9b) with
    `TILLANDSIAS_CYCLE_HOLDER_PID=$PPID scripts/cycle-checkout-lock.sh release`.
 

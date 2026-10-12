@@ -83,6 +83,11 @@ COPY preload-policy.sh /usr/local/bin/tillandsias-preload-policy.sh
 # OLLAMA_NUM_PARALLEL, which ollama reads once at process start), and runnable
 # standalone so litmus can exercise every tier branch with stubbed inputs.
 COPY engine-tuning.sh /usr/local/bin/tillandsias-engine-tuning.sh
+# @trace spec:inference-container — order 521 installed-engine integrity
+# Same contract again: POSIX sh, sourced by the entrypoint before the engine is
+# installed or executed; runnable standalone so litmus can plant stale and
+# tampered engines in a scratch cache.
+COPY engine-integrity.sh /usr/local/bin/tillandsias-engine-integrity.sh
 # @trace spec:external-logs-layer
 # Manifest of curated external log files published by this image.
 # The tray-side auditor reads this at /etc/tillandsias/external-logs.yaml
@@ -91,7 +96,8 @@ RUN mkdir -p /etc/tillandsias
 COPY external-logs.yaml /etc/tillandsias/external-logs.yaml
 RUN chmod +x /usr/local/bin/entrypoint.sh \
     /usr/local/bin/tillandsias-preload-policy.sh \
-    /usr/local/bin/tillandsias-engine-tuning.sh
+    /usr/local/bin/tillandsias-engine-tuning.sh \
+    /usr/local/bin/tillandsias-engine-integrity.sh
 
 USER 1000:1000
 

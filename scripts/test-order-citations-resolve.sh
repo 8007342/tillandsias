@@ -25,16 +25,23 @@ esac
 
 # ── ARM 2: AN INVENTED SUFFIX ON A REAL ORDER IS CAUGHT ────────────────────
 # This is the teeth. 1234 is a real order number; -zzzz is not its suffix.
-W="$(mktemp -d)"; trap 'rm -rf "$W"' EXIT INT TERM
-probe="$ROOT/scripts/.order-citation-probe-$$.sh"
+W="$(mktemp -d "${TMPDIR:-/tmp}/order-citations.XXXXXX")"; trap 'rm -rf "$W"' EXIT INT TERM
+# 1611-imnj: the probes go in a SCRATCH tree, never in this checkout's scripts/,
+# where a probe outlived the preflight door's KILL and diff-scoped guards read
+# it as added code. The tree holds a byte-identical copy of the guard (it
+# resolves ROOT from its own path) and reads the REAL ledger through a link,
+# because these arms need real orders: 1234 below and an archived one in arm 4.
+R="$W/live"; mkdir -p "$R/scripts"; cp "$G" "$R/scripts/"; ln -s "$ROOT/plan" "$R/plan"
+GR="$R/scripts/$(basename "$G")"
+probe="$R/scripts/order-citation-probe.sh"
 # SPLIT SO THIS FILE DOES NOT CONTAIN THE LITERAL IT TESTS FOR. Written whole,
 # the guard matches the FIXTURE and arm 1 fails against a clean tree — which is
 # exactly what happened on the first run, and is the same mention-versus-use
 # shape this guard exists to catch one level down.
 _at="@tr""ace"; _bad="1234-""zzzz"
 printf '#!/usr/bin/env bash\n# %s order:%s, spec:spec-traceability\ntrue\n' "$_at" "$_bad" > "$probe"
-out2="$(cd "$ROOT" && bash "$G" 2>/dev/null)"; rc2=$?
-err2="$(cd "$ROOT" && bash "$G" 2>&1 >/dev/null)"
+out2="$(bash "$GR" 2>/dev/null)"; rc2=$?
+err2="$(bash "$GR" 2>&1 >/dev/null)"
 rm -f "$probe"
 case "$out2" in
     violation:order-citations-unresolvable:*)
@@ -46,8 +53,8 @@ case "$out2" in
     *) bad "ARM 2: an invented suffix was NOT caught — verdict '$out2' rc=$rc2" ;;
 esac
 
-# ── ARM 3: the live tree is clean again once the probe is gone ─────────────
-out3="$(cd "$ROOT" && bash "$G" 2>/dev/null)"
+# ── ARM 3: the tree is clean again once the probe is gone ──────────────────
+out3="$(bash "$GR" 2>/dev/null)"
 case "$out3" in
     ok:order-citations-resolve:*) ok "ARM 3: removing the probe restores the clean verdict — arm 2 measured the probe, not a coincidence" ;;
     *) bad "ARM 3: tree not clean after probe removal: '$out3'" ;;
@@ -59,9 +66,9 @@ arch="$(/usr/bin/grep -rhoE '^[[:space:]]*-?[[:space:]]*order: "?[0-9]{3,4}-[a-z
 if [ -z "$arch" ]; then
     echo "skip: ARM 4 — no archived orders present to test with"
 else
-    probe2="$ROOT/scripts/.order-citation-probe2-$$.sh"
+    probe2="$R/scripts/order-citation-probe2.sh"
     printf '#!/usr/bin/env bash\n# %s order:%s, spec:spec-traceability\ntrue\n' "$_at" "$arch" > "$probe2"
-    out4="$(cd "$ROOT" && bash "$G" 2>/dev/null)"
+    out4="$(bash "$GR" 2>/dev/null)"
     rm -f "$probe2"
     case "$out4" in
         ok:order-citations-resolve:*) ok "ARM 4: an ARCHIVED order ($arch) resolves — archiving a row does not un-exist its order" ;;

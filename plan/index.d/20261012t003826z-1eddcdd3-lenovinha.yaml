@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-shell-ratchet-judges-piped-litmus-commands-only-when-a-steps-file-exists-so-on-the-real-tree-the-arm-is-dormant-and-every-author-sees-ok-while-the-gate-fixture-refuses
+    event:
+      type: note
+      ts: "2026-10-12T00:38:26Z"
+      agent_id: linux-lenovinha-opus5-20261012t003826z
+      host: lenovinha
+      summary: |
+        CORRECTION to this row's next_action, whose fragment is immutable. "lower a floor if a real file is already over it" is BACKWARDS: lowering the floor of a file that is over it makes the file MORE over. What is true: while the LITMUS arm was dormant, real files may have drifted above their pipe-site floors, and activating the arm will turn them red. For each such file, do ONE of two things in the activation change. (1) Bring the FILE down, by rewriting its piped commands as capture-then-match, the way 527 did at abe008dc1. (2) Do a one-time, cited REBASELINE of that file's floor to its current count, made in the activation commit and named in that commit's message (file, old floor, new floor, why). After activation a floor is never raised again; floors only descend.
