@@ -21,14 +21,21 @@
 -- THE DOOR KILL, in one run, on scripts/test-litmus-step-pipefail.sh: the
 -- pre-fix file (git show PRE_REV, the trunk commit before the move) and the
 -- file as it stands. Each is held in ARM 3, while its runner copy exists, by a
--- `timeout` shim that holds only for that copy. The darwin door's sequence then
--- runs: TERM to the pid, up to 1 s for it to die, KILL to the pid, delete the
--- guard's TMPDIR.
+-- `timeout` shim that holds only for that copy. Then the door's KILL lands:
+-- KILL to the pid (and its group), and the guard's TMPDIR is deleted.
 --  10 PRE-FIX    the copy is left in scripts/ (the defect)
 --  11 POST-FIX   nothing is left in the checkout
--- With its EXIT trap set, bash does not die on TERM while it waits in $(...).
--- Measured on darwin 2026-10-11, the KILL lands in both runs, as it did for the
--- deadline-skipped guard that filed this row.
+-- THE CONTROL SENDS KILL DIRECTLY, standing in for the door's KILL landing.
+-- KILL cannot be caught, so no trap runs on any OS: the pre-fix EXIT trap never
+-- removes the copy, and the post-fix copy is in the deleted TMPDIR. The door
+-- itself sends TERM first, and whether TERM ends the guard before the KILL is
+-- platform behaviour. On darwin, bash with an EXIT trap does not die on TERM
+-- while it waits in $(...), so the KILL lands, which is how the leak that
+-- filed this row happened. On Linux, TERM runs the trap and the pre-fix code
+-- cleans up after itself (1611's first version used TERM-then-KILL as its
+-- control and was evicted on the Linux gate for exactly that). That sequence
+-- is still run once on the pre-fix file and printed as an `observed:` line,
+-- asserting nothing.
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-checkout-writers.lua
 
@@ -171,7 +178,7 @@ else
     proc.run({ argv = { "chmod", "+x", ROOT .. "/" .. REL .. "/shim/timeout" }, timeout_ms = 10000 })
     fs.write(REL .. "/door.sh", table.concat({
         "set -m",
-        "G=\"$1\"; ROOT=\"$2\"; SHIM=\"$3\"",
+        "G=\"$1\"; ROOT=\"$2\"; SHIM=\"$3\"; MODE=\"$4\"",
         "GT=\"$(mktemp -d \"${TMPDIR:-/tmp}/checkout-writers-door.XXXXXX\")\"",
         "REAL_TIMEOUT=\"$(command -v timeout)\"; HOLD_MARK=\"$GT.hold\"; export REAL_TIMEOUT HOLD_MARK",
         "( export TMPDIR=\"$GT\" PATH=\"$SHIM:$PATH\"; exec bash \"$G\" ) >/dev/null 2>&1 &",
@@ -179,16 +186,19 @@ else
         "pre=\"$ROOT/scripts/.wka4-prefix-runner.$pid.sh\"",
         "i=0; while [ ! -e \"$HOLD_MARK\" ] && [ $i -lt 1200 ]; do sleep 0.1; i=$((i + 1)); done",
         "echo \"held=$([ -e \"$HOLD_MARK\" ] && echo yes || echo no)\"",
-        "kill -TERM \"$pid\"; g=0",
-        "while kill -0 \"$pid\" 2>/dev/null && [ $g -lt 10 ]; do sleep 0.1; g=$((g + 1)); done",
+        "if [ \"$MODE\" = term ]; then",
+        "    kill -TERM \"$pid\"; g=0",
+        "    while kill -0 \"$pid\" 2>/dev/null && [ $g -lt 10 ]; do sleep 0.1; g=$((g + 1)); done",
+        "    echo \"died-on-term=$([ $g -lt 10 ] && echo yes || echo no)\"",
+        "fi",
         "kill -KILL \"$pid\" 2>/dev/null; wait \"$pid\" 2>/dev/null",
         "kill -KILL -\"$pid\" 2>/dev/null",
         "rm -rf \"$GT\" \"$HOLD_MARK\"",
         "if [ -e \"$pre\" ]; then echo \"left=$pre\"; rm -f \"$pre\"; else echo left=none; fi",
         "" }, "\n"))
-    local function door(which)
+    local function door(which, mode)
         local r = proc.run({ argv = { "bash", ROOT .. "/" .. REL .. "/door.sh", ROOT .. "/" .. REL .. "/" .. which .. ".sh",
-            ROOT, ROOT .. "/" .. REL .. "/shim" }, cwd = ROOT, timeout_ms = 180000 })
+            ROOT, ROOT .. "/" .. REL .. "/shim", mode or "kill" }, cwd = ROOT, timeout_ms = 180000 })
         return text.trim(r.stdout or ""):gsub("\n", " ")
     end
     local pre_out = door("pre")
@@ -197,6 +207,8 @@ else
     local post_out = door("post")
     arm("11 POST-FIX held in ARM 3 and killed: nothing is left in the checkout",
         post_out:find("held=yes", 1, true) ~= nil and post_out:find("left=none", 1, true) ~= nil, post_out)
+    local os_ = text.trim(proc.run({ argv = { "uname", "-s" }, timeout_ms = 10000 }).stdout or "")
+    out.line("observed: " .. os_ .. " pre-fix under TERM, 1 s, KILL (not a control): " .. door("pre", "term"))
 end
 
 proc.run({ argv = { "rm", "-rf", ROOT .. "/" .. REL }, timeout_ms = 30000 })
