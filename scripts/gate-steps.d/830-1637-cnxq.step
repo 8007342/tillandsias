@@ -1,0 +1,24 @@
+# Gate step 1637-cnxq — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. Operator direction 2026-10-12: in the DEVELOPMENT runtime all
+# scratch, private podman stores, logs and any worktree live inside the
+# checkout under one ignored dir, scratch/, reached through
+# scripts/scratch-dir.sh. A recursive rm outside the workspace asks the
+# operator for consent (1443-we89), and a bypass-mode session waiting on that
+# prompt halts the fleet. scripts/check-scratch-location-added.sh refuses a
+# NEWLY ADDED shell line that makes scratch elsewhere (bare mktemp, /tmp or
+# $TMPDIR, a worktree outside scratch/, a write to ../) unless the line names
+# a key recorded in scripts/portability/scratch-exceptions.txt. User runtime
+# (inside a forge) is exempt by design: `user-runtime`.
+#
+# The fixture builds a scratch repository under scratch/fixtures, asserts the
+# guard SEES a planted file before reading any refusal, and runs fifteen numbered arms (sixteen assertions):
+# each refused class names its path and line, a recorded exception and a
+# comment are admitted, an unrecorded key is refused, an unresolvable base is
+# a refusal, and the real tree is green at its own HEAD.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking no new script makes scratch outside the checkout (1637-cnxq)"
+STEP_SCRIPT="scripts/test-check-scratch-location-added.sh"
+STEP_ERROR="a script again makes scratch outside <checkout>/scratch/ without a recorded exception, or the guard stopped seeing planted sites (1637-cnxq); see which arm failed above"
+STEP_OK="new scratch stays inside the checkout"

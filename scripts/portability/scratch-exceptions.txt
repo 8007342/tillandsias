@@ -1,0 +1,16 @@
+# Recorded exceptions to the scratch-location rule (order 1637-cnxq).
+#
+# A NEW shell line that makes scratch outside <checkout>/scratch/ (a mktemp
+# not routed through scripts/scratch-dir.sh, a /tmp or $TMPDIR path, a
+# `git worktree add` elsewhere, a write to ../) carries, on the SAME line,
+#     # scratch-exception:<key>
+# with a <key> from this file. scripts/check-scratch-location-added.sh refuses
+# a key that is not listed here, so an exception is always a recorded one.
+# Adding a key is a decision about where the fleet may make scratch: record
+# the measurement that forces it.
+#
+# <key> <why this line may make scratch outside the checkout>
+user-runtime inside a forge (USER RUNTIME) scratch under /tmp or any absolute path is by design: the forge is destroyed on teardown (operator direction, 2026-10-12)
+podman-runroot a rootless podman runroot or tmp_dir cannot live in a home-labelled checkout under SELinux (pasta: rootless-netns-conn.pid Permission denied, lenovinha 2026-10-12); it lives in a script-owned $XDG_RUNTIME_DIR subdir that the script removes
+matcher the line matches, lists or prints the token (a guard's pattern, a fixture's planted arm, a remedy message); it creates no path
+preflight-door build.sh's preflight door gives each guard its own TMPDIR under its own root and sweeps it after the guard (1600-nn5b); the door's root is the recorded exception until it moves under scratch/
