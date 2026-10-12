@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (macuahuitl, 2026-10-12): found while fixing #340's second eviction.
+packets:
+  - packet_id: check-shell-ratchet-judges-piped-litmus-commands-only-when-a-steps-file-exists-so-on-the-real-tree-the-arm-is-dormant-and-every-author-sees-ok-while-the-gate-fixture-refuses
+    order: 1624-bv73
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [shell-ratchet, litmus, lua, gate, local-vs-gate-parity]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/check-shell-ratchet.lua
+      - scripts/lua/test-shell-ratchet.lua
+    title: |
+      scripts/lua/check-shell-ratchet.lua refuses a new piped litmus `command:` (violation:shell-ratchet:new-piped-command) only inside `if n_steps > 0`, i.e. only once some litmus file uses the steps: form. No real litmus file does (litmus-form:...:steps=0). On the real tree the LITMUS arm is therefore dormant and answers ok at every head, while the gate's fixture scripts/lua/test-shell-ratchet.lua seeds a steps: file, wakes the arm, and refuses the same tree. Authors see green locally, and the land queue evicts.
+    context: |
+      MEASURED on lenovinha 2026-10-11/12 during #340 (order 527), which run 34 evicted at the fixture with violation:shell-ratchet-fixture:3:of:9 (arms LITMUS, FLOORS, STRINGS).
+      The ratchet itself, resolved as the gate resolves the plan binary, answered at every head:
+        origin/linux-next  ok:shell-ratchet:sh=644:floor:627 pipes=3867:floor:3798 litmus-form:command=3098:steps=0
+        83ac15c44 (527)    ok:shell-ratchet:sh=643:floor:626 pipes=3867:floor:3798 litmus-form:command=3102:steps=0
+        dea2eb1a0 (merged) ok:shell-ratchet:sh=643:floor:626 pipes=3867:floor:3798 litmus-form:command=3104:steps=0
+      With a one-line steps: probe file added (openspec/litmus-tests/zz-steps-probe.yaml), on the same heads: trunk was ok, while 83ac15c44 and dea2eb1a0 each gave violation:shell-ratchet:new-piped-command on litmus-forge-experts-teardown-ephemeral.yaml (floor 5) and litmus-inference-engine-payload-and-tuning.yaml (floor 13).
+      CODE: check-shell-ratchet.lua ~line 189, `if n_steps > 0 then for f, n in pairs(litmus_piped) do ... v("violation:shell-ratchet:new-piped-command:" .. f, ...)`. The header (line 14) says the arm is "dormant before" the steps: form exists. That was a deliberate staging choice, but nothing in the verdict line says the arm was dormant, so a dormant arm reads as a pass.
+      Fixed in 527 itself by capture-then-match (abe008dc1); this row is the guard, not that change.
+    exit_criteria:
+      - 'in ONE run on the real tree (no steps: file anywhere), with a litmus file carrying a new piped command: beyond its pipe-site floor: the current check answers ok, the fixed check answers violation:shell-ratchet:new-piped-command:<file>'
+      - 'the ok line states whether the LITMUS arm was active, e.g. litmus-arm=active|dormant, so a dormant arm can never read as a pass; test-shell-ratchet.lua gains an arm asserting both the verdict and that field with and without a steps: file'
+    unscoreable: "unpinnable-until-the-guard-exists: the woken arm and its fixture arm are written together"
+    next_action: >
+      Drop the n_steps > 0 gate on the per-file floor comparison, or replace it with an explicit staging flag that defaults to active. Print litmus-arm=<active|dormant> on the ok line. Run --dump-floors once to check that no real file is already over its floor before activating; if one is, lower that floor in the same change, never raise it.
+    provenance: |
+      Filed by lenovinha-silverblue on macuahuitl's direction, 2026-10-12; found while fixing #340 (527).
+    events:
+      - type: filed
+        ts: "2026-10-12T00:37:34Z"
+        host: lenovinha
+        summary: |-
+          The shell ratchet's LITMUS arm is dormant on the real tree (it judges only when a steps: file exists), so authors see ok while the gate fixture refuses; #340 was evicted this way in run 34.
