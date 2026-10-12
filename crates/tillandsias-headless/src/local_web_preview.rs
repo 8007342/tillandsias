@@ -2280,6 +2280,49 @@ mod tests {
         test(&log)
     }
 
+    /// 1626-r4xm: the preview's validation sites (validate_identity behind
+    /// publish/status/stop, and unique_live_instance) admit the project a lane
+    /// was launched for outside the root, and still refuse any other outside
+    /// label before Podman is asked anything.
+    #[test]
+    fn preview_admits_the_launched_outside_project_and_no_other() {
+        let elsewhere = tempfile::tempdir().unwrap();
+        let launched = elsewhere.path().join("r4xm-preview");
+        std::fs::create_dir_all(&launched).unwrap();
+        std::fs::create_dir_all(elsewhere.path().join("r4xm-preview-other")).unwrap();
+        let launched = launched.canonicalize().unwrap();
+        with_stub("exit 0", |log| {
+            let refused = validate_identity("r4xm-preview", "default").unwrap_err();
+            assert!(refused.contains("is not a known project"), "RED: {refused}");
+
+            crate::local_projects::bind_launched_project("r4xm-preview", &launched).unwrap();
+            validate_identity("r4xm-preview", "default").expect("GREEN: admitted");
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            assert_eq!(
+                rt.block_on(status("r4xm-preview", "default")).unwrap()["state"],
+                "stopped"
+            );
+            let live = unique_live_instance("r4xm-preview").unwrap_err();
+            assert!(
+                live.contains("no live forge lane"),
+                "past the label guard: {live}"
+            );
+
+            let calls_before = std::fs::read_to_string(log).unwrap_or_default();
+            for err in [
+                validate_identity("r4xm-preview-other", "default").unwrap_err(),
+                unique_live_instance("r4xm-preview-other").unwrap_err(),
+            ] {
+                assert!(err.contains("is not a known project"), "NEGATIVE: {err}");
+            }
+            assert_eq!(
+                std::fs::read_to_string(log).unwrap_or_default(),
+                calls_before,
+                "a refused label never reaches Podman"
+            );
+        });
+    }
+
     #[test]
     fn inspect_failure_is_unknown_not_confirmed_absence() {
         with_stub("exit 125", |_| {
