@@ -1,0 +1,12 @@
+# Gate step 1614-5x7m — the preflight door's deadline and grace are wall clock,
+# not a count of polls. build.sh's _pf_now and _pf_run_guard are extracted at
+# run time and run against a planted TERM-ignoring guard under a 2 s deadline:
+# the fixed door kills it within 4 s plain, with slowed polls, and under
+# taskpolicy -b (darwin); the poll-counting pre-fix door overruns in the same run.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the preflight door's wall-clock deadline (1614-5x7m)"
+STEP_LUA="scripts/lua/test-preflight-wall-clock-deadline.lua"
+STEP_ERROR="the preflight door's deadline no longer holds by wall clock (1614-5x7m) — see the FAIL lines above"
+STEP_OK="Preflight wall-clock deadline fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-11 darwin ok:preflight-wall-clock-deadline:6 arms"
