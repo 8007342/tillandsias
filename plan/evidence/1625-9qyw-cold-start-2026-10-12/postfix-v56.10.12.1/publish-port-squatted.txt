@@ -1,0 +1,16 @@
+forge: tillandsias-macron.dev-forge-maintenance
+/home/forge/src/macron.dev
+.forge-startup-context.md
+.git
+openspec
+plan
+public
+README.md
+wrangler.jsonc
+{"name":"macron-dev","compatibility_date":"2026-10-01","assets":{"directory":"./public"}}
+runtime=auto
+mcp rc=0
+{"result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"tillandsias-host-services","version":"56.10.12"}},"jsonrpc":"2.0","id":1}
+{"error":{"code":-32000,"message":"runtime_unavailable: podman failed at step router (exit)"},"jsonrpc":"2.0","id":2}
+{"result":{"state":"stopped","runtime":"unknown","watch":false,"route_ready":false,"tls":{"enabled":true,"host_trust":"unknown","diagnostic":"Local CA transport verification is separate from host-browser trust; no host trust store was changed."},"diagnostic":"","last_failure":{"step":"router","class":"exit","reason":"runtime_unavailable: podman failed at step router (exit)","at":"2026-10-12T19:46:41Z","remedy":"operator"}},"jsonrpc":"2.0","id":3}
+no URL returned

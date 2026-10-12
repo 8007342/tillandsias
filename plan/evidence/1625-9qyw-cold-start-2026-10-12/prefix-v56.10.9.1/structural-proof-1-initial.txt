@@ -1,0 +1,14 @@
+bash: line 2: hostname: command not found
+whoami=podman uid=1000 host=
+DBUS_SESSION_BUS_ADDRESS=<unset>
+XDG_RUNTIME_DIR=<unset>
+bus sockets: none
+keyrings dir: none
+run/user|dbus|keyring mounts: 2793 2906 0:110 /9qyw-outer.F49PAL/run/overlay-containers/087a7109689f1068349bff529c998e0fa9834c5f755fba3fec64a2bd58873cc2/userdata/run/secrets /run/secrets rw,nosuid,nodev,relatime - tmpfs tmpfs rw,seclabel,size=1414288k,nr_inodes=353572,mode=700,uid=1000,gid=1000,inode64
+tool present: /usr/bin/gdbus
+tool present: /usr/bin/busctl
+process count running as session daemons: 0
+/run/secrets contents: []
+active probe gdbus --session -> rc=1 Error connecting: Cannot spawn a message bus without a machine-id: Unable to load /var/lib/dbus/machine-id or /etc/machine-id: Failed to open file “/var/lib/dbus/machine-id”: No such file or directory
+active probe busctl --user -> rc=1 Failed to set bus address: $DBUS_SESSION_BUS_ADDRESS and $XDG_RUNTIME_DIR not defined (consider using --machine=<user>@.host --user to connect to bus of other user)
+active probe dbus-send --session -> rc=127 bash: line 13: dbus-send: command not found

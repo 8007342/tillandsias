@@ -1,0 +1,12 @@
+19:46:11 tillandsias-proxy rc=0 
+19:46:16 tillandsias-proxy rc=0 
+19:46:21 tillandsias-proxy rc=0 
+19:46:26 tillandsias-proxy rc=0 
+19:46:31 tillandsias-proxy rc=0 
+19:46:37 tillandsias-proxy rc=0 
+19:46:42 tillandsias-proxy rc=0 
+19:46:47 tillandsias-proxy rc=0 
+19:46:52 tillandsias-proxy rc=0 
+19:46:57 tillandsias-proxy rc=0 
+19:47:02 tillandsias-proxy rc=0 
+19:47:07 tillandsias-proxy rc=0 
