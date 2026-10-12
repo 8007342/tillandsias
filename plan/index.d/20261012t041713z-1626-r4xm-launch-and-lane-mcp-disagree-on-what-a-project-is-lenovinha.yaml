@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (macuahuitl, 2026-10-12): side finding of the 1625-6iwd reproduction.
+packets:
+  - packet_id: a-lane-launched-from-a-path-outside-the-host-project-root-starts-a-forge-whose-own-mcp-socket-then-refuses-every-call-as-not-a-known-project
+    order: 1626-r4xm
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [mcp-tool-socket, project-identity, lane-launch, diagnostics]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-headless/src/local_projects.rs
+      - crates/tillandsias-headless/src/tray/mod.rs
+    title: |
+      Launch and the lane MCP disagree on what a project is. `tillandsias --bash <abs path>` accepts ANY existing directory (resolve_launch_project_identity) and starts the forge plus its per-lane mcp.sock. Every call on that socket is then refused with "Project '<label>' is not a known project on this host", because validate_project_label only knows children of host_project_root() (TILLANDSIAS_HOST_PROJECT_ROOT, default $HOME/src) plus the cloud cache. The lane comes up, and its tools are dead with no hint why.
+    context: |
+      MEASURED on lenovinha 2026-10-12 (installed v56.9.27.2, 1625-6iwd reproduction). Project at ~/claudia/scratch-6iwd, launched with `tillandsias --bash /var/home/lenovinha/claudia/scratch-6iwd --debug` and TILLANDSIAS_HOST_PROJECT_ROOT unset. The forge came up, and the launching CLI listened on /run/user/1000/tillandsias/mcp/scratch-6iwd-default/mcp.sock (ss -xlp). From the forge, host-browser.sh answered {"code":-32000,"message":"Project 'scratch-6iwd' is not a known project on this host"} to initialize. After the directory was moved to ~/src/scratch-6iwd, the SAME running lane served publish_local normally, because the known set is rescanned per call.
+      CODE on trunk 09781015c: main.rs resolve_launch_project_identity (~7269) accepts any existing path. tray/mod.rs ~1424 (the MCP tool socket) and local_web_preview.rs validate_identity/unique_live_instance call local_projects::validate_project_label, which scans only host_project_root(). The message names neither the root nor the env var. Its only branch that does is the empty-set one.
+      Hosts that follow the 1311 bring-up recipe avoid it by exporting TILLANDSIAS_HOST_PROJECT_ROOT=$HOME/claudia (plan/index.d/20260920t113959z-0ddcd358-lenovinha-silverblue.yaml). That's knowledge a cold operator or forge agent doesn't have.
+      CONSTRAINT: validate_project_label is the fail-closed attribution guard of the MCP tool socket (1031-q4pb, order 505). The fix must not widen it to arbitrary labels. Either make launch REFUSE what the MCP would refuse, or admit exactly the canonical path the launching process itself resolved.
+    exit_criteria:
+      - 'with TILLANDSIAS_HOST_PROJECT_ROOT unset and a git project at a path outside $HOME/src, `tillandsias --bash <abs path>` EITHER refuses before any forge or mirror container is created, naming the project root and TILLANDSIAS_HOST_PROJECT_ROOT, OR the lane it starts answers MCP initialize and tools/list on its own mcp.sock. Never "launch ok, then every MCP call refused"'
+      - 'the not-a-known-project refusal names the scanned root and TILLANDSIAS_HOST_PROJECT_ROOT, so a forge agent that hits it can tell the operator what to change'
+      - 'an unrelated label is still refused on a lane socket (the order-505 equality guard keeps its existing negative tests green)'
+    unscoreable: "unpinnable-until-the-guard-exists: the launch/MCP agreement test and the chosen arm (refuse at launch vs admit the launched path) are written together"
+    next_action: >
+      Pick one arm. Refusing at launch is the smaller change: run validate_project_label on the resolved label in resolve_launch_project_identity's local branch. Then add a test with the project outside a temp project root, plus the message change.
+    provenance: |
+      Filed by lenovinha-silverblue on macuahuitl's direction, 2026-10-12; side finding 1 of the 1625-6iwd reproduction.
+    events:
+      - type: filed
+        ts: "2026-10-12T04:17:13Z"
+        host: lenovinha
+        summary: |-
+          A lane launched from outside the host project root comes up with an MCP socket that refuses every call as "not a known project". Launch and the MCP label check use different notions of a project.
