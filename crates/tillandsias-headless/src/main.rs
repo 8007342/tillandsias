@@ -3785,17 +3785,18 @@ pub(crate) const PROXY_CA_KEY_SECRET: &str = "tillandsias-ca-key";
 pub(crate) const PROXY_CA_KEY_SECRET_OPTS: &str = "uid=1000,gid=1000,mode=0400";
 
 /// Credential-quarantine tmpfs overlays (orders 170/224) for the forge's
-/// `~/.ssh` and `~/.config/gh`. `uid=1000,gid=1000` is REQUIRED, not
-/// cosmetic: podman mounts a tmpfs `root:root` unless told otherwise, and the
-/// forge runs as uid/gid 1000 (`images/default/Containerfile`) under
-/// `--userns=keep-id`. Without it `~/.config/gh` was root-owned 0700 and
-/// `gh auth status` failed with "permission denied" instead of reporting
-/// "not logged in" (1625-bax2, measured on yoga). The overlays stay EMPTY:
-/// owning them gives the forge an empty directory, never a credential.
-pub(crate) const FORGE_SSH_QUARANTINE_TMPFS: &str =
-    "/home/forge/.ssh:size=1m,mode=0700,uid=1000,gid=1000";
-pub(crate) const FORGE_GH_QUARANTINE_TMPFS: &str =
-    "/home/forge/.config/gh:size=1m,mode=0700,uid=1000,gid=1000";
+/// `~/.ssh` and `~/.config/gh`. The trailing `U` is REQUIRED, not cosmetic:
+/// podman mounts a tmpfs `root:root` unless told otherwise, and the forge runs
+/// as its image user under `--userns=keep-id`. Without it `~/.config/gh` was
+/// root-owned 0700, and `gh auth status` failed with "permission denied"
+/// instead of reporting "not logged in" (1625-bax2, measured on yoga).
+/// `U` is podman's chown-to-the-container-user option, so it follows keep-id
+/// without hard-coding a uid. NOT `uid=1000,gid=1000`: podman rejects those on
+/// `--tmpfs` ("unknown mount option"), so the forge would not start at all
+/// (exit 125, measured on macuahuitl with podman 5.8.7). The overlays stay
+/// EMPTY: owning them gives the forge an empty directory, never a credential.
+pub(crate) const FORGE_SSH_QUARANTINE_TMPFS: &str = "/home/forge/.ssh:size=1m,mode=0700,U";
+pub(crate) const FORGE_GH_QUARANTINE_TMPFS: &str = "/home/forge/.config/gh:size=1m,mode=0700,U";
 
 fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
     let mut args: Vec<String> = vec![
@@ -24813,6 +24814,69 @@ mod tests {
         }
     }
 
+    /// 1625-bax2: the quarantine tmpfs options must be ones podman ACCEPTS.
+    /// The first fix passed `uid=1000,gid=1000`, which every argv assertion
+    /// accepted and podman refuses ("unknown mount option", exit 125), so the
+    /// forge would not have started. Only a real podman can judge this.
+    ///
+    /// With a tillandsias forge image present, both overlays are mounted at
+    /// their real paths under --userns=keep-id, and each must be EMPTY and
+    /// owned by the container user. With any other local image, `true` must
+    /// start with both option strings. With no reachable podman or no local
+    /// image, the test skips with the reason (never pulls).
+    #[test]
+    fn forge_quarantine_tmpfs_options_are_accepted_by_podman() {
+        let _lock = podman_seam_lock();
+        let info = podman_cmd_sync()
+            .args(["info", "--format", "{{.Host.Arch}}"])
+            .output_bounded(OperationKind::Availability.default_budget());
+        if !info.as_ref().is_ok_and(|o| o.status.success()) {
+            eprintln!("skip: no reachable podman here (podman info failed)");
+            return;
+        }
+        let images = podman_cmd_sync()
+            .args(["images", "--format", "{{.Repository}}:{{.Tag}}"])
+            .output_bounded(OperationKind::Inspect.default_budget())
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+            .unwrap_or_default();
+        let images: Vec<&str> = images
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty() && !l.contains("<none>"))
+            .collect();
+        let forge = images.iter().find(|i| i.contains("tillandsias-forge"));
+        let Some(image) = forge.or(images.first()) else {
+            eprintln!("skip: no local image to run (this test never pulls)");
+            return;
+        };
+        let mut cmd = podman_cmd_sync();
+        cmd.args(["run", "--rm", "--pull=never", "--userns=keep-id"])
+            .args(["--tmpfs", FORGE_SSH_QUARANTINE_TMPFS])
+            .args(["--tmpfs", FORGE_GH_QUARANTINE_TMPFS]);
+        if forge.is_some() {
+            cmd.args(["--entrypoint", "/bin/sh", image, "-c"]).arg(
+                "for d in /home/forge/.ssh /home/forge/.config/gh; do \
+                   [ \"$(stat -c %u \"$d\")\" = \"$(id -u)\" ] || { echo \"$d owner $(stat -c %U:%G \"$d\")\"; exit 3; }; \
+                   [ -z \"$(ls -A \"$d\")\" ] || { echo \"$d not empty\"; exit 4; }; \
+                 done",
+            );
+        } else {
+            cmd.args(["--entrypoint", "true", image]);
+        }
+        let out = cmd
+            .output_bounded(OperationKind::Container.default_budget())
+            .expect("podman run did not finish within its budget");
+        assert!(
+            out.status.success(),
+            "podman must accept the forge quarantine tmpfs options {FORGE_SSH_QUARANTINE_TMPFS} / \
+             {FORGE_GH_QUARANTINE_TMPFS} on {image} (forge image: {}); exit {:?}, stdout {:?}, stderr {:?}",
+            forge.is_some(),
+            out.status.code(),
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
     #[test]
     fn forge_credential_quarantine_mounts_present() {
         let _pseam = podman_false_seam();
@@ -24869,6 +24933,9 @@ mod tests {
         // 1625-bax2: the overlays are FORGE-owned. podman mounts a tmpfs
         // root:root unless told otherwise, and a root-owned 0700 ~/.config/gh
         // makes `gh auth status` say "permission denied", not "not logged in".
+        // `U` chowns to the container user; podman REJECTS uid=/gid= on
+        // --tmpfs, which forge_quarantine_tmpfs_options_are_accepted_by_podman
+        // proves against a real podman (an argv check cannot).
         for quarantine in ["/home/forge/.ssh:", "/home/forge/.config/gh:"] {
             let spec = argv
                 .iter()
@@ -24876,8 +24943,12 @@ mod tests {
                 .unwrap_or_else(|| panic!("no tmpfs for {quarantine}: {argv:?}"));
             let opts: Vec<&str> = spec[quarantine.len()..].split(',').collect();
             assert!(
-                opts.contains(&"uid=1000") && opts.contains(&"gid=1000"),
-                "{quarantine} quarantine tmpfs must be owned by the forge user (uid/gid 1000); got {spec}"
+                opts.contains(&"U"),
+                "{quarantine} quarantine tmpfs must be chowned to the forge user (U); got {spec}"
+            );
+            assert!(
+                !opts.iter().any(|o| o.starts_with("uid=") || o.starts_with("gid=")),
+                "{quarantine} quarantine tmpfs must not pass uid=/gid=, which podman rejects on --tmpfs; got {spec}"
             );
         }
         assert!(
