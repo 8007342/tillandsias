@@ -730,7 +730,58 @@ _pf_predecide() {  # $1 = roster path, $2 = label
         fi
         echo "note:preflight:$_l:serial-without-a-reason — a declaration must name the shared state; running it concurrently (1499-m9fj)"
     fi
+    # ORDER 1631-6w8z: A GUARD WHOSE ANSWER COSTS MORE THAN THE PER-GUARD
+    # DEADLINE, AND THAT THE DOOR MUST STILL ASK, says `own-deadline — <reason>`
+    # (`#` or `--`). Measured on darwin under taskpolicy -b: cargo fmt --check
+    # takes 5 s and a touched crate's clippy 11-55 s, against 5 s. The door runs
+    # it in _pf_long_lane, beside the roster, deadlined against the door's
+    # whole budget, so it neither waits behind the roster nor extends it. A kill
+    # is still a deadline skip. The reason is required, as for serial.
+    if [ -n "$(sed -n '1,40{/^# preflight: own-deadline/p;/^-- preflight: own-deadline/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
+        _reason="$(sed -n '1,40{s/^# preflight: own-deadline[[:space:]]*//p;s/^-- preflight: own-deadline[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
+        if [ -n "$_reason" ]; then
+            return 13
+        fi
+        echo "note:preflight:$_l:own-deadline-without-a-reason — a declaration must name its cost; running it under the per-guard deadline (1631-6w8z)"
+    fi
     return 0
+}
+
+# ORDER 1631-6w8z. THE LONG LANE: every guard that predecides 13 (own-deadline),
+# each started at once in the background, beside the roster. Its deadline is
+# what is left of the door's budget when it starts (_pf_budget), so the door
+# ends no later than its budget on this guard's account;
+# TILLANDSIAS_PREFLIGHT_LANE_TIMEOUT overrides it, and --full (deadline 0)
+# lifts it. It writes the same `<rc> <elapsed>` file the launcher writes, at
+# the guard's roster index, so the reporter reads it like any other.
+_pf_long_lane() {  # $1 = work dir, $2 = 0 for no deadline; roster on stdin
+    local _dir="$1" _nolimit="$2" _i=0 _line _p _args _pd _dl
+    while IFS= read -r _line; do
+        [ -n "$_line" ] || continue
+        _i=$((_i + 1))
+        _p="${_line%%$'\t'*}"; _args=""
+        [ "$_p" = "$_line" ] || _args="${_line#*$'\t'}"
+        _pd=0
+        _pf_predecide "$_p" "x" >/dev/null 2>&1 || _pd=$?
+        [ "$_pd" -eq 13 ] || continue
+        if [ "$_nolimit" = 0 ]; then
+            _dl=0
+        elif [ -n "${TILLANDSIAS_PREFLIGHT_LANE_TIMEOUT:-}" ]; then
+            _dl="$TILLANDSIAS_PREFLIGHT_LANE_TIMEOUT"
+        else
+            _pf_budget
+            _dl=$(( _PF_BUDGET - (SECONDS - ${_pf_wall0:-$SECONDS}) ))
+            [ "$_dl" -ge 1 ] || _dl=1
+        fi
+        echo "$_dl" > "$_dir/$_i.lane-deadline"
+        (
+            _t=$SECONDS
+            _r=0
+            _pf_run_guard "$_p" "$_dl" "$_dir/$_i.out" "$_args" || _r=$?
+            echo "$_r $(( SECONDS - _t ))" > "$_dir/$_i.rc.tmp" && mv "$_dir/$_i.rc.tmp" "$_dir/$_i.rc"
+        ) </dev/null &
+    done
+    wait
 }
 
 # ORDER 1499-m9fj (coordinator ruling 2026-09-29). BOUNDED CONCURRENCY. 191
@@ -756,6 +807,7 @@ _pf_launcher() {  # $1 = work dir, $2 = deadline, $3 = jobs; roster on stdin
         case $_pd in
             0) _cap="$_jobs" ;;
             12) _cap=1 ;;   # serial: drain EVERY running guard first
+            13) continue ;; # own-deadline: _pf_long_lane runs it (1631-6w8z)
             *) echo "not-launched 0" > "$_dir/$_i.rc"; continue ;;
         esac
         while :; do
@@ -830,6 +882,13 @@ _preflight_roster() {
     #    through `script run` by _pf_run_guard's .lua runner.
     grep -oE '_run_lua_decider "scripts/lua/check-[a-z0-9-]+\.lua"' "$SCRIPT_DIR/build.sh" \
         | sed -E 's#^_run_lua_decider "(scripts/lua/check-[a-z0-9-]+\.lua)"#\1#'
+    # 6. the gate's INLINE CARGO refusals (1631-6w8z): `cargo fmt --check
+    #    --all` and the -D warnings clippy lines are cargo commands, not
+    #    scripts, so sources 1-5 cannot see them, and #340 (clippy) and #359
+    #    (fmt) each lost a full gate run after a door that passed them. One
+    #    guard asks both, in two modes; it declares own-deadline (see
+    #    _pf_long_lane), because neither fits the per-guard deadline.
+    printf '%s\t%s\n' scripts/lua/check-rust-lints.lua fmt scripts/lua/check-rust-lints.lua clippy
 }
 
 # Guards that cannot simply be run here, each with the reason the verdict prints.
@@ -1243,9 +1302,14 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     fi
     _pf_roster="$(_preflight_roster | sort -u)"
     _pf_wall0=$SECONDS
+    # 1631-6w8z: the long lane starts FIRST, so its guards get the most budget.
+    _pf_lane_limit=1
+    [[ "$FLAG_PREFLIGHT_FULL" != true ]] || _pf_lane_limit=0
+    printf '%s\n' "$_pf_roster" | _pf_long_lane "$_pf_dir" "$_pf_lane_limit" &
+    _pf_lane_pid=$!
     printf '%s\n' "$_pf_roster" | _pf_launcher "$_pf_dir" "$_pf_deadline" "$_pf_jobs" &
     _pf_launcher_pid=$!
-    trap 'kill "$_pf_launcher_pid" 2>/dev/null || true; wait "$_pf_launcher_pid" 2>/dev/null || true; _pf_sweep_late "$_pf_dir"; rm -rf "$_pf_dir"' EXIT
+    trap 'kill "$_pf_launcher_pid" "$_pf_lane_pid" 2>/dev/null || true; wait "$_pf_launcher_pid" "$_pf_lane_pid" 2>/dev/null || true; _pf_sweep_late "$_pf_dir"; rm -rf "$_pf_dir"' EXIT
     # ORDER 1353-ryhq — FIVE CATEGORIES, NOT TWO. `skipped` conflated a guard
     # that DECLARED its own skip with a guard the runner never got an answer
     # from, and the summary then vouched for both with `ok:`. Measured on
@@ -1285,8 +1349,11 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
 
         _pf_pd=0
         _pf_predecide "$_pf_path" "$_pf_label" || _pf_pd=$?
+        _pf_owner="$_pf_launcher_pid"
+        _pf_gdl="$_pf_deadline"
         case $_pf_pd in
             12) echo "note:preflight:$_pf_label:serial — declares shared state; run with no other guard beside it" ;;
+            13) _pf_owner="$_pf_lane_pid" ;;
             10) _pf_declskip=$((_pf_declskip + 1)); continue ;;
             11) _pf_cantrun=$((_pf_cantrun + 1)); continue ;;
         esac
@@ -1313,13 +1380,17 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
         # guard's own, measured from its own start.
         _pf_tmp="$_pf_dir/$_pf_i.out"
         while [ ! -f "$_pf_dir/$_pf_i.rc" ]; do
-            if ! kill -0 "$_pf_launcher_pid" 2>/dev/null && [ ! -f "$_pf_dir/$_pf_i.rc" ]; then
+            if ! kill -0 "$_pf_owner" 2>/dev/null && [ ! -f "$_pf_dir/$_pf_i.rc" ]; then
                 echo "not-launched 0" > "$_pf_dir/$_pf_i.rc"
                 break
             fi
             sleep 0.1 2>/dev/null || sleep 1
         done
         read -r _pf_rc _pf_el < "$_pf_dir/$_pf_i.rc"
+        if [ "$_pf_pd" -eq 13 ] && [ -f "$_pf_dir/$_pf_i.lane-deadline" ]; then
+            read -r _pf_gdl < "$_pf_dir/$_pf_i.lane-deadline"
+            echo "note:preflight:$_pf_label:own-deadline — ran beside the roster for ${_pf_el}s, deadlined at ${_pf_gdl}s of the door's budget (1631-6w8z)"
+        fi
         if [ "$_pf_rc" = "not-launched" ]; then
             # The launcher and this pass disagreed (or the launcher died): run
             # it here, serially, rather than report a guard nobody ran.
@@ -1356,7 +1427,7 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
                     grep -E '^could-not-run:' "$_pf_tmp" | head -2
                     _pf_cantrun=$((_pf_cantrun + 1)) ;;
                 timed-out)
-                    echo "skip:preflight:$_pf_label:deadline:$(( SECONDS - _pf_t0 ))s — outlived the ${_pf_deadline}s front-door deadline; the gate still runs it"
+                    echo "skip:preflight:$_pf_label:deadline:$(( SECONDS - _pf_t0 ))s — outlived the ${_pf_gdl}s front-door deadline; the gate still runs it"
                     _pf_deadline_n=$((_pf_deadline_n + 1)) ;;
                 cannot-start)
                     # THE RUNNER COULD NOT START IT (macneo 2026-09-22: exec: setsid: not found).
@@ -1385,7 +1456,7 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     done <<PFEOF
 $_pf_roster
 PFEOF
-    wait "$_pf_launcher_pid" 2>/dev/null || true
+    wait "$_pf_launcher_pid" "$_pf_lane_pid" 2>/dev/null || true
 
     # ORDER 1352-vmbc. NAME THE ISOLATION MODE IN THE VERDICT. A run without
     # setsid keeps every deadline and every convention but loses process-GROUP
