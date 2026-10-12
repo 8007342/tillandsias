@@ -1,0 +1,8 @@
+[inference] tuning: tier=gpu-cuda flash_attn=1 kv_cache=q8_0 num_parallel=2 vram_mb=8192 keep_alive=5m
+[inference] engine payload: need 'core+cuda_v13 v0.34.0 sha256:cf95886728959aa09910bb34de5cca1cc5a8f68003b5597197d3f2c2d57c0804' (have 'none'; check=engine-integrity-refused:no-engine)
+[inference] engine payload verified: v0.34.0/amd64 sha256 ok
+[inference] engine backends available: cuda_v12 cuda_v13 vulkan 
+[inference] engine integrity: ok (core+cuda_v13 v0.34.0 sha256:cf95886728959aa09910bb34de5cca1cc5a8f68003b5597197d3f2c2d57c0804)
+[inference] engine: set=core+cuda_v13 backends=[cuda_v13 ] llama-server=ok
+time=2026-10-12T15:05:00.709Z level=DEBUG source=runner.go:153 msg="verifying if device is supported" library=/home/ollama/.ollama/models/.tools/lib/ollama/cuda_v13 description="NVIDIA GeForce RTX 3070 Laptop GPU" compute=8.6 id=0 pci_id=0000:01:00.0
+time=2026-10-12T15:05:01.459Z level=INFO source=types.go:32 msg="inference compute" id=0 filter_id=0 library=CUDA compute=8.6 name=CUDA0 description="NVIDIA GeForce RTX 3070 Laptop GPU" libdirs=ollama,cuda_v13 driver=13.4 pci_id=0000:01:00.0 type=discrete total="7.7 GiB" available="2.7 GiB"

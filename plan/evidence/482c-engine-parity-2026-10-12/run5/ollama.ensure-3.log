@@ -1,0 +1,6 @@
+[2026-10-12T15:06:22.297Z] event:container_launch stage=forge-launch-inference state=starting container=tillandsias-inference
+[2026-10-12T15:06:22.530Z] event:container_launch stage=forge-launch-inference state=running container=tillandsias-inference
+[tillandsias] [forge-launch] inference not ready yet (attempt 1/60): probe failed: Container command failed (status Some(7), retry Unknown): podman exec tillandsias-inference curl -fsS --max-time 2 http://127.0.0.1:11434/api/version
+stderr: curl: (7) Failed to connect to 127.0.0.1 port 11434 after 0 ms: Could not connect to server
+[tillandsias] [forge-launch] inference ready on attempt 2/60
+inference-slot: ensure ready=true

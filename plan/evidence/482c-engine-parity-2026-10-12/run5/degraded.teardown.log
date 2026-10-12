@@ -1,0 +1,2 @@
+[tillandsias] no active lane containers; cleaning project + shared stack for inference-slot (lane-scoped: tillandsias-inference; keeping application-lifetime: tillandsias-vault, tillandsias-proxy, tillandsias-router, tillandsias-nix-cache)
+inference-slot: teardown done
