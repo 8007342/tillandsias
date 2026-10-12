@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-macos-install-keeps-a-damaged-vm-through-the-soft-reset-so-it-should-build-a-fresh-vm-and-carry-only-identity-forward
+    event:
+      type: note
+      ts: "2026-10-12T22:58:39Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |-
+        5b (option C) + loop guard MEASURED LIVE on tlatoanis-macbook-air with a build of 72363063e (local, unpushed while #388 is queued): (1) clean previous stop -> launch, no rebuild, vm-running.marker set, Ready 22:55:08Z; (2) kill -9 the tray (unclean) -> relaunch 22:55:19Z 'reset: HARD (unclean previous stop; operator standing approval, 1642-cc54)', 'rebuilt the workspace after an unclean stop (recorded ...)', fresh workspace Ready 22:56:50Z; (3) kill -9 again -> relaunch 22:56:59Z rebuilt again AND 'DEFECT (1642-cc54): two unclean stops in a row ... the clean power-off path was not reached', record holds 2 rebuilt_at lines, --diagnose prints 'Unclean-stop rebuilds: 2 IN A ROW ... DEFECT'; (4) menu Quit -> 'guest reported a clean power-off (token matched)', 'Quit: VM drained cleanly' 22:58:27Z, marker and record cleared, --diagnose 'none since the last clean stop'. Also fixed in 72363063e: check-approved-ux-strings missed append-event operator_notes (undashed type), had a SIGPIPE verdict (grep -q under pipefail) and an empty-array set -u failure on bash 3.2; Lua fixture gate step 469.
