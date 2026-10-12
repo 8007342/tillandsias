@@ -271,6 +271,31 @@ SHALL remain valid regardless of which slot is bound.
 - **THEN** `OLLAMA_HOST=http://inference:11434` SHALL still resolve for forge
   containers
 
+### Requirement: The WSL2 Vulkan opt-in keeps small models' decode on the CPU
+<!-- order: 1647-fb52 (793-a8e7 S3) -->
+On the WSL2 Vulkan opt-in lane (`TILLANDSIAS_INFERENCE_TIER=gpu-vulkan`), the
+inference container SHALL pin every local model below the decode floor to the
+CPU at start (`PARAMETER num_gpu 0`, re-created under the model's own name) and
+SHALL record each pin. ollama cannot split a model by phase (measured on
+yolanda 2026-10-12: with `num_gpu=0` prefill falls to CPU speed), so the
+per-phase policy is applied per model. The floor is the host's measured decode
+crossover, `all` when the CPU won at every size, else 3 billion parameters,
+PROVISIONAL until a host measures. On any other tier the container SHALL
+restore every recorded pin and remove the record, so an opt-out leaves no
+residue. A model already carrying the operator's own `num_gpu` SHALL be left
+alone. A model pulled while the container runs is pinned at the next start.
+
+@trace spec:inference-container
+
+#### Scenario: Opting out leaves no residual pin
+- **WHEN** the container starts on any tier other than `gpu-vulkan` after a
+  `gpu-vulkan` start pinned models
+- **THEN** every pinned model SHALL be restored from its own modelfile minus
+  `num_gpu`, with no `num_gpu 0` left and its other parameters intact
+- **AND** the pin record SHALL be removed
+- Measurable: `scripts/lua/test-decode-floor-pin.lua` arm 3 (gate step
+  `840-1647-fb52`).
+
 
 ## Litmus Tests
 

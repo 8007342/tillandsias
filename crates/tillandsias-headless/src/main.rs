@@ -5759,6 +5759,25 @@ fn wsl2_dxg_container_args(dxg_present: bool, wsl_tree_present: bool) -> Vec<Str
     ]
 }
 
+/// ORDER 793-a8e7 S3 (1647-fb52): the decode floor, in billions of parameters,
+/// below which the opt-in lane pins a model all-CPU, and where it came from.
+///
+/// ollama cannot split a model by phase (measured on yolanda 2026-10-12: with
+/// num_gpu=0 there is no op-offload, so prefill falls to CPU speed), so the
+/// per-phase policy of 793-qc6q is applied per model. A measured crossover is
+/// used as is. `all` means the host measured and the CPU won at every size.
+/// Unmeasured is 3, the smallest size MEASURED to gain on this stack
+/// (qwen2.5:3b decode 1.37x; 0.5b regressed 1.23x): a PROVISIONAL floor by
+/// coordinator ruling (2026-10-12), labelled as such in the env so the
+/// container's log line says which.
+fn decode_floor_env(crossover: accel_probe::DecodeCrossover) -> (String, &'static str) {
+    match crossover {
+        accel_probe::DecodeCrossover::AtOrAbove(b) => (format!("{b}"), "measured"),
+        accel_probe::DecodeCrossover::CpuWinsThroughout => ("all".to_string(), "cpu-wins"),
+        accel_probe::DecodeCrossover::Unmeasured => ("3".to_string(), "provisional"),
+    }
+}
+
 /// Start the host-native forwarder INSTEAD of the inference container, when the
 /// tray has configured one. Returns true when it took the lane.
 ///
@@ -6257,6 +6276,21 @@ fn build_inference_run_args(
         .flatten();
     for (name, value) in engine_slots::pin_backend_environment(effective_tier, cuda_major) {
         args.extend(["--env".into(), format!("{name}={value}")]);
+    }
+    // ORDER 793-a8e7 S3 (1647-fb52): the decode floor the container pins small
+    // models below (images/inference/decode-floor-pin.sh). Only on the opt-in
+    // lane, so every other tier's wiring is byte-identical; there the
+    // container restores any earlier pin instead.
+    if effective_tier == "gpu-vulkan" {
+        let (floor, source) = decode_floor_env(accel_probe::decode_crossover_b(
+            &accel_probe::load_or_probe(effective_tier),
+        ));
+        args.extend([
+            "--env".into(),
+            format!("TILLANDSIAS_DECODE_FLOOR_B={floor}"),
+            "--env".into(),
+            format!("TILLANDSIAS_DECODE_FLOOR_SOURCE={source}"),
+        ]);
     }
     // Order 482b: the engine slot (ollama by default, SLOT-3). The llama-server
     // slot is delivered the render nodes this user can open — on any tier,
@@ -22562,6 +22596,37 @@ mod tests {
             forge.contains("TILLANDSIAS_INFERENCE_TIER")
                 && forge.contains("effective_inference_tier()"),
             "effective tier must be exported into the forge env for agents/startup context"
+        );
+    }
+
+    /// ORDER 793-a8e7 S3 (1647-fb52): the floor follows the measured crossover,
+    /// and only an unmeasured host gets the provisional 3, labelled as such.
+    #[test]
+    fn decode_floor_follows_the_crossover_and_labels_the_provisional_default() {
+        use accel_probe::DecodeCrossover;
+        assert_eq!(
+            decode_floor_env(DecodeCrossover::AtOrAbove(1.5)),
+            ("1.5".to_string(), "measured")
+        );
+        assert_eq!(
+            decode_floor_env(DecodeCrossover::AtOrAbove(7.0)),
+            ("7".to_string(), "measured")
+        );
+        assert_eq!(
+            decode_floor_env(DecodeCrossover::CpuWinsThroughout),
+            ("all".to_string(), "cpu-wins")
+        );
+        assert_eq!(
+            decode_floor_env(DecodeCrossover::Unmeasured),
+            ("3".to_string(), "provisional")
+        );
+        // Passed only on the opt-in lane, so every other tier is byte-identical.
+        let source = include_str!("main.rs");
+        let window = source_window(source, "fn build_inference_run_args(");
+        assert!(
+            window.contains("if effective_tier == \"gpu-vulkan\" {")
+                && window.contains("TILLANDSIAS_DECODE_FLOOR_B={floor}"),
+            "the decode floor must be gated on the opt-in tier"
         );
     }
 
