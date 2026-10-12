@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-device-catalogue-grows-from-a-127-device-seed-to-the-long-tail-500-plus-devices-across-12-plus-brands-each-with-source-and-licence
+    field: status
+    value: in_progress
+    ts: "2026-10-12T23:14:13Z"
+    host: lenovinha

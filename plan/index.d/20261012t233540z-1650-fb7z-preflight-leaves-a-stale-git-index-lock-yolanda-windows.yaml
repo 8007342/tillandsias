@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-12) after two local preflight runs on yolanda-windows each left a stale .git/index.lock.
+packets:
+  - packet_id: build-sh-preflight-on-windows-leaves-a-stale-zero-byte-git-index-lock-after-a-deadline-killed-guard-dies-inside-a-git-index-write-blocking-the-next-git-add-and-switch
+    order: 1650-fb7z
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [preflight, gate, git, windows, guards, deadline]
+    estimated_hours: 3
+    owned_files:
+      - build.sh
+    related: [1647-fb52]
+    depends_on: []
+    title: |
+      ./build.sh --preflight on a Windows checkout left a stale 0-byte .git/index.lock in BOTH runs on 2026-10-12 (created mid-run, no git process alive afterwards), and the lock then refused the next git add and git switch; the likely cause is a guard killed at the 5 s front-door deadline while inside a git index write
+    context: |
+      Measured on yolanda-windows 2026-10-12 while preparing 1647-fb52 (#390), in the main checkout (not a worktree):
+        Run 1: ./build.sh --preflight on a tree mid-merge. Afterwards git add refused with "Unable to create '.git/index.lock': File exists". The lock was 0 bytes, mtime 2026-10-12 16:19 PDT, and tasklist showed no git.exe running.
+        Run 2: after the merge was committed, ./build.sh --preflight finished with partial:preflight:ran=147 declared-skip=9 skipped-by-deadline=96 refused=0 wall=222s. Afterwards git switch refused the same way. The lock was 0 bytes, mtime 2026-10-12 16:25:21.298 PDT (mid-run), there was no git.exe, and the only wsl.exe processes were the tray's sleep-infinity keepalives and one tray-launched lane (Win32_Process listing). There was no git process in the tillandsias-build distro either.
+      Both times the lock was removed by literal path after confirming no git process was alive; git then worked.
+      Hypothesis, not yet proven: the preflight kills guards that outlive the 5 s decider deadline (96 per run here). A guard killed while git is writing the index (git status refreshing the index, git add, git stash and so on) leaves index.lock behind. Several guards run git against the checkout.
+      Effect: the next git operation an agent runs fails with a scary message. An agent that "fixes" it by removing the lock while a real git process IS running can corrupt the index, so the remedy has to be a check, not a habit.
+    exit_criteria:
+      - 'reproduce: a fixture that kills a git index write mid-flight the way the preflight deadline does, and shows the stale lock (red on trunk)'
+      - 'the preflight either keeps guards from writing the index (read-only git: GIT_OPTIONAL_LOCKS=0 for status-like calls), or after it kills guards it removes an index.lock that it created and that no live git process holds, naming it'
+      - 'a lock held by a live git process is never removed (negative control)'
+    unscoreable: "a tooling hygiene fix: its evidence is the fixture red on trunk and green after, plus a preflight run that leaves no lock"
+    next_action: >
+      Find which deadline-skipped guards run index-writing git commands (git status without GIT_OPTIONAL_LOCKS=0 counts), then write the kill-mid-write fixture.
+    provenance: |
+      Filed by yolanda-windows at macuahuitl-fedora's request, 2026-10-12.
+    events:
+      - type: filed
+        ts: "2026-10-12T23:35:40Z"
+        host: yolanda-windows
+        summary: |-
+          Two Windows preflight runs each left a stale .git/index.lock (16:19 and 16:25:21 PDT, no git alive); a deadline-killed guard is the likely cause.
