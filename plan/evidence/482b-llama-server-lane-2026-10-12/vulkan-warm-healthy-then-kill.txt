@@ -1,0 +1,13 @@
+iGPU vram_used before: 828 MiB
+ready: /api/version=200 after 2s (warm)
+[inference] engine=llama-server backend=vulkan reason=render-node:renderD128
+[inference] engine integrity: ok (core+vulkan v0.34.0 sha256:cf95886728959aa09910bb34de5cca1cc5a8f68003b5597197d3f2c2d57c0804)
+[inference] llama-server backend closure: ok (set=core+vulkan backend=vulkan pin=/home/ollama/.ollama/models/.tools/lib/ollama/vulkan/libggml-vulkan.so)
+[inference] llama-server: backend=vulkan ngl=99 model=qwen2.5-0.5b-instruct build='llama-server 0.3.0-dev (build 1, commit 0f3a71be1)' upstream=127.0.0.1:11435 shim=:11434
+HEALTHY: {"version":"llama-server 0.3.0-dev (build 1, commit 0f3a71be1)"} http=200 t=0.000850s
+completion: "content":"Ok"
+iGPU vram_used while serving: 1286 MiB
+KILL llama-server (pid 107 in the container) at t=0
+t+105ms container stopped, exit=137
+[inference] FATAL: llama-server exited (rc=137) — stopping the other and exiting non-zero so the endpoint never outlives the engine
+iGPU vram_used after: 828 MiB
