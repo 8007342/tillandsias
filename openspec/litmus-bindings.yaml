@@ -632,6 +632,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:inference-engine-slot-boundary-shape
+  - litmus:inference-tier-table-migration
   - litmus:inference-policy-router-implementation
   - litmus:enclave-isolation
   coverage_ratio: 100

@@ -25,7 +25,7 @@ pull_recipe: see-section-pull-on-demand
 ## Provenance
 
 - Ollama API reference: <https://github.com/ollama/ollama/blob/main/docs/api.md> — fetched 2026-04-27, used to verify `/api/version`, `/api/tags`, `/api/generate`, `/api/chat`, `/api/pull`, `/api/embed` (the current endpoint; `/api/embeddings` is superseded), `/api/ps`. Streaming response shape (newline-delimited JSON, last chunk carries `done:true` + timing) confirmed against the doc.
-- Tillandsias model tier definitions: `images/default/config-overlay/ollama/models.json` (canonical tier list, baked into every forge image).
+- Tillandsias model tier definitions: `images/inference/tiers/tier-table.tsv` (the one shared T0-T5 table, order 482d), resolved per engine through `images/inference/tiers/models.ollama.tsv` and `models.llama-server.tsv`.
 - **Last updated**: 2026-09-13
 
 **Version baseline**: the forge image pins `v0.34.0` at
@@ -51,22 +51,24 @@ branching on the baseline should read the pin, not this prose.
 
 ## Model tiers shipped by Tillandsias
 
-Tier list is baked into the forge image at
-`images/default/config-overlay/ollama/models.json`. The inference
-container's `pull-models.sh` reads this file at first boot and pulls
-the tiers that fit in the host's VRAM.
+The tier table is `images/inference/tiers/tier-table.tsv` (order 482d), the
+one shared source both engine slots read; the inference entrypoint classifies
+the host with it at start (`[inference] tier=T<n>` in its log). A tier's set is
+its own row plus every lower row. This is a snapshot of that file:
 
-| Tier | Default model | Size | VRAM req | Role |
-|---|---|---:|---:|---|
-| T0 | `qwen2.5:0.5b` | 350 MB | 0 GB (CPU) | Instant — triggers, classification, tiny edits |
-| T1 | `tinyllama:1.1b` | 600 MB | 0 GB (CPU) | Fast — summaries, changelogs, progress tracking |
-| T2 | `phi3.5:3.8b` | 2.2 GB | 4 GB | Capable — code generation, refactoring, explanations |
-| T3 | `qwen2.5-coder:7b` | 4.5 GB | 6 GB | Code — code-specific, reliable structured output |
-| T4 | `llama3.2:8b` | 4.7 GB | 8 GB | General-capable |
+| Tier | Classified when | Adds (ollama tag) |
+|---|---|---|
+| T0 | never (always-present baseline) | `qwen2.5:0.5b` — the default set, pulled on every host |
+| T1 | fallback (every host) | — |
+| T2 | VRAM ≥ 4 GB or RAM ≥ 16 GB | `qwen2.5:7b` |
+| T3 | VRAM ≥ 8 GB or RAM ≥ 32 GB | `qwen2.5-coder:7b` |
+| T4 | VRAM ≥ 16 GB | `qwen2.5:14b` |
+| T5 | VRAM ≥ 32 GB | `qwen2.5-coder:32b` |
 
-T0 + T1 are pulled at init unconditionally (CPU-only, fit on every host).
-T2+ are pulled automatically only when the GPU detection step finds enough
-VRAM. To pull manually anyway: `ollama pull <model>` from inside the forge.
+Only the T0 baseline is pulled automatically. T2+ pulls are OPT-IN
+(`TILLANDSIAS_INFERENCE_TIER_PULLS=1`, order 392a), so multi-GB models never
+fill the loaded-model slots on their own. To pull one anyway:
+`ollama pull <model>` from inside the forge.
 
 ## Common patterns
 
@@ -206,6 +208,6 @@ curl --fail --silent --show-error \
 
 - `cheatsheets/runtime/forge-container.md` — the surrounding forge runtime contract; `OLLAMA_HOST` is exported as part of the forge's standard env.
 - `cheatsheets/runtime/networking.md` — enclave network topology; why `inference:11434` resolves on the bridge.
-- `images/default/config-overlay/ollama/models.json` — canonical tier definitions; this file is the source of truth, this cheatsheet is a snapshot.
-- `images/default/config-overlay/ollama/pull-models.sh` — the GPU-aware tier puller; useful reference for what gets pulled when.
+- `images/inference/tiers/tier-table.tsv` — canonical tier definitions; this file is the source of truth, this cheatsheet is a snapshot. `images/inference/tiers/tiers.sh` resolves it (classify / models / artifact).
+- `images/inference/entrypoint.sh` — the tier classification and the opt-in tier pulls, both driven by that table.
 - Inside a forge: `tillandsias-models` lists installed models + tier mapping; `tillandsias-services` reports inference container health.

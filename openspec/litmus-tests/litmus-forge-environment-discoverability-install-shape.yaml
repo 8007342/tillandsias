@@ -90,13 +90,17 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok:"
 
-  - step: "Req 3 models: T0/T1 tier mapping for baked CPU-only models"
-    # Spec § Req 3 § Scenarios mandate T0=qwen2.5:0.5b + T1=llama3.
-    # 2:3b as the baked tier. The tier_for() shell function is
-    # the impl; pin both literals.
-    command: "grep -Fq 'qwen2.5:0.5b)' images/default/cli/tillandsias-models && grep -Fq 'llama3.2:3b)' images/default/cli/tillandsias-models && grep -Fq \"printf 'T0'\" images/default/cli/tillandsias-models && grep -Fq \"printf 'T1'\" images/default/cli/tillandsias-models && echo \"ok: T0/T1 mapping intact\""
-    timeout_ms: 3000
-    expected_behavior: "ok:"
+  - step: "Req 3 models: the tier the CLI prints equals the canonical tier table (T0 baseline, -- when untiered)"
+    # MODIFIED by openspec/changes/models-cli-tiers-from-canonical-table (order 482d).
+    # Was: pin the literals qwen2.5:0.5b=T0 and llama3.2:3b=T1. llama3.2:3b
+    # stopped being baked at order 168 (e56b0156), so the T1 literal pinned a
+    # lie. Now: run the real CLI against a stubbed /api/tags and compare its
+    # printed tiers with images/inference/tiers/tier-table.tsv (through the
+    # CLI's byte-identical copy; litmus:inference-tier-table-migration pins
+    # the identity). Pipe-free per the shell ratchet.
+    command: "set -u; T=$(mktemp -d \"${TMPDIR:-/tmp}/models-cli.XXXXXX\"); mkdir \"$T/bin\"; printf '%s\\n' '#!/bin/sh' 'printf %s '\\''{\"models\":[{\"name\":\"qwen2.5:0.5b\",\"size\":1,\"modified_at\":\"x\",\"digest\":\"a\"},{\"name\":\"qwen2.5:7b\",\"size\":1,\"modified_at\":\"x\",\"digest\":\"b\"},{\"name\":\"qwen2.5-coder:32b\",\"size\":1,\"modified_at\":\"x\",\"digest\":\"c\"},{\"name\":\"llama3.2:3b\",\"size\":1,\"modified_at\":\"x\",\"digest\":\"d\"}]}'\\''' > \"$T/bin/curl\"; chmod +x \"$T/bin/curl\"; out=$(PATH=\"$T/bin:$PATH\" TILLANDSIAS_CLI_TIERS_DIR=images/default/cli/tiers bash images/default/cli/tillandsias-models --json); rm -rf \"$T\"; for pair in qwen2.5:0.5b=T0 qwen2.5:7b=T2 qwen2.5-coder:32b=T5 llama3.2:3b=--; do m=${pair%%=*}; want=${pair#*=}; got=$(jq -r --arg m \"$m\" '.models[] | select(.name==$m) | .tier' <<<\"$out\"); [ \"$got\" = \"$want\" ] || { echo \"FAIL: $m printed tier [$got], canonical table says [$want]\"; exit 1; }; done; echo 'ok: printed tiers equal the canonical table (qwen2.5:0.5b=T0, qwen2.5:7b=T2, qwen2.5-coder:32b=T5, llama3.2:3b=--)'"
+    timeout_ms: 8000
+    expected_behavior: "ok: printed tiers equal the canonical table"
 
   - step: "Req 4 welcome banner: advertises all 4 CLIs by name"
     # Spec § Req 4 mandates the welcome banner mentions the discovery
@@ -125,8 +129,8 @@ rollback:
     into `/usr/local/bin/`; inventory CATEGORIES with >=6 entries
     spanning Languages/Build/Test/Utils/Agents/Web/API; services
     SERVICES enumerating proxy:3128 + git-service:9418 +
-    inference; models tier_for mapping qwen2.5:0.5b='T0' +
-    llama3.2:3b='T1'; forge-welcome.sh banner mentioning all 3
+    inference; models tier_for reading the canonical tier table copy
+    (qwen2.5:0.5b prints T0, an untiered model prints --); forge-welcome.sh banner mentioning all 3
     CLI names. The COPY+symlink block was previously dropped
     silently in a refactor — RESTORE FROM `a74a13ec` if both
     Containerfile blocks (COPY + symlink) are missing.
