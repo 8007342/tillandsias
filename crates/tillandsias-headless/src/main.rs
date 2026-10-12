@@ -2401,6 +2401,9 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         "git" => "images/git",
         "inference" => "images/inference",
         "web" => "images/web",
+        // 1625-un54: the local Wrangler preview profile. runtime_assets already
+        // shipped its context; without this arm nothing could build it.
+        "web-wrangler" => "images/web-wrangler",
         "router" => "images/router",
         "chromium-core" => "images/chromium",
         "chromium-framework" => "images/chromium",
@@ -9979,7 +9982,7 @@ pub(crate) fn build_image_with_logging(
         "proxy" => "Routing Proxy",
         "git" => "Setting up Git",
         "router" => "Routing Traffic",
-        "web" => "Serving Web",
+        "web" | "web-wrangler" => "Serving Web",
         "vault" => "Securing Vault",
         _ => "Setting up containers",
     };
@@ -10207,7 +10210,7 @@ fn podman_build_argv(
 /// init — and every curl install, since install.sh runs `--reset-state
 /// --debug` — left /tmp/tillandsias-init-vault.log behind (measured on yoga
 /// 2026-09-27, mode 644).
-const INIT_IMAGES: [&str; 10] = [
+const INIT_IMAGES: [&str; 11] = [
     "proxy",
     "git",
     "vault",
@@ -10218,6 +10221,9 @@ const INIT_IMAGES: [&str; 10] = [
     "forge-base",
     "forge",
     "web",
+    // 1625-un54: publish_local's Wrangler profile image, tagged with the same
+    // version alias local_web_preview::Profile::image checks.
+    "web-wrangler",
 ];
 
 fn cleanup_init_logs() {
@@ -32854,6 +32860,46 @@ esac
             image_specs(&root, "web").expect("web image specs should be resolvable");
         assert!(containerfile.ends_with("images/web/Containerfile"));
         assert!(context.ends_with("images/web"));
+
+        // 1625-un54: the Wrangler preview image builds from its own context.
+        let (containerfile, context) = image_specs(&root, "web-wrangler")
+            .expect("web-wrangler image specs should be resolvable");
+        assert!(containerfile.ends_with("images/web-wrangler/Containerfile"));
+        assert!(context.ends_with("images/web-wrangler"));
+    }
+
+    /// 1625-un54: an image the runtime can name but init never builds is the
+    /// defect class. Every INIT_IMAGES entry must resolve through image_specs
+    /// (the build) to the same context runtime_assets hashes (the identity),
+    /// and both preview profile images must be in INIT_IMAGES.
+    #[test]
+    fn init_images_build_from_the_context_their_identity_hashes() {
+        let root = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../..");
+        for image in INIT_IMAGES {
+            let (_, context) = image_specs(&root, image)
+                .unwrap_or_else(|e| panic!("INIT_IMAGES entry {image} has no build spec: {e}"));
+            let identity = runtime_assets::image_identity(
+                &root,
+                image,
+                "0.0.0",
+                BTreeMap::new(),
+                BTreeMap::new(),
+            );
+            assert!(
+                identity.is_ok(),
+                "INIT_IMAGES entry {image} has no runtime identity context"
+            );
+            assert!(context.is_dir(), "{image}: {}", context.display());
+        }
+        for preview in ["web", "web-wrangler"] {
+            assert!(
+                INIT_IMAGES.contains(&preview),
+                "publish_local profile image {preview} is never built by init"
+            );
+        }
     }
 
     #[test]
