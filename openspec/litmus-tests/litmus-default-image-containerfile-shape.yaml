@@ -101,6 +101,15 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok:"
 
+  - step: "Req wasm32 target: the forge ships the wasm32-unknown-unknown std matching its system rustc (order 1625-grk8)"
+    # @trace order 1625-grk8: Fedora's rustc has no rustup, so `rustup target add`
+    # cannot exist; the target std is the Fedora package built from the same rust
+    # source. Pin the install, the build-time version-match refusal and the sysroot
+    # check. NEGATIVE CONTROL: a scratch copy without the install line must fail.
+    command: "set -u; chk() { grep -Fxq '        rust-std-static-wasm32-unknown-unknown \\' \"$1\" && grep -Fq 'if [ \"$rustc_v\" != \"$std_v\" ]; then' \"$1\" && grep -Fq 'lib/rustlib/wasm32-unknown-unknown/lib' \"$1\"; }; chk images/default/Containerfile.base || { echo 'FAIL: the wasm32 target std is not installed, or not version-matched to rustc'; exit 1; }; T=$(mktemp -d \"${TMPDIR:-/tmp}/grk8-cf.XXXXXX\"); grep -Fxv '        rust-std-static-wasm32-unknown-unknown \\' images/default/Containerfile.base > \"$T/cf\"; if chk \"$T/cf\"; then rm -rf \"$T\"; echo 'BROKEN: a Containerfile without the wasm32 std passed'; exit 1; fi; rm -rf \"$T\"; echo 'ok: wasm32-unknown-unknown std installed, version-matched to rustc, sysroot checked; removal rejected'"
+    timeout_ms: 3000
+    expected_behavior: "ok: wasm32-unknown-unknown std installed"
+
   - step: "Req Direct assets: NO build-time archive-extraction chains remain"
     # @trace order 188 + 180 (slice 2 + dart sub-slice): the cargo dev-tools + nextest
     # (188), actionlint/vale/wasmtime (slice 2), Dart SDK (dart sub-slice), marksman
