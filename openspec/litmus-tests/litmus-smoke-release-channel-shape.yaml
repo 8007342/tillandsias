@@ -47,13 +47,13 @@ critical_path:
     expected_behavior: "ok: base override wins"
 
   - step: "NEGATIVE CONTROL: an unknown channel is refused, not silently defaulted"
-    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-installer-channel.lua -- scripts/install.sh bogus >/dev/null 2>&1 && { echo 'FAIL: bogus channel accepted'; exit 1; }; \"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-installer-channel.lua -- scripts/install.sh bogus 2>/dev/null | grep -q '^refused:installer-channel:unknown-channel:' && echo 'ok: bogus refused'"
+    command: "o=$(\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-installer-channel.lua -- scripts/install.sh bogus 2>/dev/null) && { echo 'FAIL: bogus channel accepted'; exit 1; }; case \"$o\" in refused:installer-channel:unknown-channel:*) echo 'ok: bogus refused' ;; esac"
     timeout_ms: 3000
     expected_behavior: "ok: bogus refused"
 
   # 1614-5x7m ported the resolver to Lua; its two other refusals had no step.
   - step: "NEGATIVE CONTROL: a missing installer and a file with no REPO=..RELEASE_BASE= range are refused by name"
-    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-installer-channel.lua -- scripts/no-such-installer.sh 2>/dev/null | grep -q '^refused:installer-channel:no-installer:' && \"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-installer-channel.lua -- scripts/install-windows.ps1 2>/dev/null | grep -q '^refused:installer-channel:no-base-resolved:' && echo 'ok: missing and rangeless refused'"
+    command: "a=$(\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-installer-channel.lua -- scripts/no-such-installer.sh 2>/dev/null); b=$(\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-installer-channel.lua -- scripts/install-windows.ps1 2>/dev/null); case \"$a\" in refused:installer-channel:no-installer:*) case \"$b\" in refused:installer-channel:no-base-resolved:*) echo 'ok: missing and rangeless refused' ;; esac ;; esac"
     timeout_ms: 3000
     expected_behavior: "ok: missing and rangeless refused"
 
