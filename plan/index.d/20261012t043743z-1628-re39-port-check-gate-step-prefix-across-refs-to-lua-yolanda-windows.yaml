@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-12): one shell->lua burndown item, assigned by the coordinator.
+packets:
+  - packet_id: port-check-gate-step-prefix-across-refs-sh-to-lua-shell-to-lua-burndown
+    order: 1628-re39
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [shell-to-lua, lua, gate-steps]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-gate-step-prefix-across-refs.sh
+      - scripts/lua/check-gate-step-prefix-across-refs.lua
+      - scripts/test-gate-step-prefix-across-refs.sh
+      - scripts/gate-steps.d/730-1512-3afc-live.step
+      - scripts/portability/shell-decider-floor.txt
+      - scripts/portability/pipe-site-floor.txt
+      - scripts/portability/bare-mktemp-floor.txt
+    related: [1512-3afc]
+    title: |
+      Port scripts/check-gate-step-prefix-across-refs.sh (1512-3afc: refuse a newly added gate step whose numeric prefix trunk or another recent unlanded work ref already holds) to scripts/lua/check-gate-step-prefix-across-refs.lua
+    context: |
+      Shell-to-lua burndown (methodology convergence.yaml carried_obligations). The item is 86 lines, not a wrapper. It reads fetched remote-tracking refs with git and never fetches. It runs no podman, services or network.
+      Callers: scripts/gate-steps.d/730-1512-3afc-live.step (STEP_SCRIPT; becomes STEP_LUA, which build.sh already runs through the plan binary), and scripts/test-gate-step-prefix-across-refs.sh:20 (8 arms against a scratch clone with a bare remote) via 740-1512-3afc.step.
+      Probed on yolanda-windows: the runner has os.time for the window, and proc.run git runs in the caller's cwd, so the Lua judges the fixture's scratch clone when run from inside it.
+      All four verdicts and the stderr why/remedy lines are kept byte-identical. The seams TILLANDSIAS_STEP_PREFIX_TRUNK, TILLANDSIAS_GATE_DIFF_BASE, TILLANDSIAS_STEP_PREFIX_REFS and TILLANDSIAS_STEP_PREFIX_WINDOW_DAYS become @env.
+    exit_criteria:
+      - 'in the same run as the .sh, the Lua prints the identical verdict on the live tree'
+      - 'scripts/test-gate-step-prefix-across-refs.sh, pointed at the .sh and then at the Lua, gives identical arm results (8/8), and fails when the Lua is sabotaged'
+      - 'planted cases outside the fixture (an unfetched trunk ref, two added steps where the second collides, a prefix shared on trunk with the same basename) give identical verdicts and exit codes from both'
+      - 'the .sh is deleted, 730-1512-3afc-live.step names the Lua via STEP_LUA, its floor lines are dropped, and check-carried-obligations, check-shell-ratchet and test-shell-ratchet.lua pass'
+    unscoreable: "a port: the parity run, the fixture on both implementations and the sabotaged test are its evidence"
+    depends_on: []
+    next_action: >
+      Port the check, run the fixture against both implementations, add the planted cases, repoint the live step and the fixture, delete the .sh, drop the floors, and run the three ratchet and obligation checks.
+    provenance: |
+      Filed by yolanda-windows on macuahuitl-fedora's assignment, 2026-10-12.
+    events:
+      - type: filed
+        ts: "2026-10-12T04:37:43Z"
+        host: yolanda-windows
+        summary: |-
+          One shell->lua burndown item, check-gate-step-prefix-across-refs.sh, assigned by the coordinator after 1627-hg3t was ruled not a port.
