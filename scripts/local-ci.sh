@@ -1843,22 +1843,17 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     fi
     # Markdown distillation policy (order 599-4wzr activation): was orphaned.
     log_section "Markdown Distillation Policy"
-    if [[ -f "scripts/check-markdown-distillation.sh" ]]; then
-        # ORDER 831-ezea. This ran the checker into `tee` with NO `if`, then
-        # logged `log_pass` unconditionally. `tee` always exits 0, so the
-        # checker's exit 1 was discarded before anything could read it — the
-        # gate printed "✓ Markdown distillation policy checked (advisory)" on
-        # every run, including runs where the checker was naming noncanonical
-        # files on stderr two lines above. Same defect class as the pre-build
-        # litmus scar at the bottom of this file: a check that cannot fail.
-        #
-        # `set -o pipefail` is active (line 27), so `if <cmd> | tee` already
-        # propagates the producer's status — that is the shape used by the
-        # guard-activation audit directly above. PIPESTATUS[0] is read only to
-        # NAME the exit code in the failure message; do not read `$?` there,
-        # it is tee's.
-        bash scripts/check-markdown-distillation.sh 2>&1 | tee /tmp/markdown-distillation.log
-        _rc="${PIPESTATUS[0]}"
+    # ORDER 1632-y3ir: the checker is Lua on the one runner (it was
+    # check-markdown-distillation.sh). ORDER 831-ezea's lesson is kept: the
+    # checker's own exit status decides pass/fail. It used to run into `tee`,
+    # whose status hid the checker's exit 1; now it is captured, then shown, as
+    # the guard-activation audit above does, so no pipe stands in the way.
+    # No runnable plan binary is a missing guard, not a pass.
+    _md_plan="$( . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null )" || _md_plan=""
+    if [[ -f "scripts/lua/check-markdown-distillation.lua" && -n "$_md_plan" ]]; then
+        _rc=0
+        "$_md_plan" script run scripts/lua/check-markdown-distillation.lua > /tmp/markdown-distillation.log 2>&1 || _rc=$?
+        cat /tmp/markdown-distillation.log
         if [ "$_rc" -eq 0 ]; then
             log_pass "Markdown distillation policy checked"
             archive_check_log "markdown-distillation" "pass" /tmp/markdown-distillation.log
@@ -1868,7 +1863,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "markdown-distillation" "fail" /tmp/markdown-distillation.log
         fi
     else
-        log_fail_missing_guard "markdown-distillation" "scripts/check-markdown-distillation.sh"
+        log_fail_missing_guard "markdown-distillation" "scripts/lua/check-markdown-distillation.lua (or no runnable tillandsias-plan)"
         archive_check_log "markdown-distillation" "skipped"
     fi
 
