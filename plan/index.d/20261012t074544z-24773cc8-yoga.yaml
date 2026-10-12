@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: headless-prompting-claude-and-antigravity
+    event:
+      type: progress
+      ts: "2026-10-12T07:45:44Z"
+      agent_id: linux-yoga-claude-20261012t072342z
+      host: yoga
+      summary: |
+        SLICE 1 LANDED ON A WORK REF (2026-10-12, yoga, linux-yoga-claude-20261012t072342z): work/539 at 0bdfe4d85, draft PR https://github.com/8007342/tillandsias/pull/364 against linux-next. The row stays in_progress until the landing queue puts the merge on origin/linux-next; the closing event cites that landed sha, never 0bdfe4d85.
+        WHAT THE SLICE DOES. Both CLIs have a print mode, MEASURED on yoga with a one-word prompt (claude 2.1.296: `claude --print --verbose --output-format stream-json` ends on {"type":"result","subtype":"success","is_error":false,"result":...}; `agy --output-format stream-json --print "<text>"` ends on {"event":"result","result":{"status":"SUCCESS","response":...}}; agy's --print takes the prompt as its own value, so it goes last). Contract at the CLI seam: a prompt alone on --claude or --antigravity stays ATTENDED with the message submitted (operator directive 2026-08-31; Antigravity now takes the same shape via --prompt-interactive); the same prompt beside TILLANDSIAS_AGENT_RESULT_FORMAT=json is a DELEGATED run: no --interactive/--tty, json token forwarded, entrypoint runs print mode under harness-supervisor, agent_result.rs classifies by each CLI's terminal event (a missing is_error or a stream without the terminal event is never success). Other lanes handed a prompt are still refused loudly. Files: crates/tillandsias-headless/src/main.rs, crates/tillandsias-headless/src/agent_result.rs, images/default/entrypoint-forge-claude.sh, images/default/entrypoint-forge-antigravity.sh, openspec/litmus-tests/litmus-forge-agent-result-format.yaml (two new steps), openspec/specs/forge-as-only-runtime/spec.md (requirement text + scenario).
+        CRITERIA. (1) unattended, no TTY, no input: the delegated form on both lanes, pinned by claude_and_antigravity_prompts_are_interactive_unless_delegated. (2) structured result like the Codex lane: agent_result.rs arms, 9 new delegated_result_* tests incl. a Codex positive control. (3) fail loud for unsupported lanes: the seam guard keeps refusing (now naming --antigravity in its remedy). (4) litmus turns red on regression to interactive-only: litmus:forge-agent-result-format steps 4 and 5 (shape + unit seams); the LIVE e2e dispatch inside a real forge is NOT in this slice. (5) concurrency: Claude is GATED TO SEQUENTIAL with the reason stated on forge_worker_state_env and in the spec (the OAuth restore and approvals harvester write the default ~/.claude); filed as 1634-9suq.
+        CHECKS. cargo test launcher seams 6 passed under tray,listen-vsock; agent_result::tests 27 passed; scripts/run-litmus-test.sh forge-as-only-runtime --phase pre-build --size quick PASS 2/2; ok:manifest-dir-env:scanned=125:test=122:floor=122 (the new entrypoint pin reads CARGO_MANIFEST_DIR at runtime); cargo fmt --check clean.
+        RELAY PREFLIGHT: refused:relay-preflight:litmus:default-image, from litmus:opencode-vault-auth-content step 1 (scripts/test-opencode-vault-auth-content.sh: "FAIL: installed OpenCode rejected the isolated sentinel contract"). CONTROL: the same fixture answers the same FAIL rc=1 on untouched trunk 3111558b3 in a scratch worktree, so it is a host red (yoga's linuxbrew opencode v2.0.25), not this change; every other preflight item was green. Filed as 1634-sab8. The landing queue runs its own gate.
+        NEXT ACTION (slice 2): an e2e litmus that launches `tillandsias . --claude --prompt` and `--antigravity --prompt` under TILLANDSIAS_AGENT_RESULT_FORMAT=json in a real forge and asserts the host classifier reports Succeeded; needs a host whose vault holds Claude and Antigravity OAuth documents (not checked on yoga this cycle). Then 1634-9suq for Claude per-worker isolation.
