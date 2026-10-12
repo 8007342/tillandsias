@@ -28,6 +28,8 @@ W="$(mktemp -d "${TMPDIR:-/tmp}/probe-release-over-debug.XXXXXX")"
 trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/target/release" "$W/target/debug"
 
+# 1637-arwp: the resolver answers ABSOLUTE ($PWD at resolve time, here $W),
+# so the pins below expect $W/target/..., not ./target/... .
 answer() { (cd "$W" && unset CARGO_TARGET_DIR TILLANDSIAS_PLAN_BIN && . "$PROBE" && resolve_plan_binary) 2>/dev/null; }
 
 case "$(uname -s 2>/dev/null)" in
@@ -49,9 +51,9 @@ case "$(uname -s 2>/dev/null)" in
         else
             got="$(answer)"
             case "$got" in
-                ./target/release/tillandsias-plan.exe)
+                "$W/target/release/tillandsias-plan.exe")
                     ok "MSYS: with an unrunnable ELF at the release path, the probe answers the release .exe ($got)" ;;
-                *) bad "MSYS: the probe answered [$got], want ./target/release/tillandsias-plan.exe (pre-fix: ./target/debug/tillandsias-plan)" ;;
+                *) bad "MSYS: the probe answered [$got], want $W/target/release/tillandsias-plan.exe (pre-fix: ./target/debug/tillandsias-plan)" ;;
             esac
         fi
         echo "skip: LINUX arm needs a Linux kernel (negative control runs there)"
@@ -63,9 +65,9 @@ case "$(uname -s 2>/dev/null)" in
         done
         got="$(answer)"
         case "$got" in
-            ./target/release/tillandsias-plan)
+            "$W/target/release/tillandsias-plan")
                 ok "LINUX negative control: the order is unchanged, release extensionless answers ($got)" ;;
-            *) bad "LINUX negative control: the probe answered [$got], want ./target/release/tillandsias-plan" ;;
+            *) bad "LINUX negative control: the probe answered [$got], want $W/target/release/tillandsias-plan" ;;
         esac
         echo "skip: MSYS arm needs an MSYS kernel (it runs on Windows Git Bash)"
         ;;
