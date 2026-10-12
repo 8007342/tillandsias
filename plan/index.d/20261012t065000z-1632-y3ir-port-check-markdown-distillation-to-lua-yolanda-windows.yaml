@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-12): shell->lua port 4, shipped with the 1627-hg3t exemption commit as one PR.
+packets:
+  - packet_id: port-check-markdown-distillation-sh-to-lua-shell-to-lua-burndown
+    order: 1632-y3ir
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [shell-to-lua, lua, markdown-distillation]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-markdown-distillation.sh
+      - scripts/lua/check-markdown-distillation.lua
+      - scripts/gate-steps.d/145-1087-h2z9.step
+      - scripts/local-ci.sh
+      - scripts/portability/shell-decider-floor.txt
+      - scripts/portability/pipe-site-floor.txt
+    related: [1087-h2z9, 831-ezea, 865-q4wp, 1627-hg3t]
+    title: |
+      Port scripts/check-markdown-distillation.sh (every tracked *.md sits under an allowlisted root; 1087-h2z9 wired it into --check) to scripts/lua/check-markdown-distillation.lua, matching the .sh exactly, quirks included
+    context: |
+      Shell-to-lua burndown (methodology convergence.yaml carried_obligations). The item is a 90-line static check-*: it lists git ls-files '*.md', skips paths that are not regular files, and matches each against a bash case allowlist.
+      Callers (git grep): scripts/gate-steps.d/145-1087-h2z9.step (STEP_SCRIPT) and scripts/local-ci.sh:1846-1871 (exit code only, output teed to a log). The step's STEP_SECOND_REGIME pin quotes the ok line verbatim.
+      VERDICT GRAMMAR: the ok line "ok: markdown distillation paths" (space after the colon) is kept byte-identical through verdict.emit, which accepts it, so the regime pin and every reader stay valid. The .sh's failure path prints NOTHING on stdout (noncanonical paths and the remedy go to stderr, exit 1); the runner needs a verdict line, so the port adds violation:markdown-distillation:<n> noncanonical with exit 1. No reader keys on the failure stdout: both callers read the exit code.
+      QUIRKS TO KEEP: bash case globs let * match '/', so scripts/*/README.md admits any depth despite its comment saying "one level down"; git ls-files' '*.md' pathspec is case-sensitive (README.MD is never checked); a tracked path git quotes (non-ASCII, core.quotePath) fails the regular-file test and is skipped silently.
+      Bundled with the 1627-hg3t exemption commit (macuahuitl-fedora's ruling B): this port pays that PR's carried obligation, so the PR carries no waiver.
+    exit_criteria:
+      - 'in the same run as the .sh, the Lua check prints the identical verdict line and exit code on the real tree'
+      - 'planted cases (an allowlisted path, a noncanonical root file, scripts/a/b/README.md at depth 2, README.MD upper-case, a deleted-but-tracked .md, a symlinked .md) give identical exit codes and the same noncanonical set from the .sh and the Lua'
+      - 'gate step 145 and local-ci.sh run the Lua; the .sh is deleted, its floor lines are dropped, and check-carried-obligations (paid), check-shell-ratchet and test-shell-ratchet.lua pass'
+    unscoreable: "a port: the parity run and the planted cases are its evidence"
+    depends_on: []
+    next_action: >
+      Port the check on top of the 1627-hg3t exemption commit, run the parity matrix against the .sh, repoint gate step 145 and local-ci.sh, delete the .sh, drop the floor lines, and run the three ratchet and obligation checks.
+    provenance: |
+      Filed by yolanda-windows on macuahuitl-fedora's go, 2026-10-12.
+    events:
+      - type: filed
+        ts: "2026-10-12T06:50:00Z"
+        host: yolanda-windows
+        summary: |-
+          Shell->lua port 4, check-markdown-distillation.sh, named to the coordinator with its callers and approved.
