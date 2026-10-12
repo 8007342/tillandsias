@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # @trace order:1512-3afc
 #
-# check-gate-step-prefix-across-refs.sh against a scratch repo with a bare
+# scripts/lua/check-gate-step-prefix-across-refs.lua against a scratch repo with a bare
 # remote. Trunk holds 100-a.step. The branch under test adds 110-mine.step.
 #
 #   1  another host's RECENT unlanded ref holds 110-other.step -> refused,
@@ -17,17 +17,30 @@ set -uo pipefail
 # the gated checkout) is not its base; its scratch origin/linux-next is.
 unset TILLANDSIAS_GATE_DIFF_BASE
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CHECK="$ROOT/scripts/check-gate-step-prefix-across-refs.sh"
+# 1628-re39: the check is Lua, run through the plan binary from inside the
+# scratch clone (git runs in the caller's cwd, so it judges that clone).
+CHECK="$ROOT/scripts/lua/check-gate-step-prefix-across-refs.lua"
+PLAN_BIN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary)" || {
+    echo "could-not-run:gate-step-prefix-across-refs-fixture:no-plan-binary"
+    exit 3
+}
+# the probe may answer repo-relative; the arms run from the scratch clone
+case "$PLAN_BIN" in /*|[A-Za-z]:*) ;; *) PLAN_BIN="$ROOT/${PLAN_BIN#./}" ;; esac
+chk() { "$PLAN_BIN" script run "$CHECK"; }
 pass=0; fail=0
 ok()  { echo "ok:   $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1"; fail=$((fail+1)); }
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/step-prefix-refs.XXXXXX")"
 trap 'rm -rf "$W"' EXIT
+# The runner's proc.run audit log defaults to <checkout>/.cache/metrics/
+# (1443-w9hf); here the checkout is the scratch clone, whose `add -A` would
+# commit it and whose next checkout then aborts on it. Keep it beside the clone.
+export TILLANDSIAS_POLICY_AUDIT_LOG="$W/command-policy-audit.jsonl"
 export GIT_TERMINAL_PROMPT=0
 G() { git -c user.email=t@t -c user.name=t "$@"; }
 step() { mkdir -p scripts/gate-steps.d; printf 'STEP_SCRIPT="scripts/x.sh"\n' > "scripts/gate-steps.d/$1"; }
-run() { bash "$CHECK" 2>"$W/err"; }
+run() { chk 2>"$W/err"; }
 
 git init -q --bare "$W/bare.git"
 git init -q -b linux-next "$W/wc"; cd "$W/wc" || exit 2
@@ -82,7 +95,7 @@ out="$(run)"; rc=$?
 case "$rc:$out" in 0:ok:*) ok "arm 4: a holder older than the window is ignored";; *) bad "arm 4: rc=$rc [$out]";; esac
 # arm 4's control: widen the window and the same old ref IS a holder, so the
 # pass above came from the window and not from the ref being invisible
-out="$(TILLANDSIAS_STEP_PREFIX_WINDOW_DAYS=100000 bash "$CHECK" 2>/dev/null)"; rc=$?
+out="$(TILLANDSIAS_STEP_PREFIX_WINDOW_DAYS=100000 chk 2>/dev/null)"; rc=$?
 case "$rc:$out" in 1:refused:gate-step-prefix-across-refs:130-mine.step:origin/work/old:130-old.step) ok "arm 4 control: with the window widened the old ref refuses";; *) bad "arm 4 control: rc=$rc [$out]";; esac
 G mv scripts/gate-steps.d/130-mine.step scripts/gate-steps.d/150-mine.step; G commit -qm to150
 step 145-x.step; G add -A; G commit -qm extra
