@@ -1,0 +1,34 @@
+# Filed at the coordinator's request (2026-10-12, side finding from 1616-njfd's preflight; file only).
+packets:
+  - packet_id: a-guard-killed-at-the-door-deadline-leaves-its-declared-in-checkout-mutant-copies-and-check-bare-mktemp-then-false-refuses-the-tree-depending-on-order
+    order: 1630-dwab
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [preflight, hygiene, fixtures, darwin-regime]
+    estimated_hours: 2
+    owned_files:
+      - build.sh
+    title: |
+      When the preflight door KILLs scripts/test-awk-float-lc-numeric.sh at its deadline, the fixture's .mutant-lcnum-* copies stay in scripts/ (the declared in-checkout writer of 1587). A later guard in the same run, check-bare-mktemp.lua, then refuses the tree on the copies' bare mktemp sites. So one guard's kill false-refuses another, depending on order.
+    context: |
+      MEASURED (tlatoanis-macbook-air, 2026-10-12, taskpolicy -b ./build.sh --preflight on work/1616-njfd): the summary was refused:preflight:ran=158 could-not-run=1 refused=1. could-not-run was awk-float-lc-numeric-signal (killed). The refusal was check-bare-mktemp.lua with violation:bare-mktemp:new-site:scripts/.mutant-lcnum-select-work-batch.sh:4>floor:0, with sites in .mutant-lcnum-freshness-inventory.sh and refusal-calibration/.mutant-lcnum-measure-bands.sh. The copies were gone by the next run, which on the same tree said refused=0 (ran=168 could-not-run=0 wall=362s).
+      WHY IT LEAKS: the fixture's copies must sit beside the producers they copy (scripts/portability/checkout-writers.txt line 6), so they are named .mutant-lcnum-<basename> next to each producer, with no pid in the name. Its TERM/INT/HUP traps clean up, but nothing survives the door's KILL after the grace. That is the 1618-baia shape, with a declared in-checkout pattern where 1618 had a per-pid subdir.
+      COORDINATOR RULING (macuahuitl, 2026-10-12): fix it on the door side. On a kill, the door sweeps the killed guard's DECLARED in-checkout artifacts; awk-float-lc-numeric is the one kept writer, so its pattern is known. Do not make check-bare-mktemp skip .mutant-*: that would only hide the next variant.
+    exit_criteria:
+      - 'the kill fixture against awk-float-lc-numeric (TERM, grace, KILL, the 1618 ARM shape) leaves no .mutant-* copies on the fixed door and leaves them on the trunk door (the same function with the new sweep removed), and a check-bare-mktemp run after the fixed-door kill says ok, all in one run'
+    unscoreable: "unpinnable-until-the-guard-exists: the sweep and its kill fixture are written together"
+    depends_on: []
+    related: [1618-baia, 1616-njfd, 1619-7i9r, 1587-qqzs]
+    next_action: >
+      In _pf_run_guard's killed path (beside _pf_sweep_fixture_scratch), remove the killed guard's declared in-checkout artifacts. Read the declaration from scripts/portability/checkout-writers.txt, or add a pattern column there, so the door knows .mutant-lcnum-* next to producers without hard-coding it. Remove by literal paths from a git ls-files --others listing, never a glob rm. Write the kill fixture by extracting _pf_run_guard, as test-door-fixture-scratch-sweep.lua does.
+    provenance: |
+      Filed by tlatoanis-macbook-air on macuahuitl's go, 2026-10-12.
+    events:
+      - type: filed
+        ts: "2026-10-12T06:45:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          A guard killed at the door deadline leaves its declared .mutant-lcnum-* copies in scripts/, and check-bare-mktemp then false-refuses the tree, depending on order. The door should sweep them on kill.

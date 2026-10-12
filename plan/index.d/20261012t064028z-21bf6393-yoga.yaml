@@ -1,0 +1,16 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: land-queue-eviction-comment-quotes-every-non-ok-verdict-prefix-could-not-run-degraded-down-and-lowercase-fail-not-only-fail-refused-violation-blocked
+    field: next_action
+    value: |-
+      Add the four tests to the awk verdict sum and the arm, on work/1613-bpd3; show the arm red on the old builder and green on the new.
+
+
+      [2026-10-12T06:40:28Z yoga] RELEASED by yoga 2026-10-12T06:36Z (wip-limit remedy, 1367-2sbc). Claimed 2026-10-11T20:28Z by a yoga forge session that folded it into its local work/1613-bpd3; that forge exited without pushing and no ref carries the change (GitHub, yoga mirror, forge cache all checked 2026-10-12). The FAIL-lines builder in scripts/land-queue.sh still lacks could-not-run, degraded, down and fail at trunk 5bd16d347. Redo from the original next_action.
+    ts: "2026-10-12T06:40:28Z"
+    host: yoga

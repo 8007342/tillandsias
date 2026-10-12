@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-command-policy-bridge-does-not-count-darwins-per-user-temp-dir-as-scratch-so-cleaning-what-bare-mktemp-leaked-there-asks-the-operator
+    event:
+      type: note
+      ts: "2026-10-12T06:30:39Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t063039z
+      host: tlatoanis-macbook-air
+      summary: |-
+        Landed #350 as abd17bcec (land-queue run 39, gate green). The literal-form criterion (an rm whose target is spelled as a command substitution of getconf DARWIN_USER_TEMP_DIR) was met by the EXPANDED form: the bridge now counts the confstr(_CS_DARWIN_USER_TEMP_DIR) directory, in both its /var and /private/var spellings, as a scratch root (tests darwin_user_temp_dir_is_a_scratch_root and darwin_user_temp_dir_matches_getconf). The command-substitution spelling itself stays refused as unresolvable-rm-target, because the hook judges argv before the shell expands it and an unexpanded target cannot be proven inside a scratch root. The coordinator accepted this reading.
