@@ -214,6 +214,25 @@ enter container argv or mounts. The idiomatic Podman layer MUST capture stdout
 produced by that invocation and return its real process exit status while the
 existing TUI API continues to inherit stdout.
 
+The Claude and Antigravity lanes are delegable under the same two conditions
+(order 539). A nonblank prompt ALONE on either lane MUST open an attended
+session with the prompt submitted as its initial message (`claude <prompt>`,
+`agy --prompt-interactive <prompt>`), keeping its TTY: that is the
+coordinator's launch-a-sibling-and-direct-it hook (operator directive
+2026-08-31). The same prompt beside `TILLANDSIAS_AGENT_RESULT_FORMAT=json`
+MUST run headless with no TTY (`claude --print --verbose --output-format
+stream-json`, `agy --output-format stream-json --print`) under the forge crash
+supervisor, and the launcher MUST propagate only the result-format token, as
+for the other two lanes. The host classifier MUST evidence success only by
+each CLI's own terminal event (Claude: `type: result` with `is_error: false`
+and `subtype: success`; Antigravity: `event: result` with `result.status:
+SUCCESS`); a transcript without that event, or whose `is_error` is absent,
+MUST NOT read as done. Any other lane handed a prompt MUST refuse the launch
+rather than drop the prompt. Concurrent delegated Claude workers on one forge
+host are NOT isolated from each other (the credential and approvals writers
+target the default `~/.claude`), so a dispatcher MUST run them sequentially
+until that isolation exists.
+
 Current-run capture has these conservative rules:
 
 - Codex assistant text comes from
@@ -273,6 +292,21 @@ host MUST never read that path as outcome evidence.
   fallback
 - **AND** sibling workers MUST remain alive
 - **AND** the outcome MUST be `TIMED OUT`, never success
+
+#### Scenario: A Claude or Antigravity prompt is attended unless delegated
+
+- **WHEN** `--claude --prompt <text>` or `--antigravity --prompt <text>`
+  launches with `TILLANDSIAS_AGENT_RESULT_FORMAT` absent
+- **THEN** the container claims a TTY and the entrypoint submits the prompt to
+  an interactive session that stays attached
+- **WHEN** the same launch carries `TILLANDSIAS_AGENT_RESULT_FORMAT=json`
+- **THEN** the container claims no TTY, the entrypoint runs the CLI's print
+  mode with a stream-json transcript under the crash supervisor, and the host
+  classifies the run by the CLI's terminal event alone
+- **AND** a transcript that ends without that terminal event is
+  `INDETERMINATE`, never success
+- **AND** a `--maintenance` launch handed a prompt is refused before any
+  container is created
 
 ### Requirement: Host Terminal Is the Only Host-Side Process
 <!-- req-id: 8022bb1b -->

@@ -7556,6 +7556,17 @@ fn forge_container_name_for_mode(project_name: &str, mode: ForgeAgentMode) -> St
 /// overlay and silently drop the lane's permissive defaults. Config is shared
 /// read-only input; the documented races are in mutable state (OpenCode's
 /// unlocked `auth.json`, Codex's truncate-then-write `auth.json` and SQLite).
+///
+/// CLAUDE HAS NO PER-WORKER ISOLATION HERE, stated rather than discovered
+/// (order 539, criterion 5). `claude` reads `$CLAUDE_CONFIG_DIR` (default
+/// `~/.claude`) for its config AND its `.credentials.json`, and two forge
+/// writers target that default location: the OAuth restore
+/// (`provider-oauth-vault`, `TILLANDSIAS_CLAUDE_AUTH_FILE`) and the approvals
+/// harvester (`claude-approvals-vault`). Redirecting the directory per worker
+/// without moving both writers would start a worker with NO credential and
+/// harvest nothing. Until that is closed, concurrent Claude workers on one
+/// forge host are GATED TO SEQUENTIAL: a dispatcher launches one delegated
+/// Claude run at a time. Codex and OpenCode keep the isolation below.
 fn forge_worker_state_env(instance: Option<&str>) -> Vec<(String, String)> {
     let raw_worker = instance.unwrap_or("");
     let worker = sanitize_forge_instance(raw_worker);
@@ -18270,9 +18281,16 @@ fn build_forge_agent_run_args_with_vault(
     // like the OpenCode CLI prompt path, it must NOT claim a TTY, or podman
     // refuses with "input device is not a TTY" / the child stops (T-state)
     // when the parent is a background/e2e harness rather than a live terminal.
-    // A prompt-driven CLAUDE run is the opposite: the prompt is the initial
-    // message of an INTERACTIVE session, so it keeps its TTY.
-    let non_interactive_prompt = prompt.is_some() && matches!(mode, ForgeAgentMode::Codex);
+    // A prompt-driven CLAUDE or ANTIGRAVITY run is the opposite BY DEFAULT: the
+    // prompt is the initial message of an INTERACTIVE session, so it keeps its
+    // TTY (operator directive 2026-08-31). Order 539: those two lanes run
+    // HEADLESS instead — `claude --print` / `agy --print`, no TTY — when the
+    // caller asked for a DELEGATED run (TILLANDSIAS_AGENT_RESULT_FORMAT=json
+    // beside the prompt), which is the dispatcher's contract on every lane.
+    let non_interactive_prompt = prompt.is_some()
+        && (matches!(mode, ForgeAgentMode::Codex)
+            || (matches!(mode, ForgeAgentMode::Claude | ForgeAgentMode::Antigravity)
+                && delegated_json_requested(prompt)));
     let mut spec = ContainerSpec::new(image)
         .name(forge_container_name_for_mode(project_name, mode))
         .hostname(forge_hostname(project_name))
@@ -18480,14 +18498,32 @@ fn build_forge_agent_run_args_with_vault(
             spec = spec.env("TILLANDSIAS_AGENT_RESULT_FORMAT", "json");
         }
     }
-    // Interactive initial prompt for the Claude lane (2026-08-31): the
-    // entrypoint appends this as claude's positional argument, which starts
-    // the interactive session with the message already submitted — the
-    // coordinator's "report for directions" hook.
+    // Claude lane prompt (2026-08-31, extended by order 539). Without a
+    // delegated-run request the entrypoint appends this as claude's positional
+    // argument, which starts the interactive session with the message already
+    // submitted — the coordinator's "report for directions" hook. With
+    // TILLANDSIAS_AGENT_RESULT_FORMAT=json the entrypoint runs
+    // `claude --print --output-format stream-json "<prompt>"` instead: no
+    // TTY, and a JSONL transcript the dispatcher classifies (agent_result.rs).
     if let Some(prompt) = prompt
         && matches!(mode, ForgeAgentMode::Claude)
     {
         spec = spec.env("TILLANDSIAS_CLAUDE_PROMPT", prompt);
+        if delegated_json_requested(Some(prompt)) {
+            spec = spec.env("TILLANDSIAS_AGENT_RESULT_FORMAT", "json");
+        }
+    }
+    // Antigravity lane prompt (order 539), the Claude shape: the entrypoint
+    // runs `agy --prompt-interactive "<prompt>"` (attended, TTY) unless a
+    // delegated run was requested, when it runs
+    // `agy --output-format stream-json --print "<prompt>"` (no TTY).
+    if let Some(prompt) = prompt
+        && matches!(mode, ForgeAgentMode::Antigravity)
+    {
+        spec = spec.env("TILLANDSIAS_ANTIGRAVITY_PROMPT", prompt);
+        if delegated_json_requested(Some(prompt)) {
+            spec = spec.env("TILLANDSIAS_AGENT_RESULT_FORMAT", "json");
+        }
     }
 
     for (name, value) in
@@ -18875,18 +18911,30 @@ fn run_forge_agent_cli_mode(
     debug: bool,
 ) -> Result<(), String> {
     // Prompt support is per-lane and the SEMANTICS differ (operator
-    // directive 2026-08-31, the coordinator-mints-its-own-workers wiring):
-    //   Codex  — non-interactive `codex exec "<prompt>"`, no TTY.
-    //   Claude — INTERACTIVE session with the prompt submitted as the
-    //            initial message; the session stays attached (the tray/
-    //            ptyxis-window pattern) and reachable over remote control,
-    //            so a coordinator can launch a sibling forge agent and
-    //            direct it afterward.
+    // directive 2026-08-31, the coordinator-mints-its-own-workers wiring;
+    // order 539 added Antigravity and the headless form):
+    //   Codex       — non-interactive `codex exec "<prompt>"`, no TTY.
+    //   Claude      — INTERACTIVE session with the prompt submitted as the
+    //                 initial message; the session stays attached (the tray/
+    //                 ptyxis-window pattern) and reachable over remote
+    //                 control, so a coordinator can launch a sibling forge
+    //                 agent and direct it afterward.
+    //   Antigravity — the Claude shape (`agy --prompt-interactive`).
+    //   Any lane    — with TILLANDSIAS_AGENT_RESULT_FORMAT=json the prompt
+    //                 is a DELEGATED run: headless, no TTY, stdout captured
+    //                 and classified by agent_result.rs (`claude --print`,
+    //                 `agy --print`, and the Codex/OpenCode JSON forms).
     // Other lanes ignore a prompt; fail loud rather than silently drop it.
-    if prompt.is_some() && !matches!(mode, ForgeAgentMode::Codex | ForgeAgentMode::Claude) {
+    if prompt.is_some()
+        && !matches!(
+            mode,
+            ForgeAgentMode::Codex | ForgeAgentMode::Claude | ForgeAgentMode::Antigravity
+        )
+    {
         return Err(format!(
             "{flag} does not support --prompt; \
-             use --claude --prompt, --codex --prompt, or --opencode --prompt"
+             use --claude --prompt, --codex --prompt, --antigravity --prompt, \
+             or --opencode --prompt"
         ));
     }
     let delegated = delegated_run_config(prompt)?;
@@ -29639,6 +29687,153 @@ esac
         assert!(
             entry.contains("--dangerously-bypass-approvals-and-sandbox"),
             "codex entrypoint must keep the forge-gated bypass flag"
+        );
+    }
+
+    /// Order 539. A prompt-driven CLAUDE lane keeps its TTY and injects the
+    /// prompt env (the 2026-08-31 interactive-initial-message contract) —
+    /// UNLESS the caller asked for a delegated run, when it launches
+    /// non-interactively like the Codex lane and also forwards the JSON result
+    /// format the entrypoint branches on for `claude --print`. Antigravity
+    /// takes the same two shapes under its own prompt env.
+    #[test]
+    fn claude_and_antigravity_prompts_are_interactive_unless_delegated() {
+        let _pseam = podman_false_seam();
+        let _env = env_lock();
+        let restore = TestEnvRestore::capture(&["TILLANDSIAS_AGENT_RESULT_FORMAT"]);
+        restore.remove("TILLANDSIAS_AGENT_RESULT_FORMAT");
+        let prompt = "report to the coordinator for directions";
+        let build = |mode: ForgeAgentMode| {
+            build_forge_agent_run_args_with_vault(
+                &PathBuf::from("/tmp/project"),
+                // 1119-w2rj: a real on-disk checkout in this test.
+                Some(&PathBuf::from("/tmp/project")),
+                None,
+                "alpha",
+                None,
+                &PathBuf::from("/tmp/ca"),
+                "1.2.3",
+                mode,
+                false,
+                None,
+                Some(prompt),
+                false,
+                &test_cache_root(),
+            )
+        };
+
+        let attended = build(ForgeAgentMode::Claude);
+        assert!(
+            has_arg(&attended, &format!("TILLANDSIAS_CLAUDE_PROMPT={prompt}")),
+            "claude prompt run must inject TILLANDSIAS_CLAUDE_PROMPT; args={attended:?}"
+        );
+        assert!(
+            has_arg(&attended, "--tty") && has_arg(&attended, "--interactive"),
+            "an attended claude prompt keeps its TTY (2026-08-31); args={attended:?}"
+        );
+        assert!(
+            !has_arg(&attended, "TILLANDSIAS_AGENT_RESULT_FORMAT=json"),
+            "no delegated request, no result format; args={attended:?}"
+        );
+        let agy_attended = build(ForgeAgentMode::Antigravity);
+        assert!(
+            has_arg(
+                &agy_attended,
+                &format!("TILLANDSIAS_ANTIGRAVITY_PROMPT={prompt}")
+            ) && has_arg(&agy_attended, "--tty"),
+            "an attended antigravity prompt is interactive with its own env; args={agy_attended:?}"
+        );
+        assert!(
+            !has_arg(&agy_attended, "TILLANDSIAS_AGENT_RESULT_FORMAT=json"),
+            "no delegated request, no result format; args={agy_attended:?}"
+        );
+
+        restore.set("TILLANDSIAS_AGENT_RESULT_FORMAT", "json");
+        for (mode, env_name) in [
+            (ForgeAgentMode::Claude, "TILLANDSIAS_CLAUDE_PROMPT"),
+            (
+                ForgeAgentMode::Antigravity,
+                "TILLANDSIAS_ANTIGRAVITY_PROMPT",
+            ),
+        ] {
+            let delegated = build(mode);
+            assert!(
+                has_arg(&delegated, &format!("{env_name}={prompt}")),
+                "{mode:?} delegated run must inject {env_name}; args={delegated:?}"
+            );
+            assert!(
+                has_arg(&delegated, "TILLANDSIAS_AGENT_RESULT_FORMAT=json"),
+                "{mode:?} delegated run must forward the JSON result format; args={delegated:?}"
+            );
+            assert!(
+                !has_arg(&delegated, "--tty") && !has_arg(&delegated, "--interactive"),
+                "{mode:?} delegated run must be non-interactive; args={delegated:?}"
+            );
+            assert!(
+                !delegated.iter().any(|a| a.starts_with("TERM=")),
+                "a lane with no TTY must not pin a terminal identity; args={delegated:?}"
+            );
+        }
+        restore.remove("TILLANDSIAS_AGENT_RESULT_FORMAT");
+    }
+
+    /// Order 539: the Claude and Antigravity entrypoints must branch to a
+    /// headless `--print` run when (and only when) the delegated JSON result
+    /// format rides beside the prompt, keep their forge-gated bypass flags,
+    /// and run that branch under the crash supervisor (767-nkkq). Source-shape
+    /// pin, read at runtime so the compile-time CARGO_MANIFEST_DIR floor
+    /// (1610-d6ra) does not grow.
+    #[test]
+    fn claude_and_antigravity_entrypoints_have_headless_print_paths() {
+        let root = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        );
+        let read = |name: &str| {
+            std::fs::read_to_string(root.join("../../images/default").join(name))
+                .unwrap_or_else(|e| panic!("read {name}: {e}"))
+        };
+        let json_gate = r#"[ "${TILLANDSIAS_AGENT_RESULT_FORMAT:-}" = "json" ]"#;
+
+        let claude = read("entrypoint-forge-claude.sh");
+        assert!(
+            claude.contains("TILLANDSIAS_CLAUDE_PROMPT") && claude.contains(json_gate),
+            "claude entrypoint must branch on the prompt AND the json result format"
+        );
+        assert!(
+            claude.contains("--print --verbose --output-format stream-json"),
+            "claude headless branch must run print mode with the stream-json transcript"
+        );
+        assert!(
+            claude.contains("harness-supervisor claude"),
+            "claude headless branch must be crash-supervised"
+        );
+        assert!(
+            claude.contains("--dangerously-skip-permissions"),
+            "claude entrypoint must keep the forge-gated bypass flag"
+        );
+
+        let agy = read("entrypoint-forge-antigravity.sh");
+        assert!(
+            agy.contains("TILLANDSIAS_ANTIGRAVITY_PROMPT") && agy.contains(json_gate),
+            "antigravity entrypoint must branch on the prompt AND the json result format"
+        );
+        assert!(
+            agy.contains(
+                r#"--output-format stream-json --print "$TILLANDSIAS_ANTIGRAVITY_PROMPT""#
+            ),
+            "antigravity headless branch must pass the prompt as --print's own value, last"
+        );
+        assert!(
+            agy.contains(r#"--prompt-interactive "$TILLANDSIAS_ANTIGRAVITY_PROMPT""#),
+            "antigravity attended branch must submit the prompt interactively"
+        );
+        assert!(
+            agy.contains("harness-supervisor antigravity"),
+            "antigravity headless branch must be crash-supervised"
+        );
+        assert!(
+            agy.contains("--dangerously-skip-permissions"),
+            "antigravity entrypoint must keep the forge-gated bypass flag"
         );
     }
 

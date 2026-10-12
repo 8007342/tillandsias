@@ -144,7 +144,31 @@ fi
 
 # ── Launch Antigravity ──────────────────────────────────────
 trace_lifecycle "entrypoint" "antigravity launching"
-trace_lifecycle "exec" "launching agy"
 export TILLANDSIAS_OAUTH_PROVIDER=antigravity
 export TILLANDSIAS_CODEX_VAULT_HELPER=/usr/local/bin/provider-oauth-vault
+# Order 539: a prompt threaded from `tillandsias <project> --antigravity
+# --prompt "<text>"` follows the Claude lane's shape. Alone it opens the
+# INTERACTIVE session with the message submitted (`agy --prompt-interactive`
+# is a string flag: with no value agy answers "flag needs an argument").
+# Under TILLANDSIAS_AGENT_RESULT_FORMAT=json it is a DELEGATED run:
+# `agy --output-format stream-json --print "<text>"` (headless; the launcher
+# already dropped --interactive/--tty). `--print` takes the prompt as ITS OWN
+# value, so it goes LAST — placed before another flag, agy reads that flag as
+# the prompt and refuses. The stream's LAST line is
+# `{"event":"result","result":{"status":"SUCCESS"|...,"response":"<text>",
+# ...}}` after `init` and `step_update` events (measured 2026-10-12). The host
+# captures stdout and agent_result.rs classifies it. Crash-supervised like the
+# other headless lanes (767-nkkq): a runtime fault is a loud
+# `fail:harness-crashed:...` line and a truthful nonzero exit, never a restart.
+if [ -n "${TILLANDSIAS_ANTIGRAVITY_PROMPT:-}" ] && [ "${TILLANDSIAS_AGENT_RESULT_FORMAT:-}" = "json" ]; then
+    trace_lifecycle "exec" "launching agy --print (non-interactive, order 539)"
+    export TILLANDSIAS_CRASH_LAST_OUTPUT="/tmp/forge-lifecycle.log"
+    exec /usr/local/bin/harness-supervisor antigravity \
+        /usr/local/bin/codex-oauth-session -- \
+        agy "${agy_forge_args[@]}" --output-format stream-json --print "$TILLANDSIAS_ANTIGRAVITY_PROMPT"
+fi
+trace_lifecycle "exec" "launching agy"
+if [ -n "${TILLANDSIAS_ANTIGRAVITY_PROMPT:-}" ]; then
+    agy_forge_args+=(--prompt-interactive "$TILLANDSIAS_ANTIGRAVITY_PROMPT")
+fi
 exec /usr/local/bin/codex-oauth-session -- agy "${agy_forge_args[@]}" "$@"
