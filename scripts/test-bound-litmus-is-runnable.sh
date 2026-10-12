@@ -45,7 +45,7 @@ cd "$ROOT" || exit 2
 RUNNER="scripts/run-litmus-test.sh"
 [ -x "$RUNNER" ] || { echo "blocked:no-runner"; exit 2; }
 
-D="$(mktemp -d)"; trap 'rm -rf "$D"' EXIT
+D="$(mktemp -d "${TMPDIR:-/tmp}/test-bound-litmus-is-runnable.XXXXXX")"; trap 'rm -rf "$D"' EXIT
 
 # The synthetic names are ASSEMBLED rather than spelled, so this file contains
 # no literal pin token. check-litmus-pin-claims.sh (721-77yu) scans scripts for

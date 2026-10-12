@@ -1,0 +1,11 @@
+# Gate step 1619-7i9r — the bare-mktemp counter's arms on constructed roots, and
+# one converted site (test-capture-helper.sh) measured on the host: the
+# converted call lands in the TMPDIR it was given; on darwin the bare call from
+# before the conversion lands outside it, in the same run.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the bare-mktemp counter and a converted site (1619-7i9r)"
+STEP_LUA="scripts/lua/test-bare-mktemp.lua"
+STEP_ERROR="the bare-mktemp counter or the converted site no longer does what its fixture constructs (1619-7i9r) — see the FAIL lines above"
+STEP_OK="Bare-mktemp counter and conversion fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-11 darwin ok:bare-mktemp-fixture:7 arms"

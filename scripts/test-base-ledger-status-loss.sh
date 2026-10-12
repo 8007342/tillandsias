@@ -18,7 +18,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHECK="$ROOT/scripts/check-base-ledger-status-loss.sh"
 PROBE="$ROOT/scripts/plan-binary-probe.sh"
-WORK="$(mktemp -d)"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/test-base-ledger-status-loss.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
 fail() { echo "FAIL: $*" >&2; exit 1; }

@@ -26,7 +26,7 @@ pass=0; fail=0
 ok()   { pass=$((pass+1)); echo "  PASS  $1"; }
 bad()  { fail=$((fail+1)); echo "  FAIL  $1"; echo "        $2"; }
 
-WORK="$(mktemp -d)"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/test-added-test-is-referenced.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
 # --- a hermetic repo with the same shape as the real one --------------------
