@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-12) from the v56.10.12.1 end-user install review on yolanda-windows.
+packets:
+  - packet_id: the-windows-installer-prints-install-paths-a-probe-binary-path-a-commit-hash-a-registration-line-and-an-empty-pending-actions-box-that-a-non-technical-user-should-not-see
+    order: 1639-8gfw
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [installer, end-user, ux, guard, windows]
+    estimated_hours: 3
+    owned_files:
+      - scripts/install-windows.ps1
+      - scripts/lua/check-installer-end-user-output.lua
+    related: [1561-47a8, 1560-uam3, 1380-zmpi]
+    depends_on: []
+    title: |
+      The Windows installer still prints power-user detail on the normal path (install path, capability probe binary path, Start Menu .lnk path, the tray version line with its commit hash, "Registered in Installed Software (v...)") and a five-line PENDING ACTIONS box that only says "PENDING: none"; the end-user-output guard passes them because its diagnostic vocabulary covers only flags, TILLANDSIAS_ variables, URLs and channels
+    context: |
+      Seen on a real end-user install of v56.10.12.1 (irm|iex, unstable channel) on yolanda-windows, 2026-10-12, and checked against current trunk. This breaks the operator ruling of 2026-10-08 (end-user installer, no power-user output; quoted verbatim in 20261008t210344z-1560-installer-prompts-yolanda-windows.yaml). Lines, by current trunk scripts/install-windows.ps1:
+        1. "wsl-swap: <GB free> ... swap=8GB ..." printed before the header: ALREADY FIXED on trunk by 1560-uam3 (#377, all wsl-swap detail now goes to Log). Dropped from this row.
+        2. Say "Install path: <path>".
+        3. Say "  capability probe binary: <path>".
+        4. SayOk "Start Menu shortcut: <.lnk path>" (and the Startup entry line beside it).
+        5. SayOk of the tray --version line, which carries the build commit hash.
+        6. SayOk "Registered in Installed Software (v<version>)."
+        7. Format-PendingBanner prints a 64-column box reading "PENDING: none" when nothing is pending.
+      scripts/lua/check-installer-end-user-output.lua passed all of these (floor 0, 1561-47a8 completed) because its DIAG pattern matches only --flags, TILLANDSIAS_, URLs, channel and base: paths, probe names, hashes and registration text are outside it.
+      On item 7: 1380-zmpi printed "PENDING: none" rather than omitting it "because silence and nothing pending produce the same bytes". This row resolves that in favour of the later end-user ruling (coordinator direction 2026-10-12: print the box only when something is pending). The installer's last line ("Tray started. Look for the Tillandsias icon...") already tells the user the install finished, and the fixture tells absence from a missing banner by asserting a positive end-of-install marker.
+    exit_criteria:
+      - 'the detail of items 2-6 (paths, probe binary, commit hash, registration) goes to the install log; at most a one-line plain version stays on screen'
+      - 'the PENDING ACTIONS box prints only when at least one action is pending; with none, nothing banner-shaped is printed'
+      - 'check-installer-end-user-output.lua refuses each of items 2-7 by file:line, red on trunk before the fix and ok after it, with a fixture arm per item'
+      - 'the macOS and Linux installers are unchanged (their own 1561 slices own them)'
+    unscoreable: "an end-user output fix: its evidence is the guard red on trunk and green on the fix, plus a captured install transcript"
+    next_action: >
+      Extend the guard's vocabulary first and confirm it is red on trunk once per item, then move each line to Log.
+    provenance: |
+      Filed by yolanda-windows at macuahuitl-fedora's request, 2026-10-12, after the 776-drwr live install. The transcript is kept in the checkout at target/work/776/install.log.
+    events:
+      - type: filed
+        ts: "2026-10-12T19:03:50Z"
+        host: yolanda-windows
+        summary: |-
+          Windows installer prints paths, a commit hash, a registration line and an empty PENDING box; the end-user-output guard misses them.
