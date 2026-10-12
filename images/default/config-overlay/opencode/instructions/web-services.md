@@ -18,7 +18,12 @@ Two distinct web flows exist — pick by the user's intent:
      lane's live worktree and returns its actual local preview URL. `auto` is
      the default; `static` and `wrangler` are the only explicit choices.
      Re-publishing reconciles the same service.
-   - `service_status {}` — the published service's state.
+   - `service_status {}` — the published service's state, and after a
+     failed publish its `last_failure`: step, reason, time and `remedy`
+     (`agent`: fix or build the project; `host-retry`: call again;
+     `operator`: tell the user). A `source_not_found` reason names what
+     the host looked for; when it says an assets directory does not exist
+     yet, build the project first, then publish again.
    - `service_reload {"category": "WEB"}` — restart/reload the existing
      preview runtime while retaining its authenticated lane and live source.
    - `service_stop {"category": "WEB"}` — stop it and remove its route.
