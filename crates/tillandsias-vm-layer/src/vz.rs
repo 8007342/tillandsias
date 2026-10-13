@@ -2319,6 +2319,43 @@ pub fn read_from(path: &std::path::Path, offset: usize) -> Option<Vec<u8>> {
 /// The drain-timeout refusal, naming the VZ state the drain gave up in
 /// (1642-cc54): 0 of 13 tray quits on darwin drained cleanly, and the old
 /// message could not say whether the guest or the host was the one waiting.
+/// 1642-cc54 criterion 5. One poll of `stop()`'s drain loop, decided without
+/// VZ so a test can pin which outcomes count as a CLEAN stop. Order matters
+/// and is the loop's: VZ reporting Stopped first, then the guest's
+/// token-confirmed clean power-off, then the deadline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StopPoll {
+    Stopped,
+    CleanOffReported,
+    TimedOut,
+    Wait,
+}
+
+impl StopPoll {
+    /// Only these two leave a disk that may be booted as clean. A drain that
+    /// TIMED OUT is force-stopped mid-shutdown: its `vm-running.marker` must
+    /// survive, so the next launch rebuilds instead of booting that disk.
+    pub fn disk_is_clean(self) -> bool {
+        matches!(self, StopPoll::Stopped | StopPoll::CleanOffReported)
+    }
+}
+
+pub fn classify_stop_poll(
+    vz_state: isize,
+    clean_off_reported: bool,
+    past_deadline: bool,
+) -> StopPoll {
+    if vz_state == 0 {
+        StopPoll::Stopped
+    } else if clean_off_reported {
+        StopPoll::CleanOffReported
+    } else if past_deadline {
+        StopPoll::TimedOut
+    } else {
+        StopPoll::Wait
+    }
+}
+
 pub fn drain_timeout_message(drain_timeout: std::time::Duration, state: isize) -> String {
     format!(
         "VzRuntime::stop: drain_timeout ({}s) expired in VZ state {} ({state}); force-stop dispatched",
@@ -3594,28 +3631,30 @@ impl VmRuntime for VzRuntime {
             // VZ state enum: 0=Stopped, 1=Running, 2=Paused, 3=Error, 4=Starting,
             // 5=Pausing, 6=Resuming, 7=Stopping, 8=Saving, 9=Restoring.
             let state = on_vm_queue(vm, |vm| unsafe { vm.state() }.0)?;
-            if state == 0 {
-                // Stopped cleanly.
-                mark_vm_stopped_cleanly(&self.image_root);
-                break Ok(());
-            }
             // 1642-cc54: the guest's systemd-shutdown hook reported, with this
             // boot's token and after our request, that every filesystem is
             // unmounted and `/` is read-only. Its kernel then stalls in the
             // power-off for ~53 s (measured: VZ stays Running), so finish the
             // stop now. The disk is clean, so this force-stop is a clean stop.
-            if read_from(&console_path, console_from)
-                .is_some_and(|tail| clean_off_reported(&tail, 0, &token))
-            {
-                force_stop()?;
-                eprintln!(
-                    "[tillandsias-vz] stop: guest reported a clean power-off (token matched); \
-                     finished the stalled power-off"
-                );
+            let clean_off = state != 0
+                && read_from(&console_path, console_from)
+                    .is_some_and(|tail| clean_off_reported(&tail, 0, &token));
+            let poll = classify_stop_poll(state, clean_off, Instant::now() >= deadline);
+            // Criterion 5: the marker is cleared ONLY when the poll says the
+            // disk is clean. A timed-out drain leaves it, so the next launch
+            // rebuilds that disk rather than booting it as if it were clean.
+            if poll.disk_is_clean() {
+                if poll == StopPoll::CleanOffReported {
+                    force_stop()?;
+                    eprintln!(
+                        "[tillandsias-vz] stop: guest reported a clean power-off (token matched); \
+                         finished the stalled power-off"
+                    );
+                }
                 mark_vm_stopped_cleanly(&self.image_root);
                 break Ok(());
             }
-            if Instant::now() >= deadline {
+            if poll == StopPoll::TimedOut {
                 force_stop()?;
                 // 1642-cc54: name the state VZ was in when the drain gave up.
                 // A guest that already printed "Shutting down." while VZ still
@@ -5484,6 +5523,50 @@ mod tests {
         assert!(
             !previous_stop_was_unclean(root.path()),
             "clearing twice is harmless"
+        );
+    }
+
+    /// 1642-cc54 criterion 5: a Quit whose drain TIMES OUT is never treated
+    /// as a clean stop. Its poll keeps the marker, so the next launch takes the
+    /// unclean-stop rebuild instead of booting that disk; VZ Stopped and the
+    /// token-confirmed clean power-off are the only clean outcomes, and each
+    /// beats the deadline when both hold on the same poll.
+    #[test]
+    fn a_timed_out_drain_is_never_a_clean_stop() {
+        let timed_out = classify_stop_poll(1, false, true);
+        assert_eq!(timed_out, StopPoll::TimedOut);
+        assert!(
+            !timed_out.disk_is_clean(),
+            "a force-stop mid-shutdown keeps the marker"
+        );
+        assert_eq!(
+            classify_stop_poll(7, false, true),
+            StopPoll::TimedOut,
+            "Stopping at the deadline"
+        );
+        assert_eq!(
+            classify_stop_poll(0, false, true),
+            StopPoll::Stopped,
+            "VZ Stopped beats the deadline"
+        );
+        assert_eq!(
+            classify_stop_poll(1, true, true),
+            StopPoll::CleanOffReported,
+            "a clean power-off beats it"
+        );
+        assert!(StopPoll::Stopped.disk_is_clean() && StopPoll::CleanOffReported.disk_is_clean());
+        assert_eq!(classify_stop_poll(1, false, false), StopPoll::Wait);
+        assert!(!StopPoll::Wait.disk_is_clean());
+        // And the marker semantics the next launch reads: a run whose stop was
+        // not clean is reported unclean, which is what triggers the rebuild.
+        let root = in_checkout_tempdir();
+        mark_vm_running(root.path()).unwrap();
+        if timed_out.disk_is_clean() {
+            mark_vm_stopped_cleanly(root.path());
+        }
+        assert!(
+            previous_stop_was_unclean(root.path()),
+            "the next launch must rebuild"
         );
     }
 
