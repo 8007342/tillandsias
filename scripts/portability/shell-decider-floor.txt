@@ -25,7 +25,6 @@ scripts/check-cycle-flow-log-fresh.sh
 scripts/check-daily-maintenance.sh
 scripts/check-dead-env-branches.sh
 scripts/check-decider-retirement.sh
-scripts/check-declared-closures-added.sh
 scripts/check-deslop-due.sh
 scripts/check-deslop-sweep-health.sh
 scripts/check-enclave-ca-consistency.sh

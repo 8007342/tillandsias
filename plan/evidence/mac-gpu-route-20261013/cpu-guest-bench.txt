@@ -1,0 +1,6 @@
+cpu-guest-control run 1: prefill 1030 tok @ 87.7 t/s, decode 128 tok @ 31.4 t/s
+cpu-guest-control run 2: prefill 1030 tok @ 84.1 t/s, decode 128 tok @ 30.9 t/s
+cpu-guest-control run 3: prefill 1030 tok @ 82.7 t/s, decode 128 tok @ 30.3 t/s
+cpu-guest-control prefill t/s: median 84.1 mean 84.9 min 82.7 max 87.7 (n=3)
+cpu-guest-control decode  t/s: median 30.9 mean 30.9 min 30.3 max 31.4 (n=3)
+ok:bench-llama-server:cpu-guest-control on 127.0.0.1:11521

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-macos-install-keeps-a-damaged-vm-through-the-soft-reset-so-it-should-build-a-fresh-vm-and-carry-only-identity-forward
+    event:
+      type: note
+      ts: "2026-10-13T06:02:06Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        CRITERION 2 DESIGN (identity survives a fresh VM), from reading the code 2026-10-13.
+
+        WHY SIGN-INS ARE LOST TODAY. The host keychain already keeps the vault's unseal share and root token (vault-shamir-share-v1, vault-root-token-v1) across a rebuild. The encrypted vault CONTENT does not survive: it lives in the guest at init_cache_dir()/vault-data, which is /root/.cache/tillandsias/vault-data on rootfs.img. Every fresh guest disk (a VERSION-change rebuild after a release install, the 5b unclean-stop rebuild, a HARD reset) deletes it. On Linux the same directory is in the host's cache dir, which is why Linux keeps sign-ins across a container reset (Verified:KEEP).
+
+        DESIGN: a dedicated identity disk.
+        - identity.img, a sparse image next to rootfs.img, attached as a virtio-blk device with serial tillandsias-identity. This follows the swap-disk precedent (1377-hcnv: found by /dev/disk/by-id, not by bus position).
+        - Every boot, the guest formats the disk ONLY if it has no filesystem (ext4, label tillandsias-id), mounts it at /var/lib/tillandsias-identity, and points init_cache_dir()/vault-data at a directory on that disk.
+        - NOT a virtiofs host share, unlike the model cache: the vault mounts its data with podman :U (a recursive chown to the container user) and needs SELinux labels (the container_t denials noted in vault_bootstrap.rs). A native ext4 handles both.
+        - Lifetime: a VERSION-change rebuild, the 5b unclean-stop rebuild, and a reprovision KEEP identity.img and the keychain items, so the next VM unseals the same vault and GitHub stays signed in. The 5b rebuild therefore stops calling clear_vault_credentials_in. HARD reset (an explicit approval) still destroys both, and so does uninstall. Criterion 1's "fresh guest disk every time" is about rootfs.img only.
+
+        TEST PLAN for criterion 2: unit tests pin the storage plan (identity attached, read-write, serial), the wipe lists (rebuilds keep identity.img, HARD removes it) and the provisioning script (format-only-if-blank, mount by-id). The live proof: sign in, force a rebuild, then GitHub shows signed in with no device login. That is destructive to the operator's VM, so it runs only when the operator is not using it, and they are told right before.

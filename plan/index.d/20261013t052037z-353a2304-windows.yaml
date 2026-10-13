@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: igpu-acceleration-opt-in-for-wsl2-hosts
+    event:
+      type: note
+      ts: "2026-10-13T05:20:37Z"
+      agent_id: windows-yolanda-claude-20261013t052033z
+      host: windows
+      summary: |
+        Closed: all four slices are on linux-next. S1 #384 (work/793-a8e7, ce26af4d4/1998251b1), S2 #389 (1646-p9hg, bd75567da/d67540adf), S3 #390 (1647-fb52, dbb33bdae), S4 #395 (1648-gy9z, 25220c3ca). Exit criteria to evidence:
+        (1) A documented, reversible opt-in, with the package set and its removal recorded. Evidence: TILLANDSIAS_INFERENCE_GPU=vulkan, which main.rs wsl2_vulkan_opt_in_tier honours only when the delivered tier is cpu and both /dev/dxg and /usr/lib/wsl/lib are present. wsl_lifecycle writes inference_gpu_unit_line. The inference image carries vulkan-loader, mesa-vulkan-drivers and vulkan-tools (the Containerfile records why). This row's context records the exact dnf install and dnf remove lines. Turning the opt-in off reverts the tier, and S3 restores the pins.
+        (2) No host changes behaviour without opting in. Evidence: the opt-in tier function returns None unless the value is exactly vulkan, and its unit tests cover unset and other values. OLLAMA_IGPU_ENABLE, OLLAMA_LOAD_TIMEOUT, the decode-floor env and the watchdog are all gated on gpu-vulkan. The CPU floor stays reachable, because opt-out and the pins keep every model loadable on the CPU.
+        (3) Routing honours the measured crossover, so a 0.5B-class model does not decode on the iGPU. Evidence: S3 engine_decode_floor uses the measured crossover, else 3B provisional (coordinator ruling pending 793-qc6q), and pins sub-floor models to num_gpu 0. Live: a pinned qwen2.5:0.5b served with size_vram=0. S2 re-probes the container lane with vulkaninfo --summary (Dozen: Microsoft Direct3D12 (AMD Radeon 860M)), and the envelope states the floor via accel_decode_floor_b and accel_decode_floor_source.
+        (4) The silent hang cannot strand an unattended host. Evidence: S4 adds the 120s no-progress watchdog, kill, CPU quarantine and the gpu-stall: log line, plus OLLAMA_LOAD_TIMEOUT=2m. On yolanda a forced stall became an error and the CPU retry showed size_vram=0.
+        Recorded limits: dzn is a non-conformant Vulkan 1.2 implementation without int8 or coop-matrix. The class row 1645-pu4d (integrated-gpu) remains open.
