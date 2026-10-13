@@ -4422,9 +4422,23 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # the ratchet's ran= total (2199, from 331) is the figure that moves if
     # that stops being true.
 
+    # ORDER 835-kjuv (slice 2): the gate's last `cargo run`. The debug artifact
+    # is built once here (a no-op when a Lua guard above already built it) and
+    # resolved BY EXECUTION through the shared probe (770-ifeg: on a shared
+    # Windows/WSL checkout the extensionless target/ path can hold the other
+    # platform's artifact), the same shape check-no-python-scripts.lua uses.
+    # A build that fails or a binary that does not run is a named refusal.
     _step "Checking plan order uniqueness (tillandsias-policy plan-orders)..."
-    if ! _run cargo run -q --manifest-path "$SCRIPT_DIR/Cargo.toml" -p tillandsias-policy -- plan-orders 2>&1; then
-        _error "plan/index.yaml has open duplicate order tokens: run 'cargo run -p tillandsias-policy -- plan-orders' for details"
+    if ! _run cargo build -q --manifest-path "$SCRIPT_DIR/Cargo.toml" -p tillandsias-policy 2>&1; then
+        _error "tillandsias-policy did not build, so plan order uniqueness could not be checked"
+        exit 1
+    fi
+    if ! _policy_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh && resolve_target_binary tillandsias-policy debug "$SCRIPT_DIR")"; then
+        _error "no runnable tillandsias-policy resolves (probed target/debug and CARGO_TARGET_DIR by execution)"
+        exit 1
+    fi
+    if ! _run "$_policy_bin" plan-orders 2>&1; then
+        _error "plan/index.yaml has open duplicate order tokens: run '$_policy_bin plan-orders' for details"
         exit 1
     fi
     _info "Plan order uniqueness passed"
