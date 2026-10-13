@@ -19,14 +19,13 @@ description: >
   Pin the host-chromium-on-demand surfaces: install-chromium.sh
   entrypoint + platform detection + 4 per-platform SHA-256 env vars
   + atomic `ln -snf` symlink repoint + SKIP_CHROMIUM_DOWNLOAD escape
-  hatch + 2-version garbage collection; browser-mcp launcher cache-
-  root resolution (XDG_CACHE_HOME / ~/.cache / /tmp fallback chain).
+  hatch + 2-version garbage collection. (The browser-mcp launcher's
+  cache-root resolution was retired by 1649-xqet.)
 severity: medium
 size: instant
 
 preconditions:
   - workspace contains scripts/install-chromium.sh
-  - workspace contains crates/tillandsias-browser-mcp/src/launcher.rs
   - shell utilities (grep) are available in PATH
 
 critical_path:
@@ -76,37 +75,22 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "SKIP_CHROMIUM_DOWNLOAD"
 
-  - step: "browser-mcp launcher: cache_root resolution chain (XDG_CACHE_HOME / ~/.cache / /tmp)"
-    # Spec § "Browser Detection" mandates the launcher returns the
-    # bundled Chromium. The cache-root resolution chain is how the
-    # launcher locates the installed binary: XDG_CACHE_HOME first
-    # (XDG compliance), then ~/.cache (legacy), then /tmp (last-
-    # resort writable fallback). Pin the 3-candidate chain so a
-    # regression dropping XDG support fails fast.
-    command: "grep -F 'XDG_CACHE_HOME' crates/tillandsias-browser-mcp/src/launcher.rs && grep -F '.cache/tillandsias/chromium' crates/tillandsias-browser-mcp/src/launcher.rs && grep -F '/tmp/tillandsias/chromium' crates/tillandsias-browser-mcp/src/launcher.rs"
-    timeout_ms: 3000
-    expected_behavior: "tillandsias/chromium"
-
-  - step: "browser-mcp launcher: resolve_browser_binary entry point + override path"
-    # Spec § Browser Detection mandates the launcher returns the
-    # bundled binary always. The `resolve_browser_binary(override_
-    # bin: Option<&Path>)` signature lets tests inject a test-fixture
-    # binary; production code passes None and gets the cache-resolved
-    # path. Pin the canonical entry-point signature.
-    command: "grep -F 'fn resolve_browser_binary(override_bin: Option<&Path>) -> Result<PathBuf, LaunchError>' crates/tillandsias-browser-mcp/src/launcher.rs"
-    timeout_ms: 3000
-    expected_behavior: "resolve_browser_binary"
+  # Order 1649-xqet RETIRED the launcher half of this litmus: browser.open
+  # now always runs the chromium-framework container (litmus:browser-open-
+  # container-shape), and the cache_root / resolve_browser_binary host path
+  # these two steps pinned is gone. The installer half above stays until
+  # 774-cfw8 tombstones install-chromium.sh with its spec deltas.
 
 observability:
   traces:
     - "@trace spec:host-chromium-on-demand"
     - "@trace spec:download-telemetry"
     - "@trace spec:chromium-safe-variant"
-  expected_log: "install-chromium.sh + launcher cache-root resolution + 4 per-platform SHA-256 contracts + atomic symlink + air-gapped escape hatch pinned"
+  expected_log: "install-chromium.sh + 4 per-platform SHA-256 contracts + atomic symlink + air-gapped escape hatch pinned"
   log_fields:
     spec: "host-chromium-on-demand"
     test: "host-chromium-on-demand-shape"
-    artifact: "scripts/install-chromium.sh + crates/tillandsias-browser-mcp/src/launcher.rs"
+    artifact: "scripts/install-chromium.sh"
 
 rollback:
   on_failure: >
@@ -116,8 +100,5 @@ rollback:
     `install_chromium()` + `chromium_platform()` functions; 4 per-
     platform `CHROMIUM_SHA256_*` env-var lookups; `ln -snf` atomic
     `current` symlink repoint; `SKIP_CHROMIUM_DOWNLOAD` escape
-    hatch; browser-mcp `cache_root()` with 3-candidate
-    `XDG_CACHE_HOME / ~/.cache / /tmp` chain; `fn resolve_browser_
-    binary(override_bin: Option<&Path>) -> Result<PathBuf,
-    LaunchError>`.
-  command: "grep -nE 'install_chromium|chromium_platform|CHROMIUM_SHA256_|ln -snf|SKIP_CHROMIUM_DOWNLOAD|cache_root|resolve_browser_binary' scripts/install-chromium.sh crates/tillandsias-browser-mcp/src/launcher.rs | head -25"
+    hatch.
+  command: "grep -nE 'install_chromium|chromium_platform|CHROMIUM_SHA256_|ln -snf|SKIP_CHROMIUM_DOWNLOAD' scripts/install-chromium.sh | head -25"

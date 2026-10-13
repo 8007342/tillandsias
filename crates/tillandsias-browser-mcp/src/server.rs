@@ -6,11 +6,10 @@
 use crate::allowlist::{self, BrowserAllowlist};
 use crate::cdp_client::{CdpError, CdpSession};
 use crate::framing::{RpcRequest, RpcResponse};
-use crate::launcher::{self, LaunchError};
+use crate::launcher::{self, BrowserContainers, LaunchError, LaunchMode};
 use crate::window_registry::{DebounceTable, WindowRegistry, close_window};
 use base64::Engine;
 use serde_json::json;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use url;
@@ -49,8 +48,11 @@ pub struct SessionState {
 /// @trace spec:host-browser-mcp, spec:browser-isolation-tray-integration
 pub struct BrowserMcpServer {
     project_label: String,
-    browser_binary_override: Option<PathBuf>,
-    fake_launch: bool,
+    /// Order 1649-xqet: a window is the chromium-framework container started
+    /// by the host, never host Chromium.
+    launch_mode: LaunchMode,
+    /// Tests: a fixed local-preview TLS port instead of the host's.
+    preview_tls_port_override: Option<u16>,
     windows: Arc<WindowRegistry>,
     debounce: Arc<DebounceTable>,
 }
@@ -64,26 +66,33 @@ impl BrowserMcpServer {
         Self::with_project_label(config, project_label, None)
     }
 
-    /// Test helper: pin a project label and a browser binary override.
+    /// Pin a project label and the host's browser container launcher. With
+    /// no launcher, `browser.open` answers `BROWSER_UNAVAILABLE`.
     pub fn with_project_label(
         config: McpServerConfig,
         project_label: impl Into<String>,
-        browser_binary_override: Option<PathBuf>,
+        containers: Option<Arc<dyn BrowserContainers>>,
     ) -> Self {
-        Self::with_project_label_and_mode(config, project_label, browser_binary_override, false)
+        Self::with_project_label_and_mode(config, project_label, containers, false)
     }
 
-    /// Test helper: pin a project label, binary override, and launch mode.
+    /// Test helper: pin a project label, launcher, and launch mode.
+    /// `fake_launch` registers windows without starting anything.
     pub fn with_project_label_and_mode(
         _config: McpServerConfig,
         project_label: impl Into<String>,
-        browser_binary_override: Option<PathBuf>,
+        containers: Option<Arc<dyn BrowserContainers>>,
         fake_launch: bool,
     ) -> Self {
+        let launch_mode = match (fake_launch, containers) {
+            (true, _) => LaunchMode::Fake,
+            (false, Some(host)) => LaunchMode::Container(host),
+            (false, None) => LaunchMode::Unavailable,
+        };
         Self {
             project_label: project_label.into(),
-            browser_binary_override,
-            fake_launch,
+            launch_mode,
+            preview_tls_port_override: None,
             windows: Arc::new(WindowRegistry::default()),
             debounce: Arc::new(DebounceTable::default()),
         }
@@ -142,8 +151,19 @@ impl BrowserMcpServer {
         request.params.get("arguments").unwrap_or(&request.params)
     }
 
-    fn browser_binary(&self) -> Option<PathBuf> {
-        self.browser_binary_override.clone()
+    /// Test helper: admit a fixed local-preview TLS port.
+    pub fn with_preview_tls_port(mut self, port: u16) -> Self {
+        self.preview_tls_port_override = Some(port);
+        self
+    }
+
+    /// The router's local-preview TLS port, read from the host on every
+    /// open: the listener may come up after this lane connected.
+    fn preview_tls_port(&self) -> Option<u16> {
+        self.preview_tls_port_override.or(match &self.launch_mode {
+            LaunchMode::Container(host) => host.preview_tls_port(),
+            LaunchMode::Fake | LaunchMode::Unavailable => None,
+        })
     }
 
     /// Build the active routes allowlist from the current window registry.
@@ -164,7 +184,7 @@ impl BrowserMcpServer {
             })
             .collect();
 
-        BrowserAllowlist::new(&active_hosts)
+        BrowserAllowlist::new(&active_hosts).with_preview_tls_port(self.preview_tls_port())
     }
 
     /// Handle `initialize` request (first call after connection).
@@ -230,7 +250,7 @@ impl BrowserMcpServer {
                     "properties": {
                         "url": {
                             "type": "string",
-                            "description": "The URL to open (must match allowlist: <service>.<project>.localhost:8080)"
+                            "description": "The URL to open (must match allowlist: <service>.<project>.localhost:8080, or https on the local-preview port, e.g. https://www.<project>.localhost:18443)"
                         }
                     },
                     "required": ["url"]
@@ -387,7 +407,11 @@ impl BrowserMcpServer {
 
         // Layer 1: Basic format validation
         // @trace spec:host-browser-mcp
-        let allowed = match allowlist::validate(url, &self.project_label) {
+        let allowed = match allowlist::validate_with_preview(
+            url,
+            &self.project_label,
+            self.preview_tls_port(),
+        ) {
             Ok(allowed) => allowed,
             Err(reason) => {
                 return Self::tool_error(id, format!("URL_NOT_ALLOWED: {reason}"));
@@ -421,17 +445,12 @@ impl BrowserMcpServer {
             };
         }
 
-        let entry = match launcher::launch(
-            &allowed.url,
-            &self.project_label,
-            self.browser_binary().as_deref(),
-            self.fake_launch,
-        ) {
+        let entry = match launcher::launch(&allowed.url, &self.project_label, &self.launch_mode) {
             Ok(entry) => entry,
             Err(LaunchError::BrowserUnavailable) => {
                 return Self::tool_error(
                     id,
-                    "BROWSER_UNAVAILABLE: bundled chromium not yet downloaded",
+                    "BROWSER_UNAVAILABLE: no browser container launcher is configured for this lane",
                 );
             }
             Err(err) => {
@@ -712,15 +731,15 @@ impl BrowserMcpServer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn test_server(browser_bin: Option<PathBuf>) -> BrowserMcpServer {
-        BrowserMcpServer::with_project_label(McpServerConfig::default(), "acme", browser_bin)
+    fn test_server(containers: Option<Arc<dyn BrowserContainers>>) -> BrowserMcpServer {
+        BrowserMcpServer::with_project_label(McpServerConfig::default(), "acme", containers)
     }
 
-    fn test_server_fake_launch(browser_bin: Option<PathBuf>) -> BrowserMcpServer {
+    fn test_server_fake_launch(containers: Option<Arc<dyn BrowserContainers>>) -> BrowserMcpServer {
         BrowserMcpServer::with_project_label_and_mode(
             McpServerConfig::default(),
             "acme",
-            browser_bin,
+            containers,
             true,
         )
     }
@@ -903,7 +922,7 @@ mod tests {
     #[tokio::test]
     async fn browser_open_registers_and_lists_window() {
         let server = test_server_fake_launch(None);
-        assert!(server.fake_launch);
+        assert!(matches!(server.launch_mode, LaunchMode::Fake));
         let response = server
             .handle_request(RpcRequest {
                 id: Some(10),
@@ -949,7 +968,7 @@ mod tests {
     #[tokio::test]
     async fn browser_open_debounces_same_host() {
         let server = test_server_fake_launch(None);
-        assert!(server.fake_launch);
+        assert!(matches!(server.launch_mode, LaunchMode::Fake));
         let first = server
             .handle_request(RpcRequest {
                 id: Some(20),
@@ -1020,7 +1039,7 @@ mod tests {
     #[tokio::test]
     async fn browser_close_removes_window() {
         let server = test_server_fake_launch(None);
-        assert!(server.fake_launch);
+        assert!(matches!(server.launch_mode, LaunchMode::Fake));
         let open = server
             .handle_request(RpcRequest {
                 id: Some(40),
@@ -1579,5 +1598,151 @@ mod tests {
         // Even if opencode.acme.localhost is in routes, it should be blocked
         // to prevent recursive OpenCode Web launches
         assert!(!allowlist.is_allowed("http://opencode.acme.localhost:8080/"));
+    }
+
+    // ---- Order 1649-xqet: browser.open runs the container, admits the preview port ----
+
+    /// A host launcher that records what it was asked and starts nothing.
+    #[derive(Default)]
+    struct RecordingContainers {
+        starts: parking_lot::Mutex<Vec<(String, String)>>,
+        stops: parking_lot::Mutex<Vec<String>>,
+        preview_tls_port: Option<u16>,
+    }
+
+    impl BrowserContainers for RecordingContainers {
+        fn preview_tls_port(&self) -> Option<u16> {
+            self.preview_tls_port
+        }
+        fn start(
+            &self,
+            request: &launcher::ContainerLaunchRequest<'_>,
+        ) -> Result<launcher::ContainerHandle, LaunchError> {
+            self.starts
+                .lock()
+                .push((request.url.to_string(), request.project_label.to_string()));
+            Ok(launcher::ContainerHandle {
+                container_name: format!("tillandsias-browser-{}-1", request.project_label),
+                network_name: "tillandsias-browser-net-1".to_string(),
+                profile_dir: std::path::PathBuf::new(),
+            })
+        }
+        fn stop(&self, handle: &launcher::ContainerHandle) {
+            self.stops.lock().push(handle.container_name.clone());
+        }
+    }
+
+    async fn open(server: &BrowserMcpServer, url: &str) -> Result<String, String> {
+        let response = server
+            .handle_request(RpcRequest {
+                id: Some(1),
+                method: "tools/call".to_string(),
+                params: json!({ "name": "browser.open", "arguments": { "url": url } }),
+            })
+            .await;
+        let RpcResponse::Success { result, .. } = response else {
+            return Err(format!("not a success frame: {response:?}"));
+        };
+        if result["isError"].as_bool() == Some(true) {
+            return Err(result["content"][0]["text"]
+                .as_str()
+                .unwrap_or("")
+                .to_string());
+        }
+        Ok(result["window_id"].as_str().unwrap_or("").to_string())
+    }
+
+    /// Criterion (a), unit half: with a host launcher wired, browser.open
+    /// starts the container through it (never a host binary), and the window
+    /// carries the container until close stops it.
+    #[tokio::test]
+    async fn browser_open_starts_the_container_through_the_host_launcher() {
+        let host = Arc::new(RecordingContainers {
+            preview_tls_port: Some(18443),
+            ..Default::default()
+        });
+        let server = BrowserMcpServer::with_project_label(
+            McpServerConfig::default(),
+            "acme",
+            Some(host.clone() as Arc<dyn BrowserContainers>),
+        );
+        let window = open(&server, "https://www.acme.localhost:18443/")
+            .await
+            .expect("the preview URL opens");
+        {
+            let starts = host.starts.lock();
+            assert_eq!(starts.len(), 1);
+            assert_eq!(starts[0].0, "https://www.acme.localhost:18443/");
+            assert_eq!(starts[0].1, "acme");
+        }
+        assert!(host.stops.lock().is_empty());
+        let closed = server
+            .handle_request(RpcRequest {
+                id: Some(2),
+                method: "tools/call".to_string(),
+                params: json!({ "name": "browser.close", "arguments": { "window_id": window } }),
+            })
+            .await;
+        assert!(matches!(closed, RpcResponse::Success { .. }));
+        assert_eq!(*host.stops.lock(), vec!["tillandsias-browser-acme-1"]);
+    }
+
+    /// A window cannot outlive the server (the lane connection) that opened
+    /// it: its network would stay attached to the router.
+    #[tokio::test]
+    async fn dropping_the_server_stops_its_browser_containers() {
+        let host = Arc::new(RecordingContainers::default());
+        let server = BrowserMcpServer::with_project_label(
+            McpServerConfig::default(),
+            "acme",
+            Some(host.clone() as Arc<dyn BrowserContainers>),
+        );
+        open(&server, "http://web.acme.localhost:8080/")
+            .await
+            .expect("opens");
+        drop(server);
+        assert_eq!(*host.stops.lock(), vec!["tillandsias-browser-acme-1"]);
+    }
+
+    /// No launcher wired: the open is refused as unavailable, nothing starts.
+    #[tokio::test]
+    async fn browser_open_without_a_launcher_is_unavailable() {
+        let server = test_server(None);
+        let err = open(&server, "http://web.acme.localhost:8080/")
+            .await
+            .expect_err("no launcher");
+        assert!(err.starts_with("BROWSER_UNAVAILABLE:"), "{err}");
+    }
+
+    /// Criterion (c): the preview URL is admitted, other localhost ports and
+    /// plain http on the preview port stay refused, and so does another
+    /// project on the preview port.
+    #[tokio::test]
+    async fn browser_open_admits_the_preview_tls_port_and_refuses_other_localhost_ports() {
+        let server = test_server_fake_launch(None).with_preview_tls_port(18443);
+        open(&server, "https://www.acme.localhost:18443/")
+            .await
+            .expect("preview URL admitted");
+        for refused in [
+            "https://www.acme.localhost:18444/",
+            "https://www.acme.localhost:8443/",
+            "http://www.acme.localhost:18443/",
+            "https://www.beta.localhost:18443/",
+            "https://127.0.0.1:18443/",
+        ] {
+            let err = open(&server, refused).await.expect_err(refused);
+            assert!(err.starts_with("URL_NOT_ALLOWED:"), "{refused}: {err}");
+        }
+    }
+
+    /// The control for the admission: with no preview listener, 18443 is
+    /// just another localhost port.
+    #[tokio::test]
+    async fn without_a_preview_listener_the_preview_port_is_refused() {
+        let server = test_server_fake_launch(None);
+        let err = open(&server, "https://www.acme.localhost:18443/")
+            .await
+            .expect_err("no preview listener");
+        assert!(err.starts_with("URL_NOT_ALLOWED:"), "{err}");
     }
 }

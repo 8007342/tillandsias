@@ -1,0 +1,13 @@
+ca-pin             marker=none                                     errors=ERR_CERT_AUTHORITY_INVALID 
+cdp-loopback       marker=none                                     errors=ERR_NAME_NOT_RESOLVED 
+external-ip        marker=none                                     errors=ERR_NAME_NOT_RESOLVED 
+external           marker=none                                     errors=ERR_NAME_NOT_RESOLVED 
+fullchain-ca-pin   marker=ROUTE-DEMO host=www.demo.localhost:18443 errors=none
+fullchain-no-pin   marker=none                                     errors=ERR_CERT_AUTHORITY_INVALID 
+leaf-pin           marker=ROUTE-DEMO host=www.demo.localhost:18443 errors=none
+mixed-case         marker=ROUTE-DEMO host=www.demo.localhost:18443 errors=none
+no-pin             marker=none                                     errors=ERR_CERT_AUTHORITY_INVALID 
+no-rules-ext       marker=none                                     errors=ERR_NAME_NOT_RESOLVED 
+other-port         marker=ROUTE-DEMO host=www.demo.localhost:9999  errors=none
+other-proj         marker=none                                     errors=ERR_NAME_NOT_RESOLVED 
+router-direct      marker=none                                     errors=ERR_NAME_NOT_RESOLVED 

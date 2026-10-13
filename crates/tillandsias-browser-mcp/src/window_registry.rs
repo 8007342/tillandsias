@@ -5,10 +5,11 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::process::Child;
 use std::time::Instant;
 
 use parking_lot::Mutex;
+
+use crate::launcher::RunningContainer;
 use tracing::{debug, info};
 
 /// Stable browser window identifier.
@@ -25,7 +26,8 @@ pub struct WindowEntry {
     pub user_data_dir: PathBuf,
     pub opened_url: String,
     pub title: String,
-    pub child: Option<Child>,
+    /// The window's container; dropping it stops the container (1649-xqet).
+    pub container: Option<RunningContainer>,
     /// @trace spec:browser-window-timeout
     /// When the window was created.
     pub created_at: Instant,
@@ -193,11 +195,6 @@ impl DebounceTable {
     }
 }
 
-fn kill_child(child: &mut Child) {
-    let _ = child.kill();
-    let _ = child.wait();
-}
-
 pub fn close_window(
     registry: &WindowRegistry,
     debounce: &DebounceTable,
@@ -212,9 +209,7 @@ pub fn close_window(
         pid = entry.pid,
         "window_closed"
     );
-    if let Some(mut child) = entry.child.take() {
-        kill_child(&mut child);
-    }
+    drop(entry.container.take());
     debounce.remove_window(window_id);
     Some(entry)
 }
@@ -229,9 +224,7 @@ pub fn close_all(registry: &WindowRegistry, debounce: &DebounceTable) -> Vec<Win
             project = %entry.project_label,
             "window_closed"
         );
-        if let Some(mut child) = entry.child.take() {
-            kill_child(&mut child);
-        }
+        drop(entry.container.take());
         debounce.remove_window(&entry.window_id);
     }
     entries

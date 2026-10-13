@@ -1,0 +1,36 @@
+// 1649-xqet pre-fix probe (scratch, never committed as code): trunk's
+// browser.open as the tray builds it (with_project_label(.., None), not fake),
+// with TILLANDSIAS_BROWSER_BIN/TILLANDSIAS_CHROMIUM_BIN unset and a
+// HOME/XDG_CACHE_HOME that holds no Chromium. Run in a detached worktree of
+// origin/linux-next adc8d7303 as
+// crates/tillandsias-browser-mcp/tests/prefix_red_1649.rs.
+use serde_json::json;
+use tillandsias_browser_mcp::framing::{RpcRequest, RpcResponse};
+use tillandsias_browser_mcp::server::{BrowserMcpServer, McpServerConfig};
+
+async fn open(server: &BrowserMcpServer, url: &str) -> String {
+    let r = server
+        .handle_request(RpcRequest {
+            id: Some(1),
+            method: "tools/call".into(),
+            params: json!({"name": "browser.open", "arguments": {"url": url}}),
+        })
+        .await;
+    match r {
+        RpcResponse::Success { result, .. } => result.to_string(),
+        other => format!("{other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn prefix_browser_open() {
+    assert!(std::env::var_os("TILLANDSIAS_BROWSER_BIN").is_none());
+    assert!(std::env::var_os("TILLANDSIAS_CHROMIUM_BIN").is_none());
+    let server = BrowserMcpServer::with_project_label(McpServerConfig::default(), "demo", None);
+    for url in [
+        "https://www.demo.localhost:18443/",
+        "http://web.demo.localhost:8080/",
+    ] {
+        println!("prefix browser.open {url} -> {}", open(&server, url).await);
+    }
+}

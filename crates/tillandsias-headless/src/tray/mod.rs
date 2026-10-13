@@ -1473,10 +1473,14 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
         );
         return;
     };
+    // Order 1649-xqet: browser.open runs the chromium-framework container on
+    // a per-launch internal network, never host Chromium.
     let browser = tillandsias_browser_mcp::BrowserMcpServer::with_project_label(
         tillandsias_browser_mcp::McpServerConfig::default(),
         &project_label,
-        None,
+        Some(std::sync::Arc::new(
+            crate::browser_open::TrayBrowserContainers::new(false),
+        )),
     );
 
     loop {

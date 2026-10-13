@@ -24,6 +24,18 @@ pub struct AllowedUrl {
 pub struct BrowserAllowlist {
     /// Set of active routes in format `<service>.<project>.localhost:8080`
     active_routes: HashSet<String>,
+    /// The router's local-preview TLS port (order 1649-xqet), admitted for
+    /// https only.
+    preview_tls_port: Option<u16>,
+}
+
+/// Order 1649-xqet: the ports `browser.open` admits. 8080 and 80 are the
+/// router's http listener; the local-preview TLS port (`preview-tls-port`,
+/// 18443 first) is admitted for https only, so the preview URL
+/// `https://www.<project>.localhost:18443` opens and every other localhost
+/// port stays refused.
+fn port_admitted(scheme: &str, port: u16, preview_tls_port: Option<u16>) -> bool {
+    port == 8080 || port == 80 || (scheme == "https" && Some(port) == preview_tls_port)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -75,6 +87,7 @@ impl BrowserAllowlist {
     pub fn new(active_hosts: &[String]) -> Self {
         Self {
             active_routes: active_hosts.iter().cloned().collect(),
+            preview_tls_port: None,
         }
     }
 
@@ -82,7 +95,14 @@ impl BrowserAllowlist {
     pub fn empty() -> Self {
         Self {
             active_routes: HashSet::new(),
+            preview_tls_port: None,
         }
+    }
+
+    /// Admit the router's local-preview TLS port for https (order 1649-xqet).
+    pub fn with_preview_tls_port(mut self, port: Option<u16>) -> Self {
+        self.preview_tls_port = port;
+        self
     }
 
     /// Check if a URL is allowed by the active routes.
@@ -145,8 +165,9 @@ impl BrowserAllowlist {
             return false;
         }
 
-        // Port must be 8080 (or 80 for HTTPS variants on RFC 6761 loopback)
-        if port != 8080 && port != 80 {
+        // Port must be 8080 (or 80 for HTTPS variants on RFC 6761 loopback),
+        // or the local-preview TLS port for https (order 1649-xqet).
+        if !port_admitted(parsed.scheme(), port, self.preview_tls_port) {
             return false;
         }
 
@@ -156,8 +177,10 @@ impl BrowserAllowlist {
         if !self.active_routes.is_empty() {
             let route_8080 = format!("{}:8080", host_str);
             let route_80 = format!("{}:80", host_str);
+            let route_port = format!("{host_str}:{port}");
             return self.active_routes.contains(&route_8080)
-                || self.active_routes.contains(&route_80);
+                || self.active_routes.contains(&route_80)
+                || self.active_routes.contains(&route_port);
         }
 
         // No active routes registered yet: allow properly formatted localhost URLs
@@ -173,6 +196,16 @@ fn split_host_labels(host: &str) -> Vec<&str> {
 
 /// Validate a browser-open URL against the host-browser allowlist rules.
 pub fn validate(url: &str, project_label: &str) -> Result<AllowedUrl, AllowlistDeny> {
+    validate_with_preview(url, project_label, None)
+}
+
+/// [`validate`], also admitting the router's local-preview TLS port for
+/// https (order 1649-xqet).
+pub fn validate_with_preview(
+    url: &str,
+    project_label: &str,
+    preview_tls_port: Option<u16>,
+) -> Result<AllowedUrl, AllowlistDeny> {
     let parsed = Url::parse(url).map_err(|err| AllowlistDeny::InvalidUrl(err.to_string()))?;
 
     match parsed.scheme() {
@@ -214,7 +247,7 @@ pub fn validate(url: &str, project_label: &str) -> Result<AllowedUrl, AllowlistD
         "https" => 443,
         _ => 80,
     });
-    if port != 8080 && port != 80 {
+    if !port_admitted(parsed.scheme(), port, preview_tls_port) {
         return Err(AllowlistDeny::WrongPort {
             expected: 8080,
             actual: parsed.port(),
