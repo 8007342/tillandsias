@@ -12,10 +12,11 @@
 # (inside a forge) is exempt by design: `user-runtime`.
 #
 # The fixture builds a scratch repository under scratch/fixtures, asserts the
-# guard SEES a planted file before reading any refusal, and runs fifteen numbered arms (sixteen assertions):
+# guard SEES a planted file before reading any refusal, and runs sixteen numbered arms (seventeen assertions):
 # each refused class names its path and line, a recorded exception and a
 # comment are admitted, an unrecorded key is refused, an unresolvable base is
-# a refusal, and the real tree is green at its own HEAD.
+# a refusal, the real tree is green at its own HEAD, and the Lua walker fs.walk
+# skips scratch/ when met from above (arm 16).
 #
 # STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking no new script makes scratch outside the checkout (1637-cnxq)"

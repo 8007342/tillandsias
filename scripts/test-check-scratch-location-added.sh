@@ -186,6 +186,42 @@ if "$HELPER" /abs >/dev/null 2>&1; then _fail "arm 14b: scratch-dir.sh accepted 
 # ARM 15 — the canonical dir is ignored by git.
 if git -C "$ROOT" check-ignore -q scratch/anything; then _ok "arm 15: scratch/ is gitignored"; else _fail "arm 15: scratch/ is not gitignored"; fi
 
+# ARM 16 — the Lua walker (fs.walk, the tree scanner every check-*.lua uses)
+# skips the canonical dir when met from ABOVE. PREMISE FIRST: a direct walk of
+# scratch/ sees the planted files, so their absence from the walk of "." is the
+# skip and not a walker that saw nothing. Runs in the scratch repository with
+# the repo root pinned there, so the real checkout is never walked.
+mkdir -p "$R/scratch/nested" "$R/lua"
+printf -- '-- planted\n' > "$R/scratch/evil.lua"
+printf -- '-- planted\n' > "$R/scratch/nested/deep.lua"
+printf -- '-- kept\n' > "$R/lua/good.lua"
+cat > "$T/walk.lua" <<'LUA'
+local direct = fs.walk("scratch", { suffix = ".lua" })
+local above = fs.walk(".", { suffix = ".lua" })
+local function has(list, needle)
+    for _, f in ipairs(list) do
+        if f:find(needle, 1, true) then return true end
+    end
+    return false
+end
+if not has(direct, "evil.lua") or not has(direct, "deep.lua") then
+    verdict.refused("walk-skips-scratch", "premise: a direct walk of scratch/ did not see the planted files (" .. #direct .. ")")
+end
+if not has(above, "good.lua") then
+    verdict.refused("walk-skips-scratch", "the walk from the root did not see lua/good.lua (" .. #above .. ")")
+end
+if has(above, "scratch/") then
+    verdict.refused("walk-skips-scratch", "the walk from the root entered scratch/ (" .. #above .. " files)")
+end
+verdict.ok("walk-skips-scratch", #direct, #above)
+LUA
+OUT="$(cd "$R" && TILLANDSIAS_REPO_ROOT="$R" "$PLAN_BIN" script run "$T/walk.lua" 2>"$T/err")"; RC=$?
+rm -rf "$R/scratch" "$R/lua"
+case "$OUT" in
+    ok:walk-skips-scratch:2:1) _ok "arm 16: fs.walk sees scratch/ directly and skips it from above ($OUT)" ;;
+    *) _fail "arm 16: expected ok:walk-skips-scratch:2:1, got rc=$RC '$OUT' $(tr '\n' '|' <"$T/err")" ;;
+esac
+
 echo "summary: pass=$pass fail=$fail"
 if [ "$fail" -gt 0 ]; then
     echo "violation:scratch-location-fixture:$fail"
