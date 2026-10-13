@@ -223,7 +223,7 @@ else
 fi
 
 # 6. ORDER 1423-ydy3 — A KILLED RUN LEAVES NO EXTRACT. Each fold extracts a
-#    sibling's plan/ (~19 MB) into ${TMPDIR}/xbranch.*; the normal paths remove
+#    sibling's plan/ (~19 MB) into <scratch root>/xbranch/xbranch.* (1637-cnxq); the normal paths remove
 #    it, and a run killed mid-fold used to leak it (yoga counted 49, ~700 MB).
 #    The kill must land on a REAL in-flight fold, not a finished process, so the
 #    stub records its pid and then BLOCKS on a fifo: when the marker appears,
@@ -236,12 +236,12 @@ echo \$\$ > "$W/block/started"
 read _ < "$W/block/fifo"
 STUB
 chmod +x "$W/block/tillandsias-plan"
-( cd "$ROOT" && TMPDIR="$XT" TILLANDSIAS_PLAN_BIN="$W/block/tillandsias-plan" \
+( cd "$ROOT" && TILLANDSIAS_SCRATCH_ROOT="$XT" TILLANDSIAS_PLAN_BIN="$W/block/tillandsias-plan" \
     exec bash "$CHECK" SOME-PKT --no-fetch >/dev/null 2>&1 ) &
 _cpid=$!
 _i=0
 while [ ! -s "$W/block/started" ] && [ "$_i" -lt 300 ]; do sleep 0.1; _i=$((_i + 1)); done
-_live="$(find "$XT" -maxdepth 1 -name 'xbranch.*' | grep -c .)"
+_live="$(find "$XT/xbranch" -maxdepth 1 -name 'xbranch.*' 2>/dev/null | grep -c .)"
 if [ ! -s "$W/block/started" ] || [ "$_live" -eq 0 ]; then
     kill "$_cpid" 2>/dev/null
     bad "killed-run arm could not reach a live fold" "started=$([ -s "$W/block/started" ] && echo yes || echo no) extracts=$_live"
@@ -251,19 +251,19 @@ else
     kill -TERM "$_cpid" 2>/dev/null
     kill -TERM "$(cat "$W/block/started")" 2>/dev/null
     wait "$_cpid"; _crc=$?
-    _left="$(find "$XT" -maxdepth 1 -name 'xbranch.*' | grep -c .)"
+    _left="$(find "$XT/xbranch" -maxdepth 1 -name 'xbranch.*' 2>/dev/null | grep -c .)"
     if [ "$_left" -eq 0 ]; then
         ok "a run killed mid-fold (TERM, rc=$_crc, $_live extract live at the kill) leaves no xbranch.* behind"
     else
-        bad "a killed run leaked its extract" "rc=$_crc left=$_left: $(find "$XT" -maxdepth 1 -name 'xbranch.*' | tr '\n' ' ')"
+        bad "a killed run leaked its extract" "rc=$_crc left=$_left: $(find "$XT/xbranch" -maxdepth 1 -name 'xbranch.*' 2>/dev/null | tr '\n' ' ')"
     fi
 fi
-rm -rf "$XT"/xbranch.* 2>/dev/null
+rm -rf "$XT"/xbranch/xbranch.* 2>/dev/null
 
-# 6b. NEGATIVE CONTROL: a normal run in the same scratch TMPDIR leaves nothing,
+# 6b. NEGATIVE CONTROL: a normal run with the same scratch root leaves nothing,
 #     and its verdict is the one arm 2 reads.
-out="$(cd "$ROOT" && TMPDIR="$XT" TILLANDSIAS_PLAN_BIN="$W/free/tillandsias-plan" bash "$CHECK" SOME-PKT --no-fetch 2>/dev/null)"; rc=$?
-_left="$(find "$XT" -maxdepth 1 -name 'xbranch.*' | grep -c .)"
+out="$(cd "$ROOT" && TILLANDSIAS_SCRATCH_ROOT="$XT" TILLANDSIAS_PLAN_BIN="$W/free/tillandsias-plan" bash "$CHECK" SOME-PKT --no-fetch 2>/dev/null)"; rc=$?
+_left="$(find "$XT/xbranch" -maxdepth 1 -name 'xbranch.*' 2>/dev/null | grep -c .)"
 case "$out" in ok:cross-branch-claims:*) _okv=1 ;; *) _okv=0 ;; esac
 if [ "$rc" -eq 0 ] && [ "$_left" -eq 0 ] && [ "$_okv" -eq 1 ]; then
     ok "a normal run leaves no extract and still reads ok"

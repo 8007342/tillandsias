@@ -110,7 +110,7 @@ rc, o = count(d)
 arm("4 ABSENT a file with sites and no floor line is new at floor 0, and the refusal names why, the remedy and the site",
     rc == 1 and o:find("new-site:" .. d .. "/scripts/test-b.sh:1>floor:0", 1, true) ~= nil
     and o:find("why: on darwin a mktemp without a template ignores TMPDIR", 1, true) ~= nil
-    and o:find('remedy: give the call a template, e.g. mktemp -d "${TMPDIR:-/tmp}/<name>.XXXXXX"', 1, true) ~= nil
+    and o:find('remedy: give the call a template inside the checkout, e.g. mktemp -d "$(scripts/scratch-dir.sh fixtures)/<name>.XXXXXX"', 1, true) ~= nil
     and o:find("site: " .. d .. '/scripts/test-b.sh:1: x="$(mktemp -d)"', 1, true) ~= nil, rc .. " " .. o)
 
 fs.mkdir(REL .. "/empty/x")

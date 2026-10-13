@@ -190,7 +190,8 @@ case "${1:-check}" in
         ;;
     fixture)
         _fx_fail=0
-        _fx_dir="$(mktemp -d)"
+        _fx_dir="$(mktemp -d "$("$(dirname "$0")/scratch-dir.sh" fixtures)/daily-maintenance.XXXXXX")" || {
+            echo "FAIL: no scratch directory for the fixture (scripts/scratch-dir.sh, 1637-cnxq)"; exit 1; }
         _fx_self="$0"
         _fx_marker="$_fx_dir/.last-daily-maintenance"
         _run() {

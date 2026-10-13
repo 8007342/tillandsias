@@ -1,6 +1,6 @@
 # Per-file mktemp sites WITHOUT a template in scripts/**/*.sh (1619-7i9r). On darwin
 # they ignore TMPDIR, so the preflight door's per-guard TMPDIR sweep never sees them.
-# May only DESCEND: give the site a "${TMPDIR:-/tmp}/<name>.XXXXXX" template and lower its line.
+# May only DESCEND: give the site a template inside the checkout, mktemp "$(scripts/scratch-dir.sh logs)/<name>.XXXXXX" (1637-cnxq), and lower its line.
 scripts/build-macos-tray.sh 1
 scripts/census-litmus-layer-classification.sh 1
 scripts/census-litmus-step-enforcement.sh 1
@@ -9,7 +9,6 @@ scripts/check-append-vs-origin-fold.sh 1
 scripts/check-capability-row.sh 2
 scripts/check-cheatsheet-frontmatter.sh 1
 scripts/check-containers-conf-proxy-env.sh 1
-scripts/check-daily-maintenance.sh 1
 scripts/check-dead-env-branches.sh 1
 scripts/check-enclave-ca-consistency.sh 1
 scripts/check-forge-findings-persisted.sh 1
@@ -28,7 +27,6 @@ scripts/check-tracked-files-unwritten.sh 1
 scripts/check-windows-tray-clippy.sh 1
 scripts/clamp-ca-material.sh 1
 scripts/claude-mcp.sh 2
-scripts/cycle-preflight.sh 2
 scripts/diagnose-proxy.sh 1
 scripts/e2e-preflight.sh 1
 scripts/fleet-activity.sh 1
@@ -50,7 +48,6 @@ scripts/nix-build-container.sh 2
 scripts/preflight-fixtures-default-target.sh 1
 scripts/refusal-calibration/apply-relabelled-561.sh 1
 scripts/scan-litmus-expression-pinning.sh 1
-scripts/select-work-batch.sh 4
 scripts/stamp-requirement-ids.sh 2
 scripts/test-append-vs-origin-fold.sh 1
 scripts/test-bash-composition-hazards.sh 1
@@ -234,4 +231,3 @@ scripts/test-wsl-builder-kill-reaches-guest.sh 1
 scripts/test-yaml-reader-availability.sh 1
 scripts/update-convergence-dashboard.sh 2
 scripts/validate-traces.sh 1
-scripts/with-tillandsias-process-cleanup.sh 4

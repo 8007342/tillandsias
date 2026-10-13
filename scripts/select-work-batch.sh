@@ -186,6 +186,15 @@ case "$ROLE" in
 esac
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# ORDER 1637-cnxq — the captured stderr files below live under scratch/logs
+# (scripts/scratch-dir.sh), inside the checkout, never under the host temp dir.
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+SCRATCH_DIR="$("$ROOT/scripts/scratch-dir.sh" logs 2>/dev/null)" || SCRATCH_DIR=""
+if [ -z "$SCRATCH_DIR" ]; then
+    _afford "scripts/scratch-dir.sh named no directory inside the checkout, and the selector captures the plan binary's stderr there (1637-cnxq)" \
+        "run from a checkout that carries scripts/scratch-dir.sh, or set TILLANDSIAS_SCRATCH_ROOT to a writable absolute directory, then re-run"
+    echo "refused:no-scratch-dir"; exit 1
+fi
 cd "$ROOT" || exit 1
 
 # ARGUMENTS BEFORE ENVIRONMENT. A caller error must not be reported as an
@@ -398,7 +407,7 @@ TIER_TAGS="${TILLANDSIAS_TIER_TAGS:-low-end}"
 #
 # stderr is captured rather than discarded so the refusal can quote the real
 # reason instead of guessing at it.
-query_err="$(mktemp)"
+query_err="$(mktemp "$SCRATCH_DIR/select-query.XXXXXX")"
 rows="$("$PLAN" select-rows --status ready --claimable-by "$ROLE" \
     "${REL_ARG[@]+"${REL_ARG[@]}"}" --limit 400 2>"$query_err")"
 query_rc=$?
@@ -483,7 +492,7 @@ fi
 # queue; the mandate says never, not "unless idle".
 TIER_FILTERED=0
 for tier_tag in $TIER_TAGS; do
-    tier_err="$(mktemp)"
+    tier_err="$(mktemp "$SCRATCH_DIR/select-tier.XXXXXX")"
     # DELIBERATELY UNSCOPED BY RELEASE: the tier pool is small and
     # hand-curated (855-wrr3 is its charter row, filed v0.6 while v0.5 was
     # active), and profiling the floor is valuable whenever it was filed —
@@ -597,7 +606,7 @@ fi
 CAPS_FILTERED=0
 for tool in $TOOL_CAP_TAGS; do
     case "$HOST_CAPS" in *" ${tool} "*) continue ;; esac
-    cap_err="$(mktemp)"
+    cap_err="$(mktemp "$SCRATCH_DIR/select-cap.XXXXXX")"
     cap_rows="$("$PLAN" select-rows --status ready --claimable-by "$ROLE" \
         "${REL_ARG[@]+"${REL_ARG[@]}"}" --tag "$tool" --limit 400 2>"$cap_err")"
     cap_rc=$?
@@ -709,7 +718,7 @@ if [ -n "${TILLANDSIAS_HOST_ACCELS+x}" ] || [ -n "$MY_CAP_LINE" ]; then
                 ACCEL_BRINGUP_TAGS="${ACCEL_BRINGUP_TAGS}${ACCEL_BRINGUP_TAGS:+,}${accel}"
                 continue ;;
         esac
-        accel_err="$(mktemp)"
+        accel_err="$(mktemp "$SCRATCH_DIR/select-accel.XXXXXX")"
         accel_rows="$("$PLAN" select-rows --status ready --claimable-by "$ROLE" \
             "${REL_ARG[@]+"${REL_ARG[@]}"}" --tag "$accel" --limit 400 2>"$accel_err")"
         accel_rc=$?
