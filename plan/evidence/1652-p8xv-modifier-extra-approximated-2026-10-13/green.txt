@@ -1,0 +1,5 @@
+...........
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 219 filtered out; finished in 0.03s
+
+galaxy s23 -> samsung-galaxy-s23-plus rule tokens approximated True alternatives ['samsung-galaxy-s23-ultra', 'samsung-galaxy-s23-fe']
+galaxy s23 fe -> samsung-galaxy-s23-fe rule alias approximated False
