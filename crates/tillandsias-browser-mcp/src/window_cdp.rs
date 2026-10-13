@@ -444,7 +444,7 @@ fn handle_events(
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use crate::cdp_client::tests::FakeChromium;

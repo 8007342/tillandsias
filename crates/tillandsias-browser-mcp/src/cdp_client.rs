@@ -22,13 +22,16 @@ use base64::Engine;
 use parking_lot::Mutex;
 use serde_json::{Value, json};
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
+#[cfg(unix)]
 use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(unix)]
+use std::time::Instant;
 use thiserror::Error;
 
 /// Every command's reply budget.
@@ -55,13 +58,19 @@ pub enum CdpError {
     TypeFailed(String),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+    /// This host has no transport to a window's CDP relay yet (the relay is
+    /// a Unix socket; a Windows/WSLg path brings its own transport).
+    #[error("CDP unsupported on this host: {0}")]
+    Unsupported(String),
 }
 
 type Pending = Arc<Mutex<HashMap<u64, mpsc::Sender<Result<Value, CdpError>>>>>;
 
-/// One browser-level CDP connection.
+/// One browser-level CDP connection, over any byte transport (the relay's
+/// Unix socket on Unix hosts).
 pub struct CdpConnection {
-    writer: Mutex<UnixStream>,
+    writer: Mutex<Box<dyn Write + Send>>,
+    close: Box<dyn Fn() + Send + Sync>,
     pending: Pending,
     next_id: AtomicU64,
     events: Mutex<Option<mpsc::Receiver<Value>>>,
@@ -70,6 +79,7 @@ pub struct CdpConnection {
 impl CdpConnection {
     /// Connect to a relay socket, waiting up to `budget` for the relay to
     /// create it (the container is still starting when this is called).
+    #[cfg(unix)]
     pub fn connect(socket: &Path, budget: Duration) -> Result<Self, CdpError> {
         let deadline = Instant::now() + budget;
         loop {
@@ -86,9 +96,32 @@ impl CdpConnection {
         }
     }
 
-    /// Wrap an already connected stream (a relay socket, or a test pair).
+    /// No Unix sockets in std here: a typed refusal, never a silent no-op.
+    #[cfg(not(unix))]
+    pub fn connect(socket: &Path, _budget: Duration) -> Result<Self, CdpError> {
+        Err(CdpError::Unsupported(format!(
+            "the window CDP relay ({}) is a Unix socket; this host has no transport for it",
+            socket.display()
+        )))
+    }
+
+    /// Wrap an already connected Unix stream (a relay socket, or a test pair).
+    #[cfg(unix)]
     pub fn from_stream(stream: UnixStream) -> Result<Self, CdpError> {
         let reader = stream.try_clone()?;
+        let closer = stream.try_clone()?;
+        Self::from_io(reader, stream, move || {
+            let _ = closer.shutdown(std::net::Shutdown::Both);
+        })
+    }
+
+    /// Wrap a connected transport: its read half, its write half, and how
+    /// to close both (which must end the read half too).
+    pub fn from_io(
+        reader: impl Read + Send + 'static,
+        writer: impl Write + Send + 'static,
+        close: impl Fn() + Send + Sync + 'static,
+    ) -> Result<Self, CdpError> {
         let pending: Pending = Arc::new(Mutex::new(HashMap::new()));
         let (event_tx, event_rx) = mpsc::channel();
         let routes = Arc::clone(&pending);
@@ -96,7 +129,8 @@ impl CdpConnection {
             .name("cdp-reader".into())
             .spawn(move || read_loop(reader, routes, event_tx))?;
         Ok(Self {
-            writer: Mutex::new(stream),
+            writer: Mutex::new(Box::new(writer)),
+            close: Box::new(close),
             pending,
             next_id: AtomicU64::new(0),
             events: Mutex::new(Some(event_rx)),
@@ -105,7 +139,7 @@ impl CdpConnection {
 
     /// Close the connection: the relay then ends the window's Chromium.
     pub fn shutdown(&self) {
-        let _ = self.writer.lock().shutdown(std::net::Shutdown::Both);
+        (self.close)();
     }
 
     /// The event stream (every message without an `id`). Taken once.
@@ -228,7 +262,7 @@ fn js_string(s: &str) -> String {
     Value::String(s.to_string()).to_string()
 }
 
-fn read_loop(stream: UnixStream, pending: Pending, events: mpsc::Sender<Value>) {
+fn read_loop(stream: impl Read, pending: Pending, events: mpsc::Sender<Value>) {
     let mut reader = BufReader::new(stream);
     let mut frame = Vec::new();
     loop {
@@ -270,7 +304,20 @@ fn read_loop(stream: UnixStream, pending: Pending, events: mpsc::Sender<Value>) 
     pending.lock().clear();
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(unix)))]
+mod tests_non_unix {
+    use super::*;
+
+    #[test]
+    fn connect_is_a_typed_refusal_without_unix_sockets() {
+        assert!(matches!(
+            CdpConnection::connect(Path::new("cdp.sock"), Duration::from_millis(10)),
+            Err(CdpError::Unsupported(_))
+        ));
+    }
+}
+
+#[cfg(all(test, unix))]
 pub(crate) mod tests {
     use super::*;
     use std::io::Read;

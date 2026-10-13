@@ -1904,6 +1904,7 @@ mod tests {
     /// A host launcher whose windows have a CDP relay socket, served by a
     /// fake Chromium: it auto-attaches one page on `Target.setAutoAttach`,
     /// answers everything else with `{}`, and records what it was sent.
+    #[cfg(unix)]
     #[derive(Default)]
     struct CdpContainers {
         dir: parking_lot::Mutex<Option<tempfile::TempDir>>,
@@ -1913,6 +1914,7 @@ mod tests {
         stops: parking_lot::Mutex<Vec<String>>,
     }
 
+    #[cfg(unix)]
     impl BrowserContainers for CdpContainers {
         fn preview_tls_port(&self) -> Option<u16> {
             Some(18443)
@@ -1978,6 +1980,7 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     impl CdpContainers {
         fn methods_on(&self, session: &str) -> Vec<(String, serde_json::Value)> {
             self.seen
@@ -2012,6 +2015,7 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn browser_open_with_a_device_emulates_it_before_navigating_and_set_device_switches_it() {
         let host = Arc::new(CdpContainers::default());
@@ -2106,6 +2110,7 @@ mod tests {
         assert_eq!(*host.stops.lock(), vec!["tillandsias-browser-acme-1"]);
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn an_unknown_device_starts_nothing_and_the_default_comes_from_the_project() {
         let host = Arc::new(CdpContainers::default());
