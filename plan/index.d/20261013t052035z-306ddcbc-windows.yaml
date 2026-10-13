@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: 793-a8e7-s4-gpu-deadline-with-cpu-fallback
+    event:
+      type: note
+      ts: "2026-10-13T05:20:35Z"
+      agent_id: windows-yolanda-claude-20261013t052033z
+      host: windows
+      summary: |
+        Closed: S4 landed in run 61 as #395 (merge 25220c3ca, land(395): work/1648-gy9z into linux-next). Exit criteria to evidence:
+        (1) A GPU request on the opted-in lane that exceeds its deadline falls back to the CPU and is logged by name. Evidence: images/inference/gpu-stall-watchdog.sh, started from the entrypoint on gpu-vulkan only. A runner that makes no prompt progress for TGW_STALL_S (120s) gets kill -TERM, the model is quarantined through the decode-floor pin (num_gpu 0, recorded in the pin record), and a gpu-stall: line is logged. engine_slots sets OLLAMA_LOAD_TIMEOUT=2m on gpu-vulkan. Live on yolanda: a forced watchdog kill turned a hang into an error, the CPU retry showed size_vram=0, and opt-out restored the model.
+        (2) A fixture reproduces the hang shape and shows the fallback, and the default lane is unchanged. Evidence: scripts/lua/test-gpu-stall-watchdog.lua (11 arms) covers a stalled runner, a progressing runner and the blind cases. A blind case logs watchdog blind once and takes no action. Gate step 850-1648-gy9z. Non-vulkan tiers start no watchdog and get no OLLAMA_LOAD_TIMEOUT.
+        Repro note: the original hang was not reproduced in 8 cold loads on yolanda. The coordinator ruled option C: time-boxed repro plus blind-safe arms.
