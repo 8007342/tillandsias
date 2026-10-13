@@ -112,7 +112,10 @@ export function collect(root, {grade = false, now = new Date().toISOString(), re
       command(root, 'bash', ['scripts/centicolon-grade.sh'], 120000, {...process.env, TILLANDSIAS_REPO_ROOT: root, TILLANDSIAS_CENTICOLON_DIR: 'target/observatorium-centicolon'});
       const result = JSON.parse(readFileSync(join(root, 'target/observatorium-centicolon/grade.json'), 'utf8'));
       if (result.schema !== 'centicolon-grade-observed/1' || !Number.isInteger(result.R) || result.R < 0 || result.R !== result.denominator - result.satisfied) throw Error('Invalid grade schema or residual arithmetic');
-      residual = {value: result.R, denominator: result.denominator, satisfied: result.satisfied, source: result.schema, reason: 'Fresh canonical grader observation; only available local result evidence can earn obligations.', reasons: result.residue_reasons, records: result.records};
+      // Order 1670-gcwu: a grade over zero resolved requirement keys measures
+      // nothing (R = denominator by construction); it is a gap, never a value.
+      if (result.measured === false) residual = {value: null, unmeasured: true, denominator: result.denominator, source: result.schema, reason: `CentiColon grade unmeasured (${result.unmeasured_reason || 'no reason given'}): no litmus step names a requirement it pins, so no obligation can be traced or tested.`};
+      else residual = {value: result.R, denominator: result.denominator, satisfied: result.satisfied, source: result.schema, reason: 'Fresh canonical grader observation; only available local result evidence can earn obligations.', reasons: result.residue_reasons, records: result.records};
     } catch (error) { residual.reason = `Fresh obligation grading unavailable: ${error.message.split('\n')[0]}`; }
   }
   if (residual.value === null) gaps.push(residual.reason);

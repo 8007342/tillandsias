@@ -110,3 +110,27 @@ test('a release-cut snapshot names its release tag; a bad tag is refused (1661-v
     assert.throws(() => collect(repo, {release: 'latest'}), /Invalid release tag/);
   } finally { rmSync(repo, {recursive: true, force: true}); }
 });
+test('an unmeasured CentiColon grade is a visible gap, never a residual value (1670-gcwu)', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'observatorium-unmeasured-'));
+  const old = process.env.TILLANDSIAS_PLAN_BIN;
+  try {
+    execFileSync('git', ['init', '-q', repo]);
+    mkdirSync(join(repo, 'scripts'));
+    const fake = (grade) => writeFileSync(join(repo, 'scripts/centicolon-grade.sh'),
+      `mkdir -p "$TILLANDSIAS_REPO_ROOT/$TILLANDSIAS_CENTICOLON_DIR"\nprintf '%s' '${JSON.stringify(grade)}' > "$TILLANDSIAS_REPO_ROOT/$TILLANDSIAS_CENTICOLON_DIR/grade.json"\n`);
+    fake({schema: 'centicolon-grade-observed/1', measured: false, unmeasured_reason: 'zero-resolved-requirement-keys', R: 4, denominator: 4, satisfied: 0, records: 0});
+    execFileSync('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', 'add', '.']);
+    execFileSync('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'x']);
+    process.env.TILLANDSIAS_PLAN_BIN = join(repo, 'absent-plan-tool');
+    const unmeasured = collect(repo, {grade: true});
+    assert.equal(unmeasured.current.residual.value, null, 'an unmeasured R is not a value');
+    assert.equal(unmeasured.current.residual.unmeasured, true);
+    assert.ok(unmeasured.gaps.some(gap => gap.startsWith('CentiColon grade unmeasured (zero-resolved-requirement-keys)')));
+    fake({schema: 'centicolon-grade-observed/1', measured: true, R: 2, denominator: 4, satisfied: 2, records: 1});
+    const measured = collect(repo, {grade: true});
+    assert.equal(measured.current.residual.value, 2, 'a measured grade keeps its R');
+  } finally {
+    if (old === undefined) delete process.env.TILLANDSIAS_PLAN_BIN; else process.env.TILLANDSIAS_PLAN_BIN = old;
+    rmSync(repo, {recursive: true, force: true});
+  }
+});
