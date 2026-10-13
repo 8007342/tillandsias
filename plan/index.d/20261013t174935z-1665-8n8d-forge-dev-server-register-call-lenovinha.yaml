@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's direction (macuahuitl, 2026-10-13): the follow-up to 1662-udb3's option (c).
+packets:
+  - packet_id: an-mcp-register-call-routes-a-forge-dev-server-the-agent-names-by-port-and-service-as-service-dot-project-dot-localhost-for-that-lane-only
+    order: 1665-8n8d
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [forge, router, mcp, local-web-preview, agents, hot-reload]
+    estimated_hours: 8
+    depends_on:
+      - forge-dev-server-routing-is-defined-either-a-documented-routed-port-table-or-the-context-says-only-publish-local-is-routed-and-no-route-names-the-routes-that-exist
+    related: [1662-udb3, 1661-m9sr]
+    title: |
+      An MCP tool lets a forge agent register its own dev server ("route port N as <service>"), and the host routes <service>.<project>.localhost to that lane's port, for that lane only. This is the explicit, per-lane path to hot-reload previews, NOT a fixed port table that silently exposes whatever listens on 3000.
+    context: |
+      1662-udb3 takes option (c) for v0.5: the forge context states that only publish_local services are routed, and steers "serve/open it" to publish_local. The operator's hot-reload vision needs a running dev server (wrangler dev on 8787, vite on 5173) to be reachable. The coordinator chose an explicit register call over a fixed port table: the agent names the port and the service, so nothing is routed by accident.
+    exit_criteria:
+      - 'from a forge lane, a register call {port, service} makes https://<service>.<project>.localhost:<preview port>/ serve that lane''s dev server; a wrangler-dev-shaped server on 8787 is reachable after the call and not before; red today (no such tool)'
+      - 'another lane, of the same or another project, cannot register or reach the route; an unregister (or the lane ending) removes it'
+      - 'only the named port is routed: another port listening in the same lane stays unreachable'
+      - 'the forge context documents the call where 1662 says only publish_local is routed'
+    unscoreable: "unpinnable-until-the-guard-exists: the register tool and its live two-lane arm are written together"
+    next_action: >
+      After 1662-udb3: design the tool's shape with the router's route rendering (main.rs route.public, the sidecar), then write the two-lane live arm red first.
+    provenance: |
+      Filed by lenovinha-silverblue on macuahuitl's direction, 2026-10-13.
+    events:
+      - type: filed
+        ts: "2026-10-13T17:49:35Z"
+        host: lenovinha
+        summary: |-
+          Follow-up to 1662: an explicit per-lane MCP register call routes a named dev-server port as <service>.<project>.localhost.

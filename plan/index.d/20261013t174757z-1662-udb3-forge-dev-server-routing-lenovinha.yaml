@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's direction (macuahuitl, 2026-10-13) from an operator forge failure on yoga.
+packets:
+  - packet_id: forge-dev-server-routing-is-defined-either-a-documented-routed-port-table-or-the-context-says-only-publish-local-is-routed-and-no-route-names-the-routes-that-exist
+    order: 1662-udb3
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, router, startup-context, local-web-preview, agents, wrangler]
+    estimated_hours: 6
+    owned_files:
+      - images/default/lib-common.sh
+      - images/router/base.Caddyfile
+    title: |
+      The forge's startup context tells an agent to run a dev server on "the framework's conventional port" and promises a URL with no port, but nothing defines which forge ports the router routes. `wrangler dev` on 8787 got "no route". Define it, and make "no route for X" list the routes that exist for that project.
+    context: |
+      Operator failure on yoga (2026-10-13), private project 8007342/lakanoa at 9bb86b1c4. The agent bound wrangler dev on 0.0.0.0:8787 as the context instructs, and the router answered "tillandsias-router: no route for <host>" (images/router/base.Caddyfile catch-all). The context (images/default/lib-common.sh, "Web servers") never says which ports or services the router auto-routes.
+      Two acceptable shapes (pick one, state it in the context and the spec):
+      - route forge dev servers explicitly: a documented port table the router routes for a lane, or an MCP register call ("route my dev server on port N as <service>");
+      - or say plainly that only publish_local services are routed, and steer agents to publish_local.
+      Either way, the router's no-route answer must name the routes that DO exist for that project, so an agent can correct itself.
+    exit_criteria:
+      - 'the startup context states which forge dev servers get a URL (the port table or the register call, or "only publish_local"), and its example matches what the router does; red today (no such statement)'
+      - 'a forge dev server started the way the context says is reachable at the URL the context gives, or the context does not promise one; a live arm runs `wrangler dev`-shaped (8787) and a 3000-shaped server and asserts the documented outcome for each'
+      - 'a request for an unrouted host of a project gets a 404 whose body lists that project''s existing routes (and none of another project''s); red today (the body names only the requested host)'
+    unscoreable: "unpinnable-until-the-guard-exists: the routing decision and its live arm are written together; the no-route listing gets a router-config arm with a negative control"
+    next_action: >
+      Read how routes are rendered (main.rs route.public, the sidecar) and decide the shape with the coordinator, then write the live arm red first.
+    provenance: |
+      Filed by lenovinha-silverblue on macuahuitl's direction, 2026-10-13 (operator forge failure, yoga, lakanoa).
+    events:
+      - type: filed
+        ts: "2026-10-13T17:47:57Z"
+        host: lenovinha
+        summary: |-
+          Nothing defines which forge dev-server ports the router routes; wrangler dev on 8787 got "no route". Define it; no-route should list existing routes.

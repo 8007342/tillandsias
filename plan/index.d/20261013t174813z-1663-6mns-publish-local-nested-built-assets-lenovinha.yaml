@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's direction (macuahuitl, 2026-10-13) from an operator forge failure on yoga.
+packets:
+  - packet_id: publish-local-auto-serves-a-wrangler-project-whose-assets-directory-is-nested-and-built-by-a-build-command-proven-by-a-lakanoa-shaped-cold-start-fixture
+    order: 1663-6mns
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [local-web-preview, publish-local, wrangler, cold-start, acceptance]
+    estimated_hours: 6
+    owned_files:
+      - scripts/lua/cold-start-acceptance.lua
+      - crates/tillandsias-headless/src/local_web_preview.rs
+    title: |
+      publish_local {runtime: auto} serves a Wrangler project whose assets directory is nested (assets.directory "arkanoid-web-game/public") and produced by a build step (build.command "npm ci && npm run build", build.cwd "arkanoid-web-game"). Proven by a lakanoa-shaped fixture in the cold-start acceptance driver.
+    context: |
+      Operator failure on yoga (2026-10-13), private project 8007342/lakanoa at 9bb86b1c4. Its wrangler.jsonc has "assets": {"directory": "arkanoid-web-game/public"} and "build": {"command": "npm ci && npm run build", "cwd": "arkanoid-web-game"}. Yoga ran stable v56.10.9.1, whose publish_local failures are fixed on linux-next but not released. Whether the Wrangler profile (1625-un54) handles a nested assets directory plus a build step has never been proven.
+      lakanoa itself is private: the fixture must be lakanoa-SHAPED (a public fixture or a fake upstream in the driver), never the private repository.
+    exit_criteria:
+      - 'scripts/lua/cold-start-acceptance.lua gains a lakanoa-shaped fixture (nested assets dir, a build command in a subdirectory that produces public/index.html with a unique marker); publish_local {runtime: auto} on it serves the BUILT index (the marker) at the preview URL'
+      - 'the arm is red when the preview serves nothing, the project root, or the unbuilt directory (shown with a mutation: build step skipped, or assets dir resolved from the wrong root)'
+      - 'the fixture contains nothing from the private lakanoa repository'
+    unscoreable: "unpinnable-until-the-guard-exists: the fixture arm is written with the driver change, red first"
+    next_action: >
+      Read how the Wrangler profile resolves assets.directory and build.cwd (local_web_preview.rs, 1625-un54), then write the fixture and watch it go red before any fix.
+    provenance: |
+      Filed by lenovinha-silverblue on macuahuitl's direction, 2026-10-13 (operator forge failure, yoga, lakanoa).
+    events:
+      - type: filed
+        ts: "2026-10-13T17:48:13Z"
+        host: lenovinha
+        summary: |-
+          Prove publish_local auto serves a nested, built Wrangler assets dir with a lakanoa-shaped cold-start fixture.
