@@ -98,6 +98,50 @@ pub(crate) fn vault_store_root_from(
     Ok(root)
 }
 
+/// 1642-cc54. The guest's credential fallbacks (`fallback_vault-shamir-share-v1`,
+/// `fallback_vault-root-token-v1`, `installation_anchor`) are WRITTEN beside
+/// the store they open, so they survive a fresh rootfs with it.
+///
+/// MEASURED (live, 2026-10-13): with only the store on the identity disk, the
+/// rebuilt guest found the store, found no fallback (it had been on the
+/// rootfs), checked before the tray's delivery arrived, and the partial-init
+/// guard WIPED the surviving store ("the unseal share … is in neither the
+/// keyring nor its fallback file").
+fn credential_write_dir() -> Result<PathBuf, String> {
+    vault_store_root()
+}
+
+/// Where a fallback is READ: the store root first, then the cache dir. A guest
+/// that moved its store before its fallbacks followed (or whose headless runs
+/// before provisioning re-runs) still has them on the rootfs. A share present
+/// in EITHER place counts, so no migration state can read as "no share" and
+/// trigger the partial-init wipe.
+fn credential_read_dirs() -> Vec<PathBuf> {
+    credential_read_dirs_from(vault_store_root(), crate::init_cache_dir())
+}
+
+fn credential_read_dirs_from(
+    store_root: Result<PathBuf, String>,
+    cache_dir: Result<PathBuf, String>,
+) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    for d in [store_root, cache_dir].into_iter().flatten() {
+        if !dirs.contains(&d) {
+            dirs.push(d);
+        }
+    }
+    dirs
+}
+
+/// The first readable fallback file `name` in [`credential_read_dirs`] order.
+fn read_credential_fallback(name: &str) -> Option<PathBuf> {
+    read_credential_fallback_in(credential_read_dirs(), name)
+}
+
+fn read_credential_fallback_in(dirs: Vec<PathBuf>, name: &str) -> Option<PathBuf> {
+    dirs.into_iter().map(|d| d.join(name)).find(|p| p.is_file())
+}
+
 #[cfg(feature = "vault")]
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
@@ -294,7 +338,7 @@ pub fn set_in_vm_credentials(
     // 701-se6x criterion 2: surface a failed write instead of discarding it.
     // The `Err` arm of init_cache_dir was silent too — same consequence, since
     // no cache dir means no share file either.
-    match crate::init_cache_dir() {
+    match credential_write_dir() {
         Ok(cache_dir) => {
             if let Err(e) = write_vm_credential_fallbacks(
                 &cache_dir,
@@ -2991,10 +3035,9 @@ fn has_shamir_share_in_keyring() -> bool {
 
     // Fallback: file (populated by keychain_set_blocking when keyring unavailable,
     // e.g. in a VM guest or headless environment without D-Bus)
-    if let Ok(cache_dir) = crate::init_cache_dir() {
-        return fallback_share_counts(&cache_dir);
-    }
-    false
+    credential_read_dirs()
+        .iter()
+        .any(|d| fallback_share_counts(d))
 }
 
 /// What the OS keychain can say about the unseal share (order 1437-qza3).
@@ -3743,8 +3786,8 @@ fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
         // deriving the dummy key — the fallback was written during the initial
         // vault-init run and lets the headless self-recover when the Windows tray
         // hasn't received the GetVaultHandover handover yet.
-        let cache_dir = crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
-        let fallback_file = cache_dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"));
+        let fallback_file = read_credential_fallback(&format!("fallback_{VAULT_SHAMIR_SHARE_V1}"))
+            .unwrap_or_default();
         if fallback_file.is_file()
             && let Ok(encoded) = fs::read_to_string(&fallback_file).map(|s| s.trim().to_string())
             && let Ok(key_vec) = base64::engine::general_purpose::STANDARD.decode(&encoded)
@@ -3785,9 +3828,9 @@ fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
                     "[tillandsias-vault] keyring Shamir share get failed/timed out ({e}); checking file fallback"
                 );
             }
-            let cache_dir =
-                crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
-            let fallback_file = cache_dir.join(format!("fallback_{}", VAULT_SHAMIR_SHARE_V1));
+            let fallback_file =
+                read_credential_fallback(&format!("fallback_{}", VAULT_SHAMIR_SHARE_V1))
+                    .unwrap_or_default();
             if fallback_file.is_file() {
                 fs::read_to_string(&fallback_file)
                     .map(|s| s.trim().to_string())
@@ -3832,9 +3875,7 @@ fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
                     "[tillandsias-vault] keyring anchor get failed/timed out ({e}); checking file fallback"
                 );
             }
-            let cache_dir =
-                crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
-            let fallback_file = cache_dir.join("installation_anchor");
+            let fallback_file = read_credential_fallback("installation_anchor").unwrap_or_default();
             let mut loaded = None;
             if fallback_file.is_file()
                 && let Ok(a) = fs::read_to_string(&fallback_file)
@@ -4952,7 +4993,7 @@ fn keychain_set_blocking(user: &str, value: &str) -> Result<(), String> {
                  using fallback file (expected in VM guest and headless environments)"
             );
             let cache_dir =
-                crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
+                credential_write_dir().map_err(|err| format!("credential dir: {err}"))?;
             let fallback_file = cache_dir.join(format!("fallback_{}", user));
             fs::write(&fallback_file, &value)
                 .map_err(|err| format!("write fallback file: {err}"))?;
@@ -5161,9 +5202,8 @@ fn shamir_share_candidates() -> Vec<(&'static str, String)> {
         .ok()
         .and_then(|entry| with_keyring_timeout(move || entry.get_password()).ok());
 
-    let fallback_file = crate::init_cache_dir().ok().and_then(|dir| {
-        fs::read_to_string(dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"))).ok()
-    });
+    let fallback_file = read_credential_fallback(&format!("fallback_{VAULT_SHAMIR_SHARE_V1}"))
+        .and_then(|p| fs::read_to_string(p).ok());
 
     assemble_share_candidates(
         guest_podman_secret,
@@ -5202,7 +5242,7 @@ fn persist_healed_root_token(token: &str, share_b64: &str, debug: bool) -> Resul
                 });
             }
         }
-        let cache_dir = crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
+        let cache_dir = credential_write_dir().map_err(|err| format!("credential dir: {err}"))?;
         let fallback_file = cache_dir.join("fallback_vault-root-token-v1");
         fs::write(&fallback_file, token).map_err(|err| format!("write fallback file: {err}"))?;
         #[cfg(unix)]
@@ -5507,7 +5547,7 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
             // is the MORE dangerous of the two, because it runs immediately
             // after `operator init` — the moment the share exists and nothing
             // else on the host has a copy.
-            match crate::init_cache_dir() {
+            match credential_write_dir() {
                 Ok(cache_dir) => {
                     if let Err(e) =
                         write_vm_credential_fallbacks(&cache_dir, Some(&token), Some(&share_b64))
@@ -5592,8 +5632,8 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
         // explicit `--store-vault-root-token` path). This keeps the headless
         // self-sufficient when the Windows tray's Credential Manager hasn't
         // received the handover yet (e.g. after a GetVaultHandover failure).
-        let cache_dir = crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
-        let fallback_file = cache_dir.join("fallback_vault-root-token-v1");
+        let fallback_file =
+            read_credential_fallback("fallback_vault-root-token-v1").unwrap_or_default();
         if fallback_file.is_file()
             && let Ok(t) = fs::read_to_string(&fallback_file).map(|s| s.trim().to_string())
             && !t.is_empty()
@@ -5617,9 +5657,8 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
                     "[tillandsias-vault] keyring root token get failed/timed out ({e}); checking file fallback"
                 );
             }
-            let cache_dir =
-                crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
-            let fallback_file = cache_dir.join("fallback_vault-root-token-v1");
+            let fallback_file =
+                read_credential_fallback("fallback_vault-root-token-v1").unwrap_or_default();
             if fallback_file.is_file() {
                 fs::read_to_string(&fallback_file)
                     .map(|s| s.trim().to_string())
@@ -6535,6 +6574,54 @@ mod tests {
         let err = got.expect_err("an unmounted identity disk must refuse");
         assert!(err.contains("not mounted"), "{err}");
         assert!(err.contains(IDENTITY_DISK_MARKER), "{err}");
+    }
+
+    /// The live 2026-10-13 failure: the store survived on the identity disk,
+    /// the share's fallback did not, and the partial-init guard wiped the
+    /// store. Fallbacks are now read from the store root first, then the
+    /// cache dir, so the upgrade state (fallback still on the rootfs) and the
+    /// steady state (fallback beside the store) both find the share.
+    #[test]
+    fn a_fallback_share_is_found_beside_the_store_or_still_on_the_rootfs() {
+        let s = identity_scratch("fallback-read");
+        let (disk, cache) = (s.join("identity"), s.join("cache"));
+        fs::create_dir_all(&disk).unwrap();
+        fs::create_dir_all(&cache).unwrap();
+        let name = format!("fallback_{VAULT_SHAMIR_SHARE_V1}");
+        let dirs = || credential_read_dirs_from(Ok(disk.clone()), Ok(cache.clone()));
+        assert_eq!(
+            dirs(),
+            vec![disk.clone(), cache.clone()],
+            "store root first"
+        );
+        assert_eq!(read_credential_fallback_in(dirs(), &name), None);
+        // Upgrade state: only the rootfs copy exists. It must still count.
+        fs::write(cache.join(&name), b"rootfs-copy").unwrap();
+        assert_eq!(
+            read_credential_fallback_in(dirs(), &name),
+            Some(cache.join(&name))
+        );
+        // Steady state: the copy beside the store wins.
+        fs::write(disk.join(&name), b"disk-copy").unwrap();
+        assert_eq!(
+            read_credential_fallback_in(dirs(), &name),
+            Some(disk.join(&name))
+        );
+    }
+
+    /// Linux, or a guest without an identity disk: one directory, read once.
+    /// An unmounted identity disk (Err) still lets the rootfs copy be read.
+    #[test]
+    fn credential_read_dirs_dedupe_and_skip_an_unavailable_root() {
+        let p = PathBuf::from("/c");
+        assert_eq!(
+            credential_read_dirs_from(Ok(p.clone()), Ok(p.clone())),
+            vec![p.clone()]
+        );
+        assert_eq!(
+            credential_read_dirs_from(Err("not mounted".into()), Ok(p.clone())),
+            vec![p]
+        );
     }
 
     #[test]
