@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found by the v56.10.13.1 macOS curl-install smoke on tlatoanis-macbook-air (2026-10-13). Unclaimed.
+packets:
+  - packet_id: the-macos-reset-plan-misreports-where-the-vault-share-lives-and-predicts-a-reinit-that-does-not-happen
+    order: 1672-xznh
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [vault, reset, ux, macos, credentials]
+    estimated_hours: 2
+    related: [1642-cc54, 1658-6ca6, 803-49re, 1286-4437]
+    depends_on: []
+    title: |
+      The macOS reset plan says "no share in the Keychain, so the next init re-initialises it" while the share sits on the identity disk and the store is kept
+    context: |
+      MEASURED 2026-10-13 22:41Z, v56.10.13.1 install on tlatoanis-macbook-air (setup.log): the installer's SOFT reset printed "the Vault store inside the guest — Absent:REINIT-AT-INIT, kept by this reset, but no share is in the Keychain, so the next init re-initialises it". The login keychain did lack vault-shamir-share-v1 and vault-root-token-v1, but the guest did NOT reinitialise: since 1642-cc54 the share fallback lives on the store root (the identity disk), and 1658-6ca6 consults it. The store was kept and the GitHub sign-in survived the install, a kill -9 and an unclean-stop rebuild (0 WIPING lines). The REBUILD plan at 22:42:31Z then listed "keychain: vault-shamir-share-v1" and "keychain: vault-root-token-v1" under WILL BE PRESERVED, though neither item exists.
+      Both messages are written from the host keychain alone. Their prediction is wrong in the reassuring direction today, but a reset plan the operator can't trust is the 803-49re failure in another form.
+    exit_criteria:
+      - 'the reset disposition accounts for the identity-disk share: with the share only on the identity disk it reports the store as kept with its share, never REINIT-AT-INIT (a test, red at 8a00d2583)'
+      - 'WILL BE PRESERVED lists a keychain item only when it exists; a test with an empty scratch keychain service lists neither share item'
+      - 'NEGATIVE CONTROL: with no share anywhere (keychain empty, no identity-disk record), the disposition still reports REINIT-AT-INIT'
+    unscoreable: "operator-facing reset wording, pinned by disposition tests with and without the identity-disk share"
