@@ -4881,8 +4881,10 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # it in error. It resolves a built `tillandsias-plan`; with no binary it
     # emits `note: tillandsias-plan not built` and PASSES, so above the build it
     # is a no-op rather than a gate. It runs here, where a binary exists.
+    # Ported to Lua (1642-cc54 carry): with no binary it is now could-not-run
+    # (exit 3), which this gate refuses, instead of a pass.
     _step "Checking that added fragments' declared closures resolve (885-92iu)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-declared-closures-added.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-declared-closures-added.lua" 2>&1; then
         _error "this change files a packet whose verifiable_closure names a litmus test that does not resolve (885-92iu)"
         exit 1
     fi

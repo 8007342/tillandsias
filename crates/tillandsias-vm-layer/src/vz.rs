@@ -449,6 +449,8 @@ impl VzRuntime {
             self.image_root.join("cidata.iso"),
             // 1377-hcnv: the swap image goes with the VM it served.
             self.image_root.join(SWAP_IMAGE_FILE),
+            // 1642-cc54 (5b): a fresh disk has no unclean past.
+            self.image_root.join(RUNNING_MARKER_FILE),
         ] {
             let _ = std::fs::remove_file(&best_effort);
         }
@@ -2097,6 +2099,62 @@ pub fn vz_state_name(state: isize) -> &'static str {
     }
 }
 
+/// 1642-cc54 (5b): present from a successful `start()` until a CLEAN stop
+/// (VZ Stopped, or a token-verified clean power-off). Found at the next start,
+/// it says the previous run ended any other way: a crash, a kill, a power
+/// loss, or the drain timeout's force-stop. That disk must not be booted as if
+/// it were clean.
+pub const RUNNING_MARKER_FILE: &str = "vm-running.marker";
+
+/// 5b: did the previous run under `image_root` end without a clean stop?
+pub fn previous_stop_was_unclean(image_root: &std::path::Path) -> bool {
+    image_root.join(RUNNING_MARKER_FILE).exists()
+}
+
+/// 5b: record that a VM is running under `image_root`.
+pub fn mark_vm_running(image_root: &std::path::Path) -> std::io::Result<()> {
+    let since = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    std::fs::write(
+        image_root.join(RUNNING_MARKER_FILE),
+        format!("started_at {since}\n"),
+    )
+}
+
+/// 5b: record a CLEAN stop. Call only where the stop is proven clean. It also
+/// ends any run of automatic rebuilds: the workspace stops cleanly again.
+pub fn mark_vm_stopped_cleanly(image_root: &std::path::Path) {
+    let _ = std::fs::remove_file(image_root.join(RUNNING_MARKER_FILE));
+    let _ = std::fs::remove_file(image_root.join(AUTO_REBUILD_RECORD_FILE));
+}
+
+/// 5b loop guard (coordinator, 2026-10-12): one line per automatic rebuild
+/// after an unclean stop, kept until a clean stop. It is NOT in the wipe list,
+/// so it outlives the rebuild it records.
+pub const AUTO_REBUILD_RECORD_FILE: &str = "unclean-rebuilds.log";
+
+/// 5b loop guard: record an automatic rebuild. Returns true when the previous
+/// automatic rebuild was ALSO followed by an unclean stop: two in a row means
+/// the clean power-off path is likely not being reached at all, so every quit
+/// is rebuilding the workspace (and costing the sign-ins).
+pub fn note_auto_rebuild(image_root: &std::path::Path) -> std::io::Result<bool> {
+    use std::io::Write;
+    let path = image_root.join(AUTO_REBUILD_RECORD_FILE);
+    let consecutive = path.exists();
+    let at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)?
+        .write_all(format!("rebuilt_at {at}\n").as_bytes())?;
+    Ok(consecutive)
+}
+
 /// 1642-cc54: the cidata file that carries this boot's shutdown token.
 pub const SHUTDOWN_TOKEN_CIDATA_FILE: &str = "tillandsias-shutdown-token";
 
@@ -3255,6 +3313,10 @@ impl VmRuntime for VzRuntime {
             .lock()
             .map_err(|e| format!("vm lock poisoned: {e}"))?;
         *slot = Some(vm_handle::VmHandle(vm));
+        // 1642-cc54 (5b): a VM runs on this disk until a clean stop says so.
+        if let Err(e) = mark_vm_running(&self.image_root) {
+            eprintln!("[tillandsias-vz] could not write {RUNNING_MARKER_FILE}: {e}");
+        }
         Ok(())
     }
 
@@ -3368,6 +3430,7 @@ impl VmRuntime for VzRuntime {
             let state = on_vm_queue(vm, |vm| unsafe { vm.state() }.0)?;
             if state == 0 {
                 // Stopped cleanly.
+                mark_vm_stopped_cleanly(&self.image_root);
                 break Ok(());
             }
             // 1642-cc54: the guest's systemd-shutdown hook reported, with this
@@ -3383,6 +3446,7 @@ impl VmRuntime for VzRuntime {
                     "[tillandsias-vz] stop: guest reported a clean power-off (token matched); \
                      finished the stalled power-off"
                 );
+                mark_vm_stopped_cleanly(&self.image_root);
                 break Ok(());
             }
             if Instant::now() >= deadline {
@@ -5229,6 +5293,72 @@ mod tests {
             !clean_off_reported(after.as_bytes(), after.len() + 1, token),
             "offset past the end"
         );
+    }
+
+    /// 1642-cc54 (5b): the running marker survives every stop except a clean
+    /// one, so the next start can tell an unclean past from a clean one.
+    #[test]
+    fn running_marker_is_cleared_only_by_a_clean_stop() {
+        let root = tempfile::tempdir().unwrap();
+        assert!(
+            !previous_stop_was_unclean(root.path()),
+            "a fresh root is clean"
+        );
+        mark_vm_running(root.path()).unwrap();
+        assert!(
+            previous_stop_was_unclean(root.path()),
+            "a run that never recorded a clean stop (crash, kill, force-stop) is unclean"
+        );
+        mark_vm_stopped_cleanly(root.path());
+        assert!(
+            !previous_stop_was_unclean(root.path()),
+            "a clean stop clears it"
+        );
+        mark_vm_stopped_cleanly(root.path());
+        assert!(
+            !previous_stop_was_unclean(root.path()),
+            "clearing twice is harmless"
+        );
+    }
+
+    /// 5b loop guard: two automatic rebuilds with no clean stop between them
+    /// are flagged; a clean stop resets the count; the record survives a wipe.
+    #[test]
+    fn two_consecutive_unclean_stops_are_flagged() {
+        let root = tempfile::tempdir().unwrap();
+        assert!(
+            !note_auto_rebuild(root.path()).unwrap(),
+            "first rebuild: not a loop"
+        );
+        assert!(
+            note_auto_rebuild(root.path()).unwrap(),
+            "second rebuild with no clean stop between: the loop is flagged"
+        );
+        mark_vm_stopped_cleanly(root.path());
+        assert!(
+            !note_auto_rebuild(root.path()).unwrap(),
+            "a clean stop in between resets the guard"
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_rebuild_record_outlives_the_wipe() {
+        let root = tempfile::tempdir().unwrap();
+        let vz = VzRuntime::new(3, root.path().to_path_buf());
+        note_auto_rebuild(root.path()).unwrap();
+        vz.wipe_provisioned_artifacts().unwrap();
+        assert!(root.path().join(AUTO_REBUILD_RECORD_FILE).exists());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn wiping_the_guest_clears_its_unclean_past() {
+        let root = tempfile::tempdir().unwrap();
+        let vz = VzRuntime::new(3, root.path().to_path_buf());
+        mark_vm_running(root.path()).unwrap();
+        vz.wipe_provisioned_artifacts().unwrap();
+        assert!(!previous_stop_was_unclean(root.path()));
     }
 
     #[test]
