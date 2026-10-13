@@ -1482,6 +1482,18 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
             crate::browser_open::TrayBrowserContainers::new(false),
         )),
     );
+    // Order 1655-urz9: a window emulates the project's `[browser] device`
+    // when browser.open names none, else desktop. The label is the
+    // listener's (validated, order 505), so the path is the project's own.
+    let browser = match tillandsias_core::config::load_project_config(
+        &crate::local_projects::host_project_root().join(&project_label),
+    )
+    .browser
+    .and_then(|b| b.device)
+    {
+        Some(device) => browser.with_default_device(device),
+        None => browser,
+    };
 
     loop {
         let mut raw = String::new();
@@ -5827,8 +5839,8 @@ mod tests {
             tools.iter().filter(|t| t.starts_with("browser.")).collect();
         assert_eq!(
             browser_tools.len(),
-            8,
-            "all eight browser.* tools are advertised: {tools:?}"
+            9,
+            "all nine browser.* tools are advertised: {tools:?}"
         );
         for expected in [
             "browser.open",
@@ -5839,6 +5851,8 @@ mod tests {
             "browser.type",
             "browser.eval",
             "browser.close",
+            // Order 1655-urz9.
+            "browser.set_device",
         ] {
             assert!(
                 tools.contains(&expected),
@@ -5847,7 +5861,7 @@ mod tests {
         }
         assert_eq!(
             tools.len(),
-            12,
+            13,
             "lifecycle tools + browser family, nothing else"
         );
 
@@ -5914,8 +5928,8 @@ mod tests {
                 .collect();
             assert_eq!(
                 tools.len(),
-                12,
-                "over the transport: lifecycle tools + eight browser tools, got {tools:?}"
+                13,
+                "over the transport: lifecycle tools + nine browser tools, got {tools:?}"
             );
             assert!(tools.contains(&"browser.open") && tools.contains(&"publish_local"));
 
@@ -6395,9 +6409,9 @@ mod tests {
             let resp: serde_json::Value =
                 serde_json::from_str(&lines.next().expect("tools/list reply").expect("readable"))
                     .expect("valid JSON");
-            // Host-service lifecycle tools plus the eight browser.* tools
+            // Host-service lifecycle tools plus the nine browser.* tools
             // compose on this socket (the lifecycle family includes reload).
-            assert_eq!(resp["result"]["tools"].as_array().expect("tools").len(), 12);
+            assert_eq!(resp["result"]["tools"].as_array().expect("tools").len(), 13);
 
             drop(writer);
             drop(lines);

@@ -361,6 +361,17 @@ pub struct ProjectConfig {
 
     /// Web server configuration for "Serve Here".
     pub web: Option<WebConfig>,
+
+    /// The `[browser]` section (order 1655-urz9).
+    pub browser: Option<BrowserConfig>,
+}
+
+/// The `[browser]` section of per-project config.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct BrowserConfig {
+    /// The device `browser.open` emulates when the call names none, as a
+    /// device query (`"iphone 12 pro max"`, `"galaxy s24"`). Absent: desktop.
+    pub device: Option<String>,
 }
 
 /// Web server configuration for the `[web]` section of per-project config.
@@ -1119,6 +1130,24 @@ size-garbage: 0
         assert_eq!(parse_size_pack_kb("size-pack: not-a-number"), 0);
         // Negative-looking value (u64 parse fails).
         assert_eq!(parse_size_pack_kb("size-pack: -1"), 0);
+    }
+
+    /// Order 1655-urz9: `[browser] device` is the project's default device.
+    #[test]
+    fn project_browser_device_is_read_from_the_project_config() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(load_project_config(dir.path()).browser.is_none());
+        std::fs::create_dir_all(dir.path().join(".tillandsias")).unwrap();
+        std::fs::write(
+            dir.path().join(".tillandsias/config.toml"),
+            "[browser]\ndevice = \"iphone 12 pro max\"\n",
+        )
+        .unwrap();
+        let config = load_project_config(dir.path());
+        assert_eq!(
+            config.browser.and_then(|b| b.device).as_deref(),
+            Some("iphone 12 pro max")
+        );
     }
 
     #[test]
