@@ -3078,6 +3078,7 @@ mod tests {
             .expect("github login must drive the guest over the expect path");
         assert!(start_idx < wait_idx && wait_idx < stream_idx && stream_idx < dynamic_idx);
         assert!(
+            // source-pin-ok: the text IS the contract (the login must not wait on an author prompt); behaviour is pinned by vm-layer an_empty_dynamic_expect_list_ends_when_the_guest_exits
             window.contains("let expects: Vec<DynamicExpect> = Vec::new();"),
             "the host must answer no guest prompt (1668-8jmq): {window}"
         );
