@@ -1,4 +1,4 @@
--- @trace order:1625-9qyw, spec:local-web-preview, spec:inference-engine-slots
+-- @trace order:1625-9qyw, order:1663-6mns, spec:local-web-preview, spec:inference-engine-slots
 -- @env XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS
 --
 -- cold-start-acceptance.lua — the operator's cold-start scenario, end to end,
@@ -49,7 +49,7 @@
 --     started before it
 --
 -- Verdicts (last stdout line):
---   ok:cold-start-acceptance:<tag>:served:<url>:http=200:router-failure=step-qualified:recovered   exit 0
+--   ok:cold-start-acceptance:<tag>:served:<url>:http=200:lakanoa-shape=built-nested-served:router-failure=step-qualified:recovered   exit 0
 --   ok:cold-start-acceptance:<tag>:prefix-failure:<reason>                                          exit 0
 --   refused:cold-start-acceptance:<what>                                                             exit 1
 --   skip:cold-start-acceptance:opt-in-required                                                       exit 0
@@ -347,6 +347,67 @@ if not text.contains(got, "http=200") or not text.contains(got, "ssl_verify=0") 
     fail("fetch:" .. got)
 end
 
+-- ── 7b. a lakanoa-SHAPED project: nested assets plus a build step ──────────
+-- Order 1663-6mns (operator failure on yoga, 2026-10-13; lakanoa itself is
+-- private, so nothing of it is used). Its shape, written into the FORGE's
+-- live worktree as an agent would: wrangler.jsonc names a NESTED assets
+-- directory (arkanoid-web-game/public) produced by a build in a subdirectory
+-- (npm ci && npm run build, cwd arkanoid-web-game). The build is
+-- dependency-free, so npm ci needs no network. macron.dev's own root public/
+-- stays in place: serving it would be the WRONG ROOT.
+--   1. before the build: publish_local refuses, naming the directory and the
+--      build command (it never serves the root or nothing as if fine);
+--   2. after the build, run in the forge: it serves the BUILT index, whose
+--      title is the marker, not macron.dev's.
+local MARKER = "LAKANOA-SHAPE-BUILT"
+must(inside([[
+f=$(podman ps --format '{{.Names}}' --filter 'name=macron.*-forge')
+podman exec -i "$f" sh -s <<'FORGE'
+set -e
+cd /home/forge/src/macron.dev
+cat > wrangler.jsonc <<'J'
+{"name":"lakanoa-shape","compatibility_date":"2026-10-01","assets":{"directory":"arkanoid-web-game/public"},"build":{"command":"npm ci && npm run build","cwd":"arkanoid-web-game"}}
+J
+mkdir -p arkanoid-web-game
+cat > arkanoid-web-game/package.json <<'J'
+{"name":"arkanoid-shape","version":"1.0.0","private":true,"scripts":{"build":"node build.js"}}
+J
+cat > arkanoid-web-game/package-lock.json <<'J'
+{"name":"arkanoid-shape","version":"1.0.0","lockfileVersion":3,"requires":true,"packages":{"":{"name":"arkanoid-shape","version":"1.0.0"}}}
+J
+cat > arkanoid-web-game/build.js <<'J'
+const fs = require('fs');
+fs.mkdirSync('public', { recursive: true });
+fs.writeFileSync('public/index.html', '<!doctype html><title>LAKANOA-SHAPE-BUILT</title><p>built in arkanoid-web-game</p>\n');
+J
+echo "lakanoa-shaped fixture written: $(ls arkanoid-web-game | tr '\n' ' ')"
+FORGE
+]]), "lakanoa-shape-fixture")
+mcp({ { "service_stop", '{"category":"WEB"}' } })
+local lres, lraw = mcp({ { "publish_local", '{"category":"WEB","runtime":"auto"}' } })
+fs.write(OUT .. "/publish-lakanoa-shape-unbuilt.ndjson", lraw)
+local lreason = lres[2] and lres[2].error and lres[2].error.message or ""
+local lurl = result_url(lres[2])
+log_line("lakanoa-shape before build: url=" .. tostring(lurl) .. " reason=" .. lreason)
+if lurl or not text.contains(lreason, "arkanoid-web-game/public")
+    or not text.contains(lreason, "npm ci && npm run build") then
+    fail("lakanoa-shape-unbuilt-not-refused-with-the-build-command:" .. lraw:sub(1, 300))
+end
+local built = must(inside([[
+f=$(podman ps --format '{{.Names}}' --filter 'name=macron.*-forge')
+podman exec "$f" sh -c 'cd /home/forge/src/macron.dev/arkanoid-web-game && npm ci && npm run build' 2>&1 | tail -3
+podman exec "$f" sh -c 'ls -l /home/forge/src/macron.dev/arkanoid-web-game/public/index.html'
+]], { timeout_ms = 300000 }), "lakanoa-shape-build")
+log_line("lakanoa-shape build in the forge: " .. text.trim(built.stdout or ""):gsub("\n", " | "))
+local bres, braw = mcp({ { "publish_local", '{"category":"WEB","runtime":"auto"}' } })
+fs.write(OUT .. "/publish-lakanoa-shape-built.ndjson", braw)
+local burl = result_url(bres[2])
+local bgot = burl and fetch(burl) or ""
+log_line("lakanoa-shape after build: url=" .. tostring(burl) .. " fetch: " .. bgot:gsub("\n", " "))
+if not burl or not text.contains(bgot, "http=200") or not text.contains(bgot, "<title>" .. MARKER .. "</title>") then
+    fail("lakanoa-shape-built-not-served:" .. (bgot ~= "" and bgot or braw:sub(1, 300)))
+end
+
 -- ── 8. forced router-step failure (another app holds the router's port) ─────
 mcp({ { "service_stop", '{"category":"WEB"}' } })
 must(inside([[
@@ -382,4 +443,4 @@ log_line("host keychain: service=tillandsias item metadata identical before and 
 
 inside("pkill -f 'tillandsias --bash' 2>/dev/null; true")
 if not keep then down() end
-verdict.emit("ok:cold-start-acceptance:" .. tag .. ":served:" .. url .. ":http=200:router-failure=step-qualified:recovered", 0)
+verdict.emit("ok:cold-start-acceptance:" .. tag .. ":served:" .. url .. ":http=200:lakanoa-shape=built-nested-served:router-failure=step-qualified:recovered", 0)
