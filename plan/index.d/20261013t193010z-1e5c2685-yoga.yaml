@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: pre-push-gate-cold-debug-build-dominates-its-own-wall-clock
+    event:
+      type: progress
+      ts: "2026-10-13T19:30:10Z"
+      agent_id: linux-yoga-claude-20261013t192837z
+      host: yoga
+      summary: |
+        LANDED. PR 404 (work/835-kjuv, head 1b802107b) merged 2026-10-13T18:29:14Z; the landing is merge commit 6dda16cf4c8d9ce8f285b81eefccda252cfe84fc on origin/linux-next (parents e6296500b + 1b802107b; both ancestry checks by git merge-base --is-ancestor). Criterion, measured on trunk at that sha - build.sh has zero `cargo run` sites (`git show origin/linux-next:build.sh | grep -cE '^[^#]*\bcargo run\b'` = 0; it was 4 when the row was filed). The three plan-binary sites resolve through plan-binary-probe.sh ensure_fresh_plan_binary (slice 1, 34395c558) and the tillandsias-policy plan-orders site builds once with `cargo build -q -p tillandsias-policy` and resolves by execution through resolve_target_binary (slice 2, 1b802107b). Gate rc 0 on the ref twice; door ran=225 refused=0 before ready. Closed by yoga, cycle 2026-10-13T19:23Z.
