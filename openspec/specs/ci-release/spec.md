@@ -21,20 +21,28 @@ repository Nix targets and MUST use the configured FlakeHub cache.
 - **AND** the workflow signs the artifact with a `.cosign.bundle`
 - **AND** the workflow builds `.#tillandsias-x86_64-musl`
 
-### Hosted workflows stay release-only
+### Hosted workflows stay limited to release and approved dashboard deployment
 
 GitHub-hosted workflows MUST be reserved for remote-only release work:
 platform builds, artifact sanity checks, Cosign keyless signing through GitHub
 OIDC, GitHub Release upload, and rolling tags. Verification, litmus execution,
-dashboard generation, cache probing, merge work, and integration checks belong
-to the local release gate.
+convergence dashboard generation, cache probing, merge work, and integration
+checks belong to the local release gate. The explicit operator request on
+2026-10-13 (plan 1661-vckd) additionally authorizes `observatorium.yml` to build,
+validate and deploy the isolated Flutter/Flame dashboard on pushes to main,
+published releases, successful same-repository Release workflow completion,
+and manual dispatch. It MUST NOT run on platform/work/research branch pushes,
+pull requests, schedules or repository_dispatch. This exception does not change
+the manual-only release workflow or reintroduce generic push CI.
 
 #### Scenario: Local litmus and dashboard gate
 - **WHEN** an operator prepares a release
 - **THEN** they run `scripts/release-preflight-local.sh`
 - **AND** the local preflight runs `scripts/local-ci.sh`
-- **AND** hosted workflows do not run litmus, convergence dashboard, cache warm,
-  or test execution (a lean fmt+check push/PR gate, ci.yml, is permitted)
+- **AND** the binary release workflow does not run litmus, convergence dashboard,
+  cache warm or test execution
+- **AND** only the separately authorized Observatorium workflow validates its
+  isolated app before publication
 
 #### Scenario: Manual hosted release
 - **WHEN** `.github/workflows/release.yml` is dispatched manually

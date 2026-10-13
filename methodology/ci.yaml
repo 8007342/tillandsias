@@ -286,9 +286,11 @@ execution_contract:
 github_actions_budget:
   decided_by: "The Tlatoāni, 2026-08-02"
   rule: >
-    GitHub Actions runs EXACTLY ONE workflow: the release. Nothing else may
-    consume cloud minutes — no push CI, no PR CI, no scheduled jobs, no cache
-    warming, no webhooks. Every other gate runs locally.
+    GitHub Actions runs the manual release workflow and the explicitly
+    operator-authorized Observatorium deployment (2026-10-13, order 1661-vckd).
+    The Observatorium exception deploys the isolated Flutter/Flame website on
+    main pushes and releases; it is not platform-branch or PR CI. No other
+    workflow may consume cloud minutes. Every other gate runs locally.
   why_the_release_is_the_only_exception: >
     The release workflow signs binaries with GitHub-held secrets. That signing
     material exists only in the cloud, so the job cannot run anywhere else. No
@@ -307,7 +309,8 @@ github_actions_budget:
       circular when nothing else is allowed to run in the cloud.
   trigger_rules:
     - "release.yml stays workflow_dispatch ONLY — never push, never pull_request, never schedule."
-    - "No workflow may add push, pull_request, schedule, or repository_dispatch triggers."
+    - "observatorium.yml may deploy on push to main only, published release, successful same-repository Release workflow_run, or manual dispatch; authority: operator request 2026-10-13, 1661-vckd."
+    - "No other workflow may add push triggers; no workflow may add pull_request, schedule, or repository_dispatch triggers."
     - "No repository webhooks."
   what_we_gave_up_and_where_it_moved: >
     ci.yml existed for a real reason recorded in its header: an agent once pushed

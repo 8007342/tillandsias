@@ -4,6 +4,9 @@
 # roughly 10% of a MONTHLY GitHub Actions quota was consumed in a single day:
 # only the release may run in the cloud, because it signs binaries with
 # GitHub-held secrets that exist nowhere else. Everything else runs locally.
+# AMENDED by explicit operator request 2026-10-13 (1661-vckd): the isolated
+# Observatorium deployment may run on main/release events. Generic CI remains
+# forbidden; release.yml remains manual-only.
 #
 # WHY A LITMUS AND NOT JUST A RULE IN THE METHODOLOGY. The workflow that caused
 # this was `ci.yml`, and its own header called it "intentionally cheap" — true
@@ -16,9 +19,9 @@ name: litmus:github-actions-budget
 spec: ci-release
 phase: pre-build
 description: >
-  Assert only the release workflow exists, that it is manually dispatched and
-  never triggered by push, pull_request or schedule, and that no workflow
-  reintroduces an automatic cloud trigger.
+  Assert only the manual release and operator-authorized Observatorium
+  deployment workflows exist. Keep platform-branch CI, PR CI and schedules
+  forbidden; only the dashboard deployment may trigger on main push/releases.
 severity: critical
 size: instant
 
@@ -27,10 +30,15 @@ preconditions:
   - shell utilities (ls, grep, awk) available
 
 critical_path:
-  - step: "exactly ONE workflow exists, and it is the release"
-    command: "n=$(ls .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null | wc -l); f=$(ls .github/workflows/ 2>/dev/null | tr '\\n' ' '); if mf_assert_count \"$n\" 1 >/dev/null && [ -f .github/workflows/release.yml ]; then echo 'ok: release-only'; else echo \"found $n workflow(s): $f — only release.yml may exist\"; fi"
+  - step: "exactly the release and authorized dashboard deployment workflows exist"
+    command: "n=$(ls .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null | wc -l); f=$(ls .github/workflows/ 2>/dev/null | tr '\\n' ' '); if mf_assert_count \"$n\" 2 >/dev/null && [ -f .github/workflows/release.yml ] && [ -f .github/workflows/observatorium.yml ]; then echo 'ok: sanctioned workflows'; else echo \"found $n workflow(s): $f — only release.yml and observatorium.yml may exist\"; fi"
     timeout_ms: 5000
-    expected_behavior: "ok: release-only"
+    expected_behavior: "ok: sanctioned workflows"
+
+  - step: "dashboard automatic pushes are confined to main, with no PR or timer triggers"
+    command: "blk=$(awk '/^on:/{f=1;next} f && /^[a-z]/{f=0} f' .github/workflows/observatorium.yml); if echo \"$blk\" | grep -qE '^[[:space:]]*(pull_request|pull_request_target|schedule|repository_dispatch):' || ! echo \"$blk\" | grep -Fq 'branches: [main]'; then echo 'dashboard trigger scope violates operator approval'; else echo 'ok: dashboard main only'; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: dashboard main only"
 
   - step: "release.yml is workflow_dispatch ONLY — no push, pull_request, or schedule"
     command: "blk=$(awk '/^on:/{f=1;next} f && /^[a-z]/{f=0} f' .github/workflows/release.yml); if echo \"$blk\" | grep -qE '^[[:space:]]*(push|pull_request|schedule|repository_dispatch):'; then echo \"release.yml has an automatic trigger: $(echo \"$blk\" | tr '\\n' ' ')\"; else echo 'ok: manual dispatch only'; fi"
@@ -67,7 +75,7 @@ critical_path:
     expected_behavior: "ok: no push-CI claim"
 
 failure_modes:
-  - "a push or pull_request trigger is added to any workflow, so every agent push burns cloud minutes again"
+  - "a platform/work/research push or pull_request trigger is added, so agent pushes burn cloud minutes again"
   - "a scheduled job is added, burning minutes on a timer with nobody watching"
-  - "a second workflow appears because a check was 'easier in CI' than locally"
+  - "a workflow beyond the two explicitly sanctioned files appears"
   - "release.yml gains an automatic trigger and fires on pushes to main"
