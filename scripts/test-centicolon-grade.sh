@@ -143,7 +143,7 @@ else bad "Z: $(grep -E '^(warn|ok|unmeasured|blocked):' <<<"$OUT" | head -3)"; f
 RD="target/centicolon-real-$$"
 REAL="$(TILLANDSIAS_CENTICOLON_DIR="$RD" bash "$GRADE" 2>&1)"
 resolved="$(jg '.resolved_keys' "$(cat "$RD/static.json" 2>/dev/null)")"
-verdict="$(grep -E '^(ok|unmeasured|blocked):centicolon-grade:' <<<"$REAL" | tail -1)"
+verdict="$(grep -m1 -E '^(ok|unmeasured|blocked):centicolon-grade:' <<<"$REAL")"
 if [ "$resolved" = 0 ]; then
     case "$verdict" in unmeasured:centicolon-grade:*) ok "REAL resolved=0 -> unmeasured:" ;; *) bad "REAL resolved=0 but verdict is: $verdict" ;; esac
 elif [ -n "$resolved" ]; then

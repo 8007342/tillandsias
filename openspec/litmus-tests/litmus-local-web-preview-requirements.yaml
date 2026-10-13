@@ -24,31 +24,31 @@ preconditions:
 critical_path:
   - step: "087743d0: runtime selection accepts static or exactly one root Wrangler config and refuses ambiguity, a missing config and unknown runtimes"
     requirement: 087743d0
-    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias local_web_preview::tests::profiles_accept_assets_only_and_refuse_ambiguity -- --exact 2>&1 | tail -3"
+    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias local_web_preview::tests::profiles_accept_assets_only_and_refuse_ambiguity -- --exact 2>&1"
     timeout_ms: 600000
     success_pattern: "test result: ok. 1 passed"
 
   - step: "087743d0: the Wrangler launch is a read-only source subset running wrangler dev --local on 8080, with no host port, token or deploy, on the pinned image"
     requirement: 087743d0
-    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias local_web_preview::tests::launch_is_read_only_private_and_has_no_host_port_or_token -- --exact 2>&1 | tail -3"
+    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias local_web_preview::tests::launch_is_read_only_private_and_has_no_host_port_or_token -- --exact 2>&1"
     timeout_ms: 600000
     success_pattern: "test result: ok. 1 passed"
 
   - step: "99f3633b: a mutation from another lane or launch fails closed with lane_conflict, and caller-supplied path components are refused"
     requirement: 99f3633b
-    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias local_web_preview::tests::lane_and_launch_ownership_fail_closed -- --exact 2>&1 | tail -3"
+    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias local_web_preview::tests::lane_and_launch_ownership_fail_closed -- --exact 2>&1"
     timeout_ms: 600000
     success_pattern: "test result: ok. 1 passed"
 
   - step: "99f3633b: the live forge is the one whose MCP listener mount is exactly this lane's"
     requirement: 99f3633b
-    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias local_web_preview::tests::live_identity_requires_exact_listener_mount -- --exact 2>&1 | tail -3"
+    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias local_web_preview::tests::live_identity_requires_exact_listener_mount -- --exact 2>&1"
     timeout_ms: 600000
     success_pattern: "test result: ok. 1 passed"
 
   - step: "99f3633b: the live source is the project-scoped RAM workspace volume, never a tmpfs or another project's"
     requirement: 99f3633b
-    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias local_web_preview::tests::live_tmpfs_reference_is_project_scoped_not_host_checkout -- --exact 2>&1 | tail -3"
+    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias local_web_preview::tests::live_tmpfs_reference_is_project_scoped_not_host_checkout -- --exact 2>&1"
     timeout_ms: 600000
     success_pattern: "test result: ok. 1 passed"
 
@@ -66,4 +66,4 @@ rollback:
     A local-web-preview rule drifted from its requirement. Read the failing
     test in crates/tillandsias-headless/src/local_web_preview.rs and restore
     the rule (the spec text under the step's req-id), not the test.
-  command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias local_web_preview::tests:: 2>&1 | tail -5"
+  command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias local_web_preview::tests:: 2>&1"
