@@ -13259,12 +13259,39 @@ fn prompt_and_store_git_identity() -> Result<(), String> {
     // App user's name and the GitHub noreply address, from the cache the login
     // flow just filled; else the host gitconfig. The usual answer is Enter.
     let current = read_git_identity_defaults();
-    let (name_default, email_default) =
-        identity_prompt_defaults(read_cached_app_user().as_ref(), &current);
-    let name = prompt_with_default("Git author name", name_default.as_deref())?;
-    let email = prompt_with_default("Git author email", email_default.as_deref())?;
+    let (name, email) = git_identity_to_store(
+        read_cached_app_user().as_ref(),
+        &current,
+        prompt_with_default,
+        |label, value| println!("{label}: {value}"),
+    )?;
 
     store_git_identity(&name, &email)
+}
+
+/// 1642-cc54 (criterion 3; operator, 2026-10-12: "I was still prompted to
+/// confirm the name from the git identity, that should be auto accepted as
+/// well"). When the identity comes from the SIGNED-IN ACCOUNT (the App user the
+/// login just cached: its name, else login, and its noreply address), it is
+/// accepted without a prompt and shown with the same labels the prompt uses.
+/// Only when the account is unknown, so the defaults would come from the host
+/// gitconfig, does the operator confirm or type them.
+fn git_identity_to_store(
+    app: Option<&AppUser>,
+    current: &GitIdentity,
+    mut prompt: impl FnMut(&str, Option<&str>) -> Result<String, String>,
+    mut show: impl FnMut(&str, &str),
+) -> Result<(String, String), String> {
+    if let Some(user) = app {
+        let (name, email) = forge_git_identity(Some(user), "");
+        show("Git author name", &name);
+        show("Git author email", &email);
+        return Ok((name, email));
+    }
+    let (name_default, email_default) = identity_prompt_defaults(None, current);
+    let name = prompt("Git author name", name_default.as_deref())?;
+    let email = prompt("Git author email", email_default.as_deref())?;
+    Ok((name, email))
 }
 
 /// The refusal shown when a non-interactive login finds no git identity.
@@ -27126,6 +27153,75 @@ mod tests {
         assert_eq!(
             identity_prompt_defaults(None, &host),
             (Some("Host Name".into()), Some("host@example.com".into()))
+        );
+    }
+
+    /// 1642-cc54 criterion 3: the identity derived from the signed-in account
+    /// is accepted without a prompt, and shown with the prompt's own labels.
+    #[test]
+    fn the_signed_in_accounts_identity_is_accepted_without_a_prompt() {
+        let app = parse_app_user("162944123\toctocat\tMona Lisa").expect("parse");
+        let host = GitIdentity {
+            name: Some("Host Name".into()),
+            email: Some("host@example.com".into()),
+        };
+        let mut shown = Vec::new();
+        let got = git_identity_to_store(
+            Some(&app),
+            &host,
+            |label, _| panic!("prompted for {label} although the account is known"),
+            |label, value| shown.push(format!("{label}: {value}")),
+        );
+        assert_eq!(
+            got,
+            Ok((
+                "Mona Lisa".to_string(),
+                "162944123+octocat@users.noreply.github.com".to_string()
+            ))
+        );
+        assert_eq!(
+            shown,
+            vec![
+                "Git author name: Mona Lisa".to_string(),
+                "Git author email: 162944123+octocat@users.noreply.github.com".to_string()
+            ]
+        );
+    }
+
+    /// Without the account the operator still confirms: both prompts run, with
+    /// the host gitconfig as their defaults, and their answers are stored.
+    #[test]
+    fn without_the_account_the_identity_is_still_prompted() {
+        let host = GitIdentity {
+            name: Some("Host Name".into()),
+            email: Some("host@example.com".into()),
+        };
+        let mut asked = Vec::new();
+        let got = git_identity_to_store(
+            None,
+            &host,
+            |label, default| {
+                asked.push((label.to_string(), default.map(str::to_string)));
+                Ok(format!("typed {label}"))
+            },
+            |_, _| panic!("nothing is shown without the account"),
+        );
+        assert_eq!(
+            got,
+            Ok((
+                "typed Git author name".to_string(),
+                "typed Git author email".to_string()
+            ))
+        );
+        assert_eq!(
+            asked,
+            vec![
+                ("Git author name".to_string(), Some("Host Name".to_string())),
+                (
+                    "Git author email".to_string(),
+                    Some("host@example.com".to_string())
+                ),
+            ]
         );
     }
 
