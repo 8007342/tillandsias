@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: development-scratch-and-worktrees-live-inside-the-checkout-under-one-ignored-dir-that-every-scanner-skips
+    event:
+      type: progress
+      ts: "2026-10-13T09:37:04Z"
+      agent_id: linux-yoga-claude-20261013t074317z
+      host: yoga
+      summary: |
+        Slice 4 on work/1637-cnxq at 973797e30 (PR 386, still draft): scripts/relay-preflight.sh (self-snapshot), scripts/salvage-dirty-worktree.sh (temp index, resolved next to the script because $ROOT may be another damaged tree) and scripts/run-litmus-test.sh (step stdout/stderr captures and the gate snapshot, resolved after parse-only returns) make their scratch through scripts/scratch-dir.sh and refuse by name with why/remedy when it names no directory (refused:relay-preflight:scratch:no-dir, fail:salvage:no-scratch-dir, blocked:litmus-scratch:no-dir). The relay's dirty-worktree check now skips ?? scratch/ (criterion 3; a fake tree without the ignore rule read dirty, test-relay-preflight 1/11 then 11/11 with the skip and the seed ignoring /scratch/). test-relay-preflight.sh and test-bound-litmus-is-runnable.sh stage scratch-dir.sh in their fake trees. Every refusal branch forced once with TILLANDSIAS_SCRATCH_ROOT=/proc/no-such-dir before reading green. Green: relay-preflight 11/11, salvage-net, salvage-exec-bits 4/4, litmus-parse-only 16/16, bound-litmus 7, scratch-location 16, pin-claims 113 checked; the instant pre-build sweep ran with captures under scratch/logs and left 0 files. Door on the final tree (973797e30): ran=226 declared-skip=9 skipped-by-deadline=22 refused=1, the 830 regime hold only.. Lesson: a verdict token containing litmus: is read as a pin claim by check-litmus-pin-claims (first spelling blocked:litmus:scratch:no-dir refused the door and two litmus tests). Remaining outside scratch/: scripts/local-ci.sh (241 /tmp sites, its own slice), the door root (exception preflight-door), LITMUS_FIXTURE_SCOPE (a scope list). Control on trunk (linux-next e933e7afd, same host, same sweep): cycle-batch-triage-shape step 21 fails identically ("batch best is p2 while the ledger offers p1"), every other ci-release instant test green, so the red is the selector against this host's ledger view and not this ref.

@@ -1,0 +1,27 @@
+test-binary /var/home/lenovinha/claudia/tillandsias/target/debug/deps/tillandsias-a69e54c5169d8f95
+version 56.10.12.1 host-ip 192.168.0.111
+images: localhost/tillandsias-router:v56.10.12.1 localhost/tillandsias-chromium-framework:v56.10.12.1 localhost/e2e-fw-base:1 localhost/tillandsias-chromium-framework:v56.9.27.2 localhost/tillandsias-router:v56.9.27.2 
+ca-spki e0gG+ix8RmIwpOxnrpGw9T9xBNgLXxR9fpJLufjNbug=
+router-self-check demo-preview: ok1
+live-test browser_open::tests::live_dev_mode_gives_only_the_owning_lane_full_cdp rc=0
+host-tcp-listeners-before ["0.0.0.0:5355", "127.0.0.1:11434", "127.0.0.1:5111", "127.0.0.1:631", "127.0.0.1:8080", "127.0.0.1:8201", "127.0.0.53%lo:53", "127.0.0.54:53", "[::1]:631", "[::]:5355"]
+lane-a browser.open https://www.demo.localhost:18443/ dev=true -> {"window_id":"win-e8b418cd-ce9c-452d-a5d7-5006a45bd503","device":{"id":"desktop-chrome","model":"Desktop Chrome","approximated":false,"alternatives":[],"viewport":{"w":1280,"h":720},"dpr":1.0,"mobile":false,"max_touch_points":0},"dev":true}
+lane-a browser.cdp Runtime.evaluate 1+1 -> {"result":{"type":"number","value":2,"description":"2"}}
+lane-a browser.screenshot -> 13492 base64 bytes
+lane-b browser.cdp -> {"content":[{"type":"text","text":"WINDOW_NOT_FOUND: win-e8b418cd-ce9c-452d-a5d7-5006a45bd503"}],"isError":true}
+lane-b browser.screenshot -> {"content":[{"type":"text","text":"WINDOW_NOT_FOUND: win-e8b418cd-ce9c-452d-a5d7-5006a45bd503"}],"isError":true}
+host-tcp-listeners-new-while-open []
+container-processes remote-debugging-port=0 remote-debugging-pipe=10
+lane-a Page.navigate public -> {"frameId":"FEBEECCE7D714673525CCF34BDDB548C","loaderId":"F84BCB2A4D68CAE2A578F9470152AFD9","errorText":"net::ERR_NAME_NOT_RESOLVED","isDownload":false}
+lane-a Page.navigate other-project -> {"frameId":"FEBEECCE7D714673525CCF34BDDB548C","loaderId":"B453371C972D73CC3BDF57D89731E411","errorText":"net::ERR_NAME_NOT_RESOLVED","isDownload":false}
+other-project-upstream-hit false
+lane-a browser.navigate back -> {"ok":true,"url":"https://www.demo.localhost:18443/"}
+lane-a browser.eval -> {"value":42}
+lane-a browser.console_tail -> {"entries":[{"type":"log","text":"dev-mode-hello","timestamp":1791875142181.502}]}
+lane-a browser.network_tail -> 24 entries, failed=[String("net::ERR_ABORTED"), String("net::ERR_NAME_NOT_RESOLVED"), String("net::ERR_NAME_NOT_RESOLVED"), String("net::ERR_ABORTED")]
+lane-a browser.close -> {"ok":true}
+test browser_open::tests::live_dev_mode_gives_only_the_owning_lane_full_cdp ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 961 filtered out; finished in 3.23s
+op: unchanged
+op-net: unchanged
+op-browser-dir: unchanged

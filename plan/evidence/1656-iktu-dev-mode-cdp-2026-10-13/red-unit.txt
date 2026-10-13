@@ -1,0 +1,12 @@
+server::tests::browser_cdp_description_states_the_cookie_exposure --- FAILED
+server::tests::a_normal_window_refuses_raw_cdp --- FAILED
+server::tests::another_lane_gets_window_not_found_for_a_dev_window --- FAILED
+server::tests::dev_window_raw_cdp_evaluates_on_the_page_for_the_owning_lane --- FAILED
+---- server::tests::browser_cdp_description_states_the_cookie_exposure stdout ----
+thread 'server::tests::browser_cdp_description_states_the_cookie_exposure' (3078376) panicked at crates/tillandsias-browser-mcp/src/server.rs:2267:9:
+thread 'server::tests::a_normal_window_refuses_raw_cdp' (3078374) panicked at crates/tillandsias-browser-mcp/src/server.rs:2246:9:
+thread 'server::tests::another_lane_gets_window_not_found_for_a_dev_window' (3078375) panicked at crates/tillandsias-browser-mcp/src/server.rs:2233:13:
+browser.cdp from lane B: {"content":[{"text":"TOOL_NOT_FOUND: browser.cdp","type":"text"}],"isError":true}
+thread 'server::tests::dev_window_raw_cdp_evaluates_on_the_page_for_the_owning_lane' (3078377) panicked at crates/tillandsias-browser-mcp/src/server.rs:2214:9:
+    server::tests::browser_cdp_description_states_the_cookie_exposure
+test result: FAILED. 0 passed; 4 failed; 0 ignored; 0 measured; 78 filtered out; finished in 0.00s
