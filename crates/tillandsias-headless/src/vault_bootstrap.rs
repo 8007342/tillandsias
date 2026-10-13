@@ -3041,36 +3041,10 @@ fn report_fallback_write_failure(context: &str, detail: &str) {
     );
 }
 
-/// True iff the host keychain holds a valid (32-byte, base64-encoded) Shamir
-/// unseal share. Used to distinguish a subsequent-boot launch (data volume
-/// contains a fully-initialized Vault the host can re-unseal) from a
-/// partial-init failure (init started, process crashed before the host
-/// captured the handover, so the volume and the keyring are out of sync).
-#[cfg(feature = "vault")]
-fn has_shamir_share_in_keyring() -> bool {
-    use base64::Engine;
-    let try_decode = |encoded: &str| {
-        !encoded.is_empty()
-            && base64::engine::general_purpose::STANDARD
-                .decode(encoded)
-                .map(|v| v.len() == 32)
-                .unwrap_or(false)
-    };
-
-    // Primary: OS keychain
-    if let Ok(entry) = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1)
-        && let Ok(encoded) = with_keyring_timeout(move || entry.get_password())
-        && try_decode(&encoded)
-    {
-        return true;
-    }
-
-    // Fallback: file (populated by keychain_set_blocking when keyring unavailable,
-    // e.g. in a VM guest or headless environment without D-Bus)
-    credential_read_dirs()
-        .iter()
-        .any(|d| fallback_share_counts(d))
-}
+// 1658-6ca6: `has_shamir_share_in_keyring()` (keychain, then fallback file) was
+// the partial-init guard's only predicate. It is replaced by share_check_now(),
+// which also counts the share the host DELIVERED, inside decide_partial_init(),
+// which waits for that delivery before concluding "absent".
 
 /// What the OS keychain can say about the unseal share (order 1437-qza3).
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
@@ -4368,6 +4342,152 @@ fn vault_selinux_label_opt(_debug: bool) -> Option<String> {
     None
 }
 
+/// 1658-6ca6. How long the partial-init guard waits for the host's credential
+/// delivery before it concludes the share is ABSENT. The guard runs when
+/// headless starts Vault, which on a booting guest is BEFORE the host has
+/// connected and delivered: measured twice on 2026-10-13 (1642-cc54 live
+/// proof), the guard decided at boot, found no share, and wiped a valid store
+/// whose share the host keychain was holding. On macOS the tray delivers within
+/// seconds of Ready; the deadline is a generous bound on that, not a target.
+pub(crate) const SHARE_WAIT_DEADLINE: Duration = Duration::from_secs(90);
+const SHARE_WAIT_POLL: Duration = Duration::from_millis(500);
+
+/// Every source the partial-init guard consults, and what each said.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ShareCheck {
+    pub keychain: bool,
+    pub fallbacks: Vec<(PathBuf, bool)>,
+    pub delivered: bool,
+}
+
+impl ShareCheck {
+    fn found(&self) -> bool {
+        self.keychain || self.delivered || self.fallbacks.iter().any(|(_, ok)| *ok)
+    }
+
+    /// One clause per source, so a wipe explains which places were empty.
+    fn describe(&self) -> String {
+        let yn = |b: bool| if b { "present" } else { "absent" };
+        let mut parts = vec![format!("keychain: {}", yn(self.keychain))];
+        for (p, ok) in &self.fallbacks {
+            parts.push(format!("fallback {}: {}", p.display(), yn(*ok)));
+        }
+        parts.push(format!(
+            "host delivery: {}",
+            if self.delivered {
+                "received"
+            } else {
+                "none received"
+            }
+        ));
+        parts.join("; ")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum PartialInitVerdict {
+    /// No store on disk: nothing to keep or wipe.
+    NoStore,
+    /// A share was found: the store is kept.
+    Keep(ShareCheck),
+    /// No source produced a share before the deadline: the store is unopenable.
+    Wipe { last: ShareCheck, waited: Duration },
+}
+
+/// 1658-6ca6. The partial-init decision, with the clock, the sleep and the
+/// share check passed in so a test can deliver a share late. "Not delivered
+/// YET" is not "absent": with a store present and no share, it re-checks every
+/// [`SHARE_WAIT_POLL`] until `deadline`, keeps the store the moment ANY source
+/// produces a share, and wipes only when the deadline passes with none.
+pub(crate) fn decide_partial_init(
+    store_exists: bool,
+    mut check: impl FnMut() -> ShareCheck,
+    deadline: Duration,
+    mut now: impl FnMut() -> std::time::Instant,
+    mut sleep: impl FnMut(Duration),
+    mut on_wait: impl FnMut(),
+) -> PartialInitVerdict {
+    if !store_exists {
+        return PartialInitVerdict::NoStore;
+    }
+    let start = now();
+    let mut announced = false;
+    loop {
+        let c = check();
+        if c.found() {
+            return PartialInitVerdict::Keep(c);
+        }
+        let waited = now().saturating_duration_since(start);
+        if waited >= deadline {
+            return PartialInitVerdict::Wipe { last: c, waited };
+        }
+        if !announced {
+            on_wait();
+            announced = true;
+        }
+        sleep(SHARE_WAIT_POLL.min(deadline - waited));
+    }
+}
+
+/// The real sources: the OS keychain, every fallback path headless reads
+/// (store root, then cache dir), and the share the host delivered into memory
+/// over the control wire, which the pre-1658 guard never consulted.
+fn share_check_now() -> ShareCheck {
+    use base64::Engine;
+    let valid = |encoded: &str| {
+        let e = encoded.trim();
+        !e.is_empty()
+            && base64::engine::general_purpose::STANDARD
+                .decode(e)
+                .map(|v| v.len() == 32)
+                .unwrap_or(false)
+    };
+    let keychain = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1)
+        .ok()
+        .and_then(|entry| with_keyring_timeout(move || entry.get_password()).ok())
+        .is_some_and(|s| valid(&s));
+    let fallbacks = credential_read_dirs()
+        .into_iter()
+        .map(|d| {
+            let ok = fallback_share_counts(&d);
+            (d.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}")), ok)
+        })
+        .collect();
+    let delivered = IN_VM_CREDENTIALS
+        .get()
+        .and_then(|cell| {
+            cell.lock()
+                .ok()
+                .and_then(|g| g.as_ref()?.unseal_share_b64.clone())
+        })
+        .is_some_and(|s| valid(&s));
+    ShareCheck {
+        keychain,
+        fallbacks,
+        delivered,
+    }
+}
+
+/// The line printed before a wipe: every source checked and how long the
+/// guard waited, so the next occurrence explains itself (1658-6ca6).
+fn partial_init_wipe_reason(last: &ShareCheck, waited: Duration) -> String {
+    format!(
+        "no source produced it after waiting {}s for the host's delivery (checked at {}: {})",
+        waited.as_secs(),
+        chrono_like_utc_now(),
+        last.describe()
+    )
+}
+
+/// UTC timestamp without a date-time dependency: seconds since the epoch,
+/// which journald lines can be matched against.
+fn chrono_like_utc_now() -> String {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| format!("unix {}", d.as_secs()))
+        .unwrap_or_else(|_| "unix ?".to_string())
+}
+
 /// The one line printed before the partial-init guard wipes the store
 /// (order 1437-qza3): the store path, the missing share's name, and that every
 /// credential in it is lost.
@@ -4403,7 +4523,26 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     // Wiping it would destroy the stored GitHub token and all other secrets,
     // forcing the operator to re-authenticate — which is exactly the bug this
     // guard fixes. @trace spec:tillandsias-vault
-    let is_partial_init = vault_data_volume_exists() && !has_shamir_share_in_keyring();
+    //
+    // 1658-6ca6: "no share YET" is not "no share". The decision now also
+    // counts the share the host DELIVERED into memory, and waits up to
+    // SHARE_WAIT_DEADLINE for that delivery before concluding it is absent.
+    let verdict = decide_partial_init(
+        vault_data_volume_exists(),
+        share_check_now,
+        SHARE_WAIT_DEADLINE,
+        std::time::Instant::now,
+        std::thread::sleep,
+        || {
+            eprintln!(
+                "[tillandsias-vault] the Vault store exists but no unseal share is visible yet; \
+                 waiting up to {}s for the host's credential delivery before deciding \
+                 (1658-6ca6)",
+                SHARE_WAIT_DEADLINE.as_secs()
+            )
+        },
+    );
+    let is_partial_init = matches!(verdict, PartialInitVerdict::Wipe { .. });
     if is_partial_init {
         let vault_dir = vault_store_root()
             .unwrap_or_else(|_| PathBuf::from("."))
@@ -4412,7 +4551,14 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
         // reset clears the share any more, reaching this branch means the
         // share went missing some other way, and the wipe below destroys every
         // stored sign-in. The operator must be able to see that it happened.
-        eprintln!("{}", partial_init_wipe_line(&vault_dir));
+        // 1658-6ca6: and say which sources were empty, and for how long.
+        if let PartialInitVerdict::Wipe { last, waited } = &verdict {
+            eprintln!(
+                "{} — {}",
+                partial_init_wipe_line(&vault_dir),
+                partial_init_wipe_reason(last, *waited)
+            );
+        }
         let _ = std::fs::remove_dir_all(vault_dir);
     } else if debug && vault_data_volume_exists() {
         eprintln!(
@@ -9324,6 +9470,190 @@ mod tests {
             !entrypoint.contains("sign/*"),
             "no sign/* wildcard may appear anywhere in the vault entrypoint"
         );
+    }
+
+    // ---- 1658-6ca6: the guard waits for the host's delivery -----------------
+
+    /// A fake clock: `sleep` advances it, `now` reads it.
+    struct FakeClock {
+        base: std::time::Instant,
+        elapsed: std::cell::Cell<Duration>,
+        sleeps: std::cell::Cell<u32>,
+    }
+    impl FakeClock {
+        fn new() -> Self {
+            Self {
+                base: std::time::Instant::now(),
+                elapsed: std::cell::Cell::new(Duration::ZERO),
+                sleeps: std::cell::Cell::new(0),
+            }
+        }
+        fn now(&self) -> std::time::Instant {
+            self.base + self.elapsed.get()
+        }
+        fn sleep(&self, d: Duration) {
+            self.elapsed.set(self.elapsed.get() + d);
+            self.sleeps.set(self.sleeps.get() + 1);
+        }
+    }
+
+    fn nothing() -> ShareCheck {
+        ShareCheck {
+            keychain: false,
+            fallbacks: vec![(PathBuf::from("/disk/fallback_vault-shamir-share-v1"), false)],
+            delivered: false,
+        }
+    }
+
+    /// Delivery arrives `after` into the run, the shape of both live wipes:
+    /// the guard runs at boot, the tray delivers once it has connected.
+    fn decide_with_delivery_at(
+        after: Duration,
+        deadline: Duration,
+    ) -> (PartialInitVerdict, FakeClock, u32) {
+        let clock = FakeClock::new();
+        let waits = std::cell::Cell::new(0u32);
+        let v = decide_partial_init(
+            true,
+            || ShareCheck {
+                delivered: clock.elapsed.get() >= after,
+                ..nothing()
+            },
+            deadline,
+            || clock.now(),
+            |d| clock.sleep(d),
+            || waits.set(waits.get() + 1),
+        );
+        let w = waits.get();
+        (v, clock, w)
+    }
+
+    /// Exit criterion 2: a late but valid delivery never triggers a wipe.
+    #[test]
+    fn a_late_but_valid_delivery_keeps_the_store() {
+        let (v, clock, waits) =
+            decide_with_delivery_at(Duration::from_secs(12), SHARE_WAIT_DEADLINE);
+        assert!(
+            matches!(&v, PartialInitVerdict::Keep(c) if c.delivered),
+            "{v:?}"
+        );
+        assert!(
+            clock.elapsed.get() >= Duration::from_secs(12),
+            "it waited for the delivery"
+        );
+        assert_eq!(waits, 1, "the wait is announced once");
+    }
+
+    /// The same late delivery, decided the pre-1658 way (no wait): it WIPES.
+    /// This is what makes the test above red on trunk, measured rather than
+    /// asserted: trunk decided on the first check.
+    #[test]
+    fn deciding_without_a_wait_wipes_the_same_late_delivery() {
+        let (v, _, _) = decide_with_delivery_at(Duration::from_secs(12), Duration::ZERO);
+        assert!(matches!(v, PartialInitVerdict::Wipe { .. }), "{v:?}");
+    }
+
+    /// Exit criterion 3, the negative control: a genuinely absent share (no
+    /// keychain, no fallback, no delivery) still wipes once the deadline has
+    /// passed, so the guard is bounded, not disabled.
+    #[test]
+    fn a_genuinely_absent_share_still_wipes_after_the_deadline() {
+        let clock = FakeClock::new();
+        let v = decide_partial_init(
+            true,
+            nothing,
+            SHARE_WAIT_DEADLINE,
+            || clock.now(),
+            |d| clock.sleep(d),
+            || {},
+        );
+        match v {
+            PartialInitVerdict::Wipe { last, waited } => {
+                assert_eq!(last, nothing());
+                assert!(waited >= SHARE_WAIT_DEADLINE, "{waited:?}");
+                assert!(
+                    waited < SHARE_WAIT_DEADLINE + SHARE_WAIT_POLL,
+                    "bounded: {waited:?}"
+                );
+            }
+            other => panic!("expected a wipe, got {other:?}"),
+        }
+        assert!(
+            clock.sleeps.get() > 1,
+            "it polled rather than deciding once"
+        );
+    }
+
+    /// A share already present is kept at once, and no store means no decision.
+    #[test]
+    fn a_present_share_keeps_at_once_and_no_store_decides_nothing() {
+        let clock = FakeClock::new();
+        let any = [
+            ShareCheck {
+                keychain: true,
+                ..nothing()
+            },
+            ShareCheck {
+                delivered: true,
+                ..nothing()
+            },
+            ShareCheck {
+                fallbacks: vec![(PathBuf::from("/c/f"), true)],
+                ..nothing()
+            },
+        ];
+        for c in any {
+            let v = decide_partial_init(
+                true,
+                || c.clone(),
+                SHARE_WAIT_DEADLINE,
+                || clock.now(),
+                |d| clock.sleep(d),
+                || panic!("no wait"),
+            );
+            assert!(matches!(v, PartialInitVerdict::Keep(_)), "{v:?}");
+        }
+        assert_eq!(clock.sleeps.get(), 0);
+        let v = decide_partial_init(
+            false,
+            || panic!("no check without a store"),
+            SHARE_WAIT_DEADLINE,
+            || clock.now(),
+            |d| clock.sleep(d),
+            || {},
+        );
+        assert_eq!(v, PartialInitVerdict::NoStore);
+    }
+
+    /// Exit criterion 4: the wipe names every source it checked and how long
+    /// it waited, so the next occurrence explains itself.
+    #[test]
+    fn the_wipe_reason_names_every_source_and_the_wait() {
+        let last = ShareCheck {
+            keychain: false,
+            fallbacks: vec![
+                (
+                    PathBuf::from("/var/lib/tillandsias/identity/fallback_vault-shamir-share-v1"),
+                    false,
+                ),
+                (
+                    PathBuf::from("/root/.cache/tillandsias/fallback_vault-shamir-share-v1"),
+                    false,
+                ),
+            ],
+            delivered: false,
+        };
+        let r = partial_init_wipe_reason(&last, Duration::from_secs(90));
+        for needle in [
+            "90s",
+            "keychain: absent",
+            "fallback /var/lib/tillandsias/identity/fallback_vault-shamir-share-v1: absent",
+            "fallback /root/.cache/tillandsias/fallback_vault-shamir-share-v1: absent",
+            "host delivery: none received",
+            "checked at unix ",
+        ] {
+            assert!(r.contains(needle), "missing {needle:?} in {r}");
+        }
     }
 
     /// Order 1437-qza3: the partial-init wipe names the store, the missing
