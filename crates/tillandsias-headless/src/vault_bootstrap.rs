@@ -48,6 +48,56 @@ const VAULT_SHAMIR_SHARE_V1: &str = "vault-shamir-share-v1";
 /// Keychain user for the installation anchor (UUID).
 const INSTALL_ANCHOR_V1: &str = "installation-uuid-v1";
 
+/// 1642-cc54 (criterion 2). Written by the macOS guest's provisioning when
+/// the VM has an identity disk: one line, the disk's mount point. The disk
+/// outlives every fresh rootfs, so the Vault store kept on it survives a
+/// rebuild and the next VM unseals it with the share the host keychain kept.
+pub(crate) const IDENTITY_DISK_CONFIG: &str = "/etc/tillandsias/identity-disk";
+/// Created on the identity disk when it is formatted. Its presence is the
+/// proof the disk is MOUNTED, not merely its empty mount-point directory.
+pub(crate) const IDENTITY_DISK_MARKER: &str = ".tillandsias-identity";
+
+/// Where the Vault store (`vault-data`) and its audit log (`vault-audit`)
+/// live. Without an identity disk (Linux; a guest provisioned before
+/// 1642-cc54) that is the cache dir, as it always was.
+///
+/// With one, it is the disk — and a disk that is recorded but NOT mounted is
+/// an error, never a fallback to the cache dir. Falling back would start an
+/// empty Vault on the rootfs, whose init writes a new share over the one the
+/// keychain kept, and the identity on the disk becomes unsealable.
+pub(crate) fn vault_store_root() -> Result<PathBuf, String> {
+    vault_store_root_from(Path::new(IDENTITY_DISK_CONFIG), crate::init_cache_dir)
+}
+
+pub(crate) fn vault_store_root_from(
+    config: &Path,
+    cache_dir: impl FnOnce() -> Result<PathBuf, String>,
+) -> Result<PathBuf, String> {
+    let recorded = match fs::read_to_string(config) {
+        Ok(s) => s,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return cache_dir(),
+        Err(e) => return Err(format!("read {}: {e}", config.display())),
+    };
+    let root = PathBuf::from(recorded.trim());
+    if !root.is_absolute() {
+        return Err(format!(
+            "{} names {:?}, not an absolute mount point",
+            config.display(),
+            recorded.trim()
+        ));
+    }
+    if !root.join(IDENTITY_DISK_MARKER).exists() {
+        return Err(format!(
+            "the identity disk is not mounted at {} ({} is missing); refusing to keep the Vault \
+             store anywhere else, which would start an empty Vault over the kept sign-ins \
+             (1642-cc54)",
+            root.display(),
+            IDENTITY_DISK_MARKER
+        ));
+    }
+    Ok(root)
+}
+
 #[cfg(feature = "vault")]
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
@@ -2840,10 +2890,9 @@ pub(crate) fn is_provider_logged_in(provider: ProviderId, debug: bool) -> bool {
 /// expensive on-demand launch in `is_github_key_present` and `ensure_vault_running`.
 #[allow(dead_code)]
 fn vault_data_volume_exists() -> bool {
-    let dir = crate::init_cache_dir()
-        .unwrap_or_else(|_| PathBuf::from("."))
-        .join("vault-data");
-    dir.exists()
+    // 1642-cc54: an identity disk that is recorded but not mounted answers
+    // "no store", so nothing is initialised or wiped in its place.
+    vault_store_root().is_ok_and(|root| root.join("vault-data").exists())
 }
 
 /// Persist the in-VM credential fallback files.
@@ -4283,7 +4332,7 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     // guard fixes. @trace spec:tillandsias-vault
     let is_partial_init = vault_data_volume_exists() && !has_shamir_share_in_keyring();
     if is_partial_init {
-        let vault_dir = crate::init_cache_dir()
+        let vault_dir = vault_store_root()
             .unwrap_or_else(|_| PathBuf::from("."))
             .join("vault-data");
         // Order 1437-qza3: ALWAYS say this, not only under --debug. Since no
@@ -4339,9 +4388,7 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     // /vault/data/core/_migration and `--github-login` then reports Vault as
     // not running. `:U` re-asserts ownership and self-repairs that drift.
     // @trace spec:tillandsias-vault
-    let vault_dir = crate::init_cache_dir()
-        .map_err(|e| e.to_string())?
-        .join("vault-data");
+    let vault_dir = vault_store_root()?.join("vault-data");
     std::fs::create_dir_all(&vault_dir)
         .map_err(|e| format!("failed to create vault data dir: {}", e))?;
     let volume_arg = format!("{}:/vault/data:U", vault_dir.display());
@@ -4361,9 +4408,7 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     // between launches would otherwise leave the directory owned by a uid the
     // `vault` user cannot write, and an audit device that cannot write is FATAL
     // to Vault — every request fails once no audit device can record it.
-    let vault_audit_dir = crate::init_cache_dir()
-        .map_err(|e| e.to_string())?
-        .join("vault-audit");
+    let vault_audit_dir = vault_store_root()?.join("vault-audit");
     std::fs::create_dir_all(&vault_audit_dir)
         .map_err(|e| format!("failed to create vault audit dir: {}", e))?;
     let audit_volume_arg = vault_audit_volume_arg(&vault_audit_dir);
@@ -6440,6 +6485,64 @@ pub async fn ensure_mirror_identity_provisioned(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- 1642-cc54: the Vault store lives on the identity disk ---------------
+
+    /// A scratch dir inside the checkout (operator rule: development work
+    /// never leaves it), fresh per test.
+    fn identity_scratch(tag: &str) -> PathBuf {
+        let d = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/work/vault-store-root")
+            .join(format!("{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&d);
+        fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn vault_store_root_is_the_cache_dir_without_an_identity_disk() {
+        let s = identity_scratch("none");
+        let cache = s.join("cache");
+        let got = vault_store_root_from(&s.join("no-such-config"), || Ok(cache.clone()));
+        assert_eq!(got, Ok(cache));
+    }
+
+    #[test]
+    fn vault_store_root_is_the_identity_disk_once_it_is_mounted() {
+        let s = identity_scratch("mounted");
+        let disk = s.join("identity");
+        fs::create_dir_all(&disk).unwrap();
+        fs::write(disk.join(IDENTITY_DISK_MARKER), b"").unwrap();
+        let config = s.join("identity-disk");
+        fs::write(&config, format!("{}\n", disk.display())).unwrap();
+        let got = vault_store_root_from(&config, || panic!("must not fall back to the cache dir"));
+        assert_eq!(got, Ok(disk));
+    }
+
+    /// The case the resolver exists for: the disk is recorded but its mount
+    /// point is an empty directory. Answering the cache dir would start an
+    /// empty Vault whose init overwrites the kept share.
+    #[test]
+    fn an_unmounted_identity_disk_is_refused_never_replaced_by_the_cache_dir() {
+        let s = identity_scratch("unmounted");
+        let disk = s.join("identity");
+        fs::create_dir_all(&disk).unwrap();
+        let config = s.join("identity-disk");
+        fs::write(&config, disk.display().to_string()).unwrap();
+        let got = vault_store_root_from(&config, || panic!("must not fall back to the cache dir"));
+        let err = got.expect_err("an unmounted identity disk must refuse");
+        assert!(err.contains("not mounted"), "{err}");
+        assert!(err.contains(IDENTITY_DISK_MARKER), "{err}");
+    }
+
+    #[test]
+    fn a_relative_identity_disk_path_is_refused() {
+        let s = identity_scratch("relative");
+        let config = s.join("identity-disk");
+        fs::write(&config, "var/lib/tillandsias/identity").unwrap();
+        let got = vault_store_root_from(&config, || panic!("must not fall back to the cache dir"));
+        assert!(got.is_err());
+    }
 
     // ---- 1383-5hpk: GitHub App token rotation ------------------------------
 
