@@ -357,7 +357,6 @@ scripts scripts/check-capability-row.sh 17
 scripts scripts/check-carry-forward.sh 6
 scripts scripts/check-cheatsheet-frontmatter.sh 1
 scripts scripts/check-claim-confirmed.sh 6
-scripts scripts/check-claim-protocol-agrees.sh 3
 scripts scripts/check-claims-across-branches.sh 5
 scripts scripts/check-containers-conf-proxy-env.sh 4
 scripts scripts/check-convergence-velocity.sh 1

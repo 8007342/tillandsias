@@ -16,8 +16,10 @@
 # scripts/metrics-log-path.sh, 2026-08-26).
 #
 # SHELL, NOT LUA (check-shell-ratchet.lua prefers a Lua fixture): every arm
-# runs a process — the resolver, the reader, cargo — and scripts/lua cannot
-# spawn while 1384-aixy is blocked. Port it when it can.
+# runs a process — the resolver, the reader, cargo. An earlier version of this
+# paragraph said scripts/lua cannot spawn; that was false (proc.run is
+# registered for every observing script, and 74 of 114 Lua guards use it), so
+# this fixture is an ordinary port candidate for a later shell-to-lua item.
 #
 #   1  the default resolves OUTSIDE target/, under <root>/.cache/convergence/
 #   2  TILLANDSIAS_CHECK_LOG_INDEX wins verbatim and adopts nothing into it

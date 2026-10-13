@@ -6012,7 +6012,9 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Fragment key check passed"
 
     _step "Checking worker and coordinator agree on the claim protocol (943-unii)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-claim-protocol-agrees.sh" 2>&1; then
+    # 888-vgs8: ported to scripts/lua (the shell-to-lua carried obligation);
+    # the verdict grammar is unchanged.
+    if ! _run_lua_decider "scripts/lua/check-claim-protocol-agrees.lua" 2>&1; then
         _error "the worker and coordinator skills specify different claim mechanisms (943-unii) — see the verdict line above"
         exit 1
     fi
