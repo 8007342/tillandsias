@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's direction (macuahuitl, 2026-10-13), from 1656-tjv4 (#405). Unclaimed.
+packets:
+  - packet_id: a-webkit-browser-window-title-carries-the-engine-label-webkit-approximates-safari-so-the-user-sees-it-without-reading-tool-results
+    order: 1659-39en
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [browser, webkit, ux, labelling]
+    estimated_hours: 3
+    depends_on:
+      - a-webkit-engine-container-from-playwright-webkit-serves-apple-presets-labelled-webkit-approximates-safari
+    related: [1656-tjv4, 1656-twhk]
+    owned_files:
+      - images/webkit/webkit-window.js
+    title: |
+      A WebKit window's OS title names its engine, "WebKit (approximates Safari)", next to the page title. Users see the title bar, not the MCP tool results.
+    context: |
+      1656-tjv4 (#405) labels the engine in browser.open, list_windows and read_url. But the WebKit window's OS title is MiniBrowser's, which follows the page title, and Playwright exposes no window-title API. Options to measure:
+      - a MiniBrowser setting or wrapper that prefixes or suffixes its window title;
+      - a Wayland app_id or title the compositor shows.
+      Changing document.title is NOT acceptable: the page would observe it.
+    exit_criteria:
+      - 'with a WebKit window open on a page titled "X", the compositor-visible window title contains "WebKit (approximates Safari)" and "X"; red today (the title is the page title only)'
+      - 'the page itself still reads document.title === "X"'
+      - 'the title never names the engine as "Safari" alone'
+    unscoreable: "unpinnable-until-the-guard-exists: the title arm needs a live Wayland window; the document.title arm is a page-side check written with it"
+    next_action: >
+      Measure how MiniBrowser-GTK sets its window title in Playwright's build, and whether a launcher option or wrapper can carry the engine label without touching document.title.
+    provenance: |
+      Filed by lenovinha-silverblue on macuahuitl's direction, 2026-10-13.
+    events:
+      - type: filed
+        ts: "2026-10-13T17:16:56Z"
+        host: lenovinha
+        summary: |-
+          The WebKit window's title bar should name its engine ("WebKit (approximates Safari)") without changing document.title.

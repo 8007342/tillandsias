@@ -118,6 +118,7 @@ mod macos_main {
             root_disk: args.disk.clone(),
             cidata_iso: None,
             swap_disk: None,
+            identity_disk: None,
             shares: Vec::new(),
             nvram: args.nvram.clone(),
             serial_writer_fd: None,
