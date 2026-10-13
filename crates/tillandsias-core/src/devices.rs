@@ -490,14 +490,72 @@ mod tests {
         assert!(resolve("blorp 9000").is_none());
         assert!(resolve("zzz").is_none());
         assert!(resolve("").is_none());
-        let s = r("galaxy s24 ultra");
+        // Order 1644-u8b8: the S24 Ultra is in the data now, so the near
+        // miss is a Galaxy S that does not exist.
+        let s = r("galaxy s99");
         assert_eq!(s.brand, "samsung");
-        assert!(s.approximated, "no S24 Ultra in the data: approximated");
-        assert_eq!(s.id, "samsung-galaxy-s24");
+        assert!(s.approximated, "no S99 in the data: approximated");
         assert!(s.alternatives.iter().all(|id| id.starts_with("samsung-")));
         let i = r("iphone 99 ultra");
         assert_eq!(i.brand, "apple");
         assert!(i.approximated);
+    }
+
+    /// Order 1644-u8b8, exit criterion 3: the two Ultras resolve exactly, by
+    /// alias, to the manufacturer-sourced entries (3120 x 1440 panels, the
+    /// labelled bucket derivation: dpr 3.5, 411 x 891 CSS).
+    #[test]
+    fn galaxy_s24_and_s25_ultra_resolve_exactly() {
+        for (q, id) in [
+            ("galaxy s24 ultra", "samsung-galaxy-s24-ultra"),
+            ("galaxy s25 ultra", "samsung-galaxy-s25-ultra"),
+            ("Samsung Galaxy S25 Ultra", "samsung-galaxy-s25-ultra"),
+        ] {
+            let d = r(q);
+            assert_eq!(d.id, id, "{q}");
+            assert!(!d.approximated, "{q} is exact");
+            assert_eq!((d.viewport.w, d.viewport.h, d.dpr), (411, 891, 3.5), "{q}");
+            assert_eq!(d.engine, "blink");
+            assert_eq!(d.device.source.kind, "manufacturer-spec");
+        }
+    }
+
+    /// Order 1644-u8b8, exit criteria 1 and 2: >= 500 devices across >= 12
+    /// real makers, each with a source and licence, and every derived value
+    /// labelled (a manufacturer-spec entry carries its derivation unless the
+    /// maker published scale and viewport).
+    #[test]
+    fn the_catalogue_covers_the_long_tail_with_labelled_derivations() {
+        let devices = all();
+        assert!(devices.len() >= 500, "{} devices", devices.len());
+        let brands: BTreeSet<&str> = devices
+            .iter()
+            .map(|d| d.brand.as_str())
+            .filter(|b| !matches!(*b, "desktop" | "laptop" | "generic"))
+            .collect();
+        assert!(brands.len() >= 12, "{brands:?}");
+        for d in devices
+            .iter()
+            .filter(|d| d.source.kind == "manufacturer-spec")
+        {
+            assert!(
+                d.source
+                    .derivation
+                    .as_deref()
+                    .is_some_and(|t| !t.trim().is_empty()),
+                "{} has an unlabelled derived dpr/viewport",
+                d.id
+            );
+            let px = d
+                .screen_px
+                .expect("manufacturer entries state physical pixels");
+            let short_css = f64::from(px.w.min(px.h)) / d.dpr;
+            assert!(
+                (short_css - f64::from(d.viewport.w.min(d.viewport.h))).abs() <= 1.0,
+                "{}: viewport is not physical / dpr",
+                d.id
+            );
+        }
     }
 
     #[test]
@@ -508,7 +566,10 @@ mod tests {
         assert_eq!(r("samsung s24").id, "samsung-galaxy-s24");
         assert_eq!(r("google").id, "google-pixel-10");
         let s = r("s24u");
-        assert_eq!((s.brand.as_str(), s.approximated), ("samsung", true));
+        assert_eq!(
+            (s.id.as_str(), s.approximated),
+            ("samsung-galaxy-s24-ultra", false)
+        );
         assert!(
             resolve("9000 ultra").is_none(),
             "a modifier plus nonsense implies no brand"
