@@ -97,3 +97,16 @@ test('successful canonical query with skipped fragment warning remains unavailab
     rmSync(root, {recursive: true, force: true});
   }
 });
+test('a release-cut snapshot names its release tag; a bad tag is refused (1661-vckd)', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'observatorium-release-'));
+  try {
+    execFileSync('git', ['init', '-q', repo]);
+    writeFileSync(join(repo, 'README.md'), 'x\n');
+    execFileSync('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', 'add', '.']);
+    execFileSync('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'x']);
+    const released = collect(repo, {release: 'v56.10.13.1'});
+    assert.equal(released.release, 'v56.10.13.1');
+    assert.equal('release' in collect(repo, {}), false, 'a deploy observation names no release');
+    assert.throws(() => collect(repo, {release: 'latest'}), /Invalid release tag/);
+  } finally { rmSync(repo, {recursive: true, force: true}); }
+});

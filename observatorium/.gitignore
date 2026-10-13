@@ -6,3 +6,4 @@
 /build
 /node_modules
 web/data/
+.tools/

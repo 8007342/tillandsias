@@ -77,7 +77,7 @@ export function summarizePlan(rows) {
   });
   return {total: rows.length, states, details};
 }
-export function collect(root, {grade = false, now = new Date().toISOString()} = {}) {
+export function collect(root, {grade = false, now = new Date().toISOString(), release = null} = {}) {
   const gaps = [], details = {specs: [], plan: []};
   const revision = command(root, 'git', ['rev-parse', 'HEAD']);
   const dirty = command(root, 'git', ['status', '--porcelain', '--untracked-files=normal']).length > 0;
@@ -116,11 +116,13 @@ export function collect(root, {grade = false, now = new Date().toISOString()} = 
     } catch (error) { residual.reason = `Fresh obligation grading unavailable: ${error.message.split('\n')[0]}`; }
   }
   if (residual.value === null) gaps.push(residual.reason);
-  return {schemaVersion: 1, epoch: EPOCH, definitions: DEFINITIONS, measuredAt: now, revision, dirty, shallow, current: {specs, plan, residual, commits: {total: Number(command(root, 'git', ['rev-list', '--count', 'HEAD']))}}, details, gaps};
+  // Order 1661-vckd: the release cut stamps the release its snapshot describes.
+  if (release !== null && !/^v\d+\.\d+\.\d+\.\d+$/.test(release)) throw Error(`Invalid release tag: ${release}`);
+  return {schemaVersion: 1, epoch: EPOCH, definitions: DEFINITIONS, measuredAt: now, revision, ...(release ? {release} : {}), dirty, shallow, current: {specs, plan, residual, commits: {total: Number(command(root, 'git', ['rev-list', '--count', 'HEAD']))}}, details, gaps};
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const args = options(process.argv.slice(2), ['root', 'output', 'history', 'grade']);
+    const args = options(process.argv.slice(2), ['root', 'output', 'history', 'grade', 'release']);
     if (!args.output) throw Error('Usage: collect.mjs --root REPO --output SNAPSHOT [--history JSONL] [--grade]');
     const snapshot = collect(resolve(args.root || '.'), args);
     atomicJson(resolve(args.output), snapshot);

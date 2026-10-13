@@ -640,6 +640,24 @@ the whole mechanism, and the table reached 19 rows — nearly double — with no
 ever distilled, because a sentence in a runbook step is something a reader is
 expected to notice while doing something else.
 
+**Append the release's observatorium snapshot** (order 1661-vckd). The
+dashboard at observatorium.tillandsias.org plots one durable observation per
+release, and its durable storage is THIS repository: Cloudflare's deploy only
+reads `observatorium/history/snapshots.jsonl`, it never writes it (it has no
+push credential, and must not). So the cut appends exactly one line, naming
+the tag, in the same ledger push:
+
+```bash
+(cd observatorium && node scripts/build.mjs --release-snapshot "${new_tag}")
+tail -1 observatorium/history/snapshots.jsonl | grep -q "\"release\":\"${new_tag}\"" \
+  || { echo "observatorium snapshot does not name ${new_tag}"; exit 1; }
+git add observatorium/history/snapshots.jsonl
+```
+
+It builds `tillandsias-plan` from this checkout (or uses `TILLANDSIAS_PLAN_BIN`)
+to fold the plan and grade CentiColons; a metric it cannot observe is recorded
+as an explicit gap in the line, never as a zero.
+
 Push the ledger update to `linux-next` so other hosts and the next work-loop see the release happened.
 
 Before success, confirm the release ledger update was pushed and the local
