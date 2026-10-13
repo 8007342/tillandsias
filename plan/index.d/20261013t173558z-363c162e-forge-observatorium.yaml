@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: observatorium-flutter-flame-release-metrics-dashboard
+    field: next_action
+    value: Review and land work/1661-vckd; configure Cloudflare secrets and verify production deploy after main integration. Managed sibling/device evidence remains in 1662-tff5. Local Flutter analyze, seven tests, release web build, ten Node tests, Rust embed test and Wrangler dry-run pass; whole repository gate is running.
+    ts: "2026-10-13T17:35:58Z"
+    host: forge-observatorium
+    replaces_sha256: "5dc78c6e23dd732506cd339c5cbe29d4f55e0e813914eb233135a89e40cc3404"

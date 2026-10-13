@@ -1,0 +1,26 @@
+packets:
+  - packet_id: observatorium-forge-nested-web-stack-dogfooding-gaps
+    order: 1662-tff5
+    status: ready
+    kind: bug
+    priority: p2
+    pickup_role: linux
+    capability_tags: [forge, flutter, web, browser, mcp]
+    estimated_hours: 4
+    depends_on: []
+    related: [1661-vckd]
+    title: Forge cannot yet dogfood a self-contained nested Flutter web app through managed sibling services
+    context: Flutter command and host-browser publishing/device tools absent; nested web configuration is not discovered
+    exit_criteria:
+      - Fresh forge runs Flutter and exposes managed sibling and device-browser tools
+      - publish_local supports confined nested app artifact/config selection
+      - Observatorium is served as a managed sibling and exercised with desktop and phone presets
+    next_action: Reproduce and repair image/tool exposure and nested local preview selection using the issue evidence
+    unscoreable: 'unpinnable-until-the-guard-exists: future litmus:observatorium-managed-sibling-devices needs host-browser tool exposure and nested publish selection before a live positive/negative fixture can run'
+    issue_path: plan/issues/observatorium-forge-web-stack-gaps-2026-10-13.md
+    provenance: Observed by root, Sol and Terra in forge session 2026-10-13
+    events:
+      - type: filed
+        ts: "2026-10-13T17:24:14Z"
+        host: forge-observatorium
+        summary: Filed concrete missing Flutter/tool exposure and nested hosting capability; production credentials also unavailable

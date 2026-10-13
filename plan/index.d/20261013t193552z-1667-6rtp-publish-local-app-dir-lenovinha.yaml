@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at the operator's direction (via macuahuitl, 2026-10-13), from Codex's observatorium findings.
+packets:
+  - packet_id: publish-local-takes-a-project-confined-app-directory-so-a-subdirectory-app-with-its-own-wrangler-config-publishes
+    order: 1667-6rtp
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [local-web-preview, publish-local, wrangler, monorepo, mcp]
+    estimated_hours: 6
+    related: [1663-6mns]
+    owned_files:
+      - crates/tillandsias-headless/src/local_web_preview.rs
+    title: |
+      publish_local {category: WEB, runtime: auto, app_dir: "<relative dir>"} publishes an app whose wrangler config and build output live in a subdirectory of the project (e.g. tillandsias's observatorium/wrangler.jsonc with build/web). app_dir is confined to the project: relative, no "..", no dotfile segment, an existing directory. Without it, behaviour is unchanged.
+    context: |
+      Codex's observatorium (order 1661-vckd) keeps its app in observatorium/: wrangler.jsonc there names assets ./build/web. publish_local only detects ROOT configs (live.configs), so it cannot publish the app at all. This differs from lakanoa (1663-6mns), whose ROOT config points INTO a nested assets directory.
+      Chosen over a root wrangler.jsonc that points into observatorium/build/web. Such a root file would exist only for the local preview, would sit in every forge user's repository root, and would mislead anyone pointing Cloudflare at "/". A project-confined selector also fixes every monorepo.
+      The same safety holds:
+      - the project is attributed from the session, never the request;
+      - app_dir goes through safe_relative and verify_subset like every mount;
+      - the preview never runs build.command (1663-6mns);
+      - mounts are confined to app_dir's subset.
+    exit_criteria:
+      - 'publish_local {runtime: auto, app_dir: "observatorium"} in a forge on the tillandsias repo serves observatorium/build/web (the built dashboard''s index) at the preview URL; red today (no app_dir parameter; the root has no config)'
+      - 'app_dir values "..", "/etc", "a/../..", ".git" and a non-directory are refused before anything starts, each with a typed reason; a unit test drives them'
+      - 'without app_dir, a root-config project publishes exactly as before (the 1663 lakanoa-shaped arm and the macron.dev arm stay green)'
+      - 'the tool description and the forge web-services instruction document app_dir'
+    unscoreable: "unpinnable-until-the-guard-exists: the app_dir arms are written with the parameter, red first"
+    next_action: >
+      Read how live.configs is discovered and how source_mounts roots its paths. Add app_dir as a confined prefix to config discovery and every mount, then write the refusal unit test and the observatorium live arm, red first.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-10-13, at the operator's direction relayed by macuahuitl (1661-vckd item 5).
+    events:
+      - type: filed
+        ts: "2026-10-13T19:35:52Z"
+        host: lenovinha
+        summary: |-
+          A project-confined app_dir for publish_local, so a subdirectory app (observatorium/) with its own wrangler config publishes.
