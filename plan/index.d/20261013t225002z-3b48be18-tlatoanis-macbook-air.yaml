@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-vault-partial-init-guard-wipes-a-valid-store-when-the-share-has-not-been-delivered-yet
+    field: status
+    value: completed
+    ts: "2026-10-13T22:50:02Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-vault-partial-init-guard-wipes-a-valid-store-when-the-share-has-not-been-delivered-yet
+    event:
+      type: completed
+      ts: "2026-10-13T22:50:02Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: merge 47bc374e9 (#406): decide_partial_init tests cover all four criteria (bounded wait, late delivery keeps the store, absent share still wipes after the deadline as the negative control, wipe line names every source). Live v56.10.13.1 smoke on tlatoanis-macbook-air 2026-10-13 22:41-22:45Z: no share in the login keychain, store kept from the identity-disk fallback through a SOFT install, a kill -9 and an unclean-stop rebuild; 0 WIPING lines in the guest journal; sign-in intact (16 cloud projects)
+  - packet_id: the-vault-partial-init-guard-wipes-a-valid-store-when-the-share-has-not-been-delivered-yet
+    event:
+      type: note
+      ts: "2026-10-13T22:50:02Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        exit criteria tested on trunk and the live macOS re-check passed
