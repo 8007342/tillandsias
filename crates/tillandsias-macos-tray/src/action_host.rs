@@ -2375,9 +2375,14 @@ impl TrayActionHost {
             let rebuilt = if tillandsias_vm_layer::vz::previous_stop_was_unclean(&image_root) {
                 on_phase(crate::reset_state::REBUILD_STATUS.trim_end_matches('\u{2026}'));
                 let vz = VzRuntime::new(TILLANDSIAS_GUEST_CID, image_root.clone());
+                // Asked BEFORE the wipe (1642-cc54): it decides whether the
+                // keychain's share is kept (store on the identity disk) or
+                // cleared (store on the rootfs being destroyed).
+                let store_survives = vz.vault_store_survives_rebuild();
                 let rebuilt = crate::reset_state::run_unclean_stop_rebuild_in(
                     crate::installation_uuid::KEYCHAIN_SERVICE,
                     &tillandsias_core::cache_root::cache_root(),
+                    store_survives,
                     || vz.wipe_provisioned_artifacts().map_err(|e| e.to_string()),
                 );
                 if rebuilt.is_ok() {
