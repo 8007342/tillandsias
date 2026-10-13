@@ -1,0 +1,8 @@
+build baseline rc=0 seconds=48
+size baseline bytes=2269177333
+fc-list baseline: lang=ja:  color-emoji:  font-bytes: 9265056 
+build fonts rc=0 seconds=29
+size fonts bytes=2367966936
+fc-list fonts: lang=ja: Noto Sans CJK JP;Noto Sans Mono CJK JP; color-emoji: Noto Color Emoji; font-bytes: 83270053 
+growth bytes=98789603 MiB=94
+op: unchanged
