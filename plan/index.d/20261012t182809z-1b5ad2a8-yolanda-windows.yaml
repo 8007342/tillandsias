@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: remove-the-two-remaining-interactive-prompts-from-install-windows-ps1-per-the-end-user-installer-guideline
+    event:
+      type: note
+      ts: "2026-10-12T18:28:09Z"
+      agent_id: windows-yolanda-opus5-20261012t182808z
+      host: yolanda-windows
+      summary: |
+        Landed on linux-next via #377, run 52 merge 66eb6a26d (code commit 1b11d57a1). The installer ensures Hyper-V access and the WSL swap, sparseVhd and autoMemoryReclaim hard requirements with no prompts: a backup is written first, and the shared VM restarts only when tillandsias is the sole running distro. The tray runs the same merge at startup through wslconfig_ensure::ensure_at_startup. Evidence: the Lua fixture test-installer-merges-wslconfig-swap-keys.lua is 31/31 on the fix and 18 FAIL on the pre-fix installer; 10 Rust unit tests pass; a live scratch-copy installer run is recorded earlier. The status stays implemented, not completed, until the OPERATOR-WINDOW live GUI-startup check in next_action. #377 landed after the v56.10.12.1 tag, so it ships in the next release.

@@ -1,0 +1,16 @@
+# @trace spec:inference-engine-slots (SLOT-7), order 482b
+# GGUF PINS for the llama-server slot: logical id -> the exact file it serves.
+# A tier row the llama-server slot cannot find here is REFUSED
+# (reason=engine-integrity-refused:gguf-unpinned:<id>), never downloaded unverified;
+# a file whose bytes differ is refused and deleted (gguf-digest-mismatch).
+#
+# PROVENANCE: trust on first fetch, at pin time. Each sha256 is the Hugging Face
+# LFS oid (= the file's sha256) read from
+#   https://huggingface.co/api/models/<repo>/tree/main
+# on the pinned_at date, and the downloaded bytes were hashed and matched. A pin
+# proves the bytes served are the bytes the pinner saw; it is not a publisher
+# signature. Whoever adds or bumps a row owns its digest and size.
+#
+# 482b pins T0 only. 482-igky ("482b-2") pins the rest, one row PER SHARD.
+#logical_id	hf_repo	file	sha256	bytes	pinned_at
+qwen2.5-0.5b-instruct	Qwen/Qwen2.5-0.5B-Instruct-GGUF	qwen2.5-0.5b-instruct-q4_k_m.gguf	74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db	491400032	2026-10-12

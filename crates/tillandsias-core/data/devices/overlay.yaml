@@ -1,0 +1,108 @@
+# Hand-written device overlay (order 1643-q3at): devices neither Playwright nor
+# Chrome DevTools describe, from the MANUFACTURER's own spec page. One source
+# URL per entry. No GSMArena, WURFL or DeviceAtlas data.
+#
+# What the manufacturer publishes: panel size, physical resolution, ppi.
+# What it does NOT publish: the CSS viewport and devicePixelRatio Chrome uses.
+# Those are DERIVED, the same way for every entry, and say so in `derivation`:
+#   dpr      = the standard Android density bucket nearest the panel
+#              (420 dpi → 2.625 for 1080-wide, 480 dpi → 3 for 1200-wide,
+#               560 dpi → 3.5 for 1440-wide), the defaults these phones ship;
+#   viewport = physical resolution ÷ dpr, rounded to whole CSS px (portrait).
+# ua is Chrome's reduced Android UA, which is what Chrome actually sends since
+# UA reduction; the model is not guessed into it.
+# license: the facts are the manufacturer's; this file is Tillandsias' own
+# (GPL-3.0-or-later, the repository licence).
+license: GPL-3.0-or-later
+devices:
+  - id: sony-xperia-1-vi
+    brand: sony
+    family: xperia
+    model: Xperia 1 VI
+    aliases: [xperia 1 vi, xperia 1 6, xperia 1m6]
+    released: "2024-05"
+    form: phone
+    os: {name: android, version: "14"}
+    engine: blink
+    screen_px: {w: 1080, h: 2340}
+    panel: {inches: 6.5, aspect: "19.5:9"}
+    dpr: 2.625
+    viewport: {w: 411, h: 891}
+    mobile: true
+    touch: true
+    max_touch_points: 10
+    source:
+      kind: manufacturer-spec
+      url: https://www.sony.com.my/smartphones/products/xperia-1m6/spec
+      note: >-
+        6.5-inch 19.5:9 FHD+ HDR OLED, 1080 x 2340 (Sony Malaysia spec page;
+        the page blocks automated fetches, so the figures are as indexed from it).
+      license: manufacturer-published facts
+  - id: oneplus-12
+    brand: oneplus
+    family: oneplus
+    model: OnePlus 12
+    aliases: [oneplus 12]
+    released: "2024-01"
+    form: phone
+    os: {name: android, version: "14"}
+    engine: blink
+    screen_px: {w: 1440, h: 3168}
+    panel: {inches: 6.82, ppi: 510}
+    dpr: 3.5
+    viewport: {w: 411, h: 905}
+    mobile: true
+    touch: true
+    max_touch_points: 10
+    source:
+      kind: manufacturer-spec
+      url: https://www.oneplus.com/global/12/specs
+      note: "Size 6.82 inches; Resolution 3168*1440 (QHD+), 510 ppi."
+      license: manufacturer-published facts
+  - id: oneplus-13
+    brand: oneplus
+    family: oneplus
+    model: OnePlus 13
+    aliases: [oneplus 13]
+    released: "2025-01"
+    form: phone
+    os: {name: android, version: "15"}
+    engine: blink
+    screen_px: {w: 1440, h: 3168}
+    panel: {inches: 6.82, ppi: 510}
+    dpr: 3.5
+    viewport: {w: 411, h: 905}
+    mobile: true
+    touch: true
+    max_touch_points: 10
+    source:
+      kind: manufacturer-spec
+      url: https://www.oneplus.com/global/13/specs
+      note: "6.82 inches; Resolution 3168*1440 (QHD+), 510 ppi."
+      license: manufacturer-published facts
+  - id: xiaomi-14
+    brand: xiaomi
+    family: xiaomi
+    model: Xiaomi 14
+    aliases: [xiaomi 14, mi 14]
+    released: "2024-02"
+    form: phone
+    os: {name: android, version: "14"}
+    engine: blink
+    screen_px: {w: 1200, h: 2670}
+    panel: {inches: 6.36, ppi: 460}
+    dpr: 3
+    viewport: {w: 400, h: 890}
+    mobile: true
+    touch: true
+    max_touch_points: 10
+    source:
+      kind: manufacturer-spec
+      url: https://www.mi.com/global/product/xiaomi-14/specs
+      note: '6.36" AMOLED, 2670 x 1200, 460 ppi.'
+      license: manufacturer-published facts
+ua_android_reduced: "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36"
+derivation: >-
+  dpr from the nearest standard Android density bucket (420/480/560 dpi =
+  2.625/3/3.5); viewport = physical resolution / dpr, rounded; not published
+  by the manufacturer.

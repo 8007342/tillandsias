@@ -73,7 +73,7 @@ gating_points:
   # SAFE, not red as I first assumed — but a guard that skips on every dev host
   # is wired in name only, and this lane is where it actually executes.
   - step: "the CA bind source is the migrated path, not the old /tmp one (998-3z6g)"
-    command: "bash scripts/check-ca-bind-migration.sh"
+    command: "tillandsias-plan script run scripts/lua/check-ca-bind-migration.lua"
     timeout_ms: 60000
     expected_behavior: "ok:ca-bind-current:<n>, or an explicit skip: when podman has nothing to inspect"
     assert_output_matches: "(ok:ca-bind-current:[0-9]+|skip:)"

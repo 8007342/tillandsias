@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: llama-server-vulkan-image-variant
+    field: status
+    value: completed
+    ts: "2026-10-12T09:50:15Z"
+    host: lenovinha
+
+events:
+  - packet_id: llama-server-vulkan-image-variant
+    event:
+      type: completed
+      ts: "2026-10-12T09:50:15Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: land(360) 373939b86 into linux-next, gate green (run 42); branch work/482-bvul head 6e21853b0. Evidence plan/evidence/482b-llama-server-lane-2026-10-12/: C1 renderD128 passed selects vulkan (RADV), no host CUDA/ROCm needed; iGPU VRAM 828->1286 MiB while serving T0. C2 no render node selects cpu reason=no-render-node, core-only install, launch succeeds and serves. C3 cuda refused unless tier gpu-cuda and /dev/nvidia0 reachable, rocm refused (lane-fixtures.txt, litmus inference-llama-server-lane-shape 5/5). C4 .engine-set core+vulkan v0.34.0 sha256:cf958867 agrees with GGML_BACKEND_PATH=vulkan/libggml-vulkan.so. C5 /api/version 200 in 0.8-0.9 ms once ready, no 200 after kill -9 (container down in 105/164 ms). C6 closure fails multi-backend-unpinned on a seeded unpinned payload and passes after restoration. Live CUDA through the slot not exercised here; it is 482c.

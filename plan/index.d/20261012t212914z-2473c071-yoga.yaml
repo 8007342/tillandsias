@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: development-scratch-and-worktrees-live-inside-the-checkout-under-one-ignored-dir-that-every-scanner-skips
+    field: status
+    value: in_progress
+    ts: "2026-10-12T21:29:14Z"
+    host: yoga
+
+events:
+  - packet_id: development-scratch-and-worktrees-live-inside-the-checkout-under-one-ignored-dir-that-every-scanner-skips
+    event:
+      type: note
+      ts: "2026-10-12T21:29:14Z"
+      host: yoga
+      summary: |-
+        claimed by yoga (linux-yoga-claude-20261012t212331z) after 781-hseq closed on 745db6c70 - operator direction row 2026-10-12, p1, pickup any; slice 1 is the dir decision, the methodology record with the user-runtime exemption, the gitignore entry and the added-lines scratch-location guard with its fixture; batch seed silverblue-unknown-amd+npu-yoga-20261012 picked credential-lifecycle-audit, which cannot see this ungrouped row

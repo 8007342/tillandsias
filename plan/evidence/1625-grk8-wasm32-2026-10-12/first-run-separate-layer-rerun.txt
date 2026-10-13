@@ -1,0 +1,28 @@
+isolated store: /var/tmp/grk8-substrate.0yuliv/graph
+################ grk8-prefix-forge (--network=none)
+rustc: rustc 1.98.1 (48a229cea 2026-09-01) (Fedora 1.98.1-1.fc44)
+wasm32 std rpm: package rust-std-static-wasm32-unknown-unknown is not installed
+== cargo build --target wasm32-unknown-unknown (minimal lib crate, offline)
+error[E0463]: can't find crate for `std`
+error: could not compile `grk8-lib` (lib) due to 1 previous error
+CARGO_WASM32=fail
+== wasm-pack build (minimal wasm-bindgen crate, vendored deps, offline)
+Error: wasm32-unknown-unknown target not found in sysroot: "/usr"
+WASM_PACK=fail
+################ grk8-fixed-forge (--network=none)
+rustc: rustc 1.98.1 (48a229cea 2026-09-01) (Fedora 1.98.1-1.fc44)
+wasm32 std rpm: rust-std-static-wasm32-unknown-unknown-1.98.1-1.fc44.noarch
+== cargo build --target wasm32-unknown-unknown (minimal lib crate, offline)
+-rwxr-xr-x. 2 forge forge 377 Oct 12 07:13 /tmp/libcrate/target/wasm32-unknown-unknown/release/grk8_lib.wasm
+CARGO_WASM32=ok
+== wasm-pack build (minimal wasm-bindgen crate, vendored deps, offline)
+grk8_bindgen_bg.wasm
+grk8_bindgen_bg.wasm.d.ts
+grk8_bindgen.d.ts
+grk8_bindgen.js
+package.json
+WASM_PACK=ok
+== the wasm32 std layer in the fixed base
+179MB|/bin/sh -c microdnf install -y --nogpgcheck --setopt=install_weak_deps=0         rust-std-static-wasm32-unknown-unknown     && microdn
+== installed footprint inside the fixed image
+rust-std-static-wasm32-unknown-unknown-1.98.1-1.fc44 112808759 bytes

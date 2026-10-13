@@ -4,11 +4,12 @@
 # since 2026-09-06: present in --ci-full, absent from --check, nobody decided.
 # Measured green and cheap on b026372ff (No-Python check), so the honest verdict is to run
 # it where every host lands rather than once a day on the release gate.
+# 1630-dwab ported the decider to Lua (the shell-to-lua carried obligation).
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf): a binding assembled
+# STEP_LUA is a LITERAL path on purpose (1063-nraf): a binding assembled
 # from a variable is invisible to every name-based scan.
 STEP_DESC="Checking no Python runtime crept into scripts/"
-STEP_SCRIPT="scripts/check-no-python-scripts.sh"
+STEP_LUA="scripts/lua/check-no-python-scripts.lua"
 STEP_ERROR="a Python runtime reference entered the harness (1087-h2z9)"
 STEP_OK="No-Python check passed"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok: no Python runtime references in scripts/harness files"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-12 darwin ok:no-python-scripts"

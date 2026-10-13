@@ -1,5 +1,6 @@
 -- @trace order:1587-qqzs
 -- @env PATH
+-- preflight: serial — runs scripts/test-awk-float-lc-numeric.sh, which writes .mutant-lcnum-* copies BESIDE three producers in scripts/, the same paths gate step 450 writes, and tree-scanning guards read them as added code (1630-dwab)
 --
 -- test-awk-float-lc-numeric-signal.lua — a TERM must clean up the lcnum mutants
 -- before the preflight door's KILL lands.

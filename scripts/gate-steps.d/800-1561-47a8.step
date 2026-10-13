@@ -10,8 +10,9 @@
 # tree (enforcing the per-installer floors: install-windows.ps1 0;
 # install.sh and install-macos.sh at today's counts until their slices
 # 1561-y6f9 / 1561-kfgk drop them). Its fixture (scratch copies: a flag-naming
-# line refused by file:line, the `# power-user-only` and PENDING-1560-UAM3
-# exemptions, a comment not counted, install.sh above its floor refused) is
+# line refused by file:line, the `# power-user-only` exemption, a retired
+# PENDING-1560-UAM3 marker exempting nothing, a comment not counted, install.sh
+# above its floor refused) is
 # scripts/lua/test-check-installer-end-user-output.lua, run inline by build.sh
 # because it needs the runner binary a STEP_LUA does not receive. Both are Lua:
 # the first draft's .sh pair would have added two items to the shell ratchet.

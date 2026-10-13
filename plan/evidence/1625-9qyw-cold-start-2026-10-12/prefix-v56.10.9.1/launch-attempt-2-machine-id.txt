@@ -1,0 +1,43 @@
+project head 2ac6ce92bd7e6b6bae12a5400092413af849b5ff (Seed macron.dev: static under-construction site, vision, comics spec and backlog) branch HEAD -> main, origin/main, origin/HEAD
+launch pid 24108
+no forge after 60 min
+[tillandsias] podman container failed: status=1 stderr=Error: no container with ID or name "tillandsias-macron.dev-forge" found: no such container
+[tillandsias] podman container: /usr/bin/podman rm -f <redacted>
+[tillandsias] podman container: /usr/bin/podman rm -f <redacted>
+[tillandsias] podman container: /usr/bin/podman rm -f <redacted>
+[tillandsias] podman container: /usr/bin/podman volume rm -f <redacted>
+[tillandsias] podman container: /usr/bin/podman ps -a --filter name=^tillandsias- --format json
+[tillandsias] no active lane containers; cleaning project + shared stack for macron.dev (lane-scoped: tillandsias-inference; keeping application-lifetime: tillandsias-vault, tillandsias-proxy, tillandsias-router, tillandsias-nix-cache)
+[tillandsias] podman container: /usr/bin/podman rm <redacted>
+[tillandsias] podman container failed: status=1 stderr=Error: no container with ID or name "tillandsias-macron.dev-forge" found: no such container
+[tillandsias] podman container: /usr/bin/podman rm -f <redacted>
+[tillandsias] podman container: /usr/bin/podman rm -f <redacted>
+[tillandsias] podman container: /usr/bin/podman rm -f <redacted>
+[tillandsias] podman container: /usr/bin/podman volume rm -f <redacted>
+[tillandsias] podman container: /usr/bin/podman rm -f tillandsias-inference
+[tillandsias] podman network-exists: /usr/bin/podman network exists tillandsias-egress
+[tillandsias] podman network-exists: /usr/bin/podman network exists tillandsias-enclave
+[tillandsias] skipping host resolver update for vault: not root
+[tillandsias] podman network-exists: /usr/bin/podman network exists tillandsias-egress
+[tillandsias] runtime assets ready at /home/podman/.local/share/tillandsias/runtime/56.10.9.1 (a2aaec6418e0a139335735065d929f4a7b446adaf16bd4bb073a3f2997658e30)
+[tillandsias] podman network-exists: /usr/bin/podman network exists tillandsias-egress
+[tillandsias] podman network-exists: /usr/bin/podman network exists tillandsias-enclave
+[tillandsias] skipping host resolver update for vault: not root
+[tillandsias] detaching image ensure helper for proxy (log: /home/podman/.cache/tillandsias/image-build-proxy.log)
+[tillandsias-vault] refreshing podman secret tillandsias-ca-key from /home/podman/.local/state/tillandsias/ca/intermediate.key
+[2026-10-12T17:09:52.108Z] event:container_launch stage=ensure-proxy state=starting container=tillandsias-proxy
+[tillandsias] podman container: /usr/bin/podman run --detach --replace --name tillandsias-proxy --hostname proxy --network tillandsias-enclave,tillandsias-egress --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --userns=keep-id --pids-limit=32 --env DEBUG_PROXY=1 -v /home/podman/.local/state/tillandsias/ca/intermediate.crt:/etc/squid/certs/intermediate.crt:ro --secret <...
+[2026-10-12T17:09:52.355Z] event:container_launch stage=ensure-proxy state=running container=tillandsias-proxy
+[tillandsias] enclave proxy started, waiting for initialization...
+[tillandsias-vault] refreshing Vault TLS leaf certificate at /home/podman/.local/state/tillandsias/ca/vault.crt
+[tillandsias-vault] bootstrap starting (Phase 6.5 hardened)
+[tillandsias-vault] sanitize: failed/timed out deleting legacy vault-unseal-v1: Platform secure storage failure: no secret service provider or dbus session found
+[tillandsias] runtime assets ready at /home/podman/.local/share/tillandsias/runtime/56.10.9.1 (a2aaec6418e0a139335735065d929f4a7b446adaf16bd4bb073a3f2997658e30)
+[tillandsias] podman image-exists: /usr/bin/podman image exists localhost/tillandsias-vault:sha256-13dfe28138d33dd386a948cbee85fa5365fc9d7b21c40aeb78b8beb54609a4d1
+[tillandsias-vault] image localhost/tillandsias-vault:sha256-13dfe28138d33dd386a948cbee85fa5365fc9d7b21c40aeb78b8beb54609a4d1 already built; skipping build
+[tillandsias-vault] refreshing podman secret tillandsias-vault-tls-cert from /home/podman/.local/state/tillandsias/ca/vault.crt
+[tillandsias-vault] refreshing podman secret tillandsias-vault-tls-key from /home/podman/.local/state/tillandsias/ca/vault.key
+[tillandsias-vault] refreshing podman secret tillandsias-vault-tls-ca from /home/podman/.local/state/tillandsias/ca/intermediate.crt
+[tillandsias-vault] keyring Shamir share get failed/timed out (Platform secure storage failure: no secret service provider or dbus session found); checking file fallback
+[tillandsias-vault] Shamir share not found; deriving first-boot dummy key K
+Error: [forge-launch] prerequisites: ensure tillandsias-forge-launch: tillandsias-vault not satisfied: open /etc/machine-id: No such file or directory (os error 2)

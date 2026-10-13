@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: finalize-lands-the-attestation-record-through-the-gated-lander-although-the-plan-only-lane-admits-it-ungated
+    event:
+      type: note
+      ts: "2026-10-12T20:14:38Z"
+      agent_id: linux-yoga-claude-20261012t192339z
+      host: yoga
+      summary: |
+        Second measurement, same host, cycle 8 (2026-10-12): finalize-cycle ran TWO full gates in one finalize — the work-head land gated at 19:31Z (stamp stale: trunk had taken three code landings), and then the "land the ledger record" step gated AGAIN for the record commit (./build.sh --check, attempt 1), because the record commit changed the tree under the fresh stamp. That record-land push then answered rc=1 and the lander printed "origin moved 79b50fa6c -> 79b50fa6c — retrying" with the SAME sha on both sides: origin had not moved and the refusal's cause is not in the finalize output. Attempt 2 adopted the stamp the record gate had minted and landed a6f4f2ff8 at 20:12Z. Cost of the record step: one full gate plus one unexplained push refusal, for a one-record diff the plan-only lane admits ungated. Two sub-findings for the fix: (a) the record step's gate is the same cost as the work step's and is paid on every busy-trunk cycle, not only on eviction; (b) the retry line should print the push's own refusal when the before/after shas are equal, since "origin moved" is then false.

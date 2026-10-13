@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: llama-server-engine-parity-smoke
+    field: status
+    value: completed
+    ts: "2026-10-12T20:46:06Z"
+    host: lenovinha
+
+events:
+  - packet_id: llama-server-engine-parity-smoke
+    event:
+      type: completed
+      ts: "2026-10-12T20:46:06Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: land(376) ebb5648a8 into linux-next, gate green (run 53); branch work/482-prty head e24ffd6c1. Evidence plan/evidence/482c-engine-parity-2026-10-12/ (run 5, one run, all lanes ok, through inference:11434 from a separate consumer container): C1 ollama stays default (litmus inference-engine-parity-shape step 1 with seeded promotion control). C2 /v1/models and /v1/chat/completions answer T0 pong cold and warm on ollama (cuda_v13), llama-server CUDA (core+cuda_v13 via CDI) and llama-server Vulkan (renderD128); /api/version 200 in 1.3-1.7 ms under curl -m 1. C3 double ensure keeps the same container id with exactly one container; a no-egress --internal recreate leaves every cached file over 1 MiB unchanged (19/18/16). C4 a never-ready slot logs DEGRADED: local inference not ready (engine=llama-server), ensure rc 0, ready=false; teardown leaves no inference container. C5 free VRAM recorded before each lane (ollama +663, llama-cuda +621, vulkan iGPU +458 MiB, all back to 4958 after teardown); the operator inference containers were never stopped and stayed identical. C6 litmus inference-engine-parity-shape fails on seeded endpoint, idempotency, soft-readiness, promotion and unguarded-harness regressions and passes after byte-identical restoration. 7B memory guard is 482-5f3t.

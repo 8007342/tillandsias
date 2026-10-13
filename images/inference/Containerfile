@@ -38,7 +38,19 @@ RUN microdnf install -y bash curl ca-certificates zstd tar gzip pciutils \
 # vulkan-loader is small; mesa-vulkan-drivers carries radv and is the bulk. Kept
 # unconditional rather than tier-gated: the image is one artifact shared by every
 # host, and a CPU-only host loading no ICD costs nothing at runtime.
-RUN microdnf install -y vulkan-loader mesa-vulkan-drivers \
+#
+# vulkan-tools (order 793-a8e7) carries `vulkaninfo`: the enumeration that
+# tells a real device (Dozen's "Microsoft Direct3D12 (...)" on a WSL2 host
+# that opted in with TILLANDSIAS_INFERENCE_GPU=vulkan) from llvmpipe, which the
+# loader offers without complaint when the GPU cannot be reached.
+RUN microdnf install -y vulkan-loader mesa-vulkan-drivers vulkan-tools \
+    && microdnf clean all
+
+# @trace spec:inference-engine-slots — order 482b llama-server slot shim
+# caddy owns :11434 when TILLANDSIAS_INFERENCE_ENGINE=llama-server and answers the
+# /api/version readiness probe only while llama-server is healthy (SLOT-2).
+# Fedora's package, like the enclave router's Caddy; idle under the ollama engine.
+RUN microdnf install -y caddy \
     && microdnf clean all
 
 # -- Create non-root user --
@@ -92,6 +104,12 @@ COPY engine-integrity.sh /usr/local/bin/tillandsias-engine-integrity.sh
 # Declarative data (tier-table.tsv + one adapter per engine) and its POSIX
 # resolver; the entrypoint sources tiers.sh instead of carrying inline rows.
 COPY tiers/ /usr/local/share/tillandsias/tiers/
+# @trace spec:inference-engine-slots — order 482b llama-server slot
+# Backend selection, the exactly-one-backend closure, GGUF pins and the supervised
+# llama-server + caddy pair. Same contract as the helpers above: functions only
+# when sourced, runnable standalone for litmus.
+COPY llama-server-lane.sh /usr/local/bin/tillandsias-llama-server-lane.sh
+COPY llama-server.Caddyfile /usr/local/share/tillandsias/llama-server.Caddyfile
 # @trace spec:external-logs-layer
 # Manifest of curated external log files published by this image.
 # The tray-side auditor reads this at /etc/tillandsias/external-logs.yaml
@@ -101,7 +119,8 @@ COPY external-logs.yaml /etc/tillandsias/external-logs.yaml
 RUN chmod +x /usr/local/bin/entrypoint.sh \
     /usr/local/bin/tillandsias-preload-policy.sh \
     /usr/local/bin/tillandsias-engine-tuning.sh \
-    /usr/local/bin/tillandsias-engine-integrity.sh
+    /usr/local/bin/tillandsias-engine-integrity.sh \
+    /usr/local/bin/tillandsias-llama-server-lane.sh
 
 USER 1000:1000
 

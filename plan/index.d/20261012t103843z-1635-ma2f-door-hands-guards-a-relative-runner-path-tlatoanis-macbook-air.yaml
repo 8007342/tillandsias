@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-12): every Linux preflight refused by the 1630-dwab serial fixture.
+packets:
+  - packet_id: the-preflight-door-hands-guards-a-relative-runner-path-so-a-nested-launcher-that-cds-cannot-start-a-lua-guard
+    order: 1635-ma2f
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [preflight, door, lua-runner, linux]
+    estimated_hours: 1
+    owned_files:
+      - build.sh
+      - scripts/lua/test-door-serial-lua-declaration.lua
+    related: [1630-dwab, 1570-mxcg, 1384-ddua]
+    depends_on: []
+    title: |
+      The preflight door hands guards a RELATIVE runner path (./target/release/tillandsias-plan), so a guard whose nested launcher cds elsewhere cannot start a .lua guard, and test-door-serial-lua-declaration refuses every Linux preflight
+    context: |
+      Reported by macuahuitl-fedora (coordinator), 2026-10-12: ./build.sh --preflight on bare origin/linux-next at 1e3d977ba is refused on macuahuitl (Linux) by scripts/lua/test-door-serial-lua-declaration.lua, 3 of 3 runs. Arms 6 and 7 FAIL with "writer marks=0" (order S1 S2 only). Run alone it passes.
+      CAUSE (reproduced on darwin by tlatoanis-macbook-air): the door sets _pf_plan_bin from resolve_plan_binary, which returns the RELATIVE ./target/release/tillandsias-plan when CARGO_TARGET_DIR is unset, and hands it to every guard as TILLANDSIAS_SCRIPT_RUNNER_BIN (1570-mxcg). The fixture passes it to its nested launcher as _pf_plan_bin, whose _pf_run_guard cds into the fixture's scratch SCRIPT_DIR before exec'ing it, so the writer .lua never starts. With TILLANDSIAS_SCRIPT_RUNNER_BIN=./target/release/tillandsias-plan the fixture fails exactly as on Linux; with the absolute path it passes 7/7. _run_lua_decider already normalises ./ to $SCRIPT_DIR/; the door does not.
+      WHY ONLY LINUX: darwin DEADLINE-SKIPS this fixture at the door (6 s against the 5 s per-guard deadline under taskpolicy -b), so the door never ran it on the host that wrote it; the darwin preflights that vouched for 1630-dwab did not examine it. The arms are not vacuous (they need marks==2); they gave no diagnosis.
+    exit_criteria:
+      - 'the door hands guards an absolute runner path: a fixture arm runs the extracted door setup with a relative resolver answer and finds TILLANDSIAS_SCRIPT_RUNNER_BIN absolute; the same arm against the trunk door (normalisation removed) finds it relative'
+      - 'test-door-serial-lua-declaration passes when handed a relative runner path (TILLANDSIAS_SCRIPT_RUNNER_BIN=./target/release/tillandsias-plan), and fails before the fix'
+      - 'when the writer does not record both marks, arms 6 and 7 print the writer rc and its own output, not only marks=0'
+    unscoreable: "a door contract fix pinned by a fixture arm: its evidence is the relative-runner arm, red against the trunk door and green against the fixed one"
+    next_action: >
+      Normalise _pf_plan_bin in the door as _run_lua_decider does, absolutise PLAN in the fixture, print the writer's rc/output on marks!=2, and add the relative-runner arm.
+    provenance: |
+      Filed by tlatoanis-macbook-air at macuahuitl-fedora's request, 2026-10-12. Evidence: macuahuitl preflight 3/3 refused at 1e3d977ba; darwin repro with a relative TILLANDSIAS_SCRIPT_RUNNER_BIN.
+    events:
+      - type: filed
+        ts: "2026-10-12T10:38:43Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          The door hands guards a relative runner path; the 1630-dwab serial fixture's nested launcher cds and cannot start its .lua writer, refusing every Linux preflight (darwin deadline-skips it at the door).

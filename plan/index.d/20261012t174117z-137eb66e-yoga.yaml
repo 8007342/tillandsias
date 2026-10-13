@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: log-query-language-has-zero-consumers
+    event:
+      type: progress
+      ts: "2026-10-12T17:41:17Z"
+      agent_id: linux-yoga-claude-20261012t172428z
+      host: yoga
+      summary: |
+        Cycle 7 (yoga): the coordinator's hold condition lifted mid-cycle — the v56.10.12.1 back-merge is on linux-next (version-bump PR 378 at 95874de57; origin/main is an ancestor of trunk at 6da398464; tag v56.10.12.1 on origin, its Release run in progress since 17:27Z). work/781-hseq merged trunk twice (4189f6ab1 at a570d8098, then 6da398464 at 1eee07d2d), both pushed. Pre-ready check on 1eee07d2d: one merge base, two-dot and three-dot name-status identical, 9 files, the two D lines (crates/tillandsias-logging/src/query.rs, scripts/query-traces.sh) are the retirement the PR describes. scripts/relay-preflight.sh work/781-hseq: ok:relay-preflight:b672ee60a:refs=1 deciders=17 fmt=ok fixtures=0 crates=1 litmus=0/0 (17:37Z; the run on a570d8098 was ok:relay-preflight:3cf112297, same shape). PR 358 read draft=false at 17:39Z: un-drafted by another actor after the back-merge, before this host's gh pr ready (which answered "already ready"); the pre-ready evidence is on the PR as a comment. Closure follows on the LANDED sha once the queue integrates it, never 1eee07d2d.

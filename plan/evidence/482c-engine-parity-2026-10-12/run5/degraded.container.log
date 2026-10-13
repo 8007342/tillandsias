@@ -1,0 +1,28 @@
+[inference] WARN: system trust store not updated (rc=1, expected as uid 1000 on this image) — relying on SSL_CERT_FILE/CURL_CA_BUNDLE
+[inference] ca-trust: store_rc=1 mode=system+enclave bundle=/tmp/tillandsias-ca-bundle.crt certs=122
+[inference] preload: policy=eager models=qwen2.5:0.5b expert_slots=1 max_loaded=2 ram_gb=13
+[inference] tuning: tier=gpu-cuda flash_attn=1 kv_cache=q8_0 num_parallel=2 vram_mb=8192 keep_alive=5m
+[inference] configured proxy 'proxy' does not resolve — running direct (non-enclave shape)
+[inference] engine=llama-server backend=vulkan reason=render-node:renderD128
+[inference] engine payload: need 'core+vulkan v0.34.0 sha256:cf95886728959aa09910bb34de5cca1cc5a8f68003b5597197d3f2c2d57c0804' (have 'none'; check=engine-integrity-refused:no-engine)
+[inference] Installing ollama binary (first run)...
+curl: (6) Could not resolve host: github.com
+[inference] proxy egress not ready (attempt 1/5) — retrying in 2s
+curl: (6) Could not resolve host: github.com
+[inference] proxy egress not ready (attempt 2/5) — retrying in 4s
+curl: (6) Could not resolve host: github.com
+[inference] proxy egress not ready (attempt 3/5) — retrying in 8s
+curl: (6) Could not resolve host: github.com
+[inference] proxy egress not ready (attempt 4/5) — retrying in 16s
+curl: (6) Could not resolve host: github.com
+[inference] FATAL: proxy egress never became ready within bounded backoff (5 probes) — skipping self-install this launch
+[inference] ollama engine NOT installed (download failed or payload refused, see reason= above) — will retry next launch (non-fatal)
+[inference] FATAL: reason=engine-integrity-refused:no-engine — refusing to execute the engine in /home/ollama/.ollama/models/.tools
+========================================
+  tillandsias inference
+  listening on :11434
+  models:  /home/ollama/.ollama/models/
+  GPU:     NVIDIA (1 device(s))
+  NPU:     none (passthrough not implemented — 1118-d3b6)
+========================================
+[inference] FATAL: no ollama binary available (self-install failed, or the engine was refused — see the reason= line above) — exiting so the next launch retries

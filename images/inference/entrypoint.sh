@@ -261,6 +261,36 @@ _engine_wanted_backends() {
 }
 OLLAMA_WANTED_BACKENDS="$(_engine_wanted_backends)"
 
+# ── Engine slot (order 482b) ──────────────────────────────────────
+# @trace spec:inference-engine-slots
+# TILLANDSIAS_INFERENCE_ENGINE selects the engine behind the unchanged :11434
+# endpoint. ollama stays the default (SLOT-3) until 482c records parity evidence.
+# llama-server runs the payload's own llama-server with EXACTLY ONE backend, chosen
+# here BEFORE the payload install so only that backend dir is installed and the
+# engine set (.engine-set line 1) names it. See llama-server-lane.sh.
+TILLANDSIAS_INFERENCE_ENGINE="${TILLANDSIAS_INFERENCE_ENGINE:-ollama}"
+case "$TILLANDSIAS_INFERENCE_ENGINE" in
+    ollama | llama-server) ;;
+    *)
+        echo "[inference] WARN: unknown TILLANDSIAS_INFERENCE_ENGINE='$TILLANDSIAS_INFERENCE_ENGINE' — using the default engine (ollama)" >&2
+        TILLANDSIAS_INFERENCE_ENGINE=ollama
+        ;;
+esac
+LLAMA_LANE_SH=/usr/local/bin/tillandsias-llama-server-lane.sh
+if [ "$TILLANDSIAS_INFERENCE_ENGINE" = "llama-server" ]; then
+    if [ ! -r "$LLAMA_LANE_SH" ]; then
+        echo "[inference] FATAL: engine=llama-server but $LLAMA_LANE_SH is missing from this image — refusing rather than serving a different engine" >&2
+        exit 1
+    fi
+    # shellcheck source=llama-server-lane.sh
+    . "$LLAMA_LANE_SH"
+    read -r LLAMA_BACKEND LLAMA_BACKEND_REASON <<EOF_SELECT
+$(tillandsias_llama_backend_select)
+EOF_SELECT
+    OLLAMA_WANTED_BACKENDS="$(tillandsias_llama_backend_dir "$LLAMA_BACKEND")"
+    echo "[inference] engine=llama-server backend=$LLAMA_BACKEND reason=$LLAMA_BACKEND_REASON"
+fi
+
 OLLAMA_ARCH=""
 case "$(uname -m)" in
     x86_64 | amd64) OLLAMA_ARCH="amd64" ;;
@@ -450,6 +480,22 @@ if [ ! -x "$OLLAMA_BIN" ] || [ ! -x "$OLLAMA_LIBDIR/llama-server" ] \
                         || echo "[inference] WARN: tier wants backend '$_w' but this ollama release does not ship it — inference will fall back to CPU" >&2
                 done
                 mkdir -p "$OLLAMA_LIBDIR" 2>/dev/null || true
+                # Order 482b: a reinstall must CONVERGE on the wanted set. Extraction
+                # adds files and never removes them, so a backend dir left by an
+                # earlier set (another engine, a host that lost its GPU) would stay
+                # beside the new one: two backends where the set names one.
+                for _old_backend in "$OLLAMA_LIBDIR"/*/; do
+                    [ -d "$_old_backend" ] || continue
+                    _old_backend="${_old_backend%/}"
+                    _keep=0
+                    for _w in $OLLAMA_WANTED_BACKENDS; do
+                        [ "${_old_backend##*/}" = "$_w" ] && _keep=1
+                    done
+                    if [ "$_keep" -eq 0 ]; then
+                        echo "[inference] removing backend dir '${_old_backend##*/}' not in the wanted set '$OLLAMA_ENGINE_SET'"
+                        rm -rf "$_old_backend"
+                    fi
+                done
                 # Pass 2: extract bin/ollama + the selected slice of lib/ollama.
                 if zstd -dc "$TMP_O/ollama.tar.zst" 2>/dev/null \
                     | tar -xf - -C "$OLLAMA_TOOLSROOT" "$@" bin/ollama lib/ollama \
@@ -599,6 +645,53 @@ fi
 # disk, not against the tier string alone.
 _installed_backends="$(find "$OLLAMA_LIBDIR" -maxdepth 1 -mindepth 1 -type d -printf '%f ' 2>/dev/null)"
 echo "[inference] engine: set=$OLLAMA_ENGINE_SET backends=[${_installed_backends:-core-only}] llama-server=ok"
+
+# ── llama-server slot handoff (order 482b) ────────────────────────
+# Everything below this block is the ollama slot (serve, pulls, inventory). The
+# llama-server slot replaces it: verify the exactly-one-backend closure against
+# what is INSTALLED, make the pinned T0 model available (verified), then hand off
+# to the supervised llama-server + caddy pair, which never returns.
+if [ "$TILLANDSIAS_INFERENCE_ENGINE" = "llama-server" ]; then
+    _llama_pin="$(tillandsias_llama_backend_pin "$OLLAMA_LIBDIR" "$LLAMA_BACKEND")"
+    if [ -n "$_llama_pin" ]; then
+        export GGML_BACKEND_PATH="$_llama_pin"
+    else
+        unset GGML_BACKEND_PATH
+    fi
+    _llama_set="$(sed -n '1p' "$OLLAMA_ENGINE_MANIFEST" 2>/dev/null | cut -d' ' -f1)"
+    _llama_verdict="$(tillandsias_llama_backend_verdict "$OLLAMA_LIBDIR" "$LLAMA_BACKEND" "$_llama_set" "${GGML_BACKEND_PATH:-}")"
+    if [ "$_llama_verdict" != "ok" ]; then
+        echo "[inference] FATAL: reason=$_llama_verdict — llama-server would not run exactly the selected backend '$LLAMA_BACKEND'; exiting so the next launch reinstalls" >&2
+        exit 1
+    fi
+    echo "[inference] llama-server backend closure: ok (set=$_llama_set backend=$LLAMA_BACKEND pin=${GGML_BACKEND_PATH:-none})"
+    TIERS_SH=/usr/local/share/tillandsias/tiers/tiers.sh
+    # shellcheck source=tiers/tiers.sh
+    [ -r "$TIERS_SH" ] && . "$TIERS_SH"
+    _llama_model_id=""
+    command -v tillandsias_tier_models >/dev/null 2>&1 \
+        && _llama_model_id="$(tillandsias_tier_models T0)"
+    if [ -z "$_llama_model_id" ]; then
+        echo "[inference] FATAL: reason=tier-table-unavailable — no T0 model id for the llama-server slot" >&2
+        exit 1
+    fi
+    # Tier models above T0 are pinned per shard by 482-igky; until a row is pinned it
+    # is refused by name, so an operator who opted into tier pulls sees why.
+    if [ "${TILLANDSIAS_INFERENCE_TIER_PULLS:-0}" = "1" ]; then
+        _llama_ram_gb=$(awk '/MemTotal/ {printf "%d", $2/1024/1024}' /proc/meminfo 2>/dev/null || echo 0)
+        _llama_tier="$(tillandsias_tier_classify 0 "$_llama_ram_gb" 2>/dev/null)" || _llama_tier=T1
+        for _llama_id in $(tillandsias_tier_models "${_llama_tier:-T1}"); do
+            [ "$_llama_id" = "$_llama_model_id" ] && continue
+            tillandsias_llama_gguf_pin "$_llama_id" >/dev/null \
+                || echo "[inference] reason=engine-integrity-refused:gguf-unpinned:$_llama_id — tier ${_llama_tier} row not served by llama-server until pinned (482-igky)" >&2
+        done
+    fi
+    if ! _llama_model="$(tillandsias_llama_gguf_ensure "$_llama_model_id" "${OLLAMA_MODELS}.gguf")"; then
+        echo "[inference] FATAL: no verified model for the llama-server slot — exiting so the next launch retries (forge launch degrades, order 486)" >&2
+        exit 1
+    fi
+    tillandsias_llama_serve "$OLLAMA_LIBDIR/llama-server" "$_llama_model" "$LLAMA_BACKEND" "$_llama_model_id"
+fi
 
 # @trace spec:inference-container
 # Start ollama in background so we can pre-pull models before going live.

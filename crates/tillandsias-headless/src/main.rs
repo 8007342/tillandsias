@@ -354,6 +354,12 @@ fn main() {
         std::process::exit(msg_serve::run_cli(&user_args));
     }
 
+    // Order 1643-q3at: `devices resolve <query...>` / `devices list`. The
+    // device catalogue is pure data; dispatched early, it touches nothing.
+    if user_args.first().map(String::as_str) == Some("devices") {
+        std::process::exit(run_devices_cli(&user_args[1..]));
+    }
+
     // Order 828-h7kw: `--hold-window -- <command...>`. The terminal a lane
     // opens runs THIS, so the window closes only after the operator has seen
     // how the lane ended. Hidden helper mode, like --internal-ensure-image.
@@ -406,6 +412,65 @@ fn main() {
             Err(e) => {
                 eprintln!("[tillandsias] --internal-ensure-image {image_name} failed: {e}");
                 std::process::exit(1);
+            }
+        }
+    }
+
+    // Order 482c: hidden harness mode for the engine-parity smoke. `ensure`
+    // runs the launch path's own inference ensure plus its soft readiness
+    // report; `teardown` runs the shutdown path's shared-stack cleanup. Both
+    // act on whatever podman store the environment names, so the harness
+    // (scripts/inference-engine-parity-smoke.sh) points it at an isolated one.
+    // Not operator surface; absent from --help like --internal-ensure-image.
+    if let Some(i) = user_args
+        .iter()
+        .position(|a| a == "--internal-inference-slot")
+    {
+        let debug = user_args.iter().any(|a| a == "--debug");
+        let action = user_args.get(i + 1).map(String::as_str);
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime");
+        let client = PodmanClient::new();
+        match (action, user_args.get(i + 2)) {
+            (Some("ensure"), Some(certs_dir)) => {
+                let outcome = rt.block_on(async {
+                    ensure_inference_for_launch(
+                        &client,
+                        Path::new(certs_dir),
+                        VERSION.trim(),
+                        debug,
+                    )
+                    .await?;
+                    Ok::<bool, String>(report_inference_readiness(&client, debug).await)
+                });
+                match outcome {
+                    Ok(ready) => {
+                        println!("inference-slot: ensure ready={ready}");
+                        std::process::exit(0);
+                    }
+                    Err(e) => {
+                        eprintln!("[tillandsias] --internal-inference-slot ensure failed: {e}");
+                        std::process::exit(1);
+                    }
+                }
+            }
+            (Some("teardown"), _) => {
+                rt.block_on(cleanup_shared_stack_if_no_running_forge(
+                    &client,
+                    "inference-slot",
+                    None,
+                    debug,
+                ));
+                println!("inference-slot: teardown done");
+                std::process::exit(0);
+            }
+            _ => {
+                eprintln!(
+                    "Error: --internal-inference-slot requires `ensure <certs-dir>` or `teardown`"
+                );
+                std::process::exit(2);
             }
         }
     }
@@ -2401,6 +2466,9 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         "git" => "images/git",
         "inference" => "images/inference",
         "web" => "images/web",
+        // 1625-un54: the local Wrangler preview profile. runtime_assets already
+        // shipped its context; without this arm nothing could build it.
+        "web-wrangler" => "images/web-wrangler",
         "router" => "images/router",
         "chromium-core" => "images/chromium",
         "chromium-framework" => "images/chromium",
@@ -3783,6 +3851,20 @@ pub(crate) const PROXY_CA_KEY_SECRET: &str = "tillandsias-ca-key";
 /// unreadable to that entrypoint. uid/gid 1000 + `mode=0400` keeps the key
 /// least-privilege while readable by exactly its consumer.
 pub(crate) const PROXY_CA_KEY_SECRET_OPTS: &str = "uid=1000,gid=1000,mode=0400";
+
+/// Credential-quarantine tmpfs overlays (orders 170/224) for the forge's
+/// `~/.ssh` and `~/.config/gh`. The trailing `U` is REQUIRED, not cosmetic:
+/// podman mounts a tmpfs `root:root` unless told otherwise, and the forge runs
+/// as its image user under `--userns=keep-id`. Without it `~/.config/gh` was
+/// root-owned 0700, and `gh auth status` failed with "permission denied"
+/// instead of reporting "not logged in" (1625-bax2, measured on yoga).
+/// `U` is podman's chown-to-the-container-user option, so it follows keep-id
+/// without hard-coding a uid. NOT `uid=1000,gid=1000`: podman rejects those on
+/// `--tmpfs` ("unknown mount option"), so the forge would not start at all
+/// (exit 125, measured on macuahuitl with podman 5.8.7). The overlays stay
+/// EMPTY: owning them gives the forge an empty directory, never a credential.
+pub(crate) const FORGE_SSH_QUARANTINE_TMPFS: &str = "/home/forge/.ssh:size=1m,mode=0700,U";
+pub(crate) const FORGE_GH_QUARANTINE_TMPFS: &str = "/home/forge/.config/gh:size=1m,mode=0700,U";
 
 fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
     let mut args: Vec<String> = vec![
@@ -5210,9 +5292,51 @@ fn detect_inference_tier() -> &'static str {
 // @trace spec:inference-policy-router: Hardware-aware tier routing and fallback chain.
 fn effective_inference_tier() -> &'static str {
     let hardware = detect_inference_tier();
-    match hardware {
+    let delivered = match hardware {
         "gpu-cuda" if !nvidia_cdi_available() => "cpu",
         other => other,
+    };
+    wsl2_vulkan_opt_in_tier(
+        delivered,
+        std::env::var(INFERENCE_GPU_ENV).ok().as_deref(),
+        Path::new("/dev/dxg").exists(),
+        Path::new(WSL_HOST_TREE).exists(),
+    )
+}
+
+/// ORDER 793-a8e7: the operator opt-in that turns a WSL2 paravirtual GPU into
+/// the inference container's Vulkan lane. Forwarded from the tray's
+/// environment into the guest unit, like TILLANDSIAS_NO_LOCAL_INFERENCE.
+const INFERENCE_GPU_ENV: &str = "TILLANDSIAS_INFERENCE_GPU";
+
+/// ORDER 793-a8e7. A WSL2 host is classified `cpu` and stays that way unless
+/// the operator opts in with `TILLANDSIAS_INFERENCE_GPU=vulkan`; only then, and
+/// only when BOTH halves of the dxg delivery exist (the same two facts
+/// `wsl2_dxg_container_args` requires), does the tier become `gpu-vulkan`. The
+/// inference entrypoint maps that tier to the vulkan backend set
+/// (`_engine_wanted_backends`), and `engine_slots` pins `OLLAMA_LLM_LIBRARY`.
+///
+/// WHY OPT-IN AND NOT DETECTED. Measured with this exact stack (dzn over
+/// /dev/dxg, ollama 0.32.9): qwen2.5:3b prefill 2.04x and decode 1.37x faster
+/// on the iGPU, but qwen2.5:0.5b decode 1.23x SLOWER and nomic-embed 1.16x
+/// slower. A detected default would move every WSL2 host onto the regression.
+/// dzn also self-reports as non-conformant (Vulkan 1.2, no shaderInt8), and a
+/// cold GPU load once hung silently for >9 minutes. Without the opt-in this
+/// returns its input unchanged, so every existing host keeps byte-identical
+/// inference wiring.
+///
+/// Pure, so every arm runs on hosts that have neither /dev/dxg nor the tree.
+fn wsl2_vulkan_opt_in_tier(
+    delivered: &'static str,
+    opt_in: Option<&str>,
+    dxg_present: bool,
+    wsl_tree_present: bool,
+) -> &'static str {
+    let wants_vulkan = opt_in.is_some_and(|v| v.trim().eq_ignore_ascii_case("vulkan"));
+    if delivered == "cpu" && wants_vulkan && dxg_present && wsl_tree_present {
+        "gpu-vulkan"
+    } else {
+        delivered
     }
 }
 
@@ -5359,6 +5483,37 @@ async fn wait_for_inference_ready(client: &PodmanClient, debug: bool) -> Result<
          Inspect `podman logs tillandsias-inference` for ollama startup errors \
          (common: ollama binary self-install failed, or model cache volume missing)."
     ))
+}
+
+/// Wait for inference readiness WITHOUT gating the caller on it (order 392:
+/// best-effort). A slot that never becomes ready logs one DEGRADED line naming
+/// the selected engine and the caller continues (SLOT-8 "Readiness failure is
+/// soft"). Returns whether the slot answered.
+/// @trace spec:inference-engine-slots
+async fn report_inference_readiness(client: &PodmanClient, debug: bool) -> bool {
+    match wait_for_inference_ready(client, debug).await {
+        Ok(()) => true,
+        Err(e) => {
+            let (engine, _) = engine_slots::selected_engine_kind(
+                std::env::var("TILLANDSIAS_INFERENCE_ENGINE")
+                    .ok()
+                    .as_deref(),
+            );
+            eprintln!("{}", inference_degraded_line(engine, &e));
+            false
+        }
+    }
+}
+
+/// The SLOT-8 DEGRADED line for a slot that never became ready: names the
+/// engine and the last probe failure, and says the launch continues.
+fn inference_degraded_line(engine: engine_slots::EngineKind, reason: &str) -> String {
+    format!(
+        "[tillandsias] [forge-launch] DEGRADED: local inference not ready \
+         (engine={}): {reason}; continuing — local models are optional (harnesses \
+         use cloud models).",
+        engine.as_str()
+    )
 }
 
 /// Probe the served bare repository for a resolvable HEAD plus a concrete
@@ -6151,6 +6306,37 @@ fn build_inference_run_args(
     for (name, value) in engine_slots::pin_backend_environment(effective_tier, cuda_major) {
         args.extend(["--env".into(), format!("{name}={value}")]);
     }
+    // Order 482b: the engine slot (ollama by default, SLOT-3). The llama-server
+    // slot is delivered the render nodes this user can open — on any tier,
+    // because its Vulkan lane needs no vendor stack (SLOT-4) — and an
+    // inaccessible node is reported, never chmod-ed (SLOT-5).
+    let (engine, engine_note) = engine_slots::selected_engine_kind(
+        std::env::var("TILLANDSIAS_INFERENCE_ENGINE")
+            .ok()
+            .as_deref(),
+    );
+    if let Some(note) = engine_note {
+        eprintln!("[tillandsias] WARNING: {note}");
+    }
+    let (usable_nodes, unusable_nodes) = if engine == engine_slots::EngineKind::LlamaServer {
+        engine_slots::usable_render_nodes(Path::new("/dev/dri"))
+    } else {
+        (Vec::new(), Vec::new())
+    };
+    for node in &unusable_nodes {
+        eprintln!(
+            "[tillandsias] llama-server slot: render node {} is not readable+writable by this user — not delivered; the slot runs on CPU unless another node is usable (SLOT-5)",
+            node.display()
+        );
+    }
+    args.extend(engine_slots::llama_server_run_args(
+        engine,
+        std::env::var("TILLANDSIAS_INFERENCE_LLAMA_BACKEND")
+            .ok()
+            .as_deref(),
+        effective_tier,
+        &usable_nodes,
+    ));
     args.extend(proxy_env_args());
     // Order 524: this env pair MUST be built before the mount/image tail.
     // It used to be spliced in afterwards with two `args.insert(args.len() - 2,
@@ -7281,6 +7467,17 @@ fn resolve_launch_project_identity(
             .and_then(|n| n.to_str())
             .unwrap_or(fallback_name)
             .to_string();
+        // 1626-r4xm: THE LANE ADMITS THE PROJECT IT WAS LAUNCHED FOR. Every
+        // lane that resolves here starts a per-lane MCP listener in this
+        // process (tray builds), and that listener admits a project only
+        // through validate_project_label, the order-505 equality guard
+        // (1031-q4pb). A path outside the host project root used to launch and
+        // then have EVERY MCP call refused as "not a known project" (measured
+        // on lenovinha 2026-10-12). Binding the label to this canonical path
+        // admits exactly this project; every other outside label stays refused.
+        #[cfg(feature = "tray")]
+        crate::local_projects::bind_launched_project(&name, &canonical)
+            .map_err(|reason| format!("refusing to launch '{}': {reason}", canonical.display()))?;
         Ok((name, Some(canonical)))
     } else if is_cloud {
         Ok((project_path.to_string(), None))
@@ -8349,6 +8546,17 @@ fn build_opencode_forge_args(
         format!("TILLANDSIAS_PROJECT={project_name}"),
         "--env".into(),
         format!("TILLANDSIAS_AGENT={}", mode.agent_identity()),
+        // ORDER 776-drwr: the same accel claim build_forge_agent_run_args_with_vault
+        // hands every other lane (orders 392 and 480). This builder never had it,
+        // so OpenCode lanes ran with no envelope and lib-common.sh printed no
+        // "Accelerators" line (measured on a tray-launched Windows lane, 2026-08-16).
+        "--env".into(),
+        format!("TILLANDSIAS_INFERENCE_TIER={}", effective_inference_tier()),
+        "--env".into(),
+        format!(
+            "TILLANDSIAS_ACCEL_ENVELOPE={}",
+            accel_probe::accel_envelope(&accel_probe::load_or_probe(effective_inference_tier()))
+        ),
         "--env".into(),
         "TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets".into(),
         "--tmpfs".into(),
@@ -8366,9 +8574,9 @@ fn build_opencode_forge_args(
         // tmpfs are empty — the forge has no business reading host SSH keys or
         // GitHub CLI tokens; all authenticated git traffic flows through the mirror.
         "--tmpfs".into(),
-        "/home/forge/.ssh:size=1m,mode=0700".into(),
+        FORGE_SSH_QUARANTINE_TMPFS.into(),
         "--tmpfs".into(),
-        "/home/forge/.config/gh:size=1m,mode=0700".into(),
+        FORGE_GH_QUARANTINE_TMPFS.into(),
         // Mount under `/home/forge/src/<project>/` (not directly at
         // `/home/forge/src`) so the in-container tree matches what the forge
         // entrypoint's clone path would produce
@@ -9990,7 +10198,7 @@ pub(crate) fn build_image_with_logging(
         "proxy" => "Routing Proxy",
         "git" => "Setting up Git",
         "router" => "Routing Traffic",
-        "web" => "Serving Web",
+        "web" | "web-wrangler" => "Serving Web",
         "vault" => "Securing Vault",
         _ => "Setting up containers",
     };
@@ -10218,7 +10426,7 @@ fn podman_build_argv(
 /// init — and every curl install, since install.sh runs `--reset-state
 /// --debug` — left /tmp/tillandsias-init-vault.log behind (measured on yoga
 /// 2026-09-27, mode 644).
-const INIT_IMAGES: [&str; 10] = [
+const INIT_IMAGES: [&str; 11] = [
     "proxy",
     "git",
     "vault",
@@ -10229,6 +10437,9 @@ const INIT_IMAGES: [&str; 10] = [
     "forge-base",
     "forge",
     "web",
+    // 1625-un54: publish_local's Wrangler profile image, tagged with the same
+    // version alias local_web_preview::Profile::image checks.
+    "web-wrangler",
 ];
 
 fn cleanup_init_logs() {
@@ -16146,35 +16357,72 @@ fn browser_profile_root() -> PathBuf {
     PathBuf::from("/tmp/tillandsias/browser")
 }
 
+/// The host graphical session the browser container may reach. WAYLAND ONLY
+/// (order 1641-xbvq, operator decision 2026-10-12): X11 is not offered, because
+/// handing a container /tmp/.X11-unix gives it every X client on the display.
 #[derive(Debug, Clone, Default)]
 struct BrowserDisplayContext {
-    display: Option<String>,
-    xauthority: Option<PathBuf>,
     wayland_display: Option<String>,
     xdg_runtime_dir: Option<PathBuf>,
 }
 
+/// Where the Wayland socket file is mounted inside the browser container: a
+/// private tmpfs runtime dir holding nothing else.
+const BROWSER_RUNTIME_DIR: &str = "/run/user/browser";
+
 impl BrowserDisplayContext {
     /// @trace spec:tray-cli-coexistence
     fn from_env() -> Result<Self, String> {
-        let display = std::env::var("DISPLAY").ok();
-        let xauthority = std::env::var_os("XAUTHORITY").map(PathBuf::from);
-        let wayland_display = std::env::var("WAYLAND_DISPLAY").ok();
-        let xdg_runtime_dir = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from);
-
-        if display.is_none() && wayland_display.is_none() {
-            return Err(
-                "OpenCode Web browser launch requires a graphical session (DISPLAY or WAYLAND_DISPLAY)"
-                    .to_string(),
-            );
-        }
-
         Ok(Self {
-            display,
-            xauthority,
-            wayland_display,
-            xdg_runtime_dir,
+            wayland_display: std::env::var("WAYLAND_DISPLAY")
+                .ok()
+                .filter(|v| !v.is_empty()),
+            xdg_runtime_dir: std::env::var_os("XDG_RUNTIME_DIR")
+                .filter(|v| !v.is_empty())
+                .map(PathBuf::from),
         })
+    }
+
+    /// The host Wayland socket FILE, or why there is none. WAYLAND_DISPLAY is
+    /// a socket name under XDG_RUNTIME_DIR, or an absolute path.
+    fn wayland_socket(&self) -> Result<(PathBuf, String), String> {
+        let refuse = |why: &str| {
+            format!(
+                "the browser opens on Wayland only, and {why}. Tillandsias does not hand a \
+                 browser container an X11 display (it would reach every X client on it). \
+                 Log in to a Wayland session and retry."
+            )
+        };
+        let Some(name) = self.wayland_display.as_deref() else {
+            return Err(refuse("this session has no WAYLAND_DISPLAY"));
+        };
+        let socket = if Path::new(name).is_absolute() {
+            PathBuf::from(name)
+        } else {
+            if name.contains('/') || name == "." || name == ".." {
+                return Err(refuse(&format!(
+                    "WAYLAND_DISPLAY={name:?} is not a socket name"
+                )));
+            }
+            let Some(runtime) = self.xdg_runtime_dir.as_deref() else {
+                return Err(refuse(
+                    "XDG_RUNTIME_DIR is not set, so the Wayland socket cannot be found",
+                ));
+            };
+            runtime.join(name)
+        };
+        if !socket.exists() {
+            return Err(refuse(&format!(
+                "the Wayland socket {} does not exist",
+                socket.display()
+            )));
+        }
+        let file_name = socket
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("wayland-0")
+            .to_string();
+        Ok((socket, file_name))
     }
 }
 
@@ -16238,41 +16486,23 @@ fn build_project_browser_spec(
         .arg(format!("--user-data-dir={}", profile_dir.display()))
         .arg(format!("--app={app_url}"));
 
-    if let Some(display_name) = &display.display {
-        spec = spec
-            .env("DISPLAY", display_name)
-            .volume("/tmp/.X11-unix", "/tmp/.X11-unix", MountMode::ReadWrite)
-            .arg("--ozone-platform=x11");
-
-        if let Some(xauthority_path) = &display.xauthority
-            && xauthority_path.exists()
-        {
-            spec = spec
-                .env("XAUTHORITY", "/home/chromium/.Xauthority")
-                .bind_mount(
-                    xauthority_path.display().to_string(),
-                    "/home/chromium/.Xauthority",
-                    true,
-                );
-        }
-    } else if let Some(wayland_display) = &display.wayland_display {
-        if let Some(xdg_runtime_dir) = &display.xdg_runtime_dir {
-            spec = spec
-                .env("XDG_RUNTIME_DIR", xdg_runtime_dir.display().to_string())
-                .env("WAYLAND_DISPLAY", wayland_display)
-                .volume(
-                    xdg_runtime_dir.display().to_string(),
-                    xdg_runtime_dir.display().to_string(),
-                    MountMode::ReadWrite,
-                )
-                .arg("--ozone-platform=wayland");
-        } else {
-            return Err(
-                "OpenCode Web browser launch requires XDG_RUNTIME_DIR for Wayland sessions"
-                    .to_string(),
-            );
-        }
-    }
+    // Order 1641-xbvq (p0): ONLY the Wayland socket file, into a private tmpfs
+    // runtime dir. Mounting the host's whole $XDG_RUNTIME_DIR handed the browser
+    // podman.sock (host code execution), the tray control socket and the D-Bus
+    // session bus (and through it the keyring). `-v …:rw`, not --mount
+    // relabel=shared: a relabel would rewrite the live compositor socket's
+    // SELinux label on the host.
+    let (socket, socket_name) = display.wayland_socket()?;
+    spec = spec
+        .tmpfs(format!("{BROWSER_RUNTIME_DIR}:size=1m,mode=0755"))
+        .volume(
+            socket.display().to_string(),
+            format!("{BROWSER_RUNTIME_DIR}/{socket_name}"),
+            MountMode::ReadWrite,
+        )
+        .env("XDG_RUNTIME_DIR", BROWSER_RUNTIME_DIR)
+        .env("WAYLAND_DISPLAY", &socket_name)
+        .arg("--ozone-platform=wayland");
 
     for device_flag in detect_gpu_devices() {
         if let Some(device) = device_flag.strip_prefix("--device=") {
@@ -17183,6 +17413,53 @@ pub(crate) fn hold_window_line(status: &std::process::ExitStatus) -> String {
 /// the window.
 pub(crate) const HOLD_WINDOW_ENV: &str = "TILLANDSIAS_HOST_HOLDS_WINDOW";
 
+/// Order 1643-q3at: `tillandsias devices resolve <query...>` prints the
+/// resolved device as JSON (exit 0), or `{"match":false,…}` (exit 1).
+/// `tillandsias devices list` prints one `id<TAB>model<TAB>w×h@dpr` line per
+/// catalogue device.
+fn run_devices_cli(args: &[String]) -> i32 {
+    use tillandsias_core::devices;
+    match args.first().map(String::as_str) {
+        Some("resolve") if args.len() > 1 => {
+            let query = args[1..].join(" ");
+            match devices::resolve(&query) {
+                Some(found) => {
+                    let mut out = serde_json::to_value(&found).unwrap_or_default();
+                    if let Some(obj) = out.as_object_mut() {
+                        obj.insert("match".into(), serde_json::Value::Bool(true));
+                    }
+                    println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
+                    0
+                }
+                None => {
+                    println!(
+                        "{}",
+                        serde_json::json!({
+                            "match": false,
+                            "query": query,
+                            "reason": "no catalogue device matches, and the query names no brand to approximate within",
+                        })
+                    );
+                    1
+                }
+            }
+        }
+        Some("list") => {
+            for d in devices::all() {
+                println!(
+                    "{}\t{}\t{}x{}@{}",
+                    d.id, d.model, d.viewport.w, d.viewport.h, d.dpr
+                );
+            }
+            0
+        }
+        _ => {
+            eprintln!("usage: tillandsias devices resolve <query...> | tillandsias devices list");
+            2
+        }
+    }
+}
+
 pub(crate) fn run_hold_window(args: &[String]) -> i32 {
     let argv: Vec<&String> = match args.first().map(String::as_str) {
         Some("--") => args[1..].iter().collect(),
@@ -17513,12 +17790,7 @@ pub(crate) fn ensure_enclave_for_project(
         // inference-ollama-selfinstall-tls-uid1000-2026-07-24) must NOT abort
         // the forge — warn and continue so cloud-model harnesses launch
         // regardless. When local models land, re-gate behind an opt-in.
-        if let Err(e) = wait_for_inference_ready(&client, debug).await {
-            eprintln!(
-                "[tillandsias] [forge-launch] WARNING: local inference not ready ({e}); \
-                 continuing — local models are optional (harnesses use cloud models)."
-            );
-        }
+        report_inference_readiness(&client, debug).await;
 
         // Order 452 slice 2: the clone-only forge clones from the mirror the
         // instant it boots — block until the mirror actually serves a
@@ -17818,6 +18090,20 @@ async fn ensure_shared_git_and_inference_for_launch(
         )
         .await?;
     }
+    ensure_inference_for_launch(client, certs_dir, version, debug).await?;
+    Ok(mirror_identity)
+}
+
+/// The inference half of the launch ensure, on its own so the engine-parity
+/// harness (order 482c, `--internal-inference-slot ensure`) drives the SAME
+/// guard and run site a forge launch does, not a copy of it.
+/// @trace spec:inference-engine-slots (SLOT-8: double ensure is a no-op)
+async fn ensure_inference_for_launch(
+    client: &PodmanClient,
+    certs_dir: &Path,
+    version: &str,
+    debug: bool,
+) -> Result<(), String> {
     // Order 443: inference is nearly stateless but --replacing it on every
     // launch drops loaded models and interrupts a sibling's inference.
     // Recreate-if-not-running (ephemerality/idempotency), not always.
@@ -17850,7 +18136,7 @@ async fn ensure_shared_git_and_inference_for_launch(
             .await
             .map_err(|e| format!("[forge-launch] failed to start inference: {e}"))?;
     }
-    Ok(mirror_identity)
+    Ok(())
 }
 
 /// Build the forge `podman run` args for an interactive launch.
@@ -18423,8 +18709,8 @@ fn build_forge_agent_run_args_with_vault(
         // host $HOME, but the --volume source mount of Tllatoani's
         // ~/src/tillandsias is the host's own checkout, so its child
         // .ssh/.config would be visible). The tmpfs prevents that.
-        .tmpfs("/home/forge/.ssh:size=1m,mode=0700")
-        .tmpfs("/home/forge/.config/gh:size=1m,mode=0700")
+        .tmpfs(FORGE_SSH_QUARANTINE_TMPFS)
+        .tmpfs(FORGE_GH_QUARANTINE_TMPFS)
         .env("TILLANDSIAS_CHEATSHEETS", "/opt/cheatsheets")
         .entrypoint(mode.entrypoint());
     // Order 437: clone-only (default) selects the mirror network-clone
@@ -22391,10 +22677,22 @@ mod tests {
         // launch a cpu-only "GPU tier".
         let effective = effective_inference_tier();
         assert!(
-            ["gpu-cuda", "gpu-rocm", "metal", "unmeasured", "cpu"].contains(&effective),
+            [
+                "gpu-cuda",
+                "gpu-rocm",
+                "gpu-vulkan",
+                "metal",
+                "unmeasured",
+                "cpu"
+            ]
+            .contains(&effective),
             "effective tier grammar violated: {effective}"
         );
-        if tier == "gpu-cuda" && !nvidia_cdi_available() {
+        // 793-a8e7: an operator who opted in on a WSL2 host sees gpu-vulkan;
+        // its arms are pinned in wsl2_vulkan_opt_in_is_explicit_and_needs_both_halves.
+        if effective == "gpu-vulkan" {
+            assert_eq!(tier, "cpu", "only a cpu host can be lifted to gpu-vulkan");
+        } else if tier == "gpu-cuda" && !nvidia_cdi_available() {
             assert_eq!(
                 effective, "cpu",
                 "gpu-cuda hardware without a CDI spec must downgrade to cpu, \
@@ -22438,6 +22736,62 @@ mod tests {
             forge.contains("TILLANDSIAS_INFERENCE_TIER")
                 && forge.contains("effective_inference_tier()"),
             "effective tier must be exported into the forge env for agents/startup context"
+        );
+    }
+
+    /// ORDER 793-a8e7: the WSL2 Vulkan lane is an explicit opt-in. Without it
+    /// the tier is returned unchanged, which is what keeps every existing
+    /// host's inference wiring byte-identical (the measured 0.5B decode
+    /// regression is why this is not detected).
+    ///
+    /// REGIME: pure function, no IO, no host state, no wall-clock.
+    #[test]
+    fn wsl2_vulkan_opt_in_is_explicit_and_needs_both_halves() {
+        // THE DEFAULT LANE: no opt-in, on a fully equipped WSL2 host.
+        assert_eq!(wsl2_vulkan_opt_in_tier("cpu", None, true, true), "cpu");
+        for not_vulkan in ["", "  ", "0", "1", "true", "cuda", "gpu"] {
+            assert_eq!(
+                wsl2_vulkan_opt_in_tier("cpu", Some(not_vulkan), true, true),
+                "cpu",
+                "{not_vulkan:?} is not the opt-in"
+            );
+        }
+        // THE ONLY ARM THAT LIFTS THE TIER.
+        assert_eq!(
+            wsl2_vulkan_opt_in_tier("cpu", Some("vulkan"), true, true),
+            "gpu-vulkan"
+        );
+        assert_eq!(
+            wsl2_vulkan_opt_in_tier("cpu", Some(" Vulkan "), true, true),
+            "gpu-vulkan"
+        );
+        // NEITHER HALF ALONE: the node without the tree is the measured
+        // lavapipe-instead-of-GPU configuration, and off WSL2 neither exists.
+        assert_eq!(
+            wsl2_vulkan_opt_in_tier("cpu", Some("vulkan"), true, false),
+            "cpu"
+        );
+        assert_eq!(
+            wsl2_vulkan_opt_in_tier("cpu", Some("vulkan"), false, true),
+            "cpu"
+        );
+        assert_eq!(
+            wsl2_vulkan_opt_in_tier("cpu", Some("vulkan"), false, false),
+            "cpu"
+        );
+        // A HOST THAT ALREADY HAS A BETTER LANE KEEPS IT.
+        for tier in ["gpu-cuda", "gpu-rocm", "unmeasured"] {
+            assert_eq!(
+                wsl2_vulkan_opt_in_tier(tier, Some("vulkan"), true, true),
+                tier
+            );
+        }
+        // THE LIFTED TIER IS ONE THE REST OF THE ENCLAVE ALREADY SPEAKS: the
+        // engine pins the vulkan library for it.
+        let pinned = engine_slots::pin_backend_environment("gpu-vulkan", None);
+        assert!(
+            pinned.contains(&("OLLAMA_LLM_LIBRARY".to_string(), "vulkan".to_string())),
+            "{pinned:?}"
         );
     }
 
@@ -24848,6 +25202,69 @@ mod tests {
         }
     }
 
+    /// 1625-bax2: the quarantine tmpfs options must be ones podman ACCEPTS.
+    /// The first fix passed `uid=1000,gid=1000`, which every argv assertion
+    /// accepted and podman refuses ("unknown mount option", exit 125), so the
+    /// forge would not have started. Only a real podman can judge this.
+    ///
+    /// With a tillandsias forge image present, both overlays are mounted at
+    /// their real paths under --userns=keep-id, and each must be EMPTY and
+    /// owned by the container user. With any other local image, `true` must
+    /// start with both option strings. With no reachable podman or no local
+    /// image, the test skips with the reason (never pulls).
+    #[test]
+    fn forge_quarantine_tmpfs_options_are_accepted_by_podman() {
+        let _lock = podman_seam_lock();
+        let info = podman_cmd_sync()
+            .args(["info", "--format", "{{.Host.Arch}}"])
+            .output_bounded(OperationKind::Availability.default_budget());
+        if !info.as_ref().is_ok_and(|o| o.status.success()) {
+            eprintln!("skip: no reachable podman here (podman info failed)");
+            return;
+        }
+        let images = podman_cmd_sync()
+            .args(["images", "--format", "{{.Repository}}:{{.Tag}}"])
+            .output_bounded(OperationKind::Inspect.default_budget())
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+            .unwrap_or_default();
+        let images: Vec<&str> = images
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty() && !l.contains("<none>"))
+            .collect();
+        let forge = images.iter().find(|i| i.contains("tillandsias-forge"));
+        let Some(image) = forge.or(images.first()) else {
+            eprintln!("skip: no local image to run (this test never pulls)");
+            return;
+        };
+        let mut cmd = podman_cmd_sync();
+        cmd.args(["run", "--rm", "--pull=never", "--userns=keep-id"])
+            .args(["--tmpfs", FORGE_SSH_QUARANTINE_TMPFS])
+            .args(["--tmpfs", FORGE_GH_QUARANTINE_TMPFS]);
+        if forge.is_some() {
+            cmd.args(["--entrypoint", "/bin/sh", image, "-c"]).arg(
+                "for d in /home/forge/.ssh /home/forge/.config/gh; do \
+                   [ \"$(stat -c %u \"$d\")\" = \"$(id -u)\" ] || { echo \"$d owner $(stat -c %U:%G \"$d\")\"; exit 3; }; \
+                   [ -z \"$(ls -A \"$d\")\" ] || { echo \"$d not empty\"; exit 4; }; \
+                 done",
+            );
+        } else {
+            cmd.args(["--entrypoint", "true", image]);
+        }
+        let out = cmd
+            .output_bounded(OperationKind::Container.default_budget())
+            .expect("podman run did not finish within its budget");
+        assert!(
+            out.status.success(),
+            "podman must accept the forge quarantine tmpfs options {FORGE_SSH_QUARANTINE_TMPFS} / \
+             {FORGE_GH_QUARANTINE_TMPFS} on {image} (forge image: {}); exit {:?}, stdout {:?}, stderr {:?}",
+            forge.is_some(),
+            out.status.code(),
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
     #[test]
     fn forge_credential_quarantine_mounts_present() {
         let _pseam = podman_false_seam();
@@ -24901,6 +25318,29 @@ mod tests {
             found_gh_config,
             "must mount credential-quarantine tmpfs at /home/forge/.config/gh"
         );
+        // 1625-bax2: the overlays are FORGE-owned. podman mounts a tmpfs
+        // root:root unless told otherwise, and a root-owned 0700 ~/.config/gh
+        // makes `gh auth status` say "permission denied", not "not logged in".
+        // `U` chowns to the container user; podman REJECTS uid=/gid= on
+        // --tmpfs, which forge_quarantine_tmpfs_options_are_accepted_by_podman
+        // proves against a real podman (an argv check cannot).
+        for quarantine in ["/home/forge/.ssh:", "/home/forge/.config/gh:"] {
+            let spec = argv
+                .iter()
+                .find(|a| a.starts_with(quarantine))
+                .unwrap_or_else(|| panic!("no tmpfs for {quarantine}: {argv:?}"));
+            let opts: Vec<&str> = spec[quarantine.len()..].split(',').collect();
+            assert!(
+                opts.contains(&"U"),
+                "{quarantine} quarantine tmpfs must be chowned to the forge user (U); got {spec}"
+            );
+            assert!(
+                !opts
+                    .iter()
+                    .any(|o| o.starts_with("uid=") || o.starts_with("gid=")),
+                "{quarantine} quarantine tmpfs must not pass uid=/gid=, which podman rejects on --tmpfs; got {spec}"
+            );
+        }
         assert!(
             found_git_config_ro,
             "must mount forge-owned gitconfig at /home/forge/.gitconfig (order 224)"
@@ -26875,6 +27315,10 @@ mod tests {
     /// to sibling probes while held, excluded by exact name for the owning
     /// process, and vanish the moment the guard drops (flock-on-death).
     #[test]
+    #[cfg_attr(
+        not(unix),
+        ignore = "1635-hbvw: resource_lock is a no-op off unix (launch markers guard podman lanes, which run only in the Linux guest); resource_lock::tests::try_lock_is_a_no_op_off_unix flags the day that changes"
+    )]
     fn shared_stack_launch_marker_lifecycle_and_own_exclusion() {
         const CHILD_ENV: &str = "TILLANDSIAS_LAUNCH_MARKER_LIFECYCLE_CHILD";
         const TEST_NAME: &str = "tests::shared_stack_launch_marker_lifecycle_and_own_exclusion";
@@ -26960,10 +27404,17 @@ mod tests {
         let git_run_idx = window
             .find("\"forge-launch-git\"")
             .expect("git mirror create site present");
-        let inference_guard_idx = window
+        assert!(
+            window.contains("ensure_inference_for_launch(client, certs_dir, version, debug)"),
+            "the launch ensure must delegate inference to ensure_inference_for_launch"
+        );
+        // Order 482c: the inference half is its own fn so the parity harness
+        // drives the same guard; pin the guard order in THAT window.
+        let inference = source_window(source, "async fn ensure_inference_for_launch(");
+        let inference_guard_idx = inference
             .find("container_running(\"tillandsias-inference\")")
             .expect("inference ensure must check container_running first");
-        let inference_run_idx = window
+        let inference_run_idx = inference
             .find("\"forge-launch-inference\"")
             .expect("inference create site present");
         assert!(
@@ -26974,6 +27425,31 @@ mod tests {
             inference_guard_idx < inference_run_idx,
             "inference running-check must precede its run site"
         );
+    }
+
+    /// Order 482c / SLOT-8 "Readiness failure is soft": a never-ready slot logs
+    /// one DEGRADED line naming the selected engine and the probe failure. The
+    /// "never gates launch" half is structural; litmus:inference-engine-parity-shape
+    /// pins it with a seeded hard-gate regression.
+    #[test]
+    fn inference_degraded_line_names_engine_and_reason() {
+        for (engine, name) in [
+            (engine_slots::EngineKind::Ollama, "engine=ollama"),
+            (engine_slots::EngineKind::LlamaServer, "engine=llama-server"),
+        ] {
+            let line = inference_degraded_line(engine, "probe failed: exit 7");
+            assert!(
+                line.contains("DEGRADED: local inference not ready"),
+                "{line}"
+            );
+            assert!(line.contains(name), "{line}");
+            assert!(line.contains("probe failed: exit 7"), "{line}");
+            assert!(line.contains("continuing"), "{line}");
+            assert!(
+                !line.contains("WARNING"),
+                "SLOT-8 wants DEGRADED, not WARNING: {line}"
+            );
+        }
     }
 
     /// Order 443 fixture 1 (second-forge ensure leaves shared containers
@@ -27896,6 +28372,42 @@ mod tests {
             "Error: cannot set up namespace: newuidmap returned exit status 1"
         ));
         assert!(!podman_runtime_blocker("podman run exited with status 125"));
+    }
+
+    /// ORDER 776-drwr. The OpenCode builder (the OpenCode and OpenCode Web
+    /// lanes) must hand the forge the same accel claim the agent builder does:
+    /// TILLANDSIAS_ACCEL_ENVELOPE (lib-common.sh's "Accelerators" line and
+    /// accel_class read it) and TILLANDSIAS_INFERENCE_TIER. Measured live on
+    /// windows/yolanda 2026-08-16: a tray-launched lane through this path ran
+    /// with neither, so its agent saw no accel claim at all.
+    #[test]
+    fn opencode_forge_args_carry_the_accel_envelope_and_inference_tier() {
+        for mode in [ForgeMode::Cli, ForgeMode::Web] {
+            let args = build_opencode_forge_args(
+                &PathBuf::from("/tmp/project"),
+                Some(&PathBuf::from("/tmp/project")),
+                None,
+                "alpha",
+                None,
+                None,
+                &PathBuf::from("/tmp/ca"),
+                "1.2.3",
+                mode,
+                None,
+                false,
+                false,
+            );
+            let envelope = args
+                .iter()
+                .find_map(|a| a.strip_prefix("TILLANDSIAS_ACCEL_ENVELOPE="))
+                .unwrap_or_else(|| panic!("{mode:?}: no TILLANDSIAS_ACCEL_ENVELOPE in {args:?}"));
+            assert!(
+                envelope.contains("accel_class="),
+                "{mode:?}: the envelope must name the accel class, got {envelope:?}"
+            );
+            let tier = format!("TILLANDSIAS_INFERENCE_TIER={}", effective_inference_tier());
+            assert!(args.contains(&tier), "{mode:?}: no {tier} in {args:?}");
+        }
     }
 
     /// Order-491 probe-4 pin: the interactive forge run must carry an
@@ -29127,13 +29639,11 @@ esac
         // not be present depending on whether HOME is set in the test environment.
         assert!(has_arg(&args, "--tmpfs"));
         assert!(
-            args.iter()
-                .any(|arg| arg == "/home/forge/.ssh:size=1m,mode=0700"),
+            args.iter().any(|arg| arg == FORGE_SSH_QUARANTINE_TMPFS),
             "opencode forge args must quarantine .ssh via tmpfs; got {args:?}"
         );
         assert!(
-            args.iter()
-                .any(|arg| arg == "/home/forge/.config/gh:size=1m,mode=0700"),
+            args.iter().any(|arg| arg == FORGE_GH_QUARANTINE_TMPFS),
             "opencode forge args must quarantine .config/gh via tmpfs; got {args:?}"
         );
         assert!(
@@ -30712,7 +31222,7 @@ esac
             .find("ensure_ssh_lane_sidecar(")
             .expect("launch path must ensure the ssh lane sidecar");
         let inference_at = launch
-            .find("forge-launch-inference")
+            .find("ensure_inference_for_launch(")
             .expect("launch window names the inference start");
         assert!(
             sidecar_at < inference_at,
@@ -31418,11 +31928,11 @@ esac
     fn opencode_web_browser_spec_is_built_with_typed_podman_flags() {
         let profile_dir = PathBuf::from("/tmp/tillandsias/browser/test-profile");
         let certs_dir = PathBuf::from("/tmp/tillandsias/ca");
+        let runtime = tempfile::tempdir().expect("runtime dir");
+        std::fs::write(runtime.path().join("wayland-1"), b"").expect("socket stand-in");
         let display = BrowserDisplayContext {
-            display: Some(":99".to_string()),
-            xauthority: None,
-            wayland_display: None,
-            xdg_runtime_dir: None,
+            wayland_display: Some("wayland-1".to_string()),
+            xdg_runtime_dir: Some(runtime.path().to_path_buf()),
         };
         let token = [7u8; 32];
         let expected_app_url = tillandsias_otp::build_login_data_url(
@@ -31455,9 +31965,13 @@ esac
         assert!(has_arg(&args, "HOME=/tmp"));
         assert!(has_arg(&args, "XDG_CONFIG_HOME=/tmp/chromium-config"));
         assert!(has_arg(&args, "XDG_CACHE_HOME=/tmp/chromium-cache"));
-        assert!(args.iter().any(|arg| {
-            arg == "type=bind,source=/tmp/tillandsias/ca/intermediate.crt,target=/etc/tillandsias/ca.crt,relabel=shared,readonly=true"
-        }));
+        // 1635-hbvw: the source is certs_dir joined with the platform
+        // separator, so build the expectation the same way.
+        let ca_mount = format!(
+            "type=bind,source={},target=/etc/tillandsias/ca.crt,relabel=shared,readonly=true",
+            certs_dir.join("intermediate.crt").display()
+        );
+        assert!(args.contains(&ca_mount), "no {ca_mount} in {args:?}");
         assert!(has_arg(
             &args,
             "TILLANDSIAS_CA_BUNDLE=/etc/tillandsias/ca.crt"
@@ -31475,7 +31989,185 @@ esac
             args.iter()
                 .any(|arg| arg == "--user-data-dir=/tmp/tillandsias/browser/test-profile")
         );
-        assert!(has_arg(&args, "--ozone-platform=x11"));
+        assert!(has_arg(&args, "--ozone-platform=wayland"));
+        assert!(has_arg(&args, "WAYLAND_DISPLAY=wayland-1"));
+        assert!(has_arg(&args, "XDG_RUNTIME_DIR=/run/user/browser"));
+    }
+
+    /// ORDER 1641-xbvq live probe helper, never run by default: writes the
+    /// browser's REAL run argv for this session (from_env + the builder) to
+    /// $TILLANDSIAS_BROWSER_PROBE_ARGS, one argument per line, so the live probe
+    /// runs exactly what the product would and not a hand-copied list.
+    /// `TILLANDSIAS_BROWSER_PROBE_ARGS=<file> TILLANDSIAS_BROWSER_PROBE_VERSION=<v>
+    ///  TILLANDSIAS_BROWSER_PROBE_CERTS=<dir> cargo test … -- --ignored browser_spec_live_probe_args`
+    #[test]
+    #[ignore = "live-probe helper: needs a Wayland session and probe env"]
+    fn browser_spec_live_probe_args() {
+        let out = std::env::var("TILLANDSIAS_BROWSER_PROBE_ARGS").expect("probe args path");
+        let version = std::env::var("TILLANDSIAS_BROWSER_PROBE_VERSION").expect("image version");
+        let certs =
+            PathBuf::from(std::env::var("TILLANDSIAS_BROWSER_PROBE_CERTS").expect("certs dir"));
+        let profile = PathBuf::from(&out).with_extension("profile");
+        std::fs::create_dir_all(&profile).expect("profile dir");
+        let display = BrowserDisplayContext::from_env().expect("display context");
+        let spec = build_project_browser_spec(
+            "data:text/html,<title>tillandsias-1641-probe</title><h1>1641-xbvq probe</h1>",
+            &version,
+            &profile,
+            &certs,
+            &display,
+            "tillandsias-browser-1641-probe",
+        )
+        .expect("browser spec for this session");
+        std::fs::write(&out, spec.build_run_args().join("\n")).expect("write args");
+    }
+
+    /// ORDER 1641-xbvq: with no Wayland session the browser REFUSES, naming why
+    /// and what to do; it never falls back to an X11 display.
+    #[test]
+    fn browser_spec_refuses_without_a_wayland_session() {
+        let runtime = tempfile::tempdir().expect("runtime dir");
+        let cases = [
+            (
+                BrowserDisplayContext {
+                    wayland_display: None,
+                    xdg_runtime_dir: Some(runtime.path().to_path_buf()),
+                },
+                "no WAYLAND_DISPLAY",
+            ),
+            (
+                BrowserDisplayContext {
+                    wayland_display: Some("wayland-0".to_string()),
+                    xdg_runtime_dir: None,
+                },
+                "XDG_RUNTIME_DIR is not set",
+            ),
+            (
+                BrowserDisplayContext {
+                    wayland_display: Some("wayland-9".to_string()),
+                    xdg_runtime_dir: Some(runtime.path().to_path_buf()),
+                },
+                "does not exist",
+            ),
+            (
+                BrowserDisplayContext {
+                    wayland_display: Some("../podman/podman.sock".to_string()),
+                    xdg_runtime_dir: Some(runtime.path().to_path_buf()),
+                },
+                "is not a socket name",
+            ),
+        ];
+        for (display, why) in cases {
+            let err = build_project_browser_spec(
+                "http://x.localhost/",
+                "1.2.3",
+                Path::new("/tmp/p"),
+                Path::new("/tmp/ca"),
+                &display,
+                "tillandsias-browser-x",
+            )
+            .expect_err("no usable Wayland socket must refuse");
+            assert!(
+                err.contains("Wayland only") && err.contains(why),
+                "{why}: {err}"
+            );
+            assert!(err.contains("Log in to a Wayland session"), "{err}");
+        }
+    }
+
+    /// Every host path the run argv mounts: `-v source:target[:mode]` and
+    /// `--mount type=bind,source=…,target=…`.
+    fn browser_mount_sources(args: &[String]) -> Vec<String> {
+        let mut sources = Vec::new();
+        for pair in args.windows(2) {
+            match pair[0].as_str() {
+                "-v" => {
+                    if let Some(src) = pair[1].split(':').next() {
+                        sources.push(src.to_string());
+                    }
+                }
+                "--mount" => {
+                    if let Some(src) = pair[1].split(',').find_map(|kv| kv.strip_prefix("source="))
+                    {
+                        sources.push(src.to_string());
+                    }
+                }
+                _ => {}
+            }
+        }
+        sources
+    }
+
+    /// ORDER 1641-xbvq (p0). The browser container must reach the compositor
+    /// through the ONE Wayland socket file, never the whole runtime dir (which
+    /// holds podman.sock, the tray control socket and the D-Bus bus) and never
+    /// /tmp/.X11-unix. Both DISPLAY and WAYLAND_DISPLAY are set here, as in
+    /// every XWayland session, because X11 used to win whenever DISPLAY was set.
+    #[test]
+    fn browser_spec_mounts_only_the_wayland_socket_file() {
+        let _guard = env_lock();
+        let runtime = tempfile::tempdir().expect("runtime dir");
+        let socket = runtime.path().join("wayland-0");
+        std::fs::write(&socket, b"").expect("socket stand-in");
+        let saved: Vec<(&str, Option<std::ffi::OsString>)> =
+            ["DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR"]
+                .into_iter()
+                .map(|k| (k, std::env::var_os(k)))
+                .collect();
+        // SAFETY: env_lock serialises every test that touches the environment.
+        unsafe {
+            std::env::set_var("DISPLAY", ":0");
+            std::env::set_var("WAYLAND_DISPLAY", "wayland-0");
+            std::env::set_var("XDG_RUNTIME_DIR", runtime.path());
+        }
+        let display = BrowserDisplayContext::from_env();
+        for (k, v) in saved {
+            // SAFETY: as above.
+            unsafe {
+                match v {
+                    Some(v) => std::env::set_var(k, v),
+                    None => std::env::remove_var(k),
+                }
+            }
+        }
+        let display = display.expect("a Wayland session yields a display context");
+        let spec = build_project_browser_spec(
+            "http://opencode.visual-chess.localhost/",
+            "1.2.3",
+            Path::new("/tmp/tillandsias/browser/test-profile"),
+            Path::new("/tmp/tillandsias/ca"),
+            &display,
+            "tillandsias-browser-visual-chess",
+        )
+        .expect("a Wayland session builds a browser spec");
+        let args = spec.build_run_args();
+
+        assert!(
+            has_arg(&args, "--ozone-platform=wayland"),
+            "Wayland must be the platform: {args:?}"
+        );
+        assert!(
+            !args.iter().any(|a| a.contains("ozone-platform=x11")),
+            "X11 is dropped (operator decision 2026-10-12): {args:?}"
+        );
+        let sources = browser_mount_sources(&args);
+        let socket_src = socket.display().to_string();
+        assert_eq!(
+            sources.iter().filter(|s| **s == socket_src).count(),
+            1,
+            "exactly one mount of the Wayland socket file: {sources:?}"
+        );
+        let runtime_src = runtime.path().display().to_string();
+        for forbidden in [runtime_src.as_str(), "/tmp/.X11-unix"] {
+            assert!(
+                !sources.iter().any(|s| s.trim_end_matches('/') == forbidden),
+                "no mount may expose {forbidden}: {sources:?}"
+            );
+        }
+        assert!(
+            !args.iter().any(|a| a.starts_with("DISPLAY=")),
+            "no X11 display is handed to the browser: {args:?}"
+        );
     }
 
     fn source_window<'a>(source: &'a str, signature: &str) -> &'a str {
@@ -31786,10 +32478,26 @@ esac
     /// Lane: --opencode. A stale TILLANDSIAS_PROJECT_REMOTE_URL in the
     /// process environment (e.g. left over from an earlier --github-login)
     /// must NOT divert a plain local launch into the cloud arm.
+    /// 1626-r4xm: a local launch must be inside the host project root, as the
+    /// lane's MCP socket requires. These env names are captured by each test
+    /// that resolves a temp project, so its root is the temp dir.
+    const PROJECT_ROOT_ENVS: [&str; 3] = [
+        "TILLANDSIAS_PROJECT_REMOTE_URL",
+        "TILLANDSIAS_HOST_PROJECT_ROOT",
+        "TILLANDSIAS_CLOUD_PROJECT_CACHE",
+    ];
+    fn admit_temp_project_root(restore: &TestEnvRestore, root: &Path) {
+        restore.set("TILLANDSIAS_HOST_PROJECT_ROOT", root);
+        restore.set(
+            "TILLANDSIAS_CLOUD_PROJECT_CACHE",
+            root.join("no-cloud-cache"),
+        );
+    }
+
     #[test]
     fn cloud_mode_opencode_decision_ignores_stale_env_var() {
         let _guard = env_lock();
-        let restore = TestEnvRestore::capture(&["TILLANDSIAS_PROJECT_REMOTE_URL"]);
+        let restore = TestEnvRestore::capture(&PROJECT_ROOT_ENVS);
         restore.set(
             "TILLANDSIAS_PROJECT_REMOTE_URL",
             "https://github.com/stale/leftover.git",
@@ -31798,6 +32506,7 @@ esac
         let temp = tempfile::tempdir().expect("tempdir");
         let project_dir = temp.path().join("myproject");
         std::fs::create_dir_all(&project_dir).expect("mkdir");
+        admit_temp_project_root(&restore, temp.path());
         let path_str = project_dir.display().to_string();
 
         let (name, canonical) =
@@ -31821,7 +32530,7 @@ esac
     #[test]
     fn cloud_mode_opencode_web_decision_ignores_stale_env_var() {
         let _guard = env_lock();
-        let restore = TestEnvRestore::capture(&["TILLANDSIAS_PROJECT_REMOTE_URL"]);
+        let restore = TestEnvRestore::capture(&PROJECT_ROOT_ENVS);
         restore.set(
             "TILLANDSIAS_PROJECT_REMOTE_URL",
             "https://github.com/stale/leftover.git",
@@ -31830,6 +32539,7 @@ esac
         let temp = tempfile::tempdir().expect("tempdir");
         let project_dir = temp.path().join("webproject");
         std::fs::create_dir_all(&project_dir).expect("mkdir");
+        admit_temp_project_root(&restore, temp.path());
         let path_str = project_dir.display().to_string();
 
         let (name, canonical) =
@@ -31849,7 +32559,7 @@ esac
     #[test]
     fn cloud_mode_forge_agent_cli_decision_ignores_stale_env_var() {
         let _guard = env_lock();
-        let restore = TestEnvRestore::capture(&["TILLANDSIAS_PROJECT_REMOTE_URL"]);
+        let restore = TestEnvRestore::capture(&PROJECT_ROOT_ENVS);
         restore.set(
             "TILLANDSIAS_PROJECT_REMOTE_URL",
             "https://github.com/stale/leftover.git",
@@ -31858,6 +32568,7 @@ esac
         let temp = tempfile::tempdir().expect("tempdir");
         let project_dir = temp.path().join("dotproject");
         std::fs::create_dir_all(&project_dir).expect("mkdir");
+        admit_temp_project_root(&restore, temp.path());
         let path_str = project_dir.display().to_string();
 
         let (name, canonical) = resolve_launch_project_identity(&path_str, false, "forge-project")
@@ -31868,6 +32579,79 @@ esac
             "forge-agent CLI lane's local decision must not be diverted by the \
              stale env var"
         );
+    }
+
+    /// 1626-r4xm, criterion 1: a git project OUTSIDE the host project root
+    /// (the operator's ~/claudia/<x>, with nothing set) launches, and its lane's
+    /// MCP socket admits it. Measured on lenovinha before this: the lane
+    /// launched, and its MCP socket refused every call. RED first: the socket
+    /// refuses the label until the launch binds it.
+    #[cfg(feature = "tray")]
+    #[test]
+    fn launch_outside_host_project_root_is_admitted_by_its_lane() {
+        let _guard = env_lock();
+        let restore = TestEnvRestore::capture(&PROJECT_ROOT_ENVS);
+        restore.remove("TILLANDSIAS_PROJECT_REMOTE_URL");
+        let temp = tempfile::tempdir().expect("tempdir");
+        let root = temp.path().join("src");
+        std::fs::create_dir_all(root.join("some-other-project")).expect("mkdir");
+        let outside = temp.path().join("claudia").join("r4xm-claudia-project");
+        std::fs::create_dir_all(&outside).expect("mkdir");
+        let _ = std::process::Command::new("git")
+            .args(["init", "-q"])
+            .arg(&outside)
+            .status();
+        admit_temp_project_root(&restore, &root);
+
+        let before = crate::local_projects::validate_project_label("r4xm-claudia-project");
+        assert!(
+            before.is_err(),
+            "RED: the socket refuses it before launch: {before:?}"
+        );
+
+        let (name, canonical) =
+            resolve_launch_project_identity(&outside.display().to_string(), false, "forge-project")
+                .expect("a project outside the host project root launches");
+        assert_eq!(name, "r4xm-claudia-project");
+        assert_eq!(canonical, Some(outside.canonicalize().unwrap()));
+        crate::local_projects::validate_project_label(&name)
+            .expect("GREEN: the lane's socket admits the project it was launched for");
+    }
+
+    /// 1626-r4xm: LAUNCH AND THE LANE'S MCP SOCKET AGREE. The socket admits a
+    /// lane only through validate_project_label (order 505), so every project
+    /// that launches is admitted by its socket: never "launch ok, then every
+    /// MCP call refused". The guard is not opened wider than that: an outside
+    /// project no lane was launched for is still refused.
+    #[cfg(feature = "tray")]
+    #[test]
+    fn launch_admits_exactly_what_the_lane_socket_admits() {
+        let _guard = env_lock();
+        let restore = TestEnvRestore::capture(&PROJECT_ROOT_ENVS);
+        restore.remove("TILLANDSIAS_PROJECT_REMOTE_URL");
+        let temp = tempfile::tempdir().expect("tempdir");
+        let root = temp.path().join("src");
+        let inside = root.join("inside-project");
+        let outside = temp.path().join("elsewhere").join("outside-project");
+        let never = temp.path().join("elsewhere").join("r4xm-never-launched");
+        std::fs::create_dir_all(&inside).expect("mkdir");
+        std::fs::create_dir_all(&outside).expect("mkdir");
+        std::fs::create_dir_all(&never).expect("mkdir");
+        admit_temp_project_root(&restore, &root);
+
+        for (dir, label) in [(&inside, "inside-project"), (&outside, "outside-project")] {
+            let launched =
+                resolve_launch_project_identity(&dir.display().to_string(), false, "forge-project");
+            let socket = crate::local_projects::validate_project_label(label);
+            assert!(launched.is_ok(), "{label}: {launched:?}");
+            assert!(
+                socket.is_ok(),
+                "{label}: launch {launched:?} but the lane socket {socket:?}"
+            );
+        }
+        let err = crate::local_projects::validate_project_label("r4xm-never-launched")
+            .expect_err("NEGATIVE: an outside label no lane was launched for stays refused");
+        assert!(err.contains("is not a known project"), "{err}");
     }
 
     /// The flip side: is_cloud=true must resolve cloud even with the env var
@@ -33049,6 +33833,46 @@ esac
             image_specs(&root, "web").expect("web image specs should be resolvable");
         assert!(containerfile.ends_with("images/web/Containerfile"));
         assert!(context.ends_with("images/web"));
+
+        // 1625-un54: the Wrangler preview image builds from its own context.
+        let (containerfile, context) = image_specs(&root, "web-wrangler")
+            .expect("web-wrangler image specs should be resolvable");
+        assert!(containerfile.ends_with("images/web-wrangler/Containerfile"));
+        assert!(context.ends_with("images/web-wrangler"));
+    }
+
+    /// 1625-un54: an image the runtime can name but init never builds is the
+    /// defect class. Every INIT_IMAGES entry must resolve through image_specs
+    /// (the build) to the same context runtime_assets hashes (the identity),
+    /// and both preview profile images must be in INIT_IMAGES.
+    #[test]
+    fn init_images_build_from_the_context_their_identity_hashes() {
+        let root = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../..");
+        for image in INIT_IMAGES {
+            let (_, context) = image_specs(&root, image)
+                .unwrap_or_else(|e| panic!("INIT_IMAGES entry {image} has no build spec: {e}"));
+            let identity = runtime_assets::image_identity(
+                &root,
+                image,
+                "0.0.0",
+                BTreeMap::new(),
+                BTreeMap::new(),
+            );
+            assert!(
+                identity.is_ok(),
+                "INIT_IMAGES entry {image} has no runtime identity context"
+            );
+            assert!(context.is_dir(), "{image}: {}", context.display());
+        }
+        for preview in ["web", "web-wrangler"] {
+            assert!(
+                INIT_IMAGES.contains(&preview),
+                "publish_local profile image {preview} is never built by init"
+            );
+        }
     }
 
     #[test]

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: windows-tray-lane-launch-omits-accel-envelope
+    field: status
+    value: implemented
+    ts: "2026-10-12T11:53:10Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: windows-tray-lane-launch-omits-accel-envelope
+    event:
+      type: progress
+      ts: "2026-10-12T11:53:10Z"
+      host: yolanda-windows
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: Code landed in run 46 as 0a8a4e698 (PR #369, fix 532923706), per macuahuitl-fedora. Verified on origin/linux-next: build_opencode_forge_args sets TILLANDSIAS_INFERENCE_TIER and TILLANDSIAS_ACCEL_ENVELOPE (ORDER 776-drwr). The pre-fix control test failed on trunk and passes with the fix, in Cli and Web modes. The live tray-lane check waits on a release (see next_action).

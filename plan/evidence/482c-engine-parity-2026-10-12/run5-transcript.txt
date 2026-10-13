@@ -1,0 +1,102 @@
+482c parity smoke: bin=/tmp/claude-1000/-var-home-lenovinha-claudia-tillandsias/fa3e1fe9-5776-4474-8079-5af7f1b35379/scratchpad/482c/tillandsias-482c version=56.10.9.1 tag=localhost/tillandsias-inference:v56.10.9.1 substrate=/var/tmp/482c-parity.lYXeEa
+operator inference before: e66d8233b87e316f51bd057ab0ebcbb823ace6fbc3a110676ff6ef43c3554ba9 running started=2026-10-11 21:08:59.408082382 -0700 PDT
+image ensured in 54s: 0a25a1029311b9cf90a30ddf873043c2ca638cefcdfbef3485b761e30cf574b1 634309974
+image healthcheck removed for the scratch store: {"Test":["CMD-SHELL","curl -sf http://127.0.0.1:11434/api/version >/dev/null         && test -x /home/ollama/.ollama/models/.tools/lib/ollama/llama-server         || exit 1"],"StartPeriod":30000000000,"Interval":5000000000,"Timeout":10000000000,"Retries":12}
+scratch image healthcheck now: {"Test":["NONE"]}
+== lane ollama: engine=<unset: default> backend=<unset> home=/var/tmp/482c-parity.lYXeEa/home-ollama
+vram[ollama:before] nvidia: NVIDIA GeForce RTX 3070 Laptop GPU, 4958 MiB, 2937 MiB, 8192 MiB
+vram[ollama:before] amdgpu /sys/class/drm/card1: 1081 MiB used
+  network tillandsias-enclave recreated with egress
+  ensure-1 rc=0 in 33s: inference-slot: ensure ready=true
+  engine evidence: /tmp/claude-1000/-var-home-lenovinha-claudia-tillandsias/fa3e1fe9-5776-4474-8079-5af7f1b35379/scratchpad/482c/run5/ollama.engine-lines.txt (8 lines)
+  model listed and cache settled 16s after readiness
+vram[ollama:serving-before-probe] nvidia: NVIDIA GeForce RTX 3070 Laptop GPU, 4958 MiB, 2937 MiB, 8192 MiB
+vram[ollama:serving-before-probe] amdgpu /sys/class/drm/card1: 1085 MiB used
+  [cold] consumer GET /api/version (curl -m 1): 200 0.001295s
+  [cold] consumer GET /v1/models: nomic-embed-text:latest qwen2.5:0.5b (T0 chat model: qwen2.5:0.5b)
+  [cold] consumer POST /v1/chat/completions: content="pong"
+  [cold] engine processes: ollama=1 llama-server=1
+vram[ollama:serving-after-probe] nvidia: NVIDIA GeForce RTX 3070 Laptop GPU, 5621 MiB, 2274 MiB, 8192 MiB
+vram[ollama:serving-after-probe] amdgpu /sys/class/drm/card1: 1081 MiB used
+  ensure-2 rc=0 in 0s: inference-slot: ensure ready=true
+  double ensure: id 19850313a7d4 -> 19850313a7d4; containers named tillandsias-inference: 1
+time="2026-10-12T08:06:21-07:00" level=warning msg="StopSignal SIGTERM failed to stop container tillandsias-inference in 10 seconds, resorting to SIGKILL"
+  network tillandsias-enclave recreated --internal
+  ensure-3 rc=0 in 2s: inference-slot: ensure ready=true
+  no re-download: 19 cached files >1MiB unchanged (inode size mtime) across a no-egress recreate
+  [warm] consumer GET /api/version (curl -m 1): 200 0.001507s
+  [warm] consumer GET /v1/models: nomic-embed-text:latest qwen2.5:0.5b (T0 chat model: qwen2.5:0.5b)
+  [warm] consumer POST /v1/chat/completions: content="pong"
+  [warm] engine processes: ollama=1 llama-server=1
+  teardown: inference containers left: none
+vram[ollama:after-teardown] nvidia: NVIDIA GeForce RTX 3070 Laptop GPU, 4958 MiB, 2936 MiB, 8192 MiB
+vram[ollama:after-teardown] amdgpu /sys/class/drm/card1: 867 MiB used
+== lane llama-cuda: engine=llama-server backend=cuda home=/var/tmp/482c-parity.lYXeEa/home-llama-cuda
+vram[llama-cuda:before] nvidia: NVIDIA GeForce RTX 3070 Laptop GPU, 4958 MiB, 2936 MiB, 8192 MiB
+vram[llama-cuda:before] amdgpu /sys/class/drm/card1: 867 MiB used
+  network tillandsias-enclave recreated with egress
+  ensure-1 rc=0 in 64s: inference-slot: ensure ready=false
+  engine evidence: /tmp/claude-1000/-var-home-lenovinha-claudia-tillandsias/fa3e1fe9-5776-4474-8079-5af7f1b35379/scratchpad/482c/run5/llama-cuda.engine-lines.txt (10 lines)
+  model listed and cache settled 0s after readiness
+vram[llama-cuda:serving-before-probe] nvidia: NVIDIA GeForce RTX 3070 Laptop GPU, 5579 MiB, 2315 MiB, 8192 MiB
+vram[llama-cuda:serving-before-probe] amdgpu /sys/class/drm/card1: 934 MiB used
+  [cold] consumer GET /api/version (curl -m 1): 200 0.001458s
+  [cold] consumer GET /v1/models: qwen2.5-0.5b-instruct (T0 chat model: qwen2.5-0.5b-instruct)
+  [cold] consumer POST /v1/chat/completions: content="pong"
+  [cold] engine processes: ollama=0 llama-server=1
+vram[llama-cuda:serving-after-probe] nvidia: NVIDIA GeForce RTX 3070 Laptop GPU, 5579 MiB, 2315 MiB, 8192 MiB
+vram[llama-cuda:serving-after-probe] amdgpu /sys/class/drm/card1: 577 MiB used
+  ensure-2 rc=0 in 0s: inference-slot: ensure ready=true
+  double ensure: id 41f0128acf2a -> 41f0128acf2a; containers named tillandsias-inference: 1
+  network tillandsias-enclave recreated --internal
+  ensure-3 rc=0 in 20s: inference-slot: ensure ready=true
+  no re-download: 18 cached files >1MiB unchanged (inode size mtime) across a no-egress recreate
+  [warm] consumer GET /api/version (curl -m 1): 200 0.001702s
+  [warm] consumer GET /v1/models: qwen2.5-0.5b-instruct (T0 chat model: qwen2.5-0.5b-instruct)
+  [warm] consumer POST /v1/chat/completions: content="pong"
+  [warm] engine processes: ollama=0 llama-server=1
+  teardown: inference containers left: none
+vram[llama-cuda:after-teardown] nvidia: NVIDIA GeForce RTX 3070 Laptop GPU, 4958 MiB, 2936 MiB, 8192 MiB
+vram[llama-cuda:after-teardown] amdgpu /sys/class/drm/card1: 577 MiB used
+== lane llama-vulkan: engine=llama-server backend=vulkan home=/var/tmp/482c-parity.lYXeEa/home-llama-vulkan
+vram[llama-vulkan:before] nvidia: NVIDIA GeForce RTX 3070 Laptop GPU, 4958 MiB, 2936 MiB, 8192 MiB
+vram[llama-vulkan:before] amdgpu /sys/class/drm/card1: 577 MiB used
+  network tillandsias-enclave recreated with egress
+  ensure-1 rc=0 in 46s: inference-slot: ensure ready=true
+  engine evidence: /tmp/claude-1000/-var-home-lenovinha-claudia-tillandsias/fa3e1fe9-5776-4474-8079-5af7f1b35379/scratchpad/482c/run5/llama-vulkan.engine-lines.txt (10 lines)
+  model listed and cache settled 0s after readiness
+vram[llama-vulkan:serving-before-probe] nvidia: NVIDIA GeForce RTX 3070 Laptop GPU, 4958 MiB, 2936 MiB, 8192 MiB
+vram[llama-vulkan:serving-before-probe] amdgpu /sys/class/drm/card1: 1035 MiB used
+  [cold] consumer GET /api/version (curl -m 1): 200 0.001542s
+  [cold] consumer GET /v1/models: qwen2.5-0.5b-instruct (T0 chat model: qwen2.5-0.5b-instruct)
+  [cold] consumer POST /v1/chat/completions: content="pong"
+  [cold] engine processes: ollama=0 llama-server=1
+vram[llama-vulkan:serving-after-probe] nvidia: NVIDIA GeForce RTX 3070 Laptop GPU, 4958 MiB, 2936 MiB, 8192 MiB
+vram[llama-vulkan:serving-after-probe] amdgpu /sys/class/drm/card1: 1035 MiB used
+  ensure-2 rc=0 in 0s: inference-slot: ensure ready=true
+  double ensure: id 5679be12db5d -> 5679be12db5d; containers named tillandsias-inference: 1
+  network tillandsias-enclave recreated --internal
+  ensure-3 rc=0 in 2s: inference-slot: ensure ready=true
+  no re-download: 16 cached files >1MiB unchanged (inode size mtime) across a no-egress recreate
+  [warm] consumer GET /api/version (curl -m 1): 200 0.001711s
+  [warm] consumer GET /v1/models: qwen2.5-0.5b-instruct (T0 chat model: qwen2.5-0.5b-instruct)
+  [warm] consumer POST /v1/chat/completions: content="pong"
+  [warm] engine processes: ollama=0 llama-server=1
+  teardown: inference containers left: none
+vram[llama-vulkan:after-teardown] nvidia: NVIDIA GeForce RTX 3070 Laptop GPU, 4958 MiB, 2936 MiB, 8192 MiB
+vram[llama-vulkan:after-teardown] amdgpu /sys/class/drm/card1: 577 MiB used
+== lane degraded: engine=llama-server backend=vulkan home=/var/tmp/482c-parity.lYXeEa/home-degraded
+vram[degraded:before] nvidia: NVIDIA GeForce RTX 3070 Laptop GPU, 4958 MiB, 2936 MiB, 8192 MiB
+vram[degraded:before] amdgpu /sys/class/drm/card1: 577 MiB used
+  network tillandsias-enclave recreated --internal
+  ensure-1 rc=0 in 63s: inference-slot: ensure ready=false
+  container: exited exit=1
+  teardown: inference containers left: none
+vram[degraded:after-teardown] nvidia: NVIDIA GeForce RTX 3070 Laptop GPU, 4958 MiB, 2936 MiB, 8192 MiB
+vram[degraded:after-teardown] amdgpu /sys/class/drm/card1: 577 MiB used
+substrate removed: /var/tmp/482c-parity.lYXeEa
+operator inference after:  e66d8233b87e316f51bd057ab0ebcbb823ace6fbc3a110676ff6ef43c3554ba9 running started=2026-10-11 21:08:59.408082382 -0700 PDT
+operator netavark state (/run/user/1000/containers/networks) CHANGED during the run (the live enclave may have acted too):
+verdicts: ok:ollama ok:llama-cuda ok:llama-vulkan ok:degraded
+exit=0
+OPERATOR-UNCHANGED

@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (macuahuitl, 2026-10-12): 482c's memory-guard criterion, split out as 482c-2.
+packets:
+  - packet_id: llama-server-admits-the-measured-5690-mib-7b-profile-only-with-the-required-memory-headroom
+    order: 482-5f3t
+    parent: llama-server-engine-slot
+    status: ready
+    kind: verification
+    priority: p2
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: "linux mutable host with Podman and an NVIDIA GPU with at least 8 GiB VRAM"
+    capability_tags: [inference, llama-cpp, cuda, vulkan, podman, testing, memory]
+    estimated_hours: 4
+    depends_on:
+      - llama-server-engine-parity-smoke
+      - llama-server-tier-ggufs-beyond-t0-are-pinned-per-shard-so-the-fail-closed-refusal-lifts-row-by-row
+    owned_files:
+      - images/inference/llama-server-lane.sh
+      - images/inference/engine-tuning.sh
+    title: |
+      482c-2: under engine=llama-server, the 7B Q4_K_M profile at 32768 context with flash attention and a q8_0 KV cache (measured 5690 MiB under ollama, engine-tuning.sh) is admitted only when the required memory headroom is free.
+    context: |
+      Split out of 482c by the coordinator (2026-10-12). 482c proves T0 parity of ollama vs llama-server on CUDA and Vulkan. This row carries 482c's former criterion "the measured 5690 MiB profile is admitted only with the required memory headroom".
+      Two things are missing for it. First, the lane pins only the T0 GGUF and refuses every other row fail-closed, so a 7B profile needs 482-igky's per-shard pins. Second, the lane passes no ctx / flash-attention / KV-cache knobs to llama-server. engine-tuning.sh derives those for ollama (flash_attn, kv_cache, num_parallel, vram_mb). The lane must map the same tuning onto llama-server's -c / -fa / -ctk -ctv / -np, so that one tier means the same residency on either engine.
+      PRECONDITION before any run: either the operator's installed tillandsias carries 527 (models no longer stay resident 24 h), or the operator grants a window. On lenovinha the live inference container holds about 5457 MiB of the RTX 3070's 8192 MiB, so a 5690 MiB profile cannot be admitted beside it. That container must never be stopped to make room.
+    exit_criteria:
+      - 'engine=llama-server derives ctx, flash attention, KV cache type and parallelism from the same engine-tuning.sh output as ollama for the tier, visible in the container log'
+      - 'with the required headroom free, the 7B Q4_K_M 32768-ctx fa+q8_0 profile loads and serves, and its measured residency is recorded next to the 5690 MiB ollama figure'
+      - 'without the headroom, the guard refuses or degrades before loading (DEGRADED, never blocks forge launch), and never spills silently to host RAM'
+      - 'free VRAM is recorded before each run; the operator inference container is never stopped'
+      - 'the closure fails for a seeded memory-guard regression and passes after byte-identical restoration'
+    unscoreable: "unpinnable-until-the-guard-exists: the memory guard and its seeded-regression fixture (litmus-inference-llama-server-memory-guard.yaml) are written together"
+    next_action: >
+      Wait for 482-igky (7B pins) and for the precondition (an operator install carrying 527, or a granted window). Then map engine-tuning.sh's output onto llama-server flags in the lane and measure the profile next to ollama.
+    provenance: |
+      Filed by lenovinha-silverblue on macuahuitl's direction, 2026-10-12 (482c scope ruling).
+    events:
+      - type: filed
+        ts: "2026-10-12T09:50:46Z"
+        host: lenovinha
+        summary: |-
+          482c-2: the 5690 MiB 7B profile memory guard under engine=llama-server, split out of 482c; depends on 482-igky; precondition 527 on the operator install or an operator window.

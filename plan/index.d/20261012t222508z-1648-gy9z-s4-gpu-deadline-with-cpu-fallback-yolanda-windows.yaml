@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# A slice of 793-a8e7, given its own order so its branch is a work ref (^work/NNN[N]-xxxx$), at macuahuitl-fedora's request 2026-10-12.
+packets:
+  - packet_id: 793-a8e7-s4-gpu-deadline-with-cpu-fallback
+    order: 1648-gy9z
+    parent: 793-a8e7
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, wsl2, accel, gpu, vulkan, inference]
+    related: [793-a8e7, 793-zumy, 793-qc6q]
+    depends_on: []
+    title: |
+      793-a8e7 S4: GPU inference on the opted-in lane carries a deadline and falls back to the CPU when it expires, so the measured silent cold-load hang (>9 min at 40% prefill, no error) cannot strand an unattended host
+    context: |
+      From 793-a8e7's measurement: on the first cold GPU load of qwen2.5:3b, prompt processing stopped at 40% (2048/5093 tokens) for >9 minutes with no error; later runs were fine. Intermittent and cold-load associated.
+    exit_criteria:
+      - 'a GPU request on the opted-in lane that exceeds its deadline is retried on the CPU (or the lane falls back) and the event is logged by name'
+      - 'a fixture reproduces the hang shape (a stalled GPU runner) and shows the fallback; the default lane is unchanged'
+    unscoreable: "a slice of 793-a8e7; its evidence is the parent's live criteria on yolanda plus the slice's own unit arms and sabotages"
+    next_action: >
+      Design first: where a deadline can sit (engine watchdog in the container vs the caller), then the fixture.
+    provenance: |
+      Filed by yolanda-windows, 2026-10-12, splitting 793-a8e7 into ordered slices (S1 is #384 under 793-a8e7 itself).
+    events:
+      - type: filed
+        ts: "2026-10-12T22:25:05Z"
+        host: yolanda-windows
+        summary: |-
+          793-a8e7 slice: s4-gpu-deadline-with-cpu-fallback

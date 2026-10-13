@@ -2,7 +2,6 @@
 //! Comprehensive observability API surface for Tillandsias logging and tracing.
 //!
 //! Unified interface that integrates:
-//! - **LogQuery**: Structured query language for log analysis (OBS-002)
 //! - **CostAwareSampler**: Probabilistic sampling for high-volume traces (OBS-006)
 //! - **BudgetEnforcer**: Trace cost budget enforcement (OBS-011)
 //! - **LogAggregator**: Multi-container log aggregation (OBS-013)
@@ -10,7 +9,6 @@
 //! # Architecture
 //!
 //! The `ObservabilityAPI` provides a unified, type-safe surface for:
-//! - Querying logs with filters, JSON parsing, and aggregations
 //! - Sampling traces based on cost thresholds
 //! - Enforcing per-spec and global trace budgets
 //! - Aggregating logs from multiple containers with timestamp-ordered merging
@@ -24,9 +22,6 @@
 //!     Arc::new(aggregator)
 //! )?;
 //!
-//! // Query logs
-//! let results = api.query("{spec=\"browser-isolation\"} | stats count() by level", entries).await?;
-//!
 //! // Check budget before emitting
 //! api.check_budget("browser-isolation", 1000)?;
 //!
@@ -35,15 +30,10 @@
 //! ```
 
 use crate::error::{LoggingError, Result};
-use crate::{
-    AggregatedLogEntry, BudgetEnforcer, CostAwareSampler, LogAggregator, LogEntry, QueryExecutor,
-    parse,
-};
+use crate::{AggregatedLogEntry, BudgetEnforcer, CostAwareSampler, LogAggregator, LogEntry};
 use parking_lot::RwLock;
-use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::SystemTime;
 
 /// Sampling status and metadata
 #[derive(Debug, Clone)]
@@ -74,19 +64,6 @@ pub struct BudgetStatus {
     pub budget_percentage: f32,
 }
 
-/// Query results with metadata
-#[derive(Debug, Clone)]
-pub struct QueryResult {
-    /// Raw result value (array, count, aggregation, etc)
-    pub data: Value,
-
-    /// Number of entries matched
-    pub matches: usize,
-
-    /// Milliseconds elapsed for query execution
-    pub elapsed_ms: u64,
-}
-
 /// Aggregation results with source tracking
 #[derive(Debug, Clone)]
 pub struct AggregationResult {
@@ -102,7 +79,7 @@ pub struct AggregationResult {
 
 /// Unified observability API surface
 ///
-/// Provides type-safe access to query, sampling, budgeting, and aggregation interfaces.
+/// Provides type-safe access to sampling, budgeting, and aggregation interfaces.
 pub struct ObservabilityAPI {
     /// Cost-aware sampler for high-volume traces
     sampler: Arc<RwLock<CostAwareSampler>>,
@@ -113,18 +90,6 @@ pub struct ObservabilityAPI {
     /// Log aggregator (from OBS-013)
     #[allow(dead_code)]
     aggregator: Arc<LogAggregator>,
-
-    /// Query history for debugging (last 100 queries)
-    query_history: Arc<RwLock<Vec<QueryHistoryEntry>>>,
-}
-
-#[derive(Clone, Debug)]
-struct QueryHistoryEntry {
-    query_str: String,
-    result_count: usize,
-    elapsed_ms: u64,
-    #[allow(dead_code)]
-    timestamp: SystemTime,
 }
 
 impl ObservabilityAPI {
@@ -143,57 +108,6 @@ impl ObservabilityAPI {
             sampler,
             budget_enforcer,
             aggregator,
-            query_history: Arc::new(RwLock::new(Vec::new())),
-        })
-    }
-
-    /// Query logs with structured query language
-    ///
-    /// # Arguments
-    /// * `query_str` - Query string (e.g., `{spec="foo"} | stats count() by level`)
-    /// * `entries` - Log entries to query
-    ///
-    /// # Returns
-    /// QueryResult with data, match count, and execution time
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// let result = api.query("{spec=\"browser-isolation\"} | count", entries)?;
-    /// println!("Matched {} entries", result.matches);
-    /// ```
-    pub fn query(&self, query_str: &str, entries: Vec<Value>) -> Result<QueryResult> {
-        let start = SystemTime::now();
-
-        // Parse query
-        let query = parse(query_str)
-            .map_err(|e| LoggingError::WriteError(format!("Query parse error: {}", e)))?;
-
-        // Execute query
-        let data = QueryExecutor::execute(&query, entries)
-            .map_err(|e| LoggingError::WriteError(format!("Query execution error: {}", e)))?;
-
-        let matches = extract_match_count(&data);
-        let elapsed_ms = start.elapsed().map(|d| d.as_millis() as u64).unwrap_or(0);
-
-        // Record in history
-        {
-            let mut history = self.query_history.write();
-            history.push(QueryHistoryEntry {
-                query_str: query_str.to_string(),
-                result_count: matches,
-                elapsed_ms,
-                timestamp: start,
-            });
-            // Keep only last 100 queries
-            if history.len() > 100 {
-                history.remove(0);
-            }
-        }
-
-        Ok(QueryResult {
-            data,
-            matches,
-            elapsed_ms,
         })
     }
 
@@ -339,28 +253,6 @@ impl ObservabilityAPI {
             .collect()
     }
 
-    /// Get query history (last N queries)
-    ///
-    /// # Arguments
-    /// * `limit` - Maximum number of entries to return
-    ///
-    /// # Returns
-    /// Vector of recent query history entries (query_str, matches, elapsed_ms)
-    pub fn query_history(&self, limit: usize) -> Vec<(String, usize, u64)> {
-        let history = self.query_history.read();
-        history
-            .iter()
-            .rev()
-            .take(limit)
-            .map(|e| (e.query_str.clone(), e.result_count, e.elapsed_ms))
-            .collect()
-    }
-
-    /// Clear query history
-    pub fn clear_history(&self) {
-        self.query_history.write().clear();
-    }
-
     /// Unified trace decision: should emit based on sampling + budget
     ///
     /// Combines sampling and budget checks into a single decision.
@@ -417,21 +309,6 @@ fn estimate_entry_cost(entry: &LogEntry) -> usize {
     base_size + message_size + context_size + trace_size
 }
 
-/// Extract match count from query result
-fn extract_match_count(data: &Value) -> usize {
-    match data {
-        Value::Array(arr) => arr.len(),
-        Value::Object(obj) => {
-            if let Some(count) = obj.get("count").and_then(|v| v.as_u64()) {
-                count as usize
-            } else {
-                1
-            }
-        }
-        _ => 1,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -448,27 +325,7 @@ mod tests {
     #[test]
     fn test_create_api() {
         let api = create_api();
-        assert_eq!(api.query_history(10).len(), 0);
-    }
-
-    #[test]
-    fn test_simple_query() {
-        let api = create_api();
-
-        let entries = vec![
-            serde_json::json!({"spec": "foo", "level": "error"}),
-            serde_json::json!({"spec": "foo", "level": "warn"}),
-        ];
-
-        let result = api.query(r#"{spec="foo"} | count"#, entries).unwrap();
-        // Count operation returns {"count": 2}, so we expect 2 matches before aggregation
-        // But extract_match_count returns 1 for the count object itself
-        // The actual count value is 2
-        if let Some(v) = result.data.get("count") {
-            assert_eq!(v, 2);
-        } else {
-            panic!("Expected count field in result");
-        }
+        assert_eq!(api.per_spec_costs().len(), 0);
     }
 
     #[test]
@@ -541,23 +398,6 @@ mod tests {
 
         // Verify should_emit returns a valid bool result
         let _ = should_emit;
-    }
-
-    #[test]
-    fn test_query_history() {
-        let api = create_api();
-
-        let entries = vec![
-            serde_json::json!({"spec": "foo", "level": "error"}),
-            serde_json::json!({"spec": "foo", "level": "warn"}),
-        ];
-
-        api.query(r#"{spec="foo"} | count"#, entries.clone())
-            .unwrap();
-        api.query(r#"{level="error"} | count"#, entries).unwrap();
-
-        let history = api.query_history(10);
-        assert_eq!(history.len(), 2);
     }
 
     #[test]

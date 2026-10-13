@@ -541,6 +541,9 @@ pub fn load_or_probe_at(
     freshness: Freshness,
 ) -> CapabilityDocument {
     let identity = probe_identity();
+    // ORDER 793-a8e7 S2: a cached opted-in document that predates its
+    // container is re-probed, and its MEASUREMENTS travel to the new one.
+    let mut carried_measurements = None;
     if freshness == Freshness::Cached
         && let Ok(content) = fs::read_to_string(cache_file)
         && let Ok(mut doc) = serde_json::from_str::<CapabilityDocument>(&content)
@@ -550,16 +553,37 @@ pub fn load_or_probe_at(
         // predecessor's document as if it had probed.
         && doc.probe_identity.as_deref() == Some(identity.as_str())
     {
-        // THE STAMP GOES ON THE COPY BEING RETURNED, not on the cache. The
-        // document is otherwise returned verbatim, `timestamp` included, so
-        // this field is the only thing distinguishing it from the run that
-        // produced it (order 1139-xe5m).
-        doc.envelope_source = Some(EnvelopeSource::Served);
-        return doc;
+        if !opted_in_doc_predates_its_container(&doc) {
+            // THE STAMP GOES ON THE COPY BEING RETURNED, not on the cache. The
+            // document is otherwise returned verbatim, `timestamp` included, so
+            // this field is the only thing distinguishing it from the run that
+            // produced it (order 1139-xe5m).
+            doc.envelope_source = Some(EnvelopeSource::Served);
+            return doc;
+        }
+        // Same tier, same probe code: the measurements still describe this
+        // configuration. Dropping them here would make the decode crossover
+        // (793-qc6q), which only record_measurement writes, impossible to keep
+        // on an opted-in host, since every probe before the container exists
+        // leaves the gap this re-probe exists to close.
+        carried_measurements = Some(doc.measurements);
     }
-    let doc = run_probe(effective_tier);
+    let mut doc = run_probe(effective_tier);
+    if let Some(measurements) = carried_measurements {
+        doc.measurements = measurements;
+    }
     let _ = write_capability_cache(cache_file, &doc);
     doc
+}
+
+/// ORDER 793-a8e7 S2. An opted-in (`gpu-vulkan`) document probed before the
+/// inference container existed carries the `container-lane` gap and therefore
+/// no container-side dxg verdict. Serving it would pin the lane at cpu-only
+/// for as long as the cache lives, so such a document is re-probed instead.
+/// Scoped to the opted-in tier ON PURPOSE: on every other tier the cache
+/// behaves exactly as before, including on hosts that never run inference.
+fn opted_in_doc_predates_its_container(doc: &CapabilityDocument) -> bool {
+    doc.legacy_tier == "gpu-vulkan" && doc.enumeration_gaps.iter().any(|g| g == "container-lane")
 }
 
 /// Persist a capability document, WITHOUT its [`CapabilityDocument::envelope_source`].
@@ -709,6 +733,15 @@ pub fn run_probe(effective_tier: &str) -> CapabilityDocument {
     // proof this document already carries, BEFORE the fingerprint is computed
     // over it, so the identity covers the record as it will be read.
     promote_proven_container_lanes(&mut doc);
+    // ORDER 793-a8e7 S2. Only on the opted-in lane: the dxg device is passed
+    // into every WSL2 inference container (793-zumy), but only gpu-vulkan
+    // installs the backend that uses it, so reporting it usable on any other
+    // tier would promise agents a GPU their inference does not run on.
+    if effective_tier == "gpu-vulkan"
+        && let Some(container) = container_lane.asked.as_deref()
+    {
+        promote_dxg_from_container(&mut doc, container);
+    }
     doc.hardware_fingerprint = hardware_fingerprint_checked(&doc).ok();
     doc
 }
@@ -1441,6 +1474,124 @@ fn wsl2_vulkan_verdict_from(
         },
     }
 }
+
+/// ORDER 793-a8e7 S2: the devices `vulkaninfo --summary` lists, reduced to
+/// what `is_software_rasterizer` decides on. The summary prints one `GPU<n>:`
+/// block per physical device with `key = value` lines; only `deviceType`,
+/// `deviceName` and `driverID` are read. A block without a recognisable
+/// `deviceType` or a `deviceName` is DROPPED rather than guessed: an unknown
+/// type must never be counted as a GPU.
+#[cfg(any(target_os = "linux", test))]
+fn parse_vulkaninfo_summary(text: &str) -> Vec<VulkanPhysicalDevice> {
+    fn value<'a>(line: &'a str, key: &str) -> Option<&'a str> {
+        let rest = line.trim_start().strip_prefix(key)?;
+        let rest = rest.trim_start().strip_prefix('=')?;
+        Some(rest.trim())
+    }
+    let mut out = Vec::new();
+    let mut current: Option<(Option<u32>, Option<String>, u32)> = None;
+    let mut flush = |cur: Option<(Option<u32>, Option<String>, u32)>| {
+        if let Some((Some(device_type), Some(name), driver_id)) = cur {
+            out.push(VulkanPhysicalDevice {
+                device_type,
+                driver_id,
+                name,
+            });
+        }
+    };
+    for line in text.lines() {
+        let t = line.trim();
+        if t.starts_with("GPU")
+            && t.ends_with(':')
+            && t[3..t.len() - 1].chars().all(|c| c.is_ascii_digit())
+        {
+            flush(current.take());
+            current = Some((None, None, 0));
+            continue;
+        }
+        let Some(cur) = current.as_mut() else {
+            continue;
+        };
+        if let Some(v) = value(t, "deviceType") {
+            cur.0 = match v {
+                "PHYSICAL_DEVICE_TYPE_OTHER" => Some(0),
+                "PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU" => Some(1),
+                "PHYSICAL_DEVICE_TYPE_DISCRETE_GPU" => Some(2),
+                "PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU" => Some(3),
+                "PHYSICAL_DEVICE_TYPE_CPU" => Some(VK_PHYSICAL_DEVICE_TYPE_CPU),
+                _ => None,
+            };
+        } else if let Some(v) = value(t, "deviceName") {
+            if !v.is_empty() {
+                cur.1 = Some(v.to_string());
+            }
+        } else if let Some(v) = value(t, "driverID") {
+            cur.2 = match v {
+                "DRIVER_ID_MESA_LLVMPIPE" => VK_DRIVER_ID_MESA_LLVMPIPE,
+                "DRIVER_ID_MESA_DOZEN" => 23,
+                _ => 0,
+            };
+        }
+    }
+    flush(current.take());
+    out
+}
+
+/// ORDER 793-a8e7 S2: the WSL2 dxg device, seen from INSIDE the inference
+/// container. The guest has no Vulkan loader, so the in-process enumeration
+/// answers "nobody asked" there, and that was the verdict the opted-in lane
+/// reported (`engine-missing:no-vulkan-loader`, side wsl2-guest) while the
+/// container could reach the GPU. When the container's own enumeration lists a
+/// non-software device, the dxg record gains the `container` lane, is usable,
+/// and loses its unusable reason; it takes the enumerated name only where it
+/// still carried the placeholder.
+///
+/// Only ever ADDS evidence. A list with nothing but llvmpipe, or an empty one,
+/// leaves the record exactly as the guest-side enumeration wrote it, because
+/// a software rasterizer is not the GPU (793-zumy criterion 3). Returns whether
+/// it promoted.
+#[cfg(any(target_os = "linux", test))]
+fn promote_dxg_from_container_enumeration(
+    doc: &mut CapabilityDocument,
+    container_devices: &[VulkanPhysicalDevice],
+) -> bool {
+    let Some(real) = container_devices
+        .iter()
+        .find(|d| !d.is_software_rasterizer())
+    else {
+        return false;
+    };
+    let Some(device) = doc
+        .devices
+        .iter_mut()
+        .find(|d| d.device_class == "gpu" && d.device_node.as_deref() == Some("/dev/dxg"))
+    else {
+        return false;
+    };
+    if !device.lanes.iter().any(|l| l == "container") {
+        device.lanes.insert(0, "container".to_string());
+    }
+    device.usable = true;
+    device.unusable_reason = None;
+    if device.name_source.as_deref() != Some("enumerated") {
+        device.name = real.name.clone();
+        device.name_source = Some("enumerated".to_string());
+    }
+    true
+}
+
+/// ORDER 793-a8e7 S2, the IO half: ask the inference container's own loader.
+/// Bounded and read-only through `inference_container_exec`; a failed exec
+/// (no vulkaninfo in an older image, a dead container) changes nothing.
+#[cfg(target_os = "linux")]
+fn promote_dxg_from_container(doc: &mut CapabilityDocument, container: &str) {
+    if let Some(summary) = inference_container_exec(container, &["vulkaninfo", "--summary"]) {
+        promote_dxg_from_container_enumeration(doc, &parse_vulkaninfo_summary(&summary));
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn promote_dxg_from_container(_doc: &mut CapabilityDocument, _container: &str) {}
 
 /// ORDER 793-zumy — the IO half: actually enumerate.
 ///
@@ -7073,6 +7224,160 @@ mod tests {
             driver_id,
             name: name.to_string(),
         }
+    }
+
+    /// ORDER 793-a8e7 S2: `vulkaninfo --summary` as the inference container
+    /// prints it. The two blocks are the ones measured on esmeraldinha
+    /// (Dozen over /dev/dxg beside llvmpipe), in the tool's tab-indented shape.
+    const DOZEN_AND_LLVMPIPE_SUMMARY: &str = "\
+Devices:
+========
+GPU0:
+\tapiVersion         = 1.2.354
+\tvendorID           = 0x8086
+\tdeviceID           = 0x46d1
+\tdeviceType         = PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU
+\tdeviceName         = Microsoft Direct3D12 (Intel(R) UHD Graphics)
+\tdriverID           = DRIVER_ID_MESA_DOZEN
+\tdriverName         = Dozen
+GPU1:
+\tapiVersion         = 1.4.318
+\tvendorID           = 0x10005
+\tdeviceType         = PHYSICAL_DEVICE_TYPE_CPU
+\tdeviceName         = llvmpipe (LLVM 22.1.8, 256 bits)
+\tdriverID           = DRIVER_ID_MESA_LLVMPIPE
+";
+
+    #[test]
+    fn vulkaninfo_summary_parses_each_gpu_block_and_drops_undecidable_ones() {
+        let devices = super::parse_vulkaninfo_summary(DOZEN_AND_LLVMPIPE_SUMMARY);
+        assert_eq!(
+            devices,
+            vec![
+                vk_device(1, 23, "Microsoft Direct3D12 (Intel(R) UHD Graphics)"),
+                vk_device(4, 13, "llvmpipe (LLVM 22.1.8, 256 bits)"),
+            ]
+        );
+        // An unknown type or a missing name is dropped, never guessed as a GPU.
+        let odd = "GPU0:\n\tdeviceType = PHYSICAL_DEVICE_TYPE_FUTURE\n\tdeviceName = X\n\
+                   GPU1:\n\tdeviceType = PHYSICAL_DEVICE_TYPE_DISCRETE_GPU\n";
+        assert!(super::parse_vulkaninfo_summary(odd).is_empty());
+        // Lines before the first GPU block (the header) are not a device.
+        assert!(
+            super::parse_vulkaninfo_summary(
+                "deviceType = PHYSICAL_DEVICE_TYPE_DISCRETE_GPU\ndeviceName = X\n"
+            )
+            .is_empty()
+        );
+        assert!(super::parse_vulkaninfo_summary("").is_empty());
+    }
+
+    /// The dxg record exactly as a WSL2 guest with no Vulkan loader writes it
+    /// (yolanda, v56.10.12.1): placeholder name, no lane, the loader reason.
+    fn guest_view_dxg_doc() -> CapabilityDocument {
+        let mut dxg = device(
+            "gpu",
+            "WSL2 paravirtual GPU (/dev/dxg)",
+            &[],
+            Some("engine-missing:no-vulkan-loader"),
+        );
+        dxg.device_node = Some("/dev/dxg".to_string());
+        dxg.usable = false;
+        dxg.name_source = Some("placeholder".to_string());
+        let mut doc = doc_with(vec![dxg]);
+        doc.legacy_tier = "gpu-vulkan".to_string();
+        doc.host.side = Some("wsl2-guest".to_string());
+        doc
+    }
+
+    /// ORDER 793-a8e7 S2, the probe criterion: on the opted-in lane the
+    /// container's enumeration decides, and the class is no longer cpu-only.
+    /// Pre-fix the same document read cpu-only with the guest's loader reason.
+    #[test]
+    fn container_enumeration_of_dozen_makes_the_dxg_gpu_usable_in_the_container_lane() {
+        let mut doc = guest_view_dxg_doc();
+        let before = accel_envelope(&doc);
+        assert!(before.contains("accel_class=cpu-only"), "{before}");
+
+        let promoted = super::promote_dxg_from_container_enumeration(
+            &mut doc,
+            &super::parse_vulkaninfo_summary(DOZEN_AND_LLVMPIPE_SUMMARY),
+        );
+        assert!(promoted);
+        let gpu = &doc.devices[0];
+        assert_eq!(gpu.lanes, vec!["container".to_string()]);
+        assert!(gpu.usable && gpu.unusable_reason.is_none(), "{gpu:?}");
+        assert_eq!(gpu.name, "Microsoft Direct3D12 (Intel(R) UHD Graphics)");
+        assert_eq!(gpu.name_source.as_deref(), Some("enumerated"));
+        let after = accel_envelope(&doc);
+        assert!(!after.contains("accel_class=cpu-only"), "{after}");
+        assert!(after.contains("accel_gpu=usable"), "{after}");
+    }
+
+    /// A software rasterizer is not the GPU (793-zumy criterion 3), and an
+    /// empty answer is not one either: neither changes the record.
+    #[test]
+    fn container_enumeration_of_llvmpipe_only_or_nothing_promotes_nothing() {
+        for listing in [
+            vec![vk_device(4, 13, "llvmpipe (LLVM 22.1.8, 256 bits)")],
+            vec![],
+        ] {
+            let mut doc = guest_view_dxg_doc();
+            let untouched = doc.devices.clone();
+            assert!(!super::promote_dxg_from_container_enumeration(
+                &mut doc, &listing
+            ));
+            assert_eq!(doc.devices, untouched);
+            assert!(accel_envelope(&doc).contains("accel_class=cpu-only"));
+        }
+        // No dxg record (a native host): nothing to promote.
+        let mut native = doc_with(vec![device(
+            "gpu",
+            "renderD128 GPU",
+            &["host-native"],
+            None,
+        )]);
+        let untouched = native.devices.clone();
+        assert!(!super::promote_dxg_from_container_enumeration(
+            &mut native,
+            &super::parse_vulkaninfo_summary(DOZEN_AND_LLVMPIPE_SUMMARY),
+        ));
+        assert_eq!(native.devices, untouched);
+    }
+
+    /// ORDER 793-a8e7 S2: only an opted-in document probed before its
+    /// container existed is re-probed; every other cached document is served
+    /// exactly as before.
+    #[test]
+    fn only_an_opted_in_doc_without_a_container_view_is_reprobed() {
+        let mut doc = guest_view_dxg_doc();
+        assert!(!super::opted_in_doc_predates_its_container(&doc));
+        doc.enumeration_gaps.push("container-lane".to_string());
+        assert!(super::opted_in_doc_predates_its_container(&doc));
+        doc.legacy_tier = "cpu".to_string();
+        assert!(!super::opted_in_doc_predates_its_container(&doc));
+    }
+
+    /// ORDER 793-a8e7 S2: the re-probe keeps the measurements. Without this an
+    /// opted-in host could never hold a decode crossover: record_measurement
+    /// writes into the cached document, and the next load re-probed it away.
+    #[test]
+    fn reprobing_an_opted_in_doc_keeps_its_measurements() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cache = dir.path().join("capabilities.json");
+        let mut stale = run_probe("gpu-vulkan");
+        stale.enumeration_gaps.push("container-lane".to_string());
+        stale.host.host_id = "STALE-CACHE-MARKER".to_string();
+        let rows = vec![decode_row("cpu", 3.0, 19.6), decode_row("gpu", 3.0, 27.0)];
+        stale.measurements = rows.clone();
+        fs::write(&cache, serde_json::to_string_pretty(&stale).unwrap()).unwrap();
+
+        let got = load_or_probe_at(&cache, "gpu-vulkan", Freshness::Cached);
+        assert_ne!(got.host.host_id, "STALE-CACHE-MARKER", "it must re-probe");
+        assert_eq!(got.measurements, rows, "and keep the measurements");
+        let written: CapabilityDocument =
+            serde_json::from_str(&fs::read_to_string(&cache).unwrap()).unwrap();
+        assert_eq!(written.measurements, rows, "in the cache it writes too");
     }
 
     /// 793-zumy CRITERION 3, pinned: "Devices of type PHYSICAL_DEVICE_TYPE_CPU

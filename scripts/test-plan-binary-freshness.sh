@@ -93,11 +93,15 @@ run_case() {
     )
 }
 
+# 1637-arwp: the resolver returns a probed candidate ABSOLUTE ($PWD at resolve
+# time, here $TMPD), not ./target/... — 38 callers hand-normalised ./ and the
+# release-tier fixtures that cd'd elsewhere were the callers that never got one.
+# The healed path (case C) is made absolute the same way.
 # ── case A: binary newer than every source → fresh, no cargo consulted ──────
 set_mtimes 202601020000 202601010000
 out="$(run_case none)"
 ck "fresh binary resolves"            "rc=0" "$(printf '%s' "$out" | tail -1)"
-ck "fresh binary prints its path"     "./target/release/tillandsias-plan" \
+ck "fresh binary prints its path"     "$TMPD/target/release/tillandsias-plan" \
    "$(printf '%s' "$out" | head -1)"
 
 # ── case B: source newer, rebuild fails → rc 2, silent ──────────────────────
@@ -110,7 +114,7 @@ ck "stale + failed rebuild is silent" ""     "$(printf '%s' "$out" | head -1)"
 set_mtimes 202601020000 202601030000
 out="$(run_case touch)"
 ck "stale + rebuild-in-locus heals"   "rc=0" "$(printf '%s' "$out" | tail -1)"
-ck "healed binary prints its path"    "./target/release/tillandsias-plan" \
+ck "healed binary prints its path"    "$TMPD/target/release/tillandsias-plan" \
    "$(printf '%s' "$out" | head -1)"
 
 # ── case D: no binary at all, rebuild fails → rc 1 (resolve contract) ───────

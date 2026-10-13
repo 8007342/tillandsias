@@ -1,0 +1,16 @@
+# Gate step 1630-dwab — a .lua guard can declare itself serial
+# (`-- preflight: serial — <reason>`), and the door's own launcher then runs it
+# with nothing beside it. Both writers of the .mutant-lcnum-* checkout paths
+# (steps 450 and 455) declare it, so neither runs beside the other or beside a
+# tree-scanning guard. _pf_predecide and _pf_launcher are extracted at run time:
+# the trunk door (the `--` match removed) predecides the .lua as parallel, the
+# fixed door as serial, and the launcher shows no overlap with the declaration
+# and overlap without it, in one run. 1635-ma2f adds arm 8: the door hands
+# guards an ABSOLUTE runner path (a relative one cannot start a nested .lua guard).
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking a .lua guard can declare itself serial at the door (1630-dwab)"
+STEP_LUA="scripts/lua/test-door-serial-lua-declaration.lua"
+STEP_ERROR="the preflight door no longer honours a .lua guard's -- preflight: serial, or a .mutant-lcnum-* writer runs beside other guards (1630-dwab) — see the FAIL lines above"
+STEP_OK="Door .lua serial declaration fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-12 darwin ok:door-serial-lua-declaration:8 arms"

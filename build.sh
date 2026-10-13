@@ -439,6 +439,43 @@ _pf_sweep_fixture_scratch() {  # $1 = guard path, $2 = its pid, $3 = outfile
         echo "swept:fixture-scratch-failed:$_d" >> "$3.swept"
     fi
 }
+# ORDER 1630-dwab. A KILLed guard's DECLARED IN-CHECKOUT ARTIFACTS. A writer
+# that must keep its copies beside the scripts it copies is declared in
+# scripts/portability/checkout-writers.txt (1611-imnj), and its declaration may
+# name what it leaves: `<writer> artifacts=<basename-glob> <reason>`. Its traps
+# remove them, and a KILL runs no trap. The guard the door killed is that
+# writer, or names the writer's path in its own source (the lc-numeric signal
+# .lua runs scripts/test-awk-float-lc-numeric.sh). Only UNTRACKED files whose
+# basename matches are removed, each by its literal path, never a glob rm, so
+# a tracked file can never go. Recorded as `swept:declared-artifact:<path>`.
+_pf_sweep_declared_artifacts() {  # $1 = guard path (roster-relative), $2 = outfile
+    local _decl="$SCRIPT_DIR/scripts/portability/checkout-writers.txt" _w _a _rest _f _g
+    local -a _globs=()
+    [ -f "$_decl" ] && [ -f "$SCRIPT_DIR/$1" ] || return 0
+    while read -r _w _a _rest; do
+        case "$_w" in ''|'#'*) continue ;; esac
+        case "$_a" in artifacts=?*) ;; *) continue ;; esac
+        if [ "$_w" = "$1" ] || grep -qF "$_w" "$SCRIPT_DIR/$1" 2>/dev/null; then
+            _globs+=("${_a#artifacts=}")
+        fi
+    done < "$_decl"
+    [ "${#_globs[@]}" -gt 0 ] || return 0
+    while IFS= read -r _f; do
+        [ -n "$_f" ] || continue
+        for _g in "${_globs[@]}"; do
+            # an unquoted case pattern matches as a glob and is never expanded
+            case "${_f##*/}" in
+                $_g)
+                    if rm -f "$SCRIPT_DIR/$_f"; then
+                        echo "swept:declared-artifact:$SCRIPT_DIR/$_f" >> "$2.swept"
+                    else
+                        echo "swept:declared-artifact-failed:$SCRIPT_DIR/$_f" >> "$2.swept"
+                    fi
+                    break ;;
+            esac
+        done
+    done < <(git -C "$SCRIPT_DIR" ls-files --others --exclude-standard 2>/dev/null)
+}
 # The late sweep, from the preflight's EXIT trap: the recorded roots only.
 _pf_sweep_late() {  # $1 = the preflight run dir
     local _r
@@ -473,8 +510,29 @@ _pf_now() {
 # is read from the scheduler: under `taskpolicy -b` a process's priority reads
 # 4, against 31 plain (measured). One ps per preflight, no pipe. Sets
 # _PF_BUDGET (seconds) and _PF_BUDGET_REGIME (override|darwin-background|darwin|floor).
+#
+# ORDER 1636-6k6k (coordinator ruling 2026-10-12): AND THE PUSH-DECIDER
+# DEADLINE, per regime, in this one place. Sets _PF_DECIDER_DEADLINE (seconds),
+# the per-guard deadline for check-* deciders; fixtures keep the door's 5 s.
+# MEASURED on darwin-background (the distribution is in the 1636-6k6k row,
+# 7a990a936; the no-raise rule's re-measurement): the door's own launcher, no
+# deadline, taskpolicy -b, 250 guards. The 91 check-* deciders: p50 2 s, p90
+# 9 s, p95 15 s, and 13 of them were deadline-skipped at 5 s, so the gate
+# refused trees the door had passed (#371 on check-sigpipe-verdict-pipelines-
+# added). That distribution was taken on bare trunk, an EMPTY diff, so it read
+# the diff-scoped deciders as free. Re-measured alone on four landed PRs' real
+# diffs (#369 #370 #371 #374, 1-10 files): only sigpipe-verdict-added scaled
+# (1-70 s, one fork per line of each touched file; now one awk pass, 2-8 s),
+# and the nine deciders this deadline is for then cost at most 18 s, constant
+# across diffs (script-exec-bits 16-18 s, skills-single-source 14 s). So the
+# decider deadline is 20 s, and this regime's budget moves 415 -> 450 s. Four
+# take 40-173 s whatever the diff (fragment-keys-are-read,
+# mo-full-attestations, added-test-is-referenced, append-vs-origin-fold) and
+# stay deadline-skipped, named. Plain darwin and the floor are unchanged at
+# 5 s until measured.
 _pf_budget() {
     local _pri
+    _PF_DECIDER_DEADLINE=5
     if [ -n "${TILLANDSIAS_PREFLIGHT_BUDGET_S:-}" ]; then
         _PF_BUDGET="$TILLANDSIAS_PREFLIGHT_BUDGET_S"; _PF_BUDGET_REGIME=override
         return 0
@@ -483,7 +541,7 @@ _pf_budget() {
         Darwin)
             _pri="$(ps -o pri= -p "$$" 2>/dev/null)"; _pri="${_pri// /}"
             if [ -n "$_pri" ] && [ "$_pri" -le 4 ] 2>/dev/null; then
-                _PF_BUDGET=415; _PF_BUDGET_REGIME=darwin-background
+                _PF_BUDGET=450; _PF_BUDGET_REGIME=darwin-background; _PF_DECIDER_DEADLINE=20
             else
                 _PF_BUDGET=200; _PF_BUDGET_REGIME=darwin
             fi ;;
@@ -583,6 +641,7 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, 
         kill -KILL "-$_pid" 2>/dev/null || kill -KILL "$_pid" 2>/dev/null
         wait "$_pid" 2>/dev/null
         _pf_sweep_fixture_scratch "$_p" "$_pid" "$_out"
+        _pf_sweep_declared_artifacts "$_p" "$_out"
         _pf_sweep_guard_tmp "$_gtmp" "$_out"
         return 124
     fi
@@ -681,14 +740,69 @@ _pf_predecide() {  # $1 = roster path, $2 = label
     # shape as gate-only; the launcher then waits for every running guard,
     # runs it with nothing beside it, and only then launches the next. The
     # reason is required: a bare declaration runs concurrently, with a note.
-    if [ -n "$(sed -n '1,40{/^# preflight: serial/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
-        _reason="$(sed -n '1,40{s/^# preflight: serial[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
+    # ORDER 1630-dwab: a .lua guard comments with `--`, so `-- preflight:
+    # serial` is the same declaration. Matched only as `#` before this, which
+    # left a Lua guard no way to run alone: the lc-numeric signal fixture
+    # (step 455) wrote the same checkout paths as step 450 concurrently.
+    if [ -n "$(sed -n '1,40{/^# preflight: serial/p;/^-- preflight: serial/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
+        _reason="$(sed -n '1,40{s/^# preflight: serial[[:space:]]*//p;s/^-- preflight: serial[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
         if [ -n "$_reason" ]; then
             return 12
         fi
         echo "note:preflight:$_l:serial-without-a-reason — a declaration must name the shared state; running it concurrently (1499-m9fj)"
     fi
+    # ORDER 1631-6w8z: A GUARD WHOSE ANSWER COSTS MORE THAN THE PER-GUARD
+    # DEADLINE, AND THAT THE DOOR MUST STILL ASK, says `own-deadline — <reason>`
+    # (`#` or `--`). Measured on darwin under taskpolicy -b: cargo fmt --check
+    # takes 5 s and a touched crate's clippy 11-55 s, against 5 s. The door runs
+    # it in _pf_long_lane, beside the roster, deadlined against the door's
+    # whole budget, so it neither waits behind the roster nor extends it. A kill
+    # is still a deadline skip. The reason is required, as for serial.
+    if [ -n "$(sed -n '1,40{/^# preflight: own-deadline/p;/^-- preflight: own-deadline/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
+        _reason="$(sed -n '1,40{s/^# preflight: own-deadline[[:space:]]*//p;s/^-- preflight: own-deadline[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
+        if [ -n "$_reason" ]; then
+            return 13
+        fi
+        echo "note:preflight:$_l:own-deadline-without-a-reason — a declaration must name its cost; running it under the per-guard deadline (1631-6w8z)"
+    fi
     return 0
+}
+
+# ORDER 1631-6w8z. THE LONG LANE: every guard that predecides 13 (own-deadline),
+# each started at once in the background, beside the roster. Its deadline is
+# what is left of the door's budget when it starts (_pf_budget), so the door
+# ends no later than its budget on this guard's account;
+# TILLANDSIAS_PREFLIGHT_LANE_TIMEOUT overrides it, and --full (deadline 0)
+# lifts it. It writes the same `<rc> <elapsed>` file the launcher writes, at
+# the guard's roster index, so the reporter reads it like any other.
+_pf_long_lane() {  # $1 = work dir, $2 = 0 for no deadline; roster on stdin
+    local _dir="$1" _nolimit="$2" _i=0 _line _p _args _pd _dl
+    while IFS= read -r _line; do
+        [ -n "$_line" ] || continue
+        _i=$((_i + 1))
+        _p="${_line%%$'\t'*}"; _args=""
+        [ "$_p" = "$_line" ] || _args="${_line#*$'\t'}"
+        _pd=0
+        _pf_predecide "$_p" "x" >/dev/null 2>&1 || _pd=$?
+        [ "$_pd" -eq 13 ] || continue
+        if [ "$_nolimit" = 0 ]; then
+            _dl=0
+        elif [ -n "${TILLANDSIAS_PREFLIGHT_LANE_TIMEOUT:-}" ]; then
+            _dl="$TILLANDSIAS_PREFLIGHT_LANE_TIMEOUT"
+        else
+            _pf_budget
+            _dl=$(( _PF_BUDGET - (SECONDS - ${_pf_wall0:-$SECONDS}) ))
+            [ "$_dl" -ge 1 ] || _dl=1
+        fi
+        echo "$_dl" > "$_dir/$_i.lane-deadline"
+        (
+            _t=$SECONDS
+            _r=0
+            _pf_run_guard "$_p" "$_dl" "$_dir/$_i.out" "$_args" || _r=$?
+            echo "$_r $(( SECONDS - _t ))" > "$_dir/$_i.rc.tmp" && mv "$_dir/$_i.rc.tmp" "$_dir/$_i.rc"
+        ) </dev/null &
+    done
+    wait
 }
 
 # ORDER 1499-m9fj (coordinator ruling 2026-09-29). BOUNDED CONCURRENCY. 191
@@ -702,8 +816,19 @@ _pf_predecide() {  # $1 = roster path, $2 = label
 # minimise is deadline SKIPS, not seconds; nproc/2 cost bash-dialect its
 # deadline on yoga) so a 4-core floor host is not overcommitted into deadline
 # skips; TILLANDSIAS_PREFLIGHT_JOBS overrides, and 1 is the old serial door.
-_pf_launcher() {  # $1 = work dir, $2 = deadline, $3 = jobs; roster on stdin
-    local _dir="$1" _dl="$2" _jobs="$3" _i=0 _line _p _args _pids="" _pid _live _n _pd _cap _t _r
+# ORDER 1636-6k6k: WHICH DEADLINE A GUARD GETS. A check-* push decider (the
+# guards a door exists to run) gets the regime's decider deadline
+# (_PF_DECIDER_DEADLINE, from _pf_budget); every other guard the door's own.
+# Sets _PF_GDL, without a fork: the launcher asks once per guard.
+_pf_guard_deadline() {  # $1 = roster path, $2 = the door's deadline, $3 = the decider deadline
+    case "$1" in
+        scripts/check-*|scripts/lua/check-*) _PF_GDL="$3" ;;
+        *) _PF_GDL="$2" ;;
+    esac
+}
+
+_pf_launcher() {  # $1 = work dir, $2 = deadline, $3 = jobs, $4 = decider deadline (default $2); roster on stdin
+    local _dir="$1" _dl="$2" _jobs="$3" _ddl="${4:-$2}" _i=0 _line _p _args _pids="" _pid _live _n _pd _cap _t _r
     while IFS= read -r _line; do
         [ -n "$_line" ] || continue
         _i=$((_i + 1))
@@ -714,6 +839,7 @@ _pf_launcher() {  # $1 = work dir, $2 = deadline, $3 = jobs; roster on stdin
         case $_pd in
             0) _cap="$_jobs" ;;
             12) _cap=1 ;;   # serial: drain EVERY running guard first
+            13) continue ;; # own-deadline: _pf_long_lane runs it (1631-6w8z)
             *) echo "not-launched 0" > "$_dir/$_i.rc"; continue ;;
         esac
         while :; do
@@ -725,11 +851,12 @@ _pf_launcher() {  # $1 = work dir, $2 = deadline, $3 = jobs; roster on stdin
             [ "$_n" -ge "$_cap" ] || break
             sleep 0.1 2>/dev/null || sleep 1
         done
+        _pf_guard_deadline "$_p" "$_dl" "$_ddl"
         if [ "$_pd" -eq 12 ]; then
             # ALONE: run in the foreground, so nothing launches until it ends.
             _t=$SECONDS
             _r=0
-            _pf_run_guard "$_p" "$_dl" "$_dir/$_i.out" "$_args" </dev/null || _r=$?
+            _pf_run_guard "$_p" "$_PF_GDL" "$_dir/$_i.out" "$_args" </dev/null || _r=$?
             echo "$_r $(( SECONDS - _t ))" > "$_dir/$_i.rc.tmp" && mv "$_dir/$_i.rc.tmp" "$_dir/$_i.rc"
             continue
         fi
@@ -738,7 +865,7 @@ _pf_launcher() {  # $1 = work dir, $2 = deadline, $3 = jobs; roster on stdin
             # `|| _r=$?`, never a bare call then `$?`: this runs under set -e,
             # and a guard that refuses would end the subshell before it wrote rc.
             _r=0
-            _pf_run_guard "$_p" "$_dl" "$_dir/$_i.out" "$_args" || _r=$?
+            _pf_run_guard "$_p" "$_PF_GDL" "$_dir/$_i.out" "$_args" || _r=$?
             echo "$_r $(( SECONDS - _t ))" > "$_dir/$_i.rc.tmp" && mv "$_dir/$_i.rc.tmp" "$_dir/$_i.rc"
         ) </dev/null &
         _pids="$_pids $!"
@@ -788,13 +915,20 @@ _preflight_roster() {
     #    through `script run` by _pf_run_guard's .lua runner.
     grep -oE '_run_lua_decider "scripts/lua/check-[a-z0-9-]+\.lua"' "$SCRIPT_DIR/build.sh" \
         | sed -E 's#^_run_lua_decider "(scripts/lua/check-[a-z0-9-]+\.lua)"#\1#'
+    # 6. the gate's INLINE CARGO refusals (1631-6w8z): `cargo fmt --check
+    #    --all` and the -D warnings clippy lines are cargo commands, not
+    #    scripts, so sources 1-5 cannot see them, and #340 (clippy) and #359
+    #    (fmt) each lost a full gate run after a door that passed them. One
+    #    guard asks both, in two modes; it declares own-deadline (see
+    #    _pf_long_lane), because neither fits the per-guard deadline.
+    printf '%s\t%s\n' scripts/lua/check-rust-lints.lua fmt scripts/lua/check-rust-lints.lua clippy
 }
 
 # Guards that cannot simply be run here, each with the reason the verdict prints.
 # A guard is NEVER silently dropped: it is run, or it is named.
 _preflight_preconditions() {
     cat <<'PRECONDS'
-check-no-python-scripts.sh|policy-binary|compiles before it resolves (its first command is `cargo build -p tillandsias-policy`); runs only when that binary already exists
+check-no-python-scripts.lua|policy-binary|compiles before it resolves (its first command is `cargo build -p tillandsias-policy`); runs only when that binary already exists
 check-no-competing-gate.sh|gate-context|answers about a RUNNING gate's dispatch, not about the tree; it has no subject outside one
 check-tracked-files-unwritten.sh|gate-context|compares against a snapshot the gate takes at its own start; outside a gate there is nothing to compare
 PRECONDS
@@ -1158,6 +1292,18 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     # themselves.
     # BEGIN-STALE-PLAN-BINARY-CHECK
     _pf_plan_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _pf_plan_bin=""
+    # ORDER 1635-ma2f: AN ABSOLUTE PATH, because every guard is handed this as
+    # TILLANDSIAS_SCRIPT_RUNNER_BIN (1570-mxcg). resolve_plan_binary answers
+    # ./target/release/tillandsias-plan, relative to $SCRIPT_DIR, when
+    # CARGO_TARGET_DIR is unset; a guard that runs it from another directory
+    # cannot find it. The 1630-dwab serial fixture's nested launcher cds into
+    # its scratch root, so its .lua writer never started and every Linux
+    # preflight refused (darwin deadline-skipped the fixture, so it never ran
+    # there). _run_lua_decider normalises ./ the same way.
+    case "$_pf_plan_bin" in
+        ""|/*|[A-Za-z]:*) ;;
+        *) _pf_plan_bin="$SCRIPT_DIR/${_pf_plan_bin#./}" ;;
+    esac
     if [ -n "$_pf_plan_bin" ]; then
         _pf_vs="$(cd "$SCRIPT_DIR" && "$_pf_plan_bin" validator-surface-hash --check 2>&1)" || true
         case "$_pf_vs" in
@@ -1182,10 +1328,19 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     # STANDING NO-RAISE RULE from the day this lands; re-measure the distribution
     # before either number moves, and never in the same cycle as the refusal that
     # made someone want to.
+    # ORDER 1636-6k6k: the check-* decider deadline is the regime's
+    # (_pf_budget), re-measured as this rule asks; an explicit
+    # TILLANDSIAS_PREFLIGHT_TIMEOUT still sets every guard's, and --full lifts both.
+    _pf_budget
     if [[ "$FLAG_PREFLIGHT_FULL" == true ]]; then
         _pf_deadline=0            # `timeout 0` means no limit
+        _pf_ddeadline=0
+    elif [ -n "${TILLANDSIAS_PREFLIGHT_TIMEOUT:-}" ]; then
+        _pf_deadline="$TILLANDSIAS_PREFLIGHT_TIMEOUT"
+        _pf_ddeadline="$TILLANDSIAS_PREFLIGHT_TIMEOUT"
     else
-        _pf_deadline="${TILLANDSIAS_PREFLIGHT_TIMEOUT:-5}"
+        _pf_deadline=5
+        _pf_ddeadline="$_PF_DECIDER_DEADLINE"
     fi
 
     _pf_dir="$(mktemp -d "${TMPDIR:-/tmp}/preflight.XXXXXX")" || _pf_dir=""
@@ -1201,9 +1356,14 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     fi
     _pf_roster="$(_preflight_roster | sort -u)"
     _pf_wall0=$SECONDS
-    printf '%s\n' "$_pf_roster" | _pf_launcher "$_pf_dir" "$_pf_deadline" "$_pf_jobs" &
+    # 1631-6w8z: the long lane starts FIRST, so its guards get the most budget.
+    _pf_lane_limit=1
+    [[ "$FLAG_PREFLIGHT_FULL" != true ]] || _pf_lane_limit=0
+    printf '%s\n' "$_pf_roster" | _pf_long_lane "$_pf_dir" "$_pf_lane_limit" &
+    _pf_lane_pid=$!
+    printf '%s\n' "$_pf_roster" | _pf_launcher "$_pf_dir" "$_pf_deadline" "$_pf_jobs" "$_pf_ddeadline" &
     _pf_launcher_pid=$!
-    trap 'kill "$_pf_launcher_pid" 2>/dev/null || true; wait "$_pf_launcher_pid" 2>/dev/null || true; _pf_sweep_late "$_pf_dir"; rm -rf "$_pf_dir"' EXIT
+    trap 'kill "$_pf_launcher_pid" "$_pf_lane_pid" 2>/dev/null || true; wait "$_pf_launcher_pid" "$_pf_lane_pid" 2>/dev/null || true; _pf_sweep_late "$_pf_dir"; rm -rf "$_pf_dir"' EXIT
     # ORDER 1353-ryhq — FIVE CATEGORIES, NOT TWO. `skipped` conflated a guard
     # that DECLARED its own skip with a guard the runner never got an answer
     # from, and the summary then vouched for both with `ok:`. Measured on
@@ -1243,8 +1403,14 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
 
         _pf_pd=0
         _pf_predecide "$_pf_path" "$_pf_label" || _pf_pd=$?
+        _pf_owner="$_pf_launcher_pid"
+        # the deadline this guard is run under (1636-6k6k); a lane guard's own
+        # replaces it below (1631-6w8z)
+        _pf_guard_deadline "$_pf_path" "$_pf_deadline" "$_pf_ddeadline"
+        _pf_gdl="$_PF_GDL"
         case $_pf_pd in
             12) echo "note:preflight:$_pf_label:serial — declares shared state; run with no other guard beside it" ;;
+            13) _pf_owner="$_pf_lane_pid" ;;
             10) _pf_declskip=$((_pf_declskip + 1)); continue ;;
             11) _pf_cantrun=$((_pf_cantrun + 1)); continue ;;
         esac
@@ -1271,19 +1437,23 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
         # guard's own, measured from its own start.
         _pf_tmp="$_pf_dir/$_pf_i.out"
         while [ ! -f "$_pf_dir/$_pf_i.rc" ]; do
-            if ! kill -0 "$_pf_launcher_pid" 2>/dev/null && [ ! -f "$_pf_dir/$_pf_i.rc" ]; then
+            if ! kill -0 "$_pf_owner" 2>/dev/null && [ ! -f "$_pf_dir/$_pf_i.rc" ]; then
                 echo "not-launched 0" > "$_pf_dir/$_pf_i.rc"
                 break
             fi
             sleep 0.1 2>/dev/null || sleep 1
         done
         read -r _pf_rc _pf_el < "$_pf_dir/$_pf_i.rc"
+        if [ "$_pf_pd" -eq 13 ] && [ -f "$_pf_dir/$_pf_i.lane-deadline" ]; then
+            read -r _pf_gdl < "$_pf_dir/$_pf_i.lane-deadline"
+            echo "note:preflight:$_pf_label:own-deadline — ran beside the roster for ${_pf_el}s, deadlined at ${_pf_gdl}s of the door's budget (1631-6w8z)"
+        fi
         if [ "$_pf_rc" = "not-launched" ]; then
             # The launcher and this pass disagreed (or the launcher died): run
             # it here, serially, rather than report a guard nobody ran.
             _pf_t=$SECONDS
             _pf_rc=0
-            _pf_run_guard "$_pf_path" "$_pf_deadline" "$_pf_tmp" "$_pf_args" || _pf_rc=$?
+            _pf_run_guard "$_pf_path" "$_pf_gdl" "$_pf_tmp" "$_pf_args" || _pf_rc=$?
             _pf_el=$(( SECONDS - _pf_t ))
         fi
         _pf_t0=$(( SECONDS - _pf_el ))
@@ -1314,7 +1484,7 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
                     grep -E '^could-not-run:' "$_pf_tmp" | head -2
                     _pf_cantrun=$((_pf_cantrun + 1)) ;;
                 timed-out)
-                    echo "skip:preflight:$_pf_label:deadline:$(( SECONDS - _pf_t0 ))s — outlived the ${_pf_deadline}s front-door deadline; the gate still runs it"
+                    echo "skip:preflight:$_pf_label:deadline:$(( SECONDS - _pf_t0 ))s — outlived the ${_pf_gdl}s front-door deadline; the gate still runs it"
                     _pf_deadline_n=$((_pf_deadline_n + 1)) ;;
                 cannot-start)
                     # THE RUNNER COULD NOT START IT (macneo 2026-09-22: exec: setsid: not found).
@@ -1329,8 +1499,11 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
                 refused)
                     _pf_failed=$((_pf_failed + 1))
                     cat "$_pf_tmp" >&2
+                    # 1631-6w8z: a .lua guard is confirmed through its runner, not bash
+                    _pf_alone="bash $_pf_path${_pf_args:+ $_pf_args}"
+                    case "$_pf_path" in *.lua) _pf_alone="tillandsias-plan script run $_pf_path${_pf_args:+ -- $_pf_args}" ;; esac
                     _afford "the guard $_pf_label refused this tree; its own output is printed just above" \
-                        "fix what that output names, then confirm with the guard alone: bash $_pf_path${_pf_args:+ $_pf_args} (a full re-check is ./build.sh --preflight)"
+                        "fix what that output names, then confirm with the guard alone: $_pf_alone (a full re-check is ./build.sh --preflight)"
                     echo "refused:preflight:$_pf_label" >&2 ;;
                 *)
                     # No classifier answered (no plan binary, or one too old to
@@ -1343,7 +1516,7 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     done <<PFEOF
 $_pf_roster
 PFEOF
-    wait "$_pf_launcher_pid" 2>/dev/null || true
+    wait "$_pf_launcher_pid" "$_pf_lane_pid" 2>/dev/null || true
 
     # ORDER 1352-vmbc. NAME THE ISOLATION MODE IN THE VERDICT. A run without
     # setsid keeps every deadline and every convention but loses process-GROUP
@@ -1370,7 +1543,7 @@ PFEOF
     # ORDER 1616-njfd: and the budget that applies, so a regression reads
     # against the right number (test-preflight-front-door.sh judges by it).
     _pf_budget
-    _pf_iso="$_pf_iso budget=${_PF_BUDGET}s budget-regime=$_PF_BUDGET_REGIME"
+    _pf_iso="$_pf_iso budget=${_PF_BUDGET}s budget-regime=$_PF_BUDGET_REGIME decider-deadline=${_pf_ddeadline}s"
 
     # ORDER 1353-ryhq — THE VERDICT STATES ITS CATEGORIES AND THEIR SUM, AND
     # NEVER A FIXED COUNT. The guard set differs by checkout: two Macs measured
@@ -3254,12 +3427,26 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # grammar has exactly one cause — and is a second place for the two to
     # disagree the moment it gains another. The archiver's branch reads its
     # cause out of the log for the same reason (965-sxec).
+    # ORDER 1631-6w8z: the decider is Lua now, and runs INSIDE a tillandsias-plan,
+    # so it cannot judge that binary's currency (a stale binary vouching for
+    # itself). The .sh called ensure_fresh_plan_binary before `compact`; that
+    # call is HERE now, before any plan binary runs, and the decider is handed
+    # the fresh binary through TILLANDSIAS_PLAN_BIN, which _run_lua_decider's
+    # resolver honours. No fresh binary is the same exit-2 could-not-run.
+    # Exit 3 is _run_lua_decider's own could-not-run (no script runner).
     _events_land_rc=0
     _events_land_log="$(mktemp "${TMPDIR:-/tmp}/tillandsias-fel.XXXXXX")"
-    _run bash "$SCRIPT_DIR/scripts/check-fragment-events-land.sh" 2>&1         | tee "$_events_land_log" || true
-    _events_land_rc="${PIPESTATUS[0]}"
-    if [ "$_events_land_rc" -eq 2 ]; then
-        _error "check-fragment-events-land COULD NOT RUN (exit 2) — this says NOTHING about whether any event lands on a packet; the instrument is what needs repair (1021-a944). Verdict: $(tr -d '
+    if ! _events_land_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh && ensure_fresh_plan_binary)"; then
+        # affordance-ok: read by the exit-2 branch below, which prints it as the cause with the cycle-preflight remedy
+        echo "blocked:fragment-events-land:no-fresh-plan-binary" | tee "$_events_land_log"
+        _events_land_rc=2
+    else
+        case "$_events_land_bin" in ./*) _events_land_bin="$SCRIPT_DIR/${_events_land_bin#./}" ;; esac
+        TILLANDSIAS_PLAN_BIN="$_events_land_bin" _run_lua_decider "scripts/lua/check-fragment-events-land.lua" 2>&1 | tee "$_events_land_log" || true
+        _events_land_rc="${PIPESTATUS[0]}"
+    fi
+    if [ "$_events_land_rc" -eq 2 ] || [ "$_events_land_rc" -eq 3 ]; then
+        _error "check-fragment-events-land COULD NOT RUN (exit $_events_land_rc) — this says NOTHING about whether any event lands on a packet; the instrument is what needs repair (1021-a944). Verdict: $(tr -d '
 ' < "$_events_land_log" | tail -n 1)"
         _error "remedy: scripts/cycle-preflight.sh rebuilds the plan binary for this tree, or run 'cargo build --release -p tillandsias-plan' in this locus"
         rm -f "$_events_land_log"
@@ -4863,7 +5050,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
 
     # The end-user-installer output guard's own fixture (1561-47a8), a Lua
     # fixture on the one runner: a flag-naming line refused by file:line, the
-    # power-user-only and PENDING-1560-UAM3 exemptions, a comment not counted,
+    # power-user-only exemption, a retired PENDING-1560-UAM3 marker exempting
+    # nothing (1560-uam3), a comment not counted,
     # install.sh above its floor refused. The guard itself runs as gate step 800.
     _step "Checking the end-user installer output guard's fixture (1561-47a8)..."
     if ! _run_lua_decider "scripts/lua/test-check-installer-end-user-output.lua" 2>&1; then

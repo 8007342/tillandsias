@@ -26,7 +26,7 @@
 # NO PYTHON, AND NO SHELL CLOCK. The first version of this script used python
 # for JSON and `date +%s%3N` for timing. Both were wrong and the fleet's own
 # guards said so: python is forbidden in every environment
-# (check-no-python-scripts.sh), and `date +%s%3N` is a GNU-ism that BSD date
+# (scripts/lua/check-no-python-scripts.lua), and `date +%s%3N` is a GNU-ism that BSD date
 # ACCEPTS while emitting garbage, so a macOS host would have produced confident
 # wrong wall times with nothing erroring (761-g36m / 784-dwkh).
 #

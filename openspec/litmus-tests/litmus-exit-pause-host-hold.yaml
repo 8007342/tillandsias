@@ -28,7 +28,13 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: exit-pause-fixture-present"
 
+  # A host with no script(1) (macuahuitl: util-linux-script is a separate
+  # Fedora subpackage, not installed) cannot give exit_pause a pty. The port
+  # names that as skip:exit-pause-host-hold:no-script, exit 3; the step
+  # passes it through as its LAST line so the runner records a named SKIP
+  # (not a pass, not a fail). Any other output, or that token with another
+  # exit code, still fails.
   - step: "held skips the in-container pause, unheld still pauses, for all six entrypoints"
-    command: "out=$(\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-exit-pause-host-hold.lua 2>&1); rc=$?; case \"$out\" in (*'ok:exit-pause-host-hold:6/6'*) [ \"$rc\" = 0 ] && echo 'ok: exit-pause 6/6' ;; (*) printf '%s\\n' \"$out\" | tail -7; exit 1 ;; esac"
+    command: "out=$(\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-exit-pause-host-hold.lua 2>&1); rc=$?; case \"$out\" in (*'ok:exit-pause-host-hold:6/6'*) [ \"$rc\" = 0 ] && echo 'ok: exit-pause 6/6' ;; (*'skip:exit-pause-host-hold:no-script'*) [ \"$rc\" = 3 ] && printf '%s\\n' \"$out\" | grep -v '^skip:'; [ \"$rc\" = 3 ] && echo 'skip:exit-pause-host-hold:no-script' ;; (*) printf '%s\\n' \"$out\" | tail -7; exit 1 ;; esac"
     timeout_ms: 120000
     expected_behavior: "ok: exit-pause 6/6"
