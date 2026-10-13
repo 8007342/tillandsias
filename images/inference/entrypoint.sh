@@ -986,5 +986,19 @@ else
     fi
 fi
 
+# ── Decode floor (order 793-a8e7 S3) ─────────────────────────────
+# On the WSL2 Vulkan opt-in lane, models below the decode floor are pinned
+# all-CPU (num_gpu 0); on every other tier, any pin recorded earlier is undone,
+# so turning the opt-in off leaves no residue. See decode-floor-pin.sh. Runs
+# with serve up and the default set in place; a model pulled later (the
+# backgrounded embed pull included) is reconciled at the next start.
+if [ -n "${TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS:-}" ]; then
+    echo "[inference] status-check mode — skipping decode-floor reconcile"
+elif [ -r /usr/local/bin/tillandsias-decode-floor-pin.sh ]; then
+    # shellcheck source=decode-floor-pin.sh
+    . /usr/local/bin/tillandsias-decode-floor-pin.sh
+    echo "[inference] $(tillandsias_decode_floor_reconcile "$OLLAMA_TOOLSROOT/.decode-floor-pins")"
+fi
+
 # Hand off to ollama as the foreground process for signal handling.
 wait $OLLAMA_PID
