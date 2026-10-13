@@ -137,8 +137,23 @@ arm("3 LONG 3000 notes ahead of the approval: still approved (no SIGPIPE verdict
 
 rc, o = tree(NEW, SENTENCE, approval, true)
 arm("5 NO-ARCHIVE a tree with no plan/archive still reads the notes (bash 3.2 empty-array guard)", rc == 0, rc .. " " .. o:sub(1, 120))
-local arc, ao = tree(old.stdout, BRINGUP, "events: []\n", true)
-arm("5 NO-ARCHIVE the pre-fix gate refuses even the base-ledger approval there", arc ~= 0 and ao:find("unbound variable", 1, true) ~= nil, arc .. " " .. ao:sub(1, 120))
+-- The pre-fix half is a negative control only where the defect exists: an
+-- empty "${A[@]}" is unbound under set -u on bash < 4.4 (stock macOS 3.2),
+-- and fine on 4.4+ (Linux), where the pre-fix gate rightly passes. Ask the
+-- same `bash` the gate runs under (`--version`: the runtime refuses `bash -c`).
+-- A version it cannot read FAILS the arm; a probe that silently skips would
+-- retire the control on the very host it exists for.
+local bv = proc.run({ argv = { "bash", "--version" }, timeout_ms = 10000 })
+local major, minor = (bv.stdout or ""):match("version (%d+)%.(%d+)")
+major, minor = tonumber(major), tonumber(minor)
+if not major then
+    arm("5 NO-ARCHIVE read the gate's bash version", false, tostring(bv.status) .. " " .. tostring(bv.stdout))
+elseif major < 4 or (major == 4 and minor < 4) then
+    local arc, ao = tree(old.stdout, BRINGUP, "events: []\n", true)
+    arm("5 NO-ARCHIVE the pre-fix gate refuses even the base-ledger approval there (bash " .. major .. "." .. minor .. ")", arc ~= 0 and ao:find("unbound variable", 1, true) ~= nil, arc .. " " .. ao:sub(1, 120))
+else
+    out.line("skip: 5 NO-ARCHIVE pre-fix control needs bash<4.4 (this bash is " .. tostring(major) .. "." .. tostring(minor) .. ")")
+end
 
 rc, o = tree(NEW, "Setting things up again\u{2026}", approval)
 arm("4 REWORD code that says something else is refused", rc ~= 0 and o:find("UNAPPROVED", 1, true) ~= nil, rc .. " " .. o:sub(1, 120))
