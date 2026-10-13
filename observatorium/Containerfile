@@ -1,0 +1,9 @@
+# Build on the forge first with `npm run build`. This runtime never needs git,
+# Flutter, Cloudflare credentials, or repository source.
+FROM docker.io/library/node:22-alpine
+WORKDIR /app
+COPY build/web ./build/web
+COPY scripts/serve.mjs ./scripts/serve.mjs
+USER node
+EXPOSE 8080
+CMD ["node", "scripts/serve.mjs"]

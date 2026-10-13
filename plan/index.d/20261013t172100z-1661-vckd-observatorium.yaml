@@ -1,0 +1,55 @@
+# Append-only session receipt and explicit operator approval.
+packets:
+  - packet_id: observatorium-flutter-flame-release-metrics-dashboard
+    order: 1661-vckd
+    status: in_progress
+    kind: feature
+    priority: p1
+    pickup_role: linux
+    capability_tags: [web, flutter, flame, metrics, cloudflare]
+    estimated_hours: 8
+    depends_on: []
+    owned_files:
+      - observatorium/
+      - .github/workflows/observatorium.yaml
+      - openspec/specs/observatorium-dashboard/
+    title: Self-contained Flutter and Flame Observatorium with honest release metrics
+    context: |
+      Operator request in this session, 2026-10-13: build a self-contained
+      Flutter/Flame website deployed with npx wrangler deploy to
+      observatorium.tillandsias.org, automatically on main/release. Collect cheap
+      metrics, precompute on deployment, render precomputed data with logarithmic
+      graphs and controls. Preserve honest measurement epochs and gaps. Exercise
+      the sibling web service and device browsers; document infrastructure gaps.
+      Explicit operator UX approval applies to this new dashboard and its graph
+      controls. It does not authorize changing tray UX or the legacy trace viewer.
+      Requested Flutter/Flame and Wrangler/npm tooling authorizes Dart and Node
+      within this isolated web app; no Python automation is authorized.
+    exit_criteria:
+      - Flutter and Flame app builds and renders precomputed metrics with log scale and honest gaps
+      - Cheap collector and deploy precomputation have falsifiable automated checks
+      - Cloudflare custom domain configuration and main/release workflow are present
+      - Built artifact can be served locally and limitations are recorded honestly
+      - Work checkpoints are durably pushed and persistence gate is run
+    next_action: Implement UI, metrics pipeline, and deployment integration in parallel; validate and checkpoint
+    provenance: Explicit operator request in current forge session on 2026-10-13
+    events:
+      - type: claimed
+        ts: "2026-10-13T17:21:00Z"
+        host: forge-observatorium
+        summary: |
+          Bootstrap receipt: selected_intent=code_implementation; active_roles=root,
+          Sol(UI), Astra(metrics), Terra(deployment; default model, Terra unavailable).
+          Read methodology.yaml, bootstrap/router.yaml, spec-system.yaml, ci.yaml,
+          litmus.yaml, plan.yaml and clickable-trace-index spec through MCP.
+          Missing references: combined methodology_ask and openspec_discipline
+          path returned unsupported; used narrower MCP and file reads (unavailable).
+          Scope: isolated observatorium app, necessary workflow, spec, plan records.
+          Verification: collector/precompute tests; Flutter analyze/test/web build;
+          static preview and Wrangler dry run; ./build.sh --check before pushes.
+          Platform=Linux forge. Fetched before work. Sibling heads:
+          main=95874de575c325ef6ddd406cb69d8e8db5bed6fb;
+          linux-next=8641e34f1b9447ee47930dd2a1b769eacb24e58b;
+          windows-next=b38f7105262afdd2805e947e50d126ea58a4cbfa;
+          osx-next=49731c152273395cf95fd9f63249844cac707a57.
+          work/1661-vckd initial ref push durably relayed to GitHub; full gate running.
