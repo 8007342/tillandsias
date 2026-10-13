@@ -40,10 +40,10 @@ fn window<'a>(src: &'a str, start: &str, end: &str) -> &'a str {
     &rest[..e]
 }
 
-/// The host's `expects` vec literal inside `github_login_main`.
+/// The host's `expects` binding inside `github_login_main`.
 fn host_expects() -> &'static str {
     let login = window(HOST, "pub fn github_login_main() -> i32", "\n}\n");
-    window(login, "let expects = vec![", "\n        ];")
+    window(login, "let expects", ";\n")
 }
 
 /// The body of the guest's GitHub device login.
@@ -90,26 +90,27 @@ fn host_waits_for_no_prompt_the_device_flow_never_prints() {
     );
 }
 
-/// The prompts the host DOES answer are the guest's identity prompts, in the
-/// guest's order (name, then email).
+/// ORDER 1668-8jmq. The guest no longer prompts for a git identity, and the
+/// host answers no prompt at all. Both halves are pinned in ONE change: a host
+/// that still waited for "author name" after the guest dropped the prompt
+/// would deadlock exactly like 2026-08-10 and 1383-dkxi.
 #[test]
-fn host_identity_expects_match_the_guest_prompt_order() {
+fn host_answers_no_prompt_and_the_guest_asks_none() {
     let expects = host_expects();
-    let host_name = expects
-        .find("b\"author name\"")
-        .expect("host must answer the git author name");
-    let host_email = expects
-        .find("b\"author email\"")
-        .expect("host must answer the git author email");
-    assert!(host_name < host_email, "host must answer name before email");
-
-    let guest_name = GUEST
-        .find("\"Git author name\"")
-        .expect("guest must prompt for the git author name");
-    let guest_email = GUEST
-        .find("\"Git author email\"")
-        .expect("guest must prompt for the git author email");
-    assert!(guest_name < guest_email, "guest prompts name before email");
+    assert!(
+        expects.contains("Vec::new()") && !expects.contains("needle"),
+        "the host must wait for no guest prompt: {expects}"
+    );
+    // Built from parts so this file's own text cannot match itself.
+    for gone in [
+        concat!("\"Git author ", "name\""),
+        concat!("\"Git author ", "email\""),
+    ] {
+        assert!(
+            !GUEST.contains(gone),
+            "the guest prompts {gone} again; the host would have to answer it (1668-8jmq)"
+        );
+    }
 }
 
 /// The QR code and one-time code must reach the user. Through the escaped log
@@ -131,7 +132,7 @@ fn host_shows_the_guest_output_raw() {
 
 /// NEGATIVE CONTROL. Each check above could pass vacuously if its window were
 /// empty or wrong. Prove the extraction discriminates: the host window really
-/// contains the identity needles, and the guest source really does still carry
+/// is the typed `expects` binding, and the guest source really does still carry
 /// the retired paste prompt OUTSIDE the device flow, which is exactly the
 /// string the old pin found and mistook for the live path.
 #[test]

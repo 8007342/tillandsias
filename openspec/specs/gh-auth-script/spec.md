@@ -48,14 +48,13 @@ placed in argv, an environment variable, a project file, or host memory.
 #### Scenario: Piped invocation without opt-in fails loud
 - **WHEN** stdin is not a terminal and the user runs `tillandsias --github-login` without `--with-token`
 - **THEN** the command MUST exit non-zero before starting Podman infrastructure
-- **AND** the error MUST name `--with-token` and the existing git identity prerequisite
+- **AND** the error MUST name `--with-token`
 - **AND** the command MUST NOT attempt to open or read `/dev/tty`
 
 #### Scenario: Explicit stdin token delivery
 - **WHEN** a caller pipes one token line to `tillandsias --github-login --with-token`
-- **AND** git `user.name` and `user.email` already exist in the managed or host configuration
 - **THEN** Podman exec MUST inherit stdin with `--interactive` and MUST NOT allocate `--tty`
-- **AND** identity collection MUST use the existing values without consuming the token stream
+- **AND** nothing but the token MUST be read from the stream: there is no git identity step (order 1668-8jmq)
 - **AND** successful authentication MUST follow the same in-container Vault write and verification path as interactive login
 
 ### Requirement: Interactive login uses an ephemeral git-service-image container
@@ -69,11 +68,10 @@ The login flow MUST run `gh auth login` inside a dedicated, short-lived containe
 - **WHEN** the git service image is not present locally
 - **THEN** the flow MUST build it via `scripts/build-image.sh git` before proceeding
 
-#### Scenario: Identity prompt before launch
-- **WHEN** the flow starts
-- **THEN** the user MUST be prompted for git author name and email
-- **AND** defaults MUST be read from `<cache>/secrets/git/.gitconfig` first, falling back to the host `~/.gitconfig`
-- **AND** the accepted values MUST be written to `<cache>/secrets/git/.gitconfig`
+#### Scenario: No git identity prompt
+- **WHEN** the flow runs, on any platform and in either input mode
+- **THEN** the user MUST NOT be prompted for a git identity (name or email), and no git identity file MUST be read or written by the login
+- **AND** the login MUST cache the signed-in GitHub App user, from which every forge derives its git identity (spec:forge-git-identity-anonymization; order 1668-8jmq, operator direction 2026-10-13)
 
 #### Scenario: Ephemeral keep-alive container
 - **WHEN** the flow needs to run the OAuth flow
