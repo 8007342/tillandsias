@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: development-scratch-and-worktrees-live-inside-the-checkout-under-one-ignored-dir-that-every-scanner-skips
+    event:
+      type: progress
+      ts: "2026-10-13T13:49:58Z"
+      agent_id: linux-yoga-claude-20261013t132332z
+      host: yoga
+      summary: |
+        Slice 5 on work/1637-cnxq at 8c8bac70a (yoga, cycle 2026-10-13T13:23Z; trunk 8ffbd7015 merged at 28a4bbeef) - a ref sha, not a landing. fs.walk in crates/tillandsias-plan/src/script_run.rs, the one scanner the 09:32Z probe could not exercise, now skips the exact path <repo root>/scratch when met as a child in both branches; a walk based inside scratch/ is unchanged. Evidence - lib unit test walk_files_skips_the_scratch_dir_only_when_met_from_above asserts the premise (unskipped walk sees the planted files) then the property, 1 passed; scratch-location fixture arm 16 through the rebuilt binary in its own scratch repo with the repo root pinned there answers ok walk-skips-scratch 2 direct 1 above, 17/17; clippy -D warnings clean; door ran=230 refused=1 (the known 830 regime hold); binary rebuilt and re-stamped. Still blocked for READY on a darwin or msys STEP_SECOND_REGIME for 830-1637-cnxq.step. Shell-to-lua carried obligation is DUE on this change at landing (check-claims-across-branches.sh is in it), to be PAID by a port in a later slice - the blocked-by 1384-aixy reason I used on 888-vgs8 was false, proc.run is registered for every observing Lua script and 74 of 114 guards call it.
