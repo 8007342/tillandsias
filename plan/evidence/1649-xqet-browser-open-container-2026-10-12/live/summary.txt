@@ -1,22 +1,23 @@
 test-binary /var/home/lenovinha/claudia/tillandsias/target/debug/deps/tillandsias-a69e54c5169d8f95
 version 56.10.12.1 host-ip 192.168.0.111
 images: localhost/tillandsias-chromium-framework:v56.10.12.1 localhost/e2e-fw-base:1 localhost/tillandsias-chromium-framework:v56.9.27.2 localhost/tillandsias-router:v56.10.12.1 localhost/tillandsias-router:v56.9.27.2 
-ca-spki BhAivAn1exWACHCz4Z767efy1UuuUUuPBMQkEtlouOs=
+ca-spki 9G44k9AY33z2u/fI6fHNL4SW6M9xT0UrdP/aUWFNeXQ=
 router-self-check demo-preview: ok1
 live-test rc=0
 host-chrome-before []
-browser.open https://www.demo.localhost:18443/ -> {"window_id":"win-d2acc687-3319-4b62-9def-91295e21902e"}
-podman-ps tillandsias-browser-demo-d2acc6873319 tillandsias-browser-net-d2acc6873319 127.0.0.1:42497->9223/tcp
-router-networks e2e-enclave tillandsias-browser-net-d2acc6873319
-host-chrome-after [] contained-chrome-processes 9
-host-cdp-relay 127.0.0.1:42497/json/version -> "Browser": "Chrome/154.0.8037.57",
-browser.screenshot (pre-existing CDP client) -> {"content":[{"type":"text","text":"SCREENSHOT_FAILED: CDP connection failed: connection closed by remote (EOF during read)"}],"isError":true}
-probe window title="PREVIEW-DEMO" url=https://www.demo.localhost:18443/
-probe chromium-http-route title="PREVIEW-DEMO"
-probe chromium-other-project title="www.other.localhost"
-probe chromium-external-name title="example.com"
-probe chromium-external-ip title="1.1.1.1"
-probe chromium-host-ip title="192.168.0.111"
+browser.open https://www.demo.localhost:18443/ -> {"window_id":"win-3475d9be-2f29-40d7-883d-b4b7649434e3"}
+podman-ps tillandsias-browser-demo-3475d9be2f29 tillandsias-browser-net-3475d9be2f29
+router-networks e2e-enclave tillandsias-browser-net-3475d9be2f29
+host-chrome-after [] contained-chrome-processes 11
+window-tcp-listeners []
+window-request GET / host=www.demo.localhost:18443
+probe window-flags found
+probe chromium-preview-route title="PREVIEW-DEMO" error=null
+probe chromium-http-route title="PREVIEW-DEMO" error=null
+probe chromium-other-project title=null error=ERR_NAME_NOT_RESOLVED
+probe chromium-external-name title=null error=ERR_NAME_NOT_RESOLVED
+probe chromium-external-ip title=null error=ERR_NAME_NOT_RESOLVED
+probe chromium-host-ip title=null error=ERR_NAME_NOT_RESOLVED
 probe net-route reach:10.89.1.2
 probe net-other-project-upstream unresolved:ENOTFOUND
 probe net-external-name unresolved:ENOTFOUND
@@ -27,7 +28,7 @@ probe residual-raw-router-other-project status=200 title="PREVIEW-OTHER"
 browser.close -> {"ok":true}
 after-close containers="" networks="e2e-enclave\npodman" router-networks=e2e-enclave
 test browser_open::tests::live_browser_open_runs_the_container_on_its_own_network ... ok
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 951 filtered out; finished in 51.19s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 951 filtered out; finished in 7.80s
 op: unchanged
 op-net: unchanged
 op-browser-dir: unchanged

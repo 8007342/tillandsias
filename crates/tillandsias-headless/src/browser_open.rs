@@ -9,7 +9,11 @@
 //!   project's containers, no host, no internet;
 //! - with Chromium host-resolver rules that send the project's hosts to the
 //!   router and resolve every other name, and every IP literal, to nothing;
-//! - trusting the enclave CA through an SPKI pin, never the host trust store.
+//! - trusting the enclave CA through an SPKI pin, never the host trust store;
+//! - with NO DevTools port and no host listener: a host TCP port would hand
+//!   full control of the window, cookies included, to every local process.
+//!   Dev-mode CDP reaches a window only through a per-lane Unix socket the tray
+//!   brokers (the dev-mode broker row).
 //!
 //! @trace spec:host-browser-mcp, spec:browser-isolation-tray-integration, spec:local-web-preview
 
@@ -24,13 +28,6 @@ use tillandsias_browser_mcp::launcher::{
 
 /// The shared router every project's routes go through.
 const ROUTER_CONTAINER: &str = "tillandsias-router";
-/// Chromium's DevTools port inside the container (bound to 127.0.0.1 there).
-const CDP_PORT: u16 = 9222;
-/// The relay in `browser-window-entry.js` that the host port is published to.
-const CDP_RELAY_PORT: u16 = 9223;
-/// Runs the relay, then the image's normal launcher with the same args.
-const WINDOW_ENTRYPOINT: &str =
-    r#"["/usr/bin/node","/usr/local/lib/tillandsias/browser-window-entry.js"]"#;
 /// One window start: the image is present (`--pull=never`), so this is a
 /// wedge detector, not a performance target.
 const RUN_BUDGET: Duration = Duration::from_secs(60);
@@ -158,7 +155,7 @@ fn network_budget() -> Duration {
 }
 
 /// The window's container spec: `build_project_browser_spec` plus the
-/// window's network, the CDP relay publish, the resolver rules and the pin.
+/// window's network, the resolver rules and the pin. Nothing is published.
 pub(crate) fn browser_window_spec(
     url: &str,
     project: &str,
@@ -166,7 +163,6 @@ pub(crate) fn browser_window_spec(
     certs_dir: &Path,
     display: &crate::BrowserDisplayContext,
     ca_spki: &str,
-    cdp_host_port: u16,
 ) -> Result<tillandsias_podman::ContainerSpec, String> {
     Ok(crate::build_project_browser_spec(
         url,
@@ -177,11 +173,6 @@ pub(crate) fn browser_window_spec(
         &handle.container_name,
     )?
     .network(&handle.network_name)
-    .entrypoint(WINDOW_ENTRYPOINT)
-    .publish(format!("127.0.0.1:{cdp_host_port}:{CDP_RELAY_PORT}"))
-    .env("TILLANDSIAS_CDP_RELAY_PORT", CDP_RELAY_PORT.to_string())
-    .env("TILLANDSIAS_CDP_PORT", CDP_PORT.to_string())
-    .arg(format!("--remote-debugging-port={CDP_PORT}"))
     .arg(format!(
         "--host-resolver-rules={}",
         host_resolver_rules(project)
@@ -256,7 +247,6 @@ impl BrowserContainers for TrayBrowserContainers {
                 &certs_dir,
                 &display,
                 &ca_spki,
-                request.cdp_host_port,
             )?
             .build_run_argv()
             .map_err(|e| format!("browser container argv refused: {e}"))?;
@@ -348,7 +338,6 @@ mod tests {
             Path::new("/tmp/ca"),
             &display,
             "PIN=",
-            40000,
         )
         .unwrap()
         .build_run_argv()
@@ -360,7 +349,14 @@ mod tests {
             .map(|w| w[1].as_str())
             .collect();
         assert_eq!(networks, vec!["tillandsias-browser-net-0123456789ab"]);
-        assert!(joined.contains("-p 127.0.0.1:40000:9223"), "{joined}");
+        assert!(
+            !argv.iter().any(|a| a == "-p" || a.starts_with("--publish")),
+            "no host listener: {joined}"
+        );
+        assert!(
+            !joined.contains("--remote-debugging"),
+            "no DevTools port: {joined}"
+        );
         assert!(
             joined.contains("--host-resolver-rules=MAP *.acme.localhost:8080 router:8080"),
             "{joined}"
@@ -507,7 +503,7 @@ mod tests {
             "{{.Names}} {{.Networks}} {{.Ports}}",
         ]);
         println!("podman-ps {ps}");
-        assert!(ps.starts_with(&format!("{name} {net} 127.0.0.1:")), "{ps}");
+        assert!(ps.starts_with(&format!("{name} {net}")), "{ps}");
         let router_nets = live_podman(&[
             "inspect",
             "--format",
@@ -526,48 +522,33 @@ mod tests {
         );
         assert!(contained > 0, "no chromium in the container");
 
-        // The CDP relay, from the HOST: the published loopback port answers
-        // DevTools' /json/version (Chromium itself listens on 127.0.0.1:9222
-        // inside the container).
-        let cdp_port: u16 = ps
-            .split("127.0.0.1:")
-            .nth(1)
-            .and_then(|rest| rest.split("->").next())
-            .and_then(|p| p.parse().ok())
-            .expect("published CDP port");
-        let version = {
-            use std::io::{Read, Write};
-            let mut stream = std::net::TcpStream::connect(("127.0.0.1", cdp_port)).unwrap();
-            stream
-                .set_read_timeout(Some(Duration::from_secs(5)))
-                .unwrap();
-            stream
-                .write_all(
-                    b"GET /json/version HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
-                )
-                .unwrap();
-            let mut body = String::new();
-            let _ = stream.read_to_string(&mut body);
-            body
-        };
-        let browser = version
+        // No host listener: the window publishes nothing, and Chromium opens
+        // no DevTools port (dev-mode CDP is the tray-brokered Unix socket).
+        assert!(!ps.contains("->"), "a port is published: {ps}");
+        let listeners = live_podman(&["exec", &name, "cat", "/proc/net/tcp"]);
+        let listening: Vec<&str> = listeners
             .lines()
-            .find(|l| l.contains("\"Browser\""))
-            .unwrap_or("")
-            .trim()
-            .to_string();
-        println!("host-cdp-relay 127.0.0.1:{cdp_port}/json/version -> {browser}");
-        assert!(browser.contains("Chrome/"), "{version}");
-        // browser.screenshot is NOT asserted: CdpSession writes NUL-framed JSON
-        // to the DevTools HTTP port (the --remote-debugging-pipe framing, not
-        // WebSocket), which no Chromium answers, host or container. Recorded
-        // for the CDP follow-up row.
-        let shot = rt.block_on(call(
-            &server,
-            "browser.screenshot",
-            serde_json::json!({ "window_id": window }),
-        ));
-        println!("browser.screenshot (pre-existing CDP client) -> {shot}");
+            .skip(1)
+            .filter(|l| l.split_whitespace().nth(3) == Some("0A"))
+            .filter_map(|l| l.split_whitespace().nth(1))
+            .collect();
+        println!("window-tcp-listeners {listening:?}");
+        assert!(listening.is_empty(), "the window listens on {listening:?}");
+
+        // The window itself loaded the preview route: the demo dev server saw
+        // its request (Host www.demo.localhost:<port>) before any probe ran.
+        let demo_upstream =
+            std::env::var("TILLANDSIAS_BROWSER_E2E_DEMO_UPSTREAM").expect("harness only");
+        let window_hits = live_podman(&["logs", &demo_upstream]);
+        let window_hit = format!("GET / host=www.demo.localhost:{port}");
+        println!(
+            "window-request {}",
+            window_hits
+                .lines()
+                .find(|l| l.contains(&window_hit))
+                .unwrap_or("NONE")
+        );
+        assert!(window_hits.contains(&window_hit), "{window_hits}");
 
         let probe = crate::podman_command()
             .args([
@@ -599,7 +580,11 @@ mod tests {
                 .unwrap_or("MISSING")
                 .to_string()
         };
-        assert!(verdict("window").contains("PREVIEW-DEMO"), "{probe}");
+        assert_eq!(verdict("window-flags"), "found", "{probe}");
+        assert!(
+            verdict("chromium-preview-route").contains("PREVIEW-DEMO"),
+            "{probe}"
+        );
         assert!(
             verdict("chromium-http-route").contains("PREVIEW-DEMO"),
             "{probe}"

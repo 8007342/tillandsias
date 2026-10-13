@@ -22,8 +22,8 @@ description: >
   Pin browser.open's container path: no host-Chromium lookup or spawn in the
   launcher; the window joins only its own --internal network with a resolver
   catch-all and a CA SPKI pin; the local-preview TLS port is admitted for
-  https only; the router publishes the preview leaf as a full chain; the image
-  carries the CDP relay entry.
+  https only; the router publishes the preview leaf as a full chain; the window opens
+  no host listener and no DevTools port.
 severity: high
 size: instant
 
@@ -52,21 +52,24 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: full-chain leaf"
 
-  - step: "the chromium-framework image carries the CDP relay entry the window starts through; negative control: an image without the COPY must FAIL"
-    command: "set -u; T=target/litmus-browser-open; mkdir -p \"$T\"; F=images/chromium/Containerfile.framework; relay() { grep -qF 'COPY browser-window-entry.js /usr/local/lib/tillandsias/browser-window-entry.js' \"$1\" && test -f images/chromium/browser-window-entry.js && grep -qF '/usr/local/lib/tillandsias/browser-window-entry.js' crates/tillandsias-headless/src/browser_open.rs; }; relay \"$F\" || { echo 'FAIL: the window entry is not shipped'; exit 1; }; grep -vF 'COPY browser-window-entry.js' \"$F\" > \"$T/C\"; if relay \"$T/C\"; then echo 'FAIL: negative control passed'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: window entry shipped; seeded omission caught'"
+  - step: "the window opens no host listener and no DevTools port; negative control: a seeded publish must FAIL"
+    # A host TCP port would hand full control of the window, cookies included,
+    # to every local process. Dev-mode CDP goes through a per-lane Unix socket
+    # the tray brokers (the dev-mode broker row), never a host port.
+    command: "set -u; T=target/litmus-browser-open; mkdir -p \"$T\"; F=crates/tillandsias-headless/src/browser_open.rs; S=$(sed -n '/^pub(crate) fn browser_window_spec/,/^}/p' \"$F\"); printf '%s\\n' \"$S\" > \"$T/spec.rs\"; nolisten() { grep -qF 'fn browser_window_spec' \"$1\" && ! grep -qE '\\.publish\\(|remote-debugging' \"$1\"; }; nolisten \"$T/spec.rs\" || { echo 'FAIL: the window spec publishes a port or opens DevTools'; rm -rf \"$T\"; exit 1; }; printf '%s\\n' '    .publish(\"127.0.0.1:9222:9222\")' >> \"$T/spec.rs\"; if nolisten \"$T/spec.rs\"; then echo 'FAIL: negative control passed'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: no host listener, no DevTools port; seeded publish caught'"
     timeout_ms: 5000
-    expected_behavior: "ok: window entry shipped"
+    expected_behavior: "ok: no host listener, no DevTools port"
 
 observability:
   traces:
     - "@trace spec:host-browser-mcp"
     - "@trace spec:browser-isolation-tray-integration"
     - "@trace spec:local-web-preview"
-  expected_log: "launcher container-only + internal network/resolver/pin + https-only preview port + full-chain leaf + relay entry pinned, each with a seeded negative control"
+  expected_log: "launcher container-only + internal network/resolver/pin + https-only preview port + full-chain leaf + no host listener pinned, each with a seeded negative control"
   log_fields:
     spec: "host-browser-mcp"
     test: "browser-open-container-shape"
-    artifact: "crates/tillandsias-browser-mcp/src/{launcher,allowlist}.rs + crates/tillandsias-headless/src/{browser_open,local_web_preview}.rs + images/chromium/Containerfile.framework"
+    artifact: "crates/tillandsias-browser-mcp/src/{launcher,allowlist}.rs + crates/tillandsias-headless/src/{browser_open,local_web_preview}.rs"
 
 rollback:
   on_failure: >
@@ -75,6 +78,7 @@ rollback:
     `MAP * ~NOTFOUND` catch-all or the SPKI pin lets a window reach other
     projects, the host or the internet, or trust the host store; admitting the
     preview port for http or another port widens the allowlist; a leaf-only
-    preview chain breaks the pin (ERR_CERT_AUTHORITY_INVALID); dropping the
-    entry COPY breaks the window's start. Restore from order 1649-xqet.
-  command: "grep -nE 'Command::new|--internal|NOTFOUND|spki-list|preview_tls_port|fs::write\\(&crt|browser-window-entry' crates/tillandsias-browser-mcp/src/launcher.rs crates/tillandsias-browser-mcp/src/allowlist.rs crates/tillandsias-headless/src/browser_open.rs crates/tillandsias-headless/src/local_web_preview.rs images/chromium/Containerfile.framework"
+    preview chain breaks the pin (ERR_CERT_AUTHORITY_INVALID); a published
+    port or DevTools port hands the window to every local process. Restore
+    from order 1649-xqet.
+  command: "grep -nE 'Command::new|--internal|NOTFOUND|spki-list|preview_tls_port|fs::write\\(&crt|publish|remote-debugging' crates/tillandsias-browser-mcp/src/launcher.rs crates/tillandsias-browser-mcp/src/allowlist.rs crates/tillandsias-headless/src/browser_open.rs crates/tillandsias-headless/src/local_web_preview.rs"

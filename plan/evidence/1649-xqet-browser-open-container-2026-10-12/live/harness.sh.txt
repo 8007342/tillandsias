@@ -71,9 +71,9 @@ podman load -q -i "$S/router.tar" > /dev/null
 podman tag "$SRC_FW" localhost/e2e-fw-base:1
 podman tag "$SRC_ROUTER" "localhost/tillandsias-router:v$VERSION"
 rm -f "$S/fw.tar" "$S/router.tar"
-printf '%s\n' 'FROM localhost/e2e-fw-base:1' 'COPY browser-window-entry.js /usr/local/lib/tillandsias/browser-window-entry.js' > "$S/Containerfile.window"
-guard
-podman build -q -f "$S/Containerfile.window" -t "localhost/tillandsias-chromium-framework:v$VERSION" "$REPO/images/chromium" > "$OUT/window-build.txt" 2>&1 || { cat "$OUT/window-build.txt"; exit 1; }
+# The window image is the installed chromium-framework image, unchanged
+# (1649-xqet ships no image change), tagged as the version the binary expects.
+podman tag "$SRC_FW" "localhost/tillandsias-chromium-framework:v$VERSION"
 log "images: $(podman images --format '{{.Repository}}:{{.Tag}}' | tr '\n' ' ')"
 
 # ---- scratch CA, leaves published as full chains (prepare_tls's new shape) ----
@@ -125,11 +125,11 @@ podman logs tillandsias-router > "$OUT/router.log" 2>&1
 guard
 if [ -n "$ok" ]; then
     TILLANDSIAS_BROWSER_E2E_PREVIEW_PORT=$PORT TILLANDSIAS_BROWSER_E2E_HOST_IP="$HOST_IP" \
-    TILLANDSIAS_BROWSER_E2E_OTHER_UPSTREAM=e2e-other-web \
+    TILLANDSIAS_BROWSER_E2E_OTHER_UPSTREAM=e2e-other-web TILLANDSIAS_BROWSER_E2E_DEMO_UPSTREAM=e2e-demo-web \
         timeout 300 "$BIN" --ignored --nocapture --exact \
         browser_open::tests::live_browser_open_runs_the_container_on_its_own_network > "$OUT/live-test.txt" 2>&1
     log "live-test rc=$?"
-    grep -E '^(host-chrome|host-cdp|browser\.|podman-ps|router-networks|probe|after-close|test )' "$OUT/live-test.txt" | tee -a "$OUT/summary.txt"
+    grep -E '^(host-chrome|window-|browser\.|podman-ps|router-networks|probe|after-close|test )' "$OUT/live-test.txt" | tee -a "$OUT/summary.txt"
     grep -E 'panicked|assert' "$OUT/live-test.txt" | head -5 | tee -a "$OUT/summary.txt"
 fi
 

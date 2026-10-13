@@ -11,13 +11,9 @@
 //! @cheatsheet web/cdp.md
 
 use std::fs;
-use std::io::{Read, Write};
-use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 
-use serde_json::Value;
 use url::Url;
 use uuid::Uuid;
 
@@ -41,8 +37,6 @@ pub struct ContainerLaunchRequest<'a> {
     pub url: &'a Url,
     pub project_label: &'a str,
     pub window_id: &'a str,
-    /// Host loopback port the container's CDP relay is published on.
-    pub cdp_host_port: u16,
 }
 
 /// A started browser window, as the host names it.
@@ -65,10 +59,6 @@ pub trait BrowserContainers: Send + Sync {
     fn preview_tls_port(&self) -> Option<u16>;
     fn start(&self, request: &ContainerLaunchRequest<'_>) -> Result<ContainerHandle, LaunchError>;
     fn stop(&self, handle: &ContainerHandle);
-    /// How long to wait for the container's CDP relay to list a target.
-    fn cdp_probe_budget(&self) -> Duration {
-        CDP_PROBE_BUDGET
-    }
 }
 
 /// A running window's container. Dropping it stops the container, so a
@@ -110,61 +100,6 @@ pub enum LaunchMode {
     Unavailable,
 }
 
-fn reserve_port() -> Result<u16, std::io::Error> {
-    let listener = TcpListener::bind(("127.0.0.1", 0))?;
-    let port = listener.local_addr()?.port();
-    drop(listener);
-    Ok(port)
-}
-
-/// A container start (image already present) takes seconds, not the
-/// 1.5 s the host binary needed.
-const CDP_PROBE_BUDGET: Duration = Duration::from_secs(20);
-
-fn cdp_http_list(port: u16, budget: Duration) -> Result<Option<(String, String)>, LaunchError> {
-    let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    let deadline = Instant::now() + budget;
-    while Instant::now() < deadline {
-        let attempt =
-            TcpStream::connect_timeout(&addr, Duration::from_millis(150)).and_then(|mut stream| {
-                stream.set_read_timeout(Some(Duration::from_millis(500)))?;
-                stream.set_write_timeout(Some(Duration::from_millis(500)))?;
-                stream.write_all(
-                    b"GET /json/list HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
-                )?;
-                let mut response = String::new();
-                stream.read_to_string(&mut response)?;
-                Ok(response)
-            });
-        // The relay accepts before Chromium listens, and then closes the
-        // connection with nothing written: retry until a target appears.
-        if let Ok(response) = attempt {
-            let body = response
-                .split_once("\r\n\r\n")
-                .map(|(_, body)| body)
-                .unwrap_or("");
-            if let Ok(parsed) = serde_json::from_str::<Value>(body)
-                && let Some(first) = parsed.as_array().and_then(|items| items.first())
-            {
-                let target_id = first
-                    .get("id")
-                    .and_then(|value| value.as_str())
-                    .unwrap_or("unknown")
-                    .to_string();
-                let title = first
-                    .get("title")
-                    .and_then(|value| value.as_str())
-                    .unwrap_or("browser")
-                    .to_string();
-                return Ok(Some((target_id, title)));
-            }
-        }
-        std::thread::sleep(Duration::from_millis(250));
-    }
-
-    Ok(None)
-}
-
 fn default_title(url: &Url) -> String {
     url.host_str().unwrap_or("browser").to_string()
 }
@@ -185,23 +120,28 @@ pub fn launch(
             default_title(url),
             PathBuf::new(),
         ),
+        // No DevTools port: a host TCP listener would hand full control of
+        // the window, cookies included, to every local process. Dev-mode CDP
+        // goes through a per-lane Unix socket the tray brokers (follow-up
+        // row); until then cdp_port 0 makes the CDP tools answer typed errors.
         LaunchMode::Container(host) => {
-            let cdp_port = reserve_port()?;
             let handle = host.start(&ContainerLaunchRequest {
                 url,
                 project_label,
                 window_id: &window_id,
-                cdp_host_port: cdp_port,
             })?;
             let profile_dir = handle.profile_dir.clone();
             let running = RunningContainer {
                 handle,
                 host: Arc::clone(host),
             };
-            let probe = cdp_http_list(cdp_port, host.cdp_probe_budget()).unwrap_or(None);
-            let (target_id, title) =
-                probe.unwrap_or_else(|| (format!("{window_id}-target"), default_title(url)));
-            (Some(running), cdp_port, target_id, title, profile_dir)
+            (
+                Some(running),
+                0,
+                format!("{window_id}-target"),
+                default_title(url),
+                profile_dir,
+            )
         }
     };
 

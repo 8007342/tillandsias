@@ -1605,7 +1605,7 @@ mod tests {
     /// A host launcher that records what it was asked and starts nothing.
     #[derive(Default)]
     struct RecordingContainers {
-        starts: parking_lot::Mutex<Vec<(String, String, u16)>>,
+        starts: parking_lot::Mutex<Vec<(String, String)>>,
         stops: parking_lot::Mutex<Vec<String>>,
         preview_tls_port: Option<u16>,
     }
@@ -1618,11 +1618,9 @@ mod tests {
             &self,
             request: &launcher::ContainerLaunchRequest<'_>,
         ) -> Result<launcher::ContainerHandle, LaunchError> {
-            self.starts.lock().push((
-                request.url.to_string(),
-                request.project_label.to_string(),
-                request.cdp_host_port,
-            ));
+            self.starts
+                .lock()
+                .push((request.url.to_string(), request.project_label.to_string()));
             Ok(launcher::ContainerHandle {
                 container_name: format!("tillandsias-browser-{}-1", request.project_label),
                 network_name: "tillandsias-browser-net-1".to_string(),
@@ -1631,9 +1629,6 @@ mod tests {
         }
         fn stop(&self, handle: &launcher::ContainerHandle) {
             self.stops.lock().push(handle.container_name.clone());
-        }
-        fn cdp_probe_budget(&self) -> Duration {
-            Duration::ZERO
         }
     }
 
@@ -1679,7 +1674,6 @@ mod tests {
             assert_eq!(starts.len(), 1);
             assert_eq!(starts[0].0, "https://www.acme.localhost:18443/");
             assert_eq!(starts[0].1, "acme");
-            assert_ne!(starts[0].2, 0, "a host loopback CDP port is reserved");
         }
         assert!(host.stops.lock().is_empty());
         let closed = server

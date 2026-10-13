@@ -5,26 +5,29 @@
 'use strict';
 const net = require('net');
 const dns = require('dns');
-const http = require('http');
 const https = require('https');
 
 const PORT = process.env.PROBE_PREVIEW_PORT;
 const HOST_IP = process.env.PROBE_HOST_IP;
 const OTHER_UPSTREAM = process.env.PROBE_OTHER_UPSTREAM;
 
-function devtools(method, path) {
-  return new Promise((resolve) => {
-    const req = http.request({ host: '127.0.0.1', port: 9222, method, path }, (res) => {
-      let body = '';
-      res.on('data', (c) => (body += c));
-      res.on('end', () => {
-        try { resolve(JSON.parse(body)); } catch { resolve(null); }
-      });
-    });
-    req.on('error', () => resolve(null));
-    req.end();
-  });
+const fs = require('fs');
+const { spawnSync } = require('child_process');
+
+// The window has no DevTools port (no host listener, by design). Chromium-
+// level checks run a headless Chromium IN THIS container with the WINDOW'S
+// OWN resolver rules and CA pin, read from its command line.
+function windowFlags() {
+  for (const pid of fs.readdirSync('/proc').filter((p) => /^\d+$/.test(p))) {
+    let argv;
+    try { argv = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0'); } catch { continue; }
+    const rules = argv.find((a) => a.startsWith('--host-resolver-rules='));
+    const pin = argv.find((a) => a.startsWith('--ignore-certificate-errors-spki-list='));
+    if (rules && pin) return [rules, pin];
+  }
+  return [];
 }
+const FLAGS = windowFlags();
 
 function tcp(label, host, port) {
   return new Promise((resolve) => {
@@ -60,27 +63,24 @@ function rawRouter(label, host) {
   });
 }
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Open a tab in THIS browser and report what it rendered: the title is the
-// page's <title> when the route loaded, Chromium's error page otherwise.
-async function browse(label, url) {
-  const target = await devtools('PUT', `/json/new?${url}`);
-  await sleep(4000);
-  const list = (await devtools('GET', '/json/list')) || [];
-  const seen = list.find((t) => target && t.id === target.id);
-  console.log(`${label} title=${JSON.stringify(seen ? seen.title : null)}`);
+function browse(label, url) {
+  const r = spawnSync('/usr/local/bin/chromium-framework-launch.sh',
+    ['--headless=new', '--disable-gpu', `--user-data-dir=/tmp/probe-${label}`, ...FLAGS,
+     '--virtual-time-budget=4000', '--dump-dom', url], { encoding: 'utf8', timeout: 40000 });
+  const m = (r.stdout || '').match(/<title>([^<]*)<\/title>/);
+  const err = ((r.stderr || '').match(/ERR_[A-Z_]+/) || [null])[0];
+  console.log(`${label} title=${JSON.stringify(m ? m[1] : null)} error=${err}`);
 }
 
 (async () => {
-  const pages = (await devtools('GET', '/json/list')) || [];
-  const first = pages.find((t) => t.type === 'page');
-  console.log(`window title=${JSON.stringify(first ? first.title : null)} url=${first ? first.url : null}`);
-  await browse('chromium-http-route', 'http://web.demo.localhost:8080/');
-  await browse('chromium-other-project', `https://www.other.localhost:${PORT}/`);
-  await browse('chromium-external-name', 'https://example.com/');
-  await browse('chromium-external-ip', 'http://1.1.1.1/');
-  await browse('chromium-host-ip', `http://${HOST_IP}:5355/`);
+  console.log(`window-flags ${FLAGS.length === 2 ? 'found' : 'MISSING'}`);
+  browse('chromium-preview-route', `https://www.demo.localhost:${PORT}/`);
+  browse('chromium-http-route', 'http://web.demo.localhost:8080/');
+  browse('chromium-other-project', `https://www.other.localhost:${PORT}/`);
+  browse('chromium-external-name', 'https://example.com/');
+  browse('chromium-external-ip', 'http://1.1.1.1/');
+  browse('chromium-host-ip', `http://${HOST_IP}:5355/`);
   await tcp('net-route', 'router', 8443);
   await tcp('net-other-project-upstream', OTHER_UPSTREAM, 3000);
   await tcp('net-external-name', 'example.com', 443);
