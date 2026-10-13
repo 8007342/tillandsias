@@ -131,7 +131,8 @@ fs.write(REL .. "/harness.sh", table.concat({
     -- no real tasklist.exe: a Windows host's own git.exe must not decide an arm
     'P=""; IFS=: read -r -a _ds <<< "$PATH"',
     'for d in "${_ds[@]}"; do [ -e "$d/tasklist.exe" ] || P="${P:+$P:}$d"; done',
-    '[ -z "$FAKE" ] || P="$FAKE:$P"',
+    -- cd+pwd: on MSYS the root is C:/..., whose colon would split PATH
+    '[ -z "$FAKE" ] || P="$(cd "$FAKE" && pwd):$P"',
     'PATH="$P"; export PATH',
     '. "$FN"',
     'D="$R/run"; mkdir -p "$D"; : > "$D/start"',
