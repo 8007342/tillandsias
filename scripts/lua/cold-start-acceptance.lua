@@ -28,6 +28,16 @@
 -- Usage:
 --   tillandsias-plan script run scripts/lua/cold-start-acceptance.lua --timeout 180m -- \
 --       --privileged-podman-in-podman <release-tag> [--expect-prefix-failure] [--keep]
+--       [--project-ref <commit>|latest]
+--
+-- THE FIXTURE IS PINNED (order 1663-6mns, after the v56.10.13.1 run): the forge
+-- gets macron.dev's UPSTREAM default branch through the git mirror, so a moving
+-- upstream would silently change what PASS means. The driver records the commit
+-- the forge actually holds and, unless --project-ref latest, refuses to judge a
+-- release against anything but PINNED_PROJECT_REF:
+--   blocked:cold-start-acceptance:project-moved:pinned=<x>:forge=<y>   exit 2
+-- (a fixture fact, not a release verdict). Re-pin deliberately, after a run on
+-- the new commit.
 --
 -- Substrate: the outer container's podman store lives under
 -- target/work/cold-start-acceptance/<run>/ (gitignored, inside the checkout).
@@ -52,16 +62,26 @@
 --   ok:cold-start-acceptance:<tag>:served:<url>:http=200:lakanoa-shape=built-nested-served:router-failure=step-qualified:recovered   exit 0
 --   ok:cold-start-acceptance:<tag>:prefix-failure:<reason>                                          exit 0
 --   refused:cold-start-acceptance:<what>                                                             exit 1
+--   blocked:cold-start-acceptance:project-moved:pinned=<x>:forge=<y>                                exit 2
 --   skip:cold-start-acceptance:opt-in-required                                                       exit 0
 
 local OPT_IN = "--privileged-podman-in-podman"
-local opted, tag, expect_prefix, keep = false, nil, false, false
-for i = 1, #arg do
+-- macron.dev at "Build Mācron workshop landing page…" (2026-10-13): a root
+-- wrangler.jsonc with assets ./public and ~40 MB of images under assets/.
+local PINNED_PROJECT_REF = "e04a3293dbcd55a1c85d3967ac8b5e712716c15d"
+local opted, tag, expect_prefix, keep, project_ref = false, nil, false, false, PINNED_PROJECT_REF
+local i = 1
+while i <= #arg do
     local a = arg[i]
     if a == OPT_IN then opted = true
     elseif a == "--expect-prefix-failure" then expect_prefix = true
     elseif a == "--keep" then keep = true
+    elseif a == "--project-ref" then i = i + 1; project_ref = arg[i] or ""
     elseif a:sub(1, 2) ~= "--" then tag = a end
+    i = i + 1
+end
+if project_ref ~= "latest" and not project_ref:match("^%x+$") then
+    verdict.emit("refused:cold-start-acceptance:usage — --project-ref takes a commit sha or latest", 1)
 end
 if not opted then
     verdict.emit("skip:cold-start-acceptance:opt-in-required — pass " .. OPT_IN .. " <release-tag>", 0)
@@ -286,6 +306,47 @@ exit 1
 fs.write(OUT .. "/launch.txt", launch.stdout or "")
 if launch.code ~= 0 then fail("launch") end
 log_line(text.trim(launch.stdout or ""):gsub("\n", " | "))
+
+-- ── 6b. the forge's live source: at forge-up, hydrated, at publish ──────────
+-- Order 1663-6mns (v56.10.13.1 run): the driver used to publish the moment the
+-- forge's NAME appeared, while the forge entrypoint was still cloning the
+-- project from the mirror into its RAM workspace. With a ~40 MB checkout
+-- publish_local answered "source_not_found". Record the state the old driver
+-- published into, including the forge's clone and HOT-budget log lines, then
+-- wait for the checkout like an agent would, then record it again.
+local function forge_source_state(label)
+    local r = inside([[
+f=$(podman ps --format '{{.Names}}' --filter 'name=macron.*-forge')
+echo "== ]] .. label .. [[ $(date -u +%H:%M:%S)"
+podman exec "$f" sh -c 'if cd /home/forge/src/macron.dev 2>/dev/null; then echo "head=$(git rev-parse HEAD 2>/dev/null || echo none) tracked=$(git ls-files 2>/dev/null | wc -l) wrangler=$(test -f wrangler.jsonc && echo yes || echo no) public_index=$(test -f public/index.html && echo yes || echo no) du=$(du -sh . 2>/dev/null | cut -f1)"; else echo "no /home/forge/src/macron.dev yet"; fi; df -h /home/forge/src 2>/dev/null | tail -1'
+echo "-- forge log (clone, mirror, budget):"
+podman logs "$f" 2>&1 | grep -iE 'git-mirror|budget|clone|hot|FATAL|\[forge\]' | tail -40
+]])
+    return r.stdout or ""
+end
+local at_up = forge_source_state("at forge-up (where the pre-1663-pin driver published)")
+local hydrate = inside([[
+f=$(podman ps --format '{{.Names}}' --filter 'name=macron.*-forge')
+for i in $(seq 1 120); do
+  if podman exec "$f" sh -c 'test -f /home/forge/src/macron.dev/wrangler.jsonc && git -C /home/forge/src/macron.dev rev-parse --verify -q HEAD' >/dev/null 2>&1; then
+    echo "source hydrated $((i*5 - 5))s after forge-up"; exit 0
+  fi
+  sleep 5
+done
+echo "source NOT hydrated 600s after forge-up"; exit 1
+]], { timeout_ms = 700000 })
+local at_publish = forge_source_state("at publish")
+fs.write(OUT .. "/forge-source.txt", at_up .. "\n" .. (hydrate.stdout or "") .. "\n" .. at_publish)
+log_line("forge source: " .. text.trim(hydrate.stdout or "") .. "; at forge-up: " ..
+    (at_up:match("head=[^\n]*") or at_up:match("no /home/forge/src/macron.dev yet") or "?"))
+if hydrate.code ~= 0 then fail("forge-source-not-hydrated (see forge-source.txt)") end
+local forge_head = at_publish:match("head=(%x+)") or "none"
+log_line("project: forge holds " .. forge_head .. ", pinned " .. project_ref)
+if project_ref ~= "latest" and forge_head:sub(1, #project_ref) ~= project_ref then
+    log_line("BLOCKED: project-moved")
+    if not keep then down() end
+    verdict.emit("blocked:cold-start-acceptance:project-moved:pinned=" .. project_ref .. ":forge=" .. forge_head, 2)
+end
 
 -- ── 7. MCP from inside the forge, then a host-side fetch ────────────────────
 local function mcp(calls)
