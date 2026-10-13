@@ -101,12 +101,34 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: window lookups check the owning lane, raw CDP is dev-gated"
 
+  - step: "a WebKit window reaches only its project: a loopback-only relay (127.0.0.1 and ::1) to its forwarder, exactly the project's two names, the enclave CA as its read-only bundle, TLS always verified; negative control: a relay bound to 0.0.0.0 must FAIL"
+    # Order 1656-tjv4. WebKitGTK resolves every *.localhost name to loopback
+    # through GLib and ignores /etc/hosts for them, hence the relay; the
+    # binding stays the forwarder's SNI check plus strict_sni_host. Measured
+    # live: own project 200, another project refused at the forwarder, an
+    # outside name and a raw IP fail, a foreign-CA cert is rejected.
+    command: "set -u; T=target/litmus-browser-open; mkdir -p \"$T\"; R=crates/tillandsias-headless/src/browser_open.rs; W=images/webkit/webkit-window.js; confined() { grep -qF \"for (const host of ['127.0.0.1', '::1'])\" \"$1\" && ! grep -qE \"0\\.0\\.0\\.0|ignoreHTTPSErrors *:\" \"$1\" && grep -qF 'format!(\"www.{project}.localhost\"),' \"$R\" && grep -qF 'format!(\"web.{project}.localhost\"),' \"$R\" && [ \"$(grep -c 'spec = spec.add_host(' \"$R\")\" = 1 ] && grep -qF '\"/etc/ssl/certs/ca-certificates.crt\",' \"$R\" && grep -qF '\"TILLANDSIAS_WEBKIT_RELAY\",' \"$R\"; }; confined \"$W\" || { echo 'FAIL: the WebKit window lost its loopback-only relay, its two project names, its CA bundle, or verifies TLS no more'; rm -rf \"$T\"; exit 1; }; sed \"s/'127.0.0.1', '::1'/'0.0.0.0'/\" \"$W\" > \"$T/w.js\"; if confined \"$T/w.js\"; then echo 'FAIL: negative control passed'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: WebKit window confined (loopback relay only, project names only, enclave CA bundle, TLS verified); seeded 0.0.0.0 relay caught'"
+    timeout_ms: 5000
+    expected_behavior: "ok: WebKit window confined"
+
+  - step: "the WebKit image is pinned (Ubuntu base by digest, Node and the WebKit build by sha256), uses no Playwright browser downloader and sets no USER; negative control: a Containerfile running playwright install webkit must FAIL"
+    # Order 1656-tjv4. No USER: under --userns=keep-id an explicit USER cannot
+    # write the owner-only Wayland socket (measured: GTK "Failed to open display").
+    command: "set -u; T=target/litmus-browser-open; mkdir -p \"$T\"; F=images/webkit/Containerfile; pinned() { grep -qE '^FROM docker\\.io/library/ubuntu:24\\.04@sha256:[0-9a-f]{64}$' \"$1\" && [ \"$(grep -c 'sha256sum -c -' \"$1\")\" = 2 ] && grep -qE '^ARG WEBKIT_SHA256=[0-9a-f]{64}$' \"$1\" && grep -qE '^ARG NODE_SHA256=[0-9a-f]{64}$' \"$1\" && ! grep -qE 'playwright install (webkit|chromium|firefox|--with-deps)' \"$1\" && ! grep -qE '^USER ' \"$1\"; }; pinned \"$F\" || { echo 'FAIL: the WebKit image lost a pin (base digest, node or WebKit sha256), uses the Playwright browser downloader, or sets USER'; rm -rf \"$T\"; exit 1; }; { cat \"$F\"; echo 'RUN playwright install webkit'; } > \"$T/Containerfile\"; if pinned \"$T/Containerfile\"; then echo 'FAIL: negative control passed'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: WebKit image pinned by digest and sha256, no browser downloader, no USER; seeded downloader caught'"
+    timeout_ms: 5000
+    expected_behavior: "ok: WebKit image pinned by digest and sha256"
+
+  - step: "the WebKit engine is labelled 'WebKit (approximates Safari)', never Safari alone; negative control: a bare 'Safari' label must FAIL"
+    command: "set -u; T=target/litmus-browser-open; mkdir -p \"$T\"; L=crates/tillandsias-browser-mcp/src/launcher.rs; labelled() { grep -qF 'Engine::WebKit => \"WebKit (approximates Safari)\",' \"$1\" && ! grep -qE '=> \"Safari\",' \"$1\"; }; labelled \"$L\" || { echo 'FAIL: the WebKit engine is not labelled \"WebKit (approximates Safari)\"'; rm -rf \"$T\"; exit 1; }; sed 's/Engine::WebKit => \"WebKit (approximates Safari)\",/Engine::WebKit => \"Safari\",/' \"$L\" > \"$T/l.rs\"; if labelled \"$T/l.rs\"; then echo 'FAIL: negative control passed'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: WebKit labelled \"WebKit (approximates Safari)\"; seeded \"Safari\" label caught'"
+    timeout_ms: 5000
+    expected_behavior: "ok: WebKit labelled"
+
 observability:
   traces:
     - "@trace spec:host-browser-mcp"
     - "@trace spec:browser-isolation-tray-integration"
     - "@trace spec:local-web-preview"
-  expected_log: "launcher container-only + internal network/resolver/pin + https-only preview port + full-chain leaf + no host listener + SNI-bound forwarder + strict_sni_host + CDP pipe relay + device emulation + owning-lane dev-mode CDP pinned, each with a seeded negative control"
+  expected_log: "launcher container-only + internal network/resolver/pin + https-only preview port + full-chain leaf + no host listener + SNI-bound forwarder + strict_sni_host + CDP pipe relay + device emulation + owning-lane dev-mode CDP + confined, pinned, labelled WebKit window pinned, each with a seeded negative control"
   log_fields:
     spec: "host-browser-mcp"
     test: "browser-open-container-shape"

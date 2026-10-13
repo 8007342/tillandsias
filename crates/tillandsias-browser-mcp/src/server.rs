@@ -6,10 +6,10 @@
 use crate::allowlist::{self, BrowserAllowlist};
 use crate::cdp_client::CdpError;
 use crate::framing::{RpcRequest, RpcResponse};
-use crate::launcher::{self, BrowserContainers, LaunchError, LaunchMode};
+use crate::launcher::{self, BrowserContainers, Engine, LaunchError, LaunchMode};
 use crate::window_cdp::{DeviceEmulation, WindowCdp};
 use crate::window_registry::{DebounceTable, WindowRegistry, close_window};
-use base64::Engine;
+use base64::Engine as _;
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
@@ -205,11 +205,18 @@ impl BrowserMcpServer {
                 id,
                 format!("WINDOW_NOT_FOUND: {window_id}"),
             )),
-            Some((None, _)) => Err(Self::tool_error(
+            Some((None, _, Engine::WebKit)) => Err(Self::tool_error(
+                id,
+                format!(
+                    "ENGINE_UNSUPPORTED: this tool needs CDP, and a {} window speaks the Playwright protocol; engine-neutral tools are order 1656-twhk",
+                    Engine::WebKit.label()
+                ),
+            )),
+            Some((None, _, Engine::Chromium)) => Err(Self::tool_error(
                 id,
                 "WINDOW_NOT_RUNNING: the window has no CDP session (fake launch mode)",
             )),
-            Some((Some(cdp), dev)) => match cdp.main_session() {
+            Some((Some(cdp), dev, _)) => match cdp.main_session() {
                 Some(page) => Ok((cdp, page, dev)),
                 None => Err(Self::tool_error(
                     id,
@@ -338,6 +345,11 @@ impl BrowserMcpServer {
                         "url": {
                             "type": "string",
                             "description": "The URL to open (must match allowlist: <service>.<project>.localhost:8080, or https on the local-preview port, e.g. https://www.<project>.localhost:18443)"
+                        },
+                        "engine": {
+                            "type": "string",
+                            "enum": ["chromium", "webkit"],
+                            "description": "The engine: default is the device's (Apple presets open in \"WebKit (approximates Safari)\", everything else in Chromium). \"chromium\" emulates any preset in Chromium."
                         },
                         "dev": {
                             "type": "boolean",
@@ -604,6 +616,7 @@ impl BrowserMcpServer {
             .unwrap_or(false);
 
         // Order 1655-urz9: resolve the device before anything starts.
+        // Order 1656-tjv4: and the engine, from the device or `engine`.
         let device_query = args
             .get("device")
             .and_then(|value| value.as_str())
@@ -612,6 +625,27 @@ impl BrowserMcpServer {
             Ok(device) => device,
             Err(err) => return Self::tool_error(id, err),
         };
+        let engine = match args.get("engine").and_then(|value| value.as_str()) {
+            None => Engine::for_device(&device.engine),
+            Some(name) => match Engine::parse(name) {
+                Some(engine) => engine,
+                None => {
+                    return Self::tool_error(
+                        id,
+                        format!("ENGINE_UNKNOWN: {name:?}; use \"chromium\" or \"webkit\""),
+                    );
+                }
+            },
+        };
+        if dev && engine == Engine::WebKit {
+            return Self::tool_error(
+                id,
+                format!(
+                    "ENGINE_UNSUPPORTED: development mode is CDP, and a {} window speaks the Playwright protocol (order 1656-twhk); open it with engine: \"chromium\" for dev mode",
+                    Engine::WebKit.label()
+                ),
+            );
+        }
 
         if let Some((elapsed, existing_window_id)) =
             self.debounce.get(&self.project_label, &allowed.host)
@@ -633,6 +667,7 @@ impl BrowserMcpServer {
             &self.launch_mode,
             &device,
             dev,
+            engine,
         ) {
             Ok(entry) => entry,
             Err(LaunchError::BrowserUnavailable) => {
@@ -659,6 +694,7 @@ impl BrowserMcpServer {
                 "window_id": window_id,
                 "device": device.summary(),
                 "dev": dev,
+                "engine": engine.label(),
             }),
         }
     }
@@ -846,7 +882,8 @@ impl BrowserMcpServer {
                 json!({
                     "window_id": window.window_id,
                     "url": window.url,
-                    "title": window.title
+                    "title": window.title,
+                    "engine": window.engine
                 })
             })
             .collect::<Vec<_>>();
@@ -876,7 +913,8 @@ impl BrowserMcpServer {
                 id,
                 result: json!({
                     "url": window.url,
-                    "title": window.title
+                    "title": window.title,
+                    "engine": window.engine
                 }),
             },
             None => Self::tool_error(id, format!("WINDOW_NOT_FOUND: {window_id}")),
@@ -2271,7 +2309,7 @@ mod tests {
         let opened = call_tool(
             &server,
             "browser.open",
-            json!({ "url": url, "device": "iphone 12 pro max" }),
+            json!({ "url": url, "device": "iphone 12 pro max", "engine": "chromium" }),
         )
         .await;
         assert_eq!(
@@ -2543,5 +2581,93 @@ mod tests {
             text.contains("cookies") && text.contains("owning lane"),
             "browser.cdp must state that full CDP exposes the window's session cookies to the owning lane: {cdp}"
         );
+    }
+
+    // ---- Order 1656-tjv4: Apple presets open in "WebKit (approximates Safari)" ----
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn an_apple_preset_opens_the_webkit_engine_with_no_cdp_and_says_so() {
+        let host = Arc::new(CdpContainers::default());
+        let server = lane_server(&host);
+        let opened = call_tool(
+            &server,
+            "browser.open",
+            json!({ "url": "https://www.acme.localhost:18443/", "device": "iphone 15" }),
+        )
+        .await;
+        assert_eq!(opened["engine"], "WebKit (approximates Safari)", "{opened}");
+        assert_eq!(opened["device"]["id"], "apple-iphone-15");
+        assert!(
+            host.seen.lock().is_empty(),
+            "no CDP session for a WebKit window"
+        );
+        let window = opened["window_id"].as_str().unwrap().to_string();
+        let listed = call_tool(&server, "browser.list_windows", json!({})).await;
+        assert_eq!(
+            listed["windows"][0]["engine"],
+            "WebKit (approximates Safari)"
+        );
+        for (tool, args) in [
+            ("browser.screenshot", json!({ "window_id": window })),
+            (
+                "browser.set_device",
+                json!({ "window_id": window, "device": "galaxy s24" }),
+            ),
+        ] {
+            let got = call_tool(&server, tool, args).await;
+            let text = tool_text(&got);
+            assert!(
+                text.starts_with("ENGINE_UNSUPPORTED:")
+                    && text.contains("WebKit (approximates Safari)"),
+                "{tool}: {got}"
+            );
+        }
+        // The same preset can still be emulated in Chromium, over CDP (a
+        // fresh lane: the same host would be debounced to the first window).
+        let host2 = Arc::new(CdpContainers::default());
+        let chromium = call_tool(
+            &lane_server(&host2),
+            "browser.open",
+            json!({ "url": "https://www.acme.localhost:18443/", "device": "iphone 15", "engine": "chromium" }),
+        )
+        .await;
+        assert_eq!(chromium["engine"], "Chromium", "{chromium}");
+    }
+
+    #[tokio::test]
+    async fn dev_mode_on_webkit_and_unknown_engines_are_refused_before_anything_starts() {
+        let server = test_server_fake_launch(None);
+        let got = |v: serde_json::Value| v["content"][0]["text"].as_str().unwrap_or("").to_string();
+        let dev = call_tool(
+            &server,
+            "browser.open",
+            json!({ "url": "http://web.acme.localhost:8080/", "device": "iphone 15", "dev": true }),
+        )
+        .await;
+        assert!(got(dev.clone()).starts_with("ENGINE_UNSUPPORTED:"), "{dev}");
+        let unknown = call_tool(
+            &server,
+            "browser.open",
+            json!({ "url": "http://web.acme.localhost:8080/", "engine": "gecko" }),
+        )
+        .await;
+        assert!(
+            got(unknown.clone()).starts_with("ENGINE_UNKNOWN:"),
+            "{unknown}"
+        );
+    }
+
+    /// The engine's name is never "Safari" alone.
+    #[test]
+    fn the_webkit_label_never_says_safari_alone() {
+        use crate::launcher::Engine;
+        let label = Engine::WebKit.label();
+        assert_eq!(label, "WebKit (approximates Safari)");
+        assert!(!label.trim().eq_ignore_ascii_case("safari"));
+        assert!(label.contains("WebKit"));
+        assert_eq!(Engine::for_device("webkit"), Engine::WebKit);
+        assert_eq!(Engine::for_device("blink"), Engine::Chromium);
+        assert_eq!(Engine::for_device("gecko"), Engine::Chromium);
     }
 }

@@ -34,6 +34,43 @@ pub enum LaunchError {
     Io(#[from] std::io::Error),
 }
 
+/// The engine a window runs (order 1656-tjv4). Its user-facing name is
+/// `label()`, everywhere: WebKit is never called Safari alone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Engine {
+    Chromium,
+    WebKit,
+}
+
+impl Engine {
+    /// The name a user sees.
+    pub fn label(self) -> &'static str {
+        match self {
+            Engine::Chromium => "Chromium",
+            Engine::WebKit => "WebKit (approximates Safari)",
+        }
+    }
+
+    /// The engine a catalogue device asks for: Apple presets are webkit.
+    /// Gecko presets run in Chromium until a Gecko engine exists.
+    pub fn for_device(catalogue_engine: &str) -> Self {
+        if catalogue_engine == "webkit" {
+            Engine::WebKit
+        } else {
+            Engine::Chromium
+        }
+    }
+
+    /// `browser.open{engine}`: an explicit choice overrides the device's.
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "chromium" | "blink" => Some(Engine::Chromium),
+            "webkit" => Some(Engine::WebKit),
+            _ => None,
+        }
+    }
+}
+
 /// What the host needs to start one browser window.
 #[derive(Debug, Clone)]
 pub struct ContainerLaunchRequest<'a> {
@@ -43,6 +80,11 @@ pub struct ContainerLaunchRequest<'a> {
     /// The window's size at launch: the device's CSS viewport, in host DIPs
     /// (order 1655-urz9).
     pub window_size: (u32, u32),
+    /// The engine to start (order 1656-tjv4).
+    pub engine: Engine,
+    /// The device, as Playwright context options: what a WebKit window
+    /// emulates (a Chromium window gets it over CDP instead).
+    pub playwright_context: serde_json::Value,
 }
 
 /// A started browser window, as the host names it.
@@ -129,6 +171,7 @@ pub fn launch(
     mode: &LaunchMode,
     device: &DeviceEmulation,
     dev: bool,
+    engine: Engine,
 ) -> Result<WindowEntry, LaunchError> {
     let window_id = format!("win-{}", Uuid::new_v4());
     let (container, cdp, title, user_data_dir) = match mode {
@@ -143,12 +186,21 @@ pub fn launch(
                 project_label,
                 window_id: &window_id,
                 window_size: device.window_size(),
+                engine,
+                playwright_context: device.playwright_context(),
             })?;
             let profile_dir = handle.profile_dir.clone();
             let socket = handle.cdp_socket.clone();
             let running = RunningContainer {
                 handle,
                 host: Arc::clone(host),
+            };
+            // A WebKit window speaks the Playwright protocol, never CDP
+            // (1656-tjv4); whatever the host returned, no CDP session.
+            let socket = if engine == Engine::WebKit {
+                None
+            } else {
+                socket
             };
             let cdp = match socket {
                 Some(socket) => {
@@ -174,6 +226,7 @@ pub fn launch(
         title,
         owning_lane: String::new(),
         dev,
+        engine,
         cdp,
         container,
         created_at: now,

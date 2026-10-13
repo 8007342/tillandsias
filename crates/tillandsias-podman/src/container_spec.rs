@@ -112,6 +112,10 @@ pub struct ContainerSpec {
     mounts: Vec<MountSpec>,
     tmpfs: Vec<String>,
     devices: Vec<String>,
+    /// `--add-host` entries, typed rather than a passthrough option (order
+    /// 1656-tjv4): a WebKit window maps exactly its project's names to its
+    /// forwarder. Only a validated hostname and a parsed IP get here.
+    hosts: Vec<(String, std::net::IpAddr)>,
     options: Vec<String>,
     publish: Vec<String>,
     entrypoint: Option<String>,
@@ -144,6 +148,7 @@ impl ContainerSpec {
             mounts: Vec::new(),
             tmpfs: Vec::new(),
             devices: Vec::new(),
+            hosts: Vec::new(),
             options: Vec::new(),
             publish: Vec::new(),
             entrypoint: None,
@@ -275,6 +280,28 @@ impl ContainerSpec {
         self
     }
 
+    /// Map one hostname to one IP in the container's /etc/hosts. A name that
+    /// is not a plain DNS hostname is refused, so nothing but `name:ip` can
+    /// reach the argv.
+    pub fn add_host(mut self, host: &str, ip: std::net::IpAddr) -> Result<Self, String> {
+        let valid = !host.is_empty()
+            && host.len() <= 253
+            && host.split('.').all(|label| {
+                !label.is_empty()
+                    && label.len() <= 63
+                    && label
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+                    && !label.starts_with('-')
+                    && !label.ends_with('-')
+            });
+        if !valid {
+            return Err(format!("add_host: not a hostname: {host:?}"));
+        }
+        self.hosts.push((host.to_ascii_lowercase(), ip));
+        Ok(self)
+    }
+
     pub fn entrypoint(mut self, value: impl Into<String>) -> Self {
         self.entrypoint = Some(value.into());
         self
@@ -382,6 +409,10 @@ impl ContainerSpec {
         for device in &self.devices {
             args.push("--device".to_string());
             args.push(device.clone());
+        }
+
+        for (host, ip) in &self.hosts {
+            args.push(format!("--add-host={host}:{ip}"));
         }
 
         args.extend(self.options.iter().cloned());
@@ -696,5 +727,21 @@ mod tests {
         assert_eq!(handle.name(), "tillandsias-example");
         assert_eq!(handle.image(), "example:v1");
         assert_eq!(handle.spec(), &spec);
+    }
+
+    #[test]
+    fn add_host_takes_only_a_hostname_and_an_ip() {
+        let ip: std::net::IpAddr = "10.89.1.2".parse().unwrap();
+        let args = ContainerSpec::new("img")
+            .add_host("www.Demo.localhost", ip)
+            .unwrap()
+            .build_run_args();
+        assert!(args.contains(&"--add-host=www.demo.localhost:10.89.1.2".to_string()));
+        for bad in ["", "a b", "x:1.2.3.4", "-x.localhost", "a..b", "x;rm"] {
+            assert!(
+                ContainerSpec::new("img").add_host(bad, ip).is_err(),
+                "{bad:?}"
+            );
+        }
     }
 }

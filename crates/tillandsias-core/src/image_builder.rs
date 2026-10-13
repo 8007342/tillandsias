@@ -328,6 +328,7 @@ pub(crate) fn image_build_paths(
         "router" => format!("{root_dir}/images/router/Containerfile"),
         "chromium-core" => format!("{root_dir}/images/chromium/Containerfile.core"),
         "chromium-framework" => format!("{root_dir}/images/chromium/Containerfile.framework"),
+        "webkit" => format!("{root_dir}/images/webkit/Containerfile"),
         "vault" => format!("{root_dir}/images/vault/Containerfile"),
         _ => {
             return Err(ImageBuilderError::ContainerfileNotFound(format!(

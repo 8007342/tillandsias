@@ -1,0 +1,9 @@
+playwright: Version 1.63.0
+curl rc=0 bytes=107218719
+md5 want=y9X8s6O0bNaY9GpQB/7z7Q== got=y9X8s6O0bNaY9GpQB/7z7Q==
+install bytes=307294111 top=DEPENDENCIES_VALIDATED INSTALLATION_COMPLETE minibrowser-gtk minibrowser-wpe protocol.json pw_run.sh 
+minibrowser webkit-2359/minibrowser-wpe/MiniBrowser
+missing-libs 29: libatomic.so.1 libavif.so.16 libbacktrace.so.0 libenchant-2.so.2 libflite_cmu_grapheme_lang.so.1 libflite_cmu_grapheme_lex.so.1 libflite_cmu_indic_lang.so.1 libflite_cmu_indic_lex.so.1 libflite_cmulex.so.1 libflite_cmu_time_awb.so.1 libflite_cmu_us_awb.so.1 libflite_cmu_us_kal16.so.1 libflite_cmu_us_kal.so.1 libflite_cmu_us_rms.so.1 libflite_cmu_us_slt.so.1 libflite.so.1 libflite_usenglish.so.1 libharfbuzz-icu.so.0 libhyphen.so.0 libicudata.so.74 libicui18n.so.74 libicuuc.so.74 libjavascriptcoregtk-6.0.so.1 libjpeg.so.8 libjxl.so.0.8 libmanette-0.2.so.0 libwayland-server.so.0 libwebkitgtk-6.0.so.4 libWPEWebKit-2.0.so.1 
+headless rc=1: launch headless=true FAILED browserType.launch: Target page, context or browser has been closed | Browser logs: |  | <launching> /pw/webkit-2359/pw_run.sh --inspector-pipe --headless --no-startup-window | <launched> pid=12 | [pid=12][err] /pw/webkit-2359/minibrowser-wpe/bin/MiniBrowser: error while loading shared libraries: libicudata.so.74: cannot open shared object file: No such file or director
+headful-wayland rc=1: launch headless=false FAILED browserType.launch: Target page, context or browser has been closed | Browser logs: |  | <launching> /pw/webkit-2359/pw_run.sh --inspector-pipe --no-startup-window | <launched> pid=12 | [pid=12][err] /pw/webkit-2359/minibrowser-gtk/bin/MiniBrowser: error while loading shared libraries: libicudata.so.74: cannot open shared object file: No such file or directory | Call l
+op: unchanged

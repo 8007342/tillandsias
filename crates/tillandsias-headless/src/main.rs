@@ -2472,6 +2472,9 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         "router" => "images/router",
         "chromium-core" => "images/chromium",
         "chromium-framework" => "images/chromium",
+        // 1656-tjv4: the WebKit engine window. Not an INIT image: it is
+        // built on the first Apple-preset browser.open (ensure_versioned_images).
+        "webkit" => "images/webkit",
         "vault" => "images/vault",
         other => {
             return Err(format!("Unknown image type: {other}"));
@@ -10205,6 +10208,7 @@ pub(crate) fn build_image_with_logging(
         "git" => "Setting up Git",
         "router" => "Routing Traffic",
         "web" | "web-wrangler" => "Serving Web",
+        "webkit" => "Fetching WebKit",
         "vault" => "Securing Vault",
         _ => "Setting up containers",
     };

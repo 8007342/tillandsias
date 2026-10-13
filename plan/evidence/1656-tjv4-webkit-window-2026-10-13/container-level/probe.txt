@@ -1,0 +1,10 @@
+webkit-own-project status=200 PREVIEW-DEMO
+webkit-other-project FAILED page.goto: Peer failed to perform TLS handshake: The TLS connection was non-properly terminated.
+webkit-external-name FAILED page.goto: Error resolving “example.com”: Name or service not known
+webkit-raw-ip FAILED page.goto: Could not connect to 1.1.1.1: Network is unreachable
+webkit-enclave-ca-cert status=200 LOCAL-OK
+webkit-foreign-ca-cert FAILED page.goto: Unacceptable TLS certificate
+webkit-ua Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6 Safari/605.1.15
+raw-own-project HTTP/1.1 200 OK PREVIEW-DEMO
+raw-sni-other-project  
+raw-host-other-project HTTP/1.1 421 Misdirected Request 

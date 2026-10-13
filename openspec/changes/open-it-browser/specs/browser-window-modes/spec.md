@@ -173,6 +173,22 @@ it. Platforms MAY add engines later, under the separation requirement.
 The WebKit engine MUST be labelled "WebKit (approximates Safari)" wherever it
 is named to the user or agent. It MUST NOT be presented as Safari.
 
+The Linux WebKit window MUST reach its project only through the same
+per-window `--internal` network and SNI-bound forwarder as a Chromium window,
+with the router enforcing Host equals SNI.
+
+- **The loopback relay.** WebKitGTK resolves names through GLib, which answers
+  every `*.localhost` name with loopback and never reads `/etc/hosts` for
+  those names (measured 2026-10-13, order 1656-tjv4: with `--add-host`
+  mapping the project's name to the forwarder, WebKit still dialled loopback).
+  - So the window MUST run a relay on its own loopback (127.0.0.1 and ::1, the
+    preview port only) that passes raw TCP, unread, to its forwarder.
+  - The relay MUST NOT be replaced by `--add-host` alone: WebKit would never
+    use that mapping.
+  - The relay MUST be the window's only listener.
+- **Trust.** The window MUST trust only the enclave CA, bind-mounted read-only
+  as its whole system bundle. It MUST NOT skip certificate verification.
+
 The macOS Safari appliance:
 - is a separate macOS guest VM, distinct from the tray's Linux VM, running
   Safari and the iOS Simulator;
@@ -189,6 +205,13 @@ The macOS Safari appliance:
 - **WHEN** an iPhone preset is opened on Linux with the WebKit engine available
 - **THEN** the window runs in the WebKit container
 - **AND** the engine is reported as "WebKit (approximates Safari)"
+
+#### Scenario: A WebKit window reaches only its project
+- **WHEN** a WebKit window of project `demo` loads `https://www.other.localhost:<preview port>/`
+- **THEN** the name resolves to the window's loopback, the relay passes the
+  connection to the forwarder, and the forwarder refuses the SNI
+- **AND** an outside name and a raw IP fail, and a certificate signed by any CA
+  other than the enclave CA is rejected
 
 #### Scenario: Safari appliance stays opt-in
 - **WHEN** a macOS host has not opted in, or is floor tier and has not

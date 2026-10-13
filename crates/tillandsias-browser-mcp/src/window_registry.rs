@@ -32,6 +32,8 @@ pub struct WindowEntry {
     pub owning_lane: String,
     /// Development mode: the owning lane gets full CDP (order 1656-iktu).
     pub dev: bool,
+    /// The engine the window runs (order 1656-tjv4).
+    pub engine: crate::launcher::Engine,
     /// The window's ONE CDP session (order 1655-urz9). Dropped before the
     /// container, so the relay ends Chromium as the session closes.
     pub cdp: Option<Arc<WindowCdp>>,
@@ -50,6 +52,8 @@ pub struct WindowSummary {
     pub window_id: WindowId,
     pub url: String,
     pub title: String,
+    /// The engine's user-facing name (order 1656-tjv4).
+    pub engine: &'static str,
 }
 
 impl WindowEntry {
@@ -113,6 +117,7 @@ impl WindowRegistry {
                 window_id: entry.window_id.clone(),
                 url: entry.opened_url.clone(),
                 title: entry.title.clone(),
+                engine: entry.engine.label(),
             })
     }
 
@@ -120,12 +125,16 @@ impl WindowRegistry {
     /// `None` when there is no such window OR another lane opened it (the
     /// two are indistinguishable to the caller, order 1656-iktu); an inner
     /// `None` when the window has no CDP (fake launch mode).
-    pub fn cdp_for(&self, window_id: &str, lane: &str) -> Option<(Option<Arc<WindowCdp>>, bool)> {
+    pub fn cdp_for(
+        &self,
+        window_id: &str,
+        lane: &str,
+    ) -> Option<(Option<Arc<WindowCdp>>, bool, crate::launcher::Engine)> {
         self.windows
             .lock()
             .get(window_id)
             .filter(|entry| entry.owning_lane == lane)
-            .map(|entry| (entry.cdp.clone(), entry.dev))
+            .map(|entry| (entry.cdp.clone(), entry.dev, entry.engine))
     }
 
     /// Whether `lane` opened `window_id`.
@@ -149,6 +158,7 @@ impl WindowRegistry {
                 window_id: entry.window_id.clone(),
                 url: entry.opened_url.clone(),
                 title: entry.title.clone(),
+                engine: entry.engine.label(),
             })
             .collect()
     }
