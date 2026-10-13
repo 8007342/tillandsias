@@ -59,10 +59,11 @@ git config user.name
 git config user.email
 ```
 
-In Tillandsias forges, GitHub Login stores identity on the host at
-`~/.cache/tillandsias/secrets/git/.gitconfig`. Launchers inject the author and
-committer env vars, and entrypoints copy them into repo-local git config after
-entering `/home/forge/src/<project>`.
+In Tillandsias forges, the git identity comes from the signed-in GitHub App
+user: the launcher passes `TILLANDSIAS_GIT_*`, and the entrypoint writes
+`user.name` (the App name plus `(<host> · tillandsia-<species>)`) and the
+`<id>+<login>@users.noreply.github.com` email into git's XDG global config.
+Nothing is prompted for, and no `GIT_AUTHOR_*` is exported.
 
 **Feature branch with rebase:**
 ```bash

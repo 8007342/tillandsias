@@ -95,14 +95,14 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok:"
 
-  - step: "forge_profiles_have_eighteen_env_vars unit test attached (env-shape pin)"
+  - step: "forge_profiles_have_fourteen_env_vars unit test attached (env-shape pin; 18 -> 14 when 1668-8jmq removed GIT_AUTHOR_*/GIT_COMMITTER_*)"
     # The behavioural pin for the env-list shape. If a regression adds
     # GH_TOKEN to the env list, this test would fail at runtime — but
     # only if the test name + behaviour stays intact. Pinning the test
     # name catches a rename that would silently widen the env contract.
-    command: "grep -F 'fn forge_profiles_have_eighteen_env_vars' crates/tillandsias-core/src/container_profile.rs"
+    command: "grep -F 'fn forge_profiles_have_fourteen_env_vars' crates/tillandsias-core/src/container_profile.rs"
     timeout_ms: 3000
-    expected_behavior: "forge_profiles_have_eighteen_env_vars"
+    expected_behavior: "forge_profiles_have_fourteen_env_vars"
 
 observability:
   traces:

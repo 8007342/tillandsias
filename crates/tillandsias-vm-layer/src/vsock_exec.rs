@@ -1226,8 +1226,8 @@ fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 /// The token is sent ONLY after its prompt, so the guest's earlier `read_line`s
 /// don't buffer-steal it before the container's `read -rs TOKEN < /dev/tty`.
 ///
-/// `on_event(&str)` receives non-secret progress labels (e.g. "matched: git
-/// author name") so the caller can show progress without leaking responses.
+/// `on_event(&str)` receives non-secret progress labels (e.g. "matched:
+/// project name") so the caller can show progress without leaking responses.
 pub async fn exec_over_stream_expect<S>(
     stream: S,
     argv: &[&str],
@@ -3799,8 +3799,8 @@ mod tests {
                 }
             }
 
-            step(&mut guest, 3, b"Git author name [x]: ", b"Test User\n").await;
-            step(&mut guest, 4, b"Git author email: ", b"t@example.com\n").await;
+            step(&mut guest, 3, b"Your project name [x]: ", b"Test User\n").await;
+            step(&mut guest, 4, b"Your contact email: ", b"t@example.com\n").await;
             step(
                 &mut guest,
                 5,
@@ -3829,14 +3829,14 @@ mod tests {
 
         let expects = vec![
             Expect {
-                needle: b"author name".to_vec(),
+                needle: b"project name".to_vec(),
                 response: b"Test User\n".to_vec(),
-                label: "git author name".to_string(),
+                label: "project name".to_string(),
             },
             Expect {
-                needle: b"author email".to_vec(),
+                needle: b"contact email".to_vec(),
                 response: b"t@example.com\n".to_vec(),
-                label: "git author email".to_string(),
+                label: "contact email".to_string(),
             },
             Expect {
                 needle: b"authentication token".to_vec(),
@@ -3911,7 +3911,7 @@ mod tests {
                     body: ControlMessage::PtyData {
                         session_id: 1,
                         direction: PtyDirection::ToHost,
-                        bytes: b"Git author name: ".to_vec(),
+                        bytes: b"Your project name: ".to_vec(),
                     },
                 },
             )
@@ -3947,8 +3947,8 @@ mod tests {
 
         let callback_flag = callback_called.clone();
         let expects = vec![DynamicExpect {
-            needle: b"author name".to_vec(),
-            label: "git author name".to_string(),
+            needle: b"project name".to_vec(),
+            label: "project name".to_string(),
             response: Box::new(move || {
                 callback_flag.store(true, std::sync::atomic::Ordering::SeqCst);
                 Ok(b"Late User\n".to_vec())
@@ -3964,6 +3964,107 @@ mod tests {
         .expect("dynamic expect-driven exec should succeed");
         assert_eq!(out.exit.code, 0);
         assert!(callback_called.load(std::sync::atomic::Ordering::SeqCst));
+        guest_task.await.unwrap();
+    }
+
+    /// ORDER 1668-8jmq. The macOS `--github-login` now drives the guest with an
+    /// EMPTY expect list: the device flow asks nothing, and the git identity
+    /// prompt is gone. Against a guest that prints the device code and exits
+    /// without asking anything, the exec must stream every byte to the raw sink,
+    /// send nothing to the guest, and END. Bounded: a host still waiting for a
+    /// prompt would hang here, and the timeout turns that into a failure.
+    #[tokio::test]
+    async fn an_empty_dynamic_expect_list_ends_when_the_guest_exits() {
+        let (client, guest) = tokio::io::duplex(8192);
+        let mut guest = frame_stream(guest);
+        let guest_task = tokio::spawn(async move {
+            let _ = read_envelope(&mut guest).await.unwrap(); // Hello
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 1,
+                    body: ControlMessage::HelloAck {
+                        wire_version: WIRE_VERSION,
+                        server_caps: vec![],
+                        build_version: None,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            let _ = read_envelope(&mut guest).await.unwrap(); // PtyOpen
+            for (seq, bytes) in [
+                (3, b"Enter one-time code ABCD-1234\n".to_vec()),
+                (4, b"GitHub authentication complete\n".to_vec()),
+            ] {
+                write_envelope(
+                    &mut guest,
+                    &ControlEnvelope {
+                        wire_version: WIRE_VERSION,
+                        seq,
+                        body: ControlMessage::PtyData {
+                            session_id: 1,
+                            direction: PtyDirection::ToHost,
+                            bytes,
+                        },
+                    },
+                )
+                .await
+                .unwrap();
+            }
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 5,
+                    body: ControlMessage::PtyClose {
+                        session_id: 1,
+                        exit: PtyExit {
+                            code: 0,
+                            signal: None,
+                        },
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            // Nothing may have been sent to the guest: the stream must be at
+            // EOF (or closed) once the host returns, not carry a ToGuest frame.
+            if let Ok(ControlEnvelope {
+                body:
+                    ControlMessage::PtyData {
+                        direction: PtyDirection::ToGuest,
+                        ..
+                    },
+                ..
+            }) = read_envelope(&mut guest).await
+            {
+                panic!("the host answered a prompt the guest never printed");
+            }
+        });
+
+        let raw = std::sync::Arc::new(std::sync::Mutex::new(Vec::<u8>::new()));
+        let sink = raw.clone();
+        let out = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            exec_over_stream_expect_dynamic_with_output(
+                client,
+                &["tillandsias-headless", "--github-login"],
+                Vec::new(),
+                |_| {},
+                move |bytes| sink.lock().unwrap().extend_from_slice(bytes),
+            ),
+        )
+        .await
+        .expect("an empty expect list must not wait on the guest")
+        .expect("the exec should succeed");
+        assert_eq!(out.exit.code, 0);
+        let shown = String::from_utf8(raw.lock().unwrap().clone()).unwrap();
+        assert!(
+            shown.contains("ABCD-1234") && shown.contains("authentication complete"),
+            "every guest byte must reach the raw sink: {shown:?}"
+        );
         guest_task.await.unwrap();
     }
 

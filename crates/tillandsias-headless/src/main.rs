@@ -12386,7 +12386,7 @@ fn select_github_login_input_mode(
         return Ok(LoginInputMode::Terminal);
     }
     Err(
-        "--github-login requires a terminal; for automation, configure git user.name and user.email, then pipe one token line to `tillandsias --github-login --with-token`"
+        "--github-login requires a terminal; for automation, pipe one token line to `tillandsias --github-login --with-token`"
             .to_string(),
     )
 }
@@ -12763,15 +12763,6 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
     require_desktop_user_session(&format!("tillandsias {flag}"))?;
     report_runtime_lane(&flag, debug);
 
-    // ORDER 1364-27f8. The non-interactive lane reads an EXISTING identity, so
-    // resolve it before anything is collected: a missing gitconfig refuses here
-    // with no token consumed. Resolved after the token instead, the refusal
-    // discarded a token gh had already accepted (1052-984i's field repro).
-    let github_stdin_identity = match (&config.provider, config.input_mode) {
-        (ProviderId::GitHub, LoginInputMode::StdinToken) => Some(resolve_existing_git_identity()?),
-        _ => None,
-    };
-
     // Without `--debug` this whole preflight was SILENT, and on a cold guest it
     // loads a ~580MB image and brings up Vault + the enclave proxy — minutes of
     // a terminal that shows literally nothing, which reads to an operator as a
@@ -13070,9 +13061,9 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
 
     // ORDER 1486-y67a. The Vault write is verified (a failure returned above,
     // so no sentinel is written for a login that did not land). Tell the
-    // resident control server NOW, before any prompt: the tray used to learn
-    // of the login only after the operator answered the identity prompts
-    // below, ~13 s after the token was safe (measured 2026-09-29).
+    // resident control server NOW: the tray used to learn of the login only
+    // after the operator answered identity prompts (removed, 1668-8jmq),
+    // ~13 s after the token was safe (measured 2026-09-29).
     let mut username: Option<String> = None;
     if matches!(config.provider, ProviderId::GitHub) {
         finish_github_login_steps(
@@ -13085,10 +13076,11 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             },
             || {
                 // ONE `gh api user` (7rzd's derivation, replacing the old
-                // `--jq .login`): it gives the username, fills the App-user
-                // cache the forge identity reads, and supplies the prompt
-                // defaults below. A failed fetch clears the cache, so a
-                // previous account's name can never become the default.
+                // `--jq .login`): it gives the username and fills the App-user
+                // cache the forge identity reads. A failed fetch clears the
+                // cache, so a previous account's identity can never reach a
+                // forge. Order 1668-8jmq: there is no identity prompt; every
+                // forge takes its git identity from this cache.
                 let mut user_cmd = podman_command();
                 user_cmd.args([
                     "exec",
@@ -13113,18 +13105,7 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
                         }
                     }
                 }
-                // ORDER 1364-27f8. Identity comes AFTER the Vault write is
-                // verified: a typo in these prompts can no longer throw away a
-                // token that gh accepted.
-                match github_stdin_identity {
-                    Some((name, email)) => store_git_identity(&name, &email),
-                    None => prompt_and_store_git_identity(),
-                }
-                .map_err(|e| {
-                    format!(
-                        "{provider_name} token is stored in Vault; git identity was not saved: {e}"
-                    )
-                })
+                Ok(())
             },
         )?;
     }
@@ -13242,201 +13223,6 @@ fn run_list_cloud_projects(_debug: bool) -> Result<(), String> {
     )
 }
 
-#[derive(Default)]
-struct GitIdentity {
-    name: Option<String>,
-    email: Option<String>,
-}
-
-fn prompt_and_store_git_identity() -> Result<(), String> {
-    // Framed explicitly as NOT credentials: operators were mistaking these
-    // fields for their GitHub login (operator directive 2026-07-29). The
-    // token is already stored by the time this runs.
-    println!();
-    println!("GIT IDENTITY — this is not a credential.");
-    println!("These two values are stamped on the commits you author; they are");
-    println!("separate from the GitHub token you just provided and grant no");
-    println!("access to anything.");
-    println!();
-
-    // 1486-y67a: default to the SAME identity the forge uses (1453-7rzd): the
-    // App user's name and the GitHub noreply address, from the cache the login
-    // flow just filled; else the host gitconfig. The usual answer is Enter.
-    let current = read_git_identity_defaults();
-    let (name, email) = git_identity_to_store(
-        read_cached_app_user().as_ref(),
-        &current,
-        prompt_with_default,
-        |label, value| println!("{label}: {value}"),
-    )?;
-
-    store_git_identity(&name, &email)
-}
-
-/// 1642-cc54 (criterion 3; operator, 2026-10-12: "I was still prompted to
-/// confirm the name from the git identity, that should be auto accepted as
-/// well"). When the identity comes from the SIGNED-IN ACCOUNT (the App user the
-/// login just cached: its name, else login, and its noreply address), it is
-/// accepted without a prompt and shown with the same labels the prompt uses.
-/// Only when the account is unknown, so the defaults would come from the host
-/// gitconfig, does the operator confirm or type them.
-fn git_identity_to_store(
-    app: Option<&AppUser>,
-    current: &GitIdentity,
-    mut prompt: impl FnMut(&str, Option<&str>) -> Result<String, String>,
-    mut show: impl FnMut(&str, &str),
-) -> Result<(String, String), String> {
-    if let Some(user) = app {
-        let (name, email) = forge_git_identity(Some(user), "");
-        show("Git author name", &name);
-        show("Git author email", &email);
-        return Ok((name, email));
-    }
-    let (name_default, email_default) = identity_prompt_defaults(None, current);
-    let name = prompt("Git author name", name_default.as_deref())?;
-    let email = prompt("Git author email", email_default.as_deref())?;
-    Ok((name, email))
-}
-
-/// The refusal shown when a non-interactive login finds no git identity.
-///
-/// ORDER 1052-984i. This used to say "configure it before using --with-token",
-/// which names `git config` — and the guest HAS NO GIT. esmeraldinha measured
-/// it on the v56.9.5.1 Windows floor round: in a freshly provisioned guest
-/// `command -v git` returns nothing for either root or forge, so the only
-/// remedy the old message suggested could not be run at all.
-///
-/// THE PREREQUISITE IS A FILE, NOT A TOOL. `read_git_identity_defaults` calls
-/// `std::fs::read_to_string` on the paths below and parses `[user]` out of the
-/// text; nothing in this path executes git, checks PATH, or shells out. Writing
-/// 82 bytes of `[user]` by hand satisfies it and the login then succeeds, which
-/// is what esmeraldinha did to get past it. So the message must state the
-/// remedy in terms of the file.
-///
-/// The two available fixes are NOT interchangeable and choosing wrongly is
-/// costly: installing git in the guest would satisfy the message but not the
-/// code, and would add a package to every guest image to fix a string. The
-/// code needs only the file, so the string is what changes.
-///
-/// The paths are resolved rather than written literally as `~/.gitconfig`,
-/// because `managed_gitconfig_path` moves with `XDG_CACHE_HOME` — a message
-/// naming a path the operator does not actually have is the same defect in a
-/// new place.
-fn git_identity_missing_message(field: &str) -> String {
-    let paths = gitconfig_default_paths();
-    let searched = if paths.is_empty() {
-        "  (none — HOME is not set)".to_string()
-    } else {
-        paths
-            .iter()
-            .map(|p| format!("  {}", p.display()))
-            .collect::<Vec<_>>()
-            .join("\n")
-    };
-    let target = paths
-        .last()
-        .map(|p| p.display().to_string())
-        .unwrap_or_else(|| "~/.gitconfig".to_string());
-
-    format!(
-        "non-interactive GitHub login found no git {field}.\n\n\
-         This is a FILE, not a tool: git does not need to be installed. These \
-         paths were read and none supplied {field}:\n\
-         {searched}\n\n\
-         To fix it, create {target} with:\n\
-         \x20 [user]\n\
-         \x20 \tname = Your Name\n\
-         \x20 \temail = you@example.com\n"
-    )
-}
-
-/// Read and validate the identity the non-interactive lane will store, without
-/// storing it — so the caller can refuse before a token is collected.
-fn resolve_existing_git_identity() -> Result<(String, String), String> {
-    let current = read_git_identity_defaults();
-    let name = current
-        .name
-        .ok_or_else(|| git_identity_missing_message("user.name"))?;
-    let email = current
-        .email
-        .ok_or_else(|| git_identity_missing_message("user.email"))?;
-
-    validate_git_identity(&name, &email)?;
-    Ok((name, email))
-}
-
-fn validate_git_identity(name: &str, email: &str) -> Result<(), String> {
-    if name.trim().is_empty() {
-        return Err("Git author name cannot be empty".to_string());
-    }
-    if !email.contains('@') || email.trim().contains(char::is_whitespace) {
-        return Err("Git author email must look like an email address".to_string());
-    }
-    Ok(())
-}
-
-fn store_git_identity(name: &str, email: &str) -> Result<(), String> {
-    validate_git_identity(name, email)?;
-
-    let gitconfig = managed_gitconfig_path()?;
-    if let Some(parent) = gitconfig.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create git identity directory: {e}"))?;
-    }
-
-    let contents = format!(
-        "[user]\n\tname = {}\n\temail = {}\n",
-        escape_gitconfig_value(name.trim()),
-        escape_gitconfig_value(email.trim())
-    );
-    std::fs::write(&gitconfig, contents)
-        .map_err(|e| format!("Failed to write managed git identity: {e}"))?;
-    println!("Git identity saved: {}", gitconfig.display());
-    Ok(())
-}
-
-fn prompt_with_default(label: &str, default: Option<&str>) -> Result<String, String> {
-    match default {
-        Some(value) if !value.trim().is_empty() => {
-            print!("{label} [{value}]: ");
-        }
-        _ => {
-            print!("{label}: ");
-        }
-    }
-    io::stdout()
-        .flush()
-        .map_err(|e| format!("Failed to flush prompt: {e}"))?;
-
-    let mut input = String::new();
-    io::stdin()
-        .read_line(&mut input)
-        .map_err(|e| format!("Failed to read {label}: {e}"))?;
-
-    let input = input.trim().to_string();
-    if input.is_empty() {
-        Ok(default.unwrap_or("").trim().to_string())
-    } else {
-        Ok(input)
-    }
-}
-
-fn read_git_identity_defaults() -> GitIdentity {
-    let mut identity = GitIdentity::default();
-    for path in gitconfig_default_paths() {
-        if let Ok(contents) = std::fs::read_to_string(path) {
-            let parsed = parse_git_identity(&contents);
-            if identity.name.is_none() {
-                identity.name = parsed.name;
-            }
-            if identity.email.is_none() {
-                identity.email = parsed.email;
-            }
-        }
-    }
-    identity
-}
-
 /// The GitHub App's authenticated user, as `/user` reports it (order 1453-7rzd).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AppUser {
@@ -13490,22 +13276,6 @@ pub(crate) fn cache_app_user(user: &AppUser, debug: bool) {
                 path.display()
             );
         }
-    }
-}
-
-/// Identity prompt defaults (1486-y67a): the App user's forge identity
-/// (1453-7rzd: name, else login; `<id>+<login>@users.noreply.github.com`)
-/// when known, else the host gitconfig's values.
-fn identity_prompt_defaults(
-    app: Option<&AppUser>,
-    current: &GitIdentity,
-) -> (Option<String>, Option<String>) {
-    match app {
-        Some(u) => {
-            let (name, email) = forge_git_identity(Some(u), "");
-            (Some(name), Some(email))
-        }
-        None => (current.name.clone(), current.email.clone()),
     }
 }
 
@@ -13610,34 +13380,6 @@ fn append_git_identity_env_args(args: &mut Vec<String>, project_name: &str) {
         args.push("--env".into());
         args.push(format!("{name}={value}"));
     }
-}
-
-fn gitconfig_default_paths() -> Vec<PathBuf> {
-    let mut paths = Vec::new();
-    if let Ok(path) = managed_gitconfig_path() {
-        paths.push(path);
-    }
-    if let Ok(home) = std::env::var("HOME") {
-        paths.push(PathBuf::from(home).join(".gitconfig"));
-    }
-    paths
-}
-
-fn managed_gitconfig_path() -> Result<PathBuf, String> {
-    if let Ok(cache_home) = std::env::var("XDG_CACHE_HOME") {
-        return Ok(PathBuf::from(cache_home)
-            .join("tillandsias")
-            .join("secrets")
-            .join("git")
-            .join(".gitconfig"));
-    }
-    let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
-    Ok(PathBuf::from(home)
-        .join(".cache")
-        .join("tillandsias")
-        .join("secrets")
-        .join("git")
-        .join(".gitconfig"))
 }
 
 // ---------------------------------------------------------------------------
@@ -14251,16 +13993,10 @@ pub(crate) fn write_forge_gitconfig(
         }
     }
 
-    // Preserve existing git identity if the file exists (e.g., from a prior
-    // `managed_gitconfig_path` write by the identity prompt). We only inject
-    // structural config (redirect and safe.directory) — identity comes from
-    // launch env vars.
-    if let Ok(existing) = std::fs::read_to_string(&config_path)
-        && let Some(user_section) = extract_gitconfig_section(&existing, "user")
-    {
-        config.push('\n');
-        config.push_str(&user_section);
-    }
+    // Order 1668-8jmq: no [user] section, ever. Identity comes from the launch
+    // env, written by the forge into git's XDG global file, and git reads
+    // ~/.gitconfig AFTER that file, so a [user] carried over here (the old
+    // prompt's leftovers used to be) would override the signed-in identity.
 
     std::fs::write(&config_path, config.as_bytes()).ok()?;
     Some(config_path)
@@ -14586,65 +14322,6 @@ fn append_forge_repo_gitdir_mount_args(
             );
         }
     }
-}
-
-/// Extract a named `[section]` (including its key=value lines) from a gitconfig string.
-/// Returns `Some(String)` with the section header and body, or `None` if not found.
-fn extract_gitconfig_section(contents: &str, section: &str) -> Option<String> {
-    let target = format!("[{}]", section);
-    let mut result = String::new();
-    let mut in_section = false;
-    for line in contents.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('[') && trimmed.ends_with(']') {
-            if in_section {
-                break;
-            }
-            if trimmed == target {
-                in_section = true;
-            }
-        }
-        if in_section {
-            result.push_str(line);
-            result.push('\n');
-        }
-    }
-    if in_section && !result.is_empty() {
-        Some(result)
-    } else {
-        None
-    }
-}
-
-fn parse_git_identity(contents: &str) -> GitIdentity {
-    let mut identity = GitIdentity::default();
-    let mut in_user = false;
-
-    for line in contents.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('[') && trimmed.ends_with(']') {
-            in_user = trimmed == "[user]";
-            continue;
-        }
-        if !in_user {
-            continue;
-        }
-        if let Some((key, value)) = trimmed.split_once('=') {
-            let key = key.trim();
-            let value = value.trim().trim_matches('"').to_string();
-            match key {
-                "name" if identity.name.is_none() => identity.name = Some(value),
-                "email" if identity.email.is_none() => identity.email = Some(value),
-                _ => {}
-            }
-        }
-    }
-
-    identity
-}
-
-fn escape_gitconfig_value(value: &str) -> String {
-    value.replace('\\', "\\\\").replace('\n', " ")
 }
 
 struct LoginContainerCleanup {
@@ -25599,6 +25276,24 @@ mod tests {
                 "{mode:?} lane must carry no exported GIT_* identity: {argv:?}"
             );
         }
+        // The stack builder (the OpenCode Web forge) is the other launch path.
+        let stack = build_forge_common_args(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            &PathBuf::from(ca_dir()),
+        );
+        for key in ["TILLANDSIAS_GIT_NAME=", "TILLANDSIAS_GIT_EMAIL="] {
+            assert!(
+                stack.iter().any(|arg| arg.starts_with(key)),
+                "the stack lane must carry {key}: {stack:?}"
+            );
+        }
+        assert!(
+            !stack
+                .iter()
+                .any(|arg| arg.starts_with("GIT_AUTHOR_") || arg.starts_with("GIT_COMMITTER_")),
+            "the stack lane must carry no exported GIT_* identity: {stack:?}"
+        );
     }
 
     #[test]
@@ -26996,9 +26691,6 @@ mod tests {
         let helper_health_idx = login_window
             .find("check_auth_required_services(&required, debug)?")
             .expect("github login must run provider-neutral health preflight");
-        let prompt_idx = login_window
-            .find("None => prompt_and_store_git_identity()")
-            .expect("github login must prompt for git identity");
         let token_idx = login_window
             .find("config.token_script")
             .expect("github login must prompt for token through the helper");
@@ -27027,56 +26719,32 @@ mod tests {
             helper_idx < helper_preflight_idx && helper_preflight_idx < helper_health_idx,
             "the health preflight must target the helper container after it starts: {login_window}"
         );
-        // Operator directive 2026-07-29: CREDENTIAL FIRST, identity second.
-        // Prompting for name/email before the token made operators think
-        // those fields were their GitHub credentials.
-        assert!(
-            token_idx < prompt_idx,
-            "token entry must precede the git identity prompt: {login_window}"
-        );
     }
 
-    /// ORDER 1364-27f8. Identity is fallible, and every early return removes the
-    /// helper container holding the collected token, so it must not sit between
-    /// collection and the verified Vault write. The non-interactive lane's
-    /// identity read must precede the login exec, so a missing gitconfig refuses
-    /// before a token is consumed.
+    /// Order 1668-8jmq (operator direction 2026-10-13): no git identity step
+    /// anywhere in the login. Neither lane prompts for, reads or stores an
+    /// identity. Every forge takes it from the App user this login caches.
     #[test]
-    fn github_login_identity_cannot_discard_a_collected_token() {
+    fn github_login_has_no_git_identity_step() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
         let login_window = source_window(
             source,
             "fn run_provider_login(config: &ProviderLoginConfig, debug: bool)",
         );
-        let find = |needle: &str| {
-            login_window
-                .find(needle)
-                .unwrap_or_else(|| panic!("run_provider_login must contain {needle:?}"))
-        };
-        let stdin_identity_idx = find("Some(resolve_existing_git_identity()?)");
-        // 1571-lgex: the exec's error is mapped, not `?`-propagated, so anchor
-        // on the call itself.
-        let login_exec_idx = find("run_podman_command(login, debug)");
-        let verify_persisted_idx = find("in-container vault write verification failed");
-        let terminal_identity_idx = find("None => prompt_and_store_git_identity()");
-        let stdin_store_idx = find("store_git_identity(&name, &email)");
-
-        assert!(
-            stdin_identity_idx < login_exec_idx,
-            "the --with-token identity must be resolved before the token is collected"
-        );
-        for (label, idx) in [
-            ("terminal identity prompt", terminal_identity_idx),
-            ("stdin identity store", stdin_store_idx),
+        for gone in [
+            "prompt_and_store_git_identity",
+            "store_git_identity",
+            "resolve_existing_git_identity",
+            "Git author",
         ] {
             assert!(
-                verify_persisted_idx < idx,
-                "{label} must follow the verified Vault write, or its failure discards the token"
+                !login_window.contains(gone),
+                "the login flow must not carry {gone:?}: {login_window}"
             );
         }
         assert!(
-            !login_window.contains("store_existing_git_identity"),
-            "the store-then-refuse helper must not return to the login flow"
+            login_window.contains("cache_app_user(&user, debug)"),
+            "the login must still cache the App user the forge identity reads"
         );
     }
 
@@ -27121,12 +26789,9 @@ mod tests {
         }
     }
 
-    /// The git identity prompt must frame itself as commit metadata, NOT a
-    /// credential — the confusion this reorder exists to remove.
-    /// @trace spec:gh-auth-script
-    /// 1486-y67a: the tray learns of the login BEFORE the identity prompts.
-    /// A prompt step that takes its time (an operator typing) must find the
-    /// signal already given, and the signal must not wait for it.
+    /// 1486-y67a: the tray learns of the login BEFORE the post-login steps
+    /// (the App-user fetch). A step that takes its time must find the signal
+    /// already given, and the signal must not wait for it.
     #[test]
     fn login_signal_precedes_a_slow_prompt() {
         use std::sync::atomic::{AtomicBool, Ordering};
@@ -27173,116 +26838,6 @@ mod tests {
         assert!(
             !signalled && !prompted,
             "nothing may run after a failed verify"
-        );
-    }
-
-    /// The prompt defaults are the forge identity (1453-7rzd) when the App
-    /// user is known, else the host gitconfig.
-    #[test]
-    fn identity_prompt_defaults_follow_the_forge_identity() {
-        let app = parse_app_user("162944123\toctocat\tMona Lisa").expect("parse");
-        let host = GitIdentity {
-            name: Some("Host Name".into()),
-            email: Some("host@example.com".into()),
-        };
-        assert_eq!(
-            identity_prompt_defaults(Some(&app), &host),
-            (
-                Some("Mona Lisa".into()),
-                Some("162944123+octocat@users.noreply.github.com".into())
-            )
-        );
-        let nameless = parse_app_user("7\tappuser\t").expect("parse");
-        assert_eq!(
-            identity_prompt_defaults(Some(&nameless), &host).0,
-            Some("appuser".into())
-        );
-        assert_eq!(
-            identity_prompt_defaults(None, &host),
-            (Some("Host Name".into()), Some("host@example.com".into()))
-        );
-    }
-
-    /// 1642-cc54 criterion 3: the identity derived from the signed-in account
-    /// is accepted without a prompt, and shown with the prompt's own labels.
-    #[test]
-    fn the_signed_in_accounts_identity_is_accepted_without_a_prompt() {
-        let app = parse_app_user("162944123\toctocat\tMona Lisa").expect("parse");
-        let host = GitIdentity {
-            name: Some("Host Name".into()),
-            email: Some("host@example.com".into()),
-        };
-        let mut shown = Vec::new();
-        let got = git_identity_to_store(
-            Some(&app),
-            &host,
-            |label, _| panic!("prompted for {label} although the account is known"),
-            |label, value| shown.push(format!("{label}: {value}")),
-        );
-        assert_eq!(
-            got,
-            Ok((
-                "Mona Lisa".to_string(),
-                "162944123+octocat@users.noreply.github.com".to_string()
-            ))
-        );
-        assert_eq!(
-            shown,
-            vec![
-                "Git author name: Mona Lisa".to_string(),
-                "Git author email: 162944123+octocat@users.noreply.github.com".to_string()
-            ]
-        );
-    }
-
-    /// Without the account the operator still confirms: both prompts run, with
-    /// the host gitconfig as their defaults, and their answers are stored.
-    #[test]
-    fn without_the_account_the_identity_is_still_prompted() {
-        let host = GitIdentity {
-            name: Some("Host Name".into()),
-            email: Some("host@example.com".into()),
-        };
-        let mut asked = Vec::new();
-        let got = git_identity_to_store(
-            None,
-            &host,
-            |label, default| {
-                asked.push((label.to_string(), default.map(str::to_string)));
-                Ok(format!("typed {label}"))
-            },
-            |_, _| panic!("nothing is shown without the account"),
-        );
-        assert_eq!(
-            got,
-            Ok((
-                "typed Git author name".to_string(),
-                "typed Git author email".to_string()
-            ))
-        );
-        assert_eq!(
-            asked,
-            vec![
-                ("Git author name".to_string(), Some("Host Name".to_string())),
-                (
-                    "Git author email".to_string(),
-                    Some("host@example.com".to_string())
-                ),
-            ]
-        );
-    }
-
-    #[test]
-    fn git_identity_prompt_disclaims_being_a_credential() {
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-        let window = source_window(source, "fn prompt_and_store_git_identity()");
-        assert!(
-            window.contains("GIT IDENTITY") && window.contains("not a credential"),
-            "identity prompt must say it is not a credential: {window}"
-        );
-        assert!(
-            window.contains("stamped on the commits"),
-            "identity prompt must explain these values are commit metadata: {window}"
         );
     }
 
@@ -30022,163 +29577,6 @@ esac
         assert!(env.contains(&("TILLANDSIAS_GIT_IDENTITY_SOURCE", "project".to_string())));
     }
 
-    /// ORDER 1052-984i. The refusal must name the FILE, and must not send the
-    /// operator to `git config` — the guest has no git. esmeraldinha measured
-    /// `command -v git` returning nothing for root and forge on a freshly
-    /// provisioned v56.9.5.1 guest, so the old remedy was unrunnable there
-    /// while an 82-byte hand-written .gitconfig satisfied the check.
-    #[test]
-    fn git_identity_refusal_names_the_file_not_the_git_binary() {
-        for field in ["user.name", "user.email"] {
-            let msg = git_identity_missing_message(field);
-
-            assert!(
-                !msg.contains("git config"),
-                "the remedy must not be `git config` — the guest has no git \
-                 binary at all (1052-984i): {msg}"
-            );
-            assert!(
-                msg.contains("FILE, not a tool") && msg.contains("does not need to be installed"),
-                "the message must say the prerequisite is a file: {msg}"
-            );
-            assert!(
-                msg.contains("[user]") && msg.contains("name =") && msg.contains("email ="),
-                "the message must show the stanza to write: {msg}"
-            );
-            assert!(
-                msg.contains(field),
-                "the message must name the missing field {field}: {msg}"
-            );
-        }
-    }
-
-    /// The message must name paths that were ACTUALLY searched. A literal
-    /// `~/.gitconfig` would be wrong wherever XDG_CACHE_HOME moves the managed
-    /// path — the same defect (a remedy the operator cannot follow) in a new
-    /// place.
-    #[test]
-    fn git_identity_refusal_names_the_paths_it_searched() {
-        let msg = git_identity_missing_message("user.name");
-        for path in gitconfig_default_paths() {
-            assert!(
-                msg.contains(&path.display().to_string()),
-                "searched path {} must appear in the refusal: {msg}",
-                path.display()
-            );
-        }
-    }
-
-    /// THE FILE-VS-BINARY CHECK. The prerequisite decision reads a file; if
-    /// someone later makes it shell out to git, the message above becomes a
-    /// lie again and this fails.
-    #[test]
-    fn git_identity_prerequisite_reads_a_file_and_never_runs_git() {
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-        let window = source_window(source, "fn read_git_identity_defaults()");
-        assert!(
-            window.contains("read_to_string"),
-            "the identity prerequisite must be satisfied by reading a file: {window}"
-        );
-        assert!(
-            !window.contains("Command::new") && !window.contains("which"),
-            "the identity prerequisite must not execute or locate git — the \
-             guest has none, and the refusal promises a file is enough \
-             (1052-984i): {window}"
-        );
-    }
-
-    /// ORDER 1052-gw8w. THE REPORTED RACE DOES NOT EXIST, and this test is the
-    /// reason the inference cannot be made a third time.
-    ///
-    /// The finding was that the user.name refusal fired while the same command
-    /// printed "image git ensure still running in its detached helper", and
-    /// that a retry 40 s later succeeded — read as a not-ready state being
-    /// reported as an operator configuration fault.
-    ///
-    /// It is not, for two independent reasons, either of which is sufficient:
-    ///
-    /// 1. THE HEARTBEAT IS PRINTED BY THE BLOCKING WAITER ITSELF.
-    ///    `SetsidImageEnsure::run` loops on `try_wait` and returns only on
-    ///    `Ok(Some(status))`; the "still running" line is emitted inside that
-    ///    loop as a liveness beat. `ensure_versioned_images` then walks
-    ///    ["proxy", "git", "vault", ... "forge"] SEQUENTIALLY. So "git ensure
-    ///    still running" is what waiting looks like, not evidence of anything
-    ///    running concurrently, and the git image ensure had necessarily
-    ///    COMPLETED before the login was reached at all.
-    ///
-    /// 2. WAITING COULD NOT HELP EVEN IF IT DID RACE. The prerequisite reads
-    ///    `gitconfig_default_paths()`, and the ONLY writer of the managed path
-    ///    in this binary is `store_git_identity`, which runs strictly AFTER the
-    ///    prerequisite passes. `write_forge_gitconfig` writes
-    ///    cache_root/forge-gitconfig/<project>.config, a different path that is
-    ///    not on the search list. No ensure, no image build, and no provisioning
-    ///    step creates either file, so no amount of waiting can turn the refusal
-    ///    into a success.
-    ///
-    /// What actually explains the successful retry is in the same report, one
-    /// paragraph earlier: "Writing ~/.gitconfig by hand — 82 bytes — satisfies
-    /// it, and the login then succeeds." The retry was not unchanged. Two
-    /// adjacent lines of output invited a causal reading, and the packet's
-    /// premise inherited it.
-    #[test]
-    fn image_ensure_cannot_be_racing_the_identity_prerequisite() {
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-
-        // (1) The heartbeat lives inside the wait loop, and the waiter returns
-        // only when the child has exited.
-        // Anchored INSIDE the impl: source_window closes at the next `fn`, and
-        // `impl ... {` is immediately followed by one, so the impl header alone
-        // yields a one-line window.
-        let impl_at = source
-            .find("impl DetachedImageEnsure for SetsidImageEnsure")
-            .expect("the setsid waiter must exist");
-        let waiter = source_window(
-            &source[impl_at..],
-            "fn run(&self, request: &DetachedEnsureRequest)",
-        );
-        assert!(
-            waiter.contains("still running in its detached helper"),
-            "the heartbeat must be emitted by the waiter, which is why it does \
-             NOT indicate concurrency (1052-gw8w): {waiter}"
-        );
-        assert!(
-            waiter.contains("try_wait") && waiter.contains("Ok(Some(status)) => return"),
-            "the detached ensure must block until the helper exits: {waiter}"
-        );
-
-        // (2) The prerequisite's inputs are written by exactly one function,
-        // and it is downstream of the prerequisite. If a provisioning step ever
-        // starts writing them, this fails and the race becomes possible.
-        // Scoped to the region around the identity code rather than the whole
-        // file: this test's own prose names the function, and a scan of the
-        // file would count itself.
-        let region_start = source
-            .find("fn store_git_identity(name: &str, email: &str)")
-            .expect("the identity writer must exist");
-        let region_end = source
-            .find("Per-lane ssh-agent sidecar")
-            .expect("the identity region must be bounded");
-        let region = &source[region_start..region_end];
-        let sites: Vec<&str> = region
-            .lines()
-            .filter(|l| l.contains("managed_gitconfig_path()"))
-            .collect();
-        assert_eq!(
-            sites.len(),
-            3,
-            "expected exactly three sites — the definition, the reader in \
-             gitconfig_default_paths, and the single writer in \
-             store_git_identity. A fourth would mean something else can create \
-             the prerequisite, which is the only way waiting could ever help \
-             (1052-gw8w): {sites:?}"
-        );
-        let store = source_window(source, "fn store_git_identity(name: &str, email: &str)");
-        assert!(
-            store.contains("managed_gitconfig_path()") && store.contains("fs::write"),
-            "store_git_identity must be the one writer: {store}"
-        );
-    }
-
     #[test]
     fn forge_agent_run_argv_exports_project_selection() {
         let _pseam = podman_false_seam();
@@ -31859,33 +31257,6 @@ esac
             Some(home) => unsafe { std::env::set_var("HOME", home) },
             None => unsafe { std::env::remove_var("HOME") },
         }
-    }
-
-    #[test]
-    fn extract_gitconfig_section_finds_user_block() {
-        let config = "\
-[user]
-\tname = Test User
-\temail = test@example.com
-[core]
-\thooksPath = /path
-";
-        let user = extract_gitconfig_section(config, "user");
-        assert!(user.is_some(), "should find [user] section");
-        let user = user.unwrap();
-        assert!(user.contains("[user]"));
-        assert!(user.contains("name = Test User"));
-        assert!(user.contains("email = test@example.com"));
-        assert!(
-            !user.contains("[core]"),
-            "should not include other sections"
-        );
-    }
-
-    #[test]
-    fn extract_gitconfig_section_returns_none_for_missing() {
-        let config = "[core]\n\thooksPath = /path\n";
-        assert!(extract_gitconfig_section(config, "user").is_none());
     }
 
     #[test]

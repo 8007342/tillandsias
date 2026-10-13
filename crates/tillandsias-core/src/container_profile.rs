@@ -139,10 +139,6 @@ pub enum ContextKey {
     /// The user's selected language as a full POSIX LANG value (e.g., "ja_JP.UTF-8").
     /// @trace spec:environment-runtime
     Language,
-    /// Git author name, read from the cached gitconfig.
-    GitAuthorName,
-    /// Git author email, read from the cached gitconfig.
-    GitAuthorEmail,
     /// The project-unique DNS name of this project's git mirror
     /// (`git-{sanitized-project}`). Order 659-8faj: mirrors no longer share a
     /// constant alias, so any profile naming the mirror must resolve the
@@ -216,14 +212,6 @@ pub struct LaunchContext {
     /// is their only NAT leg).
     /// @trace spec:enclave-network, spec:proxy-container
     pub network: Option<String>,
-
-    /// Git author name for GIT_AUTHOR_NAME / GIT_COMMITTER_NAME env vars.
-    /// Read from `~/.cache/tillandsias/secrets/git/.gitconfig` at launch time.
-    pub git_author_name: String,
-
-    /// Git author email for GIT_AUTHOR_EMAIL / GIT_COMMITTER_EMAIL env vars.
-    /// Read from `~/.cache/tillandsias/secrets/git/.gitconfig` at launch time.
-    pub git_author_email: String,
 
     /// Legacy compatibility field for callers that still stage a token file.
     /// The podman-secret path does not require this to be populated.
@@ -395,23 +383,6 @@ pub fn terminal_profile() -> ContainerProfile {
             ProfileEnvVar {
                 name: "LANGUAGE",
                 value: EnvValue::FromContext(ContextKey::Language),
-            },
-            // Git identity from cached gitconfig (replaces mounted .gitconfig)
-            ProfileEnvVar {
-                name: "GIT_AUTHOR_NAME",
-                value: EnvValue::FromContext(ContextKey::GitAuthorName),
-            },
-            ProfileEnvVar {
-                name: "GIT_AUTHOR_EMAIL",
-                value: EnvValue::FromContext(ContextKey::GitAuthorEmail),
-            },
-            ProfileEnvVar {
-                name: "GIT_COMMITTER_NAME",
-                value: EnvValue::FromContext(ContextKey::GitAuthorName),
-            },
-            ProfileEnvVar {
-                name: "GIT_COMMITTER_EMAIL",
-                value: EnvValue::FromContext(ContextKey::GitAuthorEmail),
             },
             // @trace spec:git-mirror-service
             // Order 436 made this a presence flag; order 659-8faj made the
@@ -698,23 +669,6 @@ fn common_forge_env() -> Vec<ProfileEnvVar> {
             name: "LANGUAGE",
             value: EnvValue::FromContext(ContextKey::Language),
         },
-        // Git identity from cached gitconfig (replaces mounted .gitconfig)
-        ProfileEnvVar {
-            name: "GIT_AUTHOR_NAME",
-            value: EnvValue::FromContext(ContextKey::GitAuthorName),
-        },
-        ProfileEnvVar {
-            name: "GIT_AUTHOR_EMAIL",
-            value: EnvValue::FromContext(ContextKey::GitAuthorEmail),
-        },
-        ProfileEnvVar {
-            name: "GIT_COMMITTER_NAME",
-            value: EnvValue::FromContext(ContextKey::GitAuthorName),
-        },
-        ProfileEnvVar {
-            name: "GIT_COMMITTER_EMAIL",
-            value: EnvValue::FromContext(ContextKey::GitAuthorEmail),
-        },
         // @trace spec:git-mirror-service
         // Order 436 made this a presence flag; order 659-8faj made the value
         // the per-project mirror identity — see the note in terminal_profile.
@@ -908,28 +862,38 @@ mod tests {
     }
 
     #[test]
-    fn forge_profiles_have_eighteen_env_vars() {
+    fn forge_profiles_have_fourteen_env_vars() {
         let opencode = forge_opencode_profile();
         let claude = forge_claude_profile();
         // PROJECT, HOST_OS, AGENT, LANG, LANGUAGE,
-        // GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, GIT_COMMITTER_NAME, GIT_COMMITTER_EMAIL,
+        // (no GIT_AUTHOR_* / GIT_COMMITTER_*: order 1668-8jmq, the forge writes
+        // its identity as git config from TILLANDSIAS_GIT_*)
         // GIT_SERVICE, OLLAMA_HOST,
         // HTTP_PROXY, HTTPS_PROXY, NO_PROXY, http_proxy, https_proxy, no_proxy, TILLANDSIAS_CHEATSHEETS
         // @trace spec:proxy-container, spec:enclave-network, spec:git-mirror-service, spec:inference-container
-        assert_eq!(opencode.env_vars.len(), 18);
-        assert_eq!(claude.env_vars.len(), 18);
+        assert_eq!(opencode.env_vars.len(), 14);
+        assert_eq!(claude.env_vars.len(), 14);
+        for profile in [opencode, claude, terminal_profile()] {
+            assert!(
+                profile
+                    .env_vars
+                    .iter()
+                    .all(|e| !e.name.starts_with("GIT_AUTHOR_")
+                        && !e.name.starts_with("GIT_COMMITTER_")),
+                "no profile may export a GIT_* identity (1668-8jmq)"
+            );
+        }
     }
 
     #[test]
-    fn terminal_has_seventeen_env_vars() {
+    fn terminal_has_thirteen_env_vars() {
         let profile = terminal_profile();
         // PROJECT, HOST_OS, LANG, LANGUAGE (no AGENT)
-        // + GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, GIT_COMMITTER_NAME, GIT_COMMITTER_EMAIL
         // + TILLANDSIAS_GIT_SERVICE, OLLAMA_HOST
         // + HTTP_PROXY, HTTPS_PROXY, NO_PROXY, http_proxy, https_proxy, no_proxy
         // + TILLANDSIAS_CHEATSHEETS
         // @trace spec:proxy-container, spec:enclave-network, spec:inference-container, spec:git-mirror-service
-        assert_eq!(profile.env_vars.len(), 17);
+        assert_eq!(profile.env_vars.len(), 13);
     }
 
     // @trace spec:git-mirror-service, spec:secrets-management, spec:podman-orchestration
