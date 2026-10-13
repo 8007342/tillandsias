@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: pre-push-gate-cold-debug-build-dominates-its-own-wall-clock
+    event:
+      type: progress
+      ts: "2026-10-13T16:30:19Z"
+      agent_id: linux-yoga-claude-20261013t152424z
+      host: yoga
+      summary: |
+        Slice 1 at 34395c558 on work/835-kjuv (PR 404, draft). Measured against trunk before claiming - three plan-binary cargo run sites remained in build.sh (3360 tillandsias-plan check; 4552 and 4558 corpus-coverage) plus one policy-binary site (4414 plan-orders). The three plan-binary sites now resolve through the shared probe with ensure_fresh_plan_binary (the contract build.sh's fragment-events-land step already uses - release binary when current, rebuilt only when a source file is newer, named refusal when nothing resolves); the corpus verdict is captured whole and cut in the shell instead of piped through tail. Evidence - ./build.sh --check on the ref rc 0, the ledger-integrity step passed and the corpus advisory printed through the resolved binary in situ; the snippet standalone resolves target/release/tillandsias-plan rc 0 with the same last line; sigpipe-verdict-added ok, bash-dialect clean, plan-binary-probe-usage ok, jq-callsite ratchet 337/337, shell ratchet ok; grep count of plan-binary cargo run sites in build.sh is 0. Not done - the tillandsias-policy plan-orders site (the probe has run-don't-stat resolution for that binary but no freshness contract; test-plan-orders-fragment-fold.sh builds it the same way) - slice 2. The first gate on the ref died at 236 s on a rust-lld undefined-hidden-symbol link error in the plan crate's lua_source_agreements test artifact (rlib written during that run, host and toolbox rustc identical); cleaned the plan crate's dev-profile artifacts only and re-ran - unrelated to this change, recorded for the host.

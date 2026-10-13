@@ -22,7 +22,8 @@ ExecStart=@CHECKOUT@/scripts/local-ci.sh
 # rather than a timeout that reads like a failure.
 TimeoutStartSec=@TIMEOUT@
 # A red tier run is INFORMATION, not a unit failure to be retried: the record
-# it writes to target/convergence/check-logs.jsonl is what the freshness guard
+# it writes to the convergence check log (scripts/convergence-log-path.sh;
+# outside target/ since 888-vgs8) is what the freshness guard
 # consults, and it is written either way. Exiting non-zero here would mark the
 # unit failed and tell the operator nothing the log does not.
 SuccessExitStatus=0 1
