@@ -53,7 +53,7 @@ end
 local build = fs.read("build.sh")
 local CALL = '_pf_sweep_fixture_scratch "$_p" "$_pid" "$_out"'
 local parts = {}
-for _, n in ipairs({ "_pf_sweep_under", "_pf_sweep_guard_tmp", "_pf_sweep_fixture_scratch", "_pf_sweep_declared_artifacts", "_pf_now", "_pf_run_guard" }) do
+for _, n in ipairs({ "_pf_sweep_under", "_pf_sweep_guard_tmp", "_pf_sweep_fixture_scratch", "_pf_sweep_declared_artifacts", "_pf_index_lock_held", "_pf_sweep_index_lock", "_pf_now", "_pf_run_guard" }) do
     local f = extract(build, n)
     if f ~= "" then parts[#parts + 1] = f end -- _pf_now exists only once 1614-5x7m is on the tree
 end
