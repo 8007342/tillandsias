@@ -418,6 +418,21 @@ impl BrowserMcpServer {
             }
         };
 
+        // Order 1651-5t7n: a container window reaches its project only over
+        // TLS (its forwarder admits nothing else, because a plaintext Host
+        // cannot be bound to a project). Admitting an http URL would open a
+        // window that cannot load, so the allowlist refuses it here.
+        if matches!(self.launch_mode, LaunchMode::Container(_)) && allowed.url.scheme() != "https" {
+            return Self::tool_error(
+                id,
+                format!(
+                    "URL_NOT_ALLOWED: browser windows load the project over https only; \
+                     open https://www.{}.localhost:<preview port> instead",
+                    self.project_label
+                ),
+            );
+        }
+
         // Layer 2: Defense-in-depth allowlist enforcement against active routes
         // @trace spec:host-browser-mcp
         let route_allowlist = self.build_active_routes_allowlist();
@@ -1691,17 +1706,57 @@ mod tests {
     /// it: its network would stay attached to the router.
     #[tokio::test]
     async fn dropping_the_server_stops_its_browser_containers() {
-        let host = Arc::new(RecordingContainers::default());
+        let host = Arc::new(RecordingContainers {
+            preview_tls_port: Some(18443),
+            ..Default::default()
+        });
         let server = BrowserMcpServer::with_project_label(
             McpServerConfig::default(),
             "acme",
             Some(host.clone() as Arc<dyn BrowserContainers>),
         );
-        open(&server, "http://web.acme.localhost:8080/")
+        open(&server, "https://www.acme.localhost:18443/")
             .await
             .expect("opens");
         drop(server);
         assert_eq!(*host.stops.lock(), vec!["tillandsias-browser-acme-1"]);
+    }
+
+    /// Order 1651-5t7n: in container mode a plaintext URL is refused before
+    /// anything starts, since the window's forwarder serves TLS only. The
+    /// same URL is still admitted in fake mode (the allowlist's own rules).
+    #[tokio::test]
+    async fn container_mode_refuses_plaintext_urls_and_starts_nothing() {
+        let host = Arc::new(RecordingContainers {
+            preview_tls_port: Some(18443),
+            ..Default::default()
+        });
+        let server = BrowserMcpServer::with_project_label(
+            McpServerConfig::default(),
+            "acme",
+            Some(host.clone() as Arc<dyn BrowserContainers>),
+        );
+        for plaintext in [
+            "http://web.acme.localhost:8080/",
+            "http://web.acme.localhost/",
+        ] {
+            let err = open(&server, plaintext).await.expect_err(plaintext);
+            assert!(
+                err.starts_with("URL_NOT_ALLOWED:") && err.contains("https only"),
+                "{plaintext}: {err}"
+            );
+        }
+        assert!(host.starts.lock().is_empty(), "nothing started");
+        open(&server, "https://www.acme.localhost:18443/")
+            .await
+            .expect("https preview still opens");
+        assert_eq!(host.starts.lock().len(), 1);
+        open(
+            &test_server_fake_launch(None),
+            "http://web.acme.localhost:8080/",
+        )
+        .await
+        .expect("fake mode keeps the allowlist's own rules");
     }
 
     /// No launcher wired: the open is refused as unavailable, nothing starts.
