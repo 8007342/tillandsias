@@ -18,6 +18,7 @@ records live outside it. The legacy private trace viewer remains governed by
 ## Requirements
 
 ### Requirement: Flutter and Flame presentation
+<!-- req-id: 4f8d972b -->
 
 The dashboard SHALL use Flutter for its web UI and Flame for chart rendering.
 It SHALL expose controls for selecting metrics and time windows and render
@@ -31,6 +32,7 @@ representable. Raw values and units SHALL remain available to interpret graphs.
 - AND displayed raw values retain the original measurement meaning.
 
 ### Requirement: Cheap collection and precomputed publication
+<!-- req-id: 3c39b8b8 -->
 
 Collection SHALL read existing project sources and artifacts without building or
 executing the measured project. Deploy preparation SHALL validate snapshots and
@@ -47,6 +49,7 @@ unavailable rather than a zero measurement.
 - AND the dashboard does not imply that there are zero remaining obligations.
 
 ### Requirement: Honest measurement history
+<!-- req-id: af936098 -->
 
 Every metric SHALL carry its definition, unit, source and measurement epoch.
 Changed definitions SHALL start a distinct epoch. Graphs SHALL preserve missing
@@ -61,6 +64,7 @@ coverage declared. Snapshots SHALL carry a source revision and observation time.
 - AND the previous epoch remains independently identifiable.
 
 ### Requirement: Cloudflare deployment and local artifact
+<!-- req-id: ecefcdde -->
 
 The app SHALL deploy through Cloudflare Workers Builds from this repository
 (root directory `observatorium`, Build command `npm run build`, the default
