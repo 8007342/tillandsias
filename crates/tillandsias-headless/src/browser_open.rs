@@ -4,9 +4,12 @@
 //!
 //! - started from `build_project_browser_spec` (Wayland-only, only the
 //!   compositor socket mounted; order 1641-xbvq);
-//! - on its own `--internal` network, which only the router joins (alias
-//!   `router`), so the window reaches the router and nothing else: no other
-//!   project's containers, no host, no internet;
+//! - on its own `--internal` network, whose only other member is a per-window
+//!   forwarder answering as `router` (order 1651-5t7n). It passes on only TLS
+//!   whose SNI is a host of this project, to the router's :8443, and the
+//!   router's strict_sni_host binds the Host header to that SNI. So even a
+//!   process that bypasses Chromium reaches its own project and nothing else:
+//!   no other project, no plaintext, no host, no internet;
 //! - with Chromium host-resolver rules that send the project's hosts to the
 //!   router and resolve every other name, and every IP literal, to nothing;
 //! - trusting the enclave CA through an SPKI pin, never the host trust store;
@@ -28,24 +31,92 @@ use tillandsias_browser_mcp::launcher::{
 
 /// The shared router every project's routes go through.
 const ROUTER_CONTAINER: &str = "tillandsias-router";
+/// The per-window forwarder (`node -e`, from the chromium-framework image).
+const FORWARDER_JS: &str = include_str!("browser_window_forwarder.js");
+/// The router's preview TLS listener, the forwarder's only upstream.
+const ROUTER_TLS_PORT: &str = "8443";
+
 /// One window start: the image is present (`--pull=never`), so this is a
 /// wedge detector, not a performance target.
 const RUN_BUDGET: Duration = Duration::from_secs(60);
 
 /// `--host-resolver-rules` for one project's window. Chromium applies the
 /// first matching rule, and a rule may carry the replacement port: the
-/// preview URL `https://www.<p>.localhost:18443` is served by the router's
-/// `:8443` listener on the window's network, and the router's http routes
-/// (`:8080`, `:80`) by its `:8080` one. `MAP * ~NOTFOUND` sends every other
-/// name, and IP literals too, to NXDOMAIN (measured 2026-10-12: `http://1.1.1.1/`
-/// and `https://router:8443/` both end in ERR_NAME_NOT_RESOLVED).
+/// project's hosts on any port go to `router:8443` (the forwarder, then the
+/// router's preview TLS listener). There is no plaintext mapping: a plaintext
+/// Host header cannot be bound to a project (order 1651-5t7n). `MAP * ~NOTFOUND`
+/// sends every other name, and IP literals too, to NXDOMAIN (measured
+/// 2026-10-12: `http://1.1.1.1/` and `https://router:8443/` both end in
+/// ERR_NAME_NOT_RESOLVED).
 pub(crate) fn host_resolver_rules(project: &str) -> String {
-    format!(
-        "MAP *.{project}.localhost:8080 router:8080, \
-         MAP *.{project}.localhost:80 router:8080, \
-         MAP *.{project}.localhost router:8443, \
-         MAP * ~NOTFOUND"
-    )
+    format!("MAP *.{project}.localhost router:8443, MAP * ~NOTFOUND")
+}
+
+/// The forwarder's container name, derived from the window's network so
+/// `stop` can name it from the handle alone.
+fn forwarder_name(handle: &ContainerHandle) -> String {
+    let suffix = handle
+        .network_name
+        .strip_prefix("tillandsias-browser-net-")
+        .unwrap_or(&handle.network_name);
+    format!("tillandsias-browser-fwd-{suffix}")
+}
+
+/// The router's address on its own (non-window) network: the enclave in
+/// production. The forwarder dials this IP; it does not resolve `router`,
+/// because on the window's network that name is the forwarder itself.
+fn router_upstream() -> Result<(String, String), String> {
+    let rows = podman(
+        &[
+            "inspect",
+            "--format",
+            "{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{$v.IPAddress}}\n{{end}}",
+            ROUTER_CONTAINER,
+        ],
+        tillandsias_podman::OperationKind::Inspect.default_budget(),
+    )?;
+    let networks: Vec<(String, String)> = rows
+        .lines()
+        .filter_map(|l| l.split_once(' '))
+        .filter(|(net, ip)| !net.starts_with("tillandsias-browser-net-") && !ip.is_empty())
+        .map(|(net, ip)| (net.to_string(), ip.to_string()))
+        .collect();
+    networks
+        .iter()
+        .find(|(net, _)| net == tillandsias_podman::ENCLAVE_NETWORK)
+        .or_else(|| networks.first())
+        .cloned()
+        .ok_or_else(|| format!("{ROUTER_CONTAINER} has no network address"))
+}
+
+/// The forwarder's spec: on the window's network as `router`. `start` then
+/// connects it to the router's network (`podman network connect`; the spec's
+/// passthrough allowlist does not take a second `--network`, and the
+/// forwarder dials upstream only per connection). Same hardening as every
+/// container (cap-drop ALL, no-new-privileges, keep-id), read-only, nothing
+/// published.
+pub(crate) fn forwarder_spec(
+    handle: &ContainerHandle,
+    project: &str,
+    router_ip: &str,
+) -> tillandsias_podman::ContainerSpec {
+    tillandsias_podman::ContainerSpec::new(format!(
+        "tillandsias-chromium-framework:v{}",
+        crate::VERSION.trim()
+    ))
+    .pull_never()
+    .read_only()
+    .detached()
+    .name(forwarder_name(handle))
+    .network(format!("{}:alias=router", handle.network_name))
+    .pids_limit(32)
+    .tmpfs("/tmp:size=8m")
+    .env("TILLANDSIAS_FWD_PROJECT", project)
+    .env("TILLANDSIAS_FWD_UPSTREAM_HOST", router_ip)
+    .env("TILLANDSIAS_FWD_UPSTREAM_PORT", ROUTER_TLS_PORT)
+    .entrypoint("node")
+    .arg("-e")
+    .arg(FORWARDER_JS)
 }
 
 /// Base64 SHA-256 of a PEM certificate's SubjectPublicKeyInfo: the form
@@ -229,14 +300,18 @@ impl BrowserContainers for TrayBrowserContainers {
                 ],
                 network_budget(),
             )?;
+            let (router_network, router_ip) = router_upstream()?;
+            let forwarder = forwarder_spec(&handle, request.project_label, &router_ip)
+                .build_run_argv()
+                .map_err(|e| format!("forwarder argv refused: {e}"))?;
+            let forwarder: Vec<&str> = forwarder.iter().map(String::as_str).collect();
+            podman(&forwarder, RUN_BUDGET)?;
             podman(
                 &[
                     "network",
                     "connect",
-                    "--alias",
-                    "router",
-                    &handle.network_name,
-                    ROUTER_CONTAINER,
+                    &router_network,
+                    &forwarder_name(&handle),
                 ],
                 network_budget(),
             )?;
@@ -264,15 +339,10 @@ impl BrowserContainers for TrayBrowserContainers {
     }
 
     fn stop(&self, handle: &ContainerHandle) {
+        let forwarder = forwarder_name(handle);
         let steps: [&[&str]; 3] = [
             &["rm", "-f", "-t", "0", &handle.container_name],
-            &[
-                "network",
-                "disconnect",
-                "-f",
-                &handle.network_name,
-                ROUTER_CONTAINER,
-            ],
+            &["rm", "-f", "-t", "0", &forwarder],
             &["network", "rm", "-f", &handle.network_name],
         ];
         for args in steps {
@@ -312,12 +382,48 @@ mod tests {
     #[test]
     fn resolver_rules_send_only_the_project_to_the_router() {
         let rules = host_resolver_rules("acme");
-        assert_eq!(
-            rules,
-            "MAP *.acme.localhost:8080 router:8080, MAP *.acme.localhost:80 router:8080, \
-             MAP *.acme.localhost router:8443, MAP * ~NOTFOUND"
+        assert_eq!(rules, "MAP *.acme.localhost router:8443, MAP * ~NOTFOUND");
+        assert!(!rules.contains("8080"), "no plaintext mapping (1651-5t7n)");
+    }
+
+    /// Order 1651-5t7n: the forwarder answers as `router` on the window's
+    /// network, dials the router by IP on the router's network, publishes
+    /// nothing, and runs the shipped script.
+    #[test]
+    fn forwarder_spec_bridges_only_the_window_network_to_the_router() {
+        let handle = ContainerHandle {
+            container_name: "tillandsias-browser-acme-0123456789ab".into(),
+            network_name: "tillandsias-browser-net-0123456789ab".into(),
+            profile_dir: PathBuf::from("/tmp/x"),
+        };
+        let argv = forwarder_spec(&handle, "acme", "10.0.42.7")
+            .build_run_argv()
+            .unwrap();
+        let joined = argv.join(" ");
+        assert!(
+            joined.contains("--name tillandsias-browser-fwd-0123456789ab"),
+            "{joined}"
         );
-        assert!(rules.ends_with("MAP * ~NOTFOUND"), "the catch-all is last");
+        assert!(
+            joined.contains("--network tillandsias-browser-net-0123456789ab:alias=router"),
+            "{joined}"
+        );
+        assert_eq!(
+            argv.iter().filter(|a| *a == "--network").count(),
+            1,
+            "only the window network at run time: {joined}"
+        );
+        assert!(joined.contains("TILLANDSIAS_FWD_PROJECT=acme"));
+        assert!(joined.contains("TILLANDSIAS_FWD_UPSTREAM_HOST=10.0.42.7"));
+        assert!(
+            joined.contains("--cap-drop=ALL") || joined.contains("--cap-drop ALL"),
+            "{joined}"
+        );
+        assert!(
+            !argv.iter().any(|a| a == "-p"),
+            "nothing published: {joined}"
+        );
+        assert!(argv.iter().any(|a| a == FORWARDER_JS));
     }
 
     #[test]
@@ -358,7 +464,9 @@ mod tests {
             "no DevTools port: {joined}"
         );
         assert!(
-            joined.contains("--host-resolver-rules=MAP *.acme.localhost:8080 router:8080"),
+            joined.contains(
+                "--host-resolver-rules=MAP *.acme.localhost router:8443, MAP * ~NOTFOUND"
+            ),
             "{joined}"
         );
         assert!(
@@ -498,12 +606,15 @@ mod tests {
         let ps = live_podman(&[
             "ps",
             "--filter",
-            "name=^tillandsias-browser-",
+            "name=^tillandsias-browser-demo-",
             "--format",
             "{{.Names}} {{.Networks}} {{.Ports}}",
         ]);
         println!("podman-ps {ps}");
         assert!(ps.starts_with(&format!("{name} {net}")), "{ps}");
+        // Order 1651-5t7n: the router is NOT on the window's network; the
+        // window's only neighbour is its forwarder, which also sits on the
+        // router's network and publishes nothing.
         let router_nets = live_podman(&[
             "inspect",
             "--format",
@@ -511,7 +622,30 @@ mod tests {
             ROUTER_CONTAINER,
         ]);
         println!("router-networks {router_nets}");
-        assert!(router_nets.split_whitespace().any(|n| n == net));
+        assert!(!router_nets.split_whitespace().any(|n| n == net));
+        let forwarder = format!("tillandsias-browser-fwd-{suffix}");
+        let fwd = live_podman(&[
+            "ps",
+            "--filter",
+            &format!("name=^{forwarder}$"),
+            "--format",
+            "{{.Names}} {{.Networks}} ports=[{{.Ports}}]",
+        ]);
+        println!("forwarder {fwd}");
+        assert!(fwd.contains(&net) && fwd.ends_with("ports=[]"), "{fwd}");
+        let members = live_podman(&[
+            "ps",
+            "--filter",
+            &format!("network={net}"),
+            "--format",
+            "{{.Names}}",
+        ]);
+        let mut members: Vec<&str> = members.lines().collect();
+        members.sort();
+        println!("window-network-members {members:?}");
+        let mut expected = vec![forwarder.as_str(), name.as_str()];
+        expected.sort();
+        assert_eq!(members, expected);
 
         std::thread::sleep(Duration::from_secs(3));
         let (host_after, contained) = host_chrome_pids();
@@ -586,7 +720,7 @@ mod tests {
             "{probe}"
         );
         assert!(
-            verdict("chromium-http-route").contains("PREVIEW-DEMO"),
+            !verdict("chromium-http-route").contains("PREVIEW-DEMO"),
             "{probe}"
         );
         assert!(!verdict("chromium-other-project").contains("PREVIEW-OTHER"));
@@ -598,10 +732,25 @@ mod tests {
             "net-external-ip",
             "net-host-lan",
             "net-host-containers-internal",
+            // Order 1651-5t7n: no plaintext path from the window.
+            "net-router-plaintext",
         ] {
             assert!(
                 !verdict(refused).starts_with("reach:"),
                 "{refused}: {probe}"
+            );
+        }
+
+        // Order 1651-5t7n: the window reaches only its own project, even
+        // for a client that names the router itself and picks SNI and Host.
+        assert!(
+            verdict("raw-own-project").contains("PREVIEW-DEMO"),
+            "control: {probe}"
+        );
+        for escape in ["raw-sni-other-project", "raw-host-other-project"] {
+            assert!(
+                !verdict(escape).contains("PREVIEW-OTHER"),
+                "{escape} reached another project: {probe}"
             );
         }
 

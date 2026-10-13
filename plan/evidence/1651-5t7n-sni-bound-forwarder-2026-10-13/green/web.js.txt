@@ -1,0 +1,7 @@
+// Stand-in project dev server: plain http on :3000, a fixed <title> marker,
+// one stdout line per request (the live test reads the window's request here).
+require('http').createServer((req, res) => {
+  console.log(`${req.method} ${req.url} host=${req.headers.host}`);
+  res.writeHead(200, { 'content-type': 'text/html' });
+  res.end(`<html><head><title>${process.argv[2]}</title></head><body>${process.argv[2]} host=${req.headers.host}</body></html>\n`);
+}).listen(3000, '0.0.0.0', () => console.log(`${process.argv[2]} listening 3000`));

@@ -43,12 +43,13 @@ function tcp(label, host, port) {
 }
 
 
-// RESIDUAL, reported not asserted: a process in this container that bypasses
-// Chromium's resolver can still name another project to the router, which
-// routes by Host/SNI across every project.
-function rawRouter(label, host) {
+// Order 1651-5t7n: a process in this container that bypasses Chromium's
+// resolver must still reach only its own project. `sni` is the TLS server
+// name, `host` the HTTP Host header; the router routes by Host across every
+// project, so both must be bound to this window's project.
+function rawRouter(label, sni, host) {
   return new Promise((resolve) => {
-    const req = https.request({ host: 'router', port: 8443, path: '/', servername: host,
+    const req = https.request({ host: 'router', port: 8443, path: '/', servername: sni,
       headers: { host }, rejectUnauthorized: false, timeout: 4000 }, (res) => {
       let body = '';
       res.on('data', (c) => (body += c));
@@ -87,5 +88,8 @@ function browse(label, url) {
   await tcp('net-external-ip', '1.1.1.1', 443);
   await tcp('net-host-lan', HOST_IP, 5355);
   await tcp('net-host-containers-internal', 'host.containers.internal', 8080);
-  await rawRouter('residual-raw-router-other-project', `www.other.localhost`);
+  await rawRouter('raw-own-project', 'www.demo.localhost', 'www.demo.localhost');
+  await rawRouter('raw-sni-other-project', 'www.other.localhost', 'www.other.localhost');
+  await rawRouter('raw-host-other-project', 'www.demo.localhost', 'www.other.localhost');
+  await tcp('net-router-plaintext', 'router', 8080);
 })();

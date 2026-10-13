@@ -21,7 +21,8 @@ phase: pre-build
 description: >
   Pin browser.open's container path: no host-Chromium lookup or spawn in the
   launcher; the window joins only its own --internal network with a resolver
-  catch-all and a CA SPKI pin; the local-preview TLS port is admitted for
+  catch-all and a CA SPKI pin; its only neighbour is a forwarder that passes
+  on only TLS for the window's project, and the router binds Host to SNI; the local-preview TLS port is admitted for
   https only; the router publishes the preview leaf as a full chain; the window opens
   no host listener and no DevTools port.
 severity: high
@@ -37,8 +38,8 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: no host-Chromium path"
 
-  - step: "the window joins only its own --internal network, resolves nothing but the project, pins the CA; negative control: dropping the catch-all must FAIL"
-    command: "set -u; T=target/litmus-browser-open; mkdir -p \"$T\"; F=crates/tillandsias-headless/src/browser_open.rs; shape() { grep -qF '\"--internal\",' \"$1\" && grep -qF '.network(&handle.network_name)' \"$1\" && grep -qF 'MAP * ~NOTFOUND\"' \"$1\" && grep -qF -e '--ignore-certificate-errors-spki-list={ca_spki}' \"$1\" && grep -qF '\"--alias\",' \"$1\"; }; shape \"$F\" || { echo 'FAIL: browser_open.rs lost the network/resolver/pin shape'; exit 1; }; grep -vF 'MAP * ~NOTFOUND\"' \"$F\" > \"$T/b.rs\"; if shape \"$T/b.rs\"; then echo 'FAIL: negative control passed'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: internal network, resolver catch-all, CA pin; seeded removal caught'"
+  - step: "the window joins only its own --internal network (its forwarder answers as router), resolves nothing but the project, pins the CA; negative control: dropping the catch-all must FAIL"
+    command: "set -u; T=target/litmus-browser-open; mkdir -p \"$T\"; F=crates/tillandsias-headless/src/browser_open.rs; shape() { grep -qF '\"--internal\",' \"$1\" && grep -qF '.network(&handle.network_name)' \"$1\" && grep -qF 'MAP * ~NOTFOUND\"' \"$1\" && grep -qF -e '--ignore-certificate-errors-spki-list={ca_spki}' \"$1\" && grep -qF ':alias=router\"' \"$1\"; }; shape \"$F\" || { echo 'FAIL: browser_open.rs lost the network/resolver/pin shape'; exit 1; }; grep -vF 'MAP * ~NOTFOUND\"' \"$F\" > \"$T/b.rs\"; if shape \"$T/b.rs\"; then echo 'FAIL: negative control passed'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: internal network, resolver catch-all, CA pin; seeded removal caught'"
     timeout_ms: 5000
     expected_behavior: "ok: internal network, resolver catch-all, CA pin"
 
@@ -59,6 +60,21 @@ critical_path:
     command: "set -u; T=target/litmus-browser-open; mkdir -p \"$T\"; F=crates/tillandsias-headless/src/browser_open.rs; S=$(sed -n '/^pub(crate) fn browser_window_spec/,/^}/p' \"$F\"); printf '%s\\n' \"$S\" > \"$T/spec.rs\"; nolisten() { grep -qF 'fn browser_window_spec' \"$1\" && ! grep -qE '\\.publish\\(|remote-debugging' \"$1\"; }; nolisten \"$T/spec.rs\" || { echo 'FAIL: the window spec publishes a port or opens DevTools'; rm -rf \"$T\"; exit 1; }; printf '%s\\n' '    .publish(\"127.0.0.1:9222:9222\")' >> \"$T/spec.rs\"; if nolisten \"$T/spec.rs\"; then echo 'FAIL: negative control passed'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: no host listener, no DevTools port; seeded publish caught'"
     timeout_ms: 5000
     expected_behavior: "ok: no host listener, no DevTools port"
+
+  - step: "the forwarder passes on only TLS whose SNI is a host of the window's project, and the window resolves no plaintext route; negative control: a forwarder that skips the SNI test must FAIL"
+    # Order 1651-5t7n. Measured live: before, a raw request from the window
+    # container naming another project to router:8443 got 200 PREVIEW-OTHER;
+    # after, its SNI is reset by the forwarder.
+    command: "set -u; T=target/litmus-browser-open; mkdir -p \"$T\"; J=crates/tillandsias-headless/src/browser_window_forwarder.js; R=crates/tillandsias-headless/src/browser_open.rs; bound() { grep -qF 'if (buf[0] !== 0x16) return { name: undefined };' \"$1\" && grep -qF 'if (!name.endsWith(suffix)) {' \"$1\" && grep -qF 'include_str!(\"browser_window_forwarder.js\")' \"$R\" && ! grep -qF 'router:8080' \"$R\"; }; bound \"$J\" || { echo 'FAIL: the forwarder no longer binds SNI to the project, or a plaintext route came back'; exit 1; }; grep -vF 'if (!name.endsWith(suffix)) {' \"$J\" > \"$T/f.js\"; if bound \"$T/f.js\"; then echo 'FAIL: negative control passed'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: forwarder binds SNI to the project, no plaintext route; seeded bypass caught'"
+    timeout_ms: 5000
+    expected_behavior: "ok: forwarder binds SNI to the project"
+
+  - step: "the router makes the Host header equal the SNI on TLS; negative control: a base.Caddyfile without strict_sni_host must FAIL"
+    # Order 1651-5t7n. Measured live: SNI www.demo.localhost with Host
+    # www.other.localhost got 200 PREVIEW-OTHER before, 421 after.
+    command: "set -u; T=target/litmus-browser-open; mkdir -p \"$T\"; F=images/router/base.Caddyfile; strict() { grep -qE '^[[:space:]]+strict_sni_host on$' \"$1\"; }; strict \"$F\" || { echo 'FAIL: router base.Caddyfile lost strict_sni_host'; exit 1; }; grep -vF 'strict_sni_host' \"$F\" > \"$T/Caddyfile\"; if strict \"$T/Caddyfile\"; then echo 'FAIL: negative control passed'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: strict_sni_host on; seeded removal caught'"
+    timeout_ms: 5000
+    expected_behavior: "ok: strict_sni_host on"
 
 observability:
   traces:
