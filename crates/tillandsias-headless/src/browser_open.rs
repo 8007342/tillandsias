@@ -770,7 +770,7 @@ mod tests {
         let argv = webkit_window_spec(
             "acme",
             &handle,
-            Path::new("/home/u/.local/state/tillandsias/ca/intermediate.crt"),
+            Path::new("/tmp/ca/intermediate.crt"),
             &display,
             &WebKitTarget {
                 url: "https://www.acme.localhost:18443/",
