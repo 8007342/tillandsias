@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: development-scratch-and-worktrees-live-inside-the-checkout-under-one-ignored-dir-that-every-scanner-skips
+    field: next_action
+    value: |-
+      Pick the dir (target/work is the interim), record it in methodology with the user-runtime exemption, then write the guard and migrate the worst offenders.
+
+
+      [2026-10-13T03:44:58Z yoga] Slices 1-3 are on PR 386 (draft) at 9f4d6ca90 — the guard, the helper scripts/scratch-dir.sh, the methodology section, and the cycle-path scripts migrated. BLOCKED ON A SECOND REGIME — scripts/gate-steps.d/830-1637-cnxq.step needs STEP_SECOND_REGIME from a darwin or msys run of scripts/test-check-scratch-location-added.sh (1302-7j8p; yoga cannot produce it). ASK macbookair or yolanda for that run, then the pre-ready sequence and gh pr ready 386. ASK a release_target for the 1637 rows — the selector never offers them (108 ungrouped on 2026-10-13). Not migrated yet — relay-preflight.sh self-snapshot (re-exec), salvage-dirty-worktree.sh dirs (would copy a tree into itself), run-litmus-test.sh gate snapshot, local-ci.sh /tmp log sites, the door's own TMPDIR root (recorded preflight-door exception). The host-lane ASKs sent 2026-10-12/13 never delivered (the LAN rung 1506-7tq4 is ready, not built), so the asks live here and on the PR.
+
+      [2026-10-13T09:37:04Z yoga] Slice 4 at 973797e30 on work/1637-cnxq (relay self-snapshot, salvage temp index, litmus step captures and gate snapshot under scratch/; the relay's dirty check skips scratch/). Slice 5 candidates - scripts/local-ci.sh (241 /tmp sites) or moving build.sh's door root (pf-guard) under scratch/ and retiring the preflight-door exception; first probe criterion 3 by planting a refused pattern under scratch/ and running the door. Still BLOCKED for READY on a darwin or msys STEP_SECOND_REGIME for scripts/gate-steps.d/830-1637-cnxq.step. Lesson - a verdict token containing the substring litmus:name is a pin claim to check-litmus-pin-claims; spell subjects litmus-thing.
+    ts: "2026-10-13T09:37:04Z"
+    host: yoga
+
+events:
+  - packet_id: development-scratch-and-worktrees-live-inside-the-checkout-under-one-ignored-dir-that-every-scanner-skips
+    event:
+      type: note
+      ts: "2026-10-13T09:37:04Z"
+      host: yoga
+      summary: |-
+        slice 4 pushed at 973797e30

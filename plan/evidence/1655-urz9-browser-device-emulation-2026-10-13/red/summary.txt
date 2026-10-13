@@ -1,0 +1,20 @@
+test-binary /var/home/lenovinha/claudia/tillandsias/target/debug/deps/tillandsias-a69e54c5169d8f95
+version 56.10.12.1 host-ip 192.168.0.111
+images: localhost/tillandsias-router:v56.10.12.1 localhost/tillandsias-chromium-framework:v56.10.12.1 localhost/e2e-fw-base:1 localhost/tillandsias-chromium-framework:v56.9.27.2 localhost/tillandsias-router:v56.9.27.2 
+ca-spki kTzhTnN84YHXC02aUwSJqwSB7xzj5cGudc9oot7sfqI=
+router-self-check demo-preview: ok1
+live-test browser_open::tests::live_browser_open_emulates_the_requested_device rc=101
+host-tcp-listeners-before ["0.0.0.0:5355", "127.0.0.1:11434", "127.0.0.1:5111", "127.0.0.1:631", "127.0.0.1:8080", "127.0.0.1:8201", "127.0.0.53%lo:53", "127.0.0.54:53", "[::1]:631", "[::]:5355"]
+browser.open https://www.demo.localhost:18443/ device=iphone 12 pro max -> {"window_id":"win-b2883e31-edbd-43db-9a10-343da5a3452c"}
+page-report iphone-12-pro-max Some(([913.0, 2.0, 0.0], "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"))
+host-tcp-listeners-new-while-open []
+galaxy-s24-catalogue (360.0, 3.0, 5.0) samsung-galaxy-s24
+browser.set_device galaxy s24 -> {"content":[{"type":"text","text":"TOOL_NOT_FOUND: browser.set_device"}],"isError":true}
+page-report galaxy-s24 Some(([913.0, 2.0, 0.0], "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"))
+browser.close -> {"ok":true}
+test browser_open::tests::live_browser_open_emulates_the_requested_device ... FAILED
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 960 filtered out; finished in 41.18s
+thread 'browser_open::tests::live_browser_open_emulates_the_requested_device' (2293931) panicked at crates/tillandsias-headless/src/browser_open.rs:711:9:
+op: unchanged
+op-net: unchanged
+op-browser-dir: unchanged

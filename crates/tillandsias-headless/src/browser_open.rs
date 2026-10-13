@@ -15,8 +15,12 @@
 //! - trusting the enclave CA through an SPKI pin, never the host trust store;
 //! - with NO DevTools port and no host listener: a host TCP port would hand
 //!   full control of the window, cookies included, to every local process.
-//!   Dev-mode CDP reaches a window only through a per-lane Unix socket the tray
-//!   brokers (the dev-mode broker row).
+//!   Order 1655-urz9: Chromium runs with `--remote-debugging-pipe` under a
+//!   small in-container relay (`browser_window_cdp_relay.js`), which serves
+//!   the pipe on a Unix socket in a per-window host directory that only the
+//!   tray creates and mounts, for the tray's one CDP session per window;
+//! - opened at the device's CSS viewport (`--window-size`) on about:blank:
+//!   the tray emulates the device over CDP, then navigates.
 //!
 //! @trace spec:host-browser-mcp, spec:browser-isolation-tray-integration, spec:local-web-preview
 
@@ -33,6 +37,10 @@ use tillandsias_browser_mcp::launcher::{
 const ROUTER_CONTAINER: &str = "tillandsias-router";
 /// The per-window forwarder (`node -e`, from the chromium-framework image).
 const FORWARDER_JS: &str = include_str!("browser_window_forwarder.js");
+/// The window's entrypoint: Chromium under the CDP pipe relay (1655-urz9).
+const CDP_RELAY_JS: &str = include_str!("browser_window_cdp_relay.js");
+/// Where the window container sees its CDP socket directory.
+const CDP_DIR_IN_CONTAINER: &str = "/run/tillandsias-cdp";
 /// The router's preview TLS listener, the forwarder's only upstream.
 const ROUTER_TLS_PORT: &str = "8443";
 
@@ -225,30 +233,53 @@ fn network_budget() -> Duration {
     tillandsias_podman::OperationKind::Network.default_budget()
 }
 
+/// A window's CDP socket directory on the host: per window, 0700, created
+/// and removed by the tray, and mounted into that window's container only.
+fn cdp_dir(window_id: &str) -> PathBuf {
+    crate::browser_profile_root().join(format!("{window_id}.cdp"))
+}
+
 /// The window's container spec: `build_project_browser_spec` plus the
-/// window's network, the resolver rules and the pin. Nothing is published.
+/// window's network, the resolver rules, the pin, the device's window size,
+/// and the CDP pipe relay as entrypoint. Nothing is published.
+///
+/// It opens about:blank: the tray emulates the device over CDP before it
+/// navigates (order 1655-urz9).
 pub(crate) fn browser_window_spec(
-    url: &str,
     project: &str,
     handle: &ContainerHandle,
     certs_dir: &Path,
     display: &crate::BrowserDisplayContext,
     ca_spki: &str,
+    window_size: (u32, u32),
+    cdp_dir: &Path,
 ) -> Result<tillandsias_podman::ContainerSpec, String> {
+    let entrypoint = serde_json::json!(["node", "-e", CDP_RELAY_JS, "--"]).to_string();
     Ok(crate::build_project_browser_spec(
-        url,
+        "about:blank",
         crate::VERSION.trim(),
         &handle.profile_dir,
         certs_dir,
         display,
         &handle.container_name,
     )?
+    .entrypoint(entrypoint)
+    .volume(
+        cdp_dir.display().to_string(),
+        CDP_DIR_IN_CONTAINER,
+        tillandsias_podman::MountMode::ReadWrite,
+    )
+    .env(
+        "TILLANDSIAS_CDP_SOCKET",
+        format!("{CDP_DIR_IN_CONTAINER}/cdp.sock"),
+    )
     .network(&handle.network_name)
     .arg(format!(
         "--host-resolver-rules={}",
         host_resolver_rules(project)
     ))
-    .arg(format!("--ignore-certificate-errors-spki-list={ca_spki}")))
+    .arg(format!("--ignore-certificate-errors-spki-list={ca_spki}"))
+    .arg(format!("--window-size={},{}", window_size.0, window_size.1)))
 }
 
 impl BrowserContainers for TrayBrowserContainers {
@@ -280,11 +311,17 @@ impl BrowserContainers for TrayBrowserContainers {
         let display = crate::BrowserDisplayContext::from_env().map_err(LaunchError::Spawn)?;
         let profile_dir = crate::browser_profile_root().join(request.window_id);
         std::fs::create_dir_all(&profile_dir)?;
+        let cdp_dir = cdp_dir(request.window_id);
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            std::fs::DirBuilder::new().mode(0o700).create(&cdp_dir)?;
+        }
 
         let handle = ContainerHandle {
             container_name: format!("tillandsias-browser-{}-{suffix}", request.project_label),
             network_name: format!("tillandsias-browser-net-{suffix}"),
             profile_dir,
+            cdp_socket: Some(cdp_dir.join("cdp.sock")),
         };
         // From here every failure undoes what was made.
         let started = (|| {
@@ -316,12 +353,13 @@ impl BrowserContainers for TrayBrowserContainers {
                 network_budget(),
             )?;
             let argv = browser_window_spec(
-                request.url.as_str(),
                 request.project_label,
                 &handle,
                 &certs_dir,
                 &display,
                 &ca_spki,
+                request.window_size,
+                &cdp_dir,
             )?
             .build_run_argv()
             .map_err(|e| format!("browser container argv refused: {e}"))?;
@@ -353,6 +391,9 @@ impl BrowserContainers for TrayBrowserContainers {
             }
         }
         let _ = std::fs::remove_dir_all(&handle.profile_dir);
+        if let Some(dir) = handle.cdp_socket.as_deref().and_then(Path::parent) {
+            let _ = std::fs::remove_dir_all(dir);
+        }
     }
 }
 
@@ -395,6 +436,7 @@ mod tests {
             container_name: "tillandsias-browser-acme-0123456789ab".into(),
             network_name: "tillandsias-browser-net-0123456789ab".into(),
             profile_dir: PathBuf::from("/tmp/x"),
+            cdp_socket: None,
         };
         let argv = forwarder_spec(&handle, "acme", "10.0.42.7")
             .build_run_argv()
@@ -432,18 +474,22 @@ mod tests {
             container_name: "tillandsias-browser-acme-0123456789ab".into(),
             network_name: "tillandsias-browser-net-0123456789ab".into(),
             profile_dir: PathBuf::from("/run/user/1000/tillandsias/browser/win-1"),
+            cdp_socket: Some(PathBuf::from(
+                "/run/user/1000/tillandsias/browser/win-1.cdp/cdp.sock",
+            )),
         };
         let display = crate::BrowserDisplayContext {
             wayland_display: Some("wayland-0".into()),
             xdg_runtime_dir: Some(PathBuf::from("/run/user/1000")),
         };
         let argv = browser_window_spec(
-            "https://www.acme.localhost:18443/",
             "acme",
             &handle,
             Path::new("/tmp/ca"),
             &display,
             "PIN=",
+            (428, 926),
+            Path::new("/run/user/1000/tillandsias/browser/win-1.cdp"),
         )
         .unwrap()
         .build_run_argv()
@@ -460,9 +506,35 @@ mod tests {
             "no host listener: {joined}"
         );
         assert!(
-            !joined.contains("--remote-debugging"),
+            !joined.contains("--remote-debugging-port")
+                && !joined.contains("--remote-debugging-address"),
             "no DevTools port: {joined}"
         );
+        // Order 1655-urz9: CDP is the pipe, relayed to a Unix socket in the
+        // window's own directory; the window opens at the device's CSS size
+        // on about:blank, and the tray navigates after emulating.
+        let entry = argv
+            .windows(2)
+            .find(|w| w[0] == "--entrypoint")
+            .map(|w| w[1].clone())
+            .expect("an entrypoint");
+        let entry: Vec<String> = serde_json::from_str(&entry).unwrap();
+        assert_eq!(entry[0], "node");
+        assert_eq!(entry[1], "-e");
+        assert_eq!(entry[2], CDP_RELAY_JS);
+        assert!(CDP_RELAY_JS.contains("'--remote-debugging-pipe'"));
+        assert!(!CDP_RELAY_JS.contains("remote-debugging-port"));
+        assert_eq!(CDP_RELAY_JS.matches(".listen(").count(), 1, "one listener");
+        assert!(
+            CDP_RELAY_JS.contains("server.listen(SOCKET,"),
+            "the relay serves the Unix socket path only"
+        );
+        assert!(
+            joined.contains("/run/user/1000/tillandsias/browser/win-1.cdp:/run/tillandsias-cdp"),
+            "{joined}"
+        );
+        assert!(joined.contains("TILLANDSIAS_CDP_SOCKET=/run/tillandsias-cdp/cdp.sock"));
+        assert!(joined.contains("--window-size=428,926"), "{joined}");
         assert!(
             joined.contains(
                 "--host-resolver-rules=MAP *.acme.localhost router:8443, MAP * ~NOTFOUND"
@@ -473,7 +545,7 @@ mod tests {
             joined.contains("--ignore-certificate-errors-spki-list=PIN="),
             "{joined}"
         );
-        assert!(joined.contains("--app=https://www.acme.localhost:18443/"));
+        assert!(joined.contains("--app=about:blank"), "{joined}");
         assert!(
             joined.contains("--ozone-platform=wayland"),
             "still Wayland-only"
@@ -553,6 +625,435 @@ mod tests {
             tillandsias_browser_mcp::framing::RpcResponse::Success { result, .. } => result,
             other => serde_json::json!({ "frame": format!("{other:?}") }),
         }
+    }
+
+    /// Host TCP listeners (`ss -ltnH`, local address column), sorted.
+    fn host_tcp_listeners() -> Vec<String> {
+        let out = std::process::Command::new("ss")
+            .args(["-ltnH"])
+            .output()
+            .expect("ss");
+        let mut rows: Vec<String> = String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .filter_map(|l| l.split_whitespace().nth(3).map(str::to_string))
+            .collect();
+        rows.sort();
+        rows.dedup();
+        rows
+    }
+
+    /// The last `[innerWidth, devicePixelRatio, maxTouchPoints]` the demo
+    /// page reported (the harness's stand-in dev server logs one
+    /// `GET /report?m=<json>&ua=<ua>` per change), with its UA.
+    fn last_page_report(upstream: &str) -> Option<(Vec<f64>, String)> {
+        fn unescape(s: &str) -> String {
+            let b = s.as_bytes();
+            let mut out = Vec::new();
+            let mut i = 0;
+            while i < b.len() {
+                if b[i] == b'%'
+                    && i + 2 < b.len()
+                    && let Ok(v) = u8::from_str_radix(&s[i + 1..i + 3], 16)
+                {
+                    out.push(v);
+                    i += 3;
+                    continue;
+                }
+                out.push(if b[i] == b'+' { b' ' } else { b[i] });
+                i += 1;
+            }
+            String::from_utf8_lossy(&out).into_owned()
+        }
+        let logs = live_podman(&["logs", upstream]);
+        let line = logs
+            .lines()
+            .rev()
+            .find(|l| l.starts_with("GET /report?m="))?;
+        let query = line.strip_prefix("GET /report?")?.split(' ').next()?;
+        let mut m = None;
+        let mut ua = String::new();
+        for pair in query.split('&') {
+            match pair.split_once('=') {
+                Some(("m", v)) => m = serde_json::from_str::<Vec<f64>>(&unescape(v)).ok(),
+                Some(("ua", v)) => ua = unescape(v),
+                _ => {}
+            }
+        }
+        Some((m?, ua))
+    }
+
+    /// Wait until the page reports `want(width, dpr, touch_points)`.
+    fn await_page_report(
+        upstream: &str,
+        label: &str,
+        want: impl Fn(f64, f64, f64) -> bool,
+    ) -> (Vec<f64>, String) {
+        let deadline = std::time::Instant::now() + Duration::from_secs(20);
+        let mut last = None;
+        while std::time::Instant::now() < deadline {
+            last = last_page_report(upstream);
+            if let Some((m, _)) = &last
+                && m.len() == 3
+                && want(m[0], m[1], m[2])
+            {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(250));
+        }
+        println!("page-report {label} {last:?}");
+        last.unwrap_or_default()
+    }
+
+    /// Order 1655-urz9 live proof. Run by the same private-store harness as
+    /// the 1649-xqet test. What the window emulates is measured by the PAGE:
+    /// the stand-in dev server's page reports `[innerWidth, devicePixelRatio,
+    /// navigator.maxTouchPoints]` back to the dev server, never through CDP.
+    #[test]
+    #[ignore = "live: run by the 1649-xqet harness on a private podman store"]
+    fn live_browser_open_emulates_the_requested_device() {
+        let port: u16 = std::env::var("TILLANDSIAS_BROWSER_E2E_PREVIEW_PORT")
+            .expect("harness only")
+            .parse()
+            .unwrap();
+        let demo_upstream =
+            std::env::var("TILLANDSIAS_BROWSER_E2E_DEMO_UPSTREAM").expect("harness only");
+        let store = live_podman(&["info", "--format", "{{.Store.GraphRoot}}"]);
+        let home = std::env::var("HOME").unwrap_or_default();
+        assert!(
+            store.contains("/target/work/") && home.contains("/target/work/"),
+            "refusing: store {store:?} / HOME {home:?} are not the harness's private ones"
+        );
+        let listeners_before = host_tcp_listeners();
+        println!("host-tcp-listeners-before {listeners_before:?}");
+
+        let server = tillandsias_browser_mcp::BrowserMcpServer::with_project_label(
+            tillandsias_browser_mcp::McpServerConfig::default(),
+            "demo",
+            Some(std::sync::Arc::new(PinnedPreviewPort {
+                inner: TrayBrowserContainers::new(true),
+                port,
+            })),
+        );
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let url = format!("https://www.demo.localhost:{port}/");
+        let opened = rt.block_on(call(
+            &server,
+            "browser.open",
+            serde_json::json!({ "url": url, "device": "iphone 12 pro max" }),
+        ));
+        println!("browser.open {url} device=iphone 12 pro max -> {opened}");
+        let window = opened["window_id"].as_str().expect("opened").to_string();
+
+        let (m, ua) = await_page_report(&demo_upstream, "iphone-12-pro-max", |w, d, t| {
+            w == 428.0 && d == 3.0 && t > 0.0
+        });
+        let iphone_ok = m.len() == 3 && m[0] == 428.0 && m[1] == 3.0 && m[2] > 0.0;
+
+        let listeners_open = host_tcp_listeners();
+        let new_listeners: Vec<&String> = listeners_open
+            .iter()
+            .filter(|l| !listeners_before.contains(l))
+            .collect();
+        println!("host-tcp-listeners-new-while-open {new_listeners:?}");
+
+        let s24 = tillandsias_core::devices::resolve("galaxy s24").expect("in the catalogue");
+        let want = (
+            f64::from(s24.viewport.w),
+            s24.dpr,
+            f64::from(s24.device.max_touch_points),
+        );
+        println!("galaxy-s24-catalogue {want:?} {}", s24.id);
+        let switched = rt.block_on(call(
+            &server,
+            "browser.set_device",
+            serde_json::json!({ "window_id": window, "device": "galaxy s24" }),
+        ));
+        println!("browser.set_device galaxy s24 -> {switched}");
+        let (m2, ua2) =
+            await_page_report(&demo_upstream, "galaxy-s24", |w, d, t| (w, d, t) == want);
+
+        // The CDP socket's directory is the window's own, tray-only (0700),
+        // and the window container itself listens on no TCP port: CDP is
+        // the pipe.
+        let dir = cdp_dir(&window);
+        let mode = std::fs::metadata(&dir).map(|m| {
+            use std::os::unix::fs::PermissionsExt;
+            m.permissions().mode() & 0o777
+        });
+        println!(
+            "cdp-dir {} mode {:?}",
+            dir.display(),
+            mode.as_ref().map(|m| format!("{m:o}"))
+        );
+        let name = format!("tillandsias-browser-demo-{}", window_suffix(&window));
+        let tcp = live_podman(&["exec", &name, "cat", "/proc/net/tcp", "/proc/net/tcp6"]);
+        let window_listeners: Vec<&str> = tcp
+            .lines()
+            .filter(|l| l.split_whitespace().nth(3) == Some("0A"))
+            .filter_map(|l| l.split_whitespace().nth(1))
+            .collect();
+        println!("window-tcp-listeners {window_listeners:?}");
+
+        let closed = rt.block_on(call(
+            &server,
+            "browser.close",
+            serde_json::json!({ "window_id": window }),
+        ));
+        println!("browser.close -> {closed}");
+        let dir_gone = !dir.exists();
+        println!("cdp-dir-removed-on-close {dir_gone}");
+
+        // Criterion 2 as written: a fresh window opened AS the Galaxy S24.
+        let opened2 = rt.block_on(call(
+            &server,
+            "browser.open",
+            serde_json::json!({ "url": url, "device": "galaxy s24" }),
+        ));
+        println!("browser.open {url} device=galaxy s24 -> {opened2}");
+        let window2 = opened2["window_id"].as_str().expect("opened").to_string();
+        let (m3, ua3) = await_page_report(&demo_upstream, "galaxy-s24-fresh", |w, d, t| {
+            (w, d, t) == want
+        });
+        let closed2 = rt.block_on(call(
+            &server,
+            "browser.close",
+            serde_json::json!({ "window_id": window2 }),
+        ));
+        println!("browser.close -> {closed2}");
+
+        assert_eq!(mode.ok(), Some(0o700), "{}", dir.display());
+        assert!(dir_gone, "the CDP dir outlived its window");
+        assert!(
+            window_listeners.is_empty(),
+            "the window listens on {window_listeners:?}"
+        );
+        assert_eq!(
+            (m3.first().copied(), m3.get(1).copied(), m3.get(2).copied()),
+            (Some(want.0), Some(want.1), Some(want.2)),
+            "galaxy s24 opened fresh (ua {ua3})"
+        );
+        assert!(
+            iphone_ok,
+            "iphone 12 pro max: the page saw {m:?} (ua {ua}), want [428, 3, >0]"
+        );
+        assert!(
+            ua.contains("iPhone"),
+            "the page's UA is not the device's: {ua}"
+        );
+        assert_eq!(
+            (m2.first().copied(), m2.get(1).copied(), m2.get(2).copied()),
+            (Some(want.0), Some(want.1), Some(want.2)),
+            "galaxy s24 after set_device (ua {ua2})"
+        );
+        assert!(ua2.contains("Android"), "{ua2}");
+        assert!(
+            new_listeners.is_empty(),
+            "the host gained TCP listeners while the window was open: {new_listeners:?}"
+        );
+    }
+
+    /// Order 1656-iktu live proof. Same private-store harness. Two lanes of
+    /// project `demo`, each its own server as the tray builds one per lane
+    /// connection; lane A opens a dev-mode window.
+    #[test]
+    #[ignore = "live: run by the 1649-xqet harness on a private podman store"]
+    fn live_dev_mode_gives_only_the_owning_lane_full_cdp() {
+        let port: u16 = std::env::var("TILLANDSIAS_BROWSER_E2E_PREVIEW_PORT")
+            .expect("harness only")
+            .parse()
+            .unwrap();
+        let other_upstream =
+            std::env::var("TILLANDSIAS_BROWSER_E2E_OTHER_UPSTREAM").expect("harness only");
+        let store = live_podman(&["info", "--format", "{{.Store.GraphRoot}}"]);
+        let home = std::env::var("HOME").unwrap_or_default();
+        assert!(
+            store.contains("/target/work/") && home.contains("/target/work/"),
+            "refusing: store {store:?} / HOME {home:?} are not the harness's private ones"
+        );
+        let listeners_before = host_tcp_listeners();
+        println!("host-tcp-listeners-before {listeners_before:?}");
+
+        let lane = |instance: &str| {
+            tillandsias_browser_mcp::BrowserMcpServer::with_project_label(
+                tillandsias_browser_mcp::McpServerConfig::default(),
+                "demo",
+                Some(std::sync::Arc::new(PinnedPreviewPort {
+                    inner: TrayBrowserContainers::new(true),
+                    port,
+                })),
+            )
+            .with_lane(instance)
+        };
+        let lane_a = lane("lane-a");
+        let lane_b = lane("lane-b");
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let url = format!("https://www.demo.localhost:{port}/");
+        let opened = rt.block_on(call(
+            &lane_a,
+            "browser.open",
+            serde_json::json!({ "url": url, "dev": true }),
+        ));
+        println!("lane-a browser.open {url} dev=true -> {opened}");
+        let window = opened["window_id"].as_str().expect("opened").to_string();
+        let cdp = |server: &tillandsias_browser_mcp::BrowserMcpServer,
+                   method: &str,
+                   params: serde_json::Value| {
+            rt.block_on(call(
+                server,
+                "browser.cdp",
+                serde_json::json!({ "window_id": window, "method": method, "params": params }),
+            ))
+        };
+        let text =
+            |v: &serde_json::Value| v["content"][0]["text"].as_str().unwrap_or("").to_string();
+
+        // Criterion 1: the owning lane's raw CDP.
+        let two = cdp(
+            &lane_a,
+            "Runtime.evaluate",
+            serde_json::json!({ "expression": "1+1" }),
+        );
+        println!("lane-a browser.cdp Runtime.evaluate 1+1 -> {two}");
+        let shot_a = rt.block_on(call(
+            &lane_a,
+            "browser.screenshot",
+            serde_json::json!({ "window_id": window }),
+        ));
+        let shot_a_len = shot_a["data"].as_str().map_or(0, str::len);
+        println!("lane-a browser.screenshot -> {shot_a_len} base64 bytes");
+
+        // Criterion 2: another lane, same window_id.
+        let b_cdp = cdp(
+            &lane_b,
+            "Runtime.evaluate",
+            serde_json::json!({ "expression": "1+1" }),
+        );
+        let b_shot = rt.block_on(call(
+            &lane_b,
+            "browser.screenshot",
+            serde_json::json!({ "window_id": window }),
+        ));
+        println!("lane-b browser.cdp -> {b_cdp}");
+        println!("lane-b browser.screenshot -> {b_shot}");
+
+        // Criterion 3: no host listener; no process with a DevTools port.
+        let listeners_open = host_tcp_listeners();
+        let new_listeners: Vec<&String> = listeners_open
+            .iter()
+            .filter(|l| !listeners_before.contains(l))
+            .collect();
+        println!("host-tcp-listeners-new-while-open {new_listeners:?}");
+        let name = format!("tillandsias-browser-demo-{}", window_suffix(&window));
+        let cmdlines = live_podman(&[
+            "exec",
+            &name,
+            "sh",
+            "-c",
+            "for f in /proc/[0-9]*/cmdline; do tr '\\000' ' ' < \"$f\"; echo; done",
+        ]);
+        let port_procs = cmdlines
+            .lines()
+            .filter(|l| l.contains("--remote-debugging-port"))
+            .count();
+        let pipe_procs = cmdlines
+            .lines()
+            .filter(|l| l.contains("--remote-debugging-pipe"))
+            .count();
+        println!(
+            "container-processes remote-debugging-port={port_procs} remote-debugging-pipe={pipe_procs}"
+        );
+
+        // Criterion 4: raw CDP navigation reaches nothing a normal window
+        // cannot: a public host and another project both fail.
+        let public = cdp(
+            &lane_a,
+            "Page.navigate",
+            serde_json::json!({ "url": "https://example.com/" }),
+        );
+        let other = cdp(
+            &lane_a,
+            "Page.navigate",
+            serde_json::json!({ "url": format!("https://www.other.localhost:{port}/") }),
+        );
+        println!("lane-a Page.navigate public -> {public}");
+        println!("lane-a Page.navigate other-project -> {other}");
+        let other_hits = live_podman(&["logs", &other_upstream]);
+        let other_reached = other_hits.lines().any(|l| l.starts_with("GET "));
+        println!("other-project-upstream-hit {other_reached}");
+
+        // The typed tools on the owning lane.
+        let back = rt.block_on(call(
+            &lane_a,
+            "browser.navigate",
+            serde_json::json!({ "window_id": window, "url": url }),
+        ));
+        println!("lane-a browser.navigate back -> {back}");
+        let logged = rt.block_on(call(
+            &lane_a,
+            "browser.eval",
+            serde_json::json!({ "window_id": window, "expression": "console.log('dev-mode-hello'); 6*7" }),
+        ));
+        println!("lane-a browser.eval -> {logged}");
+        std::thread::sleep(Duration::from_millis(500));
+        let console = rt.block_on(call(
+            &lane_a,
+            "browser.console_tail",
+            serde_json::json!({ "window_id": window }),
+        ));
+        let network = rt.block_on(call(
+            &lane_a,
+            "browser.network_tail",
+            serde_json::json!({ "window_id": window }),
+        ));
+        println!("lane-a browser.console_tail -> {console}");
+        println!(
+            "lane-a browser.network_tail -> {} entries, failed={:?}",
+            network["entries"].as_array().map_or(0, Vec::len),
+            network["entries"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|e| e["event"] == "failed")
+                .map(|e| e["errorText"].clone())
+                .collect::<Vec<_>>()
+        );
+
+        let closed = rt.block_on(call(
+            &lane_a,
+            "browser.close",
+            serde_json::json!({ "window_id": window }),
+        ));
+        println!("lane-a browser.close -> {closed}");
+
+        assert_eq!(two["result"]["value"], 2, "{two}");
+        assert!(shot_a_len > 100, "the owning lane's screenshot: {shot_a}");
+        assert!(text(&b_cdp).starts_with("WINDOW_NOT_FOUND:"), "{b_cdp}");
+        assert!(text(&b_shot).starts_with("WINDOW_NOT_FOUND:"), "{b_shot}");
+        assert!(new_listeners.is_empty(), "{new_listeners:?}");
+        assert_eq!(port_procs, 0, "{cmdlines}");
+        assert!(pipe_procs > 0, "chromium runs on the pipe: {cmdlines}");
+        for (label, nav) in [("public", &public), ("other-project", &other)] {
+            assert!(
+                nav["errorText"].as_str().is_some_and(|e| !e.is_empty()),
+                "{label} navigation was not refused: {nav}"
+            );
+        }
+        assert!(
+            !other_reached,
+            "another project's upstream was reached:\n{other_hits}"
+        );
+        assert_eq!(logged["value"], 42, "{logged}");
+        assert!(console.to_string().contains("dev-mode-hello"), "{console}");
+        assert!(
+            network["entries"].as_array().is_some_and(|e| !e.is_empty()),
+            "{network}"
+        );
     }
 
     /// Order 1649-xqet live proof of criteria (a) and (b). Opt-in, and only

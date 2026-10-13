@@ -1,0 +1,157 @@
+#!/usr/bin/env bash
+# 1649-xqet live harness (evidence, not shipped). On a PRIVATE podman store:
+#  - scratch enclave CA in a private HOME (ca_dir() = $HOME/.local/state/tillandsias/ca)
+#  - the REAL router image as tillandsias-router on an enclave-like network, with
+#    the product's route shapes for project `demo` AND project `other`
+#    (http :8080 + preview https :8443, leaf published as a full chain)
+#  - stand-in dev servers for both projects (node, <title> markers)
+#  - the installed chromium-framework image + this branch's browser-window-entry.js
+#    (the one-line COPY Containerfile.framework now carries), tagged v$VERSION
+# then runs browser_open::tests::live_browser_open_runs_the_container_on_its_own_network.
+# Mode: `prefix` is not here (see prefix-red/); this is the post-fix run.
+set -u
+TEST="${1:-browser_open::tests::live_browser_open_runs_the_container_on_its_own_network}"
+REPO="$(cd "$(dirname "$0")/../../.." && pwd)"
+HERE="$REPO/target/work/browser-open-e2e"
+OUT="$HERE/out"
+rm -rf "$OUT"; mkdir -p "$OUT"
+VERSION="$(tr -d '[:space:]' < "$REPO/VERSION")"
+SRC_FW=localhost/tillandsias-chromium-framework:v56.9.27.2
+SRC_ROUTER=localhost/tillandsias-router:v56.9.27.2
+PORT=18443
+HOST_IP="$(ip -4 route get 1.1.1.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')"
+OP_ENV=(env -u CONTAINERS_STORAGE_CONF -u CONTAINERS_CONF -u REGISTRY_AUTH_FILE -u XDG_CACHE_HOME "HOME=$HOME")
+[ -z "${CONTAINERS_STORAGE_CONF:-}${CONTAINERS_CONF:-}" ] || { echo "ABORT: plain shell only"; exit 3; }
+log() { echo "$*" >> "$OUT/summary.txt"; echo "$*"; }
+
+# ---- the test binary, built with the normal environment ----
+BIN="$(cd "$REPO" && cargo test -q -p tillandsias-headless --features tray --bins --no-run --message-format json 2>/dev/null \
+    | python3 -I -c 'import sys,json
+for l in sys.stdin:
+    try: m=json.loads(l)
+    except Exception: continue
+    if m.get("executable") and m["target"]["name"]=="tillandsias": print(m["executable"])' | head -1)"
+[ -x "$BIN" ] || { echo "ABORT: no test binary"; exit 1; }
+log "test-binary $BIN"
+log "version $VERSION host-ip $HOST_IP"
+
+# ---- operator guardrails: before ----
+op_state() {
+    local c
+    for c in tillandsias-inference tillandsias-dev-inference tillandsias-router; do
+        "${OP_ENV[@]}" podman inspect --format '{{.Name}} {{.Id}} {{.State.Status}} {{.State.StartedAt}} {{.State.Health.Status}} {{range $k,$v := .NetworkSettings.Networks}}{{$k}}:{{$v.IPAddress}}:{{$v.MacAddress}} {{end}}' "$c" 2>&1
+    done
+    "${OP_ENV[@]}" podman network ls --format '{{.Name}}' 2>&1 | sort
+}
+OP_NET="${XDG_RUNTIME_DIR:?}/containers/networks"
+op_state > "$OUT/op-before"
+find "$OP_NET" -printf '%p %s %T@\n' 2>/dev/null | sort > "$OUT/op-net-before"
+find "$XDG_RUNTIME_DIR/tillandsias/browser" -printf '%p\n' 2>/dev/null | sort > "$OUT/op-browser-dir-before"
+
+# ---- private store ----
+S="$(mktemp -d "$HERE/run.XXXXXX")"
+R="$(mktemp -d "${XDG_RUNTIME_DIR:?}/tillandsias-browser-e2e.XXXXXX")"
+mkdir -p "$S/graph" "$R/run" "$R/tmp" "$S/netconf" "$S/home" "$S/router/preview-tls"
+printf '%s\n' '[storage]' 'driver = "overlay"' "graphroot = \"$S/graph\"" "runroot = \"$R/run\"" > "$S/storage.conf"
+printf '%s\n' '[engine]' 'cgroup_manager = "cgroupfs"' 'events_logger = "file"' "events_logfile_path = \"$S/events.log\"" \
+    "tmp_dir = \"$R/tmp\"" '[network]' "network_config_dir = \"$S/netconf\"" > "$S/containers.conf"
+"${OP_ENV[@]}" podman save --format oci-archive -o "$S/fw.tar" "$SRC_FW" > /dev/null || exit 1
+"${OP_ENV[@]}" podman save --format oci-archive -o "$S/router.tar" "$SRC_ROUTER" > /dev/null || exit 1
+
+export CONTAINERS_STORAGE_CONF="$S/storage.conf" CONTAINERS_CONF="$S/containers.conf" REGISTRY_AUTH_FILE="$S/auth.json"
+export HOME="$S/home"
+unset XDG_CACHE_HOME
+guard() {
+    local g
+    g="$(podman info --format '{{.Store.GraphRoot}} {{.Store.RunRoot}}' 2>/dev/null)"
+    [ "$g" = "$S/graph $R/run" ] || { echo "ABORT: store is '$g'"; exit 3; }
+}
+guard
+podman load -q -i "$S/fw.tar" > /dev/null
+podman load -q -i "$S/router.tar" > /dev/null
+podman tag "$SRC_FW" localhost/e2e-fw-base:1
+# The router image + this branch's base.Caddyfile (1651-5t7n: strict_sni_host),
+# the same COPY images/router/Containerfile carries.
+printf '%s\n' "FROM $SRC_ROUTER" 'COPY base.Caddyfile /etc/caddy/base.Caddyfile' > "$S/Containerfile.router"
+podman build -q -f "$S/Containerfile.router" -t "localhost/tillandsias-router:v$VERSION" "$REPO/images/router" > "$OUT/router-build.txt" 2>&1 || { cat "$OUT/router-build.txt"; exit 1; }
+rm -f "$S/fw.tar" "$S/router.tar"
+# The window image is the installed chromium-framework image, unchanged
+# (1649-xqet ships no image change), tagged as the version the binary expects.
+podman tag "$SRC_FW" "localhost/tillandsias-chromium-framework:v$VERSION"
+log "images: $(podman images --format '{{.Repository}}:{{.Tag}}' | tr '\n' ' ')"
+
+# ---- scratch CA, leaves published as full chains (prepare_tls's new shape) ----
+CA="$HOME/.local/state/tillandsias/ca"
+mkdir -p "$CA"
+openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=e2e-enclave-ca -keyout "$CA/intermediate.key" -out "$CA/intermediate.crt" \
+    -addext basicConstraints=critical,CA:TRUE -addext keyUsage=critical,keyCertSign,cRLSign 2>/dev/null
+for p in demo other; do
+    d="$S/leaf-$p"; mkdir -p "$d"
+    printf 'subjectAltName=DNS:www.%s.localhost\nbasicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n' "$p" > "$d/ext"
+    openssl req -new -newkey rsa:2048 -nodes -subj "/CN=www.$p.localhost" -keyout "$d/leaf.key" -out "$d/leaf.csr" 2>/dev/null
+    openssl x509 -req -in "$d/leaf.csr" -CA "$CA/intermediate.crt" -CAkey "$CA/intermediate.key" -set_serial "$RANDOM" -days 1 -extfile "$d/ext" -out "$d/leaf.crt" 2>/dev/null
+    cat "$d/leaf.crt" "$CA/intermediate.crt" > "$S/router/preview-tls/$p.crt"
+    cp "$d/leaf.key" "$S/router/preview-tls/$p.key"; chmod 0644 "$S/router/preview-tls/$p.key"
+done
+log "ca-spki $(openssl x509 -in "$CA/intermediate.crt" -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | base64)"
+
+# ---- enclave-like network, two projects' dev servers, the router ----
+HARD=(--cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --userns=keep-id --read-only --tmpfs /tmp:size=64m)
+guard
+podman network create e2e-enclave > /dev/null
+podman run -d --name e2e-demo-web --network e2e-enclave "${HARD[@]}" -v "$HERE:/e2e:ro" --entrypoint node localhost/e2e-fw-base:1 /e2e/web.js PREVIEW-DEMO > /dev/null
+podman run -d --name e2e-other-web --network e2e-enclave "${HARD[@]}" -v "$HERE:/e2e:ro" --entrypoint node localhost/e2e-fw-base:1 /e2e/web.js PREVIEW-OTHER > /dev/null
+# The product's rendering (main.rs, `route.public` arm) for each project.
+{
+    for p in demo other; do
+        printf 'http://web.%s.localhost:8080 {\n    reverse_proxy e2e-%s-web:3000\n}\n\n' "$p" "$p"
+        printf 'https://www.%s.localhost:8443 {\n    tls /etc/tillandsias/preview/%s.crt /etc/tillandsias/preview/%s.key\n    header X-Tillandsias-Preview e2e-%s-web\n    reverse_proxy e2e-%s-web:3000\n}\n\n' "$p" "$p" "$p" "$p" "$p"
+    done
+} > "$S/router/dynamic.Caddyfile"
+podman run -d --name tillandsias-router --hostname router --network-alias router --network e2e-enclave \
+    "${HARD[@]}" --pids-limit=64 --tmpfs /run/router:size=8m \
+    -e http_proxy= -e https_proxy= -e HTTP_PROXY= -e HTTPS_PROXY= -e no_proxy='*' -e NO_PROXY='*' \
+    -v "$S/router/dynamic.Caddyfile:/run/router/dynamic.Caddyfile:rw" \
+    --mount "type=bind,source=$CA/intermediate.crt,target=/etc/tillandsias/ca.crt,readonly=true" \
+    --mount "type=bind,source=$S/router/preview-tls,target=/etc/tillandsias/preview,readonly=true" \
+    "localhost/tillandsias-router:v$VERSION" > /dev/null
+ok=""
+for _ in $(seq 1 30); do
+    r="$(podman exec tillandsias-router curl -s -k -m 2 --resolve www.demo.localhost:8443:127.0.0.1 https://www.demo.localhost:8443/ 2>/dev/null)"
+    case "$r" in *PREVIEW-DEMO*) ok=1; break ;; esac
+    sleep 1
+done
+log "router-self-check demo-preview: ${ok:+ok}${ok:-FAILED}"
+podman logs tillandsias-router > "$OUT/router.log" 2>&1
+[ -n "$ok" ] || { log "router not serving; see router.log"; }
+
+# ---- the live test ----
+guard
+if [ -n "$ok" ]; then
+    TILLANDSIAS_BROWSER_E2E_PREVIEW_PORT=$PORT TILLANDSIAS_BROWSER_E2E_HOST_IP="$HOST_IP" \
+    TILLANDSIAS_BROWSER_E2E_OTHER_UPSTREAM=e2e-other-web TILLANDSIAS_BROWSER_E2E_DEMO_UPSTREAM=e2e-demo-web \
+        timeout 300 "$BIN" --ignored --nocapture --exact \
+        "$TEST" > "$OUT/live-test.txt" 2>&1
+    log "live-test $TEST rc=$?"
+    podman logs e2e-demo-web > "$OUT/demo-web.log" 2>&1
+    grep -E '^(page-report|host-tcp|galaxy-s24|host-chrome|window-|forwarder|browser\.|podman-ps|router-networks|probe|after-close|test )' "$OUT/live-test.txt" | tee -a "$OUT/summary.txt"
+    grep -E 'panicked|assert' "$OUT/live-test.txt" | head -5 | tee -a "$OUT/summary.txt"
+fi
+
+# ---- cleanup, private store only ----
+guard
+podman rm -a -f -t 0 > /dev/null 2>&1
+for n in $(podman network ls --format '{{.Name}}'); do [ "$n" = podman ] || podman network rm -f "$n" > /dev/null 2>&1; done
+podman rmi -a -f > /dev/null 2>&1
+podman unshare sh -c "umount -l '$S/graph/overlay' 2>/dev/null; rm -rf '$S/graph' '$R/run' '$R/tmp'"
+find "$R" -delete 2>/dev/null
+find "$S" -delete 2>/dev/null
+export HOME="$(getent passwd "$(id -u)" | cut -d: -f6)"
+unset CONTAINERS_STORAGE_CONF CONTAINERS_CONF REGISTRY_AUTH_FILE
+
+op_state > "$OUT/op-after"
+find "$OP_NET" -printf '%p %s %T@\n' 2>/dev/null | sort > "$OUT/op-net-after"
+find "$XDG_RUNTIME_DIR/tillandsias/browser" -printf '%p\n' 2>/dev/null | sort > "$OUT/op-browser-dir-after"
+for f in op op-net op-browser-dir; do
+    if cmp -s "$OUT/$f-before" "$OUT/$f-after"; then log "$f: unchanged"; else log "$f: CHANGED"; diff "$OUT/$f-before" "$OUT/$f-after" | tee -a "$OUT/summary.txt"; fi
+done

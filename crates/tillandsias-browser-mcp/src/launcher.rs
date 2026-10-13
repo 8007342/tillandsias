@@ -17,6 +17,7 @@ use std::sync::Arc;
 use url::Url;
 use uuid::Uuid;
 
+use crate::window_cdp::{DeviceEmulation, WindowCdp};
 use crate::window_registry::WindowEntry;
 
 #[derive(Debug, thiserror::Error)]
@@ -27,6 +28,8 @@ pub enum LaunchError {
     Spawn(String),
     #[error("browser metadata probe failed: {0}")]
     Probe(String),
+    #[error("the window's CDP session failed: {0}")]
+    Cdp(String),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -37,6 +40,9 @@ pub struct ContainerLaunchRequest<'a> {
     pub url: &'a Url,
     pub project_label: &'a str,
     pub window_id: &'a str,
+    /// The window's size at launch: the device's CSS viewport, in host DIPs
+    /// (order 1655-urz9).
+    pub window_size: (u32, u32),
 }
 
 /// A started browser window, as the host names it.
@@ -45,6 +51,9 @@ pub struct ContainerHandle {
     pub container_name: String,
     pub network_name: String,
     pub profile_dir: PathBuf,
+    /// The window's CDP relay socket, in a per-window host directory only
+    /// the tray mounts (order 1655-urz9). `None`: the window has no CDP.
+    pub cdp_socket: Option<PathBuf>,
 }
 
 /// The host side of `browser.open`: start and stop the browser container.
@@ -104,44 +113,53 @@ fn default_title(url: &Url) -> String {
     url.host_str().unwrap_or("browser").to_string()
 }
 
-/// Launch a browser window and return its registry entry.
+/// How long `launch` waits for the window container's CDP relay socket.
+const CDP_CONNECT_BUDGET: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Launch a browser window emulating `device` and return its registry entry.
+///
+/// Order 1655-urz9: a container window starts on about:blank. The tray
+/// attaches the window's ONE CDP session through its relay socket, emulates
+/// the device on the page, and only then navigates to `url`, so the first
+/// request already carries the device's UA and the first layout its
+/// viewport. Any failure stops the container.
 pub fn launch(
     url: &Url,
     project_label: &str,
     mode: &LaunchMode,
+    device: &DeviceEmulation,
+    dev: bool,
 ) -> Result<WindowEntry, LaunchError> {
     let window_id = format!("win-{}", Uuid::new_v4());
-    let (container, cdp_port, target_id, title, user_data_dir) = match mode {
+    let (container, cdp, title, user_data_dir) = match mode {
         LaunchMode::Unavailable => return Err(LaunchError::BrowserUnavailable),
-        LaunchMode::Fake => (
-            None,
-            0,
-            format!("{window_id}-target"),
-            default_title(url),
-            PathBuf::new(),
-        ),
+        LaunchMode::Fake => (None, None, default_title(url), PathBuf::new()),
         // No DevTools port: a host TCP listener would hand full control of
-        // the window, cookies included, to every local process. Dev-mode CDP
-        // goes through a per-lane Unix socket the tray brokers (follow-up
-        // row); until then cdp_port 0 makes the CDP tools answer typed errors.
+        // the window, cookies included, to every local process. CDP is the
+        // container's --remote-debugging-pipe, relayed to a Unix socket.
         LaunchMode::Container(host) => {
             let handle = host.start(&ContainerLaunchRequest {
                 url,
                 project_label,
                 window_id: &window_id,
+                window_size: device.window_size(),
             })?;
             let profile_dir = handle.profile_dir.clone();
+            let socket = handle.cdp_socket.clone();
             let running = RunningContainer {
                 handle,
                 host: Arc::clone(host),
             };
-            (
-                Some(running),
-                0,
-                format!("{window_id}-target"),
-                default_title(url),
-                profile_dir,
-            )
+            let cdp = match socket {
+                Some(socket) => {
+                    let cdp = WindowCdp::attach(&socket, device.clone(), dev, CDP_CONNECT_BUDGET)
+                        .and_then(|cdp| cdp.navigate(url.as_str()).map(|()| cdp))
+                        .map_err(|e| LaunchError::Cdp(e.to_string()))?;
+                    Some(Arc::new(cdp))
+                }
+                None => None,
+            };
+            (Some(running), cdp, default_title(url), profile_dir)
         }
     };
 
@@ -150,12 +168,13 @@ pub fn launch(
     Ok(WindowEntry {
         window_id,
         pid: 0,
-        cdp_port,
-        target_id,
         project_label: project_label.to_string(),
         user_data_dir,
         opened_url: url.as_str().to_string(),
         title,
+        owning_lane: String::new(),
+        dev,
+        cdp,
         container,
         created_at: now,
         last_activity: now,

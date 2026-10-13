@@ -1674,17 +1674,23 @@ example of capture → reduce → promote.
 
 ## When the Gate Fails, Read check-logs.jsonl FIRST
 
-`target/convergence/check-logs.jsonl` holds a per-run verdict for every check,
+`.cache/convergence/check-logs.jsonl` holds a per-run verdict for every check,
 going back weeks. It is the authoritative record of what failed and when.
+`scripts/convergence-log-path.sh` prints its path and honours
+`TILLANDSIAS_CHECK_LOG_INDEX`. It lived at `target/convergence/check-logs.jsonl`
+until order 888-vgs8: Finalization 9c's `cargo clean` removes `target/`
+wholesale, so the sweep this skill mandates was erasing the history this
+section mandates reading, and the sweep's verdict never said so. The first
+resolve after the move adopts a legacy `target/` index once, by copy.
 
 Do NOT diagnose from terminal scrollback. The next run overwrites the per-check
-logs under `target/convergence/check-logs/`, and re-running to "get a better
-look" is what destroys the evidence — the re-run may pass, and then the failure
-is gone.
+logs under `target/convergence/check-logs/` (those still go with a sweep), and
+re-running to "get a better look" is what destroys the evidence — the re-run
+may pass, and then the failure is gone.
 
 ```bash
 jq -r 'select(.status != "pass") | "\(.ci_run_id)\t\(.check_id)\t\(.status)"' \
-  target/convergence/check-logs.jsonl | tail -20
+  "$(scripts/convergence-log-path.sh)" | tail -20
 ```
 
 `scripts/local-ci.sh` also prints a `Failed checks:` block naming each failure.
@@ -2594,6 +2600,13 @@ Before exit:
    requires `--steps`: a stamp recording that "something happened" without
    recording what moves the unfalsifiability up a level instead of removing it.
    Record `skipped-absent` / `deferred-<reason>` honestly.
+
+   The convergence check log — the file "When the Gate Fails" above orders
+   you to read FIRST — is NOT in `target/` since order 888-vgs8: it lives at
+   `.cache/convergence/check-logs.jsonl`, resolved by
+   `scripts/convergence-log-path.sh`, so this sweep no longer erases the
+   failure history. The per-check logs under `target/convergence/check-logs/`
+   do go with it, as they always did; they are overwritten every run anyway.
 
    BEST-EFFORT, NEVER A GATE: a failed sweep must not fail the cycle, and the
    sweep must not run before the work. Ephemeral forges read `skip:forge-exempt`

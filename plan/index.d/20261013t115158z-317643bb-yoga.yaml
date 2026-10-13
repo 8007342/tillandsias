@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-mandated-cache-sweep-destroys-the-mandated-failure-log
+    event:
+      type: progress
+      ts: "2026-10-13T11:51:58Z"
+      agent_id: linux-yoga-claude-20261013t112332z
+      host: yoga
+      summary: |
+        Slice 1 pushed on work/888-vgs8 at 257d8f898 (yoga, cycle 2026-10-13T11:23Z); the sha is the ref's, not a landing. Route taken is the row's notes (relocate, not a sweep exception). New scripts/convergence-log-path.sh resolves the check-log index for every writer and reader - TILLANDSIAS_CHECK_LOG_INDEX verbatim, else <checkout>/.cache/convergence/check-logs.jsonl, with a legacy target/ index adopted once by copy. Wired - local-ci.sh and record-ci-phase-result.sh (writers), check-release-tier-freshness.sh (reader), no target/ fallback; SKILL.md read-first section and Finalization 9c name the new home. Fixture scripts/test-check-log-index-survives-cargo-clean.sh, 7 arms, premise before property - 5/7 before the wiring (after rm -rf target the reader answered never about a tier it had exercised), 7/7 after; the real cargo clean arm pins CARGO_TARGET_DIR to the scratch crate. litmus check-log-survives-the-cache-sweep bound under meta-orchestration with one live arm on the real checkout. Verification - deciders by rc all 0; door ran=228 refused=0 (19 deadline-skipped); instant tier of meta-orchestration passed=28 failed=0; test-release-tier-freshness 14/14 with its honours-the-override arm rewritten from the old literal to the property; gate-divergence ok 22 after the resolver was renamed off the check- prefix and declared infra. Draft PR opened; closure cites the LANDED sha only.
+        Follow-up a95608c12 on the same ref carries the trailer Carried-Waiver shell-to-lua blocked-by 1384-aixy - check-carried-obligations.lua reads the change as due on that backlog (it touches check-release-tier-freshness.sh), every offered item at or under 150 lines spawns git, cargo, podman or the plan binary, and scripts/lua cannot spawn while 1384-aixy is blocked; the guard in --landing mode answers waived, silent=0. Ref head on origin a95608c12.

@@ -76,12 +76,37 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: strict_sni_host on"
 
+  - step: "CDP is Chromium's --remote-debugging-pipe, relayed to ONE client on a Unix socket in the window's own directory, never a TCP port; negative control: a relay that listens on a TCP port must FAIL"
+    # Order 1655-urz9. Measured live: no new host TCP listener and no TCP
+    # listener in the window container while a device window was open; the
+    # per-window socket directory was 0700 and removed on close.
+    command: "set -u; T=target/litmus-browser-open; mkdir -p \"$T\"; J=crates/tillandsias-headless/src/browser_window_cdp_relay.js; R=crates/tillandsias-headless/src/browser_open.rs; piped() { grep -qF \"'--remote-debugging-pipe'\" \"$1\" && grep -qF 'server.listen(SOCKET,' \"$1\" && [ \"$(grep -c '\\.listen(' \"$1\")\" = 1 ] && grep -qF 'if (client) {' \"$1\" && grep -qF \"chromium.kill('SIGTERM')\" \"$1\" && ! grep -qE 'remote-debugging-port|listen\\([0-9]' \"$1\" && grep -qF 'include_str!(\"browser_window_cdp_relay.js\")' \"$R\" && grep -qF '[\"node\", \"-e\", CDP_RELAY_JS, \"--\"]' \"$R\"; }; piped \"$J\" || { echo 'FAIL: the window CDP relay is not pipe-to-one-Unix-socket-client'; rm -rf \"$T\"; exit 1; }; sed 's/server.listen(SOCKET,/server.listen(9222,/' \"$J\" > \"$T/relay.js\"; if piped \"$T/relay.js\"; then echo 'FAIL: negative control passed'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: CDP is the pipe, relayed to one Unix-socket client; seeded TCP listen caught'"
+    timeout_ms: 5000
+    expected_behavior: "ok: CDP is the pipe, relayed to one Unix-socket client"
+
+  - step: "browser.open{device} emulates the device (touch, metrics, UA) and re-asserts touch on every main-frame commit and load; browser.set_device is wired; negative control: dropping the re-assert must FAIL"
+    # Order 1655-urz9. Measured live: without the re-assert the window's
+    # first page saw navigator.maxTouchPoints fall from 5 to 0 just after
+    # the about:blank -> site commit; with it the page saw [428, 3, 5].
+    command: "set -u; T=target/litmus-browser-open; mkdir -p \"$T\"; W=crates/tillandsias-browser-mcp/src/window_cdp.rs; S=crates/tillandsias-browser-mcp/src/server.rs; wired() { grep -qF '\"Emulation.setTouchEmulationEnabled\",' \"$1\" && grep -qF '\"Emulation.setDeviceMetricsOverride\",' \"$1\" && grep -qF '(\"Emulation.setUserAgentOverride\", ua),' \"$1\" && grep -qF 'Some(\"Page.frameNavigated\") if params[\"frame\"].get(\"parentId\").is_none() => {' \"$1\" && grep -qF 'Some(\"Page.loadEventFired\") => {' \"$1\" && [ \"$(grep -cF 'reassert_touch(conn, session, state);' \"$1\")\" = 2 ] && grep -qF '\"browser.set_device\" => self.handle_browser_set_device(id, args),' \"$S\"; }; wired \"$W\" || { echo 'FAIL: device emulation, its touch re-assert, or browser.set_device is unwired'; rm -rf \"$T\"; exit 1; }; grep -vF 'reassert_touch(conn, session, state);' \"$W\" > \"$T/w.rs\"; if wired \"$T/w.rs\"; then echo 'FAIL: negative control passed'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: emulation (touch, metrics, UA) re-asserted on commit and load, set_device wired; seeded removal caught'"
+    timeout_ms: 5000
+    expected_behavior: "ok: emulation (touch, metrics, UA) re-asserted on commit and load, set_device wired"
+
+  - step: "dev mode gives raw CDP only to the lane that opened the window: every window lookup checks the owning lane and browser.cdp needs a dev-mode window; negative control: a registry lookup without the owner filter must FAIL"
+    # Order 1656-iktu. Measured live: lane A's browser.cdp Runtime.evaluate
+    # 1+1 returned 2; lane B's browser.cdp and browser.screenshot with the
+    # same window_id got WINDOW_NOT_FOUND; raw Page.navigate to a public host
+    # and to another project both ended in net::ERR_NAME_NOT_RESOLVED.
+    command: "set -u; T=target/litmus-browser-open; mkdir -p \"$T\"; G=crates/tillandsias-browser-mcp/src/window_registry.rs; S=crates/tillandsias-browser-mcp/src/server.rs; owned() { grep -qF '.filter(|entry| entry.owning_lane == lane)' \"$1\" && grep -qF '.is_some_and(|entry| entry.owning_lane == lane)' \"$1\" && grep -qF 'match self.windows.cdp_for(window_id, &self.owner()) {' \"$S\" && grep -qF 'let (cdp, page) = match self.dev_window(id, window_id, \"browser.cdp\") {' \"$S\" && grep -qF 'DEV_MODE_REQUIRED: {tool} needs a development-mode window' \"$S\"; }; owned \"$G\" || { echo 'FAIL: a window lookup no longer checks the owning lane, or browser.cdp is not dev-gated'; rm -rf \"$T\"; exit 1; }; grep -vF '.filter(|entry| entry.owning_lane == lane)' \"$G\" > \"$T/reg.rs\"; if owned \"$T/reg.rs\"; then echo 'FAIL: negative control passed'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: window lookups check the owning lane, raw CDP is dev-gated; seeded owner bypass caught'"
+    timeout_ms: 5000
+    expected_behavior: "ok: window lookups check the owning lane, raw CDP is dev-gated"
+
 observability:
   traces:
     - "@trace spec:host-browser-mcp"
     - "@trace spec:browser-isolation-tray-integration"
     - "@trace spec:local-web-preview"
-  expected_log: "launcher container-only + internal network/resolver/pin + https-only preview port + full-chain leaf + no host listener pinned, each with a seeded negative control"
+  expected_log: "launcher container-only + internal network/resolver/pin + https-only preview port + full-chain leaf + no host listener + SNI-bound forwarder + strict_sni_host + CDP pipe relay + device emulation + owning-lane dev-mode CDP pinned, each with a seeded negative control"
   log_fields:
     spec: "host-browser-mcp"
     test: "browser-open-container-shape"

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: development-scratch-and-worktrees-live-inside-the-checkout-under-one-ignored-dir-that-every-scanner-skips
+    event:
+      type: progress
+      ts: "2026-10-13T10:06:13Z"
+      agent_id: linux-yoga-claude-20261013t095822z
+      host: yoga
+      summary: |
+        Criterion-3 probe on work/1637-cnxq at 601109cad (trunk 0e0a698c4 merged): planted scratch/planted/{evil.sh,evil.py,evil.rs,evil.lua} carrying a bare mktemp, ${TMPDIR:-/tmp}, writes to /tmp, git worktree add ../, ${v,,}, a printf|grep -q pipeline, jq, sleep, python3 and a python shebang, env!(CARGO_MANIFEST_DIR), and a Lua rm -rf. git status saw nothing (ignored). ./build.sh --preflight before and after the plant was identical - ran=229 declared-skip=9 skipped-by-deadline=19 refused=1 (the 830 regime hold) - zero new refusals and no guard output named the planted path; unplanted, 0 files left under scratch/. Evidence for criterion 3 over the 229 guards that ran. Unobserved - the 19 deadline-skipped guards; and the Lua fs.walk helper (walk_files in crates/tillandsias-plan/src/script_run.rs) has no skip list, so a guard walking from the repo root would see scratch/ (today every check-*.lua walks a subtree). Next slice turns the probe into a repeatable arm and gives the walker a scratch/ skip. Trunk baseline door on 0e0a698c4 - 0 refusals.

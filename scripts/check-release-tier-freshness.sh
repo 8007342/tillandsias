@@ -6,7 +6,7 @@
 #
 # THE GAP THIS FILLS (890-27mv). The recurring loop gates on `./build.sh
 # --check`; the release gates on `--ci-full`. run-litmus-test.sh is reached
-# only from the --ci/--ci-full path, and target/convergence/check-logs.jsonl is
+# only from the --ci/--ci-full path, and the convergence check log is
 # written only by scripts/local-ci.sh. So the delta between the two tiers is
 # never exercised between releases, accumulates silently, and is discharged all
 # at once by whoever is trying to ship. Measured on yoga 2026-09-12:
@@ -36,7 +36,12 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || { echo "could-not-run:release-tier:repo root unreachable"; exit 3; }
 
-INDEX="${TILLANDSIAS_CHECK_LOG_INDEX:-target/convergence/check-logs.jsonl}"
+# 888-vgs8: the index left target/ — Finalization 9c's `cargo clean` removed it
+# with the cache, and this reader then answered never: about a tier the host
+# had exercised. The one path rule, override included, is
+# scripts/convergence-log-path.sh; resolving through it adopts a legacy target/
+# index once, by copy, which is what keeps that answer true across the move.
+INDEX="$(scripts/convergence-log-path.sh)" || { echo "could-not-run:release-tier:scripts/convergence-log-path.sh did not answer"; exit 3; }
 MAX_AGE_DAYS="${TILLANDSIAS_RELEASE_TIER_MAX_AGE_DAYS:-7}"
 
 # ── Age arithmetic WITHOUT `date -d` ───────────────────────────────────────

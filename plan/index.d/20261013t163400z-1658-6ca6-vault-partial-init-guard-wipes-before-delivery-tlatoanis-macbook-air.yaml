@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's direction (2026-10-13): found by the 1642-cc54 criterion-2 live proof on tlatoanis-macbook-air. Unclaimed.
+packets:
+  - packet_id: the-vault-partial-init-guard-wipes-a-valid-store-when-the-share-has-not-been-delivered-yet
+    order: 1658-6ca6
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [vault, security, data-loss, headless, credentials]
+    estimated_hours: 4
+    related: [1642-cc54, 803-49re, 701-se6x, 1437-qza3]
+    depends_on: []
+    title: |
+      The Vault partial-init guard concludes "no share" before the host's credential delivery can arrive, and wipes a valid store
+    context: |
+      crates/tillandsias-headless/src/vault_bootstrap.rs: `is_partial_init = vault_data_volume_exists() && !has_shamir_share_in_keyring()`, and when true it WIPES vault-data ("every credential stored in it is lost and Vault will be initialised afresh"). has_shamir_share_in_keyring() consults the OS keychain (absent in a guest) and then the fallback file. It does not wait for, or consult, the share the host delivers over the control wire (DeliverCredentials), which on macOS arrives only from the tray's polls, and those may run late or not at all once the push subscription demotes them.
+      MEASURED twice on 2026-10-13 (1642-cc54 live proof, tlatoanis-macbook-air), guest journal: "WIPING /var/lib/tillandsias/identity/vault-data: the unseal share vault-shamir-share-v1 is in neither the keyring nor its fallback file" at 15:47:03 and 16:13:41. Both times the host keychain held the share (the rebuild had kept it deliberately) and the store was intact on the identity disk. The guard decided before delivery and destroyed the operator's GitHub sign-in.
+      1642-cc54 removed the TRIGGER on macOS (fallbacks now travel with the store on the identity disk: ffae052d9 and its follow-up). The guard's own defect is general: on any platform, a destructive decision is taken on "not delivered yet" as if it meant "absent".
+    exit_criteria:
+      - 'the guard waits for the first credential delivery from the host, or a bounded deadline, before deciding the share is absent'
+      - 'a late but valid delivery never triggers a wipe: a test delivers the share after the guard first checks and asserts the store is intact (red on trunk today)'
+      - 'NEGATIVE CONTROL: a genuinely absent share (no keychain, no fallback, no delivery) still wipes after the deadline, so the guard is not disabled'
+      - 'the wipe line names every source it checked (keychain, each fallback path, delivery) and when, so the next occurrence explains itself'
+    unscoreable: "a destructive-guard timing change pinned by tests on late delivery, absence after the deadline, and the wipe's own log line"

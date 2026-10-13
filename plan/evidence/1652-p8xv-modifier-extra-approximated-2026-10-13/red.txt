@@ -1,0 +1,15 @@
+failures:
+
+---- devices::tests::a_match_that_needs_an_unnamed_modifier_is_approximated stdout ----
+
+thread 'devices::tests::a_match_that_needs_an_unnamed_modifier_is_approximated' (2111677) panicked at crates/tillandsias-core/src/devices.rs:531:9:
+galaxy s23 resolved exactly to samsung-galaxy-s23-fe
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    devices::tests::a_match_that_needs_an_unnamed_modifier_is_approximated
+
+test result: FAILED. 10 passed; 1 failed; 0 ignored; 0 measured; 219 filtered out; finished in 0.03s
+
+error: test failed, to rerun pass `-p tillandsias-core --lib`

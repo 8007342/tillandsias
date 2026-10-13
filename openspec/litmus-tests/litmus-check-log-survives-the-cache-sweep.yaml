@@ -1,0 +1,47 @@
+# freshness: added 2026-10-13 linux-yoga (order 888-vgs8)
+#
+# Order 888-vgs8: `cargo clean` — which skills/meta-orchestration/SKILL.md
+# Finalization 9c orders whenever check-build-cache-sweep.sh answers due —
+# removes target/ WHOLESALE, and target/convergence/check-logs.jsonl was the
+# failure history the same skill orders a reader to open FIRST when a gate
+# fails. The mandated sweep destroyed the mandated record, and the sweep's
+# verdict named bytes and a marker date, never the file. The record now lives
+# at <checkout>/.cache/convergence/check-logs.jsonl, resolved for every writer
+# and reader by scripts/convergence-log-path.sh (the route the row's notes
+# prefer, and the one scripts/metrics-log-path.sh already took for the metrics
+# series on 2026-08-26 for the same reason).
+name: litmus:check-log-survives-the-cache-sweep
+spec: meta-orchestration
+phase: pre-build
+size: instant
+severity: medium
+description: >
+  Pin that the convergence check log survives the build-cache sweep: its
+  default home is outside target/, an explicit TILLANDSIAS_CHECK_LOG_INDEX is
+  honoured verbatim, a legacy target/ index is adopted exactly once by copy,
+  the resolved index is intact after target/ is removed (and after a real
+  `cargo clean` where cargo is on PATH), and check-release-tier-freshness.sh
+  still answers ok about a host's release tier after the sweep — where the
+  pre-fix reader answered never:. Hermetic: every arm builds its own tree.
+
+preconditions:
+  - workspace contains scripts/convergence-log-path.sh
+  - workspace contains scripts/test-check-log-index-survives-cargo-clean.sh
+
+critical_path:
+  - step: "the resolver and the fixture parse and carry their exec bits"
+    command: "bash -n scripts/convergence-log-path.sh && bash -n scripts/test-check-log-index-survives-cargo-clean.sh && test -x scripts/convergence-log-path.sh && test -x scripts/test-check-log-index-survives-cargo-clean.sh && echo 'ok: check-log-index-parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: check-log-index-parses"
+
+  - step: "THIS checkout's check log resolves outside target/ — the real tree, not only the fixture's (resolving adopts a legacy target/ index on this host once, by copy)"
+    command: "p=$(env -u TILLANDSIAS_CHECK_LOG_INDEX scripts/convergence-log-path.sh 2>/dev/null); case \"$p\" in */target/*) echo \"FAIL: $p is inside target/\" ;; */.cache/convergence/check-logs.jsonl) echo 'ok: live index is outside target' ;; *) echo \"FAIL: unexpected $p\" ;; esac"
+    timeout_ms: 5000
+    expected_behavior: "ok: live index is outside target"
+
+  - step: "the index survives what cargo clean does to target/, legacy history is adopted once, and the freshness reader still finds the tier after the sweep"
+    # Capture then match (check-shell-ratchet.lua, 1624-bv73): no pipe in a
+    # litmus command. The whole fixture output is echoed on a miss.
+    command: "out=$(bash scripts/test-check-log-index-survives-cargo-clean.sh 2>&1); rc=$?; case \"$out\" in *'PASS: check-log-index-survives-cargo-clean'*) echo 'ok: check-log-index-survives-cargo-clean' ;; *) echo \"$out\"; echo \"FAIL: fixture rc=$rc\" ;; esac"
+    timeout_ms: 120000
+    expected_behavior: "ok: check-log-index-survives-cargo-clean"

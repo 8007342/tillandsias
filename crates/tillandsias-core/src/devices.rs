@@ -16,8 +16,10 @@
 //!    samsung→galaxy). A trailing `landscape` swaps the dimensions (rule 6).
 //! 2. An exact alias (or id) wins.
 //! 3. Otherwise every requested token must be present; the fewest extra
-//!    tokens wins, a modifier extra (pro, max, plus, ultra, mini, e, fold,
-//!    flip, cover) always outweighing any other extra.
+//!    tokens wins, a modifier extra (pro, max, plus, ultra, mini, e, fe,
+//!    fold, flip, cover) always outweighing any other extra. A winner that
+//!    carries a modifier the query did not name is not the requested model,
+//!    so it is approximated (`galaxy s23` with no base S23 in the data).
 //! 4. A brand or family alone gives the newest base flagship by release date
 //!    (never an e/mini/fold/flip/cover model).
 //! 5. A tie, or a near miss inside a named brand, returns the best match plus
@@ -155,9 +157,9 @@ pub struct Resolution {
 }
 
 const MODIFIERS: &[&str] = &[
-    "pro", "max", "plus", "ultra", "mini", "e", "fold", "flip", "cover",
+    "pro", "max", "plus", "ultra", "mini", "e", "fe", "fold", "flip", "cover",
 ];
-const NOT_BASE: &[&str] = &["e", "mini", "fold", "flip", "cover"];
+const NOT_BASE: &[&str] = &["e", "fe", "mini", "fold", "flip", "cover"];
 
 /// Split one lowercase word into tokens: a letter run of two or more meets
 /// digits (`iphone12` → iphone 12); digits meet letters (`16e` → 16 e). A
@@ -373,7 +375,10 @@ pub fn resolve(query: &str) -> Option<Resolution> {
             .take(4)
             .map(|(d, _)| d.id.clone())
             .collect();
-        return Some(oriented(query, hits[0].0, landscape, "tokens", alts));
+        let mut res = oriented(query, hits[0].0, landscape, "tokens", alts);
+        // Order 1652-p8xv: an unnamed modifier means another model.
+        res.approximated |= best_score.0 > 0;
+        return Some(res);
     }
 
     // Rule 5: a near miss, only inside ONE brand: the one the query named, or
@@ -490,14 +495,89 @@ mod tests {
         assert!(resolve("blorp 9000").is_none());
         assert!(resolve("zzz").is_none());
         assert!(resolve("").is_none());
-        let s = r("galaxy s24 ultra");
+        // Order 1644-u8b8: the S24 Ultra is in the data now, so the near
+        // miss is a Galaxy S that does not exist.
+        let s = r("galaxy s99");
         assert_eq!(s.brand, "samsung");
-        assert!(s.approximated, "no S24 Ultra in the data: approximated");
-        assert_eq!(s.id, "samsung-galaxy-s24");
+        assert!(s.approximated, "no S99 in the data: approximated");
         assert!(s.alternatives.iter().all(|id| id.starts_with("samsung-")));
         let i = r("iphone 99 ultra");
         assert_eq!(i.brand, "apple");
         assert!(i.approximated);
+    }
+
+    /// Order 1644-u8b8, exit criterion 3: the two Ultras resolve exactly, by
+    /// alias, to the manufacturer-sourced entries (3120 x 1440 panels, the
+    /// labelled bucket derivation: dpr 3.5, 411 x 891 CSS).
+    #[test]
+    fn galaxy_s24_and_s25_ultra_resolve_exactly() {
+        for (q, id) in [
+            ("galaxy s24 ultra", "samsung-galaxy-s24-ultra"),
+            ("galaxy s25 ultra", "samsung-galaxy-s25-ultra"),
+            ("Samsung Galaxy S25 Ultra", "samsung-galaxy-s25-ultra"),
+        ] {
+            let d = r(q);
+            assert_eq!(d.id, id, "{q}");
+            assert!(!d.approximated, "{q} is exact");
+            assert_eq!((d.viewport.w, d.viewport.h, d.dpr), (411, 891, 3.5), "{q}");
+            assert_eq!(d.engine, "blink");
+            assert_eq!(d.device.source.kind, "manufacturer-spec");
+        }
+    }
+
+    /// Order 1652-p8xv: there is no base Galaxy S23 in the data, and every
+    /// S23 model carries a modifier the query did not name (plus, ultra,
+    /// fe). Such a match is not the requested model: approximated, naming
+    /// the chosen model. Naming the modifier is the model asked for: exact.
+    #[test]
+    fn a_match_that_needs_an_unnamed_modifier_is_approximated() {
+        let s = r("galaxy s23");
+        assert!(s.id.starts_with("samsung-galaxy-s23-"), "{}", s.id);
+        assert!(s.approximated, "galaxy s23 resolved exactly to {}", s.id);
+        assert!(!s.model.is_empty());
+        let fe = r("galaxy s23 fe");
+        assert_eq!(
+            (fe.id.as_str(), fe.approximated),
+            ("samsung-galaxy-s23-fe", false)
+        );
+    }
+
+    /// Order 1644-u8b8, exit criteria 1 and 2: >= 500 devices across >= 12
+    /// real makers, each with a source and licence, and every derived value
+    /// labelled (a manufacturer-spec entry carries its derivation unless the
+    /// maker published scale and viewport).
+    #[test]
+    fn the_catalogue_covers_the_long_tail_with_labelled_derivations() {
+        let devices = all();
+        assert!(devices.len() >= 500, "{} devices", devices.len());
+        let brands: BTreeSet<&str> = devices
+            .iter()
+            .map(|d| d.brand.as_str())
+            .filter(|b| !matches!(*b, "desktop" | "laptop" | "generic"))
+            .collect();
+        assert!(brands.len() >= 12, "{brands:?}");
+        for d in devices
+            .iter()
+            .filter(|d| d.source.kind == "manufacturer-spec")
+        {
+            assert!(
+                d.source
+                    .derivation
+                    .as_deref()
+                    .is_some_and(|t| !t.trim().is_empty()),
+                "{} has an unlabelled derived dpr/viewport",
+                d.id
+            );
+            let px = d
+                .screen_px
+                .expect("manufacturer entries state physical pixels");
+            let short_css = f64::from(px.w.min(px.h)) / d.dpr;
+            assert!(
+                (short_css - f64::from(d.viewport.w.min(d.viewport.h))).abs() <= 1.0,
+                "{}: viewport is not physical / dpr",
+                d.id
+            );
+        }
     }
 
     #[test]
@@ -508,7 +588,10 @@ mod tests {
         assert_eq!(r("samsung s24").id, "samsung-galaxy-s24");
         assert_eq!(r("google").id, "google-pixel-10");
         let s = r("s24u");
-        assert_eq!((s.brand.as_str(), s.approximated), ("samsung", true));
+        assert_eq!(
+            (s.id.as_str(), s.approximated),
+            ("samsung-galaxy-s24-ultra", false)
+        );
         assert!(
             resolve("9000 ultra").is_none(),
             "a modifier plus nonsense implies no brand"

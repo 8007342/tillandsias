@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-mandated-cache-sweep-destroys-the-mandated-failure-log
+    event:
+      type: progress
+      ts: "2026-10-13T13:29:21Z"
+      agent_id: linux-yoga-claude-20261013t132332z
+      host: yoga
+      summary: |
+        PR #402 marked ready for review at 9c68f81e3 (yoga, cycle 2026-10-13T13:23Z) - the merge of origin/linux-next 8ffbd7015 into work/888-vgs8, pushed and confirmed by ls-remote; still a ref sha, not a landing. Pre-ready sequence on the merged ref - one merge base, two-dot and three-dot diffs agree on 14 files with no D lines; ./build.sh --preflight ran=228 refused=0 (9 declared skips, 19 deadline skips, wall 106s); check-carried-obligations.lua --landing answers carried shell-to-lua waived blocked-by 1384-aixy with silent=0; test-check-log-index-survives-cargo-clean.sh 7/7 skipped=0 on the merged tree; no openspec/specs path is touched so check-spec-script-paths is not owed. Exit criteria read against the ref and recorded on the PR - the index moves outside target/ through scripts/convergence-log-path.sh (1); ARM 5 runs a real cargo clean and ARM 4 the same removal on a tree with history and reads it afterwards (2); those arms assert the legacy location is gone before reading, so the sweep still reclaimed (3); SKILL.md names the new home in the read-first section and in 9c (4). The queue lands it once; closure cites the landed sha on origin/linux-next. No new claim this cycle, WIP 3 of 3 (888-vgs8, 1637-cnxq, 472).

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: development-scratch-and-worktrees-live-inside-the-checkout-under-one-ignored-dir-that-every-scanner-skips
+    event:
+      type: progress
+      ts: "2026-10-13T15:53:40Z"
+      agent_id: linux-yoga-claude-20261013t152424z
+      host: yoga
+      summary: |
+        Slice 6 at c5125721e on work/1637-cnxq (port commit e7ce689f8; trunk 40f1c5805 merged): the shell-to-lua item this ref owes is PAID by a port - scripts/check-cheatsheet-sources.sh (57 lines, the guard's offer) is now scripts/lua/check-cheatsheet-sources.lua on tillandsias-plan script run, shaped like check-no-python-scripts.lua (flags validated first, cargo build of tillandsias-policy with CARGO_TARGET_DIR passed through, binary resolved by execution, lines relayed, exit code kept); .sh deleted, decider floor -1. Consumers repointed - pre-commit-openspec hook (missing runner = named non-blocking warning), both cheatsheet-source-layer litmus, three live specs (check-spec-script-paths ok 97-resolved after), the distro-packaged cheatsheet recipe and its re-staged image copy, check-cheatsheet-tiers.sh comment. Proof - five side-by-side arms .sh vs .lua (--no-sha, no args, --bogus, invalid INDEX.json, empty INDEX.json over the real corpus - 531 relayed lines rc 1): same rc, same stderr; stdout differs by the appended verdict line and two dropped blank lines. Hook exercised with a planted manifest (46 ERROR lines surfaced non-blocking) and with no runner. test-spec-script-paths 6/6, litmus 2/2, shell ratchet ok sh=629 floor=612, pin claims ok, gate-divergence ok. Carried guard --landing - waived:paid-but-offset population-630-to-630 (this ref also adds test-check-scratch-location-added.sh; size rule cannot read a port beside a new fixture as paid - note for 1577-g96z), silent=0. Door at e7ce689f8 ran=227 refused=1 (the 830 regime hold). Door roster change, deliberate - the door ran this guard only via the hook's .sh mention (roster source 3); a Lua path in a hook is not a source, so the door no longer runs it; the layer is retired (tombstone) and the two litmus still execute it. STALE-INSTRUMENT LESSON - the first door refused test-check-scratch-location-added arm 16 (fs.walk skip) because cycle-preflight had rebuilt the plan binary from TRUNK at 15:24Z and check-plan-binary-current still said content-verified (script_run.rs is outside the validator surface, 1287-h6qn); rebuilt on the ref, fixture 17/17. A fixture over the runner's own behaviour cannot tell a stale runner from a regression. Still BLOCKED for READY on a darwin or msys STEP_SECOND_REGIME for 830-1637-cnxq.step.

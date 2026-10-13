@@ -9,7 +9,10 @@ use std::time::Instant;
 
 use parking_lot::Mutex;
 
+use std::sync::Arc;
+
 use crate::launcher::RunningContainer;
+use crate::window_cdp::WindowCdp;
 use tracing::{debug, info};
 
 /// Stable browser window identifier.
@@ -20,12 +23,18 @@ pub type WindowId = String;
 pub struct WindowEntry {
     pub window_id: WindowId,
     pub pid: u32,
-    pub cdp_port: u16,
-    pub target_id: String,
     pub project_label: String,
     pub user_data_dir: PathBuf,
     pub opened_url: String,
     pub title: String,
+    /// The lane that opened the window, `<project>/<instance>` (order
+    /// 1656-iktu). Every lookup that acts on the window checks it.
+    pub owning_lane: String,
+    /// Development mode: the owning lane gets full CDP (order 1656-iktu).
+    pub dev: bool,
+    /// The window's ONE CDP session (order 1655-urz9). Dropped before the
+    /// container, so the relay ends Chromium as the session closes.
+    pub cdp: Option<Arc<WindowCdp>>,
     /// The window's container; dropping it stops the container (1649-xqet).
     pub container: Option<RunningContainer>,
     /// @trace spec:browser-window-timeout
@@ -107,22 +116,35 @@ impl WindowRegistry {
             })
     }
 
-    pub fn get_entry(&self, window_id: &str) -> Option<(u16, String)> {
+    /// The window's CDP session and dev flag, for its owning lane only:
+    /// `None` when there is no such window OR another lane opened it (the
+    /// two are indistinguishable to the caller, order 1656-iktu); an inner
+    /// `None` when the window has no CDP (fake launch mode).
+    pub fn cdp_for(&self, window_id: &str, lane: &str) -> Option<(Option<Arc<WindowCdp>>, bool)> {
         self.windows
             .lock()
             .get(window_id)
-            .map(|entry| (entry.cdp_port, entry.target_id.clone()))
+            .filter(|entry| entry.owning_lane == lane)
+            .map(|entry| (entry.cdp.clone(), entry.dev))
+    }
+
+    /// Whether `lane` opened `window_id`.
+    pub fn owned_by(&self, window_id: &str, lane: &str) -> bool {
+        self.windows
+            .lock()
+            .get(window_id)
+            .is_some_and(|entry| entry.owning_lane == lane)
     }
 
     pub fn get_entry_mut(&self, window_id: &str) -> Option<WindowEntry> {
         self.windows.lock().remove(window_id)
     }
 
-    pub fn list_for_project(&self, project_label: &str) -> Vec<WindowSummary> {
+    pub fn list_for_lane(&self, lane: &str) -> Vec<WindowSummary> {
         self.windows
             .lock()
             .values()
-            .filter(|entry| entry.project_label == project_label)
+            .filter(|entry| entry.owning_lane == lane)
             .map(|entry| WindowSummary {
                 window_id: entry.window_id.clone(),
                 url: entry.opened_url.clone(),
@@ -209,6 +231,7 @@ pub fn close_window(
         pid = entry.pid,
         "window_closed"
     );
+    drop(entry.cdp.take());
     drop(entry.container.take());
     debounce.remove_window(window_id);
     Some(entry)
@@ -224,6 +247,7 @@ pub fn close_all(registry: &WindowRegistry, debounce: &DebounceTable) -> Vec<Win
             project = %entry.project_label,
             "window_closed"
         );
+        drop(entry.cdp.take());
         drop(entry.container.take());
         debounce.remove_window(&entry.window_id);
     }
