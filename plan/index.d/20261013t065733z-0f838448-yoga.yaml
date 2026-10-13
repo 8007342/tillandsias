@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: research-cert-lifecycle-state-graph
+    event:
+      type: progress
+      ts: "2026-10-13T06:57:33Z"
+      agent_id: linux-yoga-claude-20261013t052327z
+      host: yoga
+      summary: |
+        PR 367 (work/472 at ffdbf24a8, ready) cannot enter the landing queue: WORK_RE wants work/NNN-xxxx and order 472 has no suffix; skipped as not-a-work-ref at 03:51Z and 05:18Z. yoga's combined direct land of 539 and 472 refused in 19 s with E0061: the agent-result-format test closure on work/539 passes 13 arguments to build_forge_agent_run_args_with_vault, which slice 9 here made 14 (the Up<CaTrusted> witness); both refs merged trunk cleanly and the text merge of the two is clean. The one-line fix, prepared on yoga but not committed because 539 never landed, adds `&container_deps::ca_trusted_for_tests(),` after `&test_cache_root(),` in that closure, on whichever ref lands second. The 539-alone land then ran four green gates and lost every push (see the 539 event of this cycle). work/472 unchanged this cycle. Filed 1656-etsz (queue grammar vs legacy orders).
