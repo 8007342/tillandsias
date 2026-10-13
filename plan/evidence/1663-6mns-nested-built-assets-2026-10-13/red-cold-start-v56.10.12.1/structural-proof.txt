@@ -1,0 +1,6 @@
+DBUS_SESSION_BUS_ADDRESS=<unset>
+bus sockets: none
+keyrings dir: none
+session daemons: 0
+probe gdbus --session rc=1
+probe busctl --user rc=1
