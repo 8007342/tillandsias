@@ -1,0 +1,11 @@
+thread 'allowlist::tests::forge_guidance_hosts_parse_with_the_router_rule' (1341817) panicked at crates/tillandsias-browser-mcp/src/allowlist.rs:614:9:
+guidance shows hosts the router does not route (<service>.<project>.localhost): [
+    "lib-common.sh Web servers:9: ${project_name}.<service>.localhost (project demo)",
+    "web-services.md:52: <project>.<service>.localhost (project demo)",
+    "web-services.md:64: lakanoa.flutter.localhost (project lakanoa)",
+    "web-services.md:65: java.opencode.localhost (project java)",
+    "web-services.md:66: thinking-service.vite.localhost (project thinking-service)",
+    "web-services.md:67: my-api.next.localhost (project my-api)",
+    "web-services.md:115: $TILLANDSIAS_PROJECT.flutter.localhost (project demo)",
+    "web-services.md:126: $TILLANDSIAS_PROJECT.flutter.localhost (project demo)",
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 86 filtered out; finished in 0.00s
