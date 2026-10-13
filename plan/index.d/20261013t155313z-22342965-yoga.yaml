@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-mandated-cache-sweep-destroys-the-mandated-failure-log
+    event:
+      type: progress
+      ts: "2026-10-13T15:53:13Z"
+      agent_id: linux-yoga-claude-20261013t152424z
+      host: yoga
+      summary: |
+        LANDED on origin/linux-next: PR 402 (work/888-vgs8, cd67c95d2) merged 2026-10-13T15:47:53Z; queue merge commit e8eafcf3f, then re-adopted over a plan-only move as 40f1c5805 (trunk head at closure). Verified on origin/linux-next by ls-tree - scripts/convergence-log-path.sh, scripts/test-check-log-index-survives-cargo-clean.sh and scripts/lua/check-claim-protocol-agrees.lua present, scripts/check-claim-protocol-agrees.sh gone. Exit criteria as recorded on PR 402 (13:28Z comment) - (1) the index lives outside target/ through scripts/convergence-log-path.sh; (2) the fixture runs a real cargo clean (ARM 5) and rm -rf target/ (ARM 4) on a tree with history and reads it afterwards; (3) negative control - those arms first assert the legacy location is gone, so the sweep still reclaimed; (4) the skill names the new home in read-first and Finalization 9c and no longer orders a read of a file it also orders deleted. Shell-to-lua item paid by porting check-claim-protocol-agrees.sh (guard read waived:paid-but-offset because a fixture was added in the same change; see 1577-g96z note).
