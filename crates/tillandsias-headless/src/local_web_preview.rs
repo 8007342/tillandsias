@@ -961,7 +961,7 @@ fn router_dir() -> PathBuf {
     crate::router_dynamic_caddyfile_host_path()
 }
 
-fn tls_port() -> Result<u16, String> {
+pub(crate) fn tls_port() -> Result<u16, String> {
     std::fs::read_to_string(router_dir().join("preview-tls-port"))
         .ok()
         .and_then(|s| s.trim().parse().ok())
@@ -1061,6 +1061,21 @@ fn prepare_tls(project: &str, ca: &Path) -> Result<(), String> {
     for args in certificate_args(&host, &crt, &csr, &key, ca, &ext) {
         host_command(&args)?;
     }
+    // Order 1649-xqet: the router serves the leaf as a FULL CHAIN (leaf, then
+    // the enclave CA). A browser.open window trusts the CA through an SPKI pin,
+    // and Chromium honours the pin only for a key in the chain the server
+    // sends: a leaf-only chain fails with ERR_CERT_AUTHORITY_INVALID (measured
+    // 2026-10-12). Pinning the CA rather than the leaf survives leaf rotation.
+    let mut chain =
+        std::fs::read(&crt).map_err(|_| "router_not_ready: leaf certificate unreadable")?;
+    if !chain.ends_with(b"\n") {
+        chain.push(b'\n');
+    }
+    chain.extend(
+        std::fs::read(ca.join("intermediate.crt"))
+            .map_err(|_| "router_not_ready: CA certificate unavailable")?,
+    );
+    std::fs::write(&crt, chain).map_err(|_| "router_not_ready: leaf chain unwritable")?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;

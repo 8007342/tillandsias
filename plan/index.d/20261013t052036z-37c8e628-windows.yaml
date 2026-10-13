@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: 793-a8e7-s4-gpu-deadline-with-cpu-fallback
+    field: status
+    value: completed
+    ts: "2026-10-13T05:20:36Z"
+    host: windows
+
+events:
+  - packet_id: 793-a8e7-s4-gpu-deadline-with-cpu-fallback
+    event:
+      type: completed
+      ts: "2026-10-13T05:20:36Z"
+      host: windows
+      summary: |-
+        status 'completed' with evidence_refs: Closed: S4 landed in run 61 as #395 (merge 25220c3ca, land(395): work/1648-gy9z into linux-next). Exit criteria to evidence: (1) A GPU request on the opted-in lane that exceeds its deadline falls back to the CPU and is logged by name. Evidence: images/inference/gpu-stall-watchdog.sh, started from the entrypoint on gpu-vulkan only. A runner that makes no prompt progress for TGW_STALL_S (120s) gets 

@@ -391,6 +391,48 @@ pub(crate) fn run_hard_reset_in(
     Ok(())
 }
 
+/// ORDER 1642-cc54 (5b, option C): the end-user status line while the tray
+/// rebuilds a workspace whose previous run did not stop cleanly. Approved by
+/// the operator, exact text, in an operator_note on 1642-cc54 (2026-10-12).
+pub(crate) const REBUILD_STATUS: &str = "Rebuilding your workspace after an unexpected shutdown…";
+
+/// ORDER 1642-cc54 (5b, option C): the previous run left `vm-running.marker`
+/// behind (a crash, a kill, a power loss, or a drain force-stop), so its disk is
+/// never booted as if it were clean. The operator chose (2026-10-12, in-session)
+/// to rebuild it automatically, with no click, accepting a fresh sign-in until
+/// identity survives a rebuild. That standing approval stands in for
+/// 1574-mrst's per-run flag FOR THIS TRIGGER ONLY. The Keychain gate stays: a
+/// share for the wiped store must be clearable, or the fresh guest receives a
+/// dead share (803-49re). On a refusal nothing has been touched.
+pub(crate) fn run_unclean_stop_rebuild_in(
+    service: &str,
+    cache_root: &Path,
+    wipe: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    let probe = crate::installation_uuid::read_credential_string_in(service, KEPT_CREDENTIALS[0]);
+    if probe.is_err() {
+        let line = HardRefusal::KeyringUnreachable.line();
+        eprintln!("{line}");
+        return Err(line.to_string());
+    }
+    eprintln!(
+        "[tillandsias] reset: HARD (unclean previous stop; operator standing approval, 1642-cc54)"
+    );
+    let (destroyed, preserved) = hard_reset_plan(cache_root);
+    let d: Vec<&str> = destroyed.iter().map(String::as_str).collect();
+    let p: Vec<&str> = preserved.iter().map(String::as_str).collect();
+    tillandsias_core::reset_state::announce_reset_plan(&d, &p);
+    wipe().map_err(|e| format!("unclean-stop rebuild: wipe failed: {e}"))?;
+    let left = clear_vault_credentials_in(service, cache_root);
+    if !left.is_empty() {
+        eprintln!(
+            "[unclean-stop rebuild] WARNING: not cleared, remove by hand before the next launch: {}",
+            left.join("; ")
+        );
+    }
+    Ok(())
+}
+
 /// Absent is success: this is a reset, and a file that is already gone is the
 /// state we want. Only an existing file we cannot remove is an error.
 fn remove_file(p: &Path) -> Result<(), String> {
@@ -647,6 +689,103 @@ mod tests {
                 "the installation anchor must survive HARD (803-49re)"
             );
             let _ = std::fs::remove_dir_all(&cache);
+        }
+    }
+
+    /// 1642-cc54 (5b, option C): an unclean previous stop rebuilds with no
+    /// per-run flag (the operator's standing approval for this trigger), and
+    /// still clears the vault credentials and keeps the installation anchor.
+    /// A failed wipe still clears nothing.
+    #[test]
+    fn unclean_stop_rebuild_wipes_and_clears_like_hard_without_a_flag() {
+        let (svc, cache) = seeded("unclean-rebuild");
+        let mut wiped = false;
+        run_unclean_stop_rebuild_in(&svc.0, &cache, || {
+            wiped = true;
+            Ok(())
+        })
+        .expect("an unclean previous stop rebuilds without a per-run flag");
+        assert!(wiped, "the damaged disk must be wiped");
+        for t in KEPT_CREDENTIALS {
+            assert_eq!(
+                read_credential_string_in(&svc.0, t).expect("read"),
+                None,
+                "{t}"
+            );
+            assert!(
+                !cache.join(format!("fallback_{t}")).exists(),
+                "fallback_{t}"
+            );
+        }
+        assert!(!cache.join("vault-data").exists());
+        assert_eq!(
+            read_credential_string_in(&svc.0, PRESERVED_ANCHOR).expect("read anchor"),
+            Some("scratch-anchor".to_string()),
+            "the installation anchor survives (803-49re)"
+        );
+        let _ = std::fs::remove_dir_all(&cache);
+
+        let (svc, cache) = seeded("unclean-wipefail");
+        let r = run_unclean_stop_rebuild_in(&svc.0, &cache, || Err("disk busy".to_string()));
+        assert!(r.is_err_and(|e| e.contains("disk busy")));
+        assert!(all_present(&svc.0, &cache), "a failed wipe clears nothing");
+        let _ = std::fs::remove_dir_all(&cache);
+    }
+
+    /// 5b loop guard, end to end on a scratch root: two consecutive unclean
+    /// stops make `--diagnose` name the defect; a clean stop clears it.
+    #[test]
+    fn two_consecutive_unclean_stops_are_reported_as_a_defect() {
+        let root = scratch("unclean-loop");
+        let line = || crate::diagnose::unclean_rebuild_report_line(&root);
+        assert!(
+            line().contains("none since the last clean stop"),
+            "{}",
+            line()
+        );
+        assert!(!tillandsias_vm_layer::vz::note_auto_rebuild(&root).unwrap());
+        assert!(line().contains("1 since the last clean stop"), "{}", line());
+        assert!(
+            tillandsias_vm_layer::vz::note_auto_rebuild(&root).unwrap(),
+            "loop flagged"
+        );
+        let l = line();
+        assert!(l.contains("2 IN A ROW") && l.contains("DEFECT"), "{l}");
+        assert!(
+            l.contains("clean power-off path"),
+            "names the likely cause: {l}"
+        );
+        tillandsias_vm_layer::vz::mark_vm_stopped_cleanly(&root);
+        assert!(
+            line().contains("none since the last clean stop"),
+            "{}",
+            line()
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The approved status line, verbatim from the operator_note on 1642-cc54,
+    /// and free of internals vocabulary (spec:tray-ux).
+    #[test]
+    fn unclean_rebuild_status_is_the_approved_end_user_line() {
+        assert_eq!(
+            REBUILD_STATUS,
+            concat!(
+                "Rebuilding your workspace after ",
+                "an unexpected shutdown\u{2026}"
+            )
+        );
+        let lower = REBUILD_STATUS.to_lowercase();
+        for banned in [
+            "vm",
+            "vault",
+            "container",
+            "image",
+            "disk",
+            "guest",
+            "provision",
+        ] {
+            assert!(!lower.contains(banned), "{banned} in {REBUILD_STATUS}");
         }
     }
 

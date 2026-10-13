@@ -109,6 +109,11 @@ pub fn pin_backend_environment(
             // to the opt-in tier: the other vulkan tiers keep their behaviour.
             if effective_tier == "gpu-vulkan" {
                 envs.push(("OLLAMA_IGPU_ENABLE".to_string(), "1".to_string()));
+                // ORDER 1648-gy9z (793-a8e7 S4): bound a stalled MODEL LOAD on
+                // the opt-in lane (ollama's default is 5m). Cold loads measured
+                // 3-8 s on yolanda 2026-10-12. A stall AFTER the load is the
+                // in-container gpu-stall watchdog's job.
+                envs.push(("OLLAMA_LOAD_TIMEOUT".to_string(), "2m".to_string()));
             }
         }
         _ => {}
@@ -356,6 +361,15 @@ mod tests {
         // 793-a8e7: only the WSL2 opt-in tier enables integrated GPUs.
         let igpu = ("OLLAMA_IGPU_ENABLE".to_string(), "1".to_string());
         assert!(pin_backend_environment("gpu-vulkan", None).contains(&igpu));
+        // 1648-gy9z: and only it bounds a stalled load.
+        let load = ("OLLAMA_LOAD_TIMEOUT".to_string(), "2m".to_string());
+        assert!(pin_backend_environment("gpu-vulkan", None).contains(&load));
+        for tier in ["vulkan", "gpu-rocm", "gpu-cuda", "cpu"] {
+            assert!(
+                !pin_backend_environment(tier, None).contains(&load),
+                "{tier}"
+            );
+        }
         for tier in ["vulkan", "gpu-rocm", "gpu-cuda", "cpu"] {
             assert!(
                 !pin_backend_environment(tier, None).contains(&igpu),

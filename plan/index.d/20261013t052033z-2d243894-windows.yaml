@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: 793-a8e7-s3-decode-floor-pins-small-models-to-the-cpu
+    event:
+      type: note
+      ts: "2026-10-13T05:20:33Z"
+      agent_id: windows-yolanda-claude-20261013t052033z
+      host: windows
+      summary: |
+        Closed: S3 landed in run 61 as #390 (merge dbb33bdae, land(390): work/1647-fb52 into linux-next). Exit criteria to evidence:
+        (1) Below the floor on gpu-vulkan, a model is pinned to num_gpu 0 and recorded. At or above the floor it is untouched. A model whose operator set num_gpu is never pinned or restored. Evidence: images/inference/decode-floor-pin.sh tillandsias_decode_floor_reconcile, covered by scripts/lua/test-decode-floor-pin.lua (12 arms, pin/kept/skipped, idempotent re-run) and gate step 840-1647-fb52. Live on yolanda (ollama v0.34.0, Dozen): 2 models pinned, the re-run was a no-op, and a pinned qwen2.5:0.5b served with size_vram=0.
+        (2) Opt-out restores every pin, leaves no num_gpu 0 and removes the record. Evidence: the restore arms in the same fixture. Live on yolanda the opt-out restored both models with no num_gpu left, the restored modelfiles were byte-equal to the originals, and .tools/.decode-floor-pins was removed.
+        (3) The launcher passes TILLANDSIAS_DECODE_FLOOR_B only on gpu-vulkan: the measured crossover, else all when the CPU wins throughout, else 3 provisional. Evidence: accel_probe::engine_decode_floor, with unit tests for each DecodeCrossover arm and for the non-vulkan tiers getting None. The launcher env is gated on gpu-vulkan, and the envelope appends accel_decode_floor_b and accel_decode_floor_source after accel_source. Spec: the inference-container requirement, req-id 80b3dfd5.
+        Known limit, recorded in the spec: a model pulled while the container runs is pinned at the next start.

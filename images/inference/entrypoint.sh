@@ -986,5 +986,33 @@ else
     fi
 fi
 
+# ── Decode floor (order 793-a8e7 S3) ─────────────────────────────
+# On the WSL2 Vulkan opt-in lane, models below the decode floor are pinned
+# all-CPU (num_gpu 0); on every other tier, any pin recorded earlier is undone,
+# so turning the opt-in off leaves no residue. See decode-floor-pin.sh. Runs
+# with serve up and the default set in place; a model pulled later (the
+# backgrounded embed pull included) is reconciled at the next start.
+if [ -n "${TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS:-}" ]; then
+    echo "[inference] status-check mode — skipping decode-floor reconcile"
+elif [ -r /usr/local/bin/tillandsias-decode-floor-pin.sh ]; then
+    # shellcheck source=decode-floor-pin.sh
+    . /usr/local/bin/tillandsias-decode-floor-pin.sh
+    echo "[inference] $(tillandsias_decode_floor_reconcile "$OLLAMA_TOOLSROOT/.decode-floor-pins")"
+    # ── GPU stall watchdog (order 1648-gy9z, 793-a8e7 S4) ──────────
+    # Opt-in lane only. A runner that stops making progress is killed and its
+    # model quarantined to the CPU through the pin record above; a runner it
+    # cannot read is logged as blind and left alone. See gpu-stall-watchdog.sh.
+    if [ "${TILLANDSIAS_INFERENCE_TIER:-}" = "gpu-vulkan" ] \
+        && [ -r /usr/local/bin/tillandsias-gpu-stall-watchdog.sh ]; then
+        # shellcheck source=gpu-stall-watchdog.sh
+        . /usr/local/bin/tillandsias-gpu-stall-watchdog.sh
+        (
+            tillandsias_gpu_stall_watchdog "$OLLAMA_TOOLSROOT/.gpu-stall" \
+                "$OLLAMA_TOOLSROOT/.decode-floor-pins" 2>&1 | sed -u 's/^/[inference] /'
+        ) &
+        echo "[inference] gpu-stall watchdog: on (stall=${TGW_STALL_S:-120}s tick=${TGW_TICK_S:-10}s)"
+    fi
+fi
+
 # Hand off to ollama as the foreground process for signal handling.
 wait $OLLAMA_PID

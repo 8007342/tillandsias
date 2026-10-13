@@ -20,6 +20,14 @@
     # automatic redirect, CA installation, or host trust mutation is performed.
     auto_https off
 
+    # Order 1651-5t7n: on a TLS connection the Host header must equal the SNI.
+    # A browser.open window's forwarder admits only SNI under the window's own
+    # project; without this, a client could send that SNI and name another
+    # project in Host, and the router (which routes by Host) would serve it.
+    servers {
+        strict_sni_host on
+    }
+
     # Admin API on container loopback only — `caddy reload` from inside
     # the entrypoint after the dynamic Caddyfile changes.
     admin localhost:2019
