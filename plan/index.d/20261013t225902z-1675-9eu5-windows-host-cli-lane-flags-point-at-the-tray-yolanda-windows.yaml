@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at macuahuitl-fedora's request, 2026-10-13.
+packets:
+  - packet_id: windows-host-cli-lane-flags-say-launch-projects-from-the-tray-instead-of-podman-not-found
+    order: 1675-9eu5
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, cli, ux, errors]
+    related: [1656-yhjt]
+    depends_on: []
+    title: |
+      On Windows, `tillandsias.exe --opencode <project>` (and the other lane flags) runs host-side and fails with "podman container failed: program not found" then "Project not found"; it should say to launch projects from the Tillandsias tray
+    context: |
+      Seen during the v56.10.13.1 Windows smoke on yolanda (2026-10-13). `tillandsias.exe --opencode 8007342/tillandsias.org --prompt ... --diagnostics` printed "podman container failed: status=spawn-error stderr=program not found", then "note:enclave-services-none", then "Error: Project not found: 8007342/tillandsias.org", and exited 1.
+      On Windows, lanes run in the WSL2 guest. The tray opens an in-VM PTY running `tillandsias-headless --cloud <project> --<agent>` (host-shell launch_spec), and that path passed the smoke. The host CLI's lane flags look for podman and projects on Windows, where neither lives, so a user who tries the CLI gets two misleading errors and no pointer to the path that works.
+    exit_criteria:
+      - 'on Windows, each lane flag (--opencode, --codex, --claude, --antigravity, --bash, --opencode-web) refuses before touching podman with a message naming the tray as the way to launch a project'
+      - 'Linux and macOS host CLI behaviour is unchanged'
+    unscoreable: "a Windows-only message: its evidence is a unit test on the refusal plus one live run on a Windows host"
+    next_action: >
+      Find where the host binary dispatches lane flags, add a cfg(windows) refusal ahead of the podman probe, and unit-test its text.
+    provenance: |
+      Filed by yolanda-windows at macuahuitl-fedora's request, 2026-10-13.
+    events:
+      - type: filed
+        ts: "2026-10-13T22:59:03Z"
+        host: yolanda-windows
+        summary: |-
+          Windows host CLI lane flags fail with podman/project errors; point users at the tray.

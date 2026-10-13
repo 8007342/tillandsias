@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at macuahuitl-fedora's request, 2026-10-13.
+packets:
+  - packet_id: populate-hot-paths-negative-control-reads-lib-commons-ca-trust-abort-as-three-failures-off-the-forge-image
+    order: 1674-sgy9
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, scripts, instrument-defect, windows, wsl2]
+    related: [920-tqhs, 1672-8i7t]
+    owned_files:
+      - scripts/test-populate-hot-paths-negative-control.sh
+    depends_on: []
+    title: |
+      test-populate-hot-paths-negative-control.sh fails three arms on any gate host that is not the forge image, because sourcing lib-common.sh aborts on the missing vendor CA bundle before populate_hot_paths runs; it must report a named skip instead
+    context: |
+      Measured on yolanda-windows 2026-10-13 in tillandsias-build, the distro the Windows gate runs in. The fixture is red alone and inside the gate for work/1672-8i7t (whose diff does not touch it). All three arms fail: "lifecycle log did not name the copy failure", "tellme did not name the degraded copy" and "tellme did not list the image-bundle topic".
+      Cause: under set -euo pipefail the fixture sources images/default/lib-common.sh. Its top level runs init_runtime_ca_trust (6b299368b, 2026-07-14), which refuses with "[trust] ERROR: image vendor CA bundle is missing: /usr/local/share/tillandsias/vendor-ca-bundle.crt". populate_hot_paths never runs, and every arm misreads the abort. Hosts that gate inside a forge have the file, which is why it was green there.
+      It already skips by name when not root ("the negative control needs to mutate /opt and drop to a lane user"); a missing vendor bundle is the same class of cannot-run.
+    exit_criteria:
+      - 'with /usr/local/share/tillandsias/vendor-ca-bundle.crt absent the fixture prints a named skip ("vendor CA bundle absent: not a forge image") and exits 0, mirroring its non-root skip'
+      - 'an arm shows the lib-common abort is no longer misread as the three populate_hot_paths failures'
+      - 'on a forge-image host (bundle present) the three arms still run and pass'
+    unscoreable: "a fixture precondition: its evidence is the named skip in tillandsias-build and an unchanged green run in a forge"
+    next_action: >
+      Add the bundle precondition beside the root check, then an arm that sources lib-common without the bundle and asserts the named skip rather than the three FAILs.
+    provenance: |
+      Filed by yolanda-windows at macuahuitl-fedora's request, 2026-10-13.
+    events:
+      - type: filed
+        ts: "2026-10-13T22:58:46Z"
+        host: yolanda-windows
+        summary: |-
+          hot-paths negative control misreads lib-common's CA-trust abort off the forge image; skip by name.
