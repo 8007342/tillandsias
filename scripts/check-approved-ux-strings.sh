@@ -47,6 +47,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 2
 # genuinely approved, and grows a row at a time as approvals are granted.
 UX_ROWS="
 crates/tillandsias-headless/src/bringup_progress.rs|s/^const APPROVED_SENTENCE: &str = \"\(.*\)\";$/\1/p|bring-up progress (626-w3fn)
+crates/tillandsias-macos-tray/src/reset_state.rs|s/^pub(crate) const REBUILD_STATUS: &str = \"\(.*\)\";$/\1/p|unclean-stop rebuild status (1642-cc54)
 "
 
 # operator_notes — every operator_note event body in the ledger, and nothing
@@ -64,12 +65,26 @@ operator_notes() {
         # line-initial `type:` and therefore captured nothing at all — the check
         # went red on a clean tree, which is at least the honest direction to
         # fail in.
-        /^[[:space:]]*-[[:space:]]*type:[[:space:]]*operator_note[[:space:]]*$/ { inside = 1; next }
-        /^[[:space:]]*-[[:space:]]*type:/ { inside = 0; next }
+        #
+        # 1642-cc54: append-event FRAGMENTS write `- packet_id:` then `event:`
+        # then an UNDASHED `type: operator_note`, so the dash-only pattern never
+        # saw an approval recorded today; it surfaced only after a compaction
+        # rewrote it into the base form. Measured: the operator_note approving
+        # "Rebuilding your workspace after an unexpected shutdown…" was on trunk
+        # and this gate still said no approval records it. The dash is optional
+        # now; an `event:` line opens the undashed form, and any other `type:`
+        # line still closes a capture.
+        /^[[:space:]]*(-[[:space:]]*)?type:[[:space:]]*operator_note[[:space:]]*$/ { inside = 1; next }
+        /^[[:space:]]*(-[[:space:]]*)?type:/ { inside = 0; next }
+        /^[[:space:]]*event:[[:space:]]*$/ { inside = 0; next }
         /^[[:space:]]*-[[:space:]]*packet_id:/ { inside = 0; next }
         /^[[:space:]]*(packets|events|status):[[:space:]]*$/ { inside = 0; next }
         inside { print }
-    ' "$LEDGER" "${FRAGMENTS[@]}" "${ARCHIVES[@]}" 2>/dev/null
+    ' "$LEDGER" ${FRAGMENTS[@]+"${FRAGMENTS[@]}"} ${ARCHIVES[@]+"${ARCHIVES[@]}"} 2>/dev/null
+    # 1642-cc54: the `+` guards. Under `set -u`, bash 3.2 (stock macOS) calls an
+    # EMPTY array's "${A[@]}" an unbound variable, so a tree with no
+    # plan/archive/*.yaml read no notes at all and every approval looked
+    # missing. Measured by test-approved-ux-strings.lua's scratch tree.
 }
 
 # Fragment list resolved ONCE, tolerating an EMPTY index.d: a fully compacted
@@ -95,6 +110,7 @@ done
 
 LEDGER="plan/index.yaml"
 [ -f "$LEDGER" ] || { echo "skip:approved-ux-strings:no-ledger"; exit 0; }
+OPERATOR_NOTES="$(operator_notes)"
 
 # THE LOOP IS NOT PIPED INTO, and that is load-bearing rather than stylistic.
 # The first version of this generalization was `printf '%s' "$UX_ROWS" | while
@@ -137,7 +153,14 @@ while IFS='|' read -r src extractor label; do
     # operator-attributed event on the packet". So the search is scoped to those
     # event bodies, which is what the rule actually says, not merely what is
     # convenient to grep.
-    if operator_notes | grep -qF "$sentence"; then
+    #
+    # 1642-cc54: NOT `operator_notes | grep -qF` — under pipefail that is a
+    # SIGPIPE verdict. grep -q exits on its first match, awk dies writing into
+    # the closed pipe, and pipefail turns the MATCH into "unapproved". It hid
+    # while the notes were short enough to fit the pipe buffer; once fragment
+    # notes were read (above) the output passed it, and a present approval read
+    # as absent. The notes are read once, before this loop, into OPERATOR_NOTES.
+    if grep -qF "$sentence" <<<"$OPERATOR_NOTES"; then
         continue
     fi
     fail=1

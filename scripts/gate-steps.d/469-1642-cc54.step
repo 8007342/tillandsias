@@ -1,0 +1,15 @@
+# Gate step 1642-cc54 — the approved-UX-string gate sees an operator approval
+# recorded TODAY. It used to miss three ways, all found while recording the
+# operator's approval of "Rebuilding your workspace after an unexpected
+# shutdown…": the undashed `type: operator_note` that append-event fragments
+# write; `operator_notes | grep -q` under pipefail (a SIGPIPE verdict once the
+# notes outgrow the pipe buffer); and an empty plan/archive array under set -u
+# on bash 3.2. The fixture runs the gate in scratch trees, never this ledger,
+# and runs the pre-fix gate (git show 335f7785d) to show it red.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the approved-UX-string gate reads today's approvals (1642-cc54)"
+STEP_LUA="scripts/lua/test-approved-ux-strings.lua"
+STEP_ERROR="the approved-UX-string gate misses an operator_note it should read, or approves a prose mention or a reword (1642-cc54) — see the FAIL lines above"
+STEP_OK="Approved-UX-string gate fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-12 darwin ok:approved-ux-strings-fixture:5 arms"

@@ -366,7 +366,6 @@ scripts scripts/check-cycle-flow-log-fresh.sh 6
 scripts scripts/check-daily-maintenance.sh 2
 scripts scripts/check-dead-env-branches.sh 41
 scripts scripts/check-decider-retirement.sh 3
-scripts scripts/check-declared-closures-added.sh 2
 scripts scripts/check-deslop-due.sh 5
 scripts scripts/check-deslop-sweep-health.sh 4
 scripts scripts/check-enclave-network-internal.sh 5

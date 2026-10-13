@@ -114,11 +114,13 @@ done
 # 885-92iu is the exception, and the exception is the point (1034-ihxw): it
 # degrades to a SKIP when `tillandsias-plan` is unbuilt, so hoisting it above
 # the build turned a gate into a no-op on a cold tree. It must be invoked
-# exactly once and AFTER the first compile.
-_dc="$(/usr/bin/grep -nE '_run bash .*check-declared-closures-added\.sh' build.sh 2>/dev/null | head -1 | cut -d: -f1)"
-_dc_n="$(/usr/bin/grep -cE '_run bash .*check-declared-closures-added\.sh' build.sh 2>/dev/null || echo 0)"
+# exactly once and AFTER the first compile. (Ported to Lua by the 1642-cc54
+# carry: with no binary it is now could-not-run, which refuses the gate, so
+# above the compile it would turn every cold tree red instead of green.)
+_dc="$(/usr/bin/grep -nE '_run_lua_decider "scripts/lua/check-declared-closures-added\.lua"' build.sh 2>/dev/null | head -1 | cut -d: -f1)"
+_dc_n="$(/usr/bin/grep -cE '_run_lua_decider "scripts/lua/check-declared-closures-added\.lua"' build.sh 2>/dev/null || echo 0)"
 if [ "$_dc_n" != "1" ]; then
-    bad "check-declared-closures-added.sh is invoked $_dc_n times (expected exactly 1)"
+    bad "check-declared-closures-added.lua is invoked $_dc_n times (expected exactly 1)"
 elif [ -n "$_dc" ] && [ -n "$_clippy_line" ] && [ "$_dc" -gt "$_clippy_line" ]; then
     ok "885-92iu stays AFTER the first compile (it skips without a built binary)"
 else
