@@ -2659,8 +2659,8 @@ if [[ "$FLAG_CI" == true ]] || [[ "$FLAG_CI_FULL" == true ]]; then
     if [[ "$FLAG_CI_FULL" == true ]]; then
         # ORDER 1185-9qx6 — NAME THIS RUN, so the phases that run OUTSIDE
         # local-ci.sh can be recorded as part of it. The pre-build gate below is
-        # the only phase local-ci.sh (the sole writer of
-        # target/convergence/check-logs.jsonl) sees; the post-build status smoke
+        # the only phase local-ci.sh (the sole writer of the convergence check
+        # log, scripts/convergence-log-path.sh) sees; the post-build status smoke
         # and the runtime residual litmus run from this script through
         # run-litmus-test.sh and wrote no record at all. That is why
         # check-release-tier-freshness.sh read `never:release-tier` after a GREEN

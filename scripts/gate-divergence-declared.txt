@@ -31,6 +31,7 @@
 scripts/local-ci.sh                            infra      the instrument itself
 scripts/common.sh                              infra      sourced library
 scripts/timing-log.sh                          infra      sourced library
+scripts/convergence-log-path.sh                infra      the check-log index path rule (888-vgs8): a resolver both gates' writers and readers ask, not a check
 scripts/build-sidecar.sh                       infra      builder, not a check
 scripts/run-litmus-test.sh                     infra      the litmus runner; see the litmus note below
 scripts/update-convergence-dashboard.sh        infra      reporter, writes a dashboard
