@@ -128,6 +128,7 @@ pub fn launch(
     project_label: &str,
     mode: &LaunchMode,
     device: &DeviceEmulation,
+    dev: bool,
 ) -> Result<WindowEntry, LaunchError> {
     let window_id = format!("win-{}", Uuid::new_v4());
     let (container, cdp, title, user_data_dir) = match mode {
@@ -151,7 +152,7 @@ pub fn launch(
             };
             let cdp = match socket {
                 Some(socket) => {
-                    let cdp = WindowCdp::attach(&socket, device.clone(), CDP_CONNECT_BUDGET)
+                    let cdp = WindowCdp::attach(&socket, device.clone(), dev, CDP_CONNECT_BUDGET)
                         .and_then(|cdp| cdp.navigate(url.as_str()).map(|()| cdp))
                         .map_err(|e| LaunchError::Cdp(e.to_string()))?;
                     Some(Arc::new(cdp))
@@ -171,6 +172,8 @@ pub fn launch(
         user_data_dir,
         opened_url: url.as_str().to_string(),
         title,
+        owning_lane: String::new(),
+        dev,
         cdp,
         container,
         created_at: now,
