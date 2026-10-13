@@ -1,0 +1,13 @@
+# Gate step 1650-fb7z — the preflight door removes a stale .git/index.lock that
+# a guard's git left, and only such a lock. A git SIGKILLed while it holds the
+# lock (proc.run's timeout_ms KILLs the group; the Lua guard then ends on its
+# own) runs no cleanup. build.sh's _pf_run_guard and _pf_sweep_late are
+# extracted against a scratch git repository: the trunk door (both sweep calls
+# removed) leaves the lock, the fixed door removes it and names it, and a lock
+# a live process holds, or one older than the run, is never removed.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the door sweeps a stale index.lock a killed git left, and never a held one (1650-fb7z)"
+STEP_LUA="scripts/lua/test-door-index-lock-sweep.lua"
+STEP_ERROR="the preflight door no longer removes a stale index.lock a killed git left, or removed one a live process holds or one older than the run (1650-fb7z) — see the FAIL lines above"
+STEP_OK="Door index-lock sweep fixture passed"

@@ -476,13 +476,89 @@ _pf_sweep_declared_artifacts() {  # $1 = guard path (roster-relative), $2 = outf
         done
     done < <(git -C "$SCRIPT_DIR" ls-files --others --exclude-standard 2>/dev/null)
 }
+# ORDER 1650-fb7z. A STALE INDEX LOCK. Three preflights on yolanda (2026-10-12)
+# each left a 0-byte .git/index.lock with no git alive, and the next git add /
+# git switch refused on it. A git that gets SIGTERM removes its own lock (its
+# signal handlers clean lockfiles up), so the door's TERM is not what strands
+# one. A SIGKILL to git while it holds the lock is: proc.run's timeout_ms
+# SIGKILLs the command's process group (tillandsias-exec), and the Lua guard
+# around it then ends on its own, so the door never killed anything. And a
+# guard's git in a group of its own outlives the door's group KILL. MEASURED in
+# tillandsias-build (git 2.55.0): porcelain `git diff` holds index.lock for its
+# whole index refresh, and GIT_OPTIONAL_LOCKS=0 does NOT stop it (the lock was
+# seen in 91 of 183 polls with it set, 90 of 182 without). It does stop
+# `git status` writing the refreshed index (git's documented meaning), so
+# _pf_run_guard sets it to narrow the window. This sweep closes it, after a
+# killed guard and once more from the preflight's EXIT trap (_pf_sweep_late).
+#
+# The lock is removed only when it is NEWER than the start mark (a lock
+# older than the guard is not the door's to touch) AND no live process holds it
+# (git keeps the lock's fd open from create to rename). The holder check reads
+# the door's own process table (/proc, else lsof), and Windows git.exe through
+# tasklist where that is reachable (MSYS, or a WSL guest with interop: the
+# Windows side of a /mnt/c checkout is invisible to the guest's /proc). When a
+# holder cannot be ruled out the lock is KEPT, and named, never removed.
+_pf_index_lock_held() {  # $1 = absolute lock path, $2 = scratch prefix; 0 = held or unknown, 1 = proven free
+    local _pat _hit _e _pid _c _tl
+    if [ -d /proc/self/fd ] && command -v find >/dev/null 2>&1; then
+        _pat="$(printf '%s' "$1" | sed 's/[][*?\\]/\\&/g')"
+        _hit="$(find /proc/[0-9]*/fd -lname "$_pat" -print -quit 2>"$2.lockscan")"
+        if [ -n "$_hit" ]; then rm -f "$2.lockscan"; return 0; fi
+        # an fd table this door may not read is a holder it cannot rule out,
+        # when the process is a git
+        while IFS= read -r _e; do
+            case "$_e" in *"/proc/"[0-9]*"/fd"*) ;; *) continue ;; esac
+            _pid="${_e#*/proc/}"; _pid="${_pid%%/*}"
+            case "$_pid" in ''|*[!0-9]*) continue ;; esac
+            _c="$(cat "/proc/$_pid/comm" 2>/dev/null)" || _c=""
+            case "$_c" in git*) rm -f "$2.lockscan"; return 0 ;; esac
+        done < "$2.lockscan"
+        rm -f "$2.lockscan"
+    elif command -v lsof >/dev/null 2>&1; then
+        _hit="$(lsof -t -- "$1" 2>/dev/null)" || _hit=""
+        [ -z "$_hit" ] || return 0
+    else
+        return 0
+    fi
+    if command -v tasklist.exe >/dev/null 2>&1; then
+        _tl="$(MSYS_NO_PATHCONV=1 tasklist.exe /FI "IMAGENAME eq git.exe" /NH 2>/dev/null)" || return 0
+        case "$_tl" in *[Gg][Ii][Tt].[Ee][Xx][Ee]*) return 0 ;; esac
+    fi
+    return 1
+}
+_pf_sweep_index_lock() {  # $1 = start mark, $2 = outfile, $3 = tag (default index-lock)
+    local _gd _l _t="${3:-index-lock}"
+    [ -n "$1" ] && [ -f "$1" ] || return 0
+    if [ -d "$SCRIPT_DIR/.git" ]; then
+        _gd="$SCRIPT_DIR/.git"
+    else
+        _gd="$(git -C "$SCRIPT_DIR" rev-parse --absolute-git-dir 2>/dev/null)" || return 0
+    fi
+    [ -e "$_gd/index.lock" ] && [ "$_gd/index.lock" -nt "$1" ] || return 0
+    _l="$(cd "$_gd" 2>/dev/null && pwd -P)/index.lock"
+    if _pf_index_lock_held "$_l" "$2"; then
+        echo "kept:$_t:$_l — a live process holds it, or none could be ruled out" >> "$2.swept"
+    elif rm -f "$_l"; then
+        echo "swept:$_t:$_l" >> "$2.swept"
+    else
+        echo "swept:$_t-failed:$_l" >> "$2.swept"
+    fi
+}
 # The late sweep, from the preflight's EXIT trap: the recorded roots only.
 _pf_sweep_late() {  # $1 = the preflight run dir
     local _r
-    [ -n "$1" ] && [ -s "$1/guard-tmp-roots" ] || return 0
-    while read -r _r; do
-        [ -n "$_r" ] && _pf_sweep_under "$_r" "$_r" "$1/late.swept" "swept:worktree-late"
-    done < "$1/guard-tmp-roots"
+    [ -n "$1" ] && [ -d "$1" ] || return 0
+    if [ -s "$1/guard-tmp-roots" ]; then
+        while read -r _r; do
+            [ -n "$_r" ] && _pf_sweep_under "$_r" "$_r" "$1/late.swept" "swept:worktree-late"
+        done < "$1/guard-tmp-roots"
+    fi
+    # ORDER 1650-fb7z: a guard the door never killed can still leave the lock.
+    # proc.run's timeout_ms SIGKILLs the command's group (tillandsias-exec), and
+    # a git killed so runs no lockfile cleanup, while the Lua guard around it
+    # ends on its own. So the lock is also swept once here, dated against the
+    # run's start mark.
+    _pf_sweep_index_lock "$1/start" "$1/late" index-lock-late
     [ ! -s "$1/late.swept" ] || cat "$1/late.swept"
 }
 
@@ -608,10 +684,13 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, 
     local _gtmp _rc=0
     _gtmp="$(mktemp -d "${TMPDIR:-/tmp}/pf-guard.XXXXXX" 2>/dev/null)" || _gtmp=""
     rm -f "$_out.swept"
+    # ORDER 1650-fb7z: the guard's start mark, against which a lock it may
+    # leave is dated (_pf_sweep_index_lock)
+    : > "$_out.start" 2>/dev/null || true
     if [ -n "$_PF_SETSID" ]; then
-        ( { [ -z "$_gtmp" ] || export TMPDIR="$_gtmp"; }; cd "$SCRIPT_DIR" && exec setsid "${_runner[@]}" ${_a[@]+"${_a[@]}"} ) >"$_out" 2>&1 </dev/null &
+        ( { [ -z "$_gtmp" ] || export TMPDIR="$_gtmp"; }; export GIT_OPTIONAL_LOCKS=0; cd "$SCRIPT_DIR" && exec setsid "${_runner[@]}" ${_a[@]+"${_a[@]}"} ) >"$_out" 2>&1 </dev/null &
     else
-        ( { [ -z "$_gtmp" ] || export TMPDIR="$_gtmp"; }; cd "$SCRIPT_DIR" && exec "${_runner[@]}" ${_a[@]+"${_a[@]}"} ) >"$_out" 2>&1 </dev/null &
+        ( { [ -z "$_gtmp" ] || export TMPDIR="$_gtmp"; }; export GIT_OPTIONAL_LOCKS=0; cd "$SCRIPT_DIR" && exec "${_runner[@]}" ${_a[@]+"${_a[@]}"} ) >"$_out" 2>&1 </dev/null &
     fi
     _pid=$!
     _pf_now; _t0=$_PF_NOW
@@ -642,10 +721,13 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, 
         wait "$_pid" 2>/dev/null
         _pf_sweep_fixture_scratch "$_p" "$_pid" "$_out"
         _pf_sweep_declared_artifacts "$_p" "$_out"
+        _pf_sweep_index_lock "$_out.start" "$_out"
+        rm -f "$_out.start"
         _pf_sweep_guard_tmp "$_gtmp" "$_out"
         return 124
     fi
     wait "$_pid" || _rc=$?
+    rm -f "$_out.start"
     _pf_sweep_guard_tmp "$_gtmp" "$_out"
     return "$_rc"
 }
@@ -1344,6 +1426,8 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     fi
 
     _pf_dir="$(mktemp -d "${TMPDIR:-/tmp}/preflight.XXXXXX")" || _pf_dir=""
+    # ORDER 1650-fb7z: the run's start mark, for the late index-lock sweep
+    [ -z "$_pf_dir" ] || : > "$_pf_dir/start"
     if [ -z "$_pf_dir" ]; then
         echo "could-not-run:preflight:no-tmp — the door cannot buffer guard output; nothing was run" >&2
         exit 1
