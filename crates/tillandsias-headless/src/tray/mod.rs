@@ -1412,6 +1412,7 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
     };
 
     let project_label = identity.project;
+    let lane_instance = identity.instance.clone();
 
     // Validate project label by equality against the known project set (never
     // sanitize). 1031-q4pb: this site carried the INVERTED spelling of the same
@@ -1481,7 +1482,10 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
         Some(std::sync::Arc::new(
             crate::browser_open::TrayBrowserContainers::new(false),
         )),
-    );
+    )
+    // Order 1656-iktu: windows record the lane that opened them; another
+    // lane's window answers WINDOW_NOT_FOUND.
+    .with_lane(lane_instance);
     // Order 1655-urz9: a window emulates the project's `[browser] device`
     // when browser.open names none, else desktop. The label is the
     // listener's (validated, order 505), so the path is the project's own.
@@ -5839,8 +5843,8 @@ mod tests {
             tools.iter().filter(|t| t.starts_with("browser.")).collect();
         assert_eq!(
             browser_tools.len(),
-            9,
-            "all nine browser.* tools are advertised: {tools:?}"
+            13,
+            "all thirteen browser.* tools are advertised: {tools:?}"
         );
         for expected in [
             "browser.open",
@@ -5853,6 +5857,11 @@ mod tests {
             "browser.close",
             // Order 1655-urz9.
             "browser.set_device",
+            // Order 1656-iktu.
+            "browser.cdp",
+            "browser.navigate",
+            "browser.console_tail",
+            "browser.network_tail",
         ] {
             assert!(
                 tools.contains(&expected),
@@ -5861,7 +5870,7 @@ mod tests {
         }
         assert_eq!(
             tools.len(),
-            13,
+            17,
             "lifecycle tools + browser family, nothing else"
         );
 
@@ -5928,8 +5937,8 @@ mod tests {
                 .collect();
             assert_eq!(
                 tools.len(),
-                13,
-                "over the transport: lifecycle tools + nine browser tools, got {tools:?}"
+                17,
+                "over the transport: lifecycle tools + thirteen browser tools, got {tools:?}"
             );
             assert!(tools.contains(&"browser.open") && tools.contains(&"publish_local"));
 
@@ -6409,9 +6418,9 @@ mod tests {
             let resp: serde_json::Value =
                 serde_json::from_str(&lines.next().expect("tools/list reply").expect("readable"))
                     .expect("valid JSON");
-            // Host-service lifecycle tools plus the nine browser.* tools
+            // Host-service lifecycle tools plus the thirteen browser.* tools
             // compose on this socket (the lifecycle family includes reload).
-            assert_eq!(resp["result"]["tools"].as_array().expect("tools").len(), 13);
+            assert_eq!(resp["result"]["tools"].as_array().expect("tools").len(), 17);
 
             drop(writer);
             drop(lines);

@@ -22,6 +22,7 @@
 
 use parking_lot::{Condvar, Mutex};
 use serde_json::{Value, json};
+use std::collections::VecDeque;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::mpsc;
@@ -29,6 +30,9 @@ use std::time::{Duration, Instant};
 use tillandsias_core::devices::Resolution;
 
 use crate::cdp_client::{CdpConnection, CdpError};
+
+/// How often `navigate` tries through a transient network change.
+const NAVIGATE_ATTEMPTS: u32 = 4;
 
 /// `commands()` starts with this many touch commands.
 const TOUCH_COMMANDS: usize = 2;
@@ -220,11 +224,33 @@ fn derived_ua_metadata(
     }))
 }
 
+/// How many console and network entries a dev-mode window keeps.
+const TAIL_CAPACITY: usize = 500;
+
 #[derive(Debug)]
 struct State {
     device: DeviceEmulation,
     /// Attached page sessions, the window's first page first.
     pages: Vec<String>,
+    /// Development mode (order 1656-iktu): Runtime and Network are enabled
+    /// on every page and their events kept for the tails.
+    dev: bool,
+    console: VecDeque<Value>,
+    network: VecDeque<Value>,
+}
+
+fn push_capped(buf: &mut VecDeque<Value>, entry: Value) {
+    if buf.len() == TAIL_CAPACITY {
+        buf.pop_front();
+    }
+    buf.push_back(entry);
+}
+
+fn tail(buf: &VecDeque<Value>, limit: usize) -> Vec<Value> {
+    buf.iter()
+        .skip(buf.len().saturating_sub(limit))
+        .cloned()
+        .collect()
 }
 
 /// One window's CDP session.
@@ -260,15 +286,20 @@ impl WindowCdp {
     pub fn attach(
         socket: &Path,
         device: DeviceEmulation,
+        dev: bool,
         budget: Duration,
     ) -> Result<Self, CdpError> {
         let conn = Arc::new(CdpConnection::connect(socket, budget)?);
-        Self::start(conn, device)
+        Self::start(conn, device, dev)
     }
 
     /// Take over a connected window: auto-attach every page, emulate the
     /// device on each before it runs, and wait for the first page.
-    pub fn start(conn: Arc<CdpConnection>, device: DeviceEmulation) -> Result<Self, CdpError> {
+    pub fn start(
+        conn: Arc<CdpConnection>,
+        device: DeviceEmulation,
+        dev: bool,
+    ) -> Result<Self, CdpError> {
         let events = conn.take_events().ok_or_else(|| {
             CdpError::ConnectionFailed("the event stream is already taken".into())
         })?;
@@ -276,6 +307,9 @@ impl WindowCdp {
             Mutex::new(State {
                 device,
                 pages: Vec::new(),
+                dev,
+                console: VecDeque::new(),
+                network: VecDeque::new(),
             }),
             Condvar::new(),
         ));
@@ -328,21 +362,72 @@ impl WindowCdp {
         &self.conn
     }
 
+    /// The last `limit` console entries (dev mode; empty otherwise).
+    pub fn console_tail(&self, limit: usize) -> Vec<Value> {
+        tail(&self.state.0.lock().console, limit)
+    }
+
+    /// The last `limit` network entries (dev mode; empty otherwise).
+    pub fn network_tail(&self, limit: usize) -> Vec<Value> {
+        tail(&self.state.0.lock().network, limit)
+    }
+
+    /// Evaluate `expression` in the window's page and return its value
+    /// (promises awaited); a thrown exception is an error naming it.
+    pub fn evaluate(&self, expression: &str) -> Result<Value, CdpError> {
+        let session = self
+            .main_session()
+            .ok_or_else(|| CdpError::WindowNotRunning("no page".into()))?;
+        let result = self.conn.call(
+            Some(&session),
+            "Runtime.evaluate",
+            json!({ "expression": expression, "returnByValue": true, "awaitPromise": true }),
+        )?;
+        if let Some(details) = result.get("exceptionDetails") {
+            let text = details
+                .pointer("/exception/description")
+                .or_else(|| details.get("text"))
+                .and_then(Value::as_str)
+                .unwrap_or("exception");
+            return Err(CdpError::ProtocolError {
+                code: -1,
+                message: text.to_string(),
+            });
+        }
+        Ok(result
+            .pointer("/result/value")
+            .cloned()
+            .unwrap_or(Value::Null))
+    }
+
     /// Load `url` in the window's page (it starts on about:blank, so the
     /// first request already carries the device's UA).
+    ///
+    /// `net::ERR_NETWORK_CHANGED` is retried: measured live (1656-iktu), a
+    /// navigation issued right after the container starts can race the
+    /// container's network settling, and Chromium aborts it with that error.
     pub fn navigate(&self, url: &str) -> Result<(), CdpError> {
         let session = self
             .main_session()
             .ok_or_else(|| CdpError::WindowNotRunning("no page".into()))?;
-        let result = self
-            .conn
-            .call(Some(&session), "Page.navigate", json!({ "url": url }))?;
-        match result.get("errorText").and_then(Value::as_str) {
-            Some(err) if !err.is_empty() => Err(CdpError::ProtocolError {
-                code: -1,
-                message: format!("navigation to {url} failed: {err}"),
-            }),
-            _ => Ok(()),
+        let mut attempt = 0;
+        loop {
+            attempt += 1;
+            let result = self
+                .conn
+                .call(Some(&session), "Page.navigate", json!({ "url": url }))?;
+            match result.get("errorText").and_then(Value::as_str) {
+                Some("net::ERR_NETWORK_CHANGED") if attempt < NAVIGATE_ATTEMPTS => {
+                    std::thread::sleep(Duration::from_millis(500));
+                }
+                Some(err) if !err.is_empty() => {
+                    return Err(CdpError::ProtocolError {
+                        code: -1,
+                        message: format!("navigation to {url} failed: {err}"),
+                    });
+                }
+                _ => return Ok(()),
+            }
         }
     }
 
@@ -415,15 +500,68 @@ fn handle_events(
                     reassert_touch(conn, session, state);
                 }
             }
+            Some("Runtime.consoleAPICalled") => {
+                let text: Vec<String> = params["args"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .map(|a| match a.get("value") {
+                        Some(Value::String(s)) => s.clone(),
+                        Some(v) => v.to_string(),
+                        None => a["description"].as_str().unwrap_or("").to_string(),
+                    })
+                    .collect();
+                push_capped(
+                    &mut state.0.lock().console,
+                    json!({ "type": params["type"], "text": text.join(" "), "timestamp": params["timestamp"] }),
+                );
+            }
+            Some("Runtime.exceptionThrown") => {
+                let d = &params["exceptionDetails"];
+                let text = d
+                    .pointer("/exception/description")
+                    .or_else(|| d.get("text"))
+                    .cloned()
+                    .unwrap_or(Value::Null);
+                push_capped(
+                    &mut state.0.lock().console,
+                    json!({ "type": "exception", "text": text, "timestamp": params["timestamp"] }),
+                );
+            }
+            Some("Network.requestWillBeSent") => push_capped(
+                &mut state.0.lock().network,
+                json!({ "event": "request", "requestId": params["requestId"],
+                        "method": params["request"]["method"], "url": params["request"]["url"] }),
+            ),
+            Some("Network.responseReceived") => push_capped(
+                &mut state.0.lock().network,
+                json!({ "event": "response", "requestId": params["requestId"],
+                        "status": params["response"]["status"], "url": params["response"]["url"],
+                        "mimeType": params["response"]["mimeType"] }),
+            ),
+            Some("Network.loadingFailed") => push_capped(
+                &mut state.0.lock().network,
+                json!({ "event": "failed", "requestId": params["requestId"],
+                        "errorText": params["errorText"], "blockedReason": params["blockedReason"] }),
+            ),
             Some("Target.attachedToTarget") => {
                 let Some(session) = params["sessionId"].as_str() else {
                     continue;
                 };
                 if params["targetInfo"]["type"] == "page" {
-                    let device = state.0.lock().device.clone();
-                    if let Err(err) = apply(conn, session, &device)
-                        .and_then(|()| conn.call(Some(session), "Page.enable", json!({})).map(drop))
-                    {
+                    let (device, dev) = {
+                        let st = state.0.lock();
+                        (st.device.clone(), st.dev)
+                    };
+                    let mut domains = vec!["Page.enable"];
+                    if dev {
+                        domains.extend(["Runtime.enable", "Network.enable"]);
+                    }
+                    if let Err(err) = apply(conn, session, &device).and_then(|()| {
+                        domains
+                            .iter()
+                            .try_for_each(|m| conn.call(Some(session), m, json!({})).map(drop))
+                    }) {
                         tracing::warn!(%err, session, "browser window: device emulation failed");
                     }
                     let (lock, ready) = state;
@@ -523,7 +661,8 @@ mod tests {
     fn every_page_is_emulated_before_it_runs_and_set_device_switches_them_all() {
         let (conn, chromium) = auto_attaching_chromium();
         chromium.emit(attached("P1", "page", false));
-        let window = WindowCdp::start(Arc::clone(&conn), device("iphone 12 pro max")).unwrap();
+        let window =
+            WindowCdp::start(Arc::clone(&conn), device("iphone 12 pro max"), false).unwrap();
         assert_eq!(window.main_session().as_deref(), Some("P1"));
 
         // A popup: emulated, THEN released.
@@ -588,7 +727,8 @@ mod tests {
     fn touch_is_reasserted_on_every_main_frame_commit_and_load() {
         let (conn, chromium) = auto_attaching_chromium();
         chromium.emit(attached("P1", "page", false));
-        let _window = WindowCdp::start(Arc::clone(&conn), device("iphone 12 pro max")).unwrap();
+        let _window =
+            WindowCdp::start(Arc::clone(&conn), device("iphone 12 pro max"), false).unwrap();
         let before = chromium.methods().len();
         chromium.emit(json!({ "method": "Page.frameNavigated", "sessionId": "P1",
             "params": { "frame": { "id": "F1", "url": "https://www.demo.localhost/" } } }));
@@ -616,6 +756,51 @@ mod tests {
         );
     }
 
+    /// Order 1656-iktu: a dev window enables Runtime and Network on each
+    /// page and keeps console and network tails; a normal window does not.
+    #[test]
+    fn a_dev_window_enables_runtime_and_network_and_keeps_tails() {
+        let (conn, chromium) = auto_attaching_chromium();
+        chromium.emit(attached("P1", "page", false));
+        let window = WindowCdp::start(Arc::clone(&conn), device("desktop"), true).unwrap();
+        let on_p1: Vec<String> = chromium
+            .methods()
+            .into_iter()
+            .filter(|(_, s)| s.as_deref() == Some("P1"))
+            .map(|(m, _)| m)
+            .collect();
+        assert!(on_p1.contains(&"Runtime.enable".to_string()), "{on_p1:?}");
+        assert!(on_p1.contains(&"Network.enable".to_string()), "{on_p1:?}");
+        chromium.emit(json!({ "method": "Runtime.consoleAPICalled", "sessionId": "P1",
+            "params": { "type": "log", "args": [ { "type": "string", "value": "hello" }, { "type": "number", "value": 2 } ], "timestamp": 1.0 } }));
+        chromium.emit(json!({ "method": "Network.requestWillBeSent", "sessionId": "P1",
+            "params": { "requestId": "R1", "request": { "method": "GET", "url": "https://www.demo.localhost/" } } }));
+        chromium.emit(
+            json!({ "method": "Network.loadingFailed", "sessionId": "P1",
+            "params": { "requestId": "R2", "errorText": "net::ERR_NAME_NOT_RESOLVED" } }),
+        );
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while window.network_tail(10).len() < 2 && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(window.console_tail(10)[0]["text"], "hello 2");
+        let net = window.network_tail(10);
+        assert_eq!(net[0]["url"], "https://www.demo.localhost/");
+        assert_eq!(net[1]["errorText"], "net::ERR_NAME_NOT_RESOLVED");
+        assert_eq!(window.network_tail(1).len(), 1, "limit takes the newest");
+
+        let (conn2, chromium2) = auto_attaching_chromium();
+        chromium2.emit(attached("P1", "page", false));
+        let _normal = WindowCdp::start(conn2, device("desktop"), false).unwrap();
+        assert!(
+            !chromium2
+                .methods()
+                .iter()
+                .any(|(m, _)| m == "Runtime.enable" || m == "Network.enable"),
+            "a normal window enables no Runtime/Network"
+        );
+    }
+
     #[test]
     fn a_window_whose_page_never_attaches_is_an_error() {
         let (conn, _chromium) = auto_attaching_chromium();
@@ -625,6 +810,9 @@ mod tests {
                 Mutex::new(State {
                     device: device("desktop"),
                     pages: Vec::new(),
+                    dev: false,
+                    console: VecDeque::new(),
+                    network: VecDeque::new(),
                 }),
                 Condvar::new(),
             )),
@@ -639,7 +827,7 @@ mod tests {
     fn dropping_the_broker_closes_the_session() {
         let (conn, chromium) = auto_attaching_chromium();
         chromium.emit(attached("P1", "page", false));
-        let window = WindowCdp::start(Arc::clone(&conn), device("desktop")).unwrap();
+        let window = WindowCdp::start(Arc::clone(&conn), device("desktop"), false).unwrap();
         drop(window);
         let mut buf = [0u8; 1];
         let mut peer = chromium.peer.try_clone().unwrap();
