@@ -789,6 +789,7 @@ specs:
   - litmus:meta-orchestration-opsx-sync-merge
   - litmus:openspec-cli-pin-shape
   - litmus:build-cache-sweep-trigger
+  - litmus:check-log-survives-the-cache-sweep
   - litmus:issue-citation-convention
   - litmus:long-running-view-agreement
   - litmus:resumable-claim-dirt-shape
