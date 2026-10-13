@@ -15,6 +15,11 @@ const suffix = `.${process.env.TILLANDSIAS_FWD_PROJECT}.localhost`.toLowerCase()
 const upstreamHost = process.env.TILLANDSIAS_FWD_UPSTREAM_HOST;
 const upstreamPort = Number(process.env.TILLANDSIAS_FWD_UPSTREAM_PORT || 8443);
 const MAX_HELLO = 5 + 16384;
+// 8443, where Chromium's resolver rules send every project host; plus, for a
+// WebKit window (1656-tjv4), the preview port its URL names, since WebKit has
+// no resolver rules and dials the forwarder on the URL's own port.
+const listenPorts = [8443, ...String(process.env.TILLANDSIAS_FWD_EXTRA_PORTS || '')
+  .split(',').map((p) => Number(p)).filter((p) => Number.isInteger(p) && p > 0 && p !== 8443)];
 
 // null: need more bytes. { name }: the SNI host name, or undefined if none.
 function serverName(buf) {
@@ -51,8 +56,7 @@ function serverName(buf) {
   return { name: undefined };
 }
 
-net
-  .createServer((client) => {
+const server = (client) => {
     let buf = Buffer.alloc(0);
     const timer = setTimeout(() => client.destroy(), 5000);
     client.on('error', () => client.destroy());
@@ -87,5 +91,8 @@ net
       client.on('close', () => upstream.destroy());
     };
     client.on('data', onData);
-  })
-  .listen(8443, '0.0.0.0', () => console.log(`forwarder ${suffix} -> ${upstreamHost}:${upstreamPort}`));
+};
+for (const port of listenPorts) {
+  net.createServer(server).listen(port, '0.0.0.0', () =>
+    console.log(`forwarder :${port} ${suffix} -> ${upstreamHost}:${upstreamPort}`));
+}

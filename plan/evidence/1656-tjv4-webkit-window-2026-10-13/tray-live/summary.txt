@@ -1,0 +1,30 @@
+test-binary /var/home/lenovinha/claudia/tillandsias/target/debug/deps/tillandsias-a69e54c5169d8f95
+version 56.10.12.1 host-ip 192.168.0.111
+images: localhost/tillandsias-router:v56.10.12.1 localhost/tillandsias-chromium-framework:v56.10.12.1 localhost/e2e-fw-base:1 localhost/tillandsias-chromium-framework:v56.9.27.2 localhost/tillandsias-router:v56.9.27.2 
+ca-spki WCxiGkdINWNUVqV7CvHwCQQ7upeQCPOZMS1mPuoPJu4=
+router-self-check demo-preview: ok1
+live-test browser_open::tests::live_webkit_window_for_an_apple_preset rc=0
+test browser_open::tests::live_webkit_window_for_an_apple_preset has been running for over 60 seconds
+browser.open https://www.demo.localhost:18443/ device=iphone 15 -> {"window_id":"win-f5315032-045d-4920-91e4-46b749bd9945","device":{"id":"apple-iphone-15","model":"iPhone 15","approximated":false,"alternatives":[],"viewport":{"w":393,"h":852},"dpr":3.0,"mobile":true,"max_touch_points":5},"dev":false,"engine":"WebKit (approximates Safari)"}
+webkit-window-image localhost/tillandsias-webkit:v56.10.12.1
+page-report iphone-15-webkit Some(([393.0, 3.0, 0.0], "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.2 Mobile/15E148 Safari/604.1"))
+host-tcp-listeners-new-while-open []
+webkit-window-listeners ["/proc/net/tcp6:00000000000000000000000001000000:480B", "/proc/net/tcp:0100007F:480B"]
+probe webkit-own-project status=200 PREVIEW-DEMO
+probe webkit-other-project FAILED page.goto: Peer failed to perform TLS handshake: The TLS connection was non-properly terminated.
+probe webkit-external-name FAILED page.goto: Error resolving “example.com”: Name or service not known
+probe webkit-raw-ip FAILED page.goto: Could not connect to 1.1.1.1: Network is unreachable
+probe webkit-enclave-ca-cert status=200 LOCAL-OK
+probe webkit-foreign-ca-cert FAILED page.goto: Unacceptable TLS certificate
+probe webkit-ua Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6 Safari/605.1.15
+probe raw-own-project HTTP/1.1 200 OK PREVIEW-DEMO
+probe raw-sni-other-project  
+probe raw-host-other-project HTTP/1.1 421 Misdirected Request 
+forwarder-log forwarder :8443 .demo.localhost -> 10.89.0.4:8443 | forwarder :18443 .demo.localhost -> 10.89.0.4:8443 | refused sni="www.other.localhost" | refused sni="www.other.localhost" | refused sni="www.other.localhost"
+browser.close -> {"ok":true}
+after-close containers=""
+test browser_open::tests::live_webkit_window_for_an_apple_preset ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 963 filtered out; finished in 91.82s
+op: unchanged
+op-net: unchanged
+op-browser-dir: unchanged

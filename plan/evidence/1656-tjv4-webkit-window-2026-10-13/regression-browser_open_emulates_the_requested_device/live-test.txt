@@ -1,0 +1,20 @@
+
+running 1 test
+host-tcp-listeners-before ["0.0.0.0:27500", "0.0.0.0:5355", "127.0.0.1:11434", "127.0.0.1:5111", "127.0.0.1:631", "127.0.0.1:8080", "127.0.0.1:8201", "127.0.0.53%lo:53", "127.0.0.54:53", "[::1]:631", "[::]:5355"]
+browser.open https://www.demo.localhost:18443/ device=iphone 12 pro max -> {"window_id":"win-f6a20f92-bec8-4cda-9f36-6a48aa8b3909","device":{"id":"apple-iphone-12-pro-max","model":"iPhone 12 Pro Max","approximated":false,"alternatives":[],"viewport":{"w":428,"h":926},"dpr":3.0,"mobile":true,"max_touch_points":5},"dev":false,"engine":"Chromium"}
+page-report iphone-12-pro-max Some(([428.0, 3.0, 5.0], "Mozilla/5.0 (iPhone; CPU iPhone OS 14_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.2 Mobile/15E148 Safari/604.1"))
+host-tcp-listeners-new-while-open []
+galaxy-s24-catalogue (360.0, 3.0, 5.0) samsung-galaxy-s24
+browser.set_device galaxy s24 -> {"window_id":"win-f6a20f92-bec8-4cda-9f36-6a48aa8b3909","device":{"id":"samsung-galaxy-s24","model":"Galaxy S24","approximated":false,"alternatives":[],"viewport":{"w":360,"h":780},"dpr":3.0,"mobile":true,"max_touch_points":5}}
+page-report galaxy-s24 Some(([360.0, 3.0, 5.0], "Mozilla/5.0 (Linux; Android 14; SM-S921U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.8078.12 Mobile Safari/537.36"))
+cdp-dir /run/user/1000/tillandsias/browser/win-f6a20f92-bec8-4cda-9f36-6a48aa8b3909.cdp mode Ok("700")
+window-tcp-listeners []
+browser.close -> {"ok":true}
+cdp-dir-removed-on-close true
+browser.open https://www.demo.localhost:18443/ device=galaxy s24 -> {"window_id":"win-ad9022f0-bffc-4cd1-b9cb-686151057914","device":{"id":"samsung-galaxy-s24","model":"Galaxy S24","approximated":false,"alternatives":[],"viewport":{"w":360,"h":780},"dpr":3.0,"mobile":true,"max_touch_points":5},"dev":false,"engine":"Chromium"}
+page-report galaxy-s24-fresh Some(([360.0, 3.0, 5.0], "Mozilla/5.0 (Linux; Android 14; SM-S921U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.8078.12 Mobile Safari/537.36"))
+browser.close -> {"ok":true}
+test browser_open::tests::live_browser_open_emulates_the_requested_device ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 963 filtered out; finished in 4.39s
+

@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# 1656-tjv4 measure-first spike, part 2 (evidence, not shipped). On a PRIVATE
+# store: Playwright's official Ubuntu 24.04 image (pinned by digest) runs its
+# WebKit headless and headful under Wayland ONLY (just the socket file),
+# with --network none and the browser-window hardening.
+set -u
+REPO="$(cd "$(dirname "$0")/../../.." && pwd)"
+HERE="$REPO/target/work/webkit"; OUT="$HERE/out-noble"; rm -rf "$OUT"; mkdir -p "$OUT"
+IMG=mcr.microsoft.com/playwright@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
+OP_ENV=(env -u CONTAINERS_STORAGE_CONF -u CONTAINERS_CONF -u REGISTRY_AUTH_FILE -u XDG_CACHE_HOME "HOME=$HOME")
+[ -z "${CONTAINERS_STORAGE_CONF:-}${CONTAINERS_CONF:-}" ] || { echo "ABORT: plain shell only"; exit 3; }
+log() { echo "$*" >> "$OUT/summary.txt"; echo "$*"; }
+op_state() {
+    local c; for c in tillandsias-inference tillandsias-dev-inference tillandsias-router; do
+        "${OP_ENV[@]}" podman inspect --format '{{.Name}} {{.Id}} {{.State.Status}} {{.State.StartedAt}}' "$c" 2>&1; done
+    "${OP_ENV[@]}" podman network ls --format '{{.Name}}' 2>&1 | sort
+    "${OP_ENV[@]}" podman images --format '{{.Repository}}:{{.Tag}} {{.ID}}' 2>&1 | sort
+}
+op_state > "$OUT/op-before"
+S="$(mktemp -d "$HERE/run.XXXXXX")"; R="$(mktemp -d "${XDG_RUNTIME_DIR:?}/tillandsias-webkit.XXXXXX")"
+mkdir -p "$S/graph" "$R/run" "$R/tmp" "$S/home" "$S/app"
+printf '%s\n' '[storage]' 'driver = "overlay"' "graphroot = \"$S/graph\"" "runroot = \"$R/run\"" > "$S/storage.conf"
+printf '%s\n' '[engine]' 'cgroup_manager = "cgroupfs"' 'events_logger = "file"' "events_logfile_path = \"$S/events.log\"" "tmp_dir = \"$R/tmp\"" > "$S/containers.conf"
+WAYLAND_SOCK="$XDG_RUNTIME_DIR/${WAYLAND_DISPLAY:-wayland-0}"
+export CONTAINERS_STORAGE_CONF="$S/storage.conf" CONTAINERS_CONF="$S/containers.conf" REGISTRY_AUTH_FILE="$S/auth.json" HOME="$S/home"
+unset XDG_CACHE_HOME
+guard() { local g; g="$(podman info --format '{{.Store.GraphRoot}}' 2>/dev/null)"; [ "$g" = "$S/graph" ] || { echo "ABORT: store is '$g'"; exit 3; }; }
+guard
+t0=$(date +%s); podman pull -q "$IMG" > "$OUT/pull.txt" 2>&1; log "pull rc=$? seconds=$(( $(date +%s) - t0 )) bytes=$(podman image inspect "$IMG" --format '{{.Size}}' 2>/dev/null)"
+log "image: $(podman run --rm --pull=never --entrypoint sh "$IMG" -c '. /etc/os-release; echo $PRETTY_NAME; node --version; ls /ms-playwright' 2>&1 | tr '\n' ' ')"
+guard
+podman run --rm --pull=never --entrypoint sh -v "$S/app:/app:z" -w /app "$IMG" -c 'npm init -y >/dev/null && npm i -s playwright@1.63.0 >/dev/null 2>&1; ls node_modules' > "$OUT/npm.txt" 2>&1
+log "npm rc=$? $(tr '\n' ' ' < "$OUT/npm.txt")"
+cat > "$S/app/probe.js" <<'JS'
+const { webkit } = require('/app/node_modules/playwright');
+(async () => {
+  const headless = process.env.PW_HEADLESS !== '0';
+  const t0 = Date.now();
+  try {
+    const b = await webkit.launch({ headless, timeout: 30000 });
+    const p = await b.newPage();
+    await p.goto('data:text/html,<title>wk</title><p>日本語 😀</p>');
+    const ua = await p.evaluate(() => navigator.userAgent);
+    console.log(`launch headless=${headless} ok ms=${Date.now() - t0} version=${b.version()}`);
+    console.log(`ua ${ua}`);
+    console.log(`ua-has-AppleWebKit=${ua.includes('AppleWebKit')} ua-has-Chrome=${ua.includes('Chrome/')}`);
+    if (!headless) await new Promise(r => setTimeout(r, 3000));
+    await b.close();
+  } catch (e) { console.log(`launch headless=${headless} FAILED ${String(e.message || e).split('\n').slice(0, 40).join(' | ')}`); process.exitCode = 1; }
+})();
+JS
+HARD=(--network none --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --userns=keep-id --read-only --tmpfs /tmp:size=256m -e HOME=/tmp)
+guard
+podman run --rm --pull=never "${HARD[@]}" -e PW_HEADLESS=1 -v "$S/app:/app:ro,z" --entrypoint node "$IMG" /app/probe.js > "$OUT/headless.txt" 2>&1
+log "headless rc=$?: $(tr '\n' ' ' < "$OUT/headless.txt" | cut -c1-500)"
+if [ -S "$WAYLAND_SOCK" ]; then
+  guard
+  podman run --rm --pull=never "${HARD[@]}" --tmpfs /run/user/browser:size=1m,mode=0755 \
+    -v "$WAYLAND_SOCK:/run/user/browser/wayland-0:rw" -e XDG_RUNTIME_DIR=/run/user/browser -e WAYLAND_DISPLAY=wayland-0 \
+    -e GDK_BACKEND=wayland -e PW_HEADLESS=0 -e "DEBUG=pw:browser*" -v "$S/app:/app:ro,z" --entrypoint node "$IMG" /app/probe.js > "$OUT/headful.txt" 2>&1
+  log "headful-wayland-only rc=$?: $(grep -E '^launch|^ua|\[err\]' "$OUT/headful.txt" | tr '\n' ' ' | cut -c1-900)"
+  # Variant: the same, plus a dummy DISPLAY (no X socket is mounted), in case
+  # Playwright's own DISPLAY check is what ends the launch.
+  guard
+  podman run --rm --pull=never "${HARD[@]}" --tmpfs /run/user/browser:size=1m,mode=0755 \
+    -v "$WAYLAND_SOCK:/run/user/browser/wayland-0:rw" -e XDG_RUNTIME_DIR=/run/user/browser -e WAYLAND_DISPLAY=wayland-0 \
+    -e GDK_BACKEND=wayland -e DISPLAY=:99 -e PW_HEADLESS=0 -e "DEBUG=pw:browser*" -v "$S/app:/app:ro,z" --entrypoint node "$IMG" /app/probe.js > "$OUT/headful-dummy-display.txt" 2>&1
+  log "headful-wayland+dummy-DISPLAY rc=$?: $(grep -E '^launch|^ua|\[err\]' "$OUT/headful-dummy-display.txt" | tr '\n' ' ' | cut -c1-900)"
+  # Control: the same headful launch with NO display at all must fail, so a
+  # pass above really used the Wayland socket.
+  guard
+  podman run --rm --pull=never "${HARD[@]}" -e GDK_BACKEND=wayland -e PW_HEADLESS=0 -v "$S/app:/app:ro,z" --entrypoint node "$IMG" /app/probe.js > "$OUT/headful-nodisplay.txt" 2>&1
+  log "control headful-no-display rc=$?: $(tr '\n' ' ' < "$OUT/headful-nodisplay.txt" | cut -c1-300)"
+else log "headful skipped: no socket at $WAYLAND_SOCK"; fi
+guard
+podman rm -a -f -t 0 > /dev/null 2>&1; podman rmi -a -f > /dev/null 2>&1
+podman unshare sh -c "umount -l '$S/graph/overlay' 2>/dev/null; rm -rf '$S/graph' '$R/run' '$R/tmp' '$S/app'"
+find "$R" -delete 2>/dev/null; find "$S" -delete 2>/dev/null
+export HOME="$(getent passwd "$(id -u)" | cut -d: -f6)"; unset CONTAINERS_STORAGE_CONF CONTAINERS_CONF REGISTRY_AUTH_FILE
+op_state > "$OUT/op-after"
+cmp -s "$OUT/op-before" "$OUT/op-after" && log "op: unchanged" || { log "op: CHANGED"; diff "$OUT/op-before" "$OUT/op-after" | tee -a "$OUT/summary.txt"; }
