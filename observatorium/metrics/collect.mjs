@@ -115,7 +115,7 @@ export function collect(root, {grade = false, now = new Date().toISOString(), re
       // Order 1670-gcwu: a grade over zero resolved requirement keys measures
       // nothing (R = denominator by construction); it is a gap, never a value.
       if (result.measured === false) residual = {value: null, unmeasured: true, denominator: result.denominator, source: result.schema, reason: `CentiColon grade unmeasured (${result.unmeasured_reason || 'no reason given'}): no litmus step names a requirement it pins, so no obligation can be traced or tested.`};
-      else residual = {value: result.R, denominator: result.denominator, satisfied: result.satisfied, source: result.schema, reason: 'Fresh canonical grader observation; only available local result evidence can earn obligations.', reasons: result.residue_reasons, records: result.records};
+      else residual = {value: result.R, denominator: result.denominator, satisfied: result.satisfied, source: result.schema, reason: 'Fresh canonical grader observation; only available local result evidence can earn obligations.', traced: result.histogram?.traced ?? null, positivelyTested: result.histogram?.positively_tested ?? null, reasons: result.residue_reasons, records: result.records};
     } catch (error) { residual.reason = `Fresh obligation grading unavailable: ${error.message.split('\n')[0]}`; }
   }
   if (residual.value === null) gaps.push(residual.reason);
@@ -128,6 +128,11 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const args = options(process.argv.slice(2), ['root', 'output', 'history', 'grade', 'release']);
     if (!args.output) throw Error('Usage: collect.mjs --root REPO --output SNAPSHOT [--history JSONL] [--grade]');
     const snapshot = collect(resolve(args.root || '.'), args);
+    // A release cut is the dashboard's HEADLINE grade (Workers Builds runs no
+    // litmus), so it must be a measured grade over recorded litmus results.
+    if (args.release && (snapshot.current.residual.value === null || !(snapshot.current.residual.records > 0))) {
+      throw Error(`Refusing the ${args.release} release snapshot: the CentiColon grade is not a measurement over recorded litmus results (${snapshot.current.residual.reason}). Run the pre-build litmus tier first.`);
+    }
     atomicJson(resolve(args.output), snapshot);
     if (args.history) {
       mkdirSync(dirname(resolve(args.history)), {recursive: true});

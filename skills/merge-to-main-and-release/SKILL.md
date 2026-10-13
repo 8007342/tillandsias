@@ -645,9 +645,16 @@ dashboard at observatorium.tillandsias.org plots one durable observation per
 release, and its durable storage is THIS repository: Cloudflare's deploy only
 reads `observatorium/history/snapshots.jsonl`, it never writes it (it has no
 push credential, and must not). So the cut appends exactly one line, naming
-the tag, in the same ledger push:
+the tag, in the same ledger push.
+
+This line is the dashboard's HEADLINE CentiColon grade. Workers Builds runs no
+litmus, so a deploy can trace a requirement but never positively test one; only
+a host with recorded litmus results can. So the cut records a pre-build litmus
+run on THIS tree first, then grades. `collect.mjs` refuses to append a
+release snapshot whose grade is unmeasured or graded over no recorded results:
 
 ```bash
+scripts/run-litmus-test.sh --phase pre-build --compact   # records per-test results for this tree's bytes
 (cd observatorium && node scripts/build.mjs --release-snapshot "${new_tag}")
 tail -1 observatorium/history/snapshots.jsonl | grep -q "\"release\":\"${new_tag}\"" \
   || { echo "observatorium snapshot does not name ${new_tag}"; exit 1; }
@@ -656,7 +663,8 @@ git add observatorium/history/snapshots.jsonl
 
 It builds `tillandsias-plan` from this checkout (or uses `TILLANDSIAS_PLAN_BIN`)
 to fold the plan and grade CentiColons; a metric it cannot observe is recorded
-as an explicit gap in the line, never as a zero.
+as an explicit gap in the line, never as a zero. A failing litmus test does not
+block the snapshot: it un-earns its requirements, and the grade says so.
 
 Push the ledger update to `linux-next` so other hosts and the next work-loop see the release happened.
 

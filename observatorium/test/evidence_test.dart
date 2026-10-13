@@ -195,4 +195,41 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+  testWidgets(
+    'the headline residual is the release cut; the deploy grade is a labelled display-only card (1661-vckd)',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final data = fixture();
+      final current = data['current'] as Map<String, dynamic>;
+      current['residual'] = {
+        'value': 1527,
+        'release': 'v56.10.13.1',
+        'reason': 'Release v56.10.13.1 cut (2026-10-13): graded after a recorded litmus run',
+      };
+      current['residualLive'] = {
+        'traced': 2,
+        'displayOnly': true,
+        'label': 'Requirements traced at this deploy, display-only',
+      };
+      await tester.pumpWidget(
+        ObservatoriumApp(evidence: Evidence.decode(jsonEncode(data))),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('LIVE GRADE · DISPLAY-ONLY'), findsOneWidget);
+      expect(
+        find.text('Requirements traced at this deploy, display-only'),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          'Release v56.10.13.1 cut (2026-10-13): graded after a recorded litmus run',
+        ),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 }

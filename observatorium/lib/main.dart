@@ -163,6 +163,7 @@ class _DashboardState extends State<Dashboard> {
     final specs = current['specs'] as Map? ?? const {};
     final plan = current['plan'] as Map? ?? const {};
     final residual = current['residual'] as Map? ?? const {};
+    final residualLive = current['residualLive'] as Map?;
     final commits = current['commits'] as Map? ?? const {};
     final visible = evidence.series
         .where((s) => enabled.contains(s.id))
@@ -290,6 +291,15 @@ class _DashboardState extends State<Dashboard> {
                                   'No recorded measurement',
                               'residual',
                             ),
+                            if (residualLive != null)
+                              metric(
+                                width,
+                                'LIVE GRADE · DISPLAY-ONLY',
+                                residualLive['traced'],
+                                residualLive['label']?.toString() ??
+                                    'Display-only deploy observation',
+                                'residual',
+                              ),
                             metric(
                               width,
                               'COMMITS',

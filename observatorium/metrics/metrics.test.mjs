@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {chmodSync, mkdtempSync, mkdirSync, rmSync, writeFileSync} from 'node:fs';
+import {chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {collect, countSpec, EPOCH, summarizePlan} from './collect.mjs';
@@ -129,6 +129,54 @@ test('an unmeasured CentiColon grade is a visible gap, never a residual value (1
     fake({schema: 'centicolon-grade-observed/1', measured: true, R: 2, denominator: 4, satisfied: 2, records: 1});
     const measured = collect(repo, {grade: true});
     assert.equal(measured.current.residual.value, 2, 'a measured grade keeps its R');
+  } finally {
+    if (old === undefined) delete process.env.TILLANDSIAS_PLAN_BIN; else process.env.TILLANDSIAS_PLAN_BIN = old;
+    rmSync(repo, {recursive: true, force: true});
+  }
+});
+test('the headline grade is the latest release cut; the deploy grade is display-only and never joins that series (1661-vckd)', () => {
+  const live = snapshot('2026-10-14T00:00:00Z');
+  live.current.residual = {value: 1529, denominator: 1529, satisfied: 0, traced: 2, positivelyTested: 0, records: 0};
+  const cut = snapshot('2026-10-13T20:00:00Z');
+  cut.release = 'v56.10.13.1';
+  cut.current.residual = {value: 1527, denominator: 1529, satisfied: 2, traced: 0, positivelyTested: 2, records: 1399};
+  const unmeasuredCut = snapshot('2026-10-12T20:00:00Z');
+  unmeasuredCut.release = 'v56.10.12.1';
+  const result = project(live, [unmeasuredCut, cut]);
+  assert.equal(result.current.residual.value, 1527, 'the headline is the release cut, not the deploy');
+  assert.equal(result.current.residual.release, 'v56.10.13.1');
+  assert.match(result.current.residual.reason, /recorded litmus run/);
+  assert.equal(result.current.residualLive.displayOnly, true);
+  assert.equal(result.current.residualLive.traced, 2);
+  assert.match(result.current.residualLive.label, /display-only/);
+  assert.deepEqual(result.graph.series.find(s => s.id === 'residual').points.map(p => p.value), [null, 1527, null]);
+  const none = project(live, []);
+  assert.equal(none.current.residual.value, null, 'no release cut: no headline grade, never the deploy grade');
+  assert.ok(none.gaps.some(gap => gap.startsWith('No release-cut snapshot with a measured grade yet')));
+});
+test('the release cut refuses to append an unmeasured grade (1661-vckd)', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'observatorium-cut-'));
+  const old = process.env.TILLANDSIAS_PLAN_BIN;
+  try {
+    execFileSync('git', ['init', '-q', repo]);
+    mkdirSync(join(repo, 'scripts'));
+    const fake = (grade) => writeFileSync(join(repo, 'scripts/centicolon-grade.sh'),
+      `mkdir -p "$TILLANDSIAS_REPO_ROOT/$TILLANDSIAS_CENTICOLON_DIR"\nprintf '%s' '${JSON.stringify(grade)}' > "$TILLANDSIAS_REPO_ROOT/$TILLANDSIAS_CENTICOLON_DIR/grade.json"\n`);
+    fake({schema: 'centicolon-grade-observed/1', measured: false, unmeasured_reason: 'zero-resolved-requirement-keys', R: 4, denominator: 4, satisfied: 0, records: 0});
+    execFileSync('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', 'add', '.']);
+    execFileSync('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'x']);
+    const history = join(repo, 'history.jsonl');
+    const cut = () => execFileSync(process.execPath, [new URL('./collect.mjs', import.meta.url).pathname, '--root', repo, '--output', join(repo, 'out.json'), '--history', history, '--release', 'v56.10.13.1', '--grade'], {stdio: 'pipe', env: {...process.env, TILLANDSIAS_PLAN_BIN: join(repo, 'absent')}});
+    assert.throws(cut, /Refusing the v56.10.13.1 release snapshot/);
+    assert.equal(existsSync(history), false, 'nothing appended');
+    fake({schema: 'centicolon-grade-observed/1', measured: true, R: 4, denominator: 4, satisfied: 0, records: 0, histogram: {traced: 4, positively_tested: 0}});
+    assert.throws(cut, /not a measurement over recorded litmus results/, 'a measured grade with no recorded results is refused too');
+    fake({schema: 'centicolon-grade-observed/1', measured: true, R: 3, denominator: 4, satisfied: 1, records: 7, histogram: {traced: 3, positively_tested: 1}});
+    cut();
+    const line = JSON.parse(readFileSync(history, 'utf8').trim());
+    assert.equal(line.release, 'v56.10.13.1');
+    assert.equal(line.current.residual.value, 3);
+    assert.equal(line.current.residual.positivelyTested, 1);
   } finally {
     if (old === undefined) delete process.env.TILLANDSIAS_PLAN_BIN; else process.env.TILLANDSIAS_PLAN_BIN = old;
     rmSync(repo, {recursive: true, force: true});

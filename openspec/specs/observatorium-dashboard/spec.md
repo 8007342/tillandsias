@@ -77,7 +77,10 @@ time. A metric it cannot observe SHALL be published as an explicit gap.
 The durable history SHALL be the repository: the release cut SHALL append one
 snapshot naming its release tag to `observatorium/history/snapshots.jsonl`. A
 deploy SHALL read that history and SHALL NOT write it; its live observation is
-display-only. Local artifact serving SHALL use the same built assets. Managed
+display-only. Workers Builds runs no litmus, so the HEADLINE CentiColon grade
+SHALL be the latest release-cut snapshot, graded after a recorded litmus run on
+the cut host; the deploy's own grade SHALL be labelled display-only and SHALL
+NOT join the release series. Local artifact serving SHALL use the same built assets. Managed
 sibling publication and device dogfooding SHALL use host-browser tools when
 available; their absence SHALL be documented as an unverified infrastructure
 dependency.
@@ -91,7 +94,14 @@ dependency.
 #### Scenario: Release cut records the release
 
 - WHEN a release is cut
-- THEN exactly one snapshot line naming that release tag is appended to the committed history.
+- THEN exactly one snapshot line naming that release tag is appended to the committed history
+- AND it is appended only after a recorded pre-build litmus run, with a measured grade; an unmeasured grade is refused and nothing is appended.
+
+#### Scenario: Headline grade comes from the release cut
+
+- WHEN the dashboard is deployed from a build that ran no litmus
+- THEN its headline residual is the latest measured release-cut snapshot, naming that release
+- AND the deploy's traced count appears only on a card labelled display-only.
 
 ## Authority and verification
 

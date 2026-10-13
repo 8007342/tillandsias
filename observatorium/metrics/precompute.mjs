@@ -43,7 +43,7 @@ export function project(snapshot, history = [], commits = [], legacy = null) {
     ['scenarios', 'Scenario headings outside fenced code (all spec statuses)', s => s.current.specs?.scenarios ?? null, 'openspec/specs/*/spec.md', 'headings'],
     ['plan', 'Folded plan packets', s => s.current.plan.total, 'tillandsias-plan query --json canonical fold', 'packets'],
     ['fragments', 'Plan index fragments', s => s.current.plan.fragments, 'plan/index.d/*.yaml', 'files'],
-    ['residual', 'Unfulfilled scenario obligations', s => s.current.residual.value, 'centicolon-grade-observed/1 fresh observation', 'scenario obligations'],
+    ['residual', 'Unfulfilled scenario obligations at release cuts', s => s.release ? (s.current.residual?.value ?? null) : null, 'centicolon-grade-observed/1 at the release cut, after a recorded litmus run', 'scenario obligations'],
   ];
   const earliest = commits[0]?.date;
   const epochs = [...new Set(measured.map(s => s.epoch))];
@@ -73,12 +73,22 @@ export function project(snapshot, history = [], commits = [], legacy = null) {
     if (points.length) add('legacy_gate_residual', 'Legacy gate-weight residual (different denominator)', points, 'legacy-weighted-gate-checks', 'docs/convergence/centicolon-dashboard.json history', 'weighted gate checks');
     gaps.push('Legacy gate residual is a separate measurement epoch from scenario obligations; the two series must not be joined or compared as the same unit.');
   }
-  const series = measured.map(s => ({date: s.measuredAt, epoch: s.epoch, commits: s.current.commits.total, specs: s.current.specs?.files ?? null, plan: s.current.plan.total, residual: s.current.residual.value}));
+  // Order 1661-vckd: Workers Builds runs no litmus, so a deploy can trace but
+  // never positively test. The HEADLINE grade is the latest release-cut
+  // snapshot (graded on a host after a recorded litmus run); the deploy's own
+  // grade is shown, labelled display-only, and never joined to that series.
+  const cut = measured.filter(s => s.release && Number.isInteger(s.current.residual?.value)).at(-1);
+  const headline = cut
+    ? {...cut.current.residual, release: cut.release, measuredAt: cut.measuredAt, reason: `Release ${cut.release} cut (${cut.measuredAt.slice(0, 10)}): graded after a recorded litmus run`}
+    : {value: null, source: 'observatorium/history/snapshots.jsonl', reason: 'No release-cut snapshot with a measured grade yet; the live deploy grade below is display-only.'};
+  if (!cut) gaps.push(headline.reason);
+  const residualLive = {...snapshot.current.residual, displayOnly: true, label: 'Requirements traced at this deploy, display-only: Workers Builds runs no litmus, so nothing is positively tested here'};
+  const series = measured.map(s => ({date: s.measuredAt, epoch: s.epoch, commits: s.current.commits.total, specs: s.current.specs?.files ?? null, plan: s.current.plan.total, residual: s.release ? (s.current.residual?.value ?? null) : null}));
   const epochRanges = epochs.map(id => {
     const records = measured.filter(s => s.epoch === id);
     return {id, start: records[0].measuredAt, end: records.at(-1).measuredAt};
   });
-  return {schemaVersion: 1, generatedAt: snapshot.measuredAt, revision: snapshot.revision, dirty: snapshot.dirty, epoch: {...epochRanges.find(e => e.id === EPOCH), description: 'Actual working-tree observations; absent periods remain unknown.'}, epochs: epochRanges, current: snapshot.current, details: snapshot.details, series, graph: {scale: 'log10(1+x)', series: graphSeries}, gaps: [...new Set(gaps)], provenance: {commits: 'git log HEAD, committer timestamps, all reachable ancestors; missing days have no recorded commits, not repeated observations', specs: 'openspec/specs/*/spec.md headings outside fenced code', plan: snapshot.current.plan.source, legacy: legacy ? 'docs/convergence/centicolon-dashboard.json history (legacy weighted gates)' : null}};
+  return {schemaVersion: 1, generatedAt: snapshot.measuredAt, revision: snapshot.revision, dirty: snapshot.dirty, epoch: {...epochRanges.find(e => e.id === EPOCH), description: 'Actual working-tree observations; absent periods remain unknown.'}, epochs: epochRanges, current: {...snapshot.current, residual: headline, residualLive}, details: snapshot.details, series, graph: {scale: 'log10(1+x)', series: graphSeries}, gaps: [...new Set(gaps)], provenance: {commits: 'git log HEAD, committer timestamps, all reachable ancestors; missing days have no recorded commits, not repeated observations', specs: 'openspec/specs/*/spec.md headings outside fenced code', plan: snapshot.current.plan.source, legacy: legacy ? 'docs/convergence/centicolon-dashboard.json history (legacy weighted gates)' : null}};
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
