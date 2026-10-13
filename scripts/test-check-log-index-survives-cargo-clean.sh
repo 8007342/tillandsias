@@ -15,6 +15,10 @@
 # removal is what `cargo clean` does to target/ (measured for
 # scripts/metrics-log-path.sh, 2026-08-26).
 #
+# SHELL, NOT LUA (check-shell-ratchet.lua prefers a Lua fixture): every arm
+# runs a process — the resolver, the reader, cargo — and scripts/lua cannot
+# spawn while 1384-aixy is blocked. Port it when it can.
+#
 #   1  the default resolves OUTSIDE target/, under <root>/.cache/convergence/
 #   2  TILLANDSIAS_CHECK_LOG_INDEX wins verbatim and adopts nothing into it
 #   3  legacy history is adopted ONCE: copied, not moved; a legacy file that
