@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's direction (macuahuitl, 2026-10-13) from an operator forge failure on yoga.
+packets:
+  - packet_id: the-forge-startup-context-names-dev-urls-as-service-dot-project-dot-localhost-the-order-the-router-parses-and-a-guard-pins-the-two-together
+    order: 1661-m9sr
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, startup-context, router, local-web-preview, agents]
+    estimated_hours: 3
+    owned_files:
+      - images/default/lib-common.sh
+    title: |
+      The forge's startup context tells agents to hand out http://<project>.<service>.localhost/, but the router, the browser allowlist and the sidecar all route <service>.<project>.localhost. An agent that follows the context gets "no route".
+    context: |
+      Operator failure on yoga (2026-10-13), private project 8007342/lakanoa at 9bb86b1c4. FORGE_DIAGNOSTICS.md shows the agent used the context's URL shape and got "no route".
+      images/default/lib-common.sh:5100 (the "Web servers" block) prints http://${project_name}.<service>.localhost/. The router's routes, crates/tillandsias-browser-mcp/src/allowlist.rs and the sidecar all use <service>.<project>.localhost.
+    exit_criteria:
+      - 'the startup context prints the dev URL as <service>.<project>.localhost; red today (lib-common.sh:5100 prints <project>.<service>)'
+      - 'a parity guard extracts the example host from the generated startup context and checks it with the router/allowlist parser for the same project: it must parse as <service>.<project>.localhost; a mutation restoring the old order makes the guard fail'
+    unscoreable: "unpinnable-until-the-guard-exists: the context-vs-router parity arm is written with the fix"
+    next_action: >
+      Red first: a guard that renders the context for a sample project and checks its example host against the allowlist/router parser. Watch it fail on today's text, then fix lib-common.sh.
+    provenance: |
+      Filed by lenovinha-silverblue on macuahuitl's direction, 2026-10-13 (operator forge failure, yoga, lakanoa).
+    events:
+      - type: filed
+        ts: "2026-10-13T17:47:41Z"
+        host: lenovinha
+        summary: |-
+          The startup context's dev URL is <project>.<service>.localhost; the router routes <service>.<project>.localhost.
