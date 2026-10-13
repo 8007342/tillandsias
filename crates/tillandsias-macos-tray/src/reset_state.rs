@@ -460,6 +460,14 @@ pub(crate) fn run_unclean_stop_rebuild_in(
     Ok(())
 }
 
+/// The HARD reset's disk wipe (1642-cc54): the rootfs AND the identity disk.
+/// HARD is the one reset that destroys identity; every rebuild keeps the disk.
+pub(crate) fn hard_wipe(vz: &tillandsias_vm_layer::vz::VzRuntime) -> Result<(), String> {
+    vz.wipe_provisioned_artifacts()
+        .and_then(|()| vz.wipe_identity())
+        .map_err(|e| e.to_string())
+}
+
 /// Absent is success: this is a reset, and a file that is already gone is the
 /// state we want. Only an existing file we cannot remove is an error.
 fn remove_file(p: &Path) -> Result<(), String> {
@@ -799,16 +807,30 @@ mod tests {
             !preserved.iter().any(|p| p.contains("vm-identity.img")),
             "{preserved:?}"
         );
-        let src = include_str!("diagnose.rs");
-        let call = src
-            .find("run_hard_reset_in(")
-            .expect("diagnose calls the HARD reset");
-        let body = &src[call..call + 900];
-        assert!(body.contains("wipe_provisioned_artifacts()"), "{body}");
-        assert!(
-            body.contains("wipe_identity()"),
-            "HARD must wipe the identity disk too: {body}"
-        );
+        // What the wipe DOES, on a scratch VM root: the rootfs, the identity
+        // disk and the guest's record of it are all gone afterwards.
+        let root = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join(format!(
+            "../../target/work/hard-wipe-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, root.clone());
+        let identity = root.join(tillandsias_vm_layer::vz::IDENTITY_IMAGE_FILE);
+        let record = vz
+            .provision_state_dir()
+            .join(tillandsias_vm_layer::vz::IDENTITY_RECORDED_FILE);
+        std::fs::create_dir_all(record.parent().unwrap()).unwrap();
+        for f in [&vz.rootfs_image_path(), &identity, &record] {
+            std::fs::write(f, b"x").unwrap();
+        }
+        hard_wipe(&vz).expect("hard wipe");
+        assert!(!vz.rootfs_image_path().exists(), "the rootfs goes");
+        assert!(!identity.exists(), "HARD destroys the identity disk");
+        assert!(!record.exists(), "and the guest's record of it");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// 5b loop guard, end to end on a scratch root: two consecutive unclean

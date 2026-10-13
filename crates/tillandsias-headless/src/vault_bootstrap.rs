@@ -6491,9 +6491,11 @@ mod tests {
     /// A scratch dir inside the checkout (operator rule: development work
     /// never leaves it), fresh per test.
     fn identity_scratch(tag: &str) -> PathBuf {
-        let d = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../target/work/vault-store-root")
-            .join(format!("{tag}-{}", std::process::id()));
+        let d = PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../../target/work/vault-store-root")
+        .join(format!("{tag}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&d);
         fs::create_dir_all(&d).unwrap();
         d

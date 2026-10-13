@@ -1116,6 +1116,26 @@ tillandsias_identity_disk() {
   mountpoint -q "$idmnt" || mount "$idmnt" || return 1
   mountpoint -q "$idmnt" || return 1
   [ -e "$idmnt/.tillandsias-identity" ] || : > "$idmnt/.tillandsias-identity" || return 1
+  # UPGRADE. A guest provisioned before this kept its store on the rootfs, and
+  # a provisioning change re-runs this script on that same rootfs. Recording an
+  # EMPTY disk there would start a new Vault against the keychain's existing
+  # share (803-49re). Move the store instead, so the share still opens it and
+  # no sign-in is lost. The Vault is stopped first (headless may be running from
+  # boot; provisioning starts it again below); the copy lands under a temporary
+  # name and is renamed, so a half copy is never taken for a store. The rootfs
+  # copy is left as it was.
+  local old=/root/.cache/tillandsias
+  if [ -d "$old/vault-data" ] && [ ! -e "$idmnt/vault-data" ]; then
+    systemctl stop tillandsias-headless.service 2>/dev/null || true
+    podman stop -t 30 tillandsias-vault >/dev/null 2>&1 || true
+    rm -rf "$idmnt/vault-data.moving"
+    cp -a "$old/vault-data" "$idmnt/vault-data.moving" || return 1
+    mv "$idmnt/vault-data.moving" "$idmnt/vault-data" || return 1
+    if [ -d "$old/vault-audit" ] && [ ! -e "$idmnt/vault-audit" ]; then
+      cp -a "$old/vault-audit" "$idmnt/vault-audit" || true
+    fi
+    echo "[tillandsias-provision] moved the Vault store from the rootfs onto the identity disk (1642-cc54)" >&2
+  fi
   mkdir -p /etc/tillandsias || return 1
   echo "$idmnt" > /etc/tillandsias/identity-disk || return 1
   : > "$recorded" || return 1
@@ -5510,8 +5530,10 @@ mod tests {
     /// Scratch root inside the checkout (operator rule: development work
     /// never leaves it; a bare tempdir lands in /var/folders).
     fn in_checkout_tempdir() -> tempfile::TempDir {
-        let base =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/work/vz-tests");
+        let base = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../../target/work/vz-tests");
         std::fs::create_dir_all(&base).unwrap();
         tempfile::tempdir_in(base).unwrap()
     }
@@ -5625,6 +5647,24 @@ mod tests {
         let written = body.find(": > \"$recorded\"").expect("writes the record");
         assert!(removed < format && removed < body.find("blkid -p").unwrap());
         assert!(written > record, "the host record comes last");
+        // Upgrade: an existing rootfs store moves onto the disk BEFORE the disk
+        // is recorded (recording an empty disk would orphan the kept share),
+        // only when the disk has no store yet, with the Vault stopped first.
+        let moved = body
+            .find("mv \"$idmnt/vault-data.moving\" \"$idmnt/vault-data\"")
+            .expect("moves an existing store");
+        let only_if = body
+            .find("[ ! -e \"$idmnt/vault-data\" ]")
+            .expect("never over a store already on the disk");
+        let stopped = body
+            .find("podman stop -t 30 tillandsias-vault")
+            .expect("stops the Vault before copying");
+        let copied = body.find("cp -a \"$old/vault-data\"").unwrap();
+        assert!(only_if < stopped && stopped < copied && copied < moved);
+        assert!(
+            moved < record,
+            "the store must be on the disk before the disk is recorded"
+        );
         assert!(body.contains(&format!(
             "{PROVISION_STATE_GUEST_DIR}/{IDENTITY_RECORDED_FILE}"
         )));
