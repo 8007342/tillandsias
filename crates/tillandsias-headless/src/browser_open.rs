@@ -27,10 +27,10 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use base64::Engine;
+use base64::Engine as _;
 use sha2::{Digest, Sha256};
 use tillandsias_browser_mcp::launcher::{
-    BrowserContainers, ContainerHandle, ContainerLaunchRequest, LaunchError,
+    BrowserContainers, ContainerHandle, ContainerLaunchRequest, Engine, LaunchError,
 };
 
 /// The shared router every project's routes go through.
@@ -107,7 +107,9 @@ pub(crate) fn forwarder_spec(
     handle: &ContainerHandle,
     project: &str,
     router_ip: &str,
+    extra_ports: &[u16],
 ) -> tillandsias_podman::ContainerSpec {
+    let extra: Vec<String> = extra_ports.iter().map(u16::to_string).collect();
     tillandsias_podman::ContainerSpec::new(format!(
         "tillandsias-chromium-framework:v{}",
         crate::VERSION.trim()
@@ -122,6 +124,7 @@ pub(crate) fn forwarder_spec(
     .env("TILLANDSIAS_FWD_PROJECT", project)
     .env("TILLANDSIAS_FWD_UPSTREAM_HOST", router_ip)
     .env("TILLANDSIAS_FWD_UPSTREAM_PORT", ROUTER_TLS_PORT)
+    .env("TILLANDSIAS_FWD_EXTRA_PORTS", extra.join(","))
     .entrypoint("node")
     .arg("-e")
     .arg(FORWARDER_JS)
@@ -211,6 +214,109 @@ impl TrayBrowserContainers {
     pub(crate) fn new(debug: bool) -> Self {
         Self { debug }
     }
+
+    /// Start a WebKit engine window (order 1656-tjv4). The image is built on
+    /// first use. Same network shape as a Chromium window (1649/1651): its
+    /// own --internal network whose only other member is the SNI forwarder,
+    /// here also listening on the preview port the URL names.
+    fn start_webkit(
+        &self,
+        request: &ContainerLaunchRequest<'_>,
+        certs_dir: &Path,
+        display: &crate::BrowserDisplayContext,
+    ) -> Result<ContainerHandle, LaunchError> {
+        let version = crate::VERSION.trim();
+        let root =
+            crate::resolve_runtime_asset_root(version, self.debug).map_err(LaunchError::Spawn)?;
+        // First use builds the image (~90 s, 1.5 GB): say so in the result,
+        // rather than a silent wait. ensure_versioned_images also pushes the
+        // build label ("Preparing the WebKit engine (first use)…") wherever
+        // build progress is shown; live progress DURING the wait is a follow-up.
+        let tag = crate::versioned_image_tag("webkit", version);
+        let present = podman(
+            &["image", "exists", &tag],
+            tillandsias_podman::OperationKind::Inspect.default_budget(),
+        )
+        .is_ok();
+        let started_build = std::time::Instant::now();
+        crate::ensure_versioned_images(&root, &["webkit"], version, self.debug).map_err(|e| {
+            LaunchError::Spawn(format!(
+                "the {} image is not available: {e}",
+                Engine::WebKit.label()
+            ))
+        })?;
+        let preview_port = request.url.port_or_known_default().unwrap_or(443);
+        let suffix = window_suffix(request.window_id);
+        let notice = (!present).then(|| {
+            format!(
+                "Prepared the {} engine on first use ({} s); later windows open without this wait.",
+                Engine::WebKit.label(),
+                started_build.elapsed().as_secs()
+            )
+        });
+        let handle = ContainerHandle {
+            container_name: format!("tillandsias-browser-{}-{suffix}", request.project_label),
+            network_name: format!("tillandsias-browser-net-{suffix}"),
+            profile_dir: crate::browser_profile_root().join(request.window_id),
+            cdp_socket: None,
+            notice,
+        };
+        let started = (|| {
+            let label = format!("tillandsias.browser-window={}", request.window_id);
+            podman(
+                &[
+                    "network",
+                    "create",
+                    "--internal",
+                    "--label",
+                    &label,
+                    &handle.network_name,
+                ],
+                network_budget(),
+            )?;
+            let (router_network, router_ip) = router_upstream()?;
+            let forwarder =
+                forwarder_spec(&handle, request.project_label, &router_ip, &[preview_port])
+                    .build_run_argv()
+                    .map_err(|e| format!("forwarder argv refused: {e}"))?;
+            let forwarder: Vec<&str> = forwarder.iter().map(String::as_str).collect();
+            podman(&forwarder, RUN_BUDGET)?;
+            podman(
+                &[
+                    "network",
+                    "connect",
+                    &router_network,
+                    &forwarder_name(&handle),
+                ],
+                network_budget(),
+            )?;
+            let forwarder_ip = forwarder_ip_on(&handle)?;
+            let argv = webkit_window_spec(
+                request.project_label,
+                &handle,
+                &certs_dir.join("intermediate.crt"),
+                display,
+                &WebKitTarget {
+                    url: request.url.as_str(),
+                    preview_port,
+                    forwarder_ip,
+                    playwright_context: &request.playwright_context,
+                },
+            )?
+            .build_run_argv()
+            .map_err(|e| format!("webkit container argv refused: {e}"))?;
+            let argv: Vec<&str> = argv.iter().map(String::as_str).collect();
+            podman(&argv, RUN_BUDGET)
+        })();
+        if let Err(err) = started {
+            if self.debug {
+                eprintln!("[tillandsias] browser.open (webkit): {err}; undoing the window");
+            }
+            self.stop(&handle);
+            return Err(LaunchError::Spawn(err));
+        }
+        Ok(handle)
+    }
 }
 
 fn podman(args: &[&str], budget: Duration) -> Result<String, String> {
@@ -282,6 +388,110 @@ pub(crate) fn browser_window_spec(
     .arg(format!("--window-size={},{}", window_size.0, window_size.1)))
 }
 
+/// The WebKit engine window's container (order 1656-tjv4): Playwright's
+/// Linux WebKit, headful, Wayland only, emulating the device through a
+/// Playwright context, on the window's own `--internal` network.
+///
+/// - Names: WebKitGTK resolves through GLib, which answers EVERY `*.localhost`
+///   name with loopback and never reads /etc/hosts for them (measured
+///   2026-10-13). So the window's own launcher runs a loopback relay on the
+///   preview port to the forwarder (`TILLANDSIAS_WEBKIT_RELAY`). Do not drop
+///   the relay in favour of `--add-host`: WebKit would never see the mapping.
+///   The `--add-host` entries stay for non-GLib clients. The project binding
+///   is the forwarder's SNI check plus the router's strict_sni_host, unchanged.
+/// - Trust: the enclave CA, bind-mounted read-only as the container's WHOLE
+///   system bundle. No other root, never ignoreHTTPSErrors.
+/// - `label=disable` (ContainerSpec's default) for the same reason as the
+///   Chromium window (1641-xbvq, noted under 1252-qyii): without it GTK cannot
+///   connect to the host compositor's socket.
+pub(crate) fn webkit_window_spec(
+    project: &str,
+    handle: &ContainerHandle,
+    ca_file: &Path,
+    display: &crate::BrowserDisplayContext,
+    target: &WebKitTarget<'_>,
+) -> Result<tillandsias_podman::ContainerSpec, String> {
+    let WebKitTarget {
+        url,
+        preview_port,
+        forwarder_ip,
+        playwright_context,
+    } = *target;
+    let (socket, socket_name) = display.wayland_socket()?;
+    let mut spec = tillandsias_podman::ContainerSpec::new(format!(
+        "tillandsias-webkit:v{}",
+        crate::VERSION.trim()
+    ))
+    .pull_never()
+    .read_only()
+    .detached()
+    .name(&handle.container_name)
+    .network(&handle.network_name)
+    .pids_limit(512)
+    .tmpfs("/tmp:size=256m")
+    .tmpfs("/dev/shm:size=256m")
+    .bind_mount(
+        ca_file.display().to_string(),
+        "/etc/ssl/certs/ca-certificates.crt",
+        true,
+    )
+    .tmpfs(format!("{WEBKIT_RUNTIME_DIR}:size=1m,mode=0700,U"))
+    .volume(
+        socket.display().to_string(),
+        format!("{WEBKIT_RUNTIME_DIR}/{socket_name}"),
+        tillandsias_podman::MountMode::ReadWrite,
+    )
+    .env("XDG_RUNTIME_DIR", WEBKIT_RUNTIME_DIR)
+    .env("WAYLAND_DISPLAY", &socket_name)
+    .env("GDK_BACKEND", "wayland")
+    .env("HOME", "/tmp")
+    .env("TILLANDSIAS_WEBKIT_URL", url)
+    .env("TILLANDSIAS_WEBKIT_DEVICE", playwright_context.to_string())
+    .env(
+        "TILLANDSIAS_WEBKIT_RELAY",
+        format!("{forwarder_ip}:{preview_port}"),
+    );
+    for name in [
+        format!("www.{project}.localhost"),
+        format!("web.{project}.localhost"),
+    ] {
+        spec = spec.add_host(&name, forwarder_ip)?;
+    }
+    Ok(spec)
+}
+
+/// What one WebKit window shows and where its relay points.
+#[derive(Clone, Copy)]
+pub(crate) struct WebKitTarget<'a> {
+    pub(crate) url: &'a str,
+    pub(crate) preview_port: u16,
+    pub(crate) forwarder_ip: std::net::IpAddr,
+    pub(crate) playwright_context: &'a serde_json::Value,
+}
+
+/// The WebKit window's private runtime dir: only the Wayland socket file.
+const WEBKIT_RUNTIME_DIR: &str = "/run/user/browser";
+
+/// The forwarder's IP on the window's own network: the address the WebKit
+/// window's relay and `--add-host` entries name.
+fn forwarder_ip_on(handle: &ContainerHandle) -> Result<std::net::IpAddr, String> {
+    let ip = podman(
+        &[
+            "inspect",
+            "--format",
+            &format!(
+                "{{{{(index .NetworkSettings.Networks \"{}\").IPAddress}}}}",
+                handle.network_name
+            ),
+            &forwarder_name(handle),
+        ],
+        tillandsias_podman::OperationKind::Inspect.default_budget(),
+    )?;
+    ip.trim()
+        .parse()
+        .map_err(|e| format!("forwarder address {ip:?} on {}: {e}", handle.network_name))
+}
+
 impl BrowserContainers for TrayBrowserContainers {
     fn preview_tls_port(&self) -> Option<u16> {
         crate::local_web_preview::tls_port().ok()
@@ -309,6 +519,9 @@ impl BrowserContainers for TrayBrowserContainers {
         })?;
         let ca_spki = spki_sha256_base64(&pem).map_err(LaunchError::Spawn)?;
         let display = crate::BrowserDisplayContext::from_env().map_err(LaunchError::Spawn)?;
+        if request.engine == Engine::WebKit {
+            return self.start_webkit(request, &certs_dir, &display);
+        }
         let profile_dir = crate::browser_profile_root().join(request.window_id);
         std::fs::create_dir_all(&profile_dir)?;
         let cdp_dir = cdp_dir(request.window_id);
@@ -322,6 +535,7 @@ impl BrowserContainers for TrayBrowserContainers {
             network_name: format!("tillandsias-browser-net-{suffix}"),
             profile_dir,
             cdp_socket: Some(cdp_dir.join("cdp.sock")),
+            notice: None,
         };
         // From here every failure undoes what was made.
         let started = (|| {
@@ -338,7 +552,7 @@ impl BrowserContainers for TrayBrowserContainers {
                 network_budget(),
             )?;
             let (router_network, router_ip) = router_upstream()?;
-            let forwarder = forwarder_spec(&handle, request.project_label, &router_ip)
+            let forwarder = forwarder_spec(&handle, request.project_label, &router_ip, &[])
                 .build_run_argv()
                 .map_err(|e| format!("forwarder argv refused: {e}"))?;
             let forwarder: Vec<&str> = forwarder.iter().map(String::as_str).collect();
@@ -437,8 +651,9 @@ mod tests {
             network_name: "tillandsias-browser-net-0123456789ab".into(),
             profile_dir: PathBuf::from("/tmp/x"),
             cdp_socket: None,
+            notice: None,
         };
-        let argv = forwarder_spec(&handle, "acme", "10.0.42.7")
+        let argv = forwarder_spec(&handle, "acme", "10.0.42.7", &[])
             .build_run_argv()
             .unwrap();
         let joined = argv.join(" ");
@@ -477,6 +692,7 @@ mod tests {
             cdp_socket: Some(PathBuf::from(
                 "/run/user/1000/tillandsias/browser/win-1.cdp/cdp.sock",
             )),
+            notice: None,
         };
         let display = crate::BrowserDisplayContext {
             wayland_display: Some("wayland-0".into()),
@@ -552,6 +768,87 @@ mod tests {
         );
         assert!(
             !joined.contains("--network host") && !joined.contains("--network=host"),
+            "{joined}"
+        );
+    }
+
+    /// Order 1656-tjv4: the WebKit window's argv. Exactly the project's two
+    /// names to the forwarder, the enclave CA as the read-only system bundle,
+    /// only the Wayland socket, only its own network, nothing published, no
+    /// DevTools, and the loopback relay to the forwarder on the preview port.
+    #[test]
+    fn webkit_window_spec_is_confined_like_the_chromium_window() {
+        let handle = ContainerHandle {
+            container_name: "tillandsias-browser-acme-0123456789ab".into(),
+            network_name: "tillandsias-browser-net-0123456789ab".into(),
+            profile_dir: PathBuf::from("/run/user/1000/tillandsias/browser/win-1"),
+            cdp_socket: None,
+            notice: None,
+        };
+        let display = crate::BrowserDisplayContext {
+            wayland_display: Some("wayland-0".into()),
+            xdg_runtime_dir: Some(PathBuf::from("/run/user/1000")),
+        };
+        let ip: std::net::IpAddr = "10.89.1.2".parse().unwrap();
+        let argv = webkit_window_spec(
+            "acme",
+            &handle,
+            Path::new("/tmp/ca/intermediate.crt"),
+            &display,
+            &WebKitTarget {
+                url: "https://www.acme.localhost:18443/",
+                preview_port: 18443,
+                forwarder_ip: ip,
+                playwright_context: &serde_json::json!({ "viewport": { "width": 393, "height": 852 } }),
+            },
+        )
+        .unwrap()
+        .build_run_argv()
+        .unwrap();
+        let joined = argv.join(" ");
+        let hosts: Vec<&String> = argv
+            .iter()
+            .filter(|a| a.starts_with("--add-host"))
+            .collect();
+        assert_eq!(
+            hosts,
+            [
+                "--add-host=www.acme.localhost:10.89.1.2",
+                "--add-host=web.acme.localhost:10.89.1.2"
+            ]
+        );
+        assert!(
+            joined.contains("TILLANDSIAS_WEBKIT_RELAY=10.89.1.2:18443"),
+            "{joined}"
+        );
+        assert!(
+            joined.contains("intermediate.crt,target=/etc/ssl/certs/ca-certificates.crt")
+                && joined.contains("readonly"),
+            "the enclave CA is the read-only system bundle: {joined}"
+        );
+        assert!(
+            joined.contains("/run/user/1000/wayland-0:/run/user/browser/wayland-0"),
+            "{joined}"
+        );
+        assert!(
+            !joined.contains("/run/user/1000:"),
+            "never the whole runtime dir: {joined}"
+        );
+        let networks: Vec<_> = argv
+            .windows(2)
+            .filter(|w| w[0] == "--network")
+            .map(|w| w[1].as_str())
+            .collect();
+        assert_eq!(networks, ["tillandsias-browser-net-0123456789ab"]);
+        assert!(
+            !argv.iter().any(|a| a == "-p" || a.starts_with("--publish")),
+            "{joined}"
+        );
+        assert!(!joined.contains("remote-debugging") && !joined.contains("ignoreHTTPSErrors"));
+        assert!(joined.contains("tillandsias-webkit:v"), "{joined}");
+        assert!(joined.contains("--security-opt=label=disable"), "{joined}");
+        assert!(
+            joined.contains("--cap-drop=ALL") || joined.contains("--cap-drop ALL"),
             "{joined}"
         );
     }
@@ -742,7 +1039,7 @@ mod tests {
         let opened = rt.block_on(call(
             &server,
             "browser.open",
-            serde_json::json!({ "url": url, "device": "iphone 12 pro max" }),
+            serde_json::json!({ "url": url, "device": "iphone 12 pro max", "engine": "chromium" }),
         ));
         println!("browser.open {url} device=iphone 12 pro max -> {opened}");
         let window = opened["window_id"].as_str().expect("opened").to_string();
@@ -853,6 +1150,229 @@ mod tests {
             new_listeners.is_empty(),
             "the host gained TCP listeners while the window was open: {new_listeners:?}"
         );
+    }
+
+    /// LISTEN sockets in a container: (proc file, local address) pairs.
+    fn container_listeners(name: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        for file in ["/proc/net/tcp", "/proc/net/tcp6"] {
+            for line in live_podman(&["exec", name, "cat", file]).lines().skip(1) {
+                let cols: Vec<&str> = line.split_whitespace().collect();
+                if cols.get(3) == Some(&"0A") {
+                    out.push(format!("{file}:{}", cols[1]));
+                }
+            }
+        }
+        out.sort();
+        out
+    }
+
+    /// Order 1656-tjv4 live proof, through the tray's own path, on the same
+    /// private-store harness. `iphone 15` opens the WebKit engine window (its
+    /// image built on first use by ensure_versioned_images).
+    #[test]
+    #[ignore = "live: run by the 1649-xqet harness on a private podman store"]
+    fn live_webkit_window_for_an_apple_preset() {
+        let port: u16 = std::env::var("TILLANDSIAS_BROWSER_E2E_PREVIEW_PORT")
+            .expect("harness only")
+            .parse()
+            .unwrap();
+        let demo_upstream =
+            std::env::var("TILLANDSIAS_BROWSER_E2E_DEMO_UPSTREAM").expect("harness only");
+        let other_upstream =
+            std::env::var("TILLANDSIAS_BROWSER_E2E_OTHER_UPSTREAM").expect("harness only");
+        let pem_env = |var: &str| {
+            std::fs::read_to_string(std::env::var(var).expect("harness only"))
+                .unwrap()
+                .replace('\n', "\\n")
+        };
+        let store = live_podman(&["info", "--format", "{{.Store.GraphRoot}}"]);
+        let home = std::env::var("HOME").unwrap_or_default();
+        assert!(
+            store.contains("/target/work/") && home.contains("/target/work/"),
+            "refusing: store {store:?} / HOME {home:?} are not the harness's private ones"
+        );
+        let listeners_before = host_tcp_listeners();
+
+        let server = tillandsias_browser_mcp::BrowserMcpServer::with_project_label(
+            tillandsias_browser_mcp::McpServerConfig::default(),
+            "demo",
+            Some(std::sync::Arc::new(PinnedPreviewPort {
+                inner: TrayBrowserContainers::new(true),
+                port,
+            })),
+        );
+        // Multi-thread, as the tray's lane connection is: the on-demand image
+        // ensure uses block_in_place (see tray::serve_mcp_connection).
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .unwrap();
+        let url = format!("https://www.demo.localhost:{port}/");
+        let opened = rt.block_on(call(
+            &server,
+            "browser.open",
+            serde_json::json!({ "url": url, "device": "iphone 15" }),
+        ));
+        println!("browser.open {url} device=iphone 15 -> {opened}");
+        let window = opened["window_id"].as_str().expect("opened").to_string();
+        let suffix = window_suffix(&window);
+        let name = format!("tillandsias-browser-demo-{suffix}");
+        let forwarder = format!("tillandsias-browser-fwd-{suffix}");
+        let image = live_podman(&["inspect", "--format", "{{.ImageName}}", &name]);
+        println!("webkit-window-image {image}");
+
+        let (m, ua) = await_page_report(&demo_upstream, "iphone-15-webkit", |w, d, _| {
+            w == 393.0 && d == 3.0
+        });
+        let listeners_open = host_tcp_listeners();
+        let new_host: Vec<&String> = listeners_open
+            .iter()
+            .filter(|l| !listeners_before.contains(l))
+            .collect();
+        println!("host-tcp-listeners-new-while-open {new_host:?}");
+        let inside = container_listeners(&name);
+        println!("webkit-window-listeners {inside:?}");
+        let port_hex = format!("{port:04X}");
+        let relay_v4 = format!("/proc/net/tcp:0100007F:{port_hex}");
+        let relay_v6 = format!("/proc/net/tcp6:00000000000000000000000001000000:{port_hex}");
+
+        let probe = crate::podman_command()
+            .args([
+                "exec",
+                "-i",
+                "-e",
+                &format!("PROBE_PREVIEW_PORT={port}"),
+                "-e",
+                "PLAYWRIGHT_BROWSERS_PATH=/ms-playwright",
+                "-e",
+                "HOME=/tmp",
+                "-e",
+                &format!(
+                    "PROBE_ENCLAVE_LEAF={}",
+                    pem_env("TILLANDSIAS_BROWSER_E2E_ENCLAVE_LEAF")
+                ),
+                "-e",
+                &format!(
+                    "PROBE_ENCLAVE_KEY={}",
+                    pem_env("TILLANDSIAS_BROWSER_E2E_ENCLAVE_KEY")
+                ),
+                "-e",
+                &format!(
+                    "PROBE_FOREIGN_LEAF={}",
+                    pem_env("TILLANDSIAS_BROWSER_E2E_FOREIGN_LEAF")
+                ),
+                "-e",
+                &format!(
+                    "PROBE_FOREIGN_KEY={}",
+                    pem_env("TILLANDSIAS_BROWSER_E2E_FOREIGN_KEY")
+                ),
+                &name,
+                "timeout",
+                "120",
+                "node",
+                "-",
+            ])
+            .output_bounded_with_stdin(
+                include_bytes!("../tests/fixtures/webkit-window-probe.js"),
+                Duration::from_secs(150),
+            )
+            .unwrap();
+        let probe = String::from_utf8_lossy(&probe.stdout).to_string();
+        for line in probe.lines() {
+            println!("probe {line}");
+        }
+        let verdict = |label: &str| {
+            probe
+                .lines()
+                .find_map(|l| l.strip_prefix(&format!("{label} ")))
+                .unwrap_or("MISSING")
+                .to_string()
+        };
+        let fwd_log = live_podman(&["logs", &forwarder]);
+        println!("forwarder-log {}", fwd_log.replace('\n', " | "));
+        let other_hits = live_podman(&["logs", &other_upstream]);
+
+        let closed = rt.block_on(call(
+            &server,
+            "browser.close",
+            serde_json::json!({ "window_id": window }),
+        ));
+        println!("browser.close -> {closed}");
+        let left = live_podman(&[
+            "ps",
+            "-a",
+            "--filter",
+            "name=^tillandsias-browser-",
+            "--format",
+            "{{.Names}}",
+        ]);
+        println!("after-close containers={left:?}");
+
+        // 1. The engine and its label.
+        assert_eq!(opened["engine"], "WebKit (approximates Safari)", "{opened}");
+        // The private store starts without the image: the first open says
+        // it prepared the engine, rather than a silent ~90 s wait.
+        assert!(
+            opened["notice"]
+                .as_str()
+                .is_some_and(|n| n.contains("first use")),
+            "{opened}"
+        );
+        assert!(image.contains("tillandsias-webkit:v"), "{image}");
+        // 1. The page itself: the device's viewport and dpr, a WebKit UA.
+        assert_eq!(
+            (m.first().copied(), m.get(1).copied()),
+            (Some(393.0), Some(3.0)),
+            "{m:?}"
+        );
+        assert!(
+            ua.contains("AppleWebKit") && !ua.contains("Chrome/"),
+            "{ua}"
+        );
+        // The relay is the window's only listener: loopback, preview port.
+        assert!(inside.contains(&relay_v4), "{inside:?}");
+        assert!(
+            inside.iter().all(|l| *l == relay_v4 || *l == relay_v6),
+            "a listener other than the loopback relay: {inside:?}"
+        );
+        assert!(
+            new_host.is_empty(),
+            "the host gained TCP listeners: {new_host:?}"
+        );
+        // 3. Network: own project yes; another project, an outside name and a
+        // raw IP no; another project's SNI is the forwarder's refusal.
+        assert!(
+            verdict("webkit-own-project").contains("PREVIEW-DEMO"),
+            "{probe}"
+        );
+        for refused in [
+            "webkit-other-project",
+            "webkit-external-name",
+            "webkit-raw-ip",
+        ] {
+            assert!(verdict(refused).starts_with("FAILED"), "{refused}: {probe}");
+        }
+        assert!(
+            fwd_log.contains("refused sni=\"www.other.localhost\""),
+            "{fwd_log}"
+        );
+        assert!(
+            !other_hits.lines().any(|l| l.starts_with("GET ")),
+            "{other_hits}"
+        );
+        assert!(verdict("raw-host-other-project").contains("421"), "{probe}");
+        // Trust: the enclave CA only, never a foreign one.
+        assert!(
+            verdict("webkit-enclave-ca-cert").contains("LOCAL-OK"),
+            "{probe}"
+        );
+        assert!(
+            verdict("webkit-foreign-ca-cert").contains("Unacceptable TLS certificate"),
+            "{probe}"
+        );
+        assert!(left.is_empty(), "{left}");
     }
 
     /// Order 1656-iktu live proof. Same private-store harness. Two lanes of

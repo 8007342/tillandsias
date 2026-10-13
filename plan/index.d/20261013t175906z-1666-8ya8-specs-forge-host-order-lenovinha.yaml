@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's direction (macuahuitl, 2026-10-13), the follow-up to 1661-m9sr. Unclaimed.
+packets:
+  - packet_id: the-specs-name-forge-urls-as-service-dot-project-dot-localhost-and-the-host-order-guard-scans-openspec-specs-too
+    order: 1666-8ya8
+    status: ready
+    kind: docs
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [openspec, specs, router, local-web-preview, docs]
+    estimated_hours: 2
+    depends_on:
+      - the-forge-startup-context-names-dev-urls-as-service-dot-project-dot-localhost-the-order-the-router-parses-and-a-guard-pins-the-two-together
+    related: [1661-m9sr, 1662-udb3]
+    title: |
+      Three specs still show forge URLs as <project>.<service>.localhost (default-image, proxy-container, subdomain-routing-via-reverse-proxy), against subdomain-naming-flip and the router. Correct them in an OpenSpec change, and extend 1661's host-order guard to scan openspec/specs so the specs cannot drift again.
+    context: |
+      Found while fixing 1661-m9sr (#408), which corrected the forge context, web-services.md and squid.conf. Still wrong:
+      - openspec/specs/default-image/spec.md:463 and :488;
+      - openspec/specs/proxy-container/spec.md:367;
+      - openspec/specs/subdomain-routing-via-reverse-proxy/spec.md:145 and :147.
+      openspec/specs/subdomain-naming-flip/spec.md:19 already mandates <service>.<project>.localhost.
+    exit_criteria:
+      - 'an OpenSpec change corrects every <project>.<service>.localhost example in openspec/specs to <service>.<project>.localhost'
+      - 'allowlist::tests::forge_guidance_hosts_parse_with_the_router_rule (1661-m9sr) also scans openspec/specs/**/spec.md; red before the spec change (the five lines above), green after; a mutation restoring one spec example makes it fail'
+      - 'subdomain-naming-flip''s own text (which quotes the OLD order as the thing replaced) is not flagged: the guard skips explicitly-marked "instead of" counter-examples, or that line is reworded'
+    unscoreable: "unpinnable-until-the-guard-exists: the guard's spec scan is written with the spec change"
+    next_action: >
+      After #408 lands: extend the guard to openspec/specs and watch it go red on the five lines, then write the OpenSpec change.
+    provenance: |
+      Filed by lenovinha-silverblue on macuahuitl's direction, 2026-10-13.
+    events:
+      - type: filed
+        ts: "2026-10-13T17:59:06Z"
+        host: lenovinha
+        summary: |-
+          Correct three specs' <project>.<service> examples in an OpenSpec change; the 1661 guard scans openspec/specs too.

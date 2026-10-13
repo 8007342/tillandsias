@@ -1,0 +1,62 @@
+# @trace order:1656-tjv4, spec:browser-window-modes
+# The WebKit engine window: Playwright's Linux WebKit (WebKit LGPL/BSD,
+# Playwright Apache-2.0) for Apple device presets, labelled
+# "WebKit (approximates Safari)" wherever an engine name is shown.
+#
+# Ubuntu 24.04, because Playwright builds Linux WebKit only for Ubuntu/Debian:
+# measured on 2026-10-13, its ubuntu24.04 MiniBrowser does not start on the
+# Fedora 44 chromium-framework image (libicudata.so.74 and 28 other
+# Ubuntu-versioned libraries missing; plan/evidence/1656-tjv4-*).
+#
+# Every download is pinned by URL and checksum. Playwright's own browser
+# downloader is NOT used: it failed every attempt on the build host, and a
+# pinned checksum is the stronger statement anyway. `playwright install-deps`
+# runs apt only.
+FROM docker.io/library/ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
+
+# Node 22 LTS from nodejs.org (Playwright 1.63 needs node >= 20; Ubuntu 24.04 ships 18).
+ARG NODE_VERSION=22.23.3
+ARG NODE_SHA256=df450af89261115ef9f9e3830c3eeb2cc9213b63c720b1af623cb5dcbe2e02de
+ARG PLAYWRIGHT_VERSION=1.63.0
+# Playwright 1.63.0's WebKit 26.6 build (revision 2359); the sha256 was taken
+# from a download whose MD5 matched the CDN's content-md5.
+ARG WEBKIT_REVISION=2359
+ARG WEBKIT_URL=https://cdn.playwright.dev/builds/webkit/2359/webkit-ubuntu-24.04.zip
+ARG WEBKIT_SHA256=8c129d989a1c48d826ca11b45acbba919039de811623dc3819ccbd95b69eeb62
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    LANG=C.UTF-8
+
+# Fonts match the chromium-framework image (1656-6c97): Latin, CJK, emoji,
+# and metric-compatible Arial/Times/Courier.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates curl xz-utils unzip \
+        fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji fonts-liberation \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL -o /tmp/node.tar.xz "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
+    && echo "${NODE_SHA256}  /tmp/node.tar.xz" | sha256sum -c - \
+    && tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 --no-same-owner \
+    && rm /tmp/node.tar.xz
+
+RUN npm install -g --prefix=/usr/local "playwright@${PLAYWRIGHT_VERSION}" \
+    && npm cache clean --force \
+    && playwright install-deps webkit \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL -o /tmp/webkit.zip "${WEBKIT_URL}" \
+    && echo "${WEBKIT_SHA256}  /tmp/webkit.zip" | sha256sum -c - \
+    && mkdir -p "/ms-playwright/webkit-${WEBKIT_REVISION}" \
+    && unzip -q /tmp/webkit.zip -d "/ms-playwright/webkit-${WEBKIT_REVISION}" \
+    && touch "/ms-playwright/webkit-${WEBKIT_REVISION}/INSTALLATION_COMPLETE" \
+             "/ms-playwright/webkit-${WEBKIT_REVISION}/DEPENDENCIES_VALIDATED" \
+    && rm /tmp/webkit.zip
+
+COPY webkit-window.js /opt/tillandsias/webkit-window.js
+
+# No USER: under --userns=keep-id a process with no image USER runs as the
+# host user's uid, which is what the bind-mounted Wayland socket (owner-only
+# write) needs. Measured: with `USER 65534` GTK could not open the display.
+ENTRYPOINT ["node", "/opt/tillandsias/webkit-window.js"]

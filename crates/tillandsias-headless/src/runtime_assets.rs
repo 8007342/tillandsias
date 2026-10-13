@@ -261,6 +261,8 @@ fn image_context_rel(image_name: &str) -> Result<&'static str, String> {
         "web-wrangler" => Ok("images/web-wrangler"),
         "router" => Ok("images/router"),
         "chromium-core" | "chromium-framework" => Ok("images/chromium"),
+        // 1656-tjv4: the WebKit engine window, built on first use.
+        "webkit" => Ok("images/webkit"),
         "vault" => Ok("images/vault"),
         other => Err(format!("Unknown image type: {other}")),
     }
@@ -361,6 +363,8 @@ mod tests {
             "images/web-wrangler/package-lock.json",
             "images/web-wrangler/wrangler.lock.json",
             "images/web-wrangler/entrypoint.sh",
+            "images/webkit/Containerfile",
+            "images/webkit/webkit-window.js",
             "images/router/tillandsias-router-sidecar",
             "scripts/manage-cache.sh",
         ] {
@@ -391,6 +395,7 @@ mod tests {
             ("images/chromium/Containerfile.core", "images/chromium"),
             ("images/chromium/Containerfile.framework", "images/chromium"),
             ("images/vault/Containerfile", "images/vault"),
+            ("images/webkit/Containerfile", "images/webkit"),
         ];
 
         for (cf_rel_path, context_dir) in containerfiles {

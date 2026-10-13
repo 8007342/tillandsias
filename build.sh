@@ -3356,9 +3356,21 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _run cargo clippy --all-targets --manifest-path "$SCRIPT_DIR/Cargo.toml" -p tillandsias-headless --features listen-vsock -- -D warnings 2>&1
     _info "Clippy (listen-vsock) passed"
 
+    # ORDER 835-kjuv: this step was `cargo run -q -p tillandsias-plan -- check`,
+    # a cold DEBUG build of a binary cycle-preflight had already built in
+    # release — 1050 s of a 1072 s gate on yoga, to run a check that costs
+    # 0.1 s prebuilt. The shared probe (721-nyev) resolves the release binary
+    # and ensure_fresh_plan_binary rebuilds it ONLY when a source file is
+    # newer: the same contract the fragment-events-land step below relies on.
+    # No fresh binary and no cargo is a refusal, never a pass.
     _step "Checking plan ledger integrity (tillandsias-plan check)..."
-    if ! _run cargo run -q --manifest-path "$SCRIPT_DIR/Cargo.toml" -p tillandsias-plan -- check 2>&1; then
-        _error "plan/index.yaml failed integrity check: run 'cargo run -p tillandsias-plan -- check' for details"
+    if ! _ledger_check_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh && ensure_fresh_plan_binary)"; then
+        _error "plan ledger check could not run: no fresh tillandsias-plan resolves (cargo build --release -p tillandsias-plan, or scripts/cycle-preflight.sh)"
+        exit 1
+    fi
+    case "$_ledger_check_bin" in ./*) _ledger_check_bin="$SCRIPT_DIR/${_ledger_check_bin#./}" ;; esac
+    if ! _run "$_ledger_check_bin" check 2>&1; then
+        _error "plan/index.yaml failed integrity check: run '$_ledger_check_bin check' for details"
         exit 1
     fi
     _info "Plan ledger check passed"
@@ -4410,9 +4422,23 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # the ratchet's ran= total (2199, from 331) is the figure that moves if
     # that stops being true.
 
+    # ORDER 835-kjuv (slice 2): the gate's last `cargo run`. The debug artifact
+    # is built once here (a no-op when a Lua guard above already built it) and
+    # resolved BY EXECUTION through the shared probe (770-ifeg: on a shared
+    # Windows/WSL checkout the extensionless target/ path can hold the other
+    # platform's artifact), the same shape check-no-python-scripts.lua uses.
+    # A build that fails or a binary that does not run is a named refusal.
     _step "Checking plan order uniqueness (tillandsias-policy plan-orders)..."
-    if ! _run cargo run -q --manifest-path "$SCRIPT_DIR/Cargo.toml" -p tillandsias-policy -- plan-orders 2>&1; then
-        _error "plan/index.yaml has open duplicate order tokens: run 'cargo run -p tillandsias-policy -- plan-orders' for details"
+    if ! _run cargo build -q --manifest-path "$SCRIPT_DIR/Cargo.toml" -p tillandsias-policy 2>&1; then
+        _error "tillandsias-policy did not build, so plan order uniqueness could not be checked"
+        exit 1
+    fi
+    if ! _policy_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh && resolve_target_binary tillandsias-policy debug "$SCRIPT_DIR")"; then
+        _error "no runnable tillandsias-policy resolves (probed target/debug and CARGO_TARGET_DIR by execution)"
+        exit 1
+    fi
+    if ! _run "$_policy_bin" plan-orders 2>&1; then
+        _error "plan/index.yaml has open duplicate order tokens: run '$_policy_bin plan-orders' for details"
         exit 1
     fi
     _info "Plan order uniqueness passed"
@@ -4544,18 +4570,26 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # returns "no files matched" for a class deliberately declined and for a
     # class nobody has considered, and those two silences are identical.
     # UNCLASSIFIED is the difference.
-    # `cargo run -q` like the ledger-integrity step above, not a target/ path:
-    # check-plan-binary-probe-usage.sh reds the build for a hardcoded
-    # target/release path, and it is right to (704-zcgi). The subcommand lives
-    # on the LEDGER-FREE dispatch path, so this costs a walk, not a fold.
+    # The probe-resolved binary, like the ledger-integrity step above (835-kjuv;
+    # before that `cargo run -q`, a per-gate debug build), never a hardcoded
+    # target/ path: check-plan-binary-probe-usage.sh reds the build for one,
+    # and it is right to (704-zcgi). The subcommand lives on the LEDGER-FREE
+    # dispatch path, so this costs a walk, not a fold.
     _step "Reporting RAG corpus coverage (810-k8jy, advisory)..."
-    if ! _run cargo run -q --manifest-path "$SCRIPT_DIR/Cargo.toml" -p tillandsias-plan -- corpus-coverage >/dev/null 2>&1; then
+    if ! _corpus_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh && ensure_fresh_plan_binary)"; then
+        _error "the corpus-coverage report could not run — no fresh tillandsias-plan resolves"
+        exit 1
+    fi
+    case "$_corpus_bin" in ./*) _corpus_bin="$SCRIPT_DIR/${_corpus_bin#./}" ;; esac
+    if ! _run "$_corpus_bin" corpus-coverage >/dev/null 2>&1; then
         _error "the corpus-coverage report could not run — a broken checkout, not an unclassified tree"
         exit 1
     fi
-    # Printed separately from the run above so the verdict is not swallowed by
-    # a pipeline whose exit status belongs to `tail` (727-kmks, hit twice today).
-    _info "$(cargo run -q --manifest-path "$SCRIPT_DIR/Cargo.toml" -p tillandsias-plan -- corpus-coverage 2>/dev/null | tail -1)"
+    # The verdict is the report's last line. Captured whole, then cut in the
+    # shell, so no pipeline's exit status can swallow it (727-kmks, hit twice
+    # the day that pipeline was written).
+    _corpus_out="$("$_corpus_bin" corpus-coverage 2>/dev/null)"
+    _info "${_corpus_out##*$'\n'}"
 
     # Order 831-ezea, the OTHER half of the same arithmetic. Carry-forward above
     # is about SERVICE — did the cycle leave the rows it touched resumable. This
