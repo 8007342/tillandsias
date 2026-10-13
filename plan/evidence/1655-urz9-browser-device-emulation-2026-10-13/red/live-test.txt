@@ -1,0 +1,23 @@
+
+running 1 test
+host-tcp-listeners-before ["0.0.0.0:5355", "127.0.0.1:11434", "127.0.0.1:5111", "127.0.0.1:631", "127.0.0.1:8080", "127.0.0.1:8201", "127.0.0.53%lo:53", "127.0.0.54:53", "[::1]:631", "[::]:5355"]
+browser.open https://www.demo.localhost:18443/ device=iphone 12 pro max -> {"window_id":"win-b2883e31-edbd-43db-9a10-343da5a3452c"}
+page-report iphone-12-pro-max Some(([913.0, 2.0, 0.0], "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"))
+host-tcp-listeners-new-while-open []
+galaxy-s24-catalogue (360.0, 3.0, 5.0) samsung-galaxy-s24
+browser.set_device galaxy s24 -> {"content":[{"type":"text","text":"TOOL_NOT_FOUND: browser.set_device"}],"isError":true}
+page-report galaxy-s24 Some(([913.0, 2.0, 0.0], "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"))
+browser.close -> {"ok":true}
+
+thread 'browser_open::tests::live_browser_open_emulates_the_requested_device' (2293931) panicked at crates/tillandsias-headless/src/browser_open.rs:711:9:
+iphone 12 pro max: the page saw [913.0, 2.0, 0.0] (ua Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36), want [428, 3, >0]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test browser_open::tests::live_browser_open_emulates_the_requested_device ... FAILED
+
+failures:
+
+failures:
+    browser_open::tests::live_browser_open_emulates_the_requested_device
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 960 filtered out; finished in 41.18s
+

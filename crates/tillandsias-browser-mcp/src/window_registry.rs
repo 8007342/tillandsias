@@ -9,7 +9,10 @@ use std::time::Instant;
 
 use parking_lot::Mutex;
 
+use std::sync::Arc;
+
 use crate::launcher::RunningContainer;
+use crate::window_cdp::WindowCdp;
 use tracing::{debug, info};
 
 /// Stable browser window identifier.
@@ -20,12 +23,13 @@ pub type WindowId = String;
 pub struct WindowEntry {
     pub window_id: WindowId,
     pub pid: u32,
-    pub cdp_port: u16,
-    pub target_id: String,
     pub project_label: String,
     pub user_data_dir: PathBuf,
     pub opened_url: String,
     pub title: String,
+    /// The window's ONE CDP session (order 1655-urz9). Dropped before the
+    /// container, so the relay ends Chromium as the session closes.
+    pub cdp: Option<Arc<WindowCdp>>,
     /// The window's container; dropping it stops the container (1649-xqet).
     pub container: Option<RunningContainer>,
     /// @trace spec:browser-window-timeout
@@ -107,11 +111,13 @@ impl WindowRegistry {
             })
     }
 
-    pub fn get_entry(&self, window_id: &str) -> Option<(u16, String)> {
+    /// The window's CDP session: `None` when there is no such window,
+    /// `Some(None)` when the window has no CDP (fake launch mode).
+    pub fn cdp(&self, window_id: &str) -> Option<Option<Arc<WindowCdp>>> {
         self.windows
             .lock()
             .get(window_id)
-            .map(|entry| (entry.cdp_port, entry.target_id.clone()))
+            .map(|entry| entry.cdp.clone())
     }
 
     pub fn get_entry_mut(&self, window_id: &str) -> Option<WindowEntry> {
@@ -209,6 +215,7 @@ pub fn close_window(
         pid = entry.pid,
         "window_closed"
     );
+    drop(entry.cdp.take());
     drop(entry.container.take());
     debounce.remove_window(window_id);
     Some(entry)
@@ -224,6 +231,7 @@ pub fn close_all(registry: &WindowRegistry, debounce: &DebounceTable) -> Vec<Win
             project = %entry.project_label,
             "window_closed"
         );
+        drop(entry.cdp.take());
         drop(entry.container.take());
         debounce.remove_window(&entry.window_id);
     }

@@ -1,20 +1,39 @@
-//! Chrome DevTools Protocol (CDP) client for browser automation.
+//! Chrome DevTools Protocol (CDP) client over a browser window's pipe relay.
 //!
-//! Connects to a running Chromium instance via CDP WebSocket and sends commands
-//! for screenshot capture, element clicking, and text input.
+//! Order 1655-urz9. A window's Chromium runs with `--remote-debugging-pipe`
+//! inside its container: DevTools is NUL-framed JSON on the child's fds 3/4,
+//! never a TCP port. The container's relay serves that pipe on a Unix socket
+//! in a per-window directory only the tray mounts, for exactly one client.
+//! This is that client.
 //!
-//! @trace spec:host-browser-mcp, spec:browser-isolation-core, gap:BR-005
+//! - Framing: each message is one JSON object followed by a NUL byte, in
+//!   both directions. (The old client wrote this pipe framing to an HTTP
+//!   DevTools port, which never worked.)
+//! - The connection is browser-level. Page commands carry the flattened
+//!   `sessionId` from `Target.attachToTarget`/`Target.setAutoAttach`.
+//! - One reader thread routes replies to their caller by id and every event
+//!   to one event channel (`take_events`), so an event handler may itself
+//!   issue commands without deadlocking the reader.
+//!
+//! @trace spec:host-browser-mcp, spec:browser-isolation-core, spec:cdp-robustness, gap:BR-005
 //! @cheatsheet web/cdp.md
 
 use base64::Engine;
-use parking_lot::RwLock;
+use parking_lot::Mutex;
 use serde_json::{Value, json};
 use std::collections::HashMap;
-use std::io::{Read, Write};
-use std::net::{SocketAddr, TcpStream};
+use std::io::{BufRead, BufReader, Write};
+use std::os::unix::net::UnixStream;
+use std::path::Path;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 use thiserror::Error;
+
+/// Every command's reply budget.
+/// @trace spec:cdp-robustness
+pub const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Error)]
 pub enum CdpError {
@@ -38,617 +57,413 @@ pub enum CdpError {
     Io(#[from] std::io::Error),
 }
 
-/// Pool entry: wraps a TcpStream with creation time for eviction.
-/// @trace gap:BR-005
-struct PooledConnection {
-    stream: TcpStream,
-    #[allow(dead_code)]
-    target_id: String,
-    created_at: Instant,
+type Pending = Arc<Mutex<HashMap<u64, mpsc::Sender<Result<Value, CdpError>>>>>;
+
+/// One browser-level CDP connection.
+pub struct CdpConnection {
+    writer: Mutex<UnixStream>,
+    pending: Pending,
+    next_id: AtomicU64,
+    events: Mutex<Option<mpsc::Receiver<Value>>>,
 }
 
-/// Connection pool key: port + target_id.
-/// @trace gap:BR-005
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
-struct PoolKey {
-    port: u16,
-    target_id: String,
-}
-
-/// CDP connection pool for reusing connections across multiple browser windows.
-/// Implements LRU eviction and TTL-based expiration.
-/// @trace gap:BR-005
-pub struct CdpConnectionPool {
-    /// Active pooled connections keyed by (port, target_id)
-    connections: Arc<RwLock<HashMap<PoolKey, PooledConnection>>>,
-    /// Maximum number of pooled connections (default: 32)
-    max_connections: usize,
-    /// Connection TTL: older connections are evicted (default: 5 minutes)
-    connection_ttl: Duration,
-}
-
-impl Default for CdpConnectionPool {
-    fn default() -> Self {
-        Self {
-            connections: Arc::new(RwLock::new(HashMap::new())),
-            max_connections: 32,
-            connection_ttl: Duration::from_secs(300), // 5 minutes
-        }
-    }
-}
-
-impl CdpConnectionPool {
-    /// Create a new connection pool with default settings.
-    /// @trace gap:BR-005
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Create a pool with custom size and TTL.
-    /// @trace gap:BR-005
-    pub fn with_config(max_connections: usize, connection_ttl: Duration) -> Self {
-        Self {
-            connections: Arc::new(RwLock::new(HashMap::new())),
-            max_connections,
-            connection_ttl,
-        }
-    }
-
-    /// Acquire a connection from the pool or create a new one.
-    /// @trace gap:BR-005
-    fn acquire(&self, port: u16, target_id: &str) -> Result<TcpStream, CdpError> {
-        let key = PoolKey {
-            port,
-            target_id: target_id.to_string(),
-        };
-
-        // Try to reuse an existing connection
-        {
-            let mut pool = self.connections.write();
-            if let Some(pooled) = pool.get(&key) {
-                // Check if connection is still valid (within TTL)
-                if pooled.created_at.elapsed() < self.connection_ttl {
-                    // Try to verify the connection is still alive with a test clone
-                    if pooled.stream.try_clone().is_ok() {
-                        // Connection is valid, remove from pool and return
-                        if let Some(PooledConnection { stream, .. }) = pool.remove(&key) {
-                            return Ok(stream);
-                        }
-                    }
+impl CdpConnection {
+    /// Connect to a relay socket, waiting up to `budget` for the relay to
+    /// create it (the container is still starting when this is called).
+    pub fn connect(socket: &Path, budget: Duration) -> Result<Self, CdpError> {
+        let deadline = Instant::now() + budget;
+        loop {
+            match UnixStream::connect(socket) {
+                Ok(stream) => return Self::from_stream(stream),
+                Err(e) if Instant::now() >= deadline => {
+                    return Err(CdpError::ConnectionFailed(format!(
+                        "{} did not accept within {budget:?}: {e}",
+                        socket.display()
+                    )));
                 }
-                // Connection expired or invalid, remove it
-                pool.remove(&key);
+                Err(_) => std::thread::sleep(Duration::from_millis(100)),
             }
         }
-
-        // Create new connection
-        if port == 0 {
-            return Err(CdpError::WindowNotRunning(
-                "port is 0 (window in fake-launch mode)".to_string(),
-            ));
-        }
-
-        let addr = SocketAddr::from(([127, 0, 0, 1], port));
-        let stream = TcpStream::connect_timeout(&addr, Duration::from_secs(2))
-            .map_err(|e| CdpError::ConnectionFailed(e.to_string()))?;
-
-        stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
-            .map_err(|e| CdpError::ConnectionFailed(e.to_string()))?;
-        stream
-            .set_write_timeout(Some(Duration::from_secs(2)))
-            .map_err(|e| CdpError::ConnectionFailed(e.to_string()))?;
-
-        Ok(stream)
     }
 
-    /// Return a connection to the pool for reuse.
-    /// @trace gap:BR-005
-    fn release(&self, port: u16, target_id: &str, stream: TcpStream) {
-        let key = PoolKey {
-            port,
-            target_id: target_id.to_string(),
-        };
-
-        let mut pool = self.connections.write();
-
-        // Check if we've exceeded the pool size limit
-        if pool.len() >= self.max_connections {
-            // Evict oldest connection by TTL
-            if let Some(oldest_key) = pool
-                .iter()
-                .min_by_key(|(_, v)| v.created_at)
-                .map(|(k, _)| k.clone())
-            {
-                pool.remove(&oldest_key);
-            }
-        }
-
-        // Store the connection in the pool
-        pool.insert(
-            key,
-            PooledConnection {
-                stream,
-                target_id: target_id.to_string(),
-                created_at: Instant::now(),
-            },
-        );
-    }
-
-    /// Clear all pooled connections (useful for cleanup or testing).
-    /// @trace gap:BR-005
-    pub fn clear(&self) {
-        self.connections.write().clear();
-    }
-
-    /// Get the current pool size (testing only).
-    /// @trace gap:BR-005
-    #[cfg(test)]
-    #[allow(clippy::len_without_is_empty)]
-    pub fn len(&self) -> usize {
-        self.connections.read().len()
-    }
-}
-
-/// Minimal CDP session: tracks WebSocket connection and session ID.
-/// Reuses connections from the global pool for performance.
-/// @trace gap:BR-005
-pub struct CdpSession {
-    stream: TcpStream,
-    session_id: String,
-    port: u16,
-    target_id: String,
-    request_id: u64,
-}
-
-/// Global CDP connection pool (lazy-initialized).
-/// @trace gap:BR-005
-static GLOBAL_POOL: std::sync::OnceLock<Arc<CdpConnectionPool>> = std::sync::OnceLock::new();
-
-/// Get or initialize the global connection pool.
-/// @trace gap:BR-005
-fn get_global_pool() -> Arc<CdpConnectionPool> {
-    Arc::clone(GLOBAL_POOL.get_or_init(|| Arc::new(CdpConnectionPool::new())))
-}
-
-impl CdpSession {
-    /// Connect to a running Chromium instance on the given port and target.
-    /// Reuses connections from the pool when available.
-    /// @trace gap:BR-005, spec:cdp-robustness
-    pub fn connect(port: u16, target_id: &str) -> Result<Self, CdpError> {
-        let pool = get_global_pool();
-        let stream = pool.acquire(port, target_id)?;
-
-        // Create a fake session ID (in real CDP we'd use WebSocket and Target.attachToTarget,
-        // but for HTTP-based interaction we can keep it simple for now).
-        let session_id = format!("session-{}", uuid::Uuid::new_v4());
-
-        Ok(CdpSession {
-            stream,
-            session_id,
-            port,
-            target_id: target_id.to_string(),
-            request_id: 0,
+    /// Wrap an already connected stream (a relay socket, or a test pair).
+    pub fn from_stream(stream: UnixStream) -> Result<Self, CdpError> {
+        let reader = stream.try_clone()?;
+        let pending: Pending = Arc::new(Mutex::new(HashMap::new()));
+        let (event_tx, event_rx) = mpsc::channel();
+        let routes = Arc::clone(&pending);
+        std::thread::Builder::new()
+            .name("cdp-reader".into())
+            .spawn(move || read_loop(reader, routes, event_tx))?;
+        Ok(Self {
+            writer: Mutex::new(stream),
+            pending,
+            next_id: AtomicU64::new(0),
+            events: Mutex::new(Some(event_rx)),
         })
     }
 
-    /// Send a CDP JSON-RPC command and parse the response.
-    /// Implements timeout handling (5s) and automatic reconnect on connection loss.
+    /// Close the connection: the relay then ends the window's Chromium.
+    pub fn shutdown(&self) {
+        let _ = self.writer.lock().shutdown(std::net::Shutdown::Both);
+    }
+
+    /// The event stream (every message without an `id`). Taken once.
+    pub fn take_events(&self) -> Option<mpsc::Receiver<Value>> {
+        self.events.lock().take()
+    }
+
+    /// Send one command and wait for its reply. `session` is the flattened
+    /// target session, or `None` for the browser itself.
     /// @trace spec:cdp-robustness
-    fn send_command(&mut self, method: &str, params: Value) -> Result<Value, CdpError> {
-        self.request_id += 1;
-        let id = self.request_id;
-
-        let request = json!({
-            "id": id,
-            "method": method,
-            "params": params,
-            "sessionId": self.session_id,
-        });
-
-        // For now, use simple HTTP-based JSON over raw socket (not WebSocket).
-        // In production, this would be a WebSocket connection with proper framing.
-        // The `/devtools/protocol` endpoint accepts JSON over raw socket.
-        let body = serde_json::to_string(&request).map_err(|e| CdpError::ProtocolError {
+    pub fn call(
+        &self,
+        session: Option<&str>,
+        method: &str,
+        params: Value,
+    ) -> Result<Value, CdpError> {
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
+        let mut message = json!({ "id": id, "method": method, "params": params });
+        if let Some(session) = session {
+            message["sessionId"] = Value::String(session.to_string());
+        }
+        let mut frame = serde_json::to_vec(&message).map_err(|e| CdpError::ProtocolError {
             code: -32700,
             message: format!("JSON encode error: {e}"),
         })?;
-
-        // Set operation timeout (5 seconds for all operations)
-        // @trace spec:cdp-robustness
-        let timeout = Duration::from_secs(5);
-        self.stream
-            .set_write_timeout(Some(timeout))
-            .map_err(|e| CdpError::ConnectionFailed(format!("failed to set write timeout: {e}")))?;
-        self.stream
-            .set_read_timeout(Some(timeout))
-            .map_err(|e| CdpError::ConnectionFailed(format!("failed to set read timeout: {e}")))?;
-
-        // Write raw JSON command (Chrome's inspector protocol accepts this)
-        self.stream.write_all(body.as_bytes()).map_err(|e| {
-            // Connection lost mid-write: mark for reconnection
-            CdpError::ConnectionFailed(format!("write failed (connection may be broken): {e}"))
-        })?;
-        self.stream.write_all(b"\0").map_err(|e| {
-            // Connection lost mid-write: mark for reconnection
-            CdpError::ConnectionFailed(format!("write terminator failed: {e}"))
-        })?;
-
-        // Read response (null-terminated JSON) with timeout protection
-        let mut buffer = [0u8; 8192];
-        let n = match self.stream.read(&mut buffer) {
-            Ok(n) => n,
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                // Timeout: operation hung
-                return Err(CdpError::Timeout);
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {
-                // Timeout: operation hung
-                return Err(CdpError::Timeout);
-            }
-            Err(e) => {
-                // Connection lost mid-read: mark for reconnection
-                return Err(CdpError::ConnectionFailed(format!(
-                    "read failed (mid-command disconnect): {e}"
-                )));
-            }
+        frame.push(0);
+        let (tx, rx) = mpsc::channel();
+        self.pending.lock().insert(id, tx);
+        let written = {
+            let mut writer = self.writer.lock();
+            writer.write_all(&frame).and_then(|()| writer.flush())
         };
-
-        if n == 0 {
-            return Err(CdpError::ConnectionFailed(
-                "connection closed by remote (EOF during read)".to_string(),
-            ));
+        if let Err(e) = written {
+            self.pending.lock().remove(&id);
+            return Err(CdpError::ConnectionFailed(format!("write failed: {e}")));
         }
-
-        // Parse the response, stripping the null terminator
-        let response_bytes = &buffer[..n.saturating_sub(1)];
-        let response: Value =
-            serde_json::from_slice(response_bytes).map_err(|e| CdpError::ProtocolError {
-                code: -32700,
-                message: format!("JSON decode error: {e}"),
-            })?;
-
-        // Check for protocol-level error
-        if let Some(error) = response.get("error") {
-            let code = error.get("code").and_then(|v| v.as_i64()).unwrap_or(-1) as i32;
-            let message = error
-                .get("message")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown error")
-                .to_string();
-            return Err(CdpError::ProtocolError { code, message });
+        match rx.recv_timeout(COMMAND_TIMEOUT) {
+            Ok(reply) => reply,
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                self.pending.lock().remove(&id);
+                Err(CdpError::Timeout)
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => Err(CdpError::ConnectionFailed(
+                "the relay closed the connection".into(),
+            )),
         }
-
-        Ok(response.get("result").cloned().unwrap_or(Value::Null))
     }
 
-    /// Capture a screenshot of the current viewport or full page.
-    pub fn screenshot(&mut self, full_page: bool) -> Result<Vec<u8>, CdpError> {
-        let result = self.send_command(
+    /// Capture a screenshot of the page behind `session`.
+    pub fn screenshot(&self, session: &str, full_page: bool) -> Result<Vec<u8>, CdpError> {
+        let result = self.call(
+            Some(session),
             "Page.captureScreenshot",
-            json!({
-                "format": "png",
-                "captureBeyondViewport": full_page,
-            }),
+            json!({ "format": "png", "captureBeyondViewport": full_page }),
         )?;
-
-        let base64_data = result
+        let data = result
             .get("data")
-            .and_then(|v| v.as_str())
+            .and_then(Value::as_str)
             .ok_or_else(|| CdpError::ScreenshotFailed("no data in response".to_string()))?;
-
         base64::engine::general_purpose::STANDARD
-            .decode(base64_data)
+            .decode(data)
             .map_err(|e| CdpError::ScreenshotFailed(format!("base64 decode error: {e}")))
     }
 
-    /// Click an element matching a CSS selector.
-    pub fn click(&mut self, selector: &str) -> Result<(), CdpError> {
-        // Use Runtime.evaluate to find and click the element
+    /// Click the element matching a CSS selector.
+    pub fn click(&self, session: &str, selector: &str) -> Result<(), CdpError> {
         let expression = format!(
-            r#"(function() {{
-                const el = document.querySelector('{}');
-                if (!el) throw new Error('Element not found: {}');
-                el.click();
-                return true;
-            }})()"#,
-            selector.replace("'", "\\'"),
-            selector.replace("'", "\\'")
+            "(function() {{ const el = document.querySelector({sel}); \
+             if (!el) throw new Error('Element not found'); el.click(); return true; }})()",
+            sel = js_string(selector)
         );
-
-        let result = self.send_command(
-            "Runtime.evaluate",
-            json!({
-                "expression": expression,
-                "returnByValue": true,
-            }),
-        )?;
-
-        // Check for exceptions
-        if result.get("exceptionDetails").is_some() {
-            let msg = result
-                .get("exceptionDetails")
-                .and_then(|e| e.get("text"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown error");
-            if msg.contains("Element not found") {
-                return Err(CdpError::ElementNotFound {
-                    selector: selector.to_string(),
-                });
-            }
-            return Err(CdpError::ClickFailed(msg.to_string()));
-        }
-
-        Ok(())
+        self.evaluate_checked(session, &expression, selector, CdpError::ClickFailed)
     }
 
-    /// Type text into an element matching a CSS selector.
-    pub fn type_text(&mut self, selector: &str, text: &str) -> Result<(), CdpError> {
-        // Focus and fill the element
+    /// Type text into the element matching a CSS selector.
+    pub fn type_text(&self, session: &str, selector: &str, text: &str) -> Result<(), CdpError> {
         let expression = format!(
-            r#"(function() {{
-                const el = document.querySelector('{}');
-                if (!el) throw new Error('Element not found: {}');
-                el.focus();
-                el.value = '{}';
-                el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                el.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                return true;
-            }})()"#,
-            selector.replace("'", "\\'"),
-            selector.replace("'", "\\'"),
-            text.replace("'", "\\'")
+            "(function() {{ const el = document.querySelector({sel}); \
+             if (!el) throw new Error('Element not found'); el.focus(); el.value = {text}; \
+             el.dispatchEvent(new Event('input', {{ bubbles: true }})); \
+             el.dispatchEvent(new Event('change', {{ bubbles: true }})); return true; }})()",
+            sel = js_string(selector),
+            text = js_string(text)
         );
+        self.evaluate_checked(session, &expression, selector, CdpError::TypeFailed)
+    }
 
-        let result = self.send_command(
+    fn evaluate_checked(
+        &self,
+        session: &str,
+        expression: &str,
+        selector: &str,
+        failed: fn(String) -> CdpError,
+    ) -> Result<(), CdpError> {
+        let result = self.call(
+            Some(session),
             "Runtime.evaluate",
-            json!({
-                "expression": expression,
-                "returnByValue": true,
-            }),
+            json!({ "expression": expression, "returnByValue": true }),
         )?;
-
-        // Check for exceptions
-        if result.get("exceptionDetails").is_some() {
-            let msg = result
-                .get("exceptionDetails")
-                .and_then(|e| e.get("text"))
-                .and_then(|v| v.as_str())
+        if let Some(details) = result.get("exceptionDetails") {
+            let text = details
+                .pointer("/exception/description")
+                .or_else(|| details.get("text"))
+                .and_then(Value::as_str)
                 .unwrap_or("unknown error");
-            if msg.contains("Element not found") {
+            if text.contains("Element not found") {
                 return Err(CdpError::ElementNotFound {
                     selector: selector.to_string(),
                 });
             }
-            return Err(CdpError::TypeFailed(msg.to_string()));
+            return Err(failed(text.to_string()));
         }
-
         Ok(())
     }
 }
 
-impl Drop for CdpSession {
-    /// Automatically return the connection to the pool on drop.
-    /// @trace gap:BR-005
-    fn drop(&mut self) {
-        // Try to clone and return the connection to the pool for reuse.
-        // If cloning fails, the stream is simply dropped.
-        let pool = get_global_pool();
-        if let Ok(stream) = self.stream.try_clone() {
-            pool.release(self.port, &self.target_id, stream);
+/// A JavaScript string literal for `s` (JSON is a subset of JS literals),
+/// so a selector or text can never break out of the expression.
+fn js_string(s: &str) -> String {
+    Value::String(s.to_string()).to_string()
+}
+
+fn read_loop(stream: UnixStream, pending: Pending, events: mpsc::Sender<Value>) {
+    let mut reader = BufReader::new(stream);
+    let mut frame = Vec::new();
+    loop {
+        frame.clear();
+        match reader.read_until(0, &mut frame) {
+            Ok(0) | Err(_) => break,
+            Ok(_) => {}
+        }
+        if frame.last() == Some(&0) {
+            frame.pop();
+        }
+        let Ok(message) = serde_json::from_slice::<Value>(&frame) else {
+            continue;
+        };
+        match message.get("id").and_then(Value::as_u64) {
+            Some(id) => {
+                let Some(reply) = pending.lock().remove(&id) else {
+                    continue;
+                };
+                let result = match message.get("error") {
+                    Some(error) => Err(CdpError::ProtocolError {
+                        code: error.get("code").and_then(Value::as_i64).unwrap_or(-1) as i32,
+                        message: error
+                            .get("message")
+                            .and_then(Value::as_str)
+                            .unwrap_or("unknown error")
+                            .to_string(),
+                    }),
+                    None => Ok(message.get("result").cloned().unwrap_or(Value::Null)),
+                };
+                let _ = reply.send(result);
+            }
+            None => {
+                let _ = events.send(message);
+            }
         }
     }
+    // The relay is gone: fail every waiting caller now, not at its timeout.
+    pending.lock().clear();
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+    use std::io::Read;
+
+    /// A scripted stand-in for Chromium's end of the pipe: answers each
+    /// command with `reply(method, params)`, and records what it was sent.
+    pub(crate) struct FakeChromium {
+        pub(crate) seen: Arc<Mutex<Vec<Value>>>,
+        pub(crate) peer: UnixStream,
+    }
+
+    impl FakeChromium {
+        pub(crate) fn start(
+            reply: impl Fn(&Value) -> Option<Value> + Send + 'static,
+        ) -> (CdpConnection, FakeChromium) {
+            let (ours, theirs) = UnixStream::pair().unwrap();
+            let seen = Arc::new(Mutex::new(Vec::new()));
+            let log = Arc::clone(&seen);
+            let mut writer = theirs.try_clone().unwrap();
+            let peer = theirs.try_clone().unwrap();
+            std::thread::spawn(move || {
+                let mut reader = BufReader::new(theirs);
+                let mut frame = Vec::new();
+                loop {
+                    frame.clear();
+                    match reader.read_until(0, &mut frame) {
+                        Ok(0) | Err(_) => break,
+                        Ok(_) => {}
+                    }
+                    frame.pop();
+                    let msg: Value = serde_json::from_slice(&frame).unwrap();
+                    log.lock().push(msg.clone());
+                    let result = reply(&msg).unwrap_or_else(|| json!({}));
+                    let mut answer = json!({ "id": msg["id"], "result": result });
+                    if let Some(s) = msg.get("sessionId") {
+                        answer["sessionId"] = s.clone();
+                    }
+                    let mut out = serde_json::to_vec(&answer).unwrap();
+                    out.push(0);
+                    if writer.write_all(&out).is_err() {
+                        break;
+                    }
+                }
+            });
+            (
+                CdpConnection::from_stream(ours).unwrap(),
+                FakeChromium { seen, peer },
+            )
+        }
+
+        /// Push an event at the client, as Chromium would.
+        pub(crate) fn emit(&self, event: Value) {
+            let mut out = serde_json::to_vec(&event).unwrap();
+            out.push(0);
+            (&self.peer).write_all(&out).unwrap();
+        }
+
+        pub(crate) fn methods(&self) -> Vec<(String, Option<String>)> {
+            self.seen
+                .lock()
+                .iter()
+                .map(|m| {
+                    (
+                        m["method"].as_str().unwrap_or("").to_string(),
+                        m.get("sessionId")
+                            .and_then(Value::as_str)
+                            .map(str::to_string),
+                    )
+                })
+                .collect()
+        }
+    }
 
     #[test]
-    fn connect_fails_on_port_zero() {
-        let result = CdpSession::connect(0, "target-123");
-        assert!(matches!(result, Err(CdpError::WindowNotRunning(_))));
-        match result {
-            Err(CdpError::WindowNotRunning(msg)) => {
-                assert!(msg.contains("fake-launch mode"));
+    fn commands_are_nul_framed_json_with_increasing_ids_and_the_session() {
+        let (ours, mut theirs) = UnixStream::pair().unwrap();
+        let conn = CdpConnection::from_stream(ours).unwrap();
+        std::thread::spawn(move || {
+            let _ = conn.call(None, "Browser.getVersion", json!({}));
+            let _ = conn.call(Some("S1"), "Page.navigate", json!({ "url": "about:blank" }));
+        });
+        let mut got = Vec::new();
+        let mut buf = [0u8; 512];
+        theirs
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        while got.iter().filter(|b| **b == 0).count() < 1 {
+            let n = theirs.read(&mut buf).unwrap();
+            got.extend_from_slice(&buf[..n]);
+        }
+        let first: Vec<&[u8]> = got.split(|b| *b == 0).collect();
+        let msg: Value = serde_json::from_slice(first[0]).unwrap();
+        assert_eq!(msg["id"], 1);
+        assert_eq!(msg["method"], "Browser.getVersion");
+        assert!(msg.get("sessionId").is_none());
+    }
+
+    #[test]
+    fn replies_route_by_id_and_events_go_to_the_event_channel() {
+        let (conn, chromium) = FakeChromium::start(|m| match m["method"].as_str() {
+            Some("Browser.getVersion") => Some(json!({ "product": "Chrome/154" })),
+            _ => None,
+        });
+        let events = conn.take_events().unwrap();
+        assert!(
+            conn.take_events().is_none(),
+            "the event stream is taken once"
+        );
+        chromium.emit(json!({ "method": "Target.targetCreated", "params": {} }));
+        let v = conn.call(None, "Browser.getVersion", json!({})).unwrap();
+        assert_eq!(v["product"], "Chrome/154");
+        let e = events.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert_eq!(e["method"], "Target.targetCreated");
+        let r = conn.call(Some("S9"), "Page.enable", json!({})).unwrap();
+        assert_eq!(r, json!({}));
+        assert_eq!(
+            chromium.methods().last().unwrap(),
+            &("Page.enable".to_string(), Some("S9".to_string()))
+        );
+    }
+
+    #[test]
+    fn a_protocol_error_is_an_error() {
+        let (ours, theirs) = UnixStream::pair().unwrap();
+        let conn = CdpConnection::from_stream(ours).unwrap();
+        std::thread::spawn(move || {
+            let mut reader = BufReader::new(theirs.try_clone().unwrap());
+            let mut frame = Vec::new();
+            reader.read_until(0, &mut frame).unwrap();
+            let mut out =
+                br#"{"id":1,"error":{"code":-32601,"message":"'Nope.nope' wasn't found"}}"#
+                    .to_vec();
+            out.push(0);
+            (&theirs).write_all(&out).unwrap();
+        });
+        match conn.call(None, "Nope.nope", json!({})) {
+            Err(CdpError::ProtocolError { code, message }) => {
+                assert_eq!(code, -32601);
+                assert!(message.contains("wasn't found"));
             }
-            _ => panic!("expected WindowNotRunning error"),
+            other => panic!("{other:?}"),
         }
     }
 
     #[test]
-    fn connect_fails_on_invalid_port() {
-        // Port 1 is typically reserved and unlikely to be listening
-        let result = CdpSession::connect(1, "target-456");
-        assert!(matches!(result, Err(CdpError::ConnectionFailed(_))));
+    fn a_closed_relay_fails_the_caller_at_once() {
+        let (ours, theirs) = UnixStream::pair().unwrap();
+        let conn = CdpConnection::from_stream(ours).unwrap();
+        drop(theirs);
+        let started = Instant::now();
+        assert!(conn.call(None, "Browser.getVersion", json!({})).is_err());
+        assert!(started.elapsed() < COMMAND_TIMEOUT);
     }
 
     #[test]
-    fn screenshot_requires_full_page_param() {
-        // This is a compilation check: the method signature accepts full_page bool
-        // and converts it to "captureBeyondViewport" param in the CDP command.
-        // Verified by the implementation calling:
-        // json!({"format": "png", "captureBeyondViewport": full_page})
+    fn connect_gives_up_after_its_budget() {
+        let dir = tempfile::tempdir().unwrap();
+        let err =
+            CdpConnection::connect(&dir.path().join("absent.sock"), Duration::from_millis(250));
+        assert!(matches!(err, Err(CdpError::ConnectionFailed(_))));
     }
 
     #[test]
-    fn click_escapes_selector_quotes() {
-        // Verify selector escaping works correctly in the JavaScript expression.
-        // A selector like "button[data-action='save']" becomes:
-        // "button[data-action=\'save\']" in the JS expression.
-        let selector = "button[data-action='save']";
-        let escaped = selector.replace("'", "\\'");
-        assert_eq!(escaped, "button[data-action=\\'save\\']");
+    fn selectors_and_text_are_quoted_as_js_string_literals() {
+        assert_eq!(js_string("a[x='y']"), r#""a[x='y']""#);
+        assert_eq!(js_string("\"); alert(1); (\""), r#""\"); alert(1); (\"""#);
     }
 
     #[test]
-    fn type_escapes_both_selector_and_text() {
-        // Verify that both selector and text are escaped to prevent injection.
-        let selector = "input[name='query']";
-        let text = "test's value";
-        let escaped_sel = selector.replace("'", "\\'");
-        let escaped_txt = text.replace("'", "\\'");
-        assert_eq!(escaped_sel, "input[name=\\'query\\']");
-        assert_eq!(escaped_txt, "test\\'s value");
+    fn click_reports_a_missing_element() {
+        let (conn, _chromium) = FakeChromium::start(|_| {
+            Some(
+                json!({ "exceptionDetails": { "text": "Uncaught", "exception": { "description": "Error: Element not found" } } }),
+            )
+        });
+        assert!(matches!(
+            conn.click("S1", "#nope"),
+            Err(CdpError::ElementNotFound { .. })
+        ));
+        assert!(matches!(
+            conn.type_text("S1", "#nope", "x"),
+            Err(CdpError::ElementNotFound { .. })
+        ));
     }
 
     #[test]
-    fn request_id_increments_on_each_send() {
-        // Each call to send_command increments request_id.
-        // This is verified by the implementation: self.request_id += 1
-        // Testing would require mocking the TCP stream, which is tested via integration tests.
-    }
-
-    #[test]
-    fn cdp_session_constructs_with_valid_params() {
-        // This is a compilation check that verifies SessionId and request_id
-        // are correctly initialized.
-    }
-
-    #[test]
-    fn screenshot_error_on_missing_data_field() {
-        // When Page.captureScreenshot response lacks "data" field,
-        // screenshot() returns ScreenshotFailed error.
-        // This would require mocking TCP stream - covered in integration tests.
-    }
-
-    #[test]
-    fn click_detects_element_not_found() {
-        // When JavaScript throws "Element not found: ...",
-        // click() should map it to ElementNotFound error.
-        // Verified by the implementation checking exceptionDetails and the message.
-    }
-
-    #[test]
-    fn type_detects_element_not_found() {
-        // Similar to click, type_text() should map JavaScript "Element not found" to ElementNotFound.
-        // Verified by the implementation.
-    }
-
-    #[test]
-    fn pool_acquire_creates_new_on_empty() {
-        // When pool is empty, acquire creates a new connection.
-        let pool = CdpConnectionPool::new();
-        // Port 0 should trigger WindowNotRunning error
-        let result = pool.acquire(0, "target-1");
-        assert!(matches!(result, Err(CdpError::WindowNotRunning(_))));
-    }
-
-    #[test]
-    fn pool_clear_removes_all_connections() {
-        // After clear(), pool should be empty.
-        let pool = CdpConnectionPool::new();
-        pool.clear();
-        assert_eq!(pool.len(), 0);
-    }
-
-    #[test]
-    fn pool_new_has_default_config() {
-        // Default pool should have reasonable defaults.
-        let pool = CdpConnectionPool::new();
-        assert_eq!(pool.max_connections, 32);
-        assert_eq!(pool.connection_ttl, Duration::from_secs(300));
-    }
-
-    #[test]
-    fn pool_with_config_sets_custom_values() {
-        // with_config() should respect custom settings.
-        let ttl = Duration::from_secs(60);
-        let pool = CdpConnectionPool::with_config(16, ttl);
-        assert_eq!(pool.max_connections, 16);
-        assert_eq!(pool.connection_ttl, ttl);
-    }
-
-    #[test]
-    fn pool_evicts_on_size_limit() {
-        // When pool size exceeds max_connections, oldest connection is evicted.
-        let pool = CdpConnectionPool::with_config(2, Duration::from_secs(300));
-
-        // Since we can't easily create real TcpStreams without running servers,
-        // we verify the logic with the acquire/release flow.
-        // The implementation will evict the oldest by creation time.
-        pool.clear();
-        assert_eq!(pool.len(), 0);
-    }
-
-    #[test]
-    fn pool_key_equality() {
-        // PoolKey should compare by both port and target_id.
-        let key1 = PoolKey {
-            port: 9222,
-            target_id: "target-1".to_string(),
-        };
-        let key2 = PoolKey {
-            port: 9222,
-            target_id: "target-1".to_string(),
-        };
-        let key3 = PoolKey {
-            port: 9223,
-            target_id: "target-1".to_string(),
-        };
-
-        assert_eq!(key1, key2);
-        assert_ne!(key1, key3);
-    }
-
-    #[test]
-    fn connect_fails_on_port_zero_with_pool() {
-        // Even with pooling, port 0 should fail with WindowNotRunning.
-        let result = CdpSession::connect(0, "target-123");
-        assert!(matches!(result, Err(CdpError::WindowNotRunning(_))));
-    }
-
-    #[test]
-    fn cdp_session_drop_returns_to_pool() {
-        // When a CdpSession is dropped, its connection should return to the pool.
-        // This would require mocking TcpStream, tested via integration tests.
-    }
-
-    #[test]
-    fn timeout_error_variant_exists() {
-        // @trace spec:cdp-robustness
-        // Verify that CdpError::Timeout exists and can be matched
-        let err = CdpError::Timeout;
-        match err {
-            CdpError::Timeout => {
-                // Expected
-            }
-            _ => panic!("timeout error should match"),
-        }
-    }
-
-    #[test]
-    fn connection_failed_includes_context() {
-        // @trace spec:cdp-robustness
-        // Connection errors should include context about what failed
-        let err = CdpError::ConnectionFailed("mid-command disconnect".to_string());
-        let msg = err.to_string();
-        assert!(msg.contains("mid-command"));
-    }
-
-    #[test]
-    fn error_messages_are_informative() {
-        // @trace spec:cdp-robustness
-        // All error variants should produce readable messages
-        let errors = vec![
-            CdpError::WindowNotRunning("port 0".to_string()),
-            CdpError::ConnectionFailed("connection broken".to_string()),
-            CdpError::Timeout,
-            CdpError::ProtocolError {
-                code: -32000,
-                message: "server error".to_string(),
-            },
-            CdpError::ScreenshotFailed("no data".to_string()),
-            CdpError::ElementNotFound {
-                selector: "#myid".to_string(),
-            },
-            CdpError::ClickFailed("element disabled".to_string()),
-            CdpError::TypeFailed("input not found".to_string()),
-        ];
-
-        for err in errors {
-            let msg = err.to_string();
-            assert!(!msg.is_empty(), "error should have a message");
-        }
+    fn screenshot_decodes_the_png_and_requires_data() {
+        let (conn, _c) = FakeChromium::start(|_| Some(json!({ "data": "iVBORw==" })));
+        assert_eq!(conn.screenshot("S1", false).unwrap(), b"\x89PNG");
+        let (conn, _c) = FakeChromium::start(|_| Some(json!({})));
+        assert!(matches!(
+            conn.screenshot("S1", true),
+            Err(CdpError::ScreenshotFailed(_))
+        ));
     }
 }
