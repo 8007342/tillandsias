@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: pre-push-gate-cold-debug-build-dominates-its-own-wall-clock
+    event:
+      type: progress
+      ts: "2026-10-13T18:04:49Z"
+      agent_id: linux-yoga-claude-20261013t172352z
+      host: yoga
+      summary: |
+        Slice 2 at 1b802107b on work/835-kjuv (trunk 8641e34f1 merged at 98876e32c): the gate's last cargo run is gone - tillandsias-policy plan-orders builds its debug artifact once (cargo build -q -p tillandsias-policy, a no-op when a Lua guard earlier in the gate already built it) and resolves it BY EXECUTION through the probe's resolve_target_binary (770-ifeg), the shape check-no-python-scripts.lua uses; a failed build or a binary that does not run is a named refusal. grep count of cargo run sites in build.sh is 0 (test-plan-orders-fragment-fold.sh keeps its own - a fixture over a scratch tree, not the gate). Evidence - ./build.sh --check on the ref rc 0 (1484 s) with Plan ledger check passed, Plan order uniqueness passed and the corpus advisory printed through the resolved binaries in situ; sigpipe-verdict-added ok, bash-dialect clean, plan-binary-probe-usage ok, jq-callsite ratchet 337/337, shell ratchet ok; two-dot and three-dot diffs agree on one file, one merge base; carried guard due=0 silent=0. Pre-ready sequence on the merged ref - door ran=225 refused=0; PR 404 READIED for the queue at 1b802107b. The deliverable ("the gate resolves the plan binary through the shared probe instead of cargo run") holds for every site; the row has no exit_criteria, so the deliverable is the criterion; close on the LANDED sha only.
