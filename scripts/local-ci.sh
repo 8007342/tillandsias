@@ -303,7 +303,16 @@ CHECK_LOG_DIR="$SIGNATURE_DIR/check-logs"
 # so: TILLANDSIAS_CHECK_LOG_INDEX=/tmp/scratch.jsonl scripts/local-ci.sh --phase
 # pre-build. The reader's tier discriminator makes that unnecessary for
 # correctness; this makes it possible to keep the record clean as well.
-CHECK_LOG_INDEX="${TILLANDSIAS_CHECK_LOG_INDEX:-$SIGNATURE_DIR/check-logs.jsonl}"
+# ORDER 888-vgs8 — THE INDEX LIVES OUTSIDE target/. It was
+# $SIGNATURE_DIR/check-logs.jsonl, and Finalization 9c's `cargo clean` removes
+# target/ wholesale, failure history included, while the sweep's verdict named
+# bytes and a marker date and never the file. The one path rule — the override
+# above, else <checkout>/.cache/convergence/check-logs.jsonl, with a legacy
+# target/ index adopted once by copy — is scripts/convergence-log-path.sh, and
+# every writer and reader asks it so none can disagree about where the record
+# is. No fallback here: answering the old path would silently resume writing
+# into the directory the sweep empties.
+CHECK_LOG_INDEX="$("$REPO_ROOT/scripts/convergence-log-path.sh")" || { echo "could-not-run:local-ci:scripts/convergence-log-path.sh did not answer" >&2; exit 3; }
 VERSION_VALUE="$(cat VERSION 2>/dev/null || echo "0.0.0.0")"
 SOURCE_COMMIT="$(git rev-parse --short=12 HEAD 2>/dev/null || echo "unknown")"
 # ORDER 1185-9qx6 — THE RUN ID IS THE CORRELATION KEY, SO IT MUST BE SHAREABLE.
@@ -784,7 +793,7 @@ write_convergence_artifacts() {
         --arg ci_phase "$CI_PHASE" \
         --arg signature_hash "$signature_hash" \
         --arg delta_hash "$delta_hash" \
-        --arg check_log_index_ref "target/convergence/check-logs.jsonl" \
+        --arg check_log_index_ref "${CHECK_LOG_INDEX#"$REPO_ROOT"/}" \
         --arg check_log_index_hash "$check_log_hash" \
         --arg dashboard_hash "n/a" \
         --arg ci_run_id "$CI_RUN_ID" \
@@ -914,7 +923,7 @@ archive_check_log() {
     # 1242-4x53: yes|no when a failed check was re-run once in the same regime.
     local reproduced="${5:-}"
 
-    mkdir -p "$CHECK_LOG_DIR"
+    mkdir -p "$CHECK_LOG_DIR" "$(dirname "$CHECK_LOG_INDEX")"
     touch "$CHECK_LOG_INDEX"
 
     local archived_log="$CHECK_LOG_DIR/$archive_name"

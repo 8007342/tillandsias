@@ -10,7 +10,9 @@
 #
 # The recurring loop gates on `./build.sh --check`. The release gates on
 # `--ci-full`. Nothing in between ever runs the quick litmus tier, and
-# target/convergence/check-logs.jsonl is written only by scripts/local-ci.sh.
+# the convergence check log (.cache/convergence/check-logs.jsonl since
+# 888-vgs8; scripts/convergence-log-path.sh resolves it) is written only by
+# scripts/local-ci.sh.
 # So a release-blocking failure can ONLY surface at release time — the worst
 # moment to discover it, and the reason a block is always a surprise.
 #

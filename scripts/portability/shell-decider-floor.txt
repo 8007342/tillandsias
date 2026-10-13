@@ -13,7 +13,6 @@ scripts/check-carry-forward.sh
 scripts/check-cheatsheet-frontmatter.sh
 scripts/check-cheatsheet-tiers.sh
 scripts/check-claim-confirmed.sh
-scripts/check-claim-protocol-agrees.sh
 scripts/check-claims-across-branches.sh
 scripts/check-committable-branch.sh
 scripts/check-container-bases.sh

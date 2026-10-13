@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's direction (2026-10-13): found while debugging a flaky scratch-Keychain test on 1642-cc54. Unclaimed.
+packets:
+  - packet_id: the-macos-installation-anchor-is-minted-from-the-wall-clock-and-pid-not-an-os-rng
+    order: 1656-e4ws
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [security, macos, vault, keychain, entropy]
+    estimated_hours: 2
+    related: [1642-cc54, 803-49re]
+    depends_on: []
+    title: |
+      The macOS installation anchor, which the in-VM Vault derives its master key from, is minted from the wall clock and the pid instead of the OS RNG
+    context: |
+      crates/tillandsias-macos-tray/src/installation_uuid.rs generate_uuid() fills its 16 bytes as 8 bytes of SystemTime nanos (little-endian) plus 8 bytes of the pid, then forces the UUIDv4 version and variant bits. read_or_generate_with() mints the PRODUCTION installation anchor (Keychain account tillandsias-vm-uuid) with it on first run, and the in-VM Vault derives its master key from that anchor (803-49re; its comment: "the actual unseal anchor is HKDF'd over machine-id + this"). The comment calls it "not a security key on its own", but an input that is predictable to within a clock window and a small pid space weakens the derived key even so.
+      Seen 2026-10-13 on tlatoanis-macbook-air via its test-only symptom. Scratch Keychain service names were pid + generate_uuid(), so two tests on parallel threads within one clock tick got the SAME name and read each other's items (a_stored_anchor_read_through_a_failing_find_is_an_error_not_absent read "08fb954c-1702-4e18-a4b5-000000000000"). Fixed for the scratch names only on 1642-cc54 (#400) with a per-process counter. The production mint is unchanged.
+      getrandom is in Cargo.lock and a direct dependency of tillandsias-headless, but NOT of tillandsias-macos-tray, so the tray would gain it as a direct dependency (or read /dev/urandom, as vz.rs mint_shutdown_token does).
+    exit_criteria:
+      - 'generate_uuid draws at least 122 random bits from the OS RNG (getrandom or /dev/urandom), and only the UUIDv4 version and variant bits are fixed; a test fails if the wall clock or the pid feeds the output'
+      - 'two calls in the same process within the same clock tick differ: a test calls it repeatedly in a tight loop on parallel threads and finds no duplicate'
+      - 'an existing installation keeps its recorded anchor, so no re-key: read_or_generate_with still returns a stored anchor unchanged and mints only when none is stored, pinned by a test; any rotation of existing anchors is a separate, designed row'
+    unscoreable: "a randomness-source change pinned by unit tests on the generator and the read-or-generate path"

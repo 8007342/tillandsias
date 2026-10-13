@@ -275,7 +275,8 @@ $S -n '1{/a/{p;};}' "\$1"
 x="\${HOME}/s/{a}"; $S "s/\${x}/{lit}/" "\$1"
 EOF
 expect "sed-brace-nested-terminated-and-braces-in-text-pass" "ok:bash-dialect-clean" 0
-# Several -e scripts are one script joined by newlines (check-claim-protocol-agrees.sh:58).
+# Several -e scripts are one script joined by newlines (the idiom from the former
+# check-claim-protocol-agrees.sh:58, ported to scripts/lua by 888-vgs8).
 plant "$X" "-e '}'" <<EOF
 #!/usr/bin/env bash
 $S -e ':a' -e '/\\\\\$/{N;s/\\\\\\n//;ba' -e '}' "\$1"

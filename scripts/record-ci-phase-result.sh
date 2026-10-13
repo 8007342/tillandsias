@@ -5,8 +5,9 @@
 # ran OUTSIDE scripts/local-ci.sh.
 #
 # WHY THIS EXISTS (1185-9qx6). check-release-tier-freshness.sh answers "when was
-# the RELEASE tier last exercised here" by reading
-# target/convergence/check-logs.jsonl, and 1174-6r4k correctly narrowed it to
+# the RELEASE tier last exercised here" by reading the convergence check log
+# (resolved by scripts/convergence-log-path.sh; it lived under target/ until
+# 888-vgs8 moved it out of `cargo clean`'s way), and 1174-6r4k correctly narrowed it to
 # FULL-tier runs: a run whose records say ci_phase `all`, or which between them
 # cover pre-build AND post-build AND runtime. The reader was right and the
 # WRITER could never satisfy it. `./build.sh --ci-full` drives only its
@@ -70,7 +71,10 @@ esac
 JQ="${JQ:-jq}"
 command -v "$JQ" >/dev/null 2>&1 || { echo "could-not-run:record-ci-phase:no jq on PATH" >&2; exit 3; }
 
-INDEX="${TILLANDSIAS_CHECK_LOG_INDEX:-$ROOT/target/convergence/check-logs.jsonl}"
+# 888-vgs8: ONE path rule for writer and reader (the override is honoured
+# inside it), and no fallback — the old default is the directory cargo clean
+# empties.
+INDEX="$("$ROOT/scripts/convergence-log-path.sh")" || { echo "could-not-run:record-ci-phase:scripts/convergence-log-path.sh did not answer" >&2; exit 3; }
 mkdir -p "$(dirname "$INDEX")" 2>/dev/null || { echo "could-not-run:record-ci-phase:cannot create $(dirname "$INDEX")" >&2; exit 3; }
 
 sha256_of() {
