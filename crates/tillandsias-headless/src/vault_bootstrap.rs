@@ -9472,9 +9472,6 @@ mod tests {
         );
     }
 
-    /// Order 1437-qza3: the partial-init wipe names the store, the missing
-    /// share and the loss, so the one path that still destroys credentials is
-    /// never silent.
     // ---- 1658-6ca6: the guard waits for the host's delivery -----------------
 
     /// A fake clock: `sleep` advances it, `now` reads it.
@@ -9659,6 +9656,9 @@ mod tests {
         }
     }
 
+    /// Order 1437-qza3: the partial-init wipe names the store, the missing
+    /// share and the loss, so the one path that still destroys credentials is
+    /// never silent.
     #[test]
     fn partial_init_wipe_line_names_store_share_and_loss() {
         let line = partial_init_wipe_line(std::path::Path::new("/c/tillandsias/vault-data"));
