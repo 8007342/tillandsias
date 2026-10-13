@@ -1,5 +1,6 @@
 # @trace spec:init-command
 # @trace order:1339-r9xv
+# @trace order:1560-uam3
 #
 # Order 1339-r9xv: scripts/install-windows.ps1 mentioned `.wslconfig` ZERO
 # times, so a user's first build ran on whatever WSL defaults gave them.
@@ -14,13 +15,15 @@
 # `processors` copied as a NUMBER when it is a POLICY, and test threads that
 # CARGO_BUILD_JOBS does not bound (24 of 25 cargo test invocations unpinned).
 #
-# THE FIX REPORTS AND OFFERS; IT NEVER WRITES THE USER'S FILE WITHOUT A YES.
-# `.wslconfig` belongs to the user and may carry settings for unrelated work,
-# so writing it silently would be a worse defect than the one being fixed.
-# 2026-09-26 the row gained the swap keys, which ARE written -- absent keys
-# only, after an explicit [y/N] (default no) or TILLANDSIAS_WSLCONFIG=apply.
-# Arm 5 now enforces "every write sits inside the consent branch", and
-# scripts/test-installer-merges-wslconfig-swap-keys.sh RUNS the merge.
+# THE SHAPE ADVICE (memory, processors) IS REPORTED, NEVER WRITTEN. The swap
+# and memory-reclaim keys started behind a [y/N] (2026-09-26); on 2026-10-12
+# the operator ruled them hard requirements ("HyperV and SWAP should not be
+# prompts, our install should add them forcibly as they're hard
+# requirements"), so 1560-uam3 ENSURES them without asking: absent keys added,
+# conflicting values replaced, a backup written first. Arm 5 now enforces
+# "every write of .wslconfig sits inside Invoke-WslConfigEnsure, after its
+# backup", and scripts/lua/test-installer-merges-wslconfig-swap-keys.lua RUNS
+# the functions against scratch files.
 #
 # ARM 0 IS WRITTEN FIRST AND ON PURPOSE. Every other arm reads the installer
 # source; if that read fails they see nothing and would report the SUBJECT as
@@ -30,22 +33,26 @@ name: litmus:installer-reports-wsl-guest-shape
 spec: init-command
 phase: pre-build
 description: >
-  Pin 1339-r9xv: the Windows installer derives and REPORTS the guest shape the
-  user's `.wslconfig` will produce, NAMES a known-bad vCPU-to-memory ratio with
-  its measured numbers, warns that `autoMemoryReclaim` under `[wsl2]` is inert,
-  and writes `.wslconfig` only inside the consent branch (absent swap keys,
-  never overwriting a present value). Falsifiable against the pre-fix
-  installer (5 arms red), against an unconsented write (arm 5), and by the
-  merge fixture's sabotages (overwrite, unescaped path, missing comment).
+  Pin 1339-r9xv and 1560-uam3: the Windows installer derives and REPORTS the
+  guest shape the user's `.wslconfig` will produce, NAMES a known-bad
+  vCPU-to-memory ratio with its measured numbers, warns that
+  `autoMemoryReclaim` under `[wsl2]` is inert, and ENSURES the swap and
+  memory-reclaim keys without a prompt: only inside Invoke-WslConfigEnsure,
+  backup first, absent keys added and conflicting values replaced, memory and
+  processors never touched. Falsifiable against the pre-1560 installer (the
+  merge fixture's prompt, opt-out, replacement, ensure, restart and Hyper-V
+  arms red) and against a write outside the ensure function (arm 5).
 severity: high
 size: instant
 
 preconditions:
   - workspace contains scripts/test-installer-reports-wsl-guest-shape.sh
+  - workspace contains scripts/lua/test-installer-merges-wslconfig-swap-keys.lua
   - workspace contains scripts/install-windows.ps1
   - the shape fixture reads SOURCE only and runs everywhere; the merge fixture
-    RUNS the real function through PowerShell and names its run a skip where
-    no PowerShell exists. Neither asserts anything about a live WSL guest
+    RUNS the real functions through PowerShell against scratch files and names
+    its run a skip where no PowerShell exists. Neither asserts anything about a
+    live WSL guest, and neither touches the real .wslconfig or group membership
 
 critical_path:
   - step: "the fixture parses and carries its exec bit"
@@ -55,7 +62,7 @@ critical_path:
     assert_exit: 0
     assert_output_contains: "ok: wsl-guest-shape-fixture-parses"
 
-  - step: "all seven arms pass against the real installer: it reads .wslconfig, derives the effective shape, names the ratio with its numbers, warns about [experimental], writes the file only inside the consent branch, and refuses to advise when it cannot read the host"
+  - step: "all seven arms pass against the real installer: it reads .wslconfig, derives the effective shape, names the ratio with its numbers, warns about [experimental], writes the file only inside Invoke-WslConfigEnsure after its backup, and refuses to advise when it cannot read the host"
     command: "bash scripts/test-installer-reports-wsl-guest-shape.sh"
     timeout_ms: 60000
     expected_behavior: "ok:installer-reports-wsl-guest-shape:7/7 arms"
@@ -63,23 +70,20 @@ critical_path:
     assert_output_contains: "ok:installer-reports-wsl-guest-shape:7/7 arms"
 
   # SOURCE PIN, asserted on the file directly so a fixture that stopped
-  # looking cannot hide it. The write-path count OUTSIDE the consent branch
-  # is the one that matters: zero is the requirement (the branch opens at
-  # `if ($doWsl) {` and closes at its `} else {`, which awk drops before
-  # counting). An earlier version of this arm could not catch its own
-  # sabotage because it demanded the write verb and the path be ADJACENT.
-  # `|| true` on every count is load-bearing -- grep -c exits 1 on a
-  # legitimate zero and would fail this step on a CORRECT tree.
-  - step: "SOURCE PIN: the installer references .wslconfig and contains zero write paths targeting it outside the consent branch"
-    command: "sed 's/#.*//' scripts/install-windows.ps1 | awk '/doWsl\\) \\{/{s=1} s&&/\\} else \\{/{s=0;next} !s' > /tmp/wgs.$$ && m=$(grep -c 'wslconfig' /tmp/wgs.$$ || true) && w=$(grep -cE '(Set-Content|Out-File|Add-Content|New-Item|Move-Item|Copy-Item|Remove-Item|WriteAllLines|WriteAllText).*\\$WslCfgPath' /tmp/wgs.$$ || true) && rm -f /tmp/wgs.$$ && test \"$m\" -gt 0 && test \"$w\" -eq 0 && echo \"ok: wslconfig-mentions=$m unconsented-writes=$w\""
+  # looking cannot hide it: outside the body of Invoke-WslConfigEnsure (from
+  # its `function` line to the next top-level `}`), zero write verbs name
+  # `.wslconfig`'s path variables, and the installer has no prompt. `|| true`
+  # on every count is load-bearing -- grep -c exits 1 on a legitimate zero.
+  - step: "SOURCE PIN: the installer references .wslconfig, writes it only inside Invoke-WslConfigEnsure, and has no prompt"
+    command: "mkdir -p target/work && f=target/work/wgs.$$ && sed 's/#.*//' scripts/install-windows.ps1 | awk '/^function Invoke-WslConfigEnsure/{s=1} s&&/^}/{s=0;next} !s' > $f && m=$(grep -c 'wslconfig' $f || true) && w=$(grep -cE '(Set-Content|Out-File|Add-Content|Copy-Item|Move-Item|Remove-Item|WriteAllLines|WriteAllText).*(\\$WslCfgPath|\\$Path)' $f || true) && p=$(grep -cE 'Read-Host|\\[y/N\\]|\\[Y/n\\]' $f || true) && rm -f $f && test \"$m\" -gt 0 && test \"$w\" -eq 0 && test \"$p\" -eq 0 && echo \"ok: wslconfig-mentions=$m writes-outside-ensure=$w prompts=$p\""
     timeout_ms: 15000
-    expected_behavior: "ok: wslconfig-mentions=<n>0 unconsented-writes=0"
+    expected_behavior: "ok: wslconfig-mentions=<n>0 writes-outside-ensure=0 prompts=0"
     assert_exit: 0
-    assert_output_contains: "unconsented-writes=0"
+    assert_output_contains: "writes-outside-ensure=0 prompts=0"
 
-  - step: "the swap-key merge adds exactly the absent keys, never overwrites a present one, and is idempotent (run through PowerShell where present)"
-    command: "bash scripts/test-installer-merges-wslconfig-swap-keys.sh"
-    timeout_ms: 60000
+  - step: "the swap and memory-reclaim keys are ensured without asking: absent keys added, conflicts replaced after a backup, compliant files untouched, the shared VM restarted only when ours is the sole running distro, and the Hyper-V sign-out note only when IsInRole stays false (run through PowerShell where present)"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-installer-merges-wslconfig-swap-keys.lua 2>&1"
+    timeout_ms: 120000
     expected_behavior: "ok:wslconfig-merge-fixture:ran=<n> skipped=<m>"
     assert_exit: 0
     assert_output_contains: "ok:wslconfig-merge-fixture:"

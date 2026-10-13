@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace order:1420-jmp4
+# @trace order:1420-jmp4, order:1640-rutw
 #
 # Fixture for PRETTY INSTALLER 9/10: the installers show one clean progress
 # bar for the release download instead of curl's raw 12-column meter
@@ -27,6 +27,10 @@
 #      script runs with $ProgressPreference = 'SilentlyContinue' in its scope.
 #      Run, not read: the SUMS block is cut and executed with Invoke-WebRequest
 #      shadowed by a recorder of the caller's $ProgressPreference.
+#      An EMPTY record means the recorder never ran: the cut threw before it
+#      reached Invoke-WebRequest (1640-rutw: a Log call the harness had no stub
+#      for). That is could-not-reach, exit 3, naming the throw; it is never
+#      reported as "progress bar live", which is a claim about the installer.
 #
 # The W arms need PowerShell and skip by name without it.
 set -u
@@ -95,6 +99,7 @@ function Write-Progress {
     [void]$script:calls.Add([pscustomobject]@{ Pct = $PercentComplete; Done = [bool]$Completed })
 }
 function Say { param([string]$m) }
+function Log { param([string]$m) }
 function Die { param([string]$m) throw "DIE: $m" }
 
 # W3 first, independent of W1: run the SUMS block with Invoke-WebRequest
@@ -105,8 +110,10 @@ function Invoke-WebRequest { param($Uri, $OutFile, [switch]$UseBasicParsing, $Er
     # the scope that called it.
     $script:prefs += $ProgressPreference }
 $Base = 'http://127.0.0.1:1'; $Tmp = $Out
-try { . $CutSums } catch { }
+$script:w3err = ''
+try { . $CutSums } catch { $script:w3err = ($_.Exception.Message -replace '\s+', ' ') }
 "W3 prefs=$($script:prefs -join ',')"
+if ($script:prefs.Count -eq 0) { "W3 unreached=$script:w3err" }
 Remove-Item Function:\Invoke-WebRequest
 
 # Dot-sourcing the cut also runs its real call with an empty $ZipUrl, which
@@ -170,13 +177,26 @@ PS
         *) fail "W2 the progress bar is not styled leaf green: $(printf '%s\n' "$wout" | grep '^W2 ')" ;;
     esac
     ran=$((ran + 1))
-    w3="$(printf '%s\n' "$wout" | grep '^W3 ' || true)"
+    w3="$(printf '%s\n' "$wout" | grep '^W3 prefs=' || true)"
+    w3u="$(printf '%s\n' "$wout" | grep '^W3 unreached=' || true)"
     case "$w3" in
         "W3 prefs=SilentlyContinue") ;;
-        *) fail "W3 Invoke-WebRequest ran with its own progress bar live: ${w3:-no W3 line}" ;;
+        "W3 prefs=")
+            # The recorder never ran: a harness gap, not an installer verdict.
+            w3_unreached="${w3u#W3 unreached=}"
+            w3_unreached="${w3_unreached:-no error captured}"
+            ran=$((ran - 1)) ;;
+        "") fail "W3 the PowerShell run printed no W3 line: $wout" ;;
+        *) fail "W3 Invoke-WebRequest ran with its own progress bar live: $w3" ;;
     esac
 fi
 
+if [ -n "${w3_unreached:-}" ]; then
+    echo "  W3: the cut SUMS block threw before reaching Invoke-WebRequest: $w3_unreached" >&2
+    echo "  remedy: stub the helper it calls in the w.ps1 harness (Say, Log and Die are stubbed); this says nothing about the installer" >&2
+    echo "could-not-run:quiet-progress-fixture:W3-could-not-reach-invoke-webrequest:failed=$fails ran=$ran skipped=$skipped"
+    exit 3
+fi
 if [ "$fails" -gt 0 ]; then
     echo "refused:quiet-progress-fixture:failed=$fails ran=$ran skipped=$skipped"
     exit 1

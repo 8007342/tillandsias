@@ -2,34 +2,32 @@
 
 Comprehensive observability API surface completing all logging/observability interfaces.
 
-**Use when**: Building observability features, querying logs, sampling traces, enforcing budgets, or aggregating multi-container logs.
+**Use when**: Building observability features, sampling traces, enforcing budgets, or aggregating multi-container logs.
 
 ## Provenance
 
 - [Tillandsias logging specification](../specs/logging.md) — Core logging design
-- [Structured query language](../specs/query.md) — Query syntax and execution
 - [Cost-aware sampling](../specs/sampling.md) — Probabilistic sampling for high-volume traces
 - [Budget enforcement](../specs/budget-enforcement.md) — Per-spec and global cost limits
 - [Log aggregation](../specs/log-aggregation.md) — Multi-container log merging
-- **Last updated:** 2026-05-14
+- **Last updated:** 2026-10-12 (781-hseq retired the query surface; see `openspec/specs/structured-query-language/spec.md`, a tombstone)
 
 ## Overview
 
 @trace gap:OBS-023
 
-The `ObservabilityAPI` provides a unified, type-safe surface that integrates four observability subsystems:
+The `ObservabilityAPI` provides a unified, type-safe surface that integrates three observability subsystems:
 
-1. **LogQuery** — Structured log query language (OBS-002)
-2. **CostAwareSampler** — Probabilistic sampling for high-volume traces (OBS-006)
-3. **BudgetEnforcer** — Trace cost budget enforcement (OBS-011)
-4. **LogAggregator** — Multi-container log aggregation (OBS-013)
+1. **CostAwareSampler** — Probabilistic sampling for high-volume traces (OBS-006)
+2. **BudgetEnforcer** — Trace cost budget enforcement (OBS-011)
+3. **LogAggregator** — Multi-container log aggregation (OBS-013)
 
 ### Design Principles
 
-- **Type Safety**: Rust types prevent invalid queries and budget states
+- **Type Safety**: Rust types prevent invalid budget states
 - **Composability**: Each subsystem works independently or through the unified API
 - **Non-Breaking**: Integrates existing implementations without API changes
-- **Observable**: Query history and budget tracking for visibility into observability operations
+- **Observable**: Budget tracking for visibility into observability operations
 
 ## API Surface
 
@@ -40,7 +38,6 @@ pub struct ObservabilityAPI {
     sampler: Arc<RwLock<CostAwareSampler>>,
     budget_enforcer: Arc<BudgetEnforcer>,
     aggregator: Arc<LogAggregator>,
-    query_history: Arc<RwLock<Vec<QueryHistoryEntry>>>,
 }
 
 pub struct SamplingStatus {
@@ -54,12 +51,6 @@ pub struct BudgetStatus {
     pub current_cost_bytes: usize,
     pub max_cost_bytes: u64,
     pub budget_percentage: f32,
-}
-
-pub struct QueryResult {
-    pub data: Value,
-    pub matches: usize,
-    pub elapsed_ms: u64,
 }
 
 pub struct AggregationResult {
@@ -85,61 +76,6 @@ let aggregator = Arc::new(LogAggregator::new());
 
 // Create unified API
 let api = ObservabilityAPI::new(sampler, budget_enforcer, aggregator)?;
-```
-
-### Querying Logs
-
-Query logs using structured query language inspired by Loki:
-
-```rust
-// Simple filter
-let result = api.query(r#"{spec="foo"}"#, entries)?;
-println!("Matched {} entries", result.matches);
-
-// Count by spec
-let result = api.query(r#"{level="error"} | count"#, entries)?;
-if let Some(count) = result.data.get("count") {
-    println!("Error count: {}", count);
-}
-
-// Statistics
-let result = api.query(
-    r#"{component="proxy"} | stats avg(latency_ms) by spec"#,
-    entries
-)?;
-
-// JSON filtering
-let result = api.query(
-    r#"{spec="proxy"} | json | .latency_ms > 100"#,
-    entries
-)?;
-
-// Query history
-let history = api.query_history(10);  // Last 10 queries
-for (query_str, matches, elapsed_ms) in history {
-    println!("{}: {} matches in {}ms", query_str, matches, elapsed_ms);
-}
-```
-
-Query syntax:
-
-```
-# Label matching (required)
-{spec="value", level="error"}
-
-# Aggregations (optional)
-| count
-| stats count() by spec
-| stats avg(latency_ms) by spec
-| stats sum(requests) by component
-| stats max(latency_ms) by spec
-| stats min(latency_ms) by spec
-
-# JSON filtering (optional)
-| json | .field > 100
-| json | .field < 50
-| json | .field == 42
-| json | .message contains "error"
 ```
 
 ### Sampling Traces
@@ -289,19 +225,11 @@ async fn process_logs(
 ) -> Result<()> {
     // Aggregate multi-container logs
     let result = api.aggregate(entries).await?;
-
-    // Query aggregated logs
-    let json_entries: Vec<Value> = result.entries
-        .iter()
-        .map(|e| serde_json::to_value(e).unwrap())
-        .collect();
-
-    let query_result = api.query(
-        r#"{level="error"} | stats count() by component"#,
-        json_entries,
-    )?;
-
-    println!("Error counts by component: {:?}", query_result.data);
+    println!(
+        "Aggregated {} entries from {} containers",
+        result.entries.len(),
+        result.source_counts.len()
+    );
 
     Ok(())
 }
@@ -335,7 +263,6 @@ async fn emit_trace(
 fn print_observability_status(api: &ObservabilityAPI) {
     let (global_cost, violations, warning) = api.global_budget_status();
     let costs = api.per_spec_costs();
-    let history = api.query_history(5);
 
     println!("\n=== Observability Status ===");
     println!("Global Budget: {} bytes, {} violations", global_cost, violations);
@@ -344,11 +271,6 @@ fn print_observability_status(api: &ObservabilityAPI) {
     println!("Per-Spec Costs:");
     for (spec, cost) in costs {
         println!("  {}: {} bytes", spec, cost);
-    }
-
-    println!("\nRecent Queries:");
-    for (query, matches, elapsed) in history {
-        println!("  {}: {} matches in {}ms", query, matches, elapsed);
     }
 }
 ```
@@ -371,7 +293,6 @@ Example costs:
 
 | Operation | Time Complexity | Space Complexity |
 |-----------|------------------|------------------|
-| Query execution | O(n) where n = entry count | O(result size) |
 | Budget check | O(1) | O(specs) for state |
 | Sample decision | O(1) | O(1) |
 | Aggregation | O(n log n) for sort | O(n) |
@@ -382,21 +303,18 @@ Example costs:
 All operations return `Result<T>` for error handling:
 
 ```rust
-match api.query(query_str, entries) {
-    Ok(result) => println!("Matched: {}", result.matches),
-    Err(e) => eprintln!("Query failed: {}", e),
+match api.check_budget("browser-isolation", 1000) {
+    Ok(status) => println!("Within budget: {}", status.within_budget),
+    Err(e) => eprintln!("Budget check failed: {}", e),
 }
 ```
 
 Common errors:
-- `ParseError::InvalidSyntax` — Query string malformed
-- `ParseError::MissingFilter` — Query must start with `{}`
 - `LoggingError::WriteError` — Sampling or budget check failed
 
 ## Testing
 
 Unit tests verify:
-- Query parsing and execution (12+ tests)
 - Sampling behavior (8+ tests)
 - Budget enforcement (8+ tests)
 - Log aggregation (15+ tests)
@@ -412,7 +330,6 @@ cargo test --package tillandsias-logging
 
 ## Related Specs
 
-- `spec:structured-query-language` — Log query syntax and execution
 - `spec:cost-aware-sampling` — Probabilistic sampling mechanism
 - `spec:trace-budget-enforcement` — Budget tracking and warnings
 - `spec:log-aggregation` — Multi-container log merging
@@ -421,7 +338,6 @@ cargo test --package tillandsias-logging
 ## See Also
 
 - `crates/tillandsias-logging/src/surface.rs` — Implementation
-- `crates/tillandsias-logging/src/query.rs` — Query language
 - `crates/tillandsias-logging/src/sampler.rs` — Sampling mechanism
 - `crates/tillandsias-logging/src/budget_enforcer.rs` — Budget enforcement
 - `crates/tillandsias-logging/src/aggregator.rs` — Log aggregation

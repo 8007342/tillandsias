@@ -8,7 +8,6 @@ scripts/check-arrival-routing.sh
 scripts/check-bare-metal-host-initialized.sh
 scripts/check-base-ledger-status-loss.sh
 scripts/check-build-cache-sweep.sh
-scripts/check-ca-bind-migration.sh
 scripts/check-capability-row.sh
 scripts/check-carry-forward.sh
 scripts/check-cheatsheet-frontmatter.sh
@@ -51,7 +50,6 @@ scripts/check-jq-multiline-capture-strips-cr.sh
 scripts/check-landed-but-open.sh
 scripts/check-landing-provenance.sh
 scripts/check-ledger-distillation.sh
-scripts/check-litmus-dead-inputs.sh
 scripts/check-litmus-expression-pinning-added.sh
 scripts/check-litmus-grep-escapes.sh
 scripts/check-litmus-line-windows.sh
@@ -340,7 +338,6 @@ scripts/test-install-macos-announces-its-pin.sh
 scripts/test-install-macos-swap-is-interruptible.sh
 scripts/test-install-macos-tray-stop.sh
 scripts/test-install-path.sh
-scripts/test-installer-merges-wslconfig-swap-keys.sh
 scripts/test-installer-probes-by-attempt-not-by-help.sh
 scripts/test-installer-reports-wsl-guest-shape.sh
 scripts/test-installer-reset-probe.sh

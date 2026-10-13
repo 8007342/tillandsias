@@ -1,5 +1,7 @@
 # Floor for scripts/check-installer-prompts.sh (order 1560-g5d9).
 # Interactive prompts allowed in the end-user installers. 2026-10-08: the two
 # in scripts/install-windows.ps1 (.wslconfig keys, Hyper-V Administrators),
-# left "for now" by the operator; their removal is 1560-uam3. Only ever lower it.
-2
+# left "for now" by the operator. 2026-10-12: both removed by 1560-uam3 (the
+# operator scheduled it: they are hard requirements, ensured without asking).
+# Only ever lower it.
+0

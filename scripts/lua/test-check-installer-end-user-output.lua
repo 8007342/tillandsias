@@ -1,4 +1,4 @@
--- @trace order:1561-47a8, order:1561-9f4x, spec:host-state-lifecycle
+-- @trace order:1561-47a8, order:1561-9f4x, order:1560-uam3, order:1639-8gfw, spec:host-state-lifecycle
 -- @env TILLANDSIAS_PLAN_BIN TILLANDSIAS_SCRIPT_RUNNER_BIN
 --
 -- test-check-installer-end-user-output.lua — the end-user installers print
@@ -14,9 +14,14 @@
 --   1 the real tree, at the floors                          -> ok
 --   2 install-windows.ps1 gains `Say "... --some-flag ..."` -> refused by file:line
 --   3 the same line marked `# power-user-only`              -> ok
---   4 the same line inside a PENDING-1560-UAM3 region        -> ok
+--   4 the same line inside a retired PENDING-1560-UAM3 region -> refused (1560-uam3)
 --   5 install.sh gains a `say "... TILLANDSIAS_X ..."`       -> refused (above its floor)
 --   6 the text only in a comment                            -> ok
+--   7-15 power-user detail in install-windows.ps1 (paths, probe binary,
+--        shortcut, version line, registration, empty PENDING box, uninstall
+--        removal, -Param hint, order id)               -> refused (1639-8gfw)
+--   16 a failure line naming $InstallLog                     -> ok
+--   17 the detail vocabulary on install.sh                   -> ok (PowerShell-only)
 -- Each mutant asserts its own edit landed exactly once.
 -- Pre-fix (trunk 2026-10-08): arm 1 FAILS — install-windows.ps1 printed 21
 -- diagnostic lines (resolved-channel, --version/--diagnose verification,
@@ -97,11 +102,13 @@ if append_once(d .. "/scripts/install-windows.ps1", { FLAG .. "  # power-user-on
     check("3 a power-user-only line is exempt", rc == 0, "rc=" .. rc .. " out=[" .. o .. "]")
 else check("3 mutant landed once", false, "it did not") end
 
--- 4 the same line inside the pending-prompt region.
+-- 4 the same line inside a retired PENDING-1560-UAM3 region (1560-uam3 removed
+--   the exemption with the regions): refused like any other.
 d = scratch("c")
 if append_once(d .. "/scripts/install-windows.ps1", { "# BEGIN-PENDING-1560-UAM3", FLAG, "# END-PENDING-1560-UAM3" }) then
     rc, o = guard(d)
-    check("4 a line in the pending-prompt region is exempt", rc == 0, "rc=" .. rc .. " out=[" .. o .. "]")
+    check("4 a retired pending-prompt marker exempts nothing",
+        rc == 1 and text.contains(o, "scripts/install-windows.ps1:"), "rc=" .. rc .. " out=[" .. o .. "]")
 else check("4 mutant landed once", false, "it did not") end
 
 -- 5 install.sh above its floor.
@@ -118,6 +125,45 @@ if append_once(d .. "/scripts/install-windows.ps1", { "# " .. FLAG }) then
     rc, o = guard(d)
     check("6 a commented line does not count", rc == 0, "rc=" .. rc .. " out=[" .. o .. "]")
 else check("6 mutant landed once", false, "it did not") end
+
+-- 7-15 power-user DETAIL in the Windows installer (order 1639-8gfw): each line
+--   the v56.10.12.1 end-user install printed, plus its siblings, is refused by
+--   file:line. The pre-fix guard passed every one of them (its vocabulary was
+--   flags, TILLANDSIAS_, URLs, channel and base).
+local DETAIL = {
+    { "7 an install path",               'Say "Install path: $InstalledExe"' },
+    { "8 the capability probe binary",   'Say "  capability probe binary: $InstalledHeadless"' },
+    { "9 a Start Menu shortcut path",    'SayOk "Start Menu shortcut: $ShortcutPath"' },
+    { "10 the tray version line",        'SayOk $VerLine' },
+    { "11 Installed-Software registration", 'SayOk "Registered in Installed Software (v$InstalledVersion)."' },
+    { "12 an empty PENDING box",         "        $out += '  PENDING: none'" },
+    { "13 an uninstall removal detail",  'Say "  removed tray-icon settings entry: $p"' },
+    { "14 a -Param hint",                'SayOk "Uninstalled. (Use -Purge for full cleanup.)"' },
+    { "15 an order id",                  'Say "  note: no probe binary at this locus (1171-ccf2)"' },
+}
+for i, c in ipairs(DETAIL) do
+    d = scratch("detail" .. i)
+    if append_once(d .. "/scripts/install-windows.ps1", { c[2] }) then
+        rc, o = guard(d)
+        check(c[1] .. " is refused by file:line",
+            rc == 1 and text.contains(o, "scripts/install-windows.ps1:"), "rc=" .. rc .. " out=[" .. o .. "]")
+    else check(c[1] .. " mutant landed once", false, "it did not") end
+end
+
+-- 16 the log path on a failure line is allowed (the ruling: show the log by path).
+d = scratch("f")
+if append_once(d .. "/scripts/install-windows.ps1", { 'SayWn "Something went wrong. Details: $InstallLog"' }) then
+    rc, o = guard(d)
+    check("16 a failure line naming $InstallLog is allowed", rc == 0, "rc=" .. rc .. " out=[" .. o .. "]")
+else check("16 mutant landed once", false, "it did not") end
+
+-- 17 the detail vocabulary is PowerShell-only: the same path line in install.sh
+--    stays under its floor (its 1561 slice measures it).
+d = scratch("g")
+if append_once(d .. "/scripts/install.sh", { 'say "Install path: $InstalledExe"' }) then
+    rc, o = guard(d)
+    check("17 the detail vocabulary does not apply to the shell installers", rc == 0, "rc=" .. rc .. " out=[" .. o .. "]")
+else check("17 mutant landed once", false, "it did not") end
 
 run({ "rm", "-rf", ROOT .. "/" .. REL })
 if failed > 0 then

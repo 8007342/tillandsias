@@ -634,6 +634,7 @@ specs:
   - litmus:inference-engine-slot-boundary-shape
   - litmus:inference-tier-table-migration
   - litmus:inference-llama-server-lane-shape
+  - litmus:inference-engine-parity-shape
   - litmus:inference-policy-router-implementation
   - litmus:enclave-isolation
   coverage_ratio: 100
@@ -1046,6 +1047,9 @@ specs:
   status: draft
   litmus_tests:
   - litmus:local-web-preview
+  - litmus:cold-start-acceptance-shape
+  - litmus:cold-start-acceptance-e2e
+  - litmus:device-catalogue-shape
   coverage_ratio: 0
   last_verified: null
 - spec_id: tools-overlay-fast-reuse

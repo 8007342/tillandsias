@@ -1,0 +1,5 @@
+tillandsias-inference e66d8233b87e316f51bd057ab0ebcbb823ace6fbc3a110676ff6ef43c3554ba9 started=2026-10-11 21:08:59.408082382 -0700 PDT health=healthy nets=tillandsias-enclave:10.0.42.38:ca:e6:13:0f:e2:43,
+tillandsias-dev-inference 1b96d42da8fada7fd3820756b451349edb6c67f4f8ef1e8a2b0b6ab6f9ea26a8 started=2026-10-11 13:29:41.744179536 -0700 PDT health=healthy nets=
+--- after
+tillandsias-inference e66d8233b87e316f51bd057ab0ebcbb823ace6fbc3a110676ff6ef43c3554ba9 started=2026-10-11 21:08:59.408082382 -0700 PDT health=healthy nets=tillandsias-enclave:10.0.42.38:ca:e6:13:0f:e2:43,
+tillandsias-dev-inference 1b96d42da8fada7fd3820756b451349edb6c67f4f8ef1e8a2b0b6ab6f9ea26a8 started=2026-10-11 13:29:41.744179536 -0700 PDT health=healthy nets=

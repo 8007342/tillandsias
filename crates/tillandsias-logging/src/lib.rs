@@ -19,7 +19,6 @@ pub mod event_collector;
 pub mod formatter;
 pub mod log_entry;
 pub mod logger;
-pub mod query;
 pub mod rotation;
 pub mod sampler;
 pub mod schema_validation;
@@ -35,13 +34,12 @@ pub use event_collector::{
 };
 pub use log_entry::LogEntry;
 pub use logger::Logger;
-pub use query::{AggregationOp, Filter, JsonFilter, Query, QueryExecutor, parse};
 pub use sampler::CostAwareSampler;
 pub use span_context::{
     SpanContext, SpanContextBuilder, SpanId, TraceId, clear_current_span, current_span,
     set_current_span,
 };
-pub use surface::{AggregationResult, BudgetStatus, ObservabilityAPI, QueryResult, SamplingStatus};
+pub use surface::{AggregationResult, BudgetStatus, ObservabilityAPI, SamplingStatus};
 
 /// Initialize the global logging subscriber with file rotation and filtering.
 ///

@@ -1,0 +1,20 @@
+482c parity smoke: bin=/tmp/claude-1000/-var-home-lenovinha-claudia-tillandsias/fa3e1fe9-5776-4474-8079-5af7f1b35379/scratchpad/482c/tillandsias-482c version=56.10.9.1 tag=localhost/tillandsias-inference:v56.10.9.1 substrate=/var/home/lenovinha/claudia/tillandsias/target/work/inference-parity/run.WRHxum
+operator inference before: e66d8233b87e316f51bd057ab0ebcbb823ace6fbc3a110676ff6ef43c3554ba9 running started=2026-10-11 21:08:59.408082382 -0700 PDT
+image ensured in 51s: 7641581df3db44b8a5f16949772af5c7bac9ae17c1b7c063fddb2162ac8d61ef 634304853
+image healthcheck removed for the scratch store: {"Test":["CMD-SHELL","curl -sf http://127.0.0.1:11434/api/version >/dev/null         && test -x /home/ollama/.ollama/models/.tools/lib/ollama/llama-server         || exit 1"],"StartPeriod":30000000000,"Interval":5000000000,"Timeout":10000000000,"Retries":12}
+scratch image healthcheck now: {"Test":["NONE"]}
+== lane degraded: engine=llama-server backend=vulkan home=/var/home/lenovinha/claudia/tillandsias/target/work/inference-parity/run.WRHxum/home-degraded
+vram[degraded:before] nvidia: NVIDIA GeForce RTX 3070 Laptop GPU, 4958 MiB, 2936 MiB, 8192 MiB
+vram[degraded:before] amdgpu /sys/class/drm/card1: 561 MiB used
+  network tillandsias-enclave recreated --internal
+  ensure-1 rc=0 in 65s: inference-slot: ensure ready=false
+  container: exited exit=1
+  teardown: inference containers left: none
+vram[degraded:after-teardown] nvidia: NVIDIA GeForce RTX 3070 Laptop GPU, 4958 MiB, 2936 MiB, 8192 MiB
+vram[degraded:after-teardown] amdgpu /sys/class/drm/card1: 561 MiB used
+substrate removed: /var/home/lenovinha/claudia/tillandsias/target/work/inference-parity/run.WRHxum and /run/user/1000/tillandsias-parity.nMtZDh
+operator inference after:  e66d8233b87e316f51bd057ab0ebcbb823ace6fbc3a110676ff6ef43c3554ba9 running started=2026-10-11 21:08:59.408082382 -0700 PDT
+operator netavark state (/run/user/1000/containers/networks): unchanged (17 entries)
+verdicts: ok:degraded
+exit=0
+OPERATOR-UNCHANGED

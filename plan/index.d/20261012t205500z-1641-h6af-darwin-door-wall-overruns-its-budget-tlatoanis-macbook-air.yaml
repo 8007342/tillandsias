@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (2026-10-12): the second darwin-background door overrun after 1636-6k6k set the 450 s budget fires the two-run rule.
+packets:
+  - packet_id: the-darwin-background-preflight-door-overruns-its-450s-budget-and-a-run-on-a-rust-diff-took-909s
+    order: 1641-h6af
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [preflight, door-deadline, darwin, budget-regime]
+    estimated_hours: 3
+    owned_files:
+      - build.sh
+    related: [1636-6k6k, 1616-njfd, 1631-6w8z, 1637-cnxq, 1619-7i9r]
+    depends_on: []
+    title: |
+      The darwin-background preflight door overruns its 450 s budget (452 s, then 909 s), so the budget is not the bound on the door's wall time it claims to be
+    context: |
+      Two darwin-background runs on tlatoanis-macbook-air, 2026-10-12, both `taskpolicy -b ./build.sh --preflight`, both exit 0 and refused=0:
+        1. work/1636-6k6k at 62ec3ffc3 (#374, the change that set budget=450 s and decider-deadline=20 s): ran=187 skipped-by-deadline=55, wall=452s. 22 `Terminated: 15` launcher kills in the log.
+        2. work/1626-r4xm at c94e683cf (#366, a Rust-only diff in crates/tillandsias-headless): ran=177 skipped-by-deadline=65, wall=909s against budget=450s. 30 `Terminated: 15` launcher kills. The own-deadline lane reported check-rust-lints[clippy] 53 s, [fmt] 7 s, test-rust-lints 9 s, all deadlined at 444-445 s of the budget, so that lane is NOT where the extra ~460 s went.
+      The coordinator's ruling on run 1 (2026-10-12): a margin problem, budget not widened in #374; if the next two darwin runs also exceed it, a follow-up. Run 2 exceeded it by 2x, so the rule fires.
+      Not yet measured: which phase of the door spent the time after the roster's budget. Each guard is bounded by its own deadline (5 s fixture, 20 s decider), so a 909 s wall means the door kept launching, or waited on something, past the point where `_pf_budget` says the budget is spent.
+      Also seen in run 2: three fixture worktrees the door could not sweep (`swept:worktree-failed` after test-closure-guards-name-the-way-out, test-headless-sidecar-target-gate and test-scorable-closure-quoting), left under /var/folders/.../T/pf-guard.*. That is the 1619-7i9r leak class and belongs to 1637-cnxq (scratch inside the checkout), not here.
+    exit_criteria:
+      - 'the door records where its wall time goes past the budget (per phase, or per guard with its elapsed), so a run over budget names the cause in its own log'
+      - 'on darwin-background, two consecutive ./build.sh --preflight runs, one of them on a diff touching crates/tillandsias-headless, finish within budget= on the summary line; or the budget is re-set from a measured distribution with that measurement cited'
+      - 'a test proves the door stops launching new roster guards once the budget is spent (or states the reason it may not), with a negative control on the trunk door'
+    unscoreable: "a door wall-time change measured by consecutive darwin-background preflight runs plus a fixture over the budget stop"
+    next_action: >
+      Re-run the darwin-background preflight on c94e683cf with per-guard `<rc> <elapsed>` files kept, sum the elapsed per phase, and find what ran after the roster's budget was spent.
+    provenance: |
+      Filed by tlatoanis-macbook-air at macuahuitl-fedora's request, 2026-10-12. Evidence: the two preflight logs named in context (local, under target/ of the main checkout).
+    events:
+      - type: filed
+        ts: "2026-10-12T20:55:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Second darwin-background door overrun after 1636-6k6k set the 450 s budget: 452 s, then 909 s on a Rust-only diff, both refused=0; the two-run rule fires.

@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed from the v56.10.12.1 macOS curl-install smoke on tlatoanis-macbook-air, 2026-10-12, with the operator's direction given in-session.
+packets:
+  - packet_id: the-macos-install-keeps-a-damaged-vm-through-the-soft-reset-so-it-should-build-a-fresh-vm-and-carry-only-identity-forward
+    order: 1642-cc54
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [macos, install, reset, vault, identity, smoke]
+    estimated_hours: 6
+    owned_files:
+      - scripts/install-macos.sh
+    related: [1437-8c6p, 1286-4437, 1426-cb6g, 1244-9dx3, 1566-tkan]
+    depends_on: []
+    title: |
+      The macOS install's SOFT reset kept a VM damaged by a force-stop, and its guest SIGBUS-crashed into a dead login and forge; build a fresh VM on every install and carry only identity forward
+    context: |
+      OPERATOR DIRECTION (2026-10-12, in-session, tlatoanis-macbook-air): "we fix tillandsias forward, we likely just want to wipe the vm and start a new one from scratch with better settings ... the old VM is likely in a bad state, just create a new one from scratch, no more soft reset". Earlier in the same session: a SOFT reset should wipe only the ephemeral bytes while identity (the vault-unlock key in the user's keyring plus the vault content) is preserved, so new VMs, guests and containers continue where work left off. This is by design. Losing credentials in a smoke is acceptable evidence until then.
+      MEASURED, v56.10.12.1 pinned curl install (sha256 ok, pin 55c60a3b80d3), 2026-10-12:
+        1. The installer ran the SOFT reset (setup.log: "reset disposition=Verified:KEEP ... your sign-ins survive the reset") and kept rootfs.img dated 2026-10-09. On 2026-10-09 the tray's Quit drain had timed out (60s) and force-stopped the VM.
+        2. The VM reached Ready 39 s after launch. But GitHub showed logged out: the operator had to do the QR device login again. The QR code was clear and worked first try. The sign-in did NOT survive, contradicting the setup log.
+        3. After the login, the operator was still prompted to confirm the name from the git identity. It should be accepted automatically.
+        4. The first forge (8007342/visual-chess, Claude) rebuilt every image, because the SOFT reset runs podman system reset. The tray said only "Building Forge" from 20:44:49Z with no progress.
+        5. From guest uptime 370 s (20:47:03Z), guest-OS binaries died with SIGBUS: openssl, nft, nm-dispatcher, and systemd-coredump's own sd-parse-elf, about 9 at a time. The host had 637 GiB free and 54% of memory free. The tray fell back to logged-out at 20:48:08Z, and a second login at 20:50:48Z hit a fresh SIGBUS burst 2 s later, sticking the status line on "logging in".
+        6. Quit drain timed out again (20:53:52Z ack, 20:54:57Z force-stop), so the next install would keep a VM stopped uncleanly again.
+      RECOVERY USED: `tillandsias-tray --reset-guest --approve-hard-reset` (operator-approved). Fresh Fedora disk provisioned, vault keychain items and vault-data cleared, installation uuid kept.
+      Evidence (local): target/work/smoke-v56.10.12.1/{install.log,console-snap.log,tray-snap.log,hard-reset.log} in tlatoanis-macbook-air's main checkout.
+    exit_criteria:
+      - 'the macOS install provisions a FRESH guest disk every time (no rootfs.img is carried across an install), and a test pins that the installer never keeps the old rootfs.img'
+      - 'identity survives that fresh VM: after an install on a host that was signed in, GitHub shows signed in with no device login. Proven by a smoke row, or by a test that seeds the keyring-held unlock key plus the vault content and finds the token after reprovisioning'
+      - 'the git identity name derived from the signed-in account is accepted without a confirmation prompt'
+      - 'while the forge image builds, the tray shows build progress (step or percentage), not one static "Building Forge" line for minutes'
+      - 'a Quit whose drain times out is recorded, and the next launch does not boot that disk as if it were clean (the fresh-VM rule above covers installs; a plain relaunch either checks the filesystem or reprovisions)'
+    unscoreable: "an install-path and identity change measured by a curl-install smoke on a signed-in macOS host plus installer tests"
+    next_action: >
+      Read install-macos.sh's BEGIN-SETUP-RESET block and reset_state.rs. Decide with the coordinator whether the installer calls the HARD guest reset while preserving the vault unlock key and a vault export, then write the identity-survives test first.
+    provenance: |
+      Filed by tlatoanis-macbook-air from the v56.10.12.1 smoke, 2026-10-12, with the operator's direction quoted in context.
+    events:
+      - type: filed
+        ts: "2026-10-12T21:00:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          v56.10.12.1 macOS smoke: SOFT reset kept a VM force-stopped on 10-09; sign-in lost, guest binaries SIGBUS-crashed, login and forge dead; operator directs a fresh VM per install with identity carried forward.

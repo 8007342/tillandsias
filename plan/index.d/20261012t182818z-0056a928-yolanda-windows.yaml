@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-installer-restart-claim-accuracy
+    event:
+      type: note
+      ts: "2026-10-12T18:28:18Z"
+      agent_id: windows-yolanda-opus5-20261012t182816z
+      host: yolanda-windows
+      summary: |
+        Obsolete: superseded by 1560-uam3 (#377, merge 66eb6a26d). The installer no longer prompts about or defers the WSL restart claim. It ensures the settings and restarts the shared VM only when tillandsias is the sole running distro, which otherwise reports deferred. This replaces the restart-claim wording this row targeted.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-cold-start-forge-told-only-to-serve-a-web-project-locally-reaches-a-browser-loadable-url-with-no-operator-action
+    field: status
+    value: completed
+    ts: "2026-10-12T23:09:27Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-cold-start-forge-told-only-to-serve-a-web-project-locally-reaches-a-browser-loadable-url-with-no-operator-action
+    event:
+      type: completed
+      ts: "2026-10-12T23:09:27Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: land(382) bdae64aff into linux-next, gate green (run 58); branch work/1625-9qyw head 46807b11b (ancestor of origin/linux-next verified). Evidence plan/evidence/1625-9qyw-cold-start-2026-10-12/: prefix v56.10.9.1 auto failed at router init with empty status; postfix v56.10.12.1 served macron.dev http=200, forced router failure step-qualified and recovered; host keychain metadata unchanged throughout. Opt-in driver scripts/lua/cold-start-acceptance.lua, litmus cold-start-acceptance-shape (instant, 5 controls) + -e2e (opt-in). Carried shell-to-lua item paid: check-ca-bind-migration.sh -> scripts/lua/check-ca-bind-migration.lua.

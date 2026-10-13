@@ -63,6 +63,10 @@ pub struct VzRuntime {
     /// probe escapes don't spill onto the user's terminal; the tray leaves it
     /// false (serial on stderr for live diagnostics).
     serial_to_log: std::sync::atomic::AtomicBool,
+    /// 1642-cc54: this boot's clean-power-off token, minted by `start()` and
+    /// handed to the guest through cidata. `stop()` honours the guest's
+    /// clean-off line only when it carries this token.
+    shutdown_token: std::sync::Mutex<Option<String>>,
 }
 
 #[cfg(target_os = "macos")]
@@ -271,6 +275,7 @@ impl VzRuntime {
             #[cfg(target_os = "macos")]
             host_listener: std::sync::Mutex::new(None),
             serial_to_log: std::sync::atomic::AtomicBool::new(false),
+            shutdown_token: std::sync::Mutex::new(None),
         }
     }
 
@@ -767,7 +772,7 @@ impl VzRuntime {
 
     /// Generate a `cidata.iso` image using `hdiutil makehybrid`.
     #[cfg(target_os = "macos")]
-    fn generate_cidata_iso(&self, dest: &Path) -> Result<(), String> {
+    fn generate_cidata_iso(&self, dest: &Path, shutdown_token: &str) -> Result<(), String> {
         let temp_dir = self.image_root.join("cidata_tmp");
         if temp_dir.exists() {
             let _ = std::fs::remove_dir_all(&temp_dir);
@@ -839,6 +844,15 @@ local-hostname: tillandsias-vm
 
         std::fs::write(temp_dir.join("meta-data"), meta_data_content)
             .map_err(|e| format!("failed to write meta-data: {e}"))?;
+
+        // 1642-cc54: this boot's clean-power-off token. A file of its own,
+        // NOT part of user-data or meta-data, so a per-boot value never moves
+        // the instance-id (which would re-run provisioning on every boot).
+        std::fs::write(
+            temp_dir.join(SHUTDOWN_TOKEN_CIDATA_FILE),
+            format!("{shutdown_token}\n"),
+        )
+        .map_err(|e| format!("failed to write the shutdown token: {e}"))?;
 
         // 3. run hdiutil makehybrid -o <dest> -joliet -iso -default-volume-name CIDATA <temp_dir>
         if dest.exists() {
@@ -1213,6 +1227,65 @@ TTYPath=/dev/hvc0
 MaxLevelConsole=info
 EOF
 systemctl restart systemd-journald || true
+
+# ORDER 1642-cc54. THE KERNEL'S OWN MESSAGES REACH hvc0 TOO, from the next boot.
+# The journal forward above stops when journald stops, so the last phase of a
+# shutdown (systemd-shutdown unmounting, swapoff, the kernel's power-off) never
+# reached console.log. MEASURED 2026-10-12: a tray Quit whose guest printed
+# "Shutting down." 12 s after the request still left VZ short of Stopped for
+# ~53 s more, and nothing on the console said where those seconds went.
+# console=hvc0 is appended LAST, so /dev/console is hvc0: kernel and
+# systemd-shutdown messages are captured. It takes effect at the next boot,
+# which is why the journal forward above stays.
+grubby --update-kernel=ALL --args="console=hvc0" || true
+
+# ORDER 1642-cc54. A CLEAN POWER-OFF THE HOST CAN TRUST.
+# MEASURED 2026-10-12 (console=hvc0 + initcall_debug, three tray quits): the
+# guest's systemd-shutdown synced, unmounted every filesystem, remounted /
+# read-only and printed "Powering off." ~11 s after the request; the kernel
+# then shut down every virtio device and stalled, and VZ read Running until
+# the 60 s drain force-stopped it. The disk is clean from that point on.
+# So the systemd-shutdown hook below (run after the unmount, before the
+# power-off) writes this boot's token to hvc0, and the host finishes the stop
+# at once. The token comes from the host per boot through cidata, into a
+# root-only file on /run, so a guest cannot declare itself clean early or
+# with another boot's token: the host honours it only after its own request.
+cat > /usr/local/lib/tillandsias/load-shutdown-token.sh << 'EOF'
+#!/bin/sh
+set -eu
+umask 077
+mkdir -p /run/tillandsias/cidata
+mount -o ro /dev/disk/by-label/CIDATA /run/tillandsias/cidata
+cp /run/tillandsias/cidata/tillandsias-shutdown-token /run/tillandsias/shutdown-token || true
+umount /run/tillandsias/cidata
+rmdir /run/tillandsias/cidata
+EOF
+chmod 0755 /usr/local/lib/tillandsias/load-shutdown-token.sh
+cat > /etc/systemd/system/tillandsias-shutdown-token.service << 'EOF'
+[Unit]
+Description=Load this boot's clean power-off token (1642-cc54)
+After=local-fs.target
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/lib/tillandsias/load-shutdown-token.sh
+StandardOutput=journal+console
+StandardError=journal+console
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl enable --now tillandsias-shutdown-token.service || true
+mkdir -p /usr/lib/systemd/system-shutdown
+cat > /usr/lib/systemd/system-shutdown/tillandsias-clean-off << 'EOF'
+#!/bin/sh
+# systemd-shutdown runs this after every filesystem is unmounted and / is
+# read-only, just before it powers off (1642-cc54). The leading newline keeps
+# the line clear of any terminal escape the getty left on hvc0.
+t=$(cat /run/tillandsias/shutdown-token 2>/dev/null) || exit 0
+[ -n "$t" ] || exit 0
+printf '\ntillandsias-clean-off:%s\n' "$t" > /dev/hvc0
+EOF
+chmod 0755 /usr/lib/systemd/system-shutdown/tillandsias-clean-off
 
 # Write tillandsias-headless-fetch.service
 cat > /etc/systemd/system/tillandsias-headless-fetch.service << 'EOF'
@@ -2007,6 +2080,83 @@ impl std::error::Error for OpenVsockError {}
 /// linux-next). See plan/issues/forge-memory-swap-architecture-design-2026-09-26.md §4.3.
 pub const SWAP_IMAGE_FILE: &str = "vm-swap.img";
 
+/// VZVirtualMachineState by its raw value, for logs.
+pub fn vz_state_name(state: isize) -> &'static str {
+    match state {
+        0 => "Stopped",
+        1 => "Running",
+        2 => "Paused",
+        3 => "Error",
+        4 => "Starting",
+        5 => "Pausing",
+        6 => "Resuming",
+        7 => "Stopping",
+        8 => "Saving",
+        9 => "Restoring",
+        _ => "Unknown",
+    }
+}
+
+/// 1642-cc54: the cidata file that carries this boot's shutdown token.
+pub const SHUTDOWN_TOKEN_CIDATA_FILE: &str = "tillandsias-shutdown-token";
+
+/// 1642-cc54: the prefix of the line the guest's systemd-shutdown hook writes
+/// to hvc0 once every filesystem is unmounted and `/` is read-only.
+pub const CLEAN_OFF_PREFIX: &str = "tillandsias-clean-off:";
+
+/// A fresh per-boot token: 128 random bits, hex.
+pub fn mint_shutdown_token() -> Result<String, String> {
+    use std::io::Read;
+    let mut bytes = [0u8; 16];
+    std::fs::File::open("/dev/urandom")
+        .and_then(|mut f| f.read_exact(&mut bytes))
+        .map_err(|e| format!("could not mint the shutdown token: {e}"))?;
+    Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
+}
+
+/// 1642-cc54: did the guest report a clean power-off for THIS boot, AFTER the
+/// host asked it to stop? `console` is the captured console and `from` its
+/// length when the stop was requested. Only lines written after that offset
+/// count, and only an exact `tillandsias-clean-off:<token>` line: a guest
+/// cannot declare itself clean early, nor with another boot's token.
+pub fn clean_off_reported(console: &[u8], from: usize, token: &str) -> bool {
+    if token.is_empty() {
+        return false;
+    }
+    let Some(after) = console.get(from..) else {
+        return false;
+    };
+    let want = format!("{CLEAN_OFF_PREFIX}{token}");
+    String::from_utf8_lossy(after)
+        .lines()
+        .any(|line| line.trim_matches(|c: char| c.is_whitespace()) == want)
+}
+
+/// The bytes of `path` from `offset` on; `None` when it cannot be read or the
+/// offset is past its end.
+pub fn read_from(path: &std::path::Path, offset: usize) -> Option<Vec<u8>> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut f = std::fs::File::open(path).ok()?;
+    if offset as u64 > f.metadata().ok()?.len() {
+        return None;
+    }
+    f.seek(SeekFrom::Start(offset as u64)).ok()?;
+    let mut tail = Vec::new();
+    f.read_to_end(&mut tail).ok()?;
+    Some(tail)
+}
+
+/// The drain-timeout refusal, naming the VZ state the drain gave up in
+/// (1642-cc54): 0 of 13 tray quits on darwin drained cleanly, and the old
+/// message could not say whether the guest or the host was the one waiting.
+pub fn drain_timeout_message(drain_timeout: std::time::Duration, state: isize) -> String {
+    format!(
+        "VzRuntime::stop: drain_timeout ({}s) expired in VZ state {} ({state}); force-stop dispatched",
+        drain_timeout.as_secs(),
+        vz_state_name(state)
+    )
+}
+
 #[cfg(target_os = "macos")]
 pub mod boot {
     use std::os::raw::c_int;
@@ -2730,7 +2880,12 @@ impl VmRuntime for VzRuntime {
         }
 
         let cidata_iso_path = self.image_root.join("cidata.iso");
-        self.generate_cidata_iso(&cidata_iso_path)?;
+        let shutdown_token = mint_shutdown_token()?;
+        self.generate_cidata_iso(&cidata_iso_path, &shutdown_token)?;
+        *self
+            .shutdown_token
+            .lock()
+            .map_err(|e| format!("shutdown token lock poisoned: {e}"))? = Some(shutdown_token);
 
         // Route guest serial to console.log (headless modes) or host stderr
         // (tray, default). Opening console.log and handing its raw fd to the VZ
@@ -3155,6 +3310,21 @@ impl VmRuntime for VzRuntime {
         // VmShutdownRequest is acked, so the VM may already be Stopped (state 0)
         // here, or stop between this check and requestStop. Both are a CLEAN
         // stop, not a requestStop failure; the poll below then sees state 0.
+        //
+        // 1642-cc54: where the console stood when the host asked for the stop.
+        // Only a clean-off line written AFTER this offset, carrying this boot's
+        // token, is honoured below. A missing console or token honours nothing,
+        // which leaves the drain timeout and its force-stop in charge.
+        let console_path = self.console_log_path();
+        let console_from = std::fs::metadata(&console_path)
+            .map(|m| m.len() as usize)
+            .unwrap_or(usize::MAX);
+        let token = self
+            .shutdown_token
+            .lock()
+            .ok()
+            .and_then(|t| t.clone())
+            .unwrap_or_default();
         let already_stopped = on_vm_queue(vm, |vm| unsafe { vm.state() }.0)? == 0;
         if !already_stopped {
             let request_result = on_vm_queue(vm, |vm| {
@@ -3171,6 +3341,26 @@ impl VmRuntime for VzRuntime {
             }
         }
 
+        // Hard stop: `stop:completionHandler:` is the force-stop variant; wait
+        // briefly for it, then return regardless.
+        let force_stop = || -> Result<(), VmError> {
+            let (tx, rx) = std::sync::mpsc::channel::<()>();
+            on_vm_queue(vm, move |vm| {
+                let handler = block2::RcBlock::new(move |_err: *mut objc2_foundation::NSError| {
+                    let _ = tx.send(());
+                });
+                unsafe { vm.stopWithCompletionHandler(&handler) };
+            })?;
+            let force_deadline = Instant::now() + Duration::from_secs(5);
+            while Instant::now() < force_deadline {
+                if rx.try_recv().is_ok() {
+                    break;
+                }
+                wait_for_vz(Duration::from_millis(100));
+            }
+            Ok(())
+        };
+
         let deadline = Instant::now() + drain_timeout;
         let stop_res = loop {
             // VZ state enum: 0=Stopped, 1=Running, 2=Paused, 3=Error, 4=Starting,
@@ -3180,29 +3370,28 @@ impl VmRuntime for VzRuntime {
                 // Stopped cleanly.
                 break Ok(());
             }
+            // 1642-cc54: the guest's systemd-shutdown hook reported, with this
+            // boot's token and after our request, that every filesystem is
+            // unmounted and `/` is read-only. Its kernel then stalls in the
+            // power-off for ~53 s (measured: VZ stays Running), so finish the
+            // stop now. The disk is clean, so this force-stop is a clean stop.
+            if read_from(&console_path, console_from)
+                .is_some_and(|tail| clean_off_reported(&tail, 0, &token))
+            {
+                force_stop()?;
+                eprintln!(
+                    "[tillandsias-vz] stop: guest reported a clean power-off (token matched); \
+                     finished the stalled power-off"
+                );
+                break Ok(());
+            }
             if Instant::now() >= deadline {
-                // Drain timeout — try a hard stop. `stop:completionHandler:`
-                // is the force-stop variant; we wait briefly for it then
-                // return regardless.
-                let (tx, rx) = std::sync::mpsc::channel::<()>();
-                on_vm_queue(vm, move |vm| {
-                    let handler =
-                        block2::RcBlock::new(move |_err: *mut objc2_foundation::NSError| {
-                            let _ = tx.send(());
-                        });
-                    unsafe { vm.stopWithCompletionHandler(&handler) };
-                })?;
-                let force_deadline = Instant::now() + Duration::from_secs(5);
-                while Instant::now() < force_deadline {
-                    if rx.try_recv().is_ok() {
-                        break;
-                    }
-                    wait_for_vz(Duration::from_millis(100));
-                }
-                break Err(format!(
-                    "VzRuntime::stop: drain_timeout ({}s) expired; force-stop dispatched",
-                    drain_timeout.as_secs()
-                ));
+                force_stop()?;
+                // 1642-cc54: name the state VZ was in when the drain gave up.
+                // A guest that already printed "Shutting down." while VZ still
+                // reads Running is a guest kernel stuck in its power-off; one
+                // VZ reads Stopping is the host waiting on VZ.
+                break Err(drain_timeout_message(drain_timeout, state));
             }
             wait_for_vz(Duration::from_millis(250));
         };
@@ -4988,6 +5177,114 @@ mod tests {
             script.contains(std_console),
             "the units must still request console output; forwarding alone \
              carries only what something asks to send"
+        );
+    }
+
+    /// 1642-cc54: a drain that times out says which VZ state it gave up in,
+    /// so a log tells a guest stuck in power-off (Running) from the host
+    /// waiting on VZ (Stopping).
+    #[test]
+    fn drain_timeout_names_the_vz_state() {
+        let running = drain_timeout_message(Duration::from_secs(60), 1);
+        assert!(running.contains("drain_timeout (60s)"), "{running}");
+        assert!(running.contains("VZ state Running (1)"), "{running}");
+        assert!(running.contains("force-stop dispatched"), "{running}");
+        assert!(drain_timeout_message(Duration::from_secs(60), 7).contains("Stopping (7)"));
+        assert_eq!(vz_state_name(0), "Stopped");
+        assert_eq!(vz_state_name(42), "Unknown");
+    }
+
+    /// 1642-cc54: the host honours a clean-off line only with THIS boot's
+    /// token and only after its own stop request. An early line, another
+    /// boot's token, a line with text around it, or no token at all is refused.
+    #[test]
+    fn clean_off_needs_this_boots_token_after_the_request() {
+        let token = "0123456789abcdef0123456789abcdef";
+        let early = format!("boot\n{CLEAN_OFF_PREFIX}{token}\n");
+        let from = early.len();
+        let after =
+            format!("{early}[ 420.85] systemd-shutdown[1]: Syncing\n\n{CLEAN_OFF_PREFIX}{token}\n");
+        assert!(
+            clean_off_reported(after.as_bytes(), from, token),
+            "GREEN: after the request"
+        );
+        assert!(
+            !clean_off_reported(early.as_bytes(), early.len(), token),
+            "EARLY: a line written before the request is not a clean stop"
+        );
+        assert!(
+            !clean_off_reported(early.as_bytes(), 0, "ffffffffffffffffffffffffffffffff"),
+            "WRONG TOKEN: another boot's token is refused"
+        );
+        let wrapped = format!("{early}x{CLEAN_OFF_PREFIX}{token}\n");
+        assert!(
+            !clean_off_reported(wrapped.as_bytes(), from, token),
+            "a line with text around it"
+        );
+        assert!(
+            !clean_off_reported(after.as_bytes(), from, ""),
+            "no token honours nothing"
+        );
+        assert!(
+            !clean_off_reported(after.as_bytes(), after.len() + 1, token),
+            "offset past the end"
+        );
+    }
+
+    #[test]
+    fn shutdown_tokens_are_fresh_128_bit_hex() {
+        let a = mint_shutdown_token().unwrap();
+        let b = mint_shutdown_token().unwrap();
+        assert_eq!(a.len(), 32);
+        assert!(a.bytes().all(|c| c.is_ascii_hexdigit()), "{a}");
+        assert_ne!(a, b, "each boot gets its own token");
+    }
+
+    /// 1642-cc54: the guest half. A systemd-shutdown hook writes the token
+    /// read from a root-only /run file to hvc0, and a boot service fills
+    /// that file from the cidata seed. The token is never in user-data,
+    /// so a per-boot value cannot move the instance-id.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn vz_provisioning_writes_the_clean_off_token_hook() {
+        let script = provision_user_data_for_test();
+        assert!(script.contains(concat!(
+            "/usr/lib/systemd/",
+            "system-shutdown/tillandsias-clean-off"
+        )));
+        assert!(script.contains(concat!(
+            "printf '\\ntillandsias-clean-off:%s\\n' \"$t\" > /dev/",
+            "hvc0"
+        )));
+        assert!(script.contains(concat!("cat /run/tillandsias/", "shutdown-token")));
+        assert!(script.contains(concat!(
+            "/run/tillandsias/cidata/",
+            "tillandsias-shutdown-token"
+        )));
+        assert!(script.contains(concat!(
+            "systemctl enable --now ",
+            "tillandsias-shutdown-token.service"
+        )));
+        assert!(script.contains("umask 077"), "the token file is root-only");
+        assert_eq!(SHUTDOWN_TOKEN_CIDATA_FILE, "tillandsias-shutdown-token");
+    }
+
+    /// 1642-cc54: the kernel's console is hvc0 too, so the end of a shutdown
+    /// (after journald stops) reaches console.log. Without it a guest that
+    /// printed "Shutting down." and then left VZ short of Stopped for ~53 s
+    /// gave no account of those seconds.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn vz_provisioning_puts_the_kernel_console_on_hvc0() {
+        let script = provision_user_data_for_test();
+        let arg = concat!("--args=\"console=", "hvc0\"");
+        let line = script
+            .lines()
+            .find(|l| l.trim_start().starts_with("grubby ") && l.contains(arg))
+            .unwrap_or_else(|| panic!("provisioning must run grubby with {arg}"));
+        assert!(
+            line.contains("--update-kernel=ALL"),
+            "every installed kernel, so a kernel update keeps it: {line}"
         );
     }
 

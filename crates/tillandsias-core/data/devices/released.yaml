@@ -1,0 +1,97 @@
+# Launch months and flagship lines (order 1643-q3at). Neither Playwright nor
+# Chrome DevTools records when a device came out, and resolution rule 4 ("a
+# brand or family alone gives the newest base flagship") needs it.
+#
+# released: the month the device went on sale, from the maker's public launch
+# announcement. A device whose month is not known here stays undated and is
+# never picked as "newest"; it still resolves by name.
+# flagship: true marks a brand's numbered main line (iPhone N, Pixel N,
+# Galaxy S N). Rule 4 also excludes e/mini/fold/flip/cover models.
+# license: Tillandsias' own (GPL-3.0-or-later); the facts are public.
+license: GPL-3.0-or-later
+released:
+  apple-iphone-6: {released: "2014-09", flagship: true}
+  apple-iphone-6-plus: {released: "2014-09"}
+  apple-iphone-7: {released: "2016-09", flagship: true}
+  apple-iphone-7-plus: {released: "2016-09"}
+  apple-iphone-8: {released: "2017-09", flagship: true}
+  apple-iphone-8-plus: {released: "2017-09"}
+  apple-iphone-x: {released: "2017-11"}
+  apple-iphone-xr: {released: "2018-10"}
+  apple-iphone-se: {released: "2016-03"}
+  apple-iphone-se-3rd-gen: {released: "2022-03"}
+  apple-iphone-11: {released: "2019-09", flagship: true}
+  apple-iphone-11-pro: {released: "2019-09"}
+  apple-iphone-11-pro-max: {released: "2019-09"}
+  apple-iphone-12: {released: "2020-10", flagship: true}
+  apple-iphone-12-pro: {released: "2020-10"}
+  apple-iphone-12-pro-max: {released: "2020-11"}
+  apple-iphone-12-mini: {released: "2020-11"}
+  apple-iphone-13: {released: "2021-09", flagship: true}
+  apple-iphone-13-pro: {released: "2021-09"}
+  apple-iphone-13-pro-max: {released: "2021-09"}
+  apple-iphone-13-mini: {released: "2021-09"}
+  apple-iphone-14: {released: "2022-09", flagship: true}
+  apple-iphone-14-plus: {released: "2022-10"}
+  apple-iphone-14-pro: {released: "2022-09"}
+  apple-iphone-14-pro-max: {released: "2022-09"}
+  apple-iphone-15: {released: "2023-09", flagship: true}
+  apple-iphone-15-plus: {released: "2023-09"}
+  apple-iphone-15-pro: {released: "2023-09"}
+  apple-iphone-15-pro-max: {released: "2023-09"}
+  apple-iphone-16: {released: "2024-09", flagship: true}
+  apple-iphone-16-plus: {released: "2024-09"}
+  apple-iphone-16-pro: {released: "2024-09"}
+  apple-iphone-16-pro-max: {released: "2024-09"}
+  apple-iphone-16e: {released: "2025-02"}
+  apple-iphone-17: {released: "2025-09", flagship: true}
+  apple-iphone-17-pro: {released: "2025-09"}
+  apple-iphone-17-pro-max: {released: "2025-09"}
+  apple-iphone-air: {released: "2025-09"}
+  google-pixel-2: {released: "2017-10", flagship: true}
+  google-pixel-2-xl: {released: "2017-10"}
+  google-pixel-3: {released: "2018-10", flagship: true}
+  google-pixel-4: {released: "2019-10", flagship: true}
+  google-pixel-4a-5g: {released: "2020-11"}
+  google-pixel-5: {released: "2020-10", flagship: true}
+  google-pixel-6: {released: "2021-10", flagship: true}
+  google-pixel-6-pro: {released: "2021-10"}
+  google-pixel-6a: {released: "2022-07"}
+  google-pixel-7: {released: "2022-10", flagship: true}
+  google-pixel-7-pro: {released: "2022-10"}
+  google-pixel-7a: {released: "2023-05"}
+  google-pixel-8: {released: "2023-10", flagship: true}
+  google-pixel-8-pro: {released: "2023-10"}
+  google-pixel-8a: {released: "2024-05"}
+  google-pixel-9: {released: "2024-08", flagship: true}
+  google-pixel-9-pro: {released: "2024-08"}
+  google-pixel-9-pro-xl: {released: "2024-08"}
+  google-pixel-9-pro-fold: {released: "2024-09"}
+  google-pixel-10: {released: "2025-08", flagship: true}
+  google-pixel-10-pro: {released: "2025-08"}
+  google-pixel-10-pro-xl: {released: "2025-08"}
+  samsung-galaxy-s-iii: {released: "2012-05"}
+  samsung-galaxy-s5: {released: "2014-04", flagship: true}
+  samsung-galaxy-s8: {released: "2017-04", flagship: true}
+  samsung-galaxy-s8-plus: {released: "2017-04"}
+  samsung-galaxy-s9-plus: {released: "2018-03"}
+  samsung-galaxy-s20-ultra: {released: "2020-03"}
+  samsung-galaxy-s24: {released: "2024-01", flagship: true}
+  samsung-galaxy-a55: {released: "2024-03"}
+  samsung-galaxy-tab-s4: {released: "2018-08"}
+  samsung-galaxy-tab-s9: {released: "2023-08"}
+  samsung-galaxy-z-fold-5: {released: "2023-08"}
+  samsung-galaxy-z-fold-6: {released: "2024-07"}
+  samsung-galaxy-z-flip-6: {released: "2024-07"}
+  samsung-galaxy-z-fold-7: {released: "2025-07"}
+  samsung-galaxy-z-flip-7: {released: "2025-07"}
+  sony-xperia-1-vi: {released: "2024-05", flagship: true}
+  oneplus-12: {released: "2024-01", flagship: true}
+  oneplus-13: {released: "2025-01", flagship: true}
+  xiaomi-14: {released: "2024-02", flagship: true}
+# Extra aliases, matched exactly after normalisation (rule 2).
+aliases:
+  desktop: desktop-chrome
+  desktop hidpi: desktop-chrome-hidpi
+  laptop: laptop-with-hidpi-screen
+  iphone se 3: apple-iphone-se-3rd-gen

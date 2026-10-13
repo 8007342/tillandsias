@@ -115,7 +115,7 @@ feed it are the per-operation part:
 
 | operation | symbol | ensures |
 |---|---|---|
-| init / Build context | `fn run_init` | ten images, `"vault"` THIRD after `"proxy"` and `"git"` |
+| init / Build context | `fn run_init` | eleven images, `"vault"` THIRD after `"proxy"` and `"git"`, `"web-wrangler"` last |
 | proxy bring-up | `fn ensure_proxy_running` | `proxy` only |
 | status check | `fn run_status_check` | proxy, git, inference, chromium-core, chromium-framework, forge, router, web |
 | observatorium | `fn run_observatorium_mode` | web, router, chromium-core, chromium-framework |
