@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: forge-git-bootstrap-seeds-an-explicitly-attributed-agent-identity-per-harness
+    event:
+      type: list-replace
+      ts: "2026-10-13T20:19:43Z"
+      agent_id: windows-yolanda-claude-20261013t052033z
+      host: yolanda-windows
+      field: exit_criteria
+      items:
+        - "grep finds no \"Git author name\" prompt anywhere in the tree (red today)"
+        - "a launch-arg test per harness (Claude, Codex, OpenCode CLI and Web, Antigravity, Maintenance, Terminal) shows TILLANDSIAS_GIT_NAME and TILLANDSIAS_GIT_EMAIL present (Codex red today)"
+        - "a forge commit in a fresh lane has author = the App user name and <id>+<login>@users.noreply.github.com"
+        - "GIT_AUTHOR_* and GIT_COMMITTER_* are absent from container args"
+        - "the macOS tray --github-login against a guest without the prompt completes the device flow and does not hang (a bounded test with a fake guest stream; a live Mac run once built)"
+      summary: |
+        Reshaped on operator direction (2026-10-13, relayed by macuahuitl-fedora): remove the git identity prompt entirely on all platforms and propagate the GitHub App sign-in identity automatically into every forge. Simplify, don't add. The per-harness agent author this row first asked for is dropped: the author is the operator's GitHub identity, and agent attribution stays in Co-Authored-By trailers.

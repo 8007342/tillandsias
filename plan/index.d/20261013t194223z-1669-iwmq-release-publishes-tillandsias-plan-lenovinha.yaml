@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's direction (macuahuitl, 2026-10-13), option (b) of 1661-vckd's deploy-time metrics.
+packets:
+  - packet_id: the-release-publishes-a-signed-checksummed-tillandsias-plan-and-the-observatorium-deploy-fetches-the-one-matching-the-release-it-describes
+    order: 1669-iwmq
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [release, ci, observatorium, metrics, supply-chain]
+    estimated_hours: 5
+    related: [1661-vckd]
+    owned_files:
+      - .github/workflows/release.yml
+      - observatorium/scripts/build.mjs
+    title: |
+      release.yml publishes a cosign-signed, SHA256SUMS-listed tillandsias-plan (x86_64 Linux, musl, beside the headless binary). The observatorium's Cloudflare build fetches the asset matching the release it describes, verifies it, and stops building tillandsias-plan from source.
+    context: |
+      1661-vckd ships option (a): the Workers Builds run compiles tillandsias-plan with a pinned rustup (measured 160 s of a ~295 s build on 2 vCPU). It folds the plan and grades CentiColons at deploy time.
+      Option (b) removes that compile and makes "metrics match the latest live release" exact. The plan binary that grades is the one that release shipped, not whatever the branch head builds.
+    exit_criteria:
+      - 'a release publishes tillandsias-plan-x86_64-unknown-linux-musl with a cosign bundle and a SHA256SUMS line, like the headless binary; red today (no such asset)'
+      - 'observatorium/scripts/build.mjs, given the release tag, fetches that asset, verifies its checksum (and signature where the build image allows), and uses it; a tampered or missing asset fails the build (never silently falls back to a different binary); a test drives both'
+      - 'the measured Workers Builds-equivalent build time drops by the tillandsias-plan compile; recorded'
+    unscoreable: "unpinnable-until-the-guard-exists: the asset arm needs a release; the fetch/verify arms are written with build.mjs's change"
+    next_action: >
+      Add the musl tillandsias-plan build, signing and SHA256SUMS entry to release.yml beside the headless binary, then teach build.mjs to fetch it by tag.
+    provenance: |
+      Filed by lenovinha-silverblue at the coordinator's direction, 2026-10-13.
+    events:
+      - type: filed
+        ts: "2026-10-13T19:42:23Z"
+        host: lenovinha
+        summary: |-
+          Publish a signed tillandsias-plan with each release; the observatorium deploy fetches the one matching its release instead of compiling.
