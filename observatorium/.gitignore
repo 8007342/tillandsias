@@ -3,6 +3,6 @@
 .flutter-plugins-dependencies
 .cache/
 .wrangler/
-build/
-node_modules/
+/build
+/node_modules
 web/data/

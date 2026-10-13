@@ -26,7 +26,14 @@ precompute logarithmic coordinates, then build Flutter's release artifact into
 `build/web`. Set `FLUTTER` to an absolute executable path when the SDK is outside
 PATH. `npm run metrics` performs only collection and precomputation.
 
-The GitHub workflow runs on every main push, published release, successful
+The workflow template at `observatorium/ci/observatorium.workflow` is INACTIVE:
+the forge mirror rejects any workflow filename except `release.yml`, including
+the operator-authorized dashboard deployment. After the mirror allowlist is
+updated, install it as `.github/workflows/observatorium.yml`. Until then there
+is no automatic deployment. The template is retained as reviewable source;
+it is not executed from its template location.
+
+Once activated, the GitHub workflow runs on every main push, published release, successful
 Release workflow and manual dispatch. The successful-workflow trigger covers
 releases created using GitHub's built-in token, whose release events do not
 trigger downstream workflows. Production source must be an ancestor of main;

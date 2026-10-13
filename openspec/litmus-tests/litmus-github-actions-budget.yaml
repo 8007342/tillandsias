@@ -31,12 +31,12 @@ preconditions:
 
 critical_path:
   - step: "exactly the release and authorized dashboard deployment workflows exist"
-    command: "n=$(ls .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null | wc -l); f=$(ls .github/workflows/ 2>/dev/null | tr '\\n' ' '); if mf_assert_count \"$n\" 2 >/dev/null && [ -f .github/workflows/release.yml ] && [ -f .github/workflows/observatorium.yml ]; then echo 'ok: sanctioned workflows'; else echo \"found $n workflow(s): $f — only release.yml and observatorium.yml may exist\"; fi"
+    command: "n=$(ls .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null | wc -l); f=$(ls .github/workflows/ 2>/dev/null | tr '\\n' ' '); if [ -f .github/workflows/release.yml ] && { { mf_assert_count \"$n\" 1 >/dev/null && [ -f observatorium/ci/observatorium.workflow ]; } || { mf_assert_count \"$n\" 2 >/dev/null && [ -f .github/workflows/observatorium.yml ]; }; }; then echo 'ok: sanctioned workflows'; else echo \"found $n workflow(s): $f — only release.yml and observatorium.yml may exist\"; fi"
     timeout_ms: 5000
     expected_behavior: "ok: sanctioned workflows"
 
   - step: "dashboard automatic pushes are confined to main, with no PR or timer triggers"
-    command: "blk=$(awk '/^on:/{f=1;next} f && /^[a-z]/{f=0} f' .github/workflows/observatorium.yml); if echo \"$blk\" | grep -qE '^[[:space:]]*(pull_request|pull_request_target|schedule|repository_dispatch):' || ! echo \"$blk\" | grep -Fq 'branches: [main]'; then echo 'dashboard trigger scope violates operator approval'; else echo 'ok: dashboard main only'; fi"
+    command: "wf=.github/workflows/observatorium.yml; [ -f \"$wf\" ] || wf=observatorium/ci/observatorium.workflow; blk=$(awk '/^on:/{f=1;next} f && /^[a-z]/{f=0} f' \"$wf\"); if echo \"$blk\" | grep -qE '^[[:space:]]*(pull_request|pull_request_target|schedule|repository_dispatch):' || ! echo \"$blk\" | grep -Fq 'branches: [main]'; then echo 'dashboard trigger scope violates operator approval'; else echo 'ok: dashboard main only'; fi"
     timeout_ms: 5000
     expected_behavior: "ok: dashboard main only"
 

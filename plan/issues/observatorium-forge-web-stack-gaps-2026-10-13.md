@@ -5,6 +5,17 @@
 order: 1662-tff5
 status: ready
 
+Durability blocker discovered after implementation: the mirror's server-side
+pre-receive rejects `.github/workflows/observatorium.yml` with
+`is not an allowed CI workflow; allowed: release.yml`, despite the operator's
+explicit auto-deployment request and the corresponding local policy amendment.
+The implementation retains that workflow as the INACTIVE source template
+`observatorium/ci/observatorium.workflow` so the app and findings can be pushed
+without bypassing the hook. No automatic deployment exists until the mirror
+allowlist is amended and the template installed at its intended workflow path.
+Exit criterion: the mirror accepts that explicitly authorized workflow, while
+still rejecting unrelated CI files, and a main push deploys the dashboard.
+
 Observed in the 2026-10-13 forge session implementing 1661-vckd.
 
 The forge introduction claims Flutter is available on PATH, but `flutter
