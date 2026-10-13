@@ -30,14 +30,13 @@
 --       --privileged-podman-in-podman <release-tag> [--expect-prefix-failure] [--keep]
 --       [--project-ref <commit>|latest]
 --
--- THE FIXTURE IS PINNED (order 1663-6mns, after the v56.10.13.1 run): the forge
--- gets macron.dev's UPSTREAM default branch through the git mirror, so a moving
--- upstream would silently change what PASS means. The driver records the commit
--- the forge actually holds and, unless --project-ref latest, refuses to judge a
--- release against anything but PINNED_PROJECT_REF:
---   blocked:cold-start-acceptance:project-moved:pinned=<x>:forge=<y>   exit 2
--- (a fixture fact, not a release verdict). Re-pin deliberately, after a run on
--- the new commit.
+-- THE FIXTURE MOVES ON PURPOSE (operator direction, 2026-10-13): macron.dev is
+-- AI-driven, and peers' smokes add notes to it over time, so the driver tests
+-- its LATEST by default. The forge gets upstream's default branch through the
+-- git mirror. The driver RECORDS the commit the forge holds in the transcript
+-- and in the verdict, so every PASS names what it was a PASS on. To reproduce a
+-- specific run, --project-ref <sha> refuses to judge any other commit:
+--   blocked:cold-start-acceptance:project-ref-mismatch:wanted=<x>:forge=<y>   exit 2
 --
 -- Substrate: the outer container's podman store lives under
 -- target/work/cold-start-acceptance/<run>/ (gitignored, inside the checkout).
@@ -59,17 +58,14 @@
 --     started before it
 --
 -- Verdicts (last stdout line):
---   ok:cold-start-acceptance:<tag>:served:<url>:http=200:lakanoa-shape=built-nested-served:router-failure=step-qualified:recovered   exit 0
+--   ok:cold-start-acceptance:<tag>:served:<url>:http=200:lakanoa-shape=built-nested-served:router-failure=step-qualified:recovered:project=<sha>   exit 0
 --   ok:cold-start-acceptance:<tag>:prefix-failure:<reason>                                          exit 0
 --   refused:cold-start-acceptance:<what>                                                             exit 1
---   blocked:cold-start-acceptance:project-moved:pinned=<x>:forge=<y>                                exit 2
+--   blocked:cold-start-acceptance:project-ref-mismatch:wanted=<x>:forge=<y>  (only with --project-ref)  exit 2
 --   skip:cold-start-acceptance:opt-in-required                                                       exit 0
 
 local OPT_IN = "--privileged-podman-in-podman"
--- macron.dev at "Build Mācron workshop landing page…" (2026-10-13): a root
--- wrangler.jsonc with assets ./public and ~40 MB of images under assets/.
-local PINNED_PROJECT_REF = "e04a3293dbcd55a1c85d3967ac8b5e712716c15d"
-local opted, tag, expect_prefix, keep, project_ref = false, nil, false, false, PINNED_PROJECT_REF
+local opted, tag, expect_prefix, keep, project_ref = false, nil, false, false, "latest"
 local i = 1
 while i <= #arg do
     local a = arg[i]
@@ -341,11 +337,11 @@ log_line("forge source: " .. text.trim(hydrate.stdout or "") .. "; at forge-up: 
     (at_up:match("head=[^\n]*") or at_up:match("no /home/forge/src/macron.dev yet") or "?"))
 if hydrate.code ~= 0 then fail("forge-source-not-hydrated (see forge-source.txt)") end
 local forge_head = at_publish:match("head=(%x+)") or "none"
-log_line("project: forge holds " .. forge_head .. ", pinned " .. project_ref)
+log_line("project: forge holds " .. forge_head .. " (wanted " .. project_ref .. ")")
 if project_ref ~= "latest" and forge_head:sub(1, #project_ref) ~= project_ref then
-    log_line("BLOCKED: project-moved")
+    log_line("BLOCKED: project-ref-mismatch")
     if not keep then down() end
-    verdict.emit("blocked:cold-start-acceptance:project-moved:pinned=" .. project_ref .. ":forge=" .. forge_head, 2)
+    verdict.emit("blocked:cold-start-acceptance:project-ref-mismatch:wanted=" .. project_ref .. ":forge=" .. forge_head, 2)
 end
 
 -- ── 7. MCP from inside the forge, then a host-side fetch ────────────────────
@@ -504,4 +500,4 @@ log_line("host keychain: service=tillandsias item metadata identical before and 
 
 inside("pkill -f 'tillandsias --bash' 2>/dev/null; true")
 if not keep then down() end
-verdict.emit("ok:cold-start-acceptance:" .. tag .. ":served:" .. url .. ":http=200:lakanoa-shape=built-nested-served:router-failure=step-qualified:recovered", 0)
+verdict.emit("ok:cold-start-acceptance:" .. tag .. ":served:" .. url .. ":http=200:lakanoa-shape=built-nested-served:router-failure=step-qualified:recovered:project=" .. forge_head, 0)
