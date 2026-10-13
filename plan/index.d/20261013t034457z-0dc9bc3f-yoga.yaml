@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: research-cert-lifecycle-state-graph
+    event:
+      type: progress
+      ts: "2026-10-13T03:44:57Z"
+      agent_id: linux-yoga-claude-20261013t032342z
+      host: yoga
+      summary: |
+        PR 367 READIED FOR THE LANDING QUEUE (2026-10-13, yoga, cycle 2026-10-13T03:23Z, linux-yoga-claude-20261013t032342z). Trunk 3245b1e1a merged into work/472 at 6db337266 (clean, one merge base, two-dot and three-dot --name-status identical, 6 M, no D). The door refused check-manifest-dir-env.lua (1590-j20f, landed on trunk after slice 9) — the two slice-9 source pins read src/main.rs through compile-time env!("CARGO_MANIFEST_DIR"); follow-up commit ffdbf24a8 reads it at runtime through std::env::var in both tests, guard ok:manifest-dir-env:scanned=125:test=122:floor=122, door re-run ran=224 refused=0 (20 deadline skips). On the merged ref: cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock 1007 passed 0 failed 26 ignored (the two converted tests pass by name after the fix); cargo test -p tillandsias-podman rc 0; clippy --tests -D warnings rc 0 under no features, tray, tray,listen-vsock and for the podman crate; cargo fmt --all --check clean. Pushed, ls-remote proves ffdbf24a8; gh pr ready 367. Slice 9 lands announce-only (the Stale arm names the stranded consumers and restarts nothing); the rotation reaction policy (restart all / restart idle / announce only / two-phase) is the coordinator's and is on the row's next_action. The row stays in_progress until the landing proves; the closing event cites the LANDED sha on origin/linux-next, never ffdbf24a8. Remaining — criterion 3 (the policy) and the live arms of criterion 2. WHY NOW: the PR sat draft since 2026-10-12 with zero coordinator comments while PRs 382-389 landed through the queue; the queue filters drafts, the coordinator answers on readied PRs (PR 358 timeline), and the host-lane ASKs yoga-472-* never delivered (the LAN rung 1506-7tq4 is ready, not built; receipts pending 20 h).

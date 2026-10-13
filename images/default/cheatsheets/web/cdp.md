@@ -22,13 +22,43 @@ committed_for_project: false
 
 - https://chromedevtools.github.io/devtools-protocol/ — canonical protocol reference (stable)
 - https://chromedevtools.github.io/devtools-protocol/1-3/ — stable v1.3 API index
-- **Last updated:** 2026-08-17 (see the `freshness:` stamp in the frontmatter for the audit scope)
+- https://chromedevtools.github.io/devtools-protocol/tot/Target/ — `setAutoAttach` (`flatten`, `waitForDebuggerOnStart`), `attachedToTarget`
+- https://chromedevtools.github.io/devtools-protocol/tot/Emulation/ — `setDeviceMetricsOverride`, `setUserAgentOverride`, `setTouchEmulationEnabled`, `setEmitTouchEventsForMouse`
+- https://pptr.dev/api/puppeteer.launchoptions — `pipe`: Chromium's `--remote-debugging-pipe` (fds 3/4, NUL-terminated JSON)
+- `plan/evidence/1655-urz9-browser-device-emulation-2026-10-13/` — the pipe transport and the touch re-assert, measured live in this repo
+- **Last updated:** 2026-10-13 (pipe transport section, order 1655-urz9); 2026-08-17 for the rest (see the `freshness:` stamp in the frontmatter for the audit scope)
 
 ## Overview
 
 CDP is a JSON-RPC 2.0 protocol over WebSocket. Each browser process exposes an HTTP discovery endpoint (`GET /json`) that lists available targets (pages, service workers, etc.), each with a `webSocketDebuggerUrl` for CDP connection.
 
 @trace spec:host-browser-mcp, spec:host-chromium-on-demand
+
+## Tillandsias browser windows: the pipe transport (order 1655-urz9)
+
+A `browser.open` window has **no DevTools port**, in its container or on the
+host. Its Chromium runs with `--remote-debugging-pipe`: commands are written to
+the child's fd 3 and replies/events read from fd 4, each message one JSON object
+followed by a NUL byte (no WebSocket, no HTTP, no `/json`). A small relay
+(`crates/tillandsias-headless/src/browser_window_cdp_relay.js`) serves that pipe
+on a Unix socket in a per-window 0700 host directory, for ONE client: the
+tray's broker (`crates/tillandsias-browser-mcp/src/{cdp_client,window_cdp}.rs`).
+When that client disconnects, the relay ends Chromium.
+
+- The connection is browser-level. `Target.setAutoAttach {autoAttach: true,
+  flatten: true, waitForDebuggerOnStart: true}` attaches the existing page and
+  every later page (popups arrive paused); page commands then carry the
+  flattened `sessionId` at the top level of the message.
+- Device emulation per page: `setTouchEmulationEnabled {enabled,
+  maxTouchPoints}`, `setEmitTouchEventsForMouse`, `setDeviceMetricsOverride
+  {width, height, deviceScaleFactor, mobile}`, `setUserAgentOverride
+  {userAgent, platform, userAgentMetadata?}` (client hints only for Chromium
+  UAs; Safari sends none).
+- **Measured quirk:** after the window's first cross-process commit
+  (about:blank → the project's site) the page's `navigator.maxTouchPoints`
+  fell back to 0 just after its first script read the emulated value, while
+  viewport, dpr and UA held. Re-asserting touch on every main-frame
+  `Page.frameNavigated` and on `Page.loadEventFired` fixes it.
 
 ## Essential Methods (host-browser-mcp v1)
 
@@ -104,5 +134,6 @@ CDP is stable across Chromium versions 90+; the specific endpoint (`/devtools/pa
 ## Security Notes
 
 - **Loopback only**: `ws://127.0.0.1:<PORT>/devtools/page/<TARGET_ID>`. Never remote CDP over network.
+- **Tillandsias windows use no port at all**: a TCP DevTools port, even on loopback, hands the window (cookies included) to every local process. They use the pipe transport above.
 - **No auth tokens on WebSocket**: The tray trusts its own Chromium process (same user, same machine). Per-call auth is not required.
 - **Cookies set via CDP are ephemeral**: Use `Network.setCookies` before first navigation for OTP injection; the browser forgets them on exit (esp. with `--incognito`).

@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+# 1649-xqet spike (scratch, not shipped): on a PRIVATE podman store, answer
+#  Q1 does `--host-resolver-rules="MAP *.<p>.localhost router:8443, MAP * ~NOTFOUND"`
+#     remap the port, and does an SPKI pin (CA vs leaf) admit a leaf-only TLS server?
+#  Q2 from a container on a per-launch --internal network joined by "router",
+#     what is reachable (route / other project / external / host)?
+#  Q3 can the host reach a port published from a container on an --internal network?
+set -u
+HERE="$(cd "$(dirname "$0")" && pwd)"
+OUT="$HERE/out"
+mkdir -p "$OUT"
+: > "$OUT/summary.txt"
+TAG_SRC=localhost/tillandsias-chromium-framework:v56.9.27.2
+TAG=localhost/spike-chromium:1
+OP_ENV=(env -u CONTAINERS_STORAGE_CONF -u CONTAINERS_CONF -u REGISTRY_AUTH_FILE -u XDG_CACHE_HOME "HOME=$HOME")
+[ -z "${CONTAINERS_STORAGE_CONF:-}${CONTAINERS_CONF:-}" ] || { echo "ABORT: plain shell only"; exit 3; }
+
+log() { echo "$*" >> "$OUT/summary.txt"; echo "$*"; }
+
+op_state() {
+    local c
+    for c in tillandsias-inference tillandsias-dev-inference; do
+        "${OP_ENV[@]}" podman inspect --format '{{.Name}} {{.Id}} {{.State.Status}} {{.State.StartedAt}} {{.State.Health.Status}} {{range $k,$v := .NetworkSettings.Networks}}{{$k}}:{{$v.IPAddress}}:{{$v.MacAddress}} {{end}}' "$c" 2>&1
+    done
+}
+OP_NET="${XDG_RUNTIME_DIR:?}/containers/networks"
+op_state > "$OUT/op-before"
+find "$OP_NET" -printf '%p %s %T@\n' 2>/dev/null | sort > "$OUT/op-net-before"
+
+S="$(mktemp -d "$HERE/run.XXXXXX")"
+R="$(mktemp -d "${XDG_RUNTIME_DIR:?}/tillandsias-browser-spike.XXXXXX")"
+echo "$S $R" > "$OUT/substrate.path"
+mkdir -p "$S/graph" "$R/run" "$R/tmp" "$S/netconf" "$S/home" "$S/certs"
+printf '%s\n' '[storage]' 'driver = "overlay"' "graphroot = \"$S/graph\"" "runroot = \"$R/run\"" > "$S/storage.conf"
+printf '%s\n' '[engine]' 'cgroup_manager = "cgroupfs"' 'events_logger = "file"' "events_logfile_path = \"$S/events.log\"" \
+    "tmp_dir = \"$R/tmp\"" '[network]' "network_config_dir = \"$S/netconf\"" > "$S/containers.conf"
+
+# Load the image from the operator store (read-only on that side) BEFORE switching.
+"${OP_ENV[@]}" podman save --format oci-archive -o "$S/chromium.tar" "$TAG_SRC" || { echo "save failed"; exit 1; }
+
+export CONTAINERS_STORAGE_CONF="$S/storage.conf" CONTAINERS_CONF="$S/containers.conf" REGISTRY_AUTH_FILE="$S/auth.json"
+export HOME="$S/home" XDG_CACHE_HOME="$S/home/.cache"
+
+guard() {
+    local g
+    g="$(podman info --format '{{.Store.GraphRoot}} {{.Store.RunRoot}}' 2>/dev/null)"
+    [ "$g" = "$S/graph $R/run" ] || { echo "ABORT: store is '$g'"; exit 3; }
+}
+guard
+podman load -q -i "$S/chromium.tar" > "$OUT/load.txt" 2>&1
+IMG_ID="$(sed -n 's/^Loaded image: //p' "$OUT/load.txt" | head -1)"
+podman tag "$IMG_ID" "$TAG" 2>/dev/null || podman tag "$(podman images -q | head -1)" "$TAG"
+rm -f "$S/chromium.tar"
+
+# Certs: a spike CA, a leaf for www.demo.localhost and one for www.other.localhost.
+C="$S/certs"
+openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=spike-ca -keyout "$C/ca.key" -out "$C/ca.crt" \
+    -addext basicConstraints=critical,CA:TRUE -addext keyUsage=critical,keyCertSign,cRLSign 2>/dev/null
+leaf() {
+    mkdir -p "$C/$1"
+    printf 'subjectAltName=DNS:www.%s.localhost\nbasicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n' "$1" > "$C/$1/ext"
+    openssl req -new -newkey rsa:2048 -nodes -subj "/CN=www.$1.localhost" -keyout "$C/$1/leaf.key" -out "$C/$1/leaf.csr" 2>/dev/null
+    openssl x509 -req -in "$C/$1/leaf.csr" -CA "$C/ca.crt" -CAkey "$C/ca.key" -set_serial "$RANDOM" -days 1 -extfile "$C/$1/ext" -out "$C/$1/leaf.crt" 2>/dev/null
+    chmod 0644 "$C/$1/leaf.key"
+}
+leaf demo
+leaf other
+spki() { openssl x509 -in "$1" -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | base64; }
+SPKI_CA="$(spki "$C/ca.crt")"
+SPKI_LEAF="$(spki "$C/demo/leaf.crt")"
+log "spki ca=$SPKI_CA leaf=$SPKI_LEAF"
+
+HARD=(--cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --userns=keep-id --read-only --tmpfs /tmp:size=256m --tmpfs /dev/shm:size=256m -e HOME=/tmp)
+
+guard
+podman network create --internal spike-browser-net > /dev/null
+podman network create spike-other-net > /dev/null
+podman run -d --name spike-router --network spike-browser-net --network-alias router \
+    "${HARD[@]}" -v "$C/demo:/certs:ro" -v "$HERE:/spike:ro" --entrypoint node "$TAG" /spike/serve.js ROUTE-DEMO > /dev/null
+podman run -d --name spike-other --network spike-other-net --network-alias otherproj \
+    "${HARD[@]}" -v "$C/other:/certs:ro" -v "$HERE:/spike:ro" --entrypoint node "$TAG" /spike/serve.js ROUTE-OTHER > /dev/null
+sleep 3
+podman logs spike-router 2>&1 | tail -1 | sed 's/^/router: /' | tee -a "$OUT/summary.txt"
+
+browse() {
+    local label="$1" url="$2" rules="$3" spkis="$4" out="$OUT/browse-$1.txt"
+    guard
+    local extra=()
+    [ -n "$rules" ] && extra+=("--host-resolver-rules=$rules")
+    [ -n "$spkis" ] && extra+=("--ignore-certificate-errors-spki-list=$spkis")
+    timeout 90 podman run --rm --network spike-browser-net "${HARD[@]}" "$TAG" \
+        --headless=new --user-data-dir=/tmp/profile --no-first-run --disable-gpu \
+        "${extra[@]}" --virtual-time-budget=5000 --dump-dom "$url" > "$out" 2> "$out.err"
+    local rc=$?
+    local m
+    m="$(grep -o 'ROUTE-[A-Z]* host=[^<]*' "$out" | head -1)"
+    log "browse[$label] rc=$rc url=$url -> ${m:-NO-MARKER} ($(wc -c < "$out") bytes dom; err: $(grep -oE 'ERR_[A-Z_]+|net_error[^,]*' "$out.err" "$out" 2>/dev/null | sort -u | tr '\n' ' '))"
+}
+
+# spike 2: full-chain leaf with CA pin; CDP published from the internal net.
+cat "$C/demo/leaf.crt" "$C/ca.crt" > "$C/demo/full.crt"
+cp "$C/demo/leaf.crt" "$C/demo/leaf-only.crt"
+cp "$C/demo/full.crt" "$C/demo/leaf.crt"
+guard
+podman rm -f spike-router > /dev/null
+podman run -d --name spike-router --network spike-browser-net --network-alias router \
+    "${HARD[@]}" -v "$C/demo:/certs:ro" -v "$HERE:/spike:ro" --entrypoint node "$TAG" /spike/serve.js ROUTE-DEMO > /dev/null
+sleep 3
+RULES='MAP *.demo.localhost router:8443, MAP * ~NOTFOUND'
+browse fullchain-ca-pin https://www.demo.localhost:18443/ "$RULES" "$SPKI_CA"
+browse fullchain-no-pin https://www.demo.localhost:18443/ "$RULES" ""
+browse mixed-case https://WWW.Demo.LOCALHOST:18443/ "$RULES" "$SPKI_CA"
+browse other-port https://www.demo.localhost:9999/ "$RULES" "$SPKI_CA"
+browse cdp-loopback http://127.0.0.1:9222/json/version "$RULES" ""
+for mode in headless-new; do
+  for addr in 0.0.0.0 none; do
+    guard
+    a=(); [ "$addr" != none ] && a=(--remote-debugging-address=$addr)
+    podman rm -f spike-cdp > /dev/null 2>&1
+    podman run -d --name spike-cdp --network spike-browser-net -p 127.0.0.1:19222:9222 "${HARD[@]}" "$TAG" \
+        --headless=new --user-data-dir=/tmp/profile --remote-debugging-port=9222 "${a[@]}" about:blank > /dev/null 2>&1
+    sleep 6
+    log "cdp[$mode addr=$addr] host /json/version -> $(curl -s -m 3 http://127.0.0.1:19222/json/version 2>&1 | tr -d '\n' | head -c 120) ; in-ctr listeners: $(podman exec spike-cdp cat /proc/net/tcp 2>/dev/null | awk 'NR>1 && $4=="0A"{print $2}' | tr '\n' ' ')"
+  done
+done
+podman rm -f spike-cdp > /dev/null 2>&1
+
+# Cleanup, private store only.
+guard
+podman rm -a -f > /dev/null 2>&1
+podman network rm -f spike-browser-net spike-other-net > /dev/null 2>&1
+podman rmi -a -f > /dev/null 2>&1
+podman unshare sh -c "umount -l '$S/graph/overlay' 2>/dev/null; rm -rf '$S/graph' '$R/run' '$R/tmp'"
+find "$R" -delete 2>/dev/null
+find "$S" -delete 2>/dev/null
+
+op_state > "$OUT/op-after"
+find "$OP_NET" -printf '%p %s %T@\n' 2>/dev/null | sort > "$OUT/op-net-after"
+if cmp -s "$OUT/op-before" "$OUT/op-after"; then log "operator inference: unchanged"; else log "operator inference: CHANGED"; diff "$OUT/op-before" "$OUT/op-after" | tee -a "$OUT/summary.txt"; fi
+if cmp -s "$OUT/op-net-before" "$OUT/op-net-after"; then log "operator netavark dir: unchanged"; else log "operator netavark dir: CHANGED"; diff "$OUT/op-net-before" "$OUT/op-net-after" | tee -a "$OUT/summary.txt"; fi

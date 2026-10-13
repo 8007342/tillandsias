@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: igpu-acceleration-opt-in-for-wsl2-hosts
+    field: status
+    value: completed
+    ts: "2026-10-13T05:20:39Z"
+    host: windows
+
+events:
+  - packet_id: igpu-acceleration-opt-in-for-wsl2-hosts
+    event:
+      type: completed
+      ts: "2026-10-13T05:20:39Z"
+      host: windows
+      summary: |-
+        status 'completed' with evidence_refs: Closed: all four slices are on linux-next. S1 #384 (work/793-a8e7, ce26af4d4/1998251b1), S2 #389 (1646-p9hg, bd75567da/d67540adf), S3 #390 (1647-fb52, dbb33bdae), S4 #395 (1648-gy9z, 25220c3ca). Exit criteria to evidence: (1) A documented, reversible opt-in, with the package set and its removal recorded. Evidence: TILLANDSIAS_INFERENCE_GPU=vulkan, which main.rs wsl2_vulkan_opt_in_tier honours only

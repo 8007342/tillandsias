@@ -1,0 +1,8 @@
+metal-host run 1: prefill 1030 tok @ 1220.1 t/s, decode 128 tok @ 55.2 t/s
+metal-host run 2: prefill 1030 tok @ 1314.8 t/s, decode 128 tok @ 55.2 t/s
+metal-host run 3: prefill 1030 tok @ 1304.6 t/s, decode 128 tok @ 55.0 t/s
+metal-host run 4: prefill 1030 tok @ 1311.6 t/s, decode 128 tok @ 55.0 t/s
+metal-host run 5: prefill 1030 tok @ 1307.9 t/s, decode 128 tok @ 54.9 t/s
+metal-host prefill t/s: median 1307.9 mean 1291.8 min 1220.1 max 1314.8 (n=5)
+metal-host decode  t/s: median 55.0 mean 55.1 min 54.9 max 55.2 (n=5)
+ok:bench-llama-server:metal-host on 127.0.0.1:11510

@@ -1,0 +1,249 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the coordinator (macuahuitl), 2026-10-12, from the operator-approved
+# design for "start this project locally and open it":
+# plan/issues/research/open-it-browser-2026-10-12.md and the OpenSpec change
+# openspec/changes/open-it-browser/ (order 1656-urmk). Unclaimed.
+packets:
+  - packet_id: dev-mode-browser-windows-give-the-owning-lane-full-cdp-over-the-per-lane-socket-with-typed-tools-and-raw-browser-cdp-and-no-host-listener
+    order: 1656-iktu
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [browser, cdp, mcp, dev-mode, containers, local-web-preview, security]
+    estimated_hours: 10
+    depends_on:
+      - browser-open-with-a-device-opens-the-container-window-at-the-device-css-size-with-cdp-device-emulation-over-a-unix-socket-and-set-device-switches-it-live
+    related: [1649-xqet, 1651-5t7n, 1655-urz9, 1656-urmk]
+    title: |
+      Development mode: browser.open{dev:true} gives the lane that opened the window full browser control (typed navigate/evaluate/console-tail/network-tail/screenshot/emulate tools plus raw browser.cdp{window_id, method, params, sessionId?}) over its peer-authenticated per-lane MCP socket. Other lanes get WINDOW_NOT_FOUND. There is no host TCP listener and no wider network than a normal window.
+    context: |
+      Operator: agents connect to the browser to debug and drive the app "with full access". Coordinator ruling: full CDP, NOT full internet. Spec: browser-window-modes, "Development mode is full browser control, not full internet"; chromium-debug-variant (modified) for the cookie note. Transport comes from 1655-urz9: --remote-debugging-pipe in the container, an in-container relay to a Unix socket in a tray-only host dir, and one broker session per window. An optional cdp.sock is mounted only into the owning lane's /run/host/tillandsias-mcp/ for Playwright or Puppeteer. Full CDP makes the window's session cookies readable: this is accepted, stated in the tool description, and scoped to the owning lane. Today the tool table has no browser.cdp, browser.eval answers EVAL_DISABLED, and the WindowRegistry does not record the owning lane.
+    exit_criteria:
+      - 'from the owning lane, browser.cdp{window_id, method:"Runtime.evaluate", params:{expression:"1+1"}} on a dev-mode window returns 2; red today (tools/list has no browser.cdp)'
+      - 'the same call, and browser.screenshot, from a second lane with the same window_id returns WINDOW_NOT_FOUND; a test drives both lanes'
+      - '`ss -ltn` on the host before and after opening a dev-mode window lists the same sockets, and the container runs no process with --remote-debugging-port'
+      - 'a dev-mode window''s Page.navigate to a public host and to another project''s route both fail, exactly as in normal mode'
+      - 'the browser.cdp tool description states that full CDP exposes the window''s session cookies to the owning lane'
+    unscoreable: "unpinnable-until-the-guard-exists: the two-lane test and the listener comparison are written with the broker, and fail today because browser.cdp does not exist"
+    next_action: >
+      After 1655-urz9 lands its per-window CDP session: add owning_lane to the WindowRegistry, then browser.cdp and the typed tools behind a dev flag, then the two-lane WINDOW_NOT_FOUND test. Write the red arms first.
+    events:
+      - type: filed
+        ts: "2026-10-12T23:00:00Z"
+        host: macuahuitl
+        summary: |-
+          Dev-mode CDP broker: typed tools plus raw browser.cdp on the per-lane socket, cross-lane WINDOW_NOT_FOUND, no host listener.
+
+  - packet_id: a-webkit-engine-container-from-playwright-webkit-serves-apple-presets-labelled-webkit-approximates-safari
+    order: 1656-tjv4
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [browser, webkit, playwright, images, devices, mobile, wayland]
+    estimated_hours: 12
+    depends_on:
+      - browser-open-with-a-device-opens-the-container-window-at-the-device-css-size-with-cdp-device-emulation-over-a-unix-socket-and-set-device-switches-it-live
+    related: [1643-q3at, 1656-twhk, 1656-urmk]
+    title: |
+      A WebKit engine container built from Playwright's Linux WebKit (WebKit LGPL/BSD, Playwright Apache-2.0) opens Apple presets (engine webkit in the device catalogue), on Wayland only with the same per-window network as Chromium. It is labelled "WebKit (approximates Safari)" everywhere it is named.
+    context: |
+      Spec: browser-window-modes, "Engines and isolation per platform". The research (plan/issues/research/open-it-browser-2026-10-12.md) inferred, without verifying, that the image probably needs a Debian/Ubuntu base and that headful WebKit under Wayland only is unverified. Automation is the Playwright protocol, not CDP: see 1656-twhk. Today every preset opens in Chromium.
+    exit_criteria:
+      - 'browser.open{device:"iphone 15"} on Linux starts the WebKit engine container: in the page, navigator.userAgent contains "AppleWebKit" and does NOT contain "Chrome/"; red today (every window is Chromium)'
+      - 'the tool result and the window title name the engine "WebKit (approximates Safari)"; a test asserts the string and that "Safari" never appears alone'
+      - 'the WebKit container mounts only the Wayland socket file from $XDG_RUNTIME_DIR and joins only its per-window internal network (the litmus-browser-open-container-shape arms, extended to the WebKit spec)'
+      - 'headful under Wayland only is measured on a real host and recorded (works, or the named blocker)'
+    unscoreable: "unpinnable-until-the-guard-exists: the WebKit image, its shape arms and the live user-agent arm are written together"
+    next_action: >
+      Measure first: does Playwright's WebKit MiniBrowser run headful with only a Wayland socket on a Fedora host? Then choose the base image and write the shape arms.
+    events:
+      - type: filed
+        ts: "2026-10-12T23:00:00Z"
+        host: macuahuitl
+        summary: |-
+          A WebKit engine container (Playwright WebKit) for Apple presets, labelled "WebKit (approximates Safari)".
+
+  - packet_id: dev-mode-browser-tools-are-engine-neutral-across-cdp-and-the-playwright-protocol
+    order: 1656-twhk
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [browser, mcp, cdp, playwright, webkit, dev-mode]
+    estimated_hours: 8
+    depends_on:
+      - dev-mode-browser-windows-give-the-owning-lane-full-cdp-over-the-per-lane-socket-with-typed-tools-and-raw-browser-cdp-and-no-host-listener
+      - a-webkit-engine-container-from-playwright-webkit-serves-apple-presets-labelled-webkit-approximates-safari
+    related: [1656-urmk]
+    title: |
+      The typed dev-mode tools (navigate, evaluate, console and network tails, screenshot, emulate, set_device) work the same on a Chromium window (CDP) and a WebKit window (the Playwright protocol). Raw browser.cdp on a WebKit window returns a typed ENGINE_UNSUPPORTED error naming the engine, never a hang or a CDP-shaped lie.
+    context: |
+      CDP is Chromium's protocol; Playwright's WebKit speaks the Playwright protocol. Spec: browser-window-modes. Today the tools are wired straight to the CDP client (tillandsias-browser-mcp CdpSession), so a WebKit window would have no tools at all.
+    exit_criteria:
+      - 'one test runs the same tool sequence (open dev, navigate, evaluate "1+1", screenshot, console tail) against a Chromium and a WebKit window and gets equal-shaped results; red today (no engine abstraction, no WebKit window)'
+      - 'browser.cdp on a WebKit window returns ENGINE_UNSUPPORTED naming webkit within 1 s'
+      - 'cross-lane WINDOW_NOT_FOUND holds for WebKit windows too'
+    unscoreable: "unpinnable-until-the-guard-exists: the dual-engine test is written with the engine trait"
+    next_action: >
+      After 1656-iktu and 1656-tjv4: extract an engine trait from the CDP-backed tools, then implement it for the Playwright protocol.
+    events:
+      - type: filed
+        ts: "2026-10-12T23:00:00Z"
+        host: macuahuitl
+        summary: |-
+          Engine-neutral dev-mode tools across CDP and the Playwright protocol.
+
+  - packet_id: macos-browser-windows-show-through-a-virtio-gpu-display-on-the-tray-linux-vm-as-a-cage-kiosk-sized-to-the-device
+    order: 1656-cscv
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: macos
+    capability_tags: [macos, browser, virtualization-framework, virtio-gpu, wayland, cage, devices, mobile]
+    estimated_hours: 14
+    depends_on:
+      - browser-open-with-a-device-opens-the-container-window-at-the-device-css-size-with-cdp-device-emulation-over-a-unix-socket-and-set-device-switches-it-live
+    related: [1656-mqvk, 1656-urmk]
+    title: |
+      On macOS, browser.open shows the Chromium (or WebKit) container from the tray's Linux VM in its own Mac window. The VM gets a VZVirtioGraphicsDeviceConfiguration display; a cage Wayland kiosk in the guest runs the browser; the guest display and the VZVirtualMachineView are sized to the device's CSS viewport, one view per window.
+    context: |
+      Virtualization.framework shows only a whole-desktop VZVirtualMachineView, so a per-device view comes from sizing the guest display to the device and running cage as the only client. Linux guests have virtio-gpu since macOS 13 (the cheatsheet that says otherwise is corrected by 1656-mqvk). Spec: browser-window-modes, the Window row of the platform table. Today the tray's VM has no graphics device and browser.open has no macOS path.
+    exit_criteria:
+      - 'on a macOS host, browser.open{device:"iphone 12 pro max"} opens one Mac window whose content is the page at a 428-CSS-px-wide viewport: innerWidth evaluates to 428 in the page; red today (no graphics device, no macOS path)'
+      - 'two windows with different devices show two views, each sized to its own device'
+      - 'the VM configuration adds exactly one virtio-gpu display device and no other new device; the guest browser container keeps the Wayland-socket-only mount'
+      - 'closing the Mac window removes the browser container and its cage session within 5 s'
+    unscoreable: "requires-native-regime: only a macOS host with the tray's VM can show the window; the Linux-side arms (cage launch, sizing arithmetic) get unit tests"
+    next_action: >
+      Spike on a macOS host: add VZVirtioGraphicsDeviceConfiguration with one scanout to the tray's VM and run cage plus Chromium inside it, then size the scanout per window.
+    events:
+      - type: filed
+        ts: "2026-10-12T23:00:00Z"
+        host: macuahuitl
+        summary: |-
+          macOS display path: virtio-gpu display on the tray's Linux VM plus a cage kiosk window sized to the device.
+
+  - packet_id: an-opt-in-macos-safari-appliance-runs-safari-and-the-ios-simulator-in-a-separate-macos-guest-vm-driven-by-safaridriver
+    order: 1656-5rpe
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.7
+    pickup_role: macos
+    capability_tags: [macos, browser, safari, ios-simulator, safaridriver, virtualization-framework, vm, opt-in]
+    estimated_hours: 24
+    depends_on:
+      - macos-browser-windows-show-through-a-virtio-gpu-display-on-the-tray-linux-vm-as-a-cage-kiosk-sized-to-the-device
+    related: [1656-tjv4, 1656-urmk]
+    title: |
+      The Safari appliance: an opt-in, separate macOS guest VM (not the tray's Linux VM) running Safari and the iOS Simulator, driven by safaridriver (W3C WebDriver) with safari:useSimulator for iOS presets. A forwarder in the guest reaches the host router; the router CA lives only in the guest keychain. It is off by default on floor-tier Macs.
+    context: |
+      Operator: "If MacOS can do the safari-framework as a first class citizen instead then let's do so", under the hard requirement of "a 100% separate space from their personal accounts ... at least running in a guest VM". The macOS licence (section 2B(iii)) allows two extra macOS VMs, and the Linux VM does not count. Cost (inferred): 30–35 GB, or 60–90 GB with Xcode and simulators; 4–8 GB RAM; cold boot 30–60 s, resume in seconds (macOS 14+). Inside a guest, *.localhost is the guest's own loopback, hence the forwarder. Unknowns: whether Safari, Web Inspector and the Simulator work with the paravirtualized GPU (FB11975037), the real disk and resume cost, and VM slot leaks. Floor tier: esme, macneo. Today nothing creates a macOS guest.
+    exit_criteria:
+      - 'with the appliance opted in, browser.open{device:"iphone 15", engine:"safari"} opens the project in the iOS Simulator inside the guest, and a safaridriver session returns navigator.userAgent containing "Mobile/" and "Safari/"; red today (no appliance)'
+      - 'with it not opted in, or on a floor-tier host, no macOS guest VM exists after browser.open, and Apple presets use the WebKit container'
+      - 'the host keychain is byte-unchanged by appliance setup (a test compares `security find-certificate -a` before and after), while the guest keychain holds the router CA'
+      - 'the guest reaches only the project''s router routes through the forwarder: a public host fails from Safari in the guest'
+      - 'record the measured disk, RAM, cold boot and resume figures in the row'
+    unscoreable: "requires-native-regime: closure needs a macOS host with spare capacity and the guest image; every arm fails today because no appliance exists"
+    next_action: >
+      Measure first on a non-floor Mac: does a macOS guest with the paravirtualized GPU run Safari, Web Inspector and the Simulator usably (FB11975037)? Record that before any tray code.
+    events:
+      - type: filed
+        ts: "2026-10-12T23:00:00Z"
+        host: macuahuitl
+        summary: |-
+          The opt-in macOS Safari appliance: a separate macOS guest VM with safaridriver and the iOS Simulator.
+
+  - packet_id: windows-npu-inference-helper-appcontainer-confined-no-egress-on-one-socket
+    order: 1656-kbfh
+    parent_order: 483
+    status: ready
+    kind: implementation
+    priority: p2
+    desired_release: v0.6
+    pickup_role: windows
+    capability_tags: [windows, inference, npu, appcontainer, mxc, sidecar, enclave, wsl2]
+    estimated_hours: 16
+    depends_on:
+      - host-native-sidecar-endpoints
+    related: [483, 1654-6me6, 793-a8e7, 1656-urmk]
+    title: |
+      Windows NPU inference helper: a host-side, inference-only server confined in an AppContainer (MXC processcontainer or equivalent) with all egress denied, serving one socket or named pipe that the WSL2 enclave reaches through the tray. This is the Windows slice of 483, and the counterpart of the macOS Metal helper (1654-6me6).
+    context: |
+      WSL2 exposes no NPU device (WSL issue #40842, open), so an NPU is reachable only from the Windows host. Operator approval 2026-10-12: "The NPU and Metal solutions are acceptable and approved, please triage for the following releases automatically". The spec is inference-engine-slots SLOT-6, modified in openspec/changes/open-it-browser to add clauses 9–11 (OS sandbox, inference only, empty environment) and to admit a single named socket as the upstream. MXC verdict: windows_sandbox is Pro-only and shows a whole desktop; wslc needs WSL ≥ 2.9.9 (no pre-release, by operator ruling); processcontainer, which runs on the host, is acceptable only as this helper's sandbox. The engine choice (OpenVINO GenAI on Intel NPU, or the vendor runtime on the host's NPU) is part of the row. Today no Windows-side helper exists.
+    exit_criteria:
+      - 'an inference request from inside the enclave reaches the helper through the tray and is served on the NPU (the device is named in the slot descriptor, per SLOT-2); red today (no helper)'
+      - 'NEGATIVE CONTROLS inside the AppContainer, each asserted to FAIL: an outbound TCP connect to a public address, a loopback TCP listen other than its one socket, and a read of %USERPROFILE%\.ssh'
+      - 'the helper''s environment and command line carry no credential: a test reads them and finds only the allowlist'
+      - 'lease: after the tray quits or the helper is killed, no listener or pipe remains, and the enclave route fails closed while forge launch is unaffected'
+    unscoreable: "requires-native-regime: closure needs a Windows host with an NPU; every arm fails today because the helper does not exist"
+    next_action: >
+      On yolanda: confirm which NPU the host has and which runtime serves an OpenAI-compatible endpoint on it, then confirm that processcontainer can deny egress and still let that runtime open the NPU.
+    events:
+      - type: filed
+        ts: "2026-10-12T23:00:00Z"
+        host: macuahuitl
+        summary: |-
+          Windows NPU confined host helper: AppContainer-sandboxed inference, no egress, one socket (child of 483).
+
+  - packet_id: the-chromium-framework-image-ships-fonts-and-a-fixture-pins-its-entrypoint-no-sandbox-refusal
+    order: 1656-6c97
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [browser, images, chromium, fonts, litmus, security]
+    estimated_hours: 3
+    related: [612-nvf3, 615-x3b8, 1649-xqet, 1656-urmk]
+    title: |
+      The tillandsias-chromium-framework image has no fonts (a TODO), so pages render with missing or tofu glyphs. No fixture pins the image entrypoint's refusal of --no-sandbox (612-nvf3), so a regression that re-admits it would pass every gate.
+    context: |
+      Found by the open-it research (plan/issues/research/open-it-browser-2026-10-12.md, defects 4 and 5). The fonts should cover Latin, CJK, emoji and the symbols a typical web app uses, kept small. The entrypoint check is the image's own guard; a fixture should run the entrypoint with --no-sandbox and assert the refusal.
+    exit_criteria:
+      - 'in the built image, `fc-list` reports at least one Latin, one CJK and one emoji family; red today (no fonts)'
+      - 'a fixture runs the image entrypoint with --no-sandbox appended and asserts a non-zero exit with the refusal message; it fails when the entrypoint check is removed (mutation shown in the commit)'
+      - 'the image size growth from fonts is measured and recorded'
+    unscoreable: "pinned-by-its-own-fixture: the fonts arm and the --no-sandbox arm are the closure"
+    next_action: >
+      Add the font packages to the framework image, then write the entrypoint fixture and show it red when the check is removed.
+    events:
+      - type: filed
+        ts: "2026-10-12T23:00:00Z"
+        host: macuahuitl
+        summary: |-
+          Chromium framework image fonts plus the --no-sandbox entrypoint fixture.
+
+  - packet_id: cheatsheets-say-use-angle-d3d11-is-windows-only-and-that-virtualization-framework-has-virtio-gpu-for-linux-guests-since-macos-13
+    order: 1656-mqvk
+    status: ready
+    kind: docs
+    priority: p3
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [cheatsheets, docs, chromium, wsl2, macos, virtualization-framework]
+    estimated_hours: 1
+    related: [1656-cscv, 1656-urmk]
+    title: |
+      Two cheatsheet errors: cheatsheets/runtime/wslg-chromium-passthrough.md and wsl-browser-isolation.md recommend --use-angle=d3d11 for Chromium inside WSL2, but ANGLE's d3d11 backend exists only in Windows builds of Chromium; cheatsheets/runtime/macos-vz-gui-research-v2.md (and its copy under images/default/cheatsheets/) says Virtualization.framework has no virtio-gpu, but VZVirtioGraphicsDeviceConfiguration serves Linux guests since macOS 13.
+    context: |
+      Found by the open-it research (defect 7). The macOS display path (1656-cscv) depends on virtio-gpu, so the wrong cheatsheet would steer a reader away from it. Each correction needs a provenance line citing the vendor documentation (the ANGLE backend list; Apple's VZVirtioGraphicsDeviceConfiguration page).
+    exit_criteria:
+      - '`grep -rn "use-angle=d3d11" cheatsheets/` returns no line that recommends it for a Linux or WSL2 Chromium without saying it is Windows-only; red today'
+      - 'macos-vz-gui-research-v2.md, in both copies, states virtio-gpu availability for Linux guests on macOS 13+ with a provenance URL; the two copies are byte-identical'
+    unscoreable: "pinned-by-its-own-fixture: the two greps are the closure"
+    next_action: >
+      Edit the three cheatsheets (and the images/default copy), each with a provenance line.
+    events:
+      - type: filed
+        ts: "2026-10-12T23:00:00Z"
+        host: macuahuitl
+        summary: |-
+          Cheatsheet corrections: --use-angle=d3d11 is Windows-only; virtio-gpu exists for Linux guests on macOS 13+.

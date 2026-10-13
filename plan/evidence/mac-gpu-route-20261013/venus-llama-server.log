@@ -1,0 +1,17 @@
+MESA: error: Opening /dev/dri/card0 failed: Permission denied
+could not connect vdrm
+Error opening virtio-gpu device for Asahi native context
+0.00.021.422 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.021.716 W srv  llama_server: -----------------
+0.00.021.720 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.021.720 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.021.720 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.021.720 W srv  llama_server: -----------------
+0.00.023.415 I srv    load_model: loading model '/models/qwen.gguf'
+0.00.311.676 W load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.02.072.520 I cmn          init: llama threadpool init, n_threads = 4
+0.02.887.769 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 4096, kv_unified = 'true'
+0.02.890.043 I srv  llama_server: model loaded
+0.02.890.092 I srv  llama_server: listening on http://0.0.0.0:8080
+0.02.890.092 W srv  llama_server: NOTICE: server default port will be changed to :9931 in a future release
+0.02.890.092 W srv  llama_server:         ref: https://github.com/ggml-org/llama.cpp/pull/26508

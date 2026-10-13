@@ -6306,6 +6306,23 @@ fn build_inference_run_args(
     for (name, value) in engine_slots::pin_backend_environment(effective_tier, cuda_major) {
         args.extend(["--env".into(), format!("{name}={value}")]);
     }
+    // ORDER 793-a8e7 S3 (1647-fb52): the decode floor the container pins small
+    // models below (images/inference/decode-floor-pin.sh). Only on the opt-in
+    // lane, so every other tier's wiring is byte-identical; there the
+    // container restores any earlier pin instead.
+    if effective_tier == "gpu-vulkan"
+        && let Some((floor, source)) = accel_probe::engine_decode_floor(
+            effective_tier,
+            accel_probe::decode_crossover_b(&accel_probe::load_or_probe(effective_tier)),
+        )
+    {
+        args.extend([
+            "--env".into(),
+            format!("TILLANDSIAS_DECODE_FLOOR_B={floor}"),
+            "--env".into(),
+            format!("TILLANDSIAS_DECODE_FLOOR_SOURCE={source}"),
+        ]);
+    }
     // Order 482b: the engine slot (ollama by default, SLOT-3). The llama-server
     // slot is delivered the render nodes this user can open — on any tier,
     // because its Vulkan lane needs no vendor stack (SLOT-4) — and an
@@ -19479,6 +19496,10 @@ mod tray;
 #[cfg(feature = "tray")]
 mod local_web_preview;
 
+// @trace spec:host-browser-mcp (order 1649-xqet)
+#[cfg(feature = "tray")]
+mod browser_open;
+
 /// Spawn a terminal-launcher child and reap it on a detached thread.
 ///
 /// Order 385: Ptyxis's GApplication client exits in milliseconds after
@@ -22689,6 +22710,42 @@ mod tests {
                 && forge.contains("effective_inference_tier()"),
             "effective tier must be exported into the forge env for agents/startup context"
         );
+    }
+
+    /// ORDER 793-a8e7 S3 (1647-fb52): the floor follows the measured crossover,
+    /// and only an unmeasured host gets the provisional 3, labelled as such.
+    #[test]
+    fn decode_floor_follows_the_crossover_and_labels_the_provisional_default() {
+        use accel_probe::{DecodeCrossover, engine_decode_floor};
+        let on = |c| engine_decode_floor("gpu-vulkan", c);
+        assert_eq!(
+            on(DecodeCrossover::AtOrAbove(1.5)),
+            Some(("1.5".to_string(), "measured"))
+        );
+        assert_eq!(
+            on(DecodeCrossover::AtOrAbove(7.0)),
+            Some(("7".to_string(), "measured"))
+        );
+        assert_eq!(
+            on(DecodeCrossover::CpuWinsThroughout),
+            Some(("all".to_string(), "cpu-wins"))
+        );
+        assert_eq!(
+            on(DecodeCrossover::Unmeasured),
+            Some(("3".to_string(), "provisional"))
+        );
+        // Off the opt-in lane nothing enforces a floor, so nothing is passed:
+        // build_inference_run_args emits the env only when this is Some, which
+        // is the gate (asserted on the value, not the launcher's text).
+        for tier in ["cpu", "gpu-cuda", "gpu-rocm", "unmeasured"] {
+            for c in [
+                DecodeCrossover::Unmeasured,
+                DecodeCrossover::CpuWinsThroughout,
+                DecodeCrossover::AtOrAbove(3.0),
+            ] {
+                assert_eq!(engine_decode_floor(tier, c), None, "{tier} {c:?}");
+            }
+        }
     }
 
     /// ORDER 793-a8e7: the WSL2 Vulkan lane is an explicit opt-in. Without it

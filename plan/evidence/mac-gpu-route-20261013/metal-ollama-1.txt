@@ -1,0 +1,9 @@
+cold: load=0.55s total=3.04s prompt_tokens=1057
+run 1: prefill 1059 tok @ 1283.5 t/s, decode 90 tok @ 56.0 t/s
+run 2: prefill 1058 tok @ 1233.7 t/s, decode 93 tok @ 55.9 t/s
+run 3: prefill 1059 tok @ 1284.5 t/s, decode 90 tok @ 55.7 t/s
+run 4: prefill 1059 tok @ 1283.0 t/s, decode 90 tok @ 55.7 t/s
+run 5: prefill 1059 tok @ 1284.9 t/s, decode 90 tok @ 55.7 t/s
+prefill t/s: median 1283.5 mean 1273.9 min 1233.7 max 1284.9 (n=5)
+decode  t/s: median 55.7 mean 55.8 min 55.7 max 56.0 (n=5)
+ok:bench-ollama:qwen2.5:3b on 127.0.0.1:11500
