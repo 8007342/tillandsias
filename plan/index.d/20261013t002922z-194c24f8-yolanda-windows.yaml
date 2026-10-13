@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: 793-a8e7-s2-probe-judges-the-wsl2-gpu-from-the-container
+    event:
+      type: note
+      ts: "2026-10-13T00:29:22Z"
+      agent_id: windows-yolanda-opus5-20261013t002921z
+      host: yolanda-windows
+      summary: |
+        Landed on linux-next via #389, run 59 merge d67540adf (code commits ffba2e0c6 and 26da2fcc0). On gpu-vulkan the probe asks the inference container's own loader (vulkaninfo --summary): a non-software device makes the /dev/dxg record usable in the container lane, while llvmpipe-only or an empty listing changes nothing. A cached gpu-vulkan document carrying the container-lane gap is re-probed and keeps its measurements. Evidence: 5 unit tests, accel_probe 98/98, 4 sabotages red, and on yolanda live (PR #387 comment) vulkaninfo listed Microsoft Direct3D12 (AMD Radeon 860M) and the opted-in lane read accel_class=workstation-gpu while the default stayed cpu-only. The class naming is 1645-pu4d.
