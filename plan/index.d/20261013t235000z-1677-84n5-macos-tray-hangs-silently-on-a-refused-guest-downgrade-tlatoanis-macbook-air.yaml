@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found on tlatoanis-macbook-air 2026-10-13 after a dev build ran against the operator's VM. Unclaimed.
+packets:
+  - packet_id: the-macos-tray-hangs-at-setting-up-when-it-refuses-to-downgrade-the-staged-guest-binary
+    order: 1677-84n5
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [tray, ux, guest-binary, control-wire, macos]
+    estimated_hours: 3
+    related: [701-kgvk, 1668-8jmq]
+    depends_on: []
+    title: |
+      After a newer build has run, the installed tray refuses to stage its own guest binary and then sits at "setting up" forever, telling the operator nothing
+    context: |
+      MEASURED 2026-10-13 23:32-23:41Z, tlatoanis-macbook-air. A dist build from work/1668-8jmq (aa03c4274, built 22:57:18Z) ran --github-login, staging its guest binary. The installed v56.10.13.1 tray (8a00d2583, built 22:36:04Z) then logged "[guest-binary] REFUSING to stage an OLDER guest binary (701-kgvk)", followed by "staged embedded guest binary at …", which contradicts the refusal. Every vm-status poll for 8+ minutes failed with "secure control wire handshake failed: [peer-sent-no-usable-frame]". The tray showed "setting up" with no error; the operator reported "Looks like it's hung setting up". Deleting tillandsias-headless.provenance.json (the remedy named only in the log) and relaunching fixed it; the sign-in was intact.
+      The downgrade guard is right to protect a newer guest. But a host tray that refuses to stage its own guest and then can't speak to the guest it left in place is unusable, and the only diagnosis sits in a log file.
+    exit_criteria:
+      - 'when the tray refuses a downgrade AND the control-wire handshake with the staged guest fails, the tray shows a visible error naming the version mismatch and the remedy, instead of "setting up" (a test drives a refused stage plus a failing handshake)'
+      - 'the log no longer prints "staged embedded guest binary" after a refused stage'
+      - 'NEGATIVE CONTROL: a refused downgrade whose newer guest still handshakes keeps working with no error shown'
+    unscoreable: "operator-visible failure state for a guest/host version mismatch, pinned by a refused-stage test"
