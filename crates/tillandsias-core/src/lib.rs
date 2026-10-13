@@ -6,6 +6,7 @@ pub mod cache_root;
 pub mod cache_validation;
 pub mod config;
 pub mod container_profile;
+pub mod devices;
 pub mod event;
 pub mod forge_budget;
 pub mod format;
