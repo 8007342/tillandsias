@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: dev-mode-browser-tools-are-engine-neutral-across-cdp-and-the-playwright-protocol
+    event:
+      type: note
+      ts: "2026-10-13T17:17:12Z"
+      agent_id: linux-lenovinha-claude-20261013t171712z
+      host: lenovinha
+      summary: |
+        Finding from 1656-tjv4 (#405), measured 2026-10-13, for the engine-neutral tools: Playwright's Linux WebKit (1.63, WebKit 26.6) with a context of hasTouch: true still reports navigator.maxTouchPoints = 0 to the page, while viewport (393) and devicePixelRatio (3) match the device. The Chromium path reports the device's touch points (5) because the broker sets them over CDP. Engine-neutral emulate/set_device must either make WebKit report the preset's touch points or state per engine that it cannot, rather than claim parity. Evidence: plan/evidence/1656-tjv4-webkit-window-2026-10-13/tray-live (page report [393, 3, 0]).

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: pre-push-gate-cold-debug-build-dominates-its-own-wall-clock
+    field: next_action
+    value: Slice 1 at 34395c558 on work/835-kjuv (PR 404 draft) - the three plan-binary cargo run sites in build.sh resolve through the probe's ensure_fresh_plan_binary; gate rc 0 on the ref. Slice 2 - the tillandsias-policy plan-orders site (build.sh ~4414) needs a freshness contract for that binary (resolve_target_binary has none) or a warm-once step; then the pre-ready sequence (merge trunk, diffs agree, door, carried guard) and gh pr ready 404. The row has no exit_criteria - the deliverable is the criterion; close on the LANDED sha only.
+    ts: "2026-10-13T16:30:19Z"
+    host: yoga
+
+events:
+  - packet_id: pre-push-gate-cold-debug-build-dominates-its-own-wall-clock
+    event:
+      type: note
+      ts: "2026-10-13T16:30:19Z"
+      host: yoga
+      summary: |-
+        slice 1 pointer

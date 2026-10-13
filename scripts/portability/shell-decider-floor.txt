@@ -159,7 +159,6 @@ scripts/test-check-opsx-generated-dirt.sh
 scripts/test-check-packet-tier-declared.sh
 scripts/test-check-stranded-in-progress.sh
 scripts/test-check-test-baseline.sh
-scripts/test-chromium-framework-launch.sh
 scripts/test-claim-confirmation-names-the-earliest-claimant.sh
 scripts/test-claim-wip-limit.sh
 scripts/test-claims-across-branches.sh

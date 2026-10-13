@@ -1,0 +1,22 @@
+## real launcher
+ok:   1 ACCEPTS: a wrapper that accepts --no-sandbox is exec'd with it
+ok:   2 REJECTS: a wrapper that rejects --no-sandbox is exec'd without it
+ok:   3 MUTANT A: with the probe dropped, arm 1 goes red (and arm 2 stays green)
+ok:   4 MUTANT B: with the probe unconditional, arm 2 goes red (and arm 1 stays green)
+ok:chromium-framework-launch:4:of:4
+
+## real launcher MUTATED (sed): ARGS+=("--no-sandbox") -> : (probe dropped)
+FAIL: 1 ACCEPTS: a wrapper that accepts --no-sandbox is exec'd with it
+ok:   2 REJECTS: a wrapper that rejects --no-sandbox is exec'd without it
+FAIL: 3 MUTANT A: with the probe dropped, arm 1 goes red (and arm 2 stays green) [anchor ARGS+=("--no-sandbox") not found]
+FAIL: 4 MUTANT B: with the probe unconditional, arm 2 goes red (and arm 1 stays green)
+violation:chromium-framework-launch:3:of:4
+1 ACCEPTS: a wrapper that accepts --no-sandbox is exec'd with it; 3 MUTANT A: with the probe dropped, arm 1 goes red (and arm 2 stays green) [anchor ARGS+=("--no-sandbox") not found]; 4 MUTANT B: with the probe unconditional, arm 2 goes red (and arm 1 stays green)
+
+## real launcher MUTATED (sed): if accepts_no_sandbox ... -> if true (probe unconditional)
+ok:   1 ACCEPTS: a wrapper that accepts --no-sandbox is exec'd with it
+FAIL: 2 REJECTS: a wrapper that rejects --no-sandbox is exec'd without it
+ok:   3 MUTANT A: with the probe dropped, arm 1 goes red (and arm 2 stays green)
+FAIL: 4 MUTANT B: with the probe unconditional, arm 2 goes red (and arm 1 stays green) [anchor `if accepts_no_sandbox` not found]
+violation:chromium-framework-launch:2:of:4
+2 REJECTS: a wrapper that rejects --no-sandbox is exec'd without it; 4 MUTANT B: with the probe unconditional, arm 2 goes red (and arm 1 stays green) [anchor `if accepts_no_sandbox` not found]

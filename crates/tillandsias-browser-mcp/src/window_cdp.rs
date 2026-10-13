@@ -44,6 +44,8 @@ const FIRST_PAGE_BUDGET: Duration = Duration::from_secs(10);
 #[derive(Debug, Clone, PartialEq)]
 pub struct DeviceEmulation {
     pub id: String,
+    /// The catalogue's engine for this device: blink | webkit | gecko.
+    pub engine: String,
     pub model: String,
     pub approximated: bool,
     pub alternatives: Vec<String>,
@@ -81,6 +83,7 @@ impl DeviceEmulation {
         });
         Self {
             id: r.id.clone(),
+            engine: d.engine.clone(),
             model: r.model.clone(),
             approximated: r.approximated,
             alternatives: r.alternatives.clone(),
@@ -151,6 +154,19 @@ impl DeviceEmulation {
             ),
             ("Emulation.setUserAgentOverride", ua),
         ]
+    }
+
+    /// Playwright `browser.newContext` options for this device: what a
+    /// WebKit window applies (order 1656-tjv4), the counterpart of the CDP
+    /// commands above.
+    pub fn playwright_context(&self) -> Value {
+        json!({
+            "viewport": { "width": self.width, "height": self.height },
+            "deviceScaleFactor": self.dpr,
+            "isMobile": self.mobile,
+            "hasTouch": self.touch,
+            "userAgent": self.ua,
+        })
     }
 
     /// The `browser.open` / `browser.set_device` answer's device block.

@@ -306,7 +306,8 @@ pub(crate) fn hard_reset_gate<T>(
 /// What a HARD reset destroys and keeps, announced before it destroys.
 pub(crate) fn hard_reset_plan(cache_root: &Path) -> (Vec<String>, Vec<String>) {
     let mut destroyed = vec![
-        "the guest disk (rootfs.img) and the Vault store inside it, with every sign-in it holds"
+        "the guest disk (rootfs.img)".to_string(),
+        "the identity disk (vm-identity.img) and the Vault store on it, with every sign-in it holds"
             .to_string(),
     ];
     for t in KEPT_CREDENTIALS {
@@ -404,11 +405,37 @@ pub(crate) const REBUILD_STATUS: &str = "Rebuilding your workspace after an unex
 /// 1574-mrst's per-run flag FOR THIS TRIGGER ONLY. The Keychain gate stays: a
 /// share for the wiped store must be clearable, or the fresh guest receives a
 /// dead share (803-49re). On a refusal nothing has been touched.
+///
+/// 1642-cc54 (criterion 2): `store_survives` is
+/// `VzRuntime::vault_store_survives_rebuild()`, asked BEFORE the wipe. When the
+/// Vault store lives on the kept identity disk, the rebuild replaces only the
+/// rootfs: the keychain's share still opens that store, so it is KEPT and
+/// GitHub stays signed in. Only a store that lived on the rootfs dies with it,
+/// and only then is the share cleared (803-49re).
 pub(crate) fn run_unclean_stop_rebuild_in(
     service: &str,
     cache_root: &Path,
+    store_survives: bool,
     wipe: impl FnOnce() -> Result<(), String>,
 ) -> Result<(), String> {
+    if store_survives {
+        eprintln!(
+            "[tillandsias] reset: REBUILD (unclean previous stop; the Vault store is on the \
+             identity disk, so sign-ins are kept; 1642-cc54)"
+        );
+        let mut kept = vec![
+            "the identity disk (vm-identity.img) and the Vault store on it, with every sign-in"
+                .to_string(),
+        ];
+        kept.extend(KEPT_CREDENTIALS.iter().map(|t| format!("keychain: {t}")));
+        kept.push(format!(
+            "keychain: {PRESERVED_ANCHOR} (anchors this INSTALLATION; 803-49re)"
+        ));
+        kept.push("the download cache and models (the rebuilt guest reuses them)".to_string());
+        let k: Vec<&str> = kept.iter().map(String::as_str).collect();
+        tillandsias_core::reset_state::announce_reset_plan(&["the guest disk (rootfs.img)"], &k);
+        return wipe().map_err(|e| format!("unclean-stop rebuild: wipe failed: {e}"));
+    }
     let probe = crate::installation_uuid::read_credential_string_in(service, KEPT_CREDENTIALS[0]);
     if probe.is_err() {
         let line = HardRefusal::KeyringUnreachable.line();
@@ -431,6 +458,14 @@ pub(crate) fn run_unclean_stop_rebuild_in(
         );
     }
     Ok(())
+}
+
+/// The HARD reset's disk wipe (1642-cc54): the rootfs AND the identity disk.
+/// HARD is the one reset that destroys identity; every rebuild keeps the disk.
+pub(crate) fn hard_wipe(vz: &tillandsias_vm_layer::vz::VzRuntime) -> Result<(), String> {
+    vz.wipe_provisioned_artifacts()
+        .and_then(|()| vz.wipe_identity())
+        .map_err(|e| e.to_string())
 }
 
 /// Absent is success: this is a reset, and a file that is already gone is the
@@ -700,7 +735,7 @@ mod tests {
     fn unclean_stop_rebuild_wipes_and_clears_like_hard_without_a_flag() {
         let (svc, cache) = seeded("unclean-rebuild");
         let mut wiped = false;
-        run_unclean_stop_rebuild_in(&svc.0, &cache, || {
+        run_unclean_stop_rebuild_in(&svc.0, &cache, false, || {
             wiped = true;
             Ok(())
         })
@@ -726,10 +761,76 @@ mod tests {
         let _ = std::fs::remove_dir_all(&cache);
 
         let (svc, cache) = seeded("unclean-wipefail");
-        let r = run_unclean_stop_rebuild_in(&svc.0, &cache, || Err("disk busy".to_string()));
+        let r = run_unclean_stop_rebuild_in(&svc.0, &cache, false, || Err("disk busy".to_string()));
         assert!(r.is_err_and(|e| e.contains("disk busy")));
         assert!(all_present(&svc.0, &cache), "a failed wipe clears nothing");
         let _ = std::fs::remove_dir_all(&cache);
+    }
+
+    /// 1642-cc54 criterion 2: when the Vault store lives on the kept identity
+    /// disk, an unclean-stop rebuild replaces the rootfs and KEEPS everything
+    /// that opens the store: both keychain items, their fallbacks, the anchor.
+    /// GitHub stays signed in. (The `false` arm above is the store-on-rootfs
+    /// case, which still clears: 803-49re.)
+    #[test]
+    fn unclean_stop_rebuild_keeps_the_sign_ins_when_the_store_is_on_the_identity_disk() {
+        let (svc, cache) = seeded("unclean-keep");
+        let mut wiped = false;
+        run_unclean_stop_rebuild_in(&svc.0, &cache, true, || {
+            wiped = true;
+            Ok(())
+        })
+        .expect("a rebuild that keeps the store needs no clearing");
+        assert!(wiped, "the damaged rootfs must still be replaced");
+        assert!(
+            all_present(&svc.0, &cache),
+            "the share and root token must survive: the store they open survived"
+        );
+        assert_eq!(
+            read_credential_string_in(&svc.0, PRESERVED_ANCHOR).expect("read anchor"),
+            Some("scratch-anchor".to_string())
+        );
+        let _ = std::fs::remove_dir_all(&cache);
+    }
+
+    /// HARD reset is the one path that destroys identity: its announced plan
+    /// names the identity disk on the destroyed side, and its macOS caller
+    /// wipes it with the rootfs.
+    #[test]
+    fn hard_reset_destroys_the_identity_disk_and_says_so() {
+        let (destroyed, preserved) = hard_reset_plan(Path::new("/c"));
+        assert!(
+            destroyed.iter().any(|d| d.contains("vm-identity.img")),
+            "{destroyed:?}"
+        );
+        assert!(
+            !preserved.iter().any(|p| p.contains("vm-identity.img")),
+            "{preserved:?}"
+        );
+        // What the wipe DOES, on a scratch VM root: the rootfs, the identity
+        // disk and the guest's record of it are all gone afterwards.
+        let root = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join(format!(
+            "../../target/work/hard-wipe-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, root.clone());
+        let identity = root.join(tillandsias_vm_layer::vz::IDENTITY_IMAGE_FILE);
+        let record = vz
+            .provision_state_dir()
+            .join(tillandsias_vm_layer::vz::IDENTITY_RECORDED_FILE);
+        std::fs::create_dir_all(record.parent().unwrap()).unwrap();
+        for f in [&vz.rootfs_image_path(), &identity, &record] {
+            std::fs::write(f, b"x").unwrap();
+        }
+        hard_wipe(&vz).expect("hard wipe");
+        assert!(!vz.rootfs_image_path().exists(), "the rootfs goes");
+        assert!(!identity.exists(), "HARD destroys the identity disk");
+        assert!(!record.exists(), "and the guest's record of it");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// 5b loop guard, end to end on a scratch root: two consecutive unclean

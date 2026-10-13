@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-webkit-engine-container-from-playwright-webkit-serves-apple-presets-labelled-webkit-approximates-safari
+    event:
+      type: note
+      ts: "2026-10-13T16:35:57Z"
+      agent_id: linux-lenovinha-claude-20261013t163557z
+      host: lenovinha
+      summary: |
+        Coordinator-approved design note (2026-10-13), so nobody simplifies the relay away. WebKitGTK resolves names through GLib, which answers EVERY *.localhost name with loopback and never reads /etc/hosts for those names. Measured: with --add-host www.demo.localhost -> the forwarder, WebKit still dialled 127.0.0.1 and got "Connection refused" for its own project and for www.other alike. So the WebKit window's own launcher runs a relay on the window's loopback (127.0.0.1 and ::1, the preview port only) that passes raw TCP, unread, to the per-window forwarder. The project binding is unchanged: the forwarder admits only this project's SNI, and the router's strict_sni_host binds Host to SNI. --add-host stays for non-GLib clients. Also measured: the image must carry NO USER line, because under --userns=keep-id an explicit USER (65534) cannot write the owner-only host Wayland socket and GTK reports "Failed to open display". The spec delta (openspec/changes/open-it-browser, browser-window-modes) states both.

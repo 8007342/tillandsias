@@ -653,9 +653,17 @@ pub(crate) mod tests {
     /// `tillandsias-scratch-test-<pid>-<uuid>`: the pid lets a later run tell
     /// a dead run's leftovers from a sibling test that is still running.
     fn scratch_service() -> String {
+        // The counter is what makes this unique. generate_uuid() is only the
+        // wall clock plus the pid, so two tests on parallel threads within one
+        // clock tick got the SAME service and read each other's items
+        // (measured 2026-10-13: a_stored_anchor_read_through_a_failing_find
+        // read another test's anchor, 08fb954c-…-000000000000). The pid stays
+        // first: sweep_scratch reads it to find a dead run's leftovers.
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         format!(
-            "{SCRATCH_SERVICE_PREFIX}{}-{}",
+            "{SCRATCH_SERVICE_PREFIX}{}-{}-{}",
             std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             generate_uuid()
         )
     }

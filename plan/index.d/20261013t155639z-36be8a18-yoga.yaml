@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: pre-push-gate-cold-debug-build-dominates-its-own-wall-clock
+    field: status
+    value: in_progress
+    ts: "2026-10-13T15:56:39Z"
+    host: yoga
+
+events:
+  - packet_id: pre-push-gate-cold-debug-build-dominates-its-own-wall-clock
+    event:
+      type: note
+      ts: "2026-10-13T15:56:39Z"
+      host: yoga
+      summary: |-
+        claimed by yoga cycle 2026-10-13T15:23Z (agent linux-yoga-claude-20261013t152424z): the gate's ledger-integrity and corpus-coverage steps still run tillandsias-plan through cargo run (build.sh 3360, 4552, 4558); slice 1 resolves them through the shared probe with ensure_fresh_plan_binary on work/835-kjuv

@@ -48,6 +48,132 @@ const VAULT_SHAMIR_SHARE_V1: &str = "vault-shamir-share-v1";
 /// Keychain user for the installation anchor (UUID).
 const INSTALL_ANCHOR_V1: &str = "installation-uuid-v1";
 
+/// 1642-cc54 (criterion 2). Written by the macOS guest's provisioning when
+/// the VM has an identity disk: one line, the disk's mount point. The disk
+/// outlives every fresh rootfs, so the Vault store kept on it survives a
+/// rebuild and the next VM unseals it with the share the host keychain kept.
+pub(crate) const IDENTITY_DISK_CONFIG: &str = "/etc/tillandsias/identity-disk";
+/// Created on the identity disk when it is formatted. Its presence is the
+/// proof the disk is MOUNTED, not merely its empty mount-point directory.
+pub(crate) const IDENTITY_DISK_MARKER: &str = ".tillandsias-identity";
+
+/// Where the Vault store (`vault-data`) and its audit log (`vault-audit`)
+/// live. Without an identity disk (Linux; a guest provisioned before
+/// 1642-cc54) that is the cache dir, as it always was.
+///
+/// With one, it is the disk — and a disk that is recorded but NOT mounted is
+/// an error, never a fallback to the cache dir. Falling back would start an
+/// empty Vault on the rootfs, whose init writes a new share over the one the
+/// keychain kept, and the identity on the disk becomes unsealable.
+pub(crate) fn vault_store_root() -> Result<PathBuf, String> {
+    vault_store_root_from(Path::new(IDENTITY_DISK_CONFIG), crate::init_cache_dir)
+}
+
+pub(crate) fn vault_store_root_from(
+    config: &Path,
+    cache_dir: impl FnOnce() -> Result<PathBuf, String>,
+) -> Result<PathBuf, String> {
+    let recorded = match fs::read_to_string(config) {
+        Ok(s) => s,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return cache_dir(),
+        Err(e) => return Err(format!("read {}: {e}", config.display())),
+    };
+    let root = PathBuf::from(recorded.trim());
+    if !root.is_absolute() {
+        return Err(format!(
+            "{} names {:?}, not an absolute mount point",
+            config.display(),
+            recorded.trim()
+        ));
+    }
+    if !root.join(IDENTITY_DISK_MARKER).exists() {
+        return Err(format!(
+            "the identity disk is not mounted at {} ({} is missing); refusing to keep the Vault \
+             store anywhere else, which would start an empty Vault over the kept sign-ins \
+             (1642-cc54)",
+            root.display(),
+            IDENTITY_DISK_MARKER
+        ));
+    }
+    Ok(root)
+}
+
+/// 1642-cc54. The guest's credential fallbacks (`fallback_vault-shamir-share-v1`,
+/// `fallback_vault-root-token-v1`, `installation_anchor`) are WRITTEN beside
+/// the store they open, so they survive a fresh rootfs with it.
+///
+/// MEASURED (live, 2026-10-13): with only the store on the identity disk, the
+/// rebuilt guest found the store, found no fallback (it had been on the
+/// rootfs), checked before the tray's delivery arrived, and the partial-init
+/// guard WIPED the surviving store ("the unseal share … is in neither the
+/// keyring nor its fallback file").
+fn credential_write_dir() -> Result<PathBuf, String> {
+    vault_store_root()
+}
+
+/// Where a fallback is READ: the store root first, then the cache dir. A guest
+/// that moved its store before its fallbacks followed (or whose headless runs
+/// before provisioning re-runs) still has them on the rootfs. A share present
+/// in EITHER place counts, so no migration state can read as "no share" and
+/// trigger the partial-init wipe.
+fn credential_read_dirs() -> Vec<PathBuf> {
+    let dirs = credential_read_dirs_from(vault_store_root(), crate::init_cache_dir());
+    if let [store_root, cache_dir] = dirs.as_slice() {
+        settle_fallbacks_onto_store_root(store_root, cache_dir);
+    }
+    dirs
+}
+
+/// The guest's credential fallback files.
+const CREDENTIAL_FALLBACKS: [&str; 3] = [
+    "fallback_vault-shamir-share-v1",
+    "fallback_vault-root-token-v1",
+    "installation_anchor",
+];
+
+/// Copy each fallback that exists ONLY in the cache dir onto the store root,
+/// never over one already there. MEASURED (live, 2026-10-13, second run):
+/// reading the rootfs copy was not enough. Nothing in that session WROTE a
+/// fallback (the tray delivers credentials from its polls, which the push
+/// subscription demotes), so the copies stayed on the rootfs, the next
+/// rebuild destroyed them, and the partial-init guard wiped the surviving
+/// store again. The first read now completes the move. Best effort: a failed
+/// copy leaves the rootfs copy, which is still read.
+fn settle_fallbacks_onto_store_root(store_root: &Path, cache_dir: &Path) {
+    for name in CREDENTIAL_FALLBACKS {
+        let (src, dst) = (cache_dir.join(name), store_root.join(name));
+        if src.is_file() && !dst.exists() && fs::copy(&src, &dst).is_ok() {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = fs::set_permissions(&dst, fs::Permissions::from_mode(0o600));
+            }
+        }
+    }
+}
+
+fn credential_read_dirs_from(
+    store_root: Result<PathBuf, String>,
+    cache_dir: Result<PathBuf, String>,
+) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    for d in [store_root, cache_dir].into_iter().flatten() {
+        if !dirs.contains(&d) {
+            dirs.push(d);
+        }
+    }
+    dirs
+}
+
+/// The first readable fallback file `name` in [`credential_read_dirs`] order.
+fn read_credential_fallback(name: &str) -> Option<PathBuf> {
+    read_credential_fallback_in(credential_read_dirs(), name)
+}
+
+fn read_credential_fallback_in(dirs: Vec<PathBuf>, name: &str) -> Option<PathBuf> {
+    dirs.into_iter().map(|d| d.join(name)).find(|p| p.is_file())
+}
+
 #[cfg(feature = "vault")]
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
@@ -244,7 +370,7 @@ pub fn set_in_vm_credentials(
     // 701-se6x criterion 2: surface a failed write instead of discarding it.
     // The `Err` arm of init_cache_dir was silent too — same consequence, since
     // no cache dir means no share file either.
-    match crate::init_cache_dir() {
+    match credential_write_dir() {
         Ok(cache_dir) => {
             if let Err(e) = write_vm_credential_fallbacks(
                 &cache_dir,
@@ -2840,10 +2966,9 @@ pub(crate) fn is_provider_logged_in(provider: ProviderId, debug: bool) -> bool {
 /// expensive on-demand launch in `is_github_key_present` and `ensure_vault_running`.
 #[allow(dead_code)]
 fn vault_data_volume_exists() -> bool {
-    let dir = crate::init_cache_dir()
-        .unwrap_or_else(|_| PathBuf::from("."))
-        .join("vault-data");
-    dir.exists()
+    // 1642-cc54: an identity disk that is recorded but not mounted answers
+    // "no store", so nothing is initialised or wiped in its place.
+    vault_store_root().is_ok_and(|root| root.join("vault-data").exists())
 }
 
 /// Persist the in-VM credential fallback files.
@@ -2942,10 +3067,9 @@ fn has_shamir_share_in_keyring() -> bool {
 
     // Fallback: file (populated by keychain_set_blocking when keyring unavailable,
     // e.g. in a VM guest or headless environment without D-Bus)
-    if let Ok(cache_dir) = crate::init_cache_dir() {
-        return fallback_share_counts(&cache_dir);
-    }
-    false
+    credential_read_dirs()
+        .iter()
+        .any(|d| fallback_share_counts(d))
 }
 
 /// What the OS keychain can say about the unseal share (order 1437-qza3).
@@ -3694,8 +3818,8 @@ fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
         // deriving the dummy key — the fallback was written during the initial
         // vault-init run and lets the headless self-recover when the Windows tray
         // hasn't received the GetVaultHandover handover yet.
-        let cache_dir = crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
-        let fallback_file = cache_dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"));
+        let fallback_file = read_credential_fallback(&format!("fallback_{VAULT_SHAMIR_SHARE_V1}"))
+            .unwrap_or_default();
         if fallback_file.is_file()
             && let Ok(encoded) = fs::read_to_string(&fallback_file).map(|s| s.trim().to_string())
             && let Ok(key_vec) = base64::engine::general_purpose::STANDARD.decode(&encoded)
@@ -3736,9 +3860,9 @@ fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
                     "[tillandsias-vault] keyring Shamir share get failed/timed out ({e}); checking file fallback"
                 );
             }
-            let cache_dir =
-                crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
-            let fallback_file = cache_dir.join(format!("fallback_{}", VAULT_SHAMIR_SHARE_V1));
+            let fallback_file =
+                read_credential_fallback(&format!("fallback_{}", VAULT_SHAMIR_SHARE_V1))
+                    .unwrap_or_default();
             if fallback_file.is_file() {
                 fs::read_to_string(&fallback_file)
                     .map(|s| s.trim().to_string())
@@ -3783,9 +3907,7 @@ fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
                     "[tillandsias-vault] keyring anchor get failed/timed out ({e}); checking file fallback"
                 );
             }
-            let cache_dir =
-                crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
-            let fallback_file = cache_dir.join("installation_anchor");
+            let fallback_file = read_credential_fallback("installation_anchor").unwrap_or_default();
             let mut loaded = None;
             if fallback_file.is_file()
                 && let Ok(a) = fs::read_to_string(&fallback_file)
@@ -4283,7 +4405,7 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     // guard fixes. @trace spec:tillandsias-vault
     let is_partial_init = vault_data_volume_exists() && !has_shamir_share_in_keyring();
     if is_partial_init {
-        let vault_dir = crate::init_cache_dir()
+        let vault_dir = vault_store_root()
             .unwrap_or_else(|_| PathBuf::from("."))
             .join("vault-data");
         // Order 1437-qza3: ALWAYS say this, not only under --debug. Since no
@@ -4339,9 +4461,7 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     // /vault/data/core/_migration and `--github-login` then reports Vault as
     // not running. `:U` re-asserts ownership and self-repairs that drift.
     // @trace spec:tillandsias-vault
-    let vault_dir = crate::init_cache_dir()
-        .map_err(|e| e.to_string())?
-        .join("vault-data");
+    let vault_dir = vault_store_root()?.join("vault-data");
     std::fs::create_dir_all(&vault_dir)
         .map_err(|e| format!("failed to create vault data dir: {}", e))?;
     let volume_arg = format!("{}:/vault/data:U", vault_dir.display());
@@ -4361,9 +4481,7 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     // between launches would otherwise leave the directory owned by a uid the
     // `vault` user cannot write, and an audit device that cannot write is FATAL
     // to Vault — every request fails once no audit device can record it.
-    let vault_audit_dir = crate::init_cache_dir()
-        .map_err(|e| e.to_string())?
-        .join("vault-audit");
+    let vault_audit_dir = vault_store_root()?.join("vault-audit");
     std::fs::create_dir_all(&vault_audit_dir)
         .map_err(|e| format!("failed to create vault audit dir: {}", e))?;
     let audit_volume_arg = vault_audit_volume_arg(&vault_audit_dir);
@@ -4907,7 +5025,7 @@ fn keychain_set_blocking(user: &str, value: &str) -> Result<(), String> {
                  using fallback file (expected in VM guest and headless environments)"
             );
             let cache_dir =
-                crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
+                credential_write_dir().map_err(|err| format!("credential dir: {err}"))?;
             let fallback_file = cache_dir.join(format!("fallback_{}", user));
             fs::write(&fallback_file, &value)
                 .map_err(|err| format!("write fallback file: {err}"))?;
@@ -5116,9 +5234,8 @@ fn shamir_share_candidates() -> Vec<(&'static str, String)> {
         .ok()
         .and_then(|entry| with_keyring_timeout(move || entry.get_password()).ok());
 
-    let fallback_file = crate::init_cache_dir().ok().and_then(|dir| {
-        fs::read_to_string(dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"))).ok()
-    });
+    let fallback_file = read_credential_fallback(&format!("fallback_{VAULT_SHAMIR_SHARE_V1}"))
+        .and_then(|p| fs::read_to_string(p).ok());
 
     assemble_share_candidates(
         guest_podman_secret,
@@ -5157,7 +5274,7 @@ fn persist_healed_root_token(token: &str, share_b64: &str, debug: bool) -> Resul
                 });
             }
         }
-        let cache_dir = crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
+        let cache_dir = credential_write_dir().map_err(|err| format!("credential dir: {err}"))?;
         let fallback_file = cache_dir.join("fallback_vault-root-token-v1");
         fs::write(&fallback_file, token).map_err(|err| format!("write fallback file: {err}"))?;
         #[cfg(unix)]
@@ -5462,7 +5579,7 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
             // is the MORE dangerous of the two, because it runs immediately
             // after `operator init` — the moment the share exists and nothing
             // else on the host has a copy.
-            match crate::init_cache_dir() {
+            match credential_write_dir() {
                 Ok(cache_dir) => {
                     if let Err(e) =
                         write_vm_credential_fallbacks(&cache_dir, Some(&token), Some(&share_b64))
@@ -5547,8 +5664,8 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
         // explicit `--store-vault-root-token` path). This keeps the headless
         // self-sufficient when the Windows tray's Credential Manager hasn't
         // received the handover yet (e.g. after a GetVaultHandover failure).
-        let cache_dir = crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
-        let fallback_file = cache_dir.join("fallback_vault-root-token-v1");
+        let fallback_file =
+            read_credential_fallback("fallback_vault-root-token-v1").unwrap_or_default();
         if fallback_file.is_file()
             && let Ok(t) = fs::read_to_string(&fallback_file).map(|s| s.trim().to_string())
             && !t.is_empty()
@@ -5572,9 +5689,8 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
                     "[tillandsias-vault] keyring root token get failed/timed out ({e}); checking file fallback"
                 );
             }
-            let cache_dir =
-                crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
-            let fallback_file = cache_dir.join("fallback_vault-root-token-v1");
+            let fallback_file =
+                read_credential_fallback("fallback_vault-root-token-v1").unwrap_or_default();
             if fallback_file.is_file() {
                 fs::read_to_string(&fallback_file)
                     .map(|s| s.trim().to_string())
@@ -6440,6 +6556,154 @@ pub async fn ensure_mirror_identity_provisioned(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- 1642-cc54: the Vault store lives on the identity disk ---------------
+
+    /// A scratch dir inside the checkout (operator rule: development work
+    /// never leaves it), fresh per test.
+    fn identity_scratch(tag: &str) -> PathBuf {
+        let d = PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../../target/work/vault-store-root")
+        .join(format!("{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&d);
+        fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn vault_store_root_is_the_cache_dir_without_an_identity_disk() {
+        let s = identity_scratch("none");
+        let cache = s.join("cache");
+        let got = vault_store_root_from(&s.join("no-such-config"), || Ok(cache.clone()));
+        assert_eq!(got, Ok(cache));
+    }
+
+    #[test]
+    fn vault_store_root_is_the_identity_disk_once_it_is_mounted() {
+        let s = identity_scratch("mounted");
+        let disk = s.join("identity");
+        fs::create_dir_all(&disk).unwrap();
+        fs::write(disk.join(IDENTITY_DISK_MARKER), b"").unwrap();
+        let config = s.join("identity-disk");
+        fs::write(&config, format!("{}\n", disk.display())).unwrap();
+        let got = vault_store_root_from(&config, || panic!("must not fall back to the cache dir"));
+        assert_eq!(got, Ok(disk));
+    }
+
+    /// The case the resolver exists for: the disk is recorded but its mount
+    /// point is an empty directory. Answering the cache dir would start an
+    /// empty Vault whose init overwrites the kept share.
+    #[test]
+    fn an_unmounted_identity_disk_is_refused_never_replaced_by_the_cache_dir() {
+        let s = identity_scratch("unmounted");
+        let disk = s.join("identity");
+        fs::create_dir_all(&disk).unwrap();
+        let config = s.join("identity-disk");
+        fs::write(&config, disk.display().to_string()).unwrap();
+        let got = vault_store_root_from(&config, || panic!("must not fall back to the cache dir"));
+        let err = got.expect_err("an unmounted identity disk must refuse");
+        assert!(err.contains("not mounted"), "{err}");
+        assert!(err.contains(IDENTITY_DISK_MARKER), "{err}");
+    }
+
+    /// The live 2026-10-13 failure: the store survived on the identity disk,
+    /// the share's fallback did not, and the partial-init guard wiped the
+    /// store. Fallbacks are now read from the store root first, then the
+    /// cache dir, so the upgrade state (fallback still on the rootfs) and the
+    /// steady state (fallback beside the store) both find the share.
+    #[test]
+    fn a_fallback_share_is_found_beside_the_store_or_still_on_the_rootfs() {
+        let s = identity_scratch("fallback-read");
+        let (disk, cache) = (s.join("identity"), s.join("cache"));
+        fs::create_dir_all(&disk).unwrap();
+        fs::create_dir_all(&cache).unwrap();
+        let name = format!("fallback_{VAULT_SHAMIR_SHARE_V1}");
+        let dirs = || credential_read_dirs_from(Ok(disk.clone()), Ok(cache.clone()));
+        assert_eq!(
+            dirs(),
+            vec![disk.clone(), cache.clone()],
+            "store root first"
+        );
+        assert_eq!(read_credential_fallback_in(dirs(), &name), None);
+        // Upgrade state: only the rootfs copy exists. It must still count.
+        fs::write(cache.join(&name), b"rootfs-copy").unwrap();
+        assert_eq!(
+            read_credential_fallback_in(dirs(), &name),
+            Some(cache.join(&name))
+        );
+        // Steady state: the copy beside the store wins.
+        fs::write(disk.join(&name), b"disk-copy").unwrap();
+        assert_eq!(
+            read_credential_fallback_in(dirs(), &name),
+            Some(disk.join(&name))
+        );
+    }
+
+    /// The second live failure: a fallback still on the rootfs must be MOVED
+    /// beside the store by the first read, or the next rebuild loses it. A copy
+    /// already beside the store is never overwritten.
+    #[test]
+    fn a_rootfs_fallback_is_settled_beside_the_store_and_never_overwrites_one() {
+        let s = identity_scratch("fallback-settle");
+        let (disk, cache) = (s.join("identity"), s.join("cache"));
+        fs::create_dir_all(&disk).unwrap();
+        fs::create_dir_all(&cache).unwrap();
+        fs::write(
+            cache.join("fallback_vault-shamir-share-v1"),
+            b"rootfs-share",
+        )
+        .unwrap();
+        fs::write(cache.join("installation_anchor"), b"rootfs-anchor").unwrap();
+        fs::write(disk.join("installation_anchor"), b"disk-anchor").unwrap();
+        settle_fallbacks_onto_store_root(&disk, &cache);
+        assert_eq!(
+            fs::read(disk.join("fallback_vault-shamir-share-v1")).unwrap(),
+            b"rootfs-share"
+        );
+        assert_eq!(
+            fs::read(disk.join("installation_anchor")).unwrap(),
+            b"disk-anchor"
+        );
+        assert!(
+            !disk.join("fallback_vault-root-token-v1").exists(),
+            "nothing to copy"
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = fs::metadata(disk.join("fallback_vault-shamir-share-v1"))
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
+    }
+
+    /// Linux, or a guest without an identity disk: one directory, read once.
+    /// An unmounted identity disk (Err) still lets the rootfs copy be read.
+    #[test]
+    fn credential_read_dirs_dedupe_and_skip_an_unavailable_root() {
+        let p = PathBuf::from("/c");
+        assert_eq!(
+            credential_read_dirs_from(Ok(p.clone()), Ok(p.clone())),
+            vec![p.clone()]
+        );
+        assert_eq!(
+            credential_read_dirs_from(Err("not mounted".into()), Ok(p.clone())),
+            vec![p]
+        );
+    }
+
+    #[test]
+    fn a_relative_identity_disk_path_is_refused() {
+        let s = identity_scratch("relative");
+        let config = s.join("identity-disk");
+        fs::write(&config, "var/lib/tillandsias/identity").unwrap();
+        let got = vault_store_root_from(&config, || panic!("must not fall back to the cache dir"));
+        assert!(got.is_err());
+    }
 
     // ---- 1383-5hpk: GitHub App token rotation ------------------------------
 

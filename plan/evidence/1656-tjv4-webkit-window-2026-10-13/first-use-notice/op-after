@@ -1,0 +1,6 @@
+Error: template: inspect:1:13: executing "inspect" at <.Name>: can't evaluate field Name in type interface {}
+tillandsias-dev-inference 1b96d42da8fada7fd3820756b451349edb6c67f4f8ef1e8a2b0b6ab6f9ea26a8 running 2026-10-11 13:29:41.744179536 -0700 PDT healthy 
+tillandsias-router 6d7a987c601efeb2735e37f2ccc03e64b3295a945cae4982e595efd70bcb145d running 2026-10-11 16:02:42.662513951 -0700 PDT Error: template: inspect:1:76: executing "inspect" at <.State.Health.Status>: nil pointer evaluating *define.HealthCheckResults.Status
+podman
+tillandsias-egress
+tillandsias-enclave

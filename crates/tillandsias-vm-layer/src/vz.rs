@@ -457,6 +457,35 @@ impl VzRuntime {
         Ok(())
     }
 
+    /// 1642-cc54: does the Vault store outlive a rebuild of this guest? Only
+    /// when the identity image exists AND the guest recorded that its store
+    /// lives there. A guest provisioned before the identity disk, or one whose
+    /// provisioning could not mount it, kept the store on the rootfs, which the
+    /// rebuild destroys; the caller must then clear the keychain's share.
+    pub fn vault_store_survives_rebuild(&self) -> bool {
+        self.image_root.join(IDENTITY_IMAGE_FILE).exists()
+            && self
+                .provision_state_dir()
+                .join(IDENTITY_RECORDED_FILE)
+                .exists()
+    }
+
+    /// 1642-cc54: destroy the identity disk and its record. Only an explicit
+    /// HARD reset calls this; a rebuild keeps both. Missing is fine.
+    pub fn wipe_identity(&self) -> std::io::Result<()> {
+        for p in [
+            self.image_root.join(IDENTITY_IMAGE_FILE),
+            self.provision_state_dir().join(IDENTITY_RECORDED_FILE),
+        ] {
+            match std::fs::remove_file(&p) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(())
+    }
+
     /// Fetch Fedora's official Cloud qcow2 image and convert it to the
     /// raw disk image Virtualization.framework boots.
     ///
@@ -1048,6 +1077,70 @@ EOF
   systemctl enable tillandsias-swap.service
   systemctl start systemd-zram-setup@zram0.service tillandsias-swap.service
 } || echo "[tillandsias-provision] WARNING: guest swap setup incomplete (1377-hcnv); continuing without it" >&2
+
+# 1642-cc54. IDENTITY DISK. The host's vm-identity.img outlives every fresh
+# rootfs.img, so the Vault store kept on it (and the share the host keychain
+# kept) survives a rebuild: GitHub stays signed in. Found by its virtio
+# serial, like swap. FORMATTED ONLY WHEN BLANK: `blkid -p` exits 2 for "no
+# signature" and anything else (a probe error) must never reformat a disk
+# that holds the operator's identity. The mount point is RECORDED in
+# /etc/tillandsias/identity-disk only once the disk is mounted and marked;
+# headless then refuses to keep the Vault anywhere else (vault_store_root).
+# NON-FATAL: without the record, the Vault stays on the rootfs as before.
+# A FUNCTION WITH EXPLICIT RETURNS, not a `{ …; } || warn` group: set -e is
+# suspended on the left of `||`, so a failed check inside such a group would
+# NOT stop it and the record would be written over an unmounted disk.
+tillandsias_identity_disk() {
+  local iddev=/dev/disk/by-id/virtio-tillandsias-id
+  local idmnt=/var/lib/tillandsias/identity
+  local recorded=__PROVISION_STATE_GUEST_DIR__/identity-disk.recorded
+  local rc=0
+  # The host keeps the keychain's share across a rebuild only while this
+  # record exists, so it is removed FIRST and written LAST: a provisioning
+  # that cannot mount the disk leaves no stale "the store survives" claim.
+  rm -f "$recorded"
+  if [ ! -b "$iddev" ]; then
+    echo "[tillandsias-provision] no $iddev — host attached no identity disk; the Vault stays on the rootfs (1642-cc54)" >&2
+    return 0
+  fi
+  blkid -p "$iddev" >/dev/null 2>&1 || rc=$?
+  if [ "$rc" = 2 ]; then
+    mkfs.btrfs -q -L tillandsias-id "$iddev" || return 1
+  elif [ "$rc" != 0 ]; then
+    echo "[tillandsias-provision] blkid could not probe $iddev (rc=$rc); NOT formatting it" >&2
+    return 1
+  fi
+  mkdir -p "$idmnt" || return 1
+  grep -q "^LABEL=tillandsias-id " /etc/fstab \
+    || echo "LABEL=tillandsias-id $idmnt btrfs nofail 0 0" >> /etc/fstab || return 1
+  mountpoint -q "$idmnt" || mount "$idmnt" || return 1
+  mountpoint -q "$idmnt" || return 1
+  [ -e "$idmnt/.tillandsias-identity" ] || : > "$idmnt/.tillandsias-identity" || return 1
+  # UPGRADE. A guest provisioned before this kept its store on the rootfs, and
+  # a provisioning change re-runs this script on that same rootfs. Recording an
+  # EMPTY disk there would start a new Vault against the keychain's existing
+  # share (803-49re). Move the store instead, so the share still opens it and
+  # no sign-in is lost. The Vault is stopped first (headless may be running from
+  # boot; provisioning starts it again below); the copy lands under a temporary
+  # name and is renamed, so a half copy is never taken for a store. The rootfs
+  # copy is left as it was.
+  local old=/root/.cache/tillandsias
+  if [ -d "$old/vault-data" ] && [ ! -e "$idmnt/vault-data" ]; then
+    systemctl stop tillandsias-headless.service 2>/dev/null || true
+    podman stop -t 30 tillandsias-vault >/dev/null 2>&1 || true
+    rm -rf "$idmnt/vault-data.moving"
+    cp -a "$old/vault-data" "$idmnt/vault-data.moving" || return 1
+    mv "$idmnt/vault-data.moving" "$idmnt/vault-data" || return 1
+    if [ -d "$old/vault-audit" ] && [ ! -e "$idmnt/vault-audit" ]; then
+      cp -a "$old/vault-audit" "$idmnt/vault-audit" || true
+    fi
+    echo "[tillandsias-provision] moved the Vault store from the rootfs onto the identity disk (1642-cc54)" >&2
+  fi
+  mkdir -p /etc/tillandsias || return 1
+  echo "$idmnt" > /etc/tillandsias/identity-disk || return 1
+  : > "$recorded" || return 1
+}
+tillandsias_identity_disk || echo "[tillandsias-provision] WARNING: identity disk setup incomplete (1642-cc54); the Vault stays on the rootfs and sign-ins will not survive a rebuild" >&2
 
 # Mount host ~/src via virtio-fs when the VZ config provides the home-src tag.
 # PERSISTED via /etc/fstab (2026-07-10 attended-smoke finding): cloud-init
@@ -2082,6 +2175,25 @@ impl std::error::Error for OpenVsockError {}
 /// linux-next). See plan/issues/forge-memory-swap-architecture-design-2026-09-26.md §4.3.
 pub const SWAP_IMAGE_FILE: &str = "vm-swap.img";
 
+/// 1642-cc54 (criterion 2). The guest's identity disk, beside `rootfs.img`:
+/// it holds the Vault store, so it OUTLIVES every fresh rootfs (a VERSION
+/// rebuild, the unclean-stop rebuild, a reprovision) and GitHub stays signed
+/// in. Only an explicit HARD reset deletes it. Never in
+/// `wipe_provisioned_artifacts`. Module scope so the reset code on every
+/// target can name it.
+pub const IDENTITY_IMAGE_FILE: &str = "vm-identity.img";
+
+/// Logical size of a new identity image. Sparse, so it costs only what the
+/// Vault store writes (kilobytes to a few MiB).
+pub const IDENTITY_IMAGE_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+
+/// Written by the guest into the provision-state share once its Vault store
+/// lives on the identity disk (and removed first, so a provisioning that could
+/// not mount the disk leaves none). It tells the host whether a rebuild keeps
+/// the store, which decides whether the keychain's share must be cleared
+/// (803-49re: a share kept for a destroyed store breaks every sign-in).
+pub const IDENTITY_RECORDED_FILE: &str = "identity-disk.recorded";
+
 /// VZVirtualMachineState by its raw value, for logs.
 pub fn vz_state_name(state: isize) -> &'static str {
     match state {
@@ -2284,6 +2396,10 @@ pub mod boot {
         /// after the root disk under [`SWAP_BLOCK_DEVICE_ID`]. The caller
         /// creates it fresh each launch with [`fresh_sparse_swap_image`].
         pub swap_disk: Option<PathBuf>,
+        /// Optional identity disk (1642-cc54), attached after swap under
+        /// [`IDENTITY_BLOCK_DEVICE_ID`]. Created once with
+        /// [`ensure_identity_image`] and KEPT across rebuilds.
+        pub identity_disk: Option<PathBuf>,
         /// Host directories exposed to the guest over virtio-fs, in order.
         /// Empty installs no directory-sharing device at all — which is what
         /// `None` used to mean.
@@ -2309,6 +2425,7 @@ pub mod boot {
                 root_disk: None,
                 cidata_iso: None,
                 swap_disk: None,
+                identity_disk: None,
                 shares: Vec::new(),
                 nvram: None,
                 serial_writer_fd: None,
@@ -2327,6 +2444,12 @@ pub mod boot {
     /// Defined at module scope (all targets) and re-exported here: the
     /// cross-platform `stop()` cleanup names it too (1377-hcnv relay-fix).
     pub use super::SWAP_IMAGE_FILE;
+    pub use super::{IDENTITY_IMAGE_BYTES, IDENTITY_IMAGE_FILE};
+
+    /// virtio-blk serial of the identity disk (1642-cc54), seen by the guest
+    /// as `/dev/disk/by-id/virtio-tillandsias-id`. Short on purpose: a
+    /// virtio-blk serial holds at most 20 bytes.
+    pub const IDENTITY_BLOCK_DEVICE_ID: &str = "tillandsias-id";
 
     /// virtio-blk serial the guest finds its swap disk by, as
     /// `/dev/disk/by-id/virtio-tillandsias-swap`. By identity rather than
@@ -2361,6 +2484,13 @@ pub mod boot {
                 path: path.clone(),
                 read_only: false,
                 identifier: Some(SWAP_BLOCK_DEVICE_ID),
+            });
+        }
+        if let Some(path) = &spec.identity_disk {
+            plan.push(StorageAttachment {
+                path: path.clone(),
+                read_only: false,
+                identifier: Some(IDENTITY_BLOCK_DEVICE_ID),
             });
         }
         if let Some(path) = &spec.cidata_iso {
@@ -2458,6 +2588,23 @@ pub mod boot {
         f.set_len(bytes)?;
         exclude_from_time_machine(path);
         Ok(())
+    }
+
+    /// Create the identity image (1642-cc54) ONLY IF IT IS MISSING, sparse at
+    /// `bytes`. The opposite of [`fresh_sparse_swap_image`]: an existing image
+    /// holds the operator's sign-ins and is never replaced or resized here.
+    /// Not excluded from Time Machine: its contents are sealed by the share in
+    /// the keychain, which is backed up with it.
+    pub fn ensure_identity_image(path: &Path, bytes: u64) -> std::io::Result<()> {
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+        {
+            Ok(f) => f.set_len(bytes),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+            Err(e) => Err(e),
+        }
     }
 
     /// Delete the swap image. Missing is fine: stop runs after a boot that
@@ -3172,12 +3319,31 @@ impl VmRuntime for VzRuntime {
             },
         };
 
+        // 1642-cc54: the identity disk is created once and KEPT, so the Vault
+        // store on it survives this rootfs. Boot without it rather than refuse
+        // to boot; the guest then keeps the Vault on the rootfs, as before.
+        let identity_image = self.image_root.join(boot::IDENTITY_IMAGE_FILE);
+        let identity_disk =
+            match boot::ensure_identity_image(&identity_image, boot::IDENTITY_IMAGE_BYTES) {
+                Ok(()) => Some(identity_image),
+                Err(err) => {
+                    eprintln!(
+                        "[tillandsias-vz] WARNING: could not create the identity disk {} ({err}). \
+                         Booting WITHOUT it: sign-ins will not survive the next rebuild \
+                         (1642-cc54).",
+                        identity_image.display()
+                    );
+                    None
+                }
+            };
+
         let spec = boot::VzBootConfig {
             cpu_count,
             memory_bytes: guest_memory_bytes,
             root_disk: Some(rootfs),
             cidata_iso: Some(cidata_iso_path),
             swap_disk,
+            identity_disk,
             shares,
             nvram: Some(self.image_root.join("nvram.bin")),
             serial_writer_fd,
@@ -5359,6 +5525,192 @@ mod tests {
         mark_vm_running(root.path()).unwrap();
         vz.wipe_provisioned_artifacts().unwrap();
         assert!(!previous_stop_was_unclean(root.path()));
+    }
+
+    /// Scratch root inside the checkout (operator rule: development work
+    /// never leaves it; a bare tempdir lands in /var/folders).
+    fn in_checkout_tempdir() -> tempfile::TempDir {
+        let base = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../../target/work/vz-tests");
+        std::fs::create_dir_all(&base).unwrap();
+        tempfile::tempdir_in(base).unwrap()
+    }
+
+    /// 1642-cc54 criterion 2: a fresh rootfs must not take the sign-ins with
+    /// it. The wipe every rebuild runs leaves the identity image, byte for
+    /// byte, while the rootfs goes.
+    #[test]
+    fn a_rebuild_wipe_keeps_the_identity_disk() {
+        let root = in_checkout_tempdir();
+        let vz = VzRuntime::new(3, root.path().to_path_buf());
+        let rootfs = root.path().join("rootfs.img");
+        let identity = root.path().join(IDENTITY_IMAGE_FILE);
+        std::fs::write(&rootfs, b"old guest").unwrap();
+        std::fs::write(&identity, b"sealed vault store").unwrap();
+        vz.wipe_provisioned_artifacts().unwrap();
+        assert!(!rootfs.exists(), "the rootfs must be fresh after a rebuild");
+        assert_eq!(std::fs::read(&identity).unwrap(), b"sealed vault store");
+    }
+
+    /// The identity image is created once, sparse, and never replaced or
+    /// resized after: the opposite of the swap image's fresh-every-launch.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_identity_image_is_created_once_and_never_replaced() {
+        use super::boot::ensure_identity_image;
+        let root = in_checkout_tempdir();
+        let path = root.path().join(IDENTITY_IMAGE_FILE);
+        ensure_identity_image(&path, IDENTITY_IMAGE_BYTES).unwrap();
+        let meta = std::fs::metadata(&path).unwrap();
+        assert_eq!(meta.len(), IDENTITY_IMAGE_BYTES);
+        {
+            use std::os::unix::fs::MetadataExt;
+            assert!(
+                meta.blocks() * 512 < 1024 * 1024,
+                "a new identity image must be sparse"
+            );
+        }
+        std::fs::write(&path, b"sealed vault store").unwrap();
+        ensure_identity_image(&path, IDENTITY_IMAGE_BYTES).unwrap();
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            b"sealed vault store",
+            "an existing identity image must be kept as it is"
+        );
+    }
+
+    /// The disk rides the bus after swap and before the read-only cidata ISO,
+    /// read-write, under the serial the guest finds it by.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn vz_config_attaches_the_identity_disk_by_its_serial() {
+        use super::boot::{IDENTITY_BLOCK_DEVICE_ID, VzBootConfig, storage_attachment_plan};
+        use std::path::PathBuf;
+        let mut spec = VzBootConfig::defaults();
+        spec.root_disk = Some(PathBuf::from("/vm/rootfs.img"));
+        spec.swap_disk = Some(PathBuf::from("/vm/vm-swap.img"));
+        spec.identity_disk = Some(PathBuf::from("/vm/vm-identity.img"));
+        spec.cidata_iso = Some(PathBuf::from("/vm/cidata.iso"));
+        let plan = storage_attachment_plan(&spec);
+        assert_eq!(plan.len(), 4);
+        assert_eq!(plan[2].path, PathBuf::from("/vm/vm-identity.img"));
+        assert_eq!(plan[2].identifier, Some(IDENTITY_BLOCK_DEVICE_ID));
+        assert!(!plan[2].read_only, "the Vault writes its store there");
+        assert!(plan[3].read_only, "cidata stays last and read-only");
+        assert!(
+            IDENTITY_BLOCK_DEVICE_ID.len() <= 20,
+            "a virtio-blk serial holds at most 20 bytes"
+        );
+    }
+
+    /// The guest half: format only a BLANK disk (blkid -p exit 2), never one
+    /// that merely failed to probe; record the mount point only after the
+    /// disk is mounted; and do it in a function with explicit returns, since
+    /// set -e is suspended inside a `{ …; } || warn` group.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn vz_provisioning_formats_only_a_blank_identity_disk_and_records_it_once_mounted() {
+        let ud = provision_user_data_for_test();
+        let body = ud
+            .split("tillandsias_identity_disk() {")
+            .nth(1)
+            .and_then(|s| s.split("\n}\n").next())
+            .expect("the identity disk setup is a function");
+        assert!(body.contains("/dev/disk/by-id/virtio-tillandsias-id"));
+        let format = body.find("mkfs.btrfs").expect("formats a blank disk");
+        let blank = body
+            .find("if [ \"$rc\" = 2 ]")
+            .expect("only on blkid's no-signature exit");
+        assert!(
+            blank < format,
+            "the format must sit under the blank-disk branch"
+        );
+        assert!(
+            body.contains("NOT formatting it"),
+            "a probe error must not format"
+        );
+        let mounted = body
+            .rfind("mountpoint -q \"$idmnt\" || return 1")
+            .expect("checks the mount");
+        let record = body
+            .find("/etc/tillandsias/identity-disk")
+            .expect("records the mount point");
+        assert!(mounted < record, "record only after the disk is mounted");
+        assert!(ud.contains("tillandsias_identity_disk || echo"));
+        // The host-visible record: removed before anything can fail, written
+        // after everything succeeded, into the share the host reads.
+        let removed = body
+            .find("rm -f \"$recorded\"")
+            .expect("removes the stale record first");
+        let written = body.find(": > \"$recorded\"").expect("writes the record");
+        assert!(removed < format && removed < body.find("blkid -p").unwrap());
+        assert!(written > record, "the host record comes last");
+        // Upgrade: an existing rootfs store moves onto the disk BEFORE the disk
+        // is recorded (recording an empty disk would orphan the kept share),
+        // only when the disk has no store yet, with the Vault stopped first.
+        let moved = body
+            .find("mv \"$idmnt/vault-data.moving\" \"$idmnt/vault-data\"")
+            .expect("moves an existing store");
+        let only_if = body
+            .find("[ ! -e \"$idmnt/vault-data\" ]")
+            .expect("never over a store already on the disk");
+        let stopped = body
+            .find("podman stop -t 30 tillandsias-vault")
+            .expect("stops the Vault before copying");
+        let copied = body.find("cp -a \"$old/vault-data\"").unwrap();
+        assert!(only_if < stopped && stopped < copied && copied < moved);
+        assert!(
+            moved < record,
+            "the store must be on the disk before the disk is recorded"
+        );
+        assert!(body.contains(&format!(
+            "{PROVISION_STATE_GUEST_DIR}/{IDENTITY_RECORDED_FILE}"
+        )));
+    }
+
+    /// The host's half of the keep-or-clear rule (803-49re): the store
+    /// survives a rebuild only with BOTH the identity image and the guest's
+    /// record that the store lives there. Either alone is a rootfs store.
+    #[test]
+    fn the_store_survives_a_rebuild_only_when_the_guest_recorded_the_identity_disk() {
+        let root = in_checkout_tempdir();
+        let vz = VzRuntime::new(3, root.path().to_path_buf());
+        let image = root.path().join(IDENTITY_IMAGE_FILE);
+        let record = vz.provision_state_dir().join(IDENTITY_RECORDED_FILE);
+        assert!(!vz.vault_store_survives_rebuild(), "a guest with neither");
+        std::fs::write(&image, b"x").unwrap();
+        assert!(
+            !vz.vault_store_survives_rebuild(),
+            "image alone: never recorded"
+        );
+        std::fs::create_dir_all(record.parent().unwrap()).unwrap();
+        std::fs::write(&record, b"").unwrap();
+        assert!(vz.vault_store_survives_rebuild());
+        vz.wipe_provisioned_artifacts().unwrap();
+        assert!(vz.vault_store_survives_rebuild(), "a rebuild keeps both");
+        std::fs::remove_file(&image).unwrap();
+        assert!(
+            !vz.vault_store_survives_rebuild(),
+            "record alone: the image is gone"
+        );
+    }
+
+    /// HARD reset is the one path that destroys identity: the image and its
+    /// record go together, and a second call on nothing is still Ok.
+    #[test]
+    fn a_hard_wipe_removes_the_identity_disk_and_its_record() {
+        let root = in_checkout_tempdir();
+        let vz = VzRuntime::new(3, root.path().to_path_buf());
+        let image = root.path().join(IDENTITY_IMAGE_FILE);
+        let record = vz.provision_state_dir().join(IDENTITY_RECORDED_FILE);
+        std::fs::create_dir_all(record.parent().unwrap()).unwrap();
+        std::fs::write(&image, b"sealed vault store").unwrap();
+        std::fs::write(&record, b"").unwrap();
+        vz.wipe_identity().unwrap();
+        assert!(!image.exists() && !record.exists());
+        vz.wipe_identity().unwrap();
     }
 
     #[test]
