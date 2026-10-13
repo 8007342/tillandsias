@@ -552,4 +552,76 @@ mod tests {
         assert_eq!(allowed.host, OBSERVATORIUM_HOST);
         assert_eq!(allowed.service_label, "observatorium");
     }
+
+    // ---- Order 1661-m9sr: the forge's guidance and the router agree ----
+
+    /// Every `http(s)://….localhost` host in a text, with its line.
+    fn guidance_hosts(text: &str) -> Vec<(usize, String)> {
+        let mut out = Vec::new();
+        for (n, line) in text.lines().enumerate() {
+            let mut rest = line;
+            while let Some(at) = rest.find("://") {
+                let tail = &rest[at + 3..];
+                let end = tail.find(['/', '`', ' ', ')', '\\']).unwrap_or(tail.len());
+                let host = &tail[..end];
+                if host.ends_with(".localhost") {
+                    out.push((n + 1, host.to_string()));
+                }
+                rest = &tail[end..];
+            }
+        }
+        out
+    }
+
+    /// A forge agent hands out the URLs its guidance shows. Each must parse,
+    /// with the router's own rule (`validate`), as `<service>.<project>
+    /// .localhost` for the project it names: templates with a sample project
+    /// and service, concrete examples with the project names the guidance
+    /// itself uses. Measured 2026-10-13 (operator, yoga): the context said
+    /// `<project>.<service>.localhost` and the agent got "no route".
+    #[test]
+    fn forge_guidance_hosts_parse_with_the_router_rule() {
+        const CONTEXT: &str = include_str!("../../../images/default/lib-common.sh");
+        const WEB_SERVICES: &str = include_str!(
+            "../../../images/default/config-overlay/opencode/instructions/web-services.md"
+        );
+        let start = CONTEXT
+            .find("## Web servers")
+            .expect("the startup context's Web servers block");
+        let block = &CONTEXT[start..start + CONTEXT[start..].find("CONTEXT_EOF").unwrap()];
+        let known_projects = ["lakanoa", "java", "thinking-service", "my-api", "demo"];
+        let mut checked = 0;
+        let mut wrong = Vec::new();
+        for (source, text) in [
+            ("lib-common.sh Web servers", block),
+            ("web-services.md", WEB_SERVICES),
+        ] {
+            for (line, host) in guidance_hosts(text) {
+                let concrete = host
+                    .replace("${project_name}", "demo")
+                    .replace("$TILLANDSIAS_PROJECT", "demo")
+                    .replace("<project>", "demo")
+                    .replace("<service>", "web");
+                let project = known_projects
+                    .iter()
+                    .find(|p| concrete.split('.').any(|label| label == **p))
+                    .copied()
+                    .unwrap_or("demo");
+                checked += 1;
+                // OpencodeSelf is the browser's own policy (no self-reference),
+                // not the host's shape: the order is what this guard pins.
+                match validate(&format!("http://{concrete}/"), project) {
+                    Ok(_) | Err(AllowlistDeny::OpencodeSelf) => {}
+                    Err(deny) => wrong.push(format!(
+                        "{source}:{line}: {host} (project {project}): {deny}"
+                    )),
+                }
+            }
+        }
+        assert!(checked >= 2, "no example hosts found; the extraction broke");
+        assert!(
+            wrong.is_empty(),
+            "guidance shows hosts the router does not route (<service>.<project>.localhost): {wrong:#?}"
+        );
+    }
 }
