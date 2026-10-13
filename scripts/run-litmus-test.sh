@@ -1966,6 +1966,20 @@ run_litmus_test_file() {
     local combined_output=""
     local step_index=0
 
+    # ORDER 1637-cnxq — step captures and the gate snapshot live inside the
+    # checkout under scratch/logs (scripts/scratch-dir.sh), never under the host
+    # temp dir. Resolved HERE, after parse-only has returned: a listing or a
+    # parse needs no scratch, and a run that cannot name one refuses by name.
+    local SCRATCH_DIR
+    SCRATCH_DIR="$("$PROJECT_ROOT/scripts/scratch-dir.sh" logs 2>/dev/null)" || SCRATCH_DIR=""
+    if [[ -z "$SCRATCH_DIR" ]]; then
+        echo "blocked:litmus-scratch:no-dir"
+        printf '  why: %s\n  remedy: %s\n' \
+            "scripts/scratch-dir.sh named no directory inside the checkout, and every executed step captures its stdout, stderr and gate snapshot there (1637-cnxq)" \
+            "run from a checkout that carries scripts/scratch-dir.sh, or set TILLANDSIAS_SCRATCH_ROOT to a writable absolute directory, then re-run" >&2
+        return 1
+    fi
+
     # ORDER 1309-fhxb. A TEST's verdict is DERIVED from its steps, and the case
     # that forces this is the one a step-only count cannot see: a test whose every
     # executed step is a SKIP asked no question, and counting it PASSED is
@@ -2010,9 +2024,9 @@ run_litmus_test_file() {
         # (podman writers get a sqlite-rollback window), then KILL for
         # TERM-immune fixtures.
         local step_capture step_errcap step_stderr step_stderr_log=""
-        step_capture="$(mktemp "${TMPDIR:-/tmp}/litmus-step-capture.XXXXXX")"
+        step_capture="$(mktemp "$SCRATCH_DIR/litmus-step-capture.XXXXXX")"
         # ORDER 1268-fx87: stderr to its own file. The verdict reads stdout.
-        step_errcap="$(mktemp "${TMPDIR:-/tmp}/litmus-step-stderr.XXXXXX")"
+        step_errcap="$(mktemp "$SCRATCH_DIR/litmus-step-stderr.XXXXXX")"
         # 956-llei: stall counter + wall clock at launch, diffed at kill time.
         local _lt_psi0 _lt_t0
         _lt_psi0="$(_lt_cpu_stall_us)"; _lt_t0="$(date +%s)"
@@ -2056,7 +2070,7 @@ run_litmus_test_file() {
         # ORDER 1443-fpck: the fixture regime and scope for this step, and the
         # real git dir's gate files snapshotted around it.
         local _lt_gsnap=""
-        _lt_gsnap="$(mktemp -d "${TMPDIR:-/tmp}/litmus-gate-snap.XXXXXX")" && _lt_gate_snapshot "$_lt_gsnap"
+        _lt_gsnap="$(mktemp -d "$SCRATCH_DIR/litmus-gate-snap.XXXXXX")" && _lt_gate_snapshot "$_lt_gsnap"
         TILLANDSIAS_POLICY_REGIME=fixture TILLANDSIAS_FIXTURE_SCOPE="$LITMUS_FIXTURE_SCOPE" \
             TILLANDSIAS_FIXTURE_GIT_DIRS="$LITMUS_REAL_GIT_DIRS" \
             LITMUS_STDLIB="${LITMUS_STDLIB}" timeout --kill-after=10s "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"${step_shell_prelude}${step_command}" </dev/null >"$step_capture" 2>"$step_errcap" || exit_code=$?

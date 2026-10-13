@@ -99,7 +99,19 @@ cd "$ROOT" || exit 2
 # same arguments. The marker makes the merged copy skip fetch/merge (it is
 # already on the relay branch) and carry the restore point.
 RP_ORIG_ARGS=("$@")
-RP_SNAPSHOT="$(mktemp "${TMPDIR:-/tmp}/relay-preflight-self.XXXXXX")" || RP_SNAPSHOT=""
+# ORDER 1637-cnxq — the self-snapshot lives inside the checkout, under
+# scratch/logs (scripts/scratch-dir.sh), never under the host temp dir. A tree
+# without the helper refuses by name: the snapshot is what lets the merged copy
+# re-exec, and a relay that silently ran without it would judge the wrong tree.
+SCRATCH_DIR="$("$ROOT/scripts/scratch-dir.sh" logs 2>/dev/null)" || SCRATCH_DIR=""
+if [ -z "$SCRATCH_DIR" ]; then
+    echo "refused:relay-preflight:scratch:no-dir"
+    printf '  why: %s\n  remedy: %s\n' \
+        "scripts/scratch-dir.sh named no directory inside the checkout, and the relay snapshots itself there before the merge (1637-cnxq)" \
+        "run from a checkout that carries scripts/scratch-dir.sh, or set TILLANDSIAS_SCRATCH_ROOT to a writable absolute directory, then re-run" >&2
+    exit 2
+fi
+RP_SNAPSHOT="$(mktemp "$SCRATCH_DIR/relay-preflight-self.XXXXXX")" || RP_SNAPSHOT=""
 [ -n "$RP_SNAPSHOT" ] && cat "${BASH_SOURCE[0]}" > "$RP_SNAPSHOT" 2>/dev/null
 RP_REEXEC="${TILLANDSIAS_RELAY_PREFLIGHT_REEXEC:-}"
 RP_REEXEC_ORIG_REF="${TILLANDSIAS_RELAY_PREFLIGHT_ORIG_REF:-}"
@@ -171,7 +183,10 @@ fi
 # .claude/worktrees/ is agent worktree scratch and out of scope: it is
 # .gitignore'd already, but a defensive filter keeps this true even if that
 # ever lapses (rule: the script must treat it as out of scope).
-_dirty="$(git status --porcelain 2>/dev/null | grep -v '^?? \.claude/worktrees/' || true)"
+# 1637-cnxq: scratch/ is the canonical ignored dir every tree scanner skips
+# (criterion 3). The self-snapshot above already created it, and a tree whose
+# .gitignore predates the rule (a fixture's seed) must still read clean.
+_dirty="$(git status --porcelain 2>/dev/null | grep -v -e '^?? \.claude/worktrees/' -e '^?? scratch/' || true)"
 if [ -n "$_dirty" ]; then
     echo "refused:relay-preflight:dirty-worktree"
     _afford "the working tree or index carries uncommitted changes, and a relay preflight merges and gates a committed tree only" \

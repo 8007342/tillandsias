@@ -151,6 +151,8 @@ fi
 g="$D/repo"
 mkdir -p "$g/openspec/litmus-tests" "$g/scripts"
 cp scripts/run-litmus-test.sh "$g/scripts/" 2>/dev/null || true
+# 1637-cnxq: an executed step captures through scripts/scratch-dir.sh.
+cp scripts/scratch-dir.sh "$g/scripts/" 2>/dev/null || true
 cp -r scripts/lib "$g/scripts/lib" 2>/dev/null || true
 printf 'version: "1.0"\nspecs:\n- spec_id: ci-release\n  status: active\n  litmus_tests: []\n' > "$g/openspec/litmus-bindings.yaml"
 # ORDER 1356-vv5m. THE SCAFFOLD CREATES THE SPEC ITS BINDINGS NAME. Until the

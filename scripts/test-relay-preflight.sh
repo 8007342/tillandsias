@@ -64,6 +64,8 @@ _seed() {
     local d="$1"
     mkdir -p "$d/scripts/lib"
     cp "$UNDER_TEST" "$d/scripts/relay-preflight.sh"
+    # 1637-cnxq: the relay snapshots itself through scripts/scratch-dir.sh.
+    cp "$ROOT/scripts/scratch-dir.sh" "$d/scripts/scratch-dir.sh"
     local f
     for f in $DECIDER_FILES; do
         [ -f "$ROOT/scripts/$f" ] && cp "$ROOT/scripts/$f" "$d/scripts/$f"
@@ -85,7 +87,9 @@ _seed() {
     # The runner's command-policy audit writes .cache/metrics/ under the repo
     # root (1443-w9hf); gitignored in the real checkout, so here too, or the
     # next run in the same clone reads dirty.
-    printf '.cache/\n' > "$d/.gitignore"
+    # 1637-cnxq: scratch/ likewise — the relay snapshots itself under it before
+    # its own dirty check, and the real checkout ignores it.
+    printf '.cache/\n/scratch/\n' > "$d/.gitignore"
     [ -f "$ROOT/scripts/lib/exec-bits-filter.awk" ] && cp "$ROOT/scripts/lib/exec-bits-filter.awk" "$d/scripts/lib/"
     [ -f "$ROOT/scripts/test-reference-surfaces.manifest" ] && cp "$ROOT/scripts/test-reference-surfaces.manifest" "$d/scripts/"
     chmod +x "$d"/scripts/*.sh
