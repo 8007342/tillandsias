@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: headless-prompting-claude-and-antigravity
+    field: next_action
+    value: PR 364 readied 2026-10-13 at 20b90de65 (trunk 3245b1e1a merged; door ran=223 refused=0; 1008 headless tests; litmus forge-as-only-runtime PASS). After it lands, continue on work/539, never a fresh ref. Slice 2 remains — a live e2e litmus launching `tillandsias . --claude --prompt` and `--antigravity --prompt` under TILLANDSIAS_AGENT_RESULT_FORMAT=json in a real forge, asserting the host classifier reports Succeeded; needs a host whose vault holds both OAuth documents. Then 1634-9suq (Claude per-worker isolation).
+    ts: "2026-10-13T03:44:57Z"
+    host: yoga
+
+events:
+  - packet_id: headless-prompting-claude-and-antigravity
+    event:
+      type: note
+      ts: "2026-10-13T03:44:57Z"
+      host: yoga
+      summary: |-
+        PR 364 readied 2026-10-13; what remains, for whoever continues

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-sh-preflight-on-windows-leaves-a-stale-zero-byte-git-index-lock-after-a-deadline-killed-guard-dies-inside-a-git-index-write-blocking-the-next-git-add-and-switch
+    event:
+      type: note
+      ts: "2026-10-13T01:06:29Z"
+      agent_id: windows-yolanda-opus5-20261013t010628z
+      host: yolanda-windows
+      summary: |
+        Third occurrence, yolanda-windows 2026-10-12: ./build.sh --preflight on work/1648-gy9z (ran=148, 96 deadline skips, refused=0, wall=222s) again left a 0-byte .git/index.lock (mtime 17:59 PDT). No git.exe was alive (Get-Process). It was removed by literal path. So it is 3 for 3 on this host's preflight runs, which makes it deterministic rather than a rare race.

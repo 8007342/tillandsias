@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-lane-launched-from-a-path-outside-the-host-project-root-starts-a-forge-whose-own-mcp-socket-then-refuses-every-call-as-not-a-known-project
+    field: status
+    value: completed
+    ts: "2026-10-13T01:04:55Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: a-lane-launched-from-a-path-outside-the-host-project-root-starts-a-forge-whose-own-mcp-socket-then-refuses-every-call-as-not-a-known-project
+    event:
+      type: completed
+      ts: "2026-10-13T01:04:55Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: 391bbd934 cargo-test:tillandsias-headless--features-tray:3-passed
+  - packet_id: a-lane-launched-from-a-path-outside-the-host-project-root-starts-a-forge-whose-own-mcp-socket-then-refuses-every-call-as-not-a-known-project
+    event:
+      type: note
+      ts: "2026-10-13T01:04:55Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        landed 391bbd934 (#366); 3 exit-criterion tests pass on trunk
