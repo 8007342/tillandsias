@@ -62,21 +62,32 @@ coverage declared. Snapshots SHALL carry a source revision and observation time.
 
 ### Requirement: Cloudflare deployment and local artifact
 
-The app SHALL support `npx wrangler deploy` from `observatorium/` after preparation,
-using Cloudflare static assets and a custom domain for the dashboard subdomain.
-CI SHALL prepare and deploy on pushes to main and published releases, with
-credentials supplied through repository secrets. Deployment history SHALL be
-restored from durable storage and updated after successful publication rather
-than silently resetting on every ephemeral runner. Local artifact serving SHALL
-use the same built assets. Managed sibling publication and device dogfooding SHALL
-use host-browser tools when available; their absence SHALL be documented as an
-unverified infrastructure dependency.
+The app SHALL deploy through Cloudflare Workers Builds from this repository
+(root directory `observatorium`, Build command `npm run build`, the default
+`npx wrangler deploy`), using Cloudflare static assets and a custom domain for
+the dashboard subdomain. It SHALL use no GitHub Actions and no Cloudflare
+credential stored in GitHub. The one build script SHALL fetch every external
+toolchain pinned by URL and SHA-256, and SHALL compute the metrics at deploy
+time. A metric it cannot observe SHALL be published as an explicit gap.
+
+The durable history SHALL be the repository: the release cut SHALL append one
+snapshot naming its release tag to `observatorium/history/snapshots.jsonl`. A
+deploy SHALL read that history and SHALL NOT write it; its live observation is
+display-only. Local artifact serving SHALL use the same built assets. Managed
+sibling publication and device dogfooding SHALL use host-browser tools when
+available; their absence SHALL be documented as an unverified infrastructure
+dependency.
 
 #### Scenario: Fresh deployment runner
 
-- WHEN a new runner prepares a deployment
-- THEN it restores previously published snapshots before adding its observation
-- AND a missing or inaccessible prior history cannot silently replace known history.
+- WHEN Workers Builds prepares a deployment from a fresh clone
+- THEN it reads the committed release history before adding its live observation
+- AND the live observation is never written back as history.
+
+#### Scenario: Release cut records the release
+
+- WHEN a release is cut
+- THEN exactly one snapshot line naming that release tag is appended to the committed history.
 
 ## Authority and verification
 

@@ -1,70 +1,120 @@
 # Observatorium deployment
 
-@trace spec:observatorium-dashboard
+@trace spec:observatorium-dashboard, order:1661-vckd
 
-Provenance: operator request 2026-10-13; implementation verified locally with
-Flutter 3.47.7, Node 22 and Wrangler 4.150.0. This supplements the dashboard spec.
+Provenance: operator direction 2026-10-13 ("the absolute easiest
+Flutter-to-Cloudflare path"). Cloudflare Workers Builds deploys straight from
+the repository. There are no GitHub Actions, no Cloudflare token in GitHub,
+and no mirror allowlist change. The Cloudflare facts below were checked against
+Cloudflare's documentation on 2026-10-13 (links at the end).
 
-The application and its tool configuration live under `observatorium/`.
-Use Node 22+, Flutter 3.47.7 and the canonical `tillandsias-plan` binary built
-from this checkout. From that directory:
+## Cloudflare dashboard settings (the operator sets these once)
 
-```sh
-npm ci
-node scripts/history.mjs restore
-npm test
-flutter pub get
-flutter analyze
-flutter test
-npx wrangler deploy --dry-run
-npx wrangler deploy
-node scripts/history.mjs save
-```
+Workers & Pages → Create → Import a repository → `8007342/tillandsias`, then
+**Settings → Build**:
 
-Wrangler runs `npm run build`: collect current facts, grade residual obligations,
-precompute logarithmic coordinates, then build Flutter's release artifact into
-`build/web`. Set `FLUTTER` to an absolute executable path when the SDK is outside
-PATH. `npm run metrics` performs only collection and precomputation.
+| Setting | Value |
+|---|---|
+| Production branch | `main` |
+| Root directory | `observatorium` |
+| Build command | `npm run build` |
+| Deploy command | `npx wrangler deploy` (the default; leave it) |
+| Build variables | none needed |
+| Build cache | Enable (see "Caching" for what it does and does not keep) |
 
-The workflow template at `observatorium/ci/observatorium.workflow` is INACTIVE:
-the forge mirror rejects any workflow filename except `release.yml`, including
-the operator-authorized dashboard deployment. After the mirror allowlist is
-updated, install it as `.github/workflows/observatorium.yml`. Until then there
-is no automatic deployment. The template is retained as reviewable source;
-it is not executed from its template location.
+The **Build command must be set.** Workers Builds does NOT run
+`wrangler.jsonc`'s `build.command`. Cloudflare's configuration page says:
+"Currently, Workers Builds does not honor the configurations set in Custom
+Builds within your Wrangler configuration file." `build.command` stays in
+`wrangler.jsonc` for a local `npx wrangler deploy`.
 
-Once activated, the GitHub workflow runs on every main push, published release, successful
-Release workflow and manual dispatch. The successful-workflow trigger covers
-releases created using GitHub's built-in token, whose release events do not
-trigger downstream workflows. Production source must be an ancestor of main;
-successful Release runs additionally require a version tag at the source SHA.
-Its repository secrets must include `CLOUDFLARE_API_TOKEN` and
-`CLOUDFLARE_ACCOUNT_ID`; the token needs Workers deployment and domain/zone
-permissions for the existing Cloudflare-managed `tillandsias.org` zone.
-The workflow needs contents-write permission for the history research branch.
-An inaccessible remote fails history restoration rather than inventing an empty
-past. Only a successfully absent branch starts the first observation history.
-After successful deployment, a lease-guarded push preserves the cumulative
-snapshots at `research/observatorium-history` before artifact archival.
+The custom domain comes from `wrangler.jsonc`: `observatorium.tillandsias.org`
+as a Workers Custom Domain, with `workers_dev: false`. It is an assets-only
+Worker; no apex route is configured. Workers Builds uses the Wrangler version
+pinned in `package.json`.
 
-`observatorium.tillandsias.org` is an assets-only Workers Custom Domain. No
-apex route is configured. Metrics revalidate after 60 seconds; index and Flutter
-bootstrap revalidate on load. The app periodically fetches the precomputed
-JSON; it does not rescan repository data in a browser.
+## What one build does (`npm run build` = `node scripts/build.mjs`)
 
-Local sibling publication must use the host-browser MCP `publish_local` tool.
-The portable `Containerfile` consumes an already-built `build/web` artifact;
-`npm run serve` exists for bounded development checks. It does not replace the
-host-managed sibling service or prove cross-device loading. In the initial
-forge session, host-browser MCP was absent, the preview source selector only
-recognized project-root configs, and Cloudflare authentication was absent.
-Those are infrastructure gaps, not successful publication evidence.
+The same script runs on Cloudflare, in a forge, in a toolbox, and for a local
+`wrangler deploy`. Every download is pinned by URL and SHA-256 (`PINS` in
+`scripts/build.mjs`):
 
-Primary references checked 2026-10-13:
+1. **`tillandsias-plan`:** a given `TILLANDSIAS_PLAN_BIN`, or else built from
+   this checkout with `cargo build --release -p tillandsias-plan`. When no cargo
+   is present (Workers Builds lists none), a pinned `rustup-init` installs the
+   toolchain `../rust-toolchain.toml` names.
+2. **Git history:** if the clone is shallow, `git fetch --unshallow` is tried.
+   A shallow history that cannot be deepened is recorded as an explicit gap.
+3. **Live metrics:** collection with a fresh CentiColon grade
+   (`scripts/centicolon-grade.sh`), then precomputation against the COMMITTED
+   history (`history/snapshots.jsonl`). The live observation is display-only
+   and is never written back.
+4. **Flutter:** the pinned Flutter SDK, then `flutter pub get` and
+   `flutter build web --release` into `build/web` (the assets directory).
 
-- [Flutter web builds and deployment](https://docs.flutter.dev/deployment/web)
-- [Flutter web initialization](https://docs.flutter.dev/platform-integration/web/initialization)
-- [Workers static asset configuration](https://developers.cloudflare.com/workers/static-assets/binding/)
+`npm run metrics` stops after step 3.
+
+## History: durable storage is the repository
+
+`history/snapshots.jsonl` holds one line per release, each naming its tag
+(`"release":"v…"`). The release cut appends it
+(`node scripts/build.mjs --release-snapshot <tag>`; the
+merge-to-main-and-release skill, §8) and commits it with the release ledger.
+A deploy only reads it. Workers Builds has no push credential and is not
+given one.
+
+## Workers Builds environment (Cloudflare docs, 2026-10-13)
+
+- **Image:** Ubuntu 24.04, x86_64.
+- **Preinstalled:**
+  - Node.js 24.18.0 default, with 22.23.2 also installed (`NODE_VERSION`
+    selects);
+  - Go, Python and Ruby;
+  - npm, yarn, pnpm, bun;
+  - curl, git, unzip, zstd, build-essential, among others.
+  - Rust and Flutter are not listed, hence steps 1 and 4 fetch them pinned.
+- **Limits:**
+  - 20-minute build timeout;
+  - 8 GB memory and 20 GB disk;
+  - 2 vCPU on Free, 4 on Paid;
+  - 3,000 build minutes per month on Free.
+- **Outbound network:** not stated. Dependency installation implies it, and
+  this build relies on HTTPS to storage.googleapis.com (Flutter) and
+  static.rust-lang.org (rustup and the toolchain).
+- **Clone depth:** not documented. Step 2 copes either way.
+- **Caching:** per the build-caching page, the cache keeps package-manager
+  directories (npm's `.npm`) and a fixed list of framework output directories.
+  It names no way to add a directory, so the Flutter SDK, the Rust toolchain
+  and `target/` are NOT cached and are fetched or built on every deploy. The
+  measured build time below includes that cost.
+
+## Measured build time
+
+A fresh Ubuntu 24.04 container stood in for the Free plan (2 vCPU, 8 GB),
+cloned `--depth 1`, timing `npm ci` plus `npm run build`. The evidence is in
+`plan/evidence/1661-vckd-observatorium-cloudflare-2026-10-13/`. The budget
+agreed with the coordinator is ≤ 12 minutes of the 20-minute limit. Over that,
+the plan-derived metrics (folded plan, CentiColons) ship as explicit gaps
+instead, and the rest still deploys.
+
+## Local preview
+
+In a forge: `npm run build`, then the host-browser MCP tool `publish_local`
+serves `build/web`. The preview never runs `build.command` (order 1663-6mns).
+Because this app's `wrangler.jsonc` lives in `observatorium/`, not at the
+repository root, publishing it needs the project-confined app-directory
+selector filed as its own row.
+
+The portable `Containerfile` consumes an already-built `build/web`;
+`npm run serve` is for bounded development checks.
+
+## References (checked 2026-10-13)
+
+- [Workers Builds: configuration](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/) (Build command, Deploy command, Root directory, the Custom Builds note)
+- [Workers Builds: build image](https://developers.cloudflare.com/workers/ci-cd/builds/build-image/)
+- [Workers Builds: limits and pricing](https://developers.cloudflare.com/workers/ci-cd/builds/limits-and-pricing/)
+- [Workers Builds: build caching](https://developers.cloudflare.com/workers/ci-cd/builds/build-caching/)
 - [Workers Custom Domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/)
-- [Wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/)
-- [GitHub workflow token trigger rules](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)
+- [Workers static asset configuration](https://developers.cloudflare.com/workers/static-assets/binding/)
+- [Flutter release manifest (Linux)](https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json)
+- [Flutter web builds and deployment](https://docs.flutter.dev/deployment/web)
