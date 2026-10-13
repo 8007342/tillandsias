@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's relay of operator direction (2026-10-13): the operator's Codex forge on tlatoanis-macbook-air ran out of storage during its gate. Child of 1642-cc54 criterion 1. Unclaimed; tlatoanis-macbook-air claims it after the 1658-6ca6 live check.
+packets:
+  - packet_id: a-fresh-macos-guest-is-provisioned-with-storage-for-a-full-forge-gate
+    order: 1665-99fz
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [vm, vz, storage, swap, forge, provisioning]
+    estimated_hours: 8
+    related: [1642-cc54, 1662-tff5, 1661-vckd, 1377-hcnv, 1481-2bth, 997-e4v2, 1560-uam3]
+    depends_on: []
+    title: |
+      A fresh macOS guest can't hold a full forge gate: the forge's 20 GiB filesystem fills during test linking and the workspace tmpfs is 692 MiB
+    context: |
+      MEASURED by the operator's Codex forge (1661-vckd, 2026-10-13; plan/issues/observatorium-forge-web-stack-gaps-2026-10-13.md on work/1661-vckd): the forge's 20 GiB filesystem filled during workspace test linking (ld.bfd "No space left on device"; cargo target 18 GiB, 6.6 GiB incremental, 9.3 GiB debug deps), and the /home/forge/src tmpfs was 692 MiB while the startup context reported 8 GiB RAM. Rule: fix forward on the next provision; never repair existing environments.
+      SOURCE READ (not yet measured), 2026-10-13 at 2cd31a7bc:
+      - The guest root disk STARTS at GUEST_DISK_SIZE_GIB=20 (crates/tillandsias-vm-layer/src/vz.rs, 1481-2bth) and grows only at VM START, in 10 GiB steps, when allocated bytes exceed 75 %, up to 50 GiB. A gate that fills it within one boot can't be helped by that policy. That 20 GiB is the likely forge filesystem; confirm with df in the guest.
+      - The workspace tmpfs is forge_hot_src_tmpfs (crates/tillandsias-headless/src/main.rs) = compute_hot_budget: the mirror's pack size x4, clamped to [256, 4096] MiB. It is sized from the git pack alone, not from memory or the build's generated artifacts; 692 MiB is about a 173 MiB pack x4.
+      - Swap IS provisioned by source (1377-hcnv): zram0 at 2 GiB, plus the host's sparse vm-swap.img through tillandsias-swapon, non-fatal on failure. The operator suspects it's missing, so check `free -h` in a fresh guest before changing anything: either it's absent (a provisioning failure to fix) or it's present and too small for an 8 GiB machine.
+      Linux forges use host swap; WSL swap is 1560-uam3. This row is the macOS guest only.
+    exit_criteria:
+      - 'BEFORE: the pre-fix provisioning shows the 692 MiB workspace tmpfs and the 20 GiB forge filesystem (df -h in the forge and guest), and `free -h` shows what swap the guest really has'
+      - 'the guest data disk is sized for a full gate from a MEASURED full-gate peak plus headroom, and stays sparse so it costs nothing until used'
+      - 'swap is present in a fresh guest (`free -h` shows it), sized from guest RAM, with zram where it fits 8 GiB hosts better'
+      - 'the forge workspace is no longer capped at 692 MiB: it is sized from available memory and disk, or generated web and cargo artifacts go to the forge ephemeral cache by default'
+      - 'a forge gate that would exceed its storage refuses EARLY with a capacity message before building, never mid-link; a test exercises the refusal and a NEGATIVE CONTROL shows that enough space passes'
+      - 'a fresh install on this Mac runs a full gate in a forge to completion'
+    unscoreable: "provisioning capacity, proven by a live fresh-install full gate plus df/free before and after"
