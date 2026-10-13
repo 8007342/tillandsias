@@ -1,0 +1,56 @@
+$ tillandsias devices resolve iphone 12 pro max
+exit=0
+{'match': True, 'id': 'apple-iphone-12-pro-max', 'model': 'iPhone 12 Pro Max', 'viewport': {'w': 428, 'h': 926}, 'screen': {'w': 428, 'h': 926}, 'dpr': 3.0, 'engine': 'webkit', 'orientation': 'portrait', 'rule': 'alias', 'approximated': False, 'alternatives': []}
+
+$ tillandsias devices resolve iphone
+exit=0
+{'match': True, 'id': 'apple-iphone-17', 'model': 'iPhone 17', 'viewport': {'w': 402, 'h': 874}, 'screen': {'w': 402, 'h': 874}, 'dpr': 3.0, 'engine': 'webkit', 'orientation': 'portrait', 'rule': 'newest-flagship', 'approximated': False, 'alternatives': []}
+
+$ tillandsias devices resolve iphone 12
+exit=0
+{'match': True, 'id': 'apple-iphone-12', 'model': 'iPhone 12', 'viewport': {'w': 390, 'h': 844}, 'screen': {'w': 390, 'h': 844}, 'dpr': 3.0, 'engine': 'webkit', 'orientation': 'portrait', 'rule': 'alias', 'approximated': False, 'alternatives': []}
+
+$ tillandsias devices resolve iphone 12 pro
+exit=0
+{'match': True, 'id': 'apple-iphone-12-pro', 'model': 'iPhone 12 Pro', 'viewport': {'w': 390, 'h': 844}, 'screen': {'w': 390, 'h': 844}, 'dpr': 3.0, 'engine': 'webkit', 'orientation': 'portrait', 'rule': 'alias', 'approximated': False, 'alternatives': []}
+
+$ tillandsias devices resolve 12 pro max
+exit=0
+{'match': True, 'id': 'apple-iphone-12-pro-max', 'model': 'iPhone 12 Pro Max', 'viewport': {'w': 428, 'h': 926}, 'screen': {'w': 428, 'h': 926}, 'dpr': 3.0, 'engine': 'webkit', 'orientation': 'portrait', 'rule': 'tokens', 'approximated': False, 'alternatives': []}
+
+$ tillandsias devices resolve xperia
+exit=0
+{'match': True, 'id': 'sony-xperia-1-vi', 'model': 'Xperia 1 VI', 'viewport': {'w': 411, 'h': 891}, 'screen': {'w': 411, 'h': 891}, 'dpr': 2.625, 'engine': 'blink', 'orientation': 'portrait', 'rule': 'newest-flagship', 'approximated': False, 'alternatives': []}
+
+$ tillandsias devices resolve oneplus
+exit=0
+{'match': True, 'id': 'oneplus-13', 'model': 'OnePlus 13', 'viewport': {'w': 411, 'h': 905}, 'screen': {'w': 411, 'h': 905}, 'dpr': 3.5, 'engine': 'blink', 'orientation': 'portrait', 'rule': 'newest-flagship', 'approximated': False, 'alternatives': []}
+
+$ tillandsias devices resolve oneplus 12
+exit=0
+{'match': True, 'id': 'oneplus-12', 'model': 'OnePlus 12', 'viewport': {'w': 411, 'h': 905}, 'screen': {'w': 411, 'h': 905}, 'dpr': 3.5, 'engine': 'blink', 'orientation': 'portrait', 'rule': 'alias', 'approximated': False, 'alternatives': []}
+
+$ tillandsias devices resolve galaxy s24 ultra
+exit=0
+{'match': True, 'id': 'samsung-galaxy-s24', 'model': 'Galaxy S24', 'viewport': {'w': 360, 'h': 780}, 'screen': {'w': 360, 'h': 780}, 'dpr': 3.0, 'engine': 'blink', 'orientation': 'portrait', 'rule': 'near-miss', 'approximated': True, 'alternatives': ['samsung-galaxy-s20-ultra', 'samsung-galaxy-a55', 'samsung-galaxy-s8', 'samsung-galaxy-s5']}
+
+$ tillandsias devices resolve s24u
+exit=0
+{'match': True, 'id': 'samsung-galaxy-s24', 'model': 'Galaxy S24', 'viewport': {'w': 360, 'h': 780}, 'screen': {'w': 360, 'h': 780}, 'dpr': 3.0, 'engine': 'blink', 'orientation': 'portrait', 'rule': 'near-miss', 'approximated': True, 'alternatives': ['samsung-galaxy-s20-ultra', 'samsung-galaxy-a55', 'samsung-galaxy-s8', 'samsung-galaxy-s5']}
+
+$ tillandsias devices resolve desktop
+exit=0
+{'match': True, 'id': 'desktop-chrome', 'model': 'Desktop Chrome', 'viewport': {'w': 1280, 'h': 720}, 'screen': {'w': 1920, 'h': 1080}, 'dpr': 1.0, 'engine': 'blink', 'orientation': 'portrait', 'rule': 'alias', 'approximated': False, 'alternatives': []}
+
+$ tillandsias devices resolve pixel
+exit=0
+{'match': True, 'id': 'google-pixel-10', 'model': 'Pixel 10', 'viewport': {'w': 360, 'h': 808}, 'screen': {'w': 360, 'h': 808}, 'dpr': 3.0, 'engine': 'blink', 'orientation': 'portrait', 'rule': 'newest-flagship', 'approximated': False, 'alternatives': []}
+
+$ tillandsias devices resolve iphone 12 pro landscape
+exit=0
+{'match': True, 'id': 'apple-iphone-12-pro', 'model': 'iPhone 12 Pro', 'viewport': {'w': 844, 'h': 390}, 'screen': {'w': 844, 'h': 390}, 'dpr': 3.0, 'engine': 'webkit', 'orientation': 'landscape', 'rule': 'alias', 'approximated': False, 'alternatives': []}
+
+$ tillandsias devices resolve blorp 9000
+exit=1
+{'match': False, 'query': 'blorp 9000', 'reason': 'no catalogue device matches, and the query names no brand to approximate within'}
+

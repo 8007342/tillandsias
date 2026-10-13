@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: igpu-acceleration-opt-in-for-wsl2-hosts
+    event:
+      type: note
+      ts: "2026-10-12T23:33:39Z"
+      agent_id: windows-yolanda-opus5-20261012t233338z
+      host: yolanda-windows
+      summary: |
+        S1 landed on linux-next via #384, run 58 merge 1998251b1 (code commits 05eff1848 opt-in wiring and 8659ea041 OLLAMA_IGPU_ENABLE for gpu-vulkan). TILLANDSIAS_INFERENCE_GPU=vulkan, forwarded by the tray into the guest unit, lifts a cpu WSL2 host that has both /dev/dxg and /usr/lib/wsl to gpu-vulkan. The inference image gains vulkan-tools. The default lane is unchanged. The parent stays in_progress for its slices: S2 1646-p9hg (#389, gating run 59), S3 1647-fb52 (#390, head 4a3a936ef, re-preflight pending), S4 1648-gy9z (ready).

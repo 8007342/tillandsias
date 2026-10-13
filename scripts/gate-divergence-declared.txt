@@ -45,7 +45,7 @@ scripts/hooks/pre-commit-openspec.sh           infra      a commit hook; runs ea
 # consult — and nothing makes anyone consult it. That gap is 1087-h2z9's fourth
 # exit criterion, not a reason to reverse the exclusion.
 scripts/test-litmus-runner-reports-rc.sh       excluded   litmus-suite adjacent; the suite is out of --check by 748-tkjx
-scripts/check-litmus-dead-inputs.sh            excluded   scans the litmus corpus; same cost argument as 748-tkjx
+scripts/lua/check-litmus-dead-inputs.lua       excluded   scans the litmus corpus; same cost argument as 748-tkjx
 
 # UNTRIAGED. Each of these is a check that exists, runs in --ci-full, and no
 # landing host executes. Nobody wrote down why. check-no-python-scripts.sh is the

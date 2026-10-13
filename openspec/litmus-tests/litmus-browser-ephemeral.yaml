@@ -16,7 +16,7 @@ critical_path:
     assert_output_matches: "^[[:space:]]*0$"
 
   - step: "launch browser via safe wrapper using fake Podman"
-    command: "browser_root=\"${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/tillandsias/browser\"; calls_file=\"${LITMUS_PODMAN_CALLS_FILE:-target/litmus-podman/browser-ephemeral.calls.log}\"; rm -f \"$calls_file\"; DISPLAY=:99 LITMUS_PODMAN_MODE=fake LITMUS_PODMAN_CALLS_FILE=\"$calls_file\" ./run-safe-browser.sh --url \"http://opencode.test-project.localhost/\"; test -s \"$calls_file\""
+    command: "browser_root=\"${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/tillandsias/browser\"; calls_file=\"${LITMUS_PODMAN_CALLS_FILE:-target/litmus-podman/browser-ephemeral.calls.log}\"; rm -f \"$calls_file\"; env -u DISPLAY LITMUS_PODMAN_MODE=fake LITMUS_PODMAN_CALLS_FILE=\"$calls_file\" ./run-safe-browser.sh --url \"http://opencode.test-project.localhost/\"; test -s \"$calls_file\""
     timeout_ms: 10000
     expected_behavior: "the safe wrapper runs under fake podman and records its argv to the calls file; no container exists"
     # ORDER 1252-znbn. The old label read "container id returned". There is NO
@@ -45,7 +45,7 @@ critical_path:
     assert_exit: 0
 
   - step: "verify launch contract flags"
-    command: "calls_file=\"${LITMUS_PODMAN_CALLS_FILE:-target/litmus-podman/browser-ephemeral.calls.log}\"; for pattern in --rm --pull=never --userns=keep-id --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --read-only --incognito --no-first-run --no-default-browser-check --user-data-dir= --app=http://opencode.test-project.localhost/ --env=DISPLAY=:99 --volume=/tmp/.X11-unix:/tmp/.X11-unix:rw --network=host 'tillandsias-chromium-framework:v[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+'; do grep -Eq -- \"$pattern\" \"$calls_file\"; done"
+    command: "calls_file=\"${LITMUS_PODMAN_CALLS_FILE:-target/litmus-podman/browser-ephemeral.calls.log}\"; for pattern in --rm --pull=never --userns=keep-id --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --read-only --incognito --no-first-run --no-default-browser-check --user-data-dir= --app=http://opencode.test-project.localhost/ --ozone-platform=wayland --env=XDG_RUNTIME_DIR=/run/user/browser --tmpfs=/run/user/browser --network=host 'tillandsias-chromium-framework:v[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+'; do grep -Eq -- \"$pattern\" \"$calls_file\"; done && ! grep -Eq -- '--volume=/run/user/[0-9]+:|--volume=/tmp/.X11-unix' \"$calls_file\""
     timeout_ms: 5000
 
   - step: "verify browser temp dir cleanup after exit"

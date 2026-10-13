@@ -354,6 +354,12 @@ fn main() {
         std::process::exit(msg_serve::run_cli(&user_args));
     }
 
+    // Order 1643-q3at: `devices resolve <query...>` / `devices list`. The
+    // device catalogue is pure data; dispatched early, it touches nothing.
+    if user_args.first().map(String::as_str) == Some("devices") {
+        std::process::exit(run_devices_cli(&user_args[1..]));
+    }
+
     // Order 828-h7kw: `--hold-window -- <command...>`. The terminal a lane
     // opens runs THIS, so the window closes only after the operator has seen
     // how the lane ended. Hidden helper mode, like --internal-ensure-image.
@@ -5286,9 +5292,51 @@ fn detect_inference_tier() -> &'static str {
 // @trace spec:inference-policy-router: Hardware-aware tier routing and fallback chain.
 fn effective_inference_tier() -> &'static str {
     let hardware = detect_inference_tier();
-    match hardware {
+    let delivered = match hardware {
         "gpu-cuda" if !nvidia_cdi_available() => "cpu",
         other => other,
+    };
+    wsl2_vulkan_opt_in_tier(
+        delivered,
+        std::env::var(INFERENCE_GPU_ENV).ok().as_deref(),
+        Path::new("/dev/dxg").exists(),
+        Path::new(WSL_HOST_TREE).exists(),
+    )
+}
+
+/// ORDER 793-a8e7: the operator opt-in that turns a WSL2 paravirtual GPU into
+/// the inference container's Vulkan lane. Forwarded from the tray's
+/// environment into the guest unit, like TILLANDSIAS_NO_LOCAL_INFERENCE.
+const INFERENCE_GPU_ENV: &str = "TILLANDSIAS_INFERENCE_GPU";
+
+/// ORDER 793-a8e7. A WSL2 host is classified `cpu` and stays that way unless
+/// the operator opts in with `TILLANDSIAS_INFERENCE_GPU=vulkan`; only then, and
+/// only when BOTH halves of the dxg delivery exist (the same two facts
+/// `wsl2_dxg_container_args` requires), does the tier become `gpu-vulkan`. The
+/// inference entrypoint maps that tier to the vulkan backend set
+/// (`_engine_wanted_backends`), and `engine_slots` pins `OLLAMA_LLM_LIBRARY`.
+///
+/// WHY OPT-IN AND NOT DETECTED. Measured with this exact stack (dzn over
+/// /dev/dxg, ollama 0.32.9): qwen2.5:3b prefill 2.04x and decode 1.37x faster
+/// on the iGPU, but qwen2.5:0.5b decode 1.23x SLOWER and nomic-embed 1.16x
+/// slower. A detected default would move every WSL2 host onto the regression.
+/// dzn also self-reports as non-conformant (Vulkan 1.2, no shaderInt8), and a
+/// cold GPU load once hung silently for >9 minutes. Without the opt-in this
+/// returns its input unchanged, so every existing host keeps byte-identical
+/// inference wiring.
+///
+/// Pure, so every arm runs on hosts that have neither /dev/dxg nor the tree.
+fn wsl2_vulkan_opt_in_tier(
+    delivered: &'static str,
+    opt_in: Option<&str>,
+    dxg_present: bool,
+    wsl_tree_present: bool,
+) -> &'static str {
+    let wants_vulkan = opt_in.is_some_and(|v| v.trim().eq_ignore_ascii_case("vulkan"));
+    if delivered == "cpu" && wants_vulkan && dxg_present && wsl_tree_present {
+        "gpu-vulkan"
+    } else {
+        delivered
     }
 }
 
@@ -16298,35 +16346,72 @@ fn browser_profile_root() -> PathBuf {
     PathBuf::from("/tmp/tillandsias/browser")
 }
 
+/// The host graphical session the browser container may reach. WAYLAND ONLY
+/// (order 1641-xbvq, operator decision 2026-10-12): X11 is not offered, because
+/// handing a container /tmp/.X11-unix gives it every X client on the display.
 #[derive(Debug, Clone, Default)]
 struct BrowserDisplayContext {
-    display: Option<String>,
-    xauthority: Option<PathBuf>,
     wayland_display: Option<String>,
     xdg_runtime_dir: Option<PathBuf>,
 }
 
+/// Where the Wayland socket file is mounted inside the browser container: a
+/// private tmpfs runtime dir holding nothing else.
+const BROWSER_RUNTIME_DIR: &str = "/run/user/browser";
+
 impl BrowserDisplayContext {
     /// @trace spec:tray-cli-coexistence
     fn from_env() -> Result<Self, String> {
-        let display = std::env::var("DISPLAY").ok();
-        let xauthority = std::env::var_os("XAUTHORITY").map(PathBuf::from);
-        let wayland_display = std::env::var("WAYLAND_DISPLAY").ok();
-        let xdg_runtime_dir = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from);
-
-        if display.is_none() && wayland_display.is_none() {
-            return Err(
-                "OpenCode Web browser launch requires a graphical session (DISPLAY or WAYLAND_DISPLAY)"
-                    .to_string(),
-            );
-        }
-
         Ok(Self {
-            display,
-            xauthority,
-            wayland_display,
-            xdg_runtime_dir,
+            wayland_display: std::env::var("WAYLAND_DISPLAY")
+                .ok()
+                .filter(|v| !v.is_empty()),
+            xdg_runtime_dir: std::env::var_os("XDG_RUNTIME_DIR")
+                .filter(|v| !v.is_empty())
+                .map(PathBuf::from),
         })
+    }
+
+    /// The host Wayland socket FILE, or why there is none. WAYLAND_DISPLAY is
+    /// a socket name under XDG_RUNTIME_DIR, or an absolute path.
+    fn wayland_socket(&self) -> Result<(PathBuf, String), String> {
+        let refuse = |why: &str| {
+            format!(
+                "the browser opens on Wayland only, and {why}. Tillandsias does not hand a \
+                 browser container an X11 display (it would reach every X client on it). \
+                 Log in to a Wayland session and retry."
+            )
+        };
+        let Some(name) = self.wayland_display.as_deref() else {
+            return Err(refuse("this session has no WAYLAND_DISPLAY"));
+        };
+        let socket = if Path::new(name).is_absolute() {
+            PathBuf::from(name)
+        } else {
+            if name.contains('/') || name == "." || name == ".." {
+                return Err(refuse(&format!(
+                    "WAYLAND_DISPLAY={name:?} is not a socket name"
+                )));
+            }
+            let Some(runtime) = self.xdg_runtime_dir.as_deref() else {
+                return Err(refuse(
+                    "XDG_RUNTIME_DIR is not set, so the Wayland socket cannot be found",
+                ));
+            };
+            runtime.join(name)
+        };
+        if !socket.exists() {
+            return Err(refuse(&format!(
+                "the Wayland socket {} does not exist",
+                socket.display()
+            )));
+        }
+        let file_name = socket
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("wayland-0")
+            .to_string();
+        Ok((socket, file_name))
     }
 }
 
@@ -16390,41 +16475,23 @@ fn build_project_browser_spec(
         .arg(format!("--user-data-dir={}", profile_dir.display()))
         .arg(format!("--app={app_url}"));
 
-    if let Some(display_name) = &display.display {
-        spec = spec
-            .env("DISPLAY", display_name)
-            .volume("/tmp/.X11-unix", "/tmp/.X11-unix", MountMode::ReadWrite)
-            .arg("--ozone-platform=x11");
-
-        if let Some(xauthority_path) = &display.xauthority
-            && xauthority_path.exists()
-        {
-            spec = spec
-                .env("XAUTHORITY", "/home/chromium/.Xauthority")
-                .bind_mount(
-                    xauthority_path.display().to_string(),
-                    "/home/chromium/.Xauthority",
-                    true,
-                );
-        }
-    } else if let Some(wayland_display) = &display.wayland_display {
-        if let Some(xdg_runtime_dir) = &display.xdg_runtime_dir {
-            spec = spec
-                .env("XDG_RUNTIME_DIR", xdg_runtime_dir.display().to_string())
-                .env("WAYLAND_DISPLAY", wayland_display)
-                .volume(
-                    xdg_runtime_dir.display().to_string(),
-                    xdg_runtime_dir.display().to_string(),
-                    MountMode::ReadWrite,
-                )
-                .arg("--ozone-platform=wayland");
-        } else {
-            return Err(
-                "OpenCode Web browser launch requires XDG_RUNTIME_DIR for Wayland sessions"
-                    .to_string(),
-            );
-        }
-    }
+    // Order 1641-xbvq (p0): ONLY the Wayland socket file, into a private tmpfs
+    // runtime dir. Mounting the host's whole $XDG_RUNTIME_DIR handed the browser
+    // podman.sock (host code execution), the tray control socket and the D-Bus
+    // session bus (and through it the keyring). `-v …:rw`, not --mount
+    // relabel=shared: a relabel would rewrite the live compositor socket's
+    // SELinux label on the host.
+    let (socket, socket_name) = display.wayland_socket()?;
+    spec = spec
+        .tmpfs(format!("{BROWSER_RUNTIME_DIR}:size=1m,mode=0755"))
+        .volume(
+            socket.display().to_string(),
+            format!("{BROWSER_RUNTIME_DIR}/{socket_name}"),
+            MountMode::ReadWrite,
+        )
+        .env("XDG_RUNTIME_DIR", BROWSER_RUNTIME_DIR)
+        .env("WAYLAND_DISPLAY", &socket_name)
+        .arg("--ozone-platform=wayland");
 
     for device_flag in detect_gpu_devices() {
         if let Some(device) = device_flag.strip_prefix("--device=") {
@@ -17334,6 +17401,53 @@ pub(crate) fn hold_window_line(status: &std::process::ExitStatus) -> String {
 /// name (1457-r8yi): tells the entrypoint's exit_pause the host already holds
 /// the window.
 pub(crate) const HOLD_WINDOW_ENV: &str = "TILLANDSIAS_HOST_HOLDS_WINDOW";
+
+/// Order 1643-q3at: `tillandsias devices resolve <query...>` prints the
+/// resolved device as JSON (exit 0), or `{"match":false,…}` (exit 1).
+/// `tillandsias devices list` prints one `id<TAB>model<TAB>w×h@dpr` line per
+/// catalogue device.
+fn run_devices_cli(args: &[String]) -> i32 {
+    use tillandsias_core::devices;
+    match args.first().map(String::as_str) {
+        Some("resolve") if args.len() > 1 => {
+            let query = args[1..].join(" ");
+            match devices::resolve(&query) {
+                Some(found) => {
+                    let mut out = serde_json::to_value(&found).unwrap_or_default();
+                    if let Some(obj) = out.as_object_mut() {
+                        obj.insert("match".into(), serde_json::Value::Bool(true));
+                    }
+                    println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
+                    0
+                }
+                None => {
+                    println!(
+                        "{}",
+                        serde_json::json!({
+                            "match": false,
+                            "query": query,
+                            "reason": "no catalogue device matches, and the query names no brand to approximate within",
+                        })
+                    );
+                    1
+                }
+            }
+        }
+        Some("list") => {
+            for d in devices::all() {
+                println!(
+                    "{}\t{}\t{}x{}@{}",
+                    d.id, d.model, d.viewport.w, d.viewport.h, d.dpr
+                );
+            }
+            0
+        }
+        _ => {
+            eprintln!("usage: tillandsias devices resolve <query...> | tillandsias devices list");
+            2
+        }
+    }
+}
 
 pub(crate) fn run_hold_window(args: &[String]) -> i32 {
     let argv: Vec<&String> = match args.first().map(String::as_str) {
@@ -22515,10 +22629,22 @@ mod tests {
         // launch a cpu-only "GPU tier".
         let effective = effective_inference_tier();
         assert!(
-            ["gpu-cuda", "gpu-rocm", "metal", "unmeasured", "cpu"].contains(&effective),
+            [
+                "gpu-cuda",
+                "gpu-rocm",
+                "gpu-vulkan",
+                "metal",
+                "unmeasured",
+                "cpu"
+            ]
+            .contains(&effective),
             "effective tier grammar violated: {effective}"
         );
-        if tier == "gpu-cuda" && !nvidia_cdi_available() {
+        // 793-a8e7: an operator who opted in on a WSL2 host sees gpu-vulkan;
+        // its arms are pinned in wsl2_vulkan_opt_in_is_explicit_and_needs_both_halves.
+        if effective == "gpu-vulkan" {
+            assert_eq!(tier, "cpu", "only a cpu host can be lifted to gpu-vulkan");
+        } else if tier == "gpu-cuda" && !nvidia_cdi_available() {
             assert_eq!(
                 effective, "cpu",
                 "gpu-cuda hardware without a CDI spec must downgrade to cpu, \
@@ -22562,6 +22688,62 @@ mod tests {
             forge.contains("TILLANDSIAS_INFERENCE_TIER")
                 && forge.contains("effective_inference_tier()"),
             "effective tier must be exported into the forge env for agents/startup context"
+        );
+    }
+
+    /// ORDER 793-a8e7: the WSL2 Vulkan lane is an explicit opt-in. Without it
+    /// the tier is returned unchanged, which is what keeps every existing
+    /// host's inference wiring byte-identical (the measured 0.5B decode
+    /// regression is why this is not detected).
+    ///
+    /// REGIME: pure function, no IO, no host state, no wall-clock.
+    #[test]
+    fn wsl2_vulkan_opt_in_is_explicit_and_needs_both_halves() {
+        // THE DEFAULT LANE: no opt-in, on a fully equipped WSL2 host.
+        assert_eq!(wsl2_vulkan_opt_in_tier("cpu", None, true, true), "cpu");
+        for not_vulkan in ["", "  ", "0", "1", "true", "cuda", "gpu"] {
+            assert_eq!(
+                wsl2_vulkan_opt_in_tier("cpu", Some(not_vulkan), true, true),
+                "cpu",
+                "{not_vulkan:?} is not the opt-in"
+            );
+        }
+        // THE ONLY ARM THAT LIFTS THE TIER.
+        assert_eq!(
+            wsl2_vulkan_opt_in_tier("cpu", Some("vulkan"), true, true),
+            "gpu-vulkan"
+        );
+        assert_eq!(
+            wsl2_vulkan_opt_in_tier("cpu", Some(" Vulkan "), true, true),
+            "gpu-vulkan"
+        );
+        // NEITHER HALF ALONE: the node without the tree is the measured
+        // lavapipe-instead-of-GPU configuration, and off WSL2 neither exists.
+        assert_eq!(
+            wsl2_vulkan_opt_in_tier("cpu", Some("vulkan"), true, false),
+            "cpu"
+        );
+        assert_eq!(
+            wsl2_vulkan_opt_in_tier("cpu", Some("vulkan"), false, true),
+            "cpu"
+        );
+        assert_eq!(
+            wsl2_vulkan_opt_in_tier("cpu", Some("vulkan"), false, false),
+            "cpu"
+        );
+        // A HOST THAT ALREADY HAS A BETTER LANE KEEPS IT.
+        for tier in ["gpu-cuda", "gpu-rocm", "unmeasured"] {
+            assert_eq!(
+                wsl2_vulkan_opt_in_tier(tier, Some("vulkan"), true, true),
+                tier
+            );
+        }
+        // THE LIFTED TIER IS ONE THE REST OF THE ENCLAVE ALREADY SPEAKS: the
+        // engine pins the vulkan library for it.
+        let pinned = engine_slots::pin_backend_environment("gpu-vulkan", None);
+        assert!(
+            pinned.contains(&("OLLAMA_LLM_LIBRARY".to_string(), "vulkan".to_string())),
+            "{pinned:?}"
         );
     }
 
@@ -31551,11 +31733,11 @@ esac
     fn opencode_web_browser_spec_is_built_with_typed_podman_flags() {
         let profile_dir = PathBuf::from("/tmp/tillandsias/browser/test-profile");
         let certs_dir = PathBuf::from("/tmp/tillandsias/ca");
+        let runtime = tempfile::tempdir().expect("runtime dir");
+        std::fs::write(runtime.path().join("wayland-1"), b"").expect("socket stand-in");
         let display = BrowserDisplayContext {
-            display: Some(":99".to_string()),
-            xauthority: None,
-            wayland_display: None,
-            xdg_runtime_dir: None,
+            wayland_display: Some("wayland-1".to_string()),
+            xdg_runtime_dir: Some(runtime.path().to_path_buf()),
         };
         let token = [7u8; 32];
         let expected_app_url = tillandsias_otp::build_login_data_url(
@@ -31612,7 +31794,185 @@ esac
             args.iter()
                 .any(|arg| arg == "--user-data-dir=/tmp/tillandsias/browser/test-profile")
         );
-        assert!(has_arg(&args, "--ozone-platform=x11"));
+        assert!(has_arg(&args, "--ozone-platform=wayland"));
+        assert!(has_arg(&args, "WAYLAND_DISPLAY=wayland-1"));
+        assert!(has_arg(&args, "XDG_RUNTIME_DIR=/run/user/browser"));
+    }
+
+    /// ORDER 1641-xbvq live probe helper, never run by default: writes the
+    /// browser's REAL run argv for this session (from_env + the builder) to
+    /// $TILLANDSIAS_BROWSER_PROBE_ARGS, one argument per line, so the live probe
+    /// runs exactly what the product would and not a hand-copied list.
+    /// `TILLANDSIAS_BROWSER_PROBE_ARGS=<file> TILLANDSIAS_BROWSER_PROBE_VERSION=<v>
+    ///  TILLANDSIAS_BROWSER_PROBE_CERTS=<dir> cargo test … -- --ignored browser_spec_live_probe_args`
+    #[test]
+    #[ignore = "live-probe helper: needs a Wayland session and probe env"]
+    fn browser_spec_live_probe_args() {
+        let out = std::env::var("TILLANDSIAS_BROWSER_PROBE_ARGS").expect("probe args path");
+        let version = std::env::var("TILLANDSIAS_BROWSER_PROBE_VERSION").expect("image version");
+        let certs =
+            PathBuf::from(std::env::var("TILLANDSIAS_BROWSER_PROBE_CERTS").expect("certs dir"));
+        let profile = PathBuf::from(&out).with_extension("profile");
+        std::fs::create_dir_all(&profile).expect("profile dir");
+        let display = BrowserDisplayContext::from_env().expect("display context");
+        let spec = build_project_browser_spec(
+            "data:text/html,<title>tillandsias-1641-probe</title><h1>1641-xbvq probe</h1>",
+            &version,
+            &profile,
+            &certs,
+            &display,
+            "tillandsias-browser-1641-probe",
+        )
+        .expect("browser spec for this session");
+        std::fs::write(&out, spec.build_run_args().join("\n")).expect("write args");
+    }
+
+    /// ORDER 1641-xbvq: with no Wayland session the browser REFUSES, naming why
+    /// and what to do; it never falls back to an X11 display.
+    #[test]
+    fn browser_spec_refuses_without_a_wayland_session() {
+        let runtime = tempfile::tempdir().expect("runtime dir");
+        let cases = [
+            (
+                BrowserDisplayContext {
+                    wayland_display: None,
+                    xdg_runtime_dir: Some(runtime.path().to_path_buf()),
+                },
+                "no WAYLAND_DISPLAY",
+            ),
+            (
+                BrowserDisplayContext {
+                    wayland_display: Some("wayland-0".to_string()),
+                    xdg_runtime_dir: None,
+                },
+                "XDG_RUNTIME_DIR is not set",
+            ),
+            (
+                BrowserDisplayContext {
+                    wayland_display: Some("wayland-9".to_string()),
+                    xdg_runtime_dir: Some(runtime.path().to_path_buf()),
+                },
+                "does not exist",
+            ),
+            (
+                BrowserDisplayContext {
+                    wayland_display: Some("../podman/podman.sock".to_string()),
+                    xdg_runtime_dir: Some(runtime.path().to_path_buf()),
+                },
+                "is not a socket name",
+            ),
+        ];
+        for (display, why) in cases {
+            let err = build_project_browser_spec(
+                "http://x.localhost/",
+                "1.2.3",
+                Path::new("/tmp/p"),
+                Path::new("/tmp/ca"),
+                &display,
+                "tillandsias-browser-x",
+            )
+            .expect_err("no usable Wayland socket must refuse");
+            assert!(
+                err.contains("Wayland only") && err.contains(why),
+                "{why}: {err}"
+            );
+            assert!(err.contains("Log in to a Wayland session"), "{err}");
+        }
+    }
+
+    /// Every host path the run argv mounts: `-v source:target[:mode]` and
+    /// `--mount type=bind,source=…,target=…`.
+    fn browser_mount_sources(args: &[String]) -> Vec<String> {
+        let mut sources = Vec::new();
+        for pair in args.windows(2) {
+            match pair[0].as_str() {
+                "-v" => {
+                    if let Some(src) = pair[1].split(':').next() {
+                        sources.push(src.to_string());
+                    }
+                }
+                "--mount" => {
+                    if let Some(src) = pair[1].split(',').find_map(|kv| kv.strip_prefix("source="))
+                    {
+                        sources.push(src.to_string());
+                    }
+                }
+                _ => {}
+            }
+        }
+        sources
+    }
+
+    /// ORDER 1641-xbvq (p0). The browser container must reach the compositor
+    /// through the ONE Wayland socket file, never the whole runtime dir (which
+    /// holds podman.sock, the tray control socket and the D-Bus bus) and never
+    /// /tmp/.X11-unix. Both DISPLAY and WAYLAND_DISPLAY are set here, as in
+    /// every XWayland session, because X11 used to win whenever DISPLAY was set.
+    #[test]
+    fn browser_spec_mounts_only_the_wayland_socket_file() {
+        let _guard = env_lock();
+        let runtime = tempfile::tempdir().expect("runtime dir");
+        let socket = runtime.path().join("wayland-0");
+        std::fs::write(&socket, b"").expect("socket stand-in");
+        let saved: Vec<(&str, Option<std::ffi::OsString>)> =
+            ["DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR"]
+                .into_iter()
+                .map(|k| (k, std::env::var_os(k)))
+                .collect();
+        // SAFETY: env_lock serialises every test that touches the environment.
+        unsafe {
+            std::env::set_var("DISPLAY", ":0");
+            std::env::set_var("WAYLAND_DISPLAY", "wayland-0");
+            std::env::set_var("XDG_RUNTIME_DIR", runtime.path());
+        }
+        let display = BrowserDisplayContext::from_env();
+        for (k, v) in saved {
+            // SAFETY: as above.
+            unsafe {
+                match v {
+                    Some(v) => std::env::set_var(k, v),
+                    None => std::env::remove_var(k),
+                }
+            }
+        }
+        let display = display.expect("a Wayland session yields a display context");
+        let spec = build_project_browser_spec(
+            "http://opencode.visual-chess.localhost/",
+            "1.2.3",
+            Path::new("/tmp/tillandsias/browser/test-profile"),
+            Path::new("/tmp/tillandsias/ca"),
+            &display,
+            "tillandsias-browser-visual-chess",
+        )
+        .expect("a Wayland session builds a browser spec");
+        let args = spec.build_run_args();
+
+        assert!(
+            has_arg(&args, "--ozone-platform=wayland"),
+            "Wayland must be the platform: {args:?}"
+        );
+        assert!(
+            !args.iter().any(|a| a.contains("ozone-platform=x11")),
+            "X11 is dropped (operator decision 2026-10-12): {args:?}"
+        );
+        let sources = browser_mount_sources(&args);
+        let socket_src = socket.display().to_string();
+        assert_eq!(
+            sources.iter().filter(|s| **s == socket_src).count(),
+            1,
+            "exactly one mount of the Wayland socket file: {sources:?}"
+        );
+        let runtime_src = runtime.path().display().to_string();
+        for forbidden in [runtime_src.as_str(), "/tmp/.X11-unix"] {
+            assert!(
+                !sources.iter().any(|s| s.trim_end_matches('/') == forbidden),
+                "no mount may expose {forbidden}: {sources:?}"
+            );
+        }
+        assert!(
+            !args.iter().any(|a| a.starts_with("DISPLAY=")),
+            "no X11 display is handed to the browser: {args:?}"
+        );
     }
 
     fn source_window<'a>(source: &'a str, signature: &str) -> &'a str {

@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's direction (macuahuitl, 2026-10-12): option B of the 1649-xqet residual.
+packets:
+  - packet_id: a-browser-window-reaches-only-its-own-project-through-a-per-window-sni-bound-forwarder-and-the-router-enforces-host-equals-sni
+    order: 1651-5t7n
+    status: ready
+    kind: security
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [browser, containers, network, router, tls, security, local-web-preview]
+    estimated_hours: 8
+    depends_on:
+      - browser-open-runs-the-chromium-framework-container-never-host-chromium-and-admits-the-local-preview-port
+    owned_files:
+      - crates/tillandsias-headless/src/browser_open.rs
+      - images/router/base.Caddyfile
+    title: |
+      A browser.open window can reach only its own project: a per-window SNI-bound forwarder replaces the router on the window's network, and the router enforces Host == SNI.
+    context: |
+      1649-xqet (#391) put each browser.open window on its own --internal network, joined only by the shared router (alias router). Chromium's --host-resolver-rules confine the browser itself to the project.
+      Residual, measured on a private store with the real router image (plan/evidence/1649-xqet-browser-open-container-2026-10-12/live): a raw request from inside the window container to router:8443 with SNI and Host www.other.localhost gets 200 PREVIEW-OTHER. The router routes by Host/SNI across every project, so a compromised browser process is not confined to its project.
+      Design (coordinator, option B):
+      - Per window, a tiny forwarder container replaces the router on the window's network (alias router). It joins the window network and the enclave network.
+      - It passes only TLS whose ClientHello SNI is *.<project>.localhost and forwards those bytes to the router's :8443. It refuses everything else, including plaintext.
+      - The router gets strict_sni_host, so the Host header must equal the SNI.
+      - The http:8080 MAP rule is dropped, because a plaintext Host header cannot be bound to a project.
+      - The forwarder's lifecycle is the window's: started in start(), removed in stop().
+    exit_criteria:
+      - 'from inside a window container for project demo, a raw TLS request to router:8443 with SNI www.other.localhost is refused, and one with SNI www.demo.localhost but Host www.other.localhost is refused by the router (strict_sni_host); measured live on a private store, red on the 1649-xqet tree first'
+      - 'the window still renders https://www.demo.localhost:<preview-port>, and the 1649-xqet live criteria (own network, no host listener, no host chrome, nothing else reachable) stay green'
+      - 'plaintext from the window reaches nothing: the http:8080 mapping is gone from the resolver rules and the forwarder accepts no plaintext'
+    unscoreable: "unpinnable-until-the-guard-exists: the forwarder's SNI binding and strict_sni_host are added to litmus-browser-open-container-shape (with negative controls) in the same commit as the change; the raw-SNI escape probe becomes an asserted step of the live test"
+    next_action: >
+      Red first: turn the 1649-xqet live test's residual-raw-router-other-project probe into an assertion and record it failing. Then decide the forwarder's runtime: the chromium-framework image's node, or a minimal image. Add strict_sni_host to the router's TLS server, and re-run the live harness.
+    provenance: |
+      Filed by lenovinha-silverblue on macuahuitl's direction, 2026-10-12 (option B of the 1649-xqet residual; C then B).
+    events:
+      - type: filed
+        ts: "2026-10-13T00:02:43Z"
+        host: lenovinha
+        summary: |-
+          Per-window SNI-bound forwarder plus router strict_sni_host, so a window reaches only its own project; drops the http:8080 mapping.

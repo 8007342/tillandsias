@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-browser-container-bind-mounts-the-whole-xdg-runtime-dir-read-write-exposing-the-podman-socket-dbus-and-keyring-so-it-must-mount-only-the-wayland-socket
+    field: status
+    value: completed
+    ts: "2026-10-12T23:09:28Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-browser-container-bind-mounts-the-whole-xdg-runtime-dir-read-write-exposing-the-podman-socket-dbus-and-keyring-so-it-must-mount-only-the-wayland-socket
+    event:
+      type: completed
+      ts: "2026-10-12T23:09:28Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: land(383) 1f6750034 into linux-next, gate green (run 58); branch work/1641-xbvq head 42c62b4a4 (ancestor of origin/linux-next verified). Browser container now mounts only the Wayland socket file into tmpfs /run/user/browser, refuses without a Wayland session; probe shows host runtime-dir exposure 35 sockets -> wayland-0 only, window configured. Tests browser_spec_mounts_only_the_wayland_socket_file and browser_spec_refuses_without_a_wayland_session red before, green after; litmus browser-ephemeral updated. Evidence plan/evidence/1641-xbvq-browser-wayland-socket-2026-10-12/.
