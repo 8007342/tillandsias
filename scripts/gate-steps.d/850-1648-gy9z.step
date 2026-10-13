@@ -1,0 +1,21 @@
+# Gate step 1648-gy9z — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. 793-a8e7 S4: on the WSL2 Vulkan opt-in lane a GPU runner that
+# stops making progress is killed and its model quarantined to the CPU through
+# the decode-floor pin record (restored on opt-out), and a runner the watchdog
+# cannot read is logged as blind and NEVER killed (coordinator condition
+# 2026-10-12). The subject is images/inference/gpu-stall-watchdog.sh.
+#
+# The step RUNS the watchdog tick by tick against a fake process table, a stub
+# curl (/slots and /api/ps), a stub ollama store and a recording kill: advancing
+# progress, a stall below and past the threshold, three blind arms (slots
+# unreachable, unrecognised shape, unattributable model), an idle runner, and
+# the quarantine restored on opt-out. Pre-fix: no watchdog; sabotages (killing
+# an unattributable stall, dropping the threshold) each turn it red.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the opt-in lane's GPU stall watchdog kills only what it can read and quarantines to the CPU (1648-gy9z)"
+STEP_LUA="scripts/lua/test-gpu-stall-watchdog.lua"
+STEP_ERROR="the GPU stall watchdog kills blindly, misses a stall, or leaves a quarantine after opt-out (1648-gy9z); see the FAIL lines above"
+STEP_OK="a stalled GPU runner is ended and quarantined; an unreadable one is left alone"
+STEP_SECOND_REGIME="yolanda-windows 2026-10-12 msys ok:gpu-stall-watchdog-fixture:11"
