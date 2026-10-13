@@ -1,0 +1,19 @@
+// Network-level reach probe from inside the browser container: one TCP
+// connect per target, prints "<label> reach|refused|unresolved|timeout".
+const net = require('net');
+const dns = require('dns');
+const targets = process.argv.slice(2);
+function one(spec) {
+  const [label, host, port] = spec.split(',');
+  return new Promise((resolve) => {
+    const done = (v) => { console.log(`${label} ${v}`); resolve(); };
+    dns.lookup(host, (err, addr) => {
+      if (err) return done(`unresolved:${err.code}`);
+      const s = net.connect({ host: addr, port: Number(port), timeout: 3000 });
+      s.on('connect', () => { s.destroy(); done(`reach:${addr}`); });
+      s.on('timeout', () => { s.destroy(); done(`timeout:${addr}`); });
+      s.on('error', (e) => done(`refused:${addr}:${e.code}`));
+    });
+  });
+}
+(async () => { for (const t of targets) await one(t); })();

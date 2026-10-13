@@ -1,0 +1,11 @@
+spki ca=vYV5ZjiTfUsJNROlzEDdctCxFU510oC32xNF0G4tIZg= leaf=3XyPpIesvddQvEaKRYW/+LMlxWUJKR3t+uQm8YvRc7Y=
+router: ROUTE-DEMO listening 8443
+browse[fullchain-ca-pin] rc=0 url=https://www.demo.localhost:18443/ -> ROUTE-DEMO host=www.demo.localhost:18443 (95 bytes dom; err: )
+browse[fullchain-no-pin] rc=0 url=https://www.demo.localhost:18443/ -> NO-MARKER (0 bytes dom; err: /var/home/lenovinha/claudia/tillandsias/target/work/browser-spike/out/browse-fullchain-no-pin.txt.err:ERR_CERT_AUTHORITY_INVALID /var/home/lenovinha/claudia/tillandsias/target/work/browser-spike/out/browse-fullchain-no-pin.txt.err:net_error -202 )
+browse[mixed-case] rc=0 url=https://WWW.Demo.LOCALHOST:18443/ -> ROUTE-DEMO host=www.demo.localhost:18443 (95 bytes dom; err: )
+browse[other-port] rc=0 url=https://www.demo.localhost:9999/ -> ROUTE-DEMO host=www.demo.localhost:9999 (94 bytes dom; err: )
+browse[cdp-loopback] rc=0 url=http://127.0.0.1:9222/json/version -> NO-MARKER (0 bytes dom; err: /var/home/lenovinha/claudia/tillandsias/target/work/browser-spike/out/browse-cdp-loopback.txt.err:ERR_NAME_NOT_RESOLVED )
+cdp[headless-new addr=0.0.0.0] host /json/version ->  ; in-ctr listeners: 0100007F:2406 
+cdp[headless-new addr=none] host /json/version ->  ; in-ctr listeners: 0100007F:2406 
+operator inference: unchanged
+operator netavark dir: unchanged

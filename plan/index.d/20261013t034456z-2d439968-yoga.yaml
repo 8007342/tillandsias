@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: headless-prompting-claude-and-antigravity
+    event:
+      type: progress
+      ts: "2026-10-13T03:44:56Z"
+      agent_id: linux-yoga-claude-20261013t032342z
+      host: yoga
+      summary: |
+        PR 364 READIED FOR THE LANDING QUEUE (2026-10-13, yoga, cycle 2026-10-13T03:23Z, linux-yoga-claude-20261013t032342z). Trunk 3245b1e1a merged into work/539 at 20b90de65 (clean, one merge base, two-dot and three-dot --name-status identical: 6 M, no D); pushed, ls-remote proves 20b90de65. On the merged ref: ./build.sh --preflight ran=223 refused=0; cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock 1008 passed 0 failed 26 ignored; clippy --tests -D warnings rc 0; cargo fmt --all --check clean; scripts/run-litmus-test.sh forge-as-only-runtime --phase pre-build --size quick PASS; bash scripts/check-spec-script-paths.sh ok:spec-script-paths:95-resolved,10-baselined,1-exempt and test-spec-script-paths.sh 6/6 (the PR touches openspec/specs). WHY NOW: the PR sat draft 20 h with zero coordinator comments while PRs 382-389 landed through the queue; the queue filters drafts and the coordinator answers on readied PRs (PR 358 timeline), and the host-lane ASK carrying this hand-off was a dead letter (the LAN rung 1506-7tq4 is still ready; the receipt stayed pending 23 h). The row stays in_progress until the landing proves; the closing event cites the LANDED sha on origin/linux-next, never 20b90de65. Remaining on the row (unchanged): slice 2, a live e2e litmus dispatching --claude --prompt and --antigravity --prompt under TILLANDSIAS_AGENT_RESULT_FORMAT=json in a real forge, needs a host whose vault holds both OAuth documents; then 1634-9suq for Claude per-worker isolation.

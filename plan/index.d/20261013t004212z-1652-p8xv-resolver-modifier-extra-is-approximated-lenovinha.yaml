@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's direction (macuahuitl, 2026-10-13): a resolver bug found during 1644-u8b8.
+packets:
+  - packet_id: a-device-query-matched-only-by-a-model-with-an-extra-modifier-token-resolves-approximated-naming-that-model-never-exact
+    order: 1652-p8xv
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [browser, devices, resolver, local-web-preview]
+    estimated_hours: 2
+    depends_on:
+      - the-device-catalogue-grows-from-a-127-device-seed-to-the-long-tail-500-plus-devices-across-12-plus-brands-each-with-source-and-licence
+    owned_files:
+      - crates/tillandsias-core/src/devices.rs
+    title: |
+      A device query that only a model with an EXTRA modifier token matches (galaxy s23 → Galaxy S23 FE) must resolve approximated, naming that model, never exact.
+    context: |
+      Found during 1644-u8b8 (#394). The catalogue has Galaxy S23+, S23 Ultra and S23 FE, but not the base Galaxy S23: no first-party page stated its resolution.
+      `tillandsias devices resolve "galaxy s23"` returns samsung-galaxy-s23-fe, rule tokens, approximated false. The 1643-q3at token rule picks the candidate with the fewest extra tokens and counts FE as a modifier.
+      Coordinator's ruling: a match that needs any extra MODIFIER token beyond the request is by definition not the requested model. So it must come back approximated, with the chosen model (here the FE) named and the alternatives listed, rather than exact.
+      A query that names the modifier itself ("galaxy s23 fe") is the model asked for and stays exact.
+    exit_criteria:
+      - 'red arm: on the 1644-u8b8 catalogue, resolve("galaxy s23") returns approximated true, id samsung-galaxy-s23-fe (or another S23 model), and the response names the chosen model; the test fails before the fix'
+      - 'green arm: resolve("galaxy s23 fe") still returns samsung-galaxy-s23-fe with approximated false, and the 1643-q3at and 1644-u8b8 resolver tests stay green'
+    unscoreable: "unpinnable-until-the-guard-exists: the two arms are tillandsias-core devices::tests added in the same commit as the fix"
+    next_action: >
+      Red first: add the galaxy s23 approximated test and watch it fail. Then, in the token rule, mark the result approximated when the chosen device carries a modifier extra (extras().0 > 0) that the query did not name. Add the galaxy s23 fe exact arm.
+    provenance: |
+      Filed by lenovinha-silverblue on macuahuitl's direction, 2026-10-13 (resolver bug noticed in 1644-u8b8; not changed there).
+    events:
+      - type: filed
+        ts: "2026-10-13T00:42:12Z"
+        host: lenovinha
+        summary: |-
+          galaxy s23 resolves EXACTLY to the S23 FE; an extra modifier token must make the match approximated.

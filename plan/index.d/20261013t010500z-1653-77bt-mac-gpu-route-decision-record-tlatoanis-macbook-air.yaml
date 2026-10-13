@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's assignment (2026-10-13): first step of the operator-approved direction "confined host helpers for Metal and the Neural Engine" (SLOT-6, packet 483).
+packets:
+  - packet_id: mac-gpu-route-decision-record-venus-vulkan-in-the-vm-vs-metal-on-the-host
+    order: 1653-77bt
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, inference, metal, vulkan, libkrun, measurement]
+    estimated_hours: 4
+    related: [483, 1642-cc54]
+    depends_on: []
+    title: |
+      Mac GPU route decision record — libkrun/krunkit Venus Vulkan inside the VM vs Metal on the host
+    context: |
+      The operator approved confined host helpers for Metal and the Neural Engine: inference only, no internet, Seatbelt-sandboxed, one socket to the enclave. That realises SLOT-6 of openspec/specs/inference-engine-slots and packet 483 (host-native-sidecar-endpoints). Before building a helper, measure what it buys: the alternative is to keep inference in a guest and reach the GPU through libkrun/krunkit's virtio-gpu Venus (Vulkan over MoltenVK), which needs no host process at all.
+      Host: tlatoanis-macbook-air, Apple M5, 16 GiB, 10 cores. ollama 0.40.1 is installed (Metal); podman 6.1.3 (brew) ships vfkit and gvproxy but no krunkit.
+      All scratch state (models, machine, images) lives under ./target/work/1653-77bt. The operator's Tillandsias VM and the installed app are not touched.
+    exit_criteria:
+      - 'prefill and decode tokens/sec for qwen2.5:3b (same quantisation) on both routes on this Mac: Metal on the host, and Vulkan via Venus inside a krunkit guest, each from at least three runs with the spread reported'
+      - 'peak RAM on each route (host process RSS; guest memory plus the VMM process) and setup cost (what must be installed, download size, time to first token from cold)'
+      - 'a dated plan/issues note recording the numbers, the method to reproduce them, and a recommendation for packet 483'
+    unscoreable: "a decision record: the closure is the dated note and its measured numbers, not a code change"

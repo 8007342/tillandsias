@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's direction (2026-10-13): the macOS slice of packet 483, after 1653-77bt's measurement chose Metal on the host. Unclaimed until a WIP slot frees.
+packets:
+  - packet_id: macos-metal-inference-helper-seatbelt-confined-llama-server-on-one-unix-socket-reached-from-the-vm-over-vsock
+    order: 1654-6me6
+    parent_order: 483
+    status: ready
+    kind: implementation
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, inference, metal, seatbelt, vsock, enclave, sidecar]
+    estimated_hours: 12
+    related: [483, 1653-77bt, 830-xsk2]
+    depends_on: []
+    title: |
+      macOS Metal inference helper: a Seatbelt-confined host llama-server with no network, serving one Unix socket that the VM's enclave reaches over vsock through the tray
+    context: |
+      WHY THIS ROUTE (1653-77bt, plan/issues/mac-gpu-route-decision-2026-10-13.md, accepted by the coordinator 2026-10-13): for qwen2.5:3b Q4_K_M on an M5, Metal on the host gives prefill 1308 t/s and decode 55.0 t/s at 2.3 GiB RSS. Venus inside a krunkit guest gives 477 and 51.5 at 4.4 GiB, and would mean moving the guest off Virtualization.framework. Packet 483's outcome says "~75-85% of native Metal via Venus"; measured here, decode is 94% but prefill is 36%.
+
+      DESIGN SPIKE (read-only, 2026-10-13). Everything below comes from reading code and tool help, NOT from a run, except where it says "measured".
+
+      1. NO TCP AT ALL. llama-server's --host accepts "UNIX socket paths ending in .sock" (measured: the --help of ollama 0.40.1's bundled llama-server, build 11351). So the helper binds only <run-dir>/inference.sock. That is stricter than SLOT-6 clause 1 (a loopback-only bind): there is no address to mis-bind. But clause 4 is worded as "one host address, one port", so the spec needs a sentence admitting a single named Unix socket as the upstream. That is exit criterion 5.
+
+      2. SEATBELT PROFILE (SBPL, applied by spawning the helper under sandbox-exec, or by sandbox_init in a small launcher). The shape:
+           (version 1) (deny default)
+           (allow file-read* (subpath <model-dir>) (subpath <engine-dir>) <system dylib and Metal framework paths>)
+           (allow file-read* file-write* (subpath <run-dir>))
+           (deny network*)
+           (allow network-bind network-inbound (local unix-socket (path-literal "<run-dir>/inference.sock")))
+           (allow iokit-open <the GPU user client>) (allow mach-lookup <the Metal compiler service>)
+         UNKNOWN until measured: the exact iokit-open class and mach-lookup names Metal needs on macOS 27 (the AGX/IOGPU user client, and com.apple.MTLCompilerService or its successor). The way to find them is deny-default plus the sandbox violation log (`log stream --predicate 'sender == "Sandbox"'`), widened one named rule at a time, never by an allow-all. Also unknown: whether deny-default still lets Metal load its shader cache, and where that cache must live (inside <run-dir>). sandbox-exec is deprecated but present (/usr/bin/sandbox-exec); there is no prior Seatbelt use anywhere in this tree.
+
+      3. HOW THE VM REACHES THE SOCKET: VSOCK THROUGH THE TRAY, NOT A virtiofs-SHARED SOCKET.
+         - vsock (recommended). The VZ layer already registers a host-side vsock listener per VM (order 830-xsk2: vz.rs `host_listener`; "dropping it deregisters the port"). VZ hands each guest connection to the tray in-process as an fd, and the tray splices it to inference.sock. Properties: only THIS VM can reach the listener (VZ vsock is per-VM), so no host network surface exists at all; the listener's lifetime is the VM's, which is SLOT-6 clause 8's lease; and the tray is the one mediator on the host side. Inside the guest, the enclave's existing terminus (the dual-homed proxy, clause 3) is the only container given the vsock route. Forge containers keep the unchanged inference endpoint and never see the host side (clause 2's scenarios).
+         - virtiofs-shared socket (rejected, pending a cheap confirmation). A guest-side AF_UNIX connect() is resolved by the guest kernel against the guest's view of the inode. A socket that is bound on the host is not a connectable endpoint across a FUSE/virtiofs boundary, so the expected result is a refusal rather than a channel. Even if it worked, it would put a host path into the guest's share namespace (home-src is already shared), which is a wider surface than a per-VM vsock port. The one-line probe that would settle it: bind a socket in a shared dir on the host, then connect from the guest.
+
+      4. CREDENTIAL (clause 5). VZ vsock already authenticates the transport (only this VM can connect). The clause still requires an ephemeral per-run credential, kept out of files that forge containers can read, out of argv and out of logs. The candidate: the tray mints a token per helper start and delivers it to the guest-side proxy over the existing control wire (not cidata, which is a readable file). The proxy then presents it as the first frame on each vsock connection. To be designed with the proxy owner; recorded here as an open question, not a decision.
+
+      5. ENVIRONMENT (clause 6). The tray spawns the helper with an EMPTY environment plus an explicit allowlist (PATH, TMPDIR=<run-dir>, and the minimum Metal needs), so no gh token, keyring handle or project secret can be inherited.
+
+      This row does NOT cover the Neural Engine. llama.cpp does not use the ANE; a Core ML path would be its own measurement row.
+    exit_criteria:
+      - 'a Seatbelt profile file and a test that launches the helper under it: an inference request over <run-dir>/inference.sock answers on Metal at a prefill rate within 10% of the same engine unconfined on the same host (the 1653-77bt harness), proving the profile did not silently push it to CPU'
+      - 'NEGATIVE CONTROLS under the same profile, each asserted to FAIL: an outbound TCP connect to a public address, a loopback TCP bind, a read of a file outside the allowed subpaths (e.g. ~/.ssh), and a connect to any Unix socket other than its own'
+      - 'a process inside the VM (the guest-side terminus, not a forge) completes a request to the helper over vsock through the tray, and `podman network inspect tillandsias-enclave` still reports internal, with no published host port (the SLOT-6 scenario)'
+      - 'lease: after the tray quits, or after the helper is killed, no listening inference.sock remains and the vsock port is deregistered (a connect from the guest is refused); a test asserts both'
+      - 'the helper process environment and argv carry no credential: a test reads the spawned environment and argv and finds only the allowlist; and SLOT-6 clause 4 admits a single named Unix socket as the upstream (spec text changed, or the row records why loopback TCP was chosen instead)'
+    unscoreable: "a confined host helper: closure is the profile, its positive and negative-control tests, and the vsock route test, all of which fail today because none of them exists"
