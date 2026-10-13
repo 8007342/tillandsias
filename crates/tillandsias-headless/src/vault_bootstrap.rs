@@ -117,7 +117,39 @@ fn credential_write_dir() -> Result<PathBuf, String> {
 /// in EITHER place counts, so no migration state can read as "no share" and
 /// trigger the partial-init wipe.
 fn credential_read_dirs() -> Vec<PathBuf> {
-    credential_read_dirs_from(vault_store_root(), crate::init_cache_dir())
+    let dirs = credential_read_dirs_from(vault_store_root(), crate::init_cache_dir());
+    if let [store_root, cache_dir] = dirs.as_slice() {
+        settle_fallbacks_onto_store_root(store_root, cache_dir);
+    }
+    dirs
+}
+
+/// The guest's credential fallback files.
+const CREDENTIAL_FALLBACKS: [&str; 3] = [
+    "fallback_vault-shamir-share-v1",
+    "fallback_vault-root-token-v1",
+    "installation_anchor",
+];
+
+/// Copy each fallback that exists ONLY in the cache dir onto the store root,
+/// never over one already there. MEASURED (live, 2026-10-13, second run):
+/// reading the rootfs copy was not enough. Nothing in that session WROTE a
+/// fallback (the tray delivers credentials from its polls, which the push
+/// subscription demotes), so the copies stayed on the rootfs, the next
+/// rebuild destroyed them, and the partial-init guard wiped the surviving
+/// store again. The first read now completes the move. Best effort: a failed
+/// copy leaves the rootfs copy, which is still read.
+fn settle_fallbacks_onto_store_root(store_root: &Path, cache_dir: &Path) {
+    for name in CREDENTIAL_FALLBACKS {
+        let (src, dst) = (cache_dir.join(name), store_root.join(name));
+        if src.is_file() && !dst.exists() && fs::copy(&src, &dst).is_ok() {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = fs::set_permissions(&dst, fs::Permissions::from_mode(0o600));
+            }
+        }
+    }
 }
 
 fn credential_read_dirs_from(
@@ -6607,6 +6639,46 @@ mod tests {
             read_credential_fallback_in(dirs(), &name),
             Some(disk.join(&name))
         );
+    }
+
+    /// The second live failure: a fallback still on the rootfs must be MOVED
+    /// beside the store by the first read, or the next rebuild loses it. A copy
+    /// already beside the store is never overwritten.
+    #[test]
+    fn a_rootfs_fallback_is_settled_beside_the_store_and_never_overwrites_one() {
+        let s = identity_scratch("fallback-settle");
+        let (disk, cache) = (s.join("identity"), s.join("cache"));
+        fs::create_dir_all(&disk).unwrap();
+        fs::create_dir_all(&cache).unwrap();
+        fs::write(
+            cache.join("fallback_vault-shamir-share-v1"),
+            b"rootfs-share",
+        )
+        .unwrap();
+        fs::write(cache.join("installation_anchor"), b"rootfs-anchor").unwrap();
+        fs::write(disk.join("installation_anchor"), b"disk-anchor").unwrap();
+        settle_fallbacks_onto_store_root(&disk, &cache);
+        assert_eq!(
+            fs::read(disk.join("fallback_vault-shamir-share-v1")).unwrap(),
+            b"rootfs-share"
+        );
+        assert_eq!(
+            fs::read(disk.join("installation_anchor")).unwrap(),
+            b"disk-anchor"
+        );
+        assert!(
+            !disk.join("fallback_vault-root-token-v1").exists(),
+            "nothing to copy"
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = fs::metadata(disk.join("fallback_vault-shamir-share-v1"))
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
     }
 
     /// Linux, or a guest without an identity disk: one directory, read once.
