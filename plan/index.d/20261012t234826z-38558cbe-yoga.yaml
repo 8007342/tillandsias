@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: development-scratch-and-worktrees-live-inside-the-checkout-under-one-ignored-dir-that-every-scanner-skips
+    event:
+      type: progress
+      ts: "2026-10-12T23:48:26Z"
+      agent_id: linux-yoga-claude-20261012t232401z
+      host: yoga
+      summary: |
+        Slice 2 on work/1637-cnxq at e4ae8cfe4 (PR 386, draft; two commits: 0939376de carries only the .sh deletion because the commit script's `git add -A -- <paths>` named the already-removed file, matched nothing and staged nothing, and the commit shipped the stale index; e4ae8cfe4 carries the rest, staged with the add's rc and a staged-count check). Criterion 3 measured by construction: planted a refused tree under scratch/ (scratch/worktrees/probe with a check-*.sh carrying a bare mktemp, /tmp, python3, jq, a piped grep -q verdict and ${v,,}; a test-*.sh; a hooks script; a single-regime gate step; a broken .lua; a malformed plan fragment; a piped litmus command; a frontmatter-less cheatsheet; a malformed methodology yaml; two .py files) and ran ./build.sh --preflight against a control run on the same head aa174b2c1: 224 guards, exactly one changed verdict, check-no-python-scripts.lua (violation:no-python-scripts:1), whose walk is crates/tillandsias-policy should_skip_dir. That skip list now names scratch, with a unit test that makes its fixture under the checkout's scratch/; the probe re-run on this head: c3:no-verdict-change (225 guards in both passes, the python scan run serially to a verdict in each, 23:37Z to 23:40Z on yoga). The control run also exposed two standing refusals on the ref that the relay preflight never reached, because it stops at its first (check-gate-step-regimes): check-shell-ratchet.lua refuses a NEW .sh decider (violation:shell-ratchet:new-decider), and check-worktree-add-cleanup.lua refused the literal `git worktree add` in the guard and the fixture. Both fixed: the guard is now scripts/lua/check-scratch-location-added.lua (same grammar and rules, run through tillandsias-plan script run; the .sh is deleted and the five comments citing it renamed), the fixture resolves the runner through plan-binary-probe and pins TILLANDSIAS_REPO_ROOT to its scratch repo, 16/16 on yoga; the worktree token is assembled from a variable as the mktemp token already was. By hand on the ref: ratchet ok (the fixture and scratch-dir.sh are warned, not refused), worktree-add-cleanup ok scanned=881, the guard on this change ok files=1 sites=0 exempt=3, cargo fmt/build/test on tillandsias-policy green; the guard is wired into the gate in build.sh beside sigpipe-added and refusal-affordance-added, so the door runs it (225 guards), and the unit test reads CARGO_MANIFEST_DIR at runtime because check-manifest-dir-env.lua refused the compile-time env!() form the door reported first (1590-j20f). Remaining red by construction: 830-1637-cnxq single-regime until a darwin or msys host records STEP_SECOND_REGIME. The door's own TMPDIR root (build.sh:609 pf-guard, :1346 preflight.XXXXXX) stays outside the checkout this slice: it is the recorded `preflight-door` exception, and moving it changes the door's worktree sweep (_pf_sweep_guard_tmp), a build.sh change to measure on its own.
