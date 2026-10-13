@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: 793-a8e7-s3-decode-floor-pins-small-models-to-the-cpu
+    field: status
+    value: completed
+    ts: "2026-10-13T05:20:34Z"
+    host: windows
+
+events:
+  - packet_id: 793-a8e7-s3-decode-floor-pins-small-models-to-the-cpu
+    event:
+      type: completed
+      ts: "2026-10-13T05:20:34Z"
+      host: windows
+      summary: |-
+        status 'completed' with evidence_refs: Closed: S3 landed in run 61 as #390 (merge dbb33bdae, land(390): work/1647-fb52 into linux-next). Exit criteria to evidence: (1) Below the floor on gpu-vulkan, a model is pinned to num_gpu 0 and recorded. At or above the floor it is untouched. A model whose operator set num_gpu is never pinned or restored. Evidence: images/inference/decode-floor-pin.sh tillandsias_decode_floor_reconcile, covered b
