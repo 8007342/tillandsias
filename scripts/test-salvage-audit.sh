@@ -58,7 +58,46 @@ have_refs=$(git -C "$ROOT" for-each-ref --format='%(refname)' refs/remotes/origi
 
 TMPDIR_ARM2B="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR_ARM2B"; git -C "$ROOT" update-ref -d "refs/remotes/${SALVAGE_PROBE_REMOTE:-origin}/arm2probe-1226/stale" 2>/dev/null || true' EXIT
-out="$(timeout 300 bash "$CHECK" 2>&1)"
+# ── THE CEILING (order 1672-8i7t) ───────────────────────────────────────────
+# This was a fixed `timeout 300`, and the arms below then read `tail -1` of the
+# capture as the verdict. On yolanda-windows 2026-10-13 (tillandsias-build,
+# checkout on /mnt/c) the audit alone took 410s for 758 refs and ended
+# `ok:salvage-audit:758r:...`. At 300s it was killed mid-output, so ARM 1 read a
+# per-file row as an "unexpected verdict" and ARM 1b read "?" refs: a timeout
+# reported as an assertion failure. The audit's cost grows with the ref count
+# (756 to 758 in one day), so the ceiling is env-overridable, and a kill at the
+# ceiling is reported BY NAME before any arm parses the capture.
+SALVAGE_AUDIT_TIMEOUT_S="${SALVAGE_AUDIT_TIMEOUT_S:-900}"
+# Test seam for the mutation arm only: the subject the capture runs.
+CHECK="${SALVAGE_AUDIT_CHECK:-$CHECK}"
+
+# ── ARM 0: a kill at the ceiling is named, never parsed (1672-8i7t) ─────────
+# The fixture re-runs itself against a stub subject that prints a per-file row
+# (the shape the old ARM 1 misread) and then outlives a 1s ceiling. A stub, not
+# the real audit, so the arm cannot pass by accident on a clone with few refs.
+if [ -z "${TEST_SALVAGE_AUDIT_NESTED:-}" ]; then
+    printf '#!/usr/bin/env bash\necho "    crates/x.rs  linux-next-is-AHEAD (stale snapshot)"\nexec sleep 30\n' \
+        > "$TMPDIR_ARM2B/slow-audit.sh"
+    _nested="$(TEST_SALVAGE_AUDIT_NESTED=1 SALVAGE_AUDIT_TIMEOUT_S=1 \
+        SALVAGE_AUDIT_CHECK="$TMPDIR_ARM2B/slow-audit.sh" bash "${BASH_SOURCE[0]}" 2>&1)"
+    _nested_rc=$?
+    if [ "$_nested_rc" -ne 0 ] && line_matches "$_nested" '*timeout after 1s*' \
+        && ! line_matches "$_nested" '*unexpected verdict*'; then
+        ok "ARM 0: a subject killed at a 1s ceiling is reported as 'timeout after 1s', not as a parsed row"
+    else
+        bad "ARM 0: a subject killed at the ceiling was not named as a timeout (rc=$_nested_rc): $(printf '%s' "$_nested" | tr '\n' '|')"
+    fi
+fi
+
+_capture_t0=$SECONDS
+out="$(timeout "$SALVAGE_AUDIT_TIMEOUT_S" bash "$CHECK" 2>&1)"
+_capture_rc=$?
+if [ "$_capture_rc" -eq 124 ]; then
+    echo "FAIL: timeout after ${SALVAGE_AUDIT_TIMEOUT_S}s — the audit was killed at the fixture's ceiling ($((SECONDS - _capture_t0))s elapsed), so its cut-short output was NOT parsed by any arm"
+    echo "  remedy: raise SALVAGE_AUDIT_TIMEOUT_S on this host; the audit's cost grows with the ref count (1672-8i7t)"
+    echo "FAIL: salvage-audit $pass/$((pass + fail + 1)) (1226-jb8y)"
+    exit 1
+fi
 verdict="$(printf '%s' "$out" | tail -1)"
 
 # ── ARM 1: the ref lookup actually finds refs when refs exist ────────────────
