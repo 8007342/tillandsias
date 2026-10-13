@@ -227,8 +227,7 @@ else
 fi
 
 # ── Gate 4: GitHub Actions budget ──────────────────────────────────────────────
-# Operator directive 2026-08-03, amended 2026-10-13 (1661-vckd): the manual
-# release and isolated Observatorium production deployment are sanctioned.
+# Operator directive, 2026-08-03. release.yml is the ONLY sanctioned workflow.
 #
 # This checks the WORKING TREE. It is deliberately not the whole story: cron
 # workflows are scheduled from the DEFAULT BRANCH, so a file absent here can
@@ -257,15 +256,15 @@ if [[ -d .github/workflows ]]; then
     # `-exec basename {} \;` is POSIX and behaves the same on both. One process
     # per file, and the set here is a handful of workflow files.
     unexpected="$(find .github/workflows -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) \
-        ! -name 'release.yml' ! -name 'observatorium.yml' -exec basename {} \; 2>/dev/null | sort)"
+        ! -name 'release.yml' -exec basename {} \; 2>/dev/null | sort)"
     if [[ -n "$unexpected" ]]; then
-        fail "unsanctioned workflow(s) present — only release.yml and observatorium.yml may consume cloud minutes:"
+        fail "unsanctioned workflow(s) present — only release.yml may consume cloud minutes:"
         sed 's/^/    /' <<<"$unexpected" >&2
-        _afford "only release.yml and the operator-authorized observatorium.yml may consume cloud CI minutes, and another workflow file is present" "remove the workflow files listed above (git rm .github/workflows/<name>), or run that work locally, then re-run"
+        _afford "only release.yml may consume cloud CI minutes, and another workflow file is present" "remove the workflow files listed above (git rm .github/workflows/<name>), or run that work locally, then re-run"
         echo "blocked:unsanctioned-workflow"
         exit 1
     fi
-    note "actions budget clean (release.yml and operator-authorized observatorium.yml only)"
+    note "actions budget clean (release.yml only)"
 fi
 
 # ── Gate 5: the stable tag agrees with the release page (order 1061-zd83) ─────

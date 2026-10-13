@@ -55,7 +55,6 @@ cp "$RP" "$ROOT/scripts/plan-binary-probe.sh" "$R/scripts/"
 printf '#!/bin/sh\nexit 0\n' > "$R/scripts/verify-version-monotonic.sh"
 chmod +x "$R"/scripts/*.sh
 printf 'name: release\n' > "$R/.github/workflows/release.yml"
-printf 'name: Observatorium\n' > "$R/.github/workflows/observatorium.yml" # operator-authorized deployment remains allowed
 printf 'name: nightly\n' > "$R/.github/workflows/nightly.yml"   # the unsanctioned one
 git init -q -b linux-next "$R"
 git -C "$R" config user.email f@f; git -C "$R" config user.name f
