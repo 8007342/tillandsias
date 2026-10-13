@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's direction (macuahuitl, 2026-10-13), found by the Windows host.
+packets:
+  - packet_id: two-browser-open-unit-tests-assume-the-hosts-real-wayland-socket-and-fail-on-any-host-without-a-wayland-session
+    order: 1671-envz
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [tests, browser, wayland, windows, hermetic]
+    estimated_hours: 2
+    related: [1656-yhjt, 1656-tjv4]
+    owned_files:
+      - crates/tillandsias-headless/src/browser_open.rs
+    title: |
+      browser_open's window_spec_joins_only_its_network_and_pins_the_ca and webkit_window_spec_is_confined_like_the_chromium_window build their spec from wayland_display "wayland-0" and xdg_runtime_dir "/run/user/1000". Through wayland_socket()'s exists() check, that is the host's real socket, so both fail on Windows, in CI and on headless Linux. The tests make a fake socket in a temp runtime dir instead.
+    context: |
+      Found by the Windows host after #392 (2026-10-13). wayland_socket() (crates/tillandsias-headless/src/main.rs) only checks socket.exists(), so a placeholder file in a tempdir satisfies it on every OS. On Windows, the mount strings the tests assert ("/run/user/1000/wayland-0:/run/user/browser/wayland-0", and the absence of "/run/user/1000:") must be built from the temp path rather than spelled as literals.
+      This matters for 1656-yhjt: WSLg hands a different runtime dir.
+    exit_criteria:
+      - 'both tests pass with XDG_RUNTIME_DIR pointing at an empty directory and no WAYLAND_DISPLAY in the environment, on Linux; red today on a host with no /run/user/1000/wayland-0'
+      - 'cargo test -p tillandsias-headless --bin tillandsias browser_open passes natively on Windows (yolanda-windows)'
+      - 'the confinement assertions still check that only the socket file, never the runtime dir, is mounted'
+    verifiable_closure: "cargo test -p tillandsias-headless --bin tillandsias window_spec — green on lenovinha inside a podman container with no Wayland socket and on yolanda-windows natively; red on both before the fix"
+    next_action: >
+      Give both tests a tempdir runtime dir holding a placeholder wayland-0. Build the expected mount strings from that path, and re-run with WAYLAND_DISPLAY unset.
+    provenance: |
+      Filed by lenovinha-silverblue at the coordinator's direction, 2026-10-13 (Windows finding).
+    events:
+      - type: filed
+        ts: "2026-10-13T21:03:47Z"
+        host: lenovinha
+        summary: |-
+          Two browser_open tests need a fake Wayland socket in a temp runtime dir, not the host's real one.

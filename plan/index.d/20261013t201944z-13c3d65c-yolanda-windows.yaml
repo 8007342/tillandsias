@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-git-bootstrap-seeds-an-explicitly-attributed-agent-identity-per-harness
+    field: next_action
+    value: Delete prompt_and_store_git_identity and its call, the cached-gitconfig read and GIT_AUTHOR/COMMITTER injection in tillandsias-core container_profile.rs, and the macOS tray's author name/email expects in the same change. Route every lane launch through one helper that passes forge_git_identity_env from the signed-in AppUser.
+    ts: "2026-10-13T20:19:44Z"
+    host: yolanda-windows
+    replaces_sha256: "de37a7ab2696405c42d28e5ceb834f09658524fff39de96646f95c91b219a2ba"

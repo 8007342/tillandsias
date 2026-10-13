@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's direction (macuahuitl, 2026-10-13): the observatorium's headline metric grades all-zero.
+packets:
+  - packet_id: the-centicolon-grade-is-all-zero-because-no-litmus-step-names-a-req-id-and-the-grader-reports-that-as-a-warning-beside-an-ok-verdict
+    order: 1670-gcwu
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [centicolon, metrics, litmus, observatorium, grader]
+    estimated_hours: 6
+    related: [1661-vckd, 1395-88tp]
+    owned_files:
+      - scripts/centicolon-grade.sh
+      - scripts/lua/centicolon-grade-static.lua
+    title: |
+      scripts/centicolon-grade.sh grades R=1529 with satisfied=0 traced=0 positively_tested=0 on today's tree, and still prints ok:. Not one of 527 litmus files carries a requirement: key (static.json requirement_keys=0). The design's pilot (gh-auth-script requirements litmus, 1395-88tp) never landed, so the grade has never been anything but zero. The observatorium dashboard (1661-vckd) shows that zero as its headline.
+    context: |
+      Measured 2026-10-13 on linux-next 4fea046dd-era trunk:
+      - target/centicolon/static.json: litmus_files=527, requirement_keys=0, resolved_keys=0, parse_errors=0.
+      - The only refusal is zero-resolved-requirement-keys:files=527.
+      - The extractor has req-ids: 143 spec.md files carry req-id comments, and R=1529 declared.
+      - The only two requirement: keys in the litmus corpus (podman-idiomatic-enclave-network and -error-classification) are dotted pre-976-suab names. They sit under observability.log_fields, which the grader never reads.
+      - `git log -G` finds no litmus step ever carrying a hex req-id, so it is not a regression from the recent stamping.
+      The cause is that the binding layer was never adopted, not a format or path break. Two defects follow:
+      (1) the verdict is ok: while the static half refused, so consumers (the observatorium, the advisory R line) present an unmeasured zero as a measurement;
+      (2) no litmus names a req-id, so nothing can ever be traced.
+    exit_criteria:
+      - 'red arm on today''s tree: a fixture runs centicolon-grade.sh over the real corpus and asserts it does NOT print ok: while requirement_keys=0. Red today (prints ok:centicolon-grade:R=1529 ... traced=0)'
+      - 'the verdict for a zero-key corpus is a distinct non-ok line (e.g. unmeasured:centicolon-grade:requirement-keys=0) that still carries R, and the observatorium shows "unmeasured" instead of a zero grade; a test drives both'
+      - 'the design pilot lands: litmus-gh-auth-script-requirements.yaml (plus the observatorium litmus) carry requirement: <req-id> on assert-keyed, bound, pre-build steps, and the grade on trunk reports traced>0 and positively_tested>0 after a recorded green run'
+    unscoreable: "unpinnable-until-the-guard-exists: the red arm is the first commit of the fix"
+    next_action: >
+      Write the red fixture against the real corpus, then make a zero-key grade a non-ok verdict. Land the gh-auth pilot keys from plan/issues/centicolon-enforceable-metric-design-2026-09-26.md §gh-auth, then re-grade.
+    provenance: |
+      Filed by lenovinha-silverblue at the coordinator's direction, 2026-10-13, from the 1661-vckd observatorium build.
+    events:
+      - type: filed
+        ts: "2026-10-13T19:57:06Z"
+        host: lenovinha
+        summary: |-
+          The CentiColon grade is all-zero because no litmus step names a req-id; the grader says ok: anyway.

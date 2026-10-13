@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-git-bootstrap-seeds-an-explicitly-attributed-agent-identity-per-harness
+    field: title
+    value: Remove the git identity prompt entirely on every platform and propagate the GitHub App sign-in identity into every forge lane through one shared launch helper, so a fresh lane of any harness commits as the operator's GitHub identity with no prompt
+    ts: "2026-10-13T20:19:42Z"
+    host: yolanda-windows
+    replaces_sha256: "72973a0a1119a688b38bb23c6382138ffbcc60582406d727fd54585ac5aa0bfe"
+
+events:
+  - packet_id: forge-git-bootstrap-seeds-an-explicitly-attributed-agent-identity-per-harness
+    event:
+      type: note
+      ts: "2026-10-13T20:19:42Z"
+      host: yolanda-windows
+      summary: |-
+        reshaped on operator direction 2026-10-13
