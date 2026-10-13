@@ -97,8 +97,15 @@ local function observe(arg)
         snapshot[#snapshot + 1] = table.concat({ o.id, o.state, tostring(o.spec), tostring(o.req_id) }, " ")
     end
     local denominator = #obs
+    -- UNMEASURED (1670-gcwu): over a non-empty litmus corpus with zero resolved
+    -- requirement keys nothing CAN be traced, so R = denominator is the absence
+    -- of a measurement, not a measurement. Said in the JSON and in the verdict,
+    -- so no consumer presents it as a grade.
+    local measured = not ((st.litmus_files or 0) > 0 and (st.resolved_keys or 0) == 0)
     return {
         schema = "centicolon-grade-observed/1",
+        measured = measured,
+        unmeasured_reason = (not measured) and "zero-resolved-requirement-keys" or nil,
         records = records,
         denominator = denominator,
         satisfied = hist.positively_tested,
@@ -115,8 +122,10 @@ _G["centicolon-grade-observed"] = function(arg)
     local out = observe(arg)
     expert.log_info("centicolon-grade-observed:" .. json.encode(out))
     expert.log_info(string.format(
-        "ok:centicolon-grade-observed:R=%d satisfied=%d denominator=%d declared=%d traced=%d positively_tested=%d records=%d",
+        "%s:centicolon-grade-observed:R=%d satisfied=%d denominator=%d declared=%d traced=%d positively_tested=%d records=%d%s",
+        out.measured and "ok" or "unmeasured",
         out.R, out.satisfied, out.denominator, out.histogram.declared, out.histogram.traced,
-        out.histogram.positively_tested, out.records))
+        out.histogram.positively_tested, out.records,
+        out.measured and "" or (" reason=" .. out.unmeasured_reason)))
     return true
 end

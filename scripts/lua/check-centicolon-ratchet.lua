@@ -22,7 +22,8 @@ end
 
 local function grade_verdict(s)
     for _, l in ipairs(lines(s)) do
-        if l:sub(1, 20) == "ok:centicolon-grade:" or l:sub(1, 25) == "blocked:centicolon-grade:" then
+        if l:sub(1, 20) == "ok:centicolon-grade:" or l:sub(1, 25) == "blocked:centicolon-grade:"
+            or l:sub(1, 28) == "unmeasured:centicolon-grade:" then
             return l
         end
     end
@@ -41,6 +42,11 @@ for _, l in ipairs(lines(protocol)) do
 end
 local grade_line = grade_verdict(protocol)
 local grade_ok, grade_json = pcall(fs.read, OUT .. "/grade.json")
+if grade_line:sub(1, 28) == "unmeasured:centicolon-grade:" then
+    -- 1670-gcwu: nothing was measured, so there is nothing to ratchet and the
+    -- zero must not become the baseline a later real grade is compared with.
+    verdict.advisory("centicolon: unmeasured:" .. grade_line:sub(29) .. " (advisory)")
+end
 if grade_line:sub(1, 3) ~= "ok:" or not grade_ok or grade_json == "" then
     -- Preserve the shell's parameter expansion: an empty grade artifact after
     -- an ok verdict reports that full ok line as the blocked reason.
