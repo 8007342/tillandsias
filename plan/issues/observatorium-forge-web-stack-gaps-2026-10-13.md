@@ -116,3 +116,12 @@ Additional integration observations and disposition:
   validation is unchanged. The WebKit assertions use that actual fixture path
   and still reject mounting the whole runtime directory. Exit criterion: both
   confinement tests pass in a headless forge without a user compositor.
+- The next run passed all workspace and feature-gated tests, then filled the
+  692 MiB tmpfs again: `target/archive-answerability/tree` retained a 321 MiB
+  checkout copy, leaving no room for the later dialect fixture's tiny script.
+  The existing `TILLANDSIAS_ARCHIVE_CHECK_WORK` override allows this transient
+  copy to live in the forge cache. The retry uses
+  `~/.cache/tillandsias/observatorium-archive-answerability` without changing
+  the tested ledger or assertions. Exit criterion: mandatory gates select an
+  adequately sized scratch root for tmpfs forges by default, as they already
+  select native storage for 9P checkouts.
