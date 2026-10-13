@@ -1,0 +1,114 @@
+<!-- @trace spec:observatorium-dashboard -->
+<!-- freshness: auditor=forge-observatorium date=2026-10-13 verdict=updated scope=initial operator-authorized dashboard contract -->
+
+# Observatorium dashboard
+
+## Status
+
+active
+
+## Purpose
+
+Provide the operator-requested public project metrics dashboard at
+`observatorium.tillandsias.org`. Source, build tooling and deployment configuration
+live under `observatorium/`; only CI wiring and canonical specification/plan
+records live outside it. The legacy private trace viewer remains governed by
+`clickable-trace-index` and does not become part of the public deployment.
+
+## Requirements
+
+### Requirement: Flutter and Flame presentation
+<!-- req-id: 4f8d972b -->
+
+The dashboard SHALL use Flutter for its web UI and Flame for chart rendering.
+It SHALL expose controls for selecting metrics and time windows and render
+precomputed logarithmic values with a clearly named transform. Zero SHALL remain
+representable. Raw values and units SHALL remain available to interpret graphs.
+
+#### Scenario: Different magnitudes
+
+- WHEN a plot contains zero and measurements of widely different magnitudes
+- THEN a zero-safe logarithmic transform allows them to share the plot
+- AND displayed raw values retain the original measurement meaning.
+
+### Requirement: Cheap collection and precomputed publication
+<!-- req-id: 3c39b8b8 -->
+
+Collection SHALL read existing project sources and artifacts without building or
+executing the measured project. Deploy preparation SHALL validate snapshots and
+precompute graph coordinates and summaries. Rendering SHALL consume the published
+JSON artifact without querying GitHub or the private plan infrastructure.
+The initial metrics SHOULD cover specs, effective plan states, residual obligation
+artifacts where available, and commits. Missing artifacts SHALL be represented as
+unavailable rather than a zero measurement.
+
+#### Scenario: Missing residual artifact
+
+- WHEN no supported residual obligation artifact is available
+- THEN the metric is absent or null with a source availability explanation
+- AND the dashboard does not imply that there are zero remaining obligations.
+
+### Requirement: Honest measurement history
+<!-- req-id: af936098 -->
+
+Every metric SHALL carry its definition, unit, source and measurement epoch.
+Changed definitions SHALL start a distinct epoch. Graphs SHALL preserve missing
+intervals and SHALL NOT join epochs or reconstruct unobserved historical snapshot
+counts. Historical commits MAY be derived from real Git timestamps, with history
+coverage declared. Snapshots SHALL carry a source revision and observation time.
+
+#### Scenario: Definition changes
+
+- WHEN a metric changes how it counts its source
+- THEN its new epoch begins at the first actual observation under that definition
+- AND the previous epoch remains independently identifiable.
+
+### Requirement: Cloudflare deployment and local artifact
+<!-- req-id: ecefcdde -->
+
+The app SHALL deploy through Cloudflare Workers Builds from this repository
+(root directory `observatorium`, Build command `npm run build`, the default
+`npx wrangler deploy`), using Cloudflare static assets and a custom domain for
+the dashboard subdomain. It SHALL use no GitHub Actions and no Cloudflare
+credential stored in GitHub. The one build script SHALL fetch every external
+toolchain pinned by URL and SHA-256, and SHALL compute the metrics at deploy
+time. A metric it cannot observe SHALL be published as an explicit gap.
+
+The durable history SHALL be the repository: the release cut SHALL append one
+snapshot naming its release tag to `observatorium/history/snapshots.jsonl`. A
+deploy SHALL read that history and SHALL NOT write it; its live observation is
+display-only. Workers Builds runs no litmus, so the HEADLINE CentiColon grade
+SHALL be the latest release-cut snapshot, graded after a recorded litmus run on
+the cut host; the deploy's own grade SHALL be labelled display-only and SHALL
+NOT join the release series. Local artifact serving SHALL use the same built assets. Managed
+sibling publication and device dogfooding SHALL use host-browser tools when
+available; their absence SHALL be documented as an unverified infrastructure
+dependency.
+
+#### Scenario: Fresh deployment runner
+
+- WHEN Workers Builds prepares a deployment from a fresh clone
+- THEN it reads the committed release history before adding its live observation
+- AND the live observation is never written back as history.
+
+#### Scenario: Release cut records the release
+
+- WHEN a release is cut
+- THEN exactly one snapshot line naming that release tag is appended to the committed history
+- AND it is appended only after a recorded pre-build litmus run, with a measured grade; an unmeasured grade is refused and nothing is appended.
+
+#### Scenario: Headline grade comes from the release cut
+
+- WHEN the dashboard is deployed from a build that ran no litmus
+- THEN its headline residual is the latest measured release-cut snapshot, naming that release
+- AND the deploy's traced count appears only on a card labelled display-only.
+
+## Authority and verification
+
+Operator UX and Dart/Node wrapper authorization: plan packet `1661-vckd`,
+2026-10-13. No tray UX changes are authorized by this spec.
+Verification: collector and preparation tests under `observatorium/metrics/`,
+Flutter analysis/widget tests and release web build, Wrangler deployment dry run,
+and local artifact response checks. Public deployment and managed device testing
+require live credentials and host services; configuration alone is not evidence
+that either ran.

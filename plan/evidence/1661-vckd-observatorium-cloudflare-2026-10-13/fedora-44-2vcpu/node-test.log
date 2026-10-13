@@ -1,0 +1,74 @@
+
+> test
+> node --test metrics/*.test.mjs
+
+TAP version 13
+# Subtest: Markdown code fences cannot inflate heading totals
+ok 1 - Markdown code fences cannot inflate heading totals
+  ---
+  duration_ms: 1.796423
+  type: 'test'
+  ...
+# Subtest: canonical folded rows retain exact status vocabulary, duplicates refuse
+ok 2 - canonical folded rows retain exact status vocabulary, duplicates refuse
+  ---
+  duration_ms: 0.493438
+  type: 'test'
+  ...
+# Subtest: log transform preserves zero and missing distinctly, rejects negative
+ok 3 - log transform preserves zero and missing distinctly, rejects negative
+  ---
+  duration_ms: 0.219865
+  type: 'test'
+  ...
+# Subtest: history never fabricates earlier snapshots or joins legacy measurement units
+ok 4 - history never fabricates earlier snapshots or joins legacy measurement units
+  ---
+  duration_ms: 0.820791
+  type: 'test'
+  ...
+# Subtest: changed epochs remain separate and do not inherit current metric definitions
+ok 5 - changed epochs remain separate and do not inherit current metric definitions
+  ---
+  duration_ms: 6.283325
+  type: 'test'
+  ...
+# Subtest: observed regressions and duplicate snapshot handling preserve measured values
+ok 6 - observed regressions and duplicate snapshot handling preserve measured values
+  ---
+  duration_ms: 0.256881
+  type: 'test'
+  ...
+# Subtest: commits group by UTC date regardless of git traversal order
+ok 7 - commits group by UTC date regardless of git traversal order
+  ---
+  duration_ms: 0.456491
+  type: 'test'
+  ...
+# Subtest: missing plan tool is a visible unknown, never a zero count
+ok 8 - missing plan tool is a visible unknown, never a zero count
+  ---
+  duration_ms: 26.347587
+  type: 'test'
+  ...
+# Subtest: successful canonical query with skipped fragment warning remains unavailable
+ok 9 - successful canonical query with skipped fragment warning remains unavailable
+  ---
+  duration_ms: 21.697881
+  type: 'test'
+  ...
+# Subtest: a release-cut snapshot names its release tag; a bad tag is refused (1661-vckd)
+ok 10 - a release-cut snapshot names its release tag; a bad tag is refused (1661-vckd)
+  ---
+  duration_ms: 30.212749
+  type: 'test'
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 145.909146
