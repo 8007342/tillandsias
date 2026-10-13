@@ -1,0 +1,2 @@
+{"result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"tillandsias-host-services","version":"56.10.12"}},"jsonrpc":"2.0","id":1}
+{"error":{"code":-32000,"message":"source_not_found: assets directory arkanoid-web-game/public (configured in wrangler.jsonc) does not exist yet; run its build.command first: npm ci && npm run build"},"jsonrpc":"2.0","id":2}

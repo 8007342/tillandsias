@@ -1,5 +1,6 @@
 # @trace spec:local-web-preview
 # @trace order:1625-9qyw (a cold-start forge serves a web project with no operator action)
+# @trace order:1663-6mns (a nested, built Wrangler assets directory is served, never the wrong root)
 #
 # OPT-IN, size e2e: never in the default gate. It needs privileged
 # podman-in-podman, downloads the named release, builds every enclave image in a
@@ -16,8 +17,11 @@ phase: post-build
 description: >
   Opt-in live acceptance: on a sealed scratch substrate after a fresh install,
   a forge publishes a Wrangler project with publish_local runtime auto, the URL
-  is served through the router over verified TLS, a forced router-step failure
-  is step-qualified, and the same call recovers.
+  is served through the router over verified TLS; a lakanoa-shaped layout
+  (nested assets directory built by a subdirectory build command, 1663-6mns)
+  is refused with the build command before the build and serves the BUILT
+  index after it; a forced router-step failure is step-qualified, and the same
+  call recovers.
 severity: high
 size: e2e
 

@@ -49,7 +49,7 @@ Follow it exactly. Don't improvise hostnames or port numbers.
 ## URL the user opens
 
 ```
-http://<project>.<service>.localhost/
+http://<service>.<project>.localhost/
 ```
 
 - `<project>` — the project's directory name (e.g., `lakanoa`,
@@ -61,10 +61,10 @@ http://<project>.<service>.localhost/
 Examples:
 
 ```
-http://lakanoa.flutter.localhost/
-http://java.opencode.localhost/
-http://thinking-service.vite.localhost/
-http://my-api.next.localhost/
+http://flutter.lakanoa.localhost/
+http://opencode.java.localhost/
+http://vite.thinking-service.localhost/
+http://next.my-api.localhost/
 ```
 
 ## How to bind the server inside the forge
@@ -112,7 +112,7 @@ flutter run -d web-server --web-hostname 0.0.0.0 --web-port 8080
 And tell the user:
 
 > Flutter web running. Open
-> `http://$TILLANDSIAS_PROJECT.flutter.localhost/` in your browser.
+> `http://flutter.$TILLANDSIAS_PROJECT.localhost/` in your browser.
 
 Substitute the actual project name in the URL. **Do not** print
 `http://localhost:8080` — that URL is meaningless to the human.
@@ -123,7 +123,7 @@ If you want to verify the server is up before telling the user, use
 `curl` from inside the forge:
 
 ```bash
-curl -fsS http://$TILLANDSIAS_PROJECT.flutter.localhost/
+curl -fsS http://flutter.$TILLANDSIAS_PROJECT.localhost/
 ```
 
 The forge has `HTTP_PROXY=http://proxy:3128` set, and the proxy

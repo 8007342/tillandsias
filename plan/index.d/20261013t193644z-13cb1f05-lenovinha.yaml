@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: observatorium-flutter-flame-release-metrics-dashboard
+    event:
+      type: note
+      ts: "2026-10-13T19:36:44Z"
+      agent_id: linux-lenovinha-claude-20261013t193644z
+      host: lenovinha
+      summary: |
+        Taken over by lenovinha at the operator's direction (via macuahuitl, 2026-10-13), to complete and land on work/1661-vckd. Redesign per the operator: no GitHub Actions (b0797ae2b reverted, observatorium/ci removed); Cloudflare Workers Builds from the repo (root dir observatorium, Build command `npm run build`; Workers Builds does not run wrangler.jsonc's build.command, per Cloudflare's docs); one pinned build script (Flutter 3.47.7 and rustup-init 1.28.2 by URL+sha256, tillandsias-plan built from the checkout for CentiColons); durable history = observatorium/history/snapshots.jsonl appended by the release cut (merge-to-main-and-release §8). The row stays `implemented` until the land; lenovinha is the owner from here.
