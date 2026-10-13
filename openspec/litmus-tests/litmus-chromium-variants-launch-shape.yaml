@@ -121,6 +121,24 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "chromium-debug-variant"
 
+  - step: "the framework entrypoint adds --no-sandbox exactly when the Chromium wrapper accepts it (612-nvf3); negative controls: the fixture's own mutants, the probe dropped and the probe unconditional, must each go red"
+    # Order 1656-6c97. The setuid sandbox cannot start under --cap-drop=ALL +
+    # no-new-privileges (the container exits 21), so the launcher probes and
+    # adds the flag; a refusal would break every window. Measured: with the
+    # real launcher's probe dropped, arm 1 (ACCEPTS) fails; made unconditional,
+    # arm 2 (REJECTS) fails.
+    command: "set -u; out=$(tillandsias-plan script run scripts/lua/test-chromium-framework-launch.lua 2>&1); rc=$?; case \"$out\" in *\"ok:chromium-framework-launch:4:of:4\"*) [ \"$rc\" = 0 ] && { echo 'ok: the framework entrypoint adds --no-sandbox only when the wrapper accepts it; both mutants caught'; exit 0; } ;; esac; echo \"FAIL: chromium-framework-launch fixture (rc=$rc): $out\"; exit 1"
+    timeout_ms: 60000
+    expected_behavior: "ok: the framework entrypoint adds --no-sandbox only when the wrapper accepts it"
+
+  - step: "the framework image installs CJK and emoji fonts; negative control: a Containerfile without the CJK font must FAIL"
+    # Order 1656-6c97. Measured on v56.9.27.2: fc-list :lang=ja / zh-cn / ko
+    # and :charset=1f600 were empty (Latin came in with Chromium's deps). With
+    # the layer: Noto Sans CJK JP/SC/KR/TC/HK and Noto Color Emoji; +94 MiB.
+    command: "set -u; T=target/litmus-chromium-variants; mkdir -p \"$T\"; F=images/chromium/Containerfile.framework; fonts() { grep -qE '^[[:space:]]+google-noto-sans-cjk-vf-fonts' \"$1\" && grep -qE '^[[:space:]]+google-noto-color-emoji-fonts' \"$1\"; }; fonts \"$F\" || { echo 'FAIL: Containerfile.framework no longer installs the CJK and emoji fonts'; rm -rf \"$T\"; exit 1; }; grep -vF 'google-noto-sans-cjk-vf-fonts' \"$F\" > \"$T/Containerfile\"; if fonts \"$T/Containerfile\"; then echo 'FAIL: negative control passed'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: framework image installs CJK and emoji fonts; seeded removal caught'"
+    timeout_ms: 5000
+    expected_behavior: "ok: framework image installs CJK and emoji fonts"
+
 observability:
   traces:
     - "@trace spec:chromium-debug-variant"

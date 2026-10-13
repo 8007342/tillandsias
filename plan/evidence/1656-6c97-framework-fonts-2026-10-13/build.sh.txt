@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# 1656-6c97 (evidence, not shipped): on a PRIVATE podman store, build the
+# chromium-framework image twice from the installed chromium-core image:
+#   baseline = linux-next's Containerfile.framework (no font layer)
+#   fonts    = this branch's (the font layer)
+# then measure fc-list coverage and the size growth. Operator state is
+# recorded before and after; the installed images are only read (podman save).
+set -u
+REPO="$(cd "$(dirname "$0")/../../.." && pwd)"
+HERE="$REPO/target/work/fonts"
+OUT="$HERE/out"; rm -rf "$OUT"; mkdir -p "$OUT"
+CORE=localhost/tillandsias-chromium-core:v56.9.27.2
+OP_ENV=(env -u CONTAINERS_STORAGE_CONF -u CONTAINERS_CONF -u REGISTRY_AUTH_FILE -u XDG_CACHE_HOME "HOME=$HOME")
+[ -z "${CONTAINERS_STORAGE_CONF:-}${CONTAINERS_CONF:-}" ] || { echo "ABORT: plain shell only"; exit 3; }
+log() { echo "$*" >> "$OUT/summary.txt"; echo "$*"; }
+op_state() {
+    local c
+    for c in tillandsias-inference tillandsias-dev-inference tillandsias-router; do
+        "${OP_ENV[@]}" podman inspect --format '{{.Name}} {{.Id}} {{.State.Status}} {{.State.StartedAt}}' "$c" 2>&1
+    done
+    "${OP_ENV[@]}" podman network ls --format '{{.Name}}' 2>&1 | sort
+    "${OP_ENV[@]}" podman images --format '{{.Repository}}:{{.Tag}} {{.ID}}' 2>&1 | sort
+}
+op_state > "$OUT/op-before"
+
+S="$(mktemp -d "$HERE/run.XXXXXX")"
+R="$(mktemp -d "${XDG_RUNTIME_DIR:?}/tillandsias-fonts.XXXXXX")"
+mkdir -p "$S/graph" "$R/run" "$R/tmp" "$S/home" "$S/ctx"
+printf '%s\n' '[storage]' 'driver = "overlay"' "graphroot = \"$S/graph\"" "runroot = \"$R/run\"" > "$S/storage.conf"
+printf '%s\n' '[engine]' 'cgroup_manager = "cgroupfs"' 'events_logger = "file"' "events_logfile_path = \"$S/events.log\"" "tmp_dir = \"$R/tmp\"" > "$S/containers.conf"
+"${OP_ENV[@]}" podman save --format oci-archive -o "$S/core.tar" "$CORE" > /dev/null || exit 1
+export CONTAINERS_STORAGE_CONF="$S/storage.conf" CONTAINERS_CONF="$S/containers.conf" REGISTRY_AUTH_FILE="$S/auth.json" HOME="$S/home"
+unset XDG_CACHE_HOME
+guard() { local g; g="$(podman info --format '{{.Store.GraphRoot}}' 2>/dev/null)"; [ "$g" = "$S/graph" ] || { echo "ABORT: store is '$g'"; exit 3; }; }
+guard
+podman load -q -i "$S/core.tar" > /dev/null && rm -f "$S/core.tar"
+cp "$REPO/images/chromium/chromium-framework-launch.sh" "$S/ctx/"
+git -C "$REPO" show origin/linux-next:images/chromium/Containerfile.framework > "$S/ctx/Containerfile.baseline"
+cp "$REPO/images/chromium/Containerfile.framework" "$S/ctx/Containerfile.fonts"
+for v in baseline fonts; do
+    guard
+    start=$(date +%s)
+    podman build --pull=never -f "$S/ctx/Containerfile.$v" --build-arg "CHROMIUM_CORE_IMAGE=$CORE" -t "localhost/e2e-fw-$v:1" "$S/ctx" > "$OUT/build-$v.log" 2>&1
+    log "build $v rc=$? seconds=$(( $(date +%s) - start ))"
+    log "size $v bytes=$(podman image inspect "localhost/e2e-fw-$v:1" --format '{{.Size}}' 2>/dev/null)"
+    podman run --rm --pull=never --entrypoint sh "localhost/e2e-fw-$v:1" -c '
+        echo "families: $(fc-list : family | sort -u | tr "\n" ";")"
+        for l in en ja zh-cn ko; do echo "lang=$l: $(fc-list :lang=$l family | sort -u | tr "\n" ";")"; done
+        echo "color-emoji: $(fc-list :color=true family | sort -u | tr "\n" ";")"
+        echo "emoji-charset U+1F600: $(fc-list ":charset=1f600" family | sort -u | tr "\n" ";")"
+        echo "font-bytes: $(du -sb /usr/share/fonts | cut -f1)"
+        echo "chromium: $(chromium --version 2>/dev/null || chromium-browser --version 2>/dev/null)"
+        rpm -qa --qf "%{NAME} %{SIZE}\n" | grep -iE "font" | sort' > "$OUT/fc-list-$v.txt" 2>&1
+    log "fc-list $v: $(grep -E '^(lang=ja|color-emoji|font-bytes)' "$OUT/fc-list-$v.txt" | tr '\n' ' ')"
+done
+b=$(podman image inspect localhost/e2e-fw-baseline:1 --format '{{.Size}}' 2>/dev/null); f=$(podman image inspect localhost/e2e-fw-fonts:1 --format '{{.Size}}' 2>/dev/null)
+[ -n "$b" ] && [ -n "$f" ] && log "growth bytes=$((f-b)) MiB=$(( (f-b) / 1048576 ))"
+
+guard
+podman rm -a -f -t 0 > /dev/null 2>&1
+podman rmi -a -f > /dev/null 2>&1
+podman unshare sh -c "umount -l '$S/graph/overlay' 2>/dev/null; rm -rf '$S/graph' '$R/run' '$R/tmp'"
+find "$R" -delete 2>/dev/null; find "$S" -delete 2>/dev/null
+export HOME="$(getent passwd "$(id -u)" | cut -d: -f6)"
+unset CONTAINERS_STORAGE_CONF CONTAINERS_CONF REGISTRY_AUTH_FILE
+op_state > "$OUT/op-after"
+cmp -s "$OUT/op-before" "$OUT/op-after" && log "op: unchanged" || { log "op: CHANGED"; diff "$OUT/op-before" "$OUT/op-after" | tee -a "$OUT/summary.txt"; }

@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: the-chromium-framework-image-ships-fonts-and-a-fixture-pins-its-entrypoint-no-sandbox-refusal
+    event:
+      type: list-replace
+      ts: "2026-10-13T08:07:11Z"
+      agent_id: linux-lenovinha-claude-20261013t080710z
+      host: lenovinha
+      field: exit_criteria
+      items:
+        - "in the built image, `fc-list` reports at least one Latin, one CJK and one emoji family; red today (no fonts)"
+        - "scripts/test-chromium-framework-launch.sh is ported to Lua and bound to a litmus step; it goes red when the probe is dropped and when it is made unconditional."
+        - "the image size growth from fonts is measured and recorded"
+      summary: |
+        Coordinator ruling 2026-10-13: criterion 2 misread 612-nvf3: the entrypoint adds --no-sandbox when the wrapper accepts it (setuid sandbox can't start under cap-drop ALL + no-new-privileges); the real gap is the unwired fixture.
