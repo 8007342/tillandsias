@@ -146,12 +146,12 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok:"
 
-  - step: "Req Build pipeline: build-image.sh dispatches forge/web/proxy/git/inference/router/chromium/vault"
+  - step: "Req Build pipeline: build-image.sh dispatches forge/web/proxy/git/inference/router/chromium/webkit/vault"
     # Spec § Req mandates `scripts/build-image.sh forge` and `web`
     # build the respective images. The case-arm in the script
     # dispatches to >=8 image names; pin the canonical list so a
     # refactor dropping a target surfaces fast.
-    command: "grep -F 'forge|web|proxy|git|inference|router|chromium-core|chromium-framework|vault' scripts/build-image.sh"
+    command: "grep -F 'forge|web|proxy|git|inference|router|chromium-core|chromium-framework|webkit|vault' scripts/build-image.sh"
     timeout_ms: 3000
     expected_behavior: "forge|web"
 

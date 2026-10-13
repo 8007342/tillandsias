@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's direction (macuahuitl, 2026-10-13) from an operator forge failure on yoga.
+packets:
+  - packet_id: the-forge-startup-context-carries-machine-readable-web-publish-state-and-reason-lines-so-an-agent-sees-publishing-is-unavailable-before-trying
+    order: 1664-finm
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, startup-context, publish-local, local-web-preview, agents]
+    estimated_hours: 3
+    related: [1661-m9sr, 1662-udb3, 1663-6mns]
+    owned_files:
+      - images/default/lib-common.sh
+    title: |
+      The forge's startup context carries machine-readable web_publish_state= and web_publish_reason= lines (e.g. available, or unavailable with the reason), so an agent sees that publishing is unavailable before it tries publish_local.
+    context: |
+      Operator failure on yoga (2026-10-13), private project 8007342/lakanoa. The agent learned that publishing could not work only by calling publish_local: auto gave the init refusal, static gave "Podman operation failed", service_status was empty, and browser_open gave BROWSER_UNAVAILABLE. The context said nothing about whether this lane could publish.
+    exit_criteria:
+      - 'the startup context contains exactly one web_publish_state=<available|unavailable> line and, when unavailable, one web_publish_reason=<short reason> line; red today (neither exists)'
+      - 'a lane whose host cannot publish (e.g. no MCP tool socket, or no web image) renders web_publish_state=unavailable with that reason; a lane that can publish renders available; a test drives both'
+      - 'the lines are greppable by an agent (key=value, one per line, no markdown around the value)'
+    unscoreable: "unpinnable-until-the-guard-exists: the two-state arm is written with the context change"
+    next_action: >
+      Decide what the context can know at lane start (the MCP tool socket's presence, the host's answer to a cheap probe), then render the two lines and write the two-state test red first.
+    provenance: |
+      Filed by lenovinha-silverblue on macuahuitl's direction, 2026-10-13 (operator forge failure, yoga, lakanoa).
+    events:
+      - type: filed
+        ts: "2026-10-13T17:48:26Z"
+        host: lenovinha
+        summary: |-
+          Add web_publish_state= / web_publish_reason= lines to the forge context so agents see publishing is unavailable before trying.
