@@ -72,3 +72,13 @@ Additional integration observations and disposition:
   to the four existing private trace-viewer assets. Public Flutter output remains
   its own deployment. Exit criterion: a populated npm/Flutter worktree passes the
   host build and embedded legacy viewer assets remain intact.
+- The workspace tmpfs is only 692 MiB (`df -h`), despite the startup hardware
+  report describing 8 GiB RAM. npm dependencies (229 MiB) and Flutter generated
+  builds (93 MiB) exhausted it during the full gate's archive-refusal fixture
+  copy. The gate printed `could-not-run:append-event-archived-refusal:scratch-copy-failed`
+  and then incorrectly described a behavioral regression. Moving these ignored
+  generated directories to `~/.cache/tillandsias/observatorium-generated/` with
+  local symlinks restored space; this touches only the forge's ephemeral cache.
+  Exit criterion: provision sufficient workspace capacity or route generated web
+  artifacts to the ephemeral cache by default, and distinguish fixture resource
+  failure from a tested archive-guard regression. No host disk was accessed.
