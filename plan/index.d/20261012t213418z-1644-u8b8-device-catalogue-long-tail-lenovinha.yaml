@@ -1,0 +1,54 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request (macuahuitl, 2026-10-12): the operator asked for a MASSIVE device table; 1643-q3at's 127 devices are the seed.
+packets:
+  - packet_id: the-device-catalogue-grows-from-a-127-device-seed-to-the-long-tail-500-plus-devices-across-12-plus-brands-each-with-source-and-licence
+    order: 1644-u8b8
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [browser, devices, mobile, emulation, catalogue, research]
+    estimated_hours: 12
+    depends_on:
+      - a-vendored-device-catalogue-and-resolver-turn-iphone-12-pro-max-or-galaxy-s24-ultra-or-xperia-into-a-fixed-viewport-dpr-and-engine
+    owned_files:
+      - crates/tillandsias-core/data/devices/overlay.yaml
+      - crates/tillandsias-core/data/devices/released.yaml
+      - crates/tillandsias-core/data/devices/catalogue.json
+    title: |
+      Grow the device catalogue (1643-q3at, 127 devices) to the long tail the operator asked for: hundreds of KB covering many brands, so a mobile-first preview can be checked on the phones people actually hold.
+    context: |
+      1643-q3at shipped the catalogue, resolver, generator (scripts/lua/build-device-catalogue.lua) and manufacturer overlay (crates/tillandsias-core/data/devices/overlay.yaml). Its seed is Playwright plus Chrome DevTools plus four overlay phones. The operator asked for a MASSIVE table. This row grows the overlay; the resolver does not change.
+      Coverage wanted:
+      - Samsung: Galaxy S (including S24/S25 Ultra), A, Z, Note and Tab lines.
+      - Google: Pixel back to Pixel 6.
+      - Xiaomi, Redmi and POCO.
+      - OnePlus and Nord.
+      - Sony: the Xperia 1, 5 and 10 lines.
+      - Motorola, Honor, Oppo and Vivo.
+      - Apple: iPads.
+      - Common laptops.
+      Sourcing rules, unchanged from 1643-q3at:
+      - Use first-party figures (the manufacturer's own spec page or newsroom) wherever reachable, one source URL per entry.
+      - Where a maker publishes only panel figures, use the same labelled derivation: dpr from the nearest Android density bucket, viewport = resolution / dpr, `derivation` stated.
+      - No GSMArena scraping, WURFL or DeviceAtlas.
+      - Release months go in released.yaml, which drives "newest flagship".
+      Known blockers from 1643-q3at:
+      - samsung.com renders spec figures client-side; try Samsung newsroom spec sheets.
+      - Sony's spec pages block automated fetches.
+    exit_criteria:
+      - 'the generated catalogue holds >= 500 devices across >= 12 brands'
+      - 'every entry still carries a source kind, URL and licence (litmus:device-catalogue-shape stays green), and every derived value is labelled as derived'
+      - '"galaxy s24 ultra" and "galaxy s25 ultra" resolve exactly (no longer approximated), and the 1643-q3at resolver tests stay green'
+    unscoreable: "unpinnable-until-the-guard-exists: the >=500/>=12 coverage assertion is added to litmus:device-catalogue-shape together with the data"
+    next_action: >
+      After 1643-q3at lands, extend overlay.yaml brand by brand from first-party pages (Samsung newsroom first, for the S24/S25 Ultra). Regenerate catalogue.json and add the coverage assertion to the litmus.
+    provenance: |
+      Filed by lenovinha-silverblue on macuahuitl's direction, 2026-10-12 (follow-up to 1643-q3at).
+    events:
+      - type: filed
+        ts: "2026-10-12T21:34:18Z"
+        host: lenovinha
+        summary: |-
+          Grow the device catalogue to the long tail: >= 500 devices, >= 12 brands, first-party sources, labelled derivations.

@@ -1,0 +1,42 @@
+# @trace spec:local-web-preview
+# @trace order:1643-q3at (device catalogue and resolver)
+# @trace order:1644-u8b8 (long tail: >= 500 devices, >= 12 makers)
+#
+# The committed device catalogue (crates/tillandsias-core/data/devices/
+# catalogue.json) is GENERATED from vendored inputs by
+# scripts/lua/build-device-catalogue.lua, so a hand edit or an input change
+# without a regeneration must go red. Every device must name its source and
+# licence. The resolver's behaviour is pinned by tillandsias-core's
+# devices::tests (iPhone 12 Pro Max = 428x926 dpr 3 webkit, siblings distinct,
+# bare brand = newest flagship, overlay brands, nonsense = no match, never a
+# brand change, landscape swap). Pipe-free.
+name: litmus:device-catalogue-shape
+spec: local-web-preview
+phase: pre-build
+description: >
+  Pin the device catalogue: it is byte-identical to a fresh regeneration from
+  its vendored inputs (one changed byte goes red, restoration goes green), and
+  every device records a source URL and licence.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains scripts/lua/build-device-catalogue.lua
+
+critical_path:
+  - step: "the committed catalogue is fresh; a one-byte edit to a copy reads stale and the restored copy reads fresh (sha256 pre/post)"
+    command: "set -u; out=$(tillandsias-plan script run scripts/lua/build-device-catalogue.lua -- --check 2>&1); case \"$out\" in *ok:device-catalogue:fresh:*) ;; *) echo \"FAIL: committed catalogue: $out\"; exit 1;; esac; T=target/litmus-device-catalogue; mkdir -p \"$T\"; C=crates/tillandsias-core/data/devices/catalogue.json; cp \"$C\" \"$T/c.json\"; pre=$(sha256sum \"$T/c.json\"); sed -i '0,/\"dpr\":3,/s//\"dpr\":4,/' \"$T/c.json\"; red=$(tillandsias-plan script run scripts/lua/build-device-catalogue.lua -- --check --against \"$T/c.json\" 2>&1); cp \"$C\" \"$T/c.json\"; post=$(sha256sum \"$T/c.json\"); g2=$(tillandsias-plan script run scripts/lua/build-device-catalogue.lua -- --check --against \"$T/c.json\" 2>&1); rm -rf \"$T\"; case \"$red\" in *violation:device-catalogue:stale*) ;; *) echo \"FAIL: a seeded edit was not stale: $red\"; exit 1;; esac; case \"$g2\" in *ok:device-catalogue:fresh:*) ;; *) echo \"FAIL: restored copy: $g2\"; exit 1;; esac; [ \"${pre%% *}\" = \"${post%% *}\" ] && echo \"ok: catalogue fresh; seeded edit stale; restored ${post%% *} fresh\" || { echo 'FAIL: restoration not byte-identical'; exit 1; }"
+    timeout_ms: 30000
+    expected_behavior: "ok: catalogue fresh"
+
+  - step: "every catalogue device records a source URL and licence"
+    command: "set -u; C=crates/tillandsias-core/data/devices/catalogue.json; n=$(grep -c '^{\"aliases\"' \"$C\"); l=$(grep -c '\"source\":{[^}]*\"license\":\"[^\"]' \"$C\"); u=$(grep -c '\"source\":{[^}]*\"url\":\"[^\"]' \"$C\"); [ \"$n\" -gt 100 ] && [ \"$n\" = \"$l\" ] && [ \"$n\" = \"$u\" ] && echo \"ok: $n devices, each with a source url and licence\" || { echo \"FAIL: devices=$n licence=$l url=$u\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "each with a source url and licence"
+
+  - step: "the catalogue covers the long tail: >= 500 devices across >= 12 real makers; negative control: an unmeetable floor must FAIL"
+    # Order 1644-u8b8. The generator counts what it builds (brands exclude the
+    # generic desktop/laptop entries) and refuses below the floor.
+    command: "set -u; out=$(tillandsias-plan script run scripts/lua/build-device-catalogue.lua -- --check --min-devices 500 --min-brands 12 2>&1); case \"$out\" in *ok:device-catalogue:fresh:*) ;; *) echo \"FAIL: coverage: $out\"; exit 1;; esac; neg=$(tillandsias-plan script run scripts/lua/build-device-catalogue.lua -- --check --min-devices 100000 --min-brands 12 2>&1); case \"$neg\" in *violation:device-catalogue:coverage:*) ;; *) echo \"FAIL: negative control passed: $neg\"; exit 1;; esac; echo \"ok: coverage ${out##*fresh:}; unmeetable floor refused\""
+    timeout_ms: 30000
+    expected_behavior: "ok: coverage"

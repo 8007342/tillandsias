@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-preflight-doors-per-guard-deadline-does-not-scale-with-the-budget-regime-so-darwin-deadline-skips-push-deciders-the-gate-refuses-on
+    event:
+      type: note
+      ts: "2026-10-12T20:57:44Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |-
+        Landed in run 53 as e55a7042f (land(374)), containing PR head 62ec3ffc3. Exit criteria: (1) darwin-background verdicts for the 13 deciders, the before/after pair at 012bb7638 (trunk 12/13 skipped, fixed all 9 measured answered, refused=0); (2) floor regime unchanged at decider-deadline=5s, fixture arm 1 REGIMES, plus the coordinator's Linux preflight before queueing; (3) the summary line names decider-deadline=, fixture arm 7 DECIDER plus the live line 'budget=450s budget-regime=darwin-background decider-deadline=20s'. Measured overrun (452 s, then 909 s) is followed up in 1641-h6af.

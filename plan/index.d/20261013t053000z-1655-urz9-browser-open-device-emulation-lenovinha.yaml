@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's direction (macuahuitl, 2026-10-13): the next browser step after 1649-xqet and 1651-5t7n.
+packets:
+  - packet_id: browser-open-with-a-device-opens-the-container-window-at-the-device-css-size-with-cdp-device-emulation-over-a-unix-socket-and-set-device-switches-it-live
+    order: 1655-urz9
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [browser, devices, cdp, emulation, containers, local-web-preview, mobile]
+    estimated_hours: 12
+    depends_on:
+      - browser-open-runs-the-chromium-framework-container-never-host-chromium-and-admits-the-local-preview-port
+      - a-browser-window-reaches-only-its-own-project-through-a-per-window-sni-bound-forwarder-and-the-router-enforces-host-equals-sni
+      - a-vendored-device-catalogue-and-resolver-turn-iphone-12-pro-max-or-galaxy-s24-ultra-or-xperia-into-a-fixed-viewport-dpr-and-engine
+    owned_files:
+      - crates/tillandsias-browser-mcp/src/cdp_client.rs
+      - crates/tillandsias-browser-mcp/src/server.rs
+      - crates/tillandsias-browser-mcp/src/launcher.rs
+      - crates/tillandsias-headless/src/browser_open.rs
+    title: |
+      browser.open{url, device?} opens the container window at the device's fixed size with CDP device emulation, and browser.set_device switches it live.
+    context: |
+      After 1649-xqet and 1651-5t7n, a browser.open window is a chromium-framework container on its own internal network. It has no CDP at all: CdpSession sent NUL-framed (pipe) JSON to an HTTP DevTools port, which never worked, and there is no host TCP listener by design.
+      Design (coordinator, 2026-10-13):
+      - The window is opened with --app plus --window-size = the device's CSS viewport at HOST scale (not the device DPR).
+      - Over CDP, taken from the 1643-q3at resolver: Emulation.setDeviceMetricsOverride{width,height,deviceScaleFactor,mobile}, Emulation.setUserAgentOverride with client-hint metadata, Emulation.setTouchEmulationEnabled{maxTouchPoints} and Emulation.setEmitTouchEventsForMouse.
+      - The broker holds ONE CDP session per window for the window's lifetime (the overrides die with the session) and auto-attaches popups.
+      - New tool browser.set_device{window_id, device}.
+      - The default device comes from the .tillandsias project config, then desktop.
+      - CDP transport: no host TCP listener. Chromium runs with --remote-debugging-pipe inside the container; a small in-container relay exposes it on a Unix socket in a tray-only host dir. CdpSession's framing is fixed for that transport.
+    exit_criteria:
+      - 'browser.open{device:"iphone 12 pro max"}, then evaluating [innerWidth, devicePixelRatio, navigator.maxTouchPoints] in the page, returns [428, 3, >0]; red on the 1651-5t7n tree first'
+      - 'browser.open{device:"galaxy s24"} returns that device''s catalogue viewport width, dpr and touch points'
+      - 'browser.set_device{window_id, device} switches a live window: the same evaluation returns the new device''s numbers without reopening'
+      - 'the host has no new TCP listener while a window is open (ss -ltn before/after), and the CDP Unix socket lives in a tray-only host dir'
+    unscoreable: "unpinnable-until-the-guard-exists: the emulation and transport shape are added to litmus-browser-open-container-shape (with negative controls) in the same commit, and the four arms run in the live browser-open test on a private store"
+    next_action: >
+      Red first: add the device arm to the live browser-open test and record it failing on the 1651-5t7n tree. Then build the pipe relay and fix CdpSession's framing; the broker session per window; emulation from the resolver; browser.set_device; the project-config default.
+    provenance: |
+      Filed by lenovinha-silverblue on macuahuitl's direction, 2026-10-13 (next browser step after 1649-xqet and 1651-5t7n).
+    events:
+      - type: filed
+        ts: "2026-10-13T05:30:00Z"
+        host: lenovinha
+        summary: |-
+          browser.open{device} opens the container window at the device size with CDP emulation over a Unix-socket pipe relay; set_device switches it live.

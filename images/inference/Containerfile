@@ -38,7 +38,12 @@ RUN microdnf install -y bash curl ca-certificates zstd tar gzip pciutils \
 # vulkan-loader is small; mesa-vulkan-drivers carries radv and is the bulk. Kept
 # unconditional rather than tier-gated: the image is one artifact shared by every
 # host, and a CPU-only host loading no ICD costs nothing at runtime.
-RUN microdnf install -y vulkan-loader mesa-vulkan-drivers \
+#
+# vulkan-tools (order 793-a8e7) carries `vulkaninfo`: the enumeration that
+# tells a real device (Dozen's "Microsoft Direct3D12 (...)" on a WSL2 host
+# that opted in with TILLANDSIAS_INFERENCE_GPU=vulkan) from llvmpipe, which the
+# loader offers without complaint when the GPU cannot be reached.
+RUN microdnf install -y vulkan-loader mesa-vulkan-drivers vulkan-tools \
     && microdnf clean all
 
 # @trace spec:inference-engine-slots — order 482b llama-server slot shim
@@ -95,6 +100,14 @@ COPY engine-tuning.sh /usr/local/bin/tillandsias-engine-tuning.sh
 # installed or executed; runnable standalone so litmus can plant stale and
 # tampered engines in a scratch cache.
 COPY engine-integrity.sh /usr/local/bin/tillandsias-engine-integrity.sh
+# @trace spec:inference-container — order 793-a8e7 S3 decode floor
+# POSIX sh, sourced by the entrypoint AFTER `ollama serve` answers: pins models
+# below the decode floor to the CPU on the WSL2 Vulkan opt-in lane and restores
+# them on any other tier. Runnable with a stub `ollama` on PATH for the fixture.
+COPY decode-floor-pin.sh /usr/local/bin/tillandsias-decode-floor-pin.sh
+# @trace spec:inference-container — order 1648-gy9z GPU stall watchdog
+# POSIX sh, sourced after decode-floor-pin.sh on the opt-in lane; backgrounded.
+COPY gpu-stall-watchdog.sh /usr/local/bin/tillandsias-gpu-stall-watchdog.sh
 # @trace spec:inference-engine-slots — order 482d shared T0-T5 tier table
 # Declarative data (tier-table.tsv + one adapter per engine) and its POSIX
 # resolver; the entrypoint sources tiers.sh instead of carrying inline rows.

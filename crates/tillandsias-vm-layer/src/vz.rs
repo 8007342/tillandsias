@@ -63,6 +63,10 @@ pub struct VzRuntime {
     /// probe escapes don't spill onto the user's terminal; the tray leaves it
     /// false (serial on stderr for live diagnostics).
     serial_to_log: std::sync::atomic::AtomicBool,
+    /// 1642-cc54: this boot's clean-power-off token, minted by `start()` and
+    /// handed to the guest through cidata. `stop()` honours the guest's
+    /// clean-off line only when it carries this token.
+    shutdown_token: std::sync::Mutex<Option<String>>,
 }
 
 #[cfg(target_os = "macos")]
@@ -271,6 +275,7 @@ impl VzRuntime {
             #[cfg(target_os = "macos")]
             host_listener: std::sync::Mutex::new(None),
             serial_to_log: std::sync::atomic::AtomicBool::new(false),
+            shutdown_token: std::sync::Mutex::new(None),
         }
     }
 
@@ -444,8 +449,39 @@ impl VzRuntime {
             self.image_root.join("cidata.iso"),
             // 1377-hcnv: the swap image goes with the VM it served.
             self.image_root.join(SWAP_IMAGE_FILE),
+            // 1642-cc54 (5b): a fresh disk has no unclean past.
+            self.image_root.join(RUNNING_MARKER_FILE),
         ] {
             let _ = std::fs::remove_file(&best_effort);
+        }
+        Ok(())
+    }
+
+    /// 1642-cc54: does the Vault store outlive a rebuild of this guest? Only
+    /// when the identity image exists AND the guest recorded that its store
+    /// lives there. A guest provisioned before the identity disk, or one whose
+    /// provisioning could not mount it, kept the store on the rootfs, which the
+    /// rebuild destroys; the caller must then clear the keychain's share.
+    pub fn vault_store_survives_rebuild(&self) -> bool {
+        self.image_root.join(IDENTITY_IMAGE_FILE).exists()
+            && self
+                .provision_state_dir()
+                .join(IDENTITY_RECORDED_FILE)
+                .exists()
+    }
+
+    /// 1642-cc54: destroy the identity disk and its record. Only an explicit
+    /// HARD reset calls this; a rebuild keeps both. Missing is fine.
+    pub fn wipe_identity(&self) -> std::io::Result<()> {
+        for p in [
+            self.image_root.join(IDENTITY_IMAGE_FILE),
+            self.provision_state_dir().join(IDENTITY_RECORDED_FILE),
+        ] {
+            match std::fs::remove_file(&p) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(e),
+            }
         }
         Ok(())
     }
@@ -767,7 +803,7 @@ impl VzRuntime {
 
     /// Generate a `cidata.iso` image using `hdiutil makehybrid`.
     #[cfg(target_os = "macos")]
-    fn generate_cidata_iso(&self, dest: &Path) -> Result<(), String> {
+    fn generate_cidata_iso(&self, dest: &Path, shutdown_token: &str) -> Result<(), String> {
         let temp_dir = self.image_root.join("cidata_tmp");
         if temp_dir.exists() {
             let _ = std::fs::remove_dir_all(&temp_dir);
@@ -839,6 +875,15 @@ local-hostname: tillandsias-vm
 
         std::fs::write(temp_dir.join("meta-data"), meta_data_content)
             .map_err(|e| format!("failed to write meta-data: {e}"))?;
+
+        // 1642-cc54: this boot's clean-power-off token. A file of its own,
+        // NOT part of user-data or meta-data, so a per-boot value never moves
+        // the instance-id (which would re-run provisioning on every boot).
+        std::fs::write(
+            temp_dir.join(SHUTDOWN_TOKEN_CIDATA_FILE),
+            format!("{shutdown_token}\n"),
+        )
+        .map_err(|e| format!("failed to write the shutdown token: {e}"))?;
 
         // 3. run hdiutil makehybrid -o <dest> -joliet -iso -default-volume-name CIDATA <temp_dir>
         if dest.exists() {
@@ -1033,6 +1078,70 @@ EOF
   systemctl start systemd-zram-setup@zram0.service tillandsias-swap.service
 } || echo "[tillandsias-provision] WARNING: guest swap setup incomplete (1377-hcnv); continuing without it" >&2
 
+# 1642-cc54. IDENTITY DISK. The host's vm-identity.img outlives every fresh
+# rootfs.img, so the Vault store kept on it (and the share the host keychain
+# kept) survives a rebuild: GitHub stays signed in. Found by its virtio
+# serial, like swap. FORMATTED ONLY WHEN BLANK: `blkid -p` exits 2 for "no
+# signature" and anything else (a probe error) must never reformat a disk
+# that holds the operator's identity. The mount point is RECORDED in
+# /etc/tillandsias/identity-disk only once the disk is mounted and marked;
+# headless then refuses to keep the Vault anywhere else (vault_store_root).
+# NON-FATAL: without the record, the Vault stays on the rootfs as before.
+# A FUNCTION WITH EXPLICIT RETURNS, not a `{ …; } || warn` group: set -e is
+# suspended on the left of `||`, so a failed check inside such a group would
+# NOT stop it and the record would be written over an unmounted disk.
+tillandsias_identity_disk() {
+  local iddev=/dev/disk/by-id/virtio-tillandsias-id
+  local idmnt=/var/lib/tillandsias/identity
+  local recorded=__PROVISION_STATE_GUEST_DIR__/identity-disk.recorded
+  local rc=0
+  # The host keeps the keychain's share across a rebuild only while this
+  # record exists, so it is removed FIRST and written LAST: a provisioning
+  # that cannot mount the disk leaves no stale "the store survives" claim.
+  rm -f "$recorded"
+  if [ ! -b "$iddev" ]; then
+    echo "[tillandsias-provision] no $iddev — host attached no identity disk; the Vault stays on the rootfs (1642-cc54)" >&2
+    return 0
+  fi
+  blkid -p "$iddev" >/dev/null 2>&1 || rc=$?
+  if [ "$rc" = 2 ]; then
+    mkfs.btrfs -q -L tillandsias-id "$iddev" || return 1
+  elif [ "$rc" != 0 ]; then
+    echo "[tillandsias-provision] blkid could not probe $iddev (rc=$rc); NOT formatting it" >&2
+    return 1
+  fi
+  mkdir -p "$idmnt" || return 1
+  grep -q "^LABEL=tillandsias-id " /etc/fstab \
+    || echo "LABEL=tillandsias-id $idmnt btrfs nofail 0 0" >> /etc/fstab || return 1
+  mountpoint -q "$idmnt" || mount "$idmnt" || return 1
+  mountpoint -q "$idmnt" || return 1
+  [ -e "$idmnt/.tillandsias-identity" ] || : > "$idmnt/.tillandsias-identity" || return 1
+  # UPGRADE. A guest provisioned before this kept its store on the rootfs, and
+  # a provisioning change re-runs this script on that same rootfs. Recording an
+  # EMPTY disk there would start a new Vault against the keychain's existing
+  # share (803-49re). Move the store instead, so the share still opens it and
+  # no sign-in is lost. The Vault is stopped first (headless may be running from
+  # boot; provisioning starts it again below); the copy lands under a temporary
+  # name and is renamed, so a half copy is never taken for a store. The rootfs
+  # copy is left as it was.
+  local old=/root/.cache/tillandsias
+  if [ -d "$old/vault-data" ] && [ ! -e "$idmnt/vault-data" ]; then
+    systemctl stop tillandsias-headless.service 2>/dev/null || true
+    podman stop -t 30 tillandsias-vault >/dev/null 2>&1 || true
+    rm -rf "$idmnt/vault-data.moving"
+    cp -a "$old/vault-data" "$idmnt/vault-data.moving" || return 1
+    mv "$idmnt/vault-data.moving" "$idmnt/vault-data" || return 1
+    if [ -d "$old/vault-audit" ] && [ ! -e "$idmnt/vault-audit" ]; then
+      cp -a "$old/vault-audit" "$idmnt/vault-audit" || true
+    fi
+    echo "[tillandsias-provision] moved the Vault store from the rootfs onto the identity disk (1642-cc54)" >&2
+  fi
+  mkdir -p /etc/tillandsias || return 1
+  echo "$idmnt" > /etc/tillandsias/identity-disk || return 1
+  : > "$recorded" || return 1
+}
+tillandsias_identity_disk || echo "[tillandsias-provision] WARNING: identity disk setup incomplete (1642-cc54); the Vault stays on the rootfs and sign-ins will not survive a rebuild" >&2
+
 # Mount host ~/src via virtio-fs when the VZ config provides the home-src tag.
 # PERSISTED via /etc/fstab (2026-07-10 attended-smoke finding): cloud-init
 # runs first boot only, so a mount issued here evaporates on every
@@ -1213,6 +1322,65 @@ TTYPath=/dev/hvc0
 MaxLevelConsole=info
 EOF
 systemctl restart systemd-journald || true
+
+# ORDER 1642-cc54. THE KERNEL'S OWN MESSAGES REACH hvc0 TOO, from the next boot.
+# The journal forward above stops when journald stops, so the last phase of a
+# shutdown (systemd-shutdown unmounting, swapoff, the kernel's power-off) never
+# reached console.log. MEASURED 2026-10-12: a tray Quit whose guest printed
+# "Shutting down." 12 s after the request still left VZ short of Stopped for
+# ~53 s more, and nothing on the console said where those seconds went.
+# console=hvc0 is appended LAST, so /dev/console is hvc0: kernel and
+# systemd-shutdown messages are captured. It takes effect at the next boot,
+# which is why the journal forward above stays.
+grubby --update-kernel=ALL --args="console=hvc0" || true
+
+# ORDER 1642-cc54. A CLEAN POWER-OFF THE HOST CAN TRUST.
+# MEASURED 2026-10-12 (console=hvc0 + initcall_debug, three tray quits): the
+# guest's systemd-shutdown synced, unmounted every filesystem, remounted /
+# read-only and printed "Powering off." ~11 s after the request; the kernel
+# then shut down every virtio device and stalled, and VZ read Running until
+# the 60 s drain force-stopped it. The disk is clean from that point on.
+# So the systemd-shutdown hook below (run after the unmount, before the
+# power-off) writes this boot's token to hvc0, and the host finishes the stop
+# at once. The token comes from the host per boot through cidata, into a
+# root-only file on /run, so a guest cannot declare itself clean early or
+# with another boot's token: the host honours it only after its own request.
+cat > /usr/local/lib/tillandsias/load-shutdown-token.sh << 'EOF'
+#!/bin/sh
+set -eu
+umask 077
+mkdir -p /run/tillandsias/cidata
+mount -o ro /dev/disk/by-label/CIDATA /run/tillandsias/cidata
+cp /run/tillandsias/cidata/tillandsias-shutdown-token /run/tillandsias/shutdown-token || true
+umount /run/tillandsias/cidata
+rmdir /run/tillandsias/cidata
+EOF
+chmod 0755 /usr/local/lib/tillandsias/load-shutdown-token.sh
+cat > /etc/systemd/system/tillandsias-shutdown-token.service << 'EOF'
+[Unit]
+Description=Load this boot's clean power-off token (1642-cc54)
+After=local-fs.target
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/lib/tillandsias/load-shutdown-token.sh
+StandardOutput=journal+console
+StandardError=journal+console
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl enable --now tillandsias-shutdown-token.service || true
+mkdir -p /usr/lib/systemd/system-shutdown
+cat > /usr/lib/systemd/system-shutdown/tillandsias-clean-off << 'EOF'
+#!/bin/sh
+# systemd-shutdown runs this after every filesystem is unmounted and / is
+# read-only, just before it powers off (1642-cc54). The leading newline keeps
+# the line clear of any terminal escape the getty left on hvc0.
+t=$(cat /run/tillandsias/shutdown-token 2>/dev/null) || exit 0
+[ -n "$t" ] || exit 0
+printf '\ntillandsias-clean-off:%s\n' "$t" > /dev/hvc0
+EOF
+chmod 0755 /usr/lib/systemd/system-shutdown/tillandsias-clean-off
 
 # Write tillandsias-headless-fetch.service
 cat > /etc/systemd/system/tillandsias-headless-fetch.service << 'EOF'
@@ -2007,6 +2175,158 @@ impl std::error::Error for OpenVsockError {}
 /// linux-next). See plan/issues/forge-memory-swap-architecture-design-2026-09-26.md §4.3.
 pub const SWAP_IMAGE_FILE: &str = "vm-swap.img";
 
+/// 1642-cc54 (criterion 2). The guest's identity disk, beside `rootfs.img`:
+/// it holds the Vault store, so it OUTLIVES every fresh rootfs (a VERSION
+/// rebuild, the unclean-stop rebuild, a reprovision) and GitHub stays signed
+/// in. Only an explicit HARD reset deletes it. Never in
+/// `wipe_provisioned_artifacts`. Module scope so the reset code on every
+/// target can name it.
+pub const IDENTITY_IMAGE_FILE: &str = "vm-identity.img";
+
+/// Logical size of a new identity image. Sparse, so it costs only what the
+/// Vault store writes (kilobytes to a few MiB).
+pub const IDENTITY_IMAGE_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+
+/// Written by the guest into the provision-state share once its Vault store
+/// lives on the identity disk (and removed first, so a provisioning that could
+/// not mount the disk leaves none). It tells the host whether a rebuild keeps
+/// the store, which decides whether the keychain's share must be cleared
+/// (803-49re: a share kept for a destroyed store breaks every sign-in).
+pub const IDENTITY_RECORDED_FILE: &str = "identity-disk.recorded";
+
+/// VZVirtualMachineState by its raw value, for logs.
+pub fn vz_state_name(state: isize) -> &'static str {
+    match state {
+        0 => "Stopped",
+        1 => "Running",
+        2 => "Paused",
+        3 => "Error",
+        4 => "Starting",
+        5 => "Pausing",
+        6 => "Resuming",
+        7 => "Stopping",
+        8 => "Saving",
+        9 => "Restoring",
+        _ => "Unknown",
+    }
+}
+
+/// 1642-cc54 (5b): present from a successful `start()` until a CLEAN stop
+/// (VZ Stopped, or a token-verified clean power-off). Found at the next start,
+/// it says the previous run ended any other way: a crash, a kill, a power
+/// loss, or the drain timeout's force-stop. That disk must not be booted as if
+/// it were clean.
+pub const RUNNING_MARKER_FILE: &str = "vm-running.marker";
+
+/// 5b: did the previous run under `image_root` end without a clean stop?
+pub fn previous_stop_was_unclean(image_root: &std::path::Path) -> bool {
+    image_root.join(RUNNING_MARKER_FILE).exists()
+}
+
+/// 5b: record that a VM is running under `image_root`.
+pub fn mark_vm_running(image_root: &std::path::Path) -> std::io::Result<()> {
+    let since = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    std::fs::write(
+        image_root.join(RUNNING_MARKER_FILE),
+        format!("started_at {since}\n"),
+    )
+}
+
+/// 5b: record a CLEAN stop. Call only where the stop is proven clean. It also
+/// ends any run of automatic rebuilds: the workspace stops cleanly again.
+pub fn mark_vm_stopped_cleanly(image_root: &std::path::Path) {
+    let _ = std::fs::remove_file(image_root.join(RUNNING_MARKER_FILE));
+    let _ = std::fs::remove_file(image_root.join(AUTO_REBUILD_RECORD_FILE));
+}
+
+/// 5b loop guard (coordinator, 2026-10-12): one line per automatic rebuild
+/// after an unclean stop, kept until a clean stop. It is NOT in the wipe list,
+/// so it outlives the rebuild it records.
+pub const AUTO_REBUILD_RECORD_FILE: &str = "unclean-rebuilds.log";
+
+/// 5b loop guard: record an automatic rebuild. Returns true when the previous
+/// automatic rebuild was ALSO followed by an unclean stop: two in a row means
+/// the clean power-off path is likely not being reached at all, so every quit
+/// is rebuilding the workspace (and costing the sign-ins).
+pub fn note_auto_rebuild(image_root: &std::path::Path) -> std::io::Result<bool> {
+    use std::io::Write;
+    let path = image_root.join(AUTO_REBUILD_RECORD_FILE);
+    let consecutive = path.exists();
+    let at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)?
+        .write_all(format!("rebuilt_at {at}\n").as_bytes())?;
+    Ok(consecutive)
+}
+
+/// 1642-cc54: the cidata file that carries this boot's shutdown token.
+pub const SHUTDOWN_TOKEN_CIDATA_FILE: &str = "tillandsias-shutdown-token";
+
+/// 1642-cc54: the prefix of the line the guest's systemd-shutdown hook writes
+/// to hvc0 once every filesystem is unmounted and `/` is read-only.
+pub const CLEAN_OFF_PREFIX: &str = "tillandsias-clean-off:";
+
+/// A fresh per-boot token: 128 random bits, hex.
+pub fn mint_shutdown_token() -> Result<String, String> {
+    use std::io::Read;
+    let mut bytes = [0u8; 16];
+    std::fs::File::open("/dev/urandom")
+        .and_then(|mut f| f.read_exact(&mut bytes))
+        .map_err(|e| format!("could not mint the shutdown token: {e}"))?;
+    Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
+}
+
+/// 1642-cc54: did the guest report a clean power-off for THIS boot, AFTER the
+/// host asked it to stop? `console` is the captured console and `from` its
+/// length when the stop was requested. Only lines written after that offset
+/// count, and only an exact `tillandsias-clean-off:<token>` line: a guest
+/// cannot declare itself clean early, nor with another boot's token.
+pub fn clean_off_reported(console: &[u8], from: usize, token: &str) -> bool {
+    if token.is_empty() {
+        return false;
+    }
+    let Some(after) = console.get(from..) else {
+        return false;
+    };
+    let want = format!("{CLEAN_OFF_PREFIX}{token}");
+    String::from_utf8_lossy(after)
+        .lines()
+        .any(|line| line.trim_matches(|c: char| c.is_whitespace()) == want)
+}
+
+/// The bytes of `path` from `offset` on; `None` when it cannot be read or the
+/// offset is past its end.
+pub fn read_from(path: &std::path::Path, offset: usize) -> Option<Vec<u8>> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut f = std::fs::File::open(path).ok()?;
+    if offset as u64 > f.metadata().ok()?.len() {
+        return None;
+    }
+    f.seek(SeekFrom::Start(offset as u64)).ok()?;
+    let mut tail = Vec::new();
+    f.read_to_end(&mut tail).ok()?;
+    Some(tail)
+}
+
+/// The drain-timeout refusal, naming the VZ state the drain gave up in
+/// (1642-cc54): 0 of 13 tray quits on darwin drained cleanly, and the old
+/// message could not say whether the guest or the host was the one waiting.
+pub fn drain_timeout_message(drain_timeout: std::time::Duration, state: isize) -> String {
+    format!(
+        "VzRuntime::stop: drain_timeout ({}s) expired in VZ state {} ({state}); force-stop dispatched",
+        drain_timeout.as_secs(),
+        vz_state_name(state)
+    )
+}
+
 #[cfg(target_os = "macos")]
 pub mod boot {
     use std::os::raw::c_int;
@@ -2076,6 +2396,10 @@ pub mod boot {
         /// after the root disk under [`SWAP_BLOCK_DEVICE_ID`]. The caller
         /// creates it fresh each launch with [`fresh_sparse_swap_image`].
         pub swap_disk: Option<PathBuf>,
+        /// Optional identity disk (1642-cc54), attached after swap under
+        /// [`IDENTITY_BLOCK_DEVICE_ID`]. Created once with
+        /// [`ensure_identity_image`] and KEPT across rebuilds.
+        pub identity_disk: Option<PathBuf>,
         /// Host directories exposed to the guest over virtio-fs, in order.
         /// Empty installs no directory-sharing device at all — which is what
         /// `None` used to mean.
@@ -2101,6 +2425,7 @@ pub mod boot {
                 root_disk: None,
                 cidata_iso: None,
                 swap_disk: None,
+                identity_disk: None,
                 shares: Vec::new(),
                 nvram: None,
                 serial_writer_fd: None,
@@ -2119,6 +2444,12 @@ pub mod boot {
     /// Defined at module scope (all targets) and re-exported here: the
     /// cross-platform `stop()` cleanup names it too (1377-hcnv relay-fix).
     pub use super::SWAP_IMAGE_FILE;
+    pub use super::{IDENTITY_IMAGE_BYTES, IDENTITY_IMAGE_FILE};
+
+    /// virtio-blk serial of the identity disk (1642-cc54), seen by the guest
+    /// as `/dev/disk/by-id/virtio-tillandsias-id`. Short on purpose: a
+    /// virtio-blk serial holds at most 20 bytes.
+    pub const IDENTITY_BLOCK_DEVICE_ID: &str = "tillandsias-id";
 
     /// virtio-blk serial the guest finds its swap disk by, as
     /// `/dev/disk/by-id/virtio-tillandsias-swap`. By identity rather than
@@ -2153,6 +2484,13 @@ pub mod boot {
                 path: path.clone(),
                 read_only: false,
                 identifier: Some(SWAP_BLOCK_DEVICE_ID),
+            });
+        }
+        if let Some(path) = &spec.identity_disk {
+            plan.push(StorageAttachment {
+                path: path.clone(),
+                read_only: false,
+                identifier: Some(IDENTITY_BLOCK_DEVICE_ID),
             });
         }
         if let Some(path) = &spec.cidata_iso {
@@ -2250,6 +2588,23 @@ pub mod boot {
         f.set_len(bytes)?;
         exclude_from_time_machine(path);
         Ok(())
+    }
+
+    /// Create the identity image (1642-cc54) ONLY IF IT IS MISSING, sparse at
+    /// `bytes`. The opposite of [`fresh_sparse_swap_image`]: an existing image
+    /// holds the operator's sign-ins and is never replaced or resized here.
+    /// Not excluded from Time Machine: its contents are sealed by the share in
+    /// the keychain, which is backed up with it.
+    pub fn ensure_identity_image(path: &Path, bytes: u64) -> std::io::Result<()> {
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+        {
+            Ok(f) => f.set_len(bytes),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+            Err(e) => Err(e),
+        }
     }
 
     /// Delete the swap image. Missing is fine: stop runs after a boot that
@@ -2730,7 +3085,12 @@ impl VmRuntime for VzRuntime {
         }
 
         let cidata_iso_path = self.image_root.join("cidata.iso");
-        self.generate_cidata_iso(&cidata_iso_path)?;
+        let shutdown_token = mint_shutdown_token()?;
+        self.generate_cidata_iso(&cidata_iso_path, &shutdown_token)?;
+        *self
+            .shutdown_token
+            .lock()
+            .map_err(|e| format!("shutdown token lock poisoned: {e}"))? = Some(shutdown_token);
 
         // Route guest serial to console.log (headless modes) or host stderr
         // (tray, default). Opening console.log and handing its raw fd to the VZ
@@ -2959,12 +3319,31 @@ impl VmRuntime for VzRuntime {
             },
         };
 
+        // 1642-cc54: the identity disk is created once and KEPT, so the Vault
+        // store on it survives this rootfs. Boot without it rather than refuse
+        // to boot; the guest then keeps the Vault on the rootfs, as before.
+        let identity_image = self.image_root.join(boot::IDENTITY_IMAGE_FILE);
+        let identity_disk =
+            match boot::ensure_identity_image(&identity_image, boot::IDENTITY_IMAGE_BYTES) {
+                Ok(()) => Some(identity_image),
+                Err(err) => {
+                    eprintln!(
+                        "[tillandsias-vz] WARNING: could not create the identity disk {} ({err}). \
+                         Booting WITHOUT it: sign-ins will not survive the next rebuild \
+                         (1642-cc54).",
+                        identity_image.display()
+                    );
+                    None
+                }
+            };
+
         let spec = boot::VzBootConfig {
             cpu_count,
             memory_bytes: guest_memory_bytes,
             root_disk: Some(rootfs),
             cidata_iso: Some(cidata_iso_path),
             swap_disk,
+            identity_disk,
             shares,
             nvram: Some(self.image_root.join("nvram.bin")),
             serial_writer_fd,
@@ -3100,6 +3479,10 @@ impl VmRuntime for VzRuntime {
             .lock()
             .map_err(|e| format!("vm lock poisoned: {e}"))?;
         *slot = Some(vm_handle::VmHandle(vm));
+        // 1642-cc54 (5b): a VM runs on this disk until a clean stop says so.
+        if let Err(e) = mark_vm_running(&self.image_root) {
+            eprintln!("[tillandsias-vz] could not write {RUNNING_MARKER_FILE}: {e}");
+        }
         Ok(())
     }
 
@@ -3155,6 +3538,21 @@ impl VmRuntime for VzRuntime {
         // VmShutdownRequest is acked, so the VM may already be Stopped (state 0)
         // here, or stop between this check and requestStop. Both are a CLEAN
         // stop, not a requestStop failure; the poll below then sees state 0.
+        //
+        // 1642-cc54: where the console stood when the host asked for the stop.
+        // Only a clean-off line written AFTER this offset, carrying this boot's
+        // token, is honoured below. A missing console or token honours nothing,
+        // which leaves the drain timeout and its force-stop in charge.
+        let console_path = self.console_log_path();
+        let console_from = std::fs::metadata(&console_path)
+            .map(|m| m.len() as usize)
+            .unwrap_or(usize::MAX);
+        let token = self
+            .shutdown_token
+            .lock()
+            .ok()
+            .and_then(|t| t.clone())
+            .unwrap_or_default();
         let already_stopped = on_vm_queue(vm, |vm| unsafe { vm.state() }.0)? == 0;
         if !already_stopped {
             let request_result = on_vm_queue(vm, |vm| {
@@ -3171,6 +3569,26 @@ impl VmRuntime for VzRuntime {
             }
         }
 
+        // Hard stop: `stop:completionHandler:` is the force-stop variant; wait
+        // briefly for it, then return regardless.
+        let force_stop = || -> Result<(), VmError> {
+            let (tx, rx) = std::sync::mpsc::channel::<()>();
+            on_vm_queue(vm, move |vm| {
+                let handler = block2::RcBlock::new(move |_err: *mut objc2_foundation::NSError| {
+                    let _ = tx.send(());
+                });
+                unsafe { vm.stopWithCompletionHandler(&handler) };
+            })?;
+            let force_deadline = Instant::now() + Duration::from_secs(5);
+            while Instant::now() < force_deadline {
+                if rx.try_recv().is_ok() {
+                    break;
+                }
+                wait_for_vz(Duration::from_millis(100));
+            }
+            Ok(())
+        };
+
         let deadline = Instant::now() + drain_timeout;
         let stop_res = loop {
             // VZ state enum: 0=Stopped, 1=Running, 2=Paused, 3=Error, 4=Starting,
@@ -3178,31 +3596,32 @@ impl VmRuntime for VzRuntime {
             let state = on_vm_queue(vm, |vm| unsafe { vm.state() }.0)?;
             if state == 0 {
                 // Stopped cleanly.
+                mark_vm_stopped_cleanly(&self.image_root);
+                break Ok(());
+            }
+            // 1642-cc54: the guest's systemd-shutdown hook reported, with this
+            // boot's token and after our request, that every filesystem is
+            // unmounted and `/` is read-only. Its kernel then stalls in the
+            // power-off for ~53 s (measured: VZ stays Running), so finish the
+            // stop now. The disk is clean, so this force-stop is a clean stop.
+            if read_from(&console_path, console_from)
+                .is_some_and(|tail| clean_off_reported(&tail, 0, &token))
+            {
+                force_stop()?;
+                eprintln!(
+                    "[tillandsias-vz] stop: guest reported a clean power-off (token matched); \
+                     finished the stalled power-off"
+                );
+                mark_vm_stopped_cleanly(&self.image_root);
                 break Ok(());
             }
             if Instant::now() >= deadline {
-                // Drain timeout — try a hard stop. `stop:completionHandler:`
-                // is the force-stop variant; we wait briefly for it then
-                // return regardless.
-                let (tx, rx) = std::sync::mpsc::channel::<()>();
-                on_vm_queue(vm, move |vm| {
-                    let handler =
-                        block2::RcBlock::new(move |_err: *mut objc2_foundation::NSError| {
-                            let _ = tx.send(());
-                        });
-                    unsafe { vm.stopWithCompletionHandler(&handler) };
-                })?;
-                let force_deadline = Instant::now() + Duration::from_secs(5);
-                while Instant::now() < force_deadline {
-                    if rx.try_recv().is_ok() {
-                        break;
-                    }
-                    wait_for_vz(Duration::from_millis(100));
-                }
-                break Err(format!(
-                    "VzRuntime::stop: drain_timeout ({}s) expired; force-stop dispatched",
-                    drain_timeout.as_secs()
-                ));
+                force_stop()?;
+                // 1642-cc54: name the state VZ was in when the drain gave up.
+                // A guest that already printed "Shutting down." while VZ still
+                // reads Running is a guest kernel stuck in its power-off; one
+                // VZ reads Stopping is the host waiting on VZ.
+                break Err(drain_timeout_message(drain_timeout, state));
             }
             wait_for_vz(Duration::from_millis(250));
         };
@@ -4988,6 +5407,366 @@ mod tests {
             script.contains(std_console),
             "the units must still request console output; forwarding alone \
              carries only what something asks to send"
+        );
+    }
+
+    /// 1642-cc54: a drain that times out says which VZ state it gave up in,
+    /// so a log tells a guest stuck in power-off (Running) from the host
+    /// waiting on VZ (Stopping).
+    #[test]
+    fn drain_timeout_names_the_vz_state() {
+        let running = drain_timeout_message(Duration::from_secs(60), 1);
+        assert!(running.contains("drain_timeout (60s)"), "{running}");
+        assert!(running.contains("VZ state Running (1)"), "{running}");
+        assert!(running.contains("force-stop dispatched"), "{running}");
+        assert!(drain_timeout_message(Duration::from_secs(60), 7).contains("Stopping (7)"));
+        assert_eq!(vz_state_name(0), "Stopped");
+        assert_eq!(vz_state_name(42), "Unknown");
+    }
+
+    /// 1642-cc54: the host honours a clean-off line only with THIS boot's
+    /// token and only after its own stop request. An early line, another
+    /// boot's token, a line with text around it, or no token at all is refused.
+    #[test]
+    fn clean_off_needs_this_boots_token_after_the_request() {
+        let token = "0123456789abcdef0123456789abcdef";
+        let early = format!("boot\n{CLEAN_OFF_PREFIX}{token}\n");
+        let from = early.len();
+        let after =
+            format!("{early}[ 420.85] systemd-shutdown[1]: Syncing\n\n{CLEAN_OFF_PREFIX}{token}\n");
+        assert!(
+            clean_off_reported(after.as_bytes(), from, token),
+            "GREEN: after the request"
+        );
+        assert!(
+            !clean_off_reported(early.as_bytes(), early.len(), token),
+            "EARLY: a line written before the request is not a clean stop"
+        );
+        assert!(
+            !clean_off_reported(early.as_bytes(), 0, "ffffffffffffffffffffffffffffffff"),
+            "WRONG TOKEN: another boot's token is refused"
+        );
+        let wrapped = format!("{early}x{CLEAN_OFF_PREFIX}{token}\n");
+        assert!(
+            !clean_off_reported(wrapped.as_bytes(), from, token),
+            "a line with text around it"
+        );
+        assert!(
+            !clean_off_reported(after.as_bytes(), from, ""),
+            "no token honours nothing"
+        );
+        assert!(
+            !clean_off_reported(after.as_bytes(), after.len() + 1, token),
+            "offset past the end"
+        );
+    }
+
+    /// 1642-cc54 (5b): the running marker survives every stop except a clean
+    /// one, so the next start can tell an unclean past from a clean one.
+    #[test]
+    fn running_marker_is_cleared_only_by_a_clean_stop() {
+        let root = tempfile::tempdir().unwrap();
+        assert!(
+            !previous_stop_was_unclean(root.path()),
+            "a fresh root is clean"
+        );
+        mark_vm_running(root.path()).unwrap();
+        assert!(
+            previous_stop_was_unclean(root.path()),
+            "a run that never recorded a clean stop (crash, kill, force-stop) is unclean"
+        );
+        mark_vm_stopped_cleanly(root.path());
+        assert!(
+            !previous_stop_was_unclean(root.path()),
+            "a clean stop clears it"
+        );
+        mark_vm_stopped_cleanly(root.path());
+        assert!(
+            !previous_stop_was_unclean(root.path()),
+            "clearing twice is harmless"
+        );
+    }
+
+    /// 5b loop guard: two automatic rebuilds with no clean stop between them
+    /// are flagged; a clean stop resets the count; the record survives a wipe.
+    #[test]
+    fn two_consecutive_unclean_stops_are_flagged() {
+        let root = tempfile::tempdir().unwrap();
+        assert!(
+            !note_auto_rebuild(root.path()).unwrap(),
+            "first rebuild: not a loop"
+        );
+        assert!(
+            note_auto_rebuild(root.path()).unwrap(),
+            "second rebuild with no clean stop between: the loop is flagged"
+        );
+        mark_vm_stopped_cleanly(root.path());
+        assert!(
+            !note_auto_rebuild(root.path()).unwrap(),
+            "a clean stop in between resets the guard"
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_rebuild_record_outlives_the_wipe() {
+        let root = tempfile::tempdir().unwrap();
+        let vz = VzRuntime::new(3, root.path().to_path_buf());
+        note_auto_rebuild(root.path()).unwrap();
+        vz.wipe_provisioned_artifacts().unwrap();
+        assert!(root.path().join(AUTO_REBUILD_RECORD_FILE).exists());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn wiping_the_guest_clears_its_unclean_past() {
+        let root = tempfile::tempdir().unwrap();
+        let vz = VzRuntime::new(3, root.path().to_path_buf());
+        mark_vm_running(root.path()).unwrap();
+        vz.wipe_provisioned_artifacts().unwrap();
+        assert!(!previous_stop_was_unclean(root.path()));
+    }
+
+    /// Scratch root inside the checkout (operator rule: development work
+    /// never leaves it; a bare tempdir lands in /var/folders).
+    fn in_checkout_tempdir() -> tempfile::TempDir {
+        let base = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../../target/work/vz-tests");
+        std::fs::create_dir_all(&base).unwrap();
+        tempfile::tempdir_in(base).unwrap()
+    }
+
+    /// 1642-cc54 criterion 2: a fresh rootfs must not take the sign-ins with
+    /// it. The wipe every rebuild runs leaves the identity image, byte for
+    /// byte, while the rootfs goes.
+    #[test]
+    fn a_rebuild_wipe_keeps_the_identity_disk() {
+        let root = in_checkout_tempdir();
+        let vz = VzRuntime::new(3, root.path().to_path_buf());
+        let rootfs = root.path().join("rootfs.img");
+        let identity = root.path().join(IDENTITY_IMAGE_FILE);
+        std::fs::write(&rootfs, b"old guest").unwrap();
+        std::fs::write(&identity, b"sealed vault store").unwrap();
+        vz.wipe_provisioned_artifacts().unwrap();
+        assert!(!rootfs.exists(), "the rootfs must be fresh after a rebuild");
+        assert_eq!(std::fs::read(&identity).unwrap(), b"sealed vault store");
+    }
+
+    /// The identity image is created once, sparse, and never replaced or
+    /// resized after: the opposite of the swap image's fresh-every-launch.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_identity_image_is_created_once_and_never_replaced() {
+        use super::boot::ensure_identity_image;
+        let root = in_checkout_tempdir();
+        let path = root.path().join(IDENTITY_IMAGE_FILE);
+        ensure_identity_image(&path, IDENTITY_IMAGE_BYTES).unwrap();
+        let meta = std::fs::metadata(&path).unwrap();
+        assert_eq!(meta.len(), IDENTITY_IMAGE_BYTES);
+        {
+            use std::os::unix::fs::MetadataExt;
+            assert!(
+                meta.blocks() * 512 < 1024 * 1024,
+                "a new identity image must be sparse"
+            );
+        }
+        std::fs::write(&path, b"sealed vault store").unwrap();
+        ensure_identity_image(&path, IDENTITY_IMAGE_BYTES).unwrap();
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            b"sealed vault store",
+            "an existing identity image must be kept as it is"
+        );
+    }
+
+    /// The disk rides the bus after swap and before the read-only cidata ISO,
+    /// read-write, under the serial the guest finds it by.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn vz_config_attaches_the_identity_disk_by_its_serial() {
+        use super::boot::{IDENTITY_BLOCK_DEVICE_ID, VzBootConfig, storage_attachment_plan};
+        use std::path::PathBuf;
+        let mut spec = VzBootConfig::defaults();
+        spec.root_disk = Some(PathBuf::from("/vm/rootfs.img"));
+        spec.swap_disk = Some(PathBuf::from("/vm/vm-swap.img"));
+        spec.identity_disk = Some(PathBuf::from("/vm/vm-identity.img"));
+        spec.cidata_iso = Some(PathBuf::from("/vm/cidata.iso"));
+        let plan = storage_attachment_plan(&spec);
+        assert_eq!(plan.len(), 4);
+        assert_eq!(plan[2].path, PathBuf::from("/vm/vm-identity.img"));
+        assert_eq!(plan[2].identifier, Some(IDENTITY_BLOCK_DEVICE_ID));
+        assert!(!plan[2].read_only, "the Vault writes its store there");
+        assert!(plan[3].read_only, "cidata stays last and read-only");
+        assert!(
+            IDENTITY_BLOCK_DEVICE_ID.len() <= 20,
+            "a virtio-blk serial holds at most 20 bytes"
+        );
+    }
+
+    /// The guest half: format only a BLANK disk (blkid -p exit 2), never one
+    /// that merely failed to probe; record the mount point only after the
+    /// disk is mounted; and do it in a function with explicit returns, since
+    /// set -e is suspended inside a `{ …; } || warn` group.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn vz_provisioning_formats_only_a_blank_identity_disk_and_records_it_once_mounted() {
+        let ud = provision_user_data_for_test();
+        let body = ud
+            .split("tillandsias_identity_disk() {")
+            .nth(1)
+            .and_then(|s| s.split("\n}\n").next())
+            .expect("the identity disk setup is a function");
+        assert!(body.contains("/dev/disk/by-id/virtio-tillandsias-id"));
+        let format = body.find("mkfs.btrfs").expect("formats a blank disk");
+        let blank = body
+            .find("if [ \"$rc\" = 2 ]")
+            .expect("only on blkid's no-signature exit");
+        assert!(
+            blank < format,
+            "the format must sit under the blank-disk branch"
+        );
+        assert!(
+            body.contains("NOT formatting it"),
+            "a probe error must not format"
+        );
+        let mounted = body
+            .rfind("mountpoint -q \"$idmnt\" || return 1")
+            .expect("checks the mount");
+        let record = body
+            .find("/etc/tillandsias/identity-disk")
+            .expect("records the mount point");
+        assert!(mounted < record, "record only after the disk is mounted");
+        assert!(ud.contains("tillandsias_identity_disk || echo"));
+        // The host-visible record: removed before anything can fail, written
+        // after everything succeeded, into the share the host reads.
+        let removed = body
+            .find("rm -f \"$recorded\"")
+            .expect("removes the stale record first");
+        let written = body.find(": > \"$recorded\"").expect("writes the record");
+        assert!(removed < format && removed < body.find("blkid -p").unwrap());
+        assert!(written > record, "the host record comes last");
+        // Upgrade: an existing rootfs store moves onto the disk BEFORE the disk
+        // is recorded (recording an empty disk would orphan the kept share),
+        // only when the disk has no store yet, with the Vault stopped first.
+        let moved = body
+            .find("mv \"$idmnt/vault-data.moving\" \"$idmnt/vault-data\"")
+            .expect("moves an existing store");
+        let only_if = body
+            .find("[ ! -e \"$idmnt/vault-data\" ]")
+            .expect("never over a store already on the disk");
+        let stopped = body
+            .find("podman stop -t 30 tillandsias-vault")
+            .expect("stops the Vault before copying");
+        let copied = body.find("cp -a \"$old/vault-data\"").unwrap();
+        assert!(only_if < stopped && stopped < copied && copied < moved);
+        assert!(
+            moved < record,
+            "the store must be on the disk before the disk is recorded"
+        );
+        assert!(body.contains(&format!(
+            "{PROVISION_STATE_GUEST_DIR}/{IDENTITY_RECORDED_FILE}"
+        )));
+    }
+
+    /// The host's half of the keep-or-clear rule (803-49re): the store
+    /// survives a rebuild only with BOTH the identity image and the guest's
+    /// record that the store lives there. Either alone is a rootfs store.
+    #[test]
+    fn the_store_survives_a_rebuild_only_when_the_guest_recorded_the_identity_disk() {
+        let root = in_checkout_tempdir();
+        let vz = VzRuntime::new(3, root.path().to_path_buf());
+        let image = root.path().join(IDENTITY_IMAGE_FILE);
+        let record = vz.provision_state_dir().join(IDENTITY_RECORDED_FILE);
+        assert!(!vz.vault_store_survives_rebuild(), "a guest with neither");
+        std::fs::write(&image, b"x").unwrap();
+        assert!(
+            !vz.vault_store_survives_rebuild(),
+            "image alone: never recorded"
+        );
+        std::fs::create_dir_all(record.parent().unwrap()).unwrap();
+        std::fs::write(&record, b"").unwrap();
+        assert!(vz.vault_store_survives_rebuild());
+        vz.wipe_provisioned_artifacts().unwrap();
+        assert!(vz.vault_store_survives_rebuild(), "a rebuild keeps both");
+        std::fs::remove_file(&image).unwrap();
+        assert!(
+            !vz.vault_store_survives_rebuild(),
+            "record alone: the image is gone"
+        );
+    }
+
+    /// HARD reset is the one path that destroys identity: the image and its
+    /// record go together, and a second call on nothing is still Ok.
+    #[test]
+    fn a_hard_wipe_removes_the_identity_disk_and_its_record() {
+        let root = in_checkout_tempdir();
+        let vz = VzRuntime::new(3, root.path().to_path_buf());
+        let image = root.path().join(IDENTITY_IMAGE_FILE);
+        let record = vz.provision_state_dir().join(IDENTITY_RECORDED_FILE);
+        std::fs::create_dir_all(record.parent().unwrap()).unwrap();
+        std::fs::write(&image, b"sealed vault store").unwrap();
+        std::fs::write(&record, b"").unwrap();
+        vz.wipe_identity().unwrap();
+        assert!(!image.exists() && !record.exists());
+        vz.wipe_identity().unwrap();
+    }
+
+    #[test]
+    fn shutdown_tokens_are_fresh_128_bit_hex() {
+        let a = mint_shutdown_token().unwrap();
+        let b = mint_shutdown_token().unwrap();
+        assert_eq!(a.len(), 32);
+        assert!(a.bytes().all(|c| c.is_ascii_hexdigit()), "{a}");
+        assert_ne!(a, b, "each boot gets its own token");
+    }
+
+    /// 1642-cc54: the guest half. A systemd-shutdown hook writes the token
+    /// read from a root-only /run file to hvc0, and a boot service fills
+    /// that file from the cidata seed. The token is never in user-data,
+    /// so a per-boot value cannot move the instance-id.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn vz_provisioning_writes_the_clean_off_token_hook() {
+        let script = provision_user_data_for_test();
+        assert!(script.contains(concat!(
+            "/usr/lib/systemd/",
+            "system-shutdown/tillandsias-clean-off"
+        )));
+        assert!(script.contains(concat!(
+            "printf '\\ntillandsias-clean-off:%s\\n' \"$t\" > /dev/",
+            "hvc0"
+        )));
+        assert!(script.contains(concat!("cat /run/tillandsias/", "shutdown-token")));
+        assert!(script.contains(concat!(
+            "/run/tillandsias/cidata/",
+            "tillandsias-shutdown-token"
+        )));
+        assert!(script.contains(concat!(
+            "systemctl enable --now ",
+            "tillandsias-shutdown-token.service"
+        )));
+        assert!(script.contains("umask 077"), "the token file is root-only");
+        assert_eq!(SHUTDOWN_TOKEN_CIDATA_FILE, "tillandsias-shutdown-token");
+    }
+
+    /// 1642-cc54: the kernel's console is hvc0 too, so the end of a shutdown
+    /// (after journald stops) reaches console.log. Without it a guest that
+    /// printed "Shutting down." and then left VZ short of Stopped for ~53 s
+    /// gave no account of those seconds.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn vz_provisioning_puts_the_kernel_console_on_hvc0() {
+        let script = provision_user_data_for_test();
+        let arg = concat!("--args=\"console=", "hvc0\"");
+        let line = script
+            .lines()
+            .find(|l| l.trim_start().starts_with("grubby ") && l.contains(arg))
+            .unwrap_or_else(|| panic!("provisioning must run grubby with {arg}"));
+        assert!(
+            line.contains("--update-kernel=ALL"),
+            "every installed kernel, so a kernel update keeps it: {line}"
         );
     }
 

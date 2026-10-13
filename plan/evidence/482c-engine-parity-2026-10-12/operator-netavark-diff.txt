@@ -1,0 +1,14 @@
+2c2
+< /run/user/1000/containers/networks/aardvark.lock 0 1791778319.7897794100
+---
+> /run/user/1000/containers/networks/aardvark.lock 0 1791817644.6179596360
+6,7c6,7
+< /run/user/1000/containers/networks/aardvark-dns/tillandsias-enclave%int 628 1791778483.9769427450
+< /run/user/1000/containers/networks/ipam.db 65536 1791778483.9958412470
+---
+> /run/user/1000/containers/networks/aardvark-dns/tillandsias-enclave%int 628 1791817645.9959683640
+> /run/user/1000/containers/networks/ipam.db 65536 1791817646.0249685480
+9c9
+< /run/user/1000/containers/networks/rootless-netns/ref-count 1 1791778483.9958412470
+---
+> /run/user/1000/containers/networks/rootless-netns/ref-count 1 1791817646.0249685480

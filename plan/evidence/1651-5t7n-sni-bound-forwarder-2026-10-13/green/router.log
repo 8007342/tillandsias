@@ -1,0 +1,33 @@
+[router] base:    /etc/caddy/base.Caddyfile (65 lines)
+[router] dynamic: /run/router/dynamic.Caddyfile (20 lines)
+[router] merged:  /tmp/Caddyfile (87 lines)
+[router] starting tillandsias-router-sidecar (background)
+[2m2026-10-13T00:08:44.567751Z[0m [32m INFO[0m tillandsias-router-sidecar starting [3mspec[0m[2m=[0m"opencode-web-session-otp" [3msocket[0m[2m=[0m/run/host/tillandsias/control.sock [3mport[0m[2m=[0m9090
+[2m2026-10-13T00:08:44.567800Z[0m [33m WARN[0m Control-socket connection failed; backing off 250ms [3mspec[0m[2m=[0m"opencode-web-session-otp" [3merror[0m[2m=[0mNo such file or directory (os error 2)
+[2m2026-10-13T00:08:44.567869Z[0m [32m INFO[0m Validate endpoint listening [3mspec[0m[2m=[0m"opencode-web-session-otp" [3mbind[0m[2m=[0m127.0.0.1:9090
+[router] sidecar listening on 127.0.0.1:9090 (replied 401 to probe — expected)
+[router] starting Caddy
+{"level":"info","ts":1791850124.6057935,"msg":"maxprocs: Leaving GOMAXPROCS=16: CPU quota undefined"}
+{"level":"info","ts":1791850124.6058116,"msg":"GOMEMLIMIT is updated","GOMEMLIMIT":13034111385,"previous":9223372036854775807}
+{"level":"info","ts":1791850124.6058168,"msg":"using config from file","file":"/tmp/Caddyfile"}
+{"level":"info","ts":1791850124.6058216,"msg":"adapted config to JSON","adapter":"caddyfile"}
+{"level":"warn","ts":1791850124.605827,"msg":"Caddyfile input is not formatted; run 'caddy fmt --overwrite' to fix inconsistencies","adapter":"caddyfile","file":"/tmp/Caddyfile","line":16}
+{"level":"info","ts":1791850124.606392,"logger":"admin","msg":"admin endpoint started","address":"localhost:2019","enforce_origin":false,"origins":["//localhost:2019","//[::1]:2019","//127.0.0.1:2019"]}
+{"level":"info","ts":1791850124.6065502,"logger":"tls.cache.maintenance","msg":"started background certificate maintenance","cache":"0x8481fe96b00"}
+{"level":"warn","ts":1791850124.606979,"logger":"tls","msg":"unmanaged certificate expires within 1 day","not_after":1791936522,"sans":["www.other.localhost"]}
+{"level":"warn","ts":1791850124.607082,"logger":"tls","msg":"unmanaged certificate expires within 1 day","not_after":1791936521,"sans":["www.demo.localhost"]}
+{"level":"info","ts":1791850124.6071649,"logger":"http.auto_https","msg":"automatic HTTPS is completely disabled for server","server_name":"srv0"}
+{"level":"info","ts":1791850124.6071775,"logger":"http.auto_https","msg":"automatic HTTPS is completely disabled for server","server_name":"srv1"}
+{"level":"warn","ts":1791850124.6075697,"logger":"http","msg":"HTTP/2 skipped because it requires TLS","network":"tcp","addr":":8080"}
+{"level":"warn","ts":1791850124.607577,"logger":"http","msg":"HTTP/3 skipped because it requires TLS","network":"tcp","addr":":8080"}
+{"level":"info","ts":1791850124.607581,"logger":"http.log","msg":"server running","name":"srv0","protocols":["h1","h2","h3"]}
+{"level":"info","ts":1791850124.6076145,"logger":"http","msg":"enabling HTTP/3 listener","addr":":8443"}
+{"level":"info","ts":1791850124.607774,"logger":"http.log","msg":"server running","name":"srv1","protocols":["h1","h2","h3"]}
+{"level":"error","ts":1791850124.6078348,"msg":"unable to autosave config","file":"/config/caddy/autosave.json","error":"open /config/caddy/autosave.json: read-only file system"}
+{"level":"info","ts":1791850124.6078439,"msg":"serving initial configuration"}
+{"level":"warn","ts":1791850124.6079125,"logger":"tls","msg":"unable to get instance ID; storage clean stamps will be incomplete","error":"open /data/caddy/instance.uuid: read-only file system"}
+{"level":"info","ts":1791850124.6080523,"logger":"tls","msg":"cleaning storage unit","storage":"FileStorage:/tmp/caddy-storage"}
+{"level":"info","ts":1791850124.6081374,"logger":"tls","msg":"finished cleaning storage units"}
+{"level":"info","ts":1791850124.6085005,"logger":"watcher","msg":"watching config file for changes","config_file":"/tmp/Caddyfile"}
+[2m2026-10-13T00:08:44.819381Z[0m [33m WARN[0m Control-socket connection failed; backing off 500ms [3mspec[0m[2m=[0m"opencode-web-session-otp" [3merror[0m[2m=[0mNo such file or directory (os error 2)
+[2m2026-10-13T00:08:45.321028Z[0m [33m WARN[0m Control-socket connection failed; backing off 1s [3mspec[0m[2m=[0m"opencode-web-session-otp" [3merror[0m[2m=[0mNo such file or directory (os error 2)

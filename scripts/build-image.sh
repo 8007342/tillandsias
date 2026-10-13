@@ -116,7 +116,7 @@ FLAG_NO_CACHE="${TILLANDSIAS_BUILD_NO_CACHE:-false}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        forge|web|proxy|git|inference|router|chromium-core|chromium-framework|vault)
+        forge|web|proxy|git|inference|router|chromium-core|chromium-framework|webkit|vault)
             IMAGE_NAME="$1"
             ;;
         --force)
@@ -130,7 +130,7 @@ while [[ $# -gt 0 ]]; do
             FLAG_TAG="$1"
             ;;
         --help|-h)
-            echo "Usage: scripts/build-image.sh [forge|web|proxy|git|inference|router|chromium-core|chromium-framework|vault] [--force] [--no-cache] [--tag <tag>]"
+            echo "Usage: scripts/build-image.sh [forge|web|proxy|git|inference|router|chromium-core|chromium-framework|webkit|vault] [--force] [--no-cache] [--tag <tag>]"
             echo ""
             echo "Build a container image using podman (Containerfile-based, reproducible)."
             echo ""
@@ -223,6 +223,7 @@ case "$IMAGE_NAME" in
     router)    CONTAINERFILE="$ROOT/images/router/Containerfile" ;;
     chromium-core) CONTAINERFILE="$ROOT/images/chromium/Containerfile.core" ;;
     chromium-framework) CONTAINERFILE="$ROOT/images/chromium/Containerfile.framework" ;;
+    webkit)    CONTAINERFILE="$ROOT/images/webkit/Containerfile" ;;
     vault)     CONTAINERFILE="$ROOT/images/vault/Containerfile" ;;
     *)         CONTAINERFILE="$ROOT/images/default/Containerfile" ;;
 esac

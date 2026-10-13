@@ -1,0 +1,12 @@
+// Spike stand-in for the router's :8443 preview listener: TLS with a leaf
+// only (as Caddy is configured), answers with a fixed marker and the Host.
+const https = require('https');
+const fs = require('fs');
+const marker = process.argv[2] || 'ROUTE';
+https.createServer({
+  key: fs.readFileSync('/certs/leaf.key'),
+  cert: fs.readFileSync('/certs/leaf.crt'),
+}, (req, res) => {
+  res.writeHead(200, { 'content-type': 'text/html' });
+  res.end(`<html><body><p id="m">${marker} host=${req.headers.host}</p></body></html>\n`);
+}).listen(8443, '0.0.0.0', () => console.log(`${marker} listening 8443`));

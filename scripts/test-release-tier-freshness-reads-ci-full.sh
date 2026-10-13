@@ -5,7 +5,8 @@
 # that 1185-9qx6 closed.
 #
 # THE DEFECT. check-release-tier-freshness.sh asks whether the RELEASE tier ran
-# on this host, reading target/convergence/check-logs.jsonl, and since 1174-6r4k
+# on this host, reading the convergence check log (scripts/convergence-log-path.sh;
+# 888-vgs8 moved it out of target/), and since 1174-6r4k
 # it correctly demands a FULL-tier run: ci_phase `all`, or pre-build AND
 # post-build AND runtime between one run's records. Nothing could produce that.
 # local-ci.sh is the index's only writer and ci-full drives only its pre-build

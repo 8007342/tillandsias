@@ -1,0 +1,34 @@
+
+running 1 test
+host-chrome-before []
+browser.open https://www.demo.localhost:18443/ -> {"window_id":"win-b54bcdfd-3c85-4ac2-a665-50356a37af67","device":{"id":"desktop-chrome","model":"Desktop Chrome","approximated":false,"alternatives":[],"viewport":{"w":1280,"h":720},"dpr":1.0,"mobile":false,"max_touch_points":0},"dev":false,"engine":"Chromium"}
+podman-ps tillandsias-browser-demo-b54bcdfd3c85 tillandsias-browser-net-b54bcdfd3c85
+router-networks e2e-enclave
+forwarder tillandsias-browser-fwd-b54bcdfd3c85 tillandsias-browser-net-b54bcdfd3c85,e2e-enclave ports=[]
+window-network-members ["tillandsias-browser-demo-b54bcdfd3c85", "tillandsias-browser-fwd-b54bcdfd3c85"]
+host-chrome-after [] contained-chrome-processes 11
+window-tcp-listeners []
+window-request GET / host=www.demo.localhost:18443 ua=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.8078.12 Safari/537.36
+probe window-flags found
+probe chromium-preview-route title="PREVIEW-DEMO" error=null
+probe chromium-http-route title=null error=ERR_EMPTY_RESPONSE
+probe chromium-other-project title=null error=ERR_NAME_NOT_RESOLVED
+probe chromium-external-name title=null error=ERR_NAME_NOT_RESOLVED
+probe chromium-external-ip title=null error=ERR_NAME_NOT_RESOLVED
+probe chromium-host-ip title=null error=ERR_NAME_NOT_RESOLVED
+probe net-route reach:10.89.1.2
+probe net-other-project-upstream unresolved:ENOTFOUND
+probe net-external-name unresolved:ENOTFOUND
+probe net-external-ip unreachable:1.1.1.1:ENETUNREACH
+probe net-host-lan unreachable:192.168.0.111:ENETUNREACH
+probe net-host-containers-internal unreachable:169.254.1.2:ENETUNREACH
+probe raw-own-project status=200 title="PREVIEW-DEMO"
+probe raw-sni-other-project error=ECONNRESET
+probe raw-host-other-project status=421 title=null
+probe net-router-plaintext unreachable:10.89.1.2:ECONNREFUSED
+browser.close -> {"ok":true}
+after-close containers="" networks="e2e-enclave\npodman" router-networks=e2e-enclave
+test browser_open::tests::live_browser_open_runs_the_container_on_its_own_network ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 963 filtered out; finished in 9.32s
+

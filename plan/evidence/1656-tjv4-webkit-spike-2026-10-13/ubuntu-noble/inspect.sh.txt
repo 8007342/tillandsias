@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# 1656-tjv4 spike: read pw_run.sh and the bundled GTK's display backends, on a private store.
+set -u
+REPO="$(cd "$(dirname "$0")/../../.." && pwd)"; HERE="$REPO/target/work/webkit"; OUT="$HERE/out-noble/inspect.txt"
+IMG=mcr.microsoft.com/playwright@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
+S="$(mktemp -d "$HERE/insp.XXXXXX")"; R="$(mktemp -d "${XDG_RUNTIME_DIR:?}/tillandsias-webkit-insp.XXXXXX")"
+mkdir -p "$S/graph" "$R/run" "$R/tmp" "$S/home"
+printf '%s\n' '[storage]' 'driver = "overlay"' "graphroot = \"$S/graph\"" "runroot = \"$R/run\"" > "$S/storage.conf"
+printf '%s\n' '[engine]' 'cgroup_manager = "cgroupfs"' "tmp_dir = \"$R/tmp\"" > "$S/containers.conf"
+export CONTAINERS_STORAGE_CONF="$S/storage.conf" CONTAINERS_CONF="$S/containers.conf" HOME="$S/home"
+[ "$(podman info --format '{{.Store.GraphRoot}}')" = "$S/graph" ] || { echo "ABORT: not the private store"; exit 3; }
+podman pull -q "$IMG" > /dev/null
+cat > "$S/probe.sh" <<'IN'
+W=/ms-playwright/webkit-2359
+echo "=== pw_run.sh"; cat $W/pw_run.sh
+echo "=== bundled gtk/gdk/wayland libs"; ls $W/minibrowser-gtk/lib 2>/dev/null | grep -iE "gtk|gdk|wayland"
+echo "=== system gtk4"; ls /usr/lib/x86_64-linux-gnu/ | grep -iE "libgtk-4|libwayland-client"
+for f in $W/minibrowser-gtk/lib/libgtk-4.so* /usr/lib/x86_64-linux-gnu/libgtk-4.so.1; do
+  [ -e "$f" ] || continue; echo "=== ldd $f (wayland/x11)"; LD_LIBRARY_PATH=$W/minibrowser-gtk/lib ldd "$f" | grep -iE "wayland|x11"
+done
+echo "=== MiniBrowser NEEDED"; LD_LIBRARY_PATH=$W/minibrowser-gtk/lib ldd $W/minibrowser-gtk/bin/MiniBrowser | grep -iE "gtk|wayland|x11"
+IN
+podman run --rm --pull=never -v "$S/probe.sh:/probe.sh:ro,z" --entrypoint bash "$IMG" /probe.sh > "$OUT" 2>&1
+podman rmi -a -f > /dev/null 2>&1
+podman unshare rm -rf "$S/graph" "$R/run" "$R/tmp"
+find "$R" -delete 2>/dev/null; find "$S" -delete 2>/dev/null

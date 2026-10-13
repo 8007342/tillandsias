@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-device-query-matched-only-by-a-model-with-an-extra-modifier-token-resolves-approximated-naming-that-model-never-exact
+    field: status
+    value: completed
+    ts: "2026-10-13T08:04:03Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-device-query-matched-only-by-a-model-with-an-extra-modifier-token-resolves-approximated-naming-that-model-never-exact
+    event:
+      type: completed
+      ts: "2026-10-13T08:04:03Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: land 7c99cff4b (PR #397, head 9c851ba43); merge and head verified ancestors of origin/linux-next

@@ -1910,6 +1910,11 @@ WantedBy=multi-user.target
         } else {
             ""
         };
+        // ORDER 793-a8e7: the WSL2 Vulkan opt-in reaches the guest the same
+        // way. The guest-side gate is wsl2_vulkan_opt_in_tier in
+        // tillandsias-headless main.rs.
+        let gpu_env =
+            inference_gpu_unit_line(std::env::var("TILLANDSIAS_INFERENCE_GPU").ok().as_deref());
         let headless_unit = format!(
             r#"[Unit]
 Description=Tillandsias headless (in-VM vsock control wire)
@@ -1936,7 +1941,7 @@ ExecStartPre=/usr/local/lib/tillandsias/headless-preflight.sh
 Environment=HOME=/root
 Environment=XDG_RUNTIME_DIR=/run/user/0
 Environment=TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200
-{low_power_env}ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock 42420
+{low_power_env}{gpu_env}ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock 42420
 Restart=on-failure
 RestartSec=2s
 StandardOutput=journal+console
@@ -2357,8 +2362,38 @@ fn parse_headless_version(stdout: &str) -> Option<String> {
     (!v.is_empty()).then(|| v.to_string())
 }
 
+/// ORDER 793-a8e7: the guest-unit line that forwards the WSL2 Vulkan opt-in.
+/// Only the exact opt-in value is forwarded, so an unset or mistyped variable
+/// writes the same unit as before this order (byte-identical default).
+fn inference_gpu_unit_line(value: Option<&str>) -> &'static str {
+    if value.is_some_and(|v| v.trim().eq_ignore_ascii_case("vulkan")) {
+        "Environment=TILLANDSIAS_INFERENCE_GPU=vulkan\n"
+    } else {
+        ""
+    }
+}
+
 #[cfg(test)]
 mod tests {
+
+    /// ORDER 793-a8e7: the opt-in reaches the guest unit only when it says
+    /// vulkan; anything else leaves the unit exactly as it was.
+    #[test]
+    fn inference_gpu_opt_in_is_forwarded_only_when_it_says_vulkan() {
+        use super::inference_gpu_unit_line;
+        assert_eq!(inference_gpu_unit_line(None), "");
+        for other in ["", " ", "0", "1", "true", "cuda"] {
+            assert_eq!(inference_gpu_unit_line(Some(other)), "", "{other:?}");
+        }
+        assert_eq!(
+            inference_gpu_unit_line(Some("vulkan")),
+            "Environment=TILLANDSIAS_INFERENCE_GPU=vulkan\n"
+        );
+        assert_eq!(
+            inference_gpu_unit_line(Some(" Vulkan ")),
+            "Environment=TILLANDSIAS_INFERENCE_GPU=vulkan\n"
+        );
+    }
 
     /// ORDER 1004-5f7p: the ready record must separate "came up, then idled"
     /// from "never came up", and must answer NO when it cannot tell.

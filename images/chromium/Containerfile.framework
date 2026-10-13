@@ -24,10 +24,22 @@ RUN microdnf install -y \
     nodejs npm \
     && microdnf clean all
 
-# System fonts for text rendering (minimal set)
-# Most fonts are optional — chromium has fallbacks
-# For now, skip fonts to keep the image minimal
-# TODO: add font packages when needed for specific renderings
+# Fonts (order 1656-6c97). Chromium's dependencies
+# already bring Latin (Noto Sans, Adwaita, Cantarell); measured on v56.9.27.2,
+# `fc-list :lang=ja`, `:lang=zh-cn`, `:lang=ko` and `:charset=1f600` were all
+# empty, so CJK text and emoji rendered as tofu. Added, kept small:
+#   - google-noto-sans-cjk-vf-fonts: Japanese, Chinese, Korean (one variable OTC)
+#   - google-noto-color-emoji-fonts: emoji
+#   - liberation-{sans,serif,mono}-fonts: metric-compatible Arial, Times New
+#     Roman and Courier New, the names pages ask for most
+# The size growth is recorded in plan/evidence/1656-6c97-*.
+RUN microdnf install -y \
+    google-noto-sans-cjk-vf-fonts \
+    google-noto-color-emoji-fonts \
+    liberation-sans-fonts \
+    liberation-serif-fonts \
+    liberation-mono-fonts \
+    && microdnf clean all
 
 # Browser automation frameworks
 RUN npm install -g --prefix=/usr \

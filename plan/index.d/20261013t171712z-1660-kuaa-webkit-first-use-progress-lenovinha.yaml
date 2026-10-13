@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's direction (macuahuitl, 2026-10-13), from 1656-tjv4 (#405). Unclaimed.
+packets:
+  - packet_id: the-first-webkit-browser-open-shows-preparing-the-webkit-engine-while-the-image-builds-not-only-after
+    order: 1660-kuaa
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [browser, webkit, ux, images, mcp, tray]
+    estimated_hours: 5
+    depends_on:
+      - a-webkit-engine-container-from-playwright-webkit-serves-apple-presets-labelled-webkit-approximates-safari
+    related: [1656-tjv4]
+    owned_files:
+      - crates/tillandsias-headless/src/browser_open.rs
+      - crates/tillandsias-browser-mcp/src/server.rs
+    title: |
+      While the first Apple-preset browser.open builds the WebKit image (~90 s, 1.5 GB, on demand), the user and the agent see "Preparing the WebKit engine (first use)…" DURING the wait, not only in the result afterwards.
+    context: |
+      Coordinator ruling (2026-10-13): keep the WebKit image on demand, so it does not land on floor-tier hosts that never open an Apple preset, but no silent wait.
+      #405 does the small part:
+      - browser.open's result carries a notice ("Prepared the WebKit (approximates Safari) engine on first use (84 s)", measured);
+      - the image build pushes the label "Preparing the WebKit engine (first use)…" through build_image_with_logging.
+      DURING the wait, though, the MCP tool call is a blocked line on the lane socket, and the Linux tray shows no build label. The UDP status events land only in the guest/VM status path.
+      Options: MCP progress notifications (notifications/progress) on the lane transport, or a tray status line on Linux fed by the same build label.
+    exit_criteria:
+      - 'during a first-use WebKit build, the tray (Linux) shows "Preparing the WebKit engine (first use)…" within 2 s of the build starting, and clears it when the window opens; red today'
+      - 'an MCP client that sent a progressToken receives at least one notifications/progress naming the WebKit engine before the browser.open result; red today'
+      - 'a second WebKit open (image present) shows no such message'
+    unscoreable: "unpinnable-until-the-guard-exists: the progress channel and its arms are written together; the build-label wiring is pinned by its own test"
+    next_action: >
+      Decide the channel: MCP progress on the lane socket, or the Linux tray status, or both. Then show the label during a private-store first-use build, red first.
+    provenance: |
+      Filed by lenovinha-silverblue on macuahuitl's direction, 2026-10-13.
+    events:
+      - type: filed
+        ts: "2026-10-13T17:17:12Z"
+        host: lenovinha
+        summary: |-
+          Show "Preparing the WebKit engine (first use)…" while the on-demand image builds, not only afterwards.

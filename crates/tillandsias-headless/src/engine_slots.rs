@@ -99,6 +99,22 @@ pub fn pin_backend_environment(
         "vulkan" | "gpu-vulkan" | "gpu-rocm" => {
             envs.push(("OLLAMA_VULKAN".to_string(), "1".to_string()));
             envs.push(("OLLAMA_LLM_LIBRARY".to_string(), "vulkan".to_string()));
+            // ORDER 793-a8e7: the WSL2 opt-in lane's device is ALWAYS integrated
+            // (Dozen over /dev/dxg), and ollama drops integrated GPUs unless told
+            // otherwise. Measured on yolanda 2026-10-12, ollama v0.34.0 with the
+            // vulkan backend installed: "dropping integrated GPU; to enable, set
+            // OLLAMA_IGPU_ENABLE=1 ... Microsoft Direct3D12 (AMD Radeon(TM) 860M
+            // Graphics)", then `inference compute id=cpu`. With it set: library=
+            // Vulkan type=iGPU, and qwen2.5:0.5b fully resident in VRAM. Scoped
+            // to the opt-in tier: the other vulkan tiers keep their behaviour.
+            if effective_tier == "gpu-vulkan" {
+                envs.push(("OLLAMA_IGPU_ENABLE".to_string(), "1".to_string()));
+                // ORDER 1648-gy9z (793-a8e7 S4): bound a stalled MODEL LOAD on
+                // the opt-in lane (ollama's default is 5m). Cold loads measured
+                // 3-8 s on yolanda 2026-10-12. A stall AFTER the load is the
+                // in-container gpu-stall watchdog's job.
+                envs.push(("OLLAMA_LOAD_TIMEOUT".to_string(), "2m".to_string()));
+            }
         }
         _ => {}
     }
@@ -342,6 +358,24 @@ mod tests {
         let vulkan_env = pin_backend_environment("vulkan", None);
         assert!(vulkan_env.contains(&("OLLAMA_VULKAN".to_string(), "1".to_string())));
         assert!(vulkan_env.contains(&("OLLAMA_LLM_LIBRARY".to_string(), "vulkan".to_string())));
+        // 793-a8e7: only the WSL2 opt-in tier enables integrated GPUs.
+        let igpu = ("OLLAMA_IGPU_ENABLE".to_string(), "1".to_string());
+        assert!(pin_backend_environment("gpu-vulkan", None).contains(&igpu));
+        // 1648-gy9z: and only it bounds a stalled load.
+        let load = ("OLLAMA_LOAD_TIMEOUT".to_string(), "2m".to_string());
+        assert!(pin_backend_environment("gpu-vulkan", None).contains(&load));
+        for tier in ["vulkan", "gpu-rocm", "gpu-cuda", "cpu"] {
+            assert!(
+                !pin_backend_environment(tier, None).contains(&load),
+                "{tier}"
+            );
+        }
+        for tier in ["vulkan", "gpu-rocm", "gpu-cuda", "cpu"] {
+            assert!(
+                !pin_backend_environment(tier, None).contains(&igpu),
+                "{tier}"
+            );
+        }
     }
 
     #[test]

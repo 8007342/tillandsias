@@ -8,14 +8,12 @@ scripts/check-arrival-routing.sh
 scripts/check-bare-metal-host-initialized.sh
 scripts/check-base-ledger-status-loss.sh
 scripts/check-build-cache-sweep.sh
-scripts/check-ca-bind-migration.sh
 scripts/check-capability-row.sh
 scripts/check-carry-forward.sh
 scripts/check-cheatsheet-frontmatter.sh
 scripts/check-cheatsheet-sources.sh
 scripts/check-cheatsheet-tiers.sh
 scripts/check-claim-confirmed.sh
-scripts/check-claim-protocol-agrees.sh
 scripts/check-claims-across-branches.sh
 scripts/check-committable-branch.sh
 scripts/check-container-bases.sh
@@ -26,7 +24,6 @@ scripts/check-cycle-flow-log-fresh.sh
 scripts/check-daily-maintenance.sh
 scripts/check-dead-env-branches.sh
 scripts/check-decider-retirement.sh
-scripts/check-declared-closures-added.sh
 scripts/check-deslop-due.sh
 scripts/check-deslop-sweep-health.sh
 scripts/check-enclave-ca-consistency.sh
@@ -51,7 +48,6 @@ scripts/check-jq-multiline-capture-strips-cr.sh
 scripts/check-landed-but-open.sh
 scripts/check-landing-provenance.sh
 scripts/check-ledger-distillation.sh
-scripts/check-litmus-dead-inputs.sh
 scripts/check-litmus-expression-pinning-added.sh
 scripts/check-litmus-grep-escapes.sh
 scripts/check-litmus-line-windows.sh
@@ -164,7 +160,6 @@ scripts/test-check-opsx-generated-dirt.sh
 scripts/test-check-packet-tier-declared.sh
 scripts/test-check-stranded-in-progress.sh
 scripts/test-check-test-baseline.sh
-scripts/test-chromium-framework-launch.sh
 scripts/test-claim-confirmation-names-the-earliest-claimant.sh
 scripts/test-claim-wip-limit.sh
 scripts/test-claims-across-branches.sh
@@ -340,7 +335,6 @@ scripts/test-install-macos-announces-its-pin.sh
 scripts/test-install-macos-swap-is-interruptible.sh
 scripts/test-install-macos-tray-stop.sh
 scripts/test-install-path.sh
-scripts/test-installer-merges-wslconfig-swap-keys.sh
 scripts/test-installer-probes-by-attempt-not-by-help.sh
 scripts/test-installer-reports-wsl-guest-shape.sh
 scripts/test-installer-reset-probe.sh

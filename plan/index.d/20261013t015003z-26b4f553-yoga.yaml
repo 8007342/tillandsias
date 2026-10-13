@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: development-scratch-and-worktrees-live-inside-the-checkout-under-one-ignored-dir-that-every-scanner-skips
+    event:
+      type: progress
+      ts: "2026-10-13T01:50:03Z"
+      agent_id: linux-yoga-claude-20261013t012412z
+      host: yoga
+      summary: |
+        Slice 3 on work/1637-cnxq@9f4d6ca90 (PR 386, draft): the scripts every worker cycle runs make their scratch through scripts/scratch-dir.sh — cycle-preflight, select-work-batch, check-claims-across-branches, mo-full-attest, with-tillandsias-process-cleanup and the check-daily-maintenance fixture — under <checkout>/scratch/{logs,xbranch,fixtures}, each refusing by name with a why/remedy affordance when the helper names no directory (every refusal branch forced once; refusal-affordance-added: 8 checked). The two cross-branch fixtures carry the helper into their fake trees and steer the extract with TILLANDSIAS_SCRATCH_ROOT (killed-run arm: 1 extract live at the kill, none left). check-bare-mktemp.lua's remedy and floor name the scratch idiom so the two guards agree on a new site; floor sites=286 floor=286. Measured on yoga 2026-10-13: scratch-location-added ok files=9 sites=16 exempt=3; claims-across-branches 12/12; claims-affordance 8/8; mo-full-attest 18/18; daily fixture 7; bare-mktemp fixture 7; the migrated scripts ran for real and left no file under scratch/; door door ran=227 refused=1 (the 830 regime hold only), scratch/ held 0 files after. Still draft: step 830 needs a darwin or msys STEP_SECOND_REGIME.

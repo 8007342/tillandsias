@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # @trace spec:init-command
 # @trace order:1339-r9xv
+# @trace order:1560-uam3
 #
 # Pin 1339-r9xv: the Windows installer REPORTS the guest shape a user's
 # .wslconfig will produce, NAMES a known-bad ratio with its numbers, and
-# OFFERS the configuration -- and never writes .wslconfig itself.
+# OFFERS the shape configuration -- and writes .wslconfig only to ensure the
+# swap and reclaim keys, in one function, backup first (1560-uam3).
 #
 # WHY THE ROW EXISTS, measured on yolanda-windows 2026-09-21: with WSL
 # defaults a 16-logical-CPU host ran its guest with ALL 16 vCPUs inside a
@@ -83,40 +85,31 @@ else
     _bad "ARM 4: nothing warns that autoMemoryReclaim under [wsl2] is inert"
 fi
 
-# --- ARM 5: IT MUST NOT WRITE THE USER'S FILE ------------------------------
-# THIS IS THE ARM THAT MATTERS MOST. Writing .wslconfig silently would be a
-# worse defect than the one being fixed: the file is the user's and may carry
-# settings for unrelated work. Assert the absence of every write verb aimed
-# at that path, by CARDINALITY rather than by a single grep.
+# --- ARM 5: THE USER'S FILE IS WRITTEN IN ONE PLACE, BACKUP FIRST ----------
+# THE SHAPE KEYS (memory, processors) ARE NEVER WRITTEN; the swap and reclaim
+# keys are hard requirements and are ensured without asking (operator
+# 2026-10-12, order 1560-uam3). So the property is "every write of .wslconfig
+# sits inside Invoke-WslConfigEnsure, and that function copies the backup
+# before it writes", asserted by CARDINALITY: the writes in the whole file
+# must equal the writes inside that function's body, and the body must hold
+# both the backup copy and the write, in that order.
 # THE SEPARATOR IS LOAD-BEARING AND ITS ABSENCE FAILED THIS ARM ONCE. The
-# first version required the write verb and the variable to be ADJACENT --
-# `(Set-Content|...)\$WslCfgPath` -- so a control injecting the obvious
+# first version required the write verb and the variable to be ADJACENT, so
 # `Set-Content $WslCfgPath "x"` sailed straight through the arm written to
-# forbid exactly that. An arm that cannot catch its own named sabotage is
-# not an arm. Allow any run of non-newline characters between the verb and
-# the path, and count every match rather than asking whether one exists.
-#
-# 2026-09-26 (the swap keys, same row): the spec now REQUIRES one write -- the
-# absent swap keys, after an explicit yes. So the property is no longer "zero
-# writes" but "every write sits inside the consent branch", and it is asserted
-# by the same cardinality: the writes in the whole file must equal the writes
-# inside `if ($doWsl) { ... } else {`, and that branch must be reached only
-# from a [y/N] prompt (default NO) or TILLANDSIAS_WSLCONFIG=apply.
-# WriteAllLines joins the verb list: it is how the consented write is spelled,
-# and the old list would not have seen it at all.
-_wverbs='(Set-Content|Out-File|Add-Content|New-Item|Move-Item|Copy-Item|Remove-Item|WriteAllLines|WriteAllText).*\$WslCfgPath'
+# forbid exactly that. Allow any run of non-newline characters between the
+# verb and the path, and count every match rather than asking whether one
+# exists. Inside the function the path is `$Path`; outside it, `$WslCfgPath`.
+_wverbs='(Set-Content|Out-File|Add-Content|Move-Item|Remove-Item|WriteAllLines|WriteAllText).*(\$WslCfgPath|\$Path\b)'
+_body="$(awk '/^function Invoke-WslConfigEnsure/{on=1} on{print} on&&/^}/{exit}' "$CODE")"
 _w=$(grep -cE "$_wverbs" "$CODE" 2>/dev/null || true)
 _w=$((_w + $(grep -cE '\$WslCfgPath.*(-Value|>>|>)' "$CODE" 2>/dev/null || true)))
-_consent="$(awk '/^    if \(\$doWsl\) \{$/{on=1} on{print} on&&/^    \} else \{$/{exit}' "$CODE")"
-_wc=$(grep -cE "$_wverbs" <<<"$_consent" || true)
-_wc=$((_wc + $(grep -cE '\$WslCfgPath.*(-Value|>>|>)' <<<"$_consent" || true)))
-_gate=0
-grep -qF "[y/N]" "$CODE" && _gate=$((_gate + 1))
-grep -qF "\$env:TILLANDSIAS_WSLCONFIG -eq 'apply'" "$CODE" && _gate=$((_gate + 1))
-if [ "$_w" -gt 0 ] && [ "$_w" -eq "$_wc" ] && [ "$_gate" -eq 2 ]; then
-    _ok "ARM 5: all $_w write(s) of .wslconfig sit inside the consent branch ([y/N], default no, or TILLANDSIAS_WSLCONFIG=apply)"
+_wb=$(grep -cE "$_wverbs" <<<"$_body" || true)
+_bk=$(grep -nE 'Copy-Item.*\$Path.*tillandsias-bak|Copy-Item.*\$Path .*-Destination \$backup' <<<"$_body" | head -1 | cut -d: -f1)
+_wr=$(grep -nE 'WriteAllLines\(\$Path' <<<"$_body" | head -1 | cut -d: -f1)
+if [ "$_w" -gt 0 ] && [ "$_w" -eq "$_wb" ] && [ -n "$_bk" ] && [ -n "$_wr" ] && [ "$_bk" -lt "$_wr" ]; then
+    _ok "ARM 5: all $_w write(s) of .wslconfig sit inside Invoke-WslConfigEnsure, after its backup copy"
 else
-    _bad "ARM 5: $_w write(s) of .wslconfig, $_wc inside the consent branch, consent gate signals $_gate/2 -- every write must be consented"
+    _bad "ARM 5: $_w write(s) of .wslconfig, $_wb inside Invoke-WslConfigEnsure, backup at line '${_bk}' write at line '${_wr}' -- every write must be that function's, backup first"
 fi
 
 # --- ARM 6: could-not-measure is distinguished from a verdict --------------

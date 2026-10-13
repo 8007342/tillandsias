@@ -1,0 +1,1 @@
+{"id":"chatcmpl-839","object":"chat.completion","created":1791817570,"model":"qwen2.5:0.5b","system_fingerprint":"fp_ollama","choices":[{"index":0,"message":{"role":"assistant","content":"pong"},"finish_reason":"stop"}],"usage":{"prompt_tokens":36,"prompt_tokens_details":{"cached_tokens":0},"completion_tokens":2,"total_tokens":38}}

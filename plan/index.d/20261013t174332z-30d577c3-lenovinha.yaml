@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-webkit-engine-container-from-playwright-webkit-serves-apple-presets-labelled-webkit-approximates-safari
+    field: status
+    value: completed
+    ts: "2026-10-13T17:43:32Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-webkit-engine-container-from-playwright-webkit-serves-apple-presets-labelled-webkit-approximates-safari
+    event:
+      type: completed
+      ts: "2026-10-13T17:43:32Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: land e8077c4b5 (PR #405, head 75374bbd6); merge and head verified ancestors of origin/linux-next

@@ -1,0 +1,34 @@
+test-binary /var/home/lenovinha/claudia/tillandsias/target/debug/deps/tillandsias-a69e54c5169d8f95
+version 56.10.12.1 host-ip 192.168.0.111
+images: localhost/tillandsias-chromium-framework:v56.10.12.1 localhost/e2e-fw-base:1 localhost/tillandsias-chromium-framework:v56.9.27.2 localhost/tillandsias-router:v56.10.12.1 localhost/tillandsias-router:v56.9.27.2 
+ca-spki 9G44k9AY33z2u/fI6fHNL4SW6M9xT0UrdP/aUWFNeXQ=
+router-self-check demo-preview: ok1
+live-test rc=0
+host-chrome-before []
+browser.open https://www.demo.localhost:18443/ -> {"window_id":"win-3475d9be-2f29-40d7-883d-b4b7649434e3"}
+podman-ps tillandsias-browser-demo-3475d9be2f29 tillandsias-browser-net-3475d9be2f29
+router-networks e2e-enclave tillandsias-browser-net-3475d9be2f29
+host-chrome-after [] contained-chrome-processes 11
+window-tcp-listeners []
+window-request GET / host=www.demo.localhost:18443
+probe window-flags found
+probe chromium-preview-route title="PREVIEW-DEMO" error=null
+probe chromium-http-route title="PREVIEW-DEMO" error=null
+probe chromium-other-project title=null error=ERR_NAME_NOT_RESOLVED
+probe chromium-external-name title=null error=ERR_NAME_NOT_RESOLVED
+probe chromium-external-ip title=null error=ERR_NAME_NOT_RESOLVED
+probe chromium-host-ip title=null error=ERR_NAME_NOT_RESOLVED
+probe net-route reach:10.89.1.2
+probe net-other-project-upstream unresolved:ENOTFOUND
+probe net-external-name unresolved:ENOTFOUND
+probe net-external-ip unreachable:1.1.1.1:ENETUNREACH
+probe net-host-lan unreachable:192.168.0.111:ENETUNREACH
+probe net-host-containers-internal unreachable:169.254.1.2:ENETUNREACH
+probe residual-raw-router-other-project status=200 title="PREVIEW-OTHER"
+browser.close -> {"ok":true}
+after-close containers="" networks="e2e-enclave\npodman" router-networks=e2e-enclave
+test browser_open::tests::live_browser_open_runs_the_container_on_its_own_network ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 951 filtered out; finished in 7.80s
+op: unchanged
+op-net: unchanged
+op-browser-dir: unchanged

@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# A slice of 793-a8e7, given its own order so its branch is a work ref (^work/NNN[N]-xxxx$), at macuahuitl-fedora's request 2026-10-12.
+packets:
+  - packet_id: 793-a8e7-s3-decode-floor-pins-small-models-to-the-cpu
+    order: 1647-fb52
+    parent: 793-a8e7
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, wsl2, accel, gpu, vulkan, inference]
+    related: [793-a8e7, 793-zumy, 793-qc6q]
+    depends_on: []
+    title: |
+      793-a8e7 S3: on the opted-in lane, models below the decode floor are pinned all-CPU (num_gpu 0) at container start and restored on opt-out with no residue; the floor is the measured crossover, else 3B provisional
+    context: |
+      ollama cannot split a model by phase: MEASURED on yolanda 2026-10-12 (ollama v0.34.0, Dozen), num_gpu=0 loads CPU buffers only and prefill drops ~1245 -> ~395 t/s (no op-offload). Coordinator ruling: with the crossover unmeasured, models under 3B stay all-CPU and 3B+ go to the GPU, PROVISIONAL until a host measures its crossover. Mechanism (approved): re-create each model below the floor under its own name with PARAMETER num_gpu 0, recording each pin; on any other tier, restore recorded pins from their own modelfile minus num_gpu. LIMIT: a model pulled while the container runs is pinned at the next start. Live on yolanda: pin 2 models, idempotent re-run, a pinned 0.5b serving with size_vram=0, opt-out restoring both with no num_gpu left and modelfiles equal to the originals.
+    exit_criteria:
+      - 'below the floor on gpu-vulkan: pinned num_gpu 0 and recorded; at or above it: untouched; a model with an operator num_gpu: never pinned or restored'
+      - 'ARM: turning the opt-in off restores every recorded pin, leaves no residual num_gpu 0, and removes the record'
+      - 'the launcher passes TILLANDSIAS_DECODE_FLOOR_B from the measured crossover (all when the CPU wins throughout, else 3 provisional) only on gpu-vulkan'
+    unscoreable: "a slice of 793-a8e7; its evidence is the parent's live criteria on yolanda plus the slice's own unit arms and sabotages"
+    next_action: >
+      Finish the launcher env, the fixture arms, then PR as work/1647-fb52.
+    provenance: |
+      Filed by yolanda-windows, 2026-10-12, splitting 793-a8e7 into ordered slices (S1 is #384 under 793-a8e7 itself).
+    events:
+      - type: filed
+        ts: "2026-10-12T22:25:05Z"
+        host: yolanda-windows
+        summary: |-
+          793-a8e7 slice: s3-decode-floor-pins-small-models-to-the-cpu

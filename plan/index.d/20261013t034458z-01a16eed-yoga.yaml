@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: research-cert-lifecycle-state-graph
+    field: next_action
+    value: PR 367 readied 2026-10-13 at ffdbf24a8 (trunk 3245b1e1a merged at 6db337266; the manifest-dir ratchet 1590-j20f satisfied by ffdbf24a8; 1007 headless tests; clippy x4). Slice 9 lands ANNOUNCE-ONLY — the Stale arm names the stranded consumers and restarts nothing. OPEN FOR THE COORDINATOR — choose the reaction to a CA rotation (restart all / restart idle / announce only / two-phase {new, old} consumer bundle with a deferred proxy switch), see plan/issues/research-cert-lifecycle-state-graph-2026-07-24.md section Slice 9. Remaining criteria — 3 (that policy) and the live arms of 2. After the landing continue on work/472, never a fresh ref. The host-lane ASKs sent 2026-10-12 never delivered (LAN rung 1506-7tq4 is ready, not built).
+    ts: "2026-10-13T03:44:58Z"
+    host: yoga
+
+events:
+  - packet_id: research-cert-lifecycle-state-graph
+    event:
+      type: note
+      ts: "2026-10-13T03:44:58Z"
+      host: yoga
+      summary: |-
+        PR 367 readied 2026-10-13; the rotation-reaction policy is the coordinator's

@@ -1,0 +1,56 @@
+
+running 1 test
+host-chrome-before []
+browser.open https://www.demo.localhost:18443/ -> {"window_id":"win-6ce1d771-e0fd-40a9-b612-c422e64716cd"}
+podman-ps tillandsias-browser-demo-6ce1d771e0fd tillandsias-browser-net-6ce1d771e0fd
+router-networks e2e-enclave tillandsias-browser-net-6ce1d771e0fd
+host-chrome-after [] contained-chrome-processes 11
+window-tcp-listeners []
+window-request GET / host=www.demo.localhost:18443
+probe window-flags found
+probe chromium-preview-route title="PREVIEW-DEMO" error=null
+probe chromium-http-route title="PREVIEW-DEMO" error=null
+probe chromium-other-project title=null error=ERR_NAME_NOT_RESOLVED
+probe chromium-external-name title=null error=ERR_NAME_NOT_RESOLVED
+probe chromium-external-ip title=null error=ERR_NAME_NOT_RESOLVED
+probe chromium-host-ip title=null error=ERR_NAME_NOT_RESOLVED
+probe net-route reach:10.89.1.2
+probe net-other-project-upstream unresolved:ENOTFOUND
+probe net-external-name unresolved:ENOTFOUND
+probe net-external-ip unreachable:1.1.1.1:ENETUNREACH
+probe net-host-lan unreachable:192.168.0.111:ENETUNREACH
+probe net-host-containers-internal unreachable:169.254.1.2:ENETUNREACH
+probe raw-own-project status=200 title="PREVIEW-DEMO"
+probe raw-sni-other-project status=200 title="PREVIEW-OTHER"
+probe raw-host-other-project status=200 title="PREVIEW-OTHER"
+probe net-router-plaintext reach:10.89.1.2
+
+thread 'browser_open::tests::live_browser_open_runs_the_container_on_its_own_network' (1132265) panicked at crates/tillandsias-headless/src/browser_open.rs:604:13:
+net-router-plaintext: window-flags found
+chromium-preview-route title="PREVIEW-DEMO" error=null
+chromium-http-route title="PREVIEW-DEMO" error=null
+chromium-other-project title=null error=ERR_NAME_NOT_RESOLVED
+chromium-external-name title=null error=ERR_NAME_NOT_RESOLVED
+chromium-external-ip title=null error=ERR_NAME_NOT_RESOLVED
+chromium-host-ip title=null error=ERR_NAME_NOT_RESOLVED
+net-route reach:10.89.1.2
+net-other-project-upstream unresolved:ENOTFOUND
+net-external-name unresolved:ENOTFOUND
+net-external-ip unreachable:1.1.1.1:ENETUNREACH
+net-host-lan unreachable:192.168.0.111:ENETUNREACH
+net-host-containers-internal unreachable:169.254.1.2:ENETUNREACH
+raw-own-project status=200 title="PREVIEW-DEMO"
+raw-sni-other-project status=200 title="PREVIEW-OTHER"
+raw-host-other-project status=200 title="PREVIEW-OTHER"
+net-router-plaintext reach:10.89.1.2
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test browser_open::tests::live_browser_open_runs_the_container_on_its_own_network ... FAILED
+
+failures:
+
+failures:
+    browser_open::tests::live_browser_open_runs_the_container_on_its_own_network
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 951 filtered out; finished in 7.41s
+

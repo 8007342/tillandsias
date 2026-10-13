@@ -1,0 +1,37 @@
+# @trace spec:local-web-preview
+# @trace order:1625-9qyw (a cold-start forge serves a web project with no operator action)
+# @trace order:1663-6mns (a nested, built Wrangler assets directory is served, never the wrong root)
+#
+# OPT-IN, size e2e: never in the default gate. It needs privileged
+# podman-in-podman, downloads the named release, builds every enclave image in a
+# sealed nested substrate (about an hour), and checks the operator's scenario
+# end to end: fresh install, a forge on 8007342/macron.dev, publish_local
+# runtime auto from inside the forge, a host-side HTTPS fetch through the
+# router, then a forced router-step failure with a last_failure record and its
+# recovery. The host keychain's tillandsias item metadata must not change.
+# Release under test: $TILLANDSIAS_COLD_START_RELEASE (default v56.10.12.1).
+# Evidence lands in target/work/cold-start-acceptance/<run>/evidence/.
+name: litmus:cold-start-acceptance-e2e
+spec: local-web-preview
+phase: post-build
+description: >
+  Opt-in live acceptance: on a sealed scratch substrate after a fresh install,
+  a forge publishes a Wrangler project with publish_local runtime auto, the URL
+  is served through the router over verified TLS; a lakanoa-shaped layout
+  (nested assets directory built by a subdirectory build command, 1663-6mns)
+  is refused with the build command before the build and serves the BUILT
+  index after it; a forced router-step failure is step-qualified, and the same
+  call recovers.
+severity: high
+size: e2e
+
+preconditions:
+  - podman can run a privileged rootless container (quay.io/podman/stable)
+  - network access to github.com and the release assets
+  - a desktop session on the host (the keychain metadata probe uses gdbus --session)
+
+critical_path:
+  - step: "cold start: fresh install, publish_local auto from the forge, HTTPS fetch through the router, forced router failure, recovery, keychain unchanged"
+    command: "tillandsias-plan script run scripts/lua/cold-start-acceptance.lua --timeout 180m -- --privileged-podman-in-podman \"${TILLANDSIAS_COLD_START_RELEASE:-v56.10.12.1}\""
+    timeout_ms: 10800000
+    expected_behavior: "ok:cold-start-acceptance:"

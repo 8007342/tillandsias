@@ -1,0 +1,3 @@
+## mutation: lib-common.sh's context example restored to <project>.<service>
+    "lib-common.sh Web servers:9: ${project_name}.<service>.localhost (project demo): project suffix mismatch: expected demo, got web",
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 86 filtered out; finished in 0.00s

@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's direction (macuahuitl, 2026-10-13): the optional
+# part of 1656-iktu, split out as its own row. Unclaimed.
+packets:
+  - packet_id: a-dev-mode-window-offers-its-owning-lane-a-lane-scoped-raw-cdp-socket-for-playwright-or-puppeteer-inside-the-forge-and-no-other-lane-or-host-listener
+    order: 1657-uq5d
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [browser, cdp, dev-mode, playwright, puppeteer, forge, mcp, security]
+    estimated_hours: 8
+    depends_on:
+      - dev-mode-browser-windows-give-the-owning-lane-full-cdp-over-the-per-lane-socket-with-typed-tools-and-raw-browser-cdp-and-no-host-listener
+    related: [1655-urz9, 1656-iktu, 1656-twhk]
+    owned_files:
+      - crates/tillandsias-headless/src/browser_window_cdp_relay.js
+      - crates/tillandsias-headless/src/browser_open.rs
+      - crates/tillandsias-browser-mcp/src/window_cdp.rs
+    title: |
+      A dev-mode browser window offers the lane that opened it a raw CDP socket under that lane's /run/host/tillandsias-mcp/, so Playwright or Puppeteer inside the forge can drive the window directly. No other lane sees it, and the host gains no TCP listener.
+    context: |
+      1656-iktu (#401) gives the owning lane full CDP through MCP tools (browser.cdp plus typed tools) over its per-lane MCP socket. The row's optional extra, a raw socket for a library-driven client, was left out. The window's relay (browser_window_cdp_relay.js, from 1655-urz9) serves the --remote-debugging-pipe to exactly ONE client, the tray's broker, which holds the window's emulation session. So a second client needs either a second relay endpoint or the broker multiplexing a lane-facing endpoint. In both cases the broker's emulation and ownership must hold.
+      Protocol fit (stated, not yet measured): Puppeteer's connect() accepts a custom ConnectionTransport, so NUL-framed JSON over a Unix socket fits it. Playwright's chromium.connectOverCDP() takes an HTTP or WebSocket endpoint, so Playwright needs a WebSocket (/json/version plus a ws upgrade) served on a Unix socket, or a forge-local shim. Whatever the shape, it must stay a Unix socket mounted only into the owning lane, never a TCP port on the host.
+      Full CDP exposes the window's session cookies to the owning lane. This is the same exposure 1656-iktu accepted and states in browser.cdp's description.
+    exit_criteria:
+      - 'from inside the owning lane''s forge, a Puppeteer (or Playwright) script connects through the lane-scoped socket to a dev-mode window and evaluates 1+1 to 2 in the page; red today (no such socket)'
+      - 'the socket exists only under the owning lane''s /run/host/tillandsias-mcp/ mount: another lane of the same project has no path to it, and the host''s `ss -ltn` is unchanged with the socket in use'
+      - 'the window keeps its device emulation and the broker session while the library client is attached, and the socket is removed when the window closes'
+      - 'a normal (non-dev) window offers no socket'
+    unscoreable: "unpinnable-until-the-guard-exists: the lane-scoped mount and the two-lane absence arm are written with the endpoint, in the live browser-open harness"
+    next_action: >
+      Decide the endpoint shape first: the broker multiplexing a lane-facing endpoint, or a second relay socket. Measure what Playwright's connectOverCDP and Puppeteer's connect need over a Unix socket. Then mount it into the owning lane only, and write the two-lane arm red first.
+    provenance: |
+      Filed by lenovinha-silverblue on macuahuitl's direction, 2026-10-13 (the optional part of 1656-iktu, split out).
+    events:
+      - type: filed
+        ts: "2026-10-13T07:14:22Z"
+        host: lenovinha
+        summary: |-
+          Optional lane-scoped raw CDP socket for Playwright or Puppeteer inside the forge, split from 1656-iktu.

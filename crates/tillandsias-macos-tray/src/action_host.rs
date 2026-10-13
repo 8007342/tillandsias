@@ -266,6 +266,23 @@ fn spawn_and_reap(mut command: std::process::Command, what: &'static str) {
     }
 }
 
+/// 1642-cc54 (5b loop guard): the loud line for a second automatic rebuild in a
+/// row. It names the likely cause so the defect is visible in tray.log and in
+/// the record file `--diagnose` reports, instead of a silent loop that costs
+/// the sign-ins on every launch.
+fn consecutive_unclean_rebuild_line(image_root: &std::path::Path) -> String {
+    format!(
+        "[tillandsias-tray] DEFECT (1642-cc54): two unclean stops in a row, so the workspace \
+         was rebuilt again and the sign-ins lost again. Likely cause: the clean power-off \
+         path was not reached (no token-verified `tillandsias-clean-off` line on the console \
+         before the stop; check console.log and the `Quit:` lines). Every quit will keep \
+         rebuilding until it is fixed. Record: {}",
+        image_root
+            .join(tillandsias_vm_layer::vz::AUTO_REBUILD_RECORD_FILE)
+            .display()
+    )
+}
+
 // parity-surface: notification.provisioning-failed
 fn notify_provisioning_failed(reason: &str) {
     // AppleScript single-quote-escape so a `'` in the reason doesn't
@@ -2353,13 +2370,57 @@ impl TrayActionHost {
         let bar_clear_menu_item = status_menu_item_slot.clone();
 
         runtime.spawn(async move {
-            let result = run_start(
-                image_root,
-                vm_slot.clone(),
-                on_phase.as_ref(),
-                on_progress.as_ref(),
-            )
-            .await;
+            // 1642-cc54 (5b, option C): never boot a disk whose previous run
+            // did not stop cleanly. Rebuild it first, as the operator chose.
+            let rebuilt = if tillandsias_vm_layer::vz::previous_stop_was_unclean(&image_root) {
+                on_phase(crate::reset_state::REBUILD_STATUS.trim_end_matches('\u{2026}'));
+                let vz = VzRuntime::new(TILLANDSIAS_GUEST_CID, image_root.clone());
+                // Asked BEFORE the wipe (1642-cc54): it decides whether the
+                // keychain's share is kept (store on the identity disk) or
+                // cleared (store on the rootfs being destroyed).
+                let store_survives = vz.vault_store_survives_rebuild();
+                let rebuilt = crate::reset_state::run_unclean_stop_rebuild_in(
+                    crate::installation_uuid::KEYCHAIN_SERVICE,
+                    &tillandsias_core::cache_root::cache_root(),
+                    store_survives,
+                    || vz.wipe_provisioned_artifacts().map_err(|e| e.to_string()),
+                );
+                if rebuilt.is_ok() {
+                    // Fresh guest => fresh crash-loop history.
+                    let _ = std::fs::remove_file(crate::diagnose::crashloop_state_path());
+                    // Loop guard: if the clean power-off ever regresses, every
+                    // quit is unclean and every launch silently costs the
+                    // sign-ins. Two in a row is made loud, never silent.
+                    match tillandsias_vm_layer::vz::note_auto_rebuild(&image_root) {
+                        Ok(true) => eprintln!("{}", consecutive_unclean_rebuild_line(&image_root)),
+                        Ok(false) => eprintln!(
+                            "[tillandsias-tray] rebuilt the workspace after an unclean stop \
+                             (recorded in {})",
+                            image_root
+                                .join(tillandsias_vm_layer::vz::AUTO_REBUILD_RECORD_FILE)
+                                .display()
+                        ),
+                        Err(e) => eprintln!(
+                            "[tillandsias-tray] could not record the unclean-stop rebuild: {e}"
+                        ),
+                    }
+                }
+                rebuilt
+            } else {
+                Ok(())
+            };
+            let result = match rebuilt {
+                Ok(()) => {
+                    run_start(
+                        image_root,
+                        vm_slot.clone(),
+                        on_phase.as_ref(),
+                        on_progress.as_ref(),
+                    )
+                    .await
+                }
+                Err(e) => Err(e),
+            };
             // 1420-v3zt: whatever the outcome, the icon stands alone again; the
             // chip below carries the result.
             dispatch_to_main_thread(move || {

@@ -55,7 +55,7 @@ if [ ! -r "$CA_DIR/intermediate.crt" ]; then
         echo "  $CA_DIR/intermediate.crt is missing. A proxy CREATED at or after 998-3z6g binds it by that"
         echo "  path (podman records the bind SOURCE at container creation), so it cannot start until the"
         echo "  bundle exists; an older container may still bind the previous /tmp path — run"
-        echo "  scripts/check-ca-bind-migration.sh to see which containers bind which path, and recreate"
+        echo "  tillandsias-plan script run scripts/lua/check-ca-bind-migration.lua to see which containers bind which path, and recreate"
         echo "  (never restart) the stale ones."
         echo "  The bundle is materialized by the enclave orchestration, not by the"
         echo "  container that binds it, so an absent bundle is a provisioning gap"

@@ -592,6 +592,7 @@ specs:
   litmus_tests:
   - litmus:host-browser-mcp-shape
   - litmus:host-browser-mcp-lane-socket-shape
+  - litmus:browser-open-container-shape
   coverage_ratio: 67
   last_verified: '2026-05-29'
 - spec_id: host-chromium
@@ -634,6 +635,7 @@ specs:
   - litmus:inference-engine-slot-boundary-shape
   - litmus:inference-tier-table-migration
   - litmus:inference-llama-server-lane-shape
+  - litmus:inference-engine-parity-shape
   - litmus:inference-policy-router-implementation
   - litmus:enclave-isolation
   coverage_ratio: 100
@@ -787,6 +789,7 @@ specs:
   - litmus:meta-orchestration-opsx-sync-merge
   - litmus:openspec-cli-pin-shape
   - litmus:build-cache-sweep-trigger
+  - litmus:check-log-survives-the-cache-sweep
   - litmus:issue-citation-convention
   - litmus:long-running-view-agreement
   - litmus:resumable-claim-dirt-shape
@@ -1046,6 +1049,9 @@ specs:
   status: draft
   litmus_tests:
   - litmus:local-web-preview
+  - litmus:cold-start-acceptance-shape
+  - litmus:cold-start-acceptance-e2e
+  - litmus:device-catalogue-shape
   coverage_ratio: 0
   last_verified: null
 - spec_id: tools-overlay-fast-reuse

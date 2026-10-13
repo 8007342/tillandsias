@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-vault-partial-init-guard-wipes-a-valid-store-when-the-share-has-not-been-delivered-yet
+    field: status
+    value: in_progress
+    ts: "2026-10-13T17:17:40Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-vault-partial-init-guard-wipes-a-valid-store-when-the-share-has-not-been-delivered-yet
+    event:
+      type: note
+      ts: "2026-10-13T17:17:40Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        claimed by macos-tlatoanis-macbook-air-claude at the coordinator's direction (p1 data loss)

@@ -1,0 +1,23 @@
+== /run/user/browser:
+total 0
+drwxr-xr-x. 2 root     root     60 Oct 12 20:54 .
+drwxr-xr-x. 4 root     root     80 Oct 12 20:54 ..
+srwxr-xr-x. 1 chromium chromium  0 Oct 11 20:26 wayland-0
+== mounts mentioning run/user, X11, wayland, bus, keyring:
+2521 2548 0:110 /wayland-0 /run/user/browser/wayland-0 rw,nosuid,nodev,relatime - tmpfs tmpfs rw,seclabel,size=1414288k,nr_inodes=353572,mode=700,uid=1000,gid=1000,inode64
+2522 2538 0:110 /1641-probe-args.48Tvjg/args.profile /run/user/1000/1641-probe-args.48Tvjg/args.profile rw,nosuid,nodev,relatime - tmpfs tmpfs rw,seclabel,size=1414288k,nr_inodes=353572,mode=700,uid=1000,gid=1000,inode64
+2548 2538 0:177 / /run/user/browser rw,nosuid,nodev,relatime - tmpfs tmpfs rw,context="system_u:object_r:container_file_t:s0:c1022,c1023",size=1024k,mode=755,uid=524288,gid=524288,inode64
+2677 2539 0:168 /bus /proc/bus ro,nosuid,nodev,noexec,relatime - proc proc rw
+VISIBLE /run/user/1000
+absent  /run/user/1000/podman/podman.sock
+absent  /run/user/1000/bus
+absent  /run/user/1000/keyring
+absent  /run/user/1000/tillandsias
+absent  /run/user/browser/podman
+absent  /run/user/browser/bus
+absent  /run/user/browser/keyring
+absent  /run/dbus/system_bus_socket
+absent  /tmp/.X11-unix
+== sockets anywhere outside /proc /sys:
+/tmp/org.chromium.Chromium.LNHvr9/SingletonSocket
+== env DBUS: <unset> DISPLAY: <unset>

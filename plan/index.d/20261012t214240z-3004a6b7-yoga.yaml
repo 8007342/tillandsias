@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: development-scratch-and-worktrees-live-inside-the-checkout-under-one-ignored-dir-that-every-scanner-skips
+    event:
+      type: progress
+      ts: "2026-10-12T21:42:40Z"
+      agent_id: linux-yoga-claude-20261012t212331z
+      host: yoga
+      summary: |
+        Slice 1 on work/1637-cnxq at 64ebf73f6 (PR 386, draft): the canonical dir is scratch/ at the checkout root (.gitignore `/scratch/`, `git check-ignore scratch/x` resolves to .gitignore:181), nested fixtures/worktrees/podman/logs; recorded in methodology/multi-host-development.yaml single_checkout_branching with the USER RUNTIME exemption and the SELinux podman-runroot exception. Chosen over the interim target/work because the build-cache sweep's `cargo clean` removes target/ whole (yoga ran one at 20:14Z today, 56.7 GiB), and over work/ because `git checkout work/<order>` is ambiguous once such a path exists. scripts/scratch-dir.sh prints and creates it (honours TMPDIR only when TMPDIR is already inside the checkout). scripts/check-scratch-location-added.sh is diff-scoped including untracked files: an added shell line with a mktemp not routed through scratch, a /tmp or $TMPDIR path, a worktree outside scratch/ or a write to ../ is refused with path:line, why and remedy unless it carries `# scratch-exception:<key>` from scripts/portability/scratch-exceptions.txt (user-runtime, podman-runroot, matcher, preflight-door); an unlisted key is refused. Fixture scripts/test-check-scratch-location-added.sh asserts the premise (the guard sees a planted file) before any refusal, then 16/16 on yoga; the guard on this change answers ok files=1 sites=0 exempt=3; bare-mktemp lua ok 297/297; refusal-affordance, exec-bits, added-test-referenced, sigpipe-added, jq-ratchet, bash-dialect all ok. Gate step 830-1637-cnxq wires the fixture and is single-regime until a darwin or msys host records STEP_SECOND_REGIME (asked of yolanda/macbookair via the coordinator); the PR stays draft until then. Criterion 1 met on the ref; criterion 2 met for NEW sites (the guard); criterion 3 (every scanner skips scratch/: plant a refused file under it and run the roster) and the preflight door's root (build.sh:609 and :1346 still make ${TMPDIR:-/tmp}/pf-guard and preflight.XXXXXX, measured) are slice 2. Measured corpus: 731 mktemp sites in scripts/*.sh, 728 outside the checkout. Relay preflight: refused:relay-preflight:deciders:check-gate-step-regimes at 21:40:53Z, the preflight stops at its first refusal and the refusal is 830-1637-cnxq single-regime (expected until a darwin or msys STEP_SECOND_REGIME); every other decider run by hand on the ref is green (bare-mktemp 297/297, refusal-affordance 2, exec-bits 27, added-test-referenced 1, sigpipe-added 0, jq-ratchet 337/337, bash-dialect clean, scratch-location files=1 exempt=3; fixture 16/16).

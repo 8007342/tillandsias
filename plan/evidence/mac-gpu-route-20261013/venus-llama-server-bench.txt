@@ -1,0 +1,8 @@
+venus-guest run 1: prefill 1030 tok @ 461.1 t/s, decode 128 tok @ 51.4 t/s
+venus-guest run 2: prefill 1029 tok @ 462.2 t/s, decode 128 tok @ 51.9 t/s
+venus-guest run 3: prefill 1030 tok @ 489.1 t/s, decode 128 tok @ 51.8 t/s
+venus-guest run 4: prefill 1030 tok @ 487.5 t/s, decode 128 tok @ 50.7 t/s
+venus-guest run 5: prefill 1030 tok @ 477.2 t/s, decode 128 tok @ 51.5 t/s
+venus-guest prefill t/s: median 477.2 mean 475.4 min 461.1 max 489.1 (n=5)
+venus-guest decode  t/s: median 51.5 mean 51.4 min 50.7 max 51.9 (n=5)
+ok:bench-llama-server:venus-guest on 127.0.0.1:11520

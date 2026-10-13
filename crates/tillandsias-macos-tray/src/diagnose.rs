@@ -712,6 +712,29 @@ fn humanize_age(secs: u64) -> String {
 /// omitted age is read as "just now" by exactly the reader this line is for.
 ///
 /// @trace order:980-ja2m
+/// 1642-cc54 (5b loop guard): how many automatic rebuilds after an unclean stop
+/// have run since the last clean stop. Two or more is the defect the guard
+/// exists to surface: the clean power-off path is likely not being reached.
+pub(crate) fn unclean_rebuild_report_line(image_root: &std::path::Path) -> String {
+    let path = image_root.join(tillandsias_vm_layer::vz::AUTO_REBUILD_RECORD_FILE);
+    let n = std::fs::read_to_string(&path)
+        .map(|s| s.lines().filter(|l| l.starts_with("rebuilt_at ")).count())
+        .unwrap_or(0);
+    match n {
+        0 => "Unclean-stop rebuilds: none since the last clean stop".to_string(),
+        1 => format!(
+            "Unclean-stop rebuilds: 1 since the last clean stop ({})",
+            path.display()
+        ),
+        n => format!(
+            "Unclean-stop rebuilds: {n} IN A ROW since the last clean stop — DEFECT \
+             (1642-cc54): the clean power-off path is likely not reached, so every quit \
+             rebuilds the workspace and loses the sign-ins ({})",
+            path.display()
+        ),
+    }
+}
+
 fn guest_health_report_line() -> String {
     let verdict = guest_health_verdict();
     let path = crashloop_state_path();
@@ -1173,6 +1196,7 @@ fn print_human(r: &DiagnoseReport) {
     println!("{}", provision_report_line());
     println!("{}", guest_state_report_line_at(unix_now_secs()));
     println!("{}", guest_health_report_line());
+    println!("{}", unclean_rebuild_report_line(&image_root()));
     println!("No live probe was made; this report cannot contact the guest.");
     println!();
     // 701-kgvk. The guest reinstalls its headless binary from the staged copy on
@@ -1355,7 +1379,9 @@ pub fn reset_guest_main() -> i32 {
         env.as_deref(),
         crate::installation_uuid::KEYCHAIN_SERVICE,
         &cache_root,
-        || vz.wipe_provisioned_artifacts().map_err(|e| e.to_string()),
+        // 1642-cc54: HARD is the one reset that destroys identity, so the
+        // kept identity disk goes with the rootfs here and nowhere else.
+        || crate::reset_state::hard_wipe(&vz),
     ) {
         eprintln!("[reset-guest] RESULT: FAILED \u{2014} {err}");
         return 1;

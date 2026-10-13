@@ -1,0 +1,49 @@
+// 1656-tjv4 live-test probe, run INSIDE the WebKit window container (same
+// /etc/hosts, same network, same read-only trust bundle) by
+// browser_open::tests::live_webkit_window_for_an_apple_preset. Headless WebKit,
+// so it measures the engine's own name resolution, routing and cert checks.
+'use strict';
+const { webkit } = require('/usr/local/lib/node_modules/playwright');
+const https = require('https');
+const tls = require('tls');
+const port = process.env.PROBE_PREVIEW_PORT;
+const pem = (k) => process.env[k].replace(/\\n/g, '\n');
+function serve(certKey, keyKey, p) {
+  return new Promise((ok) => https.createServer({ cert: pem(certKey), key: pem(keyKey) },
+    (q, r) => { r.end('<title>local</title>LOCAL-OK'); }).listen(p, '127.0.0.1', ok));
+}
+function raw(host, sni, hostHeader) {
+  return new Promise((ok) => {
+    const s = tls.connect({ host, port: Number(port), servername: sni, rejectUnauthorized: false }, () => {
+      s.write(`GET / HTTP/1.1\r\nHost: ${hostHeader}\r\nConnection: close\r\n\r\n`);
+    });
+    let b = ''; s.on('data', (d) => (b += d)); s.on('end', () => ok(b.split('\r\n')[0] + ' ' + (b.match(/PREVIEW-\w+/) || [''])[0]));
+    s.on('error', (e) => ok(`ERR ${e.code || e.message}`)); s.setTimeout(8000, () => { s.destroy(); ok('ERR timeout'); });
+  });
+}
+(async () => {
+  await serve('PROBE_ENCLAVE_LEAF', 'PROBE_ENCLAVE_KEY', 9443);
+  await serve('PROBE_FOREIGN_LEAF', 'PROBE_FOREIGN_KEY', 9444);
+  const b = await webkit.launch({ headless: true });
+  const ctx = await b.newContext();
+  const page = await ctx.newPage();
+  const visit = async (label, url) => {
+    try {
+      const r = await page.goto(url, { timeout: 15000 });
+      const body = (await page.content()).replace(/\s+/g, ' ');
+      console.log(`${label} status=${r ? r.status() : 'none'} ${(body.match(/PREVIEW-\w+|LOCAL-OK/) || ['no-marker'])[0]}`);
+    } catch (e) { console.log(`${label} FAILED ${String(e.message).split('\n')[0]}`); }
+  };
+  await visit('webkit-own-project', `https://www.demo.localhost:${port}/`);
+  await visit('webkit-other-project', `https://www.other.localhost:${port}/`);
+  await visit('webkit-external-name', 'https://example.com/');
+  await visit('webkit-raw-ip', 'https://1.1.1.1/');
+  await visit('webkit-enclave-ca-cert', 'https://localhost:9443/');
+  await visit('webkit-foreign-ca-cert', 'https://localhost:9444/');
+  console.log(`webkit-ua ${await page.evaluate(() => navigator.userAgent)}`);
+  await b.close();
+  console.log(`raw-own-project ${await raw('www.demo.localhost', 'www.demo.localhost', `www.demo.localhost:${port}`)}`);
+  console.log(`raw-sni-other-project ${await raw('www.demo.localhost', 'www.other.localhost', `www.other.localhost:${port}`)}`);
+  console.log(`raw-host-other-project ${await raw('www.demo.localhost', 'www.demo.localhost', `www.other.localhost:${port}`)}`);
+  process.exit(0); // the two local https servers would keep node alive
+})().catch((e) => { console.log(`probe-error ${e.message}`); process.exit(1); });

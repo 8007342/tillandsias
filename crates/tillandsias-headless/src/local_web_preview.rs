@@ -540,7 +540,12 @@ fn build_local_preview_run_args(
         "--label".into(),
         format!("{PROFILE}={}", profile.name()),
     ];
+    let mut runtime_name: Option<&str> = None;
     for mount in mounts {
+        if let Some(name) = mount.strip_prefix("approved-config-name:") {
+            runtime_name = Some(name);
+            continue;
+        }
         if let Some(config) = mount.strip_prefix("approved-config:") {
             args.extend([
                 "--env".into(),
@@ -551,11 +556,12 @@ fn build_local_preview_run_args(
         args.extend(["--mount".into(), mount.clone()]);
     }
     if let Profile::Wrangler(config) = profile {
+        let runtime_config = runtime_name.unwrap_or(config);
         args.extend([
             "--label".into(),
             format!("{CONFIG}={config}"),
             "--env".into(),
-            format!("TILLANDSIAS_WRANGLER_CONFIG={config}"),
+            format!("TILLANDSIAS_WRANGLER_CONFIG={runtime_config}"),
             "--env".into(),
             "HOME=/tmp/home".into(),
             "--env".into(),
@@ -580,7 +586,7 @@ fn build_local_preview_run_args(
             "--port".into(),
             "8080".into(),
             "--config".into(),
-            format!("/srv/preview/{config}"),
+            format!("/srv/preview/{}", runtime_name.unwrap_or(config)),
             "--persist-to".into(),
             "/tmp/wrangler-state".into(),
         ]);
@@ -692,7 +698,22 @@ const c = unstable_readConfig({config: snapshot});
 function remote(v) { return v && typeof v === 'object' && (v.remote === true || Object.values(v).some(remote)); }
 function relative(p) { return p ? p.replace(/^\/tmp\/approved\//, '') : null; }
 const build = typeof c.build?.command === 'string' && c.build.command.trim() ? c.build.command.trim() : null;
-console.log(JSON.stringify({remote:remote(c), assets:relative(c.assets?.directory), main:relative(c.main), build, raw}));
+// 1663-6mns: `wrangler dev` RUNS build.command at startup (measured: "[custom
+// build] Running: ..."), inside the preview container where only the assets
+// subset is mounted and there is no network: the build fails and the runtime
+// exits. The agent builds in its forge (assets_absent says so); the runtime
+// must not run project commands. So the runtime gets the config WITHOUT
+// build (top level and every env), as JSON; a TOML name gains .json.
+const parsed = require('/opt/tillandsias/wrangler/node_modules/wrangler').experimental_readRawConfig({config: snapshot}).rawConfig;
+const hasBuild = (o) => o && typeof o === 'object' && ('build' in o || Object.values(o.env || {}).some((e) => e && 'build' in e));
+let runtime = raw, runtimeName = path.basename(process.argv[1]);
+if (hasBuild(parsed)) {
+  delete parsed.build;
+  for (const e of Object.values(parsed.env || {})) if (e && typeof e === 'object') delete e.build;
+  runtime = JSON.stringify(parsed);
+  if (!/\.jsonc?$/.test(runtimeName)) runtimeName += '.json';
+}
+console.log(JSON.stringify({remote:remote(c), assets:relative(c.assets?.directory), main:relative(c.main), build, raw:runtime, runtime_name:runtimeName}));
 "#;
 
 /// 1625-6iwd: the static profile found nothing to serve. A SOURCE-SELECTION
@@ -722,6 +743,9 @@ struct WranglerConfig {
     main: Option<String>,
     build: Option<String>,
     raw: String,
+    /// The runtime config's file name: the project's, or `<name>.json` when
+    /// the build had to be stripped from a TOML config (1663-6mns).
+    runtime_name: String,
 }
 
 fn inspect_wrangler_config(live: &LiveSource, config: &str) -> Result<WranglerConfig, String> {
@@ -775,6 +799,21 @@ fn inspect_wrangler_config(live: &LiveSource, config: &str) -> Result<WranglerCo
         main: text_field("main"),
         build: text_field("build"),
         raw: text_field("raw").ok_or("invalid_runtime: approved config unavailable")?,
+        // Absent: the project's own name (nothing was stripped). Present: a
+        // plain file name only, since it becomes a path under /srv/preview.
+        runtime_name: match text_field("runtime_name") {
+            None => config.to_string(),
+            Some(n)
+                if !n.is_empty()
+                    && n.len() <= 64
+                    && n.bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
+                    && !n.starts_with('.') =>
+            {
+                n
+            }
+            Some(_) => return Err("invalid_runtime: approved config name unavailable".into()),
+        },
     })
 }
 
@@ -905,7 +944,10 @@ fn source_mounts(live: &LiveSource, profile: &Profile) -> Result<Vec<String>, St
                     "remote_binding_forbidden: local preview refuses remote bindings".into(),
                 );
             }
-            let mut mounts = vec![format!("approved-config:{}", parsed.raw)];
+            let mut mounts = vec![
+                format!("approved-config:{}", parsed.raw),
+                format!("approved-config-name:{}", parsed.runtime_name),
+            ];
             if let Some(assets) = parsed.assets.as_deref() {
                 let relative = safe_relative(assets)?;
                 if !source_exists(live, &relative, "-d")? {
@@ -961,7 +1003,7 @@ fn router_dir() -> PathBuf {
     crate::router_dynamic_caddyfile_host_path()
 }
 
-fn tls_port() -> Result<u16, String> {
+pub(crate) fn tls_port() -> Result<u16, String> {
     std::fs::read_to_string(router_dir().join("preview-tls-port"))
         .ok()
         .and_then(|s| s.trim().parse().ok())
@@ -1061,6 +1103,21 @@ fn prepare_tls(project: &str, ca: &Path) -> Result<(), String> {
     for args in certificate_args(&host, &crt, &csr, &key, ca, &ext) {
         host_command(&args)?;
     }
+    // Order 1649-xqet: the router serves the leaf as a FULL CHAIN (leaf, then
+    // the enclave CA). A browser.open window trusts the CA through an SPKI pin,
+    // and Chromium honours the pin only for a key in the chain the server
+    // sends: a leaf-only chain fails with ERR_CERT_AUTHORITY_INVALID (measured
+    // 2026-10-12). Pinning the CA rather than the leaf survives leaf rotation.
+    let mut chain =
+        std::fs::read(&crt).map_err(|_| "router_not_ready: leaf certificate unreadable")?;
+    if !chain.ends_with(b"\n") {
+        chain.push(b'\n');
+    }
+    chain.extend(
+        std::fs::read(ca.join("intermediate.crt"))
+            .map_err(|_| "router_not_ready: CA certificate unavailable")?,
+    );
+    std::fs::write(&crt, chain).map_err(|_| "router_not_ready: leaf chain unwritable")?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -2280,6 +2337,49 @@ mod tests {
         test(&log)
     }
 
+    /// 1626-r4xm: the preview's validation sites (validate_identity behind
+    /// publish/status/stop, and unique_live_instance) admit the project a lane
+    /// was launched for outside the root, and still refuse any other outside
+    /// label before Podman is asked anything.
+    #[test]
+    fn preview_admits_the_launched_outside_project_and_no_other() {
+        let elsewhere = tempfile::tempdir().unwrap();
+        let launched = elsewhere.path().join("r4xm-preview");
+        std::fs::create_dir_all(&launched).unwrap();
+        std::fs::create_dir_all(elsewhere.path().join("r4xm-preview-other")).unwrap();
+        let launched = launched.canonicalize().unwrap();
+        with_stub("exit 0", |log| {
+            let refused = validate_identity("r4xm-preview", "default").unwrap_err();
+            assert!(refused.contains("is not a known project"), "RED: {refused}");
+
+            crate::local_projects::bind_launched_project("r4xm-preview", &launched).unwrap();
+            validate_identity("r4xm-preview", "default").expect("GREEN: admitted");
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            assert_eq!(
+                rt.block_on(status("r4xm-preview", "default")).unwrap()["state"],
+                "stopped"
+            );
+            let live = unique_live_instance("r4xm-preview").unwrap_err();
+            assert!(
+                live.contains("no live forge lane"),
+                "past the label guard: {live}"
+            );
+
+            let calls_before = std::fs::read_to_string(log).unwrap_or_default();
+            for err in [
+                validate_identity("r4xm-preview-other", "default").unwrap_err(),
+                unique_live_instance("r4xm-preview-other").unwrap_err(),
+            ] {
+                assert!(err.contains("is not a known project"), "NEGATIVE: {err}");
+            }
+            assert_eq!(
+                std::fs::read_to_string(log).unwrap_or_default(),
+                calls_before,
+                "a refused label never reaches Podman"
+            );
+        });
+    }
+
     #[test]
     fn inspect_failure_is_unknown_not_confirmed_absence() {
         with_stub("exit 125", |_| {
@@ -2469,6 +2569,64 @@ mod tests {
         assert!(safe_relative(".").is_err());
         assert!(safe_relative("../other").is_err());
         assert!(safe_relative(".env").is_err());
+    }
+
+    /// Order 1663-6mns: a config whose build had to be stripped runs under
+    /// the inspector's runtime name, for both the written file and --config;
+    /// the label keeps the project's own name.
+    #[test]
+    fn a_stripped_runtime_config_runs_under_its_runtime_name() {
+        let live = LiveSource {
+            forge_id: "launch-a".into(),
+            volume: "ram-volume".into(),
+            generation: "launch-generation".into(),
+            project: "proj".into(),
+            configs: vec![],
+        };
+        let mount = subset_mount(
+            &live,
+            "arkanoid-web-game/public",
+            "/srv/preview/arkanoid-web-game/public",
+        )
+        .unwrap();
+        let args = build_local_preview_run_args(
+            "tillandsias-proj-web",
+            &live,
+            "w1",
+            &Profile::Wrangler("wrangler.toml".into()),
+            &[
+                mount,
+                "approved-config:{\"assets\":{\"directory\":\"arkanoid-web-game/public\"}}".into(),
+                "approved-config-name:wrangler.toml.json".into(),
+            ],
+        );
+        let joined = args.join(" ");
+        assert!(
+            joined.contains("TILLANDSIAS_WRANGLER_CONFIG=wrangler.toml.json"),
+            "{joined}"
+        );
+        assert!(
+            joined.contains("--config /srv/preview/wrangler.toml.json"),
+            "{joined}"
+        );
+        assert!(
+            !joined.contains("approved-config-name"),
+            "the name is not a mount: {joined}"
+        );
+        assert!(
+            joined.contains("volume-subpath=proj/arkanoid-web-game/public,readonly=true"),
+            "{joined}"
+        );
+    }
+
+    /// The inspector strips build from the runtime config (wrangler dev runs
+    /// build.command at startup, measured) and names a TOML runtime .json.
+    #[test]
+    fn the_inspector_strips_build_from_the_runtime_config() {
+        assert!(CONFIG_INSPECTOR.contains("experimental_readRawConfig"));
+        assert!(CONFIG_INSPECTOR.contains("delete parsed.build;"));
+        assert!(CONFIG_INSPECTOR.contains("delete e.build;"));
+        assert!(CONFIG_INSPECTOR.contains("raw:runtime, runtime_name:runtimeName"));
     }
 
     #[test]

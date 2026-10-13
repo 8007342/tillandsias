@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-mandated-cache-sweep-destroys-the-mandated-failure-log
+    field: status
+    value: completed
+    ts: "2026-10-13T15:53:13Z"
+    host: yoga
+
+events:
+  - packet_id: the-mandated-cache-sweep-destroys-the-mandated-failure-log
+    event:
+      type: completed
+      ts: "2026-10-13T15:53:13Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 40f1c5805
+  - packet_id: the-mandated-cache-sweep-destroys-the-mandated-failure-log
+    event:
+      type: note
+      ts: "2026-10-13T15:53:13Z"
+      host: yoga
+      summary: |-
+        landed on origin/linux-next as 40f1c5805 (queue merge e8eafcf3f, PR 402 merged 15:47:53Z); artifacts verified by ls-tree on origin; closure cites the landed sha

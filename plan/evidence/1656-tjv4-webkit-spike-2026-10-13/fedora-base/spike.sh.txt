@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# 1656-tjv4 measure-first spike (evidence, not shipped). On a PRIVATE store:
+# does Playwright's Linux WebKit run in the Fedora-based chromium-framework
+# image, headless and then headful with ONLY the Wayland socket file mounted?
+set -u
+REPO="$(cd "$(dirname "$0")/../../.." && pwd)"
+HERE="$REPO/target/work/webkit"; OUT="$HERE/out"; rm -rf "$OUT"; mkdir -p "$OUT"
+FW=localhost/tillandsias-chromium-framework:v56.9.27.2
+OP_ENV=(env -u CONTAINERS_STORAGE_CONF -u CONTAINERS_CONF -u REGISTRY_AUTH_FILE -u XDG_CACHE_HOME "HOME=$HOME")
+[ -z "${CONTAINERS_STORAGE_CONF:-}${CONTAINERS_CONF:-}" ] || { echo "ABORT: plain shell only"; exit 3; }
+log() { echo "$*" >> "$OUT/summary.txt"; echo "$*"; }
+op_state() {
+    local c; for c in tillandsias-inference tillandsias-dev-inference tillandsias-router; do
+        "${OP_ENV[@]}" podman inspect --format '{{.Name}} {{.Id}} {{.State.Status}} {{.State.StartedAt}}' "$c" 2>&1; done
+    "${OP_ENV[@]}" podman network ls --format '{{.Name}}' 2>&1 | sort
+    "${OP_ENV[@]}" podman images --format '{{.Repository}}:{{.Tag}} {{.ID}}' 2>&1 | sort
+}
+op_state > "$OUT/op-before"
+S="$(mktemp -d "$HERE/run.XXXXXX")"; R="$(mktemp -d "${XDG_RUNTIME_DIR:?}/tillandsias-webkit.XXXXXX")"
+mkdir -p "$S/graph" "$R/run" "$R/tmp" "$S/home" "$S/pw"
+printf '%s\n' '[storage]' 'driver = "overlay"' "graphroot = \"$S/graph\"" "runroot = \"$R/run\"" > "$S/storage.conf"
+printf '%s\n' '[engine]' 'cgroup_manager = "cgroupfs"' 'events_logger = "file"' "events_logfile_path = \"$S/events.log\"" "tmp_dir = \"$R/tmp\"" > "$S/containers.conf"
+"${OP_ENV[@]}" podman save --format oci-archive -o "$S/fw.tar" "$FW" > /dev/null || exit 1
+WAYLAND_SOCK="$XDG_RUNTIME_DIR/${WAYLAND_DISPLAY:-wayland-0}"
+export CONTAINERS_STORAGE_CONF="$S/storage.conf" CONTAINERS_CONF="$S/containers.conf" REGISTRY_AUTH_FILE="$S/auth.json" HOME="$S/home"
+unset XDG_CACHE_HOME
+guard() { local g; g="$(podman info --format '{{.Store.GraphRoot}}' 2>/dev/null)"; [ "$g" = "$S/graph" ] || { echo "ABORT: store is '$g'"; exit 3; }; }
+guard; podman load -q -i "$S/fw.tar" > /dev/null && rm -f "$S/fw.tar"
+log "playwright: $(podman run --rm --pull=never --entrypoint sh "$FW" -c 'playwright --version 2>/dev/null || npx playwright --version' 2>&1 | tail -1)"
+
+# 1. Download Playwright's WebKit into a host-side scratch dir (network on).
+guard
+WK_URL=https://cdn.playwright.dev/builds/webkit/2359/webkit-ubuntu-24.04.zip
+WK_MD5_B64=y9X8s6O0bNaY9GpQB/7z7Q==
+# Playwright's own downloader failed every attempt ~5 s in (install-playwright.txt);
+# curl reaches the same URL, so fetch it, check the CDN's content-md5, and lay
+# it out where Playwright looks (PLAYWRIGHT_BROWSERS_PATH/webkit-2359).
+podman run --rm --pull=never --entrypoint sh -e PLAYWRIGHT_BROWSERS_PATH=/pw -e DEBUG=pw:install "$FW" \
+    -c 'cat /etc/os-release | head -3; timeout 60 playwright install webkit 2>&1 | grep -E "BEWARE|Downloading|attempt|FAILED" | head -8' > "$OUT/install-playwright.txt" 2>&1
+curl -sS -m 600 -o "$S/webkit.zip" "$WK_URL"; log "curl rc=$? bytes=$(stat -c %s "$S/webkit.zip" 2>/dev/null)"
+got=$(openssl dgst -md5 -binary "$S/webkit.zip" | base64); log "md5 want=$WK_MD5_B64 got=$got"
+if [ "$got" = "$WK_MD5_B64" ]; then
+    mkdir "$S/pw/webkit-2359" && unzip -q "$S/webkit.zip" -d "$S/pw/webkit-2359"
+else log "md5 MISMATCH: not extracted"; fi
+rm -f "$S/webkit.zip"
+: > "$S/pw/webkit-2359/INSTALLATION_COMPLETE"; : > "$S/pw/webkit-2359/DEPENDENCIES_VALIDATED"
+log "install bytes=$(du -sb "$S/pw" | cut -f1) top=$(ls "$S/pw/webkit-2359" | tr '\n' ' ')"
+MB="$(find "$S/pw" -name MiniBrowser -type f 2>/dev/null | head -1)"; log "minibrowser ${MB#$S/pw/}"
+
+# 2. Missing shared libraries in the Fedora image.
+guard
+podman run --rm --pull=never --user root --entrypoint sh -v "$S/pw:/pw:ro,z" "$FW" -c '
+  for f in $(find /pw -type f \( -name "*.so*" -o -name MiniBrowser -o -name "WebKit*Process" \) 2>/dev/null); do ldd "$f" 2>/dev/null | grep "not found"; done | sort -u' > "$OUT/missing-libs.txt" 2>&1
+log "missing-libs $(wc -l < "$OUT/missing-libs.txt"): $(awk '{print $1}' "$OUT/missing-libs.txt" | tr '\n' ' ')"
+
+# 3. Headless: launch, evaluate UA (no network needed: data: URL).
+cat > "$S/probe.js" <<'JS'
+const { webkit } = require('/usr/lib/node_modules/playwright');
+(async () => {
+  const headless = process.env.PW_HEADLESS !== '0';
+  const t0 = Date.now();
+  try {
+    const b = await webkit.launch({ headless, timeout: 30000 });
+    const p = await b.newPage();
+    await p.goto('data:text/html,<title>wk</title><p>日本語 😀</p>');
+    const ua = await p.evaluate(() => navigator.userAgent);
+    console.log(`launch headless=${headless} ok ms=${Date.now() - t0}`);
+    console.log(`ua ${ua}`);
+    if (!headless) await new Promise(r => setTimeout(r, 3000));
+    await b.close();
+  } catch (e) { console.log(`launch headless=${headless} FAILED ${String(e.message || e).split('\n').slice(0, 8).join(' | ')}`); process.exitCode = 1; }
+})();
+JS
+guard
+podman run --rm --pull=never --network none --cap-drop=ALL --security-opt=no-new-privileges --userns=keep-id --read-only \
+    --tmpfs /tmp:size=256m -e HOME=/tmp -e PLAYWRIGHT_BROWSERS_PATH=/pw -e PW_HEADLESS=1 \
+    -v "$S/pw:/pw:ro,z" -v "$S/probe.js:/probe.js:ro,z" --entrypoint node "$FW" /probe.js > "$OUT/headless.txt" 2>&1
+log "headless rc=$?: $(tr '\n' ' ' < "$OUT/headless.txt" | cut -c1-400)"
+
+# 4. Headful, Wayland ONLY: just the socket file in a private runtime dir.
+if [ -S "$WAYLAND_SOCK" ]; then
+  guard
+  podman run --rm --pull=never --network none --cap-drop=ALL --security-opt=no-new-privileges --userns=keep-id --read-only \
+    --tmpfs /tmp:size=256m --tmpfs /run/user/browser:size=1m,mode=0755 \
+    -v "$WAYLAND_SOCK:/run/user/browser/wayland-0:rw" -e XDG_RUNTIME_DIR=/run/user/browser -e WAYLAND_DISPLAY=wayland-0 \
+    -e GDK_BACKEND=wayland -e HOME=/tmp -e PLAYWRIGHT_BROWSERS_PATH=/pw -e PW_HEADLESS=0 \
+    -v "$S/pw:/pw:ro,z" -v "$S/probe.js:/probe.js:ro,z" --entrypoint node "$FW" /probe.js > "$OUT/headful.txt" 2>&1
+  log "headful-wayland rc=$?: $(tr '\n' ' ' < "$OUT/headful.txt" | cut -c1-400)"
+else log "headful-wayland skipped: no socket at $WAYLAND_SOCK"; fi
+
+guard
+podman rm -a -f -t 0 > /dev/null 2>&1; podman rmi -a -f > /dev/null 2>&1
+podman unshare sh -c "umount -l '$S/graph/overlay' 2>/dev/null; rm -rf '$S/graph' '$R/run' '$R/tmp' '$S/pw'"
+find "$R" -delete 2>/dev/null; find "$S" -delete 2>/dev/null
+export HOME="$(getent passwd "$(id -u)" | cut -d: -f6)"; unset CONTAINERS_STORAGE_CONF CONTAINERS_CONF REGISTRY_AUTH_FILE
+op_state > "$OUT/op-after"
+cmp -s "$OUT/op-before" "$OUT/op-after" && log "op: unchanged" || { log "op: CHANGED"; diff "$OUT/op-before" "$OUT/op-after" | tee -a "$OUT/summary.txt"; }

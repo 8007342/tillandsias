@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: 793-a8e7-s2-probe-judges-the-wsl2-gpu-from-the-container
+    field: status
+    value: completed
+    ts: "2026-10-13T00:29:23Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: 793-a8e7-s2-probe-judges-the-wsl2-gpu-from-the-container
+    event:
+      type: completed
+      ts: "2026-10-13T00:29:23Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: d67540adf (#389, run 59): container-side Dozen enumeration makes the opted-in dxg GPU usable (live on yolanda: Microsoft Direct3D12 AMD Radeon 860M, accel_class!=cpu-only); measurement carry pinned by reprobing_an_opted_in_doc_keeps_its_measurements

@@ -11,9 +11,10 @@ pub mod cdp_client;
 pub mod framing;
 pub mod launcher;
 pub mod server;
+pub mod window_cdp;
 pub mod window_registry;
 
-pub use cdp_client::{CdpConnectionPool, CdpSession};
+pub use cdp_client::CdpConnection;
 pub use server::{BrowserMcpServer, McpServerConfig};
 
 // Order 779-dqsv: the per-session concurrent-call limit (DEFAULT_CONCURRENT_CALLS)

@@ -1,6 +1,6 @@
 -- @env TILLANDSIAS_INSTALLER_OUTPUT_ROOT
 -- @read-env TILLANDSIAS_INSTALLER_OUTPUT_ROOT
--- @trace order:1561-9f4x, order:1561-47a8, spec:host-state-lifecycle
+-- @trace order:1561-9f4x, order:1561-47a8, order:1639-8gfw, spec:host-state-lifecycle
 --
 -- check-installer-end-user-output.lua — the END-USER installers print only
 -- end-user lines. Operator ruling 2026-10-08, verbatim: "we do not need to print
@@ -13,16 +13,27 @@
 -- the shell-to-Lua backlog the carried obligation burns down).
 --
 -- A DIAGNOSTIC OUTPUT LINE is a user-facing output statement whose text names a
--- --flag, a TILLANDSIAS_* variable, a URL, a channel or a base. Output
+-- --flag, a TILLANDSIAS_* variable, a URL, a channel or a base. In a PowerShell
+-- installer it is ALSO one that prints power-user DETAIL (order 1639-8gfw, found
+-- on a real v56.10.12.1 install after 1561-47a8 had reached floor 0): a path,
+-- binary or version variable ($Installed*, $*Path, $*Exe, $*Dir, $*Lnk,
+-- $*Backup, $*Headless, $VerLine, $*Version), Installed-Software registration
+-- text, the capability probe, an order id, a "removed <thing>" uninstall
+-- detail, or a "Use -<Param>" hint. The log path ($InstallLog) is allowed: a
+-- failure line shows it by path. Also counted: the literal PENDING: none
+-- anywhere in code, because an empty PENDING ACTIONS box is not end-user
+-- output (the banner prints only when something is pending). This vocabulary
+-- is PowerShell-only: the shell installers keep their floors until their 1561
+-- slices measure them. Output
 -- statements: Say / SayOk / SayWn / Write-Host / Die in PowerShell; say / die /
 -- echo / printf in shell. Comments are stripped first (a `#` at the start of a
--- line or after whitespace; PowerShell `<# ... #>` blocks whole). Two
--- exemptions, both visible in the source:
+-- line or after whitespace; PowerShell `<# ... #>` blocks whole). One
+-- exemption, visible in the source:
 --   - a line marked `# power-user-only`: reachable only when a power user passes
---     a bad flag (usage and argument errors), never on the normal path;
---   - a region between `# BEGIN-PENDING-1560-UAM3` and `# END-PENDING-1560-UAM3`:
---     the .wslconfig and Hyper-V prompt blocks the operator left "for now";
---     their removal (1560-uam3) removes the markers and the text with them.
+--     a bad flag (usage and argument errors), never on the normal path.
+-- (A second exemption, the BEGIN/END-PENDING-1560-UAM3 regions around the two
+-- prompts the operator left "for now", went with those regions in 1560-uam3,
+-- 2026-10-12; a marker of that name now exempts nothing.)
 -- Diagnostics belong in the installer's log file, shown by path on failure.
 --
 -- FLOORS: scripts/portability/installer-end-user-output-floor.txt, one
@@ -54,6 +65,8 @@ end
 local PS_OUT = [[(^|[\s;{(])(Say|SayOk|SayWn|Write-Host|Die)\s]]
 local SH_OUT = [[(^|[\s;{(|&])(say|die|echo|printf)\s]]
 local DIAG = [[--[a-z]|TILLANDSIAS_|https?:|[Cc]hannel|base:]]
+local PS_DETAIL = [=[\$\{?(Installed[A-Za-z]*|[A-Za-z]*(Path|Exe|Dir|Lnk|Backup|Headless)|VerLine|[A-Za-z]*Version)\b|Installed[ -]Software|capability probe|\(\d{3,4}-[a-z0-9]{4}\)|"\s*(removed|unregistered)\s|Use -[A-Z]]=]
+local PS_EMPTY_BANNER = "PENDING: none"
 
 -- The line with its comment removed: from the first `#` that starts the line
 -- or follows whitespace (the awk the first draft carried, kept exactly).
@@ -72,19 +85,16 @@ end
 local function diagnostic_lines(f, src)
     local ps = text.is_match(f, [[\.ps1$]])
     local hits = {}
-    local blk, pend = false, false
+    local blk = false
     for n, line in ipairs(text.lines(src)) do
         if text.is_match(line, [[^<#]]) then blk = true end
         if blk then
             if string.find(line, "#>", 1, true) then blk = false end
-        elseif text.is_match(line, [[#\s*BEGIN-PENDING-1560-UAM3]]) then
-            pend = true
-        elseif text.is_match(line, [[#\s*END-PENDING-1560-UAM3]]) then
-            pend = false
-        elseif not pend and not text.is_match(line, [[#\s*power-user-only]]) then
+        elseif not text.is_match(line, [[#\s*power-user-only]]) then
             local code = strip_comment(line)
             local is_out = ps and text.is_match(code, PS_OUT) or (not ps and text.is_match(code, SH_OUT))
-            if is_out and text.is_match(code, DIAG) then
+            if (is_out and (text.is_match(code, DIAG) or (ps and text.is_match(code, PS_DETAIL))))
+                or (ps and text.contains(code, PS_EMPTY_BANNER)) then
                 hits[#hits + 1] = f .. ":" .. n
             end
         end

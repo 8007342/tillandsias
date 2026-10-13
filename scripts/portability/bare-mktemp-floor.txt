@@ -48,7 +48,6 @@ scripts/materialize-macos-tar-to-img.sh 1
 scripts/measure-inference-tier.sh 1
 scripts/nix-build-container.sh 2
 scripts/preflight-fixtures-default-target.sh 1
-scripts/query-traces.sh 2
 scripts/refusal-calibration/apply-relabelled-561.sh 1
 scripts/scan-litmus-expression-pinning.sh 1
 scripts/select-work-batch.sh 4

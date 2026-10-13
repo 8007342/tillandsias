@@ -161,8 +161,25 @@ the distro; neither can be pointed elsewhere. Ownership therefore means:
    (`# >>> tillandsias >>>` … `# <<< tillandsias <<<`), idempotently: a second
    run changes nothing; a changed canonical value updates the block and only
    the block. `Get-WslConfigMerge` is the merge and stays pure. A key the user
-   set outside the block MUST NOT be rewritten; the existing consent prompt
-   (`TILLANDSIAS_WSLCONFIG=apply` or the interactive `[y/N]`) stays.
+   set outside the block MUST NOT be rewritten, EXCEPT a value that breaks a
+   hard requirement (below).
+   AMENDED 2026-10-12 (order 1560-uam3; operator: "HyperV and SWAP should not
+   be prompts, our install should add them forcibly as they're hard
+   requirements ... as well as the custom wsl.config file with progressive
+   memory reap setting that we shouyd ensure is present in user's runtime, at
+   least for our own VM"). The consent prompt (`TILLANDSIAS_WSLCONFIG=apply` or
+   the interactive `[y/N]`) is REMOVED. The swap and memory-reclaim keys are
+   hard requirements and MUST be ensured without asking, by the installer and
+   again by the tray at startup: an absent key is added; a present value that
+   breaks a requirement (swap below the 8 GB floor, including `swap=0`;
+   `sparseVhd` other than `true`; `autoMemoryReclaim` other than `gradual`) is
+   replaced, with the file backed up first and the change recorded in the
+   install or tray log, not on screen. `memory` and `processors` stay the
+   user's. The keys take effect at the next start of WSL's ONE shared utility
+   VM: `.wslconfig` is global, so "our VM" is that shared VM, and swap and
+   memory reclaim have no per-distro equivalent. `wsl --shutdown` MUST NOT be
+   forced while any other distro is running; it is allowed only when the
+   `tillandsias` distro is the sole running one.
 3. `/etc/wsl.conf` inside the `tillandsias` distro MUST be provisioned by
    Tillandsias from its own template on every provision (`[boot] systemd=true`
    and whatever Requirement 1 needs), never inherited from the rootfs image's
@@ -170,7 +187,8 @@ the distro; neither can be pointed elsewhere. Ownership therefore means:
 4. Uninstall MUST remove the marked block from `%USERPROFILE%\.wslconfig` and
    leave every other line byte-identical; it MUST NOT delete the file.
 
-**Measurable:** `scripts/test-installer-merges-wslconfig-swap-keys.sh` gains
+**Measurable:** `scripts/lua/test-installer-merges-wslconfig-swap-keys.lua` (ported from the
+.sh by 1560-uam3, which added the hard-requirement arms) gains
 arms: (a) two merges are idempotent (second output equals first); (b) a user
 key outside the block survives a merge with a changed canonical value; (c) the
 un-merge removes exactly the block. Pre-fix result: (a) passes, (b) and (c)
