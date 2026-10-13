@@ -25558,6 +25558,49 @@ mod tests {
         );
     }
 
+    /// Order 1668-8jmq: every agent lane carries the signed-in identity as
+    /// TILLANDSIAS_GIT_* (for configure_git_identity to WRITE as config), and
+    /// none carries an exported GIT_AUTHOR_* / GIT_COMMITTER_*.
+    #[test]
+    fn every_forge_agent_lane_carries_the_git_identity() {
+        for mode in [
+            ForgeAgentMode::Claude,
+            ForgeAgentMode::Codex,
+            ForgeAgentMode::OpenCode,
+            ForgeAgentMode::Antigravity,
+            ForgeAgentMode::Maintenance,
+        ] {
+            let argv = build_forge_agent_run_argv(
+                &PathBuf::from("/tmp/project"),
+                "alpha",
+                None,
+                &PathBuf::from(ca_dir()),
+                "1.2.3",
+                mode,
+                false,
+                false,
+                &test_cache_root(),
+            );
+            for key in [
+                "TILLANDSIAS_GIT_NAME=",
+                "TILLANDSIAS_GIT_EMAIL=",
+                "TILLANDSIAS_GIT_HOST=",
+                "TILLANDSIAS_GIT_IDENTITY_SOURCE=",
+            ] {
+                assert!(
+                    argv.iter().any(|arg| arg.starts_with(key)),
+                    "{mode:?} lane must carry {key}: {argv:?}"
+                );
+            }
+            assert!(
+                !argv
+                    .iter()
+                    .any(|arg| arg.starts_with("GIT_AUTHOR_") || arg.starts_with("GIT_COMMITTER_")),
+                "{mode:?} lane must carry no exported GIT_* identity: {argv:?}"
+            );
+        }
+    }
+
     #[test]
     fn shutdown_poll_backoff_doubles_until_capped() {
         assert_eq!(next_shutdown_poll_delay_ms(25), 50);

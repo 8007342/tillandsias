@@ -149,6 +149,36 @@ real_cfg_before="$(git -C "$ROOT" config --local --list 2>/dev/null | grep -E '^
     exit "$FAIL"
 ) || FAIL=1
 
+# ── ARM 7: READ-ONLY ~/.gitconfig (order 1668-8jmq) ─────────────────────────
+# The agent lanes bind-mount the host-written forge gitconfig read-only at
+# ~/.gitconfig, so `git config --global` cannot write it. A planted
+# ~/.gitconfig.lock refuses that write the same way, as root too (the gate's
+# guest runs as root, which a chmod would not stop). The identity must still
+# land, and the mounted file must still be read.
+(
+    export HOME="$scratch/home-ro"; mkdir -p "$HOME"; cd "$scratch" || exit 1
+    unset XDG_CONFIG_HOME
+    printf '[tillandsias]\n\tmounted = yes\n' > "$HOME/.gitconfig"
+    : > "$HOME/.gitconfig.lock"
+    export TILLANDSIAS_GIT_NAME="App User" TILLANDSIAS_GIT_EMAIL="7+appuser@users.noreply.github.com"
+    export TILLANDSIAS_GIT_HOST="lenovinha" TILLANDSIAS_GIT_IDENTITY_SOURCE="github-app"
+    if git config --global user.name probe 2>/dev/null; then
+        bad "ARM7 premise: the planted lock did not refuse a --global write"
+    fi
+    configure_git_identity
+    repo="$scratch/repo-ro"; git init -q "$repo"; cd "$repo" || exit 1
+    ident="$(git var GIT_AUTHOR_IDENT 2>/dev/null | sed 's/ [0-9]* [-+][0-9]*$//')"
+    case "$ident" in
+        "App User (lenovinha · tillandsia-"*") <7+appuser@users.noreply.github.com>")
+            ok "ARM7 with ~/.gitconfig unwritable the identity still lands: $ident" ;;
+        *) bad "ARM7 with ~/.gitconfig unwritable, GIT_AUTHOR_IDENT = '$ident'" ;;
+    esac
+    [ "$(git config --global --get tillandsias.mounted)" = yes ] \
+        && ok "ARM7 the mounted ~/.gitconfig is still read" \
+        || bad "ARM7 the mounted ~/.gitconfig is no longer read"
+    exit "$FAIL"
+) || FAIL=1
+
 # ── ARM 6: the real checkout's config is untouched ──────────────────────────
 real_cfg_after="$(git -C "$ROOT" config --local --list 2>/dev/null | grep -E '^(user|core\.hookspath)' || true)"
 [ "$real_cfg_after" = "$real_cfg_before" ] && ok "ARM6 the real checkout's local user.*/hooksPath config is unchanged" \
