@@ -1,5 +1,6 @@
 # @trace spec:local-web-preview
 # @trace order:1643-q3at (device catalogue and resolver)
+# @trace order:1644-u8b8 (long tail: >= 500 devices, >= 12 makers)
 #
 # The committed device catalogue (crates/tillandsias-core/data/devices/
 # catalogue.json) is GENERATED from vendored inputs by
@@ -32,3 +33,10 @@ critical_path:
     command: "set -u; C=crates/tillandsias-core/data/devices/catalogue.json; n=$(grep -c '^{\"aliases\"' \"$C\"); l=$(grep -c '\"source\":{[^}]*\"license\":\"[^\"]' \"$C\"); u=$(grep -c '\"source\":{[^}]*\"url\":\"[^\"]' \"$C\"); [ \"$n\" -gt 100 ] && [ \"$n\" = \"$l\" ] && [ \"$n\" = \"$u\" ] && echo \"ok: $n devices, each with a source url and licence\" || { echo \"FAIL: devices=$n licence=$l url=$u\"; exit 1; }"
     timeout_ms: 5000
     expected_behavior: "each with a source url and licence"
+
+  - step: "the catalogue covers the long tail: >= 500 devices across >= 12 real makers; negative control: an unmeetable floor must FAIL"
+    # Order 1644-u8b8. The generator counts what it builds (brands exclude the
+    # generic desktop/laptop entries) and refuses below the floor.
+    command: "set -u; out=$(tillandsias-plan script run scripts/lua/build-device-catalogue.lua -- --check --min-devices 500 --min-brands 12 2>&1); case \"$out\" in *ok:device-catalogue:fresh:*) ;; *) echo \"FAIL: coverage: $out\"; exit 1;; esac; neg=$(tillandsias-plan script run scripts/lua/build-device-catalogue.lua -- --check --min-devices 100000 --min-brands 12 2>&1); case \"$neg\" in *violation:device-catalogue:coverage:*) ;; *) echo \"FAIL: negative control passed: $neg\"; exit 1;; esac; echo \"ok: coverage ${out##*fresh:}; unmeetable floor refused\""
+    timeout_ms: 30000
+    expected_behavior: "ok: coverage"

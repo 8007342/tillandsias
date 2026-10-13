@@ -1,0 +1,26 @@
+"""1644-u8b8 scratch: apply the reviewed corrections to researcher files -> fixed/."""
+import sys, yaml
+
+DROP = {
+    "apple-ipad-pro-13-m4": "same device as the existing apple-ipad-pro-13 (2064x2752, 1032x1376 at 2x)",
+    "motorola-moto-g75": "cited page body is headed 'moto g55 5G'; provenance ambiguous",
+}
+BLANK_OS = {"oneplus-pad", "oneplus-pad-2", "oneplus-pad-go", "nothing-phone-2", "nothing-phone-2a",
+            "samsung-galaxy-s24-plus", "samsung-galaxy-s24-ultra"}
+log = []
+for f in sys.argv[1:]:
+    out = []
+    for e in yaml.safe_load(open(f)) or []:
+        i = e["id"]
+        if i in DROP:
+            log.append(f"drop {i}: {DROP[i]}"); continue
+        if i.startswith(("redmi-", "poco-")):
+            e["id"] = "xiaomi-" + i; log.append(f"rename {i} -> {e['id']}")
+        if i in BLANK_OS or i.startswith("oppo-"):
+            if e["os"].get("version"):
+                log.append(f"blank os.version {i} (was {e['os']['version']}: not stated as an Android version on the page)")
+            e["os"]["version"] = ""
+        out.append(e)
+    yaml.safe_dump(out, open(f"fixed/{f}", "w"), sort_keys=False, allow_unicode=True, width=100)
+open("fixup.log", "w").write("\n".join(log) + "\n")
+print(len(log), "corrections")

@@ -29,13 +29,20 @@
 --   … -- --check --against <file>   verify another copy (the litmus negative control)
 -- Verdicts: ok:device-catalogue:written:<n> | ok:device-catalogue:fresh:<n> |
 --           violation:device-catalogue:stale (exit 1) | refused:device-catalogue:<why> (exit 1)
+-- Coverage (order 1644-u8b8): `--min-devices N --min-brands K` add
+--   violation:device-catalogue:coverage:devices=<n>:brands=<k> (exit 1)
+-- when the catalogue holds fewer. Brands count real makers only (not the
+-- generic desktop/laptop/generic entries).
 
 local DIR = "crates/tillandsias-core/data/devices"
 local OUT = DIR .. "/catalogue.json"
 local check, against = false, nil
+local min_devices, min_brands = 0, 0
 for i = 1, #arg do
     if arg[i] == "--check" then check = true end
     if arg[i] == "--against" then against = arg[i + 1] end
+    if arg[i] == "--min-devices" then min_devices = tonumber(arg[i + 1]) or 0 end
+    if arg[i] == "--min-brands" then min_brands = tonumber(arg[i + 1]) or 0 end
 end
 
 local function read(p)
@@ -329,18 +336,77 @@ for _, e in ipairs(dt) do
     end
 end
 
--- Overlay: manufacturer spec pages.
+-- Overlay: manufacturer spec pages (orders 1643-q3at, 1644-u8b8).
+-- An entry states what the maker publishes: physical resolution (screen_px,
+-- portrait for phones/tablets, landscape for laptops), panel size, launch
+-- month, launch OS. The CSS viewport and devicePixelRatio are DERIVED unless
+-- the entry says `published: true` (the maker states points and scale, as
+-- Apple does) or carries its own `dpr` and `derivation`. Derived values are
+-- labelled in source.derivation; published ones carry none.
+local BUCKETS = {
+    phone = { { 720, 2 }, { 1080, 2.625 }, { 1280, 3 }, { math.huge, 3.5 } },
+}
+local function round(x) return math.floor(x + 0.5) end
+local function derive(o)
+    local short = math.min(o.screen_px.w, o.screen_px.h)
+    if o.form == "phone" or o.form == "foldable" then
+        for _, b in ipairs(BUCKETS.phone) do
+            if short <= b[1] then return b[2], overlay.derivation end
+        end
+    elseif o.form == "tablet" then
+        -- Android tablets ship near 800 CSS px on the short side; the nearest
+        -- standard scale to short/800.
+        local best, want = nil, short / 800
+        for _, c in ipairs({ 1.5, 2, 2.25, 2.5, 2.625, 3 }) do
+            if not best or math.abs(c - want) < math.abs(best - want) then best = c end
+        end
+        return best, overlay.derivation_tablet
+    end
+    verdict.emit("refused:device-catalogue:overlay-needs-dpr:" .. o.id, 1)
+end
+local function ua_for(o)
+    local name = o.os.name
+    if name == "android" then
+        return (o.form == "tablet") and overlay.ua.android_tablet or overlay.ua.android
+    end
+    local u = overlay.ua[name]
+    if not u then verdict.emit("refused:device-catalogue:overlay-unknown-os:" .. o.id .. ":" .. tostring(name), 1) end
+    return u
+end
+local REQUIRED = { "id", "brand", "family", "model", "aliases", "form", "os", "screen_px", "panel", "source" }
 for _, o in ipairs(overlay.devices) do
+    for _, k in ipairs(REQUIRED) do
+        if o[k] == nil then verdict.emit("refused:device-catalogue:overlay-missing-" .. k .. ":" .. tostring(o.id), 1) end
+    end
+    if not (o.source.url and o.source.url:match("^https://")) then
+        verdict.emit("refused:device-catalogue:overlay-source-url:" .. o.id, 1)
+    end
+    local dpr, derivation = o.dpr, o.derivation
+    if o.published then
+        if not (o.dpr and o.viewport) then verdict.emit("refused:device-catalogue:overlay-published-needs-dpr-and-viewport:" .. o.id, 1) end
+        derivation = nil
+    elseif not dpr then
+        dpr, derivation = derive(o)
+    elseif not derivation then
+        verdict.emit("refused:device-catalogue:overlay-dpr-without-derivation:" .. o.id, 1)
+    end
+    local vp = o.viewport or { w = round(o.screen_px.w / dpr), h = round(o.screen_px.h / dpr) }
+    local laptop = (o.form == "laptop")
+    local touch = o.touch
+    if touch == nil then touch = not laptop end
     add({
         id = o.id, brand = o.brand, family = o.family, model = o.model,
-        aliases = json.array(o.aliases), form = o.form, os = o.os, engine = o.engine,
-        screen = { w = o.viewport.w, h = o.viewport.h }, viewport = { w = o.viewport.w, h = o.viewport.h },
+        aliases = json.array(o.aliases), form = o.form, os = o.os,
+        engine = o.engine or ((o.os.name == "ios" or o.os.name == "ipados") and "webkit" or "blink"),
+        screen = { w = vp.w, h = vp.h }, viewport = { w = vp.w, h = vp.h },
         screen_px = o.screen_px, panel = o.panel,
-        dpr = o.dpr, ua = overlay.ua_android_reduced,
-        ua_metadata = { platform = "Android", platformVersion = o.os.version, architecture = "", model = "", mobile = true },
-        mobile = o.mobile, touch = o.touch, max_touch_points = o.max_touch_points,
-        source = { kind = o.source.kind, url = o.source.url, license = o.source.license,
-            note = o.source.note, derivation = overlay.derivation },
+        dpr = dpr, ua = ua_for(o),
+        ua_metadata = (o.os.name == "android") and { platform = "Android", platformVersion = o.os.version, architecture = "", model = "", mobile = (o.form ~= "tablet") } or nil,
+        mobile = not laptop, touch = touch,
+        max_touch_points = touch and 10 or 0,
+        released = o.released, flagship = o.flagship or nil,
+        source = { kind = "manufacturer-spec", url = o.source.url, license = "manufacturer-published facts",
+            note = o.source.note, derivation = derivation },
     })
 end
 
@@ -377,11 +443,24 @@ lines[#lines + 1] = "]"
 lines[#lines + 1] = "}"
 local text_out = table.concat(lines, "\n") .. "\n"
 
+-- Coverage, counted over what was built (order 1644-u8b8).
+local PLACEHOLDER = { desktop = true, laptop = true, generic = true }
+local brand_set, n_brands = {}, 0
+for _, d in ipairs(devices) do
+    if not PLACEHOLDER[d.brand] and not brand_set[d.brand] then
+        brand_set[d.brand] = true
+        n_brands = n_brands + 1
+    end
+end
+if #devices < min_devices or n_brands < min_brands then
+    verdict.emit("violation:device-catalogue:coverage:devices=" .. #devices .. ":brands=" .. n_brands, 1)
+end
+
 if check then
     local ok, cur = pcall(fs.read, against or OUT)
-    if ok and cur == text_out then verdict.ok("device-catalogue", "fresh", tostring(#devices)) end
+    if ok and cur == text_out then verdict.ok("device-catalogue", "fresh", tostring(#devices), "brands=" .. n_brands) end
     log.raw("  remedy: tillandsias-plan script run scripts/lua/build-device-catalogue.lua, then commit " .. OUT)
     verdict.emit("violation:device-catalogue:stale", 1)
 end
 fs.write(OUT, text_out)
-verdict.ok("device-catalogue", "written", tostring(#devices))
+verdict.ok("device-catalogue", "written", tostring(#devices), "brands=" .. n_brands)
