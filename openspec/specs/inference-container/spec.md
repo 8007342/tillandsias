@@ -302,6 +302,23 @@ measured.
 - Measurable: `scripts/lua/test-decode-floor-pin.lua` arm 3 (gate step
   `840-1647-fb52`).
 
+#### Scenario: A stalled GPU runner is ended and its model quarantined to the CPU
+<!-- order: 1648-gy9z (793-a8e7 S4) -->
+- **WHEN** on the `gpu-vulkan` lane a llama-server runner's `/slots` reports
+  `is_processing` with no change in progress for the stall threshold (120 s)
+  and exactly one model is GPU-resident
+- **THEN** the in-container watchdog SHALL kill that runner (the request fails
+  with an error instead of hanging), pin the model `num_gpu 0` in the same pin
+  record, and log one `gpu-stall:` line; an opt-out restores it like any pin
+- **AND** a runner whose `/slots` cannot be fetched or parsed, or a stall that
+  cannot be attributed to one GPU model, SHALL be logged `watchdog blind:` and
+  left alone, never killed
+- **AND** `OLLAMA_LOAD_TIMEOUT=2m` bounds a stalled model load on that lane
+- Measurable: `scripts/lua/test-gpu-stall-watchdog.lua` (gate step
+  `850-1648-gy9z`). The measured hang (793-a8e7: a cold qwen2.5:3b load stuck
+  at 40% prefill for over 9 minutes) was not reproduced in 8 cold loads on
+  yolanda 2026-10-12.
+
 
 ## Litmus Tests
 

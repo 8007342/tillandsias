@@ -105,6 +105,9 @@ COPY engine-integrity.sh /usr/local/bin/tillandsias-engine-integrity.sh
 # below the decode floor to the CPU on the WSL2 Vulkan opt-in lane and restores
 # them on any other tier. Runnable with a stub `ollama` on PATH for the fixture.
 COPY decode-floor-pin.sh /usr/local/bin/tillandsias-decode-floor-pin.sh
+# @trace spec:inference-container — order 1648-gy9z GPU stall watchdog
+# POSIX sh, sourced after decode-floor-pin.sh on the opt-in lane; backgrounded.
+COPY gpu-stall-watchdog.sh /usr/local/bin/tillandsias-gpu-stall-watchdog.sh
 # @trace spec:inference-engine-slots — order 482d shared T0-T5 tier table
 # Declarative data (tier-table.tsv + one adapter per engine) and its POSIX
 # resolver; the entrypoint sources tiers.sh instead of carrying inline rows.
