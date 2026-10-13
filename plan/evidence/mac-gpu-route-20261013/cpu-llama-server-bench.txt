@@ -1,0 +1,6 @@
+cpu-host-control run 1: prefill 1030 tok @ 81.2 t/s, decode 128 tok @ 29.1 t/s
+cpu-host-control run 2: prefill 1030 tok @ 78.0 t/s, decode 128 tok @ 28.4 t/s
+cpu-host-control run 3: prefill 1030 tok @ 76.8 t/s, decode 128 tok @ 27.5 t/s
+cpu-host-control prefill t/s: median 78.0 mean 78.7 min 76.8 max 81.2 (n=3)
+cpu-host-control decode  t/s: median 28.4 mean 28.4 min 27.5 max 29.1 (n=3)
+ok:bench-llama-server:cpu-host-control on 127.0.0.1:11511
