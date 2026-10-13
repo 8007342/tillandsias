@@ -1,0 +1,8 @@
+image: tillandsias-chromium-framework:v56.9.27.2 (installed, unchanged)
+families: Adwaita Mono;Adwaita Sans;Cantarell;Noto Sans;
+lang=en: Adwaita Mono;Adwaita Sans;Cantarell;Noto Sans;
+lang=ja: 
+lang=zh-cn: 
+lang=ko: 
+color-emoji: 
+emoji-charset U+1F600: 

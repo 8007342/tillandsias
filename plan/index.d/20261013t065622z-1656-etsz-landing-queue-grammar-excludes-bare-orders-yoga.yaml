@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga-silverblue, cycle 2026-10-13T05:23Z, after the landing queue skipped PR 364 (work/539) and PR 367 (work/472) twice each as not-a-work-ref.
+packets:
+  - packet_id: the-landing-queue-grammar-admits-only-suffixed-orders-so-every-legacy-bare-order-row-is-outside-the-queue-and-lands-by-hand
+    order: 1656-etsz
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [landing-queue, work-ref-lane, methodology, shell, fixtures]
+    estimated_hours: 3
+    depends_on: []
+    owned_files:
+      - scripts/land-queue.sh
+      - scripts/test-land-queue.sh
+      - methodology/multi-host-development.yaml
+      - skills/join-the-fleet/SKILL.md
+    title: |
+      The landing queue's WORK_RE (work/[0-9]{3,4}-[a-z0-9]{4}) admits only suffixed orders, so a row whose order predates the four-character suffix (539, 472, and 17 ready rows from 151 to 554) has NO ref name the queue will land, and the queue's skip comment names a grammar the author cannot satisfy.
+    context: |
+      Measured on yoga, 2026-10-13T05:23Z. scripts/land-queue.sh line 136 sets WORK_RE='^work/[0-9]{3,4}-[a-z0-9]{4}$' from methodology/multi-host-development.yaml branch_namespaces.creation_regex. PR 364 (head work/539, readied 03:32Z) and PR 367 (head work/472, readied 03:44Z) were each skipped twice (03:51Z and 05:18Z) with "This queue lands `work/<order>` refs only; `work/539` is not one". The rows' orders ARE 539 and 472; there is no suffix to add. Population on 2026-10-13: 17 rows in `ready any` carry a bare order (151 245 248 249 250 251 309 334 353 373 391 397 409 475 522 537 554) and 2 live claims do (472, 539, both yoga); `git log origin/linux-next --grep` finds no bare-order work ref ever landed through the queue.
+      Two sanctioned paths exist today and neither is written where a worker reads: (1) the coordinator's ruling of 2026-09-29 (plan/index.d/20260929t094822z-1640b378-macos.yaml): a legacy order goes through a salvage ref and the relay lane, which waits on the coordinator; (2) the MIGRATION clause (multi-host-development.yaml work_ref_lane): a direct gated push to linux-next still lands, which is what yoga did for both PRs on 2026-10-13 (direct-land commits, counted as direct by scripts/check-landing-provenance.sh on purpose).
+      Consumers of the grammar that must agree with any change: scripts/land-queue.sh WORK_RE, methodology branch_namespaces.creation_regex, scripts/test-pre-push-work-ref-lane.sh ARM 4 (asserts the packet-id grammar so work/foo stays a stray), scripts/test-mirror-discipline.sh, skills/join-the-fleet/SKILL.md section 3.
+    exit_criteria:
+      - 'DECISION (coordinator): either the grammar admits a bare legacy order (work/[0-9]{3,4}(-[a-z0-9]{4})?) in WORK_RE, creation_regex and every consumer listed in context, with scripts/test-land-queue.sh gaining an arm where a PR on work/539 lands and work/foo is still skipped; or the queue''s skip comment for a bare-order head names the legacy path (salvage ref + relay, or a direct gated land) instead of a grammar the author cannot meet, and join-the-fleet section 3 carries the same sentence'
+      - 'scripts/test-pre-push-work-ref-lane.sh ARM 4 and scripts/test-mirror-discipline.sh stay green under whichever branch of the decision lands'
+      - 'scripts/check-landing-provenance.sh classifies a direct-land(<pr>) merge as direct, not queue (the queue signature is land( / queue( / Merge pull request / from work/); a fixture arm pins it'
+    unscoreable: "unpinnable-until-the-guard-exists: the decision picks the mechanism, and the arm is written in the same commit as it: either scripts/test-land-queue.sh gains an arm where a PR on work/539 lands and work/foo is still skipped (grammar widened), or the same fixture gains an arm pinning the skip comment that names the legacy path (grammar kept)"
+    next_action: >
+      Coordinator picks the branch of criterion 1. If the grammar widens, land the regex change in scripts/land-queue.sh and methodology in one PR with the fixture arm; if it does not, write the legacy path into the queue's skip comment and join-the-fleet section 3. Until then a worker holding a bare-order row lands it by a direct gated land from its own checkout (what yoga did 2026-10-13), never by inventing a suffix.
+    provenance: |
+      Filed by yoga-silverblue (linux-yoga-claude-20261013t052327z), cycle 2026-10-13T05:23Z, from two queue skip comments on PR 364 and PR 367 and the measured bare-order population.
+    events:
+      - type: filed
+        ts: "2026-10-13T05:23:06Z"
+        host: yoga
+        summary: |-
+          The landing queue's WORK_RE excludes every legacy bare-order row (17 ready + 2 in_progress on 2026-10-13); PR 364 and PR 367 were skipped twice as not-a-work-ref and landed directly from yoga instead. Decision packet: widen the grammar everywhere it lives, or name the legacy path in the skip comment and the skill.

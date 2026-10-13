@@ -122,6 +122,8 @@ fn main() {
         "images/web-wrangler/package-lock.json",
         "images/web-wrangler/wrangler.lock.json",
         "images/web-wrangler/entrypoint.sh",
+        "images/webkit/Containerfile",
+        "images/webkit/webkit-window.js",
         "observatorium/index.html",
         "scripts/manage-cache.sh",
         "scripts/run-observatorium.sh",

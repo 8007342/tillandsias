@@ -1379,7 +1379,9 @@ pub fn reset_guest_main() -> i32 {
         env.as_deref(),
         crate::installation_uuid::KEYCHAIN_SERVICE,
         &cache_root,
-        || vz.wipe_provisioned_artifacts().map_err(|e| e.to_string()),
+        // 1642-cc54: HARD is the one reset that destroys identity, so the
+        // kept identity disk goes with the rootfs here and nowhere else.
+        || crate::reset_state::hard_wipe(&vz),
     ) {
         eprintln!("[reset-guest] RESULT: FAILED \u{2014} {err}");
         return 1;

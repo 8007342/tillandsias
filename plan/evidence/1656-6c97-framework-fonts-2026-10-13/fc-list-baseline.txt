@@ -1,0 +1,17 @@
+families: Adwaita Mono;Adwaita Sans;Cantarell;Noto Sans;
+lang=en: Adwaita Mono;Adwaita Sans;Cantarell;Noto Sans;
+lang=ja: 
+lang=zh-cn: 
+lang=ko: 
+color-emoji: 
+emoji-charset U+1F600: 
+font-bytes: 9265056
+chromium: Chromium 154.0.8037.97 Built from source for Fedora release 44 (Forty Four)
+abattis-cantarell-vf-fonts 197315
+adwaita-mono-fonts 5862900
+adwaita-sans-fonts 1801308
+default-fonts-core-sans 12155
+fontconfig 795004
+fonts-filesystem 0
+google-noto-fonts-common 18172
+google-noto-sans-vf-fonts 1457784

@@ -1,0 +1,23 @@
+families: Adwaita Mono;Adwaita Sans;Cantarell;Liberation Mono;Liberation Sans;Liberation Serif;Noto Color Emoji;Noto Sans;Noto Sans CJK HK;Noto Sans CJK JP;Noto Sans CJK KR;Noto Sans CJK SC;Noto Sans CJK TC;Noto Sans Mono CJK HK;Noto Sans Mono CJK JP;Noto Sans Mono CJK KR;Noto Sans Mono CJK SC;Noto Sans Mono CJK TC;
+lang=en: Adwaita Mono;Adwaita Sans;Cantarell;Liberation Mono;Liberation Sans;Liberation Serif;Noto Sans;Noto Sans CJK HK;Noto Sans CJK JP;Noto Sans CJK KR;Noto Sans CJK SC;Noto Sans CJK TC;Noto Sans Mono CJK HK;Noto Sans Mono CJK JP;Noto Sans Mono CJK KR;Noto Sans Mono CJK SC;Noto Sans Mono CJK TC;
+lang=ja: Noto Sans CJK JP;Noto Sans Mono CJK JP;
+lang=zh-cn: Noto Sans CJK SC;Noto Sans Mono CJK SC;
+lang=ko: Noto Sans CJK KR;Noto Sans Mono CJK KR;
+color-emoji: Noto Color Emoji;
+emoji-charset U+1F600: Noto Color Emoji;
+font-bytes: 83270053
+chromium: Chromium 154.0.8037.97 Built from source for Fedora release 44 (Forty Four)
+abattis-cantarell-vf-fonts 197315
+adwaita-mono-fonts 5862900
+adwaita-sans-fonts 1801308
+default-fonts-core-sans 12155
+fontconfig 795004
+fonts-filesystem 0
+google-noto-color-emoji-fonts 5053755
+google-noto-fonts-common 18172
+google-noto-sans-cjk-vf-fonts 32698086
+google-noto-sans-mono-cjk-vf-fonts 31923211
+google-noto-sans-vf-fonts 1457784
+liberation-mono-fonts 1216531
+liberation-sans-fonts 1673668
+liberation-serif-fonts 1539638

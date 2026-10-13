@@ -1,0 +1,131 @@
+"""1644-u8b8 scratch validator: researcher YAML -> checked overlay entries.
+
+usage: python3 -I validate.py <out.yaml> <in.yaml>...
+Prints one line per problem; writes the entries that passed to <out.yaml>.
+"""
+import json, math, re, sys, urllib.parse
+
+import yaml  # PyYAML
+
+ROOT = "/var/home/lenovinha/claudia/tillandsias"
+DOMAINS = {
+    "samsung": ["samsung.com"],
+    "google": ["google.com"],
+    "apple": ["apple.com"],
+    "xiaomi": ["mi.com", "xiaomi.com", "po.co"],
+    "oneplus": ["oneplus.com", "oneplus.in", "oneplus.net"],
+    "nothing": ["nothing.tech"],
+    "sony": ["sony.com", "sony.net", "sonymobile.com", "sony.co.uk", "sony.co.jp", "sony.com.my", "sony.co.in", "sony.jp", "sony.eu", "sony.de", "sony.fr", "sony.com.au", "sony.ca", "sony.com.sg"],
+    "motorola": ["motorola.com", "lenovo.com"],
+    "asus": ["asus.com", "asus.com.cn"],
+    "honor": ["honor.com", "hihonor.com"],
+    "oppo": ["oppo.com"],
+    "realme": ["realme.com"],
+    "vivo": ["vivo.com", "vivo.com.cn", "vivo.com.in"],
+    "dell": ["dell.com"],
+    "lenovo": ["lenovo.com"],
+    "hp": ["hp.com"],
+    "microsoft": ["microsoft.com"],
+    "acer": ["acer.com"],
+}
+FORMS = {"phone", "foldable", "tablet", "laptop"}
+OSES = {"android", "ios", "ipados", "windows", "macos", "chromeos"}
+BANNED = re.compile(r"gsmarena|phonearena|wikipedia|wurfl|deviceatlas|notebookcheck|kimovil", re.I)
+
+
+def domain_ok(brand, url):
+    host = urllib.parse.urlparse(url).hostname or ""
+    return any(host == d or host.endswith("." + d) for d in DOMAINS.get(brand, []))
+
+
+def main():
+    out_path, ins = sys.argv[1], sys.argv[2:]
+    existing = {d["id"]: d for d in json.load(open(f"{ROOT}/crates/tillandsias-core/data/devices/catalogue.json"))["devices"]}
+    overlay = yaml.safe_load(open(f"{ROOT}/crates/tillandsias-core/data/devices/overlay.yaml"))
+    seen_ids = set(existing) | {d["id"] for d in overlay["devices"]}
+    aliases = {}
+    for d in list(existing.values()) + overlay["devices"]:
+        for a in d["aliases"]:
+            aliases.setdefault(a, d["id"])
+    good, problems = [], 0
+    for path in ins:
+        try:
+            entries = yaml.safe_load(open(path)) or []
+        except Exception as e:  # noqa: BLE001
+            print(f"{path}: unparseable: {e}")
+            problems += 1
+            continue
+        for e in entries:
+            why = []
+            i = e.get("id", "?")
+            for k in ("id", "brand", "family", "model", "aliases", "form", "os", "screen_px", "panel", "source"):
+                if k not in e:
+                    why.append(f"missing {k}")
+            if why:
+                print(f"{path}: {i}: " + "; ".join(why)); problems += 1; continue
+            if i in seen_ids:
+                why.append("duplicate id")
+            if not re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", i) or not i.startswith(e["brand"] + "-"):
+                why.append("id shape")
+            if e["family"] == "edge":
+                why.append("family edge is forbidden")
+            if e["form"] not in FORMS:
+                why.append(f"form {e['form']}")
+            e["os"].setdefault("version", "")
+            if e["os"].get("name") not in OSES:
+                why.append(f"os {e['os']}")
+            else:
+                e["os"]["version"] = "" if e["os"]["version"] is None else str(e["os"]["version"])
+            url = e["source"].get("url", "")
+            note = str(e["source"].get("note", ""))
+            if not url.startswith("https://") or not domain_ok(e["brand"], url):
+                why.append(f"source url not first-party for {e['brand']}: {url}")
+            if BANNED.search(url) or BANNED.search(note):
+                why.append("banned source mentioned")
+            px = e["screen_px"]
+            w, h = int(px["w"]), int(px["h"])
+            if e["form"] == "laptop" and not w > h:
+                why.append("laptop screen_px must be landscape")
+            if e["form"] != "laptop" and not w < h:
+                why.append("screen_px must be portrait")
+            joined = re.sub(r"(?<=\d) (?=\d{3}\b)", "", note)  # French "2 400"
+            digits = re.sub(r"[^0-9]", " ", joined).split()
+            if str(w) not in digits or str(h) not in digits:
+                why.append(f"note does not quote {w}x{h}")
+            inches = float(e["panel"].get("inches", 0) or 0)
+            if inches <= 0:
+                why.append("panel.inches")
+            else:
+                ppi = math.hypot(w, h) / inches
+                stated = e["panel"].get("ppi")
+                if stated and abs(ppi - float(stated)) / float(stated) > 0.04:
+                    why.append(f"ppi {stated} vs computed {ppi:.0f}")
+                if e["form"] in ("phone", "foldable") and not (250 <= ppi <= 650):
+                    why.append(f"phone ppi {ppi:.0f} implausible")
+            if e["form"] == "laptop" or e.get("dpr") is not None:
+                if e.get("dpr") is None or e.get("viewport") is None:
+                    why.append("laptop/explicit needs dpr and viewport")
+                elif not e.get("published") and not e.get("derivation"):
+                    why.append("dpr without derivation")
+                else:
+                    vw, vh = e["viewport"]["w"], e["viewport"]["h"]
+                    if not e.get("published") and (abs(w / e["dpr"] - vw) > 1.5 or abs(h / e["dpr"] - vh) > 1.5):
+                        why.append(f"viewport {vw}x{vh} != px/dpr {w / e['dpr']:.0f}x{h / e['dpr']:.0f}")
+            if "released" in e and not re.fullmatch(r"20[0-9]{2}-(0[1-9]|1[0-2])", str(e["released"])):
+                why.append(f"released {e['released']}")
+            al = [str(a).lower().strip() for a in e["aliases"]]
+            for a in al:
+                if a in aliases and aliases[a] != i:
+                    why.append(f"alias '{a}' already names {aliases[a]}")
+            if why:
+                print(f"{path}: {i}: " + "; ".join(why)); problems += 1; continue
+            e["aliases"] = sorted(set(al))
+            for a in e["aliases"]:
+                aliases[a] = i
+            seen_ids.add(i)
+            good.append(e)
+    yaml.safe_dump(good, open(out_path, "w"), sort_keys=False, allow_unicode=True, width=100)
+    print(f"ok {len(good)} entries, {problems} problems")
+
+
+main()

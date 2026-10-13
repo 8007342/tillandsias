@@ -5097,7 +5097,7 @@ Two flows; pick by intent:
    framework's conventional port — NEVER \`localhost\`/\`127.0.0.1\` (that is
    this container's own loopback; the router cannot reach it and the
    enclave blocks direct ingress — the server will look dead). Hand the
-   user \`http://${project_name}.<service>.localhost/\` (no port). Full
+   user \`http://<service>.${project_name}.localhost/\` (no port). Full
    conventions: the web-services instruction / \`tellme about web\`.
 2. **Hosting/publishing** ("host/serve/publish this project"): do NOT run
    a server in here. Delegate to the host over the MCP tools

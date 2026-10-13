@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: development-scratch-and-worktrees-live-inside-the-checkout-under-one-ignored-dir-that-every-scanner-skips
+    event:
+      type: progress
+      ts: "2026-10-13T18:04:50Z"
+      agent_id: linux-yoga-claude-20261013t172352z
+      host: yoga
+      summary: |
+        Slice 7 at 3f26f063b on work/1637-cnxq (trunk 8641e34f1 merged at 4b4fe923e): the preflight-door exception is a MEASURED decision now, not a pending move. Tried its own remedy - build.sh's per-guard TMPDIR roots under <checkout>/scratch/preflight/ instead of ${TMPDIR:-/tmp}/pf-guard.* (motivation measured first - 96 stray /tmp/pf-guard.* roots on yoga). With the move in place the door refused five guards beyond the known 830 hold - test-check-jq-callsite-ratchet (population 0 in its scratch worlds), test-claim-confirmation-names-the-earliest-claimant (its subject answered about origin/work/1637-cnxq, the real checkout's ref), test-spec-script-paths (a baseline arm lost its resolution), test-preflight-regime-budget.lua (the launcher's output gained a line it parses around), test-check-scratch-location-added itself (scripts/scratch-dir.sh honoured the door's TMPDIR because it was now under the root, so the default-base arm read the wrong base). One cause - a scratch world INSIDE the repository is no longer outside a repository to a subject that resolves its root by climbing (git rev-parse, the Lua runtime's walk, the helper's TMPDIR-under-root arm). Reverting the move returned the door to ran=221 refused=1 with the same probe planted. Landed on the ref - the exception line and the methodology sentence record the measurement and the five names in place of "until it moves under scratch/"; a later slice may lift it once every root resolver stops at scratch/ (GIT_CEILING_DIRECTORIES covers the git climb; the Lua climb and the helper arm need their own stop). Criterion 3 exercised in two real door runs - scratch/probe/evil.sh (bare mktemp, /tmp path, mkdir ../) and evil.lua under scratch/ named by no guard. Fixture 17/17 on the binary rebuilt from this ref (rebuilt first this time, per the stale-runner lesson); carried guard silent=0. PR 386 commented. Still BLOCKED for READY on a darwin or msys STEP_SECOND_REGIME for 830-1637-cnxq.step.

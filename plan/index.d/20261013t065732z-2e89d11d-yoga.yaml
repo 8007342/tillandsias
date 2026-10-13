@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: headless-prompting-claude-and-antigravity
+    event:
+      type: progress
+      ts: "2026-10-13T06:57:32Z"
+      agent_id: linux-yoga-claude-20261013t052327z
+      host: yoga
+      summary: |
+        PR 364 (work/539 at 20b90de65, ready) cannot enter the landing queue: scripts/land-queue.sh WORK_RE admits only work/NNN-xxxx and order 539 has no suffix, so the queue skipped it as not-a-work-ref at 03:51Z and 05:18Z. yoga attempted a direct gated land under the MIGRATION clause (merge d342a3541 direct-land(364), re-integrated up to ac61ec146): four green ./build.sh --check gates of about 20 min each between 05:33Z and 06:54Z, four pushes refused (two with origin unchanged, reason not captured because the land tool's push log is temporary; two lost to land(394) and land(399) from the queue), refused:land:attempts-exhausted:4. Nothing landed; local linux-next reset to origin e82ea09bc. Found while landing 539 and 472 together: E0061, the agent-result-format test closure (this ref's slice 3) passes 13 arguments to build_forge_agent_run_args_with_vault and 472 slice 9 made it 14; the text merge is clean and only the compiler sees it. Whichever of 539/472 lands second must add `&container_deps::ca_trusted_for_tests(),` after `&test_cache_root(),` in that closure. Filed 1656-etsz for the grammar gap (17 ready + 2 in_progress bare-order rows, no bare-order ref ever landed through the queue).

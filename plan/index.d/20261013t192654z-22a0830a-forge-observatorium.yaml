@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: observatorium-flutter-flame-release-metrics-dashboard
+    field: next_action
+    value: |-
+      Review and land work/1661-vckd; configure Cloudflare secrets and verify production deploy after main integration. Managed sibling/device evidence remains in 1662-tff5. Local Flutter analyze, seven tests, release web build, ten Node tests, Rust embed test and Wrangler dry-run pass; whole repository gate is running.
+
+      [2026-10-13T19:26:54Z forge-observatorium] READY: operator has requested orchestrator validation and acceptance on its host. Gate/land work/1661-vckd remotely; all app checks pass, workspace 3045 tests passed and feature tests passed after hermetic Wayland fixture fix. Local full gate completion is blocked by forge storage allocation; retry settings are in plan/issues/observatorium-forge-web-stack-gaps-2026-10-13.md. Auto-deploy workflow remains an inactive template pending mirror allowlist support and Cloudflare credentials. research/1661-vckd is prepared locally but its new-ref push requires a completed local gate stamp; create that research checkpoint on the validating host if desired.
+    ts: "2026-10-13T19:26:54Z"
+    host: forge-observatorium

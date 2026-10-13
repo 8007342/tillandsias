@@ -174,12 +174,20 @@ check "an index of only phase-only runs reports never, not fresh" 1 "never:relea
 #     Source text: running local-ci.sh here would run the tier. The assignment
 #     is the contract, and before this order it was a fixed path — so a
 #     diagnostic run could not be pointed away from the record.
+#     888-vgs8: the assignment now goes through scripts/convergence-log-path.sh
+#     (the index left target/, where cargo clean deleted it), so the property is
+#     asserted in two halves that together are the old one: local-ci.sh takes
+#     its index from the resolver (source text), and the resolver answers the
+#     override verbatim (EXECUTED — a resolver can be run here, the tier cannot).
 _lci="$(cd "$(dirname "$GUARD")/.." && pwd)/scripts/local-ci.sh"
-if [ -f "$_lci" ] && /usr/bin/grep -q 'CHECK_LOG_INDEX="${TILLANDSIAS_CHECK_LOG_INDEX:-' "$_lci"; then
+_res="$(cd "$(dirname "$GUARD")/.." && pwd)/scripts/convergence-log-path.sh"
+_own="$TMP/own-index.jsonl"
+if [ -f "$_lci" ] && /usr/bin/grep -q 'CHECK_LOG_INDEX="$("$REPO_ROOT/scripts/convergence-log-path.sh")"' "$_lci" \
+    && [ "$(TILLANDSIAS_CHECK_LOG_INDEX="$_own" bash "$_res" 2>/dev/null)" = "$_own" ]; then
     pass=$((pass + 1))
 else
     fail=$((fail + 1))
-    echo "FAIL: local-ci.sh does not honour TILLANDSIAS_CHECK_LOG_INDEX — a diagnostic run still cannot be pointed away from the record the daily exercise reads"
+    echo "FAIL: local-ci.sh does not honour TILLANDSIAS_CHECK_LOG_INDEX — a diagnostic run still cannot be pointed away from the record the daily exercise reads (local-ci.sh must resolve through scripts/convergence-log-path.sh, and the resolver must answer the override verbatim)"
 fi
 
 total=$((pass + fail))

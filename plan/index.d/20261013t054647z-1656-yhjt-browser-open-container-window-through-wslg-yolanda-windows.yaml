@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at macuahuitl-fedora's request, 2026-10-13.
+packets:
+  - packet_id: browser-open-container-window-works-on-windows-through-wslg
+    order: 1656-yhjt
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, wsl2, wslg, wayland, browser, isolation]
+    related: [1641-xbvq, 1649-xqet, 1651-5t7n, 1560-uam3]
+    depends_on: []
+    title: |
+      browser.open's container window works on Windows through WSLg: the owned Fedora 44 WSL2 guest hands the chromium-framework container only the WSLg Wayland socket file, on the same per-window internal network as Linux
+    context: |
+      On Linux, #383, #391 and #392 landed the path. The window is Wayland-only and gets only the compositor socket FILE, in a private tmpfs runtime dir. It runs on a per-window --internal network with an SNI forwarder to the router, and there is no host listener.
+      On Windows the forge's MCP socket is served by the guest's tillandsias-headless (/run/user/0/tillandsias/mcp/<project>), so browser.open runs the container there.
+      Measured on yolanda, 2026-10-13: WSLg is up in the guest. /mnt/wslg/runtime-dir/wayland-0 is a socket (mode 0777, owner forge), and /run/user/0/wayland-0 is a WSLg symlink to it. The headless unit's env carries XDG_RUNTIME_DIR=/run/user/0 but no WAYLAND_DISPLAY, so BrowserDisplayContext refuses with "no WAYLAND_DISPLAY". The guest has no chromium-framework image yet, only the router.
+      The real ~/.wslconfig has no guiApplications line, so WSLg is at its default (on).
+      Constraint: the container gets only the one Wayland socket, never /mnt/wslg wholesale and never /tmp/.X11-unix.
+    exit_criteria:
+      - 'on yolanda, browser.open on a local preview shows a per-app window on the Windows desktop'
+      - 'inside the container, ls of its runtime dir shows only the Wayland socket, and DISPLAY is unset'
+      - 'a direct request to an outside site fails while the project loads'
+      - 'the default Linux behaviour is byte-identical'
+    unscoreable: "a live window on the Windows desktop through WSLg: its evidence is the operator-visible window, the container's runtime-dir ls and env, a refused outside fetch, and the Linux spec unit tests unchanged, recorded as live evidence on yolanda"
+    next_action: >
+      Resolve the WSLg socket when WAYLAND_DISPLAY is unset (only where /mnt/wslg/runtime-dir/wayland-0 is a socket), mount that file alone, build the chromium-framework image in the guest, then prove it live.
+    provenance: |
+      Filed by yolanda-windows at macuahuitl-fedora's request, 2026-10-13.
+    events:
+      - type: filed
+        ts: "2026-10-13T05:46:47Z"
+        host: yolanda-windows
+        summary: |-
+          browser.open through WSLg in the owned guest; today it refuses for want of WAYLAND_DISPLAY.

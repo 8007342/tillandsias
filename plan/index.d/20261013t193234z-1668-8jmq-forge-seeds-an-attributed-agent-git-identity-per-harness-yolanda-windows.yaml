@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at macuahuitl-fedora's request, 2026-10-13, from the Codex forge findings on work/1661-vckd.
+packets:
+  - packet_id: forge-git-bootstrap-seeds-an-explicitly-attributed-agent-identity-per-harness
+    order: 1668-8jmq
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [forge, harness, git, identity, codex]
+    related: [1661-vckd, 1453-7rzd, 1667-jna9]
+    depends_on: []
+    title: |
+      A fresh Codex forge lane cannot commit ("Author identity unknown"): the forge's git bootstrap must seed an explicitly attributed agent identity per harness, never the operator's own
+    context: |
+      Found by a Codex forge on work/1661-vckd (plan/issues/observatorium-forge-web-stack-gaps-2026-10-13.md on that branch). Its first commit failed with "Author identity unknown", and a hand-set repo-local identity was needed to checkpoint.
+      images/default/lib-common.sh configure_git_identity (order 1453-7rzd) writes a global identity only when the launcher passes TILLANDSIAS_GIT_NAME and TILLANDSIAS_GIT_EMAIL. Otherwise it traces "not configured" and returns, so any lane launched without them has no identity.
+      Ruling: seed a per-harness agent identity, in the same explicit-attribution style as Claude's (for example "Codex (forge) <codex-forge@tillandsias>"). Never use the operator's own identity. Like 1453-7rzd, it is written as git config, never exported as GIT_AUTHOR_*.
+    exit_criteria:
+      - 'a fresh Codex lane commits without manual config, and the author names the harness (red today)'
+      - "no harness's seeded identity is the operator's, and a launcher-passed identity still wins where one is passed"
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable includes a fixture over configure_git_identity per harness; the live evidence is a fresh Codex lane's first commit"
+    next_action: >
+      Find how each entrypoint names its harness, then give configure_git_identity a per-harness fallback with a fixture arm per harness.
+    provenance: |
+      Filed by yolanda-windows at macuahuitl-fedora's request, 2026-10-13.
+    events:
+      - type: filed
+        ts: "2026-10-13T19:32:35Z"
+        host: yolanda-windows
+        summary: |-
+          A fresh Codex forge lane has no git identity; seed an attributed agent identity per harness.

@@ -1,0 +1,24 @@
+devices 513
+by source {'playwright': 107, 'manufacturer-spec': 390, 'chrome-devtools': 16}
+samsung      95
+apple        89
+xiaomi       75
+motorola     42
+google       36
+oppo         33
+vivo         24
+oneplus      23
+lenovo       22
+asus         12
+realme       11
+sony         11
+microsoft    8
+nothing      8
+desktop      7
+honor        7
+generic      3
+blackberry   2
+nokia        2
+amazon       1
+jio          1
+lg           1

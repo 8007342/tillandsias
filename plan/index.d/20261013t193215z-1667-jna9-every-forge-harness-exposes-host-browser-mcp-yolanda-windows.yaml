@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at macuahuitl-fedora's request, 2026-10-13, from the Codex forge findings on work/1661-vckd.
+packets:
+  - packet_id: every-forge-agent-harness-exposes-the-host-browser-mcp-tools
+    order: 1667-jna9
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [forge, harness, mcp, codex, browser]
+    related: [1661-vckd, 600-xrqk, 1649-xqet]
+    depends_on: []
+    title: |
+      A Codex forge lane gets no host-browser MCP tools (no publish_local, service_status or browser.open) while Claude lanes do; every agent harness (Claude, Codex, OpenCode, Antigravity) must expose them
+    context: |
+      Found by a Codex forge on work/1661-vckd. Its notes are in plan/issues/observatorium-forge-web-stack-gaps-2026-10-13.md on that branch. The startup context prescribes publish_local, but the Codex tool catalog had none of the host-browser tools.
+      Where registration lives today (images/default/config-overlay):
+      - claude/mcp.json and opencode/config.json declare host-browser -> mcp/host-browser.sh.
+      - codex/register-experts.sh LISTS host-browser alongside forge-plan and project-info, registering through the codex CLI, yet the lane saw none of them. So the defect is in the registration reaching the lane (when it runs, which CODEX_HOME it writes, or a failed add), not a missing line.
+      - Antigravity's registration was not located while filing.
+    exit_criteria:
+      - "a Codex lane's tool catalog lists publish_local and browser.open (red today)"
+      - 'each harness (Claude, Codex, OpenCode, Antigravity) registers host-browser from one source, and a fixture fails when a harness drops it'
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable includes the per-harness registration fixture; the live evidence is a Codex lane's tool catalog"
+    next_action: >
+      Reproduce in a fresh Codex lane: read the codex-mcp lines in its startup log and the effective config.toml, then find where host-browser falls out.
+    provenance: |
+      Filed by yolanda-windows at macuahuitl-fedora's request, 2026-10-13.
+    events:
+      - type: filed
+        ts: "2026-10-13T19:32:16Z"
+        host: yolanda-windows
+        summary: |-
+          Codex forge lanes lack the host-browser MCP tools that Claude lanes have.

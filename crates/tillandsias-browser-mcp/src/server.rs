@@ -4,11 +4,12 @@
 //! @cheatsheet web/mcp.md, web/cdp.md
 
 use crate::allowlist::{self, BrowserAllowlist};
-use crate::cdp_client::{CdpError, CdpSession};
+use crate::cdp_client::CdpError;
 use crate::framing::{RpcRequest, RpcResponse};
-use crate::launcher::{self, BrowserContainers, LaunchError, LaunchMode};
+use crate::launcher::{self, BrowserContainers, Engine, LaunchError, LaunchMode};
+use crate::window_cdp::{DeviceEmulation, WindowCdp};
 use crate::window_registry::{DebounceTable, WindowRegistry, close_window};
-use base64::Engine;
+use base64::Engine as _;
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
@@ -53,6 +54,13 @@ pub struct BrowserMcpServer {
     launch_mode: LaunchMode,
     /// Tests: a fixed local-preview TLS port instead of the host's.
     preview_tls_port_override: Option<u16>,
+    /// Order 1655-urz9: the device a window emulates when `browser.open`
+    /// names none: the project's `.tillandsias/config.toml` `[browser]
+    /// device`, else `desktop`.
+    default_device: String,
+    /// The lane instance this server serves (order 1656-iktu). A window's
+    /// owner is `<project>/<instance>`; every lookup checks it.
+    lane: String,
     windows: Arc<WindowRegistry>,
     debounce: Arc<DebounceTable>,
 }
@@ -93,6 +101,8 @@ impl BrowserMcpServer {
             project_label: project_label.into(),
             launch_mode,
             preview_tls_port_override: None,
+            default_device: "desktop".to_string(),
+            lane: "default".to_string(),
             windows: Arc::new(WindowRegistry::default()),
             debounce: Arc::new(DebounceTable::default()),
         }
@@ -151,6 +161,90 @@ impl BrowserMcpServer {
         request.params.get("arguments").unwrap_or(&request.params)
     }
 
+    /// The device windows emulate when `browser.open` names none (the
+    /// project config's `[browser] device`). Order 1655-urz9.
+    pub fn with_default_device(mut self, device: impl Into<String>) -> Self {
+        self.default_device = device.into();
+        self
+    }
+
+    /// Pin the lane instance this server serves (the tray passes the
+    /// listener's LaneIdentity instance). Order 1656-iktu.
+    pub fn with_lane(mut self, instance: impl Into<String>) -> Self {
+        self.lane = instance.into();
+        self
+    }
+
+    /// The owner a window opened here records: `<project>/<instance>`.
+    fn owner(&self) -> String {
+        format!("{}/{}", self.project_label, self.lane)
+    }
+
+    /// Resolve a device query against the 1643-q3at catalogue.
+    fn resolve_device(query: &str) -> Result<DeviceEmulation, String> {
+        tillandsias_core::devices::resolve(query)
+            .map(|r| DeviceEmulation::from_resolution(&r))
+            .ok_or_else(|| {
+                format!(
+                    "DEVICE_UNKNOWN: no catalogue device matches {query:?} \
+                     (see `tillandsias devices resolve <query>`)"
+                )
+            })
+    }
+
+    /// A window's CDP session, its first page and its dev flag, or the tool
+    /// error. Another lane's window is WINDOW_NOT_FOUND, exactly like a
+    /// window that does not exist (order 1656-iktu).
+    fn window_page(
+        &self,
+        id: u64,
+        window_id: &str,
+    ) -> Result<(Arc<WindowCdp>, String, bool), RpcResponse> {
+        match self.windows.cdp_for(window_id, &self.owner()) {
+            None => Err(Self::tool_error(
+                id,
+                format!("WINDOW_NOT_FOUND: {window_id}"),
+            )),
+            Some((None, _, Engine::WebKit)) => Err(Self::tool_error(
+                id,
+                format!(
+                    "ENGINE_UNSUPPORTED: this tool needs CDP, and a {} window speaks the Playwright protocol; engine-neutral tools are order 1656-twhk",
+                    Engine::WebKit.label()
+                ),
+            )),
+            Some((None, _, Engine::Chromium)) => Err(Self::tool_error(
+                id,
+                "WINDOW_NOT_RUNNING: the window has no CDP session (fake launch mode)",
+            )),
+            Some((Some(cdp), dev, _)) => match cdp.main_session() {
+                Some(page) => Ok((cdp, page, dev)),
+                None => Err(Self::tool_error(
+                    id,
+                    "WINDOW_NOT_RUNNING: the window has no page",
+                )),
+            },
+        }
+    }
+
+    /// `window_page` for the dev-mode tools: a normal window is refused.
+    fn dev_window(
+        &self,
+        id: u64,
+        window_id: &str,
+        tool: &str,
+    ) -> Result<(Arc<WindowCdp>, String), RpcResponse> {
+        let (cdp, page, dev) = self.window_page(id, window_id)?;
+        if !dev {
+            return Err(Self::tool_error(
+                id,
+                format!(
+                    "DEV_MODE_REQUIRED: {tool} needs a development-mode window; open it with browser.open{{url, dev: true}}"
+                ),
+            ));
+        }
+        Ok((cdp, page))
+    }
+
     /// Test helper: admit a fixed local-preview TLS port.
     pub fn with_preview_tls_port(mut self, port: u16) -> Self {
         self.preview_tls_port_override = Some(port);
@@ -169,7 +263,7 @@ impl BrowserMcpServer {
     /// Build the active routes allowlist from the current window registry.
     /// @trace spec:host-browser-mcp
     fn build_active_routes_allowlist(&self) -> BrowserAllowlist {
-        let windows = self.windows.list_for_project(&self.project_label);
+        let windows = self.windows.list_for_lane(&self.owner());
         let active_hosts: Vec<String> = windows
             .iter()
             .filter_map(|window| {
@@ -251,9 +345,76 @@ impl BrowserMcpServer {
                         "url": {
                             "type": "string",
                             "description": "The URL to open (must match allowlist: <service>.<project>.localhost:8080, or https on the local-preview port, e.g. https://www.<project>.localhost:18443)"
+                        },
+                        "engine": {
+                            "type": "string",
+                            "enum": ["chromium", "webkit"],
+                            "description": "The engine: default is the device's (Apple presets open in \"WebKit (approximates Safari)\", everything else in Chromium). \"chromium\" emulates any preset in Chromium."
+                        },
+                        "dev": {
+                            "type": "boolean",
+                            "description": "Development mode: the lane that opens the window gets full browser control (browser.cdp, browser.eval, browser.navigate, console and network tails). The window's network is unchanged: it still reaches only this project."
+                        },
+                        "device": {
+                            "type": "string",
+                            "description": "The device to emulate, e.g. \"iphone 12 pro max\", \"galaxy s24\", \"desktop\" (default: the project's .tillandsias/config.toml [browser] device, else desktop). The window opens at the device's CSS viewport with its dpr, UA and touch."
                         }
                     },
                     "required": ["url"]
+                }
+            },
+            {
+                "name": "browser.cdp",
+                "description": "Development-mode windows only (browser.open{dev:true}): send any Chrome DevTools Protocol command to the window, on its page session by default (sessionId to pick another, browser_level:true for the browser target), and return CDP's result. Full CDP exposes the window's session cookies (Network.getCookies, Storage.getCookies) and storage to the owning lane, the lane that opened the window, and to no other lane. It does not widen the window's network: the window still reaches only this project's routes.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "window_id": { "type": "string" },
+                        "method": { "type": "string", "description": "A CDP method, e.g. Runtime.evaluate" },
+                        "params": { "type": "object" },
+                        "sessionId": { "type": "string" },
+                        "browser_level": { "type": "boolean" }
+                    },
+                    "required": ["window_id", "method"]
+                }
+            },
+            {
+                "name": "browser.navigate",
+                "description": "Development-mode windows only: load a project URL in the window (the same allowlist as browser.open)",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": { "window_id": { "type": "string" }, "url": { "type": "string" } },
+                    "required": ["window_id", "url"]
+                }
+            },
+            {
+                "name": "browser.console_tail",
+                "description": "Development-mode windows only: the window's last console messages and exceptions (newest last)",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": { "window_id": { "type": "string" }, "limit": { "type": "integer" } },
+                    "required": ["window_id"]
+                }
+            },
+            {
+                "name": "browser.network_tail",
+                "description": "Development-mode windows only: the window's last network requests, responses and failures (newest last)",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": { "window_id": { "type": "string" }, "limit": { "type": "integer" } },
+                    "required": ["window_id"]
+                }
+            },
+            {
+                "name": "browser.set_device",
+                "description": "Switch an open window to another emulated device, live",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "window_id": { "type": "string" },
+                        "device": { "type": "string", "description": "A device query, as for browser.open" }
+                    },
+                    "required": ["window_id", "device"]
                 }
             },
             {
@@ -334,7 +495,7 @@ impl BrowserMcpServer {
             },
             {
                 "name": "browser.eval",
-                "description": "DISABLED: JavaScript evaluation is not available in v1",
+                "description": "Development-mode windows only (browser.open{dev:true}): evaluate a JavaScript expression in the page and return its value (promises awaited)",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -391,11 +552,13 @@ impl BrowserMcpServer {
             "browser.screenshot" => self.handle_browser_screenshot(id, args).await,
             "browser.click" => self.handle_browser_click(id, args).await,
             "browser.type" => self.handle_browser_type(id, args).await,
-            "browser.eval" => Self::tool_error(
-                id,
-                "EVAL_DISABLED: browser.eval is disabled in v1; see follow-up change",
-            ),
+            "browser.eval" => self.handle_browser_eval(id, args),
+            "browser.cdp" => self.handle_browser_cdp(id, args),
+            "browser.navigate" => self.handle_browser_navigate(id, args),
+            "browser.console_tail" => self.handle_browser_tail(id, args, "browser.console_tail"),
+            "browser.network_tail" => self.handle_browser_tail(id, args, "browser.network_tail"),
             "browser.close" => self.handle_browser_close(id, args),
+            "browser.set_device" => self.handle_browser_set_device(id, args),
             other => Self::tool_error(id, format!("TOOL_NOT_FOUND: {other}")),
         }
     }
@@ -446,10 +609,48 @@ impl BrowserMcpServer {
             );
         }
 
+        // Order 1656-iktu: development mode gives the owning lane full CDP.
+        let dev = args
+            .get("dev")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false);
+
+        // Order 1655-urz9: resolve the device before anything starts.
+        // Order 1656-tjv4: and the engine, from the device or `engine`.
+        let device_query = args
+            .get("device")
+            .and_then(|value| value.as_str())
+            .unwrap_or(&self.default_device);
+        let device = match Self::resolve_device(device_query) {
+            Ok(device) => device,
+            Err(err) => return Self::tool_error(id, err),
+        };
+        let engine = match args.get("engine").and_then(|value| value.as_str()) {
+            None => Engine::for_device(&device.engine),
+            Some(name) => match Engine::parse(name) {
+                Some(engine) => engine,
+                None => {
+                    return Self::tool_error(
+                        id,
+                        format!("ENGINE_UNKNOWN: {name:?}; use \"chromium\" or \"webkit\""),
+                    );
+                }
+            },
+        };
+        if dev && engine == Engine::WebKit {
+            return Self::tool_error(
+                id,
+                format!(
+                    "ENGINE_UNSUPPORTED: development mode is CDP, and a {} window speaks the Playwright protocol (order 1656-twhk); open it with engine: \"chromium\" for dev mode",
+                    Engine::WebKit.label()
+                ),
+            );
+        }
+
         if let Some((elapsed, existing_window_id)) =
             self.debounce.get(&self.project_label, &allowed.host)
             && elapsed.elapsed() < Duration::from_millis(1000)
-            && self.windows.contains(&existing_window_id)
+            && self.windows.owned_by(&existing_window_id, &self.owner())
         {
             return RpcResponse::Success {
                 id,
@@ -460,7 +661,14 @@ impl BrowserMcpServer {
             };
         }
 
-        let entry = match launcher::launch(&allowed.url, &self.project_label, &self.launch_mode) {
+        let entry = match launcher::launch(
+            &allowed.url,
+            &self.project_label,
+            &self.launch_mode,
+            &device,
+            dev,
+            engine,
+        ) {
             Ok(entry) => entry,
             Err(LaunchError::BrowserUnavailable) => {
                 return Self::tool_error(
@@ -473,6 +681,9 @@ impl BrowserMcpServer {
             }
         };
 
+        let mut entry = entry;
+        entry.owning_lane = self.owner();
+        let notice = entry.notice.clone();
         let window_id = entry.window_id.clone();
         self.windows.insert(entry);
         self.debounce
@@ -481,21 +692,200 @@ impl BrowserMcpServer {
         RpcResponse::Success {
             id,
             result: json!({
-                "window_id": window_id
+                "window_id": window_id,
+                "device": device.summary(),
+                "dev": dev,
+                "engine": engine.label(),
+                "notice": notice,
             }),
+        }
+    }
+
+    /// `browser.set_device{window_id, device}`: re-emulate a live window.
+    /// Order 1655-urz9.
+    fn handle_browser_set_device(&self, id: u64, args: &serde_json::Value) -> RpcResponse {
+        let Some(window_id) = args.get("window_id").and_then(|value| value.as_str()) else {
+            return Self::json_rpc_error(
+                id,
+                -32602,
+                "browser.set_device requires arguments.window_id",
+            );
+        };
+        let Some(query) = args.get("device").and_then(|value| value.as_str()) else {
+            return Self::json_rpc_error(
+                id,
+                -32602,
+                "browser.set_device requires arguments.device",
+            );
+        };
+        let device = match Self::resolve_device(query) {
+            Ok(device) => device,
+            Err(err) => return Self::tool_error(id, err),
+        };
+        let (cdp, _, _) = match self.window_page(id, window_id) {
+            Ok(found) => found,
+            Err(response) => return response,
+        };
+        match cdp.set_device(device.clone()) {
+            Ok(()) => RpcResponse::Success {
+                id,
+                result: json!({ "window_id": window_id, "device": device.summary() }),
+            },
+            Err(e) => Self::tool_error(id, format!("SET_DEVICE_FAILED: {e}")),
+        }
+    }
+
+    fn window_id_arg<'a>(
+        id: u64,
+        args: &'a serde_json::Value,
+        tool: &str,
+    ) -> Result<&'a str, RpcResponse> {
+        args.get("window_id")
+            .and_then(|value| value.as_str())
+            .ok_or_else(|| {
+                Self::json_rpc_error(id, -32602, format!("{tool} requires arguments.window_id"))
+            })
+    }
+
+    /// `browser.eval{window_id, expression}`: dev-mode windows only.
+    fn handle_browser_eval(&self, id: u64, args: &serde_json::Value) -> RpcResponse {
+        let window_id = match Self::window_id_arg(id, args, "browser.eval") {
+            Ok(w) => w,
+            Err(r) => return r,
+        };
+        let Some(expression) = args.get("expression").and_then(|v| v.as_str()) else {
+            return Self::json_rpc_error(id, -32602, "browser.eval requires arguments.expression");
+        };
+        let (cdp, _, dev) = match self.window_page(id, window_id) {
+            Ok(found) => found,
+            Err(r) => return r,
+        };
+        if !dev {
+            return Self::tool_error(
+                id,
+                "EVAL_DISABLED: browser.eval needs a development-mode window; open it with browser.open{url, dev: true}",
+            );
+        }
+        match cdp.evaluate(expression) {
+            Ok(value) => RpcResponse::Success {
+                id,
+                result: json!({ "value": value }),
+            },
+            Err(e) => Self::tool_error(id, format!("EVAL_FAILED: {e}")),
+        }
+    }
+
+    /// `browser.cdp{window_id, method, params?, sessionId?, browser_level?}`:
+    /// any CDP command, for the owning lane of a dev-mode window. The page
+    /// session by default; `browser_level: true` for the browser target.
+    fn handle_browser_cdp(&self, id: u64, args: &serde_json::Value) -> RpcResponse {
+        let window_id = match Self::window_id_arg(id, args, "browser.cdp") {
+            Ok(w) => w,
+            Err(r) => return r,
+        };
+        let Some(method) = args.get("method").and_then(|v| v.as_str()) else {
+            return Self::json_rpc_error(id, -32602, "browser.cdp requires arguments.method");
+        };
+        let params = args.get("params").cloned().unwrap_or_else(|| json!({}));
+        if !params.is_object() {
+            return Self::json_rpc_error(
+                id,
+                -32602,
+                "browser.cdp arguments.params must be an object",
+            );
+        }
+        let (cdp, page) = match self.dev_window(id, window_id, "browser.cdp") {
+            Ok(found) => found,
+            Err(r) => return r,
+        };
+        let browser_level = args
+            .get("browser_level")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let session = match args.get("sessionId").and_then(|v| v.as_str()) {
+            _ if browser_level => None,
+            Some(explicit) => Some(explicit.to_string()),
+            None => Some(page),
+        };
+        match cdp.connection().call(session.as_deref(), method, params) {
+            Ok(result) => RpcResponse::Success { id, result },
+            Err(e) => Self::tool_error(id, format!("CDP_ERROR: {e}")),
+        }
+    }
+
+    /// `browser.navigate{window_id, url}`: the same allowlist as browser.open.
+    fn handle_browser_navigate(&self, id: u64, args: &serde_json::Value) -> RpcResponse {
+        let window_id = match Self::window_id_arg(id, args, "browser.navigate") {
+            Ok(w) => w,
+            Err(r) => return r,
+        };
+        let Some(url) = args.get("url").and_then(|v| v.as_str()) else {
+            return Self::json_rpc_error(id, -32602, "browser.navigate requires arguments.url");
+        };
+        let (cdp, _) = match self.dev_window(id, window_id, "browser.navigate") {
+            Ok(found) => found,
+            Err(r) => return r,
+        };
+        let allowed = match allowlist::validate_with_preview(
+            url,
+            &self.project_label,
+            self.preview_tls_port(),
+        ) {
+            Ok(allowed) => allowed,
+            Err(reason) => return Self::tool_error(id, format!("URL_NOT_ALLOWED: {reason}")),
+        };
+        if matches!(self.launch_mode, LaunchMode::Container(_)) && allowed.url.scheme() != "https" {
+            return Self::tool_error(
+                id,
+                "URL_NOT_ALLOWED: browser windows load the project over https only",
+            );
+        }
+        match cdp.navigate(allowed.url.as_str()) {
+            Ok(()) => RpcResponse::Success {
+                id,
+                result: json!({ "ok": true, "url": allowed.url.as_str() }),
+            },
+            Err(e) => Self::tool_error(id, format!("NAVIGATE_FAILED: {e}")),
+        }
+    }
+
+    /// `browser.console_tail` / `browser.network_tail{window_id, limit?}`.
+    fn handle_browser_tail(&self, id: u64, args: &serde_json::Value, tool: &str) -> RpcResponse {
+        let window_id = match Self::window_id_arg(id, args, tool) {
+            Ok(w) => w,
+            Err(r) => return r,
+        };
+        let limit = args
+            .get("limit")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(50)
+            .min(500) as usize;
+        let (cdp, _) = match self.dev_window(id, window_id, tool) {
+            Ok(found) => found,
+            Err(r) => return r,
+        };
+        let entries = if tool == "browser.console_tail" {
+            cdp.console_tail(limit)
+        } else {
+            cdp.network_tail(limit)
+        };
+        RpcResponse::Success {
+            id,
+            result: json!({ "entries": entries }),
         }
     }
 
     fn handle_browser_list_windows(&self, id: u64) -> RpcResponse {
         let windows = self
             .windows
-            .list_for_project(&self.project_label)
+            .list_for_lane(&self.owner())
             .into_iter()
             .map(|window| {
                 json!({
                     "window_id": window.window_id,
                     "url": window.url,
-                    "title": window.title
+                    "title": window.title,
+                    "engine": window.engine
                 })
             })
             .collect::<Vec<_>>();
@@ -517,12 +907,16 @@ impl BrowserMcpServer {
             );
         };
 
+        if !self.windows.owned_by(window_id, &self.owner()) {
+            return Self::tool_error(id, format!("WINDOW_NOT_FOUND: {window_id}"));
+        }
         match self.windows.get(window_id) {
             Some(window) => RpcResponse::Success {
                 id,
                 result: json!({
                     "url": window.url,
-                    "title": window.title
+                    "title": window.title,
+                    "engine": window.engine
                 }),
             },
             None => Self::tool_error(id, format!("WINDOW_NOT_FOUND: {window_id}")),
@@ -534,6 +928,9 @@ impl BrowserMcpServer {
             return Self::json_rpc_error(id, -32602, "browser.close requires arguments.window_id");
         };
 
+        if !self.windows.owned_by(window_id, &self.owner()) {
+            return Self::tool_error(id, format!("WINDOW_NOT_FOUND: {window_id}"));
+        }
         let Some(entry) = close_window(&self.windows, &self.debounce, window_id) else {
             return Self::tool_error(id, format!("WINDOW_NOT_FOUND: {window_id}"));
         };
@@ -562,29 +959,21 @@ impl BrowserMcpServer {
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
-        let (cdp_port, target_id) = match self.windows.get_entry(window_id) {
-            Some((port, tid)) => (port, tid),
-            None => {
-                return Self::tool_error(id, format!("WINDOW_NOT_FOUND: {window_id}"));
-            }
+        let (cdp, page, _) = match self.window_page(id, window_id) {
+            Ok(found) => found,
+            Err(response) => return response,
         };
 
-        match CdpSession::connect(cdp_port, &target_id) {
-            Ok(mut session) => match session.screenshot(full_page) {
-                Ok(png_bytes) => {
-                    let b64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
-                    RpcResponse::Success {
-                        id,
-                        result: json!({
-                            "data": b64
-                        }),
-                    }
+        match cdp.connection().screenshot(&page, full_page) {
+            Ok(png_bytes) => {
+                let b64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
+                RpcResponse::Success {
+                    id,
+                    result: json!({
+                        "data": b64
+                    }),
                 }
-                Err(CdpError::WindowNotRunning(msg)) => {
-                    Self::tool_error(id, format!("WINDOW_NOT_RUNNING: {msg}"))
-                }
-                Err(e) => Self::tool_error(id, format!("SCREENSHOT_FAILED: {e}")),
-            },
+            }
             Err(CdpError::WindowNotRunning(msg)) => {
                 Self::tool_error(id, format!("WINDOW_NOT_RUNNING: {msg}"))
             }
@@ -602,29 +991,21 @@ impl BrowserMcpServer {
             return Self::json_rpc_error(id, -32602, "browser.click requires arguments.selector");
         };
 
-        let (cdp_port, target_id) = match self.windows.get_entry(window_id) {
-            Some((port, tid)) => (port, tid),
-            None => {
-                return Self::tool_error(id, format!("WINDOW_NOT_FOUND: {window_id}"));
-            }
+        let (cdp, page, _) = match self.window_page(id, window_id) {
+            Ok(found) => found,
+            Err(response) => return response,
         };
 
-        match CdpSession::connect(cdp_port, &target_id) {
-            Ok(mut session) => match session.click(selector) {
-                Ok(_) => RpcResponse::Success {
-                    id,
-                    result: json!({
-                        "ok": true
-                    }),
-                },
-                Err(CdpError::ElementNotFound { selector }) => {
-                    Self::tool_error(id, format!("ELEMENT_NOT_FOUND: {selector}"))
-                }
-                Err(CdpError::WindowNotRunning(msg)) => {
-                    Self::tool_error(id, format!("WINDOW_NOT_RUNNING: {msg}"))
-                }
-                Err(e) => Self::tool_error(id, format!("CLICK_FAILED: {e}")),
+        match cdp.connection().click(&page, selector) {
+            Ok(_) => RpcResponse::Success {
+                id,
+                result: json!({
+                    "ok": true
+                }),
             },
+            Err(CdpError::ElementNotFound { selector }) => {
+                Self::tool_error(id, format!("ELEMENT_NOT_FOUND: {selector}"))
+            }
             Err(CdpError::WindowNotRunning(msg)) => {
                 Self::tool_error(id, format!("WINDOW_NOT_RUNNING: {msg}"))
             }
@@ -646,29 +1027,21 @@ impl BrowserMcpServer {
             return Self::json_rpc_error(id, -32602, "browser.type requires arguments.text");
         };
 
-        let (cdp_port, target_id) = match self.windows.get_entry(window_id) {
-            Some((port, tid)) => (port, tid),
-            None => {
-                return Self::tool_error(id, format!("WINDOW_NOT_FOUND: {window_id}"));
-            }
+        let (cdp, page, _) = match self.window_page(id, window_id) {
+            Ok(found) => found,
+            Err(response) => return response,
         };
 
-        match CdpSession::connect(cdp_port, &target_id) {
-            Ok(mut session) => match session.type_text(selector, text) {
-                Ok(_) => RpcResponse::Success {
-                    id,
-                    result: json!({
-                        "ok": true
-                    }),
-                },
-                Err(CdpError::ElementNotFound { selector }) => {
-                    Self::tool_error(id, format!("ELEMENT_NOT_FOUND: {selector}"))
-                }
-                Err(CdpError::WindowNotRunning(msg)) => {
-                    Self::tool_error(id, format!("WINDOW_NOT_RUNNING: {msg}"))
-                }
-                Err(e) => Self::tool_error(id, format!("TYPE_FAILED: {e}")),
+        match cdp.connection().type_text(&page, selector, text) {
+            Ok(_) => RpcResponse::Success {
+                id,
+                result: json!({
+                    "ok": true
+                }),
             },
+            Err(CdpError::ElementNotFound { selector }) => {
+                Self::tool_error(id, format!("ELEMENT_NOT_FOUND: {selector}"))
+            }
             Err(CdpError::WindowNotRunning(msg)) => {
                 Self::tool_error(id, format!("WINDOW_NOT_RUNNING: {msg}"))
             }
@@ -820,7 +1193,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn tools_list_returns_eight_tools() {
+    async fn tools_list_returns_thirteen_tools() {
         let server = test_server(None);
         let request = RpcRequest {
             id: Some(2),
@@ -834,7 +1207,11 @@ mod tests {
                 assert_eq!(id, 2);
                 let tools = result.get("tools").and_then(|t| t.as_array());
                 assert!(tools.is_some());
-                assert_eq!(tools.unwrap().len(), 8, "Expected 8 tools in v1");
+                assert_eq!(
+                    tools.unwrap().len(),
+                    13,
+                    "8 v1 tools + set_device (1655-urz9) + cdp, navigate, console_tail, network_tail (1656-iktu)"
+                );
             }
             _ => panic!("Expected success response"),
         }
@@ -878,7 +1255,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn browser_eval_is_disabled_in_v1() {
+    async fn browser_eval_on_an_unknown_window_is_window_not_found() {
         let server = test_server(None);
         let request = RpcRequest {
             id: Some(5),
@@ -907,7 +1284,7 @@ mod tests {
                 assert_eq!(content.len(), 1);
                 assert_eq!(
                     content[0].get("text").and_then(|value| value.as_str()),
-                    Some("EVAL_DISABLED: browser.eval is disabled in v1; see follow-up change")
+                    Some("WINDOW_NOT_FOUND: win-A")
                 );
             }
             _ => panic!("Expected success response"),
@@ -1640,6 +2017,8 @@ mod tests {
                 container_name: format!("tillandsias-browser-{}-1", request.project_label),
                 network_name: "tillandsias-browser-net-1".to_string(),
                 profile_dir: std::path::PathBuf::new(),
+                cdp_socket: None,
+                notice: None,
             })
         }
         fn stop(&self, handle: &launcher::ContainerHandle) {
@@ -1799,5 +2178,501 @@ mod tests {
             .await
             .expect_err("no preview listener");
         assert!(err.starts_with("URL_NOT_ALLOWED:"), "{err}");
+    }
+
+    // ---- Order 1655-urz9: browser.open{device} emulates through the window's CDP session ----
+
+    /// A host launcher whose windows have a CDP relay socket, served by a
+    /// fake Chromium: it auto-attaches one page on `Target.setAutoAttach`,
+    /// answers everything else with `{}`, and records what it was sent.
+    #[cfg(unix)]
+    #[derive(Default)]
+    struct CdpContainers {
+        dir: parking_lot::Mutex<Option<tempfile::TempDir>>,
+        sizes: parking_lot::Mutex<Vec<(u32, u32)>>,
+        seen: Arc<parking_lot::Mutex<Vec<serde_json::Value>>>,
+        closed: Arc<std::sync::atomic::AtomicBool>,
+        stops: parking_lot::Mutex<Vec<String>>,
+    }
+
+    #[cfg(unix)]
+    impl BrowserContainers for CdpContainers {
+        fn preview_tls_port(&self) -> Option<u16> {
+            Some(18443)
+        }
+        fn start(
+            &self,
+            request: &launcher::ContainerLaunchRequest<'_>,
+        ) -> Result<launcher::ContainerHandle, LaunchError> {
+            use std::io::{BufRead, Write};
+            self.sizes.lock().push(request.window_size);
+            let dir = tempfile::tempdir()?;
+            let socket = dir.path().join("cdp.sock");
+            let listener = std::os::unix::net::UnixListener::bind(&socket)?;
+            *self.dir.lock() = Some(dir);
+            let seen = Arc::clone(&self.seen);
+            let closed = Arc::clone(&self.closed);
+            std::thread::spawn(move || {
+                let (stream, _) = listener.accept().unwrap();
+                let mut writer = stream.try_clone().unwrap();
+                let mut reader = std::io::BufReader::new(stream);
+                let mut frame = Vec::new();
+                let mut send = |v: serde_json::Value| {
+                    let mut out = serde_json::to_vec(&v).unwrap();
+                    out.push(0);
+                    writer.write_all(&out).is_ok()
+                };
+                loop {
+                    frame.clear();
+                    match reader.read_until(0, &mut frame) {
+                        Ok(0) | Err(_) => break,
+                        Ok(_) => {}
+                    }
+                    frame.pop();
+                    let msg: serde_json::Value = serde_json::from_slice(&frame).unwrap();
+                    seen.lock().push(msg.clone());
+                    let result = match msg["method"].as_str() {
+                        Some("Browser.getWindowForTarget") => json!({ "windowId": 1 }),
+                        Some("Page.navigate") => json!({ "frameId": "F1" }),
+                        Some("Runtime.evaluate") if msg["params"]["expression"] == "1+1" => {
+                            json!({ "result": { "type": "number", "value": 2, "description": "2" } })
+                        }
+                        _ => json!({}),
+                    };
+                    if !send(json!({ "id": msg["id"], "result": result })) {
+                        break;
+                    }
+                    if msg["method"] == "Target.setAutoAttach" {
+                        send(json!({ "method": "Target.attachedToTarget", "params": {
+                            "sessionId": "P1",
+                            "targetInfo": { "type": "page", "targetId": "T1" },
+                            "waitingForDebugger": false,
+                        }}));
+                    }
+                }
+                closed.store(true, std::sync::atomic::Ordering::SeqCst);
+            });
+            Ok(launcher::ContainerHandle {
+                container_name: format!("tillandsias-browser-{}-1", request.project_label),
+                network_name: "tillandsias-browser-net-1".to_string(),
+                profile_dir: std::path::PathBuf::new(),
+                cdp_socket: Some(socket),
+                notice: None,
+            })
+        }
+        fn stop(&self, handle: &launcher::ContainerHandle) {
+            self.stops.lock().push(handle.container_name.clone());
+        }
+    }
+
+    #[cfg(unix)]
+    impl CdpContainers {
+        fn methods_on(&self, session: &str) -> Vec<(String, serde_json::Value)> {
+            self.seen
+                .lock()
+                .iter()
+                .filter(|m| m["sessionId"] == session)
+                .map(|m| {
+                    (
+                        m["method"].as_str().unwrap_or("").to_string(),
+                        m["params"].clone(),
+                    )
+                })
+                .collect()
+        }
+    }
+
+    async fn call_tool(
+        server: &BrowserMcpServer,
+        name: &str,
+        arguments: serde_json::Value,
+    ) -> serde_json::Value {
+        match server
+            .handle_request(RpcRequest {
+                id: Some(1),
+                method: "tools/call".to_string(),
+                params: json!({ "name": name, "arguments": arguments }),
+            })
+            .await
+        {
+            RpcResponse::Success { result, .. } => result,
+            other => json!({ "frame": format!("{other:?}") }),
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn browser_open_with_a_device_emulates_it_before_navigating_and_set_device_switches_it() {
+        let host = Arc::new(CdpContainers::default());
+        let server = BrowserMcpServer::with_project_label(
+            McpServerConfig::default(),
+            "acme",
+            Some(host.clone() as Arc<dyn BrowserContainers>),
+        );
+        let url = "https://www.acme.localhost:18443/";
+        let opened = call_tool(
+            &server,
+            "browser.open",
+            json!({ "url": url, "device": "iphone 12 pro max", "engine": "chromium" }),
+        )
+        .await;
+        assert_eq!(
+            opened["device"]["id"], "apple-iphone-12-pro-max",
+            "{opened}"
+        );
+        assert_eq!(opened["device"]["viewport"], json!({ "w": 428, "h": 926 }));
+        assert_eq!(opened["device"]["dpr"], 3.0);
+        assert_eq!(
+            *host.sizes.lock(),
+            vec![(428, 926)],
+            "CSS viewport, host DIPs"
+        );
+
+        let p1 = host.methods_on("P1");
+        let names: Vec<&str> = p1.iter().map(|(m, _)| m.as_str()).collect();
+        let emulation = [
+            "Emulation.setTouchEmulationEnabled",
+            "Emulation.setEmitTouchEventsForMouse",
+            "Emulation.setDeviceMetricsOverride",
+            "Emulation.setUserAgentOverride",
+        ];
+        assert_eq!(names[..4], emulation, "emulated as it attached: {names:?}");
+        assert_eq!(names[4], "Page.enable");
+        assert_eq!(
+            names[5..9],
+            emulation,
+            "then the checked re-apply: {names:?}"
+        );
+        assert_eq!(
+            names[9], "Page.navigate",
+            "and only then navigated: {names:?}"
+        );
+        assert_eq!(p1[2].1["width"], 428);
+        assert_eq!(p1[2].1["deviceScaleFactor"], 3.0);
+        assert!(p1[0].1["maxTouchPoints"].as_u64().unwrap() > 0);
+        assert_eq!(p1[9].1["url"], url);
+
+        let window = opened["window_id"].as_str().unwrap().to_string();
+        let switched = call_tool(
+            &server,
+            "browser.set_device",
+            json!({ "window_id": window, "device": "galaxy s24" }),
+        )
+        .await;
+        assert_eq!(switched["device"]["id"], "samsung-galaxy-s24", "{switched}");
+        let metrics: Vec<serde_json::Value> = host
+            .methods_on("P1")
+            .into_iter()
+            .filter(|(m, _)| m == "Emulation.setDeviceMetricsOverride")
+            .map(|(_, p)| p)
+            .collect();
+        assert_eq!(metrics.last().unwrap()["width"], 360);
+
+        let unknown = call_tool(
+            &server,
+            "browser.set_device",
+            json!({ "window_id": window, "device": "blorp 9000" }),
+        )
+        .await;
+        assert!(
+            unknown["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .starts_with("DEVICE_UNKNOWN:")
+        );
+
+        call_tool(&server, "browser.close", json!({ "window_id": window })).await;
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while !host.closed.load(std::sync::atomic::Ordering::SeqCst)
+            && std::time::Instant::now() < deadline
+        {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(
+            host.closed.load(std::sync::atomic::Ordering::SeqCst),
+            "close ends the CDP session"
+        );
+        assert_eq!(*host.stops.lock(), vec!["tillandsias-browser-acme-1"]);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn an_unknown_device_starts_nothing_and_the_default_comes_from_the_project() {
+        let host = Arc::new(CdpContainers::default());
+        let server = BrowserMcpServer::with_project_label(
+            McpServerConfig::default(),
+            "acme",
+            Some(host.clone() as Arc<dyn BrowserContainers>),
+        );
+        let refused = call_tool(
+            &server,
+            "browser.open",
+            json!({ "url": "https://www.acme.localhost:18443/", "device": "blorp 9000" }),
+        )
+        .await;
+        assert!(
+            refused["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .starts_with("DEVICE_UNKNOWN:"),
+            "{refused}"
+        );
+        assert!(host.sizes.lock().is_empty(), "nothing started");
+
+        let opened = call_tool(
+            &server,
+            "browser.open",
+            json!({ "url": "https://www.acme.localhost:18443/" }),
+        )
+        .await;
+        assert_eq!(
+            opened["device"]["id"], "desktop-chrome",
+            "no project default: desktop"
+        );
+
+        let host = Arc::new(CdpContainers::default());
+        let server = BrowserMcpServer::with_project_label(
+            McpServerConfig::default(),
+            "acme",
+            Some(host.clone() as Arc<dyn BrowserContainers>),
+        )
+        .with_default_device("galaxy s24");
+        let opened = call_tool(
+            &server,
+            "browser.open",
+            json!({ "url": "https://www.acme.localhost:18443/" }),
+        )
+        .await;
+        assert_eq!(opened["device"]["id"], "samsung-galaxy-s24", "{opened}");
+    }
+
+    #[tokio::test]
+    async fn cdp_tools_on_a_fake_window_answer_window_not_running() {
+        let server = test_server_fake_launch(None);
+        let window = open(&server, "http://web.acme.localhost:8080/")
+            .await
+            .unwrap();
+        let shot = call_tool(
+            &server,
+            "browser.set_device",
+            json!({ "window_id": window, "device": "desktop" }),
+        )
+        .await;
+        assert!(
+            shot["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .starts_with("WINDOW_NOT_RUNNING:"),
+            "{shot}"
+        );
+    }
+
+    // ---- Order 1656-iktu: dev mode gives the OWNING lane full CDP ----
+
+    #[cfg(unix)]
+    fn tool_text(v: &serde_json::Value) -> String {
+        v["content"][0]["text"].as_str().unwrap_or("").to_string()
+    }
+
+    #[cfg(unix)]
+    fn lane_server(host: &Arc<CdpContainers>) -> BrowserMcpServer {
+        BrowserMcpServer::with_project_label(
+            McpServerConfig::default(),
+            "acme",
+            Some(host.clone() as Arc<dyn BrowserContainers>),
+        )
+    }
+
+    /// Exit criterion 1: from the owning lane, raw browser.cdp evaluates on
+    /// the window's page.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn dev_window_raw_cdp_evaluates_on_the_page_for_the_owning_lane() {
+        let host = Arc::new(CdpContainers::default());
+        let lane_a = lane_server(&host);
+        let opened = call_tool(
+            &lane_a,
+            "browser.open",
+            json!({ "url": "https://www.acme.localhost:18443/", "dev": true }),
+        )
+        .await;
+        let window = opened["window_id"].as_str().expect("opened").to_string();
+        let got = call_tool(
+            &lane_a,
+            "browser.cdp",
+            json!({
+                "window_id": window, "method": "Runtime.evaluate", "params": { "expression": "1+1" }
+            }),
+        )
+        .await;
+        assert_eq!(got["result"]["value"], 2, "{got}");
+    }
+
+    /// Exit criterion 2: another lane holding the same window_id gets
+    /// WINDOW_NOT_FOUND, for raw CDP and for the typed tools alike.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn another_lane_gets_window_not_found_for_a_dev_window() {
+        let host = Arc::new(CdpContainers::default());
+        let lane_a = lane_server(&host);
+        let lane_b = lane_server(&host);
+        let opened = call_tool(
+            &lane_a,
+            "browser.open",
+            json!({ "url": "https://www.acme.localhost:18443/", "dev": true }),
+        )
+        .await;
+        let window = opened["window_id"].as_str().expect("opened").to_string();
+        for (tool, args) in [
+            (
+                "browser.cdp",
+                json!({ "window_id": window, "method": "Runtime.evaluate", "params": { "expression": "1+1" } }),
+            ),
+            ("browser.screenshot", json!({ "window_id": window })),
+            (
+                "browser.eval",
+                json!({ "window_id": window, "expression": "1+1" }),
+            ),
+        ] {
+            let got = call_tool(&lane_b, tool, args).await;
+            assert!(
+                tool_text(&got).starts_with("WINDOW_NOT_FOUND:"),
+                "{tool} from lane B: {got}"
+            );
+        }
+    }
+
+    /// A normal (non-dev) window gets no raw CDP: dev mode is opt-in.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_normal_window_refuses_raw_cdp() {
+        let host = Arc::new(CdpContainers::default());
+        let lane_a = lane_server(&host);
+        let opened = call_tool(
+            &lane_a,
+            "browser.open",
+            json!({ "url": "https://www.acme.localhost:18443/" }),
+        )
+        .await;
+        let window = opened["window_id"].as_str().expect("opened").to_string();
+        let got = call_tool(&lane_a, "browser.cdp", json!({ "window_id": window, "method": "Runtime.evaluate", "params": { "expression": "1+1" } })).await;
+        assert!(tool_text(&got).starts_with("DEV_MODE_REQUIRED:"), "{got}");
+    }
+
+    /// Exit criterion 5: the tool says what full CDP hands the lane.
+    #[tokio::test]
+    async fn browser_cdp_description_states_the_cookie_exposure() {
+        let server = test_server(None);
+        let RpcResponse::Success { result, .. } = server
+            .handle_request(RpcRequest {
+                id: Some(1),
+                method: "tools/list".into(),
+                params: json!({}),
+            })
+            .await
+        else {
+            panic!("tools/list");
+        };
+        let cdp = result["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|t| t["name"] == "browser.cdp")
+            .cloned()
+            .unwrap_or_default();
+        let text = cdp["description"].as_str().unwrap_or("");
+        assert!(
+            text.contains("cookies") && text.contains("owning lane"),
+            "browser.cdp must state that full CDP exposes the window's session cookies to the owning lane: {cdp}"
+        );
+    }
+
+    // ---- Order 1656-tjv4: Apple presets open in "WebKit (approximates Safari)" ----
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn an_apple_preset_opens_the_webkit_engine_with_no_cdp_and_says_so() {
+        let host = Arc::new(CdpContainers::default());
+        let server = lane_server(&host);
+        let opened = call_tool(
+            &server,
+            "browser.open",
+            json!({ "url": "https://www.acme.localhost:18443/", "device": "iphone 15" }),
+        )
+        .await;
+        assert_eq!(opened["engine"], "WebKit (approximates Safari)", "{opened}");
+        assert_eq!(opened["device"]["id"], "apple-iphone-15");
+        assert!(opened["notice"].is_null(), "nothing was prepared: {opened}");
+        assert!(
+            host.seen.lock().is_empty(),
+            "no CDP session for a WebKit window"
+        );
+        let window = opened["window_id"].as_str().unwrap().to_string();
+        let listed = call_tool(&server, "browser.list_windows", json!({})).await;
+        assert_eq!(
+            listed["windows"][0]["engine"],
+            "WebKit (approximates Safari)"
+        );
+        for (tool, args) in [
+            ("browser.screenshot", json!({ "window_id": window })),
+            (
+                "browser.set_device",
+                json!({ "window_id": window, "device": "galaxy s24" }),
+            ),
+        ] {
+            let got = call_tool(&server, tool, args).await;
+            let text = tool_text(&got);
+            assert!(
+                text.starts_with("ENGINE_UNSUPPORTED:")
+                    && text.contains("WebKit (approximates Safari)"),
+                "{tool}: {got}"
+            );
+        }
+        // The same preset can still be emulated in Chromium, over CDP (a
+        // fresh lane: the same host would be debounced to the first window).
+        let host2 = Arc::new(CdpContainers::default());
+        let chromium = call_tool(
+            &lane_server(&host2),
+            "browser.open",
+            json!({ "url": "https://www.acme.localhost:18443/", "device": "iphone 15", "engine": "chromium" }),
+        )
+        .await;
+        assert_eq!(chromium["engine"], "Chromium", "{chromium}");
+    }
+
+    #[tokio::test]
+    async fn dev_mode_on_webkit_and_unknown_engines_are_refused_before_anything_starts() {
+        let server = test_server_fake_launch(None);
+        let got = |v: serde_json::Value| v["content"][0]["text"].as_str().unwrap_or("").to_string();
+        let dev = call_tool(
+            &server,
+            "browser.open",
+            json!({ "url": "http://web.acme.localhost:8080/", "device": "iphone 15", "dev": true }),
+        )
+        .await;
+        assert!(got(dev.clone()).starts_with("ENGINE_UNSUPPORTED:"), "{dev}");
+        let unknown = call_tool(
+            &server,
+            "browser.open",
+            json!({ "url": "http://web.acme.localhost:8080/", "engine": "gecko" }),
+        )
+        .await;
+        assert!(
+            got(unknown.clone()).starts_with("ENGINE_UNKNOWN:"),
+            "{unknown}"
+        );
+    }
+
+    /// The engine's name is never "Safari" alone.
+    #[test]
+    fn the_webkit_label_never_says_safari_alone() {
+        use crate::launcher::Engine;
+        let label = Engine::WebKit.label();
+        assert_eq!(label, "WebKit (approximates Safari)");
+        assert!(!label.trim().eq_ignore_ascii_case("safari"));
+        assert!(label.contains("WebKit"));
+        assert_eq!(Engine::for_device("webkit"), Engine::WebKit);
+        assert_eq!(Engine::for_device("blink"), Engine::Chromium);
+        assert_eq!(Engine::for_device("gecko"), Engine::Chromium);
     }
 }
