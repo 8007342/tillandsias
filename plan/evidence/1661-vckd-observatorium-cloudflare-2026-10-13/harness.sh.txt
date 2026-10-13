@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# 1661-vckd (evidence, not shipped): run the observatorium's Cloudflare build
+# the way Workers Builds does, in a FRESH Ubuntu 24.04 container on a PRIVATE
+# podman store, limited to the free plan's 2 vCPU / 8 GB, and time it.
+#   - base tools Workers Builds preinstalls (curl git unzip xz build-essential,
+#     Node 22) are set up first and EXCLUDED from the timed budget;
+#   - the repo is cloned --depth 1 (Workers Builds' depth is undocumented);
+#   - timed: `npm ci` (Workers Builds installs dependencies) + `npm run build`
+#     from observatorium/ (the dashboard's root directory and Build command);
+#   - then, untimed: node tests, flutter analyze, flutter test, wrangler dry run.
+set -u
+REPO="$(cd "$(dirname "$0")/../../.." && pwd)"
+HERE="$REPO/target/work/obs-cf"; OUT="$HERE/out"; mkdir -p "$OUT"; find "$OUT" -mindepth 1 -delete
+UBUNTU="${OBS_IMAGE:-docker.io/library/ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55}"
+CPUS="${OBS_CPUS:-2}"
+OP_ENV=(env -u CONTAINERS_STORAGE_CONF -u CONTAINERS_CONF -u REGISTRY_AUTH_FILE -u XDG_CACHE_HOME "HOME=$HOME")
+[ -z "${CONTAINERS_STORAGE_CONF:-}${CONTAINERS_CONF:-}" ] || { echo "ABORT: plain shell only"; exit 3; }
+log() { echo "$*" >> "$OUT/summary.txt"; echo "$*"; }
+op_state() {
+    local c; for c in tillandsias-inference tillandsias-dev-inference tillandsias-router; do
+        "${OP_ENV[@]}" podman inspect --format '{{.Name}} {{.Id}} {{.State.Status}} {{.State.StartedAt}}' "$c" 2>&1; done
+    "${OP_ENV[@]}" podman network ls --format '{{.Name}}' 2>&1 | sort
+    "${OP_ENV[@]}" podman images --format '{{.Repository}}:{{.Tag}} {{.ID}}' 2>&1 | sort
+}
+op_state > "$OUT/op-before"
+S="$(mktemp -d "$HERE/run.XXXXXX")"; R="$(mktemp -d "${XDG_RUNTIME_DIR:?}/tillandsias-obs-cf.XXXXXX")"
+mkdir -p "$S/graph" "$R/run" "$R/tmp" "$S/home"
+printf '%s\n' '[storage]' 'driver = "overlay"' "graphroot = \"$S/graph\"" "runroot = \"$R/run\"" > "$S/storage.conf"
+printf '%s\n' '[engine]' 'cgroup_manager = "cgroupfs"' 'events_logger = "file"' "events_logfile_path = \"$S/events.log\"" "tmp_dir = \"$R/tmp\"" > "$S/containers.conf"
+# The clone source: this checkout's committed branch, as a bare mirror.
+git clone -q --bare "$REPO" "$S/src.git"
+export CONTAINERS_STORAGE_CONF="$S/storage.conf" CONTAINERS_CONF="$S/containers.conf" REGISTRY_AUTH_FILE="$S/auth.json" HOME="$S/home"
+unset XDG_CACHE_HOME
+guard() { local g; g="$(podman info --format '{{.Store.GraphRoot}}' 2>/dev/null)"; [ "$g" = "$S/graph" ] || { echo "ABORT: store is '$g'"; exit 3; }; }
+guard
+podman pull -q "$UBUNTU" > /dev/null
+BRANCH="$(git -C "$REPO" branch --show-current)"
+log "branch $BRANCH head $(git -C "$REPO" rev-parse --short HEAD) cpus=$CPUS memory=8g"
+cat > "$S/inside.sh" <<'IN'
+set -u
+export DEBIAN_FRONTEND=noninteractive
+t0=$(date +%s)
+if command -v apt-get >/dev/null; then apt-get update -qq >/dev/null && apt-get install -y -qq --no-install-recommends ca-certificates curl git unzip xz-utils zstd build-essential >/dev/null
+else dnf install -y -q curl git unzip xz zstd gcc gcc-c++ make tar which findutils diffutils >/dev/null; fi
+curl -fsSL -o /tmp/node.tar.xz https://nodejs.org/dist/v22.23.3/node-v22.23.3-linux-x64.tar.xz
+echo "df450af89261115ef9f9e3830c3eeb2cc9213b63c720b1af623cb5dcbe2e02de  /tmp/node.tar.xz" | sha256sum -c - >/dev/null
+tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 --no-same-owner
+echo "base-tools (excluded from budget) $(( $(date +%s) - t0 ))s node $(node --version)"
+git config --global --add safe.directory '*'
+git clone -q --depth 1 --branch "$BRANCH" file:///src.git /work/repo
+cd /work/repo/observatorium
+echo "clone shallow=$(git rev-parse --is-shallow-repository)"
+T=$(date +%s)
+npm ci --no-audit --no-fund > /out/npm-ci.log 2>&1; echo "npm-ci rc=$? $(( $(date +%s) - T ))s"
+B=$(date +%s)
+npm run build > /out/build.log 2>&1; rc=$?
+echo "npm-run-build rc=$rc $(( $(date +%s) - B ))s"
+echo "TIMED-TOTAL $(( $(date +%s) - T ))s (npm ci + npm run build)"
+grep -E "^observatorium-build:" /out/build.log | tail -12
+ls -la build/web | head -5
+python3 - 2>/dev/null <<'PY' || node -e "const m=require('./web/data/metrics.json'); console.log('metrics current', JSON.stringify(m.current.residual), 'plan', m.current.plan.total, 'gaps', m.gaps.length)"
+PY
+npm test > /out/node-test.log 2>&1; echo "node-test rc=$? $(grep -E '^# (pass|fail)' /out/node-test.log | tr '\n' ' ')"
+F=$(ls -d .tools/flutter-*/flutter/bin/flutter 2>/dev/null | head -1)
+"$F" analyze > /out/flutter-analyze.log 2>&1; echo "flutter-analyze rc=$? $(tail -1 /out/flutter-analyze.log)"
+"$F" test > /out/flutter-test.log 2>&1; echo "flutter-test rc=$? $(tail -1 /out/flutter-test.log)"
+npx wrangler deploy --dry-run > /out/wrangler-dry-run.log 2>&1; echo "wrangler-dry-run rc=$? $(grep -iE 'dry|upload|assets' /out/wrangler-dry-run.log | tail -3 | tr '\n' ' ')"
+IN
+guard
+podman run --rm --pull=never --cpus "$CPUS" --memory 8g -e BRANCH="$BRANCH" \
+    -v "$S/src.git:/src.git:ro,z" -v "$S/inside.sh:/inside.sh:ro,z" -v "$OUT:/out:z" \
+    --tmpfs /tmp:size=2g "$UBUNTU" bash /inside.sh 2>&1 | tee -a "$OUT/summary.txt"
+guard
+podman rmi -a -f > /dev/null 2>&1
+export HOME="$(getent passwd "$(id -u)" | cut -d: -f6)"
+unset CONTAINERS_STORAGE_CONF CONTAINERS_CONF REGISTRY_AUTH_FILE
+sleep 2
+if [ -n "$S" ] && [ -n "$R" ]; then
+    for _ in 1 2 3; do
+        podman unshare umount -l "$S/graph/overlay" 2>/dev/null
+        podman unshare find "$S" "$R" -delete 2>/dev/null
+        [ -e "$S" ] || [ -e "$R" ] || break
+        sleep 2
+    done
+fi
+op_state > "$OUT/op-after"
+cmp -s "$OUT/op-before" "$OUT/op-after" && log "op: unchanged" || { log "op: CHANGED"; diff "$OUT/op-before" "$OUT/op-after" | tee -a "$OUT/summary.txt"; }
+log "leftover: $(ls -d "$HERE"/run.* "$XDG_RUNTIME_DIR"/tillandsias-obs-cf.* 2>/dev/null | tr '\n' ' ')"

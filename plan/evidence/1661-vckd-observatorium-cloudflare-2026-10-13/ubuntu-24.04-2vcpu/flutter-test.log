@@ -1,0 +1,20 @@
+   Woah! You appear to be trying to run flutter as root.
+   We strongly recommend running the flutter tool without superuser privileges.
+  /
+📎
+Resolving dependencies...
+Downloading packages...
+  material_color_utilities 0.13.0 (0.13.1 available)
+  test_api 0.7.12 (0.7.15 available)
+Got dependencies!
+2 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+00:00 +0: loading /work/repo/observatorium/test/evidence_test.dart
+00:00 +0: periodic refresh preserves controls and keeps last evidence on failure
+00:01 +1: an unavailable specification scan is shown as unmeasured
+00:01 +2: dashboard adapts to 320.0 pixel screens
+00:01 +3: dashboard adapts to 390.0 pixel screens
+00:01 +4: preserves true zero and missing evidence independently
+00:01 +5: rejects an unrecognized scale instead of mislabeling coordinates
+00:01 +6: exposes missing evidence, scale controls and filterable source rows
+00:01 +7: All tests passed!

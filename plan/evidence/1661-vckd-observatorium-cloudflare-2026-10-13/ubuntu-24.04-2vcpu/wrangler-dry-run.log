@@ -1,0 +1,87 @@
+
+ ⛅️ wrangler 4.150.0
+────────────────────
+[custom build] Running: npm run build
+[custom build] 
+[custom build] > build
+[custom build] > node scripts/build.mjs
+[custom build] 
+[custom build] 
+[custom build]     Finished `release` profile [optimized] target(s) in 0.25s
+[custom build] 
+[custom build] observatorium-build: tillandsias-plan 0.3s
+[custom build] 
+[custom build] observatorium-build: git-history 0s
+[custom build] observatorium-build: git history full
+[custom build] 
+[custom build] Collected 2026-10-13T19:40:17.004Z at ee15655fb9d3; 1 explicit gaps
+[custom build] 
+[custom build] observatorium-build: collect 0.6s
+[custom build] 
+[custom build] Precomputed logarithmic graph: /work/repo/observatorium/web/data/metrics.json
+[custom build] 
+[custom build] observatorium-build: precompute 0.2s
+[custom build] 
+[custom build]    Woah! You appear to be trying to run flutter as root.
+[custom build]    We strongly recommend running the flutter tool without superuser privileges.
+[custom build] 
+[custom build]   /
+[custom build] 📎
+[custom build] 
+[custom build] Resolving dependencies...
+[custom build] 
+[custom build] Downloading packages...
+[custom build] 
+[custom build]   material_color_utilities 0.13.0 (0.13.1 available)
+[custom build]   test_api 0.7.12 (0.7.15 available)
+[custom build] 
+[custom build] Got dependencies!
+[custom build] 2 packages have newer versions incompatible with dependency constraints.
+[custom build] Try `flutter pub outdated` for more information.
+[custom build] 
+[custom build] observatorium-build: flutter-pub-get 0.4s
+[custom build] 
+[custom build]    Woah! You appear to be trying to run flutter as root.
+[custom build]    We strongly recommend running the flutter tool without superuser privileges.
+[custom build]   /
+[custom build] 
+[custom build] 📎
+[custom build] 
+[custom build] Resolving dependencies...
+[custom build] 
+[custom build] Downloading packages...
+[custom build] 
+[custom build]   material_color_utilities 0.13.0 (0.13.1 available)
+[custom build]   test_api 0.7.12 (0.7.15 available)
+[custom build] 
+[custom build] Got dependencies!
+[custom build] 2 packages have newer versions incompatible with dependency constraints.
+[custom build] Try `flutter pub outdated` for more information.
+[custom build] 
+[custom build] Compiling lib/main.dart for the Web...                          
+[custom build] 
+[custom build] 
+[custom build] Wasm dry run succeeded. Consider building and testing your application with the `--wasm` flag. See docs for more info: https://docs.flutter.dev/platform-integration/web/wasm
+[custom build] 
+[custom build] Use --no-wasm-dry-run to disable these warnings.
+[custom build] 
+[custom build] Font asset "CupertinoIcons.ttf" was tree-shaken, reducing it from 257628 to 1472 bytes (99.4% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
+[custom build] 
+[custom build] Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 8172 bytes (99.5% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
+[custom build] 
+[custom build] Compiling lib/main.dart for the Web...                          
+[custom build]    25.5s
+[custom build] 
+[custom build] 
+[custom build] ✓ Built build/web
+[custom build] 
+[custom build] observatorium-build: flutter-build-web 25.9s
+[custom build] 
+[custom build] observatorium-build: total 27s (tillandsias-plan=0.3s git-history=0s collect=0.6s precompute=0.2s flutter-pub-get=0.4s flutter-build-web=25.9s)
+[custom build] 
+✨ Read 47 files from the assets directory /work/repo/observatorium/build/web
+Total Upload: 0.31 KiB / gzip: 0.22 KiB
+No bindings found.
+--dry-run: exiting now.
+
+Cloudflare collects anonymous telemetry about your usage of Wrangler. Learn more at https://github.com/cloudflare/workers-sdk/tree/main/packages/wrangler/telemetry.md
