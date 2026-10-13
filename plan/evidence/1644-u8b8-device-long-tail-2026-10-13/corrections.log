@@ -1,0 +1,95 @@
+blank os.version samsung-galaxy-s24-plus (was 14: not stated as an Android version on the page)
+blank os.version samsung-galaxy-s24-ultra (was 14: not stated as an Android version on the page)
+rename redmi-note-13 -> xiaomi-redmi-note-13
+rename redmi-note-13-5g -> xiaomi-redmi-note-13-5g
+rename redmi-note-13-pro -> xiaomi-redmi-note-13-pro
+rename redmi-note-13-pro-5g -> xiaomi-redmi-note-13-pro-5g
+rename redmi-note-13-pro-plus-5g -> xiaomi-redmi-note-13-pro-plus-5g
+rename redmi-note-12 -> xiaomi-redmi-note-12
+rename redmi-note-12-5g -> xiaomi-redmi-note-12-5g
+rename redmi-note-12-pro -> xiaomi-redmi-note-12-pro
+rename redmi-note-12-pro-5g -> xiaomi-redmi-note-12-pro-5g
+rename redmi-note-12-pro-plus-5g -> xiaomi-redmi-note-12-pro-plus-5g
+rename redmi-note-12s -> xiaomi-redmi-note-12s
+rename redmi-note-11 -> xiaomi-redmi-note-11
+rename redmi-note-11-pro -> xiaomi-redmi-note-11-pro
+rename redmi-note-11-pro-5g -> xiaomi-redmi-note-11-pro-5g
+rename redmi-note-11s -> xiaomi-redmi-note-11s
+rename redmi-note-11s-5g -> xiaomi-redmi-note-11s-5g
+rename redmi-note-14 -> xiaomi-redmi-note-14
+rename redmi-note-14-5g -> xiaomi-redmi-note-14-5g
+rename redmi-note-14-pro -> xiaomi-redmi-note-14-pro
+rename redmi-note-14-pro-5g -> xiaomi-redmi-note-14-pro-5g
+rename redmi-note-14-pro-plus-5g -> xiaomi-redmi-note-14-pro-plus-5g
+rename redmi-note-14s -> xiaomi-redmi-note-14s
+rename redmi-note-10 -> xiaomi-redmi-note-10
+rename redmi-note-10-pro -> xiaomi-redmi-note-10-pro
+rename redmi-note-10-5g -> xiaomi-redmi-note-10-5g
+rename redmi-note-10s -> xiaomi-redmi-note-10s
+rename redmi-12 -> xiaomi-redmi-12
+rename redmi-12-5g -> xiaomi-redmi-12-5g
+rename redmi-12c -> xiaomi-redmi-12c
+rename redmi-13 -> xiaomi-redmi-13
+rename redmi-13c -> xiaomi-redmi-13c
+rename redmi-13c-5g -> xiaomi-redmi-13c-5g
+rename redmi-a3 -> xiaomi-redmi-a3
+rename redmi-10 -> xiaomi-redmi-10
+rename poco-f5-pro -> xiaomi-poco-f5-pro
+rename poco-f6 -> xiaomi-poco-f6
+rename poco-f6-pro -> xiaomi-poco-f6-pro
+rename poco-f7 -> xiaomi-poco-f7
+rename poco-f7-pro -> xiaomi-poco-f7-pro
+rename poco-f7-ultra -> xiaomi-poco-f7-ultra
+rename poco-x5-pro-5g -> xiaomi-poco-x5-pro-5g
+rename poco-x6 -> xiaomi-poco-x6
+rename poco-x6-pro -> xiaomi-poco-x6-pro
+rename poco-x7 -> xiaomi-poco-x7
+rename poco-x7-pro -> xiaomi-poco-x7-pro
+rename poco-m6-pro -> xiaomi-poco-m6-pro
+rename poco-m6 -> xiaomi-poco-m6
+rename poco-c65 -> xiaomi-poco-c65
+rename redmi-pad -> xiaomi-redmi-pad
+rename redmi-pad-se -> xiaomi-redmi-pad-se
+rename redmi-pad-pro -> xiaomi-redmi-pad-pro
+rename redmi-pad-pro-5g -> xiaomi-redmi-pad-pro-5g
+rename redmi-pad-2 -> xiaomi-redmi-pad-2
+blank os.version oneplus-pad (was 13: not stated as an Android version on the page)
+blank os.version oneplus-pad-2 (was 14: not stated as an Android version on the page)
+blank os.version oneplus-pad-go (was 13: not stated as an Android version on the page)
+blank os.version nothing-phone-2 (was 15: not stated as an Android version on the page)
+blank os.version nothing-phone-2a (was 15: not stated as an Android version on the page)
+drop motorola-moto-g75: cited page body is headed 'moto g55 5G'; provenance ambiguous
+blank os.version oppo-find-x8-pro (was 15: not stated as an Android version on the page)
+blank os.version oppo-find-x8 (was 15: not stated as an Android version on the page)
+blank os.version oppo-find-x7-ultra (was 14: not stated as an Android version on the page)
+blank os.version oppo-find-x6-pro (was 13: not stated as an Android version on the page)
+blank os.version oppo-find-x5-pro (was 12: not stated as an Android version on the page)
+blank os.version oppo-find-n5 (was 15: not stated as an Android version on the page)
+blank os.version oppo-find-n5-cover (was 15: not stated as an Android version on the page)
+blank os.version oppo-find-n3 (was 13: not stated as an Android version on the page)
+blank os.version oppo-find-n3-cover (was 13: not stated as an Android version on the page)
+blank os.version oppo-find-n3-flip (was 13: not stated as an Android version on the page)
+blank os.version oppo-find-n2-flip (was 13: not stated as an Android version on the page)
+blank os.version oppo-reno14 (was 15: not stated as an Android version on the page)
+blank os.version oppo-reno13-pro (was 15: not stated as an Android version on the page)
+blank os.version oppo-reno13 (was 15: not stated as an Android version on the page)
+blank os.version oppo-reno12-pro (was 14: not stated as an Android version on the page)
+blank os.version oppo-reno12 (was 14: not stated as an Android version on the page)
+blank os.version oppo-reno11-pro (was 14: not stated as an Android version on the page)
+blank os.version oppo-reno11 (was 14: not stated as an Android version on the page)
+blank os.version oppo-reno10-pro (was 13: not stated as an Android version on the page)
+blank os.version oppo-reno10 (was 13: not stated as an Android version on the page)
+blank os.version oppo-reno8-pro (was 12: not stated as an Android version on the page)
+blank os.version oppo-reno8 (was 12: not stated as an Android version on the page)
+blank os.version oppo-a79 (was 13: not stated as an Android version on the page)
+blank os.version oppo-a60 (was 14: not stated as an Android version on the page)
+blank os.version oppo-a58 (was 13: not stated as an Android version on the page)
+blank os.version oppo-a38 (was 13: not stated as an Android version on the page)
+blank os.version oppo-a78 (was 13: not stated as an Android version on the page)
+blank os.version oppo-a98 (was 13: not stated as an Android version on the page)
+blank os.version oppo-a17 (was 12: not stated as an Android version on the page)
+blank os.version oppo-a80 (was 14: not stated as an Android version on the page)
+blank os.version oppo-pad-2 (was 13: not stated as an Android version on the page)
+blank os.version oppo-pad-3 (was 15: not stated as an Android version on the page)
+blank os.version oppo-pad-air (was 12: not stated as an Android version on the page)
+drop apple-ipad-pro-13-m4: same device as the existing apple-ipad-pro-13 (2064x2752, 1032x1376 at 2x)
