@@ -35,7 +35,7 @@ preconditions:
 
 critical_path:
   - step: "both guards parse, are executable, and build.sh invokes each by name (an orphaned guard is fixed by invoking it, not by mentioning it)"
-    command: "test -f scripts/lua/check-declared-closures-added.lua && bash -n scripts/check-litmus-pin-claims.sh && grep -qF '_run_lua_decider \"scripts/lua/check-declared-closures-added.lua\"' build.sh && grep -q 'check-litmus-pin-claims.sh' build.sh && echo 'ok: guards-wired'"
+    command: "test -f scripts/lua/check-declared-closures-added.lua && bash -n scripts/check-litmus-pin-claims.sh && bash scripts/test-gate-fast-refusals.sh >/dev/null && grep -q 'check-litmus-pin-claims.sh' build.sh && echo 'ok: guards-wired'"
     timeout_ms: 5000
     expected_behavior: "ok: guards-wired"
 
