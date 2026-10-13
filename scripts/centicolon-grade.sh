@@ -20,6 +20,10 @@
 #
 # Verdict grammar (one line on stdout, last):
 #   ok:centicolon-grade:R=<n> satisfied=<n> denominator=<n> declared=<n> traced=<n> positively_tested=<n> records=<n>
+#   unmeasured:centicolon-grade:<same fields> reason=<why>   (exit 0; 1670-gcwu)
+#       the grade was computed but measures nothing: zero requirement keys
+#       resolved over a non-empty litmus corpus, so R = denominator by
+#       construction. grade.json carries measured:false and unmeasured_reason.
 #   blocked:centicolon-grade:<why>          (no binary, extractor refused, no output)
 # Static refusals (unresolved requirement keys, zero resolved keys) are printed
 # as warn:centicolon-grade:<refusal> lines BEFORE the verdict: the grade is
@@ -50,7 +54,7 @@ pred() {
     err="$(TILLANDSIAS_REPO_ROOT="$ROOT" "$PLAN" predicate "$SCRIPTS/lua/$1.lua" --class "$2" --arg "$3" 2>&1 >/dev/null)" || rc=$?
     err="$(sed 's/^\[lua-predicate\] //' <<<"$err")"
     sed -n "s/^$4://p" <<<"$err" >"$5"
-    grep -E '^(ok|refused|blocked):' <<<"$err" || true
+    grep -E '^(ok|unmeasured|refused|blocked):' <<<"$err" || true
     return "$rc"
 }
 
@@ -75,6 +79,6 @@ fi
 
 ob_v="$(pred centicolon-grade-observed observing "$OUT_REL/static.json|$OUT_REL/results.jsonl" centicolon-grade-observed "$OUT_REL/grade.json")"
 [ -s "$OUT_REL/grade.json" ] || { echo "blocked:centicolon-grade:observed:$(head -1 <<<"$ob_v")"; exit 1; }
-v="$(grep -m1 '^ok:centicolon-grade-observed:' <<<"$ob_v")"
+v="$(grep -m1 -E '^(ok|unmeasured):centicolon-grade-observed:' <<<"$ob_v")"
 [ -n "$v" ] || { echo "blocked:centicolon-grade:observed-no-verdict"; exit 1; }
-echo "ok:centicolon-grade:${v#ok:centicolon-grade-observed:}"
+echo "${v%%:*}:centicolon-grade:${v#*:centicolon-grade-observed:}"

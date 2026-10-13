@@ -15,7 +15,12 @@
 #   D  step with only expected_behavior -> traced, unenforced
 #   E  a requirement: key naming a req-id the extractor did not emit -> refused
 #      BY NAME (warn line; the grade is still computed so R stays printable)
-#   Z  zero resolved keys over a non-empty litmus corpus -> refused, never ok:0
+#   Z  zero resolved keys over a non-empty litmus corpus -> refused, never ok:0;
+#      the verdict is unmeasured: (R still printed) and grade.json says
+#      measured:false, so no consumer shows an unmeasured zero as a grade (1670-gcwu)
+#   REAL the real corpus: the verdict is ok: exactly when static.json resolved a
+#      requirement key, and unmeasured: exactly when it resolved none (an invariant,
+#      not today's count, so it stays true when the pilot keys land)
 # MUTATION arms on A: its record deleted -> traced (unrun); a record for OTHER
 # bytes -> traced (unrun); a later `fail` for the same bytes -> traced (failed);
 # a green record run against an older spec.md -> traced (spec-changed).
@@ -123,9 +128,28 @@ rec pass "$DA" 2026-09-26T01:00:00Z "$(printf 'an older spec.md' | "${SHA[@]}" |
 
 # ── Z: zero resolved keys over a non-empty corpus ────────────────────────────
 Z="$WORK/z"; corpus "$Z" no; grade "$Z" "$WORK/empty.jsonl"
-if grep -q '^warn:centicolon-grade:zero-resolved-requirement-keys:files=5$' <<<"$OUT" && grep -q '^ok:centicolon-grade:R=4 satisfied=0 denominator=4 declared=4 ' <<<"$OUT"; then
-    ok "Z zero resolved keys -> refused by name, R still printed (4 declared)"
-else bad "Z: $(grep -E '^(warn|ok|blocked):' <<<"$OUT" | head -3)"; fi
+if grep -q '^warn:centicolon-grade:zero-resolved-requirement-keys:files=5$' <<<"$OUT" \
+    && grep -q '^unmeasured:centicolon-grade:R=4 satisfied=0 denominator=4 declared=4 .* reason=zero-resolved-requirement-keys$' <<<"$OUT" \
+    && ! grep -q '^ok:centicolon-grade:' <<<"$OUT"; then
+    ok "Z zero resolved keys -> refused by name, verdict unmeasured: (never ok:), R still printed (4 declared)"
+else bad "Z: $(grep -E '^(warn|ok|unmeasured|blocked):' <<<"$OUT" | head -3)"; fi
+[ "$(jg '.measured' "$G")" = false ] && [ "$(jg '.unmeasured_reason' "$G")" = zero-resolved-requirement-keys ] \
+    && ok "Z grade.json says measured:false with its reason" \
+    || bad "Z grade.json measured=$(jg '.measured' "$G") reason=$(jg '.unmeasured_reason' "$G")"
+[ "$(jg '.measured' "$(cat "$H/target/centicolon/grade.json")")" = true ] \
+    && ok "H (keys resolved) grade.json says measured:true" || bad "H grade.json measured is not true"
+
+# ── REAL: the real corpus's verdict agrees with its own resolved-key count ────
+RD="target/centicolon-real-$$"
+REAL="$(TILLANDSIAS_CENTICOLON_DIR="$RD" bash "$GRADE" 2>&1)"
+resolved="$(jg '.resolved_keys' "$(cat "$RD/static.json" 2>/dev/null)")"
+verdict="$(grep -m1 -E '^(ok|unmeasured|blocked):centicolon-grade:' <<<"$REAL")"
+if [ "$resolved" = 0 ]; then
+    case "$verdict" in unmeasured:centicolon-grade:*) ok "REAL resolved=0 -> unmeasured:" ;; *) bad "REAL resolved=0 but verdict is: $verdict" ;; esac
+elif [ -n "$resolved" ]; then
+    case "$verdict" in ok:centicolon-grade:*) ok "REAL resolved=$resolved -> ok:" ;; *) bad "REAL resolved=$resolved but verdict is: $verdict" ;; esac
+else bad "REAL: no static.json ($verdict)"; fi
+find "$RD" -delete 2>/dev/null
 
 if [ "$fail" -eq 0 ]; then echo "ok:centicolon-grade:$pass"; exit 0; fi
 echo "fail:centicolon-grade:$fail failed, $pass passed"; exit 1
