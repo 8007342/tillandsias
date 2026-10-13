@@ -25961,10 +25961,16 @@ mod tests {
     /// returns the inverse split-trust window to silence.
     #[test]
     fn ensure_proxy_running_announces_stale_consumers_before_replacing() {
-        let body = source_window(
-            include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs")),
-            "fn ensure_proxy_running(",
-        );
+        // Read at runtime, never `env!`: with a shared CARGO_TARGET_DIR a test
+        // binary compiled in another worktree is reused unchanged (1590-j20f).
+        let whole = std::fs::read_to_string(
+            std::path::PathBuf::from(
+                std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+            )
+            .join("src/main.rs"),
+        )
+        .expect("read src/main.rs");
+        let body = source_window(&whole, "fn ensure_proxy_running(");
         let stale = body.find("ProxyCaCheck::Stale").expect("the stale arm");
         let announce = body
             .find("announce_stale_ca_consumers(")
@@ -28305,7 +28311,15 @@ mod tests {
             .iter()
             .any(|p| bare.starts_with(p))
         }
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        // Read at runtime, never `env!` (1590-j20f).
+        let whole = std::fs::read_to_string(
+            std::path::PathBuf::from(
+                std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+            )
+            .join("src/main.rs"),
+        )
+        .expect("read src/main.rs");
+        let source = whole.as_str();
         let production = source.split("\nmod tests {").next().unwrap_or(source);
         let lines: Vec<&str> = production.lines().collect();
 
