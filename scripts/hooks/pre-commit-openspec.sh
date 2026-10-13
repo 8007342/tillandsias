@@ -17,7 +17,7 @@
 #   2. Zero-trace specs — specs with no @trace annotations in the codebase
 #   3. Stale changes — active changes older than 7 days
 #   4. Cheatsheet source binding — INDEX.json ↔ local: path ↔ file consistency
-#      (via scripts/check-cheatsheet-sources.sh --no-sha)
+#      (via scripts/lua/check-cheatsheet-sources.lua -- --no-sha, on tillandsias-plan script run)
 #      ERRORS from the binding check are printed as warnings.
 #
 # Usage:
@@ -312,12 +312,24 @@ staleness_check() {
 # @trace spec:cheatsheet-source-layer
 
 cheatsheet_source_check() {
-    local checker="${REPO_ROOT}/scripts/check-cheatsheet-sources.sh"
+    local checker="${REPO_ROOT}/scripts/lua/check-cheatsheet-sources.lua"
     [[ -f "${checker}" ]] || return 0
     [[ -f "${REPO_ROOT}/cheatsheet-sources/INDEX.json" ]] || return 0
 
+    # The checker is Lua on `tillandsias-plan script run` (the shell-to-lua
+    # item the 1637-cnxq change carried). This hook never blocks a commit, so a
+    # runner that does not resolve is a NAMED warning here, not a refusal.
+    local plan_bin=""
+    plan_bin="$(cd "${REPO_ROOT}" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || plan_bin=""
+    case "${plan_bin}" in ./*) plan_bin="${REPO_ROOT}/${plan_bin#./}" ;; esac
+    if [[ -z "${plan_bin}" ]] || ! grep -qx script <<<"$("${plan_bin}" capabilities 2>/dev/null)"; then
+        echo "  ⚠ cheatsheet-sources: no tillandsias-plan with \`script run\` resolves, so the binding check was not run (cargo build --release -p tillandsias-plan)" >&2
+        warnings=$((warnings + 1))
+        return 0
+    fi
+
     local output exit_code
-    output="$(bash "${checker}" --no-sha 2>&1)" || exit_code=$?
+    output="$(cd "${REPO_ROOT}" && "${plan_bin}" script run "${checker}" -- --no-sha 2>&1)" || exit_code=$?
     exit_code="${exit_code:-0}"
 
     if [[ "${exit_code}" -ne 0 ]]; then
