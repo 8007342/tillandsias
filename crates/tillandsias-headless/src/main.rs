@@ -10208,7 +10208,7 @@ pub(crate) fn build_image_with_logging(
         "git" => "Setting up Git",
         "router" => "Routing Traffic",
         "web" | "web-wrangler" => "Serving Web",
-        "webkit" => "Fetching WebKit",
+        "webkit" => "Preparing the WebKit engine (first use)…",
         "vault" => "Securing Vault",
         _ => "Setting up containers",
     };

@@ -96,6 +96,9 @@ pub struct ContainerHandle {
     /// The window's CDP relay socket, in a per-window host directory only
     /// the tray mounts (order 1655-urz9). `None`: the window has no CDP.
     pub cdp_socket: Option<PathBuf>,
+    /// Something the user should be told about this open, e.g. that the
+    /// WebKit engine was prepared on first use (order 1656-tjv4).
+    pub notice: Option<String>,
 }
 
 /// The host side of `browser.open`: start and stop the browser container.
@@ -174,9 +177,9 @@ pub fn launch(
     engine: Engine,
 ) -> Result<WindowEntry, LaunchError> {
     let window_id = format!("win-{}", Uuid::new_v4());
-    let (container, cdp, title, user_data_dir) = match mode {
+    let (container, cdp, title, user_data_dir, notice) = match mode {
         LaunchMode::Unavailable => return Err(LaunchError::BrowserUnavailable),
-        LaunchMode::Fake => (None, None, default_title(url), PathBuf::new()),
+        LaunchMode::Fake => (None, None, default_title(url), PathBuf::new(), None),
         // No DevTools port: a host TCP listener would hand full control of
         // the window, cookies included, to every local process. CDP is the
         // container's --remote-debugging-pipe, relayed to a Unix socket.
@@ -191,6 +194,7 @@ pub fn launch(
             })?;
             let profile_dir = handle.profile_dir.clone();
             let socket = handle.cdp_socket.clone();
+            let notice = handle.notice.clone();
             let running = RunningContainer {
                 handle,
                 host: Arc::clone(host),
@@ -211,7 +215,7 @@ pub fn launch(
                 }
                 None => None,
             };
-            (Some(running), cdp, default_title(url), profile_dir)
+            (Some(running), cdp, default_title(url), profile_dir, notice)
         }
     };
 
@@ -227,6 +231,7 @@ pub fn launch(
         owning_lane: String::new(),
         dev,
         engine,
+        notice,
         cdp,
         container,
         created_at: now,

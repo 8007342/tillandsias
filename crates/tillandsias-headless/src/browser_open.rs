@@ -228,6 +228,17 @@ impl TrayBrowserContainers {
         let version = crate::VERSION.trim();
         let root =
             crate::resolve_runtime_asset_root(version, self.debug).map_err(LaunchError::Spawn)?;
+        // First use builds the image (~90 s, 1.5 GB): say so in the result,
+        // rather than a silent wait. ensure_versioned_images also pushes the
+        // build label ("Preparing the WebKit engine (first use)…") wherever
+        // build progress is shown; live progress DURING the wait is a follow-up.
+        let tag = crate::versioned_image_tag("webkit", version);
+        let present = podman(
+            &["image", "exists", &tag],
+            tillandsias_podman::OperationKind::Inspect.default_budget(),
+        )
+        .is_ok();
+        let started_build = std::time::Instant::now();
         crate::ensure_versioned_images(&root, &["webkit"], version, self.debug).map_err(|e| {
             LaunchError::Spawn(format!(
                 "the {} image is not available: {e}",
@@ -236,11 +247,19 @@ impl TrayBrowserContainers {
         })?;
         let preview_port = request.url.port_or_known_default().unwrap_or(443);
         let suffix = window_suffix(request.window_id);
+        let notice = (!present).then(|| {
+            format!(
+                "Prepared the {} engine on first use ({} s); later windows open without this wait.",
+                Engine::WebKit.label(),
+                started_build.elapsed().as_secs()
+            )
+        });
         let handle = ContainerHandle {
             container_name: format!("tillandsias-browser-{}-{suffix}", request.project_label),
             network_name: format!("tillandsias-browser-net-{suffix}"),
             profile_dir: crate::browser_profile_root().join(request.window_id),
             cdp_socket: None,
+            notice,
         };
         let started = (|| {
             let label = format!("tillandsias.browser-window={}", request.window_id);
@@ -516,6 +535,7 @@ impl BrowserContainers for TrayBrowserContainers {
             network_name: format!("tillandsias-browser-net-{suffix}"),
             profile_dir,
             cdp_socket: Some(cdp_dir.join("cdp.sock")),
+            notice: None,
         };
         // From here every failure undoes what was made.
         let started = (|| {
@@ -631,6 +651,7 @@ mod tests {
             network_name: "tillandsias-browser-net-0123456789ab".into(),
             profile_dir: PathBuf::from("/tmp/x"),
             cdp_socket: None,
+            notice: None,
         };
         let argv = forwarder_spec(&handle, "acme", "10.0.42.7", &[])
             .build_run_argv()
@@ -671,6 +692,7 @@ mod tests {
             cdp_socket: Some(PathBuf::from(
                 "/run/user/1000/tillandsias/browser/win-1.cdp/cdp.sock",
             )),
+            notice: None,
         };
         let display = crate::BrowserDisplayContext {
             wayland_display: Some("wayland-0".into()),
@@ -761,6 +783,7 @@ mod tests {
             network_name: "tillandsias-browser-net-0123456789ab".into(),
             profile_dir: PathBuf::from("/run/user/1000/tillandsias/browser/win-1"),
             cdp_socket: None,
+            notice: None,
         };
         let display = crate::BrowserDisplayContext {
             wayland_display: Some("wayland-0".into()),
@@ -1289,6 +1312,14 @@ mod tests {
 
         // 1. The engine and its label.
         assert_eq!(opened["engine"], "WebKit (approximates Safari)", "{opened}");
+        // The private store starts without the image: the first open says
+        // it prepared the engine, rather than a silent ~90 s wait.
+        assert!(
+            opened["notice"]
+                .as_str()
+                .is_some_and(|n| n.contains("first use")),
+            "{opened}"
+        );
         assert!(image.contains("tillandsias-webkit:v"), "{image}");
         // 1. The page itself: the device's viewport and dpr, a WebKit UA.
         assert_eq!(

@@ -683,6 +683,7 @@ impl BrowserMcpServer {
 
         let mut entry = entry;
         entry.owning_lane = self.owner();
+        let notice = entry.notice.clone();
         let window_id = entry.window_id.clone();
         self.windows.insert(entry);
         self.debounce
@@ -695,6 +696,7 @@ impl BrowserMcpServer {
                 "device": device.summary(),
                 "dev": dev,
                 "engine": engine.label(),
+                "notice": notice,
             }),
         }
     }
@@ -2016,6 +2018,7 @@ mod tests {
                 network_name: "tillandsias-browser-net-1".to_string(),
                 profile_dir: std::path::PathBuf::new(),
                 cdp_socket: None,
+                notice: None,
             })
         }
         fn stop(&self, handle: &launcher::ContainerHandle) {
@@ -2254,6 +2257,7 @@ mod tests {
                 network_name: "tillandsias-browser-net-1".to_string(),
                 profile_dir: std::path::PathBuf::new(),
                 cdp_socket: Some(socket),
+                notice: None,
             })
         }
         fn stop(&self, handle: &launcher::ContainerHandle) {
@@ -2598,6 +2602,7 @@ mod tests {
         .await;
         assert_eq!(opened["engine"], "WebKit (approximates Safari)", "{opened}");
         assert_eq!(opened["device"]["id"], "apple-iphone-15");
+        assert!(opened["notice"].is_null(), "nothing was prepared: {opened}");
         assert!(
             host.seen.lock().is_empty(),
             "no CDP session for a WebKit window"

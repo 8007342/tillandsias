@@ -34,6 +34,8 @@ pub struct WindowEntry {
     pub dev: bool,
     /// The engine the window runs (order 1656-tjv4).
     pub engine: crate::launcher::Engine,
+    /// What the user should be told about this open (order 1656-tjv4).
+    pub notice: Option<String>,
     /// The window's ONE CDP session (order 1655-urz9). Dropped before the
     /// container, so the relay ends Chromium as the session closes.
     pub cdp: Option<Arc<WindowCdp>>,
