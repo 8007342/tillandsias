@@ -93,3 +93,13 @@ Additional integration observations and disposition:
   Exit criterion: provision sufficient workspace capacity or route generated web
   artifacts to the ephemeral cache by default, and distinguish fixture resource
   failure from a tested archive-guard regression. No host disk was accessed.
+- On the resumed full gate, the separate 20 GiB forge filesystem filled during
+  workspace test linking (`ld.bfd: final link failed: No space left on device`;
+  `tillandsias-logging` test `event_coverage`). Cargo target storage reached
+  18 GiB, including 6.6 GiB of incremental state and 9.3 GiB of debug dependencies.
+  The app and findings were already durably pushed at `work/1661-vckd@5744b13a9`.
+  Removing disposable incremental state recovered 4.8 GiB of actual free space.
+  The retry disables incremental compilation and debug symbols for dev/test
+  profiles; these options preserve the checks and test assertions. Exit criterion:
+  a fresh forge can complete the mandatory full gate within its provisioned
+  storage, or refuses early with a capacity diagnosis rather than exhausting disk.
