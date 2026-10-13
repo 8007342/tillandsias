@@ -1,0 +1,21 @@
+# Gate step 1647-fb52 — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. 793-a8e7 S3: on the WSL2 Vulkan opt-in lane the inference
+# container pins models below the decode floor all-CPU (num_gpu 0), and on any
+# other tier it restores every pin it recorded, leaving no residue after an
+# opt-out (coordinator condition 2026-10-12). The subject is
+# images/inference/decode-floor-pin.sh, sourced by the entrypoint.
+#
+# The step RUNS that script, unchanged, against a stub `ollama` keeping a model
+# store on disk: pins and the record on gpu-vulkan, idempotence, the opt-out arm
+# (no residual num_gpu 0, record removed, the operator's own num_gpu kept), a
+# lower measured floor restoring, floor `all`, and a junk floor falling back to
+# the labelled provisional 3. Pre-fix: no such script; sabotages (opt-out skips
+# the restore, pinning over an operator num_gpu) each turn it red.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the opt-in lane's decode floor pins small models and leaves nothing after opt-out (1647-fb52)"
+STEP_LUA="scripts/lua/test-decode-floor-pin.lua"
+STEP_ERROR="the decode-floor pin no longer pins, or leaves num_gpu 0 behind after an opt-out (1647-fb52); see the FAIL lines above"
+STEP_OK="small models are pinned on the opt-in lane and restored without residue on opt-out"
+STEP_SECOND_REGIME="yolanda-windows 2026-10-12 msys ok:decode-floor-pin-fixture:12"
