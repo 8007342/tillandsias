@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: dev-mode-browser-tools-are-engine-neutral-across-cdp-and-the-playwright-protocol
+    event:
+      type: note
+      ts: "2026-10-13T19:28:38Z"
+      agent_id: linux-lenovinha-claude-20261013t192838z
+      host: lenovinha
+      summary: |
+        Released by lenovinha at the operator's direction (2026-10-13), to take the observatorium p1 (1661-vckd). Progress is NOT on any remote: a local WIP commit 6a6dfddf7 on lenovinha's branch work/1656-twhk (unpushed) has the engine trait (crates/tillandsias-browser-mcp/src/engine.rs: WindowEngine for WindowCdp, a WebKitControl JSON-lines client with the dev gate in the broker), and the registry/launcher/server switched to Arc<dyn WindowEngine>. Not done: the WebKit launcher's control socket (with the launcher-side dev gate), the tray's control-dir mount, set_device on WebKit (new context, "reloaded, page state was not preserved"), the maxTouchPoints init script paired with hasTouch, and the dual-engine live test. Coordinator rulings for 4 and 5 are recorded in the coordinator's messages of 2026-10-13. Ask lenovinha for the commit, or start over from this note.

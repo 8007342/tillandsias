@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: pre-push-gate-cold-debug-build-dominates-its-own-wall-clock
+    field: status
+    value: completed
+    ts: "2026-10-13T19:30:11Z"
+    host: yoga
+
+events:
+  - packet_id: pre-push-gate-cold-debug-build-dominates-its-own-wall-clock
+    event:
+      type: completed
+      ts: "2026-10-13T19:30:11Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 6dda16cf4c8d9ce8f285b81eefccda252cfe84fc
+  - packet_id: pre-push-gate-cold-debug-build-dominates-its-own-wall-clock
+    event:
+      type: note
+      ts: "2026-10-13T19:30:11Z"
+      host: yoga
+      summary: |-
+        PR 404 landed as merge 6dda16cf4 on origin/linux-next 2026-10-13T18:29:14Z; build.sh on trunk has zero cargo run sites (measured 0, was 4); gate rc 0 on the ref; closed on the LANDED sha

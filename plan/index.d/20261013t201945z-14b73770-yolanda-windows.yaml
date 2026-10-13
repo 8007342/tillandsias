@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-git-bootstrap-seeds-an-explicitly-attributed-agent-identity-per-harness
+    event:
+      type: note
+      ts: "2026-10-13T20:19:45Z"
+      agent_id: windows-yolanda-claude-20261013t052033z
+      host: yolanda-windows
+      summary: |
+        Shape, from the coordinator's read of origin/linux-next plus the Mac's relay:
+        (A) KEPT. forge_git_identity_env(app, project, host) derives the name and noreply email from the AppUser and passes TILLANDSIAS_GIT_NAME, EMAIL, HOST and IDENTITY_SOURCE. Every entrypoint calls configure_git_identity, which writes git config from them. Codex failed because its lane's launch path never passed this env.
+        (B) DELETED. prompt_and_store_git_identity() is called from the GitHub login flow, prompts "Git author name/email" and stores ~/.cache/tillandsias/secrets/git/.gitconfig. tillandsias-core container_profile.rs injects GIT_AUTHOR_* and GIT_COMMITTER_* from that cached gitconfig.
+        macOS: crates/tillandsias-macos-tray/src/diagnose.rs github_login_main answers two sequential DynamicExpects (needles "author name" and "author email") through identity_answer() and prompt_line. They MUST go in the same change as the guest prompt, otherwise the host waits forever (the sequential-expect deadlock, 1383-dkxi: the guest's 30s PTY heartbeat resets the idle deadline). Dead once they go: identity_answer, looks_like_github_credential with GITHUB_CREDENTIAL_PREFIXES (1566-tkan), piped_timeout_remedy, the HOME comment citing prompt_and_store_git_identity, and their pinning tests. The tray menu's GitHub Login (action_host.rs, PtyIntent::GithubLogin) only attaches a PTY, so the headless removal covers it.
+        The no-App-user fallback stays as it is. There is no prompt anywhere, ever. The Mac's #407 becomes moot.

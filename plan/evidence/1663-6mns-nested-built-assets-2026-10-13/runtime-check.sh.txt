@@ -1,0 +1,39 @@
+set -u
+mkdir -p /opt/tillandsias/wrangler && cd /opt/tillandsias/wrangler && npm init -y >/dev/null && npm i -s --no-audit --no-fund wrangler@4.42.0 >/dev/null 2>&1
+W=/opt/tillandsias/wrangler/node_modules/.bin/wrangler
+check() { # label config-file port
+  label=$1; cfg=$2; port=$3
+  rm -rf /srv/preview; mkdir -p /srv/preview/arkanoid-web-game/public
+  printf '<!doctype html><title>LAKANOA-SHAPE-BUILT</title>\n' > /srv/preview/arkanoid-web-game/public/index.html
+  out=$(cd /p && node -e "$(cat /x/inspector.js)" "/p/$cfg" | tail -1)
+  name=$(node -e "console.log(JSON.parse(process.argv[1]).runtime_name)" "$out")
+  node -e "require('fs').writeFileSync('/srv/preview/'+process.argv[2], JSON.parse(process.argv[1]).raw)" "$out" "$name"
+  ( cd /srv/preview && timeout 40 $W dev --local --ip 127.0.0.1 --port $port --config "/srv/preview/$name" > /tmp/dev-$label.log 2>&1 ) &
+  got=""; for i in $(seq 1 30); do got=$(curl -s -m 2 http://127.0.0.1:$port/ | grep -o '<title>[^<]*</title>'); [ -n "$got" ] && break; sleep 1; done
+  echo "$label: runtime_name=$name served=${got:-NOTHING} custom-build-ran=$(grep -c 'custom build' /tmp/dev-$label.log)"
+  [ -n "$got" ] || { echo "--- $label log"; grep -v '^\s*$' /tmp/dev-$label.log | head -12; echo "--- $label config"; cat "/srv/preview/$name"; echo; }
+  pkill -f "wrangler dev" 2>/dev/null; sleep 2
+}
+mkdir -p /p
+cat > /p/wrangler.jsonc <<'J'
+// lakanoa-shaped
+{"name":"lakanoa-shape","compatibility_date":"2026-10-01","assets":{"directory":"arkanoid-web-game/public"},
+ "build":{"command":"npm ci && npm run build","cwd":"arkanoid-web-game"}}
+J
+check jsonc wrangler.jsonc 8787
+rm /p/wrangler.jsonc
+cat > /p/wrangler.toml <<'T'
+name = "lakanoa-shape"
+compatibility_date = "2026-10-01"
+[assets]
+directory = "arkanoid-web-game/public"
+[build]
+command = "npm ci && npm run build"
+cwd = "arkanoid-web-game"
+T
+check toml wrangler.toml 8788
+# Control: the UNSTRIPPED config makes wrangler dev run the build and exit.
+rm -rf /srv/preview; mkdir -p /srv/preview/arkanoid-web-game/public; echo '<title>X</title>' > /srv/preview/arkanoid-web-game/public/index.html
+cp /p/wrangler.toml /srv/preview/wrangler.toml
+( cd /srv/preview && timeout 40 $W dev --local --ip 127.0.0.1 --port 8789 --config /srv/preview/wrangler.toml > /tmp/dev-control.log 2>&1; echo "control dev rc=$?" )
+echo "control: custom-build-ran=$(grep -c 'custom build' /tmp/dev-control.log)"
