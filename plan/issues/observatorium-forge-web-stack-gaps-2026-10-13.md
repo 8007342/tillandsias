@@ -103,3 +103,16 @@ Additional integration observations and disposition:
   profiles; these options preserve the checks and test assertions. Exit criterion:
   a fresh forge can complete the mandatory full gate within its provisioned
   storage, or refuses early with a capacity diagnosis rather than exhausting disk.
+- With storage pressure resolved, all 3,045 workspace tests passed, but the
+  tray/listen-vsock suite failed two newly merged browser argv tests:
+  `browser_open::tests::window_spec_joins_only_its_network_and_pins_the_ca` and
+  `browser_open::tests::webkit_window_spec_is_confined_like_the_chromium_window`.
+  Both constructed a display context rooted at `/run/user/1000` and unwrapped
+  the production constructor, which correctly refuses the nonexistent host
+  `wayland-0` socket in a headless forge. Repro: `cargo test -p
+  tillandsias-headless --bin tillandsias --features tray,listen-vsock
+  browser_open::tests:: -- --test-threads=1`. The tests now own a temporary
+  display directory and socket (a path fixture on non-Unix); production Wayland
+  validation is unchanged. The WebKit assertions use that actual fixture path
+  and still reject mounting the whole runtime directory. Exit criterion: both
+  confinement tests pass in a headless forge without a user compositor.
