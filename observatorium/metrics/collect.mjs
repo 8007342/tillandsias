@@ -3,7 +3,7 @@
 // @trace spec:observatorium-dashboard
 // freshness: auditor=forge-observatorium date=2026-10-13 verdict=updated scope=collector
 // Cheap repository observation. No historical tree replay and no test execution.
-import {execFileSync} from 'node:child_process';
+import {execFileSync, spawnSync} from 'node:child_process';
 import {appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync} from 'node:fs';
 import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -38,6 +38,17 @@ export function atomicJson(path, value) {
 }
 function command(root, program, args, timeout = 30000, env = process.env) {
   return execFileSync(program, args, {cwd: root, encoding: 'utf8', timeout, maxBuffer: 64 * 1024 * 1024, env, stdio: ['ignore', 'pipe', 'pipe']}).trim();
+}
+function foldedPlan(root) {
+  const result = spawnSync(process.env.TILLANDSIAS_PLAN_BIN || 'tillandsias-plan', ['--index', join(root, 'plan/index.yaml'), 'query', '--json', '--limit', '1000000'], {cwd: root, encoding: 'utf8', timeout: 30000, maxBuffer: 64 * 1024 * 1024});
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw Error(`Canonical plan query failed (${result.status}): ${(result.stderr || '').trim().split('\n')[0]}`);
+  // The canonical reader deliberately returns success with a partial fold when
+  // malformed fragments are skipped. Publishing that as complete would turn
+  // lost evidence into apparently improved counts. Keep the source warning.
+  const damage = (result.stderr || '').split('\n').find(line => /skipped|does not parse|malformed|incomplete/i.test(line));
+  if (damage) throw Error(`Incomplete canonical ledger: ${damage.trim()}`);
+  return summarizePlan(JSON.parse(result.stdout));
 }
 export function countSpec(text) {
   // Markdown code examples can contain headings; they are not requirements.
@@ -87,7 +98,7 @@ export function collect(root, {grade = false, now = new Date().toISOString()} = 
   if (existsSync(join(root, 'plan/index.yaml'))) {
     try {
       // Reuse the canonical CRDT fold. Parsing index.yaml alone silently misses overlays.
-      const folded = summarizePlan(JSON.parse(command(root, process.env.TILLANDSIAS_PLAN_BIN || 'tillandsias-plan', ['--index', join(root, 'plan/index.yaml'), 'query', '--json', '--limit', '1000000'])));
+      const folded = foldedPlan(root);
       if (folded.total >= 1000000) throw Error('Query ceiling reached; count would be truncated');
       details.plan = folded.details;
       plan = {...plan, total: folded.total, states: folded.states};

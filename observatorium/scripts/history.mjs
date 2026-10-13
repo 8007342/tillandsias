@@ -13,7 +13,7 @@ const ref = `refs/heads/${branch}`;
 const cache = resolve(process.env.OBSERVATORIUM_CACHE || resolve(app, '.cache'));
 const state = resolve(cache, 'history-head');
 const history = resolve(cache, 'snapshots.jsonl');
-const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' });
+const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 mkdirSync(cache, { recursive: true });
 if (process.argv[2] === 'restore') {
   // ls-remote failure throws; an empty successful response is first deployment.

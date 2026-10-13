@@ -1,4 +1,6 @@
 // @trace spec:observatorium-dashboard
+// Source: schema-v1 collector snapshot; refresh cadence follows metrics TTL (60s).
+import 'dart:async';
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -29,13 +31,17 @@ class ObservatoriumApp extends StatelessWidget {
 }
 
 class EvidenceLoader extends StatefulWidget {
-  const EvidenceLoader({super.key});
+  const EvidenceLoader({super.key, this.loadEvidence});
+  final Future<Evidence> Function()? loadEvidence;
   @override
   State<EvidenceLoader> createState() => _EvidenceLoaderState();
 }
 
 class _EvidenceLoaderState extends State<EvidenceLoader> {
-  late Future<Evidence> future;
+  Evidence? evidence;
+  Object? error;
+  Timer? timer;
+  bool refreshing = false;
   Future<Evidence> load() async {
     final bundle = NetworkAssetBundle(Uri.base);
     return Evidence.decode(await bundle.loadString('data/metrics.json'));
@@ -44,57 +50,93 @@ class _EvidenceLoaderState extends State<EvidenceLoader> {
   @override
   void initState() {
     super.initState();
-    future = load();
+    refresh();
+    timer = Timer.periodic(const Duration(seconds: 60), (_) => refresh());
   }
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<Evidence>(
-    future: future,
-    builder: (context, snapshot) {
-      if (snapshot.hasData) return Dashboard(evidence: snapshot.data!);
-      return Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+  void dispose() {
+    timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> refresh() async {
+    if (refreshing) return;
+    refreshing = true;
+    try {
+      final latest = await (widget.loadEvidence?.call() ?? load());
+      if (!mounted) return;
+      if (evidence?.revision != latest.revision ||
+          evidence?.generatedAt != latest.generatedAt ||
+          error != null) {
+        setState(() {
+          evidence = latest;
+          error = null;
+        });
+      }
+    } catch (failure) {
+      if (mounted) setState(() => error = failure);
+    } finally {
+      refreshing = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (evidence != null)
+      return Dashboard(
+        evidence: evidence!,
+        onRefresh: refresh,
+        refreshError: error == null
+            ? null
+            : 'Latest refresh unavailable; showing the last loaded snapshot.',
+      );
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'OBSERVATORIUM',
+                style: TextStyle(letterSpacing: 4, fontSize: 20),
+              ),
+              const SizedBox(height: 24),
+              if (error == null)
+                const CircularProgressIndicator()
+              else ...[
                 const Text(
-                  'OBSERVATORIUM',
-                  style: TextStyle(letterSpacing: 4, fontSize: 20),
+                  'Evidence could not be loaded.',
+                  style: TextStyle(fontSize: 22),
                 ),
-                const SizedBox(height: 24),
-                if (!snapshot.hasError)
-                  const CircularProgressIndicator()
-                else ...[
-                  const Text(
-                    'Evidence could not be loaded.',
-                    style: TextStyle(fontSize: 22),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'The published dashboard needs data/metrics.json from the repository collector.',
-                  ),
-                  const SizedBox(height: 12),
-                  SelectableText(snapshot.error.toString()),
-                  const SizedBox(height: 16),
-                  FilledButton(
-                    onPressed: () => setState(() => future = load()),
-                    child: const Text('Retry'),
-                  ),
-                ],
+                const SizedBox(height: 12),
+                const Text(
+                  'The published dashboard needs data/metrics.json from the repository collector.',
+                ),
+                const SizedBox(height: 12),
+                SelectableText(error.toString()),
+                const SizedBox(height: 16),
+                FilledButton(onPressed: refresh, child: const Text('Retry')),
               ],
-            ),
+            ],
           ),
         ),
-      );
-    },
-  );
+      ),
+    );
+  }
 }
 
 class Dashboard extends StatefulWidget {
-  const Dashboard({super.key, required this.evidence});
+  const Dashboard({
+    super.key,
+    required this.evidence,
+    this.onRefresh,
+    this.refreshError,
+  });
   final Evidence evidence;
+  final VoidCallback? onRefresh;
+  final String? refreshError;
   @override
   State<Dashboard> createState() => _DashboardState();
 }
@@ -118,10 +160,10 @@ class _DashboardState extends State<Dashboard> {
         : end.subtract(Duration(days: window));
     final start = requested.isBefore(first) ? first : requested;
     final current = evidence.current;
-    final specs = current['specs'] as Map;
-    final plan = current['plan'] as Map;
-    final residual = current['residual'] as Map;
-    final commits = current['commits'] as Map;
+    final specs = current['specs'] as Map? ?? const {};
+    final plan = current['plan'] as Map? ?? const {};
+    final residual = current['residual'] as Map? ?? const {};
+    final commits = current['commits'] as Map? ?? const {};
     final visible = evidence.series
         .where((s) => enabled.contains(s.id))
         .toList();
@@ -184,6 +226,36 @@ class _DashboardState extends State<Dashboard> {
                       ],
                     ),
                     const SizedBox(height: 28),
+                    if (widget.onRefresh != null) ...[
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          TextButton.icon(
+                            onPressed: widget.onRefresh,
+                            icon: const Icon(Icons.refresh, size: 18),
+                            label: const Text('Refresh evidence'),
+                          ),
+                          const Text(
+                            'Checks for published snapshots every 60 seconds.',
+                            style: TextStyle(
+                              color: Color(0xff9ca6ba),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (widget.refreshError != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8, bottom: 12),
+                          child: Text(
+                            widget.refreshError!,
+                            style: const TextStyle(color: Color(0xffffcc85)),
+                          ),
+                        ),
+                      const SizedBox(height: 12),
+                    ],
                     LayoutBuilder(
                       builder: (context, constraints) {
                         final width = constraints.maxWidth > 850
@@ -199,14 +271,14 @@ class _DashboardState extends State<Dashboard> {
                               width,
                               'SPECIFICATIONS',
                               specs['files'],
-                              '${specs['requirements']} requirements · ${specs['scenarios']} scenarios',
+                              '${countLabel(specs['requirements'])} requirements · ${countLabel(specs['scenarios'])} scenarios',
                               'specs',
                             ),
                             metric(
                               width,
                               'PLAN LEDGER',
                               plan['total'],
-                              '${(plan['states'] as Map).entries.map((e) => '${e.value} ${e.key}').join(' · ')}',
+                              '${(plan['states'] as Map? ?? const {}).entries.map((e) => '${e.value} ${e.key}').join(' · ')}',
                               'plan',
                             ),
                             metric(
@@ -214,7 +286,8 @@ class _DashboardState extends State<Dashboard> {
                               'RESIDUAL',
                               residual['value'],
                               residual['reason']?.toString() ??
-                                  residual['source'].toString(),
+                                  residual['source']?.toString() ??
+                                  'No recorded measurement',
                               'residual',
                             ),
                             metric(
@@ -364,7 +437,7 @@ class _DashboardState extends State<Dashboard> {
                                         'Time series chart. ${logarithmic ? 'Logarithmic' : 'Linear'} count axis. Exact observations are available in the data table below.',
                                     child: GameWidget(
                                       key: ValueKey(
-                                        '${enabled.join()}-$window-$logarithmic-$dots-$selected',
+                                        '${evidence.revision}-${evidence.generatedAt}-${enabled.join()}-$window-$logarithmic-$dots-$selected',
                                       ),
                                       game: EvidenceChart(
                                         series: visible,
@@ -383,7 +456,7 @@ class _DashboardState extends State<Dashboard> {
                             Text(
                               selected == null
                                   ? 'Click the chart to inspect a dated observation. Missing measurements remain gaps.'
-                                  : '${dateLabel(selected!)} · ${visible.map((s) {
+                                  : '${selected!.toIso8601String()} · ${visible.map((s) {
                                       final points = s.points.where((p) => p.date == selected);
                                       return '${s.label}: ${points.isEmpty ? 'unmeasured' : countLabel(points.first.value)}';
                                     }).join(' · ')}',
@@ -585,7 +658,7 @@ class _DashboardState extends State<Dashboard> {
           .reversed
           .map(
             (date) => [
-              dateLabel(date),
+              date.toIso8601String(),
               ...evidence.series.map((s) {
                 final points = s.points.where((p) => p.date == date);
                 return points.isEmpty

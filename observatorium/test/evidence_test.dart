@@ -1,9 +1,11 @@
 // @trace spec:observatorium-dashboard
 import 'dart:convert';
+import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tillandsias_observatorium/main.dart';
 import 'package:tillandsias_observatorium/model.dart';
+import 'package:tillandsias_observatorium/evidence_chart.dart';
 
 Map<String, dynamic> fixture() => {
   'schemaVersion': 1,
@@ -59,6 +61,69 @@ Map<String, dynamic> fixture() => {
   },
 };
 void main() {
+  testWidgets(
+    'periodic refresh preserves controls and keeps last evidence on failure',
+    (tester) async {
+      var calls = 0;
+      Future<Evidence> load() async {
+        calls++;
+        if (calls == 3) throw StateError('offline');
+        final data = fixture();
+        data['generatedAt'] = '2026-10-13T00:0$calls:00Z';
+        return Evidence.decode(jsonEncode(data));
+      }
+
+      tester.view.physicalSize = const Size(1400, 1800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        MaterialApp(home: EvidenceLoader(loadEvidence: load)),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.text('Log scale'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 60));
+      await tester.pump();
+      expect(calls, 2);
+      expect(
+        find.text('Y: raw count. All series share a zero baseline.'),
+        findsOneWidget,
+      );
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      await tester.pump(const Duration(seconds: 60));
+      await tester.pump();
+      expect(
+        find.text(
+          'Latest refresh unavailable; showing the last loaded snapshot.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Observatorium'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(seconds: 60));
+      expect(calls, 3);
+    },
+  );
+  testWidgets('an unavailable specification scan is shown as unmeasured', (
+    tester,
+  ) async {
+    final data = fixture();
+    data['current'] = Map<String, dynamic>.from(data['current'] as Map)
+      ..['specs'] = null;
+    await tester.pumpWidget(
+      ObservatoriumApp(evidence: Evidence.decode(jsonEncode(data))),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Unmeasured'), findsNWidgets(2));
+    expect(
+      find.text('Unmeasured requirements · Unmeasured scenarios'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
   for (final width in [320.0, 390.0]) {
     testWidgets('dashboard adapts to $width pixel screens', (tester) async {
       tester.view.physicalSize = Size(width, 900);
@@ -100,8 +165,26 @@ void main() {
       expect(find.text('Observatorium'), findsOneWidget);
       expect(find.text('Unmeasured'), findsOneWidget);
       expect(find.text('Residual has not been measured.'), findsOneWidget);
+      final before =
+          tester
+                  .widget<GameWidget>(
+                    find.byWidgetPredicate((w) => w is GameWidget),
+                  )
+                  .game
+              as EvidenceChart;
+      expect(before.logarithmic, isTrue);
+      expect(before.paused, isTrue);
       await tester.tap(find.text('Log scale'));
       await tester.pump(const Duration(milliseconds: 100));
+      final after =
+          tester
+                  .widget<GameWidget>(
+                    find.byWidgetPredicate((w) => w is GameWidget),
+                  )
+                  .game
+              as EvidenceChart;
+      expect(after.logarithmic, isFalse);
+      expect(identical(before, after), isFalse);
       expect(
         find.text('Y: raw count. All series share a zero baseline.'),
         findsOneWidget,

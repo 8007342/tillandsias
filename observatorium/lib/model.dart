@@ -82,5 +82,10 @@ class Evidence {
         ..sort();
 }
 
-String countLabel(dynamic value) =>
-    value == null ? 'Unmeasured' : value.toString();
+String countLabel(dynamic value) {
+  if (value == null) return 'Unmeasured';
+  if (value is num && value.isFinite && value == value.roundToDouble()) {
+    return value.toInt().toString();
+  }
+  return value.toString();
+}

@@ -51,13 +51,7 @@ fn main() {
         "",
         &mut assets,
     );
-    collect_assets(
-        &repo_root.join("observatorium"),
-        &repo_root.join("observatorium"),
-        repo_root,
-        "",
-        &mut assets,
-    );
+    collect_legacy_observatorium(repo_root, &mut assets);
     collect_assets(
         &repo_root.join("skills"),
         &repo_root.join("skills"),
@@ -86,10 +80,6 @@ fn main() {
     println!(
         "cargo:rerun-if-changed={}",
         repo_root.join("images").display()
-    );
-    println!(
-        "cargo:rerun-if-changed={}",
-        repo_root.join("observatorium").display()
     );
     println!(
         "cargo:rerun-if-changed={}",
@@ -204,6 +194,41 @@ fn main() {
     writeln!(file, "];").unwrap();
 }
 
+// @trace spec:observatorium-dashboard
+// The embedded legacy page is independent of the Flutter dashboard. Never
+// recursively package its SDK caches, dependencies or generated web artifact.
+fn collect_legacy_observatorium(repo_root: &Path, out: &mut Vec<Asset>) {
+    for directory in ["observatorium", "observatorium/lib"] {
+        let path = repo_root.join(directory);
+        let meta = fs::symlink_metadata(&path)
+            .unwrap_or_else(|e| panic!("metadata {}: {e}", path.display()));
+        assert!(
+            meta.is_dir() && !meta.file_type().is_symlink(),
+            "runtime asset directory must be a real directory: {}",
+            path.display()
+        );
+    }
+    for rel in [
+        "observatorium/index.html",
+        "observatorium/lib/chart.umd.js",
+        "observatorium/lib/highlight.min.css",
+        "observatorium/lib/highlight.min.js",
+    ] {
+        let path = repo_root.join(rel);
+        let meta = fs::symlink_metadata(&path)
+            .unwrap_or_else(|e| panic!("metadata {}: {e}", path.display()));
+        assert!(
+            meta.is_file() && !meta.file_type().is_symlink(),
+            "runtime asset must be a regular file, not a symlink: {}",
+            path.display()
+        );
+        out.push(Asset {
+            source: path,
+            dest: rel.to_string(),
+        });
+    }
+}
+
 fn collect_assets(
     dir: &Path,
     collection_root: &Path,
@@ -275,5 +300,54 @@ fn is_executable(path: &Path) -> bool {
     {
         let _ = path;
         false
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::symlink;
+
+    #[test]
+    fn legacy_assets_ignore_dashboard_dependencies_but_reject_selected_symlinks() {
+        let root = std::env::temp_dir().join(format!(
+            "observatorium-embed-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(root.join("observatorium/lib")).unwrap();
+        fs::create_dir_all(root.join("observatorium/node_modules/.bin")).unwrap();
+        for rel in [
+            "index.html",
+            "lib/chart.umd.js",
+            "lib/highlight.min.css",
+            "lib/highlight.min.js",
+        ] {
+            fs::write(root.join("observatorium").join(rel), "legacy asset").unwrap();
+        }
+        symlink(
+            "../wrangler/bin/wrangler.js",
+            root.join("observatorium/node_modules/.bin/wrangler"),
+        )
+        .unwrap();
+        let mut assets = Vec::new();
+        collect_legacy_observatorium(&root, &mut assets);
+        assert_eq!(assets.len(), 4);
+        assert!(
+            assets
+                .iter()
+                .all(|asset| !asset.dest.contains("node_modules"))
+        );
+        let selected = root.join("observatorium/lib/chart.umd.js");
+        fs::remove_file(&selected).unwrap();
+        symlink("highlight.min.js", &selected).unwrap();
+        assert!(
+            std::panic::catch_unwind(|| collect_legacy_observatorium(&root, &mut Vec::new()))
+                .is_err()
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 }

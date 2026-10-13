@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {mkdtempSync, mkdirSync, rmSync, writeFileSync} from 'node:fs';
+import {chmodSync, mkdtempSync, mkdirSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {collect, countSpec, EPOCH, summarizePlan} from './collect.mjs';
@@ -71,6 +71,27 @@ test('missing plan tool is a visible unknown, never a zero count', () => {
     assert.equal(result.current.specs, null);
     assert.equal(result.current.residual.value, null);
     assert.ok(result.gaps.some(gap => gap.startsWith('Folded plan unavailable:')));
+  } finally {
+    if (old === undefined) delete process.env.TILLANDSIAS_PLAN_BIN; else process.env.TILLANDSIAS_PLAN_BIN = old;
+    rmSync(root, {recursive: true, force: true});
+  }
+});
+test('successful canonical query with skipped fragment warning remains unavailable', () => {
+  const root = mkdtempSync(join(tmpdir(), 'observatorium-damaged-plan-'));
+  const old = process.env.TILLANDSIAS_PLAN_BIN;
+  try {
+    const git = (...args) => execFileSync('git', args, {cwd: root, stdio: 'ignore'});
+    git('init'); git('config', 'user.email', 'test@example.invalid'); git('config', 'user.name', 'Fixture');
+    mkdirSync(join(root, 'plan')); writeFileSync(join(root, 'plan/index.yaml'), 'packets: []\n');
+    git('add', '.'); git('-c', 'core.hooksPath=/dev/null', 'commit', '-m', 'fixture');
+    const binary = join(root, 'fixture-plan');
+    writeFileSync(binary, '#!/bin/sh\nprintf "[]\\n"\nprintf "warning: ledger fragment damaged.yaml does not parse and was SKIPPED — its contents are not in the answers below\\n" >&2\n');
+    chmodSync(binary, 0o755);
+    process.env.TILLANDSIAS_PLAN_BIN = binary;
+    const result = collect(root);
+    assert.equal(result.current.plan.total, null);
+    assert.deepEqual(result.details.plan, []);
+    assert.ok(result.gaps.some(gap => gap.includes('Incomplete canonical ledger') && gap.includes('damaged.yaml')));
   } finally {
     if (old === undefined) delete process.env.TILLANDSIAS_PLAN_BIN; else process.env.TILLANDSIAS_PLAN_BIN = old;
     rmSync(root, {recursive: true, force: true});

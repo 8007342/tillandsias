@@ -2,6 +2,12 @@ version: '1.0'
 description: Tillandsias Spec-to-Litmus Test Bindings Registry
 generated: '2026-05-03T12:36:39.186138'
 specs:
+- spec_id: observatorium-dashboard
+  status: active
+  litmus_tests:
+  - litmus:observatorium-metrics-history
+  coverage_ratio: 40
+  last_verified: '2026-10-13'
 - spec_id: accel-capability-probe
   status: active
   litmus_tests:

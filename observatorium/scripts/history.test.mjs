@@ -19,7 +19,10 @@ test('durable branch restores consecutive observations and rejects remote outage
     const invoke = (operation) => execFileSync(process.execPath, ['scripts/history.mjs', operation], { cwd: app, stdio: 'pipe' });
     invoke('restore');
     const history = join(app, '.cache/snapshots.jsonl');
-    const first = '{"observed_at":"2026-10-13T00:00:00Z","value":1}\n';
+    // A long-running deployment ledger must restore beyond execFile's default
+    // 1 MiB buffer without truncating or inventing an empty first deployment.
+    const first = JSON.stringify({ observed_at: '2026-10-13T00:00:00Z', value: 1,
+      provenance: 'x'.repeat(1024 * 1024 + 4096) }) + '\n';
     writeFileSync(history, first); invoke('save');
     writeFileSync(history, ''); invoke('restore');
     assert.equal(readFileSync(history, 'utf8'), first);

@@ -1,0 +1,28 @@
+# @trace spec:observatorium-dashboard
+# freshness: auditor=forge-observatorium date=2026-10-13 verdict=updated scope=metrics-contract
+name: litmus:observatorium-metrics-history
+spec: observatorium-dashboard
+phase: active
+status: active
+description: Measured values, missing data, measurement epochs and durable history remain honest
+severity: high
+size: instant
+preconditions:
+  - Node.js 22 or newer and Git are available
+critical_path:
+  - step: Exercise projection and canonical plan failure boundaries
+    command: node --test observatorium/metrics/metrics.test.mjs
+    timeout_ms: 5000
+  - step: Exercise history save/restore and unavailable remote failure
+    command: node --test observatorium/scripts/history.test.mjs
+    timeout_ms: 5000
+observability:
+  traces:
+    - '@trace spec:observatorium-dashboard'
+  expected_log: Node test runner reports zero failures and exits zero
+  log_fields:
+    spec: observatorium-dashboard
+    test: observatorium-metrics-history
+rollback:
+  on_failure: Correct the collector or history implementation; never replace missing measurements with zero
+  command: git diff -- observatorium/metrics observatorium/scripts

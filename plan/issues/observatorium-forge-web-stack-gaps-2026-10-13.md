@@ -48,3 +48,27 @@ Smallest fixes / exit criteria:
 Root cause: image/tool exposure and root-only project detection do not yet match
 the documented nested web app dogfooding contract. Keep limitations explicit until
 live evidence exists. This packet does not authorize tray UX changes.
+
+Additional integration observations and disposition:
+
+- The first commit failed with `Author identity unknown`. A repository-local
+  agent identity (`Codex Observatorium <codex-observatorium@localhost>`) allowed
+  the checkpoint; the forge's transparent Git bootstrap does not seed identity
+  for this harness. Exit criterion: a fresh authenticated forge can commit with
+  an explicitly attributed identity without impersonating the operator.
+- The full gate stalled in `check-all-fragments-intact.lua`: its policy facade
+  launched Cargo without the forge's CARGO_HOME/CARGO_TARGET_DIR, matching
+  existing packet `1593-1ny6`. No compiler child ran; Cargo waited with the
+  default `/home/forge/.cargo/.package-cache` open. Building the policy binary
+  in the configured cache and copying it into ignored `target/debug/` avoids
+  the fallback locally. Terminating the stalled Cargo produced a false claim
+  that all 4,368 YAML files were damaged; this is a validator execution failure,
+  not evidence of corrupt ledger files. Revalidation is required.
+- The full gate then exposed a real app integration problem:
+  `crates/tillandsias-headless/build.rs` recursively embeds `observatorium/` and
+  panics on `observatorium/node_modules/.bin/cf-wrangler`. Even without symlinks,
+  recursive inclusion would package development dependencies and generated public
+  artifacts into the host runtime. The fix restricts that embedded asset boundary
+  to the four existing private trace-viewer assets. Public Flutter output remains
+  its own deployment. Exit criterion: a populated npm/Flutter worktree passes the
+  host build and embedded legacy viewer assets remain intact.

@@ -16,6 +16,7 @@ packets:
       - publish_local supports confined nested app artifact/config selection
       - Observatorium is served as a managed sibling and exercised with desktop and phone presets
     next_action: Reproduce and repair image/tool exposure and nested local preview selection using the issue evidence
+    unscoreable: 'unpinnable-until-the-guard-exists: future litmus:observatorium-managed-sibling-devices needs host-browser tool exposure and nested publish selection before a live positive/negative fixture can run'
     issue_path: plan/issues/observatorium-forge-web-stack-gaps-2026-10-13.md
     provenance: Observed by root, Sol and Terra in forge session 2026-10-13
     events:

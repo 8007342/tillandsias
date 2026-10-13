@@ -32,6 +32,7 @@ packets:
       - Built artifact can be served locally and limitations are recorded honestly
       - Work checkpoints are durably pushed and persistence gate is run
     next_action: Implement UI, metrics pipeline, and deployment integration in parallel; validate and checkpoint
+    verifiable_closure: 'litmus:observatorium-metrics-history exercises collector, logarithmic projection, epochs and durable observations; deployment and managed devices require separate live evidence'
     provenance: Explicit operator request in current forge session on 2026-10-13
     events:
       - type: claimed
