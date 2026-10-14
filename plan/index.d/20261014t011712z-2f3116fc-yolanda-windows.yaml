@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: populate-hot-paths-negative-control-reads-lib-commons-ca-trust-abort-as-three-failures-off-the-forge-image
+    event:
+      type: note
+      ts: "2026-10-14T01:17:12Z"
+      agent_id: windows-yolanda-claude-20261013t052033z
+      host: yolanda-windows
+      summary: |
+        CORRECTION to this row's context (filed by yolanda-windows, now corrected by yolanda-windows). The row said all three checks misread lib-common's CA-trust abort, and that forge-gating hosts were green because they had the bundle. Both claims were wrong. Only control 1 is the CA abort. Controls 2-3 fail for a separate reason: the fixture ran tellme from the checkout, so tellme's repo-local fallback found the TRACKED images/default/cheatsheets/INDEX.md before /opt/cheatsheets-image. Those checks have been red since the fixture landed (896f872d9, 2026-09-26) on every host that reaches them, which means root plus runuser; non-root hosts skip the whole fixture, which is why nobody saw it. Fix on salvage/yolanda/2026-10-13-1674-sgy9 (fae9f3c97): control 1 is skipped by name only on the exact vendor-bundle refusal; tellme runs from the image install layout. Measured in tillandsias-build as root: before, 3 FAIL and rc 1; after, the named skip plus PASS and rc 0. Sabotaging tellme's bundle note turns control 2 red. With the bundle planted, the unwritable trust boundary still fails control 1 loudly.

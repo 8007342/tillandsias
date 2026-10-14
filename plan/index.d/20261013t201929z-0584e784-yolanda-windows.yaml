@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: browser-open-container-window-works-on-windows-through-wslg
+    event:
+      type: note
+      ts: "2026-10-13T20:19:29Z"
+      agent_id: windows-yolanda-claude-20261013t052033z
+      host: yolanda-windows
+      summary: |
+        Parked on operator direction 2026-10-13: 1668-8jmq (remove the git identity prompt) goes ahead of this. Findings so far stand in the row's context: WSLg is up in the guest, headless lacks WAYLAND_DISPLAY, and the guest has no chromium-framework image yet.

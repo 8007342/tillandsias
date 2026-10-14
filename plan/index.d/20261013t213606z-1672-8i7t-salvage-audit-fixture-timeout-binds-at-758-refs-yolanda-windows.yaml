@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at macuahuitl-fedora's request, 2026-10-13.
+packets:
+  - packet_id: salvage-audit-fixture-reads-a-timeout-kill-as-a-verdict-now-that-the-audit-outgrows-its-300s-ceiling
+    order: 1672-8i7t
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, scripts, instrument-defect, windows, wsl2]
+    related: [1226-jb8y, 1306-ifhv, 1650-fb7z, 1668-8jmq]
+    owned_files:
+      - scripts/test-salvage-audit.sh
+    depends_on: []
+    title: |
+      test-salvage-audit.sh kills its subject at a fixed 300s and then reads the last captured line as the verdict, so on a host where the audit outgrew the ceiling (410s measured at 758 refs) the gate reds on "unexpected verdict" over a clean audit
+    context: |
+      Measured on yolanda-windows 2026-10-13 in tillandsias-build, with the checkout on /mnt/c (drvfs): `bash scripts/salvage-audit.sh` alone took 410s, rc=0, ending `ok:salvage-audit:758r:67w:769f:branch=origin/linux-next`.
+      In the gate, line 61 captures `timeout 300 bash "$CHECK"` and line 62 takes `tail -1` as the verdict. The kill lands mid-output, so ARM 1 reads a per-file row ("unexpected verdict '... linux-next-is-AHEAD (stale snapshot)'") and ARM 1b reads "?" refs. This blocked the gates for 1650-fb7z and 1668-8jmq twice each.
+      1306-ifhv refuted the timeout hypothesis at 100 refs (4.17s). The ref count has since grown about 7.5x, and drvfs is slow, so the ceiling now binds. The audit's cost grows with ref count (756 to 758 in one day), so a later p2 should make it incremental (audit only refs that changed since the last run).
+    exit_criteria:
+      - 'the capture ceiling is env-overridable (SALVAGE_AUDIT_TIMEOUT_S), defaulting to 900s on the strength of the 410s measurement'
+      - 'a subject killed at the ceiling is reported as "timeout after Ns", never as a parsed row; a mutation arm with a tiny ceiling shows it'
+      - 'test-salvage-audit.sh passes in tillandsias-build on yolanda against the live 758 refs'
+    unscoreable: "a fixture ceiling: its evidence is the timed-out run named as a timeout (mutation arm) and a green run against the live refs"
+    next_action: >
+      Make the ceiling env-overridable at 900s, detect rc 124 from the capture and report it by name before any arm parses the verdict, then add the tiny-ceiling mutation arm.
+    provenance: |
+      Filed by yolanda-windows at macuahuitl-fedora's request, 2026-10-13.
+    events:
+      - type: filed
+        ts: "2026-10-13T21:36:06Z"
+        host: yolanda-windows
+        summary: |-
+          salvage-audit fixture's 300s ceiling now kills a 410s audit and reads the cut as a verdict.

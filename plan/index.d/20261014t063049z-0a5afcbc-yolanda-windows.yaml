@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: populate-hot-paths-negative-control-reads-lib-commons-ca-trust-abort-as-three-failures-off-the-forge-image
+    field: status
+    value: completed
+    ts: "2026-10-14T06:30:49Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: populate-hot-paths-negative-control-reads-lib-commons-ca-trust-abort-as-three-failures-off-the-forge-image
+    event:
+      type: completed
+      ts: "2026-10-14T06:30:49Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: landed PR #420 merge d023fdde6 in origin/linux-next, full gate green in land run 75; trunk fixture carries the named vendor-bundle skip and runs tellme from the image install layout

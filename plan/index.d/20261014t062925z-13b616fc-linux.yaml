@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-inference-engine-parity-litmus-endpoint-step-line-window-has-a-recorded-disposition
+    field: status
+    value: completed
+    ts: "2026-10-14T06:29:25Z"
+    host: linux
+
+events:
+  - packet_id: the-inference-engine-parity-litmus-endpoint-step-line-window-has-a-recorded-disposition
+    event:
+      type: completed
+      ts: "2026-10-14T06:29:25Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: d7a573642 land-queue run 75 full gate green (PR #417); 9f80fc775 PR #415 full gate green with no violation:litmus-line-windows-unrecorded
+  - packet_id: the-inference-engine-parity-litmus-endpoint-step-line-window-has-a-recorded-disposition
+    event:
+      type: note
+      ts: "2026-10-14T06:29:25Z"
+      host: linux
+      summary: |-
+        line-window disposition landed via PR #417; #415, evicted in run 74 on that violation, gated green on top of it in run 76

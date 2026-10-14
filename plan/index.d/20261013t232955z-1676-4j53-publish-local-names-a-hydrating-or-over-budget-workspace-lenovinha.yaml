@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's direction (macuahuitl, 2026-10-13), from the v56.10.13.1 Linux cold-start FAIL.
+packets:
+  - packet_id: publish-local-names-a-still-hydrating-or-over-budget-forge-workspace-instead-of-answering-source-not-found
+    order: 1676-4j53
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [local-web-preview, publish-local, forge, hot-storage, agents, errors]
+    estimated_hours: 5
+    related: [1663-6mns, 1667-6rtp]
+    owned_files:
+      - crates/tillandsias-headless/src/local_web_preview.rs
+    title: |
+      publish_local answers "source_not_found: no servable root (looked at var/html, public, dist, index.html)" when the forge's live workspace is still being cloned from the mirror, or the HOT-storage budget refused it. An agent hits this right after the forge launches and is told its project has no site. The answer must name the state ("workspace still hydrating: N of M …" / "hot-storage budget refused: …") and say to retry, or what to do.
+    context: |
+      v56.10.13.1 cold-start acceptance (lenovinha, 2026-10-13, run v56.10.13.1-20261013224041) failed this way.
+      macron.dev at e04a3293 has a root wrangler.jsonc (assets ./public) and public/index.html, plus ~40 MB of images. Yet runtime auto fell to the STATIC profile and saw neither the config nor public/: the live source looked empty.
+      The forge entrypoint clones the project from the git mirror into its RAM workspace AFTER the container exists (images/default/lib-common.sh, the mirror clone loop with retries). The driver published as soon as the forge name appeared.
+      The 1663-6mns re-run records the forge's source state and clone/HOT-budget log lines at forge-up and at publish (evidence forge-source.txt), and says which hypothesis held.
+      The fix belongs in publish_local's source resolution: an absent or partial checkout, or a budget refusal, is a typed transient or remedial state, never "no servable root".
+    exit_criteria:
+      - 'publish_local against a forge whose workspace has no resolvable HEAD yet (clone in progress) answers a typed "workspace still hydrating" error that names progress where knowable and says retry; it never says source_not_found. A unit test drives it with a fake live source; red today'
+      - 'a HOT-budget refusal recorded by the forge (forge_src_budget_report) is surfaced as "hot-storage budget refused: <what>" with the remedy; a unit test drives it'
+      - 'a fully hydrated project with no servable root still answers source_not_found exactly as today (static_without_a_servable_root_is_source_not_found stays green)'
+      - 'the cold-start driver arm publishes once without waiting on a fresh forge and gets the hydrating answer, then waits and serves'
+    unscoreable: "unpinnable-until-the-guard-exists: the typed hydrating and budget answers do not exist yet; their unit tests are written red first with the fix"
+    next_action: >
+      Read the v56.10.13.1 re-run's forge-source.txt (lenovinha, target/work/cold-start-acceptance/) to learn which state it was. Then have resolve the live source distinguish "no HEAD yet" and "budget refused" from "no servable root", red unit tests first.
+    provenance: |
+      Filed by lenovinha-silverblue at the coordinator's direction, 2026-10-13.
+    events:
+      - type: filed
+        ts: "2026-10-13T23:29:55Z"
+        host: lenovinha
+        summary: |-
+          publish_local names a hydrating or over-budget forge workspace instead of answering source_not_found.

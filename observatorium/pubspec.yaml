@@ -1,0 +1,16 @@
+name: tillandsias_observatorium
+description: A read-only observatory of precomputed repository evidence.
+publish_to: none
+version: 1.0.0+1
+environment:
+  sdk: '>=3.8.0 <4.0.0'
+dependencies:
+  flutter:
+    sdk: flutter
+  flame: 1.38.2
+  cupertino_icons: 2.0.0
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+flutter:
+  uses-material-design: true

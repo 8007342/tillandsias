@@ -134,9 +134,9 @@ end
 -- 13 deciders in the row.
 local parts = { "_preflight_preconditions() { :; }" }
 for _, n in ipairs({ "_pf_sweep_under", "_pf_sweep_guard_tmp", "_pf_sweep_fixture_scratch",
-    "_pf_sweep_declared_artifacts", "_pf_now", "_pf_run_guard", "_pf_predecide", "_pf_guard_deadline", "_pf_launcher" }) do
+    "_pf_sweep_declared_artifacts", "_pf_index_lock_held", "_pf_sweep_index_lock", "_pf_now", "_pf_run_guard", "_pf_predecide", "_pf_guard_deadline", "_pf_launcher" }) do
     local fn = extract(fs.read("build.sh"), n)
-    if fn == "" and n ~= "_pf_sweep_declared_artifacts" then
+    if fn == "" and n ~= "_pf_sweep_declared_artifacts" and n ~= "_pf_index_lock_held" and n ~= "_pf_sweep_index_lock" then
         verdict.emit("violation:preflight-regime-budget:no-subject:" .. n, 1, "build.sh has no " .. n .. " (1636-6k6k)")
     end
     parts[#parts + 1] = fn

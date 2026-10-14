@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's direction (macuahuitl, 2026-10-13): it blocks Windows' #415 in the queue gate.
+packets:
+  - packet_id: the-inference-engine-parity-litmus-endpoint-step-line-window-has-a-recorded-disposition
+    order: 1673-mptw
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, line-windows, gate, inference]
+    estimated_hours: 0.5
+    related: [482c, 925-erjs]
+    owned_files:
+      - openspec/litmus-tests/LINE-WINDOW-DISPOSITIONS.txt
+    title: |
+      check-litmus-line-windows.sh reports violation:litmus-line-windows-unrecorded:1 for litmus-inference-engine-parity-shape.yaml:48, the grep -A1 window that 482c (071c9a1d3, c397ff1ae) added. It blocks every queue gate, including Windows' #415. The window gets a recorded disposition.
+    context: |
+      The window reads the value after "--network-alias" inside a structural awk range over fn build_inference_run_args. Adjacency of an argv flag and its value is the invariant under test, the shape LINE-WINDOW-DISPOSITIONS.txt already accepts. So it gets a disposition, not a conversion.
+    verifiable_closure: "bash scripts/check-litmus-line-windows.sh prints ok:litmus-line-windows:8-recorded; red before the entry (violation:litmus-line-windows-unrecorded:1)"
+    next_action: >
+      Land the LINE-WINDOW-DISPOSITIONS.txt entry.
+    provenance: |
+      Filed by lenovinha-silverblue at the coordinator's direction, 2026-10-13.
+    events:
+      - type: filed
+        ts: "2026-10-13T22:43:37Z"
+        host: lenovinha
+        summary: |-
+          Record the line-window disposition for the inference engine parity litmus, which is blocking the queue gate.

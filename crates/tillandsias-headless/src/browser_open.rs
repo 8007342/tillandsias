@@ -615,6 +615,21 @@ impl BrowserContainers for TrayBrowserContainers {
 mod tests {
     use super::*;
 
+    // The argv tests need an existing socket path, not the caller's compositor.
+    fn display_fixture() -> (tempfile::TempDir, crate::BrowserDisplayContext) {
+        let runtime = tempfile::tempdir().unwrap();
+        let socket = runtime.path().join("wayland-0");
+        #[cfg(unix)]
+        let _listener = std::os::unix::net::UnixListener::bind(&socket).unwrap();
+        #[cfg(not(unix))]
+        std::fs::write(&socket, []).unwrap();
+        let display = crate::BrowserDisplayContext {
+            wayland_display: Some("wayland-0".into()),
+            xdg_runtime_dir: Some(runtime.path().to_path_buf()),
+        };
+        (runtime, display)
+    }
+
     /// A fixed EC certificate; the expected pin was computed with
     /// `openssl x509 -pubkey -noout | openssl pkey -pubin -outform der |
     /// openssl dgst -sha256 -binary | base64`.
@@ -685,6 +700,7 @@ mod tests {
 
     #[test]
     fn window_spec_joins_only_its_network_and_pins_the_ca() {
+        let (_runtime, display) = display_fixture();
         let handle = ContainerHandle {
             container_name: "tillandsias-browser-acme-0123456789ab".into(),
             network_name: "tillandsias-browser-net-0123456789ab".into(),
@@ -693,10 +709,6 @@ mod tests {
                 "/run/user/1000/tillandsias/browser/win-1.cdp/cdp.sock",
             )),
             notice: None,
-        };
-        let display = crate::BrowserDisplayContext {
-            wayland_display: Some("wayland-0".into()),
-            xdg_runtime_dir: Some(PathBuf::from("/run/user/1000")),
         };
         let argv = browser_window_spec(
             "acme",
@@ -778,16 +790,13 @@ mod tests {
     /// DevTools, and the loopback relay to the forwarder on the preview port.
     #[test]
     fn webkit_window_spec_is_confined_like_the_chromium_window() {
+        let (runtime, display) = display_fixture();
         let handle = ContainerHandle {
             container_name: "tillandsias-browser-acme-0123456789ab".into(),
             network_name: "tillandsias-browser-net-0123456789ab".into(),
             profile_dir: PathBuf::from("/run/user/1000/tillandsias/browser/win-1"),
             cdp_socket: None,
             notice: None,
-        };
-        let display = crate::BrowserDisplayContext {
-            wayland_display: Some("wayland-0".into()),
-            xdg_runtime_dir: Some(PathBuf::from("/run/user/1000")),
         };
         let ip: std::net::IpAddr = "10.89.1.2".parse().unwrap();
         let argv = webkit_window_spec(
@@ -827,11 +836,14 @@ mod tests {
             "the enclave CA is the read-only system bundle: {joined}"
         );
         assert!(
-            joined.contains("/run/user/1000/wayland-0:/run/user/browser/wayland-0"),
+            joined.contains(&format!(
+                "{}:/run/user/browser/wayland-0",
+                runtime.path().join("wayland-0").display()
+            )),
             "{joined}"
         );
         assert!(
-            !joined.contains("/run/user/1000:"),
+            !joined.contains(&format!("{}:", runtime.path().display())),
             "never the whole runtime dir: {joined}"
         );
         let networks: Vec<_> = argv

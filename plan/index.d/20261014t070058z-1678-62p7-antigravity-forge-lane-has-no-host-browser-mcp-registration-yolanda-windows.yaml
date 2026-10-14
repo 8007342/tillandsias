@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yolanda-windows while working 1667-jna9, 2026-10-14.
+packets:
+  - packet_id: antigravity-forge-lane-has-no-host-browser-mcp-registration
+    order: 1678-62p7
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [forge, harness, mcp, antigravity, browser]
+    related: [1667-jna9, 1447-nmq3]
+    depends_on: []
+    title: |
+      An Antigravity forge lane registers no MCP servers at all, so it has no host-browser tools (publish_local, service_status, browser.open), no forge-plan and no project-info; register them and make Antigravity a checked harness in test-harness-host-browser-parity.lua
+    context: |
+      Found while working 1667-jna9. Claude (config-overlay/claude/mcp.json), OpenCode (opencode/config.json) and Codex (codex/register-experts.sh) all declare host-browser; entrypoint-forge-antigravity.sh and lib-common's seed_agy_workspace_trust register nothing. The parity fixture prints "gap:antigravity:no-mcp-registration — order 1678-62p7" on every run.
+      Where Antigravity reads MCP config is NOT measured. cheatsheets/architecture/enclave-service-catalog-research.md says ~/.gemini/config/mcp_config.json with an mcpServers map of command + args + env, and marks it "verify". Whether agy passes the full environment to a stdio server, or filters it the way Codex does, is also unmeasured; if it filters, TILLANDSIAS_CONTROL_SOCKET must go in the server's env (see 1667-jna9).
+    exit_criteria:
+      - "measured in the forge image: the agy config file and shape that make agy start a stdio MCP server, and the environment that server receives"
+      - "an Antigravity lane starts host-browser.sh with TILLANDSIAS_CONTROL_SOCKET set (a fake lane socket receives its initialize frame), plus forge-plan and project-info"
+      - "test-harness-host-browser-parity.lua checks Antigravity like the other three, and the gap line is gone"
+    unscoreable: "unpinnable-until-measured: the agy MCP config file and its server environment are not yet measured; the pin is the Antigravity arm this row adds to test-harness-host-browser-parity.lua"
+    next_action: >
+      In the forge image, install agy, register a server that dumps its environment through the candidate config file, start agy headless, and read which file and which environment took effect.
+    provenance: |
+      Filed by yolanda-windows while working 1667-jna9, 2026-10-14.
+    events:
+      - type: filed
+        ts: "2026-10-14T07:00:58Z"
+        host: yolanda-windows
+        summary: |-
+          Antigravity forge lanes register no MCP servers; host-browser parity gap named by the 1667 fixture.

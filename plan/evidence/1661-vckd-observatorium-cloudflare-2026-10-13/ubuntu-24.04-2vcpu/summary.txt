@@ -1,0 +1,27 @@
+branch work/1661-vckd head ee15655fb cpus=2 memory=8g
+debconf: delaying package configuration, since apt-utils is not installed
+base-tools (excluded from budget) 17s node v22.23.3
+clone shallow=true
+npm-ci rc=0 3s
+npm-run-build rc=0 292s
+TIMED-TOTAL 295s (npm ci + npm run build)
+observatorium-build: tillandsias-plan 160.4s
+observatorium-build: git-history 20.2s
+observatorium-build: git history unshallowed
+observatorium-build: collect 1.7s
+observatorium-build: precompute 0.2s
+observatorium-build: flutter-pub-get 12.1s
+observatorium-build: flutter-build-web 35.1s
+observatorium-build: total 293s (tillandsias-plan=160.4s git-history=20.2s collect=1.7s precompute=0.2s flutter-pub-get=12.1s flutter-build-web=35.1s)
+total 2664
+drwxr-xr-x. 1 root root     260 Oct 13 19:39 .
+drwxr-xr-x. 1 root root       6 Oct 13 19:39 ..
+-rw-r--r--. 1 root root      32 Oct 13 19:39 .last_build_id
+-rw-r--r--. 1 root root     147 Oct 13 19:39 _headers
+metrics current {"value":null,"source":"centicolon-grade-observed/1","reason":"Fresh obligation grading unavailable: Command failed: bash scripts/centicolon-grade.sh"} plan 1675 gaps 4
+node-test rc=0 # pass 10 # fail 0 
+flutter-analyze rc=0 No issues found! (ran in 7.9s)
+flutter-test rc=0 00:01 +7: All tests passed!
+wrangler-dry-run rc=0 ✨ Read 47 files from the assets directory /work/repo/observatorium/build/web Total Upload: 0.31 KiB / gzip: 0.22 KiB --dry-run: exiting now. 
+op: unchanged
+leftover: /var/home/lenovinha/claudia/tillandsias/target/work/obs-cf/run.log 

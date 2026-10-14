@@ -142,6 +142,14 @@ if [ "$RC" -eq 0 ] && [ "$LINE" = "centicolon: blocked:ok:centicolon-grade:R=1 s
     ok "11 empty grade artifact preserves the shell's blocked advisory instead of parsing it"
 else bad "11: rc=$RC [$LINE]"; fi
 
+printf '#!/usr/bin/env bash\nmkdir -p "$TILLANDSIAS_REPO_ROOT/target/centicolon"\nprintf "{}" > "$TILLANDSIAS_REPO_ROOT/target/centicolon/grade.json"\nprintf "warn:centicolon-grade:zero-resolved-requirement-keys:files=5\\nunmeasured:centicolon-grade:R=4 satisfied=0 denominator=4 declared=4 traced=0 positively_tested=0 records=0 reason=zero-resolved-requirement-keys\\n"\n' >"$PORT/centicolon-grade.sh"
+before="$(cksum <"$H/target/centicolon/last.txt" 2>/dev/null)"
+OUT="$(TILLANDSIAS_REPO_ROOT="$H" "$PLAN" script run "$PORT/lua/check-centicolon-ratchet.lua" 2>&1)"; RC=$?; LINE="$(grep '^centicolon:' <<<"$OUT")"
+if [ "$RC" -eq 0 ] && [ "$LINE" = "centicolon: unmeasured:R=4 satisfied=0 denominator=4 declared=4 traced=0 positively_tested=0 records=0 reason=zero-resolved-requirement-keys (advisory)" ] \
+    && [ "$(cksum <"$H/target/centicolon/last.txt" 2>/dev/null)" = "$before" ]; then
+    ok "13 an unmeasured grade is reported as unmeasured, never as R, and never becomes the snapshot (1670-gcwu)"
+else bad "13: rc=$RC [$LINE]"; fi
+
 rm -rf "$H/openspec/specs"; run
 if [ "$RC" -eq 0 ] && grep -q '^centicolon: blocked:extractor:' <<<"$LINE" && ! grep -q 'R=0' <<<"$LINE"; then
     ok "12 no corpus -> preserves the grade extractor suffix, exit 0, never R=0"

@@ -1,0 +1,31 @@
+branch work/1661-vckd head c19f883b9 cpus=2 memory=8g
+Package "curl-8.18.0-13.fc44.x86_64" is already installed.
+Package "xz-1:5.8.2-2.fc44.x86_64" is already installed.
+Package "zstd-1.5.7-5.fc44.x86_64" is already installed.
+Package "tar-2:1.35-9.fc44.x86_64" is already installed.
+Package "findutils-1:4.10.0-7.fc44.x86_64" is already installed.
+
+base-tools (excluded from budget) 78s node v22.23.3
+clone shallow=true
+npm-ci rc=0 3s
+npm-run-build rc=0 274s
+TIMED-TOTAL 277s (npm ci + npm run build)
+observatorium-build: tillandsias-plan 158.1s
+observatorium-build: git-history 16.8s
+observatorium-build: git history unshallowed
+observatorium-build: collect 1.6s
+observatorium-build: precompute 0.2s
+observatorium-build: flutter-pub-get 13.2s
+observatorium-build: flutter-build-web 35.8s
+observatorium-build: total 274s (tillandsias-plan=158.1s git-history=16.8s collect=1.6s precompute=0.2s flutter-pub-get=13.2s flutter-build-web=35.8s)
+total 2664
+drwxr-xr-x. 1 root root     260 Oct 13 19:48 .
+drwxr-xr-x. 1 root root       6 Oct 13 19:47 ..
+-rw-r--r--. 1 root root      32 Oct 13 19:48 .last_build_id
+-rw-r--r--. 1 root root     147 Oct 13 19:48 _headers
+node-test rc=0 # pass 10 # fail 0 
+flutter-analyze rc=0 No issues found! (ran in 7.9s)
+flutter-test rc=0 00:01 +7: All tests passed!
+wrangler-dry-run rc=0 ✨ Read 47 files from the assets directory /work/repo/observatorium/build/web Total Upload: 0.31 KiB / gzip: 0.22 KiB --dry-run: exiting now. 
+op: unchanged
+leftover: /var/home/lenovinha/claudia/tillandsias/target/work/obs-cf/run.log 

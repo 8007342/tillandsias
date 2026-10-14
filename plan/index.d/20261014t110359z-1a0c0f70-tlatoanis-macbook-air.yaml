@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-fresh-macos-guest-is-provisioned-with-storage-for-a-full-forge-gate
+    field: next_action
+    value: 'Resume on tlatoanis-macbook-air once 1680/1681/1682 land. Baseline taken (old guest 2026-10-13 19:35Z; fresh guest 22:44Z: / 20G, swap 25Gi, so (b) is met on a fresh install). LEFT: (a) measure a full-gate peak in a forge and size the sparse data disk from it (the root grows only at VM start, 20G start, 50G cap); (c) size the /home/forge/src tmpfs from memory and disk, or route generated web and cargo artifacts to the forge cache (today pack x4: 692 MiB); (d) an early capacity refusal before a gate builds; then a fresh install runs a full gate to completion.'
+    ts: "2026-10-14T11:03:59Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: a-fresh-macos-guest-is-provisioned-with-storage-for-a-full-forge-gate
+    event:
+      type: note
+      ts: "2026-10-14T11:03:59Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        what is left, before setting it aside

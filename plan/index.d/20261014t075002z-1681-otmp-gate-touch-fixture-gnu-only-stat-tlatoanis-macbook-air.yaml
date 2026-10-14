@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found by ./build.sh --check on tlatoanis-macbook-air, 2026-10-14. Unclaimed.
+packets:
+  - packet_id: the-gate-touch-fixture-uses-gnu-only-stat-and-touch-so-darwin-check-always-refuses
+    order: 1681-otmp
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [build, tests, darwin, gate, portability]
+    estimated_hours: 1
+    related: [1599-egzz, 1680-yf9z]
+    depends_on: []
+    title: |
+      scripts/lua/test-gate-touch.lua uses GNU-only `stat -c` and `touch -d`, so ./build.sh --check refuses on every Mac with refused:gate-touch-fixture:1
+    context: |
+      MEASURED 2026-10-14 07:4xZ, tlatoanis-macbook-air, linux-next at 2fded2c54: `./build.sh --check` exited 1 with
+        FAIL: behaviour: fn=true out= err=note:gate-touch:tracked files of …/target/plan-scratch/gate-touch-…/repo to…
+        refused:gate-touch-fixture:1
+      The fixture's run.sh calls `stat -c '%Y %n'` and ages its files with `touch -d "2001-01-01 00:00:00"`. BSD stat on macOS rejects -c ("stat: illegal option -- c", measured), so `out` is empty and the behaviour arm can't pass. The function under test, build.sh `_touch_gating_checkout` (xargs -0 touch -c), is portable; only the fixture is GNU-bound. It landed in 094d1ee07 (2026-10-11), so no Mac has earned a --check stamp since then, together with 1680-yf9z.
+    exit_criteria:
+      - 'the fixture ages and reads mtimes portably (e.g. the Lua fs stdlib, or `touch -t 200101010000` plus a stat probe that branches on GNU versus BSD) and passes on darwin and Linux'
+      - 'NEGATIVE CONTROL: with _touch_gating_checkout stubbed to do nothing, the behaviour arm still fails on both platforms'
+      - 'a darwin ./build.sh --check runs this fixture to ok:gate-touch-fixture'
+    unscoreable: "a portability fix to a gate fixture, pinned by running it on darwin with and without a no-op stub"

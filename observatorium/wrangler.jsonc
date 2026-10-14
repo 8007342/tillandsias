@@ -1,0 +1,15 @@
+{
+  // @trace spec:observatorium-dashboard — atomic CDN artifact, 60s metrics cache
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tillandsias-observatorium",
+  "compatibility_date": "2026-10-13",
+  "workers_dev": false,
+  "routes": [
+    { "pattern": "observatorium.tillandsias.org", "custom_domain": true }
+  ],
+  "build": { "command": "npm run build" },
+  "assets": {
+    "directory": "./build/web",
+    "not_found_handling": "single-page-application"
+  }
+}

@@ -65,6 +65,17 @@ identity. The launcher passes the values as `TILLANDSIAS_GIT_NAME`,
   user.email=f@x commit` in a scratch repository
 - **THEN** the commit's author is `fixture <f@x>`
 
+#### Scenario: The identity lands although ~/.gitconfig is read-only
+
+- **WHEN** the forge's `~/.gitconfig` is the host-written file bind-mounted
+  read-only (every agent lane), so a `git config --global` write fails
+- **THEN** the guest writes the identity into git's XDG global file
+  (`${XDG_CONFIG_HOME:-$HOME/.config}/git/config`), the first commit in a
+  fresh lane authors as the App user's identity, and the mounted file is
+  still read
+- **AND** a failed identity write is traced, never silently ignored
+  (order 1668-8jmq; `scripts/test-forge-git-identity-source.sh` ARM 7)
+
 ### Requirement: Committer host stays derivable
 <!-- req-id: f3c9b423 -->
 
