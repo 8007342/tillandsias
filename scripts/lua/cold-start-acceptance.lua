@@ -314,7 +314,7 @@ local function forge_source_state(label)
     local r = inside([[
 f=$(podman ps --format '{{.Names}}' --filter 'name=macron.*-forge')
 echo "== ]] .. label .. [[ $(date -u +%H:%M:%S)"
-podman exec "$f" sh -c 'if cd /home/forge/src/macron.dev 2>/dev/null; then echo "head=$(git rev-parse HEAD 2>/dev/null || echo none) tracked=$(git ls-files 2>/dev/null | wc -l) wrangler=$(test -f wrangler.jsonc && echo yes || echo no) public_index=$(test -f public/index.html && echo yes || echo no) du=$(du -sh . 2>/dev/null | cut -f1)"; else echo "no /home/forge/src/macron.dev yet"; fi; df -h /home/forge/src 2>/dev/null | tail -1'
+podman exec "$f" sh -c 'if cd /home/forge/src/macron.dev 2>/dev/null; then echo "head=$(git rev-parse --verify -q HEAD 2>/dev/null || echo none) tracked=$(git ls-files 2>/dev/null | wc -l) wrangler=$(test -f wrangler.jsonc && echo yes || echo no) public_index=$(test -f public/index.html && echo yes || echo no) du=$(du -sh . 2>/dev/null | cut -f1)"; else echo "no /home/forge/src/macron.dev yet"; fi; df -h /home/forge/src 2>/dev/null | tail -1'
 echo "-- forge log (clone, mirror, budget):"
 podman logs "$f" 2>&1 | grep -iE 'git-mirror|budget|clone|hot|FATAL|\[forge\]' | tail -40
 ]])

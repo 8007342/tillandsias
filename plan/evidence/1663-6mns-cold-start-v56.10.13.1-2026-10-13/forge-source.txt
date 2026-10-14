@@ -1,0 +1,21 @@
+== at forge-up (where the pre-1663-pin driver published) 00:36:17
+head=HEAD
+none tracked=0 wrangler=no public_index=no du=53M
+tmpfs           348M   53M  296M  16% /home/forge/src
+-- forge log (clone, mirror, budget):
+[lifecycle] hot-paths | FAILED: cp /opt/cheatsheets-image/. -> /opt/cheatsheets/ (cp=1): cp: preserving times for '/opt/cheatsheets/.': Operation not permitted
+[lifecycle] hot-paths | no project-committed cheatsheets to merge (project_root=<none>)
+[lifecycle] git-mirror | cloning from git://git-cohsofd5iosi0sj0qnb0/macron.dev
+
+source hydrated 5s after forge-up
+
+== at publish 00:36:23
+head=03a46e1f3041028e4953002246a7846f3c65b5b6 tracked=55 wrangler=yes public_index=yes du=176M
+tmpfs           348M  176M  173M  51% /home/forge/src
+-- forge log (clone, mirror, budget):
+[lifecycle] hot-paths | FAILED: cp /opt/cheatsheets-image/. -> /opt/cheatsheets/ (cp=1): cp: preserving times for '/opt/cheatsheets/.': Operation not permitted
+[lifecycle] hot-paths | no project-committed cheatsheets to merge (project_root=<none>)
+[lifecycle] git-mirror | cloning from git://git-cohsofd5iosi0sj0qnb0/macron.dev
+[lifecycle] git-mirror | clone successful
+[lifecycle] git-mirror | clone already on seed branch main
+[forge] All changes must be committed to persist. Uncommitted work is lost on stop.
