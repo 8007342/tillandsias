@@ -6059,7 +6059,9 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # gate to report.
 
     _step "Checking the proxy's permissive port agrees with its consumers (245 P6)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-proxy-permissive-port-routing.sh" 2>&1; then
+    # 1663-6mns: ported to scripts/lua (the shell-to-lua carried obligation);
+    # the verdict grammar is unchanged.
+    if ! _run_lua_decider "scripts/lua/check-proxy-permissive-port-routing.lua" 2>&1; then
         _error "squid.conf and the code disagree about whether :3129 is routed (245 P6) — see the verdict line above"
         exit 1
     fi
