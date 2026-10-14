@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-14, at the coordinator's request
+# ("a dev build's tray using its own VM home and state, so it can never touch
+# the installed one, which is 1677-84n5's class").
+packets:
+  - packet_id: a-dev-build-macos-tray-runs-from-its-own-vm-home-and-state-so-it-can-never-touch-the-installed-trays-vm-guest-binary-or-keychain-items
+    order: 1717-d5uf
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: macos
+    capability_tags: [macos, tray, dev-build, isolation, vm, keychain, state]
+    estimated_hours: 6
+    related: [1677-84n5, 1656-cscv, 1672-xznh]
+    title: |
+      A dev build of the macOS tray (scripts/build-macos-tray.sh, or a target/ binary) runs against the SAME state as the installed /Applications/Tillandsias.app: the VM image root (~/Library/Application Support/tillandsias: rootfs.img, vm-identity.img, swap, console.log, unclean-rebuilds.log), the staged guest binary and its provenance sidecar (~/.local/state/tillandsias/guest-bin), the Keychain items (vault-shamir-share-v1, vault-root-token-v1, tillandsias-vm-uuid), and the guest's vsock CID. A dev build must use its own VM home and state, chosen by what the binary IS (a dev or unsigned build), so it can never touch the installed tray's VM or sign-ins.
+    context: |
+      MEASURED 2026-10-14 on tlatoanis-macbook-air (1677-84n5): after a dev build staged a newer guest binary, the installed v56.10.13.1 tray refused the downgrade (701-kgvk), its control-wire handshake failed, and it stayed at "setting up" with no error until the provenance sidecar was deleted by hand. Since then the standing rule on the operator's Mac is: live checks go through published releases only, never a dev build.
+      That rule now blocks real work. 1656-cscv (the macOS browser window: a virtio-gpu display plus a cage kiosk in the tray VM) has to start with a spike that changes the VM configuration, which only a dev build can do. Coordinator ruling (macuahuitl, 2026-10-14): do not ask the operator for a disposable dev run on their VM; park cscv until a dev build has its own VM home.
+      Shared surfaces found by reading source (not exhaustive, so the implementer must enumerate them): action_host.rs passes one image_root to VzRuntime, previous_stop_was_unclean and note_auto_rebuild; installation_uuid.rs KEYCHAIN_ACCOUNT "tillandsias-vm-uuid"; vault_bootstrap.rs "vault-shamir-share-v1"; action_host.rs TILLANDSIAS_GUEST_CID = 3; the guest-bin staging directory; the control socket path. A running installed tray plus a dev tray would also contend for the CID and for host RAM and disk, so say whether both may run at once or the dev tray refuses while the installed one is up.
+    exit_criteria:
+      - 'a dev build (not the signed release bundle) resolves every state path to a dev root, e.g. ~/Library/Application Support/tillandsias-dev and ~/.local/state/tillandsias-dev, and every Keychain item under a dev service or account; a test enumerates the full list of paths and items and asserts that none equals the installed tray''s'
+      - 'NEGATIVE CONTROL: the release bundle, identified the same way, still resolves the installed paths, byte-identical to today, so existing users keep their VM and sign-ins'
+      - 'live, on a Mac with the installed tray signed in: run the dev tray to Ready and quit it; afterwards the installed tray''s rootfs.img and vm-identity.img mtimes, guest-bin provenance file and Keychain items are unchanged, and the installed tray reaches Ready with its sign-in (the 1677-84n5 scenario, now impossible)'
+      - 'the choice is made from what the binary is, not from an environment variable a user must remember; an override, if one exists, can only move a dev build to a different dev root, never onto the installed root'
+    unscoreable: "requires-native-regime: the live arm needs a Mac with the installed tray; the path-resolution arms are unit tests"
+    next_action: >
+      Enumerate every place the macOS tray reads or writes host state (paths, Keychain, CID, sockets). Decide how a dev build knows it is one (bundle signature, a build-time flag in build-macos-tray.sh, or the binary's location). Write the path-list test red first.
+    events:
+      - type: filed
+        ts: "2026-10-14T22:00:41Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Dev-build macOS tray gets its own VM home/state/Keychain so it can never touch the installed tray (1677-84n5's class). Blocks 1656-cscv's VM-config spike.
