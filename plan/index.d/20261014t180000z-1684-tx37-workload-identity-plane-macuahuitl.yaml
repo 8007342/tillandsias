@@ -1,0 +1,388 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora on the operator's direction, 2026-10-14:
+# "File ./plan and spec followups for everything that makes sense" after the
+# SPIFFE/SPIRE study (Red Hat topic page, spiffe.io specs, SPIRE docs). Design
+# record: openspec/changes/workload-identity-plane/. Builds on 692-zjzg's
+# identity_plane_aspiration (methodology/philosophy.yaml).
+packets:
+  - packet_id: workload-identity-plane-spiffe-model-enclave-mtls-and-selinux-lane-confinement
+    order: 1684-tx37
+    status: pending
+    kind: milestone
+    priority: p1
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [security, identity, enclave, selinux, mtls]
+    related: [692-zjzg, 1685-kwmr, 1686-7miz, 1687-ipmx, 1688-ideu, 1689-echb, 1690-iqh5, 1691-96gk, 1692-37qz, 1693-9qfb, 1694-j2sk, 1695-h8bu]
+    depends_on: []
+    title: |
+      Workload identity plane: every enclave workload is named in SPIFFE form, every enclave connection authenticates both ends, and every lane is SELinux-confined to its own category
+    context: |
+      The operator's direction (2026-10-14), after a study of SPIFFE/SPIRE: "inference and router and a bunch of services within our enclave are wide open, and would benefit from two-way tls in many other places as well"; name identities in SPIFFE form and "popularize and extend" that, including a "non-aggregatable identity of the agent, providing project, lane, agent, model" on git commits; and for the per-lane sockets "make sure there's plenty of SELinux enforcements on top of that to make it super-duper-extra strong".
+      The decision recorded with the study: borrow the SPIFFE MODEL, do not run SPIRE. Its server, agent, datastore and registration workflow are built for clusters, Red Hat scopes its product (Zero Trust Workload Identity Manager) to OpenShift, and floor-tier hosts cannot carry two more daemons. Vault stays the signing authority (SPIRE accepts Vault as an UpstreamAuthority, so the door stays open). JWT-SVIDs are not adopted: X.509 over Unix or vsock sockets is stronger, and the JWT-SVID spec itself lists replay as a weakness.
+      What already has the model's shape: the SSH-CA push lane (the workload never holds the key; 30 m certs renewed at 20 m), per-lane MCP sockets that attribute from the accepting listener, and the host-guest PSK keyed to the guest binary digest (1084-x8ya).
+      What is open: the anonymous git:// receive path, no client authentication on inference, router, proxy or Vault (bearer tokens only), and `--security-opt=label=disable` as one of the four MANDATORY_HARDENING_FLAGS (crates/tillandsias-podman/src/policy.rs), so every enclave container runs SELinux-unconfined.
+    exit_criteria:
+      - "every child row below is completed, verified or done, or obsoleted with a recorded reason"
+      - "the enclave listener inventory (1688-ideu) reports zero listeners with client-auth=none that lack a named, dated waiver"
+    unscoreable: "milestone: closure is its children's closures; it has no deliverable of its own"
+    next_action: >
+      Land the spec change openspec/changes/workload-identity-plane. Then start the two v0.5 rows: 1685-kwmr (refuse git:// pushes) and 1693-9qfb (SELinux labeling on by default). The listener inventory 1688-ideu comes next, because every mTLS row is judged by it.
+    provenance: |
+      Filed by macuahuitl-fedora on the operator's direction, 2026-10-14, from a Fable research pass over spiffe.io, the SPIFFE specs, the SPIRE docs and Red Hat's topic page.
+    events:
+      - type: filed
+        ts: "2026-10-14T18:00:00Z"
+        host: macuahuitl
+        summary: |-
+          Umbrella for the SPIFFE-model identity plane, enclave mTLS and SELinux lane confinement.
+
+  - packet_id: the-git-mirror-refuses-anonymous-git-protocol-pushes-and-the-ssh-ca-lane-is-the-only-receive-path
+    order: 1685-kwmr
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: M
+    pickup_role: linux
+    capability_tags: [security, git-mirror, ssh-ca, enclave]
+    related: [1684-tx37, 756-2jnj]
+    depends_on: []
+    title: |
+      Any enclave container can push to the git mirror over anonymous git:// and the privileged relay carries it to GitHub under the operator's identity; the SSH-CA lane must be the only receive path
+    context: |
+      openspec/specs/git-mirror-service/spec.md still describes the git:// receive path as interim and anonymous ("network placement SHALL NOT be described as client authentication"). The SSH-CA lane already exists: the per-lane sidecar holds the only key, Vault signs a user cert for principal til:forge-push:<mirror-id> with a 30 m TTL, and the sshd ForceCommand (images/git/tillandsias-receive.sh) takes the principal, serial and fingerprint from the cert and ignores the requested path.
+      Threat: a compromised forge or a rogue container on the enclave network fast-forwards refs in another project's mirror, and the upstream relay publishes them as the operator.
+      Unverified: whether the mirror's own reconcile or fetch path needs receive-pack on the daemon. Answer that first.
+    exit_criteria:
+      - "a litmus arm pushing to the mirror over git:// from an enclave container is refused, and the refusal names the SSH lane (red today: the push is accepted)"
+      - "a push over the SSH-CA lane from the owning lane still lands, and one from a different project's lane is refused by principal"
+    unscoreable: "unpinnable-until-the-guard-exists: the refusal arm is the deliverable"
+    next_action: >
+      Read images/git/ (the daemon launch, the git-daemon flags, the reconcile path) and confirm nothing internal pushes over git://. Then start the daemon without receive-pack and write the refusal arm. Run it against today's mirror first and record that it goes red there.
+    provenance: |
+      Filed by macuahuitl-fedora, 2026-10-14 (workload-identity study, recommendation 1).
+    events:
+      - type: filed
+        ts: "2026-10-14T18:00:00Z"
+        host: macuahuitl
+        summary: |-
+          git:// receive path is anonymous; make the SSH-CA lane the only push path.
+
+  - packet_id: workload-identities-are-named-in-spiffe-form-and-carried-in-the-ssh-lane-cert-key-id
+    order: 1686-7miz
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    size: S
+    pickup_role: any
+    capability_tags: [security, identity, ssh-ca, spec]
+    related: [1684-tx37, 1687-ipmx]
+    depends_on: []
+    title: |
+      One SPIFFE-form name for every enclave workload — spiffe://<host-trust-domain>/project/<mirror-id>/lane/<instance>[/agent/<harness>] — carried in the SSH lane cert's Key ID
+    context: |
+      Today workload names are ad hoc: til:forge-push:<mirror-id>, git-<mirror-id>, lane socket paths, container names. A single grammar (SPIFFE ID: one trust domain per host install, path segments project/lane/agent) makes every later row speak one language: the mTLS URI SAN (1689-echb, 1690-iqh5, 1691-96gk), the commit provenance trailer (1687-ipmx) and federation (1695-h8bu).
+      The grammar goes in the SSH cert's Key ID, NOT the principal, so sshd's principal match is unchanged. The trust-domain string must be derived per install and must not encode the operator's identity.
+      The grammar is specified in openspec/changes/workload-identity-plane/specs/workload-identity/spec.md.
+    exit_criteria:
+      - "a fixture parses the Key ID of a freshly signed lane cert as a SPIFFE ID whose path names that lane's mirror id (red today: the Key ID is unspecified)"
+      - "the grammar is in openspec/specs/ with one parser, used by every consumer and refusing anything else"
+    unscoreable: "unpinnable-until-the-guard-exists: the parser fixture is the deliverable"
+    next_action: >
+      Find where the sidecar asks Vault to sign (images/git/ssh-lane-sidecar.sh, vault-agent-signer.hcl) and what Key ID it gets today. Then add the grammar and its parser, with a fixture that refuses a malformed ID.
+    provenance: |
+      Filed by macuahuitl-fedora, 2026-10-14 (workload-identity study, recommendation 2; the operator asked to "popularize and extend" the SPIFFE naming).
+    events:
+      - type: filed
+        ts: "2026-10-14T18:00:00Z"
+        host: macuahuitl
+        summary: |-
+          SPIFFE-form workload naming, starting in the SSH lane cert Key ID.
+
+  - packet_id: agent-commits-carry-a-signed-non-aggregatable-workload-identity-naming-project-lane-agent-and-model
+    order: 1687-ipmx
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    size: L
+    pickup_role: any
+    capability_tags: [security, identity, git, provenance, forge]
+    related: [1684-tx37, 1686-7miz, 1668-8jmq]
+    depends_on: [workload-identities-are-named-in-spiffe-form-and-carried-in-the-ssh-lane-cert-key-id]
+    title: |
+      Every forge commit carries a workload-identity trailer (project, lane, agent harness, model) that the mirror can verify but that cannot be aggregated across projects, signed with the lane's short-lived SSH cert
+    context: |
+      Operator, 2026-10-14: "for git commits we might want to provide some non-aggregatable identity of the agent, providing project, lane, agent, model, etc".
+      1668-8jmq fixed authorship: the author is the operator's GitHub App identity, and agents are credited in Co-Authored-By trailers. This row adds machine-verifiable provenance next to that and does not replace it.
+      Non-aggregatable means two projects' commits must not share a stable agent or lane identifier that an outside reader could join on. The proposal is a pairwise pseudonym, as in OIDC pairwise subjects: an HMAC under a per-project key held in Vault over the lane instance, harness and model. The trailer then names the SPIFFE path with the pseudonym, plus the harness and model in clear, because those are useful and not identifying. The project's own mirror can re-derive and verify it; GitHub readers see stable per-project values that do not correlate across repos.
+      Signing: git supports gpg.format=ssh. The lane's short-lived SSH user cert (from the existing sidecar, so the forge never holds the key) can sign commits, and the mirror verifies the signature against the enclave SSH CA before relaying. An unsigned or foreign-signed forge commit is refused at receive.
+      Open questions to settle in the spec: whether the model string can be trusted when the harness self-reports it (it can't be attested, so the spec must say so), and how signatures survive the mirror-to-GitHub relay (GitHub shows ssh-signed commits as unverified unless the key is registered; the signature is for the mirror, not for GitHub's badge).
+    exit_criteria:
+      - "a commit made in a forge lane carries a Tillandsias-Workload trailer whose pseudonym differs between two projects for the same lane, harness and model, and verifies against its own project's key (red today: no trailer)"
+      - "the mirror refuses a forge push containing a commit that is unsigned or signed by a key outside the enclave SSH CA (red today: accepted)"
+    unscoreable: "unpinnable-until-the-guard-exists: the trailer and the receive-time verification are the deliverable"
+    next_action: >
+      Write the trailer grammar and the pseudonym derivation into openspec/changes/workload-identity-plane/specs/workload-identity/spec.md (a requirement is drafted there). Then find where the forge configures git (configure_git_identity in images/default/lib-common.sh), and check that a non-interactive gpg.format=ssh signing can go through the sidecar's agent socket.
+    provenance: |
+      Filed by macuahuitl-fedora on the operator's direction, 2026-10-14.
+    events:
+      - type: filed
+        ts: "2026-10-14T18:00:00Z"
+        host: macuahuitl
+        summary: |-
+          Signed, pairwise-pseudonymous agent provenance on forge commits.
+
+  - packet_id: every-enclave-listener-is-inventoried-with-its-client-authentication-mode-and-none-needs-a-waiver
+    order: 1688-ideu
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.6
+    size: M
+    pickup_role: linux
+    capability_tags: [security, enclave, mtls, litmus]
+    related: [1684-tx37, 1689-echb, 1690-iqh5, 1691-96gk, 1692-37qz]
+    depends_on: []
+    title: |
+      A guard enumerates every enclave listener (vault, mirror git and ssh, router, proxy, inference, per-lane sockets, browser forwarder, web preview, expert-serve) with its client-auth mode, and any listener with client-auth=none fails unless it carries a named, dated waiver
+    context: |
+      Operator, 2026-10-14: "inference and router and a bunch of services within our enclave are wide open". The study found no client authentication on forge->inference, forge->mirror (git://), forge->router or forge->proxy, and only bearer tokens on Vault. That gap was found by grep, so it is INFERRED; this inventory makes it a measured fact.
+      Every mTLS row (1689-echb, 1690-iqh5, 1691-96gk) and the socket attestation row (1692-37qz) is judged by this guard: each one removes a waiver.
+      The guard must assert its population: a run that finds zero listeners is a failure, not a pass.
+      Its source of truth should be the launch specs (ContainerSpec ports and sockets), not a hand-kept list. A new listener then shows up without anyone remembering to add it.
+    exit_criteria:
+      - "the guard lists every enclave listener with client-auth one of none|bearer|mtls|peercred|selinux-mcs, derived from the launch specs, and fails on a listener it cannot classify"
+      - "the guard is red today with one named waiver per client-auth=none listener, and each waiver names the row that removes it"
+    unscoreable: "unpinnable-until-the-guard-exists: the inventory guard is the deliverable"
+    next_action: >
+      Enumerate the listeners from crates/tillandsias-podman ContainerSpec construction sites and the images/*/ entrypoints, and classify each one. Write the guard in lua (no new jq). Wire it as a litmus. Record the current inventory as the first measurement.
+    provenance: |
+      Filed by macuahuitl-fedora on the operator's direction, 2026-10-14.
+    events:
+      - type: filed
+        ts: "2026-10-14T18:00:00Z"
+        host: macuahuitl
+        summary: |-
+          Inventory of enclave listeners and their client-auth mode; none needs a waiver.
+
+  - packet_id: forge-lanes-authenticate-to-vault-with-a-short-lived-client-cert-not-only-a-bearer-token
+    order: 1689-echb
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    size: M
+    pickup_role: linux
+    capability_tags: [security, vault, mtls, enclave]
+    related: [1684-tx37, 1688-ideu, 1686-7miz]
+    depends_on: [workload-identities-are-named-in-spiffe-form-and-carried-in-the-ssh-lane-cert-key-id]
+    title: |
+      Vault requires a lane client certificate (1 h, URI SAN = the lane's SPIFFE ID, minted by the existing sidecar) in addition to the AppRole token, so a stolen token alone reads nothing
+    context: |
+      Today a forge reaching Vault presents a bearer AppRole token (1 h TTL, 24 h max; openspec/specs/tillandsias-vault/spec.md). The enclave CA is ephemeral and on tmpfs and already signs the Vault server leaf. Add a Vault PKI role lane-client (1 h TTL, URI SAN required, cA=false, clientAuth EKU) issued through the same sidecar pattern as the SSH lane, and set the Vault listener to tls_require_and_verify_client_cert. Start with the opencode-forge policy only.
+      macOS and Windows: Vault runs inside the Linux guest, so the change is guest-side. Confirm the tray's own Vault calls (host-delivered unseal and shares) keep their path; they may need their own client identity.
+    exit_criteria:
+      - "a curl to Vault with a valid AppRole token but no client cert is refused at TLS (red today: 200)"
+      - "the lane's own client cert plus token reads exactly what the policy allows, and a cert whose SPIFFE path names another lane is refused"
+    unscoreable: "unpinnable-until-the-guard-exists: the refusal arm is the deliverable"
+    next_action: >
+      Read how the enclave CA is minted and how Vault's listener is configured (images/vault/, vault_bootstrap.rs). Then add the lane-client role and the listener setting behind a fixture. Run the token-only arm against today's Vault first and record it red.
+    provenance: |
+      Filed by macuahuitl-fedora, 2026-10-14 (workload-identity study, recommendation 3).
+    events:
+      - type: filed
+        ts: "2026-10-14T18:00:00Z"
+        host: macuahuitl
+        summary: |-
+          Vault client certs for forge lanes.
+
+  - packet_id: the-inference-service-admits-only-lanes-presenting-an-enclave-client-cert
+    order: 1690-iqh5
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    size: L
+    pickup_role: any
+    capability_tags: [security, inference, mtls, enclave]
+    related: [1684-tx37, 1688-ideu, 1689-echb]
+    depends_on: [forge-lanes-authenticate-to-vault-with-a-short-lived-client-cert-not-only-a-bearer-token]
+    title: |
+      inference:11434 trusts anything on the enclave network; put a TLS-terminating front that requires an enclave lane client cert in front of every inference engine, on all three platforms
+    context: |
+      Today any container on the enclave network can call the inference engine (ollama or llama-server, plain HTTP) and burn the host's GPU or CPU, or read whatever the engine serves. The engines mostly speak plain HTTP and cannot verify clients, so the fix is a small TLS terminator in front of each one, verifying a client cert chained to the enclave CA with a lane SPIFFE URI SAN. It reuses 1689-echb's lane-client certs.
+      macOS: the host-native lane goes through a vsock forwarder (830-xsk2, 1309-rb3p), so the terminator sits on the guest side. Windows: the WSL2 Vulkan opt-in lane (793-a8e7) is inside the guest too. Cost matters on floor-tier hosts: measure the terminator's added latency per request.
+    exit_criteria:
+      - "a request to the inference endpoint from an enclave container without a lane client cert is refused (red today: served)"
+      - "a lane's own request with its cert is served, with the added per-request latency measured and recorded per platform"
+    unscoreable: "unpinnable-until-the-guard-exists: the refusal arm is the deliverable"
+    next_action: >
+      Wait for 1689-echb's lane-client certs. Meanwhile, pick the terminator (a Caddy or stunnel-shaped sidecar already in the image set beats a new binary) and write the refusal arm against today's endpoint.
+    provenance: |
+      Filed by macuahuitl-fedora on the operator's direction ("inference ... wide open"), 2026-10-14.
+    events:
+      - type: filed
+        ts: "2026-10-14T18:00:00Z"
+        host: macuahuitl
+        summary: |-
+          mTLS front for the inference service.
+
+  - packet_id: the-router-and-egress-proxy-authenticate-the-calling-lane-by-client-cert
+    order: 1691-96gk
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    size: M
+    pickup_role: linux
+    capability_tags: [security, router, proxy, mtls, enclave]
+    related: [1684-tx37, 1688-ideu, 1651-5t7n]
+    depends_on: [forge-lanes-authenticate-to-vault-with-a-short-lived-client-cert-not-only-a-bearer-token]
+    title: |
+      The router and the egress proxy trust source IP and network placement; each must authenticate the calling lane by its enclave client cert, so per-project routing and egress policy key on identity, not address
+    context: |
+      The router (images/router/base.Caddyfile) enforces strict_sni_host and per-project SNI binding (1651-5t7n), but it trusts the source by IP allowlist. reverse-proxy-internal records that the router serves plain HTTP on :8080 inside the enclave. The egress proxy admits by network placement. With lane client certs (1689-echb) both can key on the lane's SPIFFE path: a lane reaches only its own project's routes, and egress policy is per lane rather than per network.
+    exit_criteria:
+      - "a request through the router from a container presenting no lane cert, or a cert for another project, is refused (red today: routed by IP)"
+      - "the egress proxy refuses a CONNECT from an enclave container without a lane cert (red today: allowed by placement)"
+    unscoreable: "unpinnable-until-the-guard-exists: the refusal arms are the deliverable"
+    next_action: >
+      Read the router and proxy configs. Decide whether the in-enclave hop to the router moves from plain :8080 to TLS with client verification, or whether a socket-based hop with peer attestation (1692-37qz) is cheaper. Record the decision in the spec change before coding.
+    provenance: |
+      Filed by macuahuitl-fedora on the operator's direction ("router ... wide open"), 2026-10-14.
+    events:
+      - type: filed
+        ts: "2026-10-14T18:00:00Z"
+        host: macuahuitl
+        summary: |-
+          Client-cert authentication at the router and the egress proxy.
+
+  - packet_id: per-lane-sockets-admit-only-peers-whose-kernel-attested-cgroup-is-the-owning-lane-container
+    order: 1692-37qz
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.6
+    size: M
+    pickup_role: linux
+    capability_tags: [security, sockets, attestation, mcp, ssh-ca]
+    related: [1684-tx37, 1688-ideu, 1694-j2sk]
+    depends_on: []
+    title: |
+      The ssh-agent sidecar socket and the per-lane control/MCP socket trust whoever can open the file; each must check the peer with SO_PEERCRED and its cgroup against the owning lane's container id (SPIRE's unix + docker workload attestation, without SPIRE)
+    context: |
+      Per-lane MCP sockets attribute by the accepting listener (openspec/specs/mcp-tool-socket/spec.md), and the ssh-agent volume serves whoever mounts it. A second container mounting the same named volume, or a child process with the right uid, can reuse the lane's signing oracle. On Linux the fix is cheap: SO_PEERCRED gives the peer pid and uid, and /proc/<pid>/cgroup names the libpod container id, which must equal the lane's container. That is exactly SPIRE's unix and docker workload attestors.
+      On macOS and Windows the sockets live inside the Linux guest, so the same code applies there. That is inferred and must be verified on both.
+      SELinux MCS confinement (1694-j2sk) is the second, independent layer, and the two rows must not depend on each other.
+    exit_criteria:
+      - "a connection to a lane's ssh-agent socket from a sibling container that mounts the same volume is refused, and the refusal names the peer's container id (red today: served)"
+      - "the same check on the per-lane control socket refuses a peer outside the lane, verified on Linux, the macOS guest and the WSL2 guest"
+    unscoreable: "unpinnable-until-the-guard-exists: the refusal arm is the deliverable"
+    next_action: >
+      Find the accept paths: the ssh-lane sidecar's agent socket and the control-socket listener in crates/tillandsias-headless. Write the sibling-container arm first and record it red, then add the peer check.
+    provenance: |
+      Filed by macuahuitl-fedora, 2026-10-14 (workload-identity study, recommendation 4).
+    events:
+      - type: filed
+        ts: "2026-10-14T18:00:00Z"
+        host: macuahuitl
+        summary: |-
+          Kernel-attested peer check on per-lane sockets.
+
+  - packet_id: selinux-labeling-is-on-by-default-for-every-enclave-container-and-label-disable-is-a-named-exception
+    order: 1693-9qfb
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: L
+    pickup_role: linux
+    capability_tags: [security, selinux, podman, enclave]
+    related: [1684-tx37, 1694-j2sk, 1641-xbvq]
+    depends_on: []
+    title: |
+      --security-opt=label=disable is one of the four MANDATORY_HARDENING_FLAGS, so every enclave container runs SELinux-unconfined and any other label= is refused as a weakening; invert it so container_t with a per-container MCS pair is the default and label=disable is a named, justified exception
+    context: |
+      Measured 2026-10-14, crates/tillandsias-podman/src/policy.rs: MANDATORY_HARDENING_FLAGS = [--userns=keep-id, --cap-drop=ALL, --security-opt=no-new-privileges, --security-opt=label=disable], and is_weakening_security_opt() treats every label= value other than disable as a weakening. ContainerSpec (container_spec.rs) pushes label=disable whenever label_disable is set, and browser_open.rs documents it as ContainerSpec's default. There are 42 label=disable sites across 9 crate files.
+      This is backwards for SELinux. label=disable removes podman's per-container MCS separation (container_t:s0:cX,cY), which is the kernel's own guarantee that one container cannot read another container's files or connect to another's sockets even when both share a uid.
+      There is a precedent: the Vault uses a custom confined type, vault_container_t, inside the guest VM. The rootless-host fallback to label=disable exists because the vault data volume was created unlabeled (plan/issues/vault-rootless-container-exits-immediately-2026-07-03.md). The fix is a one-time relabel (:Z, or a chcon migration), not running unconfined forever.
+      Platforms: Linux hosts (Fedora/Silverblue: enforcing) and the macOS VZ Fedora guest enforce SELinux. WSL2 Fedora usually runs without SELinux, so on Windows the row must state what it measures there.
+      Expect breakage: bind mounts, the Wayland socket (1641-xbvq), tmpfs lanes and named volumes. Every one needs a :z/:Z or a named exception. Land it incrementally, one container role at a time, with the inventory below as the guard.
+    exit_criteria:
+      - "the hardening guard refuses label=disable unless the call site names an exception from an allow-list in policy.rs, each with a reason and a row (red today: label=disable is mandatory)"
+      - "the forge, mirror, router, proxy, inference and browser containers start under container_t with distinct MCS pairs on an enforcing Fedora host, and a file written by one is unreadable from another sharing the uid (red today: readable)"
+    unscoreable: "unpinnable-until-the-guard-exists: the inverted guard and the cross-container read arm are the deliverable"
+    next_action: >
+      Write the cross-container read arm on an enforcing host first and record it red. Then invert the guard, with every current site on the exception allow-list. Remove the exceptions one container role at a time, starting with the router, which has the fewest mounts.
+    provenance: |
+      Filed by macuahuitl-fedora on the operator's direction ("plenty of SELinux enforcements"), 2026-10-14; the policy.rs finding was measured while filing.
+    events:
+      - type: filed
+        ts: "2026-10-14T18:00:00Z"
+        host: macuahuitl
+        summary: |-
+          label=disable is a mandatory hardening flag; invert it.
+
+  - packet_id: each-lane-socket-is-labelled-with-its-lane-mcs-pair-and-enclave-roles-get-confined-selinux-types
+    order: 1694-j2sk
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.6
+    size: L
+    pickup_role: linux
+    capability_tags: [security, selinux, sockets, enclave]
+    related: [1684-tx37, 1693-9qfb, 1692-37qz]
+    depends_on: [selinux-labeling-is-on-by-default-for-every-enclave-container-and-label-disable-is-a-named-exception]
+    title: |
+      Per-lane sockets are SELinux-confined: each socket file carries its lane container's MCS pair so only that lane can connectto it, and the forge, mirror, router and proxy get confined types (udica/CIL, following vault_container_t) that allow only their own sockets and ports
+    context: |
+      Operator, 2026-10-14: per-lane sockets as isolation, with "plenty of SELinux enforcements on top of that to make it super-duper-extra strong".
+      Two layers. (1) MCS: a lane's socket file and its directory are labelled with the lane container's category pair, so the kernel denies connectto from any other container_t, regardless of uid or file mode. That is independent of the peer-credential check (1692-37qz), and the defence holds if either one fails. (2) Types: per-role confined types generated with udica or hand CIL, as vault_container_t already is, that grant each role only the sockets, ports and paths it needs. The forge type is denied the mirror's ssh key paths, the Vault data and every other lane's runtime directory.
+      Ship the policy modules with the binary and load them at init the same way try_load_vault_selinux_module does. Hosts where a module cannot load must refuse to start that role, or record an honest exception; never silently run unconfined.
+    exit_criteria:
+      - "on an enforcing host, a container in lane A cannot connect to lane B's socket even with a matching uid and mode 0666, and the denial appears as an AVC naming both categories (red today: connects)"
+      - "the forge role runs under its own confined type, and an attempt to read the mirror's ssh host key from a forge is denied by type (red today: no such type)"
+    unscoreable: "unpinnable-until-the-guard-exists: the denial arms are the deliverable"
+    next_action: >
+      After 1693-9qfb puts containers under container_t, label one lane socket with its lane's MCS pair and write the cross-lane connect arm. Then generate a forge policy with udica from a running forge and review every allow rule by hand.
+    provenance: |
+      Filed by macuahuitl-fedora on the operator's direction, 2026-10-14.
+    events:
+      - type: filed
+        ts: "2026-10-14T18:00:00Z"
+        host: macuahuitl
+        summary: |-
+          MCS-labelled lane sockets and confined role types.
+
+  - packet_id: fleet-hosts-trust-each-other-by-exchanging-enclave-ca-bundles-in-spiffe-federation-form
+    order: 1695-h8bu
+    status: pending
+    kind: feature
+    priority: p3
+    desired_release: v0.7
+    size: L
+    pickup_role: any
+    capability_tags: [security, federation, fleet, identity]
+    related: [1684-tx37, 1686-7miz, 1689-echb, 1505-sm2j]
+    depends_on: [workload-identities-are-named-in-spiffe-form-and-carried-in-the-ssh-lane-cert-key-id, forge-lanes-authenticate-to-vault-with-a-short-lived-client-cert-not-only-a-bearer-token]
+    title: |
+      Cross-host trust for the fleet mesh and inference swarm: each host publishes its enclave-CA bundle in SPIFFE federation form, and peers trust a listed domain one-way without ever merging bundles
+    context: |
+      There is no cross-host trust primitive today; 692-zjzg's note says the epoch CA "explicitly punts". The fleet VPN (1505-sm2j) and the inference swarm will need one. Borrow only the SPIFFE federation spec: a bundle endpoint per host, reached over the existing mirror lane or the fleet VPN, with a refresh hint; one-way relationships; bundles kept separate per trust domain. Deferred until lane client certs exist (1689-echb).
+    exit_criteria:
+      - "host B verifies a client cert chained to host A's published bundle and refuses one from a trust domain it has not listed"
+    unscoreable: "deferred design row: scoreable once 1689-echb lands; the cross-host verify arm is the deliverable"
+    next_action: >
+      Do not start before 1689-echb. Then write the bundle-endpoint format against the SPIFFE federation spec, and decide whether the endpoint rides the mirror lane or the fleet VPN.
+    provenance: |
+      Filed by macuahuitl-fedora, 2026-10-14 (workload-identity study, recommendation 5).
+    events:
+      - type: filed
+        ts: "2026-10-14T18:00:00Z"
+        host: macuahuitl
+        summary: |-
+          SPIFFE-style trust-bundle federation across fleet hosts (deferred).
