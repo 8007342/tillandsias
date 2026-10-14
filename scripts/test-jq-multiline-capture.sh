@@ -33,11 +33,16 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CHECK="$ROOT/scripts/check-jq-multiline-capture-strips-cr.sh"
+# 1696-gz2y follow-up: the checker is the Lua port; the runtime reads only
+# inside the repository, so the scratch tree lives under target/.
+CHECK="$ROOT/scripts/lua/check-jq-multiline-capture-strips-cr.lua"
 [ -f "$CHECK" ] || { echo "SKIP: checker not present" >&2; exit 0; }
+PLAN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary)" \
+    || { echo "violation:jq-multiline-capture:no-plan-binary"; exit 1; }
 command -v jq >/dev/null 2>&1 || { echo "SKIP: no jq(1)" >&2; exit 0; }
 
-W="$(mktemp -d)"
+mkdir -p "$ROOT/target"
+W="$(mktemp -d "$ROOT/target/jq-multiline.XXXXXX")"
 cleanup() { rm -rf "$W"; }
 trap cleanup EXIT INT TERM
 
@@ -93,7 +98,7 @@ cat > "$W/scripts/offender.sh" <<'OFF'
 names="$(cat data.json | jq -r '.models[].name')"
 echo "$names"
 OFF
-out="$(cd "$ROOT" && bash "$CHECK" "$W/scripts" 2>/dev/null)"
+out="$(cd "$ROOT" && "$PLAN" script run "$CHECK" -- "${W#"$ROOT"/}/scripts" 2>/dev/null)"
 case "$out" in
     violation:jq-multiline-capture-unstripped:*) caught=yes ;;
     *) caught=no ;;
@@ -106,7 +111,7 @@ cat > "$W/scripts/offender.sh" <<'FIXED'
 names="$(cat data.json | jq -r '.models[].name' | tr -d '\r')"
 echo "$names"
 FIXED
-out2="$(cd "$ROOT" && bash "$CHECK" "$W/scripts" 2>/dev/null)"
+out2="$(cd "$ROOT" && "$PLAN" script run "$CHECK" -- "${W#"$ROOT"/}/scripts" 2>/dev/null)"
 case "$out2" in
     ok:jq-multiline-capture-strips-cr:*) cleared=yes ;;
     *) cleared=no ;;
@@ -119,7 +124,7 @@ cat > "$W/scripts/offender.sh" <<'RED'
 biggest="$(cat data.json | jq -r '[.models[].size] | max')"
 echo "$biggest"
 RED
-out3="$(cd "$ROOT" && bash "$CHECK" "$W/scripts" 2>/dev/null)"
+out3="$(cd "$ROOT" && "$PLAN" script run "$CHECK" -- "${W#"$ROOT"/}/scripts" 2>/dev/null)"
 case "$out3" in
     ok:*) exempt=yes ;;
     *) exempt=no ;;
@@ -127,7 +132,7 @@ esac
 _result "arm6-a-reducing-filter-is-not-flagged" "yes" "$exempt"
 
 # ---- ARM 7: the real tree is clean -----------------------------------------
-out4="$(cd "$ROOT" && bash "$CHECK" scripts 2>/dev/null)"
+out4="$(cd "$ROOT" && "$PLAN" script run "$CHECK" -- scripts 2>/dev/null)"
 case "$out4" in
     ok:jq-multiline-capture-strips-cr:*) tree=ok ;;
     *) tree="$out4" ;;
