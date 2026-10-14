@@ -96,6 +96,18 @@ that MUST keep refusing, not dead code to delete.
 - **AND** the tray's per-lane listener dispatches it and writes the JSON-RPC
   response back as one line on the same connection
 
+#### Scenario: Every agent harness hands the bridge its socket variable
+
+- **WHEN** a forge agent harness starts the host-browser bridge as a stdio MCP
+  server
+- **THEN** the bridge's environment carries `TILLANDSIAS_CONTROL_SOCKET`
+- **AND** a harness that filters the server environment forwards it
+  explicitly: Codex starts stdio servers with only `HOME LANG PATH PWD SHLVL
+  USER` (codex-cli 0.162.1, measured 2026-10-14), so its registration passes
+  `--env TILLANDSIAS_CONTROL_SOCKET=<path>` (order 1667-jna9)
+- **AND** Claude, OpenCode and Codex each declare the bridge; a harness that
+  drops it fails `scripts/lua/test-harness-host-browser-parity.lua`
+
 #### Scenario: A frame on the shared control socket is refused
 
 - **WHEN** a client sends `ControlMessage::McpFrame` on

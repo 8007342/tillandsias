@@ -71,18 +71,42 @@ else
     BIN="$STUB"
 fi
 
+# apply_helper <home> [socket] — run the helper as the entrypoint does. The
+# lane's TILLANDSIAS_CONTROL_SOCKET is set when a socket is given and UNSET
+# otherwise, so a value from the calling shell cannot leak into a scenario.
+SOCK="/run/host/tillandsias-mcp/mcp.sock"
 apply_helper() {
+    local home="$1" sock="${2:-}"
+    if [ -n "$sock" ]; then
+        HOME="$home" CODEX_HOME="$home/.codex" CODEX_BIN="$BIN" \
+            TILLANDSIAS_CONFIG_OVERLAY_ROOT="$OVL" TILLANDSIAS_CONTROL_SOCKET="$sock" \
+            "$HELPER" >>"$WORK/helper.log" 2>&1 || fail "registration helper failed (see $WORK/helper.log)"
+    else
+        env -u TILLANDSIAS_CONTROL_SOCKET \
+            HOME="$home" CODEX_HOME="$home/.codex" CODEX_BIN="$BIN" \
+            TILLANDSIAS_CONFIG_OVERLAY_ROOT="$OVL" \
+            "$HELPER" >>"$WORK/helper.log" 2>&1 || fail "registration helper failed (see $WORK/helper.log)"
+    fi
+}
+
+# env_of <home> <name> — the registered server's .transport.env as compact JSON
+# ("null" when it has none).
+env_of() {
+    list_query "$1" -c --arg n "$2" '.[] | select(.name == $n) | .transport.env'
+}
+
+# list_query <home> <jq-args>... — one jq query over `codex mcp list --json`.
+# The fixture's only jq call site (jq-callsite ratchet floor is 1).
+list_query() {
     local home="$1"
+    shift
     HOME="$home" CODEX_HOME="$home/.codex" CODEX_BIN="$BIN" \
-        TILLANDSIAS_CONFIG_OVERLAY_ROOT="$OVL" \
-        "$HELPER" >>"$WORK/helper.log" 2>&1 || fail "registration helper failed (see $WORK/helper.log)"
+        "$BIN" mcp list --json 2>/dev/null | "$JQ" "$@"
 }
 
 # names_from <home> — sorted list of registered MCP server names, one per line.
 names_from() {
-    local home="$1"
-    HOME="$home" CODEX_HOME="$home/.codex" CODEX_BIN="$BIN" \
-        "$BIN" mcp list --json 2>/dev/null | "$JQ" -r '.[].name' | sort
+    list_query "$1" -r '.[].name' | sort
 }
 
 count_named() {
@@ -133,6 +157,36 @@ grep -Fq 'log_prompts = false' "$B/.codex/config.toml" || fail "unrelated config
 grep -Fq 'custom-server' "$B/.codex/config.toml" || fail "unrelated MCP server custom was lost"
 grep -Fq 'KEY = "v"' "$B/.codex/config.toml" || fail "unrelated MCP server custom env was lost"
 
+# ── Scenario C: the lane socket reaches host-browser (order 1667-jna9) ──
+# Codex starts a stdio MCP server with only HOME LANG PATH PWD SHLVL USER
+# (measured in codex-cli 0.162.1, 2026-10-14), so host-browser.sh never saw
+# TILLANDSIAS_CONTROL_SOCKET and exited at startup: a Codex lane had no
+# publish_local or browser.open. The helper must forward it explicitly.
+C="$WORK/socket"
+mkdir -p "$C"
+apply_helper "$C" "$SOCK"
+apply_helper "$C" "$SOCK"
+want_env="{\"TILLANDSIAS_CONTROL_SOCKET\":\"$SOCK\"}"   # jq -c spelling
+got_env="$(env_of "$C" host-browser)"
+[ "$got_env" = "$want_env" ] \
+    || fail "host-browser is registered without the lane socket: env=$got_env (want $want_env) — a Codex lane cannot reach publish_local"
+[ "$(env_of "$C" forge-plan)" = null ] || fail "forge-plan was given an env it does not declare: $(env_of "$C" forge-plan)"
+[ "$(count_named "$C" host-browser)" = 1 ] || fail "host-browser not exactly once after a double apply with the socket"
+[ "$(grep -cxF '[mcp_servers.host-browser.env]' "$C/.codex/config.toml")" = 1 ] \
+    || fail "host-browser env table is not exactly once after a double apply"
+
+# ── Scenario D: a registration from before the socket is upgraded ──────
+# A worker whose CODEX_HOME already lists host-browser WITHOUT the env must not
+# be skipped as "already registered".
+D="$WORK/stale"
+mkdir -p "$D"
+apply_helper "$D"
+[ "$(env_of "$D" host-browser)" = null ] || fail "with no lane socket, host-browser got an env: $(env_of "$D" host-browser)"
+apply_helper "$D" "$SOCK"
+[ "$(env_of "$D" host-browser)" = "$want_env" ] \
+    || fail "a stale host-browser registration (no env) was kept: env=$(env_of "$D" host-browser)"
+[ "$(count_named "$D" host-browser)" = 1 ] || fail "host-browser not exactly once after the upgrade"
+
 # ── Wire-level assertions shared by the image and the source tree ──
 [ -x "$HELPER" ] || fail "helper is not executable"
 grep -Fq 'register-codex-experts' "$ROOT/images/default/Containerfile" \
@@ -151,4 +205,4 @@ launch_banner=$(grep -n '^show_banner "codex"$' "$ROOT/images/default/entrypoint
 [ "$launch_reg" -gt "$launch_require" ] || fail "registration precedes require_codex (CLI not guaranteed present)"
 [ "$launch_reg" -lt "$launch_banner" ] || fail "registration is not before the launch path"
 
-echo "PASS: Codex expert MCP registration is idempotent, auth/config-preserving, and wired before launch (binary: $BIN)"
+echo "PASS: Codex expert MCP registration is idempotent, auth/config-preserving, forwards the lane socket to host-browser, and is wired before launch (binary: $BIN)"
