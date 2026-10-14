@@ -1211,6 +1211,19 @@ fn handle_mcp_jsonrpc(
                         "required": ["category"]
                     }
                 }),
+                // 1637-5765: opt-in toolchains. Prepare never blocks: the
+                // forge's `flutter` shim polls it and shows the progress.
+                serde_json::json!({
+                    "name": "toolchain_prepare",
+                    "description": "Prepare an opt-in toolchain for this lane (one time: builds the shared image). Never blocks: returns state ready, preparing (with build step and elapsed seconds) or failed. The forge's `flutter` command calls this for you.",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "toolchain": { "type": "string", "enum": ["flutter"] }
+                        },
+                        "required": ["toolchain"]
+                    }
+                }),
                 serde_json::json!({
                     "name": "service_reload",
                     "description": "Reload the authenticated lane's existing WEB preview runtime. This does not open or refresh a browser.",
@@ -1278,6 +1291,9 @@ fn handle_mcp_jsonrpc(
                             "error": { "code": -32000, "message": e }
                         }),
                     }
+                }
+                "toolchain_prepare" => {
+                    serde_json::json!({ "result": crate::toolchain_exec::prepare(&req["params"]["arguments"], debug) })
                 }
                 "service_status" => {
                     match rt.block_on(crate::local_web_preview::status(project_label, instance)) {
@@ -1569,6 +1585,19 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
             continue;
         }
         let resp = match serde_json::from_str::<serde_json::Value>(line) {
+            // 1637-5765: a toolchain session takes over the connection and
+            // streams frames until the command exits; nothing follows it.
+            Ok(req) if req["method"] == "tillandsias/exec" => {
+                crate::toolchain_exec::serve_exec(
+                    &project_label,
+                    &identity.instance,
+                    &req["id"],
+                    &req["params"],
+                    reader,
+                    writer,
+                );
+                return;
+            }
             Ok(req) => handle_mcp_jsonrpc(&project_label, &identity.instance, &req, &browser, &rt),
             Err(_) => Some(serde_json::json!({
                 "jsonrpc": "2.0",

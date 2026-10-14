@@ -2475,6 +2475,9 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         // 1656-tjv4: the WebKit engine window. Not an INIT image: it is
         // built on the first Apple-preset browser.open (ensure_versioned_images).
         "webkit" => "images/webkit",
+        // 1637-5765: the opt-in Flutter toolchain. Not an INIT image: built on
+        // the forge's first `flutter` (toolchain_exec::prepare).
+        "flutter" => "images/flutter",
         "vault" => "images/vault",
         other => {
             return Err(format!("Unknown image type: {other}"));
@@ -19207,6 +19210,11 @@ mod local_web_preview;
 // @trace spec:host-browser-mcp (order 1649-xqet)
 #[cfg(feature = "tray")]
 mod browser_open;
+
+// @trace spec:local-web-preview (order 1637-5765): opt-in toolchains (Flutter)
+// in a sibling container, streamed over the lane's MCP socket.
+#[cfg(feature = "tray")]
+mod toolchain_exec;
 
 /// Spawn a terminal-launcher child and reap it on a detached thread.
 ///
