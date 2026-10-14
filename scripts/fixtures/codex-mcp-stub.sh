@@ -19,9 +19,14 @@
 # Deliberately NOT modeled: codex's whole-file TOML re-serialization on write
 # (the fixture asserts semantic preservation of unrelated content, which both
 # the stub and the real CLI satisfy), its provider-auth document handling, and
-# its TUI. The stub supports stdio servers only; `add` with an --env or --url
-# or an existing server not shaped as a stdio table is refused loudly so a
-# fixture cannot silently drift past the supported contract.
+# its TUI. The stub supports stdio servers only; `add` with a --url or an
+# existing server not shaped as a stdio table is refused loudly so a fixture
+# cannot silently drift past the supported contract.
+#
+# `--env KEY=VALUE` (order 1667-jna9) is modeled on codex-cli 0.162.1, measured
+# in the forge image 2026-10-14: `add` writes a `[mcp_servers.<name>.env]`
+# table of `KEY = "VALUE"` lines after the server table, a re-add replaces it,
+# and `list --json` reports it as `.transport.env` (null when absent).
 
 set -euo pipefail
 
@@ -56,9 +61,18 @@ drop_block() {
 }
 
 mcp_add() {
-    [ $# -ge 2 ] || die "usage: codex mcp add <NAME> -- <COMMAND>..."
-    local name="$1"
+    [ $# -ge 2 ] || die "usage: codex mcp add <NAME> [--env KEY=VALUE]... -- <COMMAND>..."
+    local name="$1" kv
     shift
+    local envs=()
+    while [ "${1:-}" = "--env" ]; do
+        kv="${2:-}"
+        case "$kv" in
+            [A-Za-z_]*=*) envs+=("$kv") ;;
+            *) die "--env expects KEY=VALUE, got: $kv" ;;
+        esac
+        shift 2
+    done
     [ "${1:-}" = "--" ] && shift || die "expected -- before the command"
     [ $# -ge 1 ] || die "no command supplied for $name"
     case "$name" in
@@ -72,23 +86,33 @@ mcp_add() {
     local header="[mcp_servers.$name]"
     if read_block "$CONFIG" "$header" >/dev/null; then
         drop_block "$CONFIG" "$header"
+        drop_block "$CONFIG" "[mcp_servers.$name.env]"
     fi
     printf '%s\n' "$header" "command = \"$1\"" >>"$CONFIG"
+    if [ "${#envs[@]}" -gt 0 ]; then
+        printf '\n%s\n' "[mcp_servers.$name.env]" >>"$CONFIG"
+        for kv in "${envs[@]}"; do
+            printf '%s = "%s"\n' "${kv%%=*}" "${kv#*=}" >>"$CONFIG"
+        done
+    fi
     printf 'Added global MCP server %s.\n' "'$name'"
 }
 
 mcp_list() {
     local json="["
     local first=1
-    local name block command
+    local name block command env_json
     while IFS= read -r name; do
         [ -n "$name" ] || continue
         block="$(read_block "$CONFIG" "[mcp_servers.$name]")"
         command="$(printf '%s\n' "$block" | awk -F'"' '/^command = "/{ print $2; exit }')"
         [ -n "$command" ] || continue
+        env_json="$(read_block "$CONFIG" "[mcp_servers.$name.env]" | awk -F' = "' '
+            NR > 1 && NF == 2 { sub(/"$/, "", $2); printf "%s\"%s\":\"%s\"", (n++ ? "," : ""), $1, $2 }')"
+        if [ -n "$env_json" ]; then env_json="{$env_json}"; else env_json="null"; fi
         [ "$first" = 1 ] || json="$json,"
         first=0
-        json="$json{\"name\":\"$name\",\"enabled\":true,\"disabled_reason\":null,\"transport\":{\"type\":\"stdio\",\"command\":\"$command\",\"args\":[]},\"startup_timeout_sec\":null,\"tool_timeout_sec\":null,\"auth_status\":\"unsupported\"}"
+        json="$json{\"name\":\"$name\",\"enabled\":true,\"disabled_reason\":null,\"transport\":{\"type\":\"stdio\",\"command\":\"$command\",\"args\":[],\"env\":$env_json,\"env_vars\":[]},\"startup_timeout_sec\":null,\"tool_timeout_sec\":null,\"auth_status\":\"unsupported\"}"
     done < <(awk '/^\[mcp_servers\./ && $0 !~ /\]\./ { gsub(/^\[mcp_servers\./, "", $0); gsub(/\]$/, "", $0); print }' "$CONFIG" 2>/dev/null || true)
     printf '%s\n' "$json]"
 }
