@@ -9,6 +9,9 @@ const OWNER: &str = "tillandsias.preview.lane";
 const FORGE: &str = "tillandsias.preview.forge";
 const PROFILE: &str = "tillandsias.preview.runtime";
 const CONFIG: &str = "tillandsias.preview.config";
+/// Order 1667-6rtp: the project-confined app directory a preview was published
+/// from, so reload republishes the same app.
+const APP_DIR: &str = "tillandsias.preview.app-dir";
 
 tokio::task_local! { static RPC_DEADLINE: Instant; }
 
@@ -297,8 +300,40 @@ struct LiveSource {
     forge_id: String,
     volume: String,
     generation: String,
-    project: String,
+    /// The served root inside the RAM volume: `<project>`, or
+    /// `<project>/<app_dir>` (order 1667-6rtp). Every source path, mount and
+    /// check is relative to it, so an app_dir confines all of them.
+    root: String,
+    app_dir: Option<String>,
     configs: Vec<String>,
+}
+
+/// Order 1667-6rtp: an app directory is relative to the project, stays inside
+/// it, and names no hidden or private segment. Refused with a typed reason
+/// before anything starts. The live forge then proves it is a real directory
+/// and not a symlink escape (resolve_live).
+fn validate_app_dir(dir: &str) -> Result<String, String> {
+    if dir.is_empty() {
+        return Err("invalid_app_dir: empty; omit app_dir to publish the project root".into());
+    }
+    if dir.starts_with('/') {
+        return Err(format!(
+            "invalid_app_dir: {dir:?} is absolute; give a directory relative to the project"
+        ));
+    }
+    let segments: Vec<&str> = dir.split('/').filter(|s| !s.is_empty()).collect();
+    if segments.contains(&"..") {
+        return Err(format!(
+            "invalid_app_dir: {dir:?} leaves the project ('..' is not allowed)"
+        ));
+    }
+    if segments.iter().any(|s| s.starts_with('.')) {
+        return Err(format!(
+            "invalid_app_dir: {dir:?} names a hidden or private segment"
+        ));
+    }
+    safe_relative(dir)
+        .map_err(|_| format!("invalid_app_dir: {dir:?} names a private or unscoped segment"))
 }
 
 fn attributed_forge(row: &Value, socket_dir: &Path) -> bool {
@@ -313,7 +348,11 @@ fn attributed_forge(row: &Value, socket_dir: &Path) -> bool {
         })
 }
 
-fn resolve_live(project: &str, instance: &str) -> Result<LiveSource, String> {
+fn resolve_live(
+    project: &str,
+    instance: &str,
+    app_dir: Option<&str>,
+) -> Result<LiveSource, String> {
     let socket_dir = crate::mcp_socket_host_dir(project, Some(instance));
     let mut matches = Vec::new();
     for name in forge_names(project, instance) {
@@ -339,6 +378,12 @@ fn resolve_live(project: &str, instance: &str) -> Result<LiveSource, String> {
         return Err("live_worktree_unavailable: project root escapes its lane".into());
     }
     podman_at(Step::Source, &["exec", id, "test", "-d", &guest])?;
+    // Order 1667-6rtp: the app directory must be a real directory inside the
+    // project, with no symlink anywhere on the way; checked in the LIVE forge.
+    let (root, guest) = match app_dir {
+        None => (project.to_string(), guest),
+        Some(dir) => live_app_dir(id, project, &guest, dir)?,
+    };
     let configs = ["wrangler.jsonc", "wrangler.json", "wrangler.toml"]
         .into_iter()
         .filter_map(|name| {
@@ -405,9 +450,45 @@ fn resolve_live(project: &str, instance: &str) -> Result<LiveSource, String> {
         forge_id: id.to_string(),
         volume,
         generation,
-        project: project.to_string(),
+        root,
+        app_dir: app_dir.map(str::to_string),
         configs,
     })
+}
+
+/// Order 1667-6rtp: prove `dir` is a real directory inside the live project,
+/// with no symlink anywhere on the way. Returns (served root, guest path).
+fn live_app_dir(
+    id: &str,
+    project: &str,
+    guest: &str,
+    dir: &str,
+) -> Result<(String, String), String> {
+    let app = format!("{guest}/{dir}");
+    let kind = podman_at(
+        Step::Source,
+        &[
+            "exec",
+            id,
+            "sh",
+            "-c",
+            "if [ -L \"$1\" ]; then printf link; elif [ -d \"$1\" ]; then printf dir; fi",
+            "sh",
+            &app,
+        ],
+    )?;
+    if kind != "dir" {
+        return Err(format!(
+            "invalid_app_dir: {dir:?} is not a directory in the project"
+        ));
+    }
+    let actual = podman_at(Step::Source, &["exec", id, "realpath", "-e", "--", &app])?;
+    if actual.trim() != app {
+        return Err(format!(
+            "invalid_app_dir: {dir:?} escapes the project through a symlink"
+        ));
+    }
+    Ok((format!("{project}/{dir}"), app))
 }
 
 fn live_mount_source(row: &Value, project: &str, instance: &str) -> Result<String, String> {
@@ -540,6 +621,9 @@ fn build_local_preview_run_args(
         "--label".into(),
         format!("{PROFILE}={}", profile.name()),
     ];
+    if let Some(dir) = &live.app_dir {
+        args.extend(["--label".into(), format!("{APP_DIR}={dir}")]);
+    }
     let mut runtime_name: Option<&str> = None;
     for mount in mounts {
         if let Some(name) = mount.strip_prefix("approved-config-name:") {
@@ -627,13 +711,13 @@ fn subset_mount(live: &LiveSource, path: &str, destination: &str) -> Result<Stri
     let relative = safe_relative(path)?;
     Ok(format!(
         "type=volume,source={},target={destination},volume-subpath={}/{relative},readonly=true",
-        live.volume, live.project
+        live.volume, live.root
     ))
 }
 
 fn verify_subset(live: &LiveSource, path: &str) -> Result<(), String> {
     let relative = safe_relative(path)?;
-    let expected = format!("/home/forge/src/{}/{relative}", live.project);
+    let expected = format!("/home/forge/src/{}/{relative}", live.root);
     let actual = podman_at(
         Step::Source,
         &["exec", &live.forge_id, "realpath", "-e", "--", &expected],
@@ -726,7 +810,7 @@ const NO_SERVABLE_ROOT: &str =
 /// Does `relative` exist under the live project root? Absence is an ANSWER
 /// (Ok(false)); only a failed probe is an error.
 fn source_exists(live: &LiveSource, relative: &str, test: &str) -> Result<bool, String> {
-    let path = format!("/home/forge/src/{}/{relative}", live.project);
+    let path = format!("/home/forge/src/{}/{relative}", live.root);
     let script = format!("if [ {test} \"$1\" ]; then printf present; fi");
     let answer = podman_at(
         Step::Source,
@@ -879,7 +963,7 @@ fn source_mounts(live: &LiveSource, profile: &Profile) -> Result<Vec<String>, St
             }
             verify_subset(live, "index.html")?;
             let mut mounts = vec![subset_mount(live, "index.html", "/var/www/index.html")?];
-            let root = format!("/home/forge/src/{}", live.project);
+            let root = format!("/home/forge/src/{}", live.root);
             let files = podman_at(
                 Step::Source,
                 &[
@@ -982,7 +1066,7 @@ fn source_mounts(live: &LiveSource, profile: &Profile) -> Result<Vec<String>, St
                 verify_subset(live, selected)?;
                 if !mounts
                     .iter()
-                    .any(|m| m.contains(&format!("volume-subpath={}/{selected},", live.project)))
+                    .any(|m| m.contains(&format!("volume-subpath={}/{selected},", live.root)))
                 {
                     mounts.push(subset_mount(
                         live,
@@ -1334,9 +1418,10 @@ async fn publish_locked(
     project: &str,
     instance: &str,
     runtime: &str,
+    app_dir: Option<&str>,
     debug: bool,
 ) -> Result<Value, String> {
-    let live = resolve_live(project, instance)?;
+    let live = resolve_live(project, instance, app_dir)?;
     let profile = select_profile(runtime, &live.configs)?;
     let name = format!("tillandsias-{project}-web");
     let old = inspect(&name)?;
@@ -1539,16 +1624,19 @@ fn last_failure(project: &str, instance: &str) -> Option<Value> {
         .cloned()
 }
 
+/// `app_dir` (order 1667-6rtp) publishes an app whose wrangler config and
+/// build output live in a project subdirectory; None publishes the root.
 pub(crate) async fn publish(
     project: &str,
     instance: &str,
     runtime: &str,
+    app_dir: Option<&str>,
     debug: bool,
 ) -> Result<Value, String> {
     let outcome = RPC_DEADLINE
         .scope(
             Instant::now() + PUBLISH_BUDGET,
-            publish_inner(project, instance, runtime, debug),
+            publish_inner(project, instance, runtime, app_dir, debug),
         )
         .await;
     record_outcome(project, instance, &outcome);
@@ -1594,8 +1682,12 @@ async fn publish_inner(
     project: &str,
     instance: &str,
     runtime: &str,
+    app_dir: Option<&str>,
     debug: bool,
 ) -> Result<Value, String> {
+    // An invalid app directory (1667-6rtp) is a fact about the request alone,
+    // so it is refused first, before identity, profile or any mutation.
+    let app_dir = app_dir.map(validate_app_dir).transpose()?;
     validate_identity(project, instance)?;
     // Reject invalid profile before any runtime or router mutation.
     if !["auto", "static", "wrangler"].contains(&runtime) {
@@ -1609,7 +1701,7 @@ async fn publish_inner(
         command_budget(Duration::from_secs(5))?,
         debug,
     )?;
-    publish_locked(project, instance, runtime, debug).await
+    publish_locked(project, instance, runtime, app_dir.as_deref(), debug).await
 }
 
 async fn status_inner(project: &str, instance: &str) -> Result<Value, String> {
@@ -1703,7 +1795,12 @@ async fn reload_inner(project: &str, instance: &str, debug: bool) -> Result<Valu
     if !["static", "wrangler"].contains(&runtime) {
         return Err("invalid_runtime: recorded profile is unavailable".into());
     }
-    publish_locked(project, instance, runtime, debug).await
+    // Republish the same app (1667-6rtp); the label is re-validated, never trusted.
+    let app_dir = match label(&row, APP_DIR) {
+        "" => None,
+        dir => Some(validate_app_dir(dir)?),
+    };
+    publish_locked(project, instance, runtime, app_dir.as_deref(), debug).await
 }
 
 /// Called only after the launcher proves no forge remains for this lane. This
@@ -2022,7 +2119,8 @@ mod tests {
             forge_id: "forge".into(),
             volume: "vol".into(),
             generation: "g".into(),
-            project: "proj".into(),
+            root: "proj".into(),
+            app_dir: None,
             configs: vec![],
         };
         (fake, live)
@@ -2093,6 +2191,126 @@ mod tests {
         assert_eq!(
             source_mounts(&live, &Profile::Wrangler("wrangler.jsonc".into())).unwrap_err(),
             "remote_binding_forbidden: local preview refuses remote bindings"
+        );
+    }
+
+    /// Order 1667-6rtp: app_dir values that leave the project, are absolute,
+    /// or name a hidden or private segment are refused with a typed reason,
+    /// BEFORE anything starts (no podman call at all).
+    #[test]
+    fn app_dir_refusals_are_typed_and_come_before_anything_starts() {
+        for (dir, why) in [
+            ("..", "leaves the project"),
+            ("a/../..", "leaves the project"),
+            ("/etc", "is absolute"),
+            (".git", "hidden or private segment"),
+            ("observatorium/.env", "hidden or private segment"),
+            ("node_modules", "private or unscoped segment"),
+            ("", "empty"),
+        ] {
+            let err = validate_app_dir(dir).unwrap_err();
+            assert!(
+                err.starts_with("invalid_app_dir: ") && err.contains(why),
+                "{dir:?} -> {err}"
+            );
+        }
+        assert_eq!(validate_app_dir("observatorium").unwrap(), "observatorium");
+        assert_eq!(validate_app_dir("apps/site/").unwrap(), "apps/site");
+        let calls = std::rc::Rc::new(std::cell::Cell::new(0));
+        let seen = calls.clone();
+        let _fake = Fake::install(move |_| {
+            seen.set(seen.get() + 1);
+            output(125, "", SECRET)
+        });
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let err = rt
+            .block_on(publish_inner(
+                "proj",
+                "inst",
+                "auto",
+                Some("a/../.."),
+                false,
+            ))
+            .unwrap_err();
+        assert!(err.starts_with("invalid_app_dir: "), "{err}");
+        assert_eq!(calls.get(), 0, "refused before any podman call");
+    }
+
+    /// Order 1667-6rtp: the live forge must hold app_dir as a real directory;
+    /// a missing path, a file and a symlink are each refused by name.
+    #[test]
+    fn live_app_dir_must_be_a_real_directory_inside_the_project() {
+        let guest = "/home/forge/src/proj";
+        let _fake = Fake::install(move |args| match args {
+            ["exec", _, "sh", "-c", script, "sh", path] if script.contains("-L") => {
+                match path.strip_prefix("/home/forge/src/proj/").unwrap_or("") {
+                    "observatorium" => output(0, "dir", ""),
+                    "link-out" => output(0, "link", ""),
+                    _ => output(0, "", ""),
+                }
+            }
+            ["exec", _, "realpath", "-e", "--", path] => output(0, path, ""),
+            _ => output(125, "", SECRET),
+        });
+        assert_eq!(
+            live_app_dir("forge", "proj", guest, "observatorium").unwrap(),
+            (
+                "proj/observatorium".to_string(),
+                "/home/forge/src/proj/observatorium".to_string()
+            )
+        );
+        for dir in ["missing", "README.md", "link-out"] {
+            let err = live_app_dir("forge", "proj", guest, dir).unwrap_err();
+            assert_eq!(
+                err,
+                format!("invalid_app_dir: {dir:?} is not a directory in the project")
+            );
+        }
+    }
+
+    /// Order 1667-6rtp: with app_dir, the config, its assets and the static
+    /// fallback all resolve INSIDE the app directory. Tillandsias's own
+    /// observatorium (observatorium/wrangler.jsonc, assets ./build/web) is the
+    /// shape; the project root's public/ must never be served instead.
+    #[test]
+    fn an_app_dir_confines_every_mount_to_the_app() {
+        let (_fake, mut live) = fake_forge(
+            &[
+                "public/index.html",
+                "observatorium/wrangler.jsonc",
+                "observatorium/build/web/index.html",
+            ],
+            r#"{"remote":false,"assets":"./build/web","main":null,"build":null,"raw":"{}"}"#,
+        );
+        live.root = "proj/observatorium".into();
+        live.app_dir = Some("observatorium".into());
+        live.configs = vec!["wrangler.jsonc".into()];
+        let wrangler = source_mounts(&live, &Profile::Wrangler("wrangler.jsonc".into())).unwrap();
+        let subpaths: Vec<&str> = wrangler
+            .iter()
+            .filter_map(|m| m.split("volume-subpath=").nth(1))
+            .collect();
+        assert!(!subpaths.is_empty(), "{wrangler:?}");
+        assert!(
+            subpaths
+                .iter()
+                .all(|p| p.starts_with("proj/observatorium/")),
+            "every mount stays inside the app: {wrangler:?}"
+        );
+        assert!(
+            subpaths
+                .iter()
+                .any(|p| p.starts_with("proj/observatorium/build/web,")),
+            "{wrangler:?}"
+        );
+        assert_eq!(
+            source_mounts(&live, &Profile::Static).unwrap(),
+            vec![
+                "type=volume,source=vol,target=/var/www,volume-subpath=proj/observatorium/build/web,readonly=true"
+            ]
         );
     }
 
@@ -2256,7 +2474,7 @@ mod tests {
             );
             std::thread::sleep(Duration::from_millis(100));
         }
-        let live = resolve_live(project, instance).unwrap();
+        let live = resolve_live(project, instance, None).unwrap();
         let profile = select_profile("auto", &live.configs).unwrap();
         let slices =
             source_mounts(&live, &profile).expect("pinned official parser and safe source slicing");
@@ -2403,12 +2621,12 @@ mod tests {
         with_stub("exit 0", |log| {
             let rt = tokio::runtime::Runtime::new().unwrap();
             assert!(
-                rt.block_on(publish("proj", "default", "deploy", false))
+                rt.block_on(publish("proj", "default", "deploy", None, false))
                     .unwrap_err()
                     .starts_with("invalid_runtime:")
             );
             assert!(
-                rt.block_on(publish("proj", "default", "auto", false))
+                rt.block_on(publish("proj", "default", "auto", None, false))
                     .unwrap_err()
                     .starts_with("live_worktree_unavailable:")
             );
@@ -2536,7 +2754,8 @@ mod tests {
             forge_id: "launch-a".into(),
             volume: "ram-volume".into(),
             generation: "launch-generation".into(),
-            project: "proj".into(),
+            root: "proj".into(),
+            app_dir: None,
             configs: vec![],
         };
         let mount = subset_mount(&live, "var/html", "/srv/preview/var/html").unwrap();
@@ -2580,7 +2799,8 @@ mod tests {
             forge_id: "launch-a".into(),
             volume: "ram-volume".into(),
             generation: "launch-generation".into(),
-            project: "proj".into(),
+            root: "proj".into(),
+            app_dir: None,
             configs: vec![],
         };
         let mount = subset_mount(
