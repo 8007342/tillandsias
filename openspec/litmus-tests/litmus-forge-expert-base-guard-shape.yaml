@@ -26,7 +26,7 @@ name: litmus:forge-expert-base-guard-shape
 spec: meta-orchestration
 phase: pre-build
 description: >
-  Pin scripts/check-forge-expert-base.sh: the falsifiable verdict grammar
+  Pin scripts/lua/check-forge-expert-base.lua (ported from the .sh, 1637-5765): the falsifiable verdict grammar
   ^(ok:(expert-base-ready|no-plan-crate)|blocked:(expert-sources-absent|not-a-git-repo))$,
   all four branches with their exit codes, the source-presence (not branch-name)
   test, the meta-orchestration skill's consultation of it, the methodology rule
@@ -36,19 +36,20 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/check-forge-expert-base.sh
+  - workspace contains scripts/lua/check-forge-expert-base.lua (ported from the .sh, 1637-5765)
+  - tillandsias-plan with the script verb is on PATH
   - workspace contains skills/meta-orchestration/SKILL.md
   - workspace contains methodology/multi-host-development.yaml
   - POSIX sh and git are available in PATH
 
 critical_path:
-  - step: "guard exists, is POSIX sh, parses, and is executable"
-    command: "test -x scripts/check-forge-expert-base.sh && sh -n scripts/check-forge-expert-base.sh && echo 'ok: guard executable'"
+  - step: "the guard exists and the runner can run it"
+    command: "test -f scripts/lua/check-forge-expert-base.lua && out=$(tillandsias-plan script run scripts/lua/check-forge-expert-base.lua 2>/dev/null); case \"$out\" in ok:*|blocked:*) echo 'ok: guard executable' ;; *) echo \"FAIL out=[$out]\"; exit 1 ;; esac"
     timeout_ms: 5000
     expected_behavior: "ok: guard executable"
 
   - step: "the verdict grammar is documented in the guard itself"
-    command: "grep -Fq '^(ok:(expert-base-ready|no-plan-crate)|blocked:(expert-sources-absent|not-a-git-repo))$' scripts/check-forge-expert-base.sh && echo 'ok: grammar documented'"
+    command: "grep -Fq '^(ok:(expert-base-ready|no-plan-crate)|blocked:(expert-sources-absent|not-a-git-repo))$' scripts/lua/check-forge-expert-base.lua && echo 'ok: grammar documented'"
     timeout_ms: 5000
     expected_behavior: "ok: grammar documented"
 
@@ -56,32 +57,32 @@ critical_path:
     # The Tillandsias platform branches carry answer.rs + methodology.rs. If this
     # step goes red on a platform branch, the expert engine has been moved or
     # deleted and every forge seeded here would silently degrade.
-    command: "out=$(sh scripts/check-forge-expert-base.sh 2>/dev/null); rc=$?; echo \"$out rc=$rc\"; [ \"$out\" = 'ok:expert-base-ready' ] && [ \"$rc\" -eq 0 ] && echo 'ok: expert base ready'"
+    command: "out=$(tillandsias-plan script run scripts/lua/check-forge-expert-base.lua 2>/dev/null); rc=$?; echo \"$out rc=$rc\"; [ \"$out\" = 'ok:expert-base-ready' ] && [ \"$rc\" -eq 0 ] && echo 'ok: expert base ready'"
     timeout_ms: 10000
     expected_behavior: "ok: expert base ready"
 
   - step: "a checkout WITH a plan crate but WITHOUT the expert sources is REFUSED with a non-zero exit"
     # The breach condition, reproduced in a scratch repo: this is exactly what a
     # `main`-seeded forge looks like from the guard's point of view.
-    command: "d=$(mktemp -d); ( cd \"$d\" && git init -q . && mkdir -p crates/tillandsias-plan/src && : > crates/tillandsias-plan/src/lib.rs && : > crates/tillandsias-plan/src/main.rs && out=$(sh \"$OLDPWD/scripts/check-forge-expert-base.sh\" 2>/dev/null); rc=$?; echo \"$out rc=$rc\" ); rm -rf \"$d\""
+    command: "d=$(mktemp -d); ( cd \"$d\" && git init -q . && mkdir -p crates/tillandsias-plan/src && : > crates/tillandsias-plan/src/lib.rs && : > crates/tillandsias-plan/src/main.rs && out=$(tillandsias-plan script run \"$OLDPWD/scripts/lua/check-forge-expert-base.lua\" 2>/dev/null); rc=$?; echo \"$out rc=$rc\" ); rm -rf \"$d\""
     timeout_ms: 15000
     expected_behavior: "blocked:expert-sources-absent rc=1"
 
   - step: "a project with NO plan crate passes as not-applicable, never as a failure"
     # Off-Tillandsias projects have no plan expert; refusing them would make the
     # guard unusable in the product it ships inside.
-    command: "d=$(mktemp -d); ( cd \"$d\" && git init -q . && out=$(sh \"$OLDPWD/scripts/check-forge-expert-base.sh\" 2>/dev/null); rc=$?; echo \"$out rc=$rc\" ); rm -rf \"$d\""
+    command: "d=$(mktemp -d); ( cd \"$d\" && git init -q . && out=$(tillandsias-plan script run \"$OLDPWD/scripts/lua/check-forge-expert-base.lua\" 2>/dev/null); rc=$?; echo \"$out rc=$rc\" ); rm -rf \"$d\""
     timeout_ms: 15000
     expected_behavior: "ok:no-plan-crate rc=0"
 
   - step: "a non-repo directory fails closed"
-    command: "d=$(mktemp -d); ( cd \"$d\" && out=$(sh \"$OLDPWD/scripts/check-forge-expert-base.sh\" 2>/dev/null); rc=$?; echo \"$out rc=$rc\" ); rm -rf \"$d\""
+    command: "d=$(mktemp -d); ( cd \"$d\" && out=$(tillandsias-plan script run \"$OLDPWD/scripts/lua/check-forge-expert-base.lua\" 2>/dev/null); rc=$?; echo \"$out rc=$rc\" ); rm -rf \"$d\""
     timeout_ms: 10000
     expected_behavior: "blocked:not-a-git-repo rc=1"
 
   - step: "the guard emits exactly ONE verdict line on stdout"
     # Diagnostics belong on stderr; a caller branches on a single stdout line.
-    command: "n=$(sh scripts/check-forge-expert-base.sh 2>/dev/null | wc -l); echo \"lines=$n\"; [ \"$n\" -eq 1 ] && echo 'ok: single verdict line'"
+    command: "out=$(tillandsias-plan script run scripts/lua/check-forge-expert-base.lua 2>/dev/null); case \"$out\" in ''|*[![:print:]]*) echo \"FAIL out=[$out]\"; exit 1 ;; *) echo 'ok: single verdict line' ;; esac"
     timeout_ms: 10000
     expected_behavior: "ok: single verdict line"
 
@@ -89,12 +90,12 @@ critical_path:
     # Judging by branch name would break every end-user project, whose branches
     # are none of Tillandsias's business. If a future edit reintroduces a
     # branch-name comparison here, this goes red.
-    command: "if grep -nE '(\\[|\\bif\\b).*(linux-next|osx-next|windows-next)' scripts/check-forge-expert-base.sh | grep -v '^[0-9]*:#'; then echo 'FAIL: guard branches on a Tillandsias branch name'; exit 1; fi; grep -q 'crates/tillandsias-plan/src/answer.rs' scripts/check-forge-expert-base.sh && echo 'ok: source-presence test'"
+    command: "if grep -nE '(\\[|\\bif\\b).*(linux-next|osx-next|windows-next)' scripts/lua/check-forge-expert-base.lua | grep -v '^[0-9]*:#'; then echo 'FAIL: guard branches on a Tillandsias branch name'; exit 1; fi; grep -q 'crates/tillandsias-plan/src/answer.rs' scripts/lua/check-forge-expert-base.lua && echo 'ok: source-presence test'"
     timeout_ms: 5000
     expected_behavior: "ok: source-presence test"
 
   - step: "the meta-orchestration skill consults the guard (wiring is real, not prose)"
-    command: "grep -q 'scripts/check-forge-expert-base.sh' skills/meta-orchestration/SKILL.md && echo 'ok: skill wired'"
+    command: "grep -q 'scripts/lua/check-forge-expert-base.lua' skills/meta-orchestration/SKILL.md && echo 'ok: skill wired'"
     timeout_ms: 5000
     expected_behavior: "ok: skill wired"
 
@@ -123,7 +124,7 @@ critical_path:
     # FAIL. When the probe finds nothing (a forge with no target/, or a binary
     # too old to answer `capabilities`) it returns 1 and the original chain runs
     # exactly as before.
-    command: "bin=$(mf_plan_binary 2>/dev/null || true); [ -n \"$bin\" ] || bin=$(command -v tillandsias-plan 2>/dev/null || true); if [ -z \"$bin\" ]; then for c in ./target/release/tillandsias-plan ./target/debug/tillandsias-plan \"$HOME/.local/bin/tillandsias-plan\" /usr/local/bin/tillandsias-plan /usr/bin/tillandsias-plan; do [ -x \"$c\" ] && { bin=\"$c\"; break; }; done; fi; [ -n \"$bin\" ] || { echo 'SKIP: no tillandsias-plan binary on this host'; exit 0; }; out=$(\"$bin\" methodology 'forge_base_determinism.enforced_by' 2>/dev/null); printf '%s' \"$out\" | grep -q '\"confidence\": \"exact\"' || { echo 'FAIL: rule not resolvable by the methodology expert'; exit 1; }; printf '%s' \"$out\" | grep -q 'check-forge-expert-base.sh' && echo 'ok: methodology rule queryable'"
+    command: "bin=$(mf_plan_binary 2>/dev/null || true); [ -n \"$bin\" ] || bin=$(command -v tillandsias-plan 2>/dev/null || true); if [ -z \"$bin\" ]; then for c in ./target/release/tillandsias-plan ./target/debug/tillandsias-plan \"$HOME/.local/bin/tillandsias-plan\" /usr/local/bin/tillandsias-plan /usr/bin/tillandsias-plan; do [ -x \"$c\" ] && { bin=\"$c\"; break; }; done; fi; [ -n \"$bin\" ] || { echo 'SKIP: no tillandsias-plan binary on this host'; exit 0; }; out=$(\"$bin\" methodology 'forge_base_determinism.enforced_by' 2>/dev/null); printf '%s' \"$out\" | grep -q '\"confidence\": \"exact\"' || { echo 'FAIL: rule not resolvable by the methodology expert'; exit 1; }; printf '%s' \"$out\" | grep -q 'check-forge-expert-base.lua' && echo 'ok: methodology rule queryable'"
     timeout_ms: 20000
     expected_behavior: "ok: methodology rule queryable"
 
@@ -175,11 +176,11 @@ observability:
   log_fields:
     spec: "meta-orchestration"
     test: "forge-expert-base-guard-shape"
-    artifact: "scripts/check-forge-expert-base.sh + skills/meta-orchestration/SKILL.md + methodology/multi-host-development.yaml + images/default/lib-common.sh"
+    artifact: "scripts/lua/check-forge-expert-base.lua + skills/meta-orchestration/SKILL.md + methodology/multi-host-development.yaml + images/default/lib-common.sh"
 
 rollback:
   on_failure: >
-    An order-531 surface drifted. Restore: scripts/check-forge-expert-base.sh
+    An order-531 surface drifted. Restore: scripts/lua/check-forge-expert-base.lua
     (the pinned verdict grammar, all four branches with their exit codes, and the
     SOURCE-PRESENCE test — never a branch-name comparison, which would break
     every end-user project per the multi-host-development scope rule);
@@ -191,4 +192,4 @@ rollback:
     (the base_state / expert_sources verdict in inject_startup_context). NEVER
     reduce the guard to a branch-name check — the failure it exists to catch
     occurs when the seed and the actual branch AGREE.
-  command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; sh scripts/check-forge-expert-base.sh; echo rc=$?; \"$MFPLAN\" methodology 'forge_base_determinism.rule'"
+  command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; tillandsias-plan script run scripts/lua/check-forge-expert-base.lua; echo rc=$?; \"$MFPLAN\" methodology 'forge_base_determinism.rule'"
