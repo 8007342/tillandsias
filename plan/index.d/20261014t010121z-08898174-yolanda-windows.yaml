@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-git-bootstrap-seeds-an-explicitly-attributed-agent-identity-per-harness
+    field: status
+    value: completed
+    ts: "2026-10-14T01:01:21Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: forge-git-bootstrap-seeds-an-explicitly-attributed-agent-identity-per-harness
+    event:
+      type: completed
+      ts: "2026-10-14T01:01:21Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: landed #414 run 74 merge 12035ab4a in origin/linux-next; trunk carries every_forge_agent_lane_carries_the_git_identity and github_login_has_no_git_identity_step; macOS live login + commit-author check rides the next stable per operator

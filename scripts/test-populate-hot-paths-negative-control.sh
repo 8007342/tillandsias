@@ -47,7 +47,26 @@ chmod 0555 /opt/cheatsheets
 
 chown -R nobody:nobody "$HOME_LANE"
 
+# 1674-sgy9: lib-common.sh refuses at its top level when the image's vendor CA
+# bundle is absent, which it is on every gate host that is not the forge image
+# (tillandsias-build, measured 2026-10-13). populate_hot_paths then never runs
+# and control 1 used to read that abort as "the copy failure was not named".
+# Source it once as the lane user and skip control 1 BY NAME only on that exact
+# refusal; any other source failure still falls through and fails loudly.
+runuser -u nobody -- env HOME="$HOME_LANE" bash -c '
+    set -euo pipefail
+    source "'"$REPO_ROOT"'/images/default/lib-common.sh"
+' >"$TMPD/source.out" 2>&1
+src_rc=$?
+SKIP_CONTROL_1=""
+if [ "$src_rc" -ne 0 ] && grep -q 'image vendor CA bundle is missing' "$TMPD/source.out"; then
+    SKIP_CONTROL_1="vendor CA bundle absent: not a forge image ($(grep -m1 'image vendor CA bundle is missing' "$TMPD/source.out"))"
+fi
+
 # -- Negative control 1: populate_hot_paths logs FAILED, never a success line.
+if [ -n "$SKIP_CONTROL_1" ]; then
+    echo "skip: control 1 (populate_hot_paths) — $SKIP_CONTROL_1"
+else
 printf '%s\n' "$LINE_MARK" >> /tmp/forge-lifecycle.log 2>/dev/null || true
 runuser -u nobody -- env HOME="$HOME_LANE" bash -c '
     set -euo pipefail
@@ -70,12 +89,24 @@ if grep -q 'cheatsheets copied to tmpfs' <<<"$tail_log"; then
     echo "FAIL: lifecycle log printed the unconditional success line despite the failure"
     FAIL_COUNT=$((FAIL_COUNT+1))
 fi
+fi
 
 # -- Negative control 2: tellme answers from the image bundle and says so.
+# 1674-sgy9: run tellme from the image's install layout
+# (images/default/Containerfile: COPY cli/tellme /opt/agents/tillandsias-cli/bin/),
+# not from the checkout. In the checkout its repo-local fallback finds the
+# TRACKED images/default/cheatsheets/INDEX.md first, so the image bundle could
+# never be reached and controls 2-3 were red from the day they were written.
+TELLME_BIN="$TMPD/opt/agents/tillandsias-cli/bin"
+mkdir -p "$TELLME_BIN"
+cp "$REPO_ROOT/images/default/cli/tellme" "$TELLME_BIN/tellme"
+# mktemp made $TMPD 0700; the lane user needs to traverse it to reach the copy.
+chmod a+x "$TMPD"
+chmod -R a+rX "$TMPD/opt"
 runuser -u nobody -- env HOME="$HOME_LANE" \
     BASH_ENV=/dev/null \
     TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets \
-    bash "$REPO_ROOT/images/default/cli/tellme" about --list \
+    bash "$TELLME_BIN/tellme" about --list \
     >"$TMPD/tellme.out" 2>"$TMPD/tellme.err"
 t_rc=$?
 if [ "$t_rc" -ne 0 ]; then
@@ -95,4 +126,8 @@ if [ "$FAIL_COUNT" -gt 0 ]; then
     echo "populate-hot-paths negative control: $FAIL_COUNT failure(s)"
     exit 1
 fi
-echo "PASS: unwritable /opt/cheatsheets — populate_hot_paths named the failure, tellme served the image bundle"
+if [ -n "$SKIP_CONTROL_1" ]; then
+    echo "PASS: unwritable /opt/cheatsheets — tellme served the image bundle; populate_hot_paths skipped by name ($SKIP_CONTROL_1)"
+else
+    echo "PASS: unwritable /opt/cheatsheets — populate_hot_paths named the failure, tellme served the image bundle"
+fi

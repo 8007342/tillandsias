@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: salvage-audit-fixture-reads-a-timeout-kill-as-a-verdict-now-that-the-audit-outgrows-its-300s-ceiling
+    field: status
+    value: completed
+    ts: "2026-10-14T06:34:36Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: salvage-audit-fixture-reads-a-timeout-kill-as-a-verdict-now-that-the-audit-outgrows-its-300s-ceiling
+    event:
+      type: completed
+      ts: "2026-10-14T06:34:36Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: landed PR #418 merge d3e3afcd5 in origin/linux-next (fix 77b5017c0); trunk scripts/test-salvage-audit.sh carries SALVAGE_AUDIT_TIMEOUT_S and the named capture-timeout arm

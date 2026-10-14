@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found by ./build.sh --check on tlatoanis-macbook-air, 2026-10-14, after 1680-yf9z and 1681-otmp were fixed locally. Fix on work/1682-fgjo.
+packets:
+  - packet_id: mirror-discipline-arm11-sees-a-hashed-ruby-under-bash-3-2-so-darwin-check-refuses
+    order: 1682-fgjo
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [build, tests, darwin, gate, portability, git-mirror]
+    estimated_hours: 1
+    related: [1443-uit6, 1597-rrku, 1680-yf9z, 1681-otmp]
+    depends_on: []
+    title: |
+      test-mirror-discipline.sh ARM11 fails on every Mac: bash 3.2 reports a hashed /usr/bin/ruby under a temporary PATH, so the "no ruby" condition is never true
+    context: |
+      MEASURED 2026-10-14, tlatoanis-macbook-air, /bin/bash 3.2.57. With 1680-yf9z and 1681-otmp fixed locally, ./build.sh --check reached and failed "FAILED: mirror-discipline (1443-uit6)" on "FAIL: ARM11 rc=0 refs='refs/tillandsias/discipline/unknown/unreadable/…'". The push itself behaved as specified: "present but unreadable (no-ruby)", rc=0, relayed, one ref. The failing condition was `! PATH="$noruby" command -v ruby`: bash 3.2 keeps the hashed path of a command the shell already ran, and a temporary PATH prefix doesn't clear it (`ruby -e 1; PATH=<empty> command -v ruby` gives /usr/bin/ruby, rc 0; with `hash -r` in a subshell, rc 1). bash 5 on Linux clears the hash on a PATH change, so only Macs fail. Third darwin-only fixture defect blocking every Mac's --check stamp.
+    exit_criteria:
+      - 'ARM11 asks for ruby in a subshell with PATH set and the hash cleared, and passes on darwin bash 3.2 (red at e99f8c0e1, measured twice)'
+      - 'CONTROL: the same lookup still finds ruby when ruby is on the given PATH'
+      - 'a darwin ./build.sh --check passes mirror-discipline'
+    unscoreable: "a bash 3.2 hash-table portability fix to one fixture arm, pinned on darwin with a reachable-ruby control"
