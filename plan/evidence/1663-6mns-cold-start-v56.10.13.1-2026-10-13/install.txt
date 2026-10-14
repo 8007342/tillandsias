@@ -1,0 +1,11 @@
+installer sha256 0b58390fa3db2eeb13e8384211919d7e1b70aaa393534a1516ebf4bdf5fe2273 (SHA256SUMS: 0b58390fa3db2eeb13e8384211919d7e1b70aaa393534a1516ebf4bdf5fe2273)
+install rc=0
+SUCCESS proxy SUCCESS git SUCCESS vault SUCCESS inference SUCCESS router SUCCESS chromium-core SUCCESS chromium-framework SUCCESS forge-base SUCCESS forge SUCCESS web SUCCESS web-wrangler 
+Tillandsias v56.10.13.1
+inner image refs: 39
+localhost/tillandsias-web-wrangler:sha256-589586effed52f52a828d216ab49c7f25ebbbf6d0dc293e525ce8546d4b5f7c8
+localhost/tillandsias-web-wrangler:v56.10.13.1
+localhost/tillandsias-web-wrangler:latest
+localhost/tillandsias-web:latest
+localhost/tillandsias-web:sha256-ba31f7655a77c0619e094f80b28ddf0aac4d3f0490a26c309778067c9c4730a9
+localhost/tillandsias-web:v56.10.13.1

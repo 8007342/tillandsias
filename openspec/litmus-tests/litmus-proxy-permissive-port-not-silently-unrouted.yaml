@@ -29,33 +29,34 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/check-proxy-permissive-port-routing.sh
+  - workspace contains scripts/lua/check-proxy-permissive-port-routing.lua (ported from the .sh, 1663-6mns)
+  - tillandsias-plan with the script verb is on PATH
   - workspace contains images/proxy/squid.conf
-  - shell utilities (bash, grep, sed, mktemp) are available in PATH
+  - shell utilities (sed, mktemp, find) are available in PATH; fixtures live under target/ because the Lua runtime reads only inside the repository
 
 critical_path:
-  - step: "the guard parses, is executable, and the tree agrees with itself in the pinned grammar"
-    command: "bash -n scripts/check-proxy-permissive-port-routing.sh && test -x scripts/check-proxy-permissive-port-routing.sh && out=$(scripts/check-proxy-permissive-port-routing.sh) && printf '%s' \"$out\" | grep -qE '^ok:proxy-permissive-port:(unrouted-and-documented|routed:[0-9]+ consumer\\(s\\))$' && echo 'ok: tree agrees'"
+  - step: "the Lua guard runs and the tree agrees with itself in the pinned grammar"
+    command: "out=$(tillandsias-plan script run scripts/lua/check-proxy-permissive-port-routing.lua); rc=$?; case \"$out\" in ok:proxy-permissive-port:unrouted-and-documented|ok:proxy-permissive-port:routed:*' consumer(s)') [ \"$rc\" -eq 0 ] && echo 'ok: tree agrees' ;; *) echo \"FAIL rc=$rc out=[$out]\"; exit 1 ;; esac"
     timeout_ms: 20000
     expected_behavior: "ok: tree agrees"
 
   - step: "NEGATIVE CONTROL — the caveat removed while nothing routes to the port is refused (this is the state the config was actually in)"
-    command: "T=$(mktemp -d); sed 's/NOT ROUTED/happily routed/' images/proxy/squid.conf > \"$T/squid.conf\"; out=$(TILLANDSIAS_PROXY_CONF=\"$T/squid.conf\" scripts/check-proxy-permissive-port-routing.sh 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q '^violation:proxy-permissive-port:undocumented-unrouted$' && echo 'ok: undocumented-unrouted refused' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    command: "mkdir -p target; T=$(mktemp -d target/litmus-ppp.XXXXXX); sed 's/NOT ROUTED/happily routed/' images/proxy/squid.conf > \"$T/squid.conf\"; out=$(TILLANDSIAS_PROXY_CONF=\"$T/squid.conf\" tillandsias-plan script run scripts/lua/check-proxy-permissive-port-routing.lua 2>/dev/null); rc=$?; find \"$T\" -delete; [ \"$rc\" -ne 0 ] && [ \"$out\" = 'violation:proxy-permissive-port:undocumented-unrouted' ] && echo 'ok: undocumented-unrouted refused' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
     timeout_ms: 20000
     expected_behavior: "ok: undocumented-unrouted refused"
 
   - step: "NEGATIVE CONTROL — a consumer appearing while the caveat stands is refused too, so the note cannot outlive the wiring"
-    command: "T=$(mktemp -d); mkdir -p \"$T/crates\"; printf 'const P: &str = \"http://proxy:3129\";\\n' > \"$T/crates/x.rs\"; out=$(TILLANDSIAS_PROXY_CONSUMER_ROOT=\"$T/crates\" scripts/check-proxy-permissive-port-routing.sh 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q '^violation:proxy-permissive-port:stale-unrouted-caveat$' && echo 'ok: stale caveat refused' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    command: "mkdir -p target; T=$(mktemp -d target/litmus-ppp.XXXXXX); mkdir -p \"$T/crates\"; printf 'const P: &str = \"http://proxy:3129\";\\n' > \"$T/crates/x.rs\"; out=$(TILLANDSIAS_PROXY_CONSUMER_ROOT=\"$T/crates\" tillandsias-plan script run scripts/lua/check-proxy-permissive-port-routing.lua 2>/dev/null); rc=$?; find \"$T\" -delete; [ \"$rc\" -ne 0 ] && [ \"$out\" = 'violation:proxy-permissive-port:stale-unrouted-caveat' ] && echo 'ok: stale caveat refused' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
     timeout_ms: 20000
     expected_behavior: "ok: stale caveat refused"
 
   - step: "POSITIVE CONTROL — consumer present AND caveat cleared passes, so a refuse-everything guard cannot satisfy the two negatives"
-    command: "T=$(mktemp -d); mkdir -p \"$T/crates\"; sed 's/NOT ROUTED/happily routed/' images/proxy/squid.conf > \"$T/squid.conf\"; printf 'const P: &str = \"http://proxy:3129\";\\n' > \"$T/crates/x.rs\"; out=$(TILLANDSIAS_PROXY_CONF=\"$T/squid.conf\" TILLANDSIAS_PROXY_CONSUMER_ROOT=\"$T/crates\" scripts/check-proxy-permissive-port-routing.sh 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" -eq 0 ] && printf '%s' \"$out\" | grep -q '^ok:proxy-permissive-port:routed:1 consumer(s)$' && echo 'ok: routed state accepted' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    command: "mkdir -p target; T=$(mktemp -d target/litmus-ppp.XXXXXX); mkdir -p \"$T/crates\"; sed 's/NOT ROUTED/happily routed/' images/proxy/squid.conf > \"$T/squid.conf\"; printf 'const P: &str = \"http://proxy:3129\";\\n' > \"$T/crates/x.rs\"; out=$(TILLANDSIAS_PROXY_CONF=\"$T/squid.conf\" TILLANDSIAS_PROXY_CONSUMER_ROOT=\"$T/crates\" tillandsias-plan script run scripts/lua/check-proxy-permissive-port-routing.lua 2>/dev/null); rc=$?; find \"$T\" -delete; [ \"$rc\" -eq 0 ] && [ \"$out\" = 'ok:proxy-permissive-port:routed:1 consumer(s)' ] && echo 'ok: routed state accepted' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
     timeout_ms: 20000
     expected_behavior: "ok: routed state accepted"
 
   - step: "build.sh consults the guard (wiring is real, not prose)"
-    command: "grep -q 'check-proxy-permissive-port-routing.sh' build.sh && echo 'ok: wired into the gate'"
+    command: "grep -q 'scripts/lua/check-proxy-permissive-port-routing.lua' build.sh && echo 'ok: wired into the gate'"
     timeout_ms: 8000
     expected_behavior: "ok: wired into the gate"
 
@@ -67,7 +68,7 @@ observability:
   log_fields:
     spec: "proxy-container"
     test: "proxy-permissive-port-not-silently-unrouted"
-    artifact: "scripts/check-proxy-permissive-port-routing.sh + images/proxy/squid.conf"
+    artifact: "scripts/lua/check-proxy-permissive-port-routing.lua + images/proxy/squid.conf"
 
 rollback:
   on_failure: >
@@ -76,4 +77,4 @@ rollback:
     nothing routes there. Do not resolve this by deleting the guard: the
     silent-middle state it refuses is the one order 245 P6 was filed on, where
     the config claimed image builds were proxied and they were not.
-  command: "scripts/check-proxy-permissive-port-routing.sh; grep -rlF 3129 --include='*.rs' crates/"
+  command: "tillandsias-plan script run scripts/lua/check-proxy-permissive-port-routing.lua; grep -rlF 3129 --include='*.rs' crates/"
