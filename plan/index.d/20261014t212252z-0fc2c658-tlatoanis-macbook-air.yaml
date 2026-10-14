@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: bash-dialect-gate-refuses-bsd-fatal-sed-braces-suffixless-sed-i-and-stat-c-without-fallback
+    field: status
+    value: completed
+    ts: "2026-10-14T21:22:52Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: bash-dialect-gate-refuses-bsd-fatal-sed-braces-suffixless-sed-i-and-stat-c-without-fallback
+    event:
+      type: completed
+      ts: "2026-10-14T21:22:52Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: landed as land 231 (6febb9970, 2026-10-10), never closed. Re-run on trunk 2c00a83bd, darwin bash 3.2: scripts/test-check-bash-dialect.sh "PASS: check-bash-dialect fixture 69/69 scenarios green"; the tree scan scripts/lua/check-bash-dialect.lua says ok:bash-dialect-clean. The per-rule neutering red arms (5/5/2) and the host-reality arms were measured at landing (note 2026-10-08T16:55:53Z)
