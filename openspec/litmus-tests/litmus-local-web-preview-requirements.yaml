@@ -14,6 +14,9 @@ description: >
   99f3633b Session-bound live source: the owning lane and launch fail closed,
   the forge is identified by its exact MCP listener mount, and the live source
   is the project-scoped RAM workspace volume, never a host checkout.
+  bbc26ac2 Opt-in toolchain sessions (1637-5765): exec validation and
+  confinement, the shim's streams, Ctrl-C, tty, disconnect stop, dev-server
+  routing, and the cloud metadata probe refused.
 severity: high
 size: quick
 phase: pre-build
@@ -51,6 +54,57 @@ critical_path:
     command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias local_web_preview::tests::live_tmpfs_reference_is_project_scoped_not_host_checkout -- --exact 2>&1"
     timeout_ms: 600000
     success_pattern: "test result: ok. 1 passed"
+
+  - step: "bbc26ac2: an exec request is a closed toolchain, string argv and a project-relative cwd; absolute and '..' paths are refused"
+    requirement: bbc26ac2
+    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias toolchain_exec::tests::exec_request_is_validated -- --exact 2>&1"
+    timeout_ms: 600000
+    success_pattern: "test result: ok. 1 passed"
+
+  - step: "bbc26ac2: the sibling runs on the enclave with the live forge's project and cache volumes, no host bind mount, and the request supplies only flutter's argv"
+    requirement: bbc26ac2
+    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias toolchain_exec::tests::exec_args_confine_the_session_to_the_lane -- --exact 2>&1"
+    timeout_ms: 600000
+    success_pattern: "test result: ok. 1 passed"
+
+  - step: "bbc26ac2: through the real shim, stdin reaches the toolchain, stdout and stderr stay apart, and the exit code is returned"
+    requirement: bbc26ac2
+    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias toolchain_exec::tests::shim_streams_stdin_stdout_stderr_and_the_exit_code -- --exact 2>&1"
+    timeout_ms: 600000
+    success_pattern: "test result: ok. 1 passed"
+
+  - step: "bbc26ac2: Ctrl-C at the shim reaches the toolchain and its exit code comes back"
+    requirement: bbc26ac2
+    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias toolchain_exec::tests::shim_forwards_ctrl_c_to_the_toolchain -- --exact 2>&1"
+    timeout_ms: 600000
+    success_pattern: "test result: ok. 1 passed"
+
+  - step: "bbc26ac2: a tty session gives the toolchain a terminal, keystrokes as bytes and the client's resize"
+    requirement: bbc26ac2
+    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias toolchain_exec::tests::a_tty_session_gives_the_toolchain_a_terminal_input_and_resize -- --exact 2>&1"
+    timeout_ms: 600000
+    success_pattern: "test result: ok. 1 passed"
+
+  - step: "bbc26ac2: when the forge side disconnects, the host stops the toolchain"
+    requirement: bbc26ac2
+    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias toolchain_exec::tests::a_departed_shim_stops_the_toolchain -- --exact 2>&1"
+    timeout_ms: 600000
+    success_pattern: "test result: ok. 1 passed"
+
+  - step: "bbc26ac2: flutter run -d web-server is routed with host-chosen listen flags; other commands are not"
+    requirement: bbc26ac2
+    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias toolchain_exec::tests::a_web_server_run_is_routed_with_host_chosen_listen_flags -- --exact 2>&1"
+    timeout_ms: 600000
+    success_pattern: "test result: ok. 1 passed"
+
+  # Condition (c), 1637-5765: flutter_tools probes the cloud metadata address
+  # on first run (measured). The image tells it not to, and the proxy admits
+  # no IP literal at all, so the probe has nowhere to go.
+  - step: "bbc26ac2: the cloud metadata probe stays refused (BOT=false in the image; no IP literal admitted by the proxy; its last rule denies)"
+    requirement: bbc26ac2
+    command: "bot=$(grep -c 'BOT=false' images/flutter/Containerfile); ips=$(grep -cE '^[0-9.]+(/[0-9]+)?$' images/proxy/allowlist.txt); last=$(grep '^http_access' images/proxy/squid.conf); last=${last##*$'\\n'}; [ \"$bot\" -ge 1 ] && [ \"$ips\" -eq 0 ] && [ \"$last\" = 'http_access deny all' ] && echo 'ok: metadata probe refused' || { echo \"FAIL bot=$bot ips=$ips last=[$last]\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: metadata probe refused"
 
 observability:
   traces:
