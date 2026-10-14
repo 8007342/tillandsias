@@ -1185,12 +1185,13 @@ fn handle_mcp_jsonrpc(
             let mut tools = vec![
                 serde_json::json!({
                     "name": "publish_local",
-                    "description": "Publish this authenticated lane's WEB preview on the local reverse proxy. The managed auto profile selects static or local Wrangler; re-publishing reconciles the same live-source service.",
+                    "description": "Publish this authenticated lane's WEB preview on the local reverse proxy. The managed auto profile selects static or local Wrangler; re-publishing reconciles the same live-source service. For an app that lives in a subdirectory with its own wrangler config (a monorepo), pass app_dir: that directory, relative to the project; everything is then served from inside it.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
                             "category": { "type": "string", "enum": ["WEB"] },
-                            "runtime": { "type": "string", "enum": ["auto", "static", "wrangler"], "default": "auto" }
+                            "runtime": { "type": "string", "enum": ["auto", "static", "wrangler"], "default": "auto" },
+                            "app_dir": { "type": "string", "description": "Optional. A directory relative to the project (no '..', no hidden segment) holding the app's wrangler config or site; omit it to publish the project root." }
                         },
                         "required": ["category"]
                     }
@@ -1280,13 +1281,20 @@ fn handle_mcp_jsonrpc(
                         Ok(runtime) => runtime,
                         Err(message) => return Some(mcp_error(req, message)),
                     };
+                    let app_dir = match preview_app_dir(args) {
+                        Ok(app_dir) => app_dir,
+                        Err(message) => return Some(mcp_error(req, message)),
+                    };
                     match rt.block_on(crate::local_web_preview::publish(
                         project_label,
                         instance,
                         runtime,
+                        app_dir,
                         debug,
                     )) {
-                        Ok(result) => serde_json::json!({ "result": result }),
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
                         Err(e) => serde_json::json!({
                             "error": { "code": -32000, "message": e }
                         }),
@@ -1297,7 +1305,9 @@ fn handle_mcp_jsonrpc(
                 }
                 "service_status" => {
                     match rt.block_on(crate::local_web_preview::status(project_label, instance)) {
-                        Ok(result) => serde_json::json!({ "result": result }),
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
                         Err(e) => serde_json::json!({
                             "error": { "code": -32000, "message": e }
                         }),
@@ -1319,7 +1329,9 @@ fn handle_mcp_jsonrpc(
                         instance,
                         debug,
                     )) {
-                        Ok(result) => serde_json::json!({ "result": result }),
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
                         Err(e) => serde_json::json!({
                             "error": { "code": -32000, "message": e }
                         }),
@@ -1341,7 +1353,9 @@ fn handle_mcp_jsonrpc(
                         instance,
                         debug,
                     )) {
-                        Ok(result) => serde_json::json!({ "result": result }),
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
                         Err(e) => serde_json::json!({
                             "error": { "code": -32000, "message": e }
                         }),
@@ -1383,6 +1397,18 @@ fn preview_runtime(
     match value.as_str() {
         Some("auto" | "static" | "wrangler") => Ok(value.as_str().expect("matched string")),
         _ => Err("invalid_runtime: runtime must be auto, static, or wrangler".to_string()),
+    }
+}
+
+/// Order 1667-6rtp: an optional app directory. Only its TYPE is judged here;
+/// local_web_preview validates the value before anything starts.
+fn preview_app_dir(
+    args: Option<&serde_json::Map<String, serde_json::Value>>,
+) -> Result<Option<&str>, String> {
+    match args.and_then(|a| a.get("app_dir")) {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(serde_json::Value::String(dir)) => Ok(Some(dir.as_str())),
+        Some(_) => Err("invalid_app_dir: app_dir must be a string".to_string()),
     }
 }
 

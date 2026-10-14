@@ -545,7 +545,7 @@ impl BrowserMcpServer {
         };
         let args = Self::requested_arguments(request);
 
-        match tool_name {
+        let response = match tool_name {
             "browser.open" => self.handle_browser_open(id, args),
             "browser.list_windows" => self.handle_browser_list_windows(id),
             "browser.read_url" => self.handle_browser_read_url(id, args),
@@ -560,6 +560,14 @@ impl BrowserMcpServer {
             "browser.close" => self.handle_browser_close(id, args),
             "browser.set_device" => self.handle_browser_set_device(id, args),
             other => Self::tool_error(id, format!("TOOL_NOT_FOUND: {other}")),
+        };
+        // Order 1696-gz2y: every success reaches the client as MCP content.
+        match response {
+            RpcResponse::Success { id, result } => RpcResponse::Success {
+                id,
+                result: crate::framing::tool_result_content(result),
+            },
+            other => other,
         }
     }
 
@@ -1132,6 +1140,33 @@ mod tests {
         )
     }
 
+    // Order 1696-gz2y: MCP clients render a tools/call result's `content`
+    // (and `structuredContent`), never bare fields. Successes used to return
+    // the bare payload, so every successful call reached the agent empty
+    // while errors (already wrapped) arrived intact.
+    #[tokio::test]
+    async fn a_successful_tool_call_carries_its_payload_as_mcp_content() {
+        let server = test_server(None);
+        let request = RpcRequest {
+            id: Some(7),
+            method: "tools/call".to_string(),
+            params: json!({"name": "browser.list_windows", "arguments": {}}),
+        };
+        match server.handle_request(request).await {
+            RpcResponse::Success { result, .. } => {
+                let text = result["content"][0]["text"]
+                    .as_str()
+                    .unwrap_or_else(|| panic!("no content text: {result}"));
+                assert_eq!(result["content"][0]["type"], "text");
+                let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
+                assert_eq!(parsed, result["structuredContent"]);
+                assert!(parsed["windows"].is_array(), "{parsed}");
+                assert_ne!(result["isError"], true);
+            }
+            _ => panic!("Expected success response"),
+        }
+    }
+
     #[tokio::test]
     async fn initialize_request() {
         let server = test_server(None);
@@ -1329,9 +1364,10 @@ mod tests {
             .await;
 
         let window_id = match response {
-            RpcResponse::Success { result, .. } => {
-                result["window_id"].as_str().unwrap().to_string()
-            }
+            RpcResponse::Success { result, .. } => result["structuredContent"]["window_id"]
+                .as_str()
+                .unwrap()
+                .to_string(),
             other => panic!("expected success, got {other:?}"),
         };
         assert!(window_id.starts_with("win-"));
@@ -1348,7 +1384,7 @@ mod tests {
             .await;
         match list {
             RpcResponse::Success { result, .. } => {
-                let windows = result["windows"].as_array().unwrap();
+                let windows = result["structuredContent"]["windows"].as_array().unwrap();
                 assert_eq!(windows.len(), 1);
                 assert_eq!(windows[0]["window_id"], window_id);
                 assert_eq!(windows[0]["url"], "http://web.acme.localhost:8080/");
@@ -1374,9 +1410,10 @@ mod tests {
             })
             .await;
         let first_window_id = match first {
-            RpcResponse::Success { result, .. } => {
-                result["window_id"].as_str().unwrap().to_string()
-            }
+            RpcResponse::Success { result, .. } => result["structuredContent"]["window_id"]
+                .as_str()
+                .unwrap()
+                .to_string(),
             other => panic!("expected success, got {other:?}"),
         };
 
@@ -1395,8 +1432,8 @@ mod tests {
 
         match second {
             RpcResponse::Success { result, .. } => {
-                assert_eq!(result["window_id"], first_window_id);
-                assert_eq!(result["debounced"], true);
+                assert_eq!(result["structuredContent"]["window_id"], first_window_id);
+                assert_eq!(result["structuredContent"]["debounced"], true);
             }
             other => panic!("expected success, got {other:?}"),
         }
@@ -1445,9 +1482,10 @@ mod tests {
             })
             .await;
         let window_id = match open {
-            RpcResponse::Success { result, .. } => {
-                result["window_id"].as_str().unwrap().to_string()
-            }
+            RpcResponse::Success { result, .. } => result["structuredContent"]["window_id"]
+                .as_str()
+                .unwrap()
+                .to_string(),
             other => panic!("expected success, got {other:?}"),
         };
 
@@ -1466,7 +1504,7 @@ mod tests {
 
         match close {
             RpcResponse::Success { result, .. } => {
-                assert_eq!(result["ok"], true);
+                assert_eq!(result["structuredContent"]["ok"], true);
             }
             other => panic!("expected success, got {other:?}"),
         }
@@ -1483,7 +1521,12 @@ mod tests {
             .await;
         match list {
             RpcResponse::Success { result, .. } => {
-                assert!(result["windows"].as_array().unwrap().is_empty());
+                assert!(
+                    result["structuredContent"]["windows"]
+                        .as_array()
+                        .unwrap()
+                        .is_empty()
+                );
             }
             other => panic!("expected success, got {other:?}"),
         }
@@ -1603,9 +1646,10 @@ mod tests {
             .await;
 
         let window_id = match response {
-            RpcResponse::Success { result, .. } => {
-                result["window_id"].as_str().unwrap().to_string()
-            }
+            RpcResponse::Success { result, .. } => result["structuredContent"]["window_id"]
+                .as_str()
+                .unwrap()
+                .to_string(),
             other => panic!("expected success, got {other:?}"),
         };
 
@@ -1701,9 +1745,10 @@ mod tests {
             .await;
 
         let window_id = match response {
-            RpcResponse::Success { result, .. } => {
-                result["window_id"].as_str().unwrap().to_string()
-            }
+            RpcResponse::Success { result, .. } => result["structuredContent"]["window_id"]
+                .as_str()
+                .unwrap()
+                .to_string(),
             other => panic!("expected success, got {other:?}"),
         };
 
@@ -1802,9 +1847,10 @@ mod tests {
             .await;
 
         let window_id = match response {
-            RpcResponse::Success { result, .. } => {
-                result["window_id"].as_str().unwrap().to_string()
-            }
+            RpcResponse::Success { result, .. } => result["structuredContent"]["window_id"]
+                .as_str()
+                .unwrap()
+                .to_string(),
             other => panic!("expected success, got {other:?}"),
         };
 
@@ -1851,9 +1897,10 @@ mod tests {
             .await;
 
         let window_id = match response {
-            RpcResponse::Success { result, .. } => {
-                result["window_id"].as_str().unwrap().to_string()
-            }
+            RpcResponse::Success { result, .. } => result["structuredContent"]["window_id"]
+                .as_str()
+                .unwrap()
+                .to_string(),
             other => panic!("expected success, got {other:?}"),
         };
 
@@ -1898,9 +1945,10 @@ mod tests {
             .await;
 
         let window_id = match open_response {
-            RpcResponse::Success { result, .. } => {
-                result["window_id"].as_str().unwrap().to_string()
-            }
+            RpcResponse::Success { result, .. } => result["structuredContent"]["window_id"]
+                .as_str()
+                .unwrap()
+                .to_string(),
             other => panic!("expected success, got {other:?}"),
         };
 
@@ -1919,8 +1967,11 @@ mod tests {
 
         match read_response {
             RpcResponse::Success { result, .. } => {
-                assert_eq!(result["url"], "http://web.acme.localhost:8080/path");
-                assert_eq!(result["title"], "web.acme.localhost");
+                assert_eq!(
+                    result["structuredContent"]["url"],
+                    "http://web.acme.localhost:8080/path"
+                );
+                assert_eq!(result["structuredContent"]["title"], "web.acme.localhost");
             }
             other => panic!("expected success, got {other:?}"),
         }
@@ -1950,7 +2001,7 @@ mod tests {
         match response {
             RpcResponse::Success { result, .. } => {
                 // Should succeed at the app layer; network layer validates routing
-                let window_id = result["window_id"].as_str();
+                let window_id = result["structuredContent"]["window_id"].as_str();
                 assert!(window_id.is_some(), "expected window_id in result");
             }
             other => panic!("expected success, got {other:?}"),
@@ -2043,7 +2094,10 @@ mod tests {
                 .unwrap_or("")
                 .to_string());
         }
-        Ok(result["window_id"].as_str().unwrap_or("").to_string())
+        Ok(result["structuredContent"]["window_id"]
+            .as_str()
+            .unwrap_or("")
+            .to_string())
     }
 
     /// Criterion (a), unit half: with a host launcher wired, browser.open
@@ -2295,7 +2349,12 @@ mod tests {
             })
             .await
         {
-            RpcResponse::Success { result, .. } => result,
+            // Read a success as a client does, through structuredContent
+            // (1696-gz2y); an error keeps its content and isError.
+            RpcResponse::Success { result, .. } => match result.get("structuredContent") {
+                Some(structured) => structured.clone(),
+                None => result,
+            },
             other => json!({ "frame": format!("{other:?}") }),
         }
     }

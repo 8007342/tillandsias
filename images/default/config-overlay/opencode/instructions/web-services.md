@@ -18,6 +18,15 @@ Two distinct web flows exist — pick by the user's intent:
      lane's live worktree and returns its actual local preview URL. `auto` is
      the default; `static` and `wrangler` are the only explicit choices.
      Re-publishing reconciles the same service.
+   - `publish_local {"category": "WEB", "runtime": "auto", "app_dir": "observatorium"}`
+     — for an app that lives in a **subdirectory** with its own
+     `wrangler.jsonc`/`wrangler.toml` (a monorepo): `app_dir` is that
+     directory, relative to the project. Its config, its assets directory and
+     the static fallback are all resolved inside it, and nothing outside it is
+     mounted. It must be a real directory: absolute paths, `..`, hidden
+     segments (`.git`) and symlinks are refused by name. Omit it for a
+     project whose config is at the root. `service_reload` republishes the
+     same `app_dir`.
    - `service_status {}` — the published service's state, and after a
      failed publish its `last_failure`: step, reason, time and `remedy`
      (`agent`: fix or build the project; `host-retry`: call again;
@@ -38,6 +47,7 @@ Two distinct web flows exist — pick by the user's intent:
    Wrangler profile runs `wrangler dev --local`; it never deploys, logs in, or
    uses Cloudflare production bindings. Do not pass commands, paths, tokens,
    ports, or remote flags to these tools: the host deliberately refuses them.
+   (`app_dir` is the one path, and it is confined to your project.)
    Public sharing via Cloudflare tunnels is a planned capability — when a
    user asks to share publicly today, publish locally and tell them the
    public-share flow is coming.
@@ -125,8 +135,9 @@ flutter run -d web-server
 - After editing `lib/`, press `r` (hot reload) or `R` (hot restart) in the
   `flutter run` session. The open browser picks up the change. Ctrl-C stops
   it and removes the route.
-- To publish a release build instead, run `flutter build web`, then
-  `publish_local` serving `build/web`.
+- To publish a release build instead, run `flutter build web`, then call
+  `publish_local` with `{"category": "WEB", "app_dir": "game/build/web"}`
+  (the path relative to the project root).
 
 Tell the user the URL `flutter run` printed. **Do not** print
 `http://localhost:8080`: that URL means nothing to the human.
