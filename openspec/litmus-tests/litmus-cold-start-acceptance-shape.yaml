@@ -72,3 +72,15 @@ critical_path:
     command: "f=scripts/lua/cold-start-acceptance.lua; bare=$(grep -c -E 'msg\\.result\\.url|\\]\\.result\\.(runtime|state|last_failure)' \"$f\"); grep -q -F 'r.structuredContent' \"$f\" && grep -q -F 'r.content[1].text' \"$f\" && [ \"$bare\" -eq 0 ] && echo 'ok: CallToolResult reads' || { echo \"FAIL: bare result reads=$bare\"; exit 1; }"
     timeout_ms: 5000
     expected_behavior: "ok: CallToolResult reads"
+
+  - step: "1637-5765: the verdict always names its regime, so a local-dist PRE-CUT check can never read as a release PASS"
+    # --local-dist installs a local musl build; its verdict ends
+    # regime=local-dist:<commit>. A release run ends regime=release.
+    command: "f=scripts/lua/cold-start-acceptance.lua; grep -q -F '\":regime=\" .. REGIME, 0)' \"$f\" && grep -q -F 'REGIME = \"local-dist:\" .. commit' \"$f\" && grep -q -F 'local REGIME = \"release\"' \"$f\" && echo 'ok: verdict names its regime' || { echo 'FAIL: the verdict does not carry its regime'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: verdict names its regime"
+
+  - step: "1637-5765: arm 7d (Flutter hot reload) stays opt-in"
+    command: "f=scripts/lua/cold-start-acceptance.lua; grep -q -F 'if flutter_hr then' \"$f\" && grep -q -F '\"--flutter-hot-reload\" then flutter_hr = true' \"$f\" && echo 'ok: opt-in 7d' || { echo 'FAIL: an unconditional 7d'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: opt-in 7d"

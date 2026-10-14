@@ -28,7 +28,22 @@
 -- Usage:
 --   tillandsias-plan script run scripts/lua/cold-start-acceptance.lua --timeout 180m -- \
 --       --privileged-podman-in-podman <release-tag> [--expect-prefix-failure] [--keep]
---       [--project-ref <commit>|latest]
+--       [--project-ref <commit>|latest] [--flutter-hot-reload] [--local-dist <dir>]
+--
+-- --local-dist <dir> installs a LOCAL build instead of the release: <dir>
+-- holds install.sh, tillandsias-linux-x86_64 and SHA256SUMS (a musl build from
+-- ./build.sh --release, of the commit named in <dir>/COMMIT). It is a PRE-CUT
+-- check, never a release PASS: the verdict carries regime=local-dist:<commit>,
+-- and a release run carries regime=release. The release tag still names what
+-- the build is a candidate for.
+--
+-- --flutter-hot-reload adds arm 7d (order 1637-5765): from inside the forge,
+-- `flutter create` + `flutter pub add flame` through the shared sibling image,
+-- `flutter run -d web-server` routed at flutter.<project>, browser.open on it,
+-- an edit and `r`, and the browser's title proving the change arrived, with a
+-- screenshot kept as evidence. Opt-in: the first Flutter call builds a 2.8 GB
+-- image inside the substrate. Every browser reply is read through
+-- result.content (1696-gz2y).
 --
 -- THE FIXTURE MOVES ON PURPOSE (operator direction, 2026-10-13): macron.dev is
 -- AI-driven, and peers' smokes add notes to it over time, so the driver tests
@@ -59,6 +74,8 @@
 --
 -- Verdicts (last stdout line):
 --   ok:cold-start-acceptance:<tag>:served:<url>:http=200:lakanoa-shape=built-nested-served:router-failure=step-qualified:recovered:app-dir=<served|release-predates>:project=<sha>   exit 0
+--     with --flutter-hot-reload, ":flutter=hot-reload-seen" follows project=<sha>;
+--     the line always ends ":regime=release" or ":regime=local-dist:<commit>"
 --   ok:cold-start-acceptance:<tag>:prefix-failure:<reason>                                          exit 0
 --   refused:cold-start-acceptance:<what>                                                             exit 1
 --   blocked:cold-start-acceptance:project-ref-mismatch:wanted=<x>:forge=<y>  (only with --project-ref)  exit 2
@@ -66,12 +83,16 @@
 
 local OPT_IN = "--privileged-podman-in-podman"
 local opted, tag, expect_prefix, keep, project_ref = false, nil, false, false, "latest"
+local flutter_hr = false
+local local_dist = nil
 local i = 1
 while i <= #arg do
     local a = arg[i]
     if a == OPT_IN then opted = true
     elseif a == "--expect-prefix-failure" then expect_prefix = true
     elseif a == "--keep" then keep = true
+    elseif a == "--flutter-hot-reload" then flutter_hr = true
+    elseif a == "--local-dist" then i = i + 1; local_dist = arg[i] or ""
     elseif a == "--project-ref" then i = i + 1; project_ref = arg[i] or ""
     elseif a:sub(1, 2) ~= "--" then tag = a end
     i = i + 1
@@ -91,6 +112,23 @@ local NAME = "cold-start-outer"
 local VOL = "cold-start-inner-storage"
 local PROJECT_URL = "https://github.com/8007342/macron.dev"
 local RELEASE_BASE = "https://github.com/8007342/tillandsias/releases/download/" .. tag
+local REGIME = "release"
+if local_dist ~= nil then
+    -- The dir is read as files, never trusted for its claims: the commit it
+    -- names goes into the verdict so a reader can rebuild it.
+    if local_dist == "" or not fs.exists(local_dist .. "/tillandsias-linux-x86_64")
+        or not fs.exists(local_dist .. "/install.sh") or not fs.exists(local_dist .. "/SHA256SUMS")
+        or not fs.exists(local_dist .. "/COMMIT") then
+        verdict.emit("refused:cold-start-acceptance:usage — --local-dist needs a dir with install.sh, " ..
+            "tillandsias-linux-x86_64, SHA256SUMS and COMMIT", 1)
+    end
+    local commit = text.trim(fs.read(local_dist .. "/COMMIT"))
+    if not commit:match("^%x+$") then
+        verdict.emit("refused:cold-start-acceptance:usage — " .. local_dist .. "/COMMIT is not a commit sha", 1)
+    end
+    RELEASE_BASE = "file:///home/podman/dist"
+    REGIME = "local-dist:" .. commit
+end
 
 local function run(argv, opts)
     opts = opts or {}
@@ -197,7 +235,7 @@ end
 -- ── 0. host keychain before ─────────────────────────────────────────────────
 local KEY_BEFORE = keychain_meta()
 fs.write(OUT .. "/keychain-before.txt", KEY_BEFORE)
-log_line("run " .. RUN .. ": release " .. tag .. ", substrate " .. W .. " + " .. R)
+log_line("run " .. RUN .. ": release " .. tag .. " (regime " .. REGIME .. "), substrate " .. W .. " + " .. R)
 
 -- ── 1. outer container (privileged, rootless on the host) ───────────────────
 guard()
@@ -259,6 +297,11 @@ end
 log_line("structural proof: no bus address, no bus socket, no keyrings, no session daemons, probes fail")
 
 -- ── 4. fresh install, pinned, installer sha checked against SHA256SUMS ──────
+if local_dist ~= nil then
+    must(podman({ "cp", local_dist .. "/.", NAME .. ":/home/podman/dist" }), "local-dist-copy")
+    must(inside("chown -R podman:podman /home/podman/dist && ls /home/podman/dist", { as_root = true }), "local-dist-own")
+    log_line("local dist: " .. local_dist .. " (" .. REGIME .. ") copied to /home/podman/dist")
+end
 local inst = inside([[
 cd /home/podman
 curl -fsSL -o install.sh ]] .. RELEASE_BASE .. [[/install.sh
@@ -533,6 +576,151 @@ else
     app_dir_result = "served"
 end
 
+-- ── 7d. Flutter hot reload through the sibling toolchain (1637-5765) ────────
+-- Opt-in (--flutter-hot-reload). The agent's own path, from inside the forge:
+--   1. `flutter create` + `flutter pub add flame`: the forge's `flutter` shim
+--      prepares the shared image on first use and runs in the sibling;
+--   2. `flutter run -d web-server` under a pty (`script`), keystrokes fed
+--      through a file; the host routes flutter.<project> and the shim prints
+--      "Dev server routed: open <url>";
+--   3. ONE persistent MCP session (a window belongs to its connection):
+--      browser.open on the route, then browser.read_url until the page title
+--      is the BEFORE marker;
+--   4. an edit to lib/main.dart in the forge and `r`, then read_url until the
+--      title is the AFTER marker: the reload reached the browser. A screenshot
+--      is kept as evidence (base64, flutter-after-reload.png.b64);
+--   5. `q` ends the session: the sibling must be gone and the route must
+--      answer no app.
+-- MaterialApp's `title` is the page title, so the marker is machine-checked;
+-- the app itself renders to a canvas, which a DOM read cannot see.
+local flutter_note = ""
+if flutter_hr then
+    local APP = "/home/forge/src/macron.dev/hot-reload-probe"
+    local BEFORE, AFTER = "HOT-RELOAD-BEFORE", "HOT-RELOAD-AFTER"
+    local mk = inside([[
+f=$(podman ps --format '{{.Names}}' --filter 'name=macron.*-forge')
+podman exec -i "$f" bash -l -s <<'FORGE'
+set -e
+cd /home/forge/src/macron.dev
+rm -rf hot-reload-probe
+flutter create --platforms web --project-name hot_reload_probe hot-reload-probe 2>&1 | tail -4
+cd hot-reload-probe
+flutter pub add flame 2>&1 | tail -2
+sed -i "s/title: 'Flutter Demo'/title: ']] .. BEFORE .. [['/" lib/main.dart
+echo "markers in main.dart: $(grep -c ']] .. BEFORE .. [[' lib/main.dart)"
+FORGE
+echo "create-rc=$?"
+]], { timeout_ms = 3600000 })
+    fs.write(OUT .. "/flutter-create.txt", mk.stdout or "")
+    log_line("7d flutter create + pub add flame: " .. text.trim(mk.stdout or ""):gsub("\n", " | "):sub(1, 400))
+    if not text.contains(mk.stdout or "", "create-rc=0") or text.contains(mk.stdout or "", "markers in main.dart: 0") then
+        fail("flutter-create")
+    end
+
+    -- The dev server under a pty; keystrokes are appended to /tmp/flutter-keys.
+    must(inside([[
+f=$(podman ps --format '{{.Names}}' --filter 'name=macron.*-forge')
+podman exec "$f" sh -c ': > /tmp/flutter-keys; : > /tmp/flutter-run.log'
+podman exec -d "$f" bash -lc 'cd ]] .. APP .. [[ && tail -f /tmp/flutter-keys | script -qfec "flutter run -d web-server" /tmp/flutter-run.log > /dev/null 2>&1'
+]]), "flutter-run-start")
+    local up = inside([[
+f=$(podman ps --format '{{.Names}}' --filter 'name=macron.*-forge')
+for i in $(seq 1 120); do
+  log=$(podman exec "$f" cat /tmp/flutter-run.log 2>/dev/null)
+  case "$log" in *"is being served at"*) echo "served after $((i*5))s"; break ;; esac
+  sleep 5
+done
+podman exec "$f" sh -c 'tr -d "\r" < /tmp/flutter-run.log | grep -E "Dev server routed|is being served at|Error|error:" | head -5'
+]], { timeout_ms = 700000 })
+    fs.write(OUT .. "/flutter-run-up.txt", up.stdout or "")
+    log_line("7d flutter run: " .. text.trim(up.stdout or ""):gsub("\n", " | "):sub(1, 400))
+    if not text.contains(up.stdout or "", "Dev server routed") then fail("flutter-run-not-routed") end
+
+    -- One MCP session for the window's whole life: requests are appended to
+    -- /tmp/mcp7d.req, replies collected in /tmp/mcp7d.resp.
+    must(inside([[
+f=$(podman ps --format '{{.Names}}' --filter 'name=macron.*-forge')
+: > /tmp/mcp7d.req; : > /tmp/mcp7d.resp
+nohup sh -c "tail -f /tmp/mcp7d.req | podman exec -i $f /home/forge/.config-overlay/mcp/host-browser.sh > /tmp/mcp7d.resp 2>/tmp/mcp7d.err" > /dev/null 2>&1 &
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"cold-start-acceptance-7d","version":"1"}}}' '{"jsonrpc":"2.0","method":"notifications/initialized"}' >> /tmp/mcp7d.req
+]]), "mcp7d-session")
+    local next_id = 1
+    local function call7d(name, args_json, timeout_s)
+        next_id = next_id + 1
+        local req = '{"jsonrpc":"2.0","id":' .. next_id .. ',"method":"tools/call","params":{"name":"' ..
+            name .. '","arguments":' .. args_json .. '}}'
+        local r = inside([[
+cat >> /tmp/mcp7d.req <<'EOF'
+]] .. req .. [[
+
+EOF
+for i in $(seq 1 ]] .. (timeout_s or 120) .. [[); do grep -q '"id":]] .. next_id .. [[[,}]' /tmp/mcp7d.resp && break; sleep 1; done
+grep '"id":]] .. next_id .. [[[,}]' /tmp/mcp7d.resp | tail -1
+]], { timeout_ms = ((timeout_s or 120) + 60) * 1000 })
+        local line = text.trim(r.stdout or "")
+        local ok, msg = pcall(json.parse, line)
+        if not ok or type(msg) ~= "table" then return nil, line end
+        return msg, line
+    end
+    -- Browser replies are CallToolResults, read through payload() as above.
+    local route = "http://flutter.macron.dev.localhost:8080/"
+    local omsg, oline = call7d("browser.open", '{"url":"' .. route .. '"}', 240)
+    fs.write(OUT .. "/flutter-browser-open.json", oline .. "\n")
+    local opened = payload(omsg)
+    local win = opened and opened.window_id
+    log_line("7d browser.open " .. route .. ": window_id=" .. tostring(win))
+    if not win then fail("flutter-browser-open:" .. oline:sub(1, 300)) end
+    local function title_until(marker, tries)
+        local last = ""
+        for _ = 1, tries do
+            local m, l = call7d("browser.read_url", '{"window_id":"' .. win .. '"}', 30)
+            local p = payload(m)
+            last = (p and p.title) or l
+            if text.contains(tostring(last), marker) then return true, last end
+            inside("sleep 3")
+        end
+        return false, last
+    end
+    local seen_before, t1 = title_until(BEFORE, 40)
+    log_line("7d title before edit: " .. tostring(t1))
+    if not seen_before then fail("flutter-before-title:" .. tostring(t1)) end
+
+    local edit = inside([[
+f=$(podman ps --format '{{.Names}}' --filter 'name=macron.*-forge')
+podman exec "$f" sed -i 's/]] .. BEFORE .. [[/]] .. AFTER .. [[/' ]] .. APP .. [[/lib/main.dart
+podman exec "$f" sh -c 'printf r >> /tmp/flutter-keys'
+for i in $(seq 1 60); do
+  podman exec "$f" sh -c 'tr -d "\r" < /tmp/flutter-run.log' | grep -qE 'Reloaded|Recompile complete' && break; sleep 2
+done
+podman exec "$f" sh -c 'tr -d "\r" < /tmp/flutter-run.log | grep -E "hot reload|Reloaded|Recompile|No client" | tail -3'
+]], { timeout_ms = 300000 })
+    log_line("7d edit + r: " .. text.trim(edit.stdout or ""):gsub("\n", " | "))
+    local seen_after, t2 = title_until(AFTER, 20)
+    log_line("7d title after r: " .. tostring(t2))
+    local smsg, sline = call7d("browser.screenshot", '{"window_id":"' .. win .. '"}', 60)
+    local shot = payload(smsg)
+    if shot and type(shot.data) == "string" then
+        fs.write(OUT .. "/flutter-after-reload.png.b64", shot.data)
+    end
+    log_line("7d screenshot: " .. ((shot and shot.data) and ("png, base64 " .. #shot.data .. " chars") or ("none: " .. sline:sub(1, 200))))
+    if not seen_after then fail("flutter-hot-reload-not-seen:" .. tostring(t2)) end
+
+    -- `q` ends the session; the shim's disconnect stops the sibling and the
+    -- host removes the route.
+    local stop = inside([[
+f=$(podman ps --format '{{.Names}}' --filter 'name=macron.*-forge')
+podman exec "$f" sh -c 'printf q >> /tmp/flutter-keys'
+for i in $(seq 1 30); do podman ps --format '{{.Names}}' | grep -q -- '-flutter-' || break; sleep 2; done
+echo "flutter siblings left: $(podman ps --format '{{.Names}}' | grep -c -- '-flutter-')"
+p=$(podman port tillandsias-router 8080/tcp | head -1); p=${p##*:}
+echo "route after q: $(curl -s -o /dev/null -w '%{http_code}' -H 'Host: flutter.macron.dev.localhost' http://127.0.0.1:$p/)"
+pkill -f 'tail -f /tmp/mcp7d.req' 2>/dev/null; true
+]])
+    log_line("7d stop: " .. text.trim(stop.stdout or ""):gsub("\n", " | "))
+    if not text.contains(stop.stdout or "", "flutter siblings left: 0") then fail("flutter-sibling-outlived-q") end
+    flutter_note = ":flutter=hot-reload-seen"
+end
+
 -- ── 8. forced router-step failure (another app holds the router's port) ─────
 mcp({ { "service_stop", '{"category":"WEB"}' } })
 must(inside([[
@@ -568,4 +756,4 @@ log_line("host keychain: service=tillandsias item metadata identical before and 
 
 inside("pkill -f 'tillandsias --bash' 2>/dev/null; true")
 if not keep then down() end
-verdict.emit("ok:cold-start-acceptance:" .. tag .. ":served:" .. url .. ":http=200:lakanoa-shape=built-nested-served:router-failure=step-qualified:recovered:app-dir=" .. app_dir_result .. ":project=" .. forge_head, 0)
+verdict.emit("ok:cold-start-acceptance:" .. tag .. ":served:" .. url .. ":http=200:lakanoa-shape=built-nested-served:router-failure=step-qualified:recovered:app-dir=" .. app_dir_result .. ":project=" .. forge_head .. flutter_note .. ":regime=" .. REGIME, 0)
