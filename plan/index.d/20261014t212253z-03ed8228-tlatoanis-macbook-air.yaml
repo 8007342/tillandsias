@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-macos-tray-has-a-behavioural-test-that-a-superseded-credential-delivery-repopulates-the-keychain-from-the-guests-handover
+    field: status
+    value: completed
+    ts: "2026-10-14T21:22:53Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-macos-tray-has-a-behavioural-test-that-a-superseded-credential-delivery-repopulates-the-keychain-from-the-guests-handover
+    event:
+      type: completed
+      ts: "2026-10-14T21:22:53Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: landed as land 257 (5bb8d3342, 2026-10-08), never closed. Re-run on trunk 2c00a83bd, darwin: cargo test -p tillandsias-macos-tray --bin tillandsias-tray installation_uuid, 13 passed / 0 failed, including a_superseded_delivery_repopulates_the_keychain_from_the_handover and a_rejected_delivery_still_fails_closed_on_macos. Afterwards `security dump-keychain | grep -c tillandsias-scratch-test-` = 0. Red under is_accepted() measured at landing (note 2026-10-09T00:22:10Z)

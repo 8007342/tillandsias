@@ -43,7 +43,6 @@ scripts/check-groundtruth-regime-invariance.sh
 scripts/check-host-tools.sh
 scripts/check-issue-citation-convention.sh
 scripts/check-jq-callsite-ratchet.sh
-scripts/check-jq-multiline-capture-strips-cr.sh
 scripts/check-landed-but-open.sh
 scripts/check-landing-provenance.sh
 scripts/check-ledger-distillation.sh

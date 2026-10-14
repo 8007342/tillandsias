@@ -76,7 +76,7 @@ export AGENT_PROFILE AGENT_SUPPORTS_WEB AGENT_DISPLAY_NAME
 # none of them. Link each GENERIC skill into every harness's USER-level skill
 # directory. Never overwrite an entry that is already there (a project or the
 # user may own that name), never fail: this file is sourced under set -e.
-TILLANDSIAS_FORGE_GENERIC_SKILLS="${TILLANDSIAS_FORGE_GENERIC_SKILLS:-project-discipline}"
+TILLANDSIAS_FORGE_GENERIC_SKILLS="${TILLANDSIAS_FORGE_GENERIC_SKILLS:-project-discipline start-a-new-project}"
 link_forge_generic_skills() {
     local src_root="${TILLANDSIAS_SHARED_SKILLS_ROOT:-/opt/skills}" home="${HOME:-/home/forge}" skill dir
     for skill in $TILLANDSIAS_FORGE_GENERIC_SKILLS; do

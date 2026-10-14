@@ -65,7 +65,9 @@ def prepare():
         resp = call("tools/call", {"name": "toolchain_prepare", "arguments": {"toolchain": "flutter"}})
         if "error" in resp:
             die(resp["error"].get("message", "toolchain_prepare failed"))
-        state = resp.get("result", {})
+        # A CallToolResult (1696-gz2y): the payload is structuredContent.
+        result = resp.get("result", {})
+        state = result.get("structuredContent", result)
         if state.get("state") == "ready":
             if shown:
                 sys.stderr.write(("\r" if tty else "") + "Flutter is ready." + (" " * 40) + "\n")

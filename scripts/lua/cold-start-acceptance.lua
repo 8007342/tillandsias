@@ -379,7 +379,23 @@ grep -o '<title>[^<]*</title>' /tmp/fetched.html
 ]])
     return text.trim(r.stdout or "")
 end
-local function result_url(msg) return msg and msg.result and msg.result.url end
+-- A tools/call success payload. Since 1696-gz2y every success is an MCP
+-- CallToolResult: the payload as JSON in content[1].text and as
+-- structuredContent. Earlier releases (v56.10.14.1 and before) returned it
+-- bare. Read all three, so the driver judges any release, not only the shape
+-- it was written against.
+local function payload(msg)
+    local r = msg and msg.result
+    if type(r) ~= "table" then return nil end
+    if type(r.structuredContent) == "table" then return r.structuredContent end
+    if type(r.content) == "table" and r.content[1] and type(r.content[1].text) == "string" then
+        local ok, v = pcall(json.parse, r.content[1].text)
+        if ok and type(v) == "table" then return v end
+        return nil
+    end
+    return r
+end
+local function result_url(msg) local p = payload(msg); return p and p.url end
 
 local res, raw = mcp({ { "publish_local", '{"category":"WEB","runtime":"auto"}' }, { "service_status", "{}" } })
 fs.write(OUT .. "/publish-auto.ndjson", raw)
@@ -388,7 +404,7 @@ local url = result_url(res[2])
 if expect_prefix then
     local reason = res[2] and res[2].error and res[2].error.message or "<no error>"
     log_line("pre-fix publish_local auto: " .. reason .. "; service_status state=" ..
-        tostring(res[3] and res[3].result and res[3].result.state))
+        tostring(payload(res[3]) and payload(res[3]).state))
     if url then fail("prefix-unexpectedly-served:" .. url) end
     fs.write(OUT .. "/keychain-after.txt", keychain_meta())
     if fs.read(OUT .. "/keychain-after.txt") ~= KEY_BEFORE then fail("host-keychain-metadata-changed") end
@@ -397,7 +413,7 @@ if expect_prefix then
 end
 
 if not url then fail("publish-auto-no-url:" .. raw:sub(1, 300)) end
-local runtime = res[2].result.runtime
+local runtime = payload(res[2]).runtime
 local got = fetch(url)
 log_line("publish_local auto: runtime=" .. tostring(runtime) .. " url=" .. url .. "; fetch: " .. got:gsub("\n", " "))
 if not text.contains(got, "http=200") or not text.contains(got, "ssl_verify=0") or not text.contains(got, "<title>") then
@@ -527,7 +543,7 @@ podman ps --format '{{.Names}} {{.Ports}}' | grep port-holder
 local fres, fraw = mcp({ { "publish_local", '{"category":"WEB","runtime":"auto"}' }, { "service_status", "{}" } })
 fs.write(OUT .. "/publish-router-failure.ndjson", fraw)
 local freason = fres[2] and fres[2].error and fres[2].error.message or ""
-local lf = fres[3] and fres[3].result and fres[3].result.last_failure
+local lf = payload(fres[3]) and payload(fres[3]).last_failure
 log_line("forced failure: " .. freason .. "; last_failure step=" .. tostring(lf and lf.step) ..
     " class=" .. tostring(lf and lf.class) .. " remedy=" .. tostring(lf and lf.remedy))
 if not text.contains(freason, "podman failed at step router") or not lf or lf.step ~= "router" then
@@ -540,7 +556,7 @@ local rres, rraw = mcp({ { "publish_local", '{"category":"WEB","runtime":"auto"}
 fs.write(OUT .. "/publish-recovered.ndjson", rraw)
 local rurl = result_url(rres[2])
 local rgot = rurl and fetch(rurl) or ""
-local rlf = rres[3] and rres[3].result and rres[3].result.last_failure
+local rlf = payload(rres[3]) and payload(rres[3]).last_failure
 log_line("recovered: url=" .. tostring(rurl) .. " fetch: " .. rgot:gsub("\n", " ") .. " last_failure=" .. tostring(rlf ~= nil))
 if not rurl or not text.contains(rgot, "http=200") or rlf ~= nil then fail("no-recovery") end
 

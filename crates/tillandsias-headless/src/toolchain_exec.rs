@@ -828,7 +828,7 @@ mod tests {
                                 .spawn()
                         });
                     } else {
-                        frames.send(&json!({"jsonrpc": "2.0", "id": req["id"], "result": {"state": "ready"}}));
+                        frames.send(&json!({"jsonrpc": "2.0", "id": req["id"], "result": tillandsias_browser_mcp::framing::tool_result_content(json!({"state": "ready"}))}));
                     }
                 });
             }
