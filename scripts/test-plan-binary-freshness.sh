@@ -30,7 +30,13 @@ ck() { # ck <description> <expected> <actual>
     fi
 }
 
-TMPD="$(mktemp -d "${TMPDIR:-/tmp}/plan-binary-freshness.XXXXXX")"
+# 1680-yf9z: the resolver prints $PWD, which bash normalises; the raw mktemp
+# string does not. macOS's TMPDIR ends in "/", so the raw string held "T//" and
+# both "prints its path" arms failed on every Mac. Normalise TMPD the same way
+# the resolver does. The doubled slash below is DELIBERATE: it gives every
+# platform the macOS spelling, so a regression is red on Linux too.
+TMPD="$(mktemp -d "${TMPDIR:-/tmp}//plan-binary-freshness.XXXXXX")"
+TMPD="$(cd "$TMPD" && pwd)"
 trap 'rm -rf "$TMPD"' EXIT
 
 # A fake checkout: the instrument's vintage source set, a runnable stub
