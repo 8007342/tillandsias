@@ -92,16 +92,21 @@ apply_helper() {
 # env_of <home> <name> — the registered server's .transport.env as compact JSON
 # ("null" when it has none).
 env_of() {
-    local home="$1" name="$2"
+    list_query "$1" -c --arg n "$2" '.[] | select(.name == $n) | .transport.env'
+}
+
+# list_query <home> <jq-args>... — one jq query over `codex mcp list --json`.
+# The fixture's only jq call site (jq-callsite ratchet floor is 1).
+list_query() {
+    local home="$1"
+    shift
     HOME="$home" CODEX_HOME="$home/.codex" CODEX_BIN="$BIN" \
-        "$BIN" mcp list --json 2>/dev/null | "$JQ" -c --arg n "$name" '.[] | select(.name == $n) | .transport.env'
+        "$BIN" mcp list --json 2>/dev/null | "$JQ" "$@"
 }
 
 # names_from <home> — sorted list of registered MCP server names, one per line.
 names_from() {
-    local home="$1"
-    HOME="$home" CODEX_HOME="$home/.codex" CODEX_BIN="$BIN" \
-        "$BIN" mcp list --json 2>/dev/null | "$JQ" -r '.[].name' | sort
+    list_query "$1" -r '.[].name' | sort
 }
 
 count_named() {
@@ -161,7 +166,7 @@ C="$WORK/socket"
 mkdir -p "$C"
 apply_helper "$C" "$SOCK"
 apply_helper "$C" "$SOCK"
-want_env="$("$JQ" -cn --arg s "$SOCK" '{TILLANDSIAS_CONTROL_SOCKET: $s}')"
+want_env="{\"TILLANDSIAS_CONTROL_SOCKET\":\"$SOCK\"}"   # jq -c spelling
 got_env="$(env_of "$C" host-browser)"
 [ "$got_env" = "$want_env" ] \
     || fail "host-browser is registered without the lane socket: env=$got_env (want $want_env) — a Codex lane cannot reach publish_local"
