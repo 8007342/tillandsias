@@ -9,7 +9,11 @@
 # 2026-10-14/): the SDK comes from storage.googleapis.com at IMAGE BUILD time,
 # so at forge time only pub.dev is needed (create, pub add), and
 # `flutter build web` makes no connection at all.
-FROM docker.io/library/debian:bookworm-slim@sha256:a4672c0cb26fbdde88e38fa2dfb6c681942306680e41e4378b28770b6e79ee91
+# Pinned by the multi-arch INDEX digest, never a platform manifest: the amd64
+# manifest (a4672c0c…) pinned here first made an arm64 build run x86_64 under
+# qemu binfmt, measured on tlatoanis-macbook-air 2026-10-14. The assertion at
+# the end of the SDK step refuses that case.
+FROM docker.io/library/debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587
 
 # Flutter 3.47.7 stable, Dart 3.13.5. The release hash and the x64 archive's
 # sha256 are copied from releases_linux.json; a bump changes all three.
@@ -43,7 +47,8 @@ ENV FLUTTER_ROOT=/opt/flutter \
 # Linux arm64 archive, so the pinned tag is cloned and its commit must equal
 # the release hash; precache then fetches the arm64 Dart and web SDKs.
 RUN set -eu; \
-    case "${TARGETARCH:-$(dpkg --print-architecture)}" in \
+    arch="${TARGETARCH:-$(dpkg --print-architecture)}"; \
+    case "$arch" in \
       amd64) \
         curl -fsSL "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz" -o /tmp/flutter.tar.xz; \
         echo "${FLUTTER_X64_SHA256}  /tmp/flutter.tar.xz" | sha256sum -c -; \
@@ -58,7 +63,12 @@ RUN set -eu; \
     flutter config --no-analytics --no-cli-animations; \
     dart --disable-analytics; \
     flutter precache --web --no-android --no-ios --no-linux --no-windows --no-macos --no-fuchsia --no-universal; \
-    flutter --version
+    flutter --version; \
+    case "$arch" in amd64) want=linux_x64; mach=x86_64 ;; arm64) want=linux_arm64; mach=aarch64 ;; esac; \
+    dart --version 2>&1 | grep -q "on \"$want\"" \
+      || { echo "refused: the Dart SDK is not native $want (an emulated build?)" >&2; dart --version >&2; exit 1; }; \
+    test "$(uname -m)" = "$mach" \
+      || { echo "refused: building for $arch but running on $(uname -m) (emulated)" >&2; exit 1; }
 
 WORKDIR /home/forge
 CMD ["flutter", "--version"]
