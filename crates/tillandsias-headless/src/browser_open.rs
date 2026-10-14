@@ -350,23 +350,24 @@ fn cdp_dir(window_id: &str) -> PathBuf {
 /// and the CDP pipe relay as entrypoint. Nothing is published.
 ///
 /// It opens about:blank: the tray emulates the device over CDP before it
-/// navigates (order 1655-urz9).
+/// navigates (order 1655-urz9). `surface` is a visible window or, for order
+/// 1712-3fsw, headless; everything else (network, pin, CDP relay) is the same.
 pub(crate) fn browser_window_spec(
     project: &str,
     handle: &ContainerHandle,
     certs_dir: &Path,
-    display: &crate::BrowserDisplayContext,
+    surface: crate::BrowserSurface<'_>,
     ca_spki: &str,
     window_size: (u32, u32),
     cdp_dir: &Path,
 ) -> Result<tillandsias_podman::ContainerSpec, String> {
     let entrypoint = serde_json::json!(["node", "-e", CDP_RELAY_JS, "--"]).to_string();
-    Ok(crate::build_project_browser_spec(
+    Ok(crate::build_project_browser_spec_on(
         "about:blank",
         crate::VERSION.trim(),
         &handle.profile_dir,
         certs_dir,
-        display,
+        surface,
         &handle.container_name,
     )?
     .entrypoint(entrypoint)
@@ -497,6 +498,15 @@ impl BrowserContainers for TrayBrowserContainers {
         crate::local_web_preview::tls_port().ok()
     }
 
+    /// Order 1712-3fsw: a window can be shown only through a Wayland socket
+    /// that exists. The macOS and Windows VM guests have none today, and
+    /// neither does a Linux session without Wayland.
+    fn has_display(&self) -> bool {
+        crate::BrowserDisplayContext::from_env()
+            .and_then(|display| display.wayland_socket())
+            .is_ok()
+    }
+
     fn start(&self, request: &ContainerLaunchRequest<'_>) -> Result<ContainerHandle, LaunchError> {
         let suffix = window_suffix(request.window_id);
         let router = podman(
@@ -520,8 +530,21 @@ impl BrowserContainers for TrayBrowserContainers {
         let ca_spki = spki_sha256_base64(&pem).map_err(LaunchError::Spawn)?;
         let display = crate::BrowserDisplayContext::from_env().map_err(LaunchError::Spawn)?;
         if request.engine == Engine::WebKit {
+            // browser.open never asks for this (it emulates in Chromium
+            // instead); refuse rather than mount a compositor socket anyway.
+            if request.headless {
+                return Err(LaunchError::Spawn(
+                    "a headless window is Chromium; the WebKit engine needs a display".into(),
+                ));
+            }
             return self.start_webkit(request, &certs_dir, &display);
         }
+        // Order 1712-3fsw: headless mounts nothing of the display stack.
+        let surface = if request.headless {
+            crate::BrowserSurface::Headless
+        } else {
+            crate::BrowserSurface::Window(&display)
+        };
         let profile_dir = crate::browser_profile_root().join(request.window_id);
         std::fs::create_dir_all(&profile_dir)?;
         let cdp_dir = cdp_dir(request.window_id);
@@ -570,7 +593,7 @@ impl BrowserContainers for TrayBrowserContainers {
                 request.project_label,
                 &handle,
                 &certs_dir,
-                &display,
+                surface,
                 &ca_spki,
                 request.window_size,
                 &cdp_dir,
@@ -714,7 +737,7 @@ mod tests {
             "acme",
             &handle,
             Path::new("/tmp/ca"),
-            &display,
+            crate::BrowserSurface::Window(&display),
             "PIN=",
             (428, 926),
             Path::new("/run/user/1000/tillandsias/browser/win-1.cdp"),
@@ -777,6 +800,97 @@ mod tests {
         assert!(
             joined.contains("--ozone-platform=wayland"),
             "still Wayland-only"
+        );
+        assert!(
+            !joined.contains("--network host") && !joined.contains("--network=host"),
+            "{joined}"
+        );
+    }
+
+    /// Order 1712-3fsw: a headless window is the same confined container
+    /// (its own network, the pin, the CDP pipe relay, nothing published, no
+    /// DevTools port) with NOTHING of the host's display stack: no Wayland
+    /// socket or runtime dir, no compositor env, no GPU device, and Chromium
+    /// told --headless=new instead of --ozone-platform=wayland.
+    #[test]
+    fn headless_window_spec_is_the_same_confinement_with_no_display() {
+        let handle = ContainerHandle {
+            container_name: "tillandsias-browser-acme-0123456789ab".into(),
+            network_name: "tillandsias-browser-net-0123456789ab".into(),
+            profile_dir: PathBuf::from("/run/user/1000/tillandsias/browser/win-1"),
+            cdp_socket: Some(PathBuf::from(
+                "/run/user/1000/tillandsias/browser/win-1.cdp/cdp.sock",
+            )),
+            notice: None,
+        };
+        let argv = browser_window_spec(
+            "acme",
+            &handle,
+            Path::new("/tmp/ca"),
+            crate::BrowserSurface::Headless,
+            "PIN=",
+            (428, 926),
+            Path::new("/run/user/1000/tillandsias/browser/win-1.cdp"),
+        )
+        .expect("a headless window needs no display context")
+        .build_run_argv()
+        .unwrap();
+        let joined = argv.join(" ");
+
+        // The display half: absent.
+        assert!(argv.iter().any(|a| a == "--headless=new"), "{joined}");
+        for absent in [
+            "--ozone-platform",
+            "WAYLAND_DISPLAY",
+            "XDG_RUNTIME_DIR",
+            "wayland-",
+            "/dev/dri",
+            "--device",
+        ] {
+            assert!(
+                !joined.contains(absent),
+                "headless carries {absent}: {joined}"
+            );
+        }
+
+        // The confinement half: identical to the visible window's.
+        let networks: Vec<_> = argv
+            .windows(2)
+            .filter(|w| w[0] == "--network")
+            .map(|w| w[1].as_str())
+            .collect();
+        assert_eq!(networks, vec!["tillandsias-browser-net-0123456789ab"]);
+        assert!(
+            !argv.iter().any(|a| a == "-p" || a.starts_with("--publish")),
+            "no host listener: {joined}"
+        );
+        assert!(
+            !joined.contains("--remote-debugging-port")
+                && !joined.contains("--remote-debugging-address"),
+            "no DevTools port: {joined}"
+        );
+        let entry = argv
+            .windows(2)
+            .find(|w| w[0] == "--entrypoint")
+            .map(|w| w[1].clone())
+            .expect("an entrypoint");
+        let entry: Vec<String> = serde_json::from_str(&entry).unwrap();
+        assert_eq!(entry[2], CDP_RELAY_JS, "the same CDP pipe relay");
+        assert!(joined.contains("TILLANDSIAS_CDP_SOCKET=/run/tillandsias-cdp/cdp.sock"));
+        assert!(joined.contains("--window-size=428,926"), "{joined}");
+        assert!(
+            joined.contains(
+                "--host-resolver-rules=MAP *.acme.localhost router:8443, MAP * ~NOTFOUND"
+            ),
+            "{joined}"
+        );
+        assert!(
+            joined.contains("--ignore-certificate-errors-spki-list=PIN="),
+            "{joined}"
+        );
+        assert!(
+            joined.contains("--read-only") || joined.contains("--read-only=true"),
+            "{joined}"
         );
         assert!(
             !joined.contains("--network host") && !joined.contains("--network=host"),

@@ -16173,6 +16173,37 @@ fn build_project_browser_spec(
     display: &BrowserDisplayContext,
     container_name: &str,
 ) -> Result<ContainerSpec, String> {
+    build_project_browser_spec_on(
+        app_url,
+        version,
+        profile_dir,
+        certs_dir,
+        BrowserSurface::Window(display),
+        container_name,
+    )
+}
+
+/// Where a browser container draws (order 1712-3fsw).
+#[derive(Clone, Copy)]
+// Headless is chosen only by browser.open (host-services).
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
+pub(crate) enum BrowserSurface<'a> {
+    /// A visible window on the host compositor: only its Wayland socket file
+    /// is mounted (1641-xbvq).
+    Window(&'a BrowserDisplayContext),
+    /// No display at all: Chromium `--headless=new`. No compositor socket and
+    /// no GPU device reach the container; agents drive it over CDP.
+    Headless,
+}
+
+fn build_project_browser_spec_on(
+    app_url: &str,
+    version: &str,
+    profile_dir: &Path,
+    certs_dir: &Path,
+    surface: BrowserSurface<'_>,
+    container_name: &str,
+) -> Result<ContainerSpec, String> {
     // @trace spec:browser-isolation-framework, spec:browser-isolation-tray-integration
     // Hardened browser boundary: read-only rootfs, CAP_DROP=ALL, no-new-privileges,
     // userns=keep-id, and HOME/config/cache redirected to bounded tmpfs mounts.
@@ -16212,6 +16243,11 @@ fn build_project_browser_spec(
     // session bus (and through it the keyring). `-v …:rw`, not --mount
     // relabel=shared: a relabel would rewrite the live compositor socket's
     // SELinux label on the host.
+    let display = match surface {
+        BrowserSurface::Window(display) => display,
+        // Order 1712-3fsw: nothing of the host's display stack at all.
+        BrowserSurface::Headless => return Ok(spec.arg("--headless=new")),
+    };
     let (socket, socket_name) = display.wayland_socket()?;
     spec = spec
         .tmpfs(format!("{BROWSER_RUNTIME_DIR}:size=1m,mode=0755"))
