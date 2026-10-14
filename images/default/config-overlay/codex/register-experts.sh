@@ -7,8 +7,18 @@
 # The supported Codex interface (verified against codex-cli 0.146.0 and the
 # official manual at shaping time, order 600-xrqk) is:
 #
-#   codex mcp add <name> -- <command>
+#   codex mcp add <name> [--env KEY=VALUE]... -- <command>
 #   codex mcp list --json
+#
+# ENVIRONMENT IS NOT INHERITED (order 1667-jna9). Codex starts a stdio MCP
+# server with only HOME LANG PATH PWD SHLVL USER (measured in codex-cli 0.162.1
+# inside the forge image, 2026-10-14). host-browser.sh needs
+# TILLANDSIAS_CONTROL_SOCKET to reach this lane's host socket; without it the
+# server exits at startup and the lane has no publish_local, service_status or
+# browser.open, while Claude lanes (which pass the full environment) do.
+# A server line below may name variables to forward; each one set at
+# registration is written as `--env NAME=VALUE`, which codex stores as a
+# `[mcp_servers.<name>.env]` table and lists under `.transport.env`.
 #
 # `add` writes a `[mcp_servers.<name>]` table into $CODEX_HOME/config.toml and
 # replaces an existing table of the same name, so a double application leaves
@@ -36,22 +46,27 @@ MCP_DIR="${TILLANDSIAS_CONFIG_OVERLAY_ROOT:-/home/forge/.config-overlay}/mcp"
 # exists up front so the pre-check and the add agree on every path.
 mkdir -p "$CODEX_HOME" 2>/dev/null || true
 
-# codex_mcp_registered <name> <command> — 0 when the server is already present
-# as a stdio server with the exact command, non-zero otherwise. Parsed with jq
+# codex_mcp_registered <name> <command> <env-json> — 0 when the server is
+# already present as a stdio server with the exact command and every forwarded
+# variable at its current value, non-zero otherwise. Parsed with jq
 # because the helper must survive a malformed `list` output by refusing (the
 # registration is then attempted and fails loud if `add` also refuses).
 codex_mcp_registered() {
-    local name="$1" command="$2"
+    local name="$1" command="$2" env_json="$3"
     "$CODEX_BIN" mcp list --json 2>/dev/null | jq -e \
-        --arg n "$name" --arg c "$command" \
-        '.[] | select(.name == $n and .transport.type == "stdio" and .transport.command == $c)' \
+        --arg n "$name" --arg c "$command" --argjson e "$env_json" \
+        '.[] | select(.name == $n and .transport.type == "stdio" and .transport.command == $c
+            and ((.transport.env // {}) | contains($e)))' \
         >/dev/null 2>&1
 }
 
-# codex_mcp_add <name> <command>
+# codex_mcp_add <name> <command> [KEY=VALUE]...
 codex_mcp_add() {
-    local name="$1" command="$2"
-    "$CODEX_BIN" mcp add "$name" -- "$command"
+    local name="$1" command="$2" kv
+    shift 2
+    local env_args=()
+    for kv in "$@"; do env_args+=(--env "$kv"); done
+    "$CODEX_BIN" mcp add "$name" ${env_args[@]+"${env_args[@]}"} -- "$command"
 }
 
 # register_codex_experts — register every expert server, skipping the ones the
@@ -59,23 +74,31 @@ codex_mcp_add() {
 # missing executable or CLI failure; the entrypoint wraps the whole call
 # fail-soft so a registration defect can never block a forge launch.
 register_codex_experts() {
-    local name command
-    while IFS= read -r name; do
+    local name forward command var env_json
+    while read -r name forward; do
+        [ -n "$name" ] || continue
         command="$MCP_DIR/$name.sh"
         if [ ! -x "$command" ]; then
             printf '%s\n' "[codex-mcp] missing executable $command for $name" >&2
             return 1
         fi
-        if codex_mcp_registered "$name" "$command"; then
+        local kvs=()
+        env_json='{}'
+        for var in $forward; do
+            [ -n "${!var:-}" ] || continue
+            kvs+=("$var=${!var}")
+            env_json="$(jq -cn --argjson e "$env_json" --arg k "$var" --arg v "${!var}" '$e + {($k): $v}')"
+        done
+        if codex_mcp_registered "$name" "$command" "$env_json"; then
             printf '%s\n' "[codex-mcp] $name already registered ($command)"
         else
-            codex_mcp_add "$name" "$command"
-            printf '%s\n' "[codex-mcp] registered $name -> $command"
+            codex_mcp_add "$name" "$command" ${kvs[@]+"${kvs[@]}"}
+            printf '%s\n' "[codex-mcp] registered $name -> $command${kvs[*]:+ (forwarding ${kvs[*]%%=*})}"
         fi
     done <<'SERVERS'
 forge-plan
 project-info
-host-browser
+host-browser TILLANDSIAS_CONTROL_SOCKET
 SERVERS
 }
 

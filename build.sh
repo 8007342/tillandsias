@@ -534,7 +534,11 @@ _pf_sweep_index_lock() {  # $1 = start mark, $2 = outfile, $3 = tag (default ind
     else
         _gd="$(git -C "$SCRIPT_DIR" rev-parse --absolute-git-dir 2>/dev/null)" || return 0
     fi
-    [ -e "$_gd/index.lock" ] && [ "$_gd/index.lock" -nt "$1" ] || return 0
+    # 1683-tgyc: `find -newer`, not `[ -nt ]`. bash 3.2 (macOS /bin/bash)
+    # compares -nt in whole seconds, so a lock made in the run's first second
+    # read as "not newer" and was never swept on a Mac. find compares the
+    # full timestamp on BSD and GNU alike.
+    [ -e "$_gd/index.lock" ] && [ -n "$(find "$_gd/index.lock" -newer "$1" 2>/dev/null)" ] || return 0
     _l="$(cd "$_gd" 2>/dev/null && pwd -P)/index.lock"
     if _pf_index_lock_held "$_l" "$2"; then
         echo "kept:$_t:$_l — a live process holds it, or none could be ruled out" >> "$2.swept"

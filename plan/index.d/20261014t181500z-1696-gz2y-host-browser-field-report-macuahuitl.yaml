@@ -1,0 +1,240 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora from a forge field report, 2026-10-14: session
+# calmecacpilli-tlatoani.net-forge (Claude Code in a forge on calmecacpilli,
+# project tlatoani.net, a static Wrangler site). The operator asked that forge
+# to send the report.
+packets:
+  - packet_id: host-browser-mcp-success-results-carry-no-content-so-every-successful-tool-call-reads-empty
+    order: 1696-gz2y
+    status: in_progress
+    kind: bug
+    priority: p0
+    desired_release: v0.5
+    size: S
+    pickup_role: linux
+    capability_tags: [host-browser, mcp, forge]
+    related: [1667-jna9, 1656-iktu]
+    depends_on: []
+    title: |
+      Every successful host-browser tool call (publish_local, service_status, service_reload, browser_open, browser_list_windows) reaches the agent empty, because success results are a bare JSON object with no MCP content array; only errors are wrapped
+    context: |
+      Field report 2026-10-14 (calmecacpilli, tlatoani.net): publish_local served the site and browser_open opened windows, but every success reply arrived with no content, so the agent never got a window_id and could not screenshot, click, eval or read the console. Error replies (ENGINE_UNSUPPORTED, WINDOW_NOT_FOUND) arrived intact.
+      Root cause, read in crates/tillandsias-browser-mcp/src/server.rs: tool_error() wraps its text as result.content[{type:text}] with isError=true, but the success arms return RpcResponse::Success with result set to the bare payload (for example the browser_open arm's {window_id, device, dev, engine, notice}). MCP clients render a tools/call result's content array, plus structuredContent when declared, so a bare object reads as empty. The unit tests assert on the bare fields, which is why they stayed green.
+      Fix: wrap every tools/call success centrally in handle_tools_call as {content:[{type:text, text:<the payload as JSON>}], structuredContent:<the payload>}. Change the tests to read the content, as a client does.
+    exit_criteria:
+      - "a tools/call success for browser_open, browser_list_windows and service_status returns result.content[0].text that parses back to the payload (red today: no content key)"
+      - "a live forge lane's agent receives a window_id from browser_open and uses it for a screenshot"
+    unscoreable: "unpinnable-until-the-guard-exists: the content-shape assertion over every success arm is the deliverable"
+    next_action: >
+      macuahuitl is writing the central wrap in handle_tools_call plus a test that iterates every tool's success arm. Before the fix, run that test against today's server and record it red.
+    provenance: |
+      Filed by macuahuitl-fedora from the calmecacpilli forge field report, 2026-10-14; root cause read in code while filing.
+    events:
+      - type: filed
+        ts: "2026-10-14T18:15:00Z"
+        host: macuahuitl
+        summary: |-
+          Successful host-browser MCP replies have no content array; agents see them as empty.
+
+  - packet_id: browser-list-windows-returns-nothing-while-windows-the-lane-opened-are-on-screen
+    order: 1697-kfth
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: S
+    pickup_role: linux
+    capability_tags: [host-browser, mcp, browser]
+    related: [1696-gz2y, 1656-iktu]
+    depends_on: [host-browser-mcp-success-results-carry-no-content-so-every-successful-tool-call-reads-empty]
+    title: |
+      browser_list_windows came back empty while one to three windows the same lane had opened were visibly open on the host
+    context: |
+      Same field report. 1696-gz2y empties every success reply, so the emptiness may be that bug alone. Re-measure after 1696 lands. If the list is still empty, suspect the window registry's owner filter (the lane or project key recorded at open against the one the list asks with; WindowRegistry, record(&project_label, host, window_id)), or the registry living in a different process from the one that answers the list.
+    exit_criteria:
+      - "after browser_open succeeds in a lane, browser_list_windows from the same lane lists that window_id; from a different lane it does not"
+    unscoreable: "unpinnable-until-1696-gz2y: the list arm is only observable once success replies carry content"
+    next_action: >
+      Wait for 1696-gz2y, then re-run the open-then-list sequence in a live forge. If it is still empty, read WindowRegistry's record and lookup keys.
+    provenance: |
+      Filed by macuahuitl-fedora from the calmecacpilli forge field report, 2026-10-14.
+    events:
+      - type: filed
+        ts: "2026-10-14T18:15:00Z"
+        host: macuahuitl
+        summary: |-
+          list_windows empty while windows are open.
+
+  - packet_id: a-device-preset-window-hides-the-browser-chrome-so-the-viewport-is-the-device
+    order: 1699-rhy2
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    size: S
+    pickup_role: linux
+    capability_tags: [host-browser, webkit, browser, device-emulation]
+    related: [1656-tjv4, 1643-q3at]
+    depends_on: []
+    title: |
+      A WebKit MiniBrowser window opened for a device preset shows its own URL and menu bars; in device mode the window must be the device viewport only
+    context: |
+      Same field report: the operator expected no toolbars for device emulation. Toolbars change the effective viewport and break the "this is the phone" illusion. MiniBrowser and the Chromium framework window each need their kiosk or app-mode equivalent in device mode. The window's content size must equal the device's CSS viewport times the scale actually applied.
+    exit_criteria:
+      - "a browser_open with a device preset opens a window without a URL bar or menu, and the page's window.innerWidth/innerHeight equal the preset's CSS viewport, on WebKit and on Chromium"
+    unscoreable: "unpinnable-until-the-guard-exists: the viewport arm is the deliverable"
+    next_action: >
+      Find MiniBrowser's flags for hiding the toolbar and menus in the pinned WebKit build. Then add an innerWidth/innerHeight assertion read back over the window's own channel.
+    provenance: |
+      Filed by macuahuitl-fedora from the calmecacpilli forge field report, 2026-10-14.
+    events:
+      - type: filed
+        ts: "2026-10-14T18:15:00Z"
+        host: macuahuitl
+        summary: |-
+          Device-mode windows show browser chrome.
+
+  - packet_id: a-dev-mode-chromium-window-with-a-device-preset-opens-desktop-sized-and-warns-of-unknown-flags
+    order: 1700-dn8g
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: M
+    pickup_role: linux
+    capability_tags: [host-browser, chromium, device-emulation, cdp]
+    related: [1655-urz9, 1656-iktu, 1696-gz2y]
+    depends_on: []
+    title: |
+      browser_open {dev: true, engine: chromium, device: "iphone se"} opened a normal desktop-sized Chrome window with an "unknown runtime flags" warning; the device emulation did not apply
+    context: |
+      Same field report. 1655-urz9 emulates devices over a CDP pipe relay, and 1656-iktu gives dev mode raw CDP. In dev mode, either the emulation step is skipped, or the launch flags do not match the Chromium build in the chromium-framework image. The warning suggests a flag the build no longer knows. Two questions: does the dev-mode path call the same emulate-before-run sequence as the non-dev path (the window_cdp test every_page_is_emulated_before_it_runs covers the non-dev path), and which flag does the build reject?
+    exit_criteria:
+      - "a dev-mode Chromium window opened with a device preset reports the preset's innerWidth, devicePixelRatio and touch support, and the Chromium launch shows no unknown-flag warning (red today)"
+    unscoreable: "unpinnable-until-the-guard-exists: the dev-mode emulation arm is the deliverable"
+    next_action: >
+      Diff the dev and non-dev launch paths in crates/tillandsias-headless/src/browser_open.rs and window_cdp. Run the pinned Chromium with the exact argv and read which flag it warns about.
+    provenance: |
+      Filed by macuahuitl-fedora from the calmecacpilli forge field report, 2026-10-14.
+    events:
+      - type: filed
+        ts: "2026-10-14T18:15:00Z"
+        host: macuahuitl
+        summary: |-
+          Dev-mode Chromium ignores the device preset.
+
+  - packet_id: a-forge-knows-its-host-tillandsias-release-from-env-and-startup-context
+    order: 1701-ze9y
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    size: S
+    pickup_role: any
+    capability_tags: [forge, startup-context, diagnostics]
+    related: [1696-gz2y, 1664-finm]
+    depends_on: []
+    title: |
+      A forge agent cannot tell which Tillandsias release its host runs: no tillandsias binary on PATH, nothing in .forge-startup-context.md, no env var; expose TILLANDSIAS_HOST_VERSION and a host_version= line in the startup context
+    context: |
+      From the same field report: asked for the host's `tillandsias --version`, the forge agent found no way to learn it from inside, and had to ask the operator. Bug reports from forges cannot be matched to a release without it. The launcher already sets TILLANDSIAS_HOST_KIND=forge and TILLANDSIAS_MSG_HOST. Add the host's release (the VERSION the launcher was built from) both as an env var and as a machine-readable line in the startup context, next to 1664-finm's web_publish_state= lines.
+    exit_criteria:
+      - "a freshly launched forge has TILLANDSIAS_HOST_VERSION equal to the host's `tillandsias --version` release, and .forge-startup-context.md carries host_version=<same> (red today: absent)"
+    unscoreable: "unpinnable-until-the-guard-exists: the env and context assertion is the deliverable"
+    next_action: >
+      Find where the forge env is assembled (where TILLANDSIAS_HOST_KIND and TILLANDSIAS_MSG_HOST are set for the forge container) and where the startup context is written. Add both values from the launcher's own VERSION, with a fixture.
+    provenance: |
+      Filed by macuahuitl-fedora, 2026-10-14, on the calmecacpilli forge agent's suggestion.
+    events:
+      - type: filed
+        ts: "2026-10-14T18:15:00Z"
+        host: macuahuitl
+        summary: |-
+          Forge agents cannot learn the host release.
+
+  - packet_id: a-link-leaving-the-app-preview-shows-a-small-toast-with-an-extensible-open-choice
+    order: 1702-bpnx
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    size: M
+    pickup_role: linux
+    capability_tags: [host-browser, browser, ux, isolation]
+    related: [1651-5t7n, 1699-rhy2, 1703-j7vf]
+    depends_on: []
+    title: |
+      A link that leaves the app's preview (linkedin.com, tillandsias.org, another project) shows a small toast in the same device window, worded for non-technical users, with a split [Open ▾] button whose last-used choice is preselected; the choices come from an extensible registry
+    context: |
+      Field report (calmecacpilli on v56.10.13.1 stable, tlatoani.net): outbound links in the preview window fail silently, so the user cannot tell isolation from a broken site. The isolation is intended; the silence is the defect.
+      Operator design, 2026-10-14:
+      - A toast inside the same device-emulation window, saying in plain words that the link leaves the app preview. Not "Out of Network Request"; the copy is for non-technical users. Proposed: "This link leaves your app preview", with the destination host shown.
+      - A split button [Open ▾] with the last-used choice preselected. Remember it per project; the spec decides whether also per host.
+      - Initial choices: "Open in your browser (real internet)", which is the host's default browser, and "Open in a test browser (preview internet)", a chromium-framework window that sees only what the enclave allows. The choices live in a registry, so later ones ("Copy link", "Allow this site for the app", "Always do this for this site") need no redesign.
+      - Defaults, kept minimal: links to the same project (its own subdomains under the project's .localhost namespace) open in the enclave as today, with no toast. External links default to the real browser on the host.
+      - Keep it minimal and unintrusive: this toast is Tillandsias' only in-window surface for "your app just crossed a boundary".
+      - No new routing: same-project versus external is decided by the existing per-project subdomain namespacing.
+      Security constraints:
+      - Page script must never trigger the open or spoof the toast. The toast belongs to the window's own chrome or an overlay the page cannot style or script, and only a real user gesture on it opens anything.
+      - The hand-off passes only the URL: no cookies, storage, headers or referrer.
+      - A redirect chain ending outside the project is judged by its final target.
+    exit_criteria:
+      - "clicking a link to a host outside the project in a preview window shows the toast naming that host, on Chromium and WebKit (red today: nothing happens)"
+      - "choosing 'Open in your browser' hands exactly the URL to the host's default browser, and the next external click preselects that choice"
+      - "a page script calling window.open, or setting location to an outside host, shows the toast but opens nothing without a user gesture on the toast"
+      - "a link to the same project's own subdomain opens in the enclave with no toast"
+    unscoreable: "unpinnable-until-the-guard-exists: the toast and gesture arms are the deliverable"
+    next_action: >
+      Write the copy and the option-registry shape into the host-browser-mcp spec first, since the extensibility is the design. Then find where a blocked navigation ends today (the forwarder refusing the SNI, or DNS resolving nothing for the window), and intercept there for a navigation the window initiated. Pick an overlay mechanism per engine (CDP on Chromium; the MiniBrowser side on WebKit) that the page cannot reach.
+    provenance: |
+      Filed by macuahuitl-fedora from the calmecacpilli forge field report and the operator's design direction, 2026-10-14.
+    events:
+      - type: filed
+        ts: "2026-10-14T18:30:00Z"
+        host: macuahuitl
+        summary: |-
+          External links in preview windows: a toast with an extensible Open choice, defaulting to the host browser.
+
+  - packet_id: an-apps-third-party-requests-cross-the-enclave-boundary-through-a-per-project-egress-allowlist-the-user-can-see
+    order: 1703-j7vf
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.6
+    size: L
+    pickup_role: any
+    capability_tags: [proxy, egress, browser, ux, isolation, design]
+    related: [1702-bpnx, 1691-96gk, 1688-ideu, 1684-tx37]
+    depends_on: []
+    title: |
+      Design: an app in preview calls third-party APIs and loads third-party assets (fetch/XHR, CDNs, auth providers); decide how those requests leave the enclave through the egress proxy under a per-project allowlist, and how the user learns, minimally, that their app crosses that boundary before they publish
+    context: |
+      Operator, 2026-10-14: users "will want to test that their external links are correct and valid, and in-app links, links to 3rd party apis, etc, we'll need to allow some of those egress through our proxy, this is going to require some careful design since we want to minimize UX intrusion ... that will be our only surface for telling users there is a boundary being crossed by their app and we want to make sure they're aware of it when they publish their apps."
+      This row covers subresource and API traffic. Top-level navigations are 1702-bpnx's toast. Questions the design must answer:
+      - Does the preview window's egress proxy admit third-party hosts per project (an allowlist learned from the first attempt and confirmed through the same toast surface), or by policy?
+      - How does the app's list of crossed boundaries surface at publish time: a short summary such as "your app talks to: api.stripe.com, fonts.googleapis.com"?
+      - Can it all stay within today's per-project subdomain namespacing, with no new routing? This is the operator's stated hope.
+      - How does it compose with the per-lane egress identity in 1691-96gk, where the proxy keys on the lane's identity rather than its network?
+      Keep the UX to one surface. Output is a design record and spec deltas, not code.
+    exit_criteria:
+      - "a design record in plan/issues/ and spec deltas in host-browser-mcp and the proxy spec answer each question above, with a recommended default, and the operator accepts the recommendation"
+    unscoreable: "design row: closure is the operator's acceptance of the recorded recommendation"
+    next_action: >
+      Measure what the preview window does today with a fetch to a third-party API (refused at the proxy, at DNS, or never attempted), and with a CDN stylesheet. Then draft the recommendation against those facts.
+    provenance: |
+      Filed by macuahuitl-fedora on the operator's direction, 2026-10-14.
+    events:
+      - type: filed
+        ts: "2026-10-14T18:30:00Z"
+        host: macuahuitl
+        summary: |-
+          Design the per-project egress allowlist and the boundary-crossing awareness for previewed apps.
+
+events:
+  - packet_id: the-first-webkit-browser-open-shows-preparing-the-webkit-engine-while-the-image-builds-not-only-after
+    event:
+      type: note
+      ts: "2026-10-14T18:15:00Z"
+      host: macuahuitl
+      summary: |-
+        Field measurement (calmecacpilli forge, tlatoani.net, 2026-10-14): the first browser_open with device "iphone 17 pro max" (WebKit) blocked the MCP call for over 120 s although its window appeared; later opens returned at once. The tool call itself must return promptly, with a window_id or a named preparing state, not only show a notice.

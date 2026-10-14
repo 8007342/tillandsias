@@ -1,0 +1,14 @@
+# Gate step 1667-jna9 — every forge agent harness exposes the host-browser MCP
+# server. Codex starts a stdio MCP server with only HOME LANG PATH PWD SHLVL
+# USER, so its registration must forward TILLANDSIAS_CONTROL_SOCKET or
+# host-browser.sh exits at startup and the lane has no publish_local. Claude,
+# OpenCode and Codex declarations are read from the shipped overlay; a harness
+# with host-browser removed, or codex without the forwarded variable, is caught.
+# Antigravity is a named gap (1678-62p7).
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking every forge harness exposes the host-browser MCP server with its lane socket (1667-jna9)"
+STEP_LUA="scripts/lua/test-harness-host-browser-parity.lua"
+STEP_ERROR="a forge harness dropped the host-browser MCP server, or Codex no longer forwards TILLANDSIAS_CONTROL_SOCKET to it (1667-jna9) — see the FAIL lines above"
+STEP_OK="Harness host-browser parity fixture passed"
+STEP_SECOND_REGIME="yolanda-windows 2026-10-14 msys ok:harness-host-browser-parity:4 arms"
