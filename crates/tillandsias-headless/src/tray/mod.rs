@@ -1273,7 +1273,9 @@ fn handle_mcp_jsonrpc(
                         runtime,
                         debug,
                     )) {
-                        Ok(result) => serde_json::json!({ "result": result }),
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
                         Err(e) => serde_json::json!({
                             "error": { "code": -32000, "message": e }
                         }),
@@ -1281,7 +1283,9 @@ fn handle_mcp_jsonrpc(
                 }
                 "service_status" => {
                     match rt.block_on(crate::local_web_preview::status(project_label, instance)) {
-                        Ok(result) => serde_json::json!({ "result": result }),
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
                         Err(e) => serde_json::json!({
                             "error": { "code": -32000, "message": e }
                         }),
@@ -1303,7 +1307,9 @@ fn handle_mcp_jsonrpc(
                         instance,
                         debug,
                     )) {
-                        Ok(result) => serde_json::json!({ "result": result }),
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
                         Err(e) => serde_json::json!({
                             "error": { "code": -32000, "message": e }
                         }),
@@ -1325,7 +1331,9 @@ fn handle_mcp_jsonrpc(
                         instance,
                         debug,
                     )) {
-                        Ok(result) => serde_json::json!({ "result": result }),
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
                         Err(e) => serde_json::json!({
                             "error": { "code": -32000, "message": e }
                         }),
