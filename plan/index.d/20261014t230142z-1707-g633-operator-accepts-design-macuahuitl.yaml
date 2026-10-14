@@ -1,0 +1,9 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: a-pushed-project-deploys-to-cloudflare-on-its-own-domain-without-dashboard-steps
+    event:
+      type: note
+      ts: "2026-10-14T23:01:42Z"
+      host: macuahuitl
+      summary: |-
+        Operator ACCEPTED the design, 2026-10-14, verbatim in the macuahuitl coordinator session: "I approve this design." Exit criterion 1 (design record and spec deltas accepted) is met; the design is PR #440 (work/1707-g633). Covered by the acceptance unless the operator objects: one conditional GET per build, ended at build end, for build-state visibility. Next, the slice: measure U1/U2 on the operator's Cloudflare account with them present, read macron.dev's failing branch-build logs, then host-connect macron.dev (main only, site paths only).
