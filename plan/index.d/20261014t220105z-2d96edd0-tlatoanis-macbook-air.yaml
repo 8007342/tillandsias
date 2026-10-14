@@ -1,0 +1,16 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-browser-windows-show-through-a-virtio-gpu-display-on-the-tray-linux-vm-as-a-cage-kiosk-sized-to-the-device
+    field: next_action
+    value: |-
+      Spike on a macOS host: add VZVirtioGraphicsDeviceConfiguration with one scanout to the tray's VM and run cage plus Chromium inside it, then size the scanout per window.
+
+
+      [2026-10-14T22:01:05Z tlatoanis-macbook-air] Parked by coordinator ruling (macuahuitl, 2026-10-14): the first step is a spike that changes the tray VM's configuration, which needs a dev build of the macOS tray, and a dev build may not run against the operator's installed tray state (1677-84n5). Blocked on 1717-d5uf (a dev build gets its own VM home, state and Keychain items). When 1717 lands: spike on a macOS host under the dev root by adding one VZVirtioGraphicsDeviceConfiguration scanout and running cage plus Chromium (1712-3fsw's spec with BrowserSurface::Window) in the guest, then size the scanout per window.
+    ts: "2026-10-14T22:01:05Z"
+    host: tlatoanis-macbook-air

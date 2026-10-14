@@ -366,7 +366,7 @@ machines no developer owns.
 
 `os_shipped_dlls` means shipped with Windows 10+: the `api-ms-win-*` API-set
 stubs **including the UCRT** (`api-ms-win-crt-*`), plus the system DLLs
-enumerated in `scripts/check-tray-import-surface.sh`. It does NOT include the
+enumerated in `scripts/lua/check-tray-import-surface.lua`. It does NOT include the
 Visual C++ Redistributable (`vcruntime140.dll`, `msvcp140.dll`). That
 distinction is the whole invariant — the UCRT is an OS component and the redist
 is not, and collapsing the two readmits the dependency.

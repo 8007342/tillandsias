@@ -5114,7 +5114,8 @@ Two flows; pick by intent:
    a server in here. Delegate to the host over the MCP tools
     (\`host-browser\` server): \`publish_local {"category":"WEB",\
     "runtime":"auto"}\` selects the managed static or local-Wrangler
-    preview against this lane's live worktree; \`service_status\`,
+    preview against this lane's live worktree (add \`"app_dir":"<subdir>"\`
+    for an app in a subdirectory with its own wrangler config); \`service_status\`,
     \`service_reload {"category":"WEB"}\`, and \`service_stop\` manage it.
     The host attributes the project and lane from your session. Publishing is
     local-only: Wrangler local preview never deploys, logs in, or accepts

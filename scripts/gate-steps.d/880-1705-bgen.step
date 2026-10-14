@@ -1,0 +1,12 @@
+# Gate step 1705-bgen — the end-user onboarding skill. A forge on ANY project
+# offers start-a-new-project under every harness (agent-profile.sh links it
+# from /opt/skills); its setup script creates specs, a plan folder and a
+# README without overwriting anything; and neither the skill nor what it
+# creates shows an end user the environment's internal vocabulary.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the start-a-new-project onboarding skill and its forge wiring (1705-bgen)"
+STEP_SCRIPT="scripts/test-start-a-new-project-skill.sh"
+STEP_ERROR="the start-a-new-project skill went missing, stopped reaching a forge, overwrote a user's file, or showed internal vocabulary (1705-bgen) — see the FAIL lines above"
+STEP_OK="Onboarding skill fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-14 darwin ok:start-a-new-project-skill:6"

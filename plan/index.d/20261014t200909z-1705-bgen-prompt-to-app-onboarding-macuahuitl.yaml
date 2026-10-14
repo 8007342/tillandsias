@@ -1,0 +1,155 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora on the operator's direction, 2026-10-14:
+# "For the next stable release, I want you to sneak in an onboarding skill ...
+# Truly prompt to app in minutes, fully open source for anyone to try ... Have
+# some agents fill the gaps to make this happen."
+# Gap map: a read-only journey audit (2026-10-14) from a GitHub repo to a
+# forge, an onboarding skill, a Flutter app on several device windows, and a
+# push that Cloudflare deploys. Existing rows on that path: 1637-5765 (Flutter
+# in the forge), 1637-yrz8 (templates), 1637-qmmd (deploy workflow),
+# 1625-9qyw (cold-start serve), 1696-gz2y and its siblings (device windows).
+packets:
+  - packet_id: an-empty-project-forge-agent-onboards-the-user-with-openspec-flutter-and-flame-and-a-plan-path
+    order: 1705-bgen
+    status: in_progress
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    size: M
+    pickup_role: linux
+    capability_tags: [forge, skills, onboarding, openspec, flutter, end-user]
+    related: [1637-5765, 1637-yrz8, 1696-gz2y]
+    depends_on: []
+    title: |
+      In an empty project, a forge agent asked how to start a new project runs an end-user onboarding skill: it asks to use spec-driven development with OpenSpec, strongly suggests Flutter (plus Flame for graphics apps), initializes specs and a ./plan path for long-running work, in plain words with no Tillandsias internals, on Claude Code, OpenCode and Codex
+    context: |
+      Operator direction, 2026-10-14. The skill must ship in the NEXT STABLE release, and the operator will test it by launching an agent in an empty project and asking for instructions on a new project. The Tillandsias methodology, the cheatsheet system and the homebrew auto-install shims must stay transparent to end users: they work without the user ever being told about them.
+      What exists (journey audit, 2026-10-14):
+      - Only OpenCode has an empty-project path: /startup → the welcome screen → three sample prompts (cheatsheets/welcome/sample-prompts.md, which already mention Flutter and Flame). It does not suggest OpenSpec or create specs or ./plan, and Claude Code and Codex have no equivalent.
+      - openspec_init_if_absent (lib-common.sh) creates only the /opsx command set.
+      - The end-user skills today are forge-quick-intro, project-discipline and openspec-onboard; every other skill in skills/ is for Tillandsias developers.
+      - The startup-context addendum and the OpenCode instructions carry Tillandsias-internal vocabulary (plan_answer, methodology_ask, @cheatsheet citations) into end-user projects.
+      Honesty constraint: until 1637-5765 lands, the forge cannot build Flutter (FLUTTER_ROOT is set, nothing is installed). The skill must not promise a working toolchain it cannot deliver; it says what is ready and what is coming.
+      This row reconciles with 1637-yrz8, whose earlier ruling made a plain static site the default template and Flutter + Flame opt-in. The 2026-10-14 direction is that the onboarding conversation strongly SUGGESTS Flutter, and Flame for graphics apps. The user still chooses.
+    exit_criteria:
+      - "in a forge on an empty project, each harness (Claude Code, OpenCode, Codex) asked 'how do I start a new project?' offers spec-driven development with OpenSpec and recommends Flutter, with Flame for graphics apps; on acceptance, the project gains an openspec/ tree with a first spec, a ./plan/ path, and a README, and nothing else (red today: no harness does this)"
+      - "the skill's output and the files it creates contain none of the Tillandsias-internal vocabulary named by a guard list (plan_answer, methodology_ask, cheatsheet, @trace, litmus, CentiColon), checked by a fixture"
+      - "the skill ships in a release that is promoted to stable, and the operator's empty-project test passes on that stable build"
+    unscoreable: "unpinnable-until-the-guard-exists: the per-harness trigger fixture and the vocabulary guard are the deliverable"
+    next_action: >
+      macuahuitl writes the skill in skills/ (single source, harness symlinks per HARNESS-SCOPED.txt) and an empty-project trigger for Claude Code and Codex equivalent to OpenCode's /startup. A fixture runs the skill's scaffolding step in a scratch empty repo and asserts the created tree and the vocabulary guard. The Flutter step stays honest until 1637-5765 lands.
+    provenance: |
+      Filed by macuahuitl-fedora on the operator's direction, 2026-10-14.
+    events:
+      - type: filed
+        ts: "2026-10-14T20:09:09Z"
+        host: macuahuitl
+        summary: |-
+          End-user onboarding skill for empty projects: OpenSpec, Flutter + Flame, ./plan.
+
+  - packet_id: a-forge-launched-on-a-brand-new-empty-github-repo-starts-commits-and-first-pushes-through-the-mirror
+    order: 1706-f9gr
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: M
+    pickup_role: any
+    capability_tags: [forge, git-mirror, github, onboarding]
+    related: [1705-bgen]
+    depends_on: []
+    title: |
+      The prompt-to-app path starts from a brand-new GitHub repo with no commits; nobody has verified that the tray lists it, the mirror clones an unborn branch, the forge starts, and the first commit pushes back through the relay to GitHub
+    context: |
+      The journey audit found no empty-repo or unborn-branch handling in the remote-projects or git-mirror-service specs. The operator's flow: create a project on GitHub, launch it in a forge, a few prompts later push to remote. Every step on an empty repo is untested: the 5-minute repo-list cache, cloning an unborn HEAD, forge seeding (the seed branch comes from the host checkout's branch; here there is none), the first commit, and the relay's first push to a remote with no refs. Measure first and fix only what fails.
+    exit_criteria:
+      - "a litmus or live check creates a fresh empty GitHub repo, launches a forge on it, commits one file and pushes, and the commit appears on GitHub's default branch; each failing step is named and fixed (red until measured)"
+    unscoreable: "unpinnable-until-measured: which step fails is unknown; the end-to-end check is the deliverable"
+    next_action: >
+      On a host with a working forge: create an empty test repo under the operator's account (ask the operator first; it is an outward act under their identity), launch it from the tray, and record each step's result before changing any code.
+    provenance: |
+      Filed by macuahuitl-fedora, 2026-10-14 (journey audit gap G10).
+    events:
+      - type: filed
+        ts: "2026-10-14T20:09:09Z"
+        host: macuahuitl
+        summary: |-
+          Empty GitHub repo → forge → first push is unverified.
+
+  - packet_id: a-pushed-project-deploys-to-cloudflare-on-its-own-domain-without-dashboard-steps
+    order: 1707-g633
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.6
+    size: L
+    pickup_role: any
+    capability_tags: [cloudflare, deploy, github, onboarding, design]
+    related: [1637-qmmd, 1505-sm2j, 1661-vckd, 1705-bgen]
+    depends_on: []
+    title: |
+      Design: after "push to remote", Cloudflare builds and serves the project on the user's own Cloudflare domain with no dashboard clicks; decide between Workers Builds (connected to the GitHub repo) and a GitHub Actions workflow with a token secret, and how the repo, the build and the custom domain get wired from Tillandsias
+    context: |
+      Operator, 2026-10-14: "buy a domain on cloudflare and create a new project on github ... then just 'push to remote' should let CloudFlare take care of the rest."
+      Today:
+      - --cloudflare-login works (PKCE, tokens in Vault).
+      - The observatorium deploys through Workers Builds, but the operator wired it by hand in the dashboard: repo, branch, root dir, build command, custom domain.
+      - 1637-qmmd (p3) proposes a GitHub Actions template using wrangler deploy and a CF token from a GitHub secret.
+      Questions:
+      - Which path needs the fewest user steps, given the standing ruling that no Cloudflare credential ever enters a forge?
+      - Can the host side (it holds the CF token in Vault) create the Workers Builds connection, or set the GitHub secret, through the Cloudflare and GitHub APIs on the user's explicit click, outside the forge? This is an outward act under the operator's identity and needs consent.
+      - How is a domain already in the user's CF account attached as the custom domain?
+      - What does the user see: one tray action, "Publish to my domain", with a confirm?
+      Output is a design record plus spec deltas, then one slice.
+    exit_criteria:
+      - "a design record in plan/issues/ answers each question with a recommended path, and the operator accepts it"
+      - "the first slice: a test project pushed from a forge appears at its custom domain with at most one confirmation click and no Cloudflare dashboard step"
+    unscoreable: "design row: closure is the operator's acceptance, then the slice's live check"
+    next_action: >
+      Read cloudflare_login.rs and openspec/specs/observatorium-dashboard/deployment.md. Look up the Cloudflare API for Workers Builds triggers and repo connections and for custom domains. Then draft the recommendation.
+    provenance: |
+      Filed by macuahuitl-fedora on the operator's direction, 2026-10-14 (journey audit gap G9).
+    events:
+      - type: filed
+        ts: "2026-10-14T20:09:09Z"
+        host: macuahuitl
+        summary: |-
+          Push-to-deploy on the user's own Cloudflare domain without dashboard steps.
+
+  - packet_id: the-check-log-cache-sweep-litmus-reads-any-worktree-under-target-work-as-inside-target
+    order: 1714-udui
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    size: S
+    pickup_role: linux
+    capability_tags: [litmus, worktrees, convergence]
+    related: [1637-cnxq]
+    depends_on: []
+    title: |
+      litmus check-log-survives-the-cache-sweep FAILs in every worktree under target/work: its `*/target/*` case matches the worktree's own path, contradicting the scratch-location direction that puts development worktrees there
+    context: |
+      Reported by lenovinha, 2026-10-14, while gating 1637-5765 in a target/work worktree. The step (litmus-check-log-survives-the-cache-sweep.yaml) runs scripts/convergence-log-path.sh and FAILs when the resolved path matches */target/*. Inside <checkout>/target/work/<wt>/, the checkout prefix itself contains /target/, so a correctly placed ~/.cache index still reads as inside target only when the resolver falls back to a repo-relative path. Find which, then make the step judge the path relative to the worktree's own root, not by a glob over the absolute path.
+    exit_criteria:
+      - "the litmus passes in a worktree under <checkout>/target/work/ when the index lives outside that worktree's target/, and still FAILs when the index is the worktree's own target/ (red today in a target/work worktree)"
+    unscoreable: "unpinnable-until-the-guard-exists: the two-location arm is the deliverable"
+    next_action: >
+      Run scripts/convergence-log-path.sh from a target/work worktree and from the checkout root and compare. Then rewrite the step's judgement to be relative to git rev-parse --show-toplevel.
+    provenance: |
+      Filed by macuahuitl-fedora from lenovinha's fleet note, 2026-10-14.
+    events:
+      - type: filed
+        ts: "2026-10-14T20:09:09Z"
+        host: macuahuitl
+        summary: |-
+          The cache-sweep litmus misreads worktrees under target/work.
+
+events:
+  - packet_id: tillandsias-ships-project-templates-static-wrangler-by-default-and-flutter-flame-opt-in
+    event:
+      type: note
+      ts: "2026-10-14T20:09:09Z"
+      host: macuahuitl
+      summary: |-
+        Operator direction 2026-10-14 (onboarding, 1705-bgen): the onboarding conversation strongly SUGGESTS Flutter, plus Flame for graphics apps; the user still chooses. Revisit this row's static-default ruling against it when the templates are extracted.

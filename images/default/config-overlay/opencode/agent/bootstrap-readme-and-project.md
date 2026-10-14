@@ -16,6 +16,10 @@ description: "Empty-project welcome flow. Displays sample prompts and forge capa
 4. Display 3 sample prompts (first 3, or randomize with `shuf -n 3`)
 5. Print forge capability summary (one paragraph)
 6. End with open-ended "What would you like to build?" (no forced choice)
+7. When the user answers with an idea, or asks how to start, follow the
+   `start-a-new-project` skill (order 1705-bgen): it offers spec-driven
+   development, recommends Flutter (and Flame for games and graphics), and
+   sets up specs, a `plan/` folder and a README in plain words
 
 ## Output (one screen)
 

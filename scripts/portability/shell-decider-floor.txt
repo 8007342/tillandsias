@@ -44,7 +44,6 @@ scripts/check-groundtruth-regime-invariance.sh
 scripts/check-host-tools.sh
 scripts/check-issue-citation-convention.sh
 scripts/check-jq-callsite-ratchet.sh
-scripts/check-jq-multiline-capture-strips-cr.sh
 scripts/check-landed-but-open.sh
 scripts/check-landing-provenance.sh
 scripts/check-ledger-distillation.sh
@@ -100,7 +99,6 @@ scripts/check-stranded-plan-writes.sh
 scripts/check-terminology.sh
 scripts/check-test-baseline.sh
 scripts/check-tracked-files-unwritten.sh
-scripts/check-tray-import-surface.sh
 scripts/check-tray-string-corpus-drift.sh
 scripts/check-unrunnable-platform-arms.sh
 scripts/check-version-bump-isolation.sh

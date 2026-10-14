@@ -145,6 +145,30 @@ Four CLI skills MUST guide users through project setup and maintenance.
   - README validation results
   - Traces ledger tail (last 5 entries)
 
+### Requirement: A new project is onboarded with specs, a plan folder and a recommended stack
+<!-- req-id: 0077d0fa -->
+
+Every forge, on any project and under every harness (Claude Code, OpenCode, Codex), SHALL offer the generic skill `start-a-new-project`, linked from `/opt/skills` into each harness's user skill directory. When a user starts a new project or asks how to begin, the skill SHALL:
+
+- ask what they want to build;
+- recommend spec-driven development with OpenSpec, and never insist on it;
+- strongly recommend Flutter, with the Flame engine for games and graphics, while following any stack the user prefers;
+- check that a toolchain runs before promising it;
+- after the user agrees, create only what is missing: `openspec/` with a first spec, `plan/README.md`, `plan/roadmap.md` and `README.md`, never overwriting an existing file.
+
+The skill's text and every file it creates SHALL use plain words and SHALL NOT expose the environment's internal vocabulary (plan or methodology tooling, cheatsheets, trace annotations, litmus tests).
+
+#### Scenario: an empty repository is set up
+
+- **WHEN** the skill's setup script runs in an empty repository with a name and summary
+- **THEN** the repository gains `openspec/project.md`, a first spec, `plan/README.md`, `plan/roadmap.md` and `README.md`
+- **AND** a second run creates nothing, and a pre-existing `README.md` is unchanged
+
+#### Scenario: the onboarding speaks plainly
+
+- **WHEN** the skill's text and the files it created are scanned for internal vocabulary
+- **THEN** none is found
+
 ## Litmus Tests
 
 ### Test: FOR HUMANS / FOR ROBOTS structure validation

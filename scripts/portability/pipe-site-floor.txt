@@ -310,7 +310,7 @@ litmus openspec/litmus-tests/litmus-timing-telemetry-implausible-guard-shape.yam
 litmus openspec/litmus-tests/litmus-tool-dispatch-lib.yaml 2
 litmus openspec/litmus-tests/litmus-toolbox-isolation.yaml 8
 litmus openspec/litmus-tests/litmus-tray-host-control-socket-unix-shape.yaml 4
-litmus openspec/litmus-tests/litmus-tray-import-surface-os-only.yaml 4
+litmus openspec/litmus-tests/litmus-tray-import-surface-os-only.yaml 2
 litmus openspec/litmus-tests/litmus-tray-minimal-ux-status-shape.yaml 3
 litmus openspec/litmus-tests/litmus-uninstall-keeps-models.yaml 1
 litmus openspec/litmus-tests/litmus-validator-surface-currency.yaml 2
@@ -383,7 +383,6 @@ scripts scripts/check-groundtruth-regime-invariance.sh 3
 scripts scripts/check-host-tools.sh 105
 scripts scripts/check-issue-citation-convention.sh 8
 scripts scripts/check-jq-callsite-ratchet.sh 17
-scripts scripts/check-jq-multiline-capture-strips-cr.sh 11
 scripts scripts/check-landed-but-open.sh 9
 scripts scripts/check-landing-provenance.sh 4
 scripts scripts/check-ledger-distillation.sh 2
@@ -436,7 +435,6 @@ scripts scripts/check-stranded-plan-writes.sh 3
 scripts scripts/check-terminology.sh 4
 scripts scripts/check-test-baseline.sh 8
 scripts scripts/check-tracked-files-unwritten.sh 4
-scripts scripts/check-tray-import-surface.sh 25
 scripts scripts/check-tray-string-corpus-drift.sh 2
 scripts scripts/check-unrunnable-platform-arms.sh 5
 scripts scripts/check-version-bump-isolation.sh 2

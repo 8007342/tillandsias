@@ -58,7 +58,7 @@
 --     started before it
 --
 -- Verdicts (last stdout line):
---   ok:cold-start-acceptance:<tag>:served:<url>:http=200:lakanoa-shape=built-nested-served:router-failure=step-qualified:recovered:project=<sha>   exit 0
+--   ok:cold-start-acceptance:<tag>:served:<url>:http=200:lakanoa-shape=built-nested-served:router-failure=step-qualified:recovered:app-dir=<served|release-predates>:project=<sha>   exit 0
 --   ok:cold-start-acceptance:<tag>:prefix-failure:<reason>                                          exit 0
 --   refused:cold-start-acceptance:<what>                                                             exit 1
 --   blocked:cold-start-acceptance:project-ref-mismatch:wanted=<x>:forge=<y>  (only with --project-ref)  exit 2
@@ -379,7 +379,23 @@ grep -o '<title>[^<]*</title>' /tmp/fetched.html
 ]])
     return text.trim(r.stdout or "")
 end
-local function result_url(msg) return msg and msg.result and msg.result.url end
+-- A tools/call success payload. Since 1696-gz2y every success is an MCP
+-- CallToolResult: the payload as JSON in content[1].text and as
+-- structuredContent. Earlier releases (v56.10.14.1 and before) returned it
+-- bare. Read all three, so the driver judges any release, not only the shape
+-- it was written against.
+local function payload(msg)
+    local r = msg and msg.result
+    if type(r) ~= "table" then return nil end
+    if type(r.structuredContent) == "table" then return r.structuredContent end
+    if type(r.content) == "table" and r.content[1] and type(r.content[1].text) == "string" then
+        local ok, v = pcall(json.parse, r.content[1].text)
+        if ok and type(v) == "table" then return v end
+        return nil
+    end
+    return r
+end
+local function result_url(msg) local p = payload(msg); return p and p.url end
 
 local res, raw = mcp({ { "publish_local", '{"category":"WEB","runtime":"auto"}' }, { "service_status", "{}" } })
 fs.write(OUT .. "/publish-auto.ndjson", raw)
@@ -388,7 +404,7 @@ local url = result_url(res[2])
 if expect_prefix then
     local reason = res[2] and res[2].error and res[2].error.message or "<no error>"
     log_line("pre-fix publish_local auto: " .. reason .. "; service_status state=" ..
-        tostring(res[3] and res[3].result and res[3].result.state))
+        tostring(payload(res[3]) and payload(res[3]).state))
     if url then fail("prefix-unexpectedly-served:" .. url) end
     fs.write(OUT .. "/keychain-after.txt", keychain_meta())
     if fs.read(OUT .. "/keychain-after.txt") ~= KEY_BEFORE then fail("host-keychain-metadata-changed") end
@@ -397,7 +413,7 @@ if expect_prefix then
 end
 
 if not url then fail("publish-auto-no-url:" .. raw:sub(1, 300)) end
-local runtime = res[2].result.runtime
+local runtime = payload(res[2]).runtime
 local got = fetch(url)
 log_line("publish_local auto: runtime=" .. tostring(runtime) .. " url=" .. url .. "; fetch: " .. got:gsub("\n", " "))
 if not text.contains(got, "http=200") or not text.contains(got, "ssl_verify=0") or not text.contains(got, "<title>") then
@@ -465,6 +481,58 @@ if not burl or not text.contains(bgot, "http=200") or not text.contains(bgot, "<
     fail("lakanoa-shape-built-not-served:" .. (bgot ~= "" and bgot or braw:sub(1, 300)))
 end
 
+-- ── 7c. a SUBDIRECTORY app published with app_dir (order 1667-6rtp) ───────
+-- A monorepo shape: site-app/ has its own wrangler.jsonc and public/, beside
+-- the root config 7b left. publish_local {app_dir: "site-app"} must serve
+-- site-app/public (its marker title), never the root's app. An escaping
+-- app_dir is refused by name, and service_reload republishes the same app.
+-- A release older than 1667 IGNORES app_dir, so it answers the escape probe
+-- with a URL instead of invalid_app_dir. The arm then records
+-- app-dir=release-predates and moves on, never a false pass.
+local APP_MARKER = "APP-DIR-SHAPE"
+must(inside([[
+f=$(podman ps --format '{{.Names}}' --filter 'name=macron.*-forge')
+podman exec -i "$f" sh -s <<'FORGE'
+set -e
+cd /home/forge/src/macron.dev
+mkdir -p site-app/public
+cat > site-app/wrangler.jsonc <<'J'
+{"name":"app-dir-shape","compatibility_date":"2026-10-01","assets":{"directory":"./public"}}
+J
+printf '<!doctype html><title>APP-DIR-SHAPE</title><p>served from site-app/public</p>\n' > site-app/public/index.html
+echo "app-dir fixture written: $(ls site-app site-app/public | tr '\n' ' ')"
+FORGE
+]]), "app-dir-fixture")
+mcp({ { "service_stop", '{"category":"WEB"}' } })
+local eres, eraw = mcp({ { "publish_local", '{"category":"WEB","runtime":"auto","app_dir":"../escape"}' } })
+fs.write(OUT .. "/publish-app-dir-escape.ndjson", eraw)
+local ereason = eres[2] and eres[2].error and eres[2].error.message or ""
+local app_dir_result
+if result_url(eres[2]) then
+    log_line("app-dir: release predates app_dir (the escape probe was published, not refused); arm skipped")
+    mcp({ { "service_stop", '{"category":"WEB"}' } })
+    app_dir_result = "release-predates"
+else
+    log_line("app-dir escape: " .. ereason)
+    if not text.contains(ereason, "invalid_app_dir:") then fail("app-dir-escape-not-refused-by-name:" .. eraw:sub(1, 300)) end
+    local ares, araw = mcp({ { "publish_local", '{"category":"WEB","runtime":"auto","app_dir":"site-app"}' } })
+    fs.write(OUT .. "/publish-app-dir.ndjson", araw)
+    local aurl = result_url(ares[2])
+    local agot = aurl and fetch(aurl) or ""
+    log_line("app-dir site-app: url=" .. tostring(aurl) .. " fetch: " .. agot:gsub("\n", " "))
+    if not aurl or not text.contains(agot, "http=200") or not text.contains(agot, "<title>" .. APP_MARKER .. "</title>") then
+        fail("app-dir-not-served:" .. (agot ~= "" and agot or araw:sub(1, 300)))
+    end
+    local _, reload_raw = mcp({ { "service_reload", '{"category":"WEB"}' } })
+    fs.write(OUT .. "/reload-app-dir.ndjson", reload_raw)
+    local again = fetch(aurl)
+    log_line("app-dir after service_reload: " .. again:gsub("\n", " "))
+    if not text.contains(again, "<title>" .. APP_MARKER .. "</title>") then
+        fail("app-dir-lost-on-reload:" .. (again ~= "" and again or reload_raw:sub(1, 300)))
+    end
+    app_dir_result = "served"
+end
+
 -- ── 8. forced router-step failure (another app holds the router's port) ─────
 mcp({ { "service_stop", '{"category":"WEB"}' } })
 must(inside([[
@@ -475,7 +543,7 @@ podman ps --format '{{.Names}} {{.Ports}}' | grep port-holder
 local fres, fraw = mcp({ { "publish_local", '{"category":"WEB","runtime":"auto"}' }, { "service_status", "{}" } })
 fs.write(OUT .. "/publish-router-failure.ndjson", fraw)
 local freason = fres[2] and fres[2].error and fres[2].error.message or ""
-local lf = fres[3] and fres[3].result and fres[3].result.last_failure
+local lf = payload(fres[3]) and payload(fres[3]).last_failure
 log_line("forced failure: " .. freason .. "; last_failure step=" .. tostring(lf and lf.step) ..
     " class=" .. tostring(lf and lf.class) .. " remedy=" .. tostring(lf and lf.remedy))
 if not text.contains(freason, "podman failed at step router") or not lf or lf.step ~= "router" then
@@ -488,7 +556,7 @@ local rres, rraw = mcp({ { "publish_local", '{"category":"WEB","runtime":"auto"}
 fs.write(OUT .. "/publish-recovered.ndjson", rraw)
 local rurl = result_url(rres[2])
 local rgot = rurl and fetch(rurl) or ""
-local rlf = rres[3] and rres[3].result and rres[3].result.last_failure
+local rlf = payload(rres[3]) and payload(rres[3]).last_failure
 log_line("recovered: url=" .. tostring(rurl) .. " fetch: " .. rgot:gsub("\n", " ") .. " last_failure=" .. tostring(rlf ~= nil))
 if not rurl or not text.contains(rgot, "http=200") or rlf ~= nil then fail("no-recovery") end
 
@@ -500,4 +568,4 @@ log_line("host keychain: service=tillandsias item metadata identical before and 
 
 inside("pkill -f 'tillandsias --bash' 2>/dev/null; true")
 if not keep then down() end
-verdict.emit("ok:cold-start-acceptance:" .. tag .. ":served:" .. url .. ":http=200:lakanoa-shape=built-nested-served:router-failure=step-qualified:recovered:project=" .. forge_head, 0)
+verdict.emit("ok:cold-start-acceptance:" .. tag .. ":served:" .. url .. ":http=200:lakanoa-shape=built-nested-served:router-failure=step-qualified:recovered:app-dir=" .. app_dir_result .. ":project=" .. forge_head, 0)
