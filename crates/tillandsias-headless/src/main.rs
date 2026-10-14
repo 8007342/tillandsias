@@ -20925,7 +20925,7 @@ pub(crate) async fn publish_local_service(
 
     // @trace spec:local-web-preview — CLI must resolve a UNIQUE live lane.
     let instance = local_web_preview::unique_live_instance(project_name)?;
-    let result = local_web_preview::publish(project_name, &instance, "auto", debug).await?;
+    let result = local_web_preview::publish(project_name, &instance, "auto", None, debug).await?;
     result["url"]
         .as_str()
         .map(str::to_string)

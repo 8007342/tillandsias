@@ -52,10 +52,28 @@ critical_path:
     timeout_ms: 600000
     success_pattern: "test result: ok. 1 passed"
 
+  - step: "087743d0: with app_dir, the config, its assets and the static fallback resolve inside the app directory and nothing outside it is mounted (1667-6rtp)"
+    requirement: 087743d0
+    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias local_web_preview::tests::an_app_dir_confines_every_mount_to_the_app -- --exact 2>&1"
+    timeout_ms: 600000
+    success_pattern: "test result: ok. 1 passed"
+
+  - step: "99f3633b: the one caller-supplied path, app_dir, is refused by name when absolute, leaving the project, hidden or private, before any podman call (1667-6rtp)"
+    requirement: 99f3633b
+    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias local_web_preview::tests::app_dir_refusals_are_typed_and_come_before_anything_starts -- --exact 2>&1"
+    timeout_ms: 600000
+    success_pattern: "test result: ok. 1 passed"
+
+  - step: "99f3633b: app_dir must be a real directory in the live forge; a missing path, a file and a symlink are refused by name (1667-6rtp)"
+    requirement: 99f3633b
+    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias local_web_preview::tests::live_app_dir_must_be_a_real_directory_inside_the_project -- --exact 2>&1"
+    timeout_ms: 600000
+    success_pattern: "test result: ok. 1 passed"
+
 observability:
   traces:
     - "@trace spec:local-web-preview"
-  expected_log: "five pinned unit tests pass, each keyed to the requirement it pins"
+  expected_log: "eight pinned unit tests pass, each keyed to the requirement it pins"
   log_fields:
     spec: "local-web-preview"
     test: "local-web-preview-requirements"

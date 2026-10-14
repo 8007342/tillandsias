@@ -25,7 +25,11 @@ Chromium sibling, tray UI change, or host CA trust-store modification is approve
 
 All lifecycle calls MUST use the project and forge lane authenticated by the
 existing MCP socket. Caller-supplied project labels, host paths, image names,
-commands and port mappings MUST NOT select resources. Resolve the running
+commands and port mappings MUST NOT select resources. The one caller-supplied
+path, `app_dir`, only narrows the session's own project. It MUST be relative,
+contain no `..` and no hidden segment, and be a real directory with no symlink
+on the way in the live forge. Anything else is refused with a typed
+`invalid_app_dir` reason before any runtime or router mutation. Resolve the running
 forge's actual worktree, not `host_project_root()/project`, a git mirror, a
 second clone, a commit snapshot, or an exported copy. The sibling MUST see
 uncommitted and untracked source changes through the same backing filesystem.
@@ -156,6 +160,20 @@ Wrangler when exactly one root `wrangler.jsonc`, `wrangler.json` or
 Explicit Wrangler without a config MUST fail. Invalid Wrangler configuration
 MUST NOT silently fall back to static. Wrangler itself parses its configuration;
 hand-parsing JSONC as JSON or requiring `main` is incorrect.
+
+An optional `app_dir` (order 1667-6rtp) selects an app that lives in a project
+subdirectory with its own configuration, such as a monorepo. With it, "root"
+above means that directory: the configs are discovered there, and its assets,
+Worker entry and static fallback are resolved and mounted only from inside it.
+Without it, behaviour is unchanged. `service_reload` republishes the same
+`app_dir`.
+
+#### Scenario: Subdirectory app
+
+- **GIVEN** `observatorium/wrangler.jsonc` with `assets.directory="./build/web"` and no root config
+- **WHEN** `publish_local` runs in auto mode with `app_dir="observatorium"`
+- **THEN** local Wrangler serves `observatorium/build/web`
+- **AND** nothing outside `observatorium/`, including the project root's `public/`, is mounted
 
 Wrangler MUST execute `wrangler dev --local --ip 0.0.0.0 --port 8080` from the
 project root with an explicit selected config and private ephemeral writable
