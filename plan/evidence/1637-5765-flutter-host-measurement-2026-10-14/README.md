@@ -39,3 +39,16 @@ Pinned SDK: Flutter 3.47.7 stable (Dart 3.13.5), archive `stable/linux/flutter_l
 | app `build/web` (canvaskit, main.dart.js) | 40 MB | the project volume (RAM) |
 
 So one Flutter app adds about 70 MB to the project's RAM volume. macron.dev (176 MB) plus one Flame app comes to about 246 MB of 348 MB. It fits, but a second app or a large asset set would not. PUB_CACHE must stay on the cache volume: put on tmpfs, it alone would take 62% of the budget.
+
+## The image, built and run (image-run/)
+
+`images/flutter/Containerfile` was built in the same private store: 98 s, 2,796,849,689 bytes. The forge-time phases then ran against it as uid 1000 (`--userns=keep-id`), with the logging proxy as the only egress.
+
+| Phase | rc | Time | Hosts |
+|---|---|---|---|
+| `flutter --version` | 0 | 2 s | none. No 169.254.169.254 probe: `BOT=false` stops the bot detector |
+| `flutter create --platforms web app` | 0 | 14 s | pub.dev (242) |
+| `flutter pub add flame` | 0 | 3 s | pub.dev (33) |
+| `flutter build web --release` | 0 | 25 s | pub.dev (2; pub's freshness check in a fresh container) |
+
+With the image, the forge-time allowlist need is exactly `.pub.dev`. Project files are owned by the forge uid.
