@@ -16080,6 +16080,26 @@ struct BrowserDisplayContext {
     xdg_runtime_dir: Option<PathBuf>,
 }
 
+/// The WSLg compositor socket in a WSL2 guest (order 1656-yhjt).
+const WSLG_WAYLAND_SOCKET: &str = "/mnt/wslg/runtime-dir/wayland-0";
+
+/// The WSLg socket path as a WAYLAND_DISPLAY value, only if it is a socket.
+fn wslg_wayland_display(socket: &Path) -> Option<String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::FileTypeExt;
+        std::fs::metadata(socket)
+            .ok()
+            .filter(|m| m.file_type().is_socket())
+            .and_then(|_| socket.to_str().map(str::to_string))
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = socket;
+        None
+    }
+}
+
 /// Where the Wayland socket file is mounted inside the browser container: a
 /// private tmpfs runtime dir holding nothing else.
 const BROWSER_RUNTIME_DIR: &str = "/run/user/browser";
@@ -16087,14 +16107,24 @@ const BROWSER_RUNTIME_DIR: &str = "/run/user/browser";
 impl BrowserDisplayContext {
     /// @trace spec:tray-cli-coexistence
     fn from_env() -> Result<Self, String> {
-        Ok(Self {
-            wayland_display: std::env::var("WAYLAND_DISPLAY")
-                .ok()
-                .filter(|v| !v.is_empty()),
+        Ok(Self::from_env_with_wslg(Path::new(WSLG_WAYLAND_SOCKET)))
+    }
+
+    /// ORDER 1656-yhjt: inside the owned WSL2 guest the headless unit has no
+    /// WAYLAND_DISPLAY, but WSLg serves a compositor socket at a fixed path.
+    /// Only when WAYLAND_DISPLAY is unset AND that path is a socket is it used,
+    /// as an absolute WAYLAND_DISPLAY; a Linux session's value always wins.
+    fn from_env_with_wslg(wslg_socket: &Path) -> Self {
+        let wayland_display = std::env::var("WAYLAND_DISPLAY")
+            .ok()
+            .filter(|v| !v.is_empty())
+            .or_else(|| wslg_wayland_display(wslg_socket));
+        Self {
+            wayland_display,
             xdg_runtime_dir: std::env::var_os("XDG_RUNTIME_DIR")
                 .filter(|v| !v.is_empty())
                 .map(PathBuf::from),
-        })
+        }
     }
 
     /// The host Wayland socket FILE, or why there is none. WAYLAND_DISPLAY is
@@ -31396,6 +31426,53 @@ esac
         )
         .expect("browser spec for this session");
         std::fs::write(&out, spec.build_run_args().join("\n")).expect("write args");
+    }
+
+    /// ORDER 1656-yhjt: in a WSL2 guest with no WAYLAND_DISPLAY, the WSLg
+    /// socket is used only when it IS a socket, and a set WAYLAND_DISPLAY
+    /// always wins, so a Linux session resolves exactly as before.
+    #[cfg(unix)]
+    #[test]
+    fn browser_display_falls_back_to_the_wslg_socket_only_when_unset() {
+        let _guard = env_lock();
+        let dir = tempfile::tempdir().expect("wslg dir");
+        let sock = dir.path().join("wayland-0");
+        let _listener = std::os::unix::net::UnixListener::bind(&sock).expect("bind socket");
+        let plain = dir.path().join("not-a-socket");
+        std::fs::write(&plain, b"").expect("plain file");
+        let saved = std::env::var_os("WAYLAND_DISPLAY");
+        // SAFETY: env_lock serialises every test that touches the environment.
+        unsafe { std::env::remove_var("WAYLAND_DISPLAY") };
+        let unset_sock = BrowserDisplayContext::from_env_with_wslg(&sock).wayland_display;
+        let unset_plain = BrowserDisplayContext::from_env_with_wslg(&plain).wayland_display;
+        let unset_missing =
+            BrowserDisplayContext::from_env_with_wslg(&dir.path().join("absent")).wayland_display;
+        // SAFETY: as above.
+        unsafe { std::env::set_var("WAYLAND_DISPLAY", "wayland-1") };
+        let set = BrowserDisplayContext::from_env_with_wslg(&sock).wayland_display;
+        // SAFETY: as above.
+        unsafe {
+            match saved {
+                Some(v) => std::env::set_var("WAYLAND_DISPLAY", v),
+                None => std::env::remove_var("WAYLAND_DISPLAY"),
+            }
+        }
+        assert_eq!(unset_sock.as_deref(), sock.to_str());
+        assert_eq!(unset_plain, None, "a regular file is not a compositor");
+        assert_eq!(unset_missing, None);
+        assert_eq!(
+            set.as_deref(),
+            Some("wayland-1"),
+            "a session's WAYLAND_DISPLAY wins"
+        );
+        let (path, name) = BrowserDisplayContext {
+            wayland_display: unset_sock,
+            xdg_runtime_dir: None,
+        }
+        .wayland_socket()
+        .expect("absolute WSLg path needs no XDG_RUNTIME_DIR");
+        assert_eq!(path, sock);
+        assert_eq!(name, "wayland-0");
     }
 
     /// ORDER 1641-xbvq: with no Wayland session the browser REFUSES, naming why
