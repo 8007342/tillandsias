@@ -338,7 +338,7 @@ impl BrowserMcpServer {
         let tools = json!([
             {
                 "name": "browser.open",
-                "description": "Open a browser window for a project-local URL",
+                "description": "Open a browser window for a project-local URL. The reply's headless field says whether a human can see it: headless: true means NO human can see the window, and only agents drive it (over CDP in dev mode).",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -358,6 +358,10 @@ impl BrowserMcpServer {
                         "device": {
                             "type": "string",
                             "description": "The device to emulate, e.g. \"iphone 12 pro max\", \"galaxy s24\", \"desktop\" (default: the project's .tillandsias/config.toml [browser] device, else desktop). The window opens at the device's CSS viewport with its dpr, UA and touch."
+                        },
+                        "headless": {
+                            "type": "boolean",
+                            "description": "true: a headless window that no human can see, for agents driving it themselves (faster). false: a visible window a human can watch and use. Default: visible when this host has a display, else headless. A headless window is Chromium; a device that defaults to WebKit is emulated in Chromium, and the reply's notice says so."
                         }
                     },
                     "required": ["url"]
@@ -633,7 +637,8 @@ impl BrowserMcpServer {
             Ok(device) => device,
             Err(err) => return Self::tool_error(id, err),
         };
-        let engine = match args.get("engine").and_then(|value| value.as_str()) {
+        let engine_named = args.get("engine").and_then(|value| value.as_str());
+        let mut engine = match engine_named {
             None => Engine::for_device(&device.engine),
             Some(name) => match Engine::parse(name) {
                 Some(engine) => engine,
@@ -645,6 +650,45 @@ impl BrowserMcpServer {
                 }
             },
         };
+
+        // Order 1712-3fsw: headless when asked, or by default when this host
+        // cannot show a window (macOS today, Linux without Wayland).
+        let has_display = self.launch_mode.has_display();
+        let headless = match args.get("headless") {
+            None | Some(serde_json::Value::Null) => !has_display,
+            Some(serde_json::Value::Bool(headless)) => *headless,
+            Some(_) => {
+                return Self::tool_error(id, "INVALID_HEADLESS: headless must be true or false");
+            }
+        };
+        if !headless && !has_display {
+            return Self::tool_error(
+                id,
+                "DISPLAY_UNAVAILABLE: this host has no display to show a window on; \
+                 omit headless (or pass headless: true) for a headless window an agent drives over CDP",
+            );
+        }
+        // A headless window is Chromium: the WebKit engine needs a compositor.
+        // A device that only DEFAULTS to WebKit is emulated in Chromium and
+        // the reply says so; an explicit engine: "webkit" is refused.
+        let mut engine_notice = None;
+        if headless && engine == Engine::WebKit {
+            if engine_named.is_some() {
+                return Self::tool_error(
+                    id,
+                    format!(
+                        "ENGINE_UNSUPPORTED: a headless window is Chromium, and {} needs a display; \
+                         omit engine to emulate the device in Chromium",
+                        Engine::WebKit.label()
+                    ),
+                );
+            }
+            engine = Engine::Chromium;
+            engine_notice = Some(format!(
+                "Emulated in Chromium: {} needs a display, and this window is headless.",
+                Engine::WebKit.label()
+            ));
+        }
         if dev && engine == Engine::WebKit {
             return Self::tool_error(
                 id,
@@ -676,6 +720,7 @@ impl BrowserMcpServer {
             &device,
             dev,
             engine,
+            headless,
         ) {
             Ok(entry) => entry,
             Err(LaunchError::BrowserUnavailable) => {
@@ -691,6 +736,10 @@ impl BrowserMcpServer {
 
         let mut entry = entry;
         entry.owning_lane = self.owner();
+        entry.notice = match (engine_notice, entry.notice.take()) {
+            (Some(a), Some(b)) => Some(format!("{a} {b}")),
+            (a, b) => a.or(b),
+        };
         let notice = entry.notice.clone();
         let window_id = entry.window_id.clone();
         self.windows.insert(entry);
@@ -704,6 +753,8 @@ impl BrowserMcpServer {
                 "device": device.summary(),
                 "dev": dev,
                 "engine": engine.label(),
+                // Order 1712-3fsw: whether a human can see this window.
+                "headless": headless,
                 "notice": notice,
             }),
         }
@@ -893,7 +944,8 @@ impl BrowserMcpServer {
                     "window_id": window.window_id,
                     "url": window.url,
                     "title": window.title,
-                    "engine": window.engine
+                    "engine": window.engine,
+                    "headless": window.headless
                 })
             })
             .collect::<Vec<_>>();
@@ -924,7 +976,8 @@ impl BrowserMcpServer {
                 result: json!({
                     "url": window.url,
                     "title": window.title,
-                    "engine": window.engine
+                    "engine": window.engine,
+                    "headless": window.headless
                 }),
             },
             None => Self::tool_error(id, format!("WINDOW_NOT_FOUND: {window_id}")),
@@ -2051,11 +2104,18 @@ mod tests {
         starts: parking_lot::Mutex<Vec<(String, String)>>,
         stops: parking_lot::Mutex<Vec<String>>,
         preview_tls_port: Option<u16>,
+        /// Order 1712-3fsw: a host with no display (macOS VM, Linux without
+        /// Wayland), and what each start was asked for.
+        no_display: bool,
+        launches: parking_lot::Mutex<Vec<(bool, Engine)>>,
     }
 
     impl BrowserContainers for RecordingContainers {
         fn preview_tls_port(&self) -> Option<u16> {
             self.preview_tls_port
+        }
+        fn has_display(&self) -> bool {
+            !self.no_display
         }
         fn start(
             &self,
@@ -2064,6 +2124,9 @@ mod tests {
             self.starts
                 .lock()
                 .push((request.url.to_string(), request.project_label.to_string()));
+            self.launches
+                .lock()
+                .push((request.headless, request.engine));
             Ok(launcher::ContainerHandle {
                 container_name: format!("tillandsias-browser-{}-1", request.project_label),
                 network_name: "tillandsias-browser-net-1".to_string(),
@@ -2133,6 +2196,189 @@ mod tests {
             .await;
         assert!(matches!(closed, RpcResponse::Success { .. }));
         assert_eq!(*host.stops.lock(), vec!["tillandsias-browser-acme-1"]);
+    }
+
+    // ---- Order 1712-3fsw: headless when there is no display, or on request ----
+
+    fn headless_host(no_display: bool) -> (Arc<RecordingContainers>, BrowserMcpServer) {
+        let host = Arc::new(RecordingContainers {
+            preview_tls_port: Some(18443),
+            no_display,
+            ..Default::default()
+        });
+        let server = BrowserMcpServer::with_project_label(
+            McpServerConfig::default(),
+            "acme",
+            Some(host.clone() as Arc<dyn BrowserContainers>),
+        );
+        (host, server)
+    }
+
+    /// What an MCP client sees of a tools/call: the content text, parsed, or
+    /// the error text (1696-gz2y: never the bare payload).
+    async fn call_seen(
+        server: &BrowserMcpServer,
+        name: &str,
+        arguments: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        let response = server
+            .handle_request(RpcRequest {
+                id: Some(7),
+                method: "tools/call".to_string(),
+                params: json!({ "name": name, "arguments": arguments }),
+            })
+            .await;
+        let RpcResponse::Success { result, .. } = response else {
+            return Err(format!("not a success frame: {response:?}"));
+        };
+        let text = result["content"][0]["text"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
+        if result["isError"].as_bool() == Some(true) {
+            return Err(text);
+        }
+        serde_json::from_str(&text).map_err(|e| format!("content text is not JSON ({e}): {text}"))
+    }
+
+    const PREVIEW: &str = "https://www.acme.localhost:18443/";
+
+    /// macOS today, and Linux without Wayland: an Apple preset with no flags
+    /// opens HEADLESS in Chromium (WebKit needs a display), and the reply an
+    /// agent reads says so.
+    #[tokio::test]
+    async fn with_no_display_browser_open_runs_headless_and_says_so() {
+        let (host, server) = headless_host(true);
+        let seen = call_seen(
+            &server,
+            "browser.open",
+            json!({ "url": PREVIEW, "device": "iphone 12 pro max" }),
+        )
+        .await
+        .expect("a display-less host opens headless instead of refusing");
+        assert_eq!(seen["headless"], true, "{seen}");
+        assert_eq!(seen["engine"], "Chromium", "{seen}");
+        assert_eq!(seen["device"]["viewport"], json!({ "w": 428, "h": 926 }));
+        let notice = seen["notice"].as_str().unwrap_or_default();
+        assert!(
+            notice.contains("WebKit (approximates Safari) needs a display"),
+            "the fallback is announced: {seen}"
+        );
+        assert_eq!(*host.launches.lock(), vec![(true, Engine::Chromium)]);
+
+        let listed = call_seen(&server, "browser.list_windows", json!({}))
+            .await
+            .unwrap();
+        assert_eq!(listed["windows"][0]["headless"], true, "{listed}");
+    }
+
+    /// NEGATIVE CONTROL: a host WITH a display and no flag still opens a
+    /// visible window, in the device's own engine. The windowed path is
+    /// unchanged.
+    #[tokio::test]
+    async fn with_a_display_and_no_flag_the_window_is_visible_as_before() {
+        let (host, server) = headless_host(false);
+        let seen = call_seen(&server, "browser.open", json!({ "url": PREVIEW }))
+            .await
+            .unwrap();
+        assert_eq!(seen["headless"], false, "{seen}");
+        assert_eq!(*host.launches.lock(), vec![(false, Engine::Chromium)]);
+
+        let (host, server) = headless_host(false);
+        let seen = call_seen(
+            &server,
+            "browser.open",
+            json!({ "url": PREVIEW, "device": "iphone 12 pro max" }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(seen["engine"], "WebKit (approximates Safari)", "{seen}");
+        assert_eq!(*host.launches.lock(), vec![(false, Engine::WebKit)]);
+    }
+
+    /// headless: true on a display host runs headless: agents that drive
+    /// themselves skip the compositor.
+    #[tokio::test]
+    async fn headless_true_on_a_display_host_runs_headless() {
+        let (host, server) = headless_host(false);
+        let seen = call_seen(
+            &server,
+            "browser.open",
+            json!({ "url": PREVIEW, "headless": true, "dev": true }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(seen["headless"], true, "{seen}");
+        assert_eq!(seen["dev"], true, "{seen}");
+        assert_eq!(*host.launches.lock(), vec![(true, Engine::Chromium)]);
+    }
+
+    /// The refusals name their reason and start nothing.
+    #[tokio::test]
+    async fn headless_refusals_are_named_and_start_nothing() {
+        let (host, server) = headless_host(true);
+        let err = call_seen(
+            &server,
+            "browser.open",
+            json!({ "url": PREVIEW, "headless": false }),
+        )
+        .await
+        .unwrap_err();
+        assert!(err.starts_with("DISPLAY_UNAVAILABLE:"), "{err}");
+
+        let err = call_seen(
+            &server,
+            "browser.open",
+            json!({ "url": PREVIEW, "engine": "webkit" }),
+        )
+        .await
+        .unwrap_err();
+        assert!(err.starts_with("ENGINE_UNSUPPORTED:"), "{err}");
+        assert!(err.contains("headless"), "{err}");
+
+        let err = call_seen(
+            &server,
+            "browser.open",
+            json!({ "url": PREVIEW, "headless": "yes" }),
+        )
+        .await
+        .unwrap_err();
+        assert!(err.starts_with("INVALID_HEADLESS:"), "{err}");
+
+        assert!(host.launches.lock().is_empty(), "nothing started");
+    }
+
+    /// The tool description tells an agent what headless means for a human.
+    #[tokio::test]
+    async fn browser_open_describes_headless_as_invisible_to_humans() {
+        let (_host, server) = headless_host(true);
+        let listed = server
+            .handle_request(RpcRequest {
+                id: Some(1),
+                method: "tools/list".to_string(),
+                params: json!({}),
+            })
+            .await;
+        let RpcResponse::Success { result, .. } = listed else {
+            panic!("tools/list failed: {listed:?}");
+        };
+        let open = result["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|t| t["name"] == "browser.open")
+            .expect("browser.open is listed");
+        assert!(
+            open["description"]
+                .as_str()
+                .unwrap()
+                .contains("NO human can see the window"),
+            "{open}"
+        );
+        assert_eq!(
+            open["inputSchema"]["properties"]["headless"]["type"],
+            "boolean"
+        );
     }
 
     /// A window cannot outlive the server (the lane connection) that opened
