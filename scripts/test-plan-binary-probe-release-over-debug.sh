@@ -24,7 +24,11 @@ pass=0; fail=0
 ok()  { echo "ok:   $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1"; fail=$((fail+1)); }
 
-W="$(mktemp -d "${TMPDIR:-/tmp}/probe-release-over-debug.XXXXXX")"
+# 1680-yf9z: normalise W the way the probe's $PWD is (macOS's TMPDIR ends in
+# "/", so the raw string held "T//" and the LINUX arm failed on every Mac). The
+# "//" is DELIBERATE, so Linux exercises the macOS spelling too.
+W="$(mktemp -d "${TMPDIR:-/tmp}//probe-release-over-debug.XXXXXX")"
+W="$(cd "$W" && pwd)"
 trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/target/release" "$W/target/debug"
 
