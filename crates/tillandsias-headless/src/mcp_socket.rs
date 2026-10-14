@@ -247,7 +247,19 @@ pub(crate) fn handle_mcp_jsonrpc(
                         "required": ["category"]
                     }
                 }),
-                // 1637-5765: opt-in toolchains. Prepare never blocks: the
+                serde_json::json!({
+                    "name": "service_reload",
+                    "description": "Reload the authenticated lane's existing WEB preview runtime. This does not open or refresh a browser.",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "category": { "type": "string", "enum": ["WEB"] }
+                        },
+                        "required": ["category"]
+                    }
+                }),
+                // 1637-5765: opt-in toolchains, after the lifecycle tools
+                // (whose order is pinned). Prepare never blocks: the
                 // forge's `flutter` shim polls it and shows the progress.
                 serde_json::json!({
                     "name": "toolchain_prepare",
@@ -258,17 +270,6 @@ pub(crate) fn handle_mcp_jsonrpc(
                             "toolchain": { "type": "string", "enum": ["flutter"] }
                         },
                         "required": ["toolchain"]
-                    }
-                }),
-                serde_json::json!({
-                    "name": "service_reload",
-                    "description": "Reload the authenticated lane's existing WEB preview runtime. This does not open or refresh a browser.",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "category": { "type": "string", "enum": ["WEB"] }
-                        },
-                        "required": ["category"]
                     }
                 }),
             ];
