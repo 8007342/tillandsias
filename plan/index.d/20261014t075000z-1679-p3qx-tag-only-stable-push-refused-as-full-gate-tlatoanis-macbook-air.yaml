@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's direction (2026-10-14), found promoting v56.10.13.1 from tlatoanis-macbook-air. Unclaimed.
+packets:
+  - packet_id: a-tag-only-push-of-the-stable-tag-is-refused-as-needing-the-full-gate
+    order: 1679-p3qx
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [hooks, release, pre-push, promotion]
+    estimated_hours: 3
+    related: [1061-zd83, 864-mk2p, 305, 1427-r2d2]
+    depends_on: []
+    title: |
+      The pre-push gate refuses a tag-only push of refs/tags/stable as "full gate required", which leaves a stable promotion half done
+    context: |
+      MEASURED 2026-10-14 ~00:50Z, tlatoanis-macbook-air, on a clean linux-next at 1ae5c3a41. `scripts/promote-stable.sh v56.10.13.1` flipped the GitHub release (/releases/latest = v56.10.13.1, prerelease=false) and moved the LOCAL stable tag to 8a00d2583. Its `git push origin refs/tags/stable --force` was then refused by scripts/hooks/pre-push-local-gate.sh with "plan-only lane: not applicable — remote base 219aea3b4… is not present locally (full gate required)" (line ~661), then "✗ pre-push refused: ./build.sh --check has never run in this checkout". The release and the tag were left disagreeing: the 1061-zd83 split state.
+      The remote sha is the OLD annotated tag OBJECT, which a checkout never fetches, so `git cat-file -e` fails and the push falls to the full gate. A tag move uploads no tree change; judging it on a working-tree build stamp checks nothing about what is pushed.
+    exit_criteria:
+      - 'a push whose only ref update is refs/tags/stable (annotated tag, force) is judged on the tagged commit: it is accepted when that commit is an ancestor of origin/main, with no build stamp required (a test drives the hook with such a ref line, red today)'
+      - 'NEGATIVE CONTROL: the same tag pointing at a commit NOT on origin/main is refused'
+      - 'a mixed push (the tag plus any branch update) still takes the normal gate'
+      - 'promote-stable.sh pushes the stable tag through that rule end to end, so a promotion cannot stop after the release flip; or it refuses BEFORE the flip when the tag push would be refused'
+    unscoreable: "a pre-push lane decision for tag-only pushes, pinned by hook tests with ancestor and non-ancestor commits"
