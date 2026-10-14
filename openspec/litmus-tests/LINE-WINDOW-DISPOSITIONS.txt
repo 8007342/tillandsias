@@ -42,6 +42,18 @@ litmus-host-browser-mcp-lane-socket-shape.yaml | THE WINDOW READS THE STEP'S OWN
     because the step authored every line of the file it reads. Converting it
     would add indirection with no falsifiability gained.
 
+litmus-inference-engine-parity-shape.yaml | ADJACENCY IS THE INVARIANT, INSIDE AN ALREADY-STRUCTURAL RANGE.
+    The endpoint step first cuts `fn build_inference_run_args` with
+    `awk '/^fn build_inference_run_args\(/,/^}/'`, so the outer bound is
+    syntactic. Inside that range, `grep -A1 -F '"--network-alias".into(),'` reads
+    the flag's VALUE, which in an argv vec is by construction the next element
+    (rustfmt puts each element on its own line). The step asserts that this
+    value is `"inference".into(),`. A flag and its value being adjacent is the
+    property under test, so a structural range would not be more correct.
+    RESIDUAL, stated: a reformat that put the flag and its value on one line
+    would still pass, because the -A1 window then holds both. Order 1673-mptw;
+    the window came from 482c (071c9a1d3, c397ff1ae).
+
 litmus-inference-gpu-device-args.yaml | THE WINDOW'S OUTPUT IS DISCARDED.
     `grep -A2 -F '"gpu-rocm" =>' … >/dev/null` is an existence probe whose
     output goes nowhere; the verdict is decided by the `awk` range that follows
