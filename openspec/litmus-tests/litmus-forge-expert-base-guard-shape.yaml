@@ -90,7 +90,7 @@ critical_path:
     # Judging by branch name would break every end-user project, whose branches
     # are none of Tillandsias's business. If a future edit reintroduces a
     # branch-name comparison here, this goes red.
-    command: "if grep -nE '(\\[|\\bif\\b).*(linux-next|osx-next|windows-next)' scripts/lua/check-forge-expert-base.lua | grep -v '^[0-9]*:#'; then echo 'FAIL: guard branches on a Tillandsias branch name'; exit 1; fi; grep -q 'crates/tillandsias-plan/src/answer.rs' scripts/lua/check-forge-expert-base.lua && echo 'ok: source-presence test'"
+    command: "hits=$(grep -nE '(\\[|\\bif\\b).*(linux-next|osx-next|windows-next)' scripts/lua/check-forge-expert-base.lua); code=$(grep -v -e '^[0-9]*:--' -e '^$' <<<\"$hits\"); if [ -n \"$code\" ]; then echo 'FAIL: guard branches on a Tillandsias branch name'; echo \"$code\"; exit 1; fi; grep -q 'crates/tillandsias-plan/src/answer.rs' scripts/lua/check-forge-expert-base.lua && echo 'ok: source-presence test'"
     timeout_ms: 5000
     expected_behavior: "ok: source-presence test"
 
@@ -124,7 +124,7 @@ critical_path:
     # FAIL. When the probe finds nothing (a forge with no target/, or a binary
     # too old to answer `capabilities`) it returns 1 and the original chain runs
     # exactly as before.
-    command: "bin=$(mf_plan_binary 2>/dev/null || true); [ -n \"$bin\" ] || bin=$(command -v tillandsias-plan 2>/dev/null || true); if [ -z \"$bin\" ]; then for c in ./target/release/tillandsias-plan ./target/debug/tillandsias-plan \"$HOME/.local/bin/tillandsias-plan\" /usr/local/bin/tillandsias-plan /usr/bin/tillandsias-plan; do [ -x \"$c\" ] && { bin=\"$c\"; break; }; done; fi; [ -n \"$bin\" ] || { echo 'SKIP: no tillandsias-plan binary on this host'; exit 0; }; out=$(\"$bin\" methodology 'forge_base_determinism.enforced_by' 2>/dev/null); printf '%s' \"$out\" | grep -q '\"confidence\": \"exact\"' || { echo 'FAIL: rule not resolvable by the methodology expert'; exit 1; }; printf '%s' \"$out\" | grep -q 'check-forge-expert-base.lua' && echo 'ok: methodology rule queryable'"
+    command: "bin=$(mf_plan_binary 2>/dev/null || true); [ -n \"$bin\" ] || bin=$(command -v tillandsias-plan 2>/dev/null || true); if [ -z \"$bin\" ]; then for c in ./target/release/tillandsias-plan ./target/debug/tillandsias-plan \"$HOME/.local/bin/tillandsias-plan\" /usr/local/bin/tillandsias-plan /usr/bin/tillandsias-plan; do [ -x \"$c\" ] && { bin=\"$c\"; break; }; done; fi; [ -n \"$bin\" ] || { echo 'SKIP: no tillandsias-plan binary on this host'; exit 0; }; out=$(\"$bin\" methodology 'forge_base_determinism.enforced_by' 2>/dev/null); grep -q '\"confidence\": \"exact\"' <<<\"$out\" || { echo 'FAIL: rule not resolvable by the methodology expert'; exit 1; }; grep -q 'check-forge-expert-base.lua' <<<\"$out\" && echo 'ok: methodology rule queryable'"
     timeout_ms: 20000
     expected_behavior: "ok: methodology rule queryable"
 
