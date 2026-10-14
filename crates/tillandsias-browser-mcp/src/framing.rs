@@ -63,6 +63,25 @@ impl RpcRequest {
     }
 }
 
+/// Shape a successful `tools/call` payload as an MCP `CallToolResult`.
+///
+/// MCP clients render `content` (and `structuredContent`), never bare result
+/// fields, so a payload returned bare reaches the agent empty (order
+/// 1696-gz2y). The payload travels twice: as JSON text, which every client
+/// shows, and as `structuredContent` when it is an object. A payload that
+/// already carries a `content` array is returned unchanged.
+pub fn tool_result_content(payload: Value) -> Value {
+    if payload.get("content").is_some_and(Value::is_array) {
+        return payload;
+    }
+    let text = serde_json::to_string(&payload).unwrap_or_else(|_| payload.to_string());
+    let mut result = json!({ "content": [{ "type": "text", "text": text }] });
+    if payload.is_object() {
+        result["structuredContent"] = payload;
+    }
+    result
+}
+
 impl RpcResponse {
     /// Serialize to a single-line JSON string (without trailing newline).
     pub fn to_line(&self) -> Result<String, serde_json::Error> {
