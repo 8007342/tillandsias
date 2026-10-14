@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found by a full darwin ./build.sh --check on tlatoanis-macbook-air, 2026-10-14, after 1680/1681/1682 were fixed locally. Fix on work/1683-tgyc.
+packets:
+  - packet_id: the-preflight-door-never-sweeps-a-same-second-index-lock-on-a-mac-because-bash-3-2-nt-is-whole-seconds
+    order: 1683-tgyc
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [build, preflight, darwin, gate, portability, git]
+    estimated_hours: 1
+    related: [1650-fb7z, 1680-yf9z, 1681-otmp, 1682-fgjo]
+    depends_on: []
+    title: |
+      build.sh _pf_sweep_index_lock dates the lock with `[ -nt ]`, which bash 3.2 compares in whole seconds, so on a Mac a lock made in the run's first second is never swept and the 1650-fb7z fixture refuses --check
+    context: |
+      MEASURED 2026-10-14, tlatoanis-macbook-air, /bin/bash 3.2.57. With 1680/1681/1682 fixed locally, ./build.sh --check failed "violation:door-index-lock-sweep:3-failed" (4 failed standalone: arms 2, 3, 4, 5 with late-lock=left and no swept: or kept: line). Cause: `[ "$_gd/index.lock" -nt "$1" ]` in _pf_sweep_index_lock. bash 3.2 compares whole seconds, so two files 1.4 ms apart read as not newer (measured), and the sweep returns before deciding anything. That's a product gap in the door on Macs, not only a fixture bug; the fixture creates its lock at once, so it always hits it. `find LOCK -newer MARK` is sub-second on BSD and GNU (darwin: same-second yes, reverse no, equal no).
+    exit_criteria:
+      - 'the sweep dates the lock with a sub-second comparison (find -newer) and the 1650-fb7z fixture passes all 8 arms on darwin bash 3.2 (red at bc4aa5aff: 4 failed standalone)'
+      - 'NEGATIVE CONTROLS still hold on darwin: a held lock is kept (arm 4), a live git.exe keeps it (arm 5), a lock older than the run is untouched (arm 6)'
+      - 'a darwin ./build.sh --check passes door-index-lock-sweep'
+    unscoreable: "a bash 3.2 timestamp-resolution fix in the preflight door, pinned by the existing 8-arm fixture on darwin"

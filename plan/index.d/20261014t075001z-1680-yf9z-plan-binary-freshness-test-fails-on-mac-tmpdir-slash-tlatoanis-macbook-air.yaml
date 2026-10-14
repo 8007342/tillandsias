@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found by ./build.sh --check on tlatoanis-macbook-air, 2026-10-14. Unclaimed.
+packets:
+  - packet_id: test-plan-binary-freshness-fails-on-every-mac-because-tmpdir-ends-in-a-slash
+    order: 1680-yf9z
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [build, tests, darwin, gate]
+    estimated_hours: 1
+    related: [1637-arwp]
+    depends_on: []
+    title: |
+      scripts/test-plan-binary-freshness.sh fails ./build.sh --check on every Mac: it expects "$TMPDIR/…" verbatim, and macOS's TMPDIR ends in "/"
+    context: |
+      MEASURED 2026-10-14, tlatoanis-macbook-air, linux-next at 2fded2c54: `./build.sh --check` exited 1 with "plan-binary-freshness: 19 passed, 2 failed". Both failures are path spelling, not behaviour:
+        FAIL fresh binary prints its path (expected /var/folders/…/T//plan-binary-freshness.vMUXdA/target/release/tillandsias-plan, got /var/folders/…/T/plan-binary-freshness.vMUXdA/target/release/tillandsias-plan)
+        FAIL healed binary prints its path (same)
+      The test builds TMPD from mktemp -d "${TMPDIR:-/tmp}/plan-binary-freshness.XXXXXX". macOS sets TMPDIR with a trailing slash, so TMPD contains "T//". Since c87be532a (1637-arwp) resolve_plan_binary returns the probed candidate as a normalised absolute path, so the comparison at lines ~104 and ~117 fails. A darwin --check cannot pass, so no Mac can earn the pre-push stamp. Workaround: run with TMPDIR="${TMPDIR%/}" (the system temp dir minus its trailing slash). A TMPDIR inside the checkout is NOT a workaround: it fails four headless tests that need scratch outside a git repo and outside $HOME (measured 2026-10-14).
+    exit_criteria:
+      - 'the test normalises its expected path the same way the product does (or builds TMPD from a slash-free base), and passes with TMPDIR="/var/folders/…/T/" (trailing slash), the macOS default'
+      - 'NEGATIVE CONTROL: a resolve that prints a DIFFERENT binary path still fails the two path checks'
+    unscoreable: "a test-harness path-spelling fix, pinned by running it with a trailing-slash TMPDIR"
