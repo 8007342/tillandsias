@@ -33,10 +33,9 @@ action, router auth, or the isolated Chromium app window.
   route reaches OpenCode Web before Chromium opens.
 - The browser runs in `tillandsias-chromium-framework:v<VERSION>` through the
   typed Podman launch profile, not Tauri and not the daily host browser.
-- Git identity comes from GitHub Login's cached
-  `~/.cache/tillandsias/secrets/git/.gitconfig`; the launcher injects
-  `GIT_AUTHOR_*`/`GIT_COMMITTER_*`, and the entrypoint writes repo-local
-  `user.name`/`user.email`.
+- Git identity comes from the signed-in GitHub App user: the launcher passes
+  `TILLANDSIAS_GIT_*` (never `GIT_AUTHOR_*`), and the entrypoint writes
+  `user.name`/`user.email` into git's XDG global config.
 - Project bind mounts are protected with `TILLANDSIAS_PROJECT_HOST_MOUNT=1`.
   Forge entrypoints must use `/home/forge/src/<project>` in place and must
   never wipe or clone over that path.

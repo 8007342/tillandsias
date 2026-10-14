@@ -37,9 +37,10 @@ No active code path should use a bind-mounted token file or `GIT_ASKPASS`.
 
 ### Git identity
 
-- Git author name and email live in `~/.cache/tillandsias/secrets/git/.gitconfig`.
-- That file contains identity metadata only.
-- The launcher injects `GIT_AUTHOR_*` and `GIT_COMMITTER_*` from the cached identity.
+- The git identity is derived from the signed-in GitHub App user (cached as
+  `github-app-user.tsv`, a public id, login and name; not a secret).
+- The launcher passes it as `TILLANDSIAS_GIT_*`; the forge writes it as git config.
+- No `GIT_AUTHOR_*` or `GIT_COMMITTER_*` is exported, and nothing is prompted for.
 
 ## Validation
 

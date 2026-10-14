@@ -28,7 +28,7 @@ The host Rust process is the only code that reads or writes that token.
 
 - No container talks to the keyring directly.
 - No active path uses a bind-mounted token file or `GIT_ASKPASS`.
-- Git identity is stored separately in `~/.cache/tillandsias/secrets/git/.gitconfig`.
+- No git identity is stored on the host: each forge derives it from the cached GitHub App user.
 
 ## Validation
 

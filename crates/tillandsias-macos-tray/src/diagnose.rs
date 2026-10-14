@@ -1851,176 +1851,6 @@ fn proxy_exec_preamble(headless_arg: &str) -> String {
     )
 }
 
-/// How long a NON-INTERACTIVE stdin gets to answer a prompt before we give up.
-///
-/// Generous compared to `STDIN_FORWARD_TIMEOUT`'s 5s, because a pipe feeding a
-/// three-prompt login may be doing real work between lines. Still bounded,
-/// because the alternative is unbounded (see `prompt_line`).
-const PROMPT_LINE_PIPED_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
-
-/// Prompt the user on the host terminal and read a single line. When `hidden`,
-/// terminal echo is disabled via `stty -echo` for the duration (no extra crate
-/// dep) so secrets like the PAT are not shown. Returns the trimmed line, or an
-/// empty string when stdin could not answer — callers already treat empty as a
-/// hard error.
-///
-/// 663-69kp THIRD PATH. 689-stig bounded the `--exec-guest` stdin read and
-/// 689-y2my dealt with the guest heartbeat resetting the exec idle deadline.
-/// This function was the remaining unbounded read, and it is the one
-/// `--github-login` uses (three call sites). It is worse-placed than the one
-/// 689-stig fixed, in a way that changes the SIGNATURE of the hang:
-///
-///   * `read_line` here had NO `is_terminal()` guard and no timeout at all;
-///   * it is called from inside a `DynamicExpect` response closure, i.e. AFTER
-///     the VM is booted and the control-wire stream is open — so the symptom is
-///     NOT the pre-breadcrumb silence of 689-stig, it is a wedge that already
-///     printed its progress lines and is holding a live VM;
-///   * and per the comment on the `expects` list below, the guest's 30s PTY
-///     heartbeat keeps resetting the exec idle deadline (689-y2my), so nothing
-///     upstream bounds the wait either.
-///
-/// So an unattended `--github-login` WITHOUT `--with-token` boots a VM, reaches
-/// the guest's token prompt, and then blocks here forever on a stdin whose
-/// parent never closes the write end — an agent harness, a launchd job, a
-/// background shell. The 07-29 prompt-ordering deadlock the comment below
-/// describes was a SECOND, independent cause of the same 70-minute wedges; it
-/// was fixed by reordering, which is why this one survived.
-///
-/// The rule mirrors 689-stig's insight — "not a TTY" is not "a pipe that will
-/// EOF" — without breaking interactive use:
-///   * stdin IS a terminal: read unbounded. A human is reading the prompt and
-///     typing a token; timing that out would be the bug.
-///   * stdin is NOT a terminal: bounded, and on expiry refuse LOUDLY telling the
-///     operator how to answer by pipe.
-///
-/// The refusal deliberately does NOT suggest `--with-token`. That is a
-/// tillandsias-headless (GUEST) flag with no macOS host equivalent, and
-/// suggesting it here would repeat 663-acdw, where it cost one session two blind
-/// credential runs. On macOS the host drives the guest login over the control
-/// wire, so PIPING credentials to `--github-login` is the supported unattended
-/// path (main.rs:262-271 is the authority) — which is exactly the path this
-/// bounded read has to keep working, not merely tolerate.
-fn prompt_line(label: &str, hidden: bool) -> String {
-    use std::io::{IsTerminal, Write};
-
-    print!("{label}: ");
-    let _ = std::io::stdout().flush();
-
-    // Echo suppression must be undone on EVERY exit from this function,
-    // including the timeout path. Leaving a terminal with echo off after an
-    // already-confusing hang is a hostile end state, and it outlives the
-    // process.
-    if hidden {
-        let _ = std::process::Command::new("/bin/stty")
-            .arg("-echo")
-            .status();
-    }
-    let restore_echo = || {
-        if hidden {
-            let _ = std::process::Command::new("/bin/stty").arg("echo").status();
-            println!(); // newline the suppressed Enter would have produced
-        }
-    };
-
-    if std::io::stdin().is_terminal() {
-        let mut line = String::new();
-        let _ = std::io::stdin().read_line(&mut line);
-        restore_echo();
-        return line.trim().to_string();
-    }
-
-    // Non-interactive: the read happens on a detached helper thread so the
-    // timeout is real — a thread parked in `read(2)` cannot be cancelled. This
-    // is a one-shot process, so the thread is left to die with it.
-    let (tx, rx) = std::sync::mpsc::channel::<String>();
-    std::thread::spawn(move || {
-        let mut line = String::new();
-        let _ = std::io::stdin().read_line(&mut line);
-        let _ = tx.send(line);
-    });
-    match rx.recv_timeout(PROMPT_LINE_PIPED_TIMEOUT) {
-        Ok(line) => {
-            restore_echo();
-            line.trim().to_string()
-        }
-        Err(_) => {
-            restore_echo();
-            eprintln!(
-                "{}",
-                piped_timeout_remedy(label, PROMPT_LINE_PIPED_TIMEOUT.as_secs())
-            );
-            String::new()
-        }
-    }
-}
-
-/// The refusal `prompt_line` prints when a piped stdin sent no line in time.
-///
-/// ORDER 1566-tkan. This used to tell the operator to pipe "token, author
-/// name, author email". Since 1383-dkxi the credential step is a device flow
-/// with NO expect for it, so the host reads exactly two lines and the FIRST is
-/// the author name: anyone following the old remedy put their token into
-/// user.name, and from there into every pushed commit. List only the lines the
-/// host reads, and never mention a token.
-fn piped_timeout_remedy(label: &str, secs: u64) -> String {
-    format!(
-        "[github-login] stdin is not a terminal and sent no line for \"{label}\" \
-         within {secs}s — refusing to wait longer.\n\
-         A VM is already booted and the guest is waiting at its prompt, so an \
-         unbounded wait here holds a live VM open indefinitely (663-69kp).\n\
-         The GitHub sign-in itself is a device flow: approve the one-time code \
-         printed above on your phone or in a browser. Nothing else is read for it.\n\
-         The host then reads exactly two lines from stdin — the git author name, \
-         then the git author email — with the producer closing its end:\n\
-         \x20 printf '%s\\n%s\\n' \"$NAME\" \"$EMAIL\" | tillandsias-tray --github-login\n\
-         (`--with-token` is a tillandsias-headless GUEST flag and is NOT accepted \
-         here — see 663-acdw.)"
-    )
-}
-
-/// GitHub credential prefixes (classic, OAuth, user-to-server, server-to-server,
-/// refresh, fine-grained). ORDER 1566-tkan.
-const GITHUB_CREDENTIAL_PREFIXES: [&str; 6] =
-    ["ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_"];
-
-/// True when `answer` carries something shaped like a GitHub credential: one of
-/// [`GITHUB_CREDENTIAL_PREFIXES`] at the start or after a non-alphanumeric
-/// character, so `ghp_…`, `<ghp_…>` and `x ghp_…` all match but a name that
-/// merely contains the letters does not.
-fn looks_like_github_credential(answer: &str) -> bool {
-    let lower = answer.to_ascii_lowercase();
-    GITHUB_CREDENTIAL_PREFIXES.iter().any(|p| {
-        lower
-            .match_indices(p)
-            .any(|(i, _)| i == 0 || !lower.as_bytes()[i - 1].is_ascii_alphanumeric())
-    })
-}
-
-/// Validate one git-identity answer before it is sent to the guest.
-///
-/// ORDER 1566-tkan. An answer shaped like a GitHub credential is REFUSED here,
-/// before anything reaches the guest: a token written to user.name or
-/// user.email is public the moment a commit is pushed, and cannot be revoked
-/// from history. The refusal never echoes the answer.
-fn identity_answer(field: &str, answer: &str) -> Result<Vec<u8>, String> {
-    if answer.is_empty() {
-        return Err("--github-login: git author name and email are both required".to_string());
-    }
-    if looks_like_github_credential(answer) {
-        return Err(format!(
-            "--github-login: REFUSED — the git author {field} looks like a GitHub \
-             credential (it carries a ghp_/gho_/ghu_/ghs_/ghr_/github_pat_ prefix), so \
-             nothing was sent to the guest.\n\
-             why: the author {field} is written into every commit you push, where a \
-             token is public and cannot be removed from history.\n\
-             remedy: answer with your name and a (noreply) email only — the GitHub \
-             sign-in is the device code shown above and reads nothing from stdin. If \
-             you piped a token, revoke it at https://github.com/settings/tokens."
-        ));
-    }
-    Ok(format!("{answer}\n").into_bytes())
-}
-
 /// `--transport-conformance`: run the shared GuestTransport conformance
 /// fixtures (order 128) against the live VZ backend (order 126 exit
 /// criterion 3, "both primitives pass the shared conformance fixtures on
@@ -2146,12 +1976,11 @@ pub fn transport_conformance_main() -> i32 {
 /// The credential is a GitHub DEVICE FLOW (1381-za6b, 3a2b01d9e): the guest
 /// prints a QR code, a verification URL and a one-time code, which reach this
 /// terminal verbatim (1383-dkxi), and the user approves on their phone or in a
-/// browser. No token is typed and none passes through the host. The user is
-/// then **prompted on the host terminal for their OWN** git author name and
-/// email — nothing is defaulted from the operator's host git config — and
-/// those are fed to the guest's prompts via the expect-style PTY input path.
+/// browser. No token is typed and none passes through the host. Nothing else
+/// is asked (1668-8jmq): the forge's git identity comes from the signed-in App
+/// user, so there is no git identity prompt on either side.
 ///
-/// Operator usage: run in a terminal, scan the QR code, answer the prompts —
+/// Operator usage: run in a terminal and scan the QR code —
 ///   tillandsias-tray --github-login
 ///
 /// @trace spec:gh-auth-script, plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md
@@ -2241,27 +2070,17 @@ pub fn github_login_main() -> i32 {
         // waited forever — the same sequential-expect deadlock as 2026-08-10,
         // triggered by the guest changing its first step again. There is
         // nothing to TYPE for the credential, so there is no expect for it:
-        // the device code reaches the user through the raw output sink below,
-        // and the first thing the host answers is the git identity.
-        let expects = vec![
-            DynamicExpect {
-                needle: b"author name".to_vec(),
-                label: "git author name".to_string(),
-                response: Box::new(|| {
-                    identity_answer("name", &prompt_line("Git author name", false))
-                }),
-            },
-            DynamicExpect {
-                needle: b"author email".to_vec(),
-                label: "git author email".to_string(),
-                response: Box::new(|| {
-                    identity_answer("email", &prompt_line("Git author email", false))
-                }),
-            },
-        ];
-        eprintln!(
-            "[github-login] driving guest login (device code + QR -> git name -> email)…"
-        );
+        // the device code reaches the user through the raw output sink below.
+        //
+        // ORDER 1668-8jmq. Nor is there an identity step any more: the guest no
+        // longer prompts for a git identity (every forge takes its
+        // identity from the signed-in App user), so the list is EMPTY. Keeping
+        // an expect for a prompt the guest never prints is the sequential-expect
+        // deadlock again, unbounded because the guest's 30s PTY heartbeat
+        // resets the idle deadline (689-y2my). With no expects the exec streams
+        // the device flow to the terminal and ends when the guest exits.
+        let expects: Vec<DynamicExpect> = Vec::new();
+        eprintln!("[github-login] driving guest login (device code + QR)…");
         let github_login_preamble = proxy_exec_preamble("--github-login");
         let result = exec_over_stream_expect_dynamic_with_output(
             stream,
@@ -2270,8 +2089,8 @@ pub fn github_login_main() -> i32 {
                 "-lc",
                 // The control-wire exec env is cleared (no host-env leak), but
                 // the guest `--github-login` needs:
-                //   - HOME: prompt_and_store_git_identity writes the managed
-                //     git identity (name/email — not the token) under $HOME.
+                //   - HOME: the guest caches the App user under its cache dir,
+                //     which resolves from $HOME.
                 //   - XDG_RUNTIME_DIR (+writable): require_desktop_user_session
                 //     gate on the DesktopUserSession lane.
                 //   - TILLANDSIAS_VAULT_API_BASE_URL: the guest vault bootstrap
@@ -2852,9 +2671,7 @@ fn parse_aarch64_qcow2_sha(manifest_toml: &str) -> Option<String> {
 mod tests {
     use tillandsias_control_wire::secure_wire_mode::{SecureWireMode, parse_secure_wire_mode};
 
-    use super::{
-        GITHUB_CREDENTIAL_PREFIXES, headless_service_line, identity_answer, piped_timeout_remedy,
-    };
+    use super::headless_service_line;
 
     /// ORDER 1084-x8ya, CRITERION 4 — a guest that is STILL COMING UP must not
     /// be reported as this defect, and must not be called failed.
@@ -3237,159 +3054,14 @@ mod tests {
         &tail[..end]
     }
 
-    /// 663-69kp THIRD PATH. `prompt_line` is the only remaining stdin read on a
-    /// one-shot path, and it had no `is_terminal()` guard and no timeout. It is
-    /// reached from inside the `DynamicExpect` closures — after the VM is booted
-    /// and the control wire is open — and per 689-y2my the guest's 30s PTY
-    /// heartbeat keeps resetting the exec idle deadline, so nothing upstream
-    /// bounds it either. An unattended `--github-login` therefore booted a VM and
-    /// then blocked here forever on a stdin whose parent never closes.
-    ///
-    /// HONEST LIMIT OF THIS TEST: it is a SOURCE-SHAPE assertion, not a
-    /// behavioural one. It cannot prove the timeout fires — only that the guard
-    /// and the bound are present and that the interactive path stays unbounded.
-    /// A behavioural test would have to boot a VM, which is far too heavy for a
-    /// unit test and is why the property is pinned this way rather than not at
-    /// all. Treat a green result here as "the shape is right", not as "measured".
-    /// ORDER 1566-tkan. The piped-stdin remedy must list only the lines the host
-    /// reads (author name, author email). Pre-fix it printed
-    /// `printf … "$TOKEN" "$NAME" "$EMAIL"`, and the device-flow host reads the
-    /// FIRST piped line as the author name. Scanned in the SOURCE so this arm
-    /// compiles, and fails, against the pre-fix tree too.
+    /// ORDER 1668-8jmq. The guest no longer prompts for a git identity, so the
+    /// host answers nothing: an expect for a prompt the guest never prints is
+    /// the sequential-expect deadlock (1383-dkxi), unbounded because the guest's
+    /// 30s PTY heartbeat resets the idle deadline (689-y2my). A SOURCE-SHAPE
+    /// pin, like the ones it replaces. The behavioural half lives in vm-layer:
+    /// an empty expect list ends when the guest exits.
     #[test]
-    fn the_piped_remedy_never_asks_for_a_token() {
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/diagnose.rs"));
-        let production = source
-            .split("\nmod tests {")
-            .next()
-            .expect("production half");
-        // Built from parts so this test's own text cannot match itself.
-        let piped_token = concat!("\\\"$", "TOKEN");
-        assert!(
-            !production.contains(piped_token),
-            "the --github-login remedy still tells the operator to pipe a token, which \
-             the device-flow host reads as the git author NAME (1566-tkan)"
-        );
-        let token_first = concat!("(token, ", "author name");
-        assert!(
-            !production.contains(token_first),
-            "the --github-login remedy still orders the piped lines token-first (1566-tkan)"
-        );
-    }
-
-    /// ORDER 1566-tkan. The remedy's own text: two lines, name then email.
-    #[test]
-    fn the_piped_remedy_pipes_exactly_name_then_email() {
-        let r = piped_timeout_remedy("Git author name", 30);
-        assert!(
-            r.contains(r#"printf '%s\n%s\n' "$NAME" "$EMAIL" | tillandsias-tray --github-login"#),
-            "{r}"
-        );
-        assert!(!r.to_ascii_lowercase().contains("$token"), "{r}");
-        assert!(
-            r.contains("device flow"),
-            "the remedy must say how the sign-in itself happens: {r}"
-        );
-    }
-
-    /// ORDER 1566-tkan. A credential-shaped author name or email is refused
-    /// before anything is sent, and the refusal never echoes it.
-    #[test]
-    fn a_credential_shaped_identity_answer_is_refused_unsent() {
-        for prefix in GITHUB_CREDENTIAL_PREFIXES {
-            let fake = format!("{prefix}AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
-            for (field, answer) in [
-                ("name", fake.clone()),
-                ("name", fake.to_ascii_uppercase()),
-                ("name", format!("Ana <{fake}>")),
-                ("email", format!("{fake}@users.noreply.github.com")),
-            ] {
-                let got = identity_answer(field, &answer);
-                let err = got.expect_err(&format!("{field} answer {prefix}… must be refused"));
-                assert!(err.contains("REFUSED"), "{err}");
-                assert!(
-                    !err.contains(&fake),
-                    "the refusal must never echo the credential: {err}"
-                );
-            }
-        }
-    }
-
-    /// ORDER 1566-tkan NEGATIVE CONTROL: ordinary identities still pass, byte
-    /// for byte, including names that merely contain the letters of a prefix.
-    #[test]
-    fn an_ordinary_identity_answer_still_passes() {
-        for (field, answer) in [
-            ("name", "Tlatoāni"),
-            ("name", "Ana María García-López"),
-            ("name", "Ghpaul Ghosh"),
-            ("name", "laughs_out"),
-            ("email", "12345+tlatoani@users.noreply.github.com"),
-            ("email", "ghost@example.org"),
-        ] {
-            assert_eq!(
-                identity_answer(field, answer),
-                Ok(format!("{answer}\n").into_bytes()),
-                "{field} {answer:?} must pass unchanged"
-            );
-        }
-        assert!(identity_answer("name", "").is_err(), "empty stays refused");
-    }
-
-    #[test]
-    fn prompt_line_is_bounded_for_non_interactive_stdin() {
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/diagnose.rs"));
-        let window = source_window(
-            source,
-            "fn prompt_line(label: &str, hidden: bool) -> String {",
-        );
-
-        assert!(
-            window.contains("is_terminal()"),
-            "prompt_line must distinguish an interactive stdin from a pipe — treating \
-             'not a TTY' as 'a pipe that will EOF' is the 689-stig mistake: {window}"
-        );
-        assert!(
-            window.contains("recv_timeout(PROMPT_LINE_PIPED_TIMEOUT)"),
-            "the NON-INTERACTIVE read must be bounded, or an unattended --github-login \
-             wedges forever holding a live VM (663-69kp): {window}"
-        );
-        // The interactive branch must stay UNBOUNDED. A human reading a prompt and
-        // typing a token must never be timed out; a fix that bounded both paths
-        // would satisfy the assertion above and break attended logins.
-        let terminal_idx = window
-            .find("if std::io::stdin().is_terminal() {")
-            .expect("prompt_line must special-case an interactive stdin");
-        let terminal_branch = &window[terminal_idx..];
-        let terminal_end = terminal_branch
-            .find("// Non-interactive")
-            .expect("the interactive branch must precede the bounded one");
-        assert!(
-            !terminal_branch[..terminal_end].contains("recv_timeout"),
-            "the INTERACTIVE branch must not be bounded — a human typing a token is not a \
-             hang: {}",
-            &terminal_branch[..terminal_end]
-        );
-
-        // Echo restoration must be reachable from the timeout path too: leaving a
-        // terminal with echo off outlives the process.
-        assert!(
-            window.matches("restore_echo()").count() >= 3,
-            "restore_echo must run on the interactive, piped-ok AND timeout exits — a \
-             terminal left with echo disabled after a hang is a hostile end state: {window}"
-        );
-
-        // The refusal must not send the operator to a flag this binary rejects.
-        assert!(
-            !window.contains("--github-login --with-token"),
-            "must NOT suggest --with-token: it is a tillandsias-headless GUEST flag with no \
-             macOS host equivalent, and suggesting it repeats 663-acdw (two blind credential \
-             runs). main.rs:262-271 is the authority: pipe to --github-login instead."
-        );
-    }
-
-    #[test]
-    fn github_login_host_prompts_after_control_wire_ready() {
+    fn github_login_answers_no_prompt_after_control_wire_ready() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/diagnose.rs"));
         let window = source_window(source, "pub fn github_login_main() -> i32");
         let start_idx = window
@@ -3401,22 +3073,28 @@ mod tests {
         let stream_idx = window
             .find("open_control_wire_stream(")
             .expect("github login must open the control-wire stream");
-        let prompt_idx = window
-            .find("prompt_line(\"Git author name\"")
-            .expect("github login must prompt for git identity");
         let dynamic_idx = window
             .find("let result = exec_over_stream_expect_dynamic")
-            .expect("github login must use lazy prompt responses");
-
-        assert!(start_idx < wait_idx);
-        assert!(wait_idx < stream_idx);
+            .expect("github login must drive the guest over the expect path");
+        assert!(start_idx < wait_idx && wait_idx < stream_idx && stream_idx < dynamic_idx);
         assert!(
-            stream_idx < prompt_idx,
-            "host prompts must not be reachable before VM/control-wire readiness: {window}"
+            // source-pin-ok: the text IS the contract (the login must not wait on an author prompt); behaviour is pinned by vm-layer an_empty_dynamic_expect_list_ends_when_the_guest_exits
+            window.contains("let expects: Vec<DynamicExpect> = Vec::new();"),
+            "the host must answer no guest prompt (1668-8jmq): {window}"
         );
+        // Built from parts so this test's own text cannot match itself.
+        let needle_field = concat!("needle", ": b\"");
         assert!(
-            prompt_idx < dynamic_idx,
-            "prompts should be supplied lazily through the dynamic expect path"
+            !window.contains(needle_field),
+            "no needle may remain: the guest prints no prompt to wait for: {window}"
+        );
+        let production = source
+            .split("\nmod tests {")
+            .next()
+            .expect("production half");
+        assert!(
+            !production.contains(concat!("fn prompt", "_line(")),
+            "no host stdin prompt may remain on the login path"
         );
     }
 

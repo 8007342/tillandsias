@@ -353,11 +353,22 @@ configure_git_identity() {
         return 0
     fi
 
-    local species
+    # Order 1668-8jmq: written to git's XDG global file, NOT `--global`. The
+    # agent lanes bind-mount the host-written forge gitconfig READ-ONLY at
+    # ~/.gitconfig, so `git config --global` failed (rc 4: it renames a lock
+    # file over a mount point), the `|| true` hid it, and a fresh lane's first
+    # commit died with "Author identity unknown". Git reads this file as global
+    # config alongside ~/.gitconfig, so the mounted redirects still apply.
+    local species xdg_git
     species="$(forge_tillandsia_species)"
-    git config --global user.name "$name ($host · tillandsia-$species)" 2>/dev/null || true
-    git config --global user.email "$email" 2>/dev/null || true
-    trace_lifecycle "git-identity" "configured from ${TILLANDSIAS_GIT_IDENTITY_SOURCE:-unknown} as tillandsia-$species on $host"
+    xdg_git="${XDG_CONFIG_HOME:-$HOME/.config}/git/config"
+    if mkdir -p "$(dirname "$xdg_git")" 2>/dev/null \
+        && git config --file "$xdg_git" user.name "$name ($host · tillandsia-$species)" \
+        && git config --file "$xdg_git" user.email "$email"; then
+        trace_lifecycle "git-identity" "configured from ${TILLANDSIAS_GIT_IDENTITY_SOURCE:-unknown} as tillandsia-$species on $host"
+    else
+        trace_lifecycle "git-identity" "NOT configured: could not write $xdg_git"
+    fi
     _install_agent_trailer_hook
     _install_expert_refresh_hook
 }
