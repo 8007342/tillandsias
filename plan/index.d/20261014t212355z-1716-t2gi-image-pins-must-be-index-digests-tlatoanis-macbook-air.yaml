@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-14, at the coordinator's request
+# ("every image pin must be an index (multi-arch) digest, with a guard over
+# all FROM lines").
+packets:
+  - packet_id: every-image-digest-pin-is-a-multi-arch-index-and-a-guard-over-all-from-lines-refuses-a-single-platform-digest-that-the-mac-guests-qemu-binfmt-would-hide
+    order: 1716-t2gi
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [images, containers, supply-chain, arm64, macos, guard, litmus]
+    estimated_hours: 4
+    related: [1637-5765, 1713-1dnx]
+    title: |
+      A FROM line pinned to a single-platform digest builds an image for the wrong architecture, and nothing fails: the macOS tray VM (aarch64 Fedora) has a qemu-x86_64 binfmt handler, so an amd64-only base runs emulated and labelled arm64. Every `FROM …@sha256:` must be a multi-arch index digest, and a guard over all FROM lines must refuse a single-platform one.
+    context: |
+      MEASURED 2026-10-14 on tlatoanis-macbook-air, in the tray VM: images/flutter (#433, work/1637-5765 @ 824a866c7) pinned debian:bookworm-slim@sha256:a4672c0cb26f…, which is the AMD64 entry of the bookworm-slim index (index sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587; arm64 v8 = a1b86db52ce3…). `podman build --arch arm64` returned rc=0 and the release-hash check held, but inside the image `uname -m` = x86_64, dart said linux_x64, and the dart ELF e_machine = 0x3e. podman image inspect said arm64 (from --arch), while the base said amd64. Every RUN executed through /proc/sys/fs/binfmt_misc/qemu-x86_64. lenovinha fixed #433 at c2d3e229e (index pin plus a native-arch assertion).
+      Census of trunk at 2c00a83bd, read from the registry, with mediaType per pin: images/webkit ubuntu:24.04@534baea6a22c is an OCI INDEX (amd64, arm64v8, …); images/web-wrangler node:22.19.0-bookworm-slim@4a4884e8a448 is an OCI INDEX. So today the only single-platform pin was Flutter's, and this guard prevents regressions. The other fourteen FROM lines name only a tag (12) or an ARG (2) (alpine:3.22, fedora-minimal:44, vault:1.18, caddy:2-alpine, node:22-alpine, …). Whether those should be digest-pinned too is a separate supply-chain question, out of scope here.
+      Design constraint: a gate guard must not need the network. Options for the implementer to choose from and record: (a) a committed pin manifest (image, digest, mediaType, platforms), refreshed by a script that queries the registry, with the gate checking every FROM digest against it offline; (b) the build itself asserting native arch after the base layer (lenovinha's linux_<arch> plus uname -m check, made generic for every image build in the forge/guest builders); (c) both.
+    exit_criteria:
+      - 'a guard enumerates every FROM line under images/ and observatorium/ (including multi-stage and ARG-substituted ones, which it names rather than skips) and refuses any @sha256 pin not recorded as an index; red against a fixture that pins debian@sha256:a4672c0cb26f… (the measured single-platform digest)'
+      - 'POSITIVE CONTROLS pass: the index pins webkit ubuntu@534baea6a22c, web-wrangler node@4a4884e8a448 and flutter debian@7c7b2c966bc9'
+      - 'the guard runs with no network (it reads a committed record or the build''s own assertion), and a test shows it pass with the network unavailable'
+      - 'a build-time arch assertion (if option b is chosen) fails an emulated build in the macOS tray VM: an arm64 build over an amd64-only base exits non-zero naming the arch it ran on'
+    unscoreable: "pinned-by-its-own-fixture: the planted single-platform pin is the red arm, and the three live index pins are the positive controls"
+    next_action: >
+      Choose between (a), (b) and (c) and record why. Write the planted-pin fixture red first. The census above is the starting set.
+    events:
+      - type: filed
+        ts: "2026-10-14T21:23:55Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Image pins must be multi-arch index digests: a single-platform amd64 pin built an "arm64" Flutter image of x86 binaries, hidden by the Mac guest's qemu-x86_64 binfmt. Guard over all FROM lines; offline. Census: only Flutter's pin was single-platform (now fixed at c2d3e229e).
