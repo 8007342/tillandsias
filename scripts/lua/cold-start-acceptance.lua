@@ -58,7 +58,7 @@
 --     started before it
 --
 -- Verdicts (last stdout line):
---   ok:cold-start-acceptance:<tag>:served:<url>:http=200:lakanoa-shape=built-nested-served:router-failure=step-qualified:recovered:project=<sha>   exit 0
+--   ok:cold-start-acceptance:<tag>:served:<url>:http=200:lakanoa-shape=built-nested-served:router-failure=step-qualified:recovered:app-dir=<served|release-predates>:project=<sha>   exit 0
 --   ok:cold-start-acceptance:<tag>:prefix-failure:<reason>                                          exit 0
 --   refused:cold-start-acceptance:<what>                                                             exit 1
 --   blocked:cold-start-acceptance:project-ref-mismatch:wanted=<x>:forge=<y>  (only with --project-ref)  exit 2
@@ -465,6 +465,58 @@ if not burl or not text.contains(bgot, "http=200") or not text.contains(bgot, "<
     fail("lakanoa-shape-built-not-served:" .. (bgot ~= "" and bgot or braw:sub(1, 300)))
 end
 
+-- ── 7c. a SUBDIRECTORY app published with app_dir (order 1667-6rtp) ───────
+-- A monorepo shape: site-app/ has its own wrangler.jsonc and public/, beside
+-- the root config 7b left. publish_local {app_dir: "site-app"} must serve
+-- site-app/public (its marker title), never the root's app. An escaping
+-- app_dir is refused by name, and service_reload republishes the same app.
+-- A release older than 1667 IGNORES app_dir, so it answers the escape probe
+-- with a URL instead of invalid_app_dir. The arm then records
+-- app-dir=release-predates and moves on, never a false pass.
+local APP_MARKER = "APP-DIR-SHAPE"
+must(inside([[
+f=$(podman ps --format '{{.Names}}' --filter 'name=macron.*-forge')
+podman exec -i "$f" sh -s <<'FORGE'
+set -e
+cd /home/forge/src/macron.dev
+mkdir -p site-app/public
+cat > site-app/wrangler.jsonc <<'J'
+{"name":"app-dir-shape","compatibility_date":"2026-10-01","assets":{"directory":"./public"}}
+J
+printf '<!doctype html><title>APP-DIR-SHAPE</title><p>served from site-app/public</p>\n' > site-app/public/index.html
+echo "app-dir fixture written: $(ls site-app site-app/public | tr '\n' ' ')"
+FORGE
+]]), "app-dir-fixture")
+mcp({ { "service_stop", '{"category":"WEB"}' } })
+local eres, eraw = mcp({ { "publish_local", '{"category":"WEB","runtime":"auto","app_dir":"../escape"}' } })
+fs.write(OUT .. "/publish-app-dir-escape.ndjson", eraw)
+local ereason = eres[2] and eres[2].error and eres[2].error.message or ""
+local app_dir_result
+if result_url(eres[2]) then
+    log_line("app-dir: release predates app_dir (the escape probe was published, not refused); arm skipped")
+    mcp({ { "service_stop", '{"category":"WEB"}' } })
+    app_dir_result = "release-predates"
+else
+    log_line("app-dir escape: " .. ereason)
+    if not text.contains(ereason, "invalid_app_dir:") then fail("app-dir-escape-not-refused-by-name:" .. eraw:sub(1, 300)) end
+    local ares, araw = mcp({ { "publish_local", '{"category":"WEB","runtime":"auto","app_dir":"site-app"}' } })
+    fs.write(OUT .. "/publish-app-dir.ndjson", araw)
+    local aurl = result_url(ares[2])
+    local agot = aurl and fetch(aurl) or ""
+    log_line("app-dir site-app: url=" .. tostring(aurl) .. " fetch: " .. agot:gsub("\n", " "))
+    if not aurl or not text.contains(agot, "http=200") or not text.contains(agot, "<title>" .. APP_MARKER .. "</title>") then
+        fail("app-dir-not-served:" .. (agot ~= "" and agot or araw:sub(1, 300)))
+    end
+    local _, reload_raw = mcp({ { "service_reload", '{"category":"WEB"}' } })
+    fs.write(OUT .. "/reload-app-dir.ndjson", reload_raw)
+    local again = fetch(aurl)
+    log_line("app-dir after service_reload: " .. again:gsub("\n", " "))
+    if not text.contains(again, "<title>" .. APP_MARKER .. "</title>") then
+        fail("app-dir-lost-on-reload:" .. (again ~= "" and again or reload_raw:sub(1, 300)))
+    end
+    app_dir_result = "served"
+end
+
 -- ── 8. forced router-step failure (another app holds the router's port) ─────
 mcp({ { "service_stop", '{"category":"WEB"}' } })
 must(inside([[
@@ -500,4 +552,4 @@ log_line("host keychain: service=tillandsias item metadata identical before and 
 
 inside("pkill -f 'tillandsias --bash' 2>/dev/null; true")
 if not keep then down() end
-verdict.emit("ok:cold-start-acceptance:" .. tag .. ":served:" .. url .. ":http=200:lakanoa-shape=built-nested-served:router-failure=step-qualified:recovered:project=" .. forge_head, 0)
+verdict.emit("ok:cold-start-acceptance:" .. tag .. ":served:" .. url .. ":http=200:lakanoa-shape=built-nested-served:router-failure=step-qualified:recovered:app-dir=" .. app_dir_result .. ":project=" .. forge_head, 0)
