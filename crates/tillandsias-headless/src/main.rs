@@ -7495,11 +7495,17 @@ fn resolve_launch_project_identity(
         // then have EVERY MCP call refused as "not a known project" (measured
         // on lenovinha 2026-10-12). Binding the label to this canonical path
         // admits exactly this project; every other outside label stays refused.
-        #[cfg(feature = "tray")]
+        #[cfg(feature = "host-services")]
         crate::local_projects::bind_launched_project(&name, &canonical)
             .map_err(|reason| format!("refusing to launch '{}': {reason}", canonical.display()))?;
         Ok((name, Some(canonical)))
     } else if is_cloud {
+        // 1713-1dnx: the cloud half of the same rule. In the VM the launching
+        // process is a per-attach child that never ran a cloud refresh, so
+        // nothing else admits this label to its own lane's listener.
+        #[cfg(feature = "host-services")]
+        crate::local_projects::bind_launched_cloud_label(project_path)
+            .map_err(|reason| format!("refusing to launch cloud project: {reason}"))?;
         Ok((project_path.to_string(), None))
     } else {
         Err(format!("Project not found: {}", project_path))
@@ -8759,12 +8765,12 @@ fn build_opencode_forge_args(
         // START THE LANE LISTENER TOO — not just the mount (mirrors the legacy
         // tray path and the live vault builder). A mounted, env-var'd, EMPTY
         // socket dir still leaves the in-forge host-browser bridge dead on
-        // connect; cfg-gated with the module: the listener implementation lives
-        // in tray/mod.rs, so a no-tray build cannot bind one — same
-        // pre-existing limitation as the vault builder's block.
-        #[cfg(feature = "tray")]
+        // connect. ORDER 1713-1dnx: gated on `host-services`, which the VM
+        // guest's `listen-vsock` build enables too; it was `tray`, so every
+        // macOS VM forge got exactly that empty dir.
+        #[cfg(feature = "host-services")]
         {
-            let _ = tray::start_mcp_socket_server_for_lane(
+            let _ = mcp_socket::start_mcp_socket_server_for_lane(
                 project_name,
                 raw_instance.as_deref().unwrap_or("default"),
             );
@@ -17968,7 +17974,7 @@ fn prepare_forge_ram_workspace(
     if !names.lines().any(|name| expected.iter().any(|n| n == name)) {
         // A preview must not keep a departed forge's source mount alive across
         // launches. Remove only a recorded preview belonging to THIS lane.
-        #[cfg(feature = "tray")]
+        #[cfg(feature = "host-services")]
         local_web_preview::cleanup_departed_lane(project, instance, debug)?;
         remove_source_volume_if_present(&volume, debug)?;
         let mut create = podman_command();
@@ -18020,13 +18026,13 @@ fn prepare_forge_ram_workspace(
             "live_worktree_unavailable: source must be explicitly bounded RAM-only tmpfs".into(),
         );
     }
-    #[cfg(feature = "tray")]
-    tray::start_mcp_socket_server_for_lane(project, instance)
+    #[cfg(feature = "host-services")]
+    mcp_socket::start_mcp_socket_server_for_lane(project, instance)
         .map_err(|e| format!("runtime_unavailable: per-lane MCP listener failed: {e}"))?;
-    #[cfg(not(feature = "tray"))]
+    #[cfg(not(feature = "host-services"))]
     if debug {
         eprintln!(
-            "[tillandsias] local preview MCP requires a host binary built with --features tray"
+            "[tillandsias] local preview MCP requires a binary built with --features tray or listen-vsock"
         );
     }
     let _ = debug;
@@ -18070,7 +18076,7 @@ fn cleanup_forge_ram_workspace(project: &str, debug: bool) -> Result<(), String>
     if names.lines().any(|name| expected.iter().any(|n| n == name)) {
         return Ok(());
     }
-    #[cfg(feature = "tray")]
+    #[cfg(feature = "host-services")]
     local_web_preview::cleanup_departed_lane(project, instance, debug)?;
     remove_source_volume_if_present(&volume, debug)
 }
@@ -18567,12 +18573,12 @@ fn build_forge_agent_run_args_with_vault(
         // same dual-source-of-truth shape as the pids-limit partial fix
         // (959-fpc5) — a capability added to one launcher and not the other.
         // The tray-boot enumeration only covers projects that existed then.
-        // (cfg-gated with the module: the listener implementation lives in
-        // tray/mod.rs, so a no-tray build still cannot bind one — that
-        // pre-existing limitation is unchanged by this fix.)
-        #[cfg(feature = "tray")]
+        // ORDER 1713-1dnx: gated on `host-services` (was `tray`), so the VM
+        // guest, which launches its forges from a per-attach child, binds one
+        // as well.
+        #[cfg(feature = "host-services")]
         {
-            let _ = tray::start_mcp_socket_server_for_lane(
+            let _ = mcp_socket::start_mcp_socket_server_for_lane(
                 project_name,
                 raw_instance.as_deref().unwrap_or("default"),
             );
@@ -19200,12 +19206,17 @@ mod metrics_server;
 #[cfg(feature = "tray")]
 mod tray;
 
+// @trace spec:mcp-tool-socket (order 1713-1dnx: host-services, so the VM
+// guest's forges get a listener too)
+#[cfg(feature = "host-services")]
+mod mcp_socket;
+
 // @trace spec:local-web-preview
-#[cfg(feature = "tray")]
+#[cfg(feature = "host-services")]
 mod local_web_preview;
 
 // @trace spec:host-browser-mcp (order 1649-xqet)
-#[cfg(feature = "tray")]
+#[cfg(feature = "host-services")]
 mod browser_open;
 
 /// Spawn a terminal-launcher child and reap it on a detached thread.
@@ -33802,6 +33813,135 @@ esac
             !args_str.contains("control.sock"),
             "forge spec must NEVER mount control.sock; args: {args_str}"
         );
+    }
+
+    /// ORDER 1713-1dnx: the forge builders must leave a LISTENER behind the
+    /// mount, under the VM guest's feature set (`--features listen-vsock`,
+    /// exactly what build-macos-tray.sh and build-guest-binaries.sh build).
+    /// The test above checks only the argv, so it stayed green while every
+    /// macOS VM forge got an empty /run/host/tillandsias-mcp (v56.10.14.1
+    /// smoke: host-browser CONNECTION_CLOSED). This one connects to the socket
+    /// the mount points at and reads an MCP reply through `result.content`
+    /// (1696-gz2y framing), so it fails when the listener is compiled out
+    /// of the guest again.
+    ///
+    /// @trace spec:mcp-tool-socket
+    #[cfg(feature = "listen-vsock")]
+    #[test]
+    fn guest_feature_set_forge_builders_leave_a_live_lane_mcp_listener() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::os::unix::net::UnixStream;
+
+        let _env = env_lock();
+        let restore = TestEnvRestore::capture(&[
+            "TILLANDSIAS_FORGE_INSTANCE",
+            "XDG_RUNTIME_DIR",
+            crate::local_projects::HOST_PROJECT_ROOT_ENV,
+            crate::local_projects::CLOUD_LABEL_CACHE_ENV,
+        ]);
+        // A short root: macOS caps sun_path at 104 bytes (1581-sunl).
+        let runtime = tempfile::Builder::new()
+            .prefix("tg")
+            .tempdir_in("/tmp")
+            .expect("short runtime root under /tmp");
+        let projects = tempfile::tempdir().expect("project root");
+        restore.remove("TILLANDSIAS_FORGE_INSTANCE");
+        restore.set("XDG_RUNTIME_DIR", runtime.path());
+        restore.set(
+            crate::local_projects::HOST_PROJECT_ROOT_ENV,
+            projects.path(),
+        );
+        restore.set(
+            crate::local_projects::CLOUD_LABEL_CACHE_ENV,
+            projects.path().join("known-cloud-projects"),
+        );
+        // Cloud-mode lanes, as the macOS tray attaches them (`--cloud <nwo>`).
+        // The guest never runs the tray's cloud refresh, so the label cache is
+        // empty: the label is admitted the way the guest admits it, by the
+        // launch resolver.
+        for project in ["guestagent", "guestopencode"] {
+            let (name, checkout) = resolve_launch_project_identity(project, true, "forge-project")
+                .expect("cloud launch resolves");
+            assert_eq!((name.as_str(), checkout), (project, None));
+        }
+
+        let _agent = build_forge_agent_run_args_with_vault(
+            &PathBuf::from("guestagent"),
+            None,
+            None,
+            "guestagent",
+            None,
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeAgentMode::Claude,
+            false,
+            None,
+            None,
+            false,
+            &test_cache_root(),
+        );
+        let _opencode = build_opencode_forge_args(
+            &PathBuf::from("guestopencode"),
+            None,
+            None,
+            "guestopencode",
+            None,
+            None,
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+
+        for project in ["guestagent", "guestopencode"] {
+            let socket = mcp_socket_host_dir(project, None).join("mcp.sock");
+            let stream = UnixStream::connect(&socket).unwrap_or_else(|e| {
+                panic!(
+                    "{project}: no listener at the socket the forge mounts ({}): {e}",
+                    socket.display()
+                )
+            });
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(10)))
+                .expect("read timeout");
+            let mut writer = stream.try_clone().expect("clone stream");
+            let mut reader = BufReader::new(stream);
+            let mut ask = |line: &str| -> serde_json::Value {
+                writeln!(writer, "{line}").expect("write request");
+                let mut reply = String::new();
+                reader.read_line(&mut reply).expect("read reply");
+                serde_json::from_str(reply.trim())
+                    .unwrap_or_else(|e| panic!("{project}: reply is not JSON ({e}): {reply:?}"))
+            };
+
+            let list = ask(r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#);
+            let names: Vec<&str> = list["result"]["tools"]
+                .as_array()
+                .unwrap_or_else(|| panic!("{project}: tools/list has no result.tools: {list}"))
+                .iter()
+                .filter_map(|t| t["name"].as_str())
+                .collect();
+            for wanted in ["publish_local", "browser.open"] {
+                assert!(
+                    names.contains(&wanted),
+                    "{project}: tools/list lacks {wanted}: {names:?}"
+                );
+            }
+
+            let call = ask(
+                r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"browser.list_windows","arguments":{}}}"#,
+            );
+            let text = call["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap_or_else(|| panic!("{project}: no result.content[0].text: {call}"));
+            assert!(
+                serde_json::from_str::<serde_json::Value>(text).is_ok(),
+                "{project}: the content text is the tool's JSON payload: {text:?}"
+            );
+        }
+        drop(restore);
     }
 
     /// ORDER 1506-q7ab: a forge's argv carries exactly one mailbox mount —

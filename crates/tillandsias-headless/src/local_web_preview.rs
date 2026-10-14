@@ -423,6 +423,9 @@ fn live_mount_source(row: &Value, project: &str, instance: &str) -> Result<Strin
     Ok(volume)
 }
 
+// Only the tray's `--publish-local` CLI resolves a lane this way (1713-1dnx:
+// a VM guest's forges reach publish through their own lane's listener).
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
 pub(crate) fn unique_live_instance(project: &str) -> Result<String, String> {
     crate::local_projects::validate_project_label(project)?;
     let socket_root = crate::control_socket_host_dir().join("mcp");
