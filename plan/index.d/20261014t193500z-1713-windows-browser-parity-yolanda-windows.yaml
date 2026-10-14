@@ -1,0 +1,151 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Windows browser parity through WSLg. Filed by yolanda-windows on the
+# operator's direction (2026-10-14), design approved by macuahuitl-fedora.
+packets:
+  - packet_id: windows-serves-a-project-locally-and-opens-it-as-an-iphone-16-through-wslg
+    order: 1713-8kff
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, wsl2, wslg, browser, device-emulation]
+    related: [1656-yhjt, 1702-bpnx]
+    depends_on: [browser-open-container-window-works-on-windows-through-wslg]
+    title: |
+      On Windows, "serve this project locally and open it as an iPhone 16" works end to end: publish_local in the guest plus browser.open{device:"iphone 16"} opens a container window through WSLg
+    context: |
+      Linux is finishing this lane. On Windows, publish_local and browser.open run in the guest's tillandsias-headless, so once 1656-yhjt resolves the WSLg socket the lane needs the device query, the webkit image built in the guest, and a live run. No test anywhere names iPhone 16 (devices.rs resolves "iphone" to apple-iphone-17).
+    exit_criteria:
+      - 'devices.rs resolves "iphone 16" to an iPhone 16 descriptor, pinned by a unit test'
+      - 'on yolanda, publish_local plus browser.open{device:"iphone 16"} shows a WSLg window at the iPhone 16 viewport'
+      - 'no Windows host browser process starts during the run'
+    unscoreable: "live WSLg window on the Windows desktop; evidence is the window, the CDP-reported viewport and UA, and a host process list taken before and after"
+    next_action: >
+      After 1656-yhjt: add the iPhone 16 descriptor with a test, build the webkit image in the guest, run the lane live on yolanda.
+    provenance: |
+      Filed by yolanda-windows, 2026-10-14, operator direction; assigned to yolanda by macuahuitl-fedora.
+    events:
+      - type: filed
+        ts: "2026-10-14T19:35:00Z"
+        host: yolanda-windows
+        summary: |-
+          iPhone 16 lane on Windows through WSLg.
+
+  - packet_id: no-code-path-launches-or-drives-a-host-browser-and-a-guard-allows-exactly-one-user-gesture-hand-off
+    order: 1713-3v3f
+    status: ready
+    kind: security
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, security, browser, guard]
+    related: [1656-yhjt, 1702-bpnx]
+    depends_on: []
+    title: |
+      Tillandsias never launches or drives a host browser: the proof-of-concept ShellExecute and native-browser calls are removed, and a guard allows exactly one hand-off of a user-clicked external link
+    context: |
+      Operator, 2026-10-14: the early ShellExecute and native-browser calls were a proof of concept and must be removed everywhere. Known sites: the tray's Observatorium and OpenCode-Web stubs (crates/tillandsias-windows-tray/src/notify_icon.rs:4526-4538, whose comment plans a ShellExecute), and host-Chromium wording in openspec/specs/host-browser-mcp/spec.md:124.
+      Reconciliation proposed by macuahuitl-fedora and pending the operator's word: 1702-bpnx's preview toast offers "Open in your browser (real internet)" for EXTERNAL links. That single call site, run only on a user gesture, is the guard's one allowlisted hand-off. A second call site fails the guard.
+    exit_criteria:
+      - 'a census of host-browser launch calls (ShellExecute/open/start with a URL, open::that, webbrowser, explorer.exe with a URL) across crates/ finds only the allowlisted site'
+      - 'the guard refuses a planted second call site, and the census cardinality is asserted'
+      - 'the host-browser-mcp spec states the rule and drops the host-Chromium path'
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is the guard itself, planned as scripts/lua/check-no-host-browser-launch.lua with a negative control that plants a second call site, written in the same commit as the stub removal"
+    next_action: >
+      Census the call sites, write the guard with its negative control, remove the stubs, amend the spec.
+    provenance: |
+      Filed by yolanda-windows, 2026-10-14, operator direction; assigned to yolanda by macuahuitl-fedora.
+    events:
+      - type: filed
+        ts: "2026-10-14T19:35:00Z"
+        host: yolanda-windows
+        summary: |-
+          Remove host-browser launch stubs; guard allows one external-link hand-off.
+
+  - packet_id: wslg-clipboard-sharing-gets-a-security-audit-and-is-documented-in-the-security-promises
+    order: 1713-vzh7
+    status: ready
+    kind: security
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [security, wslg, documentation]
+    related: [1656-yhjt]
+    depends_on: []
+    title: |
+      WSLg's two-way clipboard between container windows and Windows is audited, and the tradeoff is stated in the tillandsias.org security promises
+    context: |
+      Operator, 2026-10-14: WSLg is the chosen compromise on Windows, and the clipboard stays on by default because users want to paste into their apps. The tradeoff must be documented in every security promise on tillandsias.org and audited.
+      WSLg shares the clipboard both ways through RDP and has no clipboard-only switch. Questions for the audit: can a page in the container read the Windows clipboard without a user gesture (Chromium's clipboard permission gate), can the host clipboard carry secrets into an agent-driven window, and what an opt-out would cost.
+    exit_criteria:
+      - 'an audit note under plan/issues records the measured behaviour for container-to-host and host-to-container copy, with and without a user gesture'
+      - 'the tillandsias.org security promises state the WSLg clipboard tradeoff'
+    unscoreable: "audit note plus public-site text; reviewed by a human"
+    next_action: >
+      Measure clipboard reads from an agent-driven Chromium window on yolanda, write the audit note, draft the promise text.
+    provenance: |
+      Filed by yolanda-windows, 2026-10-14, operator direction.
+    events:
+      - type: filed
+        ts: "2026-10-14T19:35:00Z"
+        host: yolanda-windows
+        summary: |-
+          Audit and document the WSLg clipboard tradeoff.
+
+  - packet_id: the-windows-guest-turns-off-drive-automount-and-windows-interop-where-the-forge-allows
+    order: 1713-6urw
+    status: ready
+    kind: security
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, wsl2, security, isolation]
+    related: [1656-yhjt]
+    depends_on: []
+    title: |
+      The owned WSL2 guest runs with drive automount and Windows interop off wherever the forge does not need them, so a container window cannot reach Windows files or start Windows programs
+    context: |
+      WSL by default mounts Windows drives and lets the guest start Windows .exe files. The tillandsias guest already lacks /mnt/c; this row measures every wsl.conf knob ([automount], [interop]) and turns off what the forge does not need.
+    exit_criteria:
+      - 'the guest wsl.conf states automount and interop, and each choice has a measured reason'
+      - 'from inside a browser container, starting cmd.exe fails and no Windows drive is visible'
+    unscoreable: "live guest configuration on yolanda; evidence is the wsl.conf and the refused probes"
+    next_action: >
+      Read the guest wsl.conf, test the forge with interop off, record the result.
+    provenance: |
+      Filed by yolanda-windows, 2026-10-14.
+    events:
+      - type: filed
+        ts: "2026-10-14T19:35:00Z"
+        host: yolanda-windows
+        summary: |-
+          Guest hardening: automount and interop.
+
+  - packet_id: investigate-a-streamed-display-as-an-opt-in-safety-layer-above-wslg
+    order: 1713-7x3y
+    status: ready
+    kind: investigation
+    priority: p3
+    desired_release: later
+    pickup_role: any
+    capability_tags: [browser, isolation, investigation]
+    related: [1656-yhjt, 1713-vzh7]
+    depends_on: []
+    title: |
+      Investigate a streamed container display (KasmVNC/noVNC style) as an opt-in safety layer for users who will pay its cost over WSLg
+    context: |
+      Operator, 2026-10-14: WSLg is the fair default; a streamed display might suit users with powerful machines who want no shared clipboard. Windows Sandbox is dropped (not on Windows Home). The investigation measures latency, CPU cost and what crosses to the host.
+    exit_criteria:
+      - 'a findings note compares WSLg and a streamed display on latency, CPU and what crosses to the host'
+    unscoreable: "investigation; the deliverable is a findings note"
+    next_action: >
+      Prototype one browser container with a streamed display on yolanda and measure.
+    provenance: |
+      Filed by yolanda-windows, 2026-10-14, operator direction.
+    events:
+      - type: filed
+        ts: "2026-10-14T19:35:00Z"
+        host: yolanda-windows
+        summary: |-
+          p3: streamed display as opt-in safety layer.

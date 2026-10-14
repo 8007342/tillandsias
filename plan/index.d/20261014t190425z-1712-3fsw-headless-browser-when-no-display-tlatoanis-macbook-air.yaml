@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-14, as the coordinator approved
+# (macuahuitl: "Approved: file (A), work A first, then claim 1656-cscv for (B)").
+packets:
+  - packet_id: browser-open-runs-a-headless-chromium-when-the-host-has-no-display-so-agents-drive-it-over-the-same-cdp-socket-on-macos-and-display-less-linux
+    order: 1712-3fsw
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [browser, cdp, mcp, dev-mode, headless, macos, containers, local-web-preview, security]
+    estimated_hours: 8
+    depends_on:
+      - dev-mode-browser-windows-give-the-owning-lane-full-cdp-over-the-per-lane-socket-with-typed-tools-and-raw-browser-cdp-and-no-host-listener
+      - host-browser-mcp-success-results-carry-no-content-so-every-successful-tool-call-reads-empty
+    related: [1655-urz9, 1656-iktu, 1656-cscv, 1696-gz2y, 1656-6c97, 1656-urmk]
+    title: |
+      browser.open runs a headless Chromium when the host has no display (macOS today, and Linux without Wayland), or when the call asks for headless:true. Agents drive it over the same per-window CDP unix socket with the same owning-lane rules, and the reply says headless:true so the agent knows no human can see the window.
+    context: |
+      Operator, 2026-10-14: "Yes, headless is better than visual, but we want both, sometimes agents will drive themselves and headless will liekyl be faster, however users will want to get involved sometimes so make sure we have the path with the full window as well". This row is the headless half. The windowed half on macOS is 1656-cscv, a virtio-gpu display plus a cage kiosk in the tray VM; it comes next and reuses this row's CDP session.
+      Gap (a code read of linux-next@fc2667827, not yet measured live): browser_open.rs launches Chromium with --ozone-platform=wayland, and BrowserDisplayContext::from_env (crates/tillandsias-headless/src/main.rs) needs WAYLAND_DISPLAY. The macOS tray VM has no graphics device or compositor, so browser.open has no macOS path, and the completed dev-mode CDP work (1655-urz9, 1656-iktu) can't run on a Mac. images/chromium/Containerfile.core already ships headless_shell --headless=new.
+      Coordinator notes: (1) a successful browser reply reaches the agent EMPTY until 1696-gz2y lands (#431), so every arm reads result.content / structuredContent, never the bare payload; (2) headless is an explicit reply field next to engine and device; (3) the no-display default holds on Linux without Wayland too, so the arms are written per platform.
+    exit_criteria:
+      - 'macOS (tray VM, no display): browser.open{device:"iphone 12 pro max", dev:true} succeeds; the MCP result content (not the bare payload) carries headless:true, engine and device; then browser.cdp Runtime.evaluate "innerWidth" returns 428. Red today: the open refuses with no Wayland socket'
+      - 'Linux with WAYLAND_DISPLAY unset: the same call succeeds headless with the same reply fields. Linux with a Wayland socket and no headless flag still opens a visible window with headless:false (NEGATIVE CONTROL: the windowed path is unchanged)'
+      - 'browser.open{headless:true} on a host WITH a display runs headless and starts no Wayland client'
+      - 'the 1656-iktu arms hold for a headless window: a second lane gets WINDOW_NOT_FOUND; `ss -ltn` (on the macOS host: the guest and `lsof -iTCP -sTCP:LISTEN` on the host) is unchanged before and after, and no container process has --remote-debugging-port; Page.navigate to a public host and to another project route both fail'
+      - 'the headless container keeps the per-window internal network and mounts no Wayland socket; the litmus-browser-open-container-shape arms are extended to the headless spec'
+      - 'the browser tool descriptions state that headless:true means no human can see the window'
+    unscoreable: "requires-native-regime: the macOS arm needs the tray VM on a Mac; the Linux arms and the container-shape arms run anywhere and are written red first"
+    next_action: >
+      After the v56.10.14.1 smoke: measure browser.open on this Mac's tray VM to confirm the refusal, then write the red arms (reply fields through MCP content, per platform), then the headless launch spec in browser_open.rs.
+    events:
+      - type: filed
+        ts: "2026-10-14T19:04:25Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Headless browser.open when there is no display (macOS, display-less Linux) or on request; same CDP socket and owning-lane rules; explicit headless reply field. Coordinator-approved; the windowed half is 1656-cscv.
