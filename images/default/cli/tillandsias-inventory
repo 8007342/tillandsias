@@ -23,7 +23,7 @@ esac
 # Category catalogue — declaration order = display order.
 # Format: "Category|tool tool tool ..."
 CATEGORIES=(
-    "Languages|java javac python3 node go cargo rustc dart flutter"
+    "Languages|java javac python3 node go cargo rustc dart"
     "Build|mvn gradle npm yarn pnpm pipx uv poetry make cmake ninja nix"
     "Test|pytest junit chromium-headless firefox chromedriver geckodriver"
     "Utils|jq yq protoc grpcurl shellcheck shfmt rg fd fzf curl wget git gh xmlstarlet direnv"
