@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: test-plan-binary-freshness-fails-on-every-mac-because-tmpdir-ends-in-a-slash
+    event:
+      type: progress
+      ts: "2026-10-14T11:04:09Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |-
+        Scope note: a full darwin ./build.sh --check (2026-10-14 ~10:50Z) found a SECOND instance of the same trailing-slash TMPDIR defect, in scripts/test-plan-binary-probe-release-over-debug.sh (LINUX negative-control arm, violation:plan-binary-probe-release-over-debug:0/1 on every Mac). Fixed on the same ref with the same normalise plus a deliberate // (work/1680-yf9z @ 4db1749a4): fix 1/1, mutant without the normalise 0/1 with TMPDIR unset, parent 0/1 on the macOS TMPDIR.
