@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: build-sh-preflight-on-windows-leaves-a-stale-zero-byte-git-index-lock-after-a-deadline-killed-guard-dies-inside-a-git-index-write-blocking-the-next-git-add-and-switch
+    field: status
+    value: completed
+    ts: "2026-10-14T06:30:50Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: build-sh-preflight-on-windows-leaves-a-stale-zero-byte-git-index-lock-after-a-deadline-killed-guard-dies-inside-a-git-index-write-blocking-the-next-git-add-and-switch
+    event:
+      type: completed
+      ts: "2026-10-14T06:30:50Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: landed PR #415 merge 9f80fc775 in origin/linux-next, land run 76; trunk build.sh carries _pf_index_lock_held/_pf_sweep_index_lock and the late sweep
