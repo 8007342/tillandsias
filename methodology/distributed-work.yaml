@@ -2452,3 +2452,40 @@ distributed_work:
     consumers:
       - "skills/meta-orchestration/SKILL.md (Start Of Cycle 5a — AFTER the merge; note .claude/skills is a SYMLINK to this path, cite the real one)"
       - "skills/coordinate-multihost-work/SKILL.md"
+
+  macron_dev_public_learnings:
+    trace: "operator ruling 2026-10-14, relayed by tlatoanis-macbook-air"
+    ruling: >
+      macron.dev (github.com/8007342/macron.dev, public) is the fleet's
+      public learnings site: the accumulated experience of the Tillandsias
+      fleet, for users and agents alike to find and troubleshoot Tillandsias
+      and other AI-era issues (DNS, Cloudflare, OpenSpec, and so on),
+      presented as AI-generated comics, memes and short notes. Agents of
+      this fleet running INSIDE Tillandsias forges are free to update it.
+    operator_verbatim: >
+      "Agents from our fleet running INSIDE tillandsias Forges are free to
+      update it ;) ... They're learnings are valid :D and the site IS for
+      that."
+    standing_permission: >
+      A forge agent working on macron.dev commits and pushes without asking
+      the operator or the coordinator, the same as any other work in its
+      lane. No agent, coordinator or skill tells a macron.dev agent "don't
+      push", "check with the operator first" or "that push is between you
+      and the operator". That message is the defect this entry exists to
+      prevent (it happened once on 2026-10-14 and was corrected). Public
+      safety still applies: no tokens, logs with secrets, host paths or
+      private details in published content.
+    content: >
+      High-level, truthful learnings: what broke, what fixed it, how a
+      Tillandsias user gets past it. Release smokes add one additive note
+      each (public/notes/<date>-<host>-<slug>.md plus a manifest.jsonl entry;
+      never edit another host's note). Comics and memes are welcome; follow
+      Codex's art guidelines for characters once they exist.
+    integration_practice: >
+      Cloudflare takes roughly 16-20 minutes to deploy each push to main
+      (measured 2026-10-14). So work on branches and use Cloudflare preview
+      deploys, batch merges to main, and record push-to-live time for each
+      merge so the deploy cost is measured rather than guessed.
+    consumers:
+      - "macron.dev's own AGENTS.md / CLAUDE.md (the repo states the same ruling)"
+      - "skills/smoke-curl-install-and-test-e2e (the macron.dev note step needs no extra approval)"
