@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: publish-local-auto-serves-a-wrangler-project-whose-assets-directory-is-nested-and-built-by-a-build-command-proven-by-a-lakanoa-shaped-cold-start-fixture
+    field: status
+    value: completed
+    ts: "2026-10-14T00:41:52Z"
+    host: lenovinha
+
+events:
+  - packet_id: publish-local-auto-serves-a-wrangler-project-whose-assets-directory-is-nested-and-built-by-a-build-command-proven-by-a-lakanoa-shaped-cold-start-fixture
+    event:
+      type: completed
+      ts: "2026-10-14T00:41:52Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: land 0d6ad2aee (PR #409, head 5bdfedb49); merge and head verified ancestors of origin/linux-next; v56.10.13.1 Linux cold-start PASS, run v56.10.13.1-20261013235228, macron.dev 03a46e1f3, step 7b lakanoa-shape built-nested-served (plan/evidence/1663-6mns-cold-start-v56.10.13.1-2026-10-13 on work/1663-6mns)
