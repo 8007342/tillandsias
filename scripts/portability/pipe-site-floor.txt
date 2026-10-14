@@ -91,7 +91,7 @@ litmus openspec/litmus-tests/litmus-forge-clone-reachability-probe-shape.yaml 1
 litmus openspec/litmus-tests/litmus-forge-diagnostics-e2e.yaml 5
 litmus openspec/litmus-tests/litmus-forge-e2e-rate-limit-shape.yaml 4
 litmus openspec/litmus-tests/litmus-forge-environment-discoverability-install-shape.yaml 1
-litmus openspec/litmus-tests/litmus-forge-expert-base-guard-shape.yaml 5
+litmus openspec/litmus-tests/litmus-forge-expert-base-guard-shape.yaml 4
 litmus openspec/litmus-tests/litmus-forge-experts-discoverability-shape.yaml 5
 litmus openspec/litmus-tests/litmus-forge-experts-ephemerality-shape.yaml 9
 litmus openspec/litmus-tests/litmus-forge-experts-stale-source-honesty.yaml 2

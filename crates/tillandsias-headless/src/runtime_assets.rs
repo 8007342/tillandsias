@@ -263,6 +263,8 @@ fn image_context_rel(image_name: &str) -> Result<&'static str, String> {
         "chromium-core" | "chromium-framework" => Ok("images/chromium"),
         // 1656-tjv4: the WebKit engine window, built on first use.
         "webkit" => Ok("images/webkit"),
+        // 1637-5765: the opt-in Flutter toolchain, built on first use.
+        "flutter" => Ok("images/flutter"),
         "vault" => Ok("images/vault"),
         other => Err(format!("Unknown image type: {other}")),
     }
@@ -396,6 +398,7 @@ mod tests {
             ("images/chromium/Containerfile.framework", "images/chromium"),
             ("images/vault/Containerfile", "images/vault"),
             ("images/webkit/Containerfile", "images/webkit"),
+            ("images/flutter/Containerfile", "images/flutter"),
         ];
 
         for (cf_rel_path, context_dir) in containerfiles {

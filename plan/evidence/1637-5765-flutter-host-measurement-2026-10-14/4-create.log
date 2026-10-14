@@ -1,0 +1,24 @@
+   Woah! You appear to be trying to run flutter as root.
+   We strongly recommend running the flutter tool without superuser privileges.
+  /
+📎
+Creating project app...
+Resolving dependencies in `app`...
+Downloading packages...
+Got dependencies in `app`.
+Wrote 19 files.
+
+All done!
+You can find general documentation for Flutter at: https://docs.flutter.dev/
+Detailed API documentation is available at: https://api.flutter.dev/
+If you prefer video documentation, consider: https://www.youtube.com/c/flutterdev
+
+In order to run your application, type:
+
+  $ cd app
+  $ flutter run
+
+Your application code is in app/lib/main.dart.
+
+152K	/work/app
+168M	/root/.pub-cache

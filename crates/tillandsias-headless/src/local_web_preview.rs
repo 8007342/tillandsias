@@ -348,6 +348,21 @@ fn attributed_forge(row: &Value, socket_dir: &Path) -> bool {
         })
 }
 
+/// 1637-5765: the live lane's forge and RAM source volume, for a toolchain
+/// session (toolchain_exec) that must work on the same tree publish_local
+/// serves. Same proofs as publish: one attributed forge, a bounded tmpfs volume.
+pub(crate) struct LiveLane {
+    pub(crate) forge_id: String,
+    pub(crate) volume: String,
+}
+
+pub(crate) fn resolve_live_source(project: &str, instance: &str) -> Result<LiveLane, String> {
+    resolve_live(project, instance, None).map(|l| LiveLane {
+        forge_id: l.forge_id,
+        volume: l.volume,
+    })
+}
+
 fn resolve_live(
     project: &str,
     instance: &str,
@@ -1292,6 +1307,59 @@ fn strict_reload() -> Result<(), String> {
     )
     .map(|_| ())
     .map_err(|_| "router_not_ready: Caddy rejected or could not reload configuration".into())
+}
+
+/// 1637-5765: route `<service>.<project>` to a toolchain dev server (Flutter's
+/// `run -d web-server`) for one session, over plain HTTP: the preview TLS leaf
+/// is issued for `www.<project>` only. Returns the URL a browser opens.
+pub(crate) fn add_dev_route(
+    service: &str,
+    project: &str,
+    upstream: &str,
+    port: u16,
+    debug: bool,
+) -> Result<String, String> {
+    let _lock = crate::resource_lock::acquire(
+        "preview-router",
+        command_budget(Duration::from_secs(5))?,
+        debug,
+    )?;
+    let route = crate::RouterRoute::public_service(format!("{service}.{project}"), upstream, port);
+    let mut routes = read_routes(debug)?;
+    routes.retain(|r| r.subdomain != route.subdomain);
+    routes.push(route);
+    crate::write_router_routes(&routes, debug)?;
+    strict_reload()?;
+    let published = podman_at(Step::Router, &["port", "tillandsias-router", "8080/tcp"])?;
+    let host_port = published
+        .lines()
+        .find_map(|l| l.rsplit(':').next()?.trim().parse::<u16>().ok())
+        .ok_or("router_not_ready: the router publishes no host port")?;
+    Ok(crate::project_service_url(service, project, host_port))
+}
+
+/// Remove the session's route, only while it still points at `upstream`: a
+/// newer session for the same lane replaced it and owns it now.
+pub(crate) fn remove_dev_route(
+    service: &str,
+    project: &str,
+    upstream: &str,
+    debug: bool,
+) -> Result<(), String> {
+    let _lock = crate::resource_lock::acquire(
+        "preview-router",
+        command_budget(Duration::from_secs(5))?,
+        debug,
+    )?;
+    let subdomain = format!("{service}.{project}");
+    let mut routes = read_routes(debug)?;
+    let count = routes.len();
+    routes.retain(|r| !(r.subdomain == subdomain && r.upstream_host == upstream));
+    if count != routes.len() {
+        crate::write_router_routes(&routes, debug)?;
+        strict_reload()?;
+    }
+    Ok(())
 }
 
 fn read_routes(debug: bool) -> Result<Vec<crate::RouterRoute>, String> {
