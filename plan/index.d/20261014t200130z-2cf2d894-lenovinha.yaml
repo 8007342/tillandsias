@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: an-opt-in-flutter-web-toolchain-reaches-forges-through-a-sibling-image-with-pub-dev-and-flutter-artifacts-allowed
+    event:
+      type: progress
+      ts: "2026-10-14T20:01:30Z"
+      agent_id: linux-lenovinha-claude-20261014t200130z
+      host: lenovinha
+      summary: |-
+        PR #433 (head fd73587f9): opt-in sibling image tillandsias-flutter + forge flutter shim streamed over the lane socket. MEASURED LIMIT (coordinator condition d): forge-time hosts pub.dev only; image 2.8 GB; one Flutter app adds about 70 MB (.dart_tool 30 + build/web 40) to the 348 MB RAM project volume; macron.dev + one Flame app is about 246 of 348 MB; a SECOND app is the next wall (the bounded tmpfs, not the image). Unproven: a connected browser receiving the hot reload (needs a lane launch); the arm64 image path.
