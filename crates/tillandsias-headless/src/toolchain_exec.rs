@@ -844,8 +844,10 @@ mod tests {
         let python = ["/usr/bin/python3", "/usr/local/bin/python3"]
             .into_iter()
             .find(|p| std::path::Path::new(p).exists())?;
-        let shim = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../images/default/cli/flutter");
+        let shim = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../../images/default/cli/flutter");
         let mut cmd = std::process::Command::new(python);
         cmd.arg(shim)
             .args(args)

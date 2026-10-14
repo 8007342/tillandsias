@@ -5,7 +5,13 @@
 -- fixtures set TILLANDSIAS_REPO_ROOT to their throwaway tree.
 local root = env.get("PODMAN_SYNC_SEARCH_ROOT") or "crates"
 local raw_allowed = env.get("PODMAN_SYNC_ESCAPE_HATCHES")
-if raw_allowed == nil or raw_allowed == "" then raw_allowed = "1" end
+-- The caller-owned spawns this crate allows, each a process whose lifetime is
+-- its caller's by design, never a podman query that should be bounded:
+--   1. main.rs build_image_with_logging: the streamed image build;
+--   2. toolchain_exec.rs run_session (1637-5765): an interactive toolchain
+--      session (`flutter run`), ended by its client's disconnect.
+-- A third needs the same justification here, in the same commit.
+if raw_allowed == nil or raw_allowed == "" then raw_allowed = "2" end
 if not text.is_match(raw_allowed, "^-?[0-9]+$") then
     verdict.emit("blocked:podman-sync-bounded:invalid-escape-hatches:" .. raw_allowed, 2)
 end
