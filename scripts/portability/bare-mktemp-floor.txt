@@ -141,7 +141,6 @@ scripts/test-installer-probes-by-attempt-not-by-help.sh 2
 scripts/test-installer-provisions-once.sh 1
 scripts/test-installer-reports-wsl-guest-shape.sh 1
 scripts/test-installer-reset-probe.sh 1
-scripts/test-jq-multiline-capture.sh 1
 scripts/test-land-merges-trunk.sh 1
 scripts/test-land-notice-names-unrun-litmus.sh 1
 scripts/test-land-queue.sh 1
