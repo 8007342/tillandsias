@@ -5,8 +5,8 @@
 Connecting a project to Cloudflare SHALL happen only when the user chooses
 **Publish to my domain** for that project in the tray and confirms a sheet
 that names the GitHub repository, the Cloudflare account, the branch that
-deploys (`main`), the custom domain, and that other branches get preview
-builds. Every Cloudflare and GitHub API call it makes SHALL be made by the
+deploys (`main`), the custom domain, and the paths whose changes trigger a
+build. Every Cloudflare and GitHub API call it makes SHALL be made by the
 host's resident process with credentials it reads from Vault. No Cloudflare
 OAuth token, API token, build token or GitHub secret SHALL be written to,
 mounted into, or placed in the environment or argv of a forge container,
@@ -27,21 +27,20 @@ and no forge-facing tool SHALL start a publish.
 ### Requirement: the repository is connected to Workers Builds through the Builds API
 
 On confirmation the host SHALL create (or update) the repository connection
-(`PUT /accounts/{account_id}/builds/repos/connections`) and two triggers
-(`POST /accounts/{account_id}/builds/triggers`): a production trigger for
-`main` running the deploy command `npx wrangler deploy`, and a preview
-trigger for every other branch running `npx wrangler preview`. Each uses the
-project's root directory and build command, read from the project, never
-guessed. A connection or trigger that already exists for the repository
-SHALL be updated, not duplicated. The Tillandsias GitHub App's permissions
+(`PUT /accounts/{account_id}/builds/repos/connections`) and ONE production
+trigger (`POST /accounts/{account_id}/builds/triggers`) for `main`, running
+the deploy command `npx wrangler deploy`, with the project's root directory
+and build command read from the project, never guessed. A connection or
+trigger that already exists for the repository SHALL be updated, not
+duplicated. The Tillandsias GitHub App's permissions
 SHALL NOT change for this: no Secrets, Workflows or Administration
 permission is requested.
 
-#### Scenario: publishing twice leaves one connection and two triggers
+#### Scenario: publishing twice leaves one connection and one trigger
 
 - **WHEN** the user publishes the same project twice
 - **THEN** the fake Cloudflare holds one repository connection and exactly
-  two triggers for it
+  one trigger for it, on `main`
 
 #### Scenario: the Builds scope is missing
 
@@ -49,6 +48,36 @@ permission is requested.
   403)
 - **THEN** the sheet says which permission is missing and how to grant it
   (sign in to Cloudflare again), and nothing is created
+
+### Requirement: builds spend the account's minutes only on main and only for site paths
+
+Workers Builds minutes are a shared, limited account quota (Free: 3,000
+build minutes a month and one concurrent build per account). By default the
+production trigger SHALL build only `main` (`branch_includes = ["main"]`)
+and only when a push changes the project's site paths (`path_includes`,
+taken from the project's root directory and the paths its build reads). No
+preview trigger SHALL be created unless the user turns previews on for that
+project, and the sheet SHALL say that each preview build spends the same
+minutes. The sheet SHALL show the account's build minutes used this month
+when Cloudflare reports them.
+
+#### Scenario: a push to another branch builds nothing
+
+- **WHEN** a published project with previews off receives a push to `next`
+- **THEN** its only trigger does not match, and the fake Cloudflare records
+  no build
+
+#### Scenario: a docs-only push to main builds nothing
+
+- **WHEN** a push to `main` changes only files outside the trigger's
+  `path_includes`
+- **THEN** the fake Cloudflare records no build
+
+#### Scenario: turning previews on is explicit
+
+- **WHEN** the user turns previews on for a project and confirms
+- **THEN** exactly one preview trigger exists (every branch except `main`,
+  deploy command `npx wrangler preview`), with the same `path_includes`
 
 ### Requirement: the one GitHub consent is detected and handed to the browser
 
@@ -94,9 +123,9 @@ is obtained SHALL follow an explicit ruling on the project's no-polling rule.
 Until that ruling exists, the tray shows "pushed; Cloudflare is building" and
 the live URL, and makes no repeated request.
 
-#### Scenario: a failed preview build shows its reason
+#### Scenario: a failed build shows its reason
 
-- **WHEN** a preview build fails in the fake Cloudflare with the log line
+- **WHEN** a build fails in the fake Cloudflare with the log line
   "Missing entry-point"
 - **THEN** the project's menu shows the failure with that reason
 

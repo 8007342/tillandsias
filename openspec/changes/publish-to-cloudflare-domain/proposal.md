@@ -18,9 +18,11 @@ branch builds fail in Cloudflare with no reason a forge or the tray can see.
 
 - A new capability, `cloudflare-publish`: one tray action, **Publish to my
   domain**, on an explicit confirm, through which the HOST connects the
-  project's GitHub repository to Cloudflare Workers Builds (a production
-  trigger for `main`, a preview trigger for other branches) using the user's
-  Cloudflare OAuth token from Vault. The custom domain comes from the
+  project's GitHub repository to Cloudflare Workers Builds using the user's
+  Cloudflare OAuth token from Vault. By default ONE production trigger, on
+  `main`, limited to the site's paths. Build minutes are a small shared
+  account quota (Free: 3,000 a month, one concurrent build), so previews are
+  opt-in. The custom domain comes from the
   project's own wrangler config, preflighted by the host.
 - The one consent no API can perform, installing the Cloudflare GitHub App
   on the repository owner, is detected and handed to the user's browser,

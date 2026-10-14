@@ -13,7 +13,9 @@ Use **Cloudflare Workers Builds**, connected to the user's GitHub repository by
 explicit "Publish to my domain" click** in the tray. Cloudflare builds and
 deploys on every push to `main`, and branch pushes get preview builds. The
 custom domain comes from the project's own wrangler config
-(`custom_domain = true`). No Cloudflare credential, build token or GitHub secret
+(`custom_domain = true`). **By default only `main` builds, and only when the
+site's own paths change**, because build minutes are a small shared quota (see
+"Build-minute budget"); previews are opt-in. No Cloudflare credential, build token or GitHub secret
 ever enters a forge, and nothing new is stored in GitHub. The user needs **one
 browser consent per GitHub account, ever**: installing the Cloudflare GitHub
 App, which no API can do. Cloudflare's GitHub integration requires it ("you
@@ -53,9 +55,11 @@ The user clicks **Publish to my domain**, confirms, and then the host:
 1. checks the Cloudflare GitHub App is installed on the repo's owner; if not,
    opens the browser on the install page and waits (the only browser step, once
    per GitHub account);
-2. creates the repo connection and two triggers: production (`main`,
-   `npx wrangler deploy`) and preview (`*` except `main`, `npx wrangler
-   preview`), with the root directory and build command read from the project;
+2. creates the repo connection and ONE production trigger (`main`, `npx
+   wrangler deploy`, `path_includes` = the site's paths), with the root
+   directory and build command read from the project. A preview trigger (`*`
+   except `main`, `npx wrangler preview`) is created only if the user turns
+   previews on, because each preview build spends the same minutes;
 3. checks the custom domain in the project's wrangler config is a zone in the
    user's account with no CNAME at that name, and refuses by name otherwise;
 4. starts the first build and shows its state in the tray.
@@ -66,7 +70,7 @@ The user clicks **Publish to my domain**, confirms, and then the host:
 | Credential exposure | none new: the host uses its Vault OAuth token, nothing in GitHub, nothing in a forge |
 | GitHub App permission change for Tillandsias | **none** (the mirror token stays `{contents: write}`) |
 | Builds happen when the user's machine is off | **yes**, which is what "Cloudflare takes care of the rest" means |
-| Branch previews | yes (second trigger) |
+| Branch previews | available, **off by default** (opt-in second trigger; same minute cost) |
 | Deploy latency | 59 s to 12m37s measured; queues behind other builds on Free (1 concurrent); Flutter is fetched on every build (not cached) |
 | Unknowns | U1: can the project's Cloudflare App request `workers_builds:write` (and Workers Scripts read), and does the Builds API accept its OAuth token? U2: can the host create the build token the trigger needs by API? |
 
@@ -104,6 +108,39 @@ short-lived access token handed to it as a tmpfs file, never in env
 
 C is the fallback if U1 or U2 fails. It's also the right **interim** if the
 operator wants publishing working before the Cloudflare unknowns are measured.
+
+## Build-minute budget (operator rule, 2026-10-14)
+
+Cloudflare's Free plan gives **3,000 Workers Builds minutes a month and ONE
+concurrent build per account** (developers.cloudflare.com/workers/ci-cd/builds/limits-and-pricing/).
+A deploy costs about 12+ minutes even when the app itself builds in seconds,
+because the build image fetches toolchains uncached (Flutter here). The
+operator's rule for macron.dev, relayed by the coordinator: macron.dev may use
+at most a third of the quota (~1,000 min, ~80 main deploys a month, ~2-3 a
+day), because it shares the account with the observatorium. The operator's
+correction the same day set **project-discipline level 2**: agents keep pushing
+FREQUENTLY and safely, each unit of work on its own `work/<id>` branch, landing
+on the integration branch; `main` advances only through budgeted, batched merges
+(≤ ~1,000 build-min a month, ~2 a day). A committed deploy ledger records each
+main deploy's **billed build minutes**, and a budget check refuses a merge past
+the month's share. This holds only if Cloudflare does NOT build non-production
+branches, otherwise every `work/` push spends minutes. So turning
+non-production branch builds off in the dashboard (with watch paths set to the
+site's paths) is a **precondition**. Until it's off, the ledger also records
+every branch build Cloudflare runs, so their cost is visible.
+
+The same reasoning sets this design's defaults for **every user project**:
+- one production trigger on `main`, with `path_includes` limited to the site's
+  paths, so a docs-only or plan-only push builds nothing;
+- no preview trigger unless the user turns previews on, and the toggle says it
+  spends minutes;
+- the sheet shows the account's minutes used this month when Cloudflare
+  reports them;
+- branch discipline (level 2: `work/<id>` branches pushed freely, an
+  integration branch, budgeted batched merges to `main`) belongs to the
+  project's onboarding (1705-bgen's start-a-new-project skill), not to
+  Cloudflare. This design assumes it, and its main-only default is what keeps
+  frequent `work/` pushes free.
 
 ## Spike first (before the first slice)
 
@@ -150,8 +187,9 @@ building (usually 1-13 min)" and let the user open the URL.
 Tray, on a project whose wrangler config names a custom domain:
 **Publish to my domain…** → a confirm sheet naming exactly what will happen
 ("Connect github.com/<owner>/<repo> to Cloudflare Workers Builds in account
-<name>; build `main` on every push; serve it at <domain>; preview other
-branches") → [Publish] / [Cancel]. If the Cloudflare GitHub App is missing, the
+<name>; build `main` when <paths> change; serve it at <domain>; this
+month: <n> of 3,000 build minutes used", plus an off-by-default "Preview other
+branches (uses build minutes)" toggle) → [Publish] / [Cancel]. If the Cloudflare GitHub App is missing, the
 sheet says so and the button reads **Install Cloudflare's GitHub App** (opens
 the browser), then resumes. After publishing, the project's menu shows the live
 URL and the last build's state and time. A forge agent gets none of this. Its
