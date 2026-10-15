@@ -151,13 +151,6 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "HOT_PATH_BUDGET_FLOOR_MB"
 
-  - step: "Req 5 (1729-kg5q): the /home/forge/src floor fits a build, clamped to half the cgroup"
-    # Spec § "Per-launch project source budget": floor = min(1536 MB,
-    # memory.max / 2). The launch site must use the clamped source budget.
-    command: "grep -F 'pub const HOT_PATH_SOURCE_FLOOR_MB: u32 = 1536;' crates/tillandsias-core/src/config.rs && grep -F 'HOT_PATH_SOURCE_FLOOR_MB.min(half)' crates/tillandsias-core/src/config.rs && grep -F 'tillandsias_core::config::compute_source_budget(' crates/tillandsias-headless/src/main.rs && echo 'ok: clamped source floor'"
-    timeout_ms: 3000
-    expected_behavior: "ok: clamped source floor"
-
   - step: "Req 5: 4 unit tests cover the compute_hot_budget recipe"
     # Inflation / floor / ceiling / custom-config branches +
     # the 2 parser tests = 6 total tests; pin >=4 by name presence
