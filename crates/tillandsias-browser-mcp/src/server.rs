@@ -13,6 +13,10 @@ use base64::Engine as _;
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
+
+/// Order 1725-5uue: how long browser.open waits, once the page has loaded,
+/// for a KEPT service worker to register before naming none.
+const SERVICE_WORKER_WAIT: Duration = Duration::from_secs(2);
 use url;
 
 /// Configuration for the MCP server.
@@ -355,6 +359,10 @@ impl BrowserMcpServer {
                             "type": "boolean",
                             "description": "Development mode: the lane that opens the window gets full browser control (browser.cdp, browser.eval, browser.navigate, console and network tails). The window's network is unchanged: it still reaches only this project."
                         },
+                        "keep_service_worker": {
+                            "type": "boolean",
+                            "description": "Development mode only. Default false: every page BYPASSES service workers, so a reload always reaches the preview and a stopped preview shows as down, never as a cached build. true keeps them (for testing offline and update flows), and the reply names the registered worker scripts. The reply's service_workers field says which applied."
+                        },
                         "device": {
                             "type": "string",
                             "description": "The device to emulate, e.g. \"iphone 12 pro max\", \"galaxy s24\", \"desktop\" (default: the project's .tillandsias/config.toml [browser] device, else desktop). The window opens at the device's CSS viewport with its dpr, UA and touch."
@@ -627,6 +635,12 @@ impl BrowserMcpServer {
             .and_then(|value| value.as_bool())
             .unwrap_or(false);
 
+        // Order 1725-5uue: dev windows bypass service workers unless kept.
+        let keep_service_worker = args
+            .get("keep_service_worker")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false);
+
         // Order 1655-urz9: resolve the device before anything starts.
         // Order 1656-tjv4: and the engine, from the device or `engine`.
         let device_query = args
@@ -718,7 +732,10 @@ impl BrowserMcpServer {
             &self.project_label,
             &self.launch_mode,
             &device,
-            dev,
+            launcher::DevMode {
+                dev,
+                keep_service_worker,
+            },
             engine,
             headless,
         ) {
@@ -740,6 +757,20 @@ impl BrowserMcpServer {
             (Some(a), Some(b)) => Some(format!("{a} {b}")),
             (a, b) => a.or(b),
         };
+        // Order 1725-5uue: say what the window does with service workers;
+        // a kept one is named, once the page registers it (bounded wait).
+        let service_workers = match (dev, keep_service_worker) {
+            (false, _) => json!({ "mode": "active" }),
+            (true, false) => json!({ "mode": "bypassed" }),
+            (true, true) => json!({
+                "mode": "kept",
+                "registered": entry
+                    .cdp
+                    .as_ref()
+                    .map(|cdp| cdp.service_workers(SERVICE_WORKER_WAIT))
+                    .unwrap_or_default(),
+            }),
+        };
         let notice = entry.notice.clone();
         let window_id = entry.window_id.clone();
         self.windows.insert(entry);
@@ -755,6 +786,7 @@ impl BrowserMcpServer {
                 "engine": engine.label(),
                 // Order 1712-3fsw: whether a human can see this window.
                 "headless": headless,
+                "service_workers": service_workers,
                 "notice": notice,
             }),
         }
@@ -2301,6 +2333,29 @@ mod tests {
         .unwrap();
         assert_eq!(seen["engine"], "WebKit (approximates Safari)", "{seen}");
         assert_eq!(*host.launches.lock(), vec![(false, Engine::WebKit)]);
+    }
+
+    /// Order 1725-5uue: the reply says what the window does with service
+    /// workers: a dev window bypasses them unless asked to keep them.
+    #[tokio::test]
+    async fn the_open_reply_says_whether_service_workers_were_bypassed() {
+        for (args, want) in [
+            (json!({ "url": PREVIEW }), json!({ "mode": "active" })),
+            (
+                json!({ "url": PREVIEW, "dev": true }),
+                json!({ "mode": "bypassed" }),
+            ),
+            (
+                json!({ "url": PREVIEW, "dev": true, "keep_service_worker": true }),
+                json!({ "mode": "kept", "registered": [] }),
+            ),
+        ] {
+            let (_host, server) = headless_host(false);
+            let seen = call_seen(&server, "browser.open", args.clone())
+                .await
+                .unwrap();
+            assert_eq!(seen["service_workers"], want, "{args} -> {seen}");
+        }
     }
 
     /// headless: true on a display host runs headless: agents that drive

@@ -561,6 +561,38 @@ Every successful `tools/call` on the lane socket, whether a browser tool (`brows
 - **THEN** `result.content[0].text` parses to the same object as `result.structuredContent`, which carries `windows`
 - **AND** `result.isError` is not true
 
+### Requirement: Development windows bypass service workers unless the lane keeps them
+<!-- req-id: 1d51dd06 -->
+
+A `browser.open{dev:true}` window SHALL set
+`Network.setBypassServiceWorker{bypass:true}` on every page it attaches,
+after `Network.enable`, so a reload always reaches the preview and a
+stopped preview shows as down, never as a build the service worker cached
+(order 1725-5uue). `keep_service_worker:true` SHALL leave service workers
+active, enable the `ServiceWorker` domain instead, and name the registered
+worker scripts in the reply, waiting a bounded time for the first one. The
+`browser.open` reply SHALL carry `service_workers.mode`: `bypassed`,
+`kept` (with `registered`), or `active` for a window outside development
+mode, which this requirement leaves unchanged. Both methods are
+experimental CDP, pinned to the bundled Chromium like the emulation
+commands.
+
+@trace spec:host-browser-mcp
+
+#### Scenario: A dev window bypasses service workers by default
+
+- **WHEN** an agent opens a dev window without `keep_service_worker`
+- **THEN** every page gets `Network.setBypassServiceWorker{bypass:true}`
+  after `Network.enable`
+- **AND** the reply says `service_workers.mode: bypassed`
+
+#### Scenario: A kept service worker is named
+
+- **WHEN** an agent opens a dev window with `keep_service_worker:true`
+- **THEN** no page bypasses service workers
+- **AND** the reply says `service_workers.mode: kept` and lists the
+  registered worker scripts
+
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
