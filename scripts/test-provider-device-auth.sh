@@ -145,6 +145,31 @@ else
     bad "agy negative control failed"
 fi
 
+echo "[6] negative control: decoy token file is never harvested"
+mkdir -p "$TMP_AGY/home/.gemini/decoy" "$TMP_AGY/home/.config/antigravity"
+echo "decoy-token-data" > "$TMP_AGY/home/.gemini/decoy/other-token"
+echo "decoy-token-data" > "$TMP_AGY/home/.config/antigravity/token.json"
+rm -f "$TMP_AGY/home/.gemini/antigravity-cli/antigravity-oauth-token"
+cat > "$TMP_AGY/bin/agy" <<'FAKE_AGY_DECOY'
+#!/usr/bin/env bash
+for arg in "$@"; do
+    [[ "$arg" == "--help" ]] && { echo "Usage: agy"; exit 0; }
+done
+exit 1
+FAKE_AGY_DECOY
+chmod +x "$TMP_AGY/bin/agy"
+
+if PATH="$TMP_AGY/bin:$PATH" HOME="$TMP_AGY/home" \
+     TILLANDSIAS_LIB_COMMON="$TMP_AGY/lib-common.sh" \
+     TILLANDSIAS_AGY_AUTH_FILE="$TMP_AGY/home/vault-target-token" \
+     bash "$IMG/provider-device-auth.sh" antigravity >/dev/null 2>&1; then
+    bad "decoy token was harvested"
+else
+    [ ! -f "$TMP_AGY/home/vault-target-token" ] \
+        && ok "decoy token is never harvested" \
+        || bad "target file created from decoy"
+fi
+
 echo
 echo "provider-device-auth fixture: $PASS ok, $FAIL fail"
 [ "$FAIL" -eq 0 ] && { echo "PASS: provider device-auth + oauth-vault contract shape"; exit 0; }

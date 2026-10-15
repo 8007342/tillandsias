@@ -61,23 +61,28 @@ case "$PROVIDER" in
             "$BIN" login
         else
             # agy has no auth/login subcommand; the top-level binary initiates interactive auth.
-            # Run in foreground with TTY, watching for credential file so we exit cleanly once authorized.
-            (
-                while [[ ! -s "$AUTH_FILE" ]]; do
-                    _cand="$(find "$HOME/.gemini" "$HOME/.antigravity" "$HOME/.config/antigravity" -maxdepth 3 -type f -name "*token*" 2>/dev/null | head -1)"
-                    if [[ -n "$_cand" && -s "$_cand" && "$_cand" != "$AUTH_FILE" ]]; then
-                        mkdir -p "$(dirname "$AUTH_FILE")"
-                        cp "$_cand" "$AUTH_FILE"
-                        break
-                    fi
-                    sleep 0.5
-                done
-                sleep 1
-                pkill -f "$BIN" 2>/dev/null || true
-            ) &
-            _watcher_pid=$!
-            "$BIN" || true
-            kill "$_watcher_pid" 2>/dev/null || true
+            # Start $BIN in background, track its exact PID, and signal ONLY that PID once the
+            # exact credential file ($AUTH_FILE or ~/.gemini/antigravity-cli/antigravity-oauth-token) appears.
+            _agy_default_token="$HOME/.gemini/antigravity-cli/antigravity-oauth-token"
+            "$BIN" &
+            _agy_pid=$!
+            while kill -0 "$_agy_pid" 2>/dev/null; do
+                if [[ -s "$AUTH_FILE" || -s "$_agy_default_token" ]]; then
+                    break
+                fi
+                sleep 0.5
+            done
+            # Settle period: allow agy to finish flushing/closing the token file
+            sleep 1
+            kill "$_agy_pid" 2>/dev/null || true
+            for _ in 1 2 3 4 5; do
+                kill -0 "$_agy_pid" 2>/dev/null || break
+                sleep 0.2
+            done
+            if kill -0 "$_agy_pid" 2>/dev/null; then
+                kill -KILL "$_agy_pid" 2>/dev/null || true
+            fi
+            wait "$_agy_pid" 2>/dev/null || true
         fi
         ;;
     *)
@@ -86,21 +91,18 @@ case "$PROVIDER" in
         ;;
 esac
 
-if [[ ! -s "$AUTH_FILE" ]]; then
-    _cand="$(find "$HOME/.gemini" "$HOME/.antigravity" "$HOME/.config/antigravity" -maxdepth 3 -type f -name "*token*" 2>/dev/null | head -1)"
-    if [[ -n "$_cand" && -s "$_cand" ]]; then
-        mkdir -p "$(dirname "$AUTH_FILE")"
-        cp "$_cand" "$AUTH_FILE"
-    fi
+# Synchronize canonical token if needed, setting secure permissions
+if [[ "$AUTH_FILE" != "$HOME/.gemini/antigravity-cli/antigravity-oauth-token" && -s "$HOME/.gemini/antigravity-cli/antigravity-oauth-token" ]]; then
+    mkdir -p "$(dirname "$AUTH_FILE")"
+    chmod 700 "$(dirname "$AUTH_FILE")" 2>/dev/null || true
+    cp "$HOME/.gemini/antigravity-cli/antigravity-oauth-token" "$AUTH_FILE"
+    chmod 600 "$AUTH_FILE" 2>/dev/null || true
 fi
 
 if [[ ! -s "$AUTH_FILE" ]]; then
     echo "ERROR: $PROVIDER login completed without creating $AUTH_FILE" >&2
     if [[ "$PROVIDER" == antigravity ]]; then
-        echo "Candidate credential locations found under \$HOME:" >&2
-        find "$HOME/.gemini" "$HOME/.antigravity" "$HOME/.config/antigravity" \
-            -maxdepth 3 -type f 2>/dev/null >&2 || true
-        echo "File this output into the agy-login live-verify packet." >&2
+        echo "Expected credential at $AUTH_FILE or \$HOME/.gemini/antigravity-cli/antigravity-oauth-token" >&2
     fi
     exit 3
 fi
