@@ -247,6 +247,9 @@ const DEV_SERVER_PORT: u16 = 8080;
 /// `flutter run -d web-server …` serves the app for a browser and hot-reloads
 /// into it. Such a session is routed: its listen flags are the host's
 /// (all interfaces, DEV_SERVER_PORT), any the agent passed are replaced.
+/// CanvasKit is served from the SDK (`--no-web-resources-cdn`): a browser.open
+/// window resolves only its project's hosts, so the default gstatic CDN load
+/// fails and the app never starts (measured 2026-10-14, 1637-5765).
 /// Returns the rewritten argv, or None for any other command.
 pub(crate) fn dev_server_argv(argv: &[String]) -> Option<Vec<String>> {
     if argv.first().map(String::as_str) != Some("run") {
@@ -270,7 +273,11 @@ pub(crate) fn dev_server_argv(argv: &[String]) -> Option<Vec<String>> {
             i += 2;
             continue;
         }
-        if a.starts_with("--web-hostname=") || a.starts_with("--web-port=") {
+        if a.starts_with("--web-hostname=")
+            || a.starts_with("--web-port=")
+            || a == "--web-resources-cdn"
+            || a == "--no-web-resources-cdn"
+        {
             i += 1;
             continue;
         }
@@ -282,6 +289,7 @@ pub(crate) fn dev_server_argv(argv: &[String]) -> Option<Vec<String>> {
     }
     out.push("--web-hostname=0.0.0.0".into());
     out.push(format!("--web-port={DEV_SERVER_PORT}"));
+    out.push("--no-web-resources-cdn".into());
     Some(out)
 }
 
@@ -1054,16 +1062,19 @@ mod tests {
                 "-d",
                 "web-server",
                 "--web-hostname=0.0.0.0",
-                "--web-port=8080"
+                "--web-port=8080",
+                "--no-web-resources-cdn"
             ])
         );
-        // The agent's own listen flags are replaced, in both spellings.
+        // The agent's own listen flags are replaced, in both spellings, and
+        // a CDN request is overridden: the window cannot reach the CDN.
         let routed = dev_server_argv(&v(&[
             "run",
             "--device-id=web-server",
             "--web-port",
             "5000",
             "--web-hostname=127.0.0.1",
+            "--web-resources-cdn",
             "--release",
         ]))
         .unwrap();
@@ -1074,7 +1085,8 @@ mod tests {
                 "--device-id=web-server",
                 "--release",
                 "--web-hostname=0.0.0.0",
-                "--web-port=8080"
+                "--web-port=8080",
+                "--no-web-resources-cdn"
             ])
         );
         assert!(dev_server_argv(&v(&["run", "-dweb-server"])).is_some());
