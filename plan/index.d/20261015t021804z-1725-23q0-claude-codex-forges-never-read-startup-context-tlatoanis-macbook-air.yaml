@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-15, on the coordinator's request
+# ("Yes, file the startup-context row (p1, pickup any)").
+packets:
+  - packet_id: claude-and-codex-forge-agents-never-receive-the-forge-startup-context-so-they-miss-experts-state-accel-web-publish-and-host-version
+    order: 1725-23q0
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [forge, startup-context, claude, codex, opencode, agent-guidance, harness]
+    estimated_hours: 4
+    related: [1701-ze9y, 1664-finm, 1705-bgen, 1724-kcj4]
+    title: |
+      Every forge launch writes .forge-startup-context.md (images/default/lib-common.sh inject_startup_context), but only OpenCode is pointed at it (opencode agent/status.md, instructions/*). Nothing tells a Claude or Codex forge agent the file exists, so those agents never see experts_state, the accel envelope, web_publish_state/web_publish_reason (1664-finm), the host release (1701-ze9y), or, in a Tillandsias forge, the push-before-exit gate. Each harness must receive it.
+    context: |
+      READ 2026-10-15 (source on linux-next, while preparing 1724-kcj4): `git grep forge-startup-context images/default` outside lib-common.sh matches only OpenCode's overlay files and the addendum's own comment. The Claude overlay is settings.json (a PreToolUse Bash hook) plus mcp.json; the Codex overlay is register-experts.sh. No CLAUDE.md, AGENTS.md or --append-system-prompt is installed for either. The checkout addendum (images/default/startup-context-addendum.md) is a second gap of the same kind: it is read from $project_dir/images/default/, so only a forge working on the Tillandsias repo itself ever gets it.
+      The field case behind 1724-kcj4 (lakanoa, a Claude-style session) is what made this visible: guidance placed in the startup context would never have reached that agent.
+    exit_criteria:
+      - 'a Claude forge agent and a Codex forge agent each receive the startup context (or a pointer they act on) through their harness''s own instruction channel, as OpenCode does; a fixture per harness asserts what the agent is given, red today for Claude and Codex'
+      - 'the mechanism does not shadow a project''s own CLAUDE.md or AGENTS.md (a forge-level file is additive), with a fixture showing a project file still loads'
+      - 'live: in a released forge, a Claude session answers what experts_state and host_version say without being told where to look'
+    unscoreable: "the per-harness fixtures are the closure, plus one live check in a released forge"
+    next_action: >
+      Decide the channel per harness: a forge-level ~/.claude/CLAUDE.md that points at .forge-startup-context.md, and Codex's equivalent. 1724-kcj4 installs that same single-source instruction file, so build on it rather than adding a second file.
+    events:
+      - type: filed
+        ts: "2026-10-15T02:18:04Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Claude and Codex forge agents never receive .forge-startup-context.md (only OpenCode is pointed at it): no experts_state, accel envelope, web_publish_state or host_version. Found while preparing 1724-kcj4.
