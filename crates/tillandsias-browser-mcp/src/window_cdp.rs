@@ -465,6 +465,39 @@ impl WindowCdp {
             .unwrap_or(Value::Null))
     }
 
+    /// The page's live URL and title (order 1637-5765): the current entry of
+    /// its navigation history. Read through the Page domain, never by running
+    /// page script, so a window that is not in dev mode answers it too. The
+    /// title follows `document.title`, so an app that retitles itself (a hot
+    /// reload, a route change) is seen.
+    pub fn page_info(&self) -> Result<(String, String), CdpError> {
+        let session = self
+            .main_session()
+            .ok_or_else(|| CdpError::WindowNotRunning("no page".into()))?;
+        let history = self
+            .conn
+            .call(Some(&session), "Page.getNavigationHistory", json!({}))?;
+        let index = history
+            .get("currentIndex")
+            .and_then(Value::as_u64)
+            .unwrap_or(0) as usize;
+        let entry = history
+            .get("entries")
+            .and_then(|e| e.get(index))
+            .ok_or_else(|| CdpError::ProtocolError {
+                code: -1,
+                message: "no current navigation entry".into(),
+            })?;
+        let field = |k: &str| {
+            entry
+                .get(k)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        };
+        Ok((field("url"), field("title")))
+    }
+
     /// Load `url` in the window's page (it starts on about:blank, so the
     /// first request already carries the device's UA).
     ///

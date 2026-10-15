@@ -150,7 +150,6 @@ scripts/test-ledger-write-reaches-its-reader.sh 3
 scripts/test-litmus-bindings.sh 1
 scripts/test-litmus-budget-tally.sh 1
 scripts/test-litmus-covering-relay-scope.sh 1
-scripts/test-litmus-grep-escapes.sh 1
 scripts/test-litmus-item-opener-refused.sh 1
 scripts/test-litmus-mutation-arm-guard.sh 1
 scripts/test-litmus-runner-reports-rc.sh 2

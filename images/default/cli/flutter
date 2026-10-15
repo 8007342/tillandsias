@@ -8,6 +8,10 @@ image once, then runs `flutter <args>` there against this project's files,
 streaming the output back. Interactive commands work: `flutter run -d
 web-server` takes `r`/`R` for hot reload and Ctrl-C to stop.
 
+Stdin reaches flutter only in an interactive session: a terminal, or `flutter
+run` (which reads r/R/q). Every other command gets an empty stdin, so a script
+piped into a shell is never swallowed by a `flutter` line inside it (1637-5765).
+
 Exit codes: flutter's own, or 69 when the host cannot run it (no lane socket,
 the image failed to build, the project is not attached).
 """
@@ -101,6 +105,14 @@ def project_cwd():
     return os.path.relpath(here, root) if here != root else ""
 
 
+def reads_stdin(argv, tty):
+    """Whether this session forwards stdin: a terminal, or `flutter run`."""
+    if tty:
+        return True
+    command = next((a for a in argv if not a.startswith("-")), "")
+    return command == "run"
+
+
 def run(argv):
     tty = sys.stdin.isatty() and sys.stdout.isatty()
     rows, cols = 24, 80
@@ -160,7 +172,10 @@ def run(argv):
             signal.signal(getattr(signal, f"SIG{name}"), lambda *_ , n=name: send({"sig": n}))
 
     code = 1
-    stdin_open = True
+    stdin_open = reads_stdin(argv, tty)
+    if not stdin_open:
+        # A one-shot command: stdin stays unread, for whoever reads it next.
+        send({"eof": True})
     out = {1: sys.stdout.buffer, 2: sys.stderr.buffer}
     try:
         while True:
