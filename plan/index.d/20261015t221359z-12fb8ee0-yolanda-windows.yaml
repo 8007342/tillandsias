@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: browser-open-container-window-works-on-windows-through-wslg
+    event:
+      type: progress
+      ts: "2026-10-15T22:13:59Z"
+      agent_id: windows-yolanda-claude-20261013t052033z
+      host: yolanda-windows
+      summary: |
+        Code landed: land 439 (1677a4551 / 92328b25d). The WSLg Wayland socket fallback is unit-tested. Live proof (a window on the Windows desktop) is blocked by 1713-1dnx. On Windows the guest headless is built with listen-vsock only, so the forge's /run/host/tillandsias-mcp has no listener ("Permission denied" in the v56.10.15.1 smoke), and a forge agent cannot call browser.open. Keeping in_progress until a release carries the 1dnx fix.
