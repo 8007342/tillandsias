@@ -2654,20 +2654,20 @@ mod tests {
             "Emulation.setUserAgentOverride",
         ];
         assert_eq!(names[..4], emulation, "emulated as it attached: {names:?}");
-        assert_eq!(names[4], "Page.enable");
+        assert_eq!(names[4..6], ["Page.enable", "Network.enable"]);
         assert_eq!(
-            names[5..9],
+            names[6..10],
             emulation,
             "then the checked re-apply: {names:?}"
         );
         assert_eq!(
-            names[9], "Page.navigate",
+            names[10], "Page.navigate",
             "and only then navigated: {names:?}"
         );
         assert_eq!(p1[2].1["width"], 428);
         assert_eq!(p1[2].1["deviceScaleFactor"], 3.0);
         assert!(p1[0].1["maxTouchPoints"].as_u64().unwrap() > 0);
-        assert_eq!(p1[9].1["url"], url);
+        assert_eq!(p1[10].1["url"], url);
 
         let window = opened["window_id"].as_str().unwrap().to_string();
         let switched = call_tool(
