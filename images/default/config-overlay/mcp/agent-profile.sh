@@ -81,7 +81,9 @@ link_forge_generic_skills() {
     local src_root="${TILLANDSIAS_SHARED_SKILLS_ROOT:-/opt/skills}" home="${HOME:-/home/forge}" skill dir
     for skill in $TILLANDSIAS_FORGE_GENERIC_SKILLS; do
         [ -f "$src_root/$skill/SKILL.md" ] || continue
-        for dir in "$home/.claude/skills" "$home/.codex/skills" "$home/.gemini/skills" "$home/.config/opencode/skill"; do
+        # 1743-h9rz: OpenCode's global skill directory is skills/ (plural), per
+        # opencode.ai/docs/skills; the singular skill/ was never searched.
+        for dir in "$home/.claude/skills" "$home/.codex/skills" "$home/.gemini/skills" "$home/.config/opencode/skills"; do
             [ -e "$dir/$skill" ] || [ -L "$dir/$skill" ] && continue
             mkdir -p "$dir" 2>/dev/null && ln -s "$src_root/$skill" "$dir/$skill" 2>/dev/null
         done

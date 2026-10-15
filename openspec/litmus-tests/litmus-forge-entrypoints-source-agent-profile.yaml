@@ -1,5 +1,5 @@
 # @trace spec:forge-environment-discoverability
-# @trace order:1517-p83m
+# @trace order:1517-p83m, order:1743-h9rz
 #
 # Order 1517-p83m: the four agent entrypoints sourced agent-profile.sh from
 # /opt/config-overlay, a path the image never installs, behind a silent [ -f ]
@@ -32,3 +32,12 @@ critical_path:
     command: "bash scripts/test-forge-entrypoints-source-agent-profile.sh"
     timeout_ms: 60000
     expected_behavior: "forge-entrypoints-source-agent-profile: 6 passed, 0 failed"
+
+  # 1743-h9rz: the list above named four entrypoints and missed OpenCode's,
+  # and the profile linked OpenCode's skills into a directory OpenCode never
+  # searches. This fixture lists the entrypoints and checks each agent's
+  # DOCUMENTED skill directory.
+  - step: "every forge entrypoint loads the profile and every agent finds the generic skills where it documents it looks"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-agents-discover-generic-skills.lua 2>&1"
+    timeout_ms: 60000
+    expected_behavior: "ok:forge-agents-discover-generic-skills:4"
