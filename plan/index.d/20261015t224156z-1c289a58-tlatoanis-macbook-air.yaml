@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: github-token-rotation-reads-a-vault-that-is-not-up-yet-as-no-token-and-waits-fifteen-minutes-while-cloud-projects-fail-silently
+    event:
+      type: progress
+      ts: "2026-10-15T22:41:56Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        MEASURED on macOS v56.10.15.1, live, by tlatoanis-macbook-air (filed separately as 1744-jp5x, now marked a duplicate of this row). Tray relaunched 21:39:45Z, Ready at 21:41:17Z. github-login and cloud-projects updated at 21:41:33Z with "fetch unconfirmed", then "(0 entries)". In a separate boot, `--list-cloud-projects` failed with "containerized gh exited with status 1" after a 4.3 KB api.github.com exchange. Nothing changed until 21:56:51Z, about 15 min after the guest started, when github-login updated and 16 entries loaded. The sign-in was intact throughout (the identity disk's vault-data dates from Oct 13). The guest spawns the scheduler in maybe_spawn_vsock_listener, before the Vault bootstrap, so on a VM host the first check always finds Vault down. A live exit check for this row: a macOS boot with a token past expiry loads the cloud list within 2 min of Ready. Record: plan/issues/e2e-smoke-v56.10.15.1-macos-2026-10-15.md.
