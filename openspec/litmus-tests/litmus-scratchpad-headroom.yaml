@@ -18,7 +18,9 @@ name: litmus:scratchpad-headroom
 spec: ci-release
 phase: pre-build
 description: >
-  Pin scripts/check-scratchpad-headroom.sh: quota-derived numbers when a quota
+  Pin scripts/lua/check-scratchpad-headroom.lua (ported from the .sh by 1738-wqmt;
+  its low verdicts are degraded: since script run has no warn:): quota-derived
+  numbers when a quota
   exists, a distinct verdict when only filesystem space is knowable, an explicit
   statement that df OVERSTATES usable space, quota-exhausted and disk-full as
   different verdicts, correct classification of both fleet hosts under one
@@ -27,28 +29,23 @@ severity: medium
 size: instant
 
 preconditions:
-  - workspace contains scripts/check-scratchpad-headroom.sh
-  - workspace contains scripts/test-scratchpad-headroom.sh
+  - workspace contains scripts/lua/check-scratchpad-headroom.lua
+  - workspace contains scripts/lua/test-scratchpad-headroom.lua
   - bash and coreutils are available in PATH
 
 critical_path:
-  - step: "guard and fixture parse, and the fixture is executable"
-    command: "bash -n scripts/check-scratchpad-headroom.sh && bash -n scripts/test-scratchpad-headroom.sh && test -x scripts/test-scratchpad-headroom.sh && echo 'ok: parses'"
-    timeout_ms: 5000
-    expected_behavior: "ok: parses"
-
   - step: "all arms pass (quota vs df, the 4.6x spread, quota-vs-disk distinction, advisory exit 0, grammar)"
-    command: "bash scripts/test-scratchpad-headroom.sh 2>&1 | tail -1"
+    command: "HP=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$HP\" script run scripts/lua/test-scratchpad-headroom.lua -- --plan \"$HP\" 2>&1"
     timeout_ms: 60000
     expected_behavior: "ok:scratchpad-headroom-fixture:all"
 
   - step: "the check is ADVISORY — it must never gate a cycle"
-    command: "bash scripts/check-scratchpad-headroom.sh >/dev/null 2>&1 && echo 'ok: exits 0' || echo 'FAIL: a capacity condition gated the cycle'"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-scratchpad-headroom.lua >/dev/null 2>&1 && echo 'ok: exits 0' || echo 'FAIL: a capacity condition gated the cycle'"
     timeout_ms: 15000
     expected_behavior: "ok: exits 0"
 
 evidence:
-  artifact: "scripts/check-scratchpad-headroom.sh + scripts/test-scratchpad-headroom.sh"
+  artifact: "scripts/lua/check-scratchpad-headroom.lua + scripts/lua/test-scratchpad-headroom.lua"
   measured_on: >
     lenovinha (Fedora Silverblue) 2026-08-26 — live verdict
     warn:scratchpad-headroom-low:3905m-of-5525m with the stderr note that df

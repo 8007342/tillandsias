@@ -1772,9 +1772,10 @@ fn print_usage(version: &str) {
          Destructive by design; you'll re-authenticate once"
     );
     println!(
-        "  --reset-state  FULL LOCAL RESET: everything --reset-guest wipes PLUS the \
-         host-held vault credentials, the Vault store and ALL podman images, then \
-         reprovisions. PRESERVES the installation anchor (installation-uuid-v1). \
+        "  --reset-state  SOFT LOCAL RESET: removes derived state (Tillandsias \
+         containers, volumes, secrets, networks, ALL podman images, build markers), \
+         then reprovisions. KEEPS the Vault store and your sign-ins, the keyring \
+         entries, the installation anchor and the downloads (order 1437-qza3). \
          Same name and semantics on Linux, macOS and Windows (order 1286-4437). \
          Skip with TILLANDSIAS_DESTRUCTIVE_RESET_OK=0."
     );
@@ -10797,9 +10798,10 @@ fn run_reset_state(_debug: bool) -> Result<(), String> {
 /// One-click intentional EPHEMERAL RESET: wipe + re-initialize. Reaches the
 /// same end state as a pristine `--init` + vault bring-up, with every prior
 /// guest credential discarded (the honest UX: you'll re-authenticate once).
-/// ORDER 1286-4437 (operator ruling 2026-09-20). A SUPERSET of
-/// `--reset-guest`: the guest substrate PLUS the host-held credentials,
-/// vault-data and the images, then reprovision through the same `--init` path.
+/// ORDER 1286-4437 (operator ruling 2026-09-20), made SOFT by 1437-qza3: the
+/// guest substrate PLUS the images and build markers, then reprovision through
+/// the same `--init` path. It clears no credential and deletes no store
+/// (`reset_state_plan` lists what is kept).
 ///
 /// `--reset-guest` is deliberately NOT changed. It documents "images are
 /// preserved, so this is fast when they still exist" and callers rely on that;

@@ -5213,6 +5213,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "End-user installer output guard fixture passed"
 
+    # The Linux installer runs the SOFT reset quietly into its setup log
+    # (1738-wqmt): the fixture RUNS install.sh's own reset block against a stub.
+    _step "Checking the Linux installer runs the soft reset quietly (1738-wqmt)..."
+    if ! _run_lua_decider "scripts/lua/test-install-linux-setup-is-quiet.lua" 2>&1; then
+        _error "install.sh prints power-user text, calls a non-SOFT reset, or does not log it — see the FAIL lines above (1738-wqmt)"
+        exit 1
+    fi
+    _info "Linux installer soft-reset fixture passed"
+
     _step "Checking the litmus step model (901-jtvi)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-step-model.sh" 2>&1; then
         _error "the litmus step model regressed — a producer's failure or its stderr can go missing again (901-jtvi)"
