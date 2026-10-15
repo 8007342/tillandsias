@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tillandsias-log-lines-bleed-into-an-attached-agent-tui-and-only-a-resize-redraw-clears-them
+    field: status
+    value: completed
+    ts: "2026-10-15T22:13:46Z"
+    host: lenovinha
+
+events:
+  - packet_id: tillandsias-log-lines-bleed-into-an-attached-agent-tui-and-only-a-resize-redraw-clears-them
+    event:
+      type: completed
+      ts: "2026-10-15T22:13:46Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: PR #459 landed as b9b15f5bf (land(459), head a7b0d41dd) on linux-next 2026-10-15; PTY fixture terminal_handoff::tests red 3/3 with the diversion disabled, green with it; ships in the next daily cut
