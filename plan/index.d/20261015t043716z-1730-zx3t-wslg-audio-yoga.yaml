@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga as the WSLg follow-up the coordinator asked for when approving 1722-2haw.
+packets:
+  - packet_id: a-wsl2-browser-window-plays-sound-through-an-output-only-server
+    order: 1730-zx3t
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    size: M
+    pickup_role: windows
+    capability_tags: [host-browser, browser, audio, isolation, wslg]
+    related: [1722-2haw, 1656-yhjt, 1713-vzh7]
+    depends_on: [1722-2haw]
+    title: |
+      A browser window in the WSL2 guest has no sound; WSLg serves PulseAudio at /mnt/wslg/PulseServer, which also allows recording, so it needs the same output-only front end as Linux before any mount
+    context: |
+      1722-2haw gives Linux windows sound through a dedicated PulseAudio-protocol server (crates/tillandsias-headless/src/host_audio_pulse.conf: client.access restricted, pulse.allow-module-loading false, quirks block-record-stream and block-source-volume), and its browser_open reply says "Audio: none (sound in WSL2 windows is not supported yet)" for a WSLg display.
+      Open question to measure first: whether the WSL2 guest runs a PipeWire daemon that can host that front end (with WSLg's PulseServer as its sink), or whether WSLg's PulseServer must be proxied some other way. Mounting /mnt/wslg/PulseServer directly gives a page the Windows microphone.
+    exit_criteria:
+      - "a page in a WSL2 browser window plays a tone that a Windows-side capture of the default output records (red today: no audio path)"
+      - "a page calling getUserMedia({audio:true}) in that window gets no audio, and a client of the window's socket recording any source is refused (the litmus:host-audio-output-only arms, run on the guest)"
+    unscoreable: "unpinnable-until-measured: whether the guest can host the output-only server is unknown"
+    next_action: >
+      On yolanda, check for pipewire in the WSL2 guest and whether a pipewire-pulse front end can reach WSLg's PulseServer as its sink. Decide before mounting anything.
+    provenance: |
+      Filed by yoga, 2026-10-15T04:37:16Z, as the follow-up the coordinator (macuahuitl-fedora) named when approving 1722-2haw.
+    events:
+      - type: filed
+        ts: "2026-10-15T04:37:16Z"
+        host: yoga
+        summary: |-
+          WSL2 windows need the output-only audio server too.
+
+events:
+  - packet_id: wslg-clipboard-sharing-gets-a-security-audit-and-is-documented-in-the-security-promises
+    event:
+      type: note
+      ts: "2026-10-15T04:37:16Z"
+      host: yoga
+      summary: |-
+        For the security-promises text: browser windows now get sound (1722-2haw) through an output-only server. A page cannot record, but it can LIST audio device names (metadata only). Device names can fingerprint a host. This is a known residual the coordinator accepted on 2026-10-15; state it beside the WSLg clipboard tradeoff.
