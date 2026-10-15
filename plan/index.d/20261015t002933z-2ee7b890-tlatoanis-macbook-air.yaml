@@ -1,0 +1,16 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-pushed-project-deploys-to-cloudflare-on-its-own-domain-without-dashboard-steps
+    field: next_action
+    value: |-
+      Read cloudflare_login.rs and openspec/specs/observatorium-dashboard/deployment.md. Look up the Cloudflare API for Workers Builds triggers and repo connections and for custom domains. Then draft the recommendation.
+
+
+      [2026-10-15T00:29:33Z tlatoanis-macbook-air] RESUME: close this row as COMPLETED once PR #440 (work/1707-g633: design record plus openspec change publish-to-cloudflare-domain) is on linux-next. Criterion 1 is met: the operator accepted the design (via macuahuitl, 2026-10-14, "I approve this design"). Criterion 2's no-dashboard-step slice is SUPERSEDED by the operator's manual-connect ruling (users connect their repo in the Cloudflare dashboard once; automation is deferred until apps need provisioned resources). Keep live only the host-side read-only status/diagnosis and the watch-paths-on-request ideas, as a closure note or a p3 row.
+    ts: "2026-10-15T00:29:33Z"
+    host: tlatoanis-macbook-air
