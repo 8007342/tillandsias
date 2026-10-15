@@ -1772,9 +1772,10 @@ fn print_usage(version: &str) {
          Destructive by design; you'll re-authenticate once"
     );
     println!(
-        "  --reset-state  FULL LOCAL RESET: everything --reset-guest wipes PLUS the \
-         host-held vault credentials, the Vault store and ALL podman images, then \
-         reprovisions. PRESERVES the installation anchor (installation-uuid-v1). \
+        "  --reset-state  SOFT LOCAL RESET: removes derived state (Tillandsias \
+         containers, volumes, secrets, networks, ALL podman images, build markers), \
+         then reprovisions. KEEPS the Vault store and your sign-ins, the keyring \
+         entries, the installation anchor and the downloads (order 1437-qza3). \
          Same name and semantics on Linux, macOS and Windows (order 1286-4437). \
          Skip with TILLANDSIAS_DESTRUCTIVE_RESET_OK=0."
     );
@@ -7157,7 +7158,11 @@ reverse_proxy {upstream_host}:{port}\n\
 }}\n\n"
             ));
             if route.preview_tls {
-                let preview_project = subdomain.strip_prefix("www.").unwrap_or(project_label);
+                // `<service>.<project>`: the project is everything after the
+                // first label, dots included (flutter.macron.dev → macron.dev).
+                let preview_project = subdomain
+                    .split_once('.')
+                    .map_or(project_label, |(_, project)| project);
                 routes.push_str(&format!(
                     "https://{subdomain}.localhost:8443 {{\n    tls /etc/tillandsias/preview/{preview_project}.crt /etc/tillandsias/preview/{preview_project}.key\n    header X-Tillandsias-Preview {upstream_host}\n    reverse_proxy {upstream_host}:{port}\n}}\n\n"
                 ));
@@ -10793,9 +10798,10 @@ fn run_reset_state(_debug: bool) -> Result<(), String> {
 /// One-click intentional EPHEMERAL RESET: wipe + re-initialize. Reaches the
 /// same end state as a pristine `--init` + vault bring-up, with every prior
 /// guest credential discarded (the honest UX: you'll re-authenticate once).
-/// ORDER 1286-4437 (operator ruling 2026-09-20). A SUPERSET of
-/// `--reset-guest`: the guest substrate PLUS the host-held credentials,
-/// vault-data and the images, then reprovision through the same `--init` path.
+/// ORDER 1286-4437 (operator ruling 2026-09-20), made SOFT by 1437-qza3: the
+/// guest substrate PLUS the images and build markers, then reprovision through
+/// the same `--init` path. It clears no credential and deletes no store
+/// (`reset_state_plan` lists what is kept).
 ///
 /// `--reset-guest` is deliberately NOT changed. It documents "images are
 /// preserved, so this is fast when they still exist" and callers rely on that;
@@ -18062,9 +18068,12 @@ fn forge_tool_cache_volume(project_name: &str) -> String {
 /// @trace spec:forge-hot-cold-split (Requirement: HOT tier — RAM-backed tmpfs
 ///   for finely curated paths; Per-launch project source budget)
 fn forge_hot_src_tmpfs(project_name: &str) -> String {
-    let budget = tillandsias_core::config::compute_hot_budget(
+    // Order 1729-kg5q: the floor fits a build, clamped to half the forge's
+    // memory.max (the size is a cap counted in that cgroup, not a reservation).
+    let budget = tillandsias_core::config::compute_source_budget(
         forge_mirror_pack_size_kb(project_name),
         &tillandsias_core::config::ForgeConfig::default(),
+        tillandsias_core::forge_budget::ForgeBudget::for_this_host().memory_max_mib,
     );
     format!("/home/forge/src:size={budget}m,mode=0777")
 }
@@ -32045,12 +32054,15 @@ esac
         // The bound, not a fixed number: this host may or may not have a
         // mirror volume for the name above, and the assertion must be about
         // the CLAMP the spec specifies, not about which arm ran.
+        // 1729-kg5q: the floor is the build-sized one, clamped to half of
+        // this host's forge memory.max.
         let config = tillandsias_core::config::ForgeConfig::default();
+        let floor = tillandsias_core::config::hot_path_source_floor_mb(
+            tillandsias_core::forge_budget::ForgeBudget::for_this_host().memory_max_mib,
+        );
         assert!(
-            (tillandsias_core::config::HOT_PATH_BUDGET_FLOOR_MB..=config.hot_path_max_mb)
-                .contains(&size_mb),
-            "budget {size_mb} MB escaped the spec's [{}, {}] clamp",
-            tillandsias_core::config::HOT_PATH_BUDGET_FLOOR_MB,
+            (floor..=config.hot_path_max_mb).contains(&size_mb),
+            "budget {size_mb} MB escaped the spec's [{floor}, {}] clamp",
             config.hot_path_max_mb
         );
     }

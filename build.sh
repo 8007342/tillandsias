@@ -5213,6 +5213,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "End-user installer output guard fixture passed"
 
+    # The Linux installer runs the SOFT reset quietly into its setup log
+    # (1738-wqmt): the fixture RUNS install.sh's own reset block against a stub.
+    _step "Checking the Linux installer runs the soft reset quietly (1738-wqmt)..."
+    if ! _run_lua_decider "scripts/lua/test-install-linux-setup-is-quiet.lua" 2>&1; then
+        _error "install.sh prints power-user text, calls a non-SOFT reset, or does not log it — see the FAIL lines above (1738-wqmt)"
+        exit 1
+    fi
+    _info "Linux installer soft-reset fixture passed"
+
     _step "Checking the litmus step model (901-jtvi)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-step-model.sh" 2>&1; then
         _error "the litmus step model regressed — a producer's failure or its stderr can go missing again (901-jtvi)"
@@ -5408,12 +5417,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # path and cannot be green-in-name-only. Measured green on two hosts:
     # `ok:litmus-grep-escapes:421 checked` on yoga and on lenovinha at HEAD.
     #
-    # Call the .sh, never scripts/lib/litmus-grep-escapes.awk: the awk holds
-    # the rule but expects to be driven with the file list and is not an entry
-    # point. The 8-arm fixture (scripts/test-litmus-grep-escapes.sh) is already
-    # wired into local-ci.sh, so --check needs only the check itself.
+    # The rule and its entry point are one Lua file since 1637-5765 (the .sh
+    # and scripts/lib/litmus-grep-escapes.awk are retired). The 8-arm fixture
+    # (scripts/test-litmus-grep-escapes.sh) is already wired into local-ci.sh,
+    # so --check needs only the check itself.
     _step "Checking litmus grep patterns use no GNU-undefined escapes (901-jtvi)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-grep-escapes.sh" 2>&1; then
+    # PORTED to Lua (1637-5765): scripts/lua/check-litmus-grep-escapes.lua.
+    if ! _run_lua_decider "scripts/lua/check-litmus-grep-escapes.lua" 2>&1; then
         exit 1
     fi
 

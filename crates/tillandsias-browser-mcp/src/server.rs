@@ -970,12 +970,19 @@ impl BrowserMcpServer {
         if !self.windows.owned_by(window_id, &self.owner()) {
             return Self::tool_error(id, format!("WINDOW_NOT_FOUND: {window_id}"));
         }
+        // The live page when the window has a CDP session (1637-5765): the
+        // registry keeps what browser.open saw, and a page that navigated or
+        // retitled itself since would otherwise be reported as it was.
+        let live = match self.windows.cdp_for(window_id, &self.owner()) {
+            Some((Some(cdp), _, _)) => cdp.page_info().ok(),
+            _ => None,
+        };
         match self.windows.get(window_id) {
             Some(window) => RpcResponse::Success {
                 id,
                 result: json!({
-                    "url": window.url,
-                    "title": window.title,
+                    "url": live.as_ref().map_or(window.url.as_str(), |(url, _)| url.as_str()),
+                    "title": live.as_ref().map_or(window.title.as_str(), |(_, title)| title.as_str()),
                     "engine": window.engine,
                     "headless": window.headless
                 }),
@@ -2534,6 +2541,11 @@ mod tests {
                     let result = match msg["method"].as_str() {
                         Some("Browser.getWindowForTarget") => json!({ "windowId": 1 }),
                         Some("Page.navigate") => json!({ "frameId": "F1" }),
+                        Some("Page.getNavigationHistory") => {
+                            json!({ "currentIndex": 0, "entries": [
+                                { "id": 1, "url": "https://www.acme.localhost:18443/", "title": "RETITLED-LIVE" }
+                            ]})
+                        }
                         Some("Runtime.evaluate") if msg["params"]["expression"] == "1+1" => {
                             json!({ "result": { "type": "number", "value": 2, "description": "2" } })
                         }
@@ -2642,20 +2654,20 @@ mod tests {
             "Emulation.setUserAgentOverride",
         ];
         assert_eq!(names[..4], emulation, "emulated as it attached: {names:?}");
-        assert_eq!(names[4], "Page.enable");
+        assert_eq!(names[4..6], ["Page.enable", "Network.enable"]);
         assert_eq!(
-            names[5..9],
+            names[6..10],
             emulation,
             "then the checked re-apply: {names:?}"
         );
         assert_eq!(
-            names[9], "Page.navigate",
+            names[10], "Page.navigate",
             "and only then navigated: {names:?}"
         );
         assert_eq!(p1[2].1["width"], 428);
         assert_eq!(p1[2].1["deviceScaleFactor"], 3.0);
         assert!(p1[0].1["maxTouchPoints"].as_u64().unwrap() > 0);
-        assert_eq!(p1[9].1["url"], url);
+        assert_eq!(p1[10].1["url"], url);
 
         let window = opened["window_id"].as_str().unwrap().to_string();
         let switched = call_tool(
@@ -2786,6 +2798,35 @@ mod tests {
             "acme",
             Some(host.clone() as Arc<dyn BrowserContainers>),
         )
+    }
+
+    /// Order 1637-5765: read_url reports the LIVE page, not what browser.open
+    /// stored, so an app that retitles itself (a hot reload) is seen — and a
+    /// window that is not in dev mode answers it without running page script.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn read_url_reports_the_live_title_without_page_script() {
+        let host = Arc::new(CdpContainers::default());
+        let lane = lane_server(&host);
+        let opened = call_tool(
+            &lane,
+            "browser.open",
+            json!({ "url": "https://www.acme.localhost:18443/" }),
+        )
+        .await;
+        let window = opened["window_id"].as_str().expect("opened").to_string();
+        let read = call_tool(&lane, "browser.read_url", json!({ "window_id": window })).await;
+        assert_eq!(read["title"], "RETITLED-LIVE", "{read}");
+        assert_eq!(read["url"], "https://www.acme.localhost:18443/", "{read}");
+        let page = host.methods_on("P1");
+        assert!(
+            page.iter().any(|(m, _)| m == "Page.getNavigationHistory"),
+            "{page:?}"
+        );
+        assert!(
+            !page.iter().any(|(m, _)| m == "Runtime.evaluate"),
+            "read_url must not run page script: {page:?}"
+        );
     }
 
     /// Exit criterion 1: from the owning lane, raw browser.cdp evaluates on

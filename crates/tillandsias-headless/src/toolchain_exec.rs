@@ -247,6 +247,9 @@ const DEV_SERVER_PORT: u16 = 8080;
 /// `flutter run -d web-server …` serves the app for a browser and hot-reloads
 /// into it. Such a session is routed: its listen flags are the host's
 /// (all interfaces, DEV_SERVER_PORT), any the agent passed are replaced.
+/// CanvasKit is served from the SDK (`--no-web-resources-cdn`): a browser.open
+/// window resolves only its project's hosts, so the default gstatic CDN load
+/// fails and the app never starts (measured 2026-10-14, 1637-5765).
 /// Returns the rewritten argv, or None for any other command.
 pub(crate) fn dev_server_argv(argv: &[String]) -> Option<Vec<String>> {
     if argv.first().map(String::as_str) != Some("run") {
@@ -270,7 +273,11 @@ pub(crate) fn dev_server_argv(argv: &[String]) -> Option<Vec<String>> {
             i += 2;
             continue;
         }
-        if a.starts_with("--web-hostname=") || a.starts_with("--web-port=") {
+        if a.starts_with("--web-hostname=")
+            || a.starts_with("--web-port=")
+            || a == "--web-resources-cdn"
+            || a == "--no-web-resources-cdn"
+        {
             i += 1;
             continue;
         }
@@ -282,6 +289,7 @@ pub(crate) fn dev_server_argv(argv: &[String]) -> Option<Vec<String>> {
     }
     out.push("--web-hostname=0.0.0.0".into());
     out.push(format!("--web-port={DEV_SERVER_PORT}"));
+    out.push("--no-web-resources-cdn".into());
     Some(out)
 }
 
@@ -865,7 +873,8 @@ mod tests {
             dir.path(),
             r#"read line; echo "got $line args=$*"; echo err-line >&2; exit 3"#,
         );
-        let Some(mut cmd) = shim(dir.path(), &sock, &["build", "web"]) else {
+        // `run` is interactive (r/R/q), so its piped stdin is forwarded.
+        let Some(mut cmd) = shim(dir.path(), &sock, &["run", "-d", "web-server"]) else {
             eprintln!("skip: no python3 on this host");
             return;
         };
@@ -884,8 +893,44 @@ mod tests {
             Some(3),
             "stdout={stdout} stderr={stderr}"
         );
-        assert_eq!(stdout, "got hello args=build web\n");
+        assert_eq!(stdout, "got hello args=run -d web-server\n");
         assert_eq!(stderr, "hello from the host\nerr-line\n");
+    }
+
+    /// A one-shot command never reads stdin (1637-5765): `bash -s <<EOF`
+    /// with a `flutter create` line must run the lines after it, not hand
+    /// them to flutter and exit 0. The toolchain sees EOF, and the shim
+    /// leaves the caller's stdin where it was.
+    #[test]
+    fn shim_leaves_stdin_unread_for_a_one_shot_command() {
+        use std::io::{Seek, SeekFrom};
+        let dir = tempfile::tempdir().unwrap();
+        let sock = fake_host(
+            dir.path(),
+            r#"if read line; then echo "swallowed $line"; else echo "eof args=$*"; fi"#,
+        );
+        let Some(mut cmd) = shim(dir.path(), &sock, &["create", "app"]) else {
+            eprintln!("skip: no python3 on this host");
+            return;
+        };
+        let mut script = tempfile::tempfile().unwrap();
+        script.write_all(b"echo after-flutter\n").unwrap();
+        script.seek(SeekFrom::Start(0)).unwrap();
+        let mut probe = script.try_clone().unwrap();
+        let out = cmd
+            .stdin(Stdio::from(script))
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert_eq!(out.status.code(), Some(0), "stdout={stdout}");
+        assert_eq!(stdout, "eof args=create app\n");
+        assert_eq!(
+            probe.stream_position().unwrap(),
+            0,
+            "the shim read the caller's stdin"
+        );
     }
 
     #[test]
@@ -1017,16 +1062,19 @@ mod tests {
                 "-d",
                 "web-server",
                 "--web-hostname=0.0.0.0",
-                "--web-port=8080"
+                "--web-port=8080",
+                "--no-web-resources-cdn"
             ])
         );
-        // The agent's own listen flags are replaced, in both spellings.
+        // The agent's own listen flags are replaced, in both spellings, and
+        // a CDN request is overridden: the window cannot reach the CDN.
         let routed = dev_server_argv(&v(&[
             "run",
             "--device-id=web-server",
             "--web-port",
             "5000",
             "--web-hostname=127.0.0.1",
+            "--web-resources-cdn",
             "--release",
         ]))
         .unwrap();
@@ -1037,7 +1085,8 @@ mod tests {
                 "--device-id=web-server",
                 "--release",
                 "--web-hostname=0.0.0.0",
-                "--web-port=8080"
+                "--web-port=8080",
+                "--no-web-resources-cdn"
             ])
         );
         assert!(dev_server_argv(&v(&["run", "-dweb-server"])).is_some());

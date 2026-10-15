@@ -1,0 +1,16 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-linux-soft-reset-removes-only-tillandsias-podman-objects-and-leaves-the-users-own-images-and-containers-untouched
+    field: next_action
+    value: |-
+      Replace the system reset in run_reset_state with scoped removals (reuse reset_guest_scope for containers, volumes, secrets and networks; images by Tillandsias repository), red fixture first in a sealed store that seeds foreign objects.
+
+
+      [2026-10-15T15:44:07Z lenovinha] PARKED by operator ruling 2026-10-15: "DEVELOPMENT ENVIRONMENT and DEVELOPMENT RUNTIME are IDEMPOTENT and EPHEMERAL BY DESIGN"; blasting all containers at once is allowed, toolboxes are reborn updated. The SOFT reset must preserve only the Vault contents and the keyring unlock share (plus models, cheatsheets, maybe homebrew, for quick upgrades). Reopen only if an END USER install must coexist with podman work Tillandsias does not own.
+    ts: "2026-10-15T15:44:07Z"
+    host: lenovinha

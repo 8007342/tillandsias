@@ -1,0 +1,16 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-dev-server-routing-is-defined-either-a-documented-routed-port-table-or-the-context-says-only-publish-local-is-routed-and-no-route-names-the-routes-that-exist
+    field: next_action
+    value: |-
+      Read how routes are rendered (main.rs route.public, the sidecar) and decide the shape with the coordinator, then write the live arm red first.
+
+
+      [2026-10-15T14:26:25Z lenovinha] Released by lenovinha 2026-10-15 with no work started (no branch, no commits): everything is left. Pick a shape (the per-lane MCP register call, 1665-8n8d, or 'only publish_local is routed'), state it in the lib-common.sh startup context and the spec, and make the router's no-route answer list the project's existing routes. Note: 1637-5765 added DEV_SERVICES=[flutter] as a routed dev host, so flutter.<project>.localhost already exists as one precedent.
+    ts: "2026-10-15T14:26:25Z"
+    host: lenovinha

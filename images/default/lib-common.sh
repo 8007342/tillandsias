@@ -2269,6 +2269,12 @@ export UV_CACHE_DIR="$PROJECT_CACHE/uv"
 # pip (per-project; pipx tools live in /opt/pipx, image-state)
 export PIP_CACHE_DIR="$PROJECT_CACHE/pip"
 
+# Order 1729-kg5q: build scratch goes to the cache volume (disk), not the
+# 256M /tmp tmpfs; measured 2026-10-15, TMPDIR was unset in the agent shell.
+# /tmp itself stays for the small sockets and files that expect it.
+export TMPDIR="$PROJECT_CACHE/tmp"
+mkdir -p "$TMPDIR" 2>/dev/null || true
+
 # PATH augmentation for per-project binaries, user home binaries, and system-wide toolchains
 export RUSTUP_HOME="/usr/local/rustup"
 export DART_ROOT="/opt/dart-sdk"

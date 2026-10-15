@@ -421,6 +421,11 @@ pub(crate) fn browser_window_spec(
         format!("{CDP_DIR_IN_CONTAINER}/cdp.sock"),
     )
     .network(&handle.network_name)
+    // Order 1725-cgh2: no IPv6, so no DAD settling after start, whose turn
+    // to a valid address aborted the first page's requests with
+    // net::ERR_NETWORK_CHANGED. The window's network is --internal and its
+    // names resolve to the forwarder over IPv4.
+    .disable_ipv6()
     .arg(format!(
         "--host-resolver-rules={}",
         host_resolver_rules(project)
@@ -468,6 +473,11 @@ pub(crate) fn webkit_window_spec(
     .detached()
     .name(&handle.container_name)
     .network(&handle.network_name)
+    // Order 1725-cgh2: no IPv6, so no DAD settling after start, whose turn
+    // to a valid address aborted the first page's requests with
+    // net::ERR_NETWORK_CHANGED. The window's network is --internal and its
+    // names resolve to the forwarder over IPv4.
+    .disable_ipv6()
     .pids_limit(512)
     .tmpfs("/tmp:size=256m")
     .tmpfs("/dev/shm:size=256m")
@@ -767,6 +777,10 @@ mod tests {
             "only the window network at run time: {joined}"
         );
         assert!(joined.contains("TILLANDSIAS_FWD_PROJECT=acme"));
+        assert!(
+            !joined.contains("--sysctl"),
+            "the forwarder keeps its own network as it is: {joined}"
+        );
         assert!(joined.contains("TILLANDSIAS_FWD_UPSTREAM_HOST=10.0.42.7"));
         assert!(
             joined.contains("--cap-drop=ALL") || joined.contains("--cap-drop ALL"),
@@ -844,6 +858,10 @@ mod tests {
         );
         assert!(joined.contains("TILLANDSIAS_CDP_SOCKET=/run/tillandsias-cdp/cdp.sock"));
         assert!(joined.contains("--window-size=428,926"), "{joined}");
+        assert!(
+            argv.contains(&"--sysctl=net.ipv6.conf.all.disable_ipv6=1".to_string()),
+            "no IPv6 DAD to abort the first navigation (1725-cgh2): {joined}"
+        );
         assert!(
             joined.contains(
                 "--host-resolver-rules=MAP *.acme.localhost router:8443, MAP * ~NOTFOUND"
@@ -937,6 +955,10 @@ mod tests {
         assert!(joined.contains("TILLANDSIAS_CDP_SOCKET=/run/tillandsias-cdp/cdp.sock"));
         assert!(joined.contains("--window-size=428,926"), "{joined}");
         assert!(
+            argv.contains(&"--sysctl=net.ipv6.conf.all.disable_ipv6=1".to_string()),
+            "no IPv6 DAD to abort the first navigation (1725-cgh2): {joined}"
+        );
+        assert!(
             joined.contains(
                 "--host-resolver-rules=MAP *.acme.localhost router:8443, MAP * ~NOTFOUND"
             ),
@@ -1000,6 +1022,10 @@ mod tests {
         );
         assert!(
             joined.contains("TILLANDSIAS_WEBKIT_RELAY=10.89.1.2:18443"),
+            "{joined}"
+        );
+        assert!(
+            argv.contains(&"--sysctl=net.ipv6.conf.all.disable_ipv6=1".to_string()),
             "{joined}"
         );
         assert!(

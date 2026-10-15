@@ -249,11 +249,24 @@ pub(crate) fn handle_mcp_jsonrpc(
                 }),
                 serde_json::json!({
                     "name": "service_reload",
-                    "description": "Reload the authenticated lane's existing WEB preview runtime. This does not open or refresh a browser.",
+                    "description": "Reload the authenticated lane's existing WEB preview runtime. This does not open or refresh a browser. A preview that died is recreated from its recorded profile.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
                             "category": { "type": "string", "enum": ["WEB"] }
+                        },
+                        "required": ["category"]
+                    }
+                }),
+                // 1723-2fiq: after the pinned lifecycle four.
+                serde_json::json!({
+                    "name": "service_logs",
+                    "description": "Read the last lines of this lane's WEB preview output (its server's stdout and stderr), with its state and exit code. Use it when service_status says the preview is not serving.",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "category": { "type": "string", "enum": ["WEB"] },
+                            "lines": { "type": "integer", "minimum": 1, "maximum": 500, "default": 100 }
                         },
                         "required": ["category"]
                     }
@@ -390,6 +403,36 @@ pub(crate) fn handle_mcp_jsonrpc(
                         project_label,
                         instance,
                         debug,
+                    )) {
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": e }
+                        }),
+                    }
+                }
+                "service_logs" => {
+                    let category = match web_category(args) {
+                        Ok(category) => category,
+                        Err(message) => return Some(mcp_error(req, message)),
+                    };
+                    if category != "WEB" {
+                        return Some(mcp_error(
+                            req,
+                            format!("Category {category} is not supported for service_logs"),
+                        ));
+                    }
+                    let lines = args
+                        .and_then(|a| a.get("lines"))
+                        .and_then(serde_json::Value::as_u64)
+                        .map_or(crate::local_web_preview::LOG_LINES_DEFAULT, |n| {
+                            u32::try_from(n).unwrap_or(u32::MAX)
+                        });
+                    match rt.block_on(crate::local_web_preview::logs(
+                        project_label,
+                        instance,
+                        lines,
                     )) {
                         Ok(result) => serde_json::json!({
                             "result": tillandsias_browser_mcp::framing::tool_result_content(result)

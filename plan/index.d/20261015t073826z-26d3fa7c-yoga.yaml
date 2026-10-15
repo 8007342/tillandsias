@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: real-web-and-rust-projects-fit-in-a-forge-without-hand-moving-build-dirs
+    event:
+      type: progress
+      ts: "2026-10-15T07:38:26Z"
+      agent_id: linux-yoga-claude-20261015t073826z
+      host: yoga
+      summary: |-
+        Measured in two OpenCode forges on visual-chess (yoga, v56.10.14.1). (1) The agent shell DOES get CARGO_HOME, CARGO_TARGET_DIR, npm_config_cache, PUB_CACHE on the cache volume (lib-common.sh is sourced before the harness exec); cargo target never enters the checkout. TMPDIR is unset, so /tmp is a separate 256M tmpfs. (2) /home/forge/src is a 256M tmpfs (the compute_hot_budget floor: pack x4, and this pack is small). The checkout is 57M; npm ci (4 s) put 169M of node_modules in it and filled it to 100%. .opencode/node_modules (OpenCode's own tooling) adds 62M. (3) Redirecting by symlink (node_modules and .cache to the cache volume, excluded via .git/info/exclude) FAILED: ./build.sh --dev wrote dist/ (169M, the expanded Stockfish net) into the checkout and died with ENOSPC; and build.sh's [ -d node_modules ] || npm install skipped the install because the symlinked dir existed but was empty. A symlink also shows as untracked under a 'node_modules/' gitignore pattern (measured). Conclusion: build-output dirs are project-specific (dist, .cache/wasm-pack, node_modules, .dart_tool), so per-directory redirects are whack-a-mole. The budget recipe sizes for the git pack only and ignores build output. Escalated to the coordinator: the fix changes the forge-hot-cold-split budget recipe or this row's criterion.

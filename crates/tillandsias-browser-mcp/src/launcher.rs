@@ -217,7 +217,7 @@ pub fn launch(
             })?;
             let profile_dir = handle.profile_dir.clone();
             let socket = handle.cdp_socket.clone();
-            let notice = handle.notice.clone();
+            let mut notice = handle.notice.clone();
             let running = RunningContainer {
                 handle,
                 host: Arc::clone(host),
@@ -234,6 +234,18 @@ pub fn launch(
                     let cdp = WindowCdp::attach(&socket, device.clone(), dev, CDP_CONNECT_BUDGET)
                         .and_then(|cdp| cdp.navigate(url.as_str()).map(|()| cdp))
                         .map_err(|e| LaunchError::Cdp(e.to_string()))?;
+                    // Order 1725-cgh2: say so when the first load had to
+                    // start over, so a slower open is explained.
+                    let recovered = cdp.network_recoveries();
+                    if recovered > 0 {
+                        let line = format!(
+                            "The page was loaded again {recovered} time(s): a network change at window start (net::ERR_NETWORK_CHANGED) interrupted its first load."
+                        );
+                        notice = Some(match notice.take() {
+                            Some(n) => format!("{n} {line}"),
+                            None => line,
+                        });
+                    }
                     Some(Arc::new(cdp))
                 }
                 None => None,
