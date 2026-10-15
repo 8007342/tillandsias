@@ -1,4 +1,4 @@
-//! One browser window's CDP broker and its device emulation (order 1655-urz9).
+//! One browser window's CDP broker and its device e                            .try_for_each(|(m, p)| conn.call(Some(session), m, p.clone()).map(drop))ulation (order 1655-urz9).
 //!
 //! The tray holds ONE CDP session per window, for the window's lifetime,
 //! over the window container's pipe relay (see `cdp_client`). Through it:
@@ -281,6 +281,12 @@ struct State {
     loader_of: HashMap<String, String>,
     /// Re-navigations the guard made, for browser.open's notice.
     recoveries: u32,
+    /// Order 1725-5uue: a dev window keeps its pages' service workers only
+    /// when asked; otherwise every page bypasses them, so a dead preview
+    /// reads as dead instead of a cached build.
+    keep_service_worker: bool,
+    /// The service-worker scripts the pages registered (kept mode only).
+    workers: Vec<String>,
 }
 
 /// A navigation the window verifies: every request it makes, the document
@@ -349,10 +355,11 @@ impl WindowCdp {
         socket: &Path,
         device: DeviceEmulation,
         dev: bool,
+        keep_service_worker: bool,
         budget: Duration,
     ) -> Result<Self, CdpError> {
         let conn = Arc::new(CdpConnection::connect(socket, budget)?);
-        Self::start(conn, device, dev)
+        Self::start_with(conn, device, dev, keep_service_worker)
     }
 
     /// Take over a connected window: auto-attach every page, emulate the
@@ -361,6 +368,17 @@ impl WindowCdp {
         conn: Arc<CdpConnection>,
         device: DeviceEmulation,
         dev: bool,
+    ) -> Result<Self, CdpError> {
+        Self::start_with(conn, device, dev, false)
+    }
+
+    /// [`Self::start`], keeping the pages' service workers when
+    /// `keep_service_worker` (order 1725-5uue).
+    pub fn start_with(
+        conn: Arc<CdpConnection>,
+        device: DeviceEmulation,
+        dev: bool,
+        keep_service_worker: bool,
     ) -> Result<Self, CdpError> {
         let events = conn.take_events().ok_or_else(|| {
             CdpError::ConnectionFailed("the event stream is already taken".into())
@@ -375,6 +393,8 @@ impl WindowCdp {
                 watch: None,
                 loader_of: HashMap::new(),
                 recoveries: 0,
+                keep_service_worker,
+                workers: Vec::new(),
             }),
             Condvar::new(),
         ));
@@ -425,6 +445,21 @@ impl WindowCdp {
 
     pub fn connection(&self) -> &CdpConnection {
         &self.conn
+    }
+
+    /// Order 1725-5uue: the service-worker scripts the pages registered,
+    /// waiting up to `wait` for the first one. Empty unless the window keeps
+    /// service workers.
+    pub fn service_workers(&self, wait: Duration) -> Vec<String> {
+        let deadline = Instant::now() + wait;
+        let (lock, ready) = &*self.state;
+        let mut state = lock.lock();
+        while state.keep_service_worker && state.workers.is_empty() {
+            if ready.wait_until(&mut state, deadline).timed_out() {
+                break;
+            }
+        }
+        state.workers.clone()
     }
 
     /// The last `limit` console entries (dev mode; empty otherwise).
@@ -795,21 +830,31 @@ fn handle_events(
                     continue;
                 };
                 if params["targetInfo"]["type"] == "page" {
-                    let (device, dev) = {
+                    let (device, dev, keep_sw) = {
                         let st = state.0.lock();
-                        (st.device.clone(), st.dev)
+                        (st.device.clone(), st.dev, st.keep_service_worker)
                     };
                     // Network on every page (1725-cgh2): the navigation guard
                     // observes failed requests. Its events reach the tails in
                     // dev mode only.
-                    let mut domains = vec!["Page.enable", "Network.enable"];
+                    let mut domains =
+                        vec![("Page.enable", json!({})), ("Network.enable", json!({}))];
                     if dev {
-                        domains.push("Runtime.enable");
+                        domains.push(("Runtime.enable", json!({})));
+                        // Order 1725-5uue: a service worker's cache must not
+                        // stand in for a dead preview. Bypass it (needs
+                        // Network) unless the lane asked to keep it; then
+                        // watch registrations so the reply can name them.
+                        domains.push(if keep_sw {
+                            ("ServiceWorker.enable", json!({}))
+                        } else {
+                            ("Network.setBypassServiceWorker", json!({ "bypass": true }))
+                        });
                     }
                     if let Err(err) = apply(conn, session, &device).and_then(|()| {
                         domains
                             .iter()
-                            .try_for_each(|m| conn.call(Some(session), m, json!({})).map(drop))
+                            .try_for_each(|(m, p)| conn.call(Some(session), m, p.clone()).map(drop))
                     }) {
                         tracing::warn!(%err, session, "browser window: device emulation failed");
                     }
@@ -820,6 +865,18 @@ fn handle_events(
                 if params["waitingForDebugger"] == true {
                     let _ = conn.call(Some(session), "Runtime.runIfWaitingForDebugger", json!({}));
                 }
+            }
+            Some("ServiceWorker.workerVersionUpdated") => {
+                let (lock, ready) = state;
+                let mut st = lock.lock();
+                for version in params["versions"].as_array().into_iter().flatten() {
+                    if let Some(script) = version["scriptURL"].as_str()
+                        && !st.workers.iter().any(|w| w == script)
+                    {
+                        st.workers.push(script.to_string());
+                    }
+                }
+                ready.notify_all();
             }
             Some("Target.detachedFromTarget") => {
                 if let Some(session) = params["sessionId"].as_str() {
@@ -1007,6 +1064,70 @@ mod tests {
 
     /// Order 1656-iktu: a dev window enables Runtime and Network on each
     /// page and keeps console and network tails; a normal window does not.
+    /// Order 1725-5uue: a dev window bypasses service workers on every page,
+    /// after Network (the bypass is a Network setting); keeping them enables
+    /// ServiceWorker instead and names the registered scripts.
+    #[test]
+    fn a_dev_window_bypasses_service_workers_unless_asked_to_keep_them() {
+        let sw_calls = |chromium: &FakeChromium| -> Vec<Value> {
+            chromium
+                .seen
+                .lock()
+                .iter()
+                .filter(|m| m["sessionId"] == "P1")
+                .filter(|m| {
+                    m["method"]
+                        .as_str()
+                        .is_some_and(|n| n == "Network.enable" || n.contains("ServiceWorker"))
+                })
+                .map(|m| json!([m["method"], m["params"]]))
+                .collect()
+        };
+
+        let (conn, chromium) = auto_attaching_chromium();
+        chromium.emit(attached("P1", "page", false));
+        let window = WindowCdp::start(conn, device("desktop"), true).unwrap();
+        assert_eq!(
+            sw_calls(&chromium),
+            [
+                json!(["Network.enable", {}]),
+                json!(["Network.setBypassServiceWorker", { "bypass": true }]),
+            ]
+        );
+        assert!(window.service_workers(Duration::ZERO).is_empty());
+
+        let (conn, chromium) = auto_attaching_chromium();
+        chromium.emit(attached("P1", "page", false));
+        let window = WindowCdp::start_with(conn, device("desktop"), true, true).unwrap();
+        assert_eq!(
+            sw_calls(&chromium),
+            [
+                json!(["Network.enable", {}]),
+                json!(["ServiceWorker.enable", {}])
+            ]
+        );
+        chromium.emit(
+            json!({ "method": "ServiceWorker.workerVersionUpdated", "params": {
+            "versions": [
+                { "versionId": "1", "scriptURL": "https://www.demo.localhost:18443/sw.js" },
+                { "versionId": "2", "scriptURL": "https://www.demo.localhost:18443/sw.js" },
+            ] } }),
+        );
+        assert_eq!(
+            window.service_workers(Duration::from_secs(2)),
+            ["https://www.demo.localhost:18443/sw.js"]
+        );
+
+        let (conn, chromium) = auto_attaching_chromium();
+        chromium.emit(attached("P1", "page", false));
+        let _normal = WindowCdp::start(conn, device("desktop"), false).unwrap();
+        assert_eq!(
+            sw_calls(&chromium),
+            [json!(["Network.enable", {}])],
+            "a normal window leaves service workers alone"
+        );
+    }
+
     #[test]
     fn a_dev_window_enables_runtime_and_network_and_keeps_tails() {
         let (conn, chromium) = auto_attaching_chromium();
@@ -1179,6 +1300,8 @@ mod tests {
                     watch: None,
                     loader_of: HashMap::new(),
                     recoveries: 0,
+                    keep_service_worker: false,
+                    workers: Vec::new(),
                     console: VecDeque::new(),
                     network: VecDeque::new(),
                 }),
