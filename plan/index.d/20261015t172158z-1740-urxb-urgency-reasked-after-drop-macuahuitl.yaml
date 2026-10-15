@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-selector-re-asks-the-urgency-question-after-dropping-packets-a-sibling-branch-holds
+    order: 1740-urxb
+    status: completed
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: S
+    pickup_role: linux
+    capability_tags: [selector, release-gate, coordination]
+    related: [645-n3h6, 1034-whsp]
+    depends_on: []
+    title: |
+      select-work-batch.sh ran the order-645 urgency override before the 1034-whsp cross-branch drop, so when a sibling held the chosen epic's p1 rows the batch offered p2 work while p1 rows were claimable; the release gate's urgency step went red on the v56.10.15.1 cut
+    context: |
+      Measured on macuahuitl, 2026-10-15, at the v56.10.15.1 release gate: litmus:cycle-batch-triage-shape step 21 said "batch best is p2 while the ledger offers p1". The chosen epic (convergence-velocity-milestone) held exactly two p1 rows, 1233-jqp4 and 1236-bmjh, both in_progress on osx-next. The override saw a p1-vs-p1 tie and kept the batch; the drop then removed both p1 rows.
+      The fix re-runs the same override rule over the survivors whenever the drop removed anything: one slot, strict win only, at most three candidates, each vetted by the same cross-branch checker, failing open on could-not-fold.
+    exit_criteria:
+      - "scripts/test-selector-drops-cross-branch-claims.sh arm 4: with two p1 rows, the first held on a sibling, budget 1, the batch offers the second p1 (red before the fix: the batch was empty)"
+      - "litmus:cycle-batch-triage-shape step 21 is green against the live ledger on macuahuitl"
+    verifiable_closure: "bash scripts/test-selector-drops-cross-branch-claims.sh → 9 passed, 0 failed; 8/1 against the pre-fix selector"
+    next_action: >
+      Nothing left. It lands as the fix for the v56.10.15.1 cut, which then re-runs its gate.
+    provenance: |
+      Filed and fixed by macuahuitl-fedora, 2026-10-15T17:21:58Z, during the v56.10.15.1 release gate.
+    events:
+      - type: filed
+        ts: "2026-10-15T17:21:58Z"
+        host: macuahuitl
+        summary: |-
+          The urgency override ran before the cross-branch drop; it now runs again afterwards.
+      - type: completed
+        ts: "2026-10-15T17:21:58Z"
+        host: macuahuitl
+        evidence_refs:
+          - "scripts/test-selector-drops-cross-branch-claims.sh arm 4: 9 passed 0 failed with the fix, 8 passed 1 failed on the pre-fix selector"
+          - "live: TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux offers 1235-rfub (p1) as urgent= after dropping 1233-jqp4 and 1236-bmjh"
+        summary: |-
+          Fixed and proven red-first by the fixture arm.
