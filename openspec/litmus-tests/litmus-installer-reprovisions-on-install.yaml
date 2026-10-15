@@ -76,3 +76,13 @@ critical_path:
     expected_behavior: "ok:ordered"
     # the order IS the contract. Two earlier drafts reported UNORDERED against a correctly ordered file - first awk's GNU-only \\s, then a BRE containing $ and a leading ! matching nothing. grep -F fixes it; both drafts were false REDs from the matcher, not the tree.
 
+
+  # ORDER 1738-wqmt. The Linux installer runs the SOFT reset only (on Linux
+  # --reset-state keeps the Vault store and the sign-ins, 1437-qza3), with no
+  # --debug and its output in the setup log, matching install-windows.ps1
+  # (1559-sqzp) and install-macos.sh (1437-8c6p). The fixture RUNS the
+  # installer's own reset block against a stub binary.
+  - step: "install.sh runs the SOFT reset quietly into its setup log (1738-wqmt)"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-install-linux-setup-is-quiet.lua 2>&1"
+    timeout_ms: 60000
+    expected_behavior: "ok:install-linux-setup-is-quiet:7 arms"
