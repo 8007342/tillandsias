@@ -157,6 +157,9 @@ COPY config-overlay/claude/mcp.json /home/forge/.config-overlay/claude/mcp.json
 # launch by seed_claude_pretooluse_hook so every forge session on any project
 # runs it (operator ruling 1, 2026-09-27).
 COPY config-overlay/claude/settings.json /home/forge/.config-overlay/claude/settings.json
+# @trace spec:forge-environment-discoverability, order:1678-62p7
+# Antigravity reads MCP configuration from ~/.gemini/config/mcp_config.json.
+COPY config-overlay/antigravity/mcp_config.json /home/forge/.config-overlay/antigravity/mcp_config.json
 
 # ── Shell configs ──────────────────────────────────────────────
 RUN mkdir -p /etc/skel/.config/fish

@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-start-a-new-project-skill-ships-in-the-forge-image-but-the-opencode-agent-does-not-list-it
+    event:
+      type: progress
+      ts: "2026-10-15T22:40:00Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        Cause (a) MEASURED on macOS v56.10.15.1, and its line found: no link is ever made in an OpenCode forge. In a real OpenCode forge (tray --opencode ~/src/tillandsias, 2026-10-15T21:26Z), the agent ran `ls -la ~/.claude/skills ~/.codex/skills ~/.gemini/skills ~/.config/opencode/skill /opt/skills`. /opt/skills/start-a-new-project/SKILL.md is present; all four user-level directories answer "No such file or directory".
+        The line: images/default/entrypoint-forge-opencode.sh still loads the profile with `if [ -f /opt/config-overlay/mcp/agent-profile.sh ]; then source ...; fi`, a path the image never installs (the Containerfile copies config-overlay/mcp/ to /home/forge/.config-overlay/mcp/). So agent-profile.sh, and with it link_forge_generic_skills, never runs. 1517-p83m converted the Claude, Codex, Antigravity and opencode-web entrypoints to lib-common's load_agent_profile and missed this one. The line is unchanged at the tag and on linux-next.
+        Fix: call load_agent_profile there. Guard: a fixture asserting that every images/default/entrypoint-forge-*.sh calls load_agent_profile and that none names /opt/config-overlay. Whether OpenCode then reads skill/ or skills/ (cause b) still needs the shipped version's search path; that is the coordinator's second check, which is in plan/issues/e2e-smoke-v56.10.15.1-macos-2026-10-15.md.

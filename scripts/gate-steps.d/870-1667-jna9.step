@@ -2,9 +2,9 @@
 # server. Codex starts a stdio MCP server with only HOME LANG PATH PWD SHLVL
 # USER, so its registration must forward TILLANDSIAS_CONTROL_SOCKET or
 # host-browser.sh exits at startup and the lane has no publish_local. Claude,
-# OpenCode and Codex declarations are read from the shipped overlay; a harness
-# with host-browser removed, or codex without the forwarded variable, is caught.
-# Antigravity is a named gap (1678-62p7).
+# OpenCode, Codex and Antigravity declarations are read from the shipped overlay;
+# a harness with host-browser removed, or codex without the forwarded variable, is caught.
+# Antigravity is verified and gap 1678-62p7 is closed.
 #
 # STEP_LUA is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking every forge harness exposes the host-browser MCP server with its lane socket (1667-jna9)"

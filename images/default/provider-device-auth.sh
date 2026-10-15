@@ -13,7 +13,7 @@ set -euo pipefail
 PROVIDER="${1:-}"
 
 # shellcheck source=lib-common.sh
-source /usr/local/lib/tillandsias/lib-common.sh
+source "${TILLANDSIAS_LIB_COMMON:-/usr/local/lib/tillandsias/lib-common.sh}"
 
 case "$PROVIDER" in
     claude)
@@ -51,18 +51,38 @@ case "$PROVIDER" in
             exit 2
         fi
         BIN="$(command -v agy)"
-        # Investigation posture (order pending live verify): capture the auth
-        # surface before running, so a failed login leaves evidence.
-        "$BIN" auth --help >/tmp/agy-auth-help.txt 2>&1 || \
-            "$BIN" login --help >/tmp/agy-auth-help.txt 2>&1 || true
-        if "$BIN" auth login --help >/dev/null 2>&1; then
+        # Probe subcommands safely: agy --help exits 0 even on invalid subcommands with --help,
+        # so we must never use '--help' as a probe for subcommand existence.
+        # Instead, check if 'auth' or 'login' is listed as an available subcommand.
+        _subcmds="$("$BIN" --help 2>&1 | awk '/Available subcommands:/{flag=1; next} flag {print $1}')"
+        if grep -qx "auth" <<<"$_subcmds"; then
             "$BIN" auth login
-        elif "$BIN" login --help >/dev/null 2>&1; then
+        elif grep -qx "login" <<<"$_subcmds"; then
             "$BIN" login
         else
-            echo "ERROR: could not find an agy login subcommand. Captured help output:" >&2
-            cat /tmp/agy-auth-help.txt >&2 || true
-            exit 2
+            # agy has no auth/login subcommand; the top-level binary initiates interactive auth.
+            # Start $BIN in background, track its exact PID, and signal ONLY that PID once the
+            # exact credential file ($AUTH_FILE or ~/.gemini/antigravity-cli/antigravity-oauth-token) appears.
+            _agy_default_token="$HOME/.gemini/antigravity-cli/antigravity-oauth-token"
+            "$BIN" &
+            _agy_pid=$!
+            while kill -0 "$_agy_pid" 2>/dev/null; do
+                if [[ -s "$AUTH_FILE" || -s "$_agy_default_token" ]]; then
+                    break
+                fi
+                sleep 0.5
+            done
+            # Settle period: allow agy to finish flushing/closing the token file
+            sleep 1
+            kill "$_agy_pid" 2>/dev/null || true
+            for _ in 1 2 3 4 5; do
+                kill -0 "$_agy_pid" 2>/dev/null || break
+                sleep 0.2
+            done
+            if kill -0 "$_agy_pid" 2>/dev/null; then
+                kill -KILL "$_agy_pid" 2>/dev/null || true
+            fi
+            wait "$_agy_pid" 2>/dev/null || true
         fi
         ;;
     *)
@@ -71,13 +91,18 @@ case "$PROVIDER" in
         ;;
 esac
 
+# Synchronize canonical token if needed, setting secure permissions
+if [[ "$AUTH_FILE" != "$HOME/.gemini/antigravity-cli/antigravity-oauth-token" && -s "$HOME/.gemini/antigravity-cli/antigravity-oauth-token" ]]; then
+    mkdir -p "$(dirname "$AUTH_FILE")"
+    chmod 700 "$(dirname "$AUTH_FILE")" 2>/dev/null || true
+    cp "$HOME/.gemini/antigravity-cli/antigravity-oauth-token" "$AUTH_FILE"
+    chmod 600 "$AUTH_FILE" 2>/dev/null || true
+fi
+
 if [[ ! -s "$AUTH_FILE" ]]; then
     echo "ERROR: $PROVIDER login completed without creating $AUTH_FILE" >&2
     if [[ "$PROVIDER" == antigravity ]]; then
-        echo "Candidate credential locations found under \$HOME:" >&2
-        find "$HOME/.gemini" "$HOME/.antigravity" "$HOME/.config/antigravity" \
-            -maxdepth 3 -type f -newer /tmp/agy-auth-help.txt 2>/dev/null >&2 || true
-        echo "File this output into the agy-login live-verify packet." >&2
+        echo "Expected credential at $AUTH_FILE or \$HOME/.gemini/antigravity-cli/antigravity-oauth-token" >&2
     fi
     exit 3
 fi
