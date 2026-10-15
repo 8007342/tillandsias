@@ -105,7 +105,7 @@ that MUST keep refusing, not dead code to delete.
   explicitly: Codex starts stdio servers with only `HOME LANG PATH PWD SHLVL
   USER` (codex-cli 0.162.1, measured 2026-10-14), so its registration passes
   `--env TILLANDSIAS_CONTROL_SOCKET=<path>` (order 1667-jna9)
-- **AND** Claude, OpenCode and Codex each declare the bridge; a harness that
+- **AND** Claude, OpenCode, Codex, and Antigravity each declare the bridge; a harness that
   drops it fails `scripts/lua/test-harness-host-browser-parity.lua`
 
 #### Scenario: A frame on the shared control socket is refused

@@ -13,7 +13,7 @@ set -euo pipefail
 PROVIDER="${1:-}"
 
 # shellcheck source=lib-common.sh
-source /usr/local/lib/tillandsias/lib-common.sh
+source "${TILLANDSIAS_LIB_COMMON:-/usr/local/lib/tillandsias/lib-common.sh}"
 
 case "$PROVIDER" in
     claude)
@@ -51,18 +51,33 @@ case "$PROVIDER" in
             exit 2
         fi
         BIN="$(command -v agy)"
-        # Investigation posture (order pending live verify): capture the auth
-        # surface before running, so a failed login leaves evidence.
-        "$BIN" auth --help >/tmp/agy-auth-help.txt 2>&1 || \
-            "$BIN" login --help >/tmp/agy-auth-help.txt 2>&1 || true
-        if "$BIN" auth login --help >/dev/null 2>&1; then
+        # Probe subcommands safely: agy --help exits 0 even on invalid subcommands with --help,
+        # so we must never use '--help' as a probe for subcommand existence.
+        # Instead, check if 'auth' or 'login' is listed as an available subcommand.
+        _subcmds="$("$BIN" --help 2>&1 | awk '/Available subcommands:/{flag=1; next} flag {print $1}')"
+        if grep -qx "auth" <<<"$_subcmds"; then
             "$BIN" auth login
-        elif "$BIN" login --help >/dev/null 2>&1; then
+        elif grep -qx "login" <<<"$_subcmds"; then
             "$BIN" login
         else
-            echo "ERROR: could not find an agy login subcommand. Captured help output:" >&2
-            cat /tmp/agy-auth-help.txt >&2 || true
-            exit 2
+            # agy has no auth/login subcommand; the top-level binary initiates interactive auth.
+            # Run in foreground with TTY, watching for credential file so we exit cleanly once authorized.
+            (
+                while [[ ! -s "$AUTH_FILE" ]]; do
+                    _cand="$(find "$HOME/.gemini" "$HOME/.antigravity" "$HOME/.config/antigravity" -maxdepth 3 -type f -name "*token*" 2>/dev/null | head -1)"
+                    if [[ -n "$_cand" && -s "$_cand" && "$_cand" != "$AUTH_FILE" ]]; then
+                        mkdir -p "$(dirname "$AUTH_FILE")"
+                        cp "$_cand" "$AUTH_FILE"
+                        break
+                    fi
+                    sleep 0.5
+                done
+                sleep 1
+                pkill -f "$BIN" 2>/dev/null || true
+            ) &
+            _watcher_pid=$!
+            "$BIN" || true
+            kill "$_watcher_pid" 2>/dev/null || true
         fi
         ;;
     *)
@@ -72,11 +87,19 @@ case "$PROVIDER" in
 esac
 
 if [[ ! -s "$AUTH_FILE" ]]; then
+    _cand="$(find "$HOME/.gemini" "$HOME/.antigravity" "$HOME/.config/antigravity" -maxdepth 3 -type f -name "*token*" 2>/dev/null | head -1)"
+    if [[ -n "$_cand" && -s "$_cand" ]]; then
+        mkdir -p "$(dirname "$AUTH_FILE")"
+        cp "$_cand" "$AUTH_FILE"
+    fi
+fi
+
+if [[ ! -s "$AUTH_FILE" ]]; then
     echo "ERROR: $PROVIDER login completed without creating $AUTH_FILE" >&2
     if [[ "$PROVIDER" == antigravity ]]; then
         echo "Candidate credential locations found under \$HOME:" >&2
         find "$HOME/.gemini" "$HOME/.antigravity" "$HOME/.config/antigravity" \
-            -maxdepth 3 -type f -newer /tmp/agy-auth-help.txt 2>/dev/null >&2 || true
+            -maxdepth 3 -type f 2>/dev/null >&2 || true
         echo "File this output into the agy-login live-verify packet." >&2
     fi
     exit 3
