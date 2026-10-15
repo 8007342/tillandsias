@@ -6751,10 +6751,12 @@ mod tests {
         let menu = build_menu(&state);
 
         let top_level = &menu.2;
+        // ORDER 1719-83po: +1, the APPROVED Cloudflare Login row (simplified-tray-ux
+        // e0555b06), shown disabled while its state is Unknown.
         assert_eq!(
             top_level.len(),
-            5,
-            "Expected 5 top-level items when authenticated, got {}",
+            6,
+            "Expected 6 top-level items when authenticated, got {}",
             top_level.len()
         );
 
@@ -6966,9 +6968,11 @@ mod tests {
         // expanded shape directly instead of through a label that no longer
         // exists: the authenticated top level, and the Cloud submenu that now
         // carries the expansion.
+        // ORDER 1719-83po: +1, the APPROVED Cloudflare Login row (simplified-tray-ux
+        // e0555b06), shown disabled while its state is Unknown.
         assert_eq!(
             menu_in.2.len(),
-            5,
+            6,
             "a succeeded probe must expand to the authenticated shape. labels={labels_in:?}"
         );
         assert!(
@@ -7351,7 +7355,9 @@ mod tests {
         // With the local row retired, what actually changes across the
         // transition is WHICH rows are present — the GitHubLogin row is
         // replaced by the Cloud submenu — so that is what is asserted.
-        assert_eq!(after.2.len(), 5);
+        // ORDER 1719-83po: +1, the APPROVED Cloudflare Login row (simplified-tray-ux
+        // e0555b06), shown disabled while its state is Unknown.
+        assert_eq!(after.2.len(), 6);
         let before_labels = labels(&before);
         let after_labels = labels(&after);
         // NOTE the SPACE: the rendered label is "🔑 GitHub Login", pinned by
@@ -7413,7 +7419,9 @@ mod tests {
         // ORDER 997-e4v2 step 2: 6 -> 5, the local row is retired. The property
         // under test is unchanged — a failed enclave changes the STATUS LABEL
         // and nothing else about the shape.
-        assert_eq!(top_level.len(), 5, "Failure must preserve menu shape");
+        // ORDER 1719-83po: +1, the APPROVED Cloudflare Login row (simplified-tray-ux
+        // e0555b06), shown disabled while its state is Unknown.
+        assert_eq!(top_level.len(), 6, "Failure must preserve menu shape");
 
         let label_list = labels(&menu);
         // labels()[0] is the root menu container ("Tillandsias");
@@ -7908,7 +7916,9 @@ mod tests {
 
         let menu = build_menu(&state);
         // ORDER 997-e4v2 step 2: 6 -> 5, the local row is retired.
-        assert_eq!(menu.2.len(), 5, "Top-level must keep 5 rows on failure");
+        // ORDER 1719-83po: +1, the APPROVED Cloudflare Login row (simplified-tray-ux
+        // e0555b06), shown disabled while its state is Unknown.
+        assert_eq!(menu.2.len(), 6, "Top-level must keep 6 rows on failure");
 
         let label_list = labels(&menu);
         // labels()[0] is the root menu container ("Tillandsias");
