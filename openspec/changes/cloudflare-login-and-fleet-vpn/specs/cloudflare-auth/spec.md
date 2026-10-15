@@ -69,6 +69,23 @@ and a browser opener exist, else `qr` when a relay is configured, else
 - **THEN** the command exits non-zero with `refused:cloudflare-login:access-denied`
 - **AND** nothing is written to Vault
 
+### Requirement: the login names the registered client and Cloudflare's own scope ids
+
+The login SHALL use the operator-registered Tillandsias OAuth client and
+SHALL request a non-empty set of Cloudflare's dotted scope ids (as listed by
+`GET /client/v4/oauth/scopes`, e.g. `workers-ci.write`), including
+`offline_access`. It SHALL NOT request `openid`, which Cloudflare refuses for
+this client. Every request SHALL carry a User-Agent naming Tillandsias.
+(Measured 2026-10-14: with no scope, Cloudflare's consent screen asks for
+zero permissions and cannot be approved. Order 1718-adra.)
+
+#### Scenario: the authorize URL asks for real permissions
+
+- **WHEN** the login builds its authorize URL
+- **THEN** its `scope` parameter is non-empty, contains `offline_access`,
+  contains no `openid`, and every other id has the dotted form
+  `<resource>.<access>`
+
 ### Requirement: the credential lives at two Vault paths and rotates itself
 
 The bundle SHALL be stored as `secret/cloudflare/token` (`access_token`,

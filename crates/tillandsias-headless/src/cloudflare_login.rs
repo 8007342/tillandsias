@@ -65,11 +65,29 @@ pub const RELAY_URL_ENV: &str = "TILLANDSIAS_CLOUDFLARE_RELAY_URL";
 pub const RELAY_POLL_URL_ENV: &str = "TILLANDSIAS_CLOUDFLARE_RELAY_POLL_URL";
 /// How long any receiver waits (spec: "for at most five minutes").
 pub const LOGIN_WINDOW: Duration = Duration::from_secs(300);
-/// Scopes requested at login. EMPTY until the operator registers the App and
-/// records the exact scope ids its consent screen lists (the design note's
-/// scope names are UNVERIFIED permission names, not ids); Cloudflare adds
-/// `openid`/`offline_access` itself.
-pub const CLOUDFLARE_LOGIN_SCOPES: &[&str] = &[];
+/// Scopes requested at login. ORDER 1718-adra, MEASURED 2026-10-14 on the
+/// operator's account: Cloudflare's ids are dotted (GET
+/// /client/v4/oauth/scopes lists them), this exact set was granted to the
+/// registered Tillandsias client, and an EMPTY list makes the consent screen
+/// ask for zero permissions with Authorize disabled. `openid` is refused for
+/// this client, so it is never requested. A scope added here must also be
+/// configured on the client in the Cloudflare dashboard.
+///
+/// - `offline_access`: a refresh token (rotation, Decision 2).
+/// - `workers-ci.read` / `.write`: Workers Builds triggers, builds and logs
+///   (1707-g633).
+/// - `workers-routes.read`: zone Worker routes (a wildcard route can shadow a
+///   custom domain, measured on tillandsias.org).
+/// - `workers-scripts.metadata_read`: list Workers and their tags.
+/// - `account-settings.read`: find the account id.
+pub const CLOUDFLARE_LOGIN_SCOPES: &[&str] = &[
+    "offline_access",
+    "workers-ci.read",
+    "workers-ci.write",
+    "workers-routes.read",
+    "workers-scripts.metadata_read",
+    "account-settings.read",
+];
 
 const RELAY_POLL_INTERVAL: Duration = Duration::from_secs(2);
 const RELAY_POLL_MAX_TRANSPORT_FAILURES: u32 = 5;
@@ -1276,6 +1294,51 @@ mod tests {
     use std::rc::Rc;
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// ORDER 1718-adra. MEASURED 2026-10-14 against the operator's account: an
+    /// authorize request with NO scope makes Cloudflare's consent screen ask
+    /// for "0 total permissions" with Authorize disabled, so an empty list is a
+    /// login that cannot complete. Cloudflare's ids are dotted, from
+    /// GET /client/v4/oauth/scopes (`workers-ci.write`,
+    /// `workers-scripts.metadata_read`), and `openid` is refused for this
+    /// client ("not allowed to request scope 'openid'").
+    #[test]
+    fn the_login_requests_cloudflares_measured_scope_ids_and_the_registered_client() {
+        assert!(
+            !CLOUDFLARE_LOGIN_SCOPES.is_empty(),
+            "an empty scope list asks Cloudflare for zero permissions"
+        );
+        assert!(CLOUDFLARE_LOGIN_SCOPES.contains(&"offline_access"));
+        assert!(
+            !CLOUDFLARE_LOGIN_SCOPES.contains(&"openid"),
+            "Cloudflare refuses openid for this client"
+        );
+        for scope in CLOUDFLARE_LOGIN_SCOPES {
+            if *scope == "offline_access" {
+                continue;
+            }
+            let (resource, access) = scope
+                .split_once('.')
+                .unwrap_or_else(|| panic!("{scope}: not a dotted Cloudflare scope id"));
+            assert!(
+                !resource.is_empty()
+                    && resource
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+                    && !access.is_empty()
+                    && access.chars().all(|c| c.is_ascii_lowercase() || c == '_'),
+                "{scope}: Cloudflare ids look like workers-ci.write, not wrangler's workers_builds:write"
+            );
+        }
+        // The Workers Builds scope 1707-g633 needs, granted live.
+        assert!(CLOUDFLARE_LOGIN_SCOPES.contains(&"workers-ci.write"));
+
+        let id = crate::cloudflare_oauth::CLOUDFLARE_APP_CLIENT_ID;
+        assert!(
+            id.len() == 32 && id.chars().all(|c| c.is_ascii_hexdigit()),
+            "the registered client id, not a placeholder: {id}"
+        );
+    }
 
     // ── the in-memory Vault seam (the 1505-iysn CloudflareTokenStore trait) ──
 
