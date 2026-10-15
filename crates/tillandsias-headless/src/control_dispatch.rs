@@ -97,6 +97,9 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
         // Unix-only: it is a local notification to the tray on this host.
         (GithubLoginStored { .. }, UnixSocket) => Handle,
         (GithubLoginStored { .. }, Vsock) => Unsupported,
+        // Order 1719-83po: the same CLI-to-tray wake for the Cloudflare login.
+        (CloudflareLoginStored { .. }, UnixSocket) => Handle,
+        (CloudflareLoginStored { .. }, Vsock) => Unsupported,
 
         // Q2: VM lifecycle queries on BOTH transports. Linux native has
         // a "phase" (Provisioning/Starting/Ready/...) too — useful for

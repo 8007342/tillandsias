@@ -817,6 +817,16 @@ pub enum ControlMessage {
         seq_in_reply_to: u64,
         logged_in: Option<bool>,
     },
+    /// `tillandsias --cloudflare-login` → the Linux tray, over the local unix
+    /// control socket: the bundle is stored in Vault. Wakes the tray's login
+    /// wait so it hides "Cloudflare Login" on an event, not a poll, the way
+    /// `GithubLoginStored` does for GitHub (679-rp9m). Best-effort: the login
+    /// succeeds with no tray. The tray answers `IssueAck { seq_acked }`.
+    ///
+    /// New trailing variant (additive, no WIRE_VERSION bump).
+    ///
+    /// @trace order:1719-83po, spec:tray-host-control-socket
+    CloudflareLoginStored { seq: u64, ts_unix: u64 },
 }
 
 /// What the guest established about a PTY session's foreground process.
@@ -1190,6 +1200,7 @@ impl ControlMessage {
             ControlMessage::HostClockSync { .. } => "HostClockSync",
             ControlMessage::CloudflareLoginStatusRequest { .. } => "CloudflareLoginStatusRequest",
             ControlMessage::CloudflareLoginStatusReply { .. } => "CloudflareLoginStatusReply",
+            ControlMessage::CloudflareLoginStored { .. } => "CloudflareLoginStored",
         }
     }
 }
@@ -2929,6 +2940,13 @@ mod tests {
                 },
                 "CloudflareLoginStatusReply",
             ),
+            (
+                ControlMessage::CloudflareLoginStored {
+                    seq: 1,
+                    ts_unix: 1_790_000_000,
+                },
+                "CloudflareLoginStored",
+            ),
         ]
     }
 
@@ -3208,6 +3226,7 @@ mod tests {
             // 1719-83po: trailing additions.
             ControlMessage::CloudflareLoginStatusRequest { .. } => 37,
             ControlMessage::CloudflareLoginStatusReply { .. } => 38,
+            ControlMessage::CloudflareLoginStored { .. } => 39,
         }
     }
 
@@ -3242,7 +3261,7 @@ mod tests {
         /// The number of `ControlMessage` variants. An independent literal for
         /// the same reason the discriminants are: anything computed from the
         /// enum agrees with the enum by construction.
-        const DECLARED_VARIANTS: usize = 39;
+        const DECLARED_VARIANTS: usize = 40;
 
         let samples = one_sample_per_variant();
         assert_eq!(
