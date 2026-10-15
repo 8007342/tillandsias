@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-agents-are-told-never-to-pkill-f-which-kills-their-own-shell
+    event:
+      type: progress
+      ts: "2026-10-15T22:43:05Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        Scope amended before work starts, with the coordinator's approval: (1) one plain-words guidance file + (2) the PreToolUse refusal of pkill -f / killall -r + (3) per-harness fixtures. WHY the guidance goes in its own file instead of the startup context: the reach finding behind 1725-23q0. The startup-context addendum reaches only forges working on the Tillandsias repo itself (it is read from $project_dir/images/default/), and of the four harnesses only OpenCode is pointed at .forge-startup-context.md. Guidance placed there would never have reached the lakanoa agent (a Claude-style session in a non-Tillandsias project). So: images/default/config-overlay/mcp/forge-agent-guidance.md, linked by agent-profile.sh as each harness's USER-level instructions (~/.claude/CLAUDE.md, ~/.codex/AGENTS.md, ~/.gemini/GEMINI.md, ~/.config/opencode/AGENTS.md), never overwriting an existing file, so a project's own files still load. Note from the v56.10.15.1 smoke: until 1743-h9rz (#461) lands, OpenCode forges never run agent-profile.sh, so the OpenCode fixture depends on it.
