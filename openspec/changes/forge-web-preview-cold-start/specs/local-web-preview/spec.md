@@ -24,8 +24,11 @@ The build MUST take no image name, path, command or argument from the agent.
 
 A failed `publish_local`, `service_reload` or `service_stop` MUST return a
 stable reason code that names the failed step and its class. Steps are
-container listing, inspection, image, source mounts, router, run and
-readiness; classes are transport, exit, timeout and absent. Raw podman
+container listing, inspection, image, source mounts, router, run, remove,
+rename and readiness; classes are transport, exit, timeout and absent.
+Removing a preview container MUST NOT wait a stop grace period: the preview
+is stateless, and a grace period it cannot use made every reload time out
+(packet 1723-2fiq). Raw podman
 output MUST stay withheld, because it can carry project secrets. After a
 failed publish, `service_status` MUST report the last failure for that
 project: step, reason code, time, and whether a host-side retry or an
