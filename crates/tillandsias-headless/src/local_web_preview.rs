@@ -1206,6 +1206,21 @@ fn certificate_args(
     ]
 }
 
+/// The services a project's preview leaf names besides `www`: the opt-in
+/// toolchains' dev servers (order 1637-5765). Exact names, never a
+/// `*.<project>.localhost` wildcard, so the leaf vouches only for hosts the
+/// router actually serves for this project.
+pub(crate) const DEV_SERVICES: &[&str] = &["flutter"];
+
+/// The leaf's subjectAltName: `www` and every dev service of `project`.
+fn preview_san(project: &str) -> String {
+    std::iter::once("www")
+        .chain(DEV_SERVICES.iter().copied())
+        .map(|service| format!("DNS:{service}.{project}.localhost"))
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
 fn prepare_tls(project: &str, ca: &Path) -> Result<(), String> {
     let root = router_dir();
     let tls = root.join("preview-tls");
@@ -1217,7 +1232,8 @@ fn prepare_tls(project: &str, ca: &Path) -> Result<(), String> {
     let key = temporary.path().join("leaf.key");
     let csr = temporary.path().join("leaf.csr");
     let ext = temporary.path().join("leaf.ext");
-    std::fs::write(&ext, format!("subjectAltName=DNS:{host}\nbasicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n"))
+    let san = preview_san(project);
+    std::fs::write(&ext, format!("subjectAltName={san}\nbasicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n"))
         .map_err(|_| "router_not_ready: TLS extensions unavailable")?;
     for args in certificate_args(&host, &crt, &csr, &key, ca, &ext) {
         host_command(&args)?;
@@ -1258,7 +1274,7 @@ fn prepare_tls(project: &str, ca: &Path) -> Result<(), String> {
     Ok(())
 }
 
-async fn ensure_router(project: &str, debug: bool) -> Result<PathBuf, String> {
+fn ensure_router(project: &str, debug: bool) -> Result<PathBuf, String> {
     let _lock = crate::resource_lock::acquire(
         "preview-router",
         command_budget(Duration::from_secs(5))?,
@@ -1336,23 +1352,34 @@ pub(crate) fn add_dev_route(
     port: u16,
     debug: bool,
 ) -> Result<String, String> {
+    // A browser.open window reaches its project over TLS only (1651-5t7n), so
+    // the dev server gets the preview listener too: the router is up with its
+    // :8443 binding and the project's leaf names this service, even when the
+    // project never published a www preview (an empty project).
+    ensure_router(project, debug)?;
     let _lock = crate::resource_lock::acquire(
         "preview-router",
         command_budget(Duration::from_secs(5))?,
         debug,
     )?;
-    let route = crate::RouterRoute::public_service(format!("{service}.{project}"), upstream, port);
+    let mut route =
+        crate::RouterRoute::public_service(format!("{service}.{project}"), upstream, port);
+    route.preview_tls = true;
     let mut routes = read_routes(debug)?;
     routes.retain(|r| r.subdomain != route.subdomain);
     routes.push(route);
     crate::write_router_routes(&routes, debug)?;
     strict_reload()?;
-    let published = podman_at(Step::Router, &["port", "tillandsias-router", "8080/tcp"])?;
-    let host_port = published
-        .lines()
-        .find_map(|l| l.rsplit(':').next()?.trim().parse::<u16>().ok())
-        .ok_or("router_not_ready: the router publishes no host port")?;
-    Ok(crate::project_service_url(service, project, host_port))
+    dev_url(service, project)
+}
+
+/// The URL a dev server is opened at: https on the preview listener, the
+/// only scheme a browser.open window loads (order 1637-5765).
+fn dev_url(service: &str, project: &str) -> Result<String, String> {
+    Ok(format!(
+        "https://{service}.{project}.localhost:{}/",
+        tls_port()?
+    ))
 }
 
 /// Remove the session's route, only while it still points at `upstream`: a
@@ -1545,7 +1572,7 @@ async fn publish_prepared(
 ) -> Result<Value, String> {
     let name = format!("tillandsias-{project}-web");
     let mounts = source_mounts(&live, &profile)?;
-    let ca = ensure_router(project, debug).await?;
+    let ca = ensure_router(project, debug)?;
     let candidate = format!(
         "{name}-candidate-{}-{}",
         std::process::id(),
@@ -2969,6 +2996,30 @@ mod tests {
         assert!(CONFIG_INSPECTOR.contains("delete parsed.build;"));
         assert!(CONFIG_INSPECTOR.contains("delete e.build;"));
         assert!(CONFIG_INSPECTOR.contains("raw:runtime, runtime_name:runtimeName"));
+    }
+
+    #[test]
+    fn a_dev_server_route_gets_the_projects_tls_site_and_leaf() {
+        // Order 1637-5765: a browser.open window loads https only, so the
+        // flutter dev route needs its own TLS site, bound to the PROJECT's
+        // leaf, which must name the flutter host exactly.
+        let mut dev =
+            crate::RouterRoute::public_service("flutter.macron.dev", "tillandsias-x-flutter", 8080);
+        dev.preview_tls = true;
+        let rendered = crate::generate_dynamic_caddyfile(&[dev]);
+        assert!(rendered.contains("https://flutter.macron.dev.localhost:8443"));
+        assert!(
+            rendered.contains("preview/macron.dev.crt /etc/tillandsias/preview/macron.dev.key"),
+            "the dotted project's leaf, never `dev`: {rendered}"
+        );
+        assert_eq!(
+            preview_san("macron.dev"),
+            "DNS:www.macron.dev.localhost,DNS:flutter.macron.dev.localhost"
+        );
+        assert!(
+            !preview_san("proj").contains('*'),
+            "exact names only: a wildcard would vouch for hosts the router does not serve"
+        );
     }
 
     #[test]

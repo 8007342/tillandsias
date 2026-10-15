@@ -7157,7 +7157,11 @@ reverse_proxy {upstream_host}:{port}\n\
 }}\n\n"
             ));
             if route.preview_tls {
-                let preview_project = subdomain.strip_prefix("www.").unwrap_or(project_label);
+                // `<service>.<project>`: the project is everything after the
+                // first label, dots included (flutter.macron.dev → macron.dev).
+                let preview_project = subdomain
+                    .split_once('.')
+                    .map_or(project_label, |(_, project)| project);
                 routes.push_str(&format!(
                     "https://{subdomain}.localhost:8443 {{\n    tls /etc/tillandsias/preview/{preview_project}.crt /etc/tillandsias/preview/{preview_project}.key\n    header X-Tillandsias-Preview {upstream_host}\n    reverse_proxy {upstream_host}:{port}\n}}\n\n"
                 ));

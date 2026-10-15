@@ -47,7 +47,6 @@ scripts/check-landed-but-open.sh
 scripts/check-landing-provenance.sh
 scripts/check-ledger-distillation.sh
 scripts/check-litmus-expression-pinning-added.sh
-scripts/check-litmus-grep-escapes.sh
 scripts/check-litmus-line-windows.sh
 scripts/check-litmus-mutation-arms-mutate.sh
 scripts/check-litmus-pin-claims.sh
