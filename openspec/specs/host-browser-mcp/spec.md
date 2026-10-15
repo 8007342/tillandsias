@@ -562,6 +562,7 @@ Every successful `tools/call` on the lane socket, whether a browser tool (`brows
 - **AND** `result.isError` is not true
 
 ### Requirement: Development windows bypass service workers unless the lane keeps them
+<!-- req-id: 1d51dd06 -->
 
 A `browser.open{dev:true}` window SHALL set
 `Network.setBypassServiceWorker{bypass:true}` on every page it attaches,
