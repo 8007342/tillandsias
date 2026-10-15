@@ -420,7 +420,6 @@ scripts scripts/check-running-image-freshness.sh 6
 scripts scripts/check-rust-source-pin-added.sh 2
 scripts scripts/check-salvage-refs-ledger.sh 3
 scripts scripts/check-scorable-obligation-added.sh 21
-scripts scripts/check-scratchpad-headroom.sh 7
 scripts scripts/check-script-exec-bits.sh 6
 scripts scripts/check-sigpipe-verdict-pipelines-added.sh 15
 scripts scripts/check-skill-canonicalization.sh 4
@@ -830,7 +829,6 @@ scripts scripts/test-salvage-net.sh 13
 scripts scripts/test-scorable-closure-quoting.sh 5
 scripts scripts/test-scorable-obligation-gate.sh 15
 scripts scripts/test-scorable-obligation-splitter.sh 14
-scripts scripts/test-scratchpad-headroom.sh 1
 scripts scripts/test-script-exec-bits.sh 3
 scripts scripts/test-seam-writers-canonical.sh 7
 scripts scripts/test-secrets.sh 7
