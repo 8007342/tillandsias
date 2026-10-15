@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: github-token-rotation-reads-a-vault-that-is-not-up-yet-as-no-token-and-waits-fifteen-minutes-while-cloud-projects-fail-silently
+    order: 1742-zg7r
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    size: S
+    pickup_role: linux
+    capability_tags: [github-login, vault, tray, cloud-projects, token-rotation]
+    related: [1738-wqmt]
+    depends_on: []
+    title: |
+      At tray start the GitHub token rotation runs before Vault is up, reports "ok:github-token-rotation:no-token", and waits the full 15-minute interval. If the access token expired meanwhile, the cloud-project list and the user probe fail for up to 15 minutes with an empty error, because the gh script swallows gh's stderr
+    context: |
+      Seen in the v56.10.15.1 Linux smoke on lenovinha, 2026-10-15. Every tray start (three in this run) prints "ok:github-token-rotation:no-token" before Vault comes up. In the same second, the Cloudflare rotation correctly says "blocked:cloudflare-token-rotation-failed:read:vault-unavailable".
+      Cause: VaultGitHubTokenStore::read_bundle (crates/tillandsias-headless/src/vault_bootstrap.rs) returns Ok(None) when the Vault container is not running, when the root token cannot be read, and when the secret read fails. So rotate_github_token_if_due answers DueCheck::NoToken, and github_rotation_next_delay treats any Ok as "check again in GITHUB_ROTATION_CHECK_EVERY" (15 min) instead of the 60 s error backoff. The Cloudflare store already returns Err("vault-unavailable") for the same state.
+      Effect, measured: the access token (written 04:14Z) had expired by the 21:18Z upgrade. The tray read it successfully, but "cloud refresh: gh invocation failed: containerized gh exited with status exit status: 1:" repeated with an EMPTY reason. The script in remote_projects.rs runs `gh auth login --with-token >/dev/null 2>&1` under `set -eu`, so a rejected token exits 1 with no stderr. The rotation fired on schedule at 21:41:48Z and the next tray start loaded 16 repos.
+      The sign-in itself survived, so this is a delay with an unexplained error, not a lost credential.
+    exit_criteria:
+      - "read_bundle distinguishes absent from unreachable: Vault not running, root token unreadable, or a non-NotFound read error is Err (a vault-unavailable reason), so the scheduler retries on the 60 s error backoff; a unit test with a fake store that is unavailable then holds an expired token rotates within one backoff step, and is red today"
+      - "the containerized gh script keeps gh's stderr on a failed `gh auth login`, so `cloud refresh: gh invocation failed` names the reason (for example a 401) instead of an empty string"
+    verifiable_closure: "cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock github_rotation_ — the unavailable-then-expired fake-store test; pre-fix it reports NoToken and schedules 15 min"
+    next_action: >
+      Make VaultGitHubTokenStore::read_bundle return Err for the three unreachable cases, the way the Cloudflare store does. Then make the gh scripts in remote_projects.rs keep stderr on the auth-login step.
+    provenance: |
+      Filed by lenovinha from the v56.10.15.1 Linux smoke, 2026-10-15T21:51:46Z. Evidence: Vault audit log paths and times only (never values) and the tray's --debug output.
+    events:
+      - type: filed
+        ts: "2026-10-15T21:51:46Z"
+        host: lenovinha
+        summary: |-
+          GitHub rotation reads Vault-not-up as no-token and waits 15 minutes; gh auth errors are swallowed.
