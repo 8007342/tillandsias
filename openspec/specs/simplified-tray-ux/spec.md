@@ -193,6 +193,25 @@ MUST be visible when the user is not authenticated or GitHub is unreachable.
 - After auth completes, the menu shows `[<home> ~/src/ >]` and `[<cloud> Cloud >]` instead of the login item
 - During GitHubunreachable (NetIssue stage), this menu item displays but may use cached authentication state
 
+### Requirement: Cloudflare Login Menu ([Cloudflare Login])
+<!-- req-id: e0555b06 -->
+
+@trace spec:simplified-tray-ux
+
+Approved by the Tlatoāni on 2026-10-14 (order 1719-83po), as the UX-curation governance in tray-ux requires. The item's placement and grouping are PROVISIONAL: the operator will gate and regroup every menu item in an upcoming UX review (order 1720-pqwj), and that review's outcome supersedes the placement stated here.
+
+The tray on every platform (Linux, macOS, Windows) SHALL show a `Cloudflare Login` item that mirrors GitHub Login. It SHALL be visible only while the VM reports no Cloudflare credential bundle, and hidden once one exists. The tray SHALL learn the state from the guest over the control wire through new trailing message variants. An older guest that does not know them SHALL leave the item visible but disabled (state Unknown), never crash or misreport. The tray SHALL ask for the state only on events (when the VM reaches Ready, and when a Cloudflare login session closes), never on a timer. Selecting the item SHALL open a login terminal running exactly `tillandsias-headless --cloudflare-login` with one of its documented `--via` values. The exec allowlist SHALL refuse any other headless flag on that path.
+
+#### Scenario: the item disappears after signing in
+
+- **WHEN** the user completes the Cloudflare login and the login session closes
+- **THEN** the tray asks the guest once, learns a bundle exists, and hides the item
+
+#### Scenario: an older guest degrades safely
+
+- **WHEN** the guest answers the Cloudflare state request with an unknown-variant reply
+- **THEN** the item is shown disabled, and nothing else in the menu changes
+
 ### Requirement: Single Container Per Project
 <!-- req-id: dab3d050 -->
 

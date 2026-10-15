@@ -5842,9 +5842,10 @@ async fn try_start_vsock_forwarder(client: &tillandsias_podman::PodmanClient, de
     // socat rather than about the lane.
     let image = versioned_image_tag("forge-base", VERSION.trim());
     let image = image.as_str();
-    let Some((cid, port)) = vsock_forward_target() else {
+    let Some(target) = vsock_forward_target() else {
         return false;
     };
+    let (cid, port) = (target.cid(), target.port());
     let profile = match ensure_vsock_seccomp_profile() {
         Ok(p) => p,
         Err(e) => {
@@ -5864,7 +5865,7 @@ async fn try_start_vsock_forwarder(client: &tillandsias_podman::PodmanClient, de
         .run_container_observed(
             "vsock-forwarder",
             VSOCK_FORWARDER_NAME,
-            &build_vsock_forwarder_run_args(image, &profile, cid, port),
+            &build_vsock_forwarder_run_args(image, &profile, target),
             debug,
         )
         .await
@@ -5913,10 +5914,18 @@ const VSOCK_FORWARD_DIR: &str = "/run/tillandsias";
 /// test builds, so the SetVsockForwardTarget success path is reachable from a
 /// unit test on any host (1509-kf4d); /run/tillandsias otherwise.
 pub(crate) fn vsock_forward_dir() -> PathBuf {
+    // 1722-bwy4: per TEST THREAD, not per process, so tests that write the
+    // target file never race each other and need no lock across an await. A
+    // #[tokio::test] runs its spawned server task on its own (current) thread,
+    // so the handler and the test see the same file.
     #[cfg(test)]
     {
+        let thread = format!("{:?}", std::thread::current().id())
+            .chars()
+            .filter(char::is_ascii_alphanumeric)
+            .collect::<String>();
         std::env::temp_dir().join(format!(
-            "tillandsias-vsock-forward-test-{}",
+            "tillandsias-vsock-forward-test-{}-{thread}",
             std::process::id()
         ))
     }
@@ -5937,16 +5946,71 @@ pub(crate) fn vsock_forward_dir() -> PathBuf {
 ///
 /// The env var is the test seam and the operator override; the file is how the
 /// tray actually delivers it.
-fn vsock_forward_target() -> Option<(u32, u32)> {
+///
+/// ORDER 1722-bwy4: every source is validated through [`VsockForwardTarget::new`];
+/// a refused value is logged and treated as no target (the in-guest inference
+/// container runs instead), never relayed.
+fn vsock_forward_target() -> Option<VsockForwardTarget> {
     fn parse(raw: &str) -> Option<(u32, u32)> {
         let (cid, port) = raw.trim().split_once(':')?;
         Some((cid.trim().parse().ok()?, port.trim().parse().ok()?))
     }
-    if let Ok(v) = std::env::var("TILLANDSIAS_GUEST_VSOCK_FORWARD_TO") {
-        return parse(&v);
+    let (source, raw) = match std::env::var("TILLANDSIAS_GUEST_VSOCK_FORWARD_TO") {
+        Ok(v) => ("TILLANDSIAS_GUEST_VSOCK_FORWARD_TO", v),
+        Err(_) => (
+            "the vsock-forward file",
+            std::fs::read_to_string(vsock_forward_dir().join("vsock-forward")).ok()?,
+        ),
+    };
+    let (cid, port) = parse(&raw)?;
+    match VsockForwardTarget::new(cid, port) {
+        Ok(target) => Some(target),
+        Err(why) => {
+            eprintln!("[tillandsias] {source}: {why}; NOT starting the forwarder");
+            None
+        }
     }
-    let path = vsock_forward_dir().join("vsock-forward");
-    parse(&std::fs::read_to_string(path).ok()?)
+}
+
+/// ORDER 1722-bwy4. Where the vsock forwarder may relay `inference:11434`,
+/// which every forge reaches by design: ONLY the host (cid 2), and never the
+/// guest's own control port or port 0. A target of (1, 42420) would bridge
+/// every forge to the guest's control listener (1721-fcm0). Constructible only
+/// through [`VsockForwardTarget::new`], and the forwarder's argv builder takes
+/// nothing else, so no source can skip the check.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct VsockForwardTarget {
+    cid: u32,
+    port: u32,
+}
+
+impl VsockForwardTarget {
+    /// VMADDR_CID_HOST.
+    pub(crate) const HOST_CID: u32 = 2;
+
+    pub(crate) fn new(cid: u32, port: u32) -> Result<Self, String> {
+        if cid != Self::HOST_CID {
+            return Err(format!(
+                "forward target cid {cid} refused: only the host (cid {}) may be a forward target",
+                Self::HOST_CID
+            ));
+        }
+        if port == 0 || port == tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT {
+            return Err(format!(
+                "forward target port {port} refused: not 0 and not the control port {}",
+                tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT
+            ));
+        }
+        Ok(Self { cid, port })
+    }
+
+    pub(crate) fn cid(self) -> u32 {
+        self.cid
+    }
+
+    pub(crate) fn port(self) -> u32 {
+        self.port
+    }
 }
 
 /// Materialise the derived seccomp profile and return its path.
@@ -5988,9 +6052,9 @@ fn ensure_vsock_seccomp_profile() -> Result<PathBuf, String> {
 fn build_vsock_forwarder_run_args(
     image: &str,
     profile: &Path,
-    host_cid: u32,
-    host_port: u32,
+    target: VsockForwardTarget,
 ) -> Vec<String> {
+    let (host_cid, host_port) = (target.cid(), target.port());
     vec![
         "--detach".into(),
         "--replace".into(),
@@ -22065,13 +22129,135 @@ mod tests {
         );
     }
 
+    /// ORDER 1722-bwy4 (from 1721-fcm0). A forge cannot open an AF_VSOCK
+    /// socket ONLY because containers-common's default seccomp rule denies it
+    /// (EPERM), and the guest has vsock_loopback loaded. So no forge launch may
+    /// carry a seccomp override or --privileged: either would let a forge
+    /// reach the guest control listener on (1, 42420). Every forge builder and
+    /// mode is enumerated. The vsock forwarder's derived profile is the one
+    /// sanctioned seccomp option, asserted to stay on that container alone.
+    #[test]
+    fn no_forge_launch_carries_a_seccomp_override_or_privileged() {
+        let _env = env_lock();
+        let restore = TestEnvRestore::capture(&["TILLANDSIAS_FORGE_INSTANCE"]);
+        restore.remove("TILLANDSIAS_FORGE_INSTANCE");
+        let p = PathBuf::from("/tmp/project");
+        let ca = PathBuf::from("/tmp/ca");
+        let mut launches: Vec<(String, Vec<String>)> = Vec::new();
+        for mode in [
+            ForgeAgentMode::Claude,
+            ForgeAgentMode::Codex,
+            ForgeAgentMode::OpenCode,
+            ForgeAgentMode::Antigravity,
+            ForgeAgentMode::Maintenance,
+        ] {
+            launches.push((
+                format!("agent {mode:?}"),
+                build_forge_agent_run_args_with_vault(
+                    &p,
+                    Some(&p),
+                    None,
+                    "proj",
+                    None,
+                    &ca,
+                    "1.2.3",
+                    mode,
+                    false,
+                    None,
+                    None,
+                    false,
+                    &test_cache_root(),
+                ),
+            ));
+        }
+        for mode in [ForgeMode::Cli, ForgeMode::Web] {
+            launches.push((
+                format!("opencode {mode:?}"),
+                build_opencode_forge_args(
+                    &p,
+                    Some(&p),
+                    None,
+                    "proj",
+                    None,
+                    None,
+                    &ca,
+                    "1.2.3",
+                    mode,
+                    None,
+                    false,
+                    false,
+                ),
+            ));
+        }
+        launches.push((
+            "status-check".to_string(),
+            build_status_check_forge_args(&p, "proj", None, &ca, "1.2.3"),
+        ));
+        for (lane, argv) in &launches {
+            for arg in argv {
+                let a = arg.to_ascii_lowercase();
+                assert!(
+                    !a.contains("seccomp")
+                        && !a.contains("--privileged")
+                        && !a.contains("unconfined"),
+                    "forge {lane} carries {arg:?}: it would undo the only barrier between a \
+                     forge and AF_VSOCK"
+                );
+            }
+        }
+        // The one sanctioned exception stays on the forwarder.
+        let forwarder = build_vsock_forwarder_run_args(
+            "img:v1",
+            Path::new("/run/p.json"),
+            VsockForwardTarget::new(2, 42421).unwrap(),
+        );
+        assert!(
+            forwarder.iter().any(|a| a.contains("seccomp=/run/p.json")),
+            "the forwarder keeps its derived profile"
+        );
+    }
+
+    /// ORDER 1722-bwy4: EVERY source of the forward target is validated, the
+    /// env override and the file alike. Only the host (cid 2) on a port other
+    /// than the guest's own control port (42420) or 0 is a target.
+    #[test]
+    fn vsock_forward_target_refuses_anything_but_the_host_off_the_control_port() {
+        let _env = env_lock();
+        let restore = TestEnvRestore::capture(&["TILLANDSIAS_GUEST_VSOCK_FORWARD_TO"]);
+        let file = vsock_forward_dir().join("vsock-forward");
+        std::fs::create_dir_all(vsock_forward_dir()).unwrap();
+        for bad in ["1:11434", "3:11434", "2:42420", "2:0"] {
+            restore.set("TILLANDSIAS_GUEST_VSOCK_FORWARD_TO", bad);
+            assert!(
+                vsock_forward_target().is_none(),
+                "env {bad} must be refused"
+            );
+            restore.remove("TILLANDSIAS_GUEST_VSOCK_FORWARD_TO");
+            std::fs::write(&file, format!("{bad}\n")).unwrap();
+            assert!(
+                vsock_forward_target().is_none(),
+                "file {bad} must be refused"
+            );
+        }
+        // CONTROL: the host on a normal port is a target from either source.
+        std::fs::write(&file, "2:42421\n").unwrap();
+        assert!(vsock_forward_target().is_some(), "file 2:42421 is a target");
+        restore.set("TILLANDSIAS_GUEST_VSOCK_FORWARD_TO", "2:42421");
+        assert!(vsock_forward_target().is_some(), "env 2:42421 is a target");
+        let _ = std::fs::remove_file(&file);
+    }
+
     /// The alias IS the deliverable, so pin it: a forwarder that relays
     /// correctly and is reachable only by IP leaves every agent addressing
     /// `http://inference:11434` landing on nothing, and nothing in the relay's
     /// own behaviour would show it.
     #[test]
     fn vsock_forwarder_claims_the_inference_alias_on_the_enclave_network() {
-        let args = build_vsock_forwarder_run_args("img:v1", Path::new("/run/p.json"), 2, 42421);
+        let args = build_vsock_forwarder_run_args(
+            "img:v1",
+            Path::new("/run/p.json"),
+            VsockForwardTarget::new(2, 42421).unwrap(),
+        );
         let pairs: Vec<_> = args.windows(2).collect();
         assert!(
             pairs
@@ -22092,7 +22278,11 @@ mod tests {
     /// family on the container bridging the VM boundary.
     #[test]
     fn vsock_forwarder_is_confined_by_the_derived_profile() {
-        let args = build_vsock_forwarder_run_args("img:v1", Path::new("/run/p.json"), 2, 42421);
+        let args = build_vsock_forwarder_run_args(
+            "img:v1",
+            Path::new("/run/p.json"),
+            VsockForwardTarget::new(2, 42421).unwrap(),
+        );
         assert!(
             args.iter()
                 .any(|a| a == "--security-opt=seccomp=/run/p.json")
@@ -22110,7 +22300,11 @@ mod tests {
     /// argv. Its original instance silently never set an env var.
     #[test]
     fn vsock_forwarder_places_flags_before_the_image_and_socat_args_after() {
-        let args = build_vsock_forwarder_run_args("img:v1", Path::new("/run/p.json"), 2, 42421);
+        let args = build_vsock_forwarder_run_args(
+            "img:v1",
+            Path::new("/run/p.json"),
+            VsockForwardTarget::new(2, 42421).unwrap(),
+        );
         let at = args
             .iter()
             .position(|a| a == "img:v1")

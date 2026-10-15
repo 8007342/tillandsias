@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's direction (macuahuitl, 2026-10-15), from the 1637-5765 7d local-dist pre-cut proof.
+packets:
+  - packet_id: a-locally-previewed-flutter-web-build-serves-canvaskit-from-the-project-not-the-gstatic-cdn
+    order: 1725-uswh
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [local-web-preview, flutter, toolchains, browser, publish-local]
+    estimated_hours: 3
+    related: [1637-5765, 1651-5t7n]
+    owned_files:
+      - crates/tillandsias-headless/src/toolchain_exec.rs
+      - images/default/cli/flutter
+    title: |
+      A Flutter web build that an agent publishes with publish_local and opens with browser.open never starts. By default the engine loads CanvasKit from www.gstatic.com, and a browser.open window resolves only its project's hosts. The forge's `flutter build web` should default to --no-web-resources-cdn, so a locally previewed build behaves like the dev server (fixed for `flutter run -d web-server` in 1637-5765) and like the deployed site.
+    context: |
+      Measured in the 1637-5765 7d run (lenovinha, 2026-10-15, local-dist f01969c7c).
+      With the CDN default, the window's console shows "Failed to fetch dynamically imported module: https://www.gstatic.com/flutter-canvaskit/<rev>/chromium/canvaskit.js", and the app never sets its title.
+      With --no-web-resources-cdn, canvaskit.js and canvaskit.wasm are served from the SDK (200). Only font warnings remain (fonts.gstatic.com Roboto/Noto), and the app still starts.
+      1637-5765 adds the flag only to routed `flutter run -d web-server` sessions (toolchain_exec::dev_server_argv). `flutter build web` takes the same flag; its build output then carries canvaskit/, and the bootstrap loads it from the site.
+      Whether the DEPLOYED site uses the CDN (for smaller deploys) is the operator's choice to record, not a default. The local preview must work either way.
+    exit_criteria:
+      - 'the forge `flutter build web` gets --no-web-resources-cdn unless the agent passes --web-resources-cdn explicitly; a unit test over the argv rewrite pins both cases'
+      - 'a build published with publish_local and opened with browser.open boots: browser.read_url shows the MaterialApp title (live since 1637-5765), proven by a cold-start driver arm or a recorded run'
+      - 'the operator choice for deployed builds (CDN or self-hosted CanvasKit) is recorded where the deploy is configured'
+    unscoreable: "unpinnable-until-the-guard-exists: the build-web argv rewrite and its unit test (toolchain_exec::tests::a_web_build_serves_canvaskit_locally_unless_asked) do not exist yet; written red first with the fix"
+    next_action: >
+      Extend the toolchain argv rewrite to `build web`, keeping an explicit --web-resources-cdn, with a red unit test first. Then prove it with publish_local plus browser.open on a fresh flutter create.
+    provenance: |
+      Filed by lenovinha-silverblue at the coordinator's direction, 2026-10-15.
+    events:
+      - type: filed
+        ts: "2026-10-15T03:51:07Z"
+        host: lenovinha
+        summary: |-
+          A locally previewed flutter web build must serve CanvasKit from the project, not the gstatic CDN.

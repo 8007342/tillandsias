@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: service-reload-finishes-or-names-why-not-instead-of-a-bare-podman-run-timeout
+    field: status
+    value: in_progress
+    ts: "2026-10-15T04:13:31Z"
+    host: yoga
+
+events:
+  - packet_id: service-reload-finishes-or-names-why-not-instead-of-a-bare-podman-run-timeout
+    event:
+      type: progress
+      ts: "2026-10-15T04:13:31Z"
+      host: yoga
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: claimed by yoga on assignment from macuahuitl-fedora (p1); work/1723-2fiq
+  - packet_id: service-reload-finishes-or-names-why-not-instead-of-a-bare-podman-run-timeout
+    event:
+      type: note
+      ts: "2026-10-15T04:13:31Z"
+      host: yoga
+      summary: |-
+        wip-override by yoga: p1 assigned by coordinator macuahuitl-fedora 2026-10-15; held rows are from earlier yoga sessions, flagged to the coordinator — admitted past: refused:set-field:wip-limit:3/3 — yoga already holds 3 in_progress packet(s) outside a story: research-cert-lifecycle-state-graph, 888-3d6x, 1637-cnxq (1367-2sbc; the limit is 3, from methodology/distributed-work.yaml packet_discipline.wip_limit).
