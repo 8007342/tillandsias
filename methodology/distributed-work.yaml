@@ -2486,6 +2486,32 @@ distributed_work:
       (measured 2026-10-14). So work on branches and use Cloudflare preview
       deploys, batch merges to main, and record push-to-live time for each
       merge so the deploy cost is measured rather than guessed.
+    deploy_budget:
+      trace: "operator rulings 2026-10-14"
+      rule: >
+        Cloud minutes are limited. Cloudflare Workers Builds Free gives 3,000
+        build minutes per month and ONE concurrent build per account
+        (developers.cloudflare.com/workers/ci-cd/builds/limits-and-pricing/),
+        shared with the observatorium, and a deploy costs ~12+ minutes even
+        when the app itself builds in seconds. macron.dev may use at most one
+        third: ~1,000 build-minutes a month, about 80 deploys, ~2-3 merges to
+        main a day. Agents get the rest.
+      branches: >
+        Agents push FREQUENTLY and safely to work/ and other branches
+        (project-discipline level 2: work/<id> → integration branch). Only
+        budgeted, batched merges reach main and trigger a site update. This
+        needs Cloudflare's non-production branch builds OFF for macron.dev;
+        otherwise every branch push spends minutes.
+      applies_to: >
+        Everyone who pushes to macron.dev: its own forge agents AND
+        Tillandsias builders testing forge launches. A smoke's macron.dev
+        note step pushes only to a work/ branch, never to main. A cold-start
+        driver that only clones and serves locally spends nothing.
+      ledger: >
+        macron.dev keeps a committed deploy ledger with Cloudflare's billed
+        build minutes per deploy (branch builds too, while they still run).
+        The agent merging to main sums the month first and refuses past the
+        budget unless a fix is urgent.
     consumers:
       - "macron.dev's own AGENTS.md / CLAUDE.md (the repo states the same ruling)"
       - "skills/smoke-curl-install-and-test-e2e (the macron.dev note step needs no extra approval)"
