@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-15, on the coordinator's request
+# ("file (1) and (4) as one small row, p2 ... Write both red first").
+packets:
+  - packet_id: the-guest-refuses-a-vsock-forward-target-other-than-host-cid-2-off-the-control-port-from-every-source-and-a-litmus-pins-that-no-forge-gets-a-seccomp-override-or-privileged
+    order: 1722-bwy4
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [security, vsock, seccomp, forge, litmus, inference]
+    estimated_hours: 3
+    related: [1721-fcm0, 830-xsk2]
+    title: |
+      Two guards that make 1721-fcm0's single barrier not single. (1) The tillandsias-vsock-forwarder bridges `inference:11434`, which every forge reaches by design, to VSOCK-CONNECT:{cid}:{port}, and nothing validates the target. A target of (1, 42420) would bridge every forge to the guest's control listener. The guest must refuse any forward target unless cid == 2 (VMADDR_CID_HOST) and port != 42420 (CONTROL_WIRE_VSOCK_PORT), from EVERY source. (2) A forge can't open AF_VSOCK only because of containers-common's default seccomp rule; a litmus must fail if any forge launch carries a seccomp override or --privileged.
+    context: |
+      From 1721-fcm0 (2026-10-15). MEASURED in the macOS guest: containers-common-0.67.0 denies socket(AF_VSOCK=40) with EPERM, no containers.conf overrides it, and vsock_loopback IS loaded. READ: the forward target is written unvalidated by vsock_server.rs on SetVsockForwardTarget (to /run/tillandsias/vsock-forward), is read by main.rs vsock_forward_target() from that file OR from TILLANDSIAS_GUEST_VSOCK_FORWARD_TO, and is used by build_vsock_forwarder_run_args as `VSOCK-CONNECT:{host_cid}:{host_port}`. Every source is trusted today; this is defence in depth against a bad value from any of them. 1721-fcm0 keeps the peer-CID check and order 142's per-boot secret.
+    exit_criteria:
+      - 'one validator, used by EVERY path (the SetVsockForwardTarget handler, vsock_forward_target() for the env override and for the file, and build_vsock_forwarder_run_args), refuses cid != 2 and port == 42420 with a named reason; arms for cid 1, cid 3, cid 2 with port 42420, each via the wire handler, the env override and the file, all RED before the validator; a CONTROL that cid 2 with a normal port is accepted'
+      - 'a refused target starts no forwarder, and the refusal is logged and replied with Error (not silently ignored)'
+      - 'a litmus/unit arm enumerates every forge launch builder (build_forge_agent_run_args_with_vault, build_opencode_forge_args, and any other forge spec builder) and fails if any argv carries --security-opt seccomp=, --privileged, or --security-opt=seccomp; it is red when a builder is mutated to add one (mutation shown in the commit); the forwarder''s own derived profile is the one named exception, asserted to apply only to tillandsias-vsock-forwarder'
+    unscoreable: "pinned-by-its-own-fixture: the validator arms and the launch-argv arm are the closure"
+    next_action: >
+      After 1719-83po slice 5 (or between slices while one waits on yolanda): write the validator arms red first, then the validator; then the forge-launch seccomp/--privileged arm with its mutation.
+    events:
+      - type: filed
+        ts: "2026-10-15T01:09:12Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Validate the vsock forward target (cid 2, never port 42420) from every source, plus a litmus that no forge gets a seccomp override or --privileged. Defence in depth from 1721-fcm0.
