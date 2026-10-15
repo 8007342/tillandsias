@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-guest-refuses-a-vsock-forward-target-other-than-host-cid-2-off-the-control-port-from-every-source-and-a-litmus-pins-that-no-forge-gets-a-seccomp-override-or-privileged
+    event:
+      type: progress
+      ts: "2026-10-15T02:13:03Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        Implemented on work/1722-bwy4 @ 4dcc329ee (fix f943a5bfe; preflight refused=0). Criterion 1: VsockForwardTarget::new refuses cid != 2 and port 0/42420; used by the SetVsockForwardTarget handler (validated before recording; Error reply; nothing written), by vsock_forward_target() for BOTH the env override and the file, and by build_vsock_forwarder_run_args, which now takes only the validated type. Red first: the wire arm ('target 1:11434 must be refused with Error, got IssueAck') and the env/file arm ('env 1:11434 must be refused'), each with a cid-2 control. Criterion 2: refusal logged and answered with Error; no forwarder starts. Criterion 3: no_forge_launch_carries_a_seccomp_override_or_privileged enumerates agent x5, opencode Cli/Web and status-check; MUTATION (--privileged in build_status_check_forge_args) made it FAIL. The forwarder's profile is asserted as the sole exception. darwin: headless 999/0; clippy clean x4. Closes on landing.
