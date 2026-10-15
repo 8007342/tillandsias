@@ -5,10 +5,12 @@ phase: pre-build
 description: >
   Order 1443-we89, THE TEMPORARY BRIDGE. scripts/hooks/claude-pretooluse-command-policy.sh
   hands a Bash-tool command to `tillandsias-plan policy classify-bash --hook`,
-  which classifies it against the seven measured shapes (unquoted heredoc
+  which classifies it against the eight measured shapes (unquoted heredoc
   executing prose, SIGPIPE verdict pipeline, verdict through tail -1,
   credential mutation, destructive classes from the policy floor, a shell
-  string crossing a boundary, a token literal) and answers deny / ask / allow
+  string crossing a boundary, a token literal, and since 1724-kcj4 a
+  whole-command-line kill such as pkill -f, pinned by the classifier unit test
+  self_matching_kill_is_refused_and_pgrep_is_not) and answers deny / ask / allow
   in Claude Code's hook contract. Unknown shapes allow; the kill switch is
   logged; --status prints the three-part retirement condition. Driven with hook
   JSON directly, so the hook need not be installed.
