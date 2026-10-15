@@ -158,8 +158,13 @@ enum Step {
     /// Source mounts: probes inside the live forge, the RAM volume, the config.
     Source,
     Router,
-    /// Container lifecycle: run, rename, remove.
+    /// Starting a container (`run`).
     Run,
+    /// Removing a container. Its own step (1723-2fiq): a remove that waited
+    /// out a stop timeout used to read as a failed `run`.
+    Remove,
+    /// Installing the candidate under the preview name.
+    Rename,
     Ready,
 }
 
@@ -172,6 +177,8 @@ impl Step {
             Self::Source => "source",
             Self::Router => "router",
             Self::Run => "run",
+            Self::Remove => "remove",
+            Self::Rename => "rename",
             Self::Ready => "ready",
         }
     }
@@ -233,6 +240,16 @@ fn podman_output(args: &[&str]) -> Result<std::process::Output, Class> {
         std::io::ErrorKind::TimedOut => Class::Timeout,
         _ => Class::Transport,
     })
+}
+
+/// Remove a preview container without a stop grace period. The preview is
+/// stateless, and busybox httpd runs as PID 1, which ignores SIGTERM, so a
+/// plain `rm --force` waited out the 10 s stop timeout against a 5 s per-call
+/// budget: every reload and repeat publish failed, and the cleanup of the
+/// candidate failed the same way, orphaning it (1723-2fiq, measured on yoga:
+/// 10087 ms without `--time 0`, 60 ms with it).
+fn remove_now(name: &str) -> Result<String, String> {
+    podman_at(Step::Remove, &["rm", "--force", "--time", "0", name])
 }
 
 /// Run one podman command for `step`. Never echo raw diagnostics.
@@ -1538,11 +1555,11 @@ async fn publish_prepared(
     let mut command = vec!["run"];
     command.extend(args.iter().map(String::as_str));
     if let Err(e) = podman_at(Step::Run, &command) {
-        let _ = podman_at(Step::Run, &["rm", "--force", &candidate]);
+        let _ = remove_now(&candidate);
         return Err(e);
     }
     if let Err(e) = ready_backend(&candidate).await {
-        let _ = podman_at(Step::Run, &["rm", "--force", &candidate]);
+        let _ = remove_now(&candidate);
         return Err(e);
     }
     // Recheck the exact forge launch after candidate startup (PID reuse cannot
@@ -1550,15 +1567,15 @@ async fn publish_prepared(
     if inspect(&live.forge_id)?
         .is_none_or(|r| !attributed_forge(&r, &crate::mcp_socket_host_dir(project, Some(instance))))
     {
-        let _ = podman_at(Step::Run, &["rm", "--force", &candidate]);
+        let _ = remove_now(&candidate);
         return Err("live_worktree_unavailable: source forge exited during startup".into());
     }
     let mut replacement_installed = false;
     let outcome = async {
         if old.is_some() {
-            podman_at(Step::Run, &["rm", "--force", &name])?;
+            remove_now(&name)?;
         }
-        podman_at(Step::Run, &["rename", &candidate, &name])?;
+        podman_at(Step::Rename, &["rename", &candidate, &name])?;
         replacement_installed = true;
         let _router_lock = crate::resource_lock::acquire(
             "preview-router",
@@ -1585,9 +1602,9 @@ async fn publish_prepared(
     }
     .await;
     if outcome.is_err() {
-        let _ = podman_at(Step::Run, &["rm", "--force", &candidate]);
+        let _ = remove_now(&candidate);
         if replacement_installed {
-            let _ = podman_at(Step::Run, &["rm", "--force", &name]);
+            let _ = remove_now(&name);
         }
         let _lock = crate::resource_lock::acquire(
             "preview-router",
@@ -1625,6 +1642,8 @@ fn classify_failure(reason: &str) -> (&'static str, &'static str, &'static str) 
             Step::Source,
             Step::Router,
             Step::Run,
+            Step::Remove,
+            Step::Rename,
             Step::Ready,
         ]
         .into_iter()
@@ -1829,7 +1848,7 @@ async fn stop_inner(project: &str, instance: &str, debug: bool) -> Result<Value,
     let row = inspect(&name)?;
     check_owner(row.as_ref(), instance, None)?;
     if row.is_some() {
-        podman_at(Step::Run, &["rm", "--force", &name])?;
+        remove_now(&name)?;
     }
     let _router_lock = crate::resource_lock::acquire(
         "preview-router",
@@ -1891,7 +1910,7 @@ pub(crate) fn cleanup_departed_lane(
         if label(&row, OWNER) != instance {
             return Ok(());
         }
-        podman_at(Step::Run, &["rm", "--force", &name])?;
+        remove_now(&name)?;
     }
     let _router_lock =
         crate::resource_lock::acquire("preview-router", Duration::from_secs(120), debug)?;
@@ -1934,7 +1953,7 @@ fn watch_source_lifetime(
                 Ok(Some(row))
                     if label(&row, OWNER) == instance && label(&row, FORGE) == forge_id =>
                 {
-                    if podman_at(Step::Run, &["rm", "--force", &name]).is_err() {
+                    if remove_now(&name).is_err() {
                         continue;
                     }
                 }
@@ -2026,6 +2045,8 @@ mod tests {
             Step::Source,
             Step::Router,
             Step::Run,
+            Step::Remove,
+            Step::Rename,
             Step::Ready,
         ]
         .into_iter()
@@ -2093,6 +2114,36 @@ mod tests {
                     .unwrap_err(),
                 "runtime_unavailable: podman failed at step image (transport)"
             );
+        }
+    }
+
+    /// 1723-2fiq: the preview's PID 1 (busybox httpd) ignores SIGTERM, so a
+    /// remove that grants a stop grace period outlives the per-call budget
+    /// (10087 ms measured on yoga against 5 s). The fake models that world: a
+    /// graceful `rm` times out. Removal must still finish, and a remove that
+    /// does fail names `remove`, never `run`.
+    #[test]
+    fn removing_a_preview_skips_the_grace_period_and_names_its_step() {
+        fn sigterm_ignoring_preview(args: &[&str]) -> std::io::Result<std::process::Output> {
+            let graceless = args.windows(2).any(|w| w == ["--time", "0"]);
+            if args[0] == "rm" && !graceless {
+                Err(std::io::Error::from(std::io::ErrorKind::TimedOut))
+            } else {
+                output(0, "", "")
+            }
+        }
+        {
+            let _fake = Fake::install(sigterm_ignoring_preview);
+            remove_now("tillandsias-p-web").expect("removal finishes without a grace period");
+        }
+        {
+            let _fake = Fake::install(|_| Err(std::io::Error::from(std::io::ErrorKind::TimedOut)));
+            let reason = remove_now("tillandsias-p-web").unwrap_err();
+            assert_eq!(
+                reason,
+                "runtime_unavailable: podman failed at step remove (timeout)"
+            );
+            assert_eq!(classify_failure(&reason).0, "remove");
         }
     }
 
