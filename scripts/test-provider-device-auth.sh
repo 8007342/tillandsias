@@ -96,6 +96,80 @@ grep -q "ANTHROPIC_API_KEY" "$IMG/entrypoint-forge-claude.sh" \
 grep -q "GEMINI_API_KEY" "$IMG/entrypoint-forge-antigravity.sh" \
     && ok "antigravity API-key launches skip OAuth restore" || bad "antigravity API-key guard missing"
 
+echo "[5] negative control: agy probe rejects 'auth' and succeeds end-to-end (1496-x76p)"
+TMP_AGY="$(mktemp -d "${TMPDIR:-/tmp}/provider-device-auth-agy.XXXXXX")"; trap 'rm -rf "$TMP" "$TMP_AGY"' EXIT
+mkdir -p "$TMP_AGY/bin" "$TMP_AGY/home"
+cat > "$TMP_AGY/bin/agy" <<'FAKE_AGY'
+#!/usr/bin/env bash
+for arg in "$@"; do
+    if [[ "$arg" == "--help" ]]; then
+        cat <<'HELP'
+Usage of agy:
+Available subcommands:
+  mcp             Manage MCP servers
+  update          Update CLI
+HELP
+        exit 0
+    fi
+done
+if [[ "${1:-}" == "auth" ]]; then
+    echo 'Error: unexpected argument "auth".' >&2
+    exit 2
+fi
+# Default interactive login creates the token file
+mkdir -p "$HOME/.gemini/antigravity-cli"
+echo "fixture-token-secret" > "$HOME/.gemini/antigravity-cli/antigravity-oauth-token"
+exit 0
+FAKE_AGY
+chmod +x "$TMP_AGY/bin/agy"
+
+cat > "$TMP_AGY/bin/vault-cli.sh" <<'FAKE_VAULT'
+#!/usr/bin/env bash
+case "$1" in
+  read) exit 0 ;;
+  write-stdin) cat >/dev/null ;;
+esac
+FAKE_VAULT
+chmod +x "$TMP_AGY/bin/vault-cli.sh"
+
+cat > "$TMP_AGY/lib-common.sh" <<'FAKE_LC'
+#!/usr/bin/env bash
+require_antigravity() { return 0; }
+FAKE_LC
+
+if PATH="$TMP_AGY/bin:$PATH" HOME="$TMP_AGY/home" \
+     TILLANDSIAS_LIB_COMMON="$TMP_AGY/lib-common.sh" \
+     bash "$IMG/provider-device-auth.sh" antigravity >/dev/null 2>&1; then
+    ok "agy negative control avoids 'auth' and stores token in Vault"
+else
+    bad "agy negative control failed"
+fi
+
+echo "[6] negative control: decoy token file is never harvested"
+mkdir -p "$TMP_AGY/home/.gemini/decoy" "$TMP_AGY/home/.config/antigravity"
+echo "decoy-token-data" > "$TMP_AGY/home/.gemini/decoy/other-token"
+echo "decoy-token-data" > "$TMP_AGY/home/.config/antigravity/token.json"
+rm -f "$TMP_AGY/home/.gemini/antigravity-cli/antigravity-oauth-token"
+cat > "$TMP_AGY/bin/agy" <<'FAKE_AGY_DECOY'
+#!/usr/bin/env bash
+for arg in "$@"; do
+    [[ "$arg" == "--help" ]] && { echo "Usage: agy"; exit 0; }
+done
+exit 1
+FAKE_AGY_DECOY
+chmod +x "$TMP_AGY/bin/agy"
+
+if PATH="$TMP_AGY/bin:$PATH" HOME="$TMP_AGY/home" \
+     TILLANDSIAS_LIB_COMMON="$TMP_AGY/lib-common.sh" \
+     TILLANDSIAS_AGY_AUTH_FILE="$TMP_AGY/home/vault-target-token" \
+     bash "$IMG/provider-device-auth.sh" antigravity >/dev/null 2>&1; then
+    bad "decoy token was harvested"
+else
+    [ ! -f "$TMP_AGY/home/vault-target-token" ] \
+        && ok "decoy token is never harvested" \
+        || bad "target file created from decoy"
+fi
+
 echo
 echo "provider-device-auth fixture: $PASS ok, $FAIL fail"
 [ "$FAIL" -eq 0 ] && { echo "PASS: provider device-auth + oauth-vault contract shape"; exit 0; }
