@@ -43,14 +43,14 @@ default="$(grep -oE 'HOME:-/home/forge\}/[^}"]*agent-profile\.sh' "$LIB" | head 
 default="/home/forge/${default#*\}/}"
 arm1=ok; why1=""
 [ "$default" = "$target/agent-profile.sh" ] || { arm1=bad; why1="loader default '$default' != COPY target '$target/agent-profile.sh'"; }
-for a in claude codex opencode-web antigravity; do
+for a in claude codex opencode opencode-web antigravity; do
     e="$ROOT/images/default/entrypoint-forge-$a.sh"
     lc="$(grep -n 'source /usr/local/lib/tillandsias/lib-common.sh' "$e" | head -n 1 | cut -d: -f1)"
     lp="$(grep -n '^load_agent_profile' "$e" | head -n 1 | cut -d: -f1)"
     if grep -q '/opt/config-overlay' "$e"; then arm1=bad; why1="$why1 $a names /opt/config-overlay;"; fi
     if [ -z "$lp" ] || [ -z "$lc" ] || [ "$lp" -le "$lc" ]; then arm1=bad; why1="$why1 $a: load_agent_profile missing or before lib-common;"; fi
 done
-[ "$arm1" = ok ] && ok "ARM 1: all four entrypoints call load_agent_profile after lib-common, and its default is the COPY target $target" \
+[ "$arm1" = ok ] && ok "ARM 1: all five entrypoints call load_agent_profile after lib-common, and its default is the COPY target $target" \
     || bad "ARM 1:$why1"
 
 # The loader, extracted from lib-common (a function, so no container setup runs).
