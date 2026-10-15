@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-agents-are-told-never-to-pkill-f-which-kills-their-own-shell
+    event:
+      type: progress
+      ts: "2026-10-15T23:21:49Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        PR #464 (work/1724-kcj4 @ 8408f3722, merged with trunk including #461), with all three parts. (2) The hook: bash_policy shape 8, self-matching-kill-pattern, refuses pkill -f/--full and killall -r/--regexp, directly, through wrappers and inside bash -c strings; the unit test has 12 deny arms and 9 allow controls (pgrep -f allowed) and is red with the call site disabled. The real hook entry exits 2 for `bash -c "pkill -f vite"` and 0 for `pgrep -f vite`. (1) The guidance: one file, images/default/config-overlay/mcp/forge-agent-guidance.md, linked by agent-profile.sh link_forge_agent_guidance to ~/.claude/CLAUDE.md, ~/.codex/AGENTS.md, ~/.gemini/GEMINI.md and ~/.config/opencode/AGENTS.md, never overwriting. (3) Fixtures: crates/tillandsias-core/tests/forge_agent_guidance.rs sources the real profile; its delivery arms are red without the function, and its controls (project files untouched, one source) hold both ways. Preflight refused=0; the shell-to-lua carry is waived by trailer. Remaining: the live arm in a released forge.
