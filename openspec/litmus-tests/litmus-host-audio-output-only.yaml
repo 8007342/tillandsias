@@ -1,0 +1,43 @@
+# @trace spec:host-browser-mcp
+# @trace order:1722-2haw
+#
+# A browser window's only audio path is a dedicated PulseAudio-protocol server
+# started from crates/tillandsias-headless/src/host_audio_pulse.conf. This runs
+# that SHIPPED configuration on the host's real PipeWire session and attacks it
+# through its socket: playback is accepted; recording the default source and
+# the default sink's monitor are refused with 0 bytes; load-module is refused.
+# Each deny arm is shown able to go red: the same attack against a mutant with
+# its control removed succeeds.
+#
+# RUNTIME phase on purpose: it needs the host's desktop session, which the
+# toolbox where the --check gate runs does not have (no pipewire there,
+# measured 2026-10-15 on yoga), so a gate step would only ever skip. Off a
+# desktop session it SKIPS by name.
+name: litmus:host-audio-output-only
+spec: host-browser-mcp
+phase: runtime
+description: The browser window's audio server plays and refuses every record stream and module load, each refusal shown able to fail
+severity: high
+size: quick
+
+preconditions:
+  - a Linux desktop session with a PipeWire daemon and pipewire-pulse
+  - pipewire, pactl, parecord and pacat are on PATH
+
+critical_path:
+  - step: "the shipped audio server is output-only, each control proven load-bearing"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-host-audio-output-only.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:host-audio-output-only:7 arms"
+
+observability:
+  traces:
+    - "@trace spec:host-browser-mcp"
+  expected_log: "seven arms: play accepted, mic/monitor/module refused, and each refusal goes red without its control"
+  log_fields:
+    spec: "host-browser-mcp"
+    test: "host-audio-output-only"
+
+rollback:
+  on_failure: "read the FAIL lines; a deny arm red means a window could record or load modules — do not ship"
+  command: "grep -n 'block-record-stream\\|allow-module-loading\\|matches' crates/tillandsias-headless/src/host_audio_pulse.conf"

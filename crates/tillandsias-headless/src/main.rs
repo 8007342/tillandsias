@@ -16157,6 +16157,9 @@ fn browser_profile_root() -> PathBuf {
 struct BrowserDisplayContext {
     wayland_display: Option<String>,
     xdg_runtime_dir: Option<PathBuf>,
+    /// Order 1722-2haw: the OUTPUT-ONLY audio server's socket file, when one
+    /// is running (host_audio). Never the host's own pulse socket.
+    audio_socket: Option<PathBuf>,
 }
 
 /// The WSLg compositor socket in a WSL2 guest (order 1656-yhjt).
@@ -16203,7 +16206,20 @@ impl BrowserDisplayContext {
             xdg_runtime_dir: std::env::var_os("XDG_RUNTIME_DIR")
                 .filter(|v| !v.is_empty())
                 .map(PathBuf::from),
+            audio_socket: None,
         }
+    }
+
+    /// The output-only audio socket a window's container may mount, and how
+    /// it is mounted: (host path, path inside, PULSE_SERVER value).
+    fn audio_mount(&self) -> Option<(String, String, String)> {
+        let socket = self.audio_socket.as_deref()?;
+        let inside = format!("{BROWSER_RUNTIME_DIR}/pulse-native");
+        Some((
+            socket.display().to_string(),
+            inside.clone(),
+            format!("unix:{inside}"),
+        ))
     }
 
     /// The host Wayland socket FILE, or why there is none. WAYLAND_DISPLAY is
@@ -16362,6 +16378,13 @@ fn build_project_browser_spec_on(
         .env("XDG_RUNTIME_DIR", BROWSER_RUNTIME_DIR)
         .env("WAYLAND_DISPLAY", &socket_name)
         .arg("--ozone-platform=wayland");
+    // Order 1722-2haw: sound, output only. One more socket FILE, the
+    // dedicated server that refuses every record stream; never a directory.
+    if let Some((socket, inside, server)) = display.audio_mount() {
+        spec = spec
+            .volume(socket, inside, MountMode::ReadWrite)
+            .env("PULSE_SERVER", server);
+    }
 
     for device_flag in detect_gpu_devices() {
         if let Some(device) = device_flag.strip_prefix("--device=") {
@@ -19360,6 +19383,8 @@ mod local_web_preview;
 // @trace spec:host-browser-mcp (order 1649-xqet)
 #[cfg(feature = "host-services")]
 mod browser_open;
+#[cfg(feature = "host-services")]
+mod host_audio;
 
 // @trace spec:local-web-preview (order 1637-5765): opt-in toolchains (Flutter)
 // in a sibling container, streamed over the lane's MCP socket. Gated with
@@ -31589,6 +31614,61 @@ esac
         assert!(!header.contains(' '));
     }
 
+    /// Order 1722-2haw: a visible window gets sound as ONE more socket file,
+    /// the output-only server's, and PULSE_SERVER naming it. Never the host's
+    /// own pulse socket or any runtime directory; no socket, no audio at all.
+    #[test]
+    fn a_window_mounts_only_the_output_only_audio_socket_file() {
+        let runtime = tempfile::tempdir().expect("runtime dir");
+        std::fs::write(runtime.path().join("wayland-1"), b"").expect("socket stand-in");
+        let audio = runtime.path().join("tillandsias/audio/native");
+        let spec = |audio_socket: Option<PathBuf>| {
+            let display = BrowserDisplayContext {
+                wayland_display: Some("wayland-1".to_string()),
+                xdg_runtime_dir: Some(runtime.path().to_path_buf()),
+                audio_socket,
+            };
+            build_project_browser_spec(
+                "about:blank",
+                "1.2.3",
+                Path::new("/tmp/tillandsias/browser/p"),
+                Path::new("/tmp/tillandsias/ca"),
+                &display,
+                "tillandsias-browser-acme",
+            )
+            .expect("browser spec")
+            .build_run_args()
+            .join(" ")
+        };
+        let with = spec(Some(audio.clone()));
+        assert!(
+            with.contains(&format!(
+                "{}:{BROWSER_RUNTIME_DIR}/pulse-native",
+                audio.display()
+            )),
+            "{with}"
+        );
+        assert!(
+            with.contains(&format!(
+                "PULSE_SERVER=unix:{BROWSER_RUNTIME_DIR}/pulse-native"
+            )),
+            "{with}"
+        );
+        assert!(
+            !with.contains("/pulse/native"),
+            "never the host's own socket: {with}"
+        );
+        assert!(
+            !with.contains(&format!("{}:", runtime.path().display())),
+            "never the runtime dir: {with}"
+        );
+        let without = spec(None);
+        assert!(
+            !without.contains("PULSE_SERVER") && !without.contains("pulse-native"),
+            "{without}"
+        );
+    }
+
     #[test]
     fn opencode_web_browser_spec_is_built_with_typed_podman_flags() {
         let profile_dir = PathBuf::from("/tmp/tillandsias/browser/test-profile");
@@ -31598,6 +31678,7 @@ esac
         let display = BrowserDisplayContext {
             wayland_display: Some("wayland-1".to_string()),
             xdg_runtime_dir: Some(runtime.path().to_path_buf()),
+            audio_socket: None,
         };
         let token = [7u8; 32];
         let expected_app_url = tillandsias_otp::build_login_data_url(
@@ -31727,6 +31808,7 @@ esac
         let (path, name) = BrowserDisplayContext {
             wayland_display: unset_sock,
             xdg_runtime_dir: None,
+            audio_socket: None,
         }
         .wayland_socket()
         .expect("absolute WSLg path needs no XDG_RUNTIME_DIR");
@@ -31744,6 +31826,7 @@ esac
                 BrowserDisplayContext {
                     wayland_display: None,
                     xdg_runtime_dir: Some(runtime.path().to_path_buf()),
+                    audio_socket: None,
                 },
                 "no WAYLAND_DISPLAY",
             ),
@@ -31751,6 +31834,7 @@ esac
                 BrowserDisplayContext {
                     wayland_display: Some("wayland-0".to_string()),
                     xdg_runtime_dir: None,
+                    audio_socket: None,
                 },
                 "XDG_RUNTIME_DIR is not set",
             ),
@@ -31758,6 +31842,7 @@ esac
                 BrowserDisplayContext {
                     wayland_display: Some("wayland-9".to_string()),
                     xdg_runtime_dir: Some(runtime.path().to_path_buf()),
+                    audio_socket: None,
                 },
                 "does not exist",
             ),
@@ -31765,6 +31850,7 @@ esac
                 BrowserDisplayContext {
                     wayland_display: Some("../podman/podman.sock".to_string()),
                     xdg_runtime_dir: Some(runtime.path().to_path_buf()),
+                    audio_socket: None,
                 },
                 "is not a socket name",
             ),
