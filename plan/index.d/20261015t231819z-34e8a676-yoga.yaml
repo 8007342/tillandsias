@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: five-litmus-timeouts-were-elevated-to-unblock-a-release-and-must-come-back-down-one-at-a-time-as-the-fold-fix-lands
+    field: status
+    value: in_progress
+    ts: "2026-10-15T23:18:19Z"
+    host: yoga
+    story: gate-budgets-yoga-20261015
+
+events:
+  - packet_id: five-litmus-timeouts-were-elevated-to-unblock-a-release-and-must-come-back-down-one-at-a-time-as-the-fold-fix-lands
+    event:
+      type: progress
+      ts: "2026-10-15T23:18:19Z"
+      host: yoga
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: claimed by linux-yoga-claude-20261015t231818z as one story (coordinator queue 2026-10-15): restore the four still-elevated budgets one commit each and read them inside one ci-full on yoga (timing log 116,745 records, 4,567 fragments, both above the row thresholds)

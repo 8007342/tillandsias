@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-github-token-in-vault-rotates-itself-before-its-8-hour-expiry-through-a-resident-due-check-so-no-host-needs-an-operator-reseed
+    event:
+      type: note
+      ts: "2026-10-15T23:17:58Z"
+      agent_id: linux-lenovinha-claude-20261015t231758z
+      host: lenovinha
+      summary: |
+        Assessment before any new code (lenovinha, at the coordinator's direction), against trunk at the time plus PR #462 (1742-zg7r, open).
+
+        Already met on trunk: verifiable_closure arms (1)-(5). scripts/test-github-token-auto-rotation.sh passes 8/8 on lenovinha:
+        - due token rotates once, refresh record first;
+        - concurrent checks make exactly one exchange;
+        - NEGATIVE CONTROL: a token not yet due makes no exchange;
+        - a rejected refresh keeps the old pair and names github-token-rotation-failed;
+        - no desktop session is needed, and it refuses inside a forge;
+        - backoff is bounded, the scheduler starts once per process, and the 14-day refresh-expiry warning fires once a day.
+        litmus-github-token-auto-rotation.yaml wraps it. The resident due-check is wired: spawn_github_token_rotation_scheduler is started from tray/mod.rs (tray start) and main.rs (lane launch, and the vsock listener on VM guests). The single-use-safe exchange is rotate_github_token_locked (1383-5hpk).
+
+        Gap #462 closes (1742-zg7r, macOS twin 1744-jp5x): the FIRST due-check ran before Vault was up. VaultGitHubTokenStore::read_bundle answered Ok(None), so the check reported NoToken and waited the full 15 minutes instead of retrying on the 60 s backoff. An expired token therefore stayed expired for up to 15 minutes after every tray or guest start. #462 makes the store fail closed (vault-unavailable / vault-root-token-unavailable; only NotFound means absent) and keeps gh's stderr. Test: github_rotation_retries_on_the_error_backoff_until_vault_is_up.
+
+        Live arm, PARTIAL evidence from the v56.10.15.1 Linux smoke (plan/issues/e2e-smoke-v56.10.15.1-linux-2026-10-15.md). The operator's device login wrote secret/github/refresh at 04:14Z. With no operator action, the tray's scheduler rotated at 21:41:48Z, about 17.5 h later: the Vault audit shows update secret/data/github/refresh, then update secret/data/github/token, and the tray printed ok:github-token-rotation:rotated:expires_at=1792129307. The rotated token then served `cloud refresh: loaded 16 repos from gh`. NOT yet measured: a MIRROR PUSH more than 8 h after the last login or re-seed. A real upstream push goes to an operator-owned repository under the operator's identity, so it needs the operator's yes.
+
+        Remaining for closure: #462 landing, plus the live mirror-push arm. No new rotation code is indicated by this assessment.
