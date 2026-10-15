@@ -165,6 +165,8 @@ enum Step {
     Remove,
     /// Installing the candidate under the preview name.
     Rename,
+    /// Reading the preview's own output (`logs`, 1723-2fiq).
+    Logs,
     Ready,
 }
 
@@ -179,6 +181,7 @@ impl Step {
             Self::Run => "run",
             Self::Remove => "remove",
             Self::Rename => "rename",
+            Self::Logs => "logs",
             Self::Ready => "ready",
         }
     }
@@ -605,7 +608,7 @@ fn result(
 ) -> Value {
     let mut value = json!({
         "state": state, "runtime": profile.unwrap_or("unknown"),
-        "watch": profile == Some("wrangler"), "route_ready": ready,
+        "watch": profile == Some("wrangler"), "route_ready": ready, "serving": ready,
         "tls": {"enabled": true, "host_trust": "unknown",
             "diagnostic": "Local CA transport verification is separate from host-browser trust; no host trust store was changed."},
         "diagnostic": diagnostic
@@ -1671,6 +1674,7 @@ fn classify_failure(reason: &str) -> (&'static str, &'static str, &'static str) 
             Step::Run,
             Step::Remove,
             Step::Rename,
+            Step::Logs,
             Step::Ready,
         ]
         .into_iter()
@@ -1769,7 +1773,10 @@ pub(crate) async fn status(project: &str, instance: &str) -> Result<Value, Strin
         .await?;
     // 1625-6iwd: a failed publish leaves no container, so status used to say
     // nothing. Report the last failure: step, class, reason, time, remedy.
-    if let Some(failure) = last_failure(project, instance) {
+    if let Some(mut failure) = last_failure(project, instance) {
+        // 1723-2fiq: after a failed reload, say whether the previous preview
+        // is still the one being served.
+        failure["previous_preview_serving"] = value["serving"].clone();
         value["last_failure"] = failure;
     }
     Ok(value)
@@ -1848,6 +1855,8 @@ async fn status_inner(project: &str, instance: &str) -> Result<Value, String> {
     let ca = PathBuf::from(crate::ca_dir());
     let ready = state == "running" && probe_route(project, &ca).await.is_ok();
     let preview_url = url(project).ok();
+    // 1723-2fiq: `serving` (in every result) is the one readiness signal an
+    // agent can branch on: the route answered end to end against the CA.
     Ok(result(
         state,
         Some(runtime),
@@ -1855,10 +1864,61 @@ async fn status_inner(project: &str, instance: &str) -> Result<Value, String> {
         ready,
         if ready {
             ""
+        } else if state == "failed" {
+            "not_serving: the preview exited; service_reload recreates it, service_logs shows why it stopped"
         } else {
             "router_not_ready: HTTPS route is not verified ready"
         },
     ))
+}
+
+/// The most log lines `service_logs` returns, and the default.
+const LOG_LINES_MAX: u32 = 500;
+pub(crate) const LOG_LINES_DEFAULT: u32 = 100;
+/// The byte cap on returned logs; the tail is kept.
+const LOG_BYTES_MAX: usize = 64 * 1024;
+
+/// 1723-2fiq: the preview's own output, for the lane that owns it. A preview
+/// that died used to leave the agent nothing to read.
+pub(crate) async fn logs(project: &str, instance: &str, lines: u32) -> Result<Value, String> {
+    RPC_DEADLINE
+        .scope(
+            Instant::now() + Duration::from_secs(15),
+            logs_inner(project, instance, lines),
+        )
+        .await
+}
+
+async fn logs_inner(project: &str, instance: &str, lines: u32) -> Result<Value, String> {
+    validate_identity(project, instance)?;
+    let name = format!("tillandsias-{project}-web");
+    let row = inspect(&name)?.ok_or("not_running: no preview container; publish_local first")?;
+    check_owner(Some(&row), instance, None)?;
+    let lines = lines.clamp(1, LOG_LINES_MAX);
+    let tail = lines.to_string();
+    let out = podman_output(&["logs", "--tail", &tail, &name])
+        .map_err(|class| podman_failure(Step::Logs, class))?;
+    if !out.status.success() {
+        return Err(podman_failure(Step::Logs, Class::Exit));
+    }
+    // The server writes to both streams; podman replays them separately.
+    let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
+    text.push_str(&String::from_utf8_lossy(&out.stderr));
+    let truncated = text.len() > LOG_BYTES_MAX;
+    if truncated {
+        let mut cut = text.len() - LOG_BYTES_MAX;
+        while !text.is_char_boundary(cut) {
+            cut += 1;
+        }
+        text = text.split_off(cut);
+    }
+    Ok(json!({
+        "state": row["State"]["Status"],
+        "exit_code": row["State"]["ExitCode"],
+        "lines": lines,
+        "truncated": truncated,
+        "log": text,
+    }))
 }
 
 async fn stop_inner(project: &str, instance: &str, debug: bool) -> Result<Value, String> {
@@ -1905,9 +1965,9 @@ async fn reload_inner(project: &str, instance: &str, debug: bool) -> Result<Valu
     let row = inspect(&format!("tillandsias-{project}-web"))?
         .ok_or("not_running: no preview to reload")?;
     check_owner(Some(&row), instance, None)?;
-    if row["State"]["Status"] != "running" {
-        return Err("not_running: preview is not running".into());
-    }
+    // 1723-2fiq: a preview that died is RECREATED from its recorded profile
+    // and app directory, the same as a running one is replaced. It used to
+    // answer not_running, and once a preview died the agent had no way back.
     let runtime = label(&row, PROFILE);
     if !["static", "wrangler"].contains(&runtime) {
         return Err("invalid_runtime: recorded profile is unavailable".into());
@@ -2074,6 +2134,7 @@ mod tests {
             Step::Run,
             Step::Remove,
             Step::Rename,
+            Step::Logs,
             Step::Ready,
         ]
         .into_iter()
@@ -2172,6 +2233,129 @@ mod tests {
             );
             assert_eq!(classify_failure(&reason).0, "remove");
         }
+    }
+
+    /// A preview row as podman inspect reports it.
+    fn preview_row(status: &str, exit_code: i32, owner: &str) -> String {
+        json!([{
+            "State": {"Status": status, "ExitCode": exit_code},
+            "Config": {"Labels": {OWNER: owner, PROFILE: "static"}}
+        }])
+        .to_string()
+    }
+
+    /// 1723-2fiq: a preview that DIED is recreated by service_reload. It used
+    /// to answer not_running, so once a preview died the agent was stuck.
+    #[test]
+    fn reload_recreates_a_preview_that_exited_instead_of_refusing() {
+        // with_stub: a known project and a scratch runtime dir; the fake
+        // installed inside it answers podman first.
+        with_stub("exit 0", |_| {
+            reload_recreates_a_preview_that_exited_instead_of_refusing_body()
+        });
+    }
+
+    fn reload_recreates_a_preview_that_exited_instead_of_refusing_body() {
+        let _fake = Fake::install(|args| match args[0] {
+            "ps" => output(0, "tillandsias-proj-web abc\n", ""),
+            "inspect" => output(0, &preview_row("exited", 137, "default"), ""),
+            _ => output(0, "", ""),
+        });
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let err = rt.block_on(reload("proj", "default", false)).unwrap_err();
+        // No forge is live in a unit test, so the republish stops at the
+        // source; the point is that it was ATTEMPTED.
+        assert!(!err.starts_with("not_running"), "{err}");
+        assert!(err.starts_with("live_worktree_unavailable"), "{err}");
+    }
+
+    /// 1723-2fiq: the owning lane reads the preview's output, both streams,
+    /// with its state and exit code; the line count is bounded.
+    #[test]
+    fn service_logs_returns_both_streams_bounded_for_the_owner_only() {
+        // with_stub: a known project and a scratch runtime dir; the fake
+        // installed inside it answers podman first.
+        with_stub("exit 0", |_| {
+            service_logs_returns_both_streams_bounded_for_the_owner_only_body()
+        });
+    }
+
+    fn service_logs_returns_both_streams_bounded_for_the_owner_only_body() {
+        let seen = std::rc::Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
+        let log = seen.clone();
+        let _fake = Fake::install(move |args| {
+            log.borrow_mut().push(args.join(" "));
+            match args[0] {
+                "ps" => output(0, "tillandsias-proj-web abc\n", ""),
+                "inspect" => output(0, &preview_row("exited", 1, "default"), ""),
+                "logs" => output(0, "serving on 8080\n", "httpd: bind: address in use\n"),
+                _ => output(0, "", ""),
+            }
+        });
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let got = rt.block_on(logs("proj", "default", 10_000)).unwrap();
+        assert_eq!(got["state"], "exited");
+        assert_eq!(got["exit_code"], 1);
+        assert_eq!(got["lines"], LOG_LINES_MAX);
+        let text = got["log"].as_str().unwrap();
+        assert!(
+            text.contains("serving on 8080") && text.contains("address in use"),
+            "{text}"
+        );
+        assert!(
+            seen.borrow()
+                .iter()
+                .any(|c| c == "logs --tail 500 tillandsias-proj-web"),
+            "{:?}",
+            seen.borrow()
+        );
+        drop(_fake);
+
+        let _other = Fake::install(|args| match args[0] {
+            "ps" => output(0, "tillandsias-proj-web abc\n", ""),
+            "inspect" => output(0, &preview_row("running", 0, "other-lane"), ""),
+            "logs" => panic!("another lane's logs were read"),
+            _ => output(0, "", ""),
+        });
+        let err = rt.block_on(logs("proj", "default", 10)).unwrap_err();
+        assert!(err.starts_with("lane_conflict"), "{err}");
+    }
+
+    /// 1723-2fiq: every result carries `serving`; an exited preview says so
+    /// and names the way back.
+    #[test]
+    fn status_of_an_exited_preview_is_not_serving_and_names_the_remedy() {
+        // with_stub: a known project and a scratch runtime dir; the fake
+        // installed inside it answers podman first.
+        with_stub("exit 0", |_| {
+            status_of_an_exited_preview_is_not_serving_and_names_the_remedy_body()
+        });
+    }
+
+    fn status_of_an_exited_preview_is_not_serving_and_names_the_remedy_body() {
+        let _fake = Fake::install(|args| match args[0] {
+            "ps" => output(0, "tillandsias-proj-web abc\n", ""),
+            "inspect" => output(0, &preview_row("exited", 137, "default"), ""),
+            _ => output(0, "", ""),
+        });
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let got = rt.block_on(status("proj", "default")).unwrap();
+        assert_eq!(got["state"], "failed");
+        assert_eq!(got["serving"], false);
+        let diagnostic = got["diagnostic"].as_str().unwrap();
+        assert!(
+            diagnostic.contains("service_reload") && diagnostic.contains("service_logs"),
+            "{diagnostic}"
+        );
     }
 
     /// 1625-6iwd criterion 2: the last failure survives for service_status, with

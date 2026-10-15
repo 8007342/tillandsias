@@ -5167,8 +5167,8 @@ mod tests {
         );
         assert_eq!(
             tools.len(),
-            18,
-            "lifecycle tools + toolchain_prepare + browser family, nothing else"
+            19,
+            "lifecycle tools + service_logs + toolchain_prepare + browser family, nothing else"
         );
 
         let note = serde_json::json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
@@ -5234,8 +5234,8 @@ mod tests {
                 .collect();
             assert_eq!(
                 tools.len(),
-                18,
-                "over the transport: lifecycle tools, toolchain_prepare (1637-5765) + thirteen browser tools, got {tools:?}"
+                19,
+                "over the transport: lifecycle tools, service_logs (1723-2fiq), toolchain_prepare (1637-5765) + thirteen browser tools, got {tools:?}"
             );
             assert!(tools.contains(&"browser.open") && tools.contains(&"publish_local"));
 
@@ -5715,10 +5715,11 @@ mod tests {
             let resp: serde_json::Value =
                 serde_json::from_str(&lines.next().expect("tools/list reply").expect("readable"))
                     .expect("valid JSON");
-            // Host-service lifecycle tools, toolchain_prepare (1637-5765) and
+            // Host-service lifecycle tools, service_logs (1723-2fiq),
+            // toolchain_prepare (1637-5765) and
             // the thirteen browser.* tools compose on this socket (the
             // lifecycle family includes reload).
-            assert_eq!(resp["result"]["tools"].as_array().expect("tools").len(), 18);
+            assert_eq!(resp["result"]["tools"].as_array().expect("tools").len(), 19);
 
             drop(writer);
             drop(lines);
