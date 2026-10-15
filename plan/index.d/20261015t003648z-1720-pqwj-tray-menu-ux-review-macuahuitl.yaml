@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora on the operator's direction, 2026-10-14.
+packets:
+  - packet_id: every-tray-menu-item-is-gated-and-regrouped-in-an-operator-ux-review
+    order: 1720-pqwj
+    status: pending
+    kind: research
+    priority: p2
+    desired_release: v0.6
+    size: M
+    pickup_role: any
+    capability_tags: [tray, ux, design, menu]
+    related: [1719-83po]
+    depends_on: []
+    title: |
+      UX review: the operator gates and regroups every tray menu item on all three platforms; until it lands, new items (Cloudflare Login, 1719-83po) are placed provisionally
+    context: |
+      Operator, 2026-10-14, approving 1719-83po's plan: "We'll gate and re-group all menu items in a UX review soon, current plan is approved, add it to specs and ./plan."
+      The tray-ux spec makes the Tlatoāni's approval mandatory for every UX change, so this review is the operator's. Prepare for it: an inventory of every menu item per platform and per stage (NoAuth, Authed, NetIssue and so on), with its gate (the state that shows, hides or disables it), its group, and the spec requirement that defines it, so the review decides from facts. Items added since the last curation (GitHub Login, Cloudflare Login, project and cloud submenus, diagnostics) are the main subject.
+    exit_criteria:
+      - "an inventory of every tray menu item per platform and stage, with its gate, group and defining requirement, is recorded in plan/issues/ and presented to the operator"
+      - "the operator's regrouping decision is recorded in the tray specs (simplified-tray-ux, tray-ux), and every provisional placement note (such as Cloudflare Login's) is resolved"
+    unscoreable: "design review: closure is the operator's recorded decision"
+    next_action: >
+      Build the per-platform menu inventory from the tray sources and specs (Linux tray, macOS tray, Windows tray, host-shell MenuAction). Then wait for the operator's review session; do not regroup anything before it.
+    provenance: |
+      Filed by macuahuitl-fedora on the operator's direction, 2026-10-14.
+    events:
+      - type: filed
+        ts: "2026-10-15T00:36:48Z"
+        host: macuahuitl
+        summary: |-
+          Operator UX review to gate and regroup all tray menu items.
+
+events:
+  - packet_id: every-tray-has-a-cloudflare-login-item-that-opens-a-terminal-on-the-vm-running-cloudflare-login-like-github-login
+    event:
+      type: note
+      ts: "2026-10-15T00:36:48Z"
+      host: macuahuitl
+      summary: |-
+        Operator APPROVED the plan, 2026-10-14, verbatim: "Approved. We'll gate and re-group all menu items in a UX review soon, current plan is approved, add it to specs and ./plan." The approved plan: the full event-driven version (trailing control-wire variants, asked only on Ready and on login-session close, never polled; an older guest shows the item disabled), landed in five slices. The item's placement is PROVISIONAL until the UX review (1720-pqwj). Spec: simplified-tray-ux → "Cloudflare Login Menu".

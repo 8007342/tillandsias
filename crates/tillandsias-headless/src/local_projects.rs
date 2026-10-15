@@ -13,10 +13,10 @@
 //! `scan_project_root` here does the actual walk (dirs only, no dot-files,
 //! sorted by label, mtime as `last_seen_unix`).
 
-#[cfg(feature = "tray")]
+#[cfg(feature = "host-services")]
 use std::env;
 use std::path::Path;
-#[cfg(feature = "tray")]
+#[cfg(feature = "host-services")]
 use std::path::PathBuf;
 
 use tillandsias_control_wire::LocalProjectEntry;
@@ -30,10 +30,10 @@ pub(crate) fn ram_workspace_volume(project: &str, instance: &str) -> String {
     format!("tillandsias-source-{:x}", digest)
 }
 
-#[cfg(feature = "tray")]
+#[cfg(feature = "host-services")]
 pub const HOST_PROJECT_ROOT_ENV: &str = "TILLANDSIAS_HOST_PROJECT_ROOT";
 
-#[cfg(feature = "tray")]
+#[cfg(feature = "host-services")]
 pub fn host_project_root() -> PathBuf {
     if let Ok(v) = env::var(HOST_PROJECT_ROOT_ENV) {
         return PathBuf::from(v);
@@ -59,12 +59,13 @@ pub fn host_project_root() -> PathBuf {
 ///
 /// @trace spec:host-shell-architecture
 // 997-e4v2 step 3 / 1031-q4pb: the wire enumerator that used to call this from
-// a non-tray build is gone, and the four remaining callers (order 505 label
-// validation in main.rs x3 and the MCP tool-socket guard in tray/mod.rs) are ALL
-// behind `feature = "tray"`. So this is dead in a default build and load-bearing
-// in a tray one. Scoped rather than blanket-allowed so a tray build still
+// a non-tray build is gone, and the remaining callers (order 505 label
+// validation in main.rs and the MCP tool-socket guard in mcp_socket.rs) are ALL
+// behind `feature = "host-services"`, which tray and listen-vsock both enable
+// (1713-1dnx). So this is dead in a default build and load-bearing in a
+// host-services one. Scoped rather than blanket-allowed so such a build still
 // reports it if 1031-q4pb removes the last real caller.
-#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
 pub fn scan_project_root(root: &Path) -> Vec<LocalProjectEntry> {
     let Ok(entries) = std::fs::read_dir(root) else {
         return Vec::new();
@@ -146,11 +147,11 @@ pub fn scan_project_root(root: &Path) -> Vec<LocalProjectEntry> {
 
 /// Env override for the confirmed-cloud-label cache. Set by tests and by the
 /// empty-root control run; unset in normal operation.
-#[cfg(feature = "tray")]
+#[cfg(feature = "host-services")]
 pub const CLOUD_LABEL_CACHE_ENV: &str = "TILLANDSIAS_CLOUD_PROJECT_CACHE";
 
 /// Path of the persisted set of cloud project labels.
-#[cfg(feature = "tray")]
+#[cfg(feature = "host-services")]
 pub fn cloud_label_cache_path() -> PathBuf {
     if let Ok(v) = env::var(CLOUD_LABEL_CACHE_ENV) {
         return PathBuf::from(v);
@@ -162,7 +163,10 @@ pub fn cloud_label_cache_path() -> PathBuf {
 ///
 /// Call this ONLY where the fetch succeeded (731-eupn). Writing the empty list
 /// of a failed fetch would deny every launch until the next success.
-#[cfg(feature = "tray")]
+#[cfg(feature = "host-services")]
+// Only the tray's cloud refresh writes the cache (1713-1dnx: a VM guest admits
+// the label it launched instead), so it is dead in a guest-only build.
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
 pub fn persist_cloud_labels(labels: &[String]) -> std::io::Result<()> {
     let path = cloud_label_cache_path();
     if let Some(parent) = path.parent() {
@@ -183,7 +187,7 @@ pub fn persist_cloud_labels(labels: &[String]) -> std::io::Result<()> {
 
 /// Labels from the last confirmed cloud fetch. Absent cache = empty, which
 /// denies rather than allows.
-#[cfg(feature = "tray")]
+#[cfg(feature = "host-services")]
 pub fn read_cloud_labels() -> Vec<String> {
     let path = cloud_label_cache_path();
     match std::fs::read_to_string(&path) {
@@ -198,7 +202,7 @@ pub fn read_cloud_labels() -> Vec<String> {
 }
 
 /// The set order 505 validates a label against.
-#[cfg(feature = "tray")]
+#[cfg(feature = "host-services")]
 pub fn known_project_labels() -> std::collections::BTreeSet<String> {
     let mut set: std::collections::BTreeSet<String> = scan_project_root(&host_project_root())
         .into_iter()
@@ -211,7 +215,7 @@ pub fn known_project_labels() -> std::collections::BTreeSet<String> {
 /// 1626-r4xm: the local projects THIS process launched a lane for, each bound
 /// to the canonical path it was launched from. The lane listener runs in the
 /// launching process, so the binding lives exactly as long as the lane.
-#[cfg(feature = "tray")]
+#[cfg(feature = "host-services")]
 fn launched_bindings() -> std::sync::MutexGuard<'static, std::collections::BTreeMap<String, PathBuf>>
 {
     static BINDINGS: std::sync::OnceLock<
@@ -225,7 +229,7 @@ fn launched_bindings() -> std::sync::MutexGuard<'static, std::collections::BTree
 
 /// A binding holds while its path is still a directory that canonicalizes to
 /// itself. A project moved, deleted or swapped for a symlink stops admitting.
-#[cfg(feature = "tray")]
+#[cfg(feature = "host-services")]
 fn binding_holds(path: &Path) -> bool {
     path.is_dir() && path.canonicalize().ok().as_deref() == Some(path)
 }
@@ -237,7 +241,7 @@ fn binding_holds(path: &Path) -> bool {
 ///
 /// Refuses to rebind a label that still holds a DIFFERENT path: two projects
 /// with one label would make the lane's identity ambiguous.
-#[cfg(feature = "tray")]
+#[cfg(feature = "host-services")]
 pub fn bind_launched_project(label: &str, canonical: &Path) -> Result<(), String> {
     if canonical.file_name().and_then(|n| n.to_str()) != Some(label) || !binding_holds(canonical) {
         return Err(format!(
@@ -261,20 +265,53 @@ pub fn bind_launched_project(label: &str, canonical: &Path) -> Result<(), String
     Ok(())
 }
 
+/// 1713-1dnx: the cloud projects THIS process launched a lane for. In the
+/// macOS/Windows VM a forge is launched by a per-attach child that never runs
+/// the tray's cloud refresh, so the label cache that order 505 reads is empty
+/// there and every MCP call would be refused. The child admits the one cloud
+/// label it launched, the cloud counterpart of [`bind_launched_project`].
+#[cfg(feature = "host-services")]
+fn launched_cloud_labels() -> std::sync::MutexGuard<'static, std::collections::BTreeSet<String>> {
+    static LABELS: std::sync::OnceLock<std::sync::Mutex<std::collections::BTreeSet<String>>> =
+        std::sync::OnceLock::new();
+    LABELS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// 1713-1dnx: admit the cloud project a lane was launched for, by its exact
+/// label. Refuses a label that could name a path rather than one project.
+#[cfg(feature = "host-services")]
+pub fn bind_launched_cloud_label(label: &str) -> Result<(), String> {
+    if label.is_empty() || label == "." || label == ".." || label.contains(['/', '\\', '\0', '\n'])
+    {
+        return Err(format!(
+            "cannot bind cloud lane '{label}': a lane label names one project"
+        ));
+    }
+    launched_cloud_labels().insert(label.to_string());
+    Ok(())
+}
+
 /// Order 505: validate a project label by EQUALITY against the known set.
 ///
 /// FAILS CLOSED. An empty set denies, which is the defect this replaces.
 /// Never sanitizes: the label is either known verbatim or refused.
 ///
 /// 1626-r4xm: the known set also holds the projects this process launched a
-/// lane for ([`bind_launched_project`]), while their bound path holds. Every
-/// other label outside the root is still refused.
-#[cfg(feature = "tray")]
+/// lane for ([`bind_launched_project`]), while their bound path holds, and
+/// (1713-1dnx) the cloud labels it launched ([`bind_launched_cloud_label`]).
+/// Every other label outside the root is still refused.
+#[cfg(feature = "host-services")]
 pub fn validate_project_label(label: &str) -> Result<(), String> {
     if launched_bindings()
         .get(label)
         .is_some_and(|bound| binding_holds(bound))
     {
+        return Ok(());
+    }
+    if launched_cloud_labels().contains(label) {
         return Ok(());
     }
     let known = known_project_labels();
@@ -361,13 +398,13 @@ mod tests {
     // serialize on the crate-wide lock (crate::test_support::env_lock,
     // 1437-5czv). Without it they pass alone and fail in a full run, which is
     // the flaky-test shape that gets a suite ignored rather than fixed.
-    #[cfg(feature = "tray")]
+    #[cfg(feature = "host-services")]
     struct EnvScope {
         _g: std::sync::MutexGuard<'static, ()>,
         _tmp: std::path::PathBuf,
     }
 
-    #[cfg(feature = "tray")]
+    #[cfg(feature = "host-services")]
     impl Drop for EnvScope {
         fn drop(&mut self) {
             unsafe {
@@ -381,7 +418,7 @@ mod tests {
     /// Point both halves of the validation set at a scratch dir. `locals` are
     /// created as directories under the project root; `cloud` is written to the
     /// confirmed-cloud cache.
-    #[cfg(feature = "tray")]
+    #[cfg(feature = "host-services")]
     fn scoped(locals: &[&str], cloud: Option<&[&str]>) -> EnvScope {
         let g = crate::test_support::env_lock();
         let tmp = std::env::temp_dir().join(format!(
@@ -414,7 +451,7 @@ mod tests {
     /// validation was SKIPPED — the label flowed straight into
     /// `format!("tillandsias-{name}-web")` and into paths. This is the state of
     /// every fresh curl-install, whose ~/src does not exist.
-    #[cfg(feature = "tray")]
+    #[cfg(feature = "host-services")]
     #[test]
     fn empty_enumeration_denies_instead_of_allowing_anything() {
         let _s = scoped(&[], None);
@@ -429,7 +466,7 @@ mod tests {
 
     /// A label that is not merely absent but actively hostile still gets no
     /// special handling — it is refused by equality, never sanitized.
-    #[cfg(feature = "tray")]
+    #[cfg(feature = "host-services")]
     #[test]
     fn traversal_shaped_label_is_denied_on_an_empty_host() {
         let _s = scoped(&[], None);
@@ -443,7 +480,7 @@ mod tests {
 
     /// CRITERION 2: a cloud-known label passes with no local checkout at all —
     /// the cloud-only end state (776-jcf3), where there is no directory to scan.
-    #[cfg(feature = "tray")]
+    #[cfg(feature = "host-services")]
     #[test]
     fn cloud_known_label_passes_with_no_local_projects() {
         let _s = scoped(&[], Some(&["forge", "tillandsias"]));
@@ -459,7 +496,7 @@ mod tests {
     /// 1626-r4xm, criterion 2: the wrong-label refusal names the root it scanned
     /// and the variable that moves it, so a forge agent that hits it on a lane
     /// socket can tell the operator what to change. It still refuses.
-    #[cfg(feature = "tray")]
+    #[cfg(feature = "host-services")]
     #[test]
     fn unknown_label_refusal_names_the_scanned_root_and_its_variable() {
         let _s = scoped(&["known-project"], None);
@@ -479,7 +516,7 @@ mod tests {
     /// launched for it (red), then admitted bound to its canonical path
     /// (green). Another outside label is still refused, and the binding stops
     /// admitting once its directory is gone.
-    #[cfg(feature = "tray")]
+    #[cfg(feature = "host-services")]
     #[test]
     fn launched_project_outside_the_root_is_admitted_and_no_other() {
         let _s = scoped(&["known-project"], None);
@@ -520,7 +557,7 @@ mod tests {
     /// 1626-r4xm: a binding names exactly the launched directory. A label that
     /// is not the path's last component is refused, and a label that still
     /// holds one path cannot be rebound to another.
-    #[cfg(feature = "tray")]
+    #[cfg(feature = "host-services")]
     #[test]
     fn launched_binding_refuses_a_mismatched_label_and_a_second_path() {
         let elsewhere = tempfile::tempdir().expect("tempdir");
@@ -540,7 +577,7 @@ mod tests {
 
     /// The local half still works, and the two halves union rather than one
     /// shadowing the other.
-    #[cfg(feature = "tray")]
+    #[cfg(feature = "host-services")]
     #[test]
     fn local_and_cloud_labels_union() {
         let _s = scoped(&["local-only"], Some(&["cloud-only"]));
@@ -553,7 +590,7 @@ mod tests {
     /// CONFIRMED-empty account is empty, and an empty cache denies. The
     /// call-site half (never persisting a FAILED fetch) is enforced by
     /// persist_cloud_labels having exactly one caller, on the success path.
-    #[cfg(feature = "tray")]
+    #[cfg(feature = "host-services")]
     #[test]
     fn confirmed_empty_cloud_account_still_denies() {
         let _s = scoped(&[], Some(&[]));
@@ -562,7 +599,7 @@ mod tests {
 
     /// A newline in a label would forge extra cache entries on read-back, so it
     /// is dropped rather than encoded — it cannot name a real repo.
-    #[cfg(feature = "tray")]
+    #[cfg(feature = "host-services")]
     #[test]
     fn newline_bearing_label_cannot_forge_cache_entries() {
         let _s = scoped(&[], None);

@@ -1772,9 +1772,10 @@ fn print_usage(version: &str) {
          Destructive by design; you'll re-authenticate once"
     );
     println!(
-        "  --reset-state  FULL LOCAL RESET: everything --reset-guest wipes PLUS the \
-         host-held vault credentials, the Vault store and ALL podman images, then \
-         reprovisions. PRESERVES the installation anchor (installation-uuid-v1). \
+        "  --reset-state  SOFT LOCAL RESET: removes derived state (Tillandsias \
+         containers, volumes, secrets, networks, ALL podman images, build markers), \
+         then reprovisions. KEEPS the Vault store and your sign-ins, the keyring \
+         entries, the installation anchor and the downloads (order 1437-qza3). \
          Same name and semantics on Linux, macOS and Windows (order 1286-4437). \
          Skip with TILLANDSIAS_DESTRUCTIVE_RESET_OK=0."
     );
@@ -2475,6 +2476,9 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         // 1656-tjv4: the WebKit engine window. Not an INIT image: it is
         // built on the first Apple-preset browser.open (ensure_versioned_images).
         "webkit" => "images/webkit",
+        // 1637-5765: the opt-in Flutter toolchain. Not an INIT image: built on
+        // the forge's first `flutter` (toolchain_exec::prepare).
+        "flutter" => "images/flutter",
         "vault" => "images/vault",
         other => {
             return Err(format!("Unknown image type: {other}"));
@@ -5839,9 +5843,10 @@ async fn try_start_vsock_forwarder(client: &tillandsias_podman::PodmanClient, de
     // socat rather than about the lane.
     let image = versioned_image_tag("forge-base", VERSION.trim());
     let image = image.as_str();
-    let Some((cid, port)) = vsock_forward_target() else {
+    let Some(target) = vsock_forward_target() else {
         return false;
     };
+    let (cid, port) = (target.cid(), target.port());
     let profile = match ensure_vsock_seccomp_profile() {
         Ok(p) => p,
         Err(e) => {
@@ -5861,7 +5866,7 @@ async fn try_start_vsock_forwarder(client: &tillandsias_podman::PodmanClient, de
         .run_container_observed(
             "vsock-forwarder",
             VSOCK_FORWARDER_NAME,
-            &build_vsock_forwarder_run_args(image, &profile, cid, port),
+            &build_vsock_forwarder_run_args(image, &profile, target),
             debug,
         )
         .await
@@ -5910,10 +5915,18 @@ const VSOCK_FORWARD_DIR: &str = "/run/tillandsias";
 /// test builds, so the SetVsockForwardTarget success path is reachable from a
 /// unit test on any host (1509-kf4d); /run/tillandsias otherwise.
 pub(crate) fn vsock_forward_dir() -> PathBuf {
+    // 1722-bwy4: per TEST THREAD, not per process, so tests that write the
+    // target file never race each other and need no lock across an await. A
+    // #[tokio::test] runs its spawned server task on its own (current) thread,
+    // so the handler and the test see the same file.
     #[cfg(test)]
     {
+        let thread = format!("{:?}", std::thread::current().id())
+            .chars()
+            .filter(char::is_ascii_alphanumeric)
+            .collect::<String>();
         std::env::temp_dir().join(format!(
-            "tillandsias-vsock-forward-test-{}",
+            "tillandsias-vsock-forward-test-{}-{thread}",
             std::process::id()
         ))
     }
@@ -5934,16 +5947,71 @@ pub(crate) fn vsock_forward_dir() -> PathBuf {
 ///
 /// The env var is the test seam and the operator override; the file is how the
 /// tray actually delivers it.
-fn vsock_forward_target() -> Option<(u32, u32)> {
+///
+/// ORDER 1722-bwy4: every source is validated through [`VsockForwardTarget::new`];
+/// a refused value is logged and treated as no target (the in-guest inference
+/// container runs instead), never relayed.
+fn vsock_forward_target() -> Option<VsockForwardTarget> {
     fn parse(raw: &str) -> Option<(u32, u32)> {
         let (cid, port) = raw.trim().split_once(':')?;
         Some((cid.trim().parse().ok()?, port.trim().parse().ok()?))
     }
-    if let Ok(v) = std::env::var("TILLANDSIAS_GUEST_VSOCK_FORWARD_TO") {
-        return parse(&v);
+    let (source, raw) = match std::env::var("TILLANDSIAS_GUEST_VSOCK_FORWARD_TO") {
+        Ok(v) => ("TILLANDSIAS_GUEST_VSOCK_FORWARD_TO", v),
+        Err(_) => (
+            "the vsock-forward file",
+            std::fs::read_to_string(vsock_forward_dir().join("vsock-forward")).ok()?,
+        ),
+    };
+    let (cid, port) = parse(&raw)?;
+    match VsockForwardTarget::new(cid, port) {
+        Ok(target) => Some(target),
+        Err(why) => {
+            eprintln!("[tillandsias] {source}: {why}; NOT starting the forwarder");
+            None
+        }
     }
-    let path = vsock_forward_dir().join("vsock-forward");
-    parse(&std::fs::read_to_string(path).ok()?)
+}
+
+/// ORDER 1722-bwy4. Where the vsock forwarder may relay `inference:11434`,
+/// which every forge reaches by design: ONLY the host (cid 2), and never the
+/// guest's own control port or port 0. A target of (1, 42420) would bridge
+/// every forge to the guest's control listener (1721-fcm0). Constructible only
+/// through [`VsockForwardTarget::new`], and the forwarder's argv builder takes
+/// nothing else, so no source can skip the check.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct VsockForwardTarget {
+    cid: u32,
+    port: u32,
+}
+
+impl VsockForwardTarget {
+    /// VMADDR_CID_HOST.
+    pub(crate) const HOST_CID: u32 = 2;
+
+    pub(crate) fn new(cid: u32, port: u32) -> Result<Self, String> {
+        if cid != Self::HOST_CID {
+            return Err(format!(
+                "forward target cid {cid} refused: only the host (cid {}) may be a forward target",
+                Self::HOST_CID
+            ));
+        }
+        if port == 0 || port == tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT {
+            return Err(format!(
+                "forward target port {port} refused: not 0 and not the control port {}",
+                tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT
+            ));
+        }
+        Ok(Self { cid, port })
+    }
+
+    pub(crate) fn cid(self) -> u32 {
+        self.cid
+    }
+
+    pub(crate) fn port(self) -> u32 {
+        self.port
+    }
 }
 
 /// Materialise the derived seccomp profile and return its path.
@@ -5985,9 +6053,9 @@ fn ensure_vsock_seccomp_profile() -> Result<PathBuf, String> {
 fn build_vsock_forwarder_run_args(
     image: &str,
     profile: &Path,
-    host_cid: u32,
-    host_port: u32,
+    target: VsockForwardTarget,
 ) -> Vec<String> {
+    let (host_cid, host_port) = (target.cid(), target.port());
     vec![
         "--detach".into(),
         "--replace".into(),
@@ -7090,7 +7158,11 @@ reverse_proxy {upstream_host}:{port}\n\
 }}\n\n"
             ));
             if route.preview_tls {
-                let preview_project = subdomain.strip_prefix("www.").unwrap_or(project_label);
+                // `<service>.<project>`: the project is everything after the
+                // first label, dots included (flutter.macron.dev → macron.dev).
+                let preview_project = subdomain
+                    .split_once('.')
+                    .map_or(project_label, |(_, project)| project);
                 routes.push_str(&format!(
                     "https://{subdomain}.localhost:8443 {{\n    tls /etc/tillandsias/preview/{preview_project}.crt /etc/tillandsias/preview/{preview_project}.key\n    header X-Tillandsias-Preview {upstream_host}\n    reverse_proxy {upstream_host}:{port}\n}}\n\n"
                 ));
@@ -7495,11 +7567,17 @@ fn resolve_launch_project_identity(
         // then have EVERY MCP call refused as "not a known project" (measured
         // on lenovinha 2026-10-12). Binding the label to this canonical path
         // admits exactly this project; every other outside label stays refused.
-        #[cfg(feature = "tray")]
+        #[cfg(feature = "host-services")]
         crate::local_projects::bind_launched_project(&name, &canonical)
             .map_err(|reason| format!("refusing to launch '{}': {reason}", canonical.display()))?;
         Ok((name, Some(canonical)))
     } else if is_cloud {
+        // 1713-1dnx: the cloud half of the same rule. In the VM the launching
+        // process is a per-attach child that never ran a cloud refresh, so
+        // nothing else admits this label to its own lane's listener.
+        #[cfg(feature = "host-services")]
+        crate::local_projects::bind_launched_cloud_label(project_path)
+            .map_err(|reason| format!("refusing to launch cloud project: {reason}"))?;
         Ok((project_path.to_string(), None))
     } else {
         Err(format!("Project not found: {}", project_path))
@@ -8759,12 +8837,12 @@ fn build_opencode_forge_args(
         // START THE LANE LISTENER TOO — not just the mount (mirrors the legacy
         // tray path and the live vault builder). A mounted, env-var'd, EMPTY
         // socket dir still leaves the in-forge host-browser bridge dead on
-        // connect; cfg-gated with the module: the listener implementation lives
-        // in tray/mod.rs, so a no-tray build cannot bind one — same
-        // pre-existing limitation as the vault builder's block.
-        #[cfg(feature = "tray")]
+        // connect. ORDER 1713-1dnx: gated on `host-services`, which the VM
+        // guest's `listen-vsock` build enables too; it was `tray`, so every
+        // macOS VM forge got exactly that empty dir.
+        #[cfg(feature = "host-services")]
         {
-            let _ = tray::start_mcp_socket_server_for_lane(
+            let _ = mcp_socket::start_mcp_socket_server_for_lane(
                 project_name,
                 raw_instance.as_deref().unwrap_or("default"),
             );
@@ -10720,9 +10798,10 @@ fn run_reset_state(_debug: bool) -> Result<(), String> {
 /// One-click intentional EPHEMERAL RESET: wipe + re-initialize. Reaches the
 /// same end state as a pristine `--init` + vault bring-up, with every prior
 /// guest credential discarded (the honest UX: you'll re-authenticate once).
-/// ORDER 1286-4437 (operator ruling 2026-09-20). A SUPERSET of
-/// `--reset-guest`: the guest substrate PLUS the host-held credentials,
-/// vault-data and the images, then reprovision through the same `--init` path.
+/// ORDER 1286-4437 (operator ruling 2026-09-20), made SOFT by 1437-qza3: the
+/// guest substrate PLUS the images and build markers, then reprovision through
+/// the same `--init` path. It clears no credential and deletes no store
+/// (`reset_state_plan` lists what is kept).
 ///
 /// `--reset-guest` is deliberately NOT changed. It documents "images are
 /// preserved, so this is fast when they still exist" and callers rely on that;
@@ -16080,6 +16159,26 @@ struct BrowserDisplayContext {
     xdg_runtime_dir: Option<PathBuf>,
 }
 
+/// The WSLg compositor socket in a WSL2 guest (order 1656-yhjt).
+const WSLG_WAYLAND_SOCKET: &str = "/mnt/wslg/runtime-dir/wayland-0";
+
+/// The WSLg socket path as a WAYLAND_DISPLAY value, only if it is a socket.
+fn wslg_wayland_display(socket: &Path) -> Option<String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::FileTypeExt;
+        std::fs::metadata(socket)
+            .ok()
+            .filter(|m| m.file_type().is_socket())
+            .and_then(|_| socket.to_str().map(str::to_string))
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = socket;
+        None
+    }
+}
+
 /// Where the Wayland socket file is mounted inside the browser container: a
 /// private tmpfs runtime dir holding nothing else.
 const BROWSER_RUNTIME_DIR: &str = "/run/user/browser";
@@ -16087,14 +16186,24 @@ const BROWSER_RUNTIME_DIR: &str = "/run/user/browser";
 impl BrowserDisplayContext {
     /// @trace spec:tray-cli-coexistence
     fn from_env() -> Result<Self, String> {
-        Ok(Self {
-            wayland_display: std::env::var("WAYLAND_DISPLAY")
-                .ok()
-                .filter(|v| !v.is_empty()),
+        Ok(Self::from_env_with_wslg(Path::new(WSLG_WAYLAND_SOCKET)))
+    }
+
+    /// ORDER 1656-yhjt: inside the owned WSL2 guest the headless unit has no
+    /// WAYLAND_DISPLAY, but WSLg serves a compositor socket at a fixed path.
+    /// Only when WAYLAND_DISPLAY is unset AND that path is a socket is it used,
+    /// as an absolute WAYLAND_DISPLAY; a Linux session's value always wins.
+    fn from_env_with_wslg(wslg_socket: &Path) -> Self {
+        let wayland_display = std::env::var("WAYLAND_DISPLAY")
+            .ok()
+            .filter(|v| !v.is_empty())
+            .or_else(|| wslg_wayland_display(wslg_socket));
+        Self {
+            wayland_display,
             xdg_runtime_dir: std::env::var_os("XDG_RUNTIME_DIR")
                 .filter(|v| !v.is_empty())
                 .map(PathBuf::from),
-        })
+        }
     }
 
     /// The host Wayland socket FILE, or why there is none. WAYLAND_DISPLAY is
@@ -16167,6 +16276,37 @@ fn build_project_browser_spec(
     display: &BrowserDisplayContext,
     container_name: &str,
 ) -> Result<ContainerSpec, String> {
+    build_project_browser_spec_on(
+        app_url,
+        version,
+        profile_dir,
+        certs_dir,
+        BrowserSurface::Window(display),
+        container_name,
+    )
+}
+
+/// Where a browser container draws (order 1712-3fsw).
+#[derive(Clone, Copy)]
+// Headless is chosen only by browser.open (host-services).
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
+pub(crate) enum BrowserSurface<'a> {
+    /// A visible window on the host compositor: only its Wayland socket file
+    /// is mounted (1641-xbvq).
+    Window(&'a BrowserDisplayContext),
+    /// No display at all: Chromium `--headless=new`. No compositor socket and
+    /// no GPU device reach the container; agents drive it over CDP.
+    Headless,
+}
+
+fn build_project_browser_spec_on(
+    app_url: &str,
+    version: &str,
+    profile_dir: &Path,
+    certs_dir: &Path,
+    surface: BrowserSurface<'_>,
+    container_name: &str,
+) -> Result<ContainerSpec, String> {
     // @trace spec:browser-isolation-framework, spec:browser-isolation-tray-integration
     // Hardened browser boundary: read-only rootfs, CAP_DROP=ALL, no-new-privileges,
     // userns=keep-id, and HOME/config/cache redirected to bounded tmpfs mounts.
@@ -16206,6 +16346,11 @@ fn build_project_browser_spec(
     // session bus (and through it the keyring). `-v …:rw`, not --mount
     // relabel=shared: a relabel would rewrite the live compositor socket's
     // SELinux label on the host.
+    let display = match surface {
+        BrowserSurface::Window(display) => display,
+        // Order 1712-3fsw: nothing of the host's display stack at all.
+        BrowserSurface::Headless => return Ok(spec.arg("--headless=new")),
+    };
     let (socket, socket_name) = display.wayland_socket()?;
     spec = spec
         .tmpfs(format!("{BROWSER_RUNTIME_DIR}:size=1m,mode=0755"))
@@ -17900,9 +18045,12 @@ fn forge_tool_cache_volume(project_name: &str) -> String {
 /// @trace spec:forge-hot-cold-split (Requirement: HOT tier — RAM-backed tmpfs
 ///   for finely curated paths; Per-launch project source budget)
 fn forge_hot_src_tmpfs(project_name: &str) -> String {
-    let budget = tillandsias_core::config::compute_hot_budget(
+    // Order 1729-kg5q: the floor fits a build, clamped to half the forge's
+    // memory.max (the size is a cap counted in that cgroup, not a reservation).
+    let budget = tillandsias_core::config::compute_source_budget(
         forge_mirror_pack_size_kb(project_name),
         &tillandsias_core::config::ForgeConfig::default(),
+        tillandsias_core::forge_budget::ForgeBudget::for_this_host().memory_max_mib,
     );
     format!("/home/forge/src:size={budget}m,mode=0777")
 }
@@ -17968,7 +18116,7 @@ fn prepare_forge_ram_workspace(
     if !names.lines().any(|name| expected.iter().any(|n| n == name)) {
         // A preview must not keep a departed forge's source mount alive across
         // launches. Remove only a recorded preview belonging to THIS lane.
-        #[cfg(feature = "tray")]
+        #[cfg(feature = "host-services")]
         local_web_preview::cleanup_departed_lane(project, instance, debug)?;
         remove_source_volume_if_present(&volume, debug)?;
         let mut create = podman_command();
@@ -18020,13 +18168,13 @@ fn prepare_forge_ram_workspace(
             "live_worktree_unavailable: source must be explicitly bounded RAM-only tmpfs".into(),
         );
     }
-    #[cfg(feature = "tray")]
-    tray::start_mcp_socket_server_for_lane(project, instance)
+    #[cfg(feature = "host-services")]
+    mcp_socket::start_mcp_socket_server_for_lane(project, instance)
         .map_err(|e| format!("runtime_unavailable: per-lane MCP listener failed: {e}"))?;
-    #[cfg(not(feature = "tray"))]
+    #[cfg(not(feature = "host-services"))]
     if debug {
         eprintln!(
-            "[tillandsias] local preview MCP requires a host binary built with --features tray"
+            "[tillandsias] local preview MCP requires a binary built with --features tray or listen-vsock"
         );
     }
     let _ = debug;
@@ -18070,7 +18218,7 @@ fn cleanup_forge_ram_workspace(project: &str, debug: bool) -> Result<(), String>
     if names.lines().any(|name| expected.iter().any(|n| n == name)) {
         return Ok(());
     }
-    #[cfg(feature = "tray")]
+    #[cfg(feature = "host-services")]
     local_web_preview::cleanup_departed_lane(project, instance, debug)?;
     remove_source_volume_if_present(&volume, debug)
 }
@@ -18567,12 +18715,12 @@ fn build_forge_agent_run_args_with_vault(
         // same dual-source-of-truth shape as the pids-limit partial fix
         // (959-fpc5) — a capability added to one launcher and not the other.
         // The tray-boot enumeration only covers projects that existed then.
-        // (cfg-gated with the module: the listener implementation lives in
-        // tray/mod.rs, so a no-tray build still cannot bind one — that
-        // pre-existing limitation is unchanged by this fix.)
-        #[cfg(feature = "tray")]
+        // ORDER 1713-1dnx: gated on `host-services` (was `tray`), so the VM
+        // guest, which launches its forges from a per-attach child, binds one
+        // as well.
+        #[cfg(feature = "host-services")]
         {
-            let _ = tray::start_mcp_socket_server_for_lane(
+            let _ = mcp_socket::start_mcp_socket_server_for_lane(
                 project_name,
                 raw_instance.as_deref().unwrap_or("default"),
             );
@@ -19200,13 +19348,24 @@ mod metrics_server;
 #[cfg(feature = "tray")]
 mod tray;
 
+// @trace spec:mcp-tool-socket (order 1713-1dnx: host-services, so the VM
+// guest's forges get a listener too)
+#[cfg(feature = "host-services")]
+mod mcp_socket;
+
 // @trace spec:local-web-preview
-#[cfg(feature = "tray")]
+#[cfg(feature = "host-services")]
 mod local_web_preview;
 
 // @trace spec:host-browser-mcp (order 1649-xqet)
-#[cfg(feature = "tray")]
+#[cfg(feature = "host-services")]
 mod browser_open;
+
+// @trace spec:local-web-preview (order 1637-5765): opt-in toolchains (Flutter)
+// in a sibling container, streamed over the lane's MCP socket. Gated with
+// mcp_socket (1713-1dnx), so the VM guest's forges get `flutter` too.
+#[cfg(feature = "host-services")]
+mod toolchain_exec;
 
 /// Spawn a terminal-launcher child and reap it on a detached thread.
 ///
@@ -20925,7 +21084,7 @@ pub(crate) async fn publish_local_service(
 
     // @trace spec:local-web-preview — CLI must resolve a UNIQUE live lane.
     let instance = local_web_preview::unique_live_instance(project_name)?;
-    let result = local_web_preview::publish(project_name, &instance, "auto", debug).await?;
+    let result = local_web_preview::publish(project_name, &instance, "auto", None, debug).await?;
     result["url"]
         .as_str()
         .map(str::to_string)
@@ -21975,13 +22134,135 @@ mod tests {
         );
     }
 
+    /// ORDER 1722-bwy4 (from 1721-fcm0). A forge cannot open an AF_VSOCK
+    /// socket ONLY because containers-common's default seccomp rule denies it
+    /// (EPERM), and the guest has vsock_loopback loaded. So no forge launch may
+    /// carry a seccomp override or --privileged: either would let a forge
+    /// reach the guest control listener on (1, 42420). Every forge builder and
+    /// mode is enumerated. The vsock forwarder's derived profile is the one
+    /// sanctioned seccomp option, asserted to stay on that container alone.
+    #[test]
+    fn no_forge_launch_carries_a_seccomp_override_or_privileged() {
+        let _env = env_lock();
+        let restore = TestEnvRestore::capture(&["TILLANDSIAS_FORGE_INSTANCE"]);
+        restore.remove("TILLANDSIAS_FORGE_INSTANCE");
+        let p = PathBuf::from("/tmp/project");
+        let ca = PathBuf::from("/tmp/ca");
+        let mut launches: Vec<(String, Vec<String>)> = Vec::new();
+        for mode in [
+            ForgeAgentMode::Claude,
+            ForgeAgentMode::Codex,
+            ForgeAgentMode::OpenCode,
+            ForgeAgentMode::Antigravity,
+            ForgeAgentMode::Maintenance,
+        ] {
+            launches.push((
+                format!("agent {mode:?}"),
+                build_forge_agent_run_args_with_vault(
+                    &p,
+                    Some(&p),
+                    None,
+                    "proj",
+                    None,
+                    &ca,
+                    "1.2.3",
+                    mode,
+                    false,
+                    None,
+                    None,
+                    false,
+                    &test_cache_root(),
+                ),
+            ));
+        }
+        for mode in [ForgeMode::Cli, ForgeMode::Web] {
+            launches.push((
+                format!("opencode {mode:?}"),
+                build_opencode_forge_args(
+                    &p,
+                    Some(&p),
+                    None,
+                    "proj",
+                    None,
+                    None,
+                    &ca,
+                    "1.2.3",
+                    mode,
+                    None,
+                    false,
+                    false,
+                ),
+            ));
+        }
+        launches.push((
+            "status-check".to_string(),
+            build_status_check_forge_args(&p, "proj", None, &ca, "1.2.3"),
+        ));
+        for (lane, argv) in &launches {
+            for arg in argv {
+                let a = arg.to_ascii_lowercase();
+                assert!(
+                    !a.contains("seccomp")
+                        && !a.contains("--privileged")
+                        && !a.contains("unconfined"),
+                    "forge {lane} carries {arg:?}: it would undo the only barrier between a \
+                     forge and AF_VSOCK"
+                );
+            }
+        }
+        // The one sanctioned exception stays on the forwarder.
+        let forwarder = build_vsock_forwarder_run_args(
+            "img:v1",
+            Path::new("/run/p.json"),
+            VsockForwardTarget::new(2, 42421).unwrap(),
+        );
+        assert!(
+            forwarder.iter().any(|a| a.contains("seccomp=/run/p.json")),
+            "the forwarder keeps its derived profile"
+        );
+    }
+
+    /// ORDER 1722-bwy4: EVERY source of the forward target is validated, the
+    /// env override and the file alike. Only the host (cid 2) on a port other
+    /// than the guest's own control port (42420) or 0 is a target.
+    #[test]
+    fn vsock_forward_target_refuses_anything_but_the_host_off_the_control_port() {
+        let _env = env_lock();
+        let restore = TestEnvRestore::capture(&["TILLANDSIAS_GUEST_VSOCK_FORWARD_TO"]);
+        let file = vsock_forward_dir().join("vsock-forward");
+        std::fs::create_dir_all(vsock_forward_dir()).unwrap();
+        for bad in ["1:11434", "3:11434", "2:42420", "2:0"] {
+            restore.set("TILLANDSIAS_GUEST_VSOCK_FORWARD_TO", bad);
+            assert!(
+                vsock_forward_target().is_none(),
+                "env {bad} must be refused"
+            );
+            restore.remove("TILLANDSIAS_GUEST_VSOCK_FORWARD_TO");
+            std::fs::write(&file, format!("{bad}\n")).unwrap();
+            assert!(
+                vsock_forward_target().is_none(),
+                "file {bad} must be refused"
+            );
+        }
+        // CONTROL: the host on a normal port is a target from either source.
+        std::fs::write(&file, "2:42421\n").unwrap();
+        assert!(vsock_forward_target().is_some(), "file 2:42421 is a target");
+        restore.set("TILLANDSIAS_GUEST_VSOCK_FORWARD_TO", "2:42421");
+        assert!(vsock_forward_target().is_some(), "env 2:42421 is a target");
+        let _ = std::fs::remove_file(&file);
+    }
+
     /// The alias IS the deliverable, so pin it: a forwarder that relays
     /// correctly and is reachable only by IP leaves every agent addressing
     /// `http://inference:11434` landing on nothing, and nothing in the relay's
     /// own behaviour would show it.
     #[test]
     fn vsock_forwarder_claims_the_inference_alias_on_the_enclave_network() {
-        let args = build_vsock_forwarder_run_args("img:v1", Path::new("/run/p.json"), 2, 42421);
+        let args = build_vsock_forwarder_run_args(
+            "img:v1",
+            Path::new("/run/p.json"),
+            VsockForwardTarget::new(2, 42421).unwrap(),
+        );
         let pairs: Vec<_> = args.windows(2).collect();
         assert!(
             pairs
@@ -22002,7 +22283,11 @@ mod tests {
     /// family on the container bridging the VM boundary.
     #[test]
     fn vsock_forwarder_is_confined_by_the_derived_profile() {
-        let args = build_vsock_forwarder_run_args("img:v1", Path::new("/run/p.json"), 2, 42421);
+        let args = build_vsock_forwarder_run_args(
+            "img:v1",
+            Path::new("/run/p.json"),
+            VsockForwardTarget::new(2, 42421).unwrap(),
+        );
         assert!(
             args.iter()
                 .any(|a| a == "--security-opt=seccomp=/run/p.json")
@@ -22020,7 +22305,11 @@ mod tests {
     /// argv. Its original instance silently never set an env var.
     #[test]
     fn vsock_forwarder_places_flags_before_the_image_and_socat_args_after() {
-        let args = build_vsock_forwarder_run_args("img:v1", Path::new("/run/p.json"), 2, 42421);
+        let args = build_vsock_forwarder_run_args(
+            "img:v1",
+            Path::new("/run/p.json"),
+            VsockForwardTarget::new(2, 42421).unwrap(),
+        );
         let at = args
             .iter()
             .position(|a| a == "img:v1")
@@ -31398,6 +31687,53 @@ esac
         std::fs::write(&out, spec.build_run_args().join("\n")).expect("write args");
     }
 
+    /// ORDER 1656-yhjt: in a WSL2 guest with no WAYLAND_DISPLAY, the WSLg
+    /// socket is used only when it IS a socket, and a set WAYLAND_DISPLAY
+    /// always wins, so a Linux session resolves exactly as before.
+    #[cfg(unix)]
+    #[test]
+    fn browser_display_falls_back_to_the_wslg_socket_only_when_unset() {
+        let _guard = env_lock();
+        let dir = tempfile::tempdir().expect("wslg dir");
+        let sock = dir.path().join("wayland-0");
+        let _listener = std::os::unix::net::UnixListener::bind(&sock).expect("bind socket");
+        let plain = dir.path().join("not-a-socket");
+        std::fs::write(&plain, b"").expect("plain file");
+        let saved = std::env::var_os("WAYLAND_DISPLAY");
+        // SAFETY: env_lock serialises every test that touches the environment.
+        unsafe { std::env::remove_var("WAYLAND_DISPLAY") };
+        let unset_sock = BrowserDisplayContext::from_env_with_wslg(&sock).wayland_display;
+        let unset_plain = BrowserDisplayContext::from_env_with_wslg(&plain).wayland_display;
+        let unset_missing =
+            BrowserDisplayContext::from_env_with_wslg(&dir.path().join("absent")).wayland_display;
+        // SAFETY: as above.
+        unsafe { std::env::set_var("WAYLAND_DISPLAY", "wayland-1") };
+        let set = BrowserDisplayContext::from_env_with_wslg(&sock).wayland_display;
+        // SAFETY: as above.
+        unsafe {
+            match saved {
+                Some(v) => std::env::set_var("WAYLAND_DISPLAY", v),
+                None => std::env::remove_var("WAYLAND_DISPLAY"),
+            }
+        }
+        assert_eq!(unset_sock.as_deref(), sock.to_str());
+        assert_eq!(unset_plain, None, "a regular file is not a compositor");
+        assert_eq!(unset_missing, None);
+        assert_eq!(
+            set.as_deref(),
+            Some("wayland-1"),
+            "a session's WAYLAND_DISPLAY wins"
+        );
+        let (path, name) = BrowserDisplayContext {
+            wayland_display: unset_sock,
+            xdg_runtime_dir: None,
+        }
+        .wayland_socket()
+        .expect("absolute WSLg path needs no XDG_RUNTIME_DIR");
+        assert_eq!(path, sock);
+        assert_eq!(name, "wayland-0");
+    }
+
     /// ORDER 1641-xbvq: with no Wayland session the browser REFUSES, naming why
     /// and what to do; it never falls back to an X11 display.
     #[test]
@@ -31632,12 +31968,15 @@ esac
         // The bound, not a fixed number: this host may or may not have a
         // mirror volume for the name above, and the assertion must be about
         // the CLAMP the spec specifies, not about which arm ran.
+        // 1729-kg5q: the floor is the build-sized one, clamped to half of
+        // this host's forge memory.max.
         let config = tillandsias_core::config::ForgeConfig::default();
+        let floor = tillandsias_core::config::hot_path_source_floor_mb(
+            tillandsias_core::forge_budget::ForgeBudget::for_this_host().memory_max_mib,
+        );
         assert!(
-            (tillandsias_core::config::HOT_PATH_BUDGET_FLOOR_MB..=config.hot_path_max_mb)
-                .contains(&size_mb),
-            "budget {size_mb} MB escaped the spec's [{}, {}] clamp",
-            tillandsias_core::config::HOT_PATH_BUDGET_FLOOR_MB,
+            (floor..=config.hot_path_max_mb).contains(&size_mb),
+            "budget {size_mb} MB escaped the spec's [{floor}, {}] clamp",
             config.hot_path_max_mb
         );
     }
@@ -33802,6 +34141,135 @@ esac
             !args_str.contains("control.sock"),
             "forge spec must NEVER mount control.sock; args: {args_str}"
         );
+    }
+
+    /// ORDER 1713-1dnx: the forge builders must leave a LISTENER behind the
+    /// mount, under the VM guest's feature set (`--features listen-vsock`,
+    /// exactly what build-macos-tray.sh and build-guest-binaries.sh build).
+    /// The test above checks only the argv, so it stayed green while every
+    /// macOS VM forge got an empty /run/host/tillandsias-mcp (v56.10.14.1
+    /// smoke: host-browser CONNECTION_CLOSED). This one connects to the socket
+    /// the mount points at and reads an MCP reply through `result.content`
+    /// (1696-gz2y framing), so it fails when the listener is compiled out
+    /// of the guest again.
+    ///
+    /// @trace spec:mcp-tool-socket
+    #[cfg(feature = "listen-vsock")]
+    #[test]
+    fn guest_feature_set_forge_builders_leave_a_live_lane_mcp_listener() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::os::unix::net::UnixStream;
+
+        let _env = env_lock();
+        let restore = TestEnvRestore::capture(&[
+            "TILLANDSIAS_FORGE_INSTANCE",
+            "XDG_RUNTIME_DIR",
+            crate::local_projects::HOST_PROJECT_ROOT_ENV,
+            crate::local_projects::CLOUD_LABEL_CACHE_ENV,
+        ]);
+        // A short root: macOS caps sun_path at 104 bytes (1581-sunl).
+        let runtime = tempfile::Builder::new()
+            .prefix("tg")
+            .tempdir_in("/tmp")
+            .expect("short runtime root under /tmp");
+        let projects = tempfile::tempdir().expect("project root");
+        restore.remove("TILLANDSIAS_FORGE_INSTANCE");
+        restore.set("XDG_RUNTIME_DIR", runtime.path());
+        restore.set(
+            crate::local_projects::HOST_PROJECT_ROOT_ENV,
+            projects.path(),
+        );
+        restore.set(
+            crate::local_projects::CLOUD_LABEL_CACHE_ENV,
+            projects.path().join("known-cloud-projects"),
+        );
+        // Cloud-mode lanes, as the macOS tray attaches them (`--cloud <nwo>`).
+        // The guest never runs the tray's cloud refresh, so the label cache is
+        // empty: the label is admitted the way the guest admits it, by the
+        // launch resolver.
+        for project in ["guestagent", "guestopencode"] {
+            let (name, checkout) = resolve_launch_project_identity(project, true, "forge-project")
+                .expect("cloud launch resolves");
+            assert_eq!((name.as_str(), checkout), (project, None));
+        }
+
+        let _agent = build_forge_agent_run_args_with_vault(
+            &PathBuf::from("guestagent"),
+            None,
+            None,
+            "guestagent",
+            None,
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeAgentMode::Claude,
+            false,
+            None,
+            None,
+            false,
+            &test_cache_root(),
+        );
+        let _opencode = build_opencode_forge_args(
+            &PathBuf::from("guestopencode"),
+            None,
+            None,
+            "guestopencode",
+            None,
+            None,
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+
+        for project in ["guestagent", "guestopencode"] {
+            let socket = mcp_socket_host_dir(project, None).join("mcp.sock");
+            let stream = UnixStream::connect(&socket).unwrap_or_else(|e| {
+                panic!(
+                    "{project}: no listener at the socket the forge mounts ({}): {e}",
+                    socket.display()
+                )
+            });
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(10)))
+                .expect("read timeout");
+            let mut writer = stream.try_clone().expect("clone stream");
+            let mut reader = BufReader::new(stream);
+            let mut ask = |line: &str| -> serde_json::Value {
+                writeln!(writer, "{line}").expect("write request");
+                let mut reply = String::new();
+                reader.read_line(&mut reply).expect("read reply");
+                serde_json::from_str(reply.trim())
+                    .unwrap_or_else(|e| panic!("{project}: reply is not JSON ({e}): {reply:?}"))
+            };
+
+            let list = ask(r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#);
+            let names: Vec<&str> = list["result"]["tools"]
+                .as_array()
+                .unwrap_or_else(|| panic!("{project}: tools/list has no result.tools: {list}"))
+                .iter()
+                .filter_map(|t| t["name"].as_str())
+                .collect();
+            for wanted in ["publish_local", "browser.open"] {
+                assert!(
+                    names.contains(&wanted),
+                    "{project}: tools/list lacks {wanted}: {names:?}"
+                );
+            }
+
+            let call = ask(
+                r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"browser.list_windows","arguments":{}}}"#,
+            );
+            let text = call["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap_or_else(|| panic!("{project}: no result.content[0].text: {call}"));
+            assert!(
+                serde_json::from_str::<serde_json::Value>(text).is_ok(),
+                "{project}: the content text is the tool's JSON payload: {text:?}"
+            );
+        }
+        drop(restore);
     }
 
     /// ORDER 1506-q7ab: a forge's argv carries exactly one mailbox mount —

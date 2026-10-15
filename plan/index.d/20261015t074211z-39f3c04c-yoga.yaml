@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: real-web-and-rust-projects-fit-in-a-forge-without-hand-moving-build-dirs
+    field: context
+    value: |-
+      visual-chess field report, question 5 and setup step 1. lenovinha measured that macron.dev plus one Flutter app use 246 of 348 MB (1637-5765). The RAM checkout is fast and disposable, which is deliberate for the source. But build artefacts (node_modules, target/, .dart_tool, build/, .cache) and TMPDIR belong on the cache volume, which already exists per project ($PROJECT_CACHE). Today an agent discovers this by failing.
+      Options:
+      - The forge pre-creates and links or bind-mounts the well-known heavy directories into the cache volume.
+      - Set env vars where tools honour them: CARGO_TARGET_DIR, npm_config_cache, TMPDIR, PUB_CACHE (already done for Flutter).
+      Watch the cache volume's own growth (1637-tpz3, 77 GB once).
+
+
+      [2026-10-15T07:42:11Z yoga] Measured and refuted 2026-10-15 (yoga, two visual-chess forges): redirecting build directories one by one onto the cache volume does not work. They are project-specific (node_modules, dist, .cache/wasm-pack, .dart_tool); a symlinked node_modules shows as untracked under a 'node_modules/' gitignore, and the project's own [ -d node_modules ] || npm install skipped the install on the empty symlinked dir; dist/ alone (169M) then filled the 256M tmpfs. Ruling: raise the /home/forge/src floor to min(1536M, memory.max/2) and move TMPDIR to the cache volume (option A); a per-project override (B) is deferred, and whole-checkout-on-disk (C) is rejected.
+    ts: "2026-10-15T07:42:11Z"
+    host: yoga
+
+events:
+  - packet_id: real-web-and-rust-projects-fit-in-a-forge-without-hand-moving-build-dirs
+    event:
+      type: progress
+      ts: "2026-10-15T07:42:11Z"
+      host: yoga
+      summary: |-
+        status 'visual-chess field report, question 5 and setup step 1. lenovinha measured that macron.dev plus one Flutter app use 246 of 348 MB (1637-5765). The RAM checkout is fast and disposable, which is deliberate for the source. But build artefacts (node_modules, target/, .dart_tool, build/, .cache) and TMPDIR belong on the cache volume, which already exists per project ($PROJECT_CACHE). Today an agent discovers this by failing.
+        Options:
+        - The forge pre-creates and links or bind-mounts the well-known heavy directories into the cache volume.
+        - Set env vars where tools honour them: CARGO_TARGET_DIR, npm_config_cache, TMPDIR, PUB_CACHE (already done for Flutter).
+        Watch the cache volume's own growth (1637-tpz3, 77 GB once).
+        
+        
+        [2026-10-15T07:42:11Z yoga] Measured and refuted 2026-10-15 (yoga, two visual-chess forges): redirecting build directories one by one onto the cache volume does not work. They are project-specific (node_modules, dist, .cache/wasm-pack, .dart_tool); a symlinked node_modules shows as untracked under a 'node_modules/' gitignore, and the project's own [ -d node_modules ] || npm install skipped the install on the empty symlinked dir; dist/ alone (169M) then filled the 256M tmpfs. Ruling: raise the /home/forge/src floor to min(1536M, memory.max/2) and move TMPDIR to the cache volume (option A); a per-project override (B) is deferred, and whole-checkout-on-disk (C) is rejected.' (not terminal) with evidence_refs: measurement events of 2026-10-15 on this row

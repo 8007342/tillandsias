@@ -338,7 +338,7 @@ impl BrowserMcpServer {
         let tools = json!([
             {
                 "name": "browser.open",
-                "description": "Open a browser window for a project-local URL",
+                "description": "Open a browser window for a project-local URL. The reply's headless field says whether a human can see it: headless: true means NO human can see the window, and only agents drive it (over CDP in dev mode).",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -358,6 +358,10 @@ impl BrowserMcpServer {
                         "device": {
                             "type": "string",
                             "description": "The device to emulate, e.g. \"iphone 12 pro max\", \"galaxy s24\", \"desktop\" (default: the project's .tillandsias/config.toml [browser] device, else desktop). The window opens at the device's CSS viewport with its dpr, UA and touch."
+                        },
+                        "headless": {
+                            "type": "boolean",
+                            "description": "true: a headless window that no human can see, for agents driving it themselves (faster). false: a visible window a human can watch and use. Default: visible when this host has a display, else headless. A headless window is Chromium; a device that defaults to WebKit is emulated in Chromium, and the reply's notice says so."
                         }
                     },
                     "required": ["url"]
@@ -545,7 +549,7 @@ impl BrowserMcpServer {
         };
         let args = Self::requested_arguments(request);
 
-        match tool_name {
+        let response = match tool_name {
             "browser.open" => self.handle_browser_open(id, args),
             "browser.list_windows" => self.handle_browser_list_windows(id),
             "browser.read_url" => self.handle_browser_read_url(id, args),
@@ -560,6 +564,14 @@ impl BrowserMcpServer {
             "browser.close" => self.handle_browser_close(id, args),
             "browser.set_device" => self.handle_browser_set_device(id, args),
             other => Self::tool_error(id, format!("TOOL_NOT_FOUND: {other}")),
+        };
+        // Order 1696-gz2y: every success reaches the client as MCP content.
+        match response {
+            RpcResponse::Success { id, result } => RpcResponse::Success {
+                id,
+                result: crate::framing::tool_result_content(result),
+            },
+            other => other,
         }
     }
 
@@ -625,7 +637,8 @@ impl BrowserMcpServer {
             Ok(device) => device,
             Err(err) => return Self::tool_error(id, err),
         };
-        let engine = match args.get("engine").and_then(|value| value.as_str()) {
+        let engine_named = args.get("engine").and_then(|value| value.as_str());
+        let mut engine = match engine_named {
             None => Engine::for_device(&device.engine),
             Some(name) => match Engine::parse(name) {
                 Some(engine) => engine,
@@ -637,6 +650,45 @@ impl BrowserMcpServer {
                 }
             },
         };
+
+        // Order 1712-3fsw: headless when asked, or by default when this host
+        // cannot show a window (macOS today, Linux without Wayland).
+        let has_display = self.launch_mode.has_display();
+        let headless = match args.get("headless") {
+            None | Some(serde_json::Value::Null) => !has_display,
+            Some(serde_json::Value::Bool(headless)) => *headless,
+            Some(_) => {
+                return Self::tool_error(id, "INVALID_HEADLESS: headless must be true or false");
+            }
+        };
+        if !headless && !has_display {
+            return Self::tool_error(
+                id,
+                "DISPLAY_UNAVAILABLE: this host has no display to show a window on; \
+                 omit headless (or pass headless: true) for a headless window an agent drives over CDP",
+            );
+        }
+        // A headless window is Chromium: the WebKit engine needs a compositor.
+        // A device that only DEFAULTS to WebKit is emulated in Chromium and
+        // the reply says so; an explicit engine: "webkit" is refused.
+        let mut engine_notice = None;
+        if headless && engine == Engine::WebKit {
+            if engine_named.is_some() {
+                return Self::tool_error(
+                    id,
+                    format!(
+                        "ENGINE_UNSUPPORTED: a headless window is Chromium, and {} needs a display; \
+                         omit engine to emulate the device in Chromium",
+                        Engine::WebKit.label()
+                    ),
+                );
+            }
+            engine = Engine::Chromium;
+            engine_notice = Some(format!(
+                "Emulated in Chromium: {} needs a display, and this window is headless.",
+                Engine::WebKit.label()
+            ));
+        }
         if dev && engine == Engine::WebKit {
             return Self::tool_error(
                 id,
@@ -668,6 +720,7 @@ impl BrowserMcpServer {
             &device,
             dev,
             engine,
+            headless,
         ) {
             Ok(entry) => entry,
             Err(LaunchError::BrowserUnavailable) => {
@@ -683,6 +736,10 @@ impl BrowserMcpServer {
 
         let mut entry = entry;
         entry.owning_lane = self.owner();
+        entry.notice = match (engine_notice, entry.notice.take()) {
+            (Some(a), Some(b)) => Some(format!("{a} {b}")),
+            (a, b) => a.or(b),
+        };
         let notice = entry.notice.clone();
         let window_id = entry.window_id.clone();
         self.windows.insert(entry);
@@ -696,6 +753,8 @@ impl BrowserMcpServer {
                 "device": device.summary(),
                 "dev": dev,
                 "engine": engine.label(),
+                // Order 1712-3fsw: whether a human can see this window.
+                "headless": headless,
                 "notice": notice,
             }),
         }
@@ -885,7 +944,8 @@ impl BrowserMcpServer {
                     "window_id": window.window_id,
                     "url": window.url,
                     "title": window.title,
-                    "engine": window.engine
+                    "engine": window.engine,
+                    "headless": window.headless
                 })
             })
             .collect::<Vec<_>>();
@@ -910,13 +970,21 @@ impl BrowserMcpServer {
         if !self.windows.owned_by(window_id, &self.owner()) {
             return Self::tool_error(id, format!("WINDOW_NOT_FOUND: {window_id}"));
         }
+        // The live page when the window has a CDP session (1637-5765): the
+        // registry keeps what browser.open saw, and a page that navigated or
+        // retitled itself since would otherwise be reported as it was.
+        let live = match self.windows.cdp_for(window_id, &self.owner()) {
+            Some((Some(cdp), _, _)) => cdp.page_info().ok(),
+            _ => None,
+        };
         match self.windows.get(window_id) {
             Some(window) => RpcResponse::Success {
                 id,
                 result: json!({
-                    "url": window.url,
-                    "title": window.title,
-                    "engine": window.engine
+                    "url": live.as_ref().map_or(window.url.as_str(), |(url, _)| url.as_str()),
+                    "title": live.as_ref().map_or(window.title.as_str(), |(_, title)| title.as_str()),
+                    "engine": window.engine,
+                    "headless": window.headless
                 }),
             },
             None => Self::tool_error(id, format!("WINDOW_NOT_FOUND: {window_id}")),
@@ -1132,6 +1200,33 @@ mod tests {
         )
     }
 
+    // Order 1696-gz2y: MCP clients render a tools/call result's `content`
+    // (and `structuredContent`), never bare fields. Successes used to return
+    // the bare payload, so every successful call reached the agent empty
+    // while errors (already wrapped) arrived intact.
+    #[tokio::test]
+    async fn a_successful_tool_call_carries_its_payload_as_mcp_content() {
+        let server = test_server(None);
+        let request = RpcRequest {
+            id: Some(7),
+            method: "tools/call".to_string(),
+            params: json!({"name": "browser.list_windows", "arguments": {}}),
+        };
+        match server.handle_request(request).await {
+            RpcResponse::Success { result, .. } => {
+                let text = result["content"][0]["text"]
+                    .as_str()
+                    .unwrap_or_else(|| panic!("no content text: {result}"));
+                assert_eq!(result["content"][0]["type"], "text");
+                let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
+                assert_eq!(parsed, result["structuredContent"]);
+                assert!(parsed["windows"].is_array(), "{parsed}");
+                assert_ne!(result["isError"], true);
+            }
+            _ => panic!("Expected success response"),
+        }
+    }
+
     #[tokio::test]
     async fn initialize_request() {
         let server = test_server(None);
@@ -1329,9 +1424,10 @@ mod tests {
             .await;
 
         let window_id = match response {
-            RpcResponse::Success { result, .. } => {
-                result["window_id"].as_str().unwrap().to_string()
-            }
+            RpcResponse::Success { result, .. } => result["structuredContent"]["window_id"]
+                .as_str()
+                .unwrap()
+                .to_string(),
             other => panic!("expected success, got {other:?}"),
         };
         assert!(window_id.starts_with("win-"));
@@ -1348,7 +1444,7 @@ mod tests {
             .await;
         match list {
             RpcResponse::Success { result, .. } => {
-                let windows = result["windows"].as_array().unwrap();
+                let windows = result["structuredContent"]["windows"].as_array().unwrap();
                 assert_eq!(windows.len(), 1);
                 assert_eq!(windows[0]["window_id"], window_id);
                 assert_eq!(windows[0]["url"], "http://web.acme.localhost:8080/");
@@ -1374,9 +1470,10 @@ mod tests {
             })
             .await;
         let first_window_id = match first {
-            RpcResponse::Success { result, .. } => {
-                result["window_id"].as_str().unwrap().to_string()
-            }
+            RpcResponse::Success { result, .. } => result["structuredContent"]["window_id"]
+                .as_str()
+                .unwrap()
+                .to_string(),
             other => panic!("expected success, got {other:?}"),
         };
 
@@ -1395,8 +1492,8 @@ mod tests {
 
         match second {
             RpcResponse::Success { result, .. } => {
-                assert_eq!(result["window_id"], first_window_id);
-                assert_eq!(result["debounced"], true);
+                assert_eq!(result["structuredContent"]["window_id"], first_window_id);
+                assert_eq!(result["structuredContent"]["debounced"], true);
             }
             other => panic!("expected success, got {other:?}"),
         }
@@ -1445,9 +1542,10 @@ mod tests {
             })
             .await;
         let window_id = match open {
-            RpcResponse::Success { result, .. } => {
-                result["window_id"].as_str().unwrap().to_string()
-            }
+            RpcResponse::Success { result, .. } => result["structuredContent"]["window_id"]
+                .as_str()
+                .unwrap()
+                .to_string(),
             other => panic!("expected success, got {other:?}"),
         };
 
@@ -1466,7 +1564,7 @@ mod tests {
 
         match close {
             RpcResponse::Success { result, .. } => {
-                assert_eq!(result["ok"], true);
+                assert_eq!(result["structuredContent"]["ok"], true);
             }
             other => panic!("expected success, got {other:?}"),
         }
@@ -1483,7 +1581,12 @@ mod tests {
             .await;
         match list {
             RpcResponse::Success { result, .. } => {
-                assert!(result["windows"].as_array().unwrap().is_empty());
+                assert!(
+                    result["structuredContent"]["windows"]
+                        .as_array()
+                        .unwrap()
+                        .is_empty()
+                );
             }
             other => panic!("expected success, got {other:?}"),
         }
@@ -1603,9 +1706,10 @@ mod tests {
             .await;
 
         let window_id = match response {
-            RpcResponse::Success { result, .. } => {
-                result["window_id"].as_str().unwrap().to_string()
-            }
+            RpcResponse::Success { result, .. } => result["structuredContent"]["window_id"]
+                .as_str()
+                .unwrap()
+                .to_string(),
             other => panic!("expected success, got {other:?}"),
         };
 
@@ -1701,9 +1805,10 @@ mod tests {
             .await;
 
         let window_id = match response {
-            RpcResponse::Success { result, .. } => {
-                result["window_id"].as_str().unwrap().to_string()
-            }
+            RpcResponse::Success { result, .. } => result["structuredContent"]["window_id"]
+                .as_str()
+                .unwrap()
+                .to_string(),
             other => panic!("expected success, got {other:?}"),
         };
 
@@ -1802,9 +1907,10 @@ mod tests {
             .await;
 
         let window_id = match response {
-            RpcResponse::Success { result, .. } => {
-                result["window_id"].as_str().unwrap().to_string()
-            }
+            RpcResponse::Success { result, .. } => result["structuredContent"]["window_id"]
+                .as_str()
+                .unwrap()
+                .to_string(),
             other => panic!("expected success, got {other:?}"),
         };
 
@@ -1851,9 +1957,10 @@ mod tests {
             .await;
 
         let window_id = match response {
-            RpcResponse::Success { result, .. } => {
-                result["window_id"].as_str().unwrap().to_string()
-            }
+            RpcResponse::Success { result, .. } => result["structuredContent"]["window_id"]
+                .as_str()
+                .unwrap()
+                .to_string(),
             other => panic!("expected success, got {other:?}"),
         };
 
@@ -1898,9 +2005,10 @@ mod tests {
             .await;
 
         let window_id = match open_response {
-            RpcResponse::Success { result, .. } => {
-                result["window_id"].as_str().unwrap().to_string()
-            }
+            RpcResponse::Success { result, .. } => result["structuredContent"]["window_id"]
+                .as_str()
+                .unwrap()
+                .to_string(),
             other => panic!("expected success, got {other:?}"),
         };
 
@@ -1919,8 +2027,11 @@ mod tests {
 
         match read_response {
             RpcResponse::Success { result, .. } => {
-                assert_eq!(result["url"], "http://web.acme.localhost:8080/path");
-                assert_eq!(result["title"], "web.acme.localhost");
+                assert_eq!(
+                    result["structuredContent"]["url"],
+                    "http://web.acme.localhost:8080/path"
+                );
+                assert_eq!(result["structuredContent"]["title"], "web.acme.localhost");
             }
             other => panic!("expected success, got {other:?}"),
         }
@@ -1950,7 +2061,7 @@ mod tests {
         match response {
             RpcResponse::Success { result, .. } => {
                 // Should succeed at the app layer; network layer validates routing
-                let window_id = result["window_id"].as_str();
+                let window_id = result["structuredContent"]["window_id"].as_str();
                 assert!(window_id.is_some(), "expected window_id in result");
             }
             other => panic!("expected success, got {other:?}"),
@@ -2000,11 +2111,18 @@ mod tests {
         starts: parking_lot::Mutex<Vec<(String, String)>>,
         stops: parking_lot::Mutex<Vec<String>>,
         preview_tls_port: Option<u16>,
+        /// Order 1712-3fsw: a host with no display (macOS VM, Linux without
+        /// Wayland), and what each start was asked for.
+        no_display: bool,
+        launches: parking_lot::Mutex<Vec<(bool, Engine)>>,
     }
 
     impl BrowserContainers for RecordingContainers {
         fn preview_tls_port(&self) -> Option<u16> {
             self.preview_tls_port
+        }
+        fn has_display(&self) -> bool {
+            !self.no_display
         }
         fn start(
             &self,
@@ -2013,6 +2131,9 @@ mod tests {
             self.starts
                 .lock()
                 .push((request.url.to_string(), request.project_label.to_string()));
+            self.launches
+                .lock()
+                .push((request.headless, request.engine));
             Ok(launcher::ContainerHandle {
                 container_name: format!("tillandsias-browser-{}-1", request.project_label),
                 network_name: "tillandsias-browser-net-1".to_string(),
@@ -2043,7 +2164,10 @@ mod tests {
                 .unwrap_or("")
                 .to_string());
         }
-        Ok(result["window_id"].as_str().unwrap_or("").to_string())
+        Ok(result["structuredContent"]["window_id"]
+            .as_str()
+            .unwrap_or("")
+            .to_string())
     }
 
     /// Criterion (a), unit half: with a host launcher wired, browser.open
@@ -2079,6 +2203,189 @@ mod tests {
             .await;
         assert!(matches!(closed, RpcResponse::Success { .. }));
         assert_eq!(*host.stops.lock(), vec!["tillandsias-browser-acme-1"]);
+    }
+
+    // ---- Order 1712-3fsw: headless when there is no display, or on request ----
+
+    fn headless_host(no_display: bool) -> (Arc<RecordingContainers>, BrowserMcpServer) {
+        let host = Arc::new(RecordingContainers {
+            preview_tls_port: Some(18443),
+            no_display,
+            ..Default::default()
+        });
+        let server = BrowserMcpServer::with_project_label(
+            McpServerConfig::default(),
+            "acme",
+            Some(host.clone() as Arc<dyn BrowserContainers>),
+        );
+        (host, server)
+    }
+
+    /// What an MCP client sees of a tools/call: the content text, parsed, or
+    /// the error text (1696-gz2y: never the bare payload).
+    async fn call_seen(
+        server: &BrowserMcpServer,
+        name: &str,
+        arguments: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        let response = server
+            .handle_request(RpcRequest {
+                id: Some(7),
+                method: "tools/call".to_string(),
+                params: json!({ "name": name, "arguments": arguments }),
+            })
+            .await;
+        let RpcResponse::Success { result, .. } = response else {
+            return Err(format!("not a success frame: {response:?}"));
+        };
+        let text = result["content"][0]["text"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
+        if result["isError"].as_bool() == Some(true) {
+            return Err(text);
+        }
+        serde_json::from_str(&text).map_err(|e| format!("content text is not JSON ({e}): {text}"))
+    }
+
+    const PREVIEW: &str = "https://www.acme.localhost:18443/";
+
+    /// macOS today, and Linux without Wayland: an Apple preset with no flags
+    /// opens HEADLESS in Chromium (WebKit needs a display), and the reply an
+    /// agent reads says so.
+    #[tokio::test]
+    async fn with_no_display_browser_open_runs_headless_and_says_so() {
+        let (host, server) = headless_host(true);
+        let seen = call_seen(
+            &server,
+            "browser.open",
+            json!({ "url": PREVIEW, "device": "iphone 12 pro max" }),
+        )
+        .await
+        .expect("a display-less host opens headless instead of refusing");
+        assert_eq!(seen["headless"], true, "{seen}");
+        assert_eq!(seen["engine"], "Chromium", "{seen}");
+        assert_eq!(seen["device"]["viewport"], json!({ "w": 428, "h": 926 }));
+        let notice = seen["notice"].as_str().unwrap_or_default();
+        assert!(
+            notice.contains("WebKit (approximates Safari) needs a display"),
+            "the fallback is announced: {seen}"
+        );
+        assert_eq!(*host.launches.lock(), vec![(true, Engine::Chromium)]);
+
+        let listed = call_seen(&server, "browser.list_windows", json!({}))
+            .await
+            .unwrap();
+        assert_eq!(listed["windows"][0]["headless"], true, "{listed}");
+    }
+
+    /// NEGATIVE CONTROL: a host WITH a display and no flag still opens a
+    /// visible window, in the device's own engine. The windowed path is
+    /// unchanged.
+    #[tokio::test]
+    async fn with_a_display_and_no_flag_the_window_is_visible_as_before() {
+        let (host, server) = headless_host(false);
+        let seen = call_seen(&server, "browser.open", json!({ "url": PREVIEW }))
+            .await
+            .unwrap();
+        assert_eq!(seen["headless"], false, "{seen}");
+        assert_eq!(*host.launches.lock(), vec![(false, Engine::Chromium)]);
+
+        let (host, server) = headless_host(false);
+        let seen = call_seen(
+            &server,
+            "browser.open",
+            json!({ "url": PREVIEW, "device": "iphone 12 pro max" }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(seen["engine"], "WebKit (approximates Safari)", "{seen}");
+        assert_eq!(*host.launches.lock(), vec![(false, Engine::WebKit)]);
+    }
+
+    /// headless: true on a display host runs headless: agents that drive
+    /// themselves skip the compositor.
+    #[tokio::test]
+    async fn headless_true_on_a_display_host_runs_headless() {
+        let (host, server) = headless_host(false);
+        let seen = call_seen(
+            &server,
+            "browser.open",
+            json!({ "url": PREVIEW, "headless": true, "dev": true }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(seen["headless"], true, "{seen}");
+        assert_eq!(seen["dev"], true, "{seen}");
+        assert_eq!(*host.launches.lock(), vec![(true, Engine::Chromium)]);
+    }
+
+    /// The refusals name their reason and start nothing.
+    #[tokio::test]
+    async fn headless_refusals_are_named_and_start_nothing() {
+        let (host, server) = headless_host(true);
+        let err = call_seen(
+            &server,
+            "browser.open",
+            json!({ "url": PREVIEW, "headless": false }),
+        )
+        .await
+        .unwrap_err();
+        assert!(err.starts_with("DISPLAY_UNAVAILABLE:"), "{err}");
+
+        let err = call_seen(
+            &server,
+            "browser.open",
+            json!({ "url": PREVIEW, "engine": "webkit" }),
+        )
+        .await
+        .unwrap_err();
+        assert!(err.starts_with("ENGINE_UNSUPPORTED:"), "{err}");
+        assert!(err.contains("headless"), "{err}");
+
+        let err = call_seen(
+            &server,
+            "browser.open",
+            json!({ "url": PREVIEW, "headless": "yes" }),
+        )
+        .await
+        .unwrap_err();
+        assert!(err.starts_with("INVALID_HEADLESS:"), "{err}");
+
+        assert!(host.launches.lock().is_empty(), "nothing started");
+    }
+
+    /// The tool description tells an agent what headless means for a human.
+    #[tokio::test]
+    async fn browser_open_describes_headless_as_invisible_to_humans() {
+        let (_host, server) = headless_host(true);
+        let listed = server
+            .handle_request(RpcRequest {
+                id: Some(1),
+                method: "tools/list".to_string(),
+                params: json!({}),
+            })
+            .await;
+        let RpcResponse::Success { result, .. } = listed else {
+            panic!("tools/list failed: {listed:?}");
+        };
+        let open = result["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|t| t["name"] == "browser.open")
+            .expect("browser.open is listed");
+        assert!(
+            open["description"]
+                .as_str()
+                .unwrap()
+                .contains("NO human can see the window"),
+            "{open}"
+        );
+        assert_eq!(
+            open["inputSchema"]["properties"]["headless"]["type"],
+            "boolean"
+        );
     }
 
     /// A window cannot outlive the server (the lane connection) that opened
@@ -2234,6 +2541,11 @@ mod tests {
                     let result = match msg["method"].as_str() {
                         Some("Browser.getWindowForTarget") => json!({ "windowId": 1 }),
                         Some("Page.navigate") => json!({ "frameId": "F1" }),
+                        Some("Page.getNavigationHistory") => {
+                            json!({ "currentIndex": 0, "entries": [
+                                { "id": 1, "url": "https://www.acme.localhost:18443/", "title": "RETITLED-LIVE" }
+                            ]})
+                        }
                         Some("Runtime.evaluate") if msg["params"]["expression"] == "1+1" => {
                             json!({ "result": { "type": "number", "value": 2, "description": "2" } })
                         }
@@ -2295,7 +2607,12 @@ mod tests {
             })
             .await
         {
-            RpcResponse::Success { result, .. } => result,
+            // Read a success as a client does, through structuredContent
+            // (1696-gz2y); an error keeps its content and isError.
+            RpcResponse::Success { result, .. } => match result.get("structuredContent") {
+                Some(structured) => structured.clone(),
+                None => result,
+            },
             other => json!({ "frame": format!("{other:?}") }),
         }
     }
@@ -2337,20 +2654,20 @@ mod tests {
             "Emulation.setUserAgentOverride",
         ];
         assert_eq!(names[..4], emulation, "emulated as it attached: {names:?}");
-        assert_eq!(names[4], "Page.enable");
+        assert_eq!(names[4..6], ["Page.enable", "Network.enable"]);
         assert_eq!(
-            names[5..9],
+            names[6..10],
             emulation,
             "then the checked re-apply: {names:?}"
         );
         assert_eq!(
-            names[9], "Page.navigate",
+            names[10], "Page.navigate",
             "and only then navigated: {names:?}"
         );
         assert_eq!(p1[2].1["width"], 428);
         assert_eq!(p1[2].1["deviceScaleFactor"], 3.0);
         assert!(p1[0].1["maxTouchPoints"].as_u64().unwrap() > 0);
-        assert_eq!(p1[9].1["url"], url);
+        assert_eq!(p1[10].1["url"], url);
 
         let window = opened["window_id"].as_str().unwrap().to_string();
         let switched = call_tool(
@@ -2481,6 +2798,35 @@ mod tests {
             "acme",
             Some(host.clone() as Arc<dyn BrowserContainers>),
         )
+    }
+
+    /// Order 1637-5765: read_url reports the LIVE page, not what browser.open
+    /// stored, so an app that retitles itself (a hot reload) is seen — and a
+    /// window that is not in dev mode answers it without running page script.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn read_url_reports_the_live_title_without_page_script() {
+        let host = Arc::new(CdpContainers::default());
+        let lane = lane_server(&host);
+        let opened = call_tool(
+            &lane,
+            "browser.open",
+            json!({ "url": "https://www.acme.localhost:18443/" }),
+        )
+        .await;
+        let window = opened["window_id"].as_str().expect("opened").to_string();
+        let read = call_tool(&lane, "browser.read_url", json!({ "window_id": window })).await;
+        assert_eq!(read["title"], "RETITLED-LIVE", "{read}");
+        assert_eq!(read["url"], "https://www.acme.localhost:18443/", "{read}");
+        let page = host.methods_on("P1");
+        assert!(
+            page.iter().any(|(m, _)| m == "Page.getNavigationHistory"),
+            "{page:?}"
+        );
+        assert!(
+            !page.iter().any(|(m, _)| m == "Runtime.evaluate"),
+            "read_url must not run page script: {page:?}"
+        );
     }
 
     /// Exit criterion 1: from the owning lane, raw browser.cdp evaluates on

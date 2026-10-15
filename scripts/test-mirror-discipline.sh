@@ -249,7 +249,11 @@ rm -f "$d/relayed"
 out="$(PATH="$noruby" git -C "$d/work" push --no-verify origin main 2>&1)"; rc=$?
 PATH="$noruby" sh "$PUB" "$d/mirror.git" >/dev/null 2>&1
 refs="$(disc_refs "$d")"
-if ! PATH="$noruby" command -v ruby >/dev/null 2>&1 && [ "$rc" -eq 0 ] && [ -e "$d/relayed" ] \
+# 1682-fgjo: ask in a subshell with the hash cleared. bash 3.2 (macOS /bin/bash)
+# keeps a hashed path for a command this shell has already RUN, and a temporary
+# `PATH=… command -v` still reports it, so on every Mac this arm saw
+# /usr/bin/ruby and failed although the push really ran without ruby.
+if ! (PATH="$noruby"; hash -r; command -v ruby >/dev/null 2>&1) && [ "$rc" -eq 0 ] && [ -e "$d/relayed" ] \
    && grep -q 'present but unreadable (no-ruby)' <<<"$out" && [ "$(grep -c . <<<"$refs")" -eq 1 ]; then
     ok "ARM11 no ruby: the enforced seed is reported unreadable, the push is accepted (fails open), one ref published"
 else bad "ARM11 rc=$rc refs='$(tr '\n' ' ' <<<"$refs")' out='$(tr '\n' '|' <<<"$out")'"; fi

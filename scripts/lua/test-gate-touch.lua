@@ -71,19 +71,43 @@ local function git(args)
     proc.run({ argv = argv, timeout_ms = 30000 })
 end
 git({ "init", "-q" }); git({ "add", "crates", "images" }); git({ "commit", "-qm", "fixture" })
--- Age every file, so a touch is visible as a move forward.
-proc.run({ argv = { "touch", "-d", "2001-01-01 00:00:00", S .. "/repo/crates/x/src/lib.rs", S .. "/repo/images/default/embedded.txt", S .. "/repo/untracked.txt" } })
-fs.write(REL .. "/run.sh", "SCRIPT_DIR=\"$1\"\n" .. (fn or "") .. "\ncd \"$1\" && _touch_gating_checkout\nstat -c '%Y %n' crates/x/src/lib.rs images/default/embedded.txt untracked.txt\n")
-local r = proc.run({ argv = { "bash", S .. "/run.sh", S .. "/repo" }, timeout_ms = 30000 })
-local o = r.stdout or ""
+-- 1681-otmp: PORTABLE on purpose. This arm used `touch -d` and `stat -c`, which
+-- are GNU only; BSD stat rejects -c, so on every Mac `out` came back empty and
+-- this arm refused --check for a reason that had nothing to do with the touch.
+-- `touch -t` is POSIX, and the mtime read tries GNU then BSD.
+local AGED = { "crates/x/src/lib.rs", "images/default/embedded.txt", "untracked.txt" }
+local function run_touch(fnsrc)
+    -- Age every file, so a touch is visible as a move forward.
+    local argv = { "touch", "-t", "200101010000" }
+    for _, f in ipairs(AGED) do argv[#argv + 1] = S .. "/repo/" .. f end
+    proc.run({ argv = argv })
+    fs.write(REL .. "/run.sh", "SCRIPT_DIR=\"$1\"\n" .. (fnsrc or "") .. "\n"
+        .. "mt() { stat -c '%Y' \"$1\" 2>/dev/null || stat -f '%m' \"$1\"; }\n"
+        .. "cd \"$1\" && _touch_gating_checkout\n"
+        .. "for f in " .. table.concat(AGED, " ") .. "; do echo \"$(mt \"$f\") $f\"; done\n")
+    local r = proc.run({ argv = { "bash", S .. "/run.sh", S .. "/repo" }, timeout_ms = 30000 })
+    local m = {}
+    for t, n in (r.stdout or ""):gmatch("(%d+) ([^\n]+)") do m[n] = tonumber(t) end
+    return m, r
+end
 local old = 978307200 + 86400 * 2 -- well after 2001-01-01, as a floor
-local m = {}
-for t, n in o:gmatch("(%d+) ([^\n]+)") do m[n] = tonumber(t) end
-local lib, emb, unt = m["crates/x/src/lib.rs"], m["images/default/embedded.txt"], m["untracked.txt"]
-if fn and lib and emb and unt and lib > old and emb > old and unt < old and has(r.stderr or "", "note:gate-touch:") then
+local function moved_tracked_only(m, r)
+    local lib, emb, unt = m[AGED[1]], m[AGED[2]], m[AGED[3]]
+    return lib and emb and unt and lib > old and emb > old and unt < old and has(r.stderr or "", "note:gate-touch:")
+end
+local m, r = run_touch(fn)
+if fn and moved_tracked_only(m, r) then
     ok("build.sh's function moves every tracked file's mtime (crates/ and images/) and leaves an untracked file alone")
 else
-    bad("behaviour: fn=" .. tostring(fn ~= nil) .. " out=" .. o:gsub("\n", " | ") .. " err=" .. (r.stderr or ""):sub(1, 120))
+    bad("behaviour: fn=" .. tostring(fn ~= nil) .. " out=" .. (r.stdout or ""):gsub("\n", " | ") .. " err=" .. (r.stderr or ""):sub(1, 120))
+end
+-- NEGATIVE CONTROL (1681-otmp): a touch that touches nothing must fail the same
+-- check, or the arm above passes on how mtimes are read, not on the touch.
+local nm, nr = run_touch("_touch_gating_checkout() { echo 'note:gate-touch: no-op stub' >&2; }")
+if nm[AGED[1]] and not moved_tracked_only(nm, nr) then
+    ok("CONTROL: a no-op touch is caught (tracked mtimes stay aged and are read back)")
+else
+    bad("control: a no-op touch was not caught, out=" .. (nr.stdout or ""):gsub("\n", " | "))
 end
 
 proc.run({ argv = { "rm", "-rf", S } })

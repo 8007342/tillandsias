@@ -96,6 +96,18 @@ that MUST keep refusing, not dead code to delete.
 - **AND** the tray's per-lane listener dispatches it and writes the JSON-RPC
   response back as one line on the same connection
 
+#### Scenario: Every agent harness hands the bridge its socket variable
+
+- **WHEN** a forge agent harness starts the host-browser bridge as a stdio MCP
+  server
+- **THEN** the bridge's environment carries `TILLANDSIAS_CONTROL_SOCKET`
+- **AND** a harness that filters the server environment forwards it
+  explicitly: Codex starts stdio servers with only `HOME LANG PATH PWD SHLVL
+  USER` (codex-cli 0.162.1, measured 2026-10-14), so its registration passes
+  `--env TILLANDSIAS_CONTROL_SOCKET=<path>` (order 1667-jna9)
+- **AND** Claude, OpenCode and Codex each declare the bridge; a harness that
+  drops it fails `scripts/lua/test-harness-host-browser-parity.lua`
+
 #### Scenario: A frame on the shared control socket is refused
 
 - **WHEN** a client sends `ControlMessage::McpFrame` on
@@ -537,6 +549,17 @@ risk note.
   `-32000 ConcurrentCallLimit`
 - **AND** the 16 in-flight calls continue to completion unaffected
 
+
+### Requirement: A successful tool call returns its payload as MCP content
+<!-- req-id: 37592e2e -->
+
+Every successful `tools/call` on the lane socket, whether a browser tool (`browser.*`) or a service tool (`publish_local`, `service_status`, `service_stop`, `service_reload`), SHALL return an MCP `CallToolResult`: a `content` array whose first item is `{type: "text", text: <the payload as JSON>}`, plus `structuredContent: <the payload>` when the payload is an object. A bare payload SHALL NOT be returned, because MCP clients render only `content` and `structuredContent`. A bare payload therefore reaches the agent empty; the 2026-10-14 field report (order 1696-gz2y) lost every window_id that way while the wrapped errors arrived intact.
+
+#### Scenario: a successful list_windows is readable by a client
+
+- **WHEN** a lane calls `browser.list_windows` and it succeeds
+- **THEN** `result.content[0].text` parses to the same object as `result.structuredContent`, which carries `windows`
+- **AND** `result.isError` is not true
 
 ## Litmus Tests
 

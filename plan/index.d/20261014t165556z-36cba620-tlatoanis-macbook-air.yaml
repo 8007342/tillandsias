@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-preflight-door-never-sweeps-a-same-second-index-lock-on-a-mac-because-bash-3-2-nt-is-whole-seconds
+    field: status
+    value: completed
+    ts: "2026-10-14T16:55:56Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-preflight-door-never-sweeps-a-same-second-index-lock-on-a-mac-because-bash-3-2-nt-is-whole-seconds
+    event:
+      type: completed
+      ts: "2026-10-14T16:55:56Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: landed #426, merge fc2667827: build.sh _pf_sweep_index_lock dates the lock with find -newer. Criterion 1: scripts/lua/test-door-index-lock-sweep.lua ok:8 arms on darwin bash 3.2 (4 failed at bc4aa5aff). Criterion 2: arms 4 HELD, 5 WINDOWS and 6 OLDER still hold. Criterion 3: a full darwin ./build.sh --check on the merge of 1680-1683 gave rc=0 (7045 s), door-index-lock-sweep 8 arms in situ
+  - packet_id: the-preflight-door-never-sweeps-a-same-second-index-lock-on-a-mac-because-bash-3-2-nt-is-whole-seconds
+    event:
+      type: note
+      ts: "2026-10-14T16:55:56Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        landed and every exit criterion exercised

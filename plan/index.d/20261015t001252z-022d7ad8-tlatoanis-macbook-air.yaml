@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: browser-open-runs-a-headless-chromium-when-the-host-has-no-display-so-agents-drive-it-over-the-same-cdp-socket-on-macos-and-display-less-linux
+    field: status
+    value: implemented
+    ts: "2026-10-15T00:12:52Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: browser-open-runs-a-headless-chromium-when-the-host-has-no-display-so-agents-drive-it-over-the-same-cdp-socket-on-macos-and-display-less-linux
+    event:
+      type: progress
+      ts: "2026-10-15T00:12:52Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: landed #438, merge 58247bc2b: browser.open{headless} defaults to has_display; the headless reply field; Chromium --headless=new with the same confinement; the WebKit-default fallback; named refusals. Unit arms through result.content plus a mutation (2 arms red); headless window-spec confinement test; tray,listen-vsock 987/0. LEFT: the live arms (macOS forge iphone innerWidth=428, no new listener, no --remote-debugging-port, cross-lane WINDOW_NOT_FOUND headless; Linux without Wayland) wait for the next release

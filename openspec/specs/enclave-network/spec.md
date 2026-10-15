@@ -62,6 +62,8 @@ The attach sites are these run-argument builders, named by SYMBOL so the list su
 - `vault_bootstrap.rs` `fn launch_vault_container`
 - `local_web_preview.rs` `fn build_local_preview_run_args` — enclave-only local
   preview runtime; candidate and published sibling share this builder
+- `toolchain_exec.rs` `fn build_exec_args` — order 1637-5765; an opt-in
+  toolchain session (Flutter) for one lane, enclave-only with proxy egress
 
 The local preview configuration-inspector container in `source_mounts` uses
 `--network=none`

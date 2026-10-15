@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: release-v56-10-14-1-is-recorded-in-the-readme-ledger-work-queue-and-observatorium-history
+    order: 1704-rpx3
+    status: in_progress
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    size: S
+    pickup_role: linux
+    capability_tags: [release, ledger, observatorium]
+    related: [1661-vckd]
+    depends_on: []
+    title: |
+      Release cut section 8 for v56.10.14.1: README ledger rows (v56.10.14.1, and v56.10.13.1, which had none), work-queue lines, and the observatorium release snapshot
+    context: |
+      The v56.10.14.1 cut (PR #421, bump #422, tag at 643de7a39, release run 38589775088 green on all three jobs) needs its ledger records on trunk before the smoke gos. The commits are on work/release-ledger-56.10.14.1 (PR #428), which the land queue skipped as not-a-work-ref; they move to this order's work ref.
+    exit_criteria:
+      - "origin/linux-next carries the v56.10.14.1 README row, its work-queue line and a snapshots.jsonl line naming v56.10.14.1"
+    unscoreable: "release bookkeeping: closure is the landed ledger commits"
+    next_action: >
+      Land work/1704-rpx3 through the queue, then send the three smoke gos naming the landed SHA.
+    provenance: |
+      Filed by macuahuitl-fedora, 2026-10-14.
+    events:
+      - type: filed
+        ts: "2026-10-14T18:35:00Z"
+        host: macuahuitl
+        summary: |-
+          Release ledger records for v56.10.14.1.

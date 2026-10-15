@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: test-plan-binary-freshness-fails-on-every-mac-because-tmpdir-ends-in-a-slash
+    field: status
+    value: completed
+    ts: "2026-10-14T19:04:17Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: test-plan-binary-freshness-fails-on-every-mac-because-tmpdir-ends-in-a-slash
+    event:
+      type: completed
+      ts: "2026-10-14T19:04:17Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: landed #423, merge a1bb7e348: both fixtures normalise TMPDIR with cd && pwd. Criterion 1: on trunk 4237eacb0 with TMPDIR=/var/folders/.../T/ (trailing slash) test-plan-binary-freshness ok:21 and test-plan-binary-probe-release-over-debug ok:1/1 (both red at bc4aa5aff). Criterion 2: the deliberate // and different-path arms still fail the two path checks (in the fixture). A full darwin ./build.sh --check on the 1680-1683 merge gave rc=0 (7045 s)

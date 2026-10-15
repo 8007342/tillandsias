@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-14, from the 1707-g633 U1 probe run
+# with the operator present on their own Cloudflare account.
+packets:
+  - packet_id: cloudflare-login-uses-the-registered-client-id-and-cloudflares-real-dotted-scope-ids-because-an-empty-scope-list-asks-for-zero-permissions
+    order: 1718-adra
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [cloudflare, oauth, login, scopes, vault]
+    estimated_hours: 3
+    related: [1707-g633, 1505-kc5f, 1505-sm2j]
+    title: |
+      `tillandsias --cloudflare-login` can't complete on any account. CLOUDFLARE_APP_CLIENT_ID is still the placeholder "tillandsias-cloudflare-app-client-id-unregistered", and CLOUDFLARE_LOGIN_SCOPES is empty. MEASURED: an authorize request with no scope makes Cloudflare's consent screen ask for "0 total permissions", with Authorize disabled. The operator has now registered the Tillandsias OAuth client (client id d9d1303782dfe45c7e2d7bb9ce89c8a8, public, like GITHUB_APP_CLIENT_ID), and Cloudflare's scope ids are dotted and hyphenated (workers-ci.write), not wrangler's colon form.
+    context: |
+      MEASURED 2026-10-14 ~23:20Z on tlatoanis-macbook-air, with the operator present, by a standalone read-only PKCE probe (the token was held in memory, never printed, and both tokens were revoked with HTTP 200). Against https://dash.cloudflare.com/.well-known/openid-configuration:
+      - authorization_endpoint .../oauth2/auth; token_endpoint .../oauth2/token; revocation_endpoint .../oauth2/revoke. scopes_supported lists only offline_access, offline, openid.
+      - grant_types_supported now INCLUDES urn:ietf:params:oauth:grant-type:device_code, and the document has a device_authorization_endpoint. The 1505 design (Decision 1) assumed Cloudflare had no device grant. The login already prints note:cloudflare-login:device-grant-available in that case, so whether to add a device-flow receiver (which would fit QR and headless logins better than the relay page) is a design question for 1505.
+      - Authorize with no scope param: the consent screen showed 0 permissions, with Authorize disabled.
+      - invalid_scope refusals, each naming the scope: "openid" ("The OAuth 2.0 Client is not allowed to request scope 'openid'"), "account:read", "workers_builds:write", "workers_routes:read". So the wrangler/cf colon ids are NOT this client's ids.
+      - ACCEPTED and GRANTED (token response `scope`): "offline_access workers-ci.read workers-ci.write workers-routes.read" ("Background Access", "Workers CI Read/Write", "Workers Routes Read" on the consent screen).
+      - Python's urllib User-Agent gets HTTP 403 from the discovery URL. reqwest (cloudflare_oauth.rs) sends no User-Agent and gets 200, as does curl. Not a defect today, but fragile: set an explicit User-Agent.
+      Requesting a SUBSET of the client's configured scopes works. The dashboard marked all 8 configured scopes "required", but Cloudflare judges required/optional only against what the request asks for.
+    exit_criteria:
+      - 'CLOUDFLARE_APP_CLIENT_ID is the registered client id, and CLOUDFLARE_LOGIN_SCOPES lists dotted ids that Cloudflare accepted live (at least offline_access plus what 1707-g633 needs: workers-ci.read, workers-ci.write, workers-scripts.read, account-settings.read, each confirmed by a granted scope string, not assumed)'
+      - 'a fixture asserts that the authorize URL carries a non-empty scope parameter, that openid is never in it, and that every id matches ^[a-z0-9-]+\.[a-z]+$ or is offline_access; it is red on today''s empty list'
+      - 'the HTTP client sets an explicit User-Agent naming Tillandsias and its version'
+      - 'live: `tillandsias --cloudflare-login` on the operator''s Mac shows the named permissions on the consent screen and stores a bundle whose granted scope equals the requested set'
+    unscoreable: "requires-native-regime for the live arm (the operator's account); the scope-shape fixture runs anywhere"
+    next_action: >
+      Wait for the 1707-g633 probe's second run, which adds workers-scripts.read and account-settings.read, then put the confirmed ids and the client id in cloudflare_oauth.rs and cloudflare_login.rs, red fixture first.
+    events:
+      - type: filed
+        ts: "2026-10-14T23:32:59Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Cloudflare login: registered client id d9d1303782dfe45c7e2d7bb9ce89c8a8; the real scope ids are dotted (workers-ci.write); an empty scope list asks for 0 permissions; openid is refused; the device grant now exists. Measured live with the operator.

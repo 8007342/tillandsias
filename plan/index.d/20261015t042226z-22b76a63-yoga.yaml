@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: research-cert-lifecycle-state-graph
+    field: next_action
+    value: |-
+      PR 367 readied 2026-10-13 at ffdbf24a8 (trunk 3245b1e1a merged at 6db337266; the manifest-dir ratchet 1590-j20f satisfied by ffdbf24a8; 1007 headless tests; clippy x4). Slice 9 lands ANNOUNCE-ONLY — the Stale arm names the stranded consumers and restarts nothing. OPEN FOR THE COORDINATOR — choose the reaction to a CA rotation (restart all / restart idle / announce only / two-phase {new, old} consumer bundle with a deferred proxy switch), see plan/issues/research-cert-lifecycle-state-graph-2026-07-24.md section Slice 9. Remaining criteria — 3 (that policy) and the live arms of 2. After the landing continue on work/472, never a fresh ref. The host-lane ASKs sent 2026-10-12 never delivered (LAN rung 1506-7tq4 is ready, not built).
+
+      [2026-10-13T06:57:34Z yoga] ASK coordinator (2026-10-13T07Z) - relay work/472 at ffdbf24a8 (PR 367) per the 2026-09-29 legacy-order ruling, or widen WORK_RE (1656-etsz). Land AFTER 539 and carry the one-line witness fix in the agent-result-format closure (text on the 539 and 472 progress events of 2026-10-13T07Z), or land first and the fix moves to work/539.
+
+      [2026-10-15T04:22:26Z yoga] Released for re-claim. work/472 at ffdbf24a8 (PR 367, open draft, not on linux-next). Left - a coordinator relay of the bare-order ref (or 1656-etsz), merge trunk, re-ready 367, carry the one-line ca_trusted witness fix if 539 lands first; then criterion 3 (the CA-rotation reaction policy) and the live arms of criterion 2.
+    ts: "2026-10-15T04:22:26Z"
+    host: yoga
+
+events:
+  - packet_id: research-cert-lifecycle-state-graph
+    event:
+      type: progress
+      ts: "2026-10-15T04:22:26Z"
+      host: yoga
+      summary: |-
+        status 'PR 367 readied 2026-10-13 at ffdbf24a8 (trunk 3245b1e1a merged at 6db337266; the manifest-dir ratchet 1590-j20f satisfied by ffdbf24a8; 1007 headless tests; clippy x4). Slice 9 lands ANNOUNCE-ONLY — the Stale arm names the stranded consumers and restarts nothing. OPEN FOR THE COORDINATOR — choose the reaction to a CA rotation (restart all / restart idle / announce only / two-phase {new, old} consumer bundle with a deferred proxy switch), see plan/issues/research-cert-lifecycle-state-graph-2026-07-24.md section Slice 9. Remaining criteria — 3 (that policy) and the live arms of 2. After the landing continue on work/472, never a fresh ref. The host-lane ASKs sent 2026-10-12 never delivered (LAN rung 1506-7tq4 is ready, not built).
+        
+        [2026-10-13T06:57:34Z yoga] ASK coordinator (2026-10-13T07Z) - relay work/472 at ffdbf24a8 (PR 367) per the 2026-09-29 legacy-order ruling, or widen WORK_RE (1656-etsz). Land AFTER 539 and carry the one-line witness fix in the agent-result-format closure (text on the 539 and 472 progress events of 2026-10-13T07Z), or land first and the fix moves to work/539.
+        
+        [2026-10-15T04:22:26Z yoga] Released for re-claim. work/472 at ffdbf24a8 (PR 367, open draft, not on linux-next). Left - a coordinator relay of the bare-order ref (or 1656-etsz), merge trunk, re-ready 367, carry the one-line ca_trusted witness fix if 539 lands first; then criterion 3 (the CA-rotation reaction policy) and the live arms of criterion 2.' (not terminal) with evidence_refs: PR 367 open draft at ffdbf24a8, not an ancestor of origin/linux-next

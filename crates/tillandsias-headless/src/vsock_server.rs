@@ -1631,7 +1631,12 @@ async fn serve_ready_stream(
                 // the life of the process.
                 let dir = crate::vsock_forward_dir();
                 let dir = dir.as_path();
-                let outcome = std::fs::create_dir_all(dir)
+                // ORDER 1722-bwy4: validate BEFORE recording. A refused target
+                // goes down the Err arm below: logged, answered with Error, and
+                // never written, so the forwarder never relays to it.
+                let outcome = crate::VsockForwardTarget::new(cid, port)
+                    .map_err(|why| std::io::Error::new(std::io::ErrorKind::InvalidInput, why))
+                    .and_then(|_| std::fs::create_dir_all(dir))
                     .and_then(|()| std::fs::write(dir.join("vsock-forward"), format!("{cid}:{port}\n")));
                 match outcome {
                     Ok(()) => {
@@ -2793,6 +2798,62 @@ mod tests {
             ),
             "the status caller must receive the VmStatusReply, not a frame owed to an earlier request; got {status_reply:?}"
         );
+    }
+
+    /// ORDER 1722-bwy4. The forwarder bridges `inference:11434`, which every
+    /// forge reaches, to VSOCK-CONNECT:{cid}:{port}. A target other than the
+    /// host (cid 2), or the guest's own control port, would bridge every forge
+    /// to the control listener. Each is refused with an Error frame, and
+    /// nothing is recorded.
+    #[tokio::test]
+    async fn set_vsock_forward_target_refuses_anything_but_the_host_off_the_control_port() {
+        for (cid, port) in [(1, 11434), (3, 11434), (2, 42420), (2, 0)] {
+            let state = VmStateHandle::new();
+            let (mut client, server) = tokio::io::duplex(64 * 1024);
+            let (_shutdown_tx, shutdown_rx) = watch::channel(false);
+            let _server_task = tokio::spawn(handle_connection_with_mode(
+                Ok(SecureControlWireMode::Off),
+                Box::new(server),
+                state,
+                shutdown_rx,
+            ));
+            let file = crate::vsock_forward_dir().join("vsock-forward");
+            let _ = std::fs::remove_file(&file);
+            for env in [
+                ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 1,
+                    body: ControlMessage::Hello {
+                        from: "a-tray".to_string(),
+                        capabilities: Vec::new(),
+                        build_version: None,
+                    },
+                },
+                ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 2,
+                    body: ControlMessage::SetVsockForwardTarget { cid, port },
+                },
+            ] {
+                write_envelope(&mut client, &env).await.expect("write");
+                let reply =
+                    tokio::time::timeout(Duration::from_secs(2), read_envelope(&mut client))
+                        .await
+                        .expect("a frame within 2s")
+                        .expect("read");
+                if env.seq == 2 {
+                    assert!(
+                        matches!(reply.body, ControlMessage::Error { .. }),
+                        "target {cid}:{port} must be refused with Error, got {:?}",
+                        reply.body
+                    );
+                }
+            }
+            assert!(
+                !file.exists(),
+                "a refused target {cid}:{port} must not be recorded"
+            );
+        }
     }
 
     #[tokio::test]

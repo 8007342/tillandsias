@@ -1136,6 +1136,54 @@ if [ -n "$batch" ]; then
     fi
 fi
 
+# ── ORDER 1740-urxb: ASK THE URGENCY QUESTION AGAIN AFTER THE DROP ─────────
+#
+# The order-645 override above runs BEFORE the 1034-whsp drop, so it compares
+# the global best against a batch that still holds packets about to be removed.
+# MEASURED on the v56.10.15.1 cut (2026-10-15): the chosen epic's only p1 rows
+# (1233-jqp4, 1236-bmjh) were in_progress on osx-next, so the override saw a
+# p1-vs-p1 tie and did nothing; the drop then took both, and the batch offered
+# p2 work while forty-odd p1 rows were claimable. litmus:cycle-batch-triage-shape
+# step 21 caught it at the release gate.
+#
+# So, when anything was dropped, re-run the same rule over the survivors: one
+# slot, strict win only, never a packet the drop just removed, and the new
+# candidate is vetted by the same checker (one id, ~1s). A held candidate is
+# skipped for the next; could-not-fold (rc 2) admits it, matching the fail-open
+# rule above. Bounded at three candidates so a sibling holding the whole p1
+# frontier costs seconds, not a fold per row.
+if [ -n "${_held:-}" ]; then
+    _b_pids="$(printf '%s\n' "$batch" | cut -f4)"
+    [ -n "${URGENT_NOTE:-}" ] && ! grep -qxF "$URGENT_NOTE" <<<"$_b_pids" && URGENT_NOTE=""
+    _cands="$(printf '%s\n' "$rows" \
+        | awk -F'\t' -v held="$_held" '
+            BEGIN { n = split(held, a, /[ \n]+/); for (i = 1; i <= n; i++) if (a[i] != "") h[a[i]] = 1 }
+            NF >= 4 && !($3 in h)' \
+        | sort -t"$(printf '\t')" -k1,1n -k3,3 -k4,4 \
+        | head -3)"
+    while IFS= read -r _c; do
+        [ -n "$_c" ] || continue
+        _c_rank="$(printf '%s' "$_c" | cut -f1)"
+        _c_order="$(printf '%s' "$_c" | cut -f3)"
+        _c_pid="$(printf '%s' "$_c" | cut -f4)"
+        _b_rank="$(printf '%s\n' "$batch" | grep . | cut -f1 | sort -n | head -1)"
+        [ "${_c_rank:-9}" -lt "${_b_rank:-9}" ] || break
+        _b_pids="$(printf '%s\n' "$batch" | cut -f4)"
+        grep -qxF "$_c_pid" <<<"$_b_pids" && break
+        if [ -x "$_xb" ]; then
+            bash "$_xb" --batch "$_c_order" >/dev/null 2>&1 </dev/null
+            if [ $? -eq 1 ]; then
+                printf 'cross-branch: %s is claimed on a sibling branch — dropped from this batch (1034-whsp)\n' "$_c_order" >&2
+                continue
+            fi
+        fi
+        batch="$({ printf '%s\n' "$_c"
+                   printf '%s\n' "$batch" | grep . | head -n $((BUDGET - 1)); })"
+        URGENT_NOTE="$_c_pid"
+        break
+    done <<< "$_cands"
+fi
+
 size="$(printf '%s\n' "$batch" | grep -c .)"
 
 printf 'batch: epic=%s role=%s release=%s size=%s budget=%s score=%s seed=%s pick=%s/%s%s%s%s\n' \

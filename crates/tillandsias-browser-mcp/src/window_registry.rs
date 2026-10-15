@@ -34,6 +34,9 @@ pub struct WindowEntry {
     pub dev: bool,
     /// The engine the window runs (order 1656-tjv4).
     pub engine: crate::launcher::Engine,
+    /// Headless: no human can see the window; agents drive it over CDP
+    /// (order 1712-3fsw).
+    pub headless: bool,
     /// What the user should be told about this open (order 1656-tjv4).
     pub notice: Option<String>,
     /// The window's ONE CDP session (order 1655-urz9). Dropped before the
@@ -56,6 +59,8 @@ pub struct WindowSummary {
     pub title: String,
     /// The engine's user-facing name (order 1656-tjv4).
     pub engine: &'static str,
+    /// Whether no human can see the window (order 1712-3fsw).
+    pub headless: bool,
 }
 
 impl WindowEntry {
@@ -120,6 +125,7 @@ impl WindowRegistry {
                 url: entry.opened_url.clone(),
                 title: entry.title.clone(),
                 engine: entry.engine.label(),
+                headless: entry.headless,
             })
     }
 
@@ -161,6 +167,7 @@ impl WindowRegistry {
                 url: entry.opened_url.clone(),
                 title: entry.title.clone(),
                 engine: entry.engine.label(),
+                headless: entry.headless,
             })
             .collect()
     }

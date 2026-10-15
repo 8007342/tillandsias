@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-14, from the v56.10.14.1 macOS smoke.
+packets:
+  - packet_id: forges-in-the-macos-and-windows-vm-get-an-empty-lane-mcp-socket-dir-because-the-guest-binary-is-built-without-the-tray-feature-that-holds-the-listener
+    order: 1713-1dnx
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [mcp, browser, local-web-preview, macos, windows, vm, guest-binary, features, publish-local]
+    estimated_hours: 4
+    related: [1712-3fsw, 1667-jna9, 1696-gz2y, 1630-pz77, 1656-iktu]
+    title: |
+      In a forge launched through the macOS tray (v56.10.14.1), host-browser fails with CONNECTION_CLOSED: /run/host/tillandsias-mcp is mounted with TILLANDSIAS_CONTROL_SOCKET set, but the directory is empty, so no mcp.sock exists. Source read: the in-VM guest binary is built with `--features listen-vsock` (build-macos-tray.sh, build-guest-binaries.sh, flake), and start_mcp_socket_server_for_lane lives in tray/mod.rs behind #[cfg(feature = "tray")], so the guest mounts the lane dir and never binds the listener. Every host-browser tool (publish_local, service_status, service_reload, browser_open, browser_list_windows, the dev-mode CDP tools) is unreachable from macOS forges, and by the same build, likely from Windows forges too.
+    context: |
+      MEASURED 2026-10-14 ~20:15Z, in the macron.dev forge on tlatoanis-macbook-air (v56.10.14.1, installed by curl and attached through the tray menu with agent Claude). The forge's own session reported:
+      - `claude mcp list`: host-browser: /home/forge/.config-overlay/mcp/host-browser.sh - Failed to connect — CONNECTION_CLOSED;
+      - TILLANDSIAS_CONTROL_SOCKET=/run/host/tillandsias-mcp/mcp.sock;
+      - running the wrapper by hand: {"jsonrpc":"2.0","error":{"code":-32000,"message":"TILLANDSIAS_CONTROL_SOCKET does not exist"}};
+      - `ls -la /run/host/tillandsias-mcp/` is empty (root:root 755), and mount shows it read-only on a tmpfs source.
+      /run/host/tillandsias-msg (the lane mailbox, 1506-q7ab) IS present in the same forge, so the lane plumbing runs and only the listener is missing.
+      SOURCE READ (not yet confirmed by a build): crates/tillandsias-headless/src/main.rs, both forge builders (the one near the ORDER 505 comment and the vault one), call tray::start_mcp_socket_server_for_lane only under #[cfg(feature = "tray")], with comments that a no-tray build "cannot bind one — same pre-existing limitation". The VM guest IS that no-tray build. On Linux the host-native tray carries the feature, which is why the linux arms pass.
+      This blocks 1712-3fsw (headless browser on macOS): its agent drives the window through these tools.
+    exit_criteria:
+      - 'in a forge attached through the macOS tray, `claude mcp list` shows host-browser connected, and a tools/list over the wrapper returns publish_local and browser_open; red on v56.10.14.1 (empty dir, CONNECTION_CLOSED)'
+      - 'the listener is started by the guest binary as built for the VM (the listen-vsock feature set): a test, built with exactly the features build-macos-tray.sh uses, launches a forge spec and finds mcp.sock bound in the lane dir; it fails when the start is cfg-gated out again (mutation shown in the commit)'
+      - 'attribution is unchanged: a connection on lane A''s socket is attributed to lane A only (the existing per-lane attribution arm passes under the guest feature set)'
+      - 'the Windows (WSL2) forge is checked the same way and the result recorded: fixed by the same change, or a named follow-up'
+    unscoreable: "requires-native-regime: the live arm needs a forge in the macOS VM; the feature-set test runs on any host"
+    next_action: >
+      Confirm the source read: build tillandsias-headless with --features listen-vsock and check that start_mcp_socket_server_for_lane is absent, or that the forge spec path skips it. Then move the lane listener out of the tray-only module (or enable it under listen-vsock), and write the feature-set test red first.
+    events:
+      - type: filed
+        ts: "2026-10-14T20:21:15Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          macOS (and likely Windows) VM forges: the lane MCP socket dir is mounted but empty, because the listener is cfg(feature="tray") and the guest binary is built with listen-vsock only. host-browser is CONNECTION_CLOSED, and every host-browser tool is unreachable. Found in the v56.10.14.1 smoke. Blocks 1712-3fsw.

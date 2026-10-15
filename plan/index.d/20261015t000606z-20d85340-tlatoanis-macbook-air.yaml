@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-pushed-project-deploys-to-cloudflare-on-its-own-domain-without-dashboard-steps
+    event:
+      type: progress
+      ts: "2026-10-15T00:06:06Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        OPERATOR RULING (2026-10-14, in session): users connect their GitHub repo to Cloudflare Workers Builds MANUALLY, once, in the dashboard (default deploy command `npx wrangler deploy`). Automating the connection and build token (U2) is DEFERRED until apps need more provisioned resources (persistence, durable objects, databases, SSO), when far more must be automated anyway. U2 was not run; nothing was created.
+        MEASURED the same day with read scopes plus workers-ci.write (operator present; every token revoked HTTP 200):
+        (1) Workers Builds write works under the Tillandsias OAuth token: PATCH /accounts/{id}/builds/triggers/{trigger_uuid} {"path_includes":["observatorium/*"]} returned HTTP 200, operator-requested, on the observatorium Worker `tillandsias`, trigger uuid 1cae7e29 (display name e3f031ac); read back with branch main, build `npm run build`, root `/observatorium`. OPEN: Cloudflare doesn't document whether path_includes is relative to the repo root or to the trigger's root directory. Verify on the next main push touching observatorium/; if no build runs, set it to "*" (root-relative). Watch-path behaviour is the design's main budget lever, so this matters for every user project too.
+        (2) observatorium.tillandsias.org served the apex: zone tillandsias.org had a Worker route `*.tillandsias.org/*` -> tillandsias-org, which won over the observatorium's custom domain (observatorium.tillandsias.org -> tillandsias, correct). Evidence: both hostnames byte-identical (2,459,118 bytes, same sha256); flutter_bootstrap.js and main.dart.js 404 on the subdomain. The operator removed the route(s); the observatorium Worker then answered on its own hostname (the app's own load failure is left to fix forward). DESIGN CONSEQUENCE: the custom-domain preflight must also list the zone's Worker routes and refuse or warn on a wildcard route that shadows the hostname.
+        (3) The observatorium build warns every time: "Your config file is using the Worker name \"tillandsias-observatorium\", but the CI system expected \"tillandsias\". Overriding". Harmless; fix by renaming observatorium/wrangler.jsonc `name` (not done, not yet approved).
+        (4) tillandsias-org (the apex, repo 8007342/tillandsias.org) has a "Deploy non-production branches" trigger (`npx wrangler versions upload`, all branches except main) that has built work/site-tweaks and work/instructions-url, spending shared minutes. The operator was told; still in place.
+        (5) Correction: macron.dev's "failed branch builds" (cfb4bbc, 640c9e2, d091abe) are GitHub check runs "Workers Builds: macron-dev" with started_at == completed_at. Cloudflare posts an instant "failure" check for a push its main-only trigger doesn't cover. No build ran and no minutes were spent. The forge's 9m39s/~27s were push->check-post times, not build times.

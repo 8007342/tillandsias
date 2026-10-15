@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's direction (macuahuitl, 2026-10-15), from the 1738-wqmt review.
+packets:
+  - packet_id: a-linux-soft-reset-removes-only-tillandsias-podman-objects-and-leaves-the-users-own-images-and-containers-untouched
+    order: 1739-ufcj
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [installer, reset, podman, end-user, data-safety]
+    estimated_hours: 6
+    related: [1738-wqmt, 1437-qza3, 1286-4437, 1309-q4kr]
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      On Linux, the SOFT reset that every curl|bash install runs calls `podman system reset --force`, which destroys EVERY podman object for the user: their own images, containers, volumes and toolboxes, not only Tillandsias'. On an end user's machine that is data we do not own. The reset must remove only Tillandsias objects (by our labels, names and image repositories) and leave everything else byte-identical.
+    context: |
+      Found in review of 1738-wqmt (lenovinha, 2026-10-15). run_reset_state (crates/tillandsias-headless/src/main.rs, Linux) announces "ALL podman images on this host (podman system reset --force)" in its destroyed set, then runs exactly that. install.sh calls it on every install (1286-4437), so a user who installs Tillandsias on a host with their own podman work loses it.
+      Already measured once, on pirria 2026-09-20 (1309-q4kr): a smoke's `podman system reset --force` destroyed the `tillandsias-builder` toolbox along with everything else in the store.
+      The guest half (apply_pending_soft_reset, inside the macOS/Windows VM) is out of scope: the guest's podman store is ours alone.
+      --reset-guest already scopes by name (reset_guest_scope / reset_guest_network_scope); the soft reset could reuse that scoping and add images by repository (localhost/tillandsias-*), keeping its announcement truthful about what it removes.
+    exit_criteria:
+      - 'on a Linux host holding a non-Tillandsias image, container, volume and network (and a toolbox), a reinstall (install.sh, or --reset-state) leaves each of them byte-identical: same IDs, digests and creation times before and after; red today'
+      - 'every Tillandsias container, volume, secret, network and image is still removed, and the reprovision still succeeds; the reset''s announcement names what it removes by scope, not "ALL podman images"'
+      - 'proven in a sealed podman-in-podman store (never the operator''s real store), with a fixture that seeds foreign objects and fails if any of them changes'
+    unscoreable: "unpinnable-until-the-guard-exists: the foreign-objects-survive fixture is the deliverable"
+    next_action: >
+      Replace the system reset in run_reset_state with scoped removals (reuse reset_guest_scope for containers, volumes, secrets and networks; images by Tillandsias repository), red fixture first in a sealed store that seeds foreign objects.
+    provenance: |
+      Filed by lenovinha-silverblue at the coordinator's direction, 2026-10-15.
+    events:
+      - type: filed
+        ts: "2026-10-15T15:06:09Z"
+        host: lenovinha
+        summary: |-
+          The Linux soft reset wipes the user's own podman objects; scope it to Tillandsias'.

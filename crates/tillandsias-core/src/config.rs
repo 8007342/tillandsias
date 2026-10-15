@@ -262,6 +262,37 @@ pub fn compute_hot_budget(pack_size_kb: u64, config: &ForgeConfig) -> u32 {
         .min(config.hot_path_max_mb)
 }
 
+/// The `/home/forge/src` floor before the memory clamp (order 1729-kg5q).
+///
+/// 256 MB fits the source but not a build. Measured 2026-10-15 in a forge on
+/// visual-chess: a 57 MB checkout plus `npm ci` (169 MB of node_modules)
+/// filled the 256 MB tmpfs in 4 s, and `./build.sh --dev` then needed another
+/// 169 MB for dist/. Moving build directories one by one does not work
+/// (they are project-specific, and a symlinked node_modules broke the
+/// project's own install check), so the source tmpfs gets room for a build.
+/// A tmpfs `size=` is a CAP, not a reservation: pages exist only as files are
+/// written, and they count in the forge's memory cgroup.
+pub const HOT_PATH_SOURCE_FLOOR_MB: u32 = 1536;
+
+/// The source tmpfs floor for a forge whose cgroup `memory.max` is
+/// `memory_max_mib`: [`HOT_PATH_SOURCE_FLOOR_MB`], never more than half of
+/// `memory.max`, so on a small host the cap cannot look like headroom the
+/// cgroup does not have.
+pub fn hot_path_source_floor_mb(memory_max_mib: u64) -> u32 {
+    let half = u32::try_from(memory_max_mib / 2).unwrap_or(u32::MAX);
+    HOT_PATH_SOURCE_FLOOR_MB.min(half)
+}
+
+/// [`compute_hot_budget`] for `/home/forge/src`: the same pack × inflation
+/// recipe, with the build-sized floor clamped to the forge's memory.
+pub fn compute_source_budget(pack_size_kb: u64, config: &ForgeConfig, memory_max_mib: u64) -> u32 {
+    let pack_size_mb = (pack_size_kb / 1024) as u32;
+    pack_size_mb
+        .saturating_mul(config.hot_path_inflation)
+        .max(hot_path_source_floor_mb(memory_max_mib))
+        .min(config.hot_path_max_mb)
+}
+
 /// Global configuration loaded from `~/.config/tillandsias/config.toml`.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GlobalConfig {
@@ -1049,6 +1080,29 @@ hot_path_inflation = 6
             small_budget, HOT_PATH_BUDGET_FLOOR_MB,
             "sub-floor pack MUST rise to the floor"
         );
+    }
+
+    // @trace order:1729-kg5q, spec:forge-hot-cold-split
+    #[test]
+    fn the_source_floor_fits_a_build_but_never_exceeds_half_the_cgroup() {
+        let config = ForgeConfig::default();
+        // The default forge budget (6144 MiB) leaves the full floor.
+        assert_eq!(hot_path_source_floor_mb(6144), HOT_PATH_SOURCE_FLOOR_MB);
+        assert_eq!(compute_source_budget(0, &config, 6144), 1536);
+        // A small host: half of memory.max wins over the floor.
+        assert_eq!(hot_path_source_floor_mb(2048), 1024);
+        assert_eq!(compute_source_budget(0, &config, 2048), 1024);
+        // A big pack still follows pack × inflation, and the ceiling holds.
+        assert_eq!(compute_source_budget(500 * 1024, &config, 6144), 2000);
+        assert_eq!(
+            compute_source_budget(u64::MAX / 1024, &config, 6144),
+            config.hot_path_max_mb
+        );
+        // The measured failure: 57 MB checkout + 169 MB node_modules + 169 MB
+        // dist does not fit the old 256 MB floor, and fits the new one.
+        let need = 57 + 169 + 169;
+        assert!(need > HOT_PATH_BUDGET_FLOOR_MB);
+        assert!(need < compute_source_budget(0, &config, 6144));
     }
 
     // @trace spec:forge-hot-cold-split (Scenario "Budget exceeds

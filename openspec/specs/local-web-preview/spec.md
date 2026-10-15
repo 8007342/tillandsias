@@ -25,7 +25,11 @@ Chromium sibling, tray UI change, or host CA trust-store modification is approve
 
 All lifecycle calls MUST use the project and forge lane authenticated by the
 existing MCP socket. Caller-supplied project labels, host paths, image names,
-commands and port mappings MUST NOT select resources. Resolve the running
+commands and port mappings MUST NOT select resources. The one caller-supplied
+path, `app_dir`, only narrows the session's own project. It MUST be relative,
+contain no `..` and no hidden segment, and be a real directory with no symlink
+on the way in the live forge. Anything else is refused with a typed
+`invalid_app_dir` reason before any runtime or router mutation. Resolve the running
 forge's actual worktree, not `host_project_root()/project`, a git mirror, a
 second clone, a commit snapshot, or an exported copy. The sibling MUST see
 uncommitted and untracked source changes through the same backing filesystem.
@@ -157,6 +161,20 @@ Explicit Wrangler without a config MUST fail. Invalid Wrangler configuration
 MUST NOT silently fall back to static. Wrangler itself parses its configuration;
 hand-parsing JSONC as JSON or requiring `main` is incorrect.
 
+An optional `app_dir` (order 1667-6rtp) selects an app that lives in a project
+subdirectory with its own configuration, such as a monorepo. With it, "root"
+above means that directory: the configs are discovered there, and its assets,
+Worker entry and static fallback are resolved and mounted only from inside it.
+Without it, behaviour is unchanged. `service_reload` republishes the same
+`app_dir`.
+
+#### Scenario: Subdirectory app
+
+- **GIVEN** `observatorium/wrangler.jsonc` with `assets.directory="./build/web"` and no root config
+- **WHEN** `publish_local` runs in auto mode with `app_dir="observatorium"`
+- **THEN** local Wrangler serves `observatorium/build/web`
+- **AND** nothing outside `observatorium/`, including the project root's `public/`, is mounted
+
 Wrangler MUST execute `wrangler dev --local --ip 0.0.0.0 --port 8080` from the
 project root with an explicit selected config and private ephemeral writable
 runtime state/cache outside the source mount. Source SHOULD be read-only to the
@@ -190,9 +208,14 @@ envelope and legacy result fields. Inputs are:
 | Tool | Arguments | Meaning |
 |---|---|---|
 | `publish_local` | `category: "WEB"`, optional `runtime: "auto"\|"static"\|"wrangler"` (default auto) | Start/publish or reconcile this lane's preview |
-| `service_status` | none | Observe, no launch/restart side effects |
+| `service_status` | none | Observe, no launch/restart side effects; `serving` says whether the route answers end to end, and after a failed reload `last_failure.previous_preview_serving` says whether the old preview is still served |
 | `service_stop` | `category: "WEB"` | Stop container and remove only its route; already absent is success |
-| `service_reload` | `category: "WEB"` | Restart the recorded profile on the same live source and URL; absent is `not_running` |
+| `service_reload` | `category: "WEB"` | Restart the recorded profile on the same live source and URL; a preview that exited is recreated the same way; absent is `not_running` |
+| `service_logs` | `category: "WEB"`, optional `lines` (1-500, default 100) | The preview's own output (stdout and stderr, tail kept, 64 KiB cap), its state and exit code; only for the lane that owns it |
+
+Removing a preview container never waits a stop grace period (1723-2fiq):
+the static server is PID 1 and ignores SIGTERM, so a graceful remove outlived
+the per-call budget and every reload timed out.
 
 Initial-phase prerequisite: the host binary MUST be built with the `tray`
 feature and its existing authenticated MCP listener must be available. Moving
@@ -258,6 +281,63 @@ verification, or silently return HTTP as a successful HTTPS preview.
 - **THEN** status distinguishes healthy runtime/TLS from untrusted or unknown host trust
 - **AND** diagnostics explain the separate approval needed to install trust
 - **AND** no trust-store bytes are changed
+
+### Requirement: Opt-in toolchain sessions
+<!-- req-id: bbc26ac2 -->
+
+Order 1637-5765, operator direction 2026-10-12 and 2026-10-14: a forge agent
+can build and run Flutter (with Flame) for its project, without the forge image
+carrying a 2.5 GB SDK and without a per-project install. The forge's `flutter`
+command is a client. Flutter itself runs in the shared `tillandsias-flutter`
+sibling image (`images/flutter`), pinned by base digest, SDK version and
+archive sha256.
+
+- **Opt-in.** The image MUST NOT be in INIT_IMAGES. It is built on the first
+  `toolchain_prepare` call. That call MUST NOT block. It returns `ready`,
+  `preparing` (with build step, total and elapsed seconds when known) or
+  `failed`. The client MUST show a plain-words one-time preparing state with
+  that progress, never a silent wait.
+- **Session.** `tillandsias/exec` runs on the lane's own MCP connection, so
+  listener attribution decides the lane. The request supplies only the
+  toolchain name (closed set), flutter's argv and a project-relative cwd. The
+  cwd MUST have no absolute path and no `..`.
+  - The host takes the project volume and the tool-cache volume from the LIVE
+    forge. Output, input, signals, resize and the exit code are streamed as
+    NDJSON frames.
+  - A tty session MUST deliver keystrokes (`r`, `R`, Ctrl-C) as bytes.
+  - When the client disconnects, the host MUST stop the toolchain. Its
+    container is `--rm`.
+- **Confinement.** The sibling runs on the internal enclave network with
+  egress only through the proxy, with all capabilities dropped,
+  no-new-privileges and keep-id.
+  - It gets the project directory read-write at the forge's own path, and
+    PUB_CACHE on the tool-cache volume, never on the RAM project volume.
+  - The cloud metadata address MUST stay unreachable. The image sets `BOT=false`
+    so the tool does not probe it, and the proxy admits no IP literal.
+- **Dev server.** `flutter run -d web-server` is routed. The host chooses its
+  listen flags (all interfaces, a fixed in-container port), replaces any the
+  agent passed, and routes `flutter.<project>` over HTTP for the session's
+  lifetime. It removes the route only while the route still points at that
+  session.
+
+Measured limits (2026-10-14, `plan/evidence/1637-5765-flutter-host-measurement-2026-10-14/`):
+- Forge-time hosts: `pub.dev` only.
+- Image: 2.8 GB.
+- One Flutter app adds about 70 MB (`.dart_tool` 30 MB + `build/web` 40 MB) to the
+  348 MB RAM project volume. macron.dev plus one Flame app is about 246 MB.
+- **A second app is the next wall:** the bounded tmpfs, not the image.
+
+#### Scenario: First use
+
+- **WHEN** an agent runs `flutter create` in a forge whose host has no Flutter image
+- **THEN** the client reports "Preparing Flutter (one time, a few minutes)" with build progress
+- **AND** the command runs once the image is ready, with its output streamed and its exit code returned.
+
+#### Scenario: Hot reload
+
+- **WHEN** an agent runs `flutter run -d web-server` and presses `r`
+- **THEN** the session receives the keystroke and the routed URL serves the app
+- **AND** Ctrl-C or the forge's exit stops the session and removes its route.
 
 ## Sources of truth and limits
 

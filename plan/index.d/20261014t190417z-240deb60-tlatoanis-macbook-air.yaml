@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-gate-touch-fixture-uses-gnu-only-stat-and-touch-so-darwin-check-always-refuses
+    field: status
+    value: completed
+    ts: "2026-10-14T19:04:17Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-gate-touch-fixture-uses-gnu-only-stat-and-touch-so-darwin-check-always-refuses
+    event:
+      type: completed
+      ts: "2026-10-14T19:04:17Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: landed #424, merge d779c1822: scripts/lua/test-gate-touch.lua ages with touch -t and reads mtimes with stat -c, falling back to stat -f %m. Criteria 1 and 2: on trunk 4237eacb0 darwin, ok:gate-touch-fixture:4, including "CONTROL: a no-op touch is caught". Criterion 3: a full darwin ./build.sh --check on the 1680-1683 merge gave rc=0 (7045 s), running this fixture to ok

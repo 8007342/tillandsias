@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # @trace order:901-jtvi
 #
-# test-litmus-grep-escapes.sh — pin check-litmus-grep-escapes.sh.
+# test-litmus-grep-escapes.sh — pin scripts/lua/check-litmus-grep-escapes.lua
+# (ported from check-litmus-grep-escapes.sh by 1637-5765, byte-identical on
+# every arm below and on the corpus).
 #
 # EVERY ARM NAMES THE BINARY IT WAS MEASURED AGAINST, because this guard exists
 # because that went unrecorded. All escape behaviour below was measured against
@@ -28,13 +30,17 @@ set -uo pipefail
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 1
 
-SUT="$REPO_ROOT/scripts/check-litmus-grep-escapes.sh"
+PLAN_BIN="$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" || {
+    echo "could-not-run: no tillandsias-plan resolves to run scripts/lua/check-litmus-grep-escapes.lua"; exit 1; }
+sut() { "$PLAN_BIN" script run scripts/lua/check-litmus-grep-escapes.lua -- "$@"; }
 FIXCOMMIT=6fc5b7ac2   # "fix(1011-d578)": the commit that replaced the two steps
 pass=0; fail=0
 ok()  { echo "  ok: $1"; pass=$((pass+1)); }
 bad() { echo "  FAIL: $1"; fail=$((fail+1)); }
 
-work="$(mktemp -d)" || exit 1
+# Inside the repository: the Lua runtime's reads are confined to it.
+work="target/work/test-litmus-grep-escapes.$$"
+mkdir -p "$work" || exit 1
 trap 'rm -rf "$work"' EXIT
 
 # ── arm 1: THE NEGATIVE CONTROL — the real pre-fix steps must be REFUSED ─────
@@ -42,7 +48,7 @@ trap 'rm -rf "$work"' EXIT
 if git cat-file -e "${FIXCOMMIT}^:openspec/litmus-tests/litmus-capability-routing-shape.yaml" 2>/dev/null; then
     mkdir -p "$work/neg"
     git show "${FIXCOMMIT}^:openspec/litmus-tests/litmus-capability-routing-shape.yaml" > "$work/neg/x.yaml"
-    if out="$(bash "$SUT" "$work/neg" 2>&1)"; then
+    if out="$(sut "$work/neg" 2>&1)"; then
         bad "arm1 pre-fix steps ACCEPTED — the guard has no teeth: $out"
     else
         case "$out" in
@@ -60,13 +66,13 @@ fi
 if git cat-file -e "${FIXCOMMIT}:openspec/litmus-tests/litmus-capability-routing-shape.yaml" 2>/dev/null; then
     mkdir -p "$work/pos"
     git show "${FIXCOMMIT}:openspec/litmus-tests/litmus-capability-routing-shape.yaml" > "$work/pos/x.yaml"
-    bash "$SUT" "$work/pos" >/dev/null 2>&1 \
+    sut "$work/pos" >/dev/null 2>&1 \
         && ok "arm2 post-fix forms accepted" \
         || bad "arm2 post-fix forms REFUSED — the guard rejects the fix"
 fi
 
 # ── arm 3: the committed corpus is clean, and that is the PRE-FIX result ─────
-if out="$(bash "$SUT" 2>&1)"; then
+if out="$(sut 2>&1)"; then
     ok "arm3 committed corpus clean ($out) — stated as the guard's pre-fix result, not as evidence"
 else
     bad "arm3 committed corpus now has violations: $out"
@@ -79,14 +85,14 @@ fi
 mkdir -p "$work/idiom"
 printf 'steps:\n  - command: "out=$(x); printf %%s \\"$out\\" | grep -c \\"^packet$(printf \x27\\\\t\x27)\\""\n' \
     > "$work/idiom/x.yaml"
-bash "$SUT" "$work/idiom" >/dev/null 2>&1 \
+sut "$work/idiom" >/dev/null 2>&1 \
     && ok "arm4 \$(printf '\\t') idiom accepted" \
     || bad "arm4 the CORRECT idiom was refused"
 
 # ── arm 5: -F interprets no regex, so no escape in it can be undefined ───────
 mkdir -p "$work/fixed"
 printf 'steps:\n  - command: "grep -qF \x27Servicing\\\\tRebootPending\x27 f.ps1"\n' > "$work/fixed/x.yaml"
-bash "$SUT" "$work/fixed" >/dev/null 2>&1 \
+sut "$work/fixed" >/dev/null 2>&1 \
     && ok "arm5 grep -F pattern accepted (fixed strings interpret no regex)" \
     || bad "arm5 a -F fixed-string pattern was refused"
 
@@ -95,7 +101,7 @@ bash "$SUT" "$work/fixed" >/dev/null 2>&1 \
 # Two committed litmus files use `grep -P '[^\x00-\x7F]'` and must stay green.
 mkdir -p "$work/pcre"
 printf 'steps:\n  - command: "grep -qP \x27[^\\\\x00-\\\\x7F]\x27 scripts/install-windows.ps1"\n' > "$work/pcre/x.yaml"
-bash "$SUT" "$work/pcre" >/dev/null 2>&1 \
+sut "$work/pcre" >/dev/null 2>&1 \
     && ok "arm6 grep -P pattern accepted (PCRE defines these escapes)" \
     || bad "arm6 a -P PCRE pattern was refused"
 
@@ -106,14 +112,14 @@ bash "$SUT" "$work/pcre" >/dev/null 2>&1 \
 # have been a false-positive generator on working code.
 mkdir -p "$work/gnuext"
 printf 'steps:\n  - command: "grep -qE \x27^\\\\s+-\\\\s*name:\x27 .github/workflows/x.yml"\n' > "$work/gnuext/x.yaml"
-bash "$SUT" "$work/gnuext" >/dev/null 2>&1 \
+sut "$work/gnuext" >/dev/null 2>&1 \
     && ok "arm7 \\s and \\w accepted (GNU extensions, measured defined)" \
     || bad "arm7 GNU extensions \\s/\\w were refused — 10 committed lines would go red"
 
 # ── arm 8: a fresh \t violation IS caught (the guard keeps working) ──────────
 mkdir -p "$work/fresh"
 printf 'steps:\n  - command: "printf %%s \\"$out\\" | grep -qE \x27^hardware\\\\tloci=\x27"\n' > "$work/fresh/x.yaml"
-bash "$SUT" "$work/fresh" >/dev/null 2>&1 \
+sut "$work/fresh" >/dev/null 2>&1 \
     && bad "arm8 a fresh \\t violation was ACCEPTED" \
     || ok "arm8 a fresh \\t violation is refused"
 

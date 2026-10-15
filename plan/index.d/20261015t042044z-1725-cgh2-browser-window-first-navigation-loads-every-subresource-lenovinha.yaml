@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's direction (macuahuitl, 2026-10-15), from the third 1637-5765 7d local-dist run.
+packets:
+  - packet_id: a-browser-window-first-navigation-loads-every-subresource-not-only-the-document-through-the-network-change-race
+    order: 1725-cgh2
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [host-browser-mcp, browser, chromium, windows, cdp, local-web-preview, flutter]
+    estimated_hours: 6
+    related: [1656-iktu, 1637-5765, 1651-5t7n]
+    owned_files:
+      - crates/tillandsias-browser-mcp/src/window_cdp.rs
+      - crates/tillandsias-headless/src/browser_open.rs
+      - crates/tillandsias-podman/src/lib.rs
+    title: |
+      A browser.open window's FIRST navigation can lose its subresources to net::ERR_NETWORK_CHANGED. Chromium aborts in-flight requests while the freshly started window's network settles. window_cdp::navigate retries only the document (1656-iktu), so a multi-asset page opens half-loaded with no error to the agent: a Flutter app never boots, and any SPA misses its bundle. Single-HTML pages never show it.
+    context: |
+      Measured in the third 1637-5765 7d run (lenovinha, 2026-10-15, local-dist 6185cccbd).
+      browser.open on https://flutter.macron.dev.localhost:18443/ loaded index.html (200). flutter_bootstrap.js then failed with net::ERR_NETWORK_CHANGED (dev window network tail). The page held 1 script and 0 flutter-views, and its title stayed the index.html title for 40 reads over ~2 min.
+      The SAME window, re-navigated once settled, booted the app: read_url showed the MaterialApp title (HOT-RELOAD-BEFORE) within 5 s. An earlier manual window loaded first time by luck.
+      The window container starts after the forwarder's `podman network connect`, so the window's own netns is not reconfigured afterwards.
+      Hypothesis, unproven: the window's eth0 IPv6 link-local is tentative during DAD (~1-2 s) and its transition to valid fires Chromium's network-change notifier. The window needs no IPv6: it sits on an --internal network, and its resolver rules map project hosts to `router`.
+    exit_criteria:
+      - 'GUARD FIRST, independent of the cause (b): browser.open holds the page on about:blank until the window network is quiet, observed through CDP, before the first navigation; a fixture page with N subresources loads COMPLETELY on its first open, every time, in a test or recorded run; red today'
+      - 'MEASURE (a): with IPv6 disabled in the window container, the network-change event at start disappears or not; recorded either way. If it does, ContainerSpec gains sysctl support and the window spec sets net.ipv6.conf.all.disable_ipv6=1'
+      - '(c) reload-once-after-a-network-change-failure only if (b) cannot be made reliable, with the reason recorded'
+      - 'the 1637-5765 cold-start arm 7d passes every step on a fresh local-dist run (read_url shows HOT-RELOAD-BEFORE, then HOT-RELOAD-AFTER after r)'
+    unscoreable: "unpinnable-until-the-guard-exists: the multi-subresource first-open fixture (browser_open first_open_loads_every_subresource) does not exist yet; written red first with the guard"
+    next_action: >
+      Reproduce the network-change event at window start through CDP (Network.loadingFailed with ERR_NETWORK_CHANGED, timed against container start). Build the about:blank quiet-period guard in window_cdp with a red multi-subresource fixture, then measure disable_ipv6.
+    provenance: |
+      Filed by lenovinha-silverblue at the coordinator's direction, 2026-10-15.
+    events:
+      - type: filed
+        ts: "2026-10-15T04:20:44Z"
+        host: lenovinha
+        summary: |-
+          A browser window's first navigation must load every subresource through the ERR_NETWORK_CHANGED race at window start.

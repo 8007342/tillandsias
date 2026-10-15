@@ -1,0 +1,226 @@
+#!/usr/bin/env python3
+# @trace spec:local-web-preview, order:1637-5765
+"""flutter: run Flutter for this forge's project in the shared toolchain image.
+
+The forge image carries no Flutter SDK (2.5 GB unpacked). This command asks the
+host, over the lane's own MCP socket, to prepare the shared `tillandsias-flutter`
+image once, then runs `flutter <args>` there against this project's files,
+streaming the output back. Interactive commands work: `flutter run -d
+web-server` takes `r`/`R` for hot reload and Ctrl-C to stop.
+
+Stdin reaches flutter only in an interactive session: a terminal, or `flutter
+run` (which reads r/R/q). Every other command gets an empty stdin, so a script
+piped into a shell is never swallowed by a `flutter` line inside it (1637-5765).
+
+Exit codes: flutter's own, or 69 when the host cannot run it (no lane socket,
+the image failed to build, the project is not attached).
+"""
+import base64
+import json
+import os
+import select
+import signal
+import socket
+import sys
+import time
+
+SOCKET = os.environ.get("TILLANDSIAS_CONTROL_SOCKET", "/run/host/tillandsias-mcp/mcp.sock")
+PROJECT = os.environ.get("TILLANDSIAS_PROJECT", "")
+UNAVAILABLE = 69
+
+
+def die(msg):
+    sys.stderr.write(f"flutter (tillandsias): {msg}\n")
+    sys.exit(UNAVAILABLE)
+
+
+def connect():
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        s.connect(SOCKET)
+    except OSError:
+        die(
+            f"the host toolchain service is not reachable at {SOCKET}. "
+            "Flutter runs in a shared sibling image that the Tillandsias tray "
+            "provides to this forge; launch the forge from the tray."
+        )
+    return s
+
+
+def call(method, params, req_id=1):
+    """One request/response exchange on a fresh connection."""
+    s = connect()
+    with s:
+        s.sendall((json.dumps({"jsonrpc": "2.0", "id": req_id, "method": method, "params": params}) + "\n").encode())
+        buf = b""
+        while b"\n" not in buf:
+            chunk = s.recv(65536)
+            if not chunk:
+                die("the host closed the connection without answering")
+            buf += chunk
+    return json.loads(buf.split(b"\n", 1)[0])
+
+
+def prepare():
+    """Poll toolchain_prepare until the image is ready, showing progress."""
+    shown = False
+    tty = sys.stderr.isatty()
+    while True:
+        resp = call("tools/call", {"name": "toolchain_prepare", "arguments": {"toolchain": "flutter"}})
+        if "error" in resp:
+            die(resp["error"].get("message", "toolchain_prepare failed"))
+        # A CallToolResult (1696-gz2y): the payload is structuredContent.
+        result = resp.get("result", {})
+        state = result.get("structuredContent", result)
+        if state.get("state") == "ready":
+            if shown:
+                sys.stderr.write(("\r" if tty else "") + "Flutter is ready." + (" " * 40) + "\n")
+            return
+        if state.get("state") == "failed":
+            if shown:
+                sys.stderr.write("\n")
+            die(state.get("reason", "preparing Flutter failed"))
+        line = "Preparing Flutter (one time, a few minutes)"
+        if "step" in state and "total" in state:
+            line += f": step {state['step']}/{state['total']}"
+        line += f", {state.get('elapsed_s', 0)} s"
+        if tty:
+            sys.stderr.write("\r" + line + "   ")
+        elif not shown or int(state.get("elapsed_s", 0)) % 30 < 3:
+            sys.stderr.write(line + "\n")
+        sys.stderr.flush()
+        shown = True
+        time.sleep(3)
+
+
+def project_cwd():
+    # TILLANDSIAS_PROJECT_ROOT is a test seam; in a forge the root is fixed.
+    root = os.environ.get("TILLANDSIAS_PROJECT_ROOT") or (f"/home/forge/src/{PROJECT}" if PROJECT else "")
+    if not root or not os.path.isdir(root):
+        die("no project is attached to this forge (TILLANDSIAS_PROJECT is unset or missing)")
+    here = os.path.realpath(os.getcwd())
+    root = os.path.realpath(root)
+    if here != root and not here.startswith(root + "/"):
+        die(f"run flutter inside the project, under {root}")
+    return os.path.relpath(here, root) if here != root else ""
+
+
+def reads_stdin(argv, tty):
+    """Whether this session forwards stdin: a terminal, or `flutter run`."""
+    if tty:
+        return True
+    command = next((a for a in argv if not a.startswith("-")), "")
+    return command == "run"
+
+
+def run(argv):
+    tty = sys.stdin.isatty() and sys.stdout.isatty()
+    rows, cols = 24, 80
+    if tty:
+        try:
+            cols, rows = os.get_terminal_size(sys.stdout.fileno())
+        except OSError:
+            pass
+    s = connect()
+    params = {"toolchain": "flutter", "argv": argv, "cwd": project_cwd(), "tty": tty, "rows": rows, "cols": cols}
+    s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tillandsias/exec", "params": params}) + "\n").encode())
+
+    buf = b""
+
+    def frames():
+        nonlocal buf
+        while b"\n" in buf:
+            line, buf = buf.split(b"\n", 1)
+            if line.strip():
+                yield json.loads(line)
+
+    # The first line is the JSON-RPC answer: an error, or the session result.
+    while b"\n" not in buf:
+        chunk = s.recv(65536)
+        if not chunk:
+            die("the host closed the connection before the session started")
+        buf += chunk
+    first = next(frames())
+    if "error" in first:
+        die(first["error"].get("message", "the host refused the session"))
+
+    def send(frame):
+        try:
+            s.sendall((json.dumps(frame) + "\n").encode())
+        except OSError:
+            pass
+
+    saved = None
+    if tty:
+        import termios
+        import tty as ttymod
+
+        saved = termios.tcgetattr(sys.stdin.fileno())
+        ttymod.setraw(sys.stdin.fileno())
+
+        def on_winch(*_):
+            try:
+                c, r = os.get_terminal_size(sys.stdout.fileno())
+                send({"winch": [r, c]})
+            except OSError:
+                pass
+
+        signal.signal(signal.SIGWINCH, on_winch)
+    else:
+        # Without a terminal, signals travel as frames to the container.
+        for name in ("INT", "TERM", "HUP"):
+            signal.signal(getattr(signal, f"SIG{name}"), lambda *_ , n=name: send({"sig": n}))
+
+    code = 1
+    stdin_open = reads_stdin(argv, tty)
+    if not stdin_open:
+        # A one-shot command: stdin stays unread, for whoever reads it next.
+        send({"eof": True})
+    out = {1: sys.stdout.buffer, 2: sys.stderr.buffer}
+    try:
+        while True:
+            for frame in frames():
+                if "out" in frame:
+                    stream = out.get(frame.get("fd", 1), sys.stdout.buffer)
+                    stream.write(base64.b64decode(frame["out"]))
+                    stream.flush()
+                elif "notice" in frame:
+                    # Host notices go to stderr, so stdout stays flutter's.
+                    sys.stderr.write(("\r\n" if saved is not None else "") + frame["notice"] + ("\r\n" if saved is not None else "\n"))
+                    sys.stderr.flush()
+                elif "exit" in frame:
+                    code = int(frame["exit"])
+                    return code
+            watch = [s] + ([sys.stdin] if stdin_open else [])
+            try:
+                ready, _, _ = select.select(watch, [], [])
+            except InterruptedError:
+                continue
+            if s in ready:
+                chunk = s.recv(65536)
+                if not chunk:
+                    return code
+                buf += chunk
+            if stdin_open and sys.stdin in ready:
+                data = os.read(sys.stdin.fileno(), 65536)
+                if data:
+                    send({"in": base64.b64encode(data).decode()})
+                else:
+                    stdin_open = False
+                    send({"eof": True})
+    finally:
+        if saved is not None:
+            import termios
+
+            termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, saved)
+        s.close()
+
+
+def main():
+    argv = sys.argv[1:]
+    prepare()
+    sys.exit(run(argv))
+
+
+if __name__ == "__main__":
+    main()

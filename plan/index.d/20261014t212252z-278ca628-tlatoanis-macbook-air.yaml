@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: claim-ledger-node-never-reclaims-an-orphaned-lease-on-darwin-because-stat-c-has-no-bsd-fallback
+    field: status
+    value: completed
+    ts: "2026-10-14T21:22:52Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: claim-ledger-node-never-reclaims-an-orphaned-lease-on-darwin-because-stat-c-has-no-bsd-fallback
+    event:
+      type: completed
+      ts: "2026-10-14T21:22:52Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: landed as land 234 (b9a440ddb, 2026-10-10), never closed. Re-run on trunk 2c00a83bd, darwin: bash scripts/test-ledger-node-claim-resolution.sh says ok:ledger-node-claim-resolution-fixture:10 (litmus:ledger-node-claim-shape expected_behavior). Arm 9 red on the pre-fix script and arm 10 the fresh-orphan control: receipts in plan/issues/evidence/1553-kvmf-darwin-20261008/

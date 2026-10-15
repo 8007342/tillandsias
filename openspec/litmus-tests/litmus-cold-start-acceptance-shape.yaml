@@ -64,3 +64,24 @@ critical_path:
     command: "set -u; T=$(mktemp -d \"${TMPDIR:-/tmp}/cold-start-meta.XXXXXX\"); chk() { grep -q -F 'org.freedesktop.DBus.Properties.Get' \"$1\" || return 1; grep -q -E 'GetSecret\\\"|secret-tool' \"$1\" && return 1; grep -q -w jq \"$1\" && return 1; return 0; }; cp scripts/lua/cold-start-acceptance.lua \"$T/f\"; pre=$(sha256sum \"$T/f\"); chk \"$T/f\" && g1=green || g1=red; printf '%s\\n' 'local x = { \"gdbus\", \"--method\", \"org.freedesktop.Secret.Service.GetSecret\" }' 'local y = \"jq\"' >> \"$T/f\"; chk \"$T/f\" && red=green || red=red; cp scripts/lua/cold-start-acceptance.lua \"$T/f\"; post=$(sha256sum \"$T/f\"); chk \"$T/f\" && g2=green || g2=red; rm -rf \"$T\"; [ \"$g1\" = green ] && [ \"$red\" = red ] && [ \"$g2\" = green ] && [ \"${pre%% *}\" = \"${post%% *}\" ] && echo \"ok: metadata-only keychain read; no jq; seeded regression red; restored ${post%% *} green\" || { echo \"FAIL: g1=$g1 seeded=$red g2=$g2\"; exit 1; }"
     timeout_ms: 8000
     expected_behavior: "ok: metadata-only keychain read"
+
+  - step: "1696-gz2y: tool replies are read as MCP CallToolResults (structuredContent, then content[1].text, then the bare result), never as bare result fields only"
+    # Since 1696-gz2y every tools/call success is a CallToolResult. A driver
+    # reading only bare result.url failed every release carrying it with a
+    # false publish-auto-no-url. Seeded regression: a bare msg.result.url read.
+    command: "f=scripts/lua/cold-start-acceptance.lua; bare=$(grep -c -E 'msg\\.result\\.url|\\]\\.result\\.(runtime|state|last_failure)' \"$f\"); grep -q -F 'r.structuredContent' \"$f\" && grep -q -F 'r.content[1].text' \"$f\" && [ \"$bare\" -eq 0 ] && echo 'ok: CallToolResult reads' || { echo \"FAIL: bare result reads=$bare\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: CallToolResult reads"
+
+  - step: "1637-5765: the verdict always names its regime, so a local-dist PRE-CUT check can never read as a release PASS"
+    # --local-dist installs a local musl build; its verdict ends
+    # regime=local-dist:<commit>. A release run ends regime=release. A refused
+    # verdict carries it too, so a pre-cut FAIL never reads as a release FAIL.
+    command: "f=scripts/lua/cold-start-acceptance.lua; grep -q -F '\":regime=\" .. REGIME, 0)' \"$f\" && grep -q -F 'REGIME = \"local-dist:\" .. commit' \"$f\" && grep -q -F 'local REGIME = \"release\"' \"$f\" && grep -q -F '\"refused:cold-start-acceptance:\" .. what .. \":regime=\" .. REGIME' \"$f\" && echo 'ok: verdict names its regime' || { echo 'FAIL: the verdict does not carry its regime'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: verdict names its regime"
+
+  - step: "1637-5765: arm 7d (Flutter hot reload) stays opt-in"
+    command: "f=scripts/lua/cold-start-acceptance.lua; grep -q -F 'if flutter_hr then' \"$f\" && grep -q -F '\"--flutter-hot-reload\" then flutter_hr = true' \"$f\" && echo 'ok: opt-in 7d' || { echo 'FAIL: an unconditional 7d'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: opt-in 7d"

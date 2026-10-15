@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-14, at the coordinator's request
+# (macuahuitl: "a forge may reach its OWN project's deployed public domain
+# (read-only GET and HEAD) ... scope it to domains the project declares").
+packets:
+  - packet_id: a-forge-may-read-its-own-projects-declared-deployed-domain-through-the-egress-proxy-so-an-agent-can-measure-push-to-live-and-verify-its-deploy
+    order: 1715-xp6x
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [proxy, egress, cloudflare, wrangler, deploy, forge, security, macron-dev]
+    estimated_hours: 6
+    related: [1703-j7vf, 1707-g633, 1702-bpnx]
+    title: |
+      The forge egress proxy refuses a project's own deployed public domain, so an agent can't load the site it just pushed: it can't measure push → live or check that the deploy serves what it built. Admit read-only GET and HEAD to exactly the domains the project itself declares (its wrangler routes and custom_domain entries), for that project's forge only. This is never a general opening.
+    context: |
+      MEASURED 2026-10-14 by the agent in the macron.dev forge on tlatoanis-macbook-air (v56.10.14.1): the proxy resets CONNECT to macron.dev, so after each push to main the agent read deploy completion from GitHub's check runs instead of loading the site. Its measured push → check-complete times: main 12m37s, 1m31s, 59s and 6m46s; branch builds failed. Under the operator's 2026-10-14 ruling, forge agents keep macron.dev up to date and measure deploy times, so they need to see the live result.
+      Coordinator ruling (macuahuitl, 2026-10-14): a forge may reach its OWN project's deployed public domain, read-only (GET and HEAD), scoped to domains the project declares (wrangler routes / custom_domain), never a general opening.
+      This is a narrow, declared case of 1703-j7vf's per-project egress design (third-party APIs and assets in preview). Build it so 1703's allowlist can absorb it rather than become a second mechanism.
+      Open questions the implementer must answer, not assume:
+      - images/proxy/allowlist.txt and squid.conf are image-wide today. Where does a per-forge (per-lane) rule live, and how does the proxy attribute a request to a lane?
+      - Under CONNECT the proxy sees only host:port. Enforcing read-only means either the enclave CA terminates TLS for these domains, or the method rule is recorded as unenforceable for HTTPS and the scope is host-only. Say which, and record it in the spec.
+      - Which wrangler fields count: routes[].pattern / custom_domain, and `name` → <name>.<account>.workers.dev? Read them from the project's own checkout at forge start, so a change needs a forge restart. Declarations are untrusted input, so refuse wildcards, IP literals, and any domain another project declares.
+    exit_criteria:
+      - 'in a forge for a project whose wrangler config declares custom_domain macron.dev, `curl -sI https://macron.dev/` returns the deployed site''s status line; red on v56.10.14.1 (the proxy resets the CONNECT)'
+      - 'NEGATIVE CONTROLS, all still refused: from the same forge, a domain the project does not declare; from a DIFFERENT project''s forge, macron.dev; a declaration that is a wildcard (*.example.com) or an IP literal'
+      - 'the method rule is enforced (a POST to the declared domain is refused) or the spec records that HTTPS tunnels are host-scoped only, with the reason; a test pins whichever is chosen'
+      - 'a project that declares no domain gets no new egress: the proxy config generated for its forge is byte-identical to today''s'
+      - 'the macron.dev forge agent can record push → live, from the push to the first GET that serves the new build, and publishes it to /deploys/log.jsonl'
+    unscoreable: "unpinnable-until-the-guard-exists: the declared-domain arm and the three negative controls are written with the proxy rule, and fail today because no per-project rule exists"
+    next_action: >
+      Read how the forge proxy attributes a request to a lane (images/proxy/squid.conf, the forge launch args) and whether the enclave CA already terminates TLS anywhere. Then write the red arms: the declared-domain GET, and the three negative controls.
+    events:
+      - type: filed
+        ts: "2026-10-14T21:08:26Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Forge read-only egress to its own declared deployed domain (wrangler routes/custom_domain), so agents can measure push → live; coordinator-ruled, scoped, related to 1703-j7vf. Found by the macron.dev forge in the v56.10.14.1 smoke.

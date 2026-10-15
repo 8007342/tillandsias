@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: browser-open-runs-a-headless-chromium-when-the-host-has-no-display-so-agents-drive-it-over-the-same-cdp-socket-on-macos-and-display-less-linux
+    event:
+      type: progress
+      ts: "2026-10-14T21:59:50Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        Implemented on work/1712-3fsw @ a3ec8b1ac (commit 2633c12fa, stacked on work/1713-1dnx and merged with trunk; preflight refused=0 could-not-run=0). browser.open takes headless (default: visible when BrowserContainers::has_display, else headless); the reply, list_windows and get_window carry headless; headless is Chromium --headless=new with no display/GPU mounts and the same confinement. A device that defaults to WebKit falls back to Chromium with a notice; explicit webkit + headless, headless:false without a display, and a non-bool are refused by name. Unit arms (read through result.content): display-less → headless iphone 12 pro max 428x926; NEGATIVE CONTROL: a display host with no flag is visible, as before; headless:true on a display host; refusals start nothing; tools/list describes it. Mutation (default forced to visible): 2 arms red. Headless window-spec confinement test. darwin: browser-mcp 93+25+6, headless tray,listen-vsock 987/0, clippy clean on 4 feature sets plus browser-mcp. LEFT: the live arms (macOS VM forge innerWidth=428, no new listener, no --remote-debugging-port, cross-lane WINDOW_NOT_FOUND headless; Linux without Wayland) need a release containing 1713 and 1712.
