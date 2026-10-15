@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-linux-curl-installer-resets-soft-and-keeps-the-users-sign-ins
+    order: 1738-wqmt
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: S
+    pickup_role: linux
+    capability_tags: [installer, reset, vault, end-user]
+    related: [1286-4437, 1437-evzi, 1371-a7w2]
+    depends_on: []
+    title: |
+      The Linux curl|bash installer still ends with `tillandsias --reset-state --debug`, the FULL reset that wipes the host-held Vault credentials, so every reinstall forces a new sign-in. The operator ruled installers SOFT-only "forever" on 2026-10-08, and the Windows and macOS installers already comply
+    context: |
+      Measured by yoga, 2026-10-15, installing v56.10.14.1 for the operator's challenge (171 s, rc=0). The installer's last step is `"$INSTALL_PATH" --reset-state --debug` (scripts/install.sh, the 1286-4437 block, 2026-09-20). Keeping the sign-ins requires knowing TILLANDSIAS_DESTRUCTIVE_RESET_OK=0, which the one-liner never mentions.
+      Operator ruling 2026-10-08 (memory: installer-is-for-end-users-no-prompts): "SOFT reset is the default only and forever. A power user wanting to do a hard reset should be capable of figuring out where to place a flag ... we do not need to print any power user messages during install, at all."
+      That later, explicit ruling supersedes 1286-4437's installer behaviour. A reset is still the repair (reset-is-the-baseline), but a SOFT one: containers and images are rebuilt, the Vault and sign-ins are kept.
+      Also drop --debug from the installer's call: it prints power-user output into a pretty installer.
+    exit_criteria:
+      - "a curl|bash install on a Linux host that holds GitHub and Vault credentials ends with the sign-ins intact and no env var needed (red today: they are wiped unless TILLANDSIAS_DESTRUCTIVE_RESET_OK=0)"
+      - "the installer runs the soft reset (--reset-guest or its Linux equivalent) and prints no debug or power-user lines; a hard reset is reachable only through an explicit CLI flag"
+      - "the install litmus from 1286-4437 asserts the soft behaviour, matching the Windows and macOS installers"
+    unscoreable: "unpinnable-until-the-guard-exists: the credentials-survive install arm is the deliverable"
+    next_action: >
+      Find the Linux soft reset (yoga used --reset-guest; confirm that on Linux it keeps the Vault store). Switch install.sh to it without --debug, and update 1286-4437's install litmus to assert that the sign-ins survive.
+    provenance: |
+      Filed by macuahuitl-fedora, 2026-10-15T05:06:43Z, from yoga's challenge run.
+    events:
+      - type: filed
+        ts: "2026-10-15T05:06:43Z"
+        host: macuahuitl
+        summary: |-
+          The Linux installer violates the soft-only ruling and wipes sign-ins.
