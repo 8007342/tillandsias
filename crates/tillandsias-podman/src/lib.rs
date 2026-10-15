@@ -14,6 +14,7 @@ pub mod launch;
 pub mod peer_table;
 pub mod policy;
 pub mod runtime;
+pub mod terminal_handoff;
 
 use std::env;
 use std::fs;
