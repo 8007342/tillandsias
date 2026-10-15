@@ -75,8 +75,9 @@ critical_path:
 
   - step: "1637-5765: the verdict always names its regime, so a local-dist PRE-CUT check can never read as a release PASS"
     # --local-dist installs a local musl build; its verdict ends
-    # regime=local-dist:<commit>. A release run ends regime=release.
-    command: "f=scripts/lua/cold-start-acceptance.lua; grep -q -F '\":regime=\" .. REGIME, 0)' \"$f\" && grep -q -F 'REGIME = \"local-dist:\" .. commit' \"$f\" && grep -q -F 'local REGIME = \"release\"' \"$f\" && echo 'ok: verdict names its regime' || { echo 'FAIL: the verdict does not carry its regime'; exit 1; }"
+    # regime=local-dist:<commit>. A release run ends regime=release. A refused
+    # verdict carries it too, so a pre-cut FAIL never reads as a release FAIL.
+    command: "f=scripts/lua/cold-start-acceptance.lua; grep -q -F '\":regime=\" .. REGIME, 0)' \"$f\" && grep -q -F 'REGIME = \"local-dist:\" .. commit' \"$f\" && grep -q -F 'local REGIME = \"release\"' \"$f\" && grep -q -F '\"refused:cold-start-acceptance:\" .. what .. \":regime=\" .. REGIME' \"$f\" && echo 'ok: verdict names its regime' || { echo 'FAIL: the verdict does not carry its regime'; exit 1; }"
     timeout_ms: 5000
     expected_behavior: "ok: verdict names its regime"
 

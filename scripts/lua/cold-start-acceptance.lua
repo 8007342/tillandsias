@@ -139,14 +139,14 @@ end
 local function must(r, what)
     if r.code ~= 0 then
         verdict.emit("refused:cold-start-acceptance:" .. what .. " rc=" .. tostring(r.code) ..
-            " " .. text.trim((r.stderr or "") .. (r.stdout or "")):sub(1, 400), 1)
+            " " .. text.trim((r.stderr or "") .. (r.stdout or "")):sub(1, 400) .. ":regime=" .. REGIME, 1)
     end
     return r
 end
 
 local REPO = text.trim(must(run({ "git", "rev-parse", "--show-toplevel" }), "repo-root").stdout)
 local XRD = env.get("XDG_RUNTIME_DIR") or ""
-if XRD == "" then verdict.emit("refused:cold-start-acceptance:no-XDG_RUNTIME_DIR", 1) end
+if XRD == "" then verdict.emit("refused:cold-start-acceptance:no-XDG_RUNTIME_DIR:regime=" .. REGIME, 1) end
 local RUN = tag .. "-" .. time.iso_utc():gsub("[^%dTZ]", "")
 local W = REPO .. "/target/work/cold-start-acceptance/" .. RUN
 local OUT = W .. "/evidence"
@@ -229,7 +229,7 @@ end
 local function fail(what)
     log_line("FAIL: " .. what)
     if not keep then down() end
-    verdict.emit("refused:cold-start-acceptance:" .. what, 1)
+    verdict.emit("refused:cold-start-acceptance:" .. what .. ":regime=" .. REGIME, 1)
 end
 
 -- ── 0. host keychain before ─────────────────────────────────────────────────
@@ -384,7 +384,7 @@ log_line("project: forge holds " .. forge_head .. " (wanted " .. project_ref .. 
 if project_ref ~= "latest" and forge_head:sub(1, #project_ref) ~= project_ref then
     log_line("BLOCKED: project-ref-mismatch")
     if not keep then down() end
-    verdict.emit("blocked:cold-start-acceptance:project-ref-mismatch:wanted=" .. project_ref .. ":forge=" .. forge_head, 2)
+    verdict.emit("blocked:cold-start-acceptance:project-ref-mismatch:wanted=" .. project_ref .. ":forge=" .. forge_head .. ":regime=" .. REGIME, 2)
 end
 
 -- ── 7. MCP from inside the forge, then a host-side fetch ────────────────────
@@ -452,7 +452,7 @@ if expect_prefix then
     fs.write(OUT .. "/keychain-after.txt", keychain_meta())
     if fs.read(OUT .. "/keychain-after.txt") ~= KEY_BEFORE then fail("host-keychain-metadata-changed") end
     if not keep then down() end
-    verdict.emit("ok:cold-start-acceptance:" .. tag .. ":prefix-failure:" .. reason, 0)
+    verdict.emit("ok:cold-start-acceptance:" .. tag .. ":prefix-failure:" .. reason .. ":regime=" .. REGIME, 0)
 end
 
 if not url then fail("publish-auto-no-url:" .. raw:sub(1, 300)) end
@@ -580,9 +580,9 @@ end
 -- Opt-in (--flutter-hot-reload). The agent's own path, from inside the forge:
 --   1. `flutter create` + `flutter pub add flame`: the forge's `flutter` shim
 --      prepares the shared image on first use and runs in the sibling;
---   2. `flutter run -d web-server` under a pty (`script`), keystrokes fed
+--   2. `flutter run -d web-server`, keystrokes piped in (no pty needed)
 --      through a file; the host routes flutter.<project> and the shim prints
---      "Dev server routed: open <url>";
+--      "Dev server routed: open <https url>";
 --   3. ONE persistent MCP session (a window belongs to its connection):
 --      browser.open on the route, then browser.read_url until the page title
 --      is the BEFORE marker;
@@ -603,9 +603,12 @@ podman exec -i "$f" bash -l -s <<'FORGE'
 set -e
 cd /home/forge/src/macron.dev
 rm -rf hot-reload-probe
-flutter create --platforms web --project-name hot_reload_probe hot-reload-probe 2>&1 | tail -4
+flutter create --platforms web --project-name hot_reload_probe hot-reload-probe > /tmp/flutter-create.log 2>&1
+echo "flutter-create-rc=$?"
 cd hot-reload-probe
-flutter pub add flame 2>&1 | tail -2
+flutter pub add flame > /tmp/flutter-pub.log 2>&1
+echo "pub-add-rc=$?"
+echo "flame in pubspec: $(grep -c '^  flame:' pubspec.yaml)"
 sed -i "s/title: 'Flutter Demo'/title: ']] .. BEFORE .. [['/" lib/main.dart
 echo "markers in main.dart: $(grep -c ']] .. BEFORE .. [[' lib/main.dart)"
 FORGE
@@ -613,15 +616,21 @@ echo "create-rc=$?"
 ]], { timeout_ms = 3600000 })
     fs.write(OUT .. "/flutter-create.txt", mk.stdout or "")
     log_line("7d flutter create + pub add flame: " .. text.trim(mk.stdout or ""):gsub("\n", " | "):sub(1, 400))
-    if not text.contains(mk.stdout or "", "create-rc=0") or text.contains(mk.stdout or "", "markers in main.dart: 0") then
-        fail("flutter-create")
+    -- The script is piped into the forge shell, as an agent pipes one: a
+    -- `flutter` line that swallowed stdin would end it early with rc 0, so
+    -- each line after it must be SEEN, never inferred from the exit code.
+    local co = mk.stdout or ""
+    for _, want in ipairs({ "flutter-create-rc=0", "pub-add-rc=0", "flame in pubspec: 1", "markers in main.dart: 1", "create-rc=0" }) do
+        if not text.contains(co, want) then fail("flutter-create:missing '" .. want .. "'") end
     end
 
-    -- The dev server under a pty; keystrokes are appended to /tmp/flutter-keys.
+    -- The dev server; keystrokes are appended to /tmp/flutter-keys. No pty:
+    -- `flutter run` acts on r/q from a pipe (measured 2026-10-14), and the
+    -- shim forwards stdin for `run`, so this is also the piped-agent path.
     must(inside([[
 f=$(podman ps --format '{{.Names}}' --filter 'name=macron.*-forge')
 podman exec "$f" sh -c ': > /tmp/flutter-keys; : > /tmp/flutter-run.log'
-podman exec -d "$f" bash -lc 'cd ]] .. APP .. [[ && tail -f /tmp/flutter-keys | script -qfec "flutter run -d web-server" /tmp/flutter-run.log > /dev/null 2>&1'
+podman exec -d "$f" bash -lc 'cd ]] .. APP .. [[ && tail -f /tmp/flutter-keys | flutter run -d web-server > /tmp/flutter-run.log 2>&1'
 ]]), "flutter-run-start")
     local up = inside([[
 f=$(podman ps --format '{{.Names}}' --filter 'name=macron.*-forge')
@@ -635,6 +644,11 @@ podman exec "$f" sh -c 'tr -d "\r" < /tmp/flutter-run.log | grep -E "Dev server 
     fs.write(OUT .. "/flutter-run-up.txt", up.stdout or "")
     log_line("7d flutter run: " .. text.trim(up.stdout or ""):gsub("\n", " | "):sub(1, 400))
     if not text.contains(up.stdout or "", "Dev server routed") then fail("flutter-run-not-routed") end
+    -- The URL the shim tells the agent to open, exactly as printed.
+    local route = (up.stdout or ""):match("Dev server routed: open (%S+)")
+    if not route or not route:match("^https://flutter%.macron%.dev%.localhost:%d+/$") then
+        fail("flutter-route-not-https:" .. tostring(route))
+    end
 
     -- One MCP session for the window's whole life: requests are appended to
     -- /tmp/mcp7d.req, replies collected in /tmp/mcp7d.resp.
@@ -663,7 +677,6 @@ grep '"id":]] .. next_id .. [[[,}]' /tmp/mcp7d.resp | tail -1
         return msg, line
     end
     -- Browser replies are CallToolResults, read through payload() as above.
-    local route = "http://flutter.macron.dev.localhost:8080/"
     local omsg, oline = call7d("browser.open", '{"url":"' .. route .. '"}', 240)
     fs.write(OUT .. "/flutter-browser-open.json", oline .. "\n")
     local opened = payload(omsg)
@@ -713,11 +726,16 @@ podman exec "$f" sh -c 'printf q >> /tmp/flutter-keys'
 for i in $(seq 1 30); do podman ps --format '{{.Names}}' | grep -q -- '-flutter-' || break; sleep 2; done
 echo "flutter siblings left: $(podman ps --format '{{.Names}}' | grep -c -- '-flutter-')"
 p=$(podman port tillandsias-router 8080/tcp | head -1); p=${p##*:}
-echo "route after q: $(curl -s -o /dev/null -w '%{http_code}' -H 'Host: flutter.macron.dev.localhost' http://127.0.0.1:$p/)"
+for i in $(seq 1 30); do
+  code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: flutter.macron.dev.localhost' "http://127.0.0.1:$p/")
+  [ "$code" = 404 ] && break; sleep 1
+done
+echo "route after q: $code"
 pkill -f 'tail -f /tmp/mcp7d.req' 2>/dev/null; true
 ]])
     log_line("7d stop: " .. text.trim(stop.stdout or ""):gsub("\n", " | "))
     if not text.contains(stop.stdout or "", "flutter siblings left: 0") then fail("flutter-sibling-outlived-q") end
+    if not text.contains(stop.stdout or "", "route after q: 404") then fail("flutter-route-outlived-q") end
     flutter_note = ":flutter=hot-reload-seen"
 end
 
