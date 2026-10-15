@@ -1189,7 +1189,7 @@ Run before launching a forge from this checkout. Run the executable guard
 instead of re-deriving the check in prose:
 
 ```bash
-scripts/check-forge-expert-base.sh
+tillandsias-plan script run scripts/lua/check-forge-expert-base.lua
 ```
 
 It prints exactly one line matching

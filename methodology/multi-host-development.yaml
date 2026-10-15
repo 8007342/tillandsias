@@ -1112,9 +1112,9 @@ multi_host_development:
       parked on becomes the base of every forge launched from it. Any workflow
       that moves the checkout MUST return it, and any workflow that launches a
       forge MUST verify the base can build what the forge will claim to
-      provide. This is enforced by scripts/check-forge-expert-base.sh, not by
+      provide. This is enforced by scripts/lua/check-forge-expert-base.lua, not by
       an agent noticing.
-    enforced_by: scripts/check-forge-expert-base.sh
+    enforced_by: scripts/lua/check-forge-expert-base.lua
     grammar: "^(ok:(expert-base-ready|no-plan-crate)|blocked:(expert-sources-absent|not-a-git-repo))$"
     why_source_presence_not_branch_name: >
       The check tests for the expert engine SOURCES, never for a branch name.

@@ -1,0 +1,30 @@
+Processing triggers for libc-bin (2.36-9+deb12u14) ...
+Processing triggers for ca-certificates (20250419~deb12u1) ...
+Updating certificates in /etc/ssl/certs...
+0 added, 0 removed; done.
+Running hooks in /etc/ca-certificates/update.d...
+done.
+--> c0b769f3041b
+STEP 9/13: USER forge
+--> 60052d84d026
+STEP 10/13: ENV FLUTTER_ROOT=/opt/flutter     PATH=/opt/flutter/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin     BOT=false     FLUTTER_SUPPRESS_ANALYTICS=true     PUB_CACHE=/home/forge/.pub-cache
+--> c272db2dda84
+STEP 11/13: RUN set -eu;     case "${TARGETARCH:-$(dpkg --print-architecture)}" in       amd64)         curl -fsSL "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz" -o /tmp/flutter.tar.xz;         echo "${FLUTTER_X64_SHA256}  /tmp/flutter.tar.xz" | sha256sum -c -;         tar -xJf /tmp/flutter.tar.xz -C /opt;         rm /tmp/flutter.tar.xz ;;       arm64)         git clone --depth 1 --branch "${FLUTTER_VERSION}" https://github.com/flutter/flutter.git /opt/flutter;         test "$(git -C /opt/flutter rev-parse HEAD)" = "${FLUTTER_RELEASE_HASH}" ;;       *) echo "unsupported architecture" >&2; exit 1 ;;     esac;     git config --global --add safe.directory /opt/flutter;     flutter config --no-analytics --no-cli-animations;     dart --disable-analytics;     flutter precache --web --no-android --no-ios --no-linux --no-windows --no-macos --no-fuchsia --no-universal;     flutter --version
+/tmp/flutter.tar.xz: OK
+Analytics reporting disabled.
+Setting "cli-animations" value to "false".
+
+You may need to restart any open editors for them to read new settings.
+Analytics reporting disabled. In order to enable it, run: dart --enable-analytics
+Flutter 3.47.7 • channel stable • https://github.com/flutter/flutter.git
+Framework • revision abaf9c5237 (6 days ago) • 2026-10-08 09:51:21 -0700
+Engine • hash d8a2d6c768c334d53e16277f837970ffa1e2de81 (revision deb287481e) (7 days ago) • 2026-10-07 17:09:12.000Z
+Tools • Dart 3.13.5 • DevTools 2.60.0
+--> 18e17dea9976
+STEP 12/13: WORKDIR /home/forge
+--> 824a461caad4
+STEP 13/13: CMD ["flutter", "--version"]
+COMMIT localhost/tillandsias-flutter:measure
+--> 55567bad1675
+Successfully tagged localhost/tillandsias-flutter:measure
+55567bad167508210e2e199c5c43fabcf4e5272924df21dea5429f7895fd3675

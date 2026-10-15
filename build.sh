@@ -4486,6 +4486,35 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Feature-gated tests passed: $_fg_ran test(s) executed under tray,listen-vsock"
 
+    # ORDER 1713-1dnx: the VM GUEST's feature set, exactly as
+    # build-macos-tray.sh and build-guest-binaries.sh build it (listen-vsock,
+    # WITHOUT tray). The pass above always has both features, so it could not
+    # see a service that only the tray compiled: v56.10.14.1 shipped every
+    # macOS VM forge an empty /run/host/tillandsias-mcp while every test here
+    # was green. Only the guest_feature_set_* tests run, so the marginal cost
+    # is one more compile of the crate's test binary (58 s cold on a MacBook
+    # Air), not a second full suite. Same zero-ran refusal as above.
+    _step "Running guest-feature-set tests (listen-vsock, no tray) — 1713-1dnx..."
+    _gf_transcript="$SCRIPT_DIR/target/test-transcript-guest-feature-set-gate.log"
+    _gf_rc=0
+    _run cargo test -p tillandsias-headless --bin tillandsias \
+        --features listen-vsock --no-fail-fast \
+        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- guest_feature_set_ --test-threads=1 2>&1 |
+        tee "$_gf_transcript" || _gf_rc="${PIPESTATUS[0]}"
+    if [[ $_gf_rc -ne 0 ]]; then
+        _error "the guest-feature-set tests failed (cargo rc=$_gf_rc) — transcript: $_gf_transcript"
+        _error "a VM guest built with --features listen-vsock lacks something its forges need"
+        exit 1
+    fi
+    _gf_ran="$(awk '/^test result:/ { p += $4; f += $6 } END { print p + f + 0 }' "$_gf_transcript" 2>/dev/null)"
+    case "$_gf_ran" in ''|*[!0-9]*) _gf_ran=0 ;; esac
+    if [[ "$_gf_ran" -eq 0 ]]; then
+        _error "the guest-feature-set pass executed ZERO tests (filter guest_feature_set_) — 1713-1dnx"
+        _error "  transcript: $_gf_transcript"
+        exit 1
+    fi
+    _info "Guest-feature-set tests passed: $_gf_ran test(s) executed under listen-vsock alone"
+
     # CRITERION 3 (1003-444f) IS SATISFIED BY --workspace, NOT BY A SECOND
     # CHECK, and the check I wrote first is deleted rather than shipped.
     #
@@ -5379,12 +5408,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # path and cannot be green-in-name-only. Measured green on two hosts:
     # `ok:litmus-grep-escapes:421 checked` on yoga and on lenovinha at HEAD.
     #
-    # Call the .sh, never scripts/lib/litmus-grep-escapes.awk: the awk holds
-    # the rule but expects to be driven with the file list and is not an entry
-    # point. The 8-arm fixture (scripts/test-litmus-grep-escapes.sh) is already
-    # wired into local-ci.sh, so --check needs only the check itself.
+    # The rule and its entry point are one Lua file since 1637-5765 (the .sh
+    # and scripts/lib/litmus-grep-escapes.awk are retired). The 8-arm fixture
+    # (scripts/test-litmus-grep-escapes.sh) is already wired into local-ci.sh,
+    # so --check needs only the check itself.
     _step "Checking litmus grep patterns use no GNU-undefined escapes (901-jtvi)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-grep-escapes.sh" 2>&1; then
+    # PORTED to Lua (1637-5765): scripts/lua/check-litmus-grep-escapes.lua.
+    if ! _run_lua_decider "scripts/lua/check-litmus-grep-escapes.lua" 2>&1; then
         exit 1
     fi
 

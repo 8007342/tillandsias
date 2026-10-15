@@ -207,11 +207,15 @@ COPY cli/tillandsias-models /opt/agents/tillandsias-cli/bin/tillandsias-models
 # adapter (images/inference/tiers/); tillandsias-models' tier_for reads them.
 COPY cli/tiers/ /opt/agents/tillandsias-cli/share/tiers/
 COPY cli/tellme /opt/agents/tillandsias-cli/bin/tellme
+# 1637-5765: `flutter` runs in the shared tillandsias-flutter sibling image,
+# prepared on first use; this is only the client (python3, the lane socket).
+COPY cli/flutter /opt/agents/tillandsias-cli/bin/flutter
 RUN chmod +x /opt/agents/tillandsias-cli/bin/* \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-inventory /usr/local/bin/tillandsias-inventory \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-services /usr/local/bin/tillandsias-services \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-models /usr/local/bin/tillandsias-models \
-    && ln -sf /opt/agents/tillandsias-cli/bin/tellme /usr/local/bin/tellme
+    && ln -sf /opt/agents/tillandsias-cli/bin/tellme /usr/local/bin/tellme \
+    && ln -sf /opt/agents/tillandsias-cli/bin/flutter /usr/local/bin/flutter
 
 # ── Skills mapping ─────────────────────────────────────────────
 # @trace

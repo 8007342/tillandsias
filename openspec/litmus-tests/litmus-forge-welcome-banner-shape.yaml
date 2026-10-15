@@ -106,6 +106,24 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok:"
 
+  # 1637-5765: the banner said "dart 3 (flutter)" and the inventory listed
+  # flutter while the image shipped no Flutter at all. The decider holds every
+  # advertised toolchain to a provider in the image sources.
+  - step: "1637-5765: every toolchain the banner and inventory advertise has a provider in images/default"
+    command: "out=$(tillandsias-plan script run scripts/lua/check-forge-advertised-toolchains.lua); rc=$?; case \"$out\" in ok:forge-advertised-toolchains:*) [ \"$rc\" -eq 0 ] && echo 'ok: advertised toolchains provided' ;; *) echo \"FAIL rc=$rc out=[$out]\"; exit 1 ;; esac"
+    timeout_ms: 20000
+    expected_behavior: "ok: advertised toolchains provided"
+
+  - step: "1637-5765 NEGATIVE CONTROL: a flutter claim with no shim is refused (today's image before the fix)"
+    command: "mkdir -p target; T=$(mktemp -d target/litmus-fat.XXXXXX); mkdir -p \"$T/cli\"; cp images/default/Containerfile images/default/lib-common.sh \"$T/\"; sed 's/dart 3\\${RST}/dart 3 (flutter)${RST}/' images/default/forge-welcome.sh > \"$T/forge-welcome.sh\"; cp images/default/cli/tillandsias-inventory \"$T/cli/\"; out=$(TILLANDSIAS_FORGE_IMAGE_DIR=\"$T\" tillandsias-plan script run scripts/lua/check-forge-advertised-toolchains.lua 2>/dev/null); rc=$?; find \"$T\" -delete; [ \"$rc\" -eq 1 ] && [ \"$out\" = 'violation:forge-advertised-toolchains:flutter' ] && echo 'ok: unprovided flutter refused' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: unprovided flutter refused"
+
+  - step: "1637-5765 POSITIVE CONTROL: the same claim with the shim shipped and installed is accepted"
+    command: "mkdir -p target; T=$(mktemp -d target/litmus-fat.XXXXXX); mkdir -p \"$T/cli\"; cp images/default/lib-common.sh \"$T/\"; sed 's/dart 3\\${RST}/dart 3 (flutter)${RST}/' images/default/forge-welcome.sh > \"$T/forge-welcome.sh\"; cp images/default/cli/tillandsias-inventory \"$T/cli/\"; : > \"$T/cli/flutter\"; { cat images/default/Containerfile; echo 'RUN ln -sf /opt/agents/tillandsias-cli/bin/flutter /usr/local/bin/flutter'; } > \"$T/Containerfile\"; out=$(TILLANDSIAS_FORGE_IMAGE_DIR=\"$T\" tillandsias-plan script run scripts/lua/check-forge-advertised-toolchains.lua 2>/dev/null); rc=$?; find \"$T\" -delete; [ \"$rc\" -eq 0 ] && [ \"$out\" = 'ok:forge-advertised-toolchains:2 judged' ] && echo 'ok: provided flutter accepted' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: provided flutter accepted"
+
 observability:
   traces:
     - "@trace spec:forge-welcome"

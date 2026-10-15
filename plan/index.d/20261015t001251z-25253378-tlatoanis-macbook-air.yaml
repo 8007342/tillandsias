@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forges-in-the-macos-and-windows-vm-get-an-empty-lane-mcp-socket-dir-because-the-guest-binary-is-built-without-the-tray-feature-that-holds-the-listener
+    field: status
+    value: implemented
+    ts: "2026-10-15T00:12:51Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: forges-in-the-macos-and-windows-vm-get-an-empty-lane-mcp-socket-dir-because-the-guest-binary-is-built-without-the-tray-feature-that-holds-the-listener
+    event:
+      type: progress
+      ts: "2026-10-15T00:12:51Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: landed #436, merge b4ade0689: the host-services feature (tray and listen-vsock) gates mcp_socket.rs, local_web_preview, browser_open and the order-505 label validation; the VM per-attach child admits the cloud label it launched. Criterion 2 met: guest_feature_set_forge_builders_leave_a_live_lane_mcp_listener under --features listen-vsock, red under both mutations (start gated to tray: "no listener at the socket the forge mounts"; admission compiled out: "knows of no projects"), plus the build.sh guest-feature-set gate step. Criterion 3 met: tray,listen-vsock 986/0, including the attribution arms. LEFT: criterion 1 (live: a forge in the macOS VM with host-browser connected and publish_local working) needs the next release; criterion 4 (WSL forge) goes to yolanda

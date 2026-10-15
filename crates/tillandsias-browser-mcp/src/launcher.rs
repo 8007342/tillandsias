@@ -85,6 +85,10 @@ pub struct ContainerLaunchRequest<'a> {
     /// The device, as Playwright context options: what a WebKit window
     /// emulates (a Chromium window gets it over CDP instead).
     pub playwright_context: serde_json::Value,
+    /// Start the window with no display (order 1712-3fsw): Chromium
+    /// `--headless=new`, no compositor socket. Decided by `browser.open`
+    /// before the launch, from the request or [`BrowserContainers::has_display`].
+    pub headless: bool,
 }
 
 /// A started browser window, as the host names it.
@@ -111,6 +115,12 @@ pub trait BrowserContainers: Send + Sync {
     /// The router's local-preview TLS port (`preview-tls-port`), when the
     /// preview listener exists. `browser.open` admits this port for https.
     fn preview_tls_port(&self) -> Option<u16>;
+    /// Whether this host can show a window (order 1712-3fsw). Without one,
+    /// `browser.open` starts headless unless the caller insists otherwise.
+    /// Defaults to true: a launcher that cannot tell keeps the old behaviour.
+    fn has_display(&self) -> bool {
+        true
+    }
     fn start(&self, request: &ContainerLaunchRequest<'_>) -> Result<ContainerHandle, LaunchError>;
     fn stop(&self, handle: &ContainerHandle);
 }
@@ -154,6 +164,17 @@ pub enum LaunchMode {
     Unavailable,
 }
 
+impl LaunchMode {
+    /// Whether a window opened this way can be seen (order 1712-3fsw).
+    /// `Fake` and `Unavailable` report a display, as before.
+    pub fn has_display(&self) -> bool {
+        match self {
+            LaunchMode::Container(host) => host.has_display(),
+            LaunchMode::Fake | LaunchMode::Unavailable => true,
+        }
+    }
+}
+
 fn default_title(url: &Url) -> String {
     url.host_str().unwrap_or("browser").to_string()
 }
@@ -175,6 +196,7 @@ pub fn launch(
     device: &DeviceEmulation,
     dev: bool,
     engine: Engine,
+    headless: bool,
 ) -> Result<WindowEntry, LaunchError> {
     let window_id = format!("win-{}", Uuid::new_v4());
     let (container, cdp, title, user_data_dir, notice) = match mode {
@@ -191,6 +213,7 @@ pub fn launch(
                 window_size: device.window_size(),
                 engine,
                 playwright_context: device.playwright_context(),
+                headless,
             })?;
             let profile_dir = handle.profile_dir.clone();
             let socket = handle.cdp_socket.clone();
@@ -231,6 +254,7 @@ pub fn launch(
         owning_lane: String::new(),
         dev,
         engine,
+        headless,
         notice,
         cdp,
         container,

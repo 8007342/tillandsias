@@ -100,7 +100,7 @@ mkdir -p "$HOME/.config/fish"
     cp "/etc/skel/.config/fish/config.fish" "$HOME/.config/fish/config.fish" 2>/dev/null || true
 
 # ── Common PATH setup ───────────────────────────────────────
-# @trace spec:cross-platform, spec:windows-wsl-runtime, spec:forge-shell-tools
+# @trace spec:cross-platform, spec:wsl-runtime, spec:forge-shell-tools
 # Pin /usr/bin and /usr/sbin at the front so rustc/cargo/git/python are
 # discoverable even when child processes (opencode, agent CLIs, build tools)
 # inherit a sanitized $PATH that drops standard system dirs. On Fedora-based
@@ -193,7 +193,7 @@ export TILLANDSIAS_EXTERNAL_LOGS="/var/log/tillandsias/external"
 # Format: [lifecycle] <phase> | <detail>
 # Mirrors output to /tmp/forge-lifecycle.log so runtime-diagnostics-stream
 # can surface lifecycle events back to the calling terminal.
-# @trace spec:cross-platform, spec:windows-wsl-runtime, spec:runtime-diagnostics-stream
+# @trace spec:cross-platform, spec:wsl-runtime, spec:runtime-diagnostics-stream
 trace_lifecycle() {
     # Write to the file log unconditionally so agents can always observe
     # expert build state (order 797-thbw). Gate stderr only — in production,
@@ -1002,7 +1002,7 @@ checkout_forge_seed_branch() {
     return 0
 }
 
-# @trace spec:cross-platform, spec:windows-wsl-runtime, spec:git-mirror-service, spec:forge-offline
+# @trace spec:cross-platform, spec:wsl-runtime, spec:git-mirror-service, spec:forge-offline
 # Shared clone-from-mirror routine for ALL forge entrypoints (opencode,
 # claude, opencode-web, terminal). Two transports:
 #   - filesystem  : TILLANDSIAS_GIT_MIRROR_PATH=/path/to/bare/mirror (Windows/WSL)
@@ -1080,7 +1080,7 @@ _clone_project_from_mirror_impl() {
         if git clone "${src}" "$clone_dir" 2>&1; then
             trace_lifecycle "git-mirror" "clone successful (filesystem)"
             cd "$clone_dir" || return 1
-            # @trace spec:cross-platform, spec:windows-wsl-runtime, spec:git-mirror-service
+            # @trace spec:cross-platform, spec:wsl-runtime, spec:git-mirror-service
             # UX-friendly remote alignment: present the GitHub URL as `origin`
             # so `git remote -v` shows what users expect, while operations
             # still flow through the credential-isolated local mirror.
@@ -3032,7 +3032,7 @@ record_update_check() {
 # Entrypoints can cd into it after sourcing this library.
 find_project_dir() {
     PROJECT_DIR=""
-    # @trace spec:cross-platform, spec:windows-wsl-runtime
+    # @trace spec:cross-platform, spec:wsl-runtime
     # Priority: $TILLANDSIAS_PROJECT match wins. On Linux/podman this loop
     # only ever sees one entry (the freshly-cloned project — tmpfs is
     # wiped per launch). On Windows/WSL the distro fs persists between

@@ -91,7 +91,7 @@ litmus openspec/litmus-tests/litmus-forge-clone-reachability-probe-shape.yaml 1
 litmus openspec/litmus-tests/litmus-forge-diagnostics-e2e.yaml 5
 litmus openspec/litmus-tests/litmus-forge-e2e-rate-limit-shape.yaml 4
 litmus openspec/litmus-tests/litmus-forge-environment-discoverability-install-shape.yaml 1
-litmus openspec/litmus-tests/litmus-forge-expert-base-guard-shape.yaml 5
+litmus openspec/litmus-tests/litmus-forge-expert-base-guard-shape.yaml 4
 litmus openspec/litmus-tests/litmus-forge-experts-discoverability-shape.yaml 5
 litmus openspec/litmus-tests/litmus-forge-experts-ephemerality-shape.yaml 9
 litmus openspec/litmus-tests/litmus-forge-experts-stale-source-honesty.yaml 2
@@ -383,12 +383,10 @@ scripts scripts/check-groundtruth-regime-invariance.sh 3
 scripts scripts/check-host-tools.sh 105
 scripts scripts/check-issue-citation-convention.sh 8
 scripts scripts/check-jq-callsite-ratchet.sh 17
-scripts scripts/check-jq-multiline-capture-strips-cr.sh 11
 scripts scripts/check-landed-but-open.sh 9
 scripts scripts/check-landing-provenance.sh 4
 scripts scripts/check-ledger-distillation.sh 2
 scripts scripts/check-litmus-expression-pinning-added.sh 5
-scripts scripts/check-litmus-grep-escapes.sh 1
 scripts scripts/check-litmus-line-windows.sh 8
 scripts scripts/check-litmus-mutation-arms-mutate.sh 3
 scripts scripts/check-litmus-pin-claims.sh 5

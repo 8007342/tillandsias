@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-pushed-project-deploys-to-cloudflare-on-its-own-domain-without-dashboard-steps
+    event:
+      type: progress
+      ts: "2026-10-14T23:40:17Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        U1 COMPLETE (2026-10-14, operator present; read-only probe; tokens revoked HTTP 200): the Workers Builds API ACCEPTS the Tillandsias OAuth token. Granted "offline_access workers-ci.read workers-ci.write workers-routes.read workers-scripts.metadata_read account-settings.read". Results, all HTTP 200: GET /accounts (1 account); GET /accounts/{id}/workers/scripts (6 Workers: lakanoa, macron-dev, tillandsias, tillandsias-org, tlatoani-net, visual-chess); GET /accounts/{id}/builds/workers/{tag}/triggers for macron-dev: ONE trigger, branch_includes [main], path_includes ["*"], deploy "npx wrangler deploy", build command EMPTY, root "/"; GET .../builds: 6 builds, all branch main, all outcome success (2026-10-12..14).
+        FINDING: macron-dev's Workers Builds is ALREADY main-only and never ran a branch build. The failed "branch builds" the forge read from GitHub check runs (cfb4bbc 9m39s, 640c9e2 ~27s, d091abe) are NOT Workers Builds. Leading hypothesis, unverified: a Cloudflare Pages project connected to the same repo (Pages builds every branch by default; this token has no Pages scope). Asked the operator to look in Workers & Pages. Consequence for the level-2 budget plan: "turn off non-production Workers builds" is already true; the stray builder is elsewhere. path_includes ["*"] means every main push builds, including docs-only ones, which is the design's watch-path default to change.
+        Scope catalogue: GET /client/v4/oauth/scopes answered 397 entries under this OAuth token (ids like workers-scripts.metadata_read, account-settings.read, workers-routes.write, zone.read). account-api-tokens.write ("Account API Tokens Write") EXISTS as an OAuth scope, so token minting by OAuth may be possible; that is relevant to U2.
+        NEXT: U2 (create a build token by API on a throwaway, then delete it) needs the operator's explicit OK.

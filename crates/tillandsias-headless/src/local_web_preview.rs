@@ -158,8 +158,13 @@ enum Step {
     /// Source mounts: probes inside the live forge, the RAM volume, the config.
     Source,
     Router,
-    /// Container lifecycle: run, rename, remove.
+    /// Starting a container (`run`).
     Run,
+    /// Removing a container. Its own step (1723-2fiq): a remove that waited
+    /// out a stop timeout used to read as a failed `run`.
+    Remove,
+    /// Installing the candidate under the preview name.
+    Rename,
     Ready,
 }
 
@@ -172,6 +177,8 @@ impl Step {
             Self::Source => "source",
             Self::Router => "router",
             Self::Run => "run",
+            Self::Remove => "remove",
+            Self::Rename => "rename",
             Self::Ready => "ready",
         }
     }
@@ -233,6 +240,16 @@ fn podman_output(args: &[&str]) -> Result<std::process::Output, Class> {
         std::io::ErrorKind::TimedOut => Class::Timeout,
         _ => Class::Transport,
     })
+}
+
+/// Remove a preview container without a stop grace period. The preview is
+/// stateless, and busybox httpd runs as PID 1, which ignores SIGTERM, so a
+/// plain `rm --force` waited out the 10 s stop timeout against a 5 s per-call
+/// budget: every reload and repeat publish failed, and the cleanup of the
+/// candidate failed the same way, orphaning it (1723-2fiq, measured on yoga:
+/// 10087 ms without `--time 0`, 60 ms with it).
+fn remove_now(name: &str) -> Result<String, String> {
+    podman_at(Step::Remove, &["rm", "--force", "--time", "0", name])
 }
 
 /// Run one podman command for `step`. Never echo raw diagnostics.
@@ -346,6 +363,21 @@ fn attributed_forge(row: &Value, socket_dir: &Path) -> bool {
                         .is_some_and(|s| Path::new(s) == socket_dir)
             })
         })
+}
+
+/// 1637-5765: the live lane's forge and RAM source volume, for a toolchain
+/// session (toolchain_exec) that must work on the same tree publish_local
+/// serves. Same proofs as publish: one attributed forge, a bounded tmpfs volume.
+pub(crate) struct LiveLane {
+    pub(crate) forge_id: String,
+    pub(crate) volume: String,
+}
+
+pub(crate) fn resolve_live_source(project: &str, instance: &str) -> Result<LiveLane, String> {
+    resolve_live(project, instance, None).map(|l| LiveLane {
+        forge_id: l.forge_id,
+        volume: l.volume,
+    })
 }
 
 fn resolve_live(
@@ -504,6 +536,9 @@ fn live_mount_source(row: &Value, project: &str, instance: &str) -> Result<Strin
     Ok(volume)
 }
 
+// Only the tray's `--publish-local` CLI resolves a lane this way (1713-1dnx:
+// a VM guest's forges reach publish through their own lane's listener).
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
 pub(crate) fn unique_live_instance(project: &str) -> Result<String, String> {
     crate::local_projects::validate_project_label(project)?;
     let socket_root = crate::control_socket_host_dir().join("mcp");
@@ -1171,6 +1206,21 @@ fn certificate_args(
     ]
 }
 
+/// The services a project's preview leaf names besides `www`: the opt-in
+/// toolchains' dev servers (order 1637-5765). Exact names, never a
+/// `*.<project>.localhost` wildcard, so the leaf vouches only for hosts the
+/// router actually serves for this project.
+pub(crate) const DEV_SERVICES: &[&str] = &["flutter"];
+
+/// The leaf's subjectAltName: `www` and every dev service of `project`.
+fn preview_san(project: &str) -> String {
+    std::iter::once("www")
+        .chain(DEV_SERVICES.iter().copied())
+        .map(|service| format!("DNS:{service}.{project}.localhost"))
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
 fn prepare_tls(project: &str, ca: &Path) -> Result<(), String> {
     let root = router_dir();
     let tls = root.join("preview-tls");
@@ -1182,7 +1232,8 @@ fn prepare_tls(project: &str, ca: &Path) -> Result<(), String> {
     let key = temporary.path().join("leaf.key");
     let csr = temporary.path().join("leaf.csr");
     let ext = temporary.path().join("leaf.ext");
-    std::fs::write(&ext, format!("subjectAltName=DNS:{host}\nbasicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n"))
+    let san = preview_san(project);
+    std::fs::write(&ext, format!("subjectAltName={san}\nbasicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n"))
         .map_err(|_| "router_not_ready: TLS extensions unavailable")?;
     for args in certificate_args(&host, &crt, &csr, &key, ca, &ext) {
         host_command(&args)?;
@@ -1223,7 +1274,7 @@ fn prepare_tls(project: &str, ca: &Path) -> Result<(), String> {
     Ok(())
 }
 
-async fn ensure_router(project: &str, debug: bool) -> Result<PathBuf, String> {
+fn ensure_router(project: &str, debug: bool) -> Result<PathBuf, String> {
     let _lock = crate::resource_lock::acquire(
         "preview-router",
         command_budget(Duration::from_secs(5))?,
@@ -1289,6 +1340,70 @@ fn strict_reload() -> Result<(), String> {
     )
     .map(|_| ())
     .map_err(|_| "router_not_ready: Caddy rejected or could not reload configuration".into())
+}
+
+/// 1637-5765: route `<service>.<project>` to a toolchain dev server (Flutter's
+/// `run -d web-server`) for one session, over plain HTTP: the preview TLS leaf
+/// is issued for `www.<project>` only. Returns the URL a browser opens.
+pub(crate) fn add_dev_route(
+    service: &str,
+    project: &str,
+    upstream: &str,
+    port: u16,
+    debug: bool,
+) -> Result<String, String> {
+    // A browser.open window reaches its project over TLS only (1651-5t7n), so
+    // the dev server gets the preview listener too: the router is up with its
+    // :8443 binding and the project's leaf names this service, even when the
+    // project never published a www preview (an empty project).
+    ensure_router(project, debug)?;
+    let _lock = crate::resource_lock::acquire(
+        "preview-router",
+        command_budget(Duration::from_secs(5))?,
+        debug,
+    )?;
+    let mut route =
+        crate::RouterRoute::public_service(format!("{service}.{project}"), upstream, port);
+    route.preview_tls = true;
+    let mut routes = read_routes(debug)?;
+    routes.retain(|r| r.subdomain != route.subdomain);
+    routes.push(route);
+    crate::write_router_routes(&routes, debug)?;
+    strict_reload()?;
+    dev_url(service, project)
+}
+
+/// The URL a dev server is opened at: https on the preview listener, the
+/// only scheme a browser.open window loads (order 1637-5765).
+fn dev_url(service: &str, project: &str) -> Result<String, String> {
+    Ok(format!(
+        "https://{service}.{project}.localhost:{}/",
+        tls_port()?
+    ))
+}
+
+/// Remove the session's route, only while it still points at `upstream`: a
+/// newer session for the same lane replaced it and owns it now.
+pub(crate) fn remove_dev_route(
+    service: &str,
+    project: &str,
+    upstream: &str,
+    debug: bool,
+) -> Result<(), String> {
+    let _lock = crate::resource_lock::acquire(
+        "preview-router",
+        command_budget(Duration::from_secs(5))?,
+        debug,
+    )?;
+    let subdomain = format!("{service}.{project}");
+    let mut routes = read_routes(debug)?;
+    let count = routes.len();
+    routes.retain(|r| !(r.subdomain == subdomain && r.upstream_host == upstream));
+    if count != routes.len() {
+        crate::write_router_routes(&routes, debug)?;
+        strict_reload()?;
+    }
+    Ok(())
 }
 
 fn read_routes(debug: bool) -> Result<Vec<crate::RouterRoute>, String> {
@@ -1457,7 +1572,7 @@ async fn publish_prepared(
 ) -> Result<Value, String> {
     let name = format!("tillandsias-{project}-web");
     let mounts = source_mounts(&live, &profile)?;
-    let ca = ensure_router(project, debug).await?;
+    let ca = ensure_router(project, debug)?;
     let candidate = format!(
         "{name}-candidate-{}-{}",
         std::process::id(),
@@ -1467,11 +1582,11 @@ async fn publish_prepared(
     let mut command = vec!["run"];
     command.extend(args.iter().map(String::as_str));
     if let Err(e) = podman_at(Step::Run, &command) {
-        let _ = podman_at(Step::Run, &["rm", "--force", &candidate]);
+        let _ = remove_now(&candidate);
         return Err(e);
     }
     if let Err(e) = ready_backend(&candidate).await {
-        let _ = podman_at(Step::Run, &["rm", "--force", &candidate]);
+        let _ = remove_now(&candidate);
         return Err(e);
     }
     // Recheck the exact forge launch after candidate startup (PID reuse cannot
@@ -1479,15 +1594,15 @@ async fn publish_prepared(
     if inspect(&live.forge_id)?
         .is_none_or(|r| !attributed_forge(&r, &crate::mcp_socket_host_dir(project, Some(instance))))
     {
-        let _ = podman_at(Step::Run, &["rm", "--force", &candidate]);
+        let _ = remove_now(&candidate);
         return Err("live_worktree_unavailable: source forge exited during startup".into());
     }
     let mut replacement_installed = false;
     let outcome = async {
         if old.is_some() {
-            podman_at(Step::Run, &["rm", "--force", &name])?;
+            remove_now(&name)?;
         }
-        podman_at(Step::Run, &["rename", &candidate, &name])?;
+        podman_at(Step::Rename, &["rename", &candidate, &name])?;
         replacement_installed = true;
         let _router_lock = crate::resource_lock::acquire(
             "preview-router",
@@ -1514,9 +1629,9 @@ async fn publish_prepared(
     }
     .await;
     if outcome.is_err() {
-        let _ = podman_at(Step::Run, &["rm", "--force", &candidate]);
+        let _ = remove_now(&candidate);
         if replacement_installed {
-            let _ = podman_at(Step::Run, &["rm", "--force", &name]);
+            let _ = remove_now(&name);
         }
         let _lock = crate::resource_lock::acquire(
             "preview-router",
@@ -1554,6 +1669,8 @@ fn classify_failure(reason: &str) -> (&'static str, &'static str, &'static str) 
             Step::Source,
             Step::Router,
             Step::Run,
+            Step::Remove,
+            Step::Rename,
             Step::Ready,
         ]
         .into_iter()
@@ -1758,7 +1875,7 @@ async fn stop_inner(project: &str, instance: &str, debug: bool) -> Result<Value,
     let row = inspect(&name)?;
     check_owner(row.as_ref(), instance, None)?;
     if row.is_some() {
-        podman_at(Step::Run, &["rm", "--force", &name])?;
+        remove_now(&name)?;
     }
     let _router_lock = crate::resource_lock::acquire(
         "preview-router",
@@ -1820,7 +1937,7 @@ pub(crate) fn cleanup_departed_lane(
         if label(&row, OWNER) != instance {
             return Ok(());
         }
-        podman_at(Step::Run, &["rm", "--force", &name])?;
+        remove_now(&name)?;
     }
     let _router_lock =
         crate::resource_lock::acquire("preview-router", Duration::from_secs(120), debug)?;
@@ -1863,7 +1980,7 @@ fn watch_source_lifetime(
                 Ok(Some(row))
                     if label(&row, OWNER) == instance && label(&row, FORGE) == forge_id =>
                 {
-                    if podman_at(Step::Run, &["rm", "--force", &name]).is_err() {
+                    if remove_now(&name).is_err() {
                         continue;
                     }
                 }
@@ -1955,6 +2072,8 @@ mod tests {
             Step::Source,
             Step::Router,
             Step::Run,
+            Step::Remove,
+            Step::Rename,
             Step::Ready,
         ]
         .into_iter()
@@ -2022,6 +2141,36 @@ mod tests {
                     .unwrap_err(),
                 "runtime_unavailable: podman failed at step image (transport)"
             );
+        }
+    }
+
+    /// 1723-2fiq: the preview's PID 1 (busybox httpd) ignores SIGTERM, so a
+    /// remove that grants a stop grace period outlives the per-call budget
+    /// (10087 ms measured on yoga against 5 s). The fake models that world: a
+    /// graceful `rm` times out. Removal must still finish, and a remove that
+    /// does fail names `remove`, never `run`.
+    #[test]
+    fn removing_a_preview_skips_the_grace_period_and_names_its_step() {
+        fn sigterm_ignoring_preview(args: &[&str]) -> std::io::Result<std::process::Output> {
+            let graceless = args.windows(2).any(|w| w == ["--time", "0"]);
+            if args[0] == "rm" && !graceless {
+                Err(std::io::Error::from(std::io::ErrorKind::TimedOut))
+            } else {
+                output(0, "", "")
+            }
+        }
+        {
+            let _fake = Fake::install(sigterm_ignoring_preview);
+            remove_now("tillandsias-p-web").expect("removal finishes without a grace period");
+        }
+        {
+            let _fake = Fake::install(|_| Err(std::io::Error::from(std::io::ErrorKind::TimedOut)));
+            let reason = remove_now("tillandsias-p-web").unwrap_err();
+            assert_eq!(
+                reason,
+                "runtime_unavailable: podman failed at step remove (timeout)"
+            );
+            assert_eq!(classify_failure(&reason).0, "remove");
         }
     }
 
@@ -2847,6 +2996,30 @@ mod tests {
         assert!(CONFIG_INSPECTOR.contains("delete parsed.build;"));
         assert!(CONFIG_INSPECTOR.contains("delete e.build;"));
         assert!(CONFIG_INSPECTOR.contains("raw:runtime, runtime_name:runtimeName"));
+    }
+
+    #[test]
+    fn a_dev_server_route_gets_the_projects_tls_site_and_leaf() {
+        // Order 1637-5765: a browser.open window loads https only, so the
+        // flutter dev route needs its own TLS site, bound to the PROJECT's
+        // leaf, which must name the flutter host exactly.
+        let mut dev =
+            crate::RouterRoute::public_service("flutter.macron.dev", "tillandsias-x-flutter", 8080);
+        dev.preview_tls = true;
+        let rendered = crate::generate_dynamic_caddyfile(&[dev]);
+        assert!(rendered.contains("https://flutter.macron.dev.localhost:8443"));
+        assert!(
+            rendered.contains("preview/macron.dev.crt /etc/tillandsias/preview/macron.dev.key"),
+            "the dotted project's leaf, never `dev`: {rendered}"
+        );
+        assert_eq!(
+            preview_san("macron.dev"),
+            "DNS:www.macron.dev.localhost,DNS:flutter.macron.dev.localhost"
+        );
+        assert!(
+            !preview_san("proj").contains('*'),
+            "exact names only: a wildcard would vouch for hosts the router does not serve"
+        );
     }
 
     #[test]

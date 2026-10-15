@@ -108,24 +108,39 @@ default port and tell the user: "I'm running it as
 `<project>.<framework>.localhost` — you can adjust the alias if you
 want." The router accepts arbitrary `<service>` segments by convention.
 
-### Example: Flutter web
+### Example: Flutter web (with Flame)
 
-User asks: "Run my Flutter app."
+`flutter` in the forge runs in a shared Flutter image beside the forge
+(order 1637-5765). The first call prepares that image once and prints
+"Preparing Flutter (one time, a few minutes)" with progress; wait for it.
+After that, commands run at normal speed and write into this project.
+
+User asks: "Make a Flutter game and run it."
 
 You should:
 
 ```bash
 cd /home/forge/src/$TILLANDSIAS_PROJECT
-flutter run -d web-server --web-hostname 0.0.0.0 --web-port 8080
+flutter create --platforms web game
+cd game
+flutter pub add flame
+flutter run -d web-server
 ```
 
-And tell the user:
+- Do not pass `--web-hostname` or `--web-port`. The host sets them and
+  routes `flutter.<project>` to the dev server for as long as it runs.
+- `flutter run` prints the URL to open, for example
+  `http://flutter.<project>.localhost:<port>/`. Open it with `browser.open`
+  and check the app.
+- After editing `lib/`, press `r` (hot reload) or `R` (hot restart) in the
+  `flutter run` session. The open browser picks up the change. Ctrl-C stops
+  it and removes the route.
+- To publish a release build instead, run `flutter build web`, then call
+  `publish_local` with `{"category": "WEB", "app_dir": "game/build/web"}`
+  (the path relative to the project root).
 
-> Flutter web running. Open
-> `http://flutter.$TILLANDSIAS_PROJECT.localhost/` in your browser.
-
-Substitute the actual project name in the URL. **Do not** print
-`http://localhost:8080` — that URL is meaningless to the human.
+Tell the user the URL `flutter run` printed. **Do not** print
+`http://localhost:8080`: that URL means nothing to the human.
 
 ## Self-testing the server from inside the forge
 
