@@ -145,22 +145,45 @@ The host available RAM MUST be measured before every forge launch via platform-n
 The `/home/forge/src` tmpfs size MUST be computed per-launch from the project's
 git mirror pack size.
 
-`compute_hot_budget(project_name, cache_dir)`:
-1. Runs `git -C <mirror> count-objects -v -H | grep size-pack`
-2. Parses the reported pack size in KB
+`compute_source_budget(pack, config, memory_max)`:
+1. Runs `git -C <mirror> count-objects -v` and sums `size-pack` and `size`
+2. Parses the pack size in KB
 3. Multiplies by `forge.hot_path_inflation` (default 4, configurable in
    `~/.config/tillandsias/config.toml`)
-4. Clamps to `[256, forge.hot_path_max_mb]` (default max: 4096 MB)
+4. Clamps to `[floor, forge.hot_path_max_mb]` (default max: 4096 MB), where
+   `floor = min(1536 MB, memory.max / 2)` and `memory.max` is the forge's
+   cgroup limit
 
-#### Scenario: Budget = git mirror's size-pack × forge.hot_path_inflation, clamped [256, forge.hot_path_max_mb]
+The floor fits a build, not only the source: node_modules and a project's own
+build output land in the checkout. A tmpfs `size=` is a cap, not a
+reservation: pages exist only as files are written, and they count in the
+forge's memory cgroup, which is why the floor never exceeds half of it.
+`TMPDIR` points at the cache volume (`$TILLANDSIAS_PROJECT_CACHE/tmp`), not at
+the `/tmp` tmpfs.
 
-- **WHEN** the mirror's pack size is 200 MB and `hot_path_inflation` is 4
-- **THEN** the computed budget MUST be 800 MB (200 × 4), within [256, 4096]
+> Delta (order 1729-kg5q, 2026-10-15): at the old 256 MB floor, a 57 MB
+> visual-chess checkout plus `npm ci` (169 MB node_modules) filled the tmpfs
+> in 4 s, and its build needed another 169 MB for dist/. Moving build
+> directories one by one onto the cache volume was measured and refuted: they
+> are project-specific, and a symlinked node_modules broke the project's own
+> install check.
 
-#### Scenario: Empty mirror returns floor (256 MB)
+#### Scenario: Budget = git mirror's size-pack × forge.hot_path_inflation, clamped [floor, forge.hot_path_max_mb]
 
-- **WHEN** the git mirror is empty or `count-objects` returns 0
-- **THEN** `compute_hot_budget` MUST return 256 MB (the floor)
+- **WHEN** the mirror's pack size is 500 MB, `hot_path_inflation` is 4 and the
+  forge's memory.max is 6144 MB
+- **THEN** the computed budget MUST be 2000 MB (500 × 4), within [1536, 4096]
+
+#### Scenario: Empty mirror returns the floor
+
+- **WHEN** the git mirror is empty or `count-objects` returns 0, and memory.max
+  is 6144 MB
+- **THEN** the budget MUST be 1536 MB
+
+#### Scenario: The floor never exceeds half the cgroup
+
+- **WHEN** the forge's memory.max is 2048 MB
+- **THEN** the floor MUST be 1024 MB
 
 #### Scenario: Budget exceeds max_mb → clamped at ceiling
 

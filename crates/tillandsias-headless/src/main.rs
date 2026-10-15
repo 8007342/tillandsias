@@ -18043,9 +18043,12 @@ fn forge_tool_cache_volume(project_name: &str) -> String {
 /// @trace spec:forge-hot-cold-split (Requirement: HOT tier — RAM-backed tmpfs
 ///   for finely curated paths; Per-launch project source budget)
 fn forge_hot_src_tmpfs(project_name: &str) -> String {
-    let budget = tillandsias_core::config::compute_hot_budget(
+    // Order 1729-kg5q: the floor fits a build, clamped to half the forge's
+    // memory.max (the size is a cap counted in that cgroup, not a reservation).
+    let budget = tillandsias_core::config::compute_source_budget(
         forge_mirror_pack_size_kb(project_name),
         &tillandsias_core::config::ForgeConfig::default(),
+        tillandsias_core::forge_budget::ForgeBudget::for_this_host().memory_max_mib,
     );
     format!("/home/forge/src:size={budget}m,mode=0777")
 }
@@ -31963,12 +31966,15 @@ esac
         // The bound, not a fixed number: this host may or may not have a
         // mirror volume for the name above, and the assertion must be about
         // the CLAMP the spec specifies, not about which arm ran.
+        // 1729-kg5q: the floor is the build-sized one, clamped to half of
+        // this host's forge memory.max.
         let config = tillandsias_core::config::ForgeConfig::default();
+        let floor = tillandsias_core::config::hot_path_source_floor_mb(
+            tillandsias_core::forge_budget::ForgeBudget::for_this_host().memory_max_mib,
+        );
         assert!(
-            (tillandsias_core::config::HOT_PATH_BUDGET_FLOOR_MB..=config.hot_path_max_mb)
-                .contains(&size_mb),
-            "budget {size_mb} MB escaped the spec's [{}, {}] clamp",
-            tillandsias_core::config::HOT_PATH_BUDGET_FLOOR_MB,
+            (floor..=config.hot_path_max_mb).contains(&size_mb),
+            "budget {size_mb} MB escaped the spec's [{floor}, {}] clamp",
             config.hot_path_max_mb
         );
     }

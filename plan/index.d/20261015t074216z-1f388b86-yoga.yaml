@@ -1,0 +1,17 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: real-web-and-rust-projects-fit-in-a-forge-without-hand-moving-build-dirs
+    event:
+      type: list-replace
+      ts: "2026-10-15T07:42:16Z"
+      agent_id: linux-yoga-claude-20261015t074216z
+      host: yoga
+      field: exit_criteria
+      items:
+        - "a fresh forge on visual-chess runs npm ci + ./build.sh --dev to completion with no ENOSPC (red today at 256M)"
+      summary: |-
+        coordinator ruling 2026-10-15: name the output, not the mechanism; moving build dirs one by one was measured and refuted
