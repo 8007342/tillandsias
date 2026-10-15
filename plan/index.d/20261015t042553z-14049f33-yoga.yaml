@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-browser-window-plays-its-pages-audio-on-the-host-speakers-output-only
+    event:
+      type: progress
+      ts: "2026-10-15T04:25:53Z"
+      agent_id: linux-yoga-claude-20261015t042553z
+      host: yoga
+      summary: |-
+        Measured on yoga (PipeWire 1.6.9, WirePlumber 0.5.18). client.access=restricted alone is NOT output-only: WirePlumber's default restricted PM grants RX everywhere; parecord through it recorded 131072 B from the mic and saw the speaker monitor. pipewire-pulse has no runtime module-native-protocol-unix. A dedicated 'pipewire -c conf' running only module-protocol-pulse on its own socket, with client.access=restricted, pulse.allow-module-loading=false and pulse.rules quirks [block-record-stream block-source-volume], gives: mic record Access denied 0 B, monitor record Access denied 0 B, load-module Access denied, playback rc 0. No host config edit. Socket path must fit sun_path (108 B). Design sent to the coordinator for a security-boundary ruling before anything is mounted.
