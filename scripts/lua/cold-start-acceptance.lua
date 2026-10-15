@@ -696,7 +696,10 @@ grep '"id":]] .. next_id .. [[[,}]' /tmp/mcp7d.resp | tail -1
     end
     local seen_before, t1 = title_until(BEFORE, 40)
     log_line("7d title before edit: " .. tostring(t1))
-    if not seen_before then fail("flutter-before-title:" .. tostring(t1)) end
+    -- Known open cause (1725-cgh2): a window's first navigation can lose its
+    -- subresources to net::ERR_NETWORK_CHANGED, and the app never boots. The
+    -- verdict names the row so a red 7d reads as that, until it lands.
+    if not seen_before then fail("flutter-before-title:" .. tostring(t1) .. ":open-row=1725-cgh2") end
 
     local edit = inside([[
 f=$(podman ps --format '{{.Names}}' --filter 'name=macron.*-forge')
