@@ -38,9 +38,23 @@ description: >
   zero. Detached OpenCode Web stays outside the contract in both directions —
   it never carries the variable and is never refused by the grammar.
 
+  5. (order 539) The Claude and Antigravity lanes are delegable too. A prompt
+  alone on those lanes opens an ATTENDED session with the message submitted
+  (operator directive 2026-08-31: a coordinator launches a sibling and directs
+  it afterward); the same prompt beside `TILLANDSIAS_AGENT_RESULT_FORMAT=json`
+  runs HEADLESS — `claude --print --verbose --output-format stream-json`,
+  `agy --output-format stream-json --print` — with no TTY, under the crash
+  supervisor, and the host classifies the transcript by the terminal event
+  each CLI actually emits (measured 2026-10-12: Claude's `type:result` with
+  `is_error`/`subtype`, Antigravity's `event:result` with `result.status`).
+  A lane that regresses to interactive-only, or a transcript with no terminal
+  event, must read as NOT done.
+
 preconditions:
   - workspace contains images/default/entrypoint-forge-opencode.sh
   - workspace contains images/default/entrypoint-forge-codex.sh
+  - workspace contains images/default/entrypoint-forge-claude.sh
+  - workspace contains images/default/entrypoint-forge-antigravity.sh
   - workspace contains crates/tillandsias-headless/src/agent_result.rs
   - workspace contains crates/tillandsias-podman/src/client.rs
 
@@ -59,6 +73,16 @@ critical_path:
     command: "grep -Fq 'TILLANDSIAS_AGENT_RESULT_FORMAT' images/default/entrypoint-forge-opencode.sh && grep -Fq 'TILLANDSIAS_AGENT_RESULT_FORMAT' images/default/entrypoint-forge-codex.sh && echo 'ok: opt-in on both lanes'"
     timeout_ms: 5000
     expected_behavior: "ok: opt-in on both lanes"
+
+  - step: "the Claude and Antigravity lanes branch to a supervised headless --print run only beside the json result format (order 539)"
+    command: "C=images/default/entrypoint-forge-claude.sh; A=images/default/entrypoint-forge-antigravity.sh; grep -Fq -- '--print --verbose --output-format stream-json' \"$C\" && grep -Fq 'harness-supervisor claude' \"$C\" && grep -Fq -- '--output-format stream-json --print \"$TILLANDSIAS_ANTIGRAVITY_PROMPT\"' \"$A\" && grep -Fq 'harness-supervisor antigravity' \"$A\" && grep -Fq -- '--prompt-interactive \"$TILLANDSIAS_ANTIGRAVITY_PROMPT\"' \"$A\" && echo 'ok: claude and antigravity headless branches'"
+    timeout_ms: 5000
+    expected_behavior: "ok: claude and antigravity headless branches"
+
+  - step: "a Claude or Antigravity prompt keeps its TTY unless a delegated run was requested, and the entrypoints carry the headless branches"
+    command: "cargo test -q -p tillandsias-headless claude_and_antigravity_ && echo 'ok: claude and antigravity prompt lanes'"
+    timeout_ms: 120000
+    expected_behavior: "ok: claude and antigravity prompt lanes"
 
   - step: "the prompted Codex command consumes an appended --json result argument"
     command: "E=images/default/entrypoint-forge-codex.sh; grep -Fq 'codex_result_args+=(--json)' \"$E\" && grep -Fq 'codex exec \"${codex_forge_args[@]}\" \"${codex_result_args[@]}\" \"$TILLANDSIAS_CODEX_PROMPT\"' \"$E\" && echo 'ok: codex --json reaches exec'"

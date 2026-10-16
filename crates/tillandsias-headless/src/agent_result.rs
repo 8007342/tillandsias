@@ -1,12 +1,22 @@
 //! Outcome parsing for delegated forge agent runs (order 429).
 //!
-//! Both agent CLIs can emit a JSONL transcript when
+//! Every agent CLI the forge drives can emit a JSONL transcript when
 //! `TILLANDSIAS_AGENT_RESULT_FORMAT=json` is set (see the forge entrypoints):
 //!
 //!   * Codex `codex exec --json` emits `thread.started`, `turn.*`,
 //!     `item.completed` with a nested `item`, and `error`.
 //!   * OpenCode `opencode run --format json` emits events whose payload lives
 //!     under `part` (`part.text` and `part.reason`) plus nested error data.
+//!   * Claude `claude --print --output-format stream-json` (order 539) emits
+//!     `system`/`init`, `assistant` (text under `message.content[]`) and ONE
+//!     terminal `result` carrying `subtype`, `is_error` and `result`; the
+//!     `json` output format is that same `result` object alone.
+//!   * Antigravity `agy --output-format stream-json --print` (order 539) keys
+//!     on `event` rather than `type`: `init`, `step_update`, and a terminal
+//!     `result` with `result.status` (`SUCCESS`) and `result.response`.
+//!
+//! The Claude and Antigravity shapes were MEASURED on 2026-10-12 (claude
+//! 2.1.296; agy of the same day) with a one-word prompt, not read from docs.
 //!
 //! # The one invariant that matters
 //!
@@ -100,12 +110,102 @@ pub fn parse_transcript(transcript: &str) -> AgentOutcome {
         let Ok(v) = serde_json::from_str::<Value>(line) else {
             continue; // interleaved non-JSON log output
         };
-        let Some(kind) = v.get("type").and_then(Value::as_str) else {
+        // Codex, OpenCode and Claude key their events on `type`; Antigravity
+        // keys on `event` with the payload under a same-named object. A line
+        // with neither is noise. Both matches below run on every event line;
+        // each is a no-op for the other CLIs' shapes.
+        let kind = v.get("type").and_then(Value::as_str);
+        let agy_event = v.get("event").and_then(Value::as_str);
+        if kind.is_none() && agy_event.is_none() {
             continue;
-        };
+        }
         saw_any_event = true;
 
-        match kind {
+        match agy_event.unwrap_or("") {
+            // ---- antigravity (order 539) ----
+            "init" => saw_start = true,
+            // The ONLY terminal event. `status` other than SUCCESS (or missing)
+            // is a failure; a stream that ends on a `step_update` stays
+            // indeterminate, so a killed run cannot read as done.
+            "result" => {
+                let status = v
+                    .pointer("/result/status")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                if status == "SUCCESS" {
+                    saw_terminal_success = true;
+                    if let Some(t) = v.pointer("/result/response").and_then(Value::as_str)
+                        && !t.trim().is_empty()
+                    {
+                        last_text = Some(t.trim_end().to_string());
+                    }
+                } else {
+                    failure_reason.get_or_insert_with(|| {
+                        let shown = if status.is_empty() {
+                            "<missing>"
+                        } else {
+                            status
+                        };
+                        format!("antigravity result status {shown}")
+                    });
+                }
+            }
+            "error" => {
+                failure_reason.get_or_insert_with(|| {
+                    extract_reason(&v).unwrap_or_else(|| "antigravity error event".to_string())
+                });
+            }
+            _ => {}
+        }
+
+        match kind.unwrap_or("") {
+            // ---- claude (order 539) ----
+            // `system`/`init` opens the run; `assistant` carries message text;
+            // `result` is the ONLY terminal event and says for itself whether
+            // it failed (`is_error`, `subtype` such as `error_max_turns`). A
+            // missing `is_error` reads as an error: absence is never success.
+            "system" if v.get("subtype").and_then(Value::as_str) == Some("init") => {
+                saw_start = true;
+            }
+            "assistant" => {
+                if let Some(parts) = v.pointer("/message/content").and_then(Value::as_array) {
+                    for part in parts {
+                        if part.get("type").and_then(Value::as_str) == Some("text")
+                            && let Some(t) = part.get("text").and_then(Value::as_str)
+                            && !t.trim().is_empty()
+                        {
+                            last_text = Some(t.to_string());
+                        }
+                    }
+                }
+            }
+            "result" => {
+                let subtype = v
+                    .get("subtype")
+                    .and_then(Value::as_str)
+                    .unwrap_or("<missing>");
+                let is_error = v.get("is_error").and_then(Value::as_bool).unwrap_or(true);
+                if is_error || subtype != "success" {
+                    failure_reason.get_or_insert_with(|| {
+                        match v
+                            .get("result")
+                            .and_then(Value::as_str)
+                            .filter(|s| !s.trim().is_empty())
+                        {
+                            Some(detail) => format!("claude result {subtype}: {detail}"),
+                            None => format!("claude result {subtype}"),
+                        }
+                    });
+                } else {
+                    saw_terminal_success = true;
+                    if let Some(t) = v.get("result").and_then(Value::as_str)
+                        && !t.trim().is_empty()
+                    {
+                        last_text = Some(t.to_string());
+                    }
+                }
+            }
+
             // ---- codex ----
             "thread.started" | "turn.started" => saw_start = true,
             "turn.completed" => {
@@ -507,5 +607,131 @@ done."#;
                 .summary()
                 .contains("FAILED")
         );
+    }
+
+    // ---------------------------------------------------------------
+    // Order 539: the Claude and Antigravity print-mode shapes, as MEASURED
+    // on 2026-10-12 (claude 2.1.296 `--print --verbose --output-format
+    // stream-json`; `agy --output-format stream-json --print`), trimmed to
+    // the keys the parser reads. Every negative arm below is a stream the
+    // real CLI produces when it is killed, exhausted or refused.
+    // ---------------------------------------------------------------
+
+    const CLAUDE_STREAM_OK: &str = r#"{"type":"system","subtype":"init","cwd":"/tmp","session_id":"fb330c60","tools":["Bash"]}
+{"type":"assistant","message":{"model":"claude-fable-5-1","id":"msg_01","type":"message","role":"assistant","content":[{"type":"text","text":"pong"}],"stop_reason":null},"session_id":"fb330c60"}
+{"type":"rate_limit_event","rate_limit_info":{"status":"allowed"}}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":2151,"num_turns":1,"result":"pong","session_id":"fb330c60","permission_denials":[]}"#;
+
+    #[test]
+    fn delegated_result_claude_stream_json_success_is_evidenced_by_its_result_line() {
+        match parse_transcript(CLAUDE_STREAM_OK) {
+            AgentOutcome::Succeeded { last_message } => {
+                assert_eq!(last_message.as_deref(), Some("pong"));
+            }
+            other => panic!("expected Succeeded, got {other:?}"),
+        }
+        assert!(classify_captured_run(CLAUDE_STREAM_OK, &test_exit_status(0), false).is_success());
+    }
+
+    /// `--output-format json` is the terminal object ALONE, on one line.
+    #[test]
+    fn delegated_result_claude_json_object_alone_succeeds() {
+        let t = r#"{"type":"result","subtype":"success","is_error":false,"num_turns":1,"result":"pong","session_id":"b486f7f1"}"#;
+        assert!(parse_transcript(t).is_success());
+    }
+
+    #[test]
+    fn delegated_result_claude_error_result_is_a_failure_with_its_subtype() {
+        let t = r#"{"type":"system","subtype":"init","session_id":"s"}
+{"type":"result","subtype":"error_max_turns","is_error":true,"num_turns":1,"result":"Reached max turns (1)","session_id":"s"}"#;
+        match parse_transcript(t) {
+            AgentOutcome::Failed { reason } => {
+                assert!(reason.contains("error_max_turns"), "reason: {reason}");
+                assert!(reason.contains("max turns"), "reason: {reason}");
+            }
+            other => panic!("expected Failed, got {other:?}"),
+        }
+    }
+
+    /// A `result` whose `is_error` is MISSING must not read as success: the
+    /// parser's whole contract is that absence is never evidence.
+    #[test]
+    fn delegated_result_claude_result_without_is_error_is_not_success() {
+        let t = r#"{"type":"result","subtype":"success","result":"pong"}"#;
+        assert!(!parse_transcript(t).is_success());
+    }
+
+    /// Killed after the assistant turn and before the terminal line: the
+    /// stream has text but no `result`, so it is indeterminate, not done.
+    #[test]
+    fn delegated_result_claude_stream_without_result_line_is_indeterminate() {
+        let t = r#"{"type":"system","subtype":"init","session_id":"s"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"working on it"}]},"session_id":"s"}"#;
+        match parse_transcript(t) {
+            AgentOutcome::Indeterminate { reason } => {
+                assert!(reason.contains("terminal"), "reason: {reason}")
+            }
+            other => panic!("expected Indeterminate, got {other:?}"),
+        }
+    }
+
+    const AGY_STREAM_OK: &str = r#"{"event":"init","conversation_id":"e890f926","init":{"cwd":"/tmp","tools":["ask_permission"]}}
+{"event":"step_update","step_update":{"conversation_id":"e890f926","step_index":0,"state":"DONE","step_type":"user_input"}}
+{"event":"step_update","step_update":{"conversation_id":"e890f926","step_index":1,"state":"ACTIVE","step_type":"agent_response","text_delta":"pong"}}
+{"event":"step_update","step_update":{"conversation_id":"e890f926","step_index":1,"state":"DONE","step_type":"agent_response","text_delta":"\n","duration_seconds":4.76}}
+{"event":"result","result":{"conversation_id":"e890f926","status":"SUCCESS","response":"pong\n","duration_seconds":4.79,"num_turns":1}}"#;
+
+    #[test]
+    fn delegated_result_antigravity_stream_json_success_is_evidenced_by_its_result_event() {
+        match parse_transcript(AGY_STREAM_OK) {
+            AgentOutcome::Succeeded { last_message } => {
+                assert_eq!(last_message.as_deref(), Some("pong"));
+            }
+            other => panic!("expected Succeeded, got {other:?}"),
+        }
+        assert!(classify_captured_run(AGY_STREAM_OK, &test_exit_status(0), false).is_success());
+    }
+
+    #[test]
+    fn delegated_result_antigravity_non_success_status_is_a_failure() {
+        let t = r#"{"event":"init","conversation_id":"c","init":{}}
+{"event":"result","result":{"conversation_id":"c","status":"CANCELLED","response":""}}"#;
+        match parse_transcript(t) {
+            AgentOutcome::Failed { reason } => {
+                assert!(reason.contains("CANCELLED"), "reason: {reason}")
+            }
+            other => panic!("expected Failed, got {other:?}"),
+        }
+        let missing = r#"{"event":"result","result":{"conversation_id":"c"}}"#;
+        assert!(!parse_transcript(missing).is_success());
+    }
+
+    /// Killed mid-step: `init` and `step_update` events but no `result`.
+    #[test]
+    fn delegated_result_antigravity_stream_without_result_event_is_indeterminate() {
+        let t = r#"{"event":"init","conversation_id":"c","init":{}}
+{"event":"step_update","step_update":{"step_index":1,"state":"ACTIVE","step_type":"agent_response","text_delta":"po"}}"#;
+        match parse_transcript(t) {
+            AgentOutcome::Indeterminate { reason } => {
+                assert!(reason.contains("terminal"), "reason: {reason}")
+            }
+            other => panic!("expected Indeterminate, got {other:?}"),
+        }
+    }
+
+    /// The positive control for the `event`-keyed path: a Codex stream must
+    /// classify exactly as before the Antigravity arms were added.
+    #[test]
+    fn delegated_result_codex_stream_is_unchanged_by_the_event_keyed_arms() {
+        let t = r#"{"type":"thread.started","thread_id":"t1"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"type":"agent_message","text":"done"}}
+{"type":"turn.completed"}"#;
+        match parse_transcript(t) {
+            AgentOutcome::Succeeded { last_message } => {
+                assert_eq!(last_message.as_deref(), Some("done"));
+            }
+            other => panic!("expected Succeeded, got {other:?}"),
+        }
     }
 }

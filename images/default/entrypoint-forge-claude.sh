@@ -174,6 +174,27 @@ fi
 # session with the message already submitted — typically "report to the
 # coordinator for directions" — so a fleet coordinator can launch sibling
 # forge agents and direct them over the remote-control channel.
+#
+# Order 539: the same prompt under TILLANDSIAS_AGENT_RESULT_FORMAT=json is a
+# DELEGATED run — `claude --print` (headless; the launcher already dropped
+# --interactive/--tty) with `--output-format stream-json`, whose LAST line is
+# `{"type":"result","subtype":"success"|"error_*","is_error":<bool>,
+# "result":"<final text>",...}` after `system`/`init` and `assistant` events
+# (measured on claude 2.1.296, 2026-10-12). `--verbose` is what print mode
+# requires beside stream-json. The host captures stdout and agent_result.rs
+# classifies it; an attended run keeps the formatted TUI. Crash-supervised
+# like the other headless lanes (767-nkkq): a runtime fault is a loud
+# `fail:harness-crashed:...` line and a truthful nonzero exit, never a
+# restart.
+if [ -n "${TILLANDSIAS_CLAUDE_PROMPT:-}" ] && [ "${TILLANDSIAS_AGENT_RESULT_FORMAT:-}" = "json" ]; then
+    trace_lifecycle "entrypoint" "claude launching (non-interactive print, order 539)"
+    trace_lifecycle "exec" "launching claude --print"
+    export TILLANDSIAS_CRASH_LAST_OUTPUT="/tmp/forge-lifecycle.log"
+    exec /usr/local/bin/harness-supervisor claude \
+        /usr/local/bin/codex-oauth-session -- \
+        "$CC_BIN" "${claude_forge_args[@]}" --print --verbose --output-format stream-json \
+        "$TILLANDSIAS_CLAUDE_PROMPT"
+fi
 if [ -n "${TILLANDSIAS_CLAUDE_PROMPT:-}" ]; then
     claude_forge_args+=("$TILLANDSIAS_CLAUDE_PROMPT")
 fi
