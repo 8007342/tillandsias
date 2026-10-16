@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-browser-window-first-navigation-loads-every-subresource-not-only-the-document-through-the-network-change-race
+    field: status
+    value: completed
+    ts: "2026-10-15T19:39:32Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-browser-window-first-navigation-loads-every-subresource-not-only-the-document-through-the-network-change-race
+    event:
+      type: completed
+      ts: "2026-10-15T19:39:32Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: PR #453 landed as d6026be0f (land(453), head d0f252542) on linux-next 2026-10-15T16:20:12Z; window containers run without IPv6 and the first navigation retries ERR_NETWORK_CHANGED; gate green; shipped in tag v56.10.15.1

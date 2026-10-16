@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-15, from the v56.10.15.1 macOS smoke.
+packets:
+  - packet_id: macos-tray-opencode-cli-ends-in-an-unclean-stop-so-the-next-tray-launch-rebuilds-the-guest-and-cli-boots-launder-an-unclean-disk
+    order: 1744-jrjw
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    size: S
+    pickup_role: macos
+    capability_tags: [macos, vm, unclean-stop, cli, rebuild]
+    related: [1642-cc54]
+    title: |
+      After `tillandsias-tray --opencode <path> --prompt ...` exited 0, the next tray launch logged "reset: REBUILD (unclean previous stop)" and destroyed rootfs.img, including the forge image the run had just built. The opposite also holds: the CLI boot modes (--exec-guest, --opencode, --list-cloud-projects) boot a disk the tray would rebuild, and a clean CLI stop then clears the unclean marker, so an unclean disk is silently accepted as clean
+    context: |
+      MEASURED (v56.10.15.1 macOS smoke): the --opencode run went from 21:26:28Z to 21:37:04Z, exit 0. Its stderr has no "[tillandsias-vz] stop: guest reported a clean power-off" line; every --exec-guest run that day has one, and so does a later --opencode run (22:33Z to 22:38Z), so the unclean stop is intermittent: 1 of 2 runs. The tray launched next, at 21:39:45Z, did REBUILD. Separately, at 22:23Z an --exec-guest run was force-stopped (the guest was in a kswapd soft lockup, 1744-xjfw). The next --opencode run booted that disk without a rebuild, and its forge build died with a Go register dump. An --exec-guest boot after that ended in a clean power-off, which removes vm-running.marker (mark_vm_stopped_cleanly), so the tray would no longer have rebuilt that disk.
+      READ: opencode_main and exec_guest_main both end in `vz.stop(Duration::from_secs(10))`. The likely difference is that a forge stack is still tearing down when the 10 s drain expires; that is unverified, because the console log for that stop was overwritten by later boots. The unclean-stop REBUILD decision (1642-cc54) lives in the tray launch path only.
+    exit_criteria:
+      - "an --opencode run that exits normally leaves a clean stop: the next tray launch does not REBUILD (a live check), with the drain long enough for forge teardown, or the teardown awaited before the stop"
+      - "a CLI boot mode finding vm-running.marker either applies the same REBUILD as the tray or refuses with a message; it never boots the unclean disk and then clears the marker (a vm-layer unit test, red today)"
+    unscoreable: "one live --opencode then tray launch, plus the marker unit test"
+    next_action: >
+      Capture the console log of an --opencode stop to see whether the 10 s drain expires. Move the unclean-marker check into VzRuntime start (or a shared helper) so every boot mode honours it.
+    events:
+      - type: filed
+        ts: "2026-10-15T22:42:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          --opencode leaves an unclean stop (the next tray launch REBUILDs), and CLI boots launder an unclean disk's marker.

@@ -319,6 +319,46 @@ impl TrayBrowserContainers {
     }
 }
 
+/// Order 1722-2haw: give a visible window the output-only audio socket, and
+/// say in the reply what it got. A window always opens; sound is a bonus
+/// whose absence is stated, never silent.
+fn with_output_audio(
+    mut display: crate::BrowserDisplayContext,
+    headless: bool,
+) -> (crate::BrowserDisplayContext, String) {
+    if headless {
+        return (
+            display,
+            "Audio: none (a headless window has no speakers).".into(),
+        );
+    }
+    // A WSLg compositor is an absolute WAYLAND_DISPLAY (1656-yhjt). WSLg's
+    // PulseServer is not yet behind an output-only server.
+    if display
+        .wayland_display
+        .as_deref()
+        .is_some_and(|d| d.starts_with('/'))
+    {
+        return (
+            display,
+            "Audio: none (sound in WSL2 windows is not supported yet).".into(),
+        );
+    }
+    let Some(runtime) = display.xdg_runtime_dir.clone() else {
+        return (display, "Audio: none (XDG_RUNTIME_DIR is not set).".into());
+    };
+    match crate::host_audio::ensure_output_only_socket(&runtime) {
+        Ok(socket) => {
+            display.audio_socket = Some(socket);
+            (
+                display,
+                "Audio: playback to the host speakers; the page cannot record (no microphone, no capture of other sound).".into(),
+            )
+        }
+        Err(why) => (display, format!("Audio: none ({why}).")),
+    }
+}
+
 fn podman(args: &[&str], budget: Duration) -> Result<String, String> {
     let output = crate::podman_command()
         .args(args)
@@ -381,6 +421,11 @@ pub(crate) fn browser_window_spec(
         format!("{CDP_DIR_IN_CONTAINER}/cdp.sock"),
     )
     .network(&handle.network_name)
+    // Order 1725-cgh2: no IPv6, so no DAD settling after start, whose turn
+    // to a valid address aborted the first page's requests with
+    // net::ERR_NETWORK_CHANGED. The window's network is --internal and its
+    // names resolve to the forwarder over IPv4.
+    .disable_ipv6()
     .arg(format!(
         "--host-resolver-rules={}",
         host_resolver_rules(project)
@@ -428,6 +473,11 @@ pub(crate) fn webkit_window_spec(
     .detached()
     .name(&handle.container_name)
     .network(&handle.network_name)
+    // Order 1725-cgh2: no IPv6, so no DAD settling after start, whose turn
+    // to a valid address aborted the first page's requests with
+    // net::ERR_NETWORK_CHANGED. The window's network is --internal and its
+    // names resolve to the forwarder over IPv4.
+    .disable_ipv6()
     .pids_limit(512)
     .tmpfs("/tmp:size=256m")
     .tmpfs("/dev/shm:size=256m")
@@ -452,6 +502,13 @@ pub(crate) fn webkit_window_spec(
         "TILLANDSIAS_WEBKIT_RELAY",
         format!("{forwarder_ip}:{preview_port}"),
     );
+    // Order 1722-2haw: the same output-only socket file as a Chromium window.
+    if let Some((socket, _, _)) = display.audio_mount() {
+        let inside = format!("{WEBKIT_RUNTIME_DIR}/pulse-native");
+        spec = spec
+            .volume(socket, &inside, tillandsias_podman::MountMode::ReadWrite)
+            .env("PULSE_SERVER", format!("unix:{inside}"));
+    }
     for name in [
         format!("www.{project}.localhost"),
         format!("web.{project}.localhost"),
@@ -529,6 +586,14 @@ impl BrowserContainers for TrayBrowserContainers {
         })?;
         let ca_spki = spki_sha256_base64(&pem).map_err(LaunchError::Spawn)?;
         let display = crate::BrowserDisplayContext::from_env().map_err(LaunchError::Spawn)?;
+        let (display, audio) = with_output_audio(display, request.headless);
+        let add_audio = |mut handle: ContainerHandle| {
+            handle.notice = Some(match handle.notice.take() {
+                Some(notice) => format!("{notice} {audio}"),
+                None => audio.clone(),
+            });
+            handle
+        };
         if request.engine == Engine::WebKit {
             // browser.open never asks for this (it emulates in Chromium
             // instead); refuse rather than mount a compositor socket anyway.
@@ -537,7 +602,9 @@ impl BrowserContainers for TrayBrowserContainers {
                     "a headless window is Chromium; the WebKit engine needs a display".into(),
                 ));
             }
-            return self.start_webkit(request, &certs_dir, &display);
+            return self
+                .start_webkit(request, &certs_dir, &display)
+                .map(add_audio);
         }
         // Order 1712-3fsw: headless mounts nothing of the display stack.
         let surface = if request.headless {
@@ -610,7 +677,7 @@ impl BrowserContainers for TrayBrowserContainers {
             self.stop(&handle);
             return Err(LaunchError::Spawn(err));
         }
-        Ok(handle)
+        Ok(add_audio(handle))
     }
 
     fn stop(&self, handle: &ContainerHandle) {
@@ -649,6 +716,7 @@ mod tests {
         let display = crate::BrowserDisplayContext {
             wayland_display: Some("wayland-0".into()),
             xdg_runtime_dir: Some(runtime.path().to_path_buf()),
+            audio_socket: None,
         };
         (runtime, display)
     }
@@ -709,6 +777,10 @@ mod tests {
             "only the window network at run time: {joined}"
         );
         assert!(joined.contains("TILLANDSIAS_FWD_PROJECT=acme"));
+        assert!(
+            !joined.contains("--sysctl"),
+            "the forwarder keeps its own network as it is: {joined}"
+        );
         assert!(joined.contains("TILLANDSIAS_FWD_UPSTREAM_HOST=10.0.42.7"));
         assert!(
             joined.contains("--cap-drop=ALL") || joined.contains("--cap-drop ALL"),
@@ -786,6 +858,10 @@ mod tests {
         );
         assert!(joined.contains("TILLANDSIAS_CDP_SOCKET=/run/tillandsias-cdp/cdp.sock"));
         assert!(joined.contains("--window-size=428,926"), "{joined}");
+        assert!(
+            argv.contains(&"--sysctl=net.ipv6.conf.all.disable_ipv6=1".to_string()),
+            "no IPv6 DAD to abort the first navigation (1725-cgh2): {joined}"
+        );
         assert!(
             joined.contains(
                 "--host-resolver-rules=MAP *.acme.localhost router:8443, MAP * ~NOTFOUND"
@@ -879,6 +955,10 @@ mod tests {
         assert!(joined.contains("TILLANDSIAS_CDP_SOCKET=/run/tillandsias-cdp/cdp.sock"));
         assert!(joined.contains("--window-size=428,926"), "{joined}");
         assert!(
+            argv.contains(&"--sysctl=net.ipv6.conf.all.disable_ipv6=1".to_string()),
+            "no IPv6 DAD to abort the first navigation (1725-cgh2): {joined}"
+        );
+        assert!(
             joined.contains(
                 "--host-resolver-rules=MAP *.acme.localhost router:8443, MAP * ~NOTFOUND"
             ),
@@ -942,6 +1022,10 @@ mod tests {
         );
         assert!(
             joined.contains("TILLANDSIAS_WEBKIT_RELAY=10.89.1.2:18443"),
+            "{joined}"
+        );
+        assert!(
+            argv.contains(&"--sysctl=net.ipv6.conf.all.disable_ipv6=1".to_string()),
             "{joined}"
         );
         assert!(

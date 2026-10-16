@@ -1,0 +1,125 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora from the lakanoa test project's field report:
+# github.com/8007342/lakanoa commit e613839 (FORGE_DIAGNOSTICS.md, session 2026-10-15 on yoga)
+packets:
+  - packet_id: a-browser-window-plays-its-pages-audio-on-the-host-speakers-output-only
+    order: 1722-2haw
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: M
+    pickup_role: linux
+    capability_tags: [host-browser, browser, audio, isolation]
+    related: [1641-xbvq, 1656-yhjt, 1712-3fsw]
+    depends_on: []
+    title: |
+      A game playing in a host-browser window is silent: the browser container has no route to the host's sound server, so audio Chromium produces never reaches the speakers
+    context: |
+      Field report (github.com/8007342/lakanoa commit e613839 (FORGE_DIAGNOSTICS.md, session 2026-10-15 on yoga), finding 9). The Chromium tab's speaker icon was lit and an in-forge headless check measured the game's AudioContext running with output peaks near 0.08, yet nothing reached the host speakers while host-native audio worked.
+      Fix direction, under the browser container's isolation rules (1641-xbvq gives it ONLY the Wayland socket file):
+      - Mount exactly one more socket file, the host's PulseAudio-protocol socket ($XDG_RUNTIME_DIR/pulse/native, which pipewire-pulse also serves), read-write as a file and never the runtime dir.
+      - Set PULSE_SERVER=unix:<path> and keep --userns=keep-id so the container user can open it.
+      SECURITY, which must be designed rather than assumed: the PulseAudio protocol also allows RECORDING, so mounting that socket gives a page microphone access. The window must be output-only: no capture devices exposed, or a dedicated playback-only sink/socket, with an arm proving a capture attempt fails.
+      Platforms:
+      - Linux hosts: the PipeWire-pulse socket.
+      - WSL2: WSLg serves PulseAudio at /mnt/wslg/PulseServer.
+      - macOS guest: no sound path yet. Headless windows (1712) have no speakers by definition, so say so in the reply.
+    exit_criteria:
+      - "a page in a visible browser window plays a test tone that a host-side capture of the default sink records (red today: silence)"
+      - "a page calling getUserMedia({audio:true}) in that window gets no device, and no capture stream reaches the host (security arm)"
+      - "the browser container still mounts no runtime directory, only named socket files"
+    unscoreable: "unpinnable-until-the-guard-exists: the tone and no-capture arms are the deliverable"
+    next_action: >
+      Measure whether pipewire-pulse can expose a playback-only socket (a pulse module-native-protocol-unix with auth limited to playback, or a separate sink and socket), or whether denying capture needs a client-side config in the image. Decide before mounting anything, then write the no-capture arm red first.
+    provenance: |
+      Filed by macuahuitl-fedora, 2026-10-15T01:17:57Z, from the lakanoa field report.
+    events:
+      - type: filed
+        ts: "2026-10-15T01:17:57Z"
+        host: macuahuitl
+        summary: |-
+          Host-browser windows play no audio; the fix must be output-only.
+
+  - packet_id: service-reload-finishes-or-names-why-not-instead-of-a-bare-podman-run-timeout
+    order: 1723-2fiq
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: S
+    pickup_role: linux
+    capability_tags: [local-web-preview, podman, diagnostics]
+    related: [1696-gz2y, 1625-6iwd]
+    depends_on: []
+    title: |
+      service_reload {category: WEB} fails with "runtime_unavailable: podman failed at step run (timeout)", and service_status reports nothing afterwards, so nobody knows whether the preview picked up the rebuilt bundle
+    context: |
+      Field report (github.com/8007342/lakanoa commit e613839 (FORGE_DIAGNOSTICS.md, session 2026-10-15 on yoga), finding 11), on yoga. The reply step-qualifies the failure (1625-6iwd), but a timeout at "run" says neither what podman was waiting for nor what state the preview is in now. The empty service_status is 1696-gz2y (fixed on trunk, unreleased). Re-measure on a release carrying 1696 before concluding that status really has no data.
+      Questions: is reload a stop-then-run whose run waits on the previous container's teardown, the image or a name conflict? Is the timeout budget sized for a cold host? After a timeout, is the old preview still serving, or is nothing serving?
+    exit_criteria:
+      - "service_reload on a published preview finishes, and the preview serves the rebuilt bundle (a marker changed before the reload is visible after it)"
+      - "when reload does fail, the reply names the podman sub-step and what it waited for, and service_status reports whether the previous preview is still serving"
+    unscoreable: "unpinnable-until-reproduced: the timeout's cause is unknown; the reload-marker arm is the deliverable"
+    next_action: >
+      Reproduce on a Linux host with a published preview: time each podman call inside reload, read the ordering in local_web_preview::reload, and find what run waits for.
+    provenance: |
+      Filed by macuahuitl-fedora, 2026-10-15T01:17:57Z, from the lakanoa field report.
+    events:
+      - type: filed
+        ts: "2026-10-15T01:17:57Z"
+        host: macuahuitl
+        summary: |-
+          service_reload times out at podman run with no cause named.
+
+  - packet_id: forge-agents-are-told-never-to-pkill-f-which-kills-their-own-shell
+    order: 1724-kcj4
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    size: S
+    pickup_role: any
+    capability_tags: [forge, startup-context, agent-guidance]
+    related: [1705-bgen]
+    depends_on: []
+    title: |
+      Forge agents keep killing their own shell with pkill -f (exit 144): the pattern matches the agent's own command line. The forge's agent guidance must say to use pgrep and kill by PID, skipping $$
+    context: |
+      Field report (github.com/8007342/lakanoa commit e613839 (FORGE_DIAGNOSTICS.md, session 2026-10-15 on yoga), finding 12): pkill -f "http.server 8099" killed the agent's own shell. The report says it is the SECOND time (its finding 6). Tillandsias' own fleet learned the same lesson (memory: never sweep a literal your own command carries), but end-user forge agents get no such guidance. The fix belongs in the forge's agent-facing context: the startup-context addendum or a generic skill. Keep it one plain sentence, not Tillandsias-internal vocabulary (1705-bgen's rule).
+    exit_criteria:
+      - "the forge's agent-facing context carries the pgrep-and-kill-by-PID rule, and a fixture asserts it is present in what a forge agent receives (red today)"
+    unscoreable: "unpinnable-until-the-guard-exists: the presence fixture is the deliverable"
+    next_action: >
+      Find what a forge agent receives (inject_startup_context, startup-context-addendum.md and the harness instruction files) and add one line there, with a fixture.
+    provenance: |
+      Filed by macuahuitl-fedora, 2026-10-15T01:17:57Z, from the lakanoa field report.
+    events:
+      - type: filed
+        ts: "2026-10-15T01:17:57Z"
+        host: macuahuitl
+        summary: |-
+          Forge agents need the never-pkill-f rule.
+
+events:
+  - packet_id: host-browser-mcp-success-results-carry-no-content-so-every-successful-tool-call-reads-empty
+    event:
+      type: note
+      ts: "2026-10-15T01:17:57Z"
+      host: macuahuitl
+      summary: |-
+        A second independent field confirmation (github.com/8007342/lakanoa commit e613839 (FORGE_DIAGNOSTICS.md, session 2026-10-15 on yoga), finding 8, on yoga): publish_local, service_status, browser_open (WebKit, Chromium, dev:true) and browser_list_windows all came back empty while errors arrived. The fix (1ad05f769) is on trunk and ships in the next cut. The live criterion waits for that release.
+  - packet_id: a-device-preset-window-hides-the-browser-chrome-so-the-viewport-is-the-device
+    event:
+      type: note
+      ts: "2026-10-15T01:17:57Z"
+      host: macuahuitl
+      summary: |-
+        Field detail (github.com/8007342/lakanoa commit e613839 (FORGE_DIAGNOSTICS.md, session 2026-10-15 on yoga), finding 10, iPhone SE 375x667 in Chromium). The window showed tabs, the address bar and launch-flag warning bars, so the content did not fit at the device aspect until the user stretched it. Chromium also enforces a minimum window width of about 500 px, so the window came out about 160% of the device width. Proposed launch: --app=<url> (no tabs or address bar), no warning-bar flags (else --test-type), --no-first-run --no-default-browser-check. Set the device size by CDP Emulation.setDeviceMetricsOverride inside a window at least as large as the minimum, with the page drawn at device size and empty margins, not by sizing the OS window to the device. Open the window without stealing focus. Device emulation itself worked (touch seen).
+  - packet_id: a-dev-mode-chromium-window-with-a-device-preset-opens-desktop-sized-and-warns-of-unknown-flags
+    event:
+      type: note
+      ts: "2026-10-15T01:17:57Z"
+      host: macuahuitl
+      summary: |-
+        Related field detail (github.com/8007342/lakanoa commit e613839 (FORGE_DIAGNOSTICS.md, session 2026-10-15 on yoga), finding 10): the launch-flag warning bars seen there are likely this row's "unknown runtime flags" warning. Chromium's minimum window width (~500 px) means the device size must come from CDP metrics, not the OS window size (see 1699-rhy2's note).

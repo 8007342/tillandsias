@@ -336,10 +336,37 @@ echo ""
 if [ ! -x "$INSTALL_PATH" ]; then
     die "install: $INSTALL_PATH is missing or not executable after the fetch — refusing to reset local state, because there would be nothing left to reprovision with."
 fi
-say "Running tillandsias --reset-state (resets local state, then reprovisions — may take a minute)..."
-"$INSTALL_PATH" --reset-state --debug
+# ORDER 1738-wqmt: the SOFT reset, always, and QUIET. On Linux `--reset-state`
+# IS the soft reset (1437-qza3, 2026-09-27; v56.10.14.1 carries it): it destroys
+# derived state only (containers, images, build markers) and keeps the Vault
+# store, the keyring entries, the installation anchor and the downloads, so
+# the sign-ins survive an install. HARD is never reachable from here, and
+# nothing here asks.
+#
+# Operator ruling 2026-10-08, verbatim: "we do not need to print any power
+# user messages during install, at all. Install should be for END USER (NOT
+# POWER USER) and be a pretty installer, rather than an
+# informational/debugging installer." The binary's reset banner names flags
+# and variables, so it goes to the setup log, as install-macos.sh does, and
+# this installer names only the log. No --debug. The log is kept on success:
+# it is the one record of what the reset kept and removed.
+# BEGIN-SETUP-RESET (scripts/lua/test-install-linux-setup-is-quiet.lua runs this block)
+SETUP_LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/tillandsias"
+SETUP_LOG="$SETUP_LOG_DIR/setup.log"
+mkdir -p "$SETUP_LOG_DIR" 2>/dev/null || true
+say "Getting Tillandsias ready (this may take a few minutes)..."
+set +e
+"$INSTALL_PATH" --reset-state </dev/null >"$SETUP_LOG" 2>&1
+RESET_EXIT=$?
+set -e
+# Fail LOUD, by path: "ready" after a failed setup would hand the user a tray
+# booting against nothing.
+[ "$RESET_EXIT" -eq 0 ] || \
+    die "Tillandsias could not finish setting up (exit $RESET_EXIT). Details: $SETUP_LOG — re-run this installer"
+say "Setup details: $SETUP_LOG"
+# END-SETUP-RESET
 echo ""
-say "Reset and reprovision complete. Launch the tray with:"
+say "Tillandsias is ready. Launch the tray with:"
 if path_has_dir "$INSTALL_DIR"; then
     say "  tillandsias --tray"
 else

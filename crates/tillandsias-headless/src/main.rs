@@ -245,6 +245,10 @@ fn terminal_foreground_pgrp() -> Option<i32> {
 }
 
 fn main() {
+    // ORDER 1744-xjfw: first, so even a panic on the helper's FIRST write (a
+    // startup warning, before argument dispatch) is recorded. A no-op unless
+    // the detached image-ensure parent named a sidecar.
+    install_image_ensure_panic_hook();
     #[cfg(unix)]
     {
         // Own our process group so graceful shutdown can sweep stray children
@@ -1772,9 +1776,10 @@ fn print_usage(version: &str) {
          Destructive by design; you'll re-authenticate once"
     );
     println!(
-        "  --reset-state  FULL LOCAL RESET: everything --reset-guest wipes PLUS the \
-         host-held vault credentials, the Vault store and ALL podman images, then \
-         reprovisions. PRESERVES the installation anchor (installation-uuid-v1). \
+        "  --reset-state  SOFT LOCAL RESET: removes derived state (Tillandsias \
+         containers, volumes, secrets, networks, ALL podman images, build markers), \
+         then reprovisions. KEEPS the Vault store and your sign-ins, the keyring \
+         entries, the installation anchor and the downloads (order 1437-qza3). \
          Same name and semantics on Linux, macOS and Windows (order 1286-4437). \
          Skip with TILLANDSIAS_DESTRUCTIVE_RESET_OK=0."
     );
@@ -2817,6 +2822,82 @@ const IMAGE_BUILD_DETACH_ENV: &str = "TILLANDSIAS_IMAGE_BUILD_DETACH";
 /// Set on the helper process so its own `ensure_image_exists` (including
 /// base-image recursion) stays in-process — one helper, never nested ones.
 const IMAGE_BUILD_HELPER_ENV: &str = "TILLANDSIAS_IMAGE_BUILD_HELPER";
+/// ORDER 1744-xjfw: where the helper's panic hook writes the panic text. The
+/// helper's stdout AND stderr are its build log, so one failed write to that
+/// file (a full disk mid-build, say) both panics the helper (`println!` panics
+/// on a write error) and loses the panic message: measured on the macOS guest,
+/// "exited 101" with a log holding nothing past the forge-base pull. This
+/// sidecar lives in the temp dir (tmpfs on the guest), not beside the log.
+const IMAGE_ENSURE_PANIC_FILE_ENV: &str = "TILLANDSIAS_IMAGE_ENSURE_PANIC_FILE";
+
+fn image_ensure_panic_path(image_name: &str) -> PathBuf {
+    std::env::temp_dir().join(format!("tillandsias-image-ensure-{image_name}.panic"))
+}
+
+/// Helper mode: record any panic to the sidecar named by
+/// [`IMAGE_ENSURE_PANIC_FILE_ENV`] before the default hook prints it.
+fn install_image_ensure_panic_hook() {
+    let Some(path) = std::env::var_os(IMAGE_ENSURE_PANIC_FILE_ENV).map(PathBuf::from) else {
+        return;
+    };
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = fs::write(&path, format!("{info}\n"));
+        default_hook(info);
+    }));
+}
+
+/// Free bytes on the filesystem holding `path`, for a failure message.
+#[cfg(unix)]
+// statvfs field widths differ by platform (f_bavail is u32 on macOS, u64 on
+// Linux), so the cast is needed on one and redundant on the other.
+#[allow(clippy::unnecessary_cast)]
+fn free_bytes_at(path: &Path) -> Option<u64> {
+    use std::os::unix::ffi::OsStrExt;
+    let c = std::ffi::CString::new(path.as_os_str().as_bytes()).ok()?;
+    let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
+    if unsafe { libc::statvfs(c.as_ptr(), &mut st) } != 0 {
+        return None;
+    }
+    Some(st.f_bavail as u64 * st.f_frsize as u64)
+}
+
+#[cfg(not(unix))]
+fn free_bytes_at(_path: &Path) -> Option<u64> {
+    None
+}
+
+/// ORDER 1744-xjfw: the error for a helper that exited non-zero. Says what a
+/// bare 101 means when no panic text survived, and how much space was left,
+/// so the next failure names its own cause instead of a progress bar.
+fn describe_image_ensure_failure(
+    image_name: &str,
+    code: i32,
+    log_path: &Path,
+    log_tail: &str,
+    panic_text: Option<&str>,
+    free_bytes: Option<u64>,
+) -> String {
+    let mut msg = match panic_text.map(str::trim).filter(|t| !t.is_empty()) {
+        Some(p) => {
+            format!("detached image ensure helper for {image_name} panicked (exit {code}): {p}")
+        }
+        None if code == 101 => format!(
+            "detached image ensure helper for {image_name} exited 101, a panic whose message was not recorded: a write to its build log failed (a full disk is the usual cause)"
+        ),
+        None => format!("detached image ensure helper for {image_name} exited {code}"),
+    };
+    if let Some(b) = free_bytes {
+        let dir = log_path.parent().unwrap_or(log_path);
+        msg.push_str(&format!(
+            "\nfree space under {}: {} MiB",
+            dir.display(),
+            b / (1024 * 1024)
+        ));
+    }
+    msg.push_str(&format!("\nlog tail ({}):\n{log_tail}", log_path.display()));
+    msg
+}
 
 /// Order 270: pure decision — should this ensure detach into a
 /// session-surviving helper? The multi-minute first-use `podman build` ran
@@ -2856,6 +2937,8 @@ struct DetachedEnsureRequest {
     image_name: String,
     image_tag: String,
     log_path: PathBuf,
+    /// 1744-xjfw: the sidecar the helper's panic hook writes.
+    panic_path: PathBuf,
     debug: bool,
 }
 
@@ -2890,6 +2973,7 @@ impl DetachedImageEnsure for SetsidImageEnsure {
             .arg(&request.image_name)
             .arg(&request.image_tag)
             .env(IMAGE_BUILD_HELPER_ENV, "1")
+            .env(IMAGE_ENSURE_PANIC_FILE_ENV, &request.panic_path)
             .stdin(Stdio::null())
             .stdout(log)
             .stderr(log_err);
@@ -2956,11 +3040,15 @@ fn run_image_ensure_detached<D: DetachedImageEnsure>(
             log_path.display()
         );
     }
+    let panic_path = image_ensure_panic_path(image_name);
+    // A sidecar left by an earlier run must not be read as this run's panic.
+    let _ = fs::remove_file(&panic_path);
     let request = DetachedEnsureRequest {
         root: root.to_path_buf(),
         image_name: image_name.to_string(),
         image_tag: image_tag.to_string(),
         log_path: log_path.clone(),
+        panic_path: panic_path.clone(),
         debug,
     };
     let code = detacher.run(&request)?;
@@ -2974,9 +3062,14 @@ fn run_image_ensure_detached<D: DetachedImageEnsure>(
             lines[start..].join("\n")
         })
         .unwrap_or_default();
-    Err(format!(
-        "detached image ensure helper for {image_name} exited {code}; log tail ({}):\n{tail}",
-        log_path.display()
+    let panic_text = fs::read_to_string(&panic_path).ok();
+    Err(describe_image_ensure_failure(
+        image_name,
+        code,
+        &log_path,
+        &tail,
+        panic_text.as_deref(),
+        free_bytes_at(log_path.parent().unwrap_or(&log_path)),
     ))
 }
 
@@ -5842,9 +5935,10 @@ async fn try_start_vsock_forwarder(client: &tillandsias_podman::PodmanClient, de
     // socat rather than about the lane.
     let image = versioned_image_tag("forge-base", VERSION.trim());
     let image = image.as_str();
-    let Some((cid, port)) = vsock_forward_target() else {
+    let Some(target) = vsock_forward_target() else {
         return false;
     };
+    let (cid, port) = (target.cid(), target.port());
     let profile = match ensure_vsock_seccomp_profile() {
         Ok(p) => p,
         Err(e) => {
@@ -5864,7 +5958,7 @@ async fn try_start_vsock_forwarder(client: &tillandsias_podman::PodmanClient, de
         .run_container_observed(
             "vsock-forwarder",
             VSOCK_FORWARDER_NAME,
-            &build_vsock_forwarder_run_args(image, &profile, cid, port),
+            &build_vsock_forwarder_run_args(image, &profile, target),
             debug,
         )
         .await
@@ -5913,10 +6007,18 @@ const VSOCK_FORWARD_DIR: &str = "/run/tillandsias";
 /// test builds, so the SetVsockForwardTarget success path is reachable from a
 /// unit test on any host (1509-kf4d); /run/tillandsias otherwise.
 pub(crate) fn vsock_forward_dir() -> PathBuf {
+    // 1722-bwy4: per TEST THREAD, not per process, so tests that write the
+    // target file never race each other and need no lock across an await. A
+    // #[tokio::test] runs its spawned server task on its own (current) thread,
+    // so the handler and the test see the same file.
     #[cfg(test)]
     {
+        let thread = format!("{:?}", std::thread::current().id())
+            .chars()
+            .filter(char::is_ascii_alphanumeric)
+            .collect::<String>();
         std::env::temp_dir().join(format!(
-            "tillandsias-vsock-forward-test-{}",
+            "tillandsias-vsock-forward-test-{}-{thread}",
             std::process::id()
         ))
     }
@@ -5937,16 +6039,71 @@ pub(crate) fn vsock_forward_dir() -> PathBuf {
 ///
 /// The env var is the test seam and the operator override; the file is how the
 /// tray actually delivers it.
-fn vsock_forward_target() -> Option<(u32, u32)> {
+///
+/// ORDER 1722-bwy4: every source is validated through [`VsockForwardTarget::new`];
+/// a refused value is logged and treated as no target (the in-guest inference
+/// container runs instead), never relayed.
+fn vsock_forward_target() -> Option<VsockForwardTarget> {
     fn parse(raw: &str) -> Option<(u32, u32)> {
         let (cid, port) = raw.trim().split_once(':')?;
         Some((cid.trim().parse().ok()?, port.trim().parse().ok()?))
     }
-    if let Ok(v) = std::env::var("TILLANDSIAS_GUEST_VSOCK_FORWARD_TO") {
-        return parse(&v);
+    let (source, raw) = match std::env::var("TILLANDSIAS_GUEST_VSOCK_FORWARD_TO") {
+        Ok(v) => ("TILLANDSIAS_GUEST_VSOCK_FORWARD_TO", v),
+        Err(_) => (
+            "the vsock-forward file",
+            std::fs::read_to_string(vsock_forward_dir().join("vsock-forward")).ok()?,
+        ),
+    };
+    let (cid, port) = parse(&raw)?;
+    match VsockForwardTarget::new(cid, port) {
+        Ok(target) => Some(target),
+        Err(why) => {
+            eprintln!("[tillandsias] {source}: {why}; NOT starting the forwarder");
+            None
+        }
     }
-    let path = vsock_forward_dir().join("vsock-forward");
-    parse(&std::fs::read_to_string(path).ok()?)
+}
+
+/// ORDER 1722-bwy4. Where the vsock forwarder may relay `inference:11434`,
+/// which every forge reaches by design: ONLY the host (cid 2), and never the
+/// guest's own control port or port 0. A target of (1, 42420) would bridge
+/// every forge to the guest's control listener (1721-fcm0). Constructible only
+/// through [`VsockForwardTarget::new`], and the forwarder's argv builder takes
+/// nothing else, so no source can skip the check.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct VsockForwardTarget {
+    cid: u32,
+    port: u32,
+}
+
+impl VsockForwardTarget {
+    /// VMADDR_CID_HOST.
+    pub(crate) const HOST_CID: u32 = 2;
+
+    pub(crate) fn new(cid: u32, port: u32) -> Result<Self, String> {
+        if cid != Self::HOST_CID {
+            return Err(format!(
+                "forward target cid {cid} refused: only the host (cid {}) may be a forward target",
+                Self::HOST_CID
+            ));
+        }
+        if port == 0 || port == tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT {
+            return Err(format!(
+                "forward target port {port} refused: not 0 and not the control port {}",
+                tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT
+            ));
+        }
+        Ok(Self { cid, port })
+    }
+
+    pub(crate) fn cid(self) -> u32 {
+        self.cid
+    }
+
+    pub(crate) fn port(self) -> u32 {
+        self.port
+    }
 }
 
 /// Materialise the derived seccomp profile and return its path.
@@ -5988,9 +6145,9 @@ fn ensure_vsock_seccomp_profile() -> Result<PathBuf, String> {
 fn build_vsock_forwarder_run_args(
     image: &str,
     profile: &Path,
-    host_cid: u32,
-    host_port: u32,
+    target: VsockForwardTarget,
 ) -> Vec<String> {
+    let (host_cid, host_port) = (target.cid(), target.port());
     vec![
         "--detach".into(),
         "--replace".into(),
@@ -7093,7 +7250,11 @@ reverse_proxy {upstream_host}:{port}\n\
 }}\n\n"
             ));
             if route.preview_tls {
-                let preview_project = subdomain.strip_prefix("www.").unwrap_or(project_label);
+                // `<service>.<project>`: the project is everything after the
+                // first label, dots included (flutter.macron.dev → macron.dev).
+                let preview_project = subdomain
+                    .split_once('.')
+                    .map_or(project_label, |(_, project)| project);
                 routes.push_str(&format!(
                     "https://{subdomain}.localhost:8443 {{\n    tls /etc/tillandsias/preview/{preview_project}.crt /etc/tillandsias/preview/{preview_project}.key\n    header X-Tillandsias-Preview {upstream_host}\n    reverse_proxy {upstream_host}:{port}\n}}\n\n"
                 ));
@@ -10729,9 +10890,10 @@ fn run_reset_state(_debug: bool) -> Result<(), String> {
 /// One-click intentional EPHEMERAL RESET: wipe + re-initialize. Reaches the
 /// same end state as a pristine `--init` + vault bring-up, with every prior
 /// guest credential discarded (the honest UX: you'll re-authenticate once).
-/// ORDER 1286-4437 (operator ruling 2026-09-20). A SUPERSET of
-/// `--reset-guest`: the guest substrate PLUS the host-held credentials,
-/// vault-data and the images, then reprovision through the same `--init` path.
+/// ORDER 1286-4437 (operator ruling 2026-09-20), made SOFT by 1437-qza3: the
+/// guest substrate PLUS the images and build markers, then reprovision through
+/// the same `--init` path. It clears no credential and deletes no store
+/// (`reset_state_plan` lists what is kept).
 ///
 /// `--reset-guest` is deliberately NOT changed. It documents "images are
 /// preserved, so this is fast when they still exist" and callers rely on that;
@@ -11804,6 +11966,148 @@ impl CodexDeviceQrScanner {
     }
 }
 
+const ANTIGRAVITY_DEVICE_VERIFICATION_URIS: &[&str] =
+    &["https://www.google.com/device", "https://google.com/device"];
+
+struct AntigravityDeviceQrScanner {
+    buffer: Vec<u8>,
+    detected_uri: Option<String>,
+    bytes_since_uri: usize,
+    displayed: bool,
+}
+
+impl AntigravityDeviceQrScanner {
+    fn new() -> Self {
+        Self {
+            buffer: Vec::with_capacity(1024),
+            detected_uri: None,
+            bytes_since_uri: 0,
+            displayed: false,
+        }
+    }
+
+    fn feed(&mut self, chunk: &[u8], tier: tillandsias_progress_tty::Tier) -> Option<String> {
+        if self.displayed {
+            return None;
+        }
+
+        self.buffer.extend_from_slice(chunk);
+        if self.buffer.len() > 2048 {
+            let drain = self.buffer.len() - 2048;
+            self.buffer.drain(..drain);
+        }
+
+        if self.detected_uri.is_none() {
+            if let Some(uri) = Self::scan_for_uri(&self.buffer) {
+                self.detected_uri = Some(uri);
+                self.bytes_since_uri = 0;
+            }
+        } else {
+            self.bytes_since_uri += chunk.len();
+        }
+
+        if let Some(ref uri) = self.detected_uri {
+            let code = Self::scan_for_code(&self.buffer);
+            if code.is_some() || self.bytes_since_uri >= 128 {
+                self.displayed = true;
+                return Self::render_presentation(uri, code.as_deref(), tier);
+            }
+        }
+
+        None
+    }
+
+    fn scan_for_uri(buf: &[u8]) -> Option<String> {
+        let text = String::from_utf8_lossy(buf);
+        for &expected in ANTIGRAVITY_DEVICE_VERIFICATION_URIS {
+            if let Some(idx) = text.find(expected) {
+                let before = if idx == 0 {
+                    ' '
+                } else {
+                    text[..idx].chars().next_back().unwrap_or(' ')
+                };
+                let end_idx = idx + expected.len();
+                let after = if end_idx >= text.len() {
+                    ' '
+                } else {
+                    text[end_idx..].chars().next().unwrap_or(' ')
+                };
+
+                let valid_boundary_before = before.is_ascii_whitespace()
+                    || before == '('
+                    || before == '['
+                    || before == '<'
+                    || before == '"'
+                    || before == '\'';
+                let valid_boundary_after = after.is_ascii_whitespace()
+                    || after == ')'
+                    || after == ']'
+                    || after == '>'
+                    || after == '"'
+                    || after == '\''
+                    || after == '.'
+                    || after == ','
+                    || after == ';'
+                    || after == '\r'
+                    || after == '\n';
+
+                if valid_boundary_before && valid_boundary_after {
+                    return Some(expected.to_string());
+                }
+            }
+        }
+        None
+    }
+
+    fn scan_for_code(buf: &[u8]) -> Option<String> {
+        let text = String::from_utf8_lossy(buf);
+        for token in
+            text.split(|c: char| c.is_ascii_whitespace() || c == ':' || c == '"' || c == '\'')
+        {
+            let trimmed = token.trim();
+            if trimmed.len() == 9 {
+                let chars: Vec<char> = trimmed.chars().collect();
+                if chars.len() == 9
+                    && chars[..4].iter().all(|c| c.is_ascii_alphanumeric())
+                    && chars[4] == '-'
+                    && chars[5..].iter().all(|c| c.is_ascii_alphanumeric())
+                {
+                    return Some(trimmed.to_ascii_uppercase());
+                }
+            }
+        }
+        None
+    }
+
+    fn render_presentation(
+        uri: &str,
+        code: Option<&str>,
+        tier: tillandsias_progress_tty::Tier,
+    ) -> Option<String> {
+        let mobile_url = if let Some(c) = code {
+            format!("{uri}?user_code={c}")
+        } else {
+            uri.to_string()
+        };
+        let qr = render_terminal_qr_in(&mobile_url, tier).ok()?;
+        let mut out = format!(
+            "\nScan this QR code with your mobile phone to complete Antigravity login:\n\n{qr}\n"
+        );
+        out.push_str(&format!("  Or in any browser, visit: {uri}\n"));
+        if let Some(c) = code {
+            out.push_str("  Enter this one-time code:\n\n");
+            out.push_str(&big_user_code(c, tier));
+            out.push_str(&format!(
+                "\n  Enter one-time code:      {}\n\n",
+                styled_user_code(c, tier)
+            ));
+        } else {
+            out.push('\n');
+        }
+        Some(out)
+    }
+}
+
 /// Rows in one [`big_glyph`].
 const BIG_GLYPH_ROWS: usize = 5;
 
@@ -12736,6 +13040,42 @@ fn run_codex_device_login_with_qr(
     }
 }
 
+/// Stream Antigravity's device instructions, add a QR code, and render the one-time
+/// code in large 5x5 block letters (matching GitHub device login presentation).
+fn run_antigravity_device_login_with_qr(
+    mut login: tillandsias_podman::SyncPodmanCommand,
+    debug: bool,
+) -> Result<(), String> {
+    use std::io::Write;
+
+    if debug {
+        eprintln!("[tillandsias] running: {:?}", login.as_std());
+    }
+    let tier = qr_tier();
+    let mut scanner = AntigravityDeviceQrScanner::new();
+    let status = login
+        .status_bounded_with_stdin_streaming(
+            &[],
+            tillandsias_podman::OperationKind::Container.default_budget(),
+            move |chunk| {
+                let mut out = std::io::stdout().lock();
+                let _ = out.write_all(chunk);
+                if let Some(rendered) = scanner.feed(chunk, tier) {
+                    let _ = out.write_all(rendered.as_bytes());
+                }
+                let _ = out.flush();
+            },
+        )
+        .map_err(|e| format!("Failed to run Antigravity device login: {e}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "Antigravity device login exited with status {status}"
+        ))
+    }
+}
+
 /// ORDER 1571-lgex. What an end user sees, and what the tray's status label
 /// becomes, when a provider's interactive sign-in step ends without a
 /// credential — most often because its window expired (Claude closes it at
@@ -12961,6 +13301,10 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             && matches!(config.input_mode, LoginInputMode::Terminal)
         {
             run_codex_device_login_with_qr(login, debug)
+        } else if matches!(config.provider, ProviderId::Antigravity)
+            && matches!(config.input_mode, LoginInputMode::Terminal)
+        {
+            run_antigravity_device_login_with_qr(login, debug)
         } else {
             run_podman_command(login, debug)
         };
@@ -16087,6 +16431,9 @@ fn browser_profile_root() -> PathBuf {
 struct BrowserDisplayContext {
     wayland_display: Option<String>,
     xdg_runtime_dir: Option<PathBuf>,
+    /// Order 1722-2haw: the OUTPUT-ONLY audio server's socket file, when one
+    /// is running (host_audio). Never the host's own pulse socket.
+    audio_socket: Option<PathBuf>,
 }
 
 /// The WSLg compositor socket in a WSL2 guest (order 1656-yhjt).
@@ -16133,7 +16480,20 @@ impl BrowserDisplayContext {
             xdg_runtime_dir: std::env::var_os("XDG_RUNTIME_DIR")
                 .filter(|v| !v.is_empty())
                 .map(PathBuf::from),
+            audio_socket: None,
         }
+    }
+
+    /// The output-only audio socket a window's container may mount, and how
+    /// it is mounted: (host path, path inside, PULSE_SERVER value).
+    fn audio_mount(&self) -> Option<(String, String, String)> {
+        let socket = self.audio_socket.as_deref()?;
+        let inside = format!("{BROWSER_RUNTIME_DIR}/pulse-native");
+        Some((
+            socket.display().to_string(),
+            inside.clone(),
+            format!("unix:{inside}"),
+        ))
     }
 
     /// The host Wayland socket FILE, or why there is none. WAYLAND_DISPLAY is
@@ -16292,6 +16652,13 @@ fn build_project_browser_spec_on(
         .env("XDG_RUNTIME_DIR", BROWSER_RUNTIME_DIR)
         .env("WAYLAND_DISPLAY", &socket_name)
         .arg("--ozone-platform=wayland");
+    // Order 1722-2haw: sound, output only. One more socket FILE, the
+    // dedicated server that refuses every record stream; never a directory.
+    if let Some((socket, inside, server)) = display.audio_mount() {
+        spec = spec
+            .volume(socket, inside, MountMode::ReadWrite)
+            .env("PULSE_SERVER", server);
+    }
 
     for device_flag in detect_gpu_devices() {
         if let Some(device) = device_flag.strip_prefix("--device=") {
@@ -17975,9 +18342,12 @@ fn forge_tool_cache_volume(project_name: &str) -> String {
 /// @trace spec:forge-hot-cold-split (Requirement: HOT tier — RAM-backed tmpfs
 ///   for finely curated paths; Per-launch project source budget)
 fn forge_hot_src_tmpfs(project_name: &str) -> String {
-    let budget = tillandsias_core::config::compute_hot_budget(
+    // Order 1729-kg5q: the floor fits a build, clamped to half the forge's
+    // memory.max (the size is a cap counted in that cgroup, not a reservation).
+    let budget = tillandsias_core::config::compute_source_budget(
         forge_mirror_pack_size_kb(project_name),
         &tillandsias_core::config::ForgeConfig::default(),
+        tillandsias_core::forge_budget::ForgeBudget::for_this_host().memory_max_mib,
     );
     format!("/home/forge/src:size={budget}m,mode=0777")
 }
@@ -19287,6 +19657,8 @@ mod local_web_preview;
 // @trace spec:host-browser-mcp (order 1649-xqet)
 #[cfg(feature = "host-services")]
 mod browser_open;
+#[cfg(feature = "host-services")]
+mod host_audio;
 
 // @trace spec:local-web-preview (order 1637-5765): opt-in toolchains (Flutter)
 // in a sibling container, streamed over the lane's MCP socket. Gated with
@@ -22061,13 +22433,135 @@ mod tests {
         );
     }
 
+    /// ORDER 1722-bwy4 (from 1721-fcm0). A forge cannot open an AF_VSOCK
+    /// socket ONLY because containers-common's default seccomp rule denies it
+    /// (EPERM), and the guest has vsock_loopback loaded. So no forge launch may
+    /// carry a seccomp override or --privileged: either would let a forge
+    /// reach the guest control listener on (1, 42420). Every forge builder and
+    /// mode is enumerated. The vsock forwarder's derived profile is the one
+    /// sanctioned seccomp option, asserted to stay on that container alone.
+    #[test]
+    fn no_forge_launch_carries_a_seccomp_override_or_privileged() {
+        let _env = env_lock();
+        let restore = TestEnvRestore::capture(&["TILLANDSIAS_FORGE_INSTANCE"]);
+        restore.remove("TILLANDSIAS_FORGE_INSTANCE");
+        let p = PathBuf::from("/tmp/project");
+        let ca = PathBuf::from("/tmp/ca");
+        let mut launches: Vec<(String, Vec<String>)> = Vec::new();
+        for mode in [
+            ForgeAgentMode::Claude,
+            ForgeAgentMode::Codex,
+            ForgeAgentMode::OpenCode,
+            ForgeAgentMode::Antigravity,
+            ForgeAgentMode::Maintenance,
+        ] {
+            launches.push((
+                format!("agent {mode:?}"),
+                build_forge_agent_run_args_with_vault(
+                    &p,
+                    Some(&p),
+                    None,
+                    "proj",
+                    None,
+                    &ca,
+                    "1.2.3",
+                    mode,
+                    false,
+                    None,
+                    None,
+                    false,
+                    &test_cache_root(),
+                ),
+            ));
+        }
+        for mode in [ForgeMode::Cli, ForgeMode::Web] {
+            launches.push((
+                format!("opencode {mode:?}"),
+                build_opencode_forge_args(
+                    &p,
+                    Some(&p),
+                    None,
+                    "proj",
+                    None,
+                    None,
+                    &ca,
+                    "1.2.3",
+                    mode,
+                    None,
+                    false,
+                    false,
+                ),
+            ));
+        }
+        launches.push((
+            "status-check".to_string(),
+            build_status_check_forge_args(&p, "proj", None, &ca, "1.2.3"),
+        ));
+        for (lane, argv) in &launches {
+            for arg in argv {
+                let a = arg.to_ascii_lowercase();
+                assert!(
+                    !a.contains("seccomp")
+                        && !a.contains("--privileged")
+                        && !a.contains("unconfined"),
+                    "forge {lane} carries {arg:?}: it would undo the only barrier between a \
+                     forge and AF_VSOCK"
+                );
+            }
+        }
+        // The one sanctioned exception stays on the forwarder.
+        let forwarder = build_vsock_forwarder_run_args(
+            "img:v1",
+            Path::new("/run/p.json"),
+            VsockForwardTarget::new(2, 42421).unwrap(),
+        );
+        assert!(
+            forwarder.iter().any(|a| a.contains("seccomp=/run/p.json")),
+            "the forwarder keeps its derived profile"
+        );
+    }
+
+    /// ORDER 1722-bwy4: EVERY source of the forward target is validated, the
+    /// env override and the file alike. Only the host (cid 2) on a port other
+    /// than the guest's own control port (42420) or 0 is a target.
+    #[test]
+    fn vsock_forward_target_refuses_anything_but_the_host_off_the_control_port() {
+        let _env = env_lock();
+        let restore = TestEnvRestore::capture(&["TILLANDSIAS_GUEST_VSOCK_FORWARD_TO"]);
+        let file = vsock_forward_dir().join("vsock-forward");
+        std::fs::create_dir_all(vsock_forward_dir()).unwrap();
+        for bad in ["1:11434", "3:11434", "2:42420", "2:0"] {
+            restore.set("TILLANDSIAS_GUEST_VSOCK_FORWARD_TO", bad);
+            assert!(
+                vsock_forward_target().is_none(),
+                "env {bad} must be refused"
+            );
+            restore.remove("TILLANDSIAS_GUEST_VSOCK_FORWARD_TO");
+            std::fs::write(&file, format!("{bad}\n")).unwrap();
+            assert!(
+                vsock_forward_target().is_none(),
+                "file {bad} must be refused"
+            );
+        }
+        // CONTROL: the host on a normal port is a target from either source.
+        std::fs::write(&file, "2:42421\n").unwrap();
+        assert!(vsock_forward_target().is_some(), "file 2:42421 is a target");
+        restore.set("TILLANDSIAS_GUEST_VSOCK_FORWARD_TO", "2:42421");
+        assert!(vsock_forward_target().is_some(), "env 2:42421 is a target");
+        let _ = std::fs::remove_file(&file);
+    }
+
     /// The alias IS the deliverable, so pin it: a forwarder that relays
     /// correctly and is reachable only by IP leaves every agent addressing
     /// `http://inference:11434` landing on nothing, and nothing in the relay's
     /// own behaviour would show it.
     #[test]
     fn vsock_forwarder_claims_the_inference_alias_on_the_enclave_network() {
-        let args = build_vsock_forwarder_run_args("img:v1", Path::new("/run/p.json"), 2, 42421);
+        let args = build_vsock_forwarder_run_args(
+            "img:v1",
+            Path::new("/run/p.json"),
+            VsockForwardTarget::new(2, 42421).unwrap(),
+        );
         let pairs: Vec<_> = args.windows(2).collect();
         assert!(
             pairs
@@ -22088,7 +22582,11 @@ mod tests {
     /// family on the container bridging the VM boundary.
     #[test]
     fn vsock_forwarder_is_confined_by_the_derived_profile() {
-        let args = build_vsock_forwarder_run_args("img:v1", Path::new("/run/p.json"), 2, 42421);
+        let args = build_vsock_forwarder_run_args(
+            "img:v1",
+            Path::new("/run/p.json"),
+            VsockForwardTarget::new(2, 42421).unwrap(),
+        );
         assert!(
             args.iter()
                 .any(|a| a == "--security-opt=seccomp=/run/p.json")
@@ -22106,7 +22604,11 @@ mod tests {
     /// argv. Its original instance silently never set an env var.
     #[test]
     fn vsock_forwarder_places_flags_before_the_image_and_socat_args_after() {
-        let args = build_vsock_forwarder_run_args("img:v1", Path::new("/run/p.json"), 2, 42421);
+        let args = build_vsock_forwarder_run_args(
+            "img:v1",
+            Path::new("/run/p.json"),
+            VsockForwardTarget::new(2, 42421).unwrap(),
+        );
         let at = args
             .iter()
             .position(|a| a == "img:v1")
@@ -25574,6 +26076,7 @@ mod tests {
                     image_name: request.image_name.clone(),
                     image_tag: request.image_tag.clone(),
                     log_path: request.log_path.clone(),
+                    panic_path: request.panic_path.clone(),
                     debug: request.debug,
                 });
                 Ok(self.exit_code)
@@ -25620,6 +26123,70 @@ mod tests {
         )
         .expect_err("helper non-zero exit is a failure");
         assert!(err.contains("exited 7"), "carries the helper exit: {err}");
+    }
+
+    /// ORDER 1744-xjfw: a helper whose build log could not be written exited
+    /// 101 with nothing in that log (macOS guest, v56.10.15.1). The error now
+    /// carries the panic text from the sidecar the helper's hook writes, says
+    /// what a bare 101 means when there is none, and never reports a sidecar
+    /// left by an earlier run as this run's panic.
+    #[test]
+    fn a_helper_panic_is_named_even_when_its_log_is_silent() {
+        struct PanickingHelper {
+            exit_code: i32,
+            panic_text: Option<&'static str>,
+        }
+        impl DetachedImageEnsure for PanickingHelper {
+            fn run(&self, request: &DetachedEnsureRequest) -> Result<i32, String> {
+                if let Some(t) = self.panic_text {
+                    fs::write(&request.panic_path, t).unwrap();
+                }
+                Ok(self.exit_code)
+            }
+        }
+        let run = |image: &str, helper: &PanickingHelper| {
+            run_image_ensure_detached(Path::new("/r"), image, "t:v1", false, helper)
+                .expect_err("non-zero exit is a failure")
+        };
+
+        let err = run(
+            "xjfw-panicked",
+            &PanickingHelper {
+                exit_code: 101,
+                panic_text: Some(
+                    "panicked at library/std/src/io/stdio.rs:1:1:\nfailed printing to stdout: No space left on device (os error 28)",
+                ),
+            },
+        );
+        assert!(err.contains("panicked (exit 101)"), "{err}");
+        assert!(err.contains("No space left on device"), "{err}");
+
+        let err = run(
+            "xjfw-silent",
+            &PanickingHelper {
+                exit_code: 101,
+                panic_text: None,
+            },
+        );
+        assert!(
+            err.contains("a panic whose message was not recorded"),
+            "{err}"
+        );
+
+        // A sidecar from an earlier run is removed before the helper starts.
+        fs::write(image_ensure_panic_path("xjfw-stale"), "an OLD panic").unwrap();
+        let err = run(
+            "xjfw-stale",
+            &PanickingHelper {
+                exit_code: 7,
+                panic_text: None,
+            },
+        );
+        assert!(!err.contains("an OLD panic"), "{err}");
+        assert!(err.contains("exited 7"), "{err}");
+        for image in ["xjfw-panicked", "xjfw-silent", "xjfw-stale"] {
+            let _ = fs::remove_file(image_ensure_panic_path(image));
+        }
     }
 
     /// Order 270 source-window pins: (a) the detach decision runs BEFORE the
@@ -25762,6 +26329,7 @@ mod tests {
         for raw in [
             "run_podman_command(login, debug)?",
             "run_codex_device_login_with_qr(login, debug)?",
+            "run_antigravity_device_login_with_qr(login, debug)?",
         ] {
             assert!(
                 !login_window.contains(raw),
@@ -26604,6 +27172,101 @@ mod tests {
         assert!(
             !qr.contains('\u{2580}') && !qr.contains('\u{2584}'),
             "no half-block glyphs"
+        );
+    }
+
+    #[test]
+    fn antigravity_device_qr_recognizes_stream_split_and_user_code() {
+        use tillandsias_progress_tty::{EnvView, Tier};
+
+        let non_tty = Tier::detect(&EnvView {
+            is_tty: false,
+            term: Some("xterm-256color".into()),
+            ..EnvView::default()
+        });
+        let no_color = Tier::detect(&EnvView {
+            is_tty: true,
+            term: Some("xterm-256color".into()),
+            no_color: Some(String::new()),
+            ..EnvView::default()
+        });
+        assert_eq!(non_tty, Tier::Plain);
+        assert_eq!(no_color, Tier::Plain);
+
+        for expected_uri in ANTIGRAVITY_DEVICE_VERIFICATION_URIS {
+            let uri = expected_uri.as_bytes();
+            for tier in [non_tty, no_color] {
+                for split in 0..=uri.len() {
+                    let mut scanner = AntigravityDeviceQrScanner::new();
+                    let mut first = b"Please visit: \r\n  ".to_vec();
+                    first.extend_from_slice(&uri[..split]);
+                    assert!(scanner.feed(&first, tier).is_none(), "split={split}");
+                    let mut second = uri[split..].to_vec();
+                    second.extend_from_slice(b" \r\nand enter code: ABCD-EFGH\r\n");
+                    let qr = scanner
+                        .feed(&second, tier)
+                        .expect("complete URI and code must render");
+                    assert!(qr.lines().count() >= 10, "split={split}");
+                    assert!(!qr.contains('\x1b'), "plain QR must have no escapes");
+                    assert!(
+                        qr.contains(expected_uri),
+                        "QR presentation must contain URI"
+                    );
+                    assert!(
+                        qr.contains("ABCD-EFGH"),
+                        "QR presentation must contain user code"
+                    );
+                    assert!(
+                        scanner
+                            .feed(b"\nhttps://www.google.com/device \n", tier)
+                            .is_none(),
+                        "a login renders at most one QR"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn antigravity_device_qr_rejects_spoofed_urls() {
+        use tillandsias_progress_tty::Tier;
+
+        for output in [
+            "device code: ABCD-EFGH\n",
+            "\nhttp://www.google.com/device \n",
+            "\nhttps://www.google.com.evil.invalid/device \n",
+            "\nhttps://google.com.evil.invalid/device \n",
+            "\nhttps://evil.invalid/?next=https://www.google.com/device \n",
+            "\nhttps://notgoogle.com/device \n",
+        ] {
+            let mut scanner = AntigravityDeviceQrScanner::new();
+            assert!(
+                scanner.feed(output.as_bytes(), Tier::Plain).is_none(),
+                "{output:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn antigravity_device_qr_uses_the_existing_terminal_palette() {
+        use tillandsias_progress_tty::Tier;
+
+        let mut scanner = AntigravityDeviceQrScanner::new();
+        let output = "Visit https://www.google.com/device and enter code ABCD-EFGH\n";
+        let presentation = scanner
+            .feed(output.as_bytes(), Tier::TrueColor)
+            .expect("verified URL must render");
+        assert!(
+            presentation.contains("\x1b[48;2;30;74;50m"),
+            "leaf-deepest modules"
+        );
+        assert!(
+            presentation.contains("\x1b[48;2;157;187;165m"),
+            "leaf-light ground"
+        );
+        assert!(
+            presentation.contains("ABCD-EFGH"),
+            "styled user code present"
         );
     }
 
@@ -31386,6 +32049,61 @@ esac
         assert!(!header.contains(' '));
     }
 
+    /// Order 1722-2haw: a visible window gets sound as ONE more socket file,
+    /// the output-only server's, and PULSE_SERVER naming it. Never the host's
+    /// own pulse socket or any runtime directory; no socket, no audio at all.
+    #[test]
+    fn a_window_mounts_only_the_output_only_audio_socket_file() {
+        let runtime = tempfile::tempdir().expect("runtime dir");
+        std::fs::write(runtime.path().join("wayland-1"), b"").expect("socket stand-in");
+        let audio = runtime.path().join("tillandsias/audio/native");
+        let spec = |audio_socket: Option<PathBuf>| {
+            let display = BrowserDisplayContext {
+                wayland_display: Some("wayland-1".to_string()),
+                xdg_runtime_dir: Some(runtime.path().to_path_buf()),
+                audio_socket,
+            };
+            build_project_browser_spec(
+                "about:blank",
+                "1.2.3",
+                Path::new("/tmp/tillandsias/browser/p"),
+                Path::new("/tmp/tillandsias/ca"),
+                &display,
+                "tillandsias-browser-acme",
+            )
+            .expect("browser spec")
+            .build_run_args()
+            .join(" ")
+        };
+        let with = spec(Some(audio.clone()));
+        assert!(
+            with.contains(&format!(
+                "{}:{BROWSER_RUNTIME_DIR}/pulse-native",
+                audio.display()
+            )),
+            "{with}"
+        );
+        assert!(
+            with.contains(&format!(
+                "PULSE_SERVER=unix:{BROWSER_RUNTIME_DIR}/pulse-native"
+            )),
+            "{with}"
+        );
+        assert!(
+            !with.contains("/pulse/native"),
+            "never the host's own socket: {with}"
+        );
+        assert!(
+            !with.contains(&format!("{}:", runtime.path().display())),
+            "never the runtime dir: {with}"
+        );
+        let without = spec(None);
+        assert!(
+            !without.contains("PULSE_SERVER") && !without.contains("pulse-native"),
+            "{without}"
+        );
+    }
+
     #[test]
     fn opencode_web_browser_spec_is_built_with_typed_podman_flags() {
         let profile_dir = PathBuf::from("/tmp/tillandsias/browser/test-profile");
@@ -31395,6 +32113,7 @@ esac
         let display = BrowserDisplayContext {
             wayland_display: Some("wayland-1".to_string()),
             xdg_runtime_dir: Some(runtime.path().to_path_buf()),
+            audio_socket: None,
         };
         let token = [7u8; 32];
         let expected_app_url = tillandsias_otp::build_login_data_url(
@@ -31524,6 +32243,7 @@ esac
         let (path, name) = BrowserDisplayContext {
             wayland_display: unset_sock,
             xdg_runtime_dir: None,
+            audio_socket: None,
         }
         .wayland_socket()
         .expect("absolute WSLg path needs no XDG_RUNTIME_DIR");
@@ -31541,6 +32261,7 @@ esac
                 BrowserDisplayContext {
                     wayland_display: None,
                     xdg_runtime_dir: Some(runtime.path().to_path_buf()),
+                    audio_socket: None,
                 },
                 "no WAYLAND_DISPLAY",
             ),
@@ -31548,6 +32269,7 @@ esac
                 BrowserDisplayContext {
                     wayland_display: Some("wayland-0".to_string()),
                     xdg_runtime_dir: None,
+                    audio_socket: None,
                 },
                 "XDG_RUNTIME_DIR is not set",
             ),
@@ -31555,6 +32277,7 @@ esac
                 BrowserDisplayContext {
                     wayland_display: Some("wayland-9".to_string()),
                     xdg_runtime_dir: Some(runtime.path().to_path_buf()),
+                    audio_socket: None,
                 },
                 "does not exist",
             ),
@@ -31562,6 +32285,7 @@ esac
                 BrowserDisplayContext {
                     wayland_display: Some("../podman/podman.sock".to_string()),
                     xdg_runtime_dir: Some(runtime.path().to_path_buf()),
+                    audio_socket: None,
                 },
                 "is not a socket name",
             ),
@@ -31765,12 +32489,15 @@ esac
         // The bound, not a fixed number: this host may or may not have a
         // mirror volume for the name above, and the assertion must be about
         // the CLAMP the spec specifies, not about which arm ran.
+        // 1729-kg5q: the floor is the build-sized one, clamped to half of
+        // this host's forge memory.max.
         let config = tillandsias_core::config::ForgeConfig::default();
+        let floor = tillandsias_core::config::hot_path_source_floor_mb(
+            tillandsias_core::forge_budget::ForgeBudget::for_this_host().memory_max_mib,
+        );
         assert!(
-            (tillandsias_core::config::HOT_PATH_BUDGET_FLOOR_MB..=config.hot_path_max_mb)
-                .contains(&size_mb),
-            "budget {size_mb} MB escaped the spec's [{}, {}] clamp",
-            tillandsias_core::config::HOT_PATH_BUDGET_FLOOR_MB,
+            (floor..=config.hot_path_max_mb).contains(&size_mb),
+            "budget {size_mb} MB escaped the spec's [{floor}, {}] clamp",
             config.hot_path_max_mb
         );
     }

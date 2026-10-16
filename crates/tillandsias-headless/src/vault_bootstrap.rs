@@ -1251,6 +1251,28 @@ pub fn store_github_token_bundle(
         .map_err(|e| format!("could not store the rotated access token: {e}"))
 }
 
+/// 1742-zg7r: the Vault container must be running for a read to mean anything.
+fn github_store_reachable(vault_running: bool) -> Result<(), String> {
+    if vault_running {
+        Ok(())
+    } else {
+        Err("vault-unavailable".into())
+    }
+}
+
+/// 1742-zg7r: what one GitHub record read means for the rotation. Only
+/// NotFound is "absent"; every other failure is a reason, so the scheduler
+/// retries on the error backoff instead of believing there is no token.
+fn github_vault_read(
+    res: Result<serde_json::Value, VaultError>,
+) -> Result<Option<serde_json::Value>, String> {
+    match res {
+        Ok(v) => Ok(Some(v)),
+        Err(VaultError::NotFound(_)) => Ok(None),
+        Err(e) => Err(cloudflare_vault_reason(&e).into()),
+    }
+}
+
 /// The live store: Vault through the root token, the same client the rest of
 /// this module uses.
 pub struct VaultGitHubTokenStore {
@@ -1260,20 +1282,21 @@ pub struct VaultGitHubTokenStore {
 impl GitHubTokenStore for VaultGitHubTokenStore {
     fn read_bundle(&self) -> Result<Option<GitHubTokenBundle>, String> {
         let debug = self.debug;
-        if !container_running(VAULT_CONTAINER_NAME) {
-            return Ok(None);
-        }
+        // 1742-zg7r: a Vault that is not up yet is UNREACHABLE, not empty.
+        // Answering Ok(None) made the scheduler report `no-token` and wait the
+        // full check interval at every tray start, because the tray starts the
+        // rotation before it starts Vault; Err takes the 60 s error backoff.
+        // The Cloudflare store already fails closed the same way.
+        github_store_reachable(container_running(VAULT_CONTAINER_NAME))?;
         let _stability = vault_stability_lease(debug)?;
         let rt = tokio_runtime()?;
         let base_url = vault_api_base_url();
-        let root_token = match read_and_handover_root_token(debug) {
-            Ok(t) => t,
-            Err(_) => return Ok(None),
-        };
+        let root_token = read_and_handover_root_token(debug)
+            .map_err(|_| "vault-root-token-unavailable".to_string())?;
         let client = vault_client(&base_url, &root_token, debug)?;
-        let secret = match rt.block_on(client.read_secret(GITHUB_TOKEN_PATH)) {
-            Ok(s) => s,
-            Err(_) => return Ok(None),
+        let Some(secret) = github_vault_read(rt.block_on(client.read_secret(GITHUB_TOKEN_PATH)))?
+        else {
+            return Ok(None);
         };
         let token = match secret["token"].as_str() {
             Some(t) if !t.is_empty() => t.to_string(),
@@ -1281,7 +1304,8 @@ impl GitHubTokenStore for VaultGitHubTokenStore {
         };
         // An absent refresh record is a legitimate state (a token-only login);
         // a read error is not the same thing and is reported as one.
-        let refresh = rt.block_on(client.read_secret(GITHUB_REFRESH_PATH)).ok();
+        let refresh = github_vault_read(rt.block_on(client.read_secret(GITHUB_REFRESH_PATH)))
+            .map_err(|e| format!("refresh-{e}"))?;
         let refresh_token = refresh
             .as_ref()
             .and_then(|r| r["refresh_token"].as_str())
@@ -7400,6 +7424,81 @@ mod tests {
         assert_eq!(
             github_rotation_next_delay(&Ok(DueCheck::NoToken), d2),
             GITHUB_ROTATION_CHECK_EVERY
+        );
+    }
+
+    /// 1742-zg7r: the live store's two decisions, each a pure function so the
+    /// gate can run them. A Vault that is not up is a REASON, not an absence.
+    #[test]
+    fn github_rotation_store_reports_an_unreachable_vault_as_a_reason() {
+        assert_eq!(
+            github_store_reachable(false),
+            Err("vault-unavailable".to_string())
+        );
+        assert_eq!(github_store_reachable(true), Ok(()));
+        let absent = github_vault_read(Err(VaultError::NotFound("secret/github/token".into())));
+        assert_eq!(absent, Ok(None), "only NotFound means there is no token");
+        for (err, reason) in [
+            (
+                VaultError::Network("connection refused".into()),
+                "vault-unavailable",
+            ),
+            (VaultError::Sealed("sealed".into()), "vault-sealed"),
+            (VaultError::Unauthorized("403".into()), "vault-unauthorized"),
+        ] {
+            assert_eq!(github_vault_read(Err(err)), Err(reason.to_string()));
+        }
+    }
+
+    /// 1742-zg7r, the field shape: the tray starts the rotation before Vault.
+    /// A store that is not up yet, then up with an EXPIRED token, must rotate
+    /// on the 60 s error backoff, not after the 15 min check interval. Before
+    /// the fix the first read was Ok(None) -> NoToken -> a 15 min wait.
+    #[test]
+    fn github_rotation_retries_on_the_error_backoff_until_vault_is_up() {
+        struct NotUpYet {
+            up: std::cell::Cell<bool>,
+            inner: SharedStore,
+        }
+        impl GitHubTokenStore for NotUpYet {
+            fn read_bundle(&self) -> Result<Option<GitHubTokenBundle>, String> {
+                github_store_reachable(self.up.get())?;
+                self.inner.read_bundle()
+            }
+            fn write_record(&self, path: &str, value: serde_json::Value) -> Result<(), String> {
+                self.inner.write_record(path, value)
+            }
+        }
+        let store = NotUpYet {
+            up: std::cell::Cell::new(false),
+            inner: SharedStore::with(&bundle_expiring_at(NOW - 60)),
+        };
+        let lock = test_lock("zg7r");
+        let check = || {
+            rotate_github_token_if_due(
+                &store,
+                &fresh_pair,
+                NOW,
+                false,
+                &lock,
+                std::time::Duration::from_secs(5),
+                false,
+            )
+        };
+        let first = check();
+        assert!(
+            matches!(&first, Err(e) if e.contains("vault-unavailable")),
+            "Vault not up must be an error, got {first:?}"
+        );
+        assert_eq!(
+            github_rotation_next_delay(&first, Duration::ZERO),
+            Duration::from_secs(60),
+            "an unreachable Vault is retried on the error backoff"
+        );
+        store.up.set(true);
+        assert!(
+            matches!(check(), Ok(DueCheck::Rotated { .. })),
+            "once Vault is up the expired token rotates on the next check"
         );
     }
 

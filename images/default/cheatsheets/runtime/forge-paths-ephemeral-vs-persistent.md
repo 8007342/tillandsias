@@ -77,6 +77,7 @@ Cargo target/, Maven .m2/, Gradle ~/.gradle/, Flutter pub-cache, npm/yarn/pnpm c
 | Flutter / Dart | `PUB_CACHE` | `pub/` |
 | npm | `npm_config_cache` | `npm/` |
 | Yarn | `YARN_CACHE_FOLDER` | `yarn/` |
+| Playwright browsers | `PLAYWRIGHT_BROWSERS_PATH` | `ms-playwright/` |
 | pnpm | `PNPM_HOME` | `pnpm/` |
 | uv | `UV_CACHE_DIR` | `uv/` |
 | pip | `PIP_CACHE_DIR` | `pip/` |

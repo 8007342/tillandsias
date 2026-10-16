@@ -70,8 +70,9 @@ else
     bad "codex: headers=$codex_hdr level=[$codex_lvl] file=[$(cat "$CODEX_HOME/config.toml" 2>/dev/null)]"
 fi
 agy_cfg="$HOME/.gemini/antigravity-cli/settings.json"
-if [ "$(jget -c '.trustedWorkspaces' "$agy_cfg" 2>/dev/null)" = "[\"$KEY\"]" ]; then
-    ok "agy: trustedWorkspaces = [\"$KEY\"] (a list, once) after two runs"
+if [ "$(jget -c '.trustedWorkspaces' "$agy_cfg" 2>/dev/null)" = "[\"$KEY\"]" ] &&
+   [ "$(jget -r '.approvalMode' "$agy_cfg" 2>/dev/null)" = "auto" ]; then
+    ok "agy: trustedWorkspaces = [\"$KEY\"] and approvalMode = \"auto\" after two runs"
 else
     bad "agy: $(cat "$agy_cfg" 2>/dev/null)"
 fi
@@ -102,8 +103,8 @@ if grep -qxF '[mcp_servers.forge-plan]' "$CODEX_HOME/config.toml" &&
 else
     bad "codex merge: [$(cat "$CODEX_HOME/config.toml")]"
 fi
-if [ "$(jget -c '[.colorScheme, .trustedWorkspaces]' "$HOME/.gemini/antigravity-cli/settings.json")" = "[\"dark\",[\"/else/where\",\"$KEY\"]]" ]; then
-    ok "agy: other settings and trusted workspaces preserved, project appended"
+if [ "$(jget -c '[.colorScheme, .trustedWorkspaces, .approvalMode]' "$HOME/.gemini/antigravity-cli/settings.json")" = "[\"dark\",[\"/else/where\",\"$KEY\"],\"auto\"]" ]; then
+    ok "agy: other settings and trusted workspaces preserved, approvalMode auto seeded, project appended"
 else
     bad "agy merge: $(cat "$HOME/.gemini/antigravity-cli/settings.json")"
 fi

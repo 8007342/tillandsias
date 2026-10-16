@@ -1,0 +1,17 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: a-wsl2-browser-window-plays-sound-through-an-output-only-server
+    event:
+      type: list-replace
+      ts: "2026-10-15T04:39:13Z"
+      agent_id: linux-macuahuitl-claude-20261015t043913z
+      host: linux
+      field: depends_on
+      items:
+        - "a-browser-window-plays-its-pages-audio-on-the-host-speakers-output-only"
+      summary: |-
+        fold fix: depends_on takes packet_ids, not orders; the order 1722-2haw made tillandsias-plan check fail for every host's plan-lane push

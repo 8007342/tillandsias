@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: tillandsias-log-lines-bleed-into-an-attached-agent-tui-and-only-a-resize-redraw-clears-them
+    order: 1741-xq7d
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    size: S
+    pickup_role: linux
+    capability_tags: [forge, terminal, attach, codex, ux]
+    related: [702-6jza]
+    depends_on: []
+    title: |
+      While a Codex forge session runs, lines prefixed "[tillandsias]" are written into the agent's full-screen TUI and corrupt it until a window resize forces a redraw. Every Tillandsias log line must go to a log file or the tray, never to a terminal an agent owns
+    context: |
+      Operator field report, 2026-10-15, from the lakanoa project (github.com/8007342/lakanoa): a Codex forge worked end to end. It pushed code and troubleshot locally through a sibling container. But a few "[tillandsias]" log lines bled into the Codex session; resizing the window redrew the screen and cleared them every time.
+      The "[tillandsias]" prefix is emitted by the host binary (crates/tillandsias-headless: bringup_progress, resource_lock, remote_projects, forge_swap, runtime_assets, tray/cloud), not by the forge image scripts, whose background jobs already write to /tmp/forge-lifecycle.log. So the suspect is a host-side writer that shares the terminal the forge attach uses after the agent has taken over the screen.
+      702-6jza is the macOS sibling (its "stderr bleed"); this row covers Linux and can close both if the fix is in the shared attach path.
+    exit_criteria:
+      - "after an attached agent TUI starts, no byte that the Tillandsias host process writes reaches that terminal: a fixture attaches a fake full-screen client and asserts its PTY receives no [tillandsias] line while the host emits progress, lock and remote-project messages (red today)"
+      - "those messages still reach their log file or the tray, so nothing is lost"
+    unscoreable: "unpinnable-until-the-guard-exists: the attach-PTY fixture is the deliverable"
+    next_action: >
+      Reproduce: launch a Codex forge from the tray on Linux and watch for "[tillandsias]" lines after Codex draws. Find which host writer still owns the attach terminal's stderr. Route it to the log file once the attach handoff happens, then write the fixture.
+    provenance: |
+      Filed by macuahuitl-fedora, 2026-10-15T19:37:47Z, from the operator's lakanoa field report.
+    events:
+      - type: filed
+        ts: "2026-10-15T19:37:47Z"
+        host: macuahuitl
+        summary: |-
+          Host log lines corrupt an attached agent TUI until a resize redraw.

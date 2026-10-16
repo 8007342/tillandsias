@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's direction (macuahuitl, 2026-10-15), from the 1637-5765 / 1725-cgh2 7d work.
+packets:
+  - packet_id: a-webkit-browser-window-reaches-its-projects-dev-service-hosts-like-chromium
+    order: 1725-wkfl
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [local-web-preview, browser, webkit, flutter]
+    estimated_hours: 3
+    related: [1637-5765, 1725-cgh2]
+    owned_files:
+      - crates/tillandsias-headless/src/browser_open.rs
+    title: |
+      A WebKit browser.open window maps only www.<project>.localhost and web.<project>.localhost to the forwarder, so a routed Flutter dev server at flutter.<project>.localhost (a DEV_SERVICES host since 1637-5765) does not resolve in it. The WebKit window should map the same project hosts the router serves, dev services included.
+    context: |
+      Seen while proving 1725-cgh2 (lenovinha, 2026-10-15). browser_open.rs builds the WebKit spec with add_host for exactly two names, www and web.
+      local_web_preview::DEV_SERVICES = ["flutter"] adds flutter.<project>.localhost to the router's SAN and routes; the Chromium window reaches it, the WebKit one cannot.
+      The host list should come from one source shared with the router (preview hosts plus DEV_SERVICES), not a second literal list.
+    exit_criteria:
+      - 'the WebKit window spec maps every host the router serves for the project (www, web, and each DEV_SERVICES entry) to the forwarder, from one shared list; a unit test over the spec pins flutter.<project>.localhost'
+      - 'a WebKit window opened on a routed flutter dev URL loads it, proven by a recorded run or a cold-start driver arm'
+    unscoreable: "unpinnable-until-the-guard-exists: the spec unit test naming flutter.<project>.localhost does not exist yet; written red first with the fix"
+    next_action: >
+      Replace the literal www/web pair in the WebKit spec with the router's project host list (including DEV_SERVICES), red unit test first; then open a flutter dev URL in WebKit on a fresh project.
+    provenance: |
+      Filed by lenovinha-silverblue at the coordinator's direction, 2026-10-15.
+    events:
+      - type: filed
+        ts: "2026-10-15T14:25:07Z"
+        host: lenovinha
+        summary: |-
+          A WebKit window must reach flutter.<project>.localhost like the Chromium window does.

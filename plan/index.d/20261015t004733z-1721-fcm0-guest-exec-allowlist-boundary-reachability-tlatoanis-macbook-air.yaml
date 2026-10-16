@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-15, at the coordinator's request:
+# "record in it whether that arm is a real boundary ... if something can, it's
+# the boundary and gets p1".
+packets:
+  - packet_id: whether-the-guest-exec-allowlist-is-a-boundary-depends-on-whether-anything-but-the-host-tray-can-reach-the-vsock-control-listener-measure-it-from-a-forge
+    order: 1721-fcm0
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [security, vsock, exec-allowlist, control-wire, forge, isolation]
+    estimated_hours: 3
+    related: [795-zshi, 1719-83po, 137]
+    title: |
+      The guest's exec allowlist (exec_allowlist.rs) admits `/bin/bash -lc <any script>` and, via the 795-zshi verbatim arm, ANY absolute program with ANY arguments, so it constrains nothing that matters. Whether that is acceptable depends on one unmeasured fact: can anything other than the host tray open a connection to the guest's control listener (vsock port 42420)? From the host, only the VM's owner process can. From inside the guest, a forge container might, through vsock loopback, and the channel PSK would not stop it, because it is derived from the hash of a public release binary.
+    context: |
+      READ 2026-10-15 (source on linux-next, not yet measured live):
+      - Who sends argv: the host tray's MenuAction → PtyIntent mapping (tillandsias-host-shell pty/mod.rs), and `tillandsias-tray --exec-guest` (the same binary, operator CLI; its classifier refuses some shapes). Both are host processes the operator runs.
+      - Host-side reach: on macOS the guest is reachable over vsock only through the VZVirtualMachine object owned by the tray process. On Windows, hvsocket (to be confirmed by yolanda). On Linux native there is no guest; the tray's control.sock is 0600 in the runtime dir and is never mounted into a forge (forge_container_spec_mounts_only_per_lane_mcp_dir).
+      - Channel auth: vsock_server.rs maybe_secure_stream runs a Noise NNpsk0 handshake when SecureControlWireMode::On, with PSK = HKDF(release_root_secret, version, wire, hop). tillandsias-secure-channel release_root_secret() is the SHA-256 of the RUNNING BINARY (DEV_ROOT_SEED on debug builds). Release binaries are public GitHub assets, so the PSK proves "same version", NOT "trusted peer". Per-boot hardening with a host secret is deferred (order 142).
+      - Peer check: vsock_server.rs has no peer-CID check, so a connection from inside the guest (CID 1, loopback) would be served like one from the host (CID 2).
+      - Linux AF_VSOCK is not confined by network namespaces, so a forge container on the guest may be able to `connect((1, 42420))` if the vsock loopback transport is present, unless podman's seccomp profile or the guest config blocks it.
+      If a forge CAN connect: it can send PtyOpen with `/bin/bash -lc <anything>` and run code as the guest daemon's user outside its container, a full forge-to-guest escape. That's p1 and the real boundary. If it CANNOT: the arms are unreachable by untrusted input, and tightening the verbatim and bash arms is hygiene.
+    exit_criteria:
+      - 'MEASURED from inside a running forge on the macOS guest (and on Windows WSL, by yolanda): an AF_VSOCK connect to (1, 42420) and to (2, 42420), each with its exact result (refused, EPERM from seccomp, timeout, or connected), plus whether the guest has the vsock_loopback module loaded'
+      - 'the row records the verdict: reachable (raise to p1, and file the fix: peer-CID check on accept, a per-boot host secret per order 142, a seccomp deny for AF_VSOCK in forges) or unreachable (state why, and tighten the verbatim arm as hygiene)'
+      - 'whichever holds, a test pins it: a forge-spec/seccomp arm that refuses AF_VSOCK, or an accept-path arm that refuses a non-host CID'
+    unscoreable: "requires-native-regime: the connect test needs a forge inside the macOS VM (and WSL)"
+    next_action: >
+      From a forge on the macOS guest, run python3 -c 'import socket;s=socket.socket(socket.AF_VSOCK,socket.SOCK_STREAM);s.settimeout(3);print(s.connect_ex((1,42420)))' and the same for CID 2; record both results, and `lsmod | grep vsock` in the guest. Do not change exec_allowlist under 1719-83po (coordinator).
+    events:
+      - type: filed
+        ts: "2026-10-15T00:47:33Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Is the guest exec allowlist a boundary? Only if a forge can reach vsock 42420: there's no peer-CID check, and the PSK is derived from a public binary's hash. Measure from a forge; p1 if reachable.

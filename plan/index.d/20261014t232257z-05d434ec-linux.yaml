@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-antigravity-login-lane-runs-agy-auth-login-which-agy-1-2-13-refuses-as-an-unexpected-argument-so-antigravity-sign-in-exits-2
+    field: status
+    value: completed
+    ts: "2026-10-14T23:22:57Z"
+    host: linux
+
+events:
+  - packet_id: the-antigravity-login-lane-runs-agy-auth-login-which-agy-1-2-13-refuses-as-an-unexpected-argument-so-antigravity-sign-in-exits-2
+    event:
+      type: completed
+      ts: "2026-10-14T23:22:57Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: scripts/test-provider-device-auth.sh 21/21 ok (including fake agy negative control), scripts/test-forge-project-trust-seeds.sh 17/17 ok, cargo test antigravity_device_qr 3/3 ok
+  - packet_id: the-antigravity-login-lane-runs-agy-auth-login-which-agy-1-2-13-refuses-as-an-unexpected-argument-so-antigravity-sign-in-exits-2
+    event:
+      type: note
+      ts: "2026-10-14T23:22:57Z"
+      host: linux
+      summary: |-
+        Antigravity login lane fixed: safe subcommand inspection without --help probe, interactive foreground auth with background completion watcher, QR code display with stylized user code, seeded workspace trust and approvalMode auto

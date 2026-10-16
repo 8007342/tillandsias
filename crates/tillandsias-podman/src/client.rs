@@ -1143,7 +1143,24 @@ impl PodmanClient {
             cmd.as_std(),
             debug_enabled,
         );
-        cmd.status().await.map_err(|err| {
+        // 1741-xq7d: spawn first so the agent inherits the terminal, then
+        // divert this process's own terminal output until it exits. The
+        // launcher keeps serving the lane's MCP socket meanwhile, and its
+        // writers would otherwise draw over the agent's TUI.
+        let waited = match cmd.spawn() {
+            Ok(mut child) => {
+                let handoff = crate::terminal_handoff::TerminalHandoff::divert(
+                    &crate::terminal_handoff::attached_session_log_path(container_name),
+                );
+                let waited = child.wait().await;
+                if let Some(handoff) = handoff {
+                    handoff.restore();
+                }
+                waited
+            }
+            Err(err) => Err(err),
+        };
+        waited.map_err(|err| {
             let message = format!(
                 "stage '{stage}' could not spawn attached container {container_name}: {err}\nnext: verify podman is available in this desktop session\nredacted argv: podman {}",
                 redact_argv(&full_args).join(" ")

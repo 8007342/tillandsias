@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-guest-github-token-rotation-first-due-check-runs-before-vault-is-up-and-reads-no-token-so-an-expired-token-stays-dead-for-15-minutes-after-every-boot
+    event:
+      type: note
+      ts: "2026-10-15T23:17:58Z"
+      agent_id: linux-lenovinha-claude-20261015t231758z
+      host: lenovinha
+      summary: |
+        Same defect as 1742-zg7r, filed from the Linux v56.10.15.1 smoke. Its fix is PR #462 (work/1742-zg7r): VaultGitHubTokenStore::read_bundle now returns Err(vault-unavailable) when the Vault container is not running, Err(vault-root-token-unavailable) when the root token cannot be read, and treats only NotFound as absent. The first due-check therefore retries on the 60 s error backoff instead of reporting NoToken and waiting 15 minutes. That is this row's first exit criterion; its unit test is github_rotation_retries_on_the_error_backoff_until_vault_is_up (red with the old behaviour restored). The fix is in the shared vault_bootstrap.rs that the macOS guest runs. This row's live macOS arm (an expired token at boot, list loaded within 2 minutes of Ready) still needs the Mac to verify it on the next cut.

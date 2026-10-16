@@ -95,3 +95,40 @@ into a single container.
 - **WHEN** a window is open
 - **THEN** no host or container process listens on a TCP debugging port
 - **AND** the CDP Unix socket lives in a tray-only host directory
+
+## ADDED Requirements
+
+### Requirement: A window plays sound and cannot record
+
+A visible browser window on a Linux host SHALL play its page's audio on the
+host speakers, through ONE more socket file: that of a dedicated
+PulseAudio-protocol server the tray starts from a configuration shipped in
+the binary (never an edit of the host's audio configuration). That server
+SHALL refuse every record stream (microphone, and the monitor of any sink),
+every module load, and source volume changes. The browser container SHALL NOT
+mount the host's own pulse socket or any runtime directory. The server runs
+only the PulseAudio-protocol module and no network module, and it exits with
+the tray. The `browser.open` reply SHALL state the window's audio: playback,
+or none and why. Headless windows, WSL2 windows and the macOS guest have no
+audio and say so.
+
+> Delta: on 2026-10-15 a game in a host-browser window was silent (packet
+> 1722-2haw). `client.access = "restricted"` alone is not a boundary:
+> WirePlumber grants restricted clients read access to every object, and a
+> capture through it recorded the microphone.
+
+Known residual: a page can LIST audio device names (metadata only, no
+audio). Device names can fingerprint a host.
+
+@trace spec:host-browser-mcp
+
+#### Scenario: A page's tone reaches the speakers
+- **WHEN** a page in a visible window plays a tone
+- **THEN** a host-side capture of the default sink's monitor records it
+
+#### Scenario: A page cannot record
+- **WHEN** a page calls `getUserMedia({audio: true})`, even with the
+  permission granted
+- **THEN** the capture fails and no audio reaches the page
+- **AND** a client of the window's audio socket that records the default
+  source or a sink monitor is refused with 0 bytes, and load-module is refused

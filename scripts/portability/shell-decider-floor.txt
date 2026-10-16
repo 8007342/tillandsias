@@ -47,7 +47,6 @@ scripts/check-landed-but-open.sh
 scripts/check-landing-provenance.sh
 scripts/check-ledger-distillation.sh
 scripts/check-litmus-expression-pinning-added.sh
-scripts/check-litmus-grep-escapes.sh
 scripts/check-litmus-line-windows.sh
 scripts/check-litmus-mutation-arms-mutate.sh
 scripts/check-litmus-pin-claims.sh
@@ -84,7 +83,6 @@ scripts/check-running-image-freshness.sh
 scripts/check-rust-source-pin-added.sh
 scripts/check-salvage-refs-ledger.sh
 scripts/check-scorable-obligation-added.sh
-scripts/check-scratchpad-headroom.sh
 scripts/check-script-exec-bits.sh
 scripts/check-sigpipe-verdict-pipelines-added.sh
 scripts/check-skill-canonicalization.sh
@@ -520,7 +518,6 @@ scripts/test-salvage-refs-ledger.sh
 scripts/test-scorable-closure-quoting.sh
 scripts/test-scorable-obligation-gate.sh
 scripts/test-scorable-obligation-splitter.sh
-scripts/test-scratchpad-headroom.sh
 scripts/test-script-exec-bits.sh
 scripts/test-script-run-verb.sh
 scripts/test-seam-writers-canonical.sh

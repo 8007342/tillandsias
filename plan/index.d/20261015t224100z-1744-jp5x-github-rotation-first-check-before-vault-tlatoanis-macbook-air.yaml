@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-15, from the v56.10.15.1 macOS smoke.
+packets:
+  - packet_id: the-guest-github-token-rotation-first-due-check-runs-before-vault-is-up-and-reads-no-token-so-an-expired-token-stays-dead-for-15-minutes-after-every-boot
+    order: 1744-jp5x
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: S
+    pickup_role: any
+    capability_tags: [vault, github, token-rotation, macos, windows, guest]
+    related: [1461-8tyy, 1489-8qd6, 1505-iysn]
+    title: |
+      On a VM host (macOS, likely Windows) the GitHub token rotation scheduler's first due-check runs before the Vault container is up. VaultGitHubTokenStore::read_bundle answers Ok(None) when the container is not running, so the check returns NoToken silently and sleeps the full 15-minute interval. A token that expired while the Mac was off therefore stays expired for about 15 minutes after every boot: the cloud project list shows nothing and `--list-cloud-projects` fails, although the sign-in is intact
+    context: |
+      MEASURED (v56.10.15.1 macOS smoke, plan/issues/e2e-smoke-v56.10.15.1-macos-2026-10-15.md). The tray was relaunched at 21:39:45Z and reached Ready at 21:41:17Z. github-login and cloud-projects updated with "fetch unconfirmed" and then "(0 entries)" at 21:41:33Z. `--list-cloud-projects` in a separate boot failed with "containerized gh exited with status 1" after a 4.3 KB api.github.com exchange. Nothing changed until 21:56:51Z, about 15 minutes after the guest started, when github-login updated and the list loaded 16 entries. No sign-in was ever lost: the Vault store on the identity disk was intact throughout.
+      READ (source at the tag): maybe_spawn_vsock_listener (headless main.rs) spawns spawn_github_token_rotation_scheduler at guest start, before the Vault bootstrap. In vault_bootstrap.rs, VaultGitHubTokenStore::read_bundle returns Ok(None) when `!container_running(VAULT_CONTAINER_NAME)`, and also when the root token or the secret read fails. rotate_github_token_if_due maps None to DueCheck::NoToken, which is Ok, prints nothing unless --debug, and gets the 15-minute GITHUB_ROTATION_CHECK_EVERY delay rather than the error backoff. claim_github_rotation_scheduler_slot allows one scheduler per process, so a later lane launch cannot trigger an earlier check. The Cloudflare sibling (1505-iysn) fails closed on the same condition and logs "blocked:cloudflare-token-rotation-failed:read:vault-unavailable" on every boot. That is noisy, but it retries on the backoff.
+    exit_criteria:
+      - "an unavailable Vault is not NoToken: the due-check returns a retryable error (or waits for Vault Ready) so the next check comes on the 1-minute backoff, not after 15 minutes; a unit test over a store whose Vault is down asserts the backoff path (red today)"
+      - "live: on a released macOS tray, with a GitHub token past expiry at boot, the cloud project list loads within 2 minutes of Ready"
+    unscoreable: "the store-down unit test plus one live boot with an expired token"
+    next_action: >
+      Make read_bundle return Err when the Vault container is not running (or the root token or secret read fails for a reason other than absence), or start the scheduler after the Vault bootstrap completes. Keep a real absence as NoToken.
+    events:
+      - type: filed
+        ts: "2026-10-15T22:41:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Guest GitHub rotation's first check runs before Vault and reads NoToken, so an expired token stays dead about 15 min after every boot (measured 21:41 to 21:56Z).

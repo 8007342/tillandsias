@@ -1,4 +1,4 @@
-//! One browser window's CDP broker and its device emulation (order 1655-urz9).
+//! One browser window's CDP broker and its device e                            .try_for_each(|(m, p)| conn.call(Some(session), m, p.clone()).map(drop))ulation (order 1655-urz9).
 //!
 //! The tray holds ONE CDP session per window, for the window's lifetime,
 //! over the window container's pipe relay (see `cdp_client`). Through it:
@@ -22,7 +22,7 @@
 
 use parking_lot::{Condvar, Mutex};
 use serde_json::{Value, json};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::mpsc;
@@ -31,8 +31,28 @@ use tillandsias_core::devices::Resolution;
 
 use crate::cdp_client::{CdpConnection, CdpError};
 
-/// How often `navigate` tries through a transient network change.
+/// How often one navigation is re-tried through a transient network change,
+/// for its document and its subresources together (1656-iktu, 1725-cgh2).
 const NAVIGATE_ATTEMPTS: u32 = 4;
+
+/// The error Chromium gives every in-flight request when it sees the host's
+/// addresses change: a freshly started window's IPv6 address settling, a
+/// suspend/resume, a VPN coming up.
+const NETWORK_CHANGED: &str = "net::ERR_NETWORK_CHANGED";
+
+/// How long after a navigation starts its requests are watched for
+/// NETWORK_CHANGED (1725-cgh2). A page's late subresources (an app bundle
+/// loaded after the load event) are inside it; a network change an hour
+/// later on a long-lived page is not this guard's business.
+const NAVIGATION_WATCH: Duration = Duration::from_secs(15);
+
+/// How long `navigate` waits for the page's load event, so a recovery during
+/// it is known when browser.open answers. Best effort: a slower page simply
+/// returns before it loads, still watched.
+#[cfg(not(test))]
+const LOAD_WAIT: Duration = Duration::from_secs(8);
+#[cfg(test)]
+const LOAD_WAIT: Duration = Duration::from_millis(300);
 
 /// `commands()` starts with this many touch commands.
 const TOUCH_COMMANDS: usize = 2;
@@ -253,6 +273,38 @@ struct State {
     dev: bool,
     console: VecDeque<Value>,
     network: VecDeque<Value>,
+    /// The main page's current navigation (order 1725-cgh2).
+    watch: Option<NavigationWatch>,
+    /// Which navigation (loaderId) each of the main page's requests belongs
+    /// to, so a request of an ABANDONED load failing late is never mistaken
+    /// for the current one. Cleared per navigation.
+    loader_of: HashMap<String, String>,
+    /// Re-navigations the guard made, for browser.open's notice.
+    recoveries: u32,
+    /// Order 1725-5uue: a dev window keeps its pages' service workers only
+    /// when asked; otherwise every page bypasses them, so a dead preview
+    /// reads as dead instead of a cached build.
+    keep_service_worker: bool,
+    /// The service-worker scripts the pages registered (kept mode only).
+    workers: Vec<String>,
+}
+
+/// A navigation the window verifies: every request it makes, the document
+/// and every subresource, must not die of NETWORK_CHANGED. One that does
+/// re-navigates, bounded by NAVIGATE_ATTEMPTS.
+#[derive(Debug)]
+struct NavigationWatch {
+    session: String,
+    url: String,
+    started: Instant,
+    /// The loaderId of the current attempt; None until Page.navigate answers
+    /// (its requests may be reported first, and count as the current one).
+    loader: Option<String>,
+    /// Loads this navigation abandoned: their requests keep failing after
+    /// the re-navigation, and none of them may start another.
+    abandoned: Vec<String>,
+    attempts: u32,
+    loaded: bool,
 }
 
 fn push_capped(buf: &mut VecDeque<Value>, entry: Value) {
@@ -303,10 +355,11 @@ impl WindowCdp {
         socket: &Path,
         device: DeviceEmulation,
         dev: bool,
+        keep_service_worker: bool,
         budget: Duration,
     ) -> Result<Self, CdpError> {
         let conn = Arc::new(CdpConnection::connect(socket, budget)?);
-        Self::start(conn, device, dev)
+        Self::start_with(conn, device, dev, keep_service_worker)
     }
 
     /// Take over a connected window: auto-attach every page, emulate the
@@ -315,6 +368,17 @@ impl WindowCdp {
         conn: Arc<CdpConnection>,
         device: DeviceEmulation,
         dev: bool,
+    ) -> Result<Self, CdpError> {
+        Self::start_with(conn, device, dev, false)
+    }
+
+    /// [`Self::start`], keeping the pages' service workers when
+    /// `keep_service_worker` (order 1725-5uue).
+    pub fn start_with(
+        conn: Arc<CdpConnection>,
+        device: DeviceEmulation,
+        dev: bool,
+        keep_service_worker: bool,
     ) -> Result<Self, CdpError> {
         let events = conn.take_events().ok_or_else(|| {
             CdpError::ConnectionFailed("the event stream is already taken".into())
@@ -326,6 +390,11 @@ impl WindowCdp {
                 dev,
                 console: VecDeque::new(),
                 network: VecDeque::new(),
+                watch: None,
+                loader_of: HashMap::new(),
+                recoveries: 0,
+                keep_service_worker,
+                workers: Vec::new(),
             }),
             Condvar::new(),
         ));
@@ -378,6 +447,21 @@ impl WindowCdp {
         &self.conn
     }
 
+    /// Order 1725-5uue: the service-worker scripts the pages registered,
+    /// waiting up to `wait` for the first one. Empty unless the window keeps
+    /// service workers.
+    pub fn service_workers(&self, wait: Duration) -> Vec<String> {
+        let deadline = Instant::now() + wait;
+        let (lock, ready) = &*self.state;
+        let mut state = lock.lock();
+        while state.keep_service_worker && state.workers.is_empty() {
+            if ready.wait_until(&mut state, deadline).timed_out() {
+                break;
+            }
+        }
+        state.workers.clone()
+    }
+
     /// The last `limit` console entries (dev mode; empty otherwise).
     pub fn console_tail(&self, limit: usize) -> Vec<Value> {
         tail(&self.state.0.lock().console, limit)
@@ -416,35 +500,123 @@ impl WindowCdp {
             .unwrap_or(Value::Null))
     }
 
+    /// The page's live URL and title (order 1637-5765): the current entry of
+    /// its navigation history. Read through the Page domain, never by running
+    /// page script, so a window that is not in dev mode answers it too. The
+    /// title follows `document.title`, so an app that retitles itself (a hot
+    /// reload, a route change) is seen.
+    pub fn page_info(&self) -> Result<(String, String), CdpError> {
+        let session = self
+            .main_session()
+            .ok_or_else(|| CdpError::WindowNotRunning("no page".into()))?;
+        let history = self
+            .conn
+            .call(Some(&session), "Page.getNavigationHistory", json!({}))?;
+        let index = history
+            .get("currentIndex")
+            .and_then(Value::as_u64)
+            .unwrap_or(0) as usize;
+        let entry = history
+            .get("entries")
+            .and_then(|e| e.get(index))
+            .ok_or_else(|| CdpError::ProtocolError {
+                code: -1,
+                message: "no current navigation entry".into(),
+            })?;
+        let field = |k: &str| {
+            entry
+                .get(k)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        };
+        Ok((field("url"), field("title")))
+    }
+
     /// Load `url` in the window's page (it starts on about:blank, so the
     /// first request already carries the device's UA).
     ///
     /// `net::ERR_NETWORK_CHANGED` is retried: measured live (1656-iktu), a
     /// navigation issued right after the container starts can race the
     /// container's network settling, and Chromium aborts it with that error.
+    ///
+    /// Order 1725-cgh2: the navigation is VERIFIED, not only its document. A
+    /// request of it that dies of NETWORK_CHANGED (a subresource, measured:
+    /// flutter_bootstrap.js on a window's first open) re-navigates the page
+    /// from the event worker, sharing the document's NAVIGATE_ATTEMPTS. Then
+    /// this waits (LOAD_WAIT, best effort) for the load event, so a recovery
+    /// is known to `network_recoveries` when browser.open answers.
     pub fn navigate(&self, url: &str) -> Result<(), CdpError> {
         let session = self
             .main_session()
             .ok_or_else(|| CdpError::WindowNotRunning("no page".into()))?;
-        let mut attempt = 0;
+        {
+            let mut st = self.state.0.lock();
+            st.loader_of.clear();
+            st.watch = Some(NavigationWatch {
+                session: session.clone(),
+                url: url.to_string(),
+                started: Instant::now(),
+                loader: None,
+                abandoned: Vec::new(),
+                attempts: 1,
+                loaded: false,
+            });
+        }
         loop {
-            attempt += 1;
             let result = self
                 .conn
                 .call(Some(&session), "Page.navigate", json!({ "url": url }))?;
-            match result.get("errorText").and_then(Value::as_str) {
-                Some("net::ERR_NETWORK_CHANGED") if attempt < NAVIGATE_ATTEMPTS => {
-                    std::thread::sleep(Duration::from_millis(500));
+            let err = result.get("errorText").and_then(Value::as_str);
+            let retry = {
+                let mut st = self.state.0.lock();
+                let Some(watch) = st.watch.as_mut() else {
+                    break;
+                };
+                match err {
+                    Some(NETWORK_CHANGED) if watch.attempts < NAVIGATE_ATTEMPTS => {
+                        watch.attempts += 1;
+                        st.recoveries += 1;
+                        true
+                    }
+                    _ => {
+                        if watch.loader.is_none() {
+                            watch.loader = result
+                                .get("loaderId")
+                                .and_then(Value::as_str)
+                                .map(str::to_string);
+                        }
+                        false
+                    }
                 }
+            };
+            match err {
+                _ if retry => std::thread::sleep(Duration::from_millis(500)),
                 Some(err) if !err.is_empty() => {
+                    self.state.0.lock().watch = None;
                     return Err(CdpError::ProtocolError {
                         code: -1,
                         message: format!("navigation to {url} failed: {err}"),
                     });
                 }
-                _ => return Ok(()),
+                _ => break,
             }
         }
+        let deadline = Instant::now() + LOAD_WAIT;
+        let (lock, ready) = &*self.state;
+        let mut st = lock.lock();
+        while st.watch.as_ref().is_some_and(|w| !w.loaded) {
+            if ready.wait_until(&mut st, deadline).timed_out() {
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    /// How many times this window re-navigated a page whose requests the
+    /// network change killed (order 1725-cgh2).
+    pub fn network_recoveries(&self) -> u32 {
+        self.state.0.lock().recoveries
     }
 
     /// Switch the live window to another device: every attached page, and
@@ -497,6 +669,45 @@ fn reassert_touch(conn: &CdpConnection, session: &str, state: &(Mutex<State>, Co
     }
 }
 
+/// Whether a failed request means the watched navigation must start over:
+/// it died of NETWORK_CHANGED, on the watched page, inside NAVIGATION_WATCH,
+/// and it belongs to the CURRENT attempt (a request of an abandoned load
+/// failing late is ignored). Claims the attempt; returns (session, url).
+fn network_changed_renavigation(
+    st: &mut State,
+    session: Option<&str>,
+    params: &Value,
+) -> Option<(String, String)> {
+    if params["errorText"].as_str() != Some(NETWORK_CHANGED) {
+        return None;
+    }
+    let loader = params["requestId"]
+        .as_str()
+        .and_then(|r| st.loader_of.get(r).cloned());
+    let w = st.watch.as_mut()?;
+    if Some(w.session.as_str()) != session
+        || w.started.elapsed() > NAVIGATION_WATCH
+        || w.attempts >= NAVIGATE_ATTEMPTS
+    {
+        return None;
+    }
+    match (&w.loader, &loader) {
+        // An abandoned load's request, failing late.
+        (_, Some(of_request)) if w.abandoned.contains(of_request) => return None,
+        (Some(current), Some(of_request)) if current != of_request => return None,
+        // Unattributable after a re-navigation: never a reason for another.
+        (_, None) if !w.abandoned.is_empty() => return None,
+        _ => {}
+    }
+    w.abandoned
+        .extend(w.loader.take().into_iter().chain(loader));
+    w.attempts += 1;
+    w.loaded = false;
+    let out = (w.session.clone(), w.url.clone());
+    st.recoveries += 1;
+    Some(out)
+}
+
 fn handle_events(
     events: mpsc::Receiver<Value>,
     conn: &CdpConnection,
@@ -514,6 +725,11 @@ fn handle_events(
             Some("Page.loadEventFired") => {
                 if let Some(session) = event_session {
                     reassert_touch(conn, session, state);
+                    let (lock, ready) = state;
+                    if let Some(w) = lock.lock().watch.as_mut().filter(|w| w.session == session) {
+                        w.loaded = true;
+                    }
+                    ready.notify_all();
                 }
             }
             Some("Runtime.consoleAPICalled") => {
@@ -544,39 +760,101 @@ fn handle_events(
                     json!({ "type": "exception", "text": text, "timestamp": params["timestamp"] }),
                 );
             }
-            Some("Network.requestWillBeSent") => push_capped(
-                &mut state.0.lock().network,
-                json!({ "event": "request", "requestId": params["requestId"],
-                        "method": params["request"]["method"], "url": params["request"]["url"] }),
-            ),
-            Some("Network.responseReceived") => push_capped(
-                &mut state.0.lock().network,
-                json!({ "event": "response", "requestId": params["requestId"],
-                        "status": params["response"]["status"], "url": params["response"]["url"],
-                        "mimeType": params["response"]["mimeType"] }),
-            ),
-            Some("Network.loadingFailed") => push_capped(
-                &mut state.0.lock().network,
-                json!({ "event": "failed", "requestId": params["requestId"],
-                        "errorText": params["errorText"], "blockedReason": params["blockedReason"] }),
-            ),
+            Some("Network.requestWillBeSent") => {
+                let mut st = state.0.lock();
+                if let (Some(request), Some(loader)) =
+                    (params["requestId"].as_str(), params["loaderId"].as_str())
+                    && st
+                        .watch
+                        .as_ref()
+                        .is_some_and(|w| Some(w.session.as_str()) == event_session)
+                {
+                    st.loader_of.insert(request.to_string(), loader.to_string());
+                }
+                if st.dev {
+                    push_capped(
+                        &mut st.network,
+                        json!({ "event": "request", "requestId": params["requestId"],
+                                "method": params["request"]["method"], "url": params["request"]["url"] }),
+                    );
+                }
+            }
+            Some("Network.responseReceived") => {
+                let mut st = state.0.lock();
+                if st.dev {
+                    push_capped(
+                        &mut st.network,
+                        json!({ "event": "response", "requestId": params["requestId"],
+                                "status": params["response"]["status"], "url": params["response"]["url"],
+                                "mimeType": params["response"]["mimeType"] }),
+                    );
+                }
+            }
+            Some("Network.loadingFailed") => {
+                let renavigate = {
+                    let mut st = state.0.lock();
+                    if st.dev {
+                        push_capped(
+                            &mut st.network,
+                            json!({ "event": "failed", "requestId": params["requestId"],
+                                    "errorText": params["errorText"], "blockedReason": params["blockedReason"] }),
+                        );
+                    }
+                    network_changed_renavigation(&mut st, event_session, params)
+                };
+                if let Some((session, url)) = renavigate {
+                    tracing::info!(
+                        session,
+                        url,
+                        "browser window: a request died of {NETWORK_CHANGED}; re-navigating (1725-cgh2)"
+                    );
+                    match conn.call(Some(&session), "Page.navigate", json!({ "url": url })) {
+                        Ok(result) => {
+                            let (lock, ready) = state;
+                            if let Some(w) = lock.lock().watch.as_mut() {
+                                w.loader = result
+                                    .get("loaderId")
+                                    .and_then(Value::as_str)
+                                    .map(str::to_string);
+                            }
+                            ready.notify_all();
+                        }
+                        Err(err) => {
+                            tracing::warn!(%err, session, "browser window: re-navigation failed")
+                        }
+                    }
+                }
+            }
             Some("Target.attachedToTarget") => {
                 let Some(session) = params["sessionId"].as_str() else {
                     continue;
                 };
                 if params["targetInfo"]["type"] == "page" {
-                    let (device, dev) = {
+                    let (device, dev, keep_sw) = {
                         let st = state.0.lock();
-                        (st.device.clone(), st.dev)
+                        (st.device.clone(), st.dev, st.keep_service_worker)
                     };
-                    let mut domains = vec!["Page.enable"];
+                    // Network on every page (1725-cgh2): the navigation guard
+                    // observes failed requests. Its events reach the tails in
+                    // dev mode only.
+                    let mut domains =
+                        vec![("Page.enable", json!({})), ("Network.enable", json!({}))];
                     if dev {
-                        domains.extend(["Runtime.enable", "Network.enable"]);
+                        domains.push(("Runtime.enable", json!({})));
+                        // Order 1725-5uue: a service worker's cache must not
+                        // stand in for a dead preview. Bypass it (needs
+                        // Network) unless the lane asked to keep it; then
+                        // watch registrations so the reply can name them.
+                        domains.push(if keep_sw {
+                            ("ServiceWorker.enable", json!({}))
+                        } else {
+                            ("Network.setBypassServiceWorker", json!({ "bypass": true }))
+                        });
                     }
                     if let Err(err) = apply(conn, session, &device).and_then(|()| {
                         domains
                             .iter()
-                            .try_for_each(|m| conn.call(Some(session), m, json!({})).map(drop))
+                            .try_for_each(|(m, p)| conn.call(Some(session), m, p.clone()).map(drop))
                     }) {
                         tracing::warn!(%err, session, "browser window: device emulation failed");
                     }
@@ -587,6 +865,18 @@ fn handle_events(
                 if params["waitingForDebugger"] == true {
                     let _ = conn.call(Some(session), "Runtime.runIfWaitingForDebugger", json!({}));
                 }
+            }
+            Some("ServiceWorker.workerVersionUpdated") => {
+                let (lock, ready) = state;
+                let mut st = lock.lock();
+                for version in params["versions"].as_array().into_iter().flatten() {
+                    if let Some(script) = version["scriptURL"].as_str()
+                        && !st.workers.iter().any(|w| w == script)
+                    {
+                        st.workers.push(script.to_string());
+                    }
+                }
+                ready.notify_all();
             }
             Some("Target.detachedFromTarget") => {
                 if let Some(session) = params["sessionId"].as_str() {
@@ -705,11 +995,11 @@ mod tests {
         assert_eq!(seen[0], ("Target.setAutoAttach".to_string(), None));
         assert_eq!(
             on("P1").len(),
-            9,
-            "attach, Page.enable, the checked re-apply: {seen:?}"
+            10,
+            "attach, Page.enable, Network.enable, the checked re-apply: {seen:?}"
         );
         let p2 = on("P2");
-        assert_eq!(p2.len(), 6, "{seen:?}");
+        assert_eq!(p2.len(), 7, "{seen:?}");
         assert_eq!(p2[4], "Page.enable");
         assert_eq!(p2.last().unwrap(), "Runtime.runIfWaitingForDebugger");
         assert_eq!(
@@ -774,6 +1064,70 @@ mod tests {
 
     /// Order 1656-iktu: a dev window enables Runtime and Network on each
     /// page and keeps console and network tails; a normal window does not.
+    /// Order 1725-5uue: a dev window bypasses service workers on every page,
+    /// after Network (the bypass is a Network setting); keeping them enables
+    /// ServiceWorker instead and names the registered scripts.
+    #[test]
+    fn a_dev_window_bypasses_service_workers_unless_asked_to_keep_them() {
+        let sw_calls = |chromium: &FakeChromium| -> Vec<Value> {
+            chromium
+                .seen
+                .lock()
+                .iter()
+                .filter(|m| m["sessionId"] == "P1")
+                .filter(|m| {
+                    m["method"]
+                        .as_str()
+                        .is_some_and(|n| n == "Network.enable" || n.contains("ServiceWorker"))
+                })
+                .map(|m| json!([m["method"], m["params"]]))
+                .collect()
+        };
+
+        let (conn, chromium) = auto_attaching_chromium();
+        chromium.emit(attached("P1", "page", false));
+        let window = WindowCdp::start(conn, device("desktop"), true).unwrap();
+        assert_eq!(
+            sw_calls(&chromium),
+            [
+                json!(["Network.enable", {}]),
+                json!(["Network.setBypassServiceWorker", { "bypass": true }]),
+            ]
+        );
+        assert!(window.service_workers(Duration::ZERO).is_empty());
+
+        let (conn, chromium) = auto_attaching_chromium();
+        chromium.emit(attached("P1", "page", false));
+        let window = WindowCdp::start_with(conn, device("desktop"), true, true).unwrap();
+        assert_eq!(
+            sw_calls(&chromium),
+            [
+                json!(["Network.enable", {}]),
+                json!(["ServiceWorker.enable", {}])
+            ]
+        );
+        chromium.emit(
+            json!({ "method": "ServiceWorker.workerVersionUpdated", "params": {
+            "versions": [
+                { "versionId": "1", "scriptURL": "https://www.demo.localhost:18443/sw.js" },
+                { "versionId": "2", "scriptURL": "https://www.demo.localhost:18443/sw.js" },
+            ] } }),
+        );
+        assert_eq!(
+            window.service_workers(Duration::from_secs(2)),
+            ["https://www.demo.localhost:18443/sw.js"]
+        );
+
+        let (conn, chromium) = auto_attaching_chromium();
+        chromium.emit(attached("P1", "page", false));
+        let _normal = WindowCdp::start(conn, device("desktop"), false).unwrap();
+        assert_eq!(
+            sw_calls(&chromium),
+            [json!(["Network.enable", {}])],
+            "a normal window leaves service workers alone"
+        );
+    }
+
     #[test]
     fn a_dev_window_enables_runtime_and_network_and_keeps_tails() {
         let (conn, chromium) = auto_attaching_chromium();
@@ -808,13 +1162,129 @@ mod tests {
         let (conn2, chromium2) = auto_attaching_chromium();
         chromium2.emit(attached("P1", "page", false));
         let _normal = WindowCdp::start(conn2, device("desktop"), false).unwrap();
+        // Network is on for every page since 1725-cgh2 (the navigation guard
+        // reads failed requests); Runtime and the tails stay dev-only.
         assert!(
             !chromium2
                 .methods()
                 .iter()
-                .any(|(m, _)| m == "Runtime.enable" || m == "Network.enable"),
-            "a normal window enables no Runtime/Network"
+                .any(|(m, _)| m == "Runtime.enable"),
+            "a normal window enables no Runtime"
         );
+        assert!(
+            chromium2
+                .methods()
+                .iter()
+                .any(|(m, _)| m == "Network.enable"),
+            "every window enables Network for the guard"
+        );
+        assert!(_normal.network_tail(10).is_empty(), "no tails outside dev");
+    }
+
+    /// A Chromium whose every Page.navigate starts a new load, L1, L2, …
+    fn loading_chromium() -> (Arc<CdpConnection>, FakeChromium) {
+        let loads = std::sync::atomic::AtomicU32::new(0);
+        let (conn, chromium) = FakeChromium::start(move |m| match m["method"].as_str() {
+            Some("Browser.getWindowForTarget") => Some(json!({ "windowId": 7 })),
+            Some("Page.navigate") => {
+                let n = loads.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+                Some(json!({ "frameId": "F1", "loaderId": format!("L{n}") }))
+            }
+            _ => None,
+        });
+        (Arc::new(conn), chromium)
+    }
+
+    fn navigations(chromium: &FakeChromium) -> usize {
+        chromium
+            .methods()
+            .iter()
+            .filter(|(m, _)| m == "Page.navigate")
+            .count()
+    }
+
+    fn until(what: impl Fn() -> bool) {
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while !what() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    /// One load of a page with `n` subresources: the document and each
+    /// subresource is requested on `loader`; `failing` die of `error`.
+    fn load(chromium: &FakeChromium, loader: &str, n: usize, failing: &[usize], error: &str) {
+        for i in 0..=n {
+            chromium.emit(json!({ "method": "Network.requestWillBeSent", "sessionId": "P1",
+                "params": { "requestId": format!("{loader}-R{i}"), "loaderId": loader,
+                            "request": { "method": "GET", "url": format!("https://www.demo.localhost/{i}") } } }));
+        }
+        for i in failing {
+            chromium.emit(
+                json!({ "method": "Network.loadingFailed", "sessionId": "P1",
+                "params": { "requestId": format!("{loader}-R{i}"), "errorText": error } }),
+            );
+        }
+    }
+
+    /// Order 1725-cgh2, the fixture: a page with N subresources whose FIRST
+    /// load loses some of them to ERR_NETWORK_CHANGED (measured live:
+    /// flutter_bootstrap.js on a window's first open) is re-navigated ONCE,
+    /// however many of its requests died, and the second load completes. A
+    /// request of the abandoned load failing late does not start a third.
+    #[test]
+    fn a_first_load_that_loses_subresources_to_a_network_change_is_navigated_again() {
+        let (conn, chromium) = loading_chromium();
+        chromium.emit(attached("P1", "page", false));
+        let window = Arc::new(WindowCdp::start(conn, device("desktop"), false).unwrap());
+        let nav = {
+            let window = Arc::clone(&window);
+            std::thread::spawn(move || window.navigate("https://www.demo.localhost/"))
+        };
+        until(|| navigations(&chromium) == 1);
+        load(&chromium, "L1", 8, &[3, 5, 7], NETWORK_CHANGED);
+        until(|| navigations(&chromium) == 2);
+        load(&chromium, "L2", 8, &[], "");
+        chromium.emit(json!({ "method": "Page.loadEventFired", "sessionId": "P1", "params": {} }));
+        // The abandoned load's last request fails late: not the current load.
+        chromium.emit(
+            json!({ "method": "Network.loadingFailed", "sessionId": "P1",
+            "params": { "requestId": "L1-R8", "errorText": NETWORK_CHANGED } }),
+        );
+        nav.join().unwrap().unwrap();
+        std::thread::sleep(Duration::from_millis(100));
+        assert_eq!(navigations(&chromium), 2, "{:?}", chromium.methods());
+        assert_eq!(window.network_recoveries(), 1);
+    }
+
+    /// Only a network change restarts a load: a request refused for any
+    /// other reason (a blocked host, a 404's dead link) is the page's own.
+    #[test]
+    fn a_subresource_failing_for_another_reason_is_left_alone() {
+        let (conn, chromium) = loading_chromium();
+        chromium.emit(attached("P1", "page", false));
+        let window = WindowCdp::start(conn, device("desktop"), false).unwrap();
+        window.navigate("https://www.demo.localhost/").unwrap();
+        load(&chromium, "L1", 4, &[1, 2], "net::ERR_NAME_NOT_RESOLVED");
+        std::thread::sleep(Duration::from_millis(150));
+        assert_eq!(navigations(&chromium), 1);
+        assert_eq!(window.network_recoveries(), 0);
+    }
+
+    /// A network that keeps changing is not retried forever: the document's
+    /// and the subresources' re-navigations share NAVIGATE_ATTEMPTS.
+    #[test]
+    fn re_navigation_is_bounded() {
+        let (conn, chromium) = loading_chromium();
+        chromium.emit(attached("P1", "page", false));
+        let window = WindowCdp::start(conn, device("desktop"), false).unwrap();
+        window.navigate("https://www.demo.localhost/").unwrap();
+        for n in 1..=(NAVIGATE_ATTEMPTS as usize + 2) {
+            until(|| navigations(&chromium) >= n.min(NAVIGATE_ATTEMPTS as usize));
+            load(&chromium, &format!("L{n}"), 2, &[1], NETWORK_CHANGED);
+        }
+        std::thread::sleep(Duration::from_millis(150));
+        assert_eq!(navigations(&chromium), NAVIGATE_ATTEMPTS as usize);
+        assert_eq!(window.network_recoveries(), NAVIGATE_ATTEMPTS - 1);
     }
 
     #[test]
@@ -827,6 +1297,11 @@ mod tests {
                     device: device("desktop"),
                     pages: Vec::new(),
                     dev: false,
+                    watch: None,
+                    loader_of: HashMap::new(),
+                    recoveries: 0,
+                    keep_service_worker: false,
+                    workers: Vec::new(),
                     console: VecDeque::new(),
                     network: VecDeque::new(),
                 }),

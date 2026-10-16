@@ -158,8 +158,15 @@ enum Step {
     /// Source mounts: probes inside the live forge, the RAM volume, the config.
     Source,
     Router,
-    /// Container lifecycle: run, rename, remove.
+    /// Starting a container (`run`).
     Run,
+    /// Removing a container. Its own step (1723-2fiq): a remove that waited
+    /// out a stop timeout used to read as a failed `run`.
+    Remove,
+    /// Installing the candidate under the preview name.
+    Rename,
+    /// Reading the preview's own output (`logs`, 1723-2fiq).
+    Logs,
     Ready,
 }
 
@@ -172,6 +179,9 @@ impl Step {
             Self::Source => "source",
             Self::Router => "router",
             Self::Run => "run",
+            Self::Remove => "remove",
+            Self::Rename => "rename",
+            Self::Logs => "logs",
             Self::Ready => "ready",
         }
     }
@@ -233,6 +243,16 @@ fn podman_output(args: &[&str]) -> Result<std::process::Output, Class> {
         std::io::ErrorKind::TimedOut => Class::Timeout,
         _ => Class::Transport,
     })
+}
+
+/// Remove a preview container without a stop grace period. The preview is
+/// stateless, and busybox httpd runs as PID 1, which ignores SIGTERM, so a
+/// plain `rm --force` waited out the 10 s stop timeout against a 5 s per-call
+/// budget: every reload and repeat publish failed, and the cleanup of the
+/// candidate failed the same way, orphaning it (1723-2fiq, measured on yoga:
+/// 10087 ms without `--time 0`, 60 ms with it).
+fn remove_now(name: &str) -> Result<String, String> {
+    podman_at(Step::Remove, &["rm", "--force", "--time", "0", name])
 }
 
 /// Run one podman command for `step`. Never echo raw diagnostics.
@@ -588,7 +608,7 @@ fn result(
 ) -> Value {
     let mut value = json!({
         "state": state, "runtime": profile.unwrap_or("unknown"),
-        "watch": profile == Some("wrangler"), "route_ready": ready,
+        "watch": profile == Some("wrangler"), "route_ready": ready, "serving": ready,
         "tls": {"enabled": true, "host_trust": "unknown",
             "diagnostic": "Local CA transport verification is separate from host-browser trust; no host trust store was changed."},
         "diagnostic": diagnostic
@@ -1189,6 +1209,21 @@ fn certificate_args(
     ]
 }
 
+/// The services a project's preview leaf names besides `www`: the opt-in
+/// toolchains' dev servers (order 1637-5765). Exact names, never a
+/// `*.<project>.localhost` wildcard, so the leaf vouches only for hosts the
+/// router actually serves for this project.
+pub(crate) const DEV_SERVICES: &[&str] = &["flutter"];
+
+/// The leaf's subjectAltName: `www` and every dev service of `project`.
+fn preview_san(project: &str) -> String {
+    std::iter::once("www")
+        .chain(DEV_SERVICES.iter().copied())
+        .map(|service| format!("DNS:{service}.{project}.localhost"))
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
 fn prepare_tls(project: &str, ca: &Path) -> Result<(), String> {
     let root = router_dir();
     let tls = root.join("preview-tls");
@@ -1200,7 +1235,8 @@ fn prepare_tls(project: &str, ca: &Path) -> Result<(), String> {
     let key = temporary.path().join("leaf.key");
     let csr = temporary.path().join("leaf.csr");
     let ext = temporary.path().join("leaf.ext");
-    std::fs::write(&ext, format!("subjectAltName=DNS:{host}\nbasicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n"))
+    let san = preview_san(project);
+    std::fs::write(&ext, format!("subjectAltName={san}\nbasicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n"))
         .map_err(|_| "router_not_ready: TLS extensions unavailable")?;
     for args in certificate_args(&host, &crt, &csr, &key, ca, &ext) {
         host_command(&args)?;
@@ -1241,7 +1277,7 @@ fn prepare_tls(project: &str, ca: &Path) -> Result<(), String> {
     Ok(())
 }
 
-async fn ensure_router(project: &str, debug: bool) -> Result<PathBuf, String> {
+fn ensure_router(project: &str, debug: bool) -> Result<PathBuf, String> {
     let _lock = crate::resource_lock::acquire(
         "preview-router",
         command_budget(Duration::from_secs(5))?,
@@ -1319,23 +1355,34 @@ pub(crate) fn add_dev_route(
     port: u16,
     debug: bool,
 ) -> Result<String, String> {
+    // A browser.open window reaches its project over TLS only (1651-5t7n), so
+    // the dev server gets the preview listener too: the router is up with its
+    // :8443 binding and the project's leaf names this service, even when the
+    // project never published a www preview (an empty project).
+    ensure_router(project, debug)?;
     let _lock = crate::resource_lock::acquire(
         "preview-router",
         command_budget(Duration::from_secs(5))?,
         debug,
     )?;
-    let route = crate::RouterRoute::public_service(format!("{service}.{project}"), upstream, port);
+    let mut route =
+        crate::RouterRoute::public_service(format!("{service}.{project}"), upstream, port);
+    route.preview_tls = true;
     let mut routes = read_routes(debug)?;
     routes.retain(|r| r.subdomain != route.subdomain);
     routes.push(route);
     crate::write_router_routes(&routes, debug)?;
     strict_reload()?;
-    let published = podman_at(Step::Router, &["port", "tillandsias-router", "8080/tcp"])?;
-    let host_port = published
-        .lines()
-        .find_map(|l| l.rsplit(':').next()?.trim().parse::<u16>().ok())
-        .ok_or("router_not_ready: the router publishes no host port")?;
-    Ok(crate::project_service_url(service, project, host_port))
+    dev_url(service, project)
+}
+
+/// The URL a dev server is opened at: https on the preview listener, the
+/// only scheme a browser.open window loads (order 1637-5765).
+fn dev_url(service: &str, project: &str) -> Result<String, String> {
+    Ok(format!(
+        "https://{service}.{project}.localhost:{}/",
+        tls_port()?
+    ))
 }
 
 /// Remove the session's route, only while it still points at `upstream`: a
@@ -1528,7 +1575,7 @@ async fn publish_prepared(
 ) -> Result<Value, String> {
     let name = format!("tillandsias-{project}-web");
     let mounts = source_mounts(&live, &profile)?;
-    let ca = ensure_router(project, debug).await?;
+    let ca = ensure_router(project, debug)?;
     let candidate = format!(
         "{name}-candidate-{}-{}",
         std::process::id(),
@@ -1538,11 +1585,11 @@ async fn publish_prepared(
     let mut command = vec!["run"];
     command.extend(args.iter().map(String::as_str));
     if let Err(e) = podman_at(Step::Run, &command) {
-        let _ = podman_at(Step::Run, &["rm", "--force", &candidate]);
+        let _ = remove_now(&candidate);
         return Err(e);
     }
     if let Err(e) = ready_backend(&candidate).await {
-        let _ = podman_at(Step::Run, &["rm", "--force", &candidate]);
+        let _ = remove_now(&candidate);
         return Err(e);
     }
     // Recheck the exact forge launch after candidate startup (PID reuse cannot
@@ -1550,15 +1597,15 @@ async fn publish_prepared(
     if inspect(&live.forge_id)?
         .is_none_or(|r| !attributed_forge(&r, &crate::mcp_socket_host_dir(project, Some(instance))))
     {
-        let _ = podman_at(Step::Run, &["rm", "--force", &candidate]);
+        let _ = remove_now(&candidate);
         return Err("live_worktree_unavailable: source forge exited during startup".into());
     }
     let mut replacement_installed = false;
     let outcome = async {
         if old.is_some() {
-            podman_at(Step::Run, &["rm", "--force", &name])?;
+            remove_now(&name)?;
         }
-        podman_at(Step::Run, &["rename", &candidate, &name])?;
+        podman_at(Step::Rename, &["rename", &candidate, &name])?;
         replacement_installed = true;
         let _router_lock = crate::resource_lock::acquire(
             "preview-router",
@@ -1585,9 +1632,9 @@ async fn publish_prepared(
     }
     .await;
     if outcome.is_err() {
-        let _ = podman_at(Step::Run, &["rm", "--force", &candidate]);
+        let _ = remove_now(&candidate);
         if replacement_installed {
-            let _ = podman_at(Step::Run, &["rm", "--force", &name]);
+            let _ = remove_now(&name);
         }
         let _lock = crate::resource_lock::acquire(
             "preview-router",
@@ -1625,6 +1672,9 @@ fn classify_failure(reason: &str) -> (&'static str, &'static str, &'static str) 
             Step::Source,
             Step::Router,
             Step::Run,
+            Step::Remove,
+            Step::Rename,
+            Step::Logs,
             Step::Ready,
         ]
         .into_iter()
@@ -1723,7 +1773,10 @@ pub(crate) async fn status(project: &str, instance: &str) -> Result<Value, Strin
         .await?;
     // 1625-6iwd: a failed publish leaves no container, so status used to say
     // nothing. Report the last failure: step, class, reason, time, remedy.
-    if let Some(failure) = last_failure(project, instance) {
+    if let Some(mut failure) = last_failure(project, instance) {
+        // 1723-2fiq: after a failed reload, say whether the previous preview
+        // is still the one being served.
+        failure["previous_preview_serving"] = value["serving"].clone();
         value["last_failure"] = failure;
     }
     Ok(value)
@@ -1802,6 +1855,8 @@ async fn status_inner(project: &str, instance: &str) -> Result<Value, String> {
     let ca = PathBuf::from(crate::ca_dir());
     let ready = state == "running" && probe_route(project, &ca).await.is_ok();
     let preview_url = url(project).ok();
+    // 1723-2fiq: `serving` (in every result) is the one readiness signal an
+    // agent can branch on: the route answered end to end against the CA.
     Ok(result(
         state,
         Some(runtime),
@@ -1809,10 +1864,61 @@ async fn status_inner(project: &str, instance: &str) -> Result<Value, String> {
         ready,
         if ready {
             ""
+        } else if state == "failed" {
+            "not_serving: the preview exited; service_reload recreates it, service_logs shows why it stopped"
         } else {
             "router_not_ready: HTTPS route is not verified ready"
         },
     ))
+}
+
+/// The most log lines `service_logs` returns, and the default.
+const LOG_LINES_MAX: u32 = 500;
+pub(crate) const LOG_LINES_DEFAULT: u32 = 100;
+/// The byte cap on returned logs; the tail is kept.
+const LOG_BYTES_MAX: usize = 64 * 1024;
+
+/// 1723-2fiq: the preview's own output, for the lane that owns it. A preview
+/// that died used to leave the agent nothing to read.
+pub(crate) async fn logs(project: &str, instance: &str, lines: u32) -> Result<Value, String> {
+    RPC_DEADLINE
+        .scope(
+            Instant::now() + Duration::from_secs(15),
+            logs_inner(project, instance, lines),
+        )
+        .await
+}
+
+async fn logs_inner(project: &str, instance: &str, lines: u32) -> Result<Value, String> {
+    validate_identity(project, instance)?;
+    let name = format!("tillandsias-{project}-web");
+    let row = inspect(&name)?.ok_or("not_running: no preview container; publish_local first")?;
+    check_owner(Some(&row), instance, None)?;
+    let lines = lines.clamp(1, LOG_LINES_MAX);
+    let tail = lines.to_string();
+    let out = podman_output(&["logs", "--tail", &tail, &name])
+        .map_err(|class| podman_failure(Step::Logs, class))?;
+    if !out.status.success() {
+        return Err(podman_failure(Step::Logs, Class::Exit));
+    }
+    // The server writes to both streams; podman replays them separately.
+    let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
+    text.push_str(&String::from_utf8_lossy(&out.stderr));
+    let truncated = text.len() > LOG_BYTES_MAX;
+    if truncated {
+        let mut cut = text.len() - LOG_BYTES_MAX;
+        while !text.is_char_boundary(cut) {
+            cut += 1;
+        }
+        text = text.split_off(cut);
+    }
+    Ok(json!({
+        "state": row["State"]["Status"],
+        "exit_code": row["State"]["ExitCode"],
+        "lines": lines,
+        "truncated": truncated,
+        "log": text,
+    }))
 }
 
 async fn stop_inner(project: &str, instance: &str, debug: bool) -> Result<Value, String> {
@@ -1829,7 +1935,7 @@ async fn stop_inner(project: &str, instance: &str, debug: bool) -> Result<Value,
     let row = inspect(&name)?;
     check_owner(row.as_ref(), instance, None)?;
     if row.is_some() {
-        podman_at(Step::Run, &["rm", "--force", &name])?;
+        remove_now(&name)?;
     }
     let _router_lock = crate::resource_lock::acquire(
         "preview-router",
@@ -1859,9 +1965,9 @@ async fn reload_inner(project: &str, instance: &str, debug: bool) -> Result<Valu
     let row = inspect(&format!("tillandsias-{project}-web"))?
         .ok_or("not_running: no preview to reload")?;
     check_owner(Some(&row), instance, None)?;
-    if row["State"]["Status"] != "running" {
-        return Err("not_running: preview is not running".into());
-    }
+    // 1723-2fiq: a preview that died is RECREATED from its recorded profile
+    // and app directory, the same as a running one is replaced. It used to
+    // answer not_running, and once a preview died the agent had no way back.
     let runtime = label(&row, PROFILE);
     if !["static", "wrangler"].contains(&runtime) {
         return Err("invalid_runtime: recorded profile is unavailable".into());
@@ -1891,7 +1997,7 @@ pub(crate) fn cleanup_departed_lane(
         if label(&row, OWNER) != instance {
             return Ok(());
         }
-        podman_at(Step::Run, &["rm", "--force", &name])?;
+        remove_now(&name)?;
     }
     let _router_lock =
         crate::resource_lock::acquire("preview-router", Duration::from_secs(120), debug)?;
@@ -1934,7 +2040,7 @@ fn watch_source_lifetime(
                 Ok(Some(row))
                     if label(&row, OWNER) == instance && label(&row, FORGE) == forge_id =>
                 {
-                    if podman_at(Step::Run, &["rm", "--force", &name]).is_err() {
+                    if remove_now(&name).is_err() {
                         continue;
                     }
                 }
@@ -2026,6 +2132,9 @@ mod tests {
             Step::Source,
             Step::Router,
             Step::Run,
+            Step::Remove,
+            Step::Rename,
+            Step::Logs,
             Step::Ready,
         ]
         .into_iter()
@@ -2094,6 +2203,159 @@ mod tests {
                 "runtime_unavailable: podman failed at step image (transport)"
             );
         }
+    }
+
+    /// 1723-2fiq: the preview's PID 1 (busybox httpd) ignores SIGTERM, so a
+    /// remove that grants a stop grace period outlives the per-call budget
+    /// (10087 ms measured on yoga against 5 s). The fake models that world: a
+    /// graceful `rm` times out. Removal must still finish, and a remove that
+    /// does fail names `remove`, never `run`.
+    #[test]
+    fn removing_a_preview_skips_the_grace_period_and_names_its_step() {
+        fn sigterm_ignoring_preview(args: &[&str]) -> std::io::Result<std::process::Output> {
+            let graceless = args.windows(2).any(|w| w == ["--time", "0"]);
+            if args[0] == "rm" && !graceless {
+                Err(std::io::Error::from(std::io::ErrorKind::TimedOut))
+            } else {
+                output(0, "", "")
+            }
+        }
+        {
+            let _fake = Fake::install(sigterm_ignoring_preview);
+            remove_now("tillandsias-p-web").expect("removal finishes without a grace period");
+        }
+        {
+            let _fake = Fake::install(|_| Err(std::io::Error::from(std::io::ErrorKind::TimedOut)));
+            let reason = remove_now("tillandsias-p-web").unwrap_err();
+            assert_eq!(
+                reason,
+                "runtime_unavailable: podman failed at step remove (timeout)"
+            );
+            assert_eq!(classify_failure(&reason).0, "remove");
+        }
+    }
+
+    /// A preview row as podman inspect reports it.
+    fn preview_row(status: &str, exit_code: i32, owner: &str) -> String {
+        json!([{
+            "State": {"Status": status, "ExitCode": exit_code},
+            "Config": {"Labels": {OWNER: owner, PROFILE: "static"}}
+        }])
+        .to_string()
+    }
+
+    /// 1723-2fiq: a preview that DIED is recreated by service_reload. It used
+    /// to answer not_running, so once a preview died the agent was stuck.
+    #[test]
+    fn reload_recreates_a_preview_that_exited_instead_of_refusing() {
+        // with_stub: a known project and a scratch runtime dir; the fake
+        // installed inside it answers podman first.
+        with_stub("exit 0", |_| {
+            reload_recreates_a_preview_that_exited_instead_of_refusing_body()
+        });
+    }
+
+    fn reload_recreates_a_preview_that_exited_instead_of_refusing_body() {
+        let _fake = Fake::install(|args| match args[0] {
+            "ps" => output(0, "tillandsias-proj-web abc\n", ""),
+            "inspect" => output(0, &preview_row("exited", 137, "default"), ""),
+            _ => output(0, "", ""),
+        });
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let err = rt.block_on(reload("proj", "default", false)).unwrap_err();
+        // No forge is live in a unit test, so the republish stops at the
+        // source; the point is that it was ATTEMPTED.
+        assert!(!err.starts_with("not_running"), "{err}");
+        assert!(err.starts_with("live_worktree_unavailable"), "{err}");
+    }
+
+    /// 1723-2fiq: the owning lane reads the preview's output, both streams,
+    /// with its state and exit code; the line count is bounded.
+    #[test]
+    fn service_logs_returns_both_streams_bounded_for_the_owner_only() {
+        // with_stub: a known project and a scratch runtime dir; the fake
+        // installed inside it answers podman first.
+        with_stub("exit 0", |_| {
+            service_logs_returns_both_streams_bounded_for_the_owner_only_body()
+        });
+    }
+
+    fn service_logs_returns_both_streams_bounded_for_the_owner_only_body() {
+        let seen = std::rc::Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
+        let log = seen.clone();
+        let _fake = Fake::install(move |args| {
+            log.borrow_mut().push(args.join(" "));
+            match args[0] {
+                "ps" => output(0, "tillandsias-proj-web abc\n", ""),
+                "inspect" => output(0, &preview_row("exited", 1, "default"), ""),
+                "logs" => output(0, "serving on 8080\n", "httpd: bind: address in use\n"),
+                _ => output(0, "", ""),
+            }
+        });
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let got = rt.block_on(logs("proj", "default", 10_000)).unwrap();
+        assert_eq!(got["state"], "exited");
+        assert_eq!(got["exit_code"], 1);
+        assert_eq!(got["lines"], LOG_LINES_MAX);
+        let text = got["log"].as_str().unwrap();
+        assert!(
+            text.contains("serving on 8080") && text.contains("address in use"),
+            "{text}"
+        );
+        assert!(
+            seen.borrow()
+                .iter()
+                .any(|c| c == "logs --tail 500 tillandsias-proj-web"),
+            "{:?}",
+            seen.borrow()
+        );
+        drop(_fake);
+
+        let _other = Fake::install(|args| match args[0] {
+            "ps" => output(0, "tillandsias-proj-web abc\n", ""),
+            "inspect" => output(0, &preview_row("running", 0, "other-lane"), ""),
+            "logs" => panic!("another lane's logs were read"),
+            _ => output(0, "", ""),
+        });
+        let err = rt.block_on(logs("proj", "default", 10)).unwrap_err();
+        assert!(err.starts_with("lane_conflict"), "{err}");
+    }
+
+    /// 1723-2fiq: every result carries `serving`; an exited preview says so
+    /// and names the way back.
+    #[test]
+    fn status_of_an_exited_preview_is_not_serving_and_names_the_remedy() {
+        // with_stub: a known project and a scratch runtime dir; the fake
+        // installed inside it answers podman first.
+        with_stub("exit 0", |_| {
+            status_of_an_exited_preview_is_not_serving_and_names_the_remedy_body()
+        });
+    }
+
+    fn status_of_an_exited_preview_is_not_serving_and_names_the_remedy_body() {
+        let _fake = Fake::install(|args| match args[0] {
+            "ps" => output(0, "tillandsias-proj-web abc\n", ""),
+            "inspect" => output(0, &preview_row("exited", 137, "default"), ""),
+            _ => output(0, "", ""),
+        });
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let got = rt.block_on(status("proj", "default")).unwrap();
+        assert_eq!(got["state"], "failed");
+        assert_eq!(got["serving"], false);
+        let diagnostic = got["diagnostic"].as_str().unwrap();
+        assert!(
+            diagnostic.contains("service_reload") && diagnostic.contains("service_logs"),
+            "{diagnostic}"
+        );
     }
 
     /// 1625-6iwd criterion 2: the last failure survives for service_status, with
@@ -2918,6 +3180,30 @@ mod tests {
         assert!(CONFIG_INSPECTOR.contains("delete parsed.build;"));
         assert!(CONFIG_INSPECTOR.contains("delete e.build;"));
         assert!(CONFIG_INSPECTOR.contains("raw:runtime, runtime_name:runtimeName"));
+    }
+
+    #[test]
+    fn a_dev_server_route_gets_the_projects_tls_site_and_leaf() {
+        // Order 1637-5765: a browser.open window loads https only, so the
+        // flutter dev route needs its own TLS site, bound to the PROJECT's
+        // leaf, which must name the flutter host exactly.
+        let mut dev =
+            crate::RouterRoute::public_service("flutter.macron.dev", "tillandsias-x-flutter", 8080);
+        dev.preview_tls = true;
+        let rendered = crate::generate_dynamic_caddyfile(&[dev]);
+        assert!(rendered.contains("https://flutter.macron.dev.localhost:8443"));
+        assert!(
+            rendered.contains("preview/macron.dev.crt /etc/tillandsias/preview/macron.dev.key"),
+            "the dotted project's leaf, never `dev`: {rendered}"
+        );
+        assert_eq!(
+            preview_san("macron.dev"),
+            "DNS:www.macron.dev.localhost,DNS:flutter.macron.dev.localhost"
+        );
+        assert!(
+            !preview_san("proj").contains('*'),
+            "exact names only: a wildcard would vouch for hosts the router does not serve"
+        );
     }
 
     #[test]

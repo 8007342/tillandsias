@@ -75,6 +75,11 @@ local ALLOWED = {
     -- read from the MOUNTED CHECKOUT (743-y5wh), and it carries its own litmus.
     -- It is executable context, not prose about the project.
     "images/default/startup-context-addendum.md",
+    -- The same class (1724-kcj4): agent-profile.sh links this file at every
+    -- forge launch as each harness's USER-level instructions (~/.claude/
+    -- CLAUDE.md, ~/.codex/AGENTS.md, ...). It is what the agent is told, not
+    -- prose about the project; its fixture is forge_agent_guidance.rs.
+    "images/default/config-overlay/mcp/forge-agent-guidance.md",
     -- A README documenting the scripts it sits beside. Narrower than the
     -- `crates/*` entry below, which admits ALL markdown anywhere under crates/:
     -- this admits only a README (at any depth: `*` matches '/', see above).

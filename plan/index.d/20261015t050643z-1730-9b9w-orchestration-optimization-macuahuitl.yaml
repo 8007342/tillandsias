@@ -1,0 +1,258 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora on the operator's direction, 2026-10-15: find
+# optimization opportunities in the coordinator's orchestration duties.
+# Analysis: plan/issues/orchestration-optimization-2026-10-15.md
+packets:
+  - packet_id: coordinator-orchestration-is-optimized-from-measured-land-and-peer-costs
+    order: 1730-9b9w
+    status: pending
+    kind: milestone
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [orchestration, land-queue, fleet, methodology]
+    related: [1731-cshq, 1732-a7m4, 1733-7gpz, 1734-cqgk, 1735-hjeu, 1736-rnx2, 1737-xbh3]
+    depends_on: []
+    title: |
+      Orchestration optimization: land more PRs per gate, catch bounce causes before a gate, let peers own their PRs, and stop micro-managing peers, measured against the 2026-10-15 baseline
+    context: |
+      Operator, 2026-10-15: "we've been micro-managing remote sessions and spend a lot of time in integrations ... look for optimization opportunities". Baseline (land runs 74-84): 26 lands in 11 runs, 9 bounces, ~20 coordinator re-preflights that caught 0, ~3-4 coordinator messages per landed PR. Analysis and measurement plan: plan/issues/orchestration-optimization-2026-10-15.md.
+    exit_criteria:
+      - "the child rows are closed, and one week of land runs is measured against the baseline in the analysis record"
+    unscoreable: "milestone: closure is its children plus the recorded one-week measurement"
+    next_action: >
+      The child rows carry the work. 1735-hjeu (the charter) is already applied by message to yoga. 1731-cshq (merge train) is the largest saving.
+    provenance: |
+      Filed by macuahuitl-fedora on the operator's direction, 2026-10-15T05:06:43Z.
+    events:
+      - type: filed
+        ts: "2026-10-15T05:06:43Z"
+        host: macuahuitl
+        summary: |-
+          Umbrella for orchestration optimizations measured on 2026-10-15.
+
+  - packet_id: the-land-queue-gates-ready-candidates-as-one-merge-train-and-bisects-only-on-red
+    order: 1731-cshq
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    size: L
+    pickup_role: linux
+    capability_tags: [land-queue, gate, throughput]
+    related: [1730-9b9w]
+    depends_on: []
+    title: |
+      The land queue gates every PR alone (~17-35 min each, serially), so a 4-PR run costs 4 gates; stack the ready candidates into one merge train, gate once, land them all on green, and bisect only when the train is red
+    context: |
+      Measured 2026-10-15: 26 lands took ~26 serial full gates on macuahuitl, the largest coordinator time sink. In a merge train the gate verdict covers the stacked tree. On green, land each PR's merge in order (preserving the per-PR land(<n>) commits and PR comments). On red, bisect (halve the train) until the red PR is found, evict it with the gate's output, and land the rest.
+      Keep the existing pre-gate checks (carried obligations, not-a-work-ref, conflict) per candidate before forming the train. The adopt-over-plan-only-move logic must still work when trunk moves during the gate.
+    exit_criteria:
+      - "a run with 3 green candidates performs ONE full gate and lands all 3, each with its own land(<n>) commit (red today: 3 gates)"
+      - "a run with one red candidate among 3 evicts exactly that one, with its gate output, and lands the other 2, in at most 1 + ceil(log2 3) gates"
+    unscoreable: "unpinnable-until-the-guard-exists: the train fixture over a scratch remote is the deliverable"
+    next_action: >
+      Read scripts/land-queue.sh's per-candidate loop (gate, push, adopt) and design the train as a pre-pass that only changes how many gates run. Prove it with a scratch-remote fixture that uses a stub gate.
+    provenance: |
+      Filed by macuahuitl-fedora, 2026-10-15T05:06:43Z.
+    events:
+      - type: filed
+        ts: "2026-10-15T05:06:43Z"
+        host: macuahuitl
+        summary: |-
+          Merge-train gating for the land queue.
+
+  - packet_id: preflight-catches-the-landing-carried-check-the-combined-features-and-the-work-ref-name
+    order: 1732-a7m4
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    size: M
+    pickup_role: any
+    capability_tags: [preflight, land-queue, gate]
+    related: [1730-9b9w, 1731-cshq]
+    depends_on: []
+    title: |
+      ./build.sh --preflight passed for PRs the land queue then bounced: a missing Carried-Waiver trailer (3 on 2026-10-15), the combined tray,listen-vsock test set (1), a non-work-ref branch (1). Preflight must run the same cheap checks
+    context: |
+      On 2026-10-15 every one of these PRs had preflight refused=0 and still bounced.
+      - Carried: the queue runs scripts/lua/check-carried-obligations.lua --landing against trunk, and preflight does not (or not in landing mode).
+      - Combined features: the gate's tray,listen-vsock set compiles tests the workspace pass cannot see. A `cargo check --tests -p tillandsias-headless --features tray,listen-vsock`, run only when headless crates changed, catches compile-level breaks cheaply, though not test failures (state that limit).
+      - Ref name: the queue skips anything not named work/<order>. Preflight can name the rule when the current branch breaks it.
+    exit_criteria:
+      - "preflight on a branch touching a carried-obligation area with no trailer is refused with the queue's own reason (red today)"
+      - "preflight on a branch that breaks the tray,listen-vsock compile is refused when headless crates changed (red today)"
+      - "preflight on a branch not named work/<order> prints the naming rule (advisory)"
+    unscoreable: "unpinnable-until-the-guard-exists: the three arms are the deliverable"
+    next_action: >
+      Find where --preflight assembles its guard list, and add the three checks as deciders with deadlines that fit the preflight budget. The combined compile must reuse the toolbox target dir.
+    provenance: |
+      Filed by macuahuitl-fedora, 2026-10-15T05:06:43Z.
+    events:
+      - type: filed
+        ts: "2026-10-15T05:06:43Z"
+        host: macuahuitl
+        summary: |-
+          Preflight misses three of the queue's bounce causes.
+
+  - packet_id: the-land-queue-honours-a-draft-mid-run-and-warns-of-overlapping-open-prs-early
+    order: 1733-7gpz
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    size: S
+    pickup_role: any
+    capability_tags: [land-queue, collisions, pull-requests]
+    related: [1730-9b9w, 1731-cshq]
+    depends_on: []
+    title: |
+      The queue fixes its candidate list at launch, so a PR made draft mid-run was still gated and landed (#427). Collisions between sibling PRs (#432/#433, #433/#436) surface only at merge. Re-read draft status per candidate, and post an overlap advisory when two open PRs touch the same files
+    context: |
+      2026-10-15: drafting #427 mid-run did not hold it. Two conflicts cost an eviction and a re-merge each.
+      Fix 1: re-check isDraft just before each candidate gates.
+      Fix 2: when a PR opens, or each queue run starts, compare its changed files with every other open non-draft PR's, and comment on both PRs naming the overlap and that "whichever lands second merges". `git merge-tree` against trunk gives an instant conflict answer before any gate.
+    exit_criteria:
+      - "a PR converted to draft after the run starts is skipped with skip:land-queue:<n>:draft (red today: gated)"
+      - "two open PRs touching the same file each get one overlap comment naming the other, without duplicates on later runs"
+    unscoreable: "unpinnable-until-the-guard-exists: the draft and overlap arms are the deliverable"
+    next_action: >
+      Add the per-candidate draft re-read (one gh call) and the overlap pass in scripts/land-queue.sh. Test with a stub gh.
+    provenance: |
+      Filed by macuahuitl-fedora, 2026-10-15T05:06:43Z.
+    events:
+      - type: filed
+        ts: "2026-10-15T05:06:43Z"
+        host: macuahuitl
+        summary: |-
+          Queue honours drafts mid-run; early overlap advisories.
+
+  - packet_id: peers-own-their-prs-end-to-end-and-the-coordinator-stops-relaying-and-re-preflighting
+    order: 1734-cqgk
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    size: M
+    pickup_role: any
+    capability_tags: [fleet, pre-push, pull-requests, windows]
+    related: [1730-9b9w, 1735-hjeu]
+    depends_on: []
+    title: |
+      Every peer PR passes through the coordinator by hand (re-push yolanda's salvage ref as work/, open the PR, re-preflight). Let Windows push work/ refs on a preflight stamp, have peers open their own non-draft PRs, and drop the coordinator re-preflight for Linux peers
+    context: |
+      2026-10-15: yolanda cannot push work/ refs because the pre-push hook demands a full ./build.sh --check stamp that Windows cannot earn in time, so the coordinator re-pushed each salvage ref. The coordinator then opened every peer PR and re-ran preflight about 20 times, catching 0 bounces.
+      Proposal:
+      - The hook admits a work/<order> push with a fresh --preflight stamp. The land queue's full gate is the real gate for trunk; the hook only protects trunk and release branches.
+      - Peers open their own PRs (gh works on every peer).
+      - The coordinator stops re-preflighting Linux peers; macOS and Windows preflights skip platform guards, so keep an optional Linux re-preflight for those only if their bounce rate says so.
+    exit_criteria:
+      - "a Windows host pushes work/<order> with a preflight-clean stamp and no full --check (red today: refused)"
+      - "a push to linux-next or main without the full stamp is still refused"
+      - "for one week, the coordinator opens no peer PR and relays no salvage ref; recorded on 1730-9b9w"
+    unscoreable: "unpinnable-until-the-guard-exists: the hook arms plus the one-week measurement"
+    next_action: >
+      Read the pre-push hook's work/ handling (scripts/hooks/ and pre-push-local-gate.sh) and propose the preflight-stamp admission with its two arms. Confirm with the coordinator that trunk protection is unchanged.
+    provenance: |
+      Filed by macuahuitl-fedora, 2026-10-15T05:06:43Z.
+    events:
+      - type: filed
+        ts: "2026-10-15T05:06:43Z"
+        host: macuahuitl
+        summary: |-
+          Peers own their PRs; no coordinator relay or re-preflight.
+
+  - packet_id: a-peer-autonomy-charter-gives-peers-row-queues-scope-authority-and-four-escalation-triggers
+    order: 1735-hjeu
+    status: in_progress
+    kind: chore
+    priority: p1
+    desired_release: v0.5
+    size: S
+    pickup_role: linux
+    capability_tags: [methodology, fleet, coordination]
+    related: [1730-9b9w, 1734-cqgk]
+    depends_on: []
+    title: |
+      Methodology gains a peer autonomy charter: peers get 3-5 row queues and decide within a row's scope; they escalate only for an outward act under the operator's identity, a cross-row scope change, a security boundary, or conflicting rulings; status is one line (READY:/DONE:/BLOCKED:)
+    context: |
+      2026-10-15: about a dozen peer questions had answers already settled by standing rules or the row's own scope, and each held a peer for a message cycle. Yoga's one-line status grammar carried the same decisions in a fraction of the text. The charter was applied by message to yoga on 2026-10-15 as the first measured case. Within a few minutes yoga used it correctly: it escalated exactly one security-boundary question (1722-2haw audio capture) and continued on the next queued row while waiting.
+    exit_criteria:
+      - "methodology (distributed-work.yaml) carries the charter: queue size, decision scope, the four escalation triggers, the status grammar; methodology_ask answers 'when should a peer ask the coordinator?' with it"
+      - "the coordinator's skills (meta-orchestration, coordinate-multihost-work) point at it instead of per-message instructions"
+    unscoreable: "methodology text: closure is the landed entry and the skills pointing at it"
+    next_action: >
+      macuahuitl writes the methodology entry and the skill pointers on a work ref after the next cut, then sends every peer its queue under the charter.
+    provenance: |
+      Filed by macuahuitl-fedora, 2026-10-15T05:06:43Z.
+    events:
+      - type: filed
+        ts: "2026-10-15T05:06:43Z"
+        host: macuahuitl
+        summary: |-
+          The peer autonomy charter, applied to yoga first.
+
+  - packet_id: release-tier-litmus-reds-surface-the-day-they-land-and-the-queue-locks-its-checkout
+    order: 1736-rnx2
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    size: M
+    pickup_role: linux
+    capability_tags: [land-queue, litmus, release, gate]
+    related: [1730-9b9w, 1731-cshq]
+    depends_on: []
+    title: |
+      A litmus pin broken by a landed PR (#427's PASS-line rewording) reached cut time unseen, because only the release tier runs the pre-build litmus; and nothing stops writes to the checkout while the queue gates there. After each land run, run the pre-build litmus scoped to the specs the landed PRs touched; hold a lock while gating
+    context: |
+      2026-10-15: litmus-forge-experts-discoverability-shape went red on trunk at #427's landing. It was found hours later by manual triage of a peer's release-build failures (fixed in #446). The scoped run reuses the class selector's spec mapping: litmus for the specs owning the changed files. It runs right after a land run ends, on the coordinator host, with no cron.
+      Lock: the queue writes a lock while it holds the checkout. The coordinator's command-policy hook refuses git checkout, merge, switch and file writes in that checkout while the lock is held. Measured near-miss: a no-op --ff-only merge mid-run on 2026-10-15.
+    exit_criteria:
+      - "a land run that lands a PR breaking a pre-build litmus pin reports the red litmus by name in its own output (red today: silent until the cut)"
+      - "while the queue gates, a git merge in the checkout from the coordinator session is refused, naming the running unit"
+    unscoreable: "unpinnable-until-the-guard-exists: the scoped-litmus and lock arms are the deliverable"
+    next_action: >
+      Find how the class selector maps changed paths to specs, add a post-run scoped litmus step to scripts/land-queue.sh, then add the lock and the hook rule.
+    provenance: |
+      Filed by macuahuitl-fedora, 2026-10-15T05:06:43Z.
+    events:
+      - type: filed
+        ts: "2026-10-15T05:06:43Z"
+        host: macuahuitl
+        summary: |-
+          Release-tier reds surface the day they land; the queue locks its checkout.
+
+  - packet_id: every-host-judges-the-ledger-with-a-plan-binary-that-matches-trunk
+    order: 1737-xbh3
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: M
+    pickup_role: any
+    capability_tags: [plan-lane, plan-binary, fleet, ledger]
+    related: [1730-9b9w, 1734-cqgk]
+    depends_on: []
+    title: |
+      One host's malformed fragment (depends_on naming an order) passed its own plan-lane check and then made every other host's plan push refuse; and hosts resolve different installed plan binaries (~/.local/bin is older than the checkout), so they disagree on whether the same ledger is valid
+    context: |
+      2026-10-15, about 04:37Z: yoga pushed 1730-zx3t with `depends_on: [1722-2haw]`, an order where a packet_id is required. Trunk's fold then failed tillandsias-plan check, and lenovinha's and macuahuitl's plan-lane pushes were refused fleet-wide. The fix was a list-replace fragment (3d7d3fe52). But macuahuitl's push script resolved ~/.local/bin/tillandsias-plan, which did not fold the replacement, and refused the fix itself until TILLANDSIAS_PLAN_BIN pointed at the current build.
+      Two defects:
+      - The plan lane's validation must run the SAME check, with a binary at least as new as trunk's schema, on every host. A push that would break trunk's fold must be refused at the pushing host.
+      - An installed plan binary older than the checkout must be noticed and rebuilt, or bypassed, before it judges the ledger. The vocabulary probe (memory: currency is a vocabulary probe, not an mtime) is the established method.
+    exit_criteria:
+      - "a plan-lane push of a fragment whose depends_on names an order is refused AT THE PUSHING HOST, on every host (red today: yoga's passed)"
+      - "the push script refuses or rebuilds a resolved plan binary that cannot fold a list-replace on depends_on, instead of judging the ledger with it (red today on macuahuitl)"
+    unscoreable: "unpinnable-until-the-guard-exists: the two arms are the deliverable"
+    next_action: >
+      Find why yoga's check passed: its resolved binary and its version. Then make push-plan-fragments-to-trunk.sh run plan-binary-probe's currency check before folding, and add a depends_on-must-be-packet-id lint to the fragment parse.
+    provenance: |
+      Filed by macuahuitl-fedora, 2026-10-15T05:06:43Z.
+    events:
+      - type: filed
+        ts: "2026-10-15T05:06:43Z"
+        host: macuahuitl
+        summary: |-
+          A bad fragment blocked every host's plan lane; stale plan binaries disagree on the fold.

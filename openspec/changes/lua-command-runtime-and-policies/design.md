@@ -182,8 +182,10 @@ What exists (read before designing; none of it is re-filed):
     `tillandsias-plan policy classify-bash`. Deny = exit 2 with the refusal
     on stderr; ask = `permissionDecision: "ask"` JSON; allow = exit 0
     silently; unknown shapes allow (a bridge that refuses what it does not
-    understand stops the fleet). The seven shapes and their lexical grammar
-    are in the classifier header; `--status` prints the counts and the
+    understand stops the fleet). The eight shapes and their lexical grammar
+    are in the classifier header (shape 8, a whole-command-line kill such as
+    `pkill -f` that kills its own shell, was added by 1724-kcj4 and is pinned
+    by the classifier's unit test); `--status` prints the counts and the
     retirement condition; `TILLANDSIAS_PRETOOLUSE_HOOK=off` is the logged
     kill switch. Removal: 1443-8pur and 1443-r4cj closed on every locus,
     zero deny/ask from `caller=pretooluse` for fourteen fleet days, and the
