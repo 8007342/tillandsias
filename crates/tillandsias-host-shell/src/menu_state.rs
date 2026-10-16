@@ -373,6 +373,21 @@ impl CloudflareLoginState {
             None => CloudflareLoginState::Unknown,
         }
     }
+
+    /// The state after `observed` arrives, shared by every tray that asks the
+    /// guest (macOS, Windows). A confirmed answer always lands. An unreadable
+    /// one (Unknown) keeps what was known, except a LoggingIn whose session is
+    /// over: that falls back to Unknown (shown disabled), never a stale
+    /// in-progress row.
+    pub fn settled_by(self, observed: Self) -> Self {
+        match (self, observed) {
+            (CloudflareLoginState::LoggingIn, CloudflareLoginState::Unknown) => {
+                CloudflareLoginState::Unknown
+            }
+            (known, CloudflareLoginState::Unknown) => known,
+            (_, confirmed) => confirmed,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -910,13 +925,10 @@ fn build_agent_rows(state: &MenuState) -> Vec<MenuItem> {
 /// short list stays GitHub-only (publishing needs GitHub first, and the first
 /// step must not be cluttered).
 ///
-/// Never on the Windows tray until slice 5 wires it: that tray never asks the
-/// guest, so the state would stay Unknown and the row disabled forever, a dead
-/// row (yolanda, #482 review).
+/// Every surface renders it the same way. Each tray must therefore ask for the
+/// state (slice 5 wired Windows); a tray that never asks would leave a dead,
+/// disabled row (yolanda, #482 review).
 fn cloudflare_login_item(state: &MenuState) -> Option<MenuItem> {
-    if state.target == TargetSurface::WindowsTray {
-        return None;
-    }
     if !matches!(state.login, GithubLoginState::LoggedIn { .. }) {
         return None;
     }
@@ -1136,14 +1148,13 @@ mod tests {
         );
     }
 
-    /// Order 1719-83po: no Cloudflare Login row anywhere in the Windows tray's
-    /// tree, in any state, until slice 5 wires that tray to the guest. A row
-    /// rendered there, even disabled, is dead: nothing ever moves it off
-    /// Unknown. The macOS control proves the same states DO render the row, so
-    /// this cannot pass merely because the row never renders at all.
+    /// Order 1719-83po slice 5: the Windows tray now asks the guest, so its
+    /// Cloudflare Login row is the SAME item as macOS and Linux in every state
+    /// (present, label, enabled). This replaces slice 3's absence test; the
+    /// Windows tray's asking is pinned in that crate.
     #[test]
-    fn cloudflare_login_row_is_absent_on_the_windows_tray_until_slice_5() {
-        let has_row = |target: TargetSurface, cf: CloudflareLoginState, ready: bool| {
+    fn cloudflare_login_row_is_identical_on_every_surface() {
+        let row = |target: TargetSurface, cf: CloudflareLoginState, ready: bool| {
             let state = MenuState {
                 login: GithubLoginState::LoggedIn { handle: "u".into() },
                 cloudflare_login: cf,
@@ -1152,28 +1163,56 @@ mod tests {
                 target,
                 ..MenuState::initial()
             };
-            let menu = build(&state);
-            let mut all_ids = Vec::new();
-            collect_ids(menu.top_items(), &mut all_ids);
-            all_ids.contains(&ids::CLOUDFLARE_LOGIN)
+            match build(&state) {
+                MenuStructure::Ready { items } => {
+                    items.into_iter().find(|i| i.id == ids::CLOUDFLARE_LOGIN)
+                }
+                other => panic!("expected Ready, got {other:?}"),
+            }
         };
         for cf in [
             CloudflareLoginState::Unknown,
             CloudflareLoginState::LoggedOut,
             CloudflareLoginState::LoggingIn,
+            CloudflareLoginState::LoggedIn,
         ] {
             for ready in [false, true] {
-                assert!(
-                    !has_row(TargetSurface::WindowsTray, cf, ready),
-                    "Windows: {cf:?} ready={ready} rendered a cloudflare-login row \
-                     the Windows tray can never update (dead until slice 5)"
-                );
-                assert!(
-                    has_row(TargetSurface::MacosTray, cf, ready),
-                    "control: macOS {cf:?} ready={ready} must render the row"
-                );
+                let mac = row(TargetSurface::MacosTray, cf, ready);
+                for target in [TargetSurface::WindowsTray, TargetSurface::LinuxTray] {
+                    assert_eq!(
+                        row(target, cf, ready),
+                        mac,
+                        "{target:?} {cf:?} ready={ready}: the row must match macOS"
+                    );
+                }
             }
         }
+        assert!(
+            row(
+                TargetSurface::WindowsTray,
+                CloudflareLoginState::LoggedOut,
+                true
+            )
+            .is_some_and(|i| i.enabled),
+            "Windows offers the login once the guest says none is stored"
+        );
+    }
+
+    /// Order 1719-83po: the one transition rule every asking tray uses.
+    #[test]
+    fn cloudflare_login_state_settles_on_confirmed_answers_only() {
+        use CloudflareLoginState as Cf;
+        for from in [Cf::Unknown, Cf::LoggedOut, Cf::LoggingIn, Cf::LoggedIn] {
+            assert_eq!(from.settled_by(Cf::LoggedIn), Cf::LoggedIn, "{from:?}");
+            assert_eq!(from.settled_by(Cf::LoggedOut), Cf::LoggedOut, "{from:?}");
+        }
+        assert_eq!(Cf::LoggedIn.settled_by(Cf::Unknown), Cf::LoggedIn);
+        assert_eq!(Cf::LoggedOut.settled_by(Cf::Unknown), Cf::LoggedOut);
+        assert_eq!(
+            Cf::LoggingIn.settled_by(Cf::Unknown),
+            Cf::Unknown,
+            "a finished session with no answer must not stay 'Logging in…'"
+        );
     }
 
     /// Order 1719-83po: the reply maps three ways, and Unknown is the start.
@@ -1364,17 +1403,6 @@ mod tests {
             win.sort();
             here.retain(|i| i != ids::SEPARATOR);
             win.retain(|i| i != ids::SEPARATOR);
-            // ONE sanctioned membership difference, stated per surface: the
-            // Cloudflare Login row is on macOS and Linux and not on Windows
-            // until slice 5 wires that tray (order 1719-83po). Asserted
-            // positively, then set aside, so nothing else may differ.
-            let cf_expected = target != TargetSurface::WindowsTray;
-            assert_eq!(
-                here.iter().any(|i| i == ids::CLOUDFLARE_LOGIN),
-                cf_expected,
-                "{target:?}: cloudflare-login presence must be {cf_expected}: {seq:?}"
-            );
-            here.retain(|i| i != ids::CLOUDFLARE_LOGIN);
             assert_eq!(
                 here, win,
                 "{target:?}: top-level id SET diverged from Windows (order may differ, membership may not)"
@@ -1474,16 +1502,15 @@ mod tests {
             other => panic!("expected MenuStructure::Ready, got {other:?}"),
         };
 
-        // status + cloud + separator + version + quit = 5 top-level items.
+        // status + cloud + cloudflare-login + separator + version + quit = 6.
         // Order 997-e4v2 removed the local-projects submenu: Cloud is the only
-        // project path, so the Linux-parity contract is five, not six. The
-        // unapproved reset-guest leaf went earlier (operator order 2026-07-22).
-        // Order 1719-83po's Cloudflare Login row is not on this WINDOWS build
-        // until slice 5 wires that tray (cloudflare_login_row_is_absent_on_the_
-        // windows_tray_until_slice_5); macOS and Linux show it.
+        // project path. The unapproved reset-guest leaf went earlier (operator
+        // order 2026-07-22). Order 1719-83po added the APPROVED Cloudflare
+        // Login row (spec simplified-tray-ux e0555b06), shown here because
+        // the state starts Unknown; slice 5 wired it on this Windows build.
         assert_eq!(
             items.len(),
-            5,
+            6,
             "top-level item count (authenticated, Linux parity)"
         );
 
@@ -1493,6 +1520,7 @@ mod tests {
             vec![
                 ids::STATUS,
                 ids::CLOUD_PROJECTS,
+                ids::CLOUDFLARE_LOGIN,
                 ids::SEPARATOR,
                 ids::VERSION,
                 ids::QUIT,
@@ -2276,25 +2304,15 @@ mod tests {
             ids::VERSION,
             ids::QUIT,
         ];
-        // The Windows tray does not show it until slice 5 wires that tray to
-        // the guest (a row it can never update would be dead).
-        const APPROVED_LOGGED_IN_WINDOWS: [&str; 5] = [
-            ids::STATUS,
-            ids::CLOUD_PROJECTS,
-            ids::SEPARATOR,
-            ids::VERSION,
-            ids::QUIT,
-        ];
 
         for target in [TargetSurface::WindowsTray, TargetSurface::MacosTray] {
-            let logged_in = match target {
-                TargetSurface::WindowsTray => &APPROVED_LOGGED_IN_WINDOWS[..],
-                TargetSurface::MacosTray | TargetSurface::LinuxTray => &APPROVED_LOGGED_IN[..],
-            };
             for (login, approved) in [
                 (GithubLoginState::LoggedOut, &APPROVED_LOGGED_OUT[..]),
                 (GithubLoginState::LoggingIn, &APPROVED_LOGGED_OUT[..]),
-                (GithubLoginState::LoggedIn { handle: "u".into() }, logged_in),
+                (
+                    GithubLoginState::LoggedIn { handle: "u".into() },
+                    &APPROVED_LOGGED_IN[..],
+                ),
             ] {
                 let state = MenuState {
                     login,

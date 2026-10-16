@@ -1056,22 +1056,14 @@ async fn poll_cloudflare_login_once(
 /// Order 1719-83po: write an observed Cloudflare login state; true when the
 /// menu must be rebuilt. Answers arrive only on events (Ready, the login
 /// session closing), each final, so a confirmed answer always replaces the
-/// local LoggingIn, and Unknown never overwrites a confirmed answer.
+/// local LoggingIn, and Unknown never overwrites a confirmed answer (the
+/// shared `CloudflareLoginState::settled_by`, also used by the Windows tray).
 fn apply_cloudflare_login_state(
     observed: tillandsias_host_shell::menu_state::CloudflareLoginState,
     menu_state: &Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
 ) -> bool {
-    use tillandsias_host_shell::menu_state::CloudflareLoginState;
     let mut guard = menu_state.lock().unwrap();
-    let next = match (guard.cloudflare_login, observed) {
-        // An unreadable answer keeps what we knew, except a LoggingIn whose
-        // session is over: that falls back to Unknown (shown disabled).
-        (CloudflareLoginState::LoggingIn, CloudflareLoginState::Unknown) => {
-            CloudflareLoginState::Unknown
-        }
-        (known, CloudflareLoginState::Unknown) => known,
-        (_, confirmed) => confirmed,
-    };
+    let next = guard.cloudflare_login.settled_by(observed);
     if guard.cloudflare_login == next {
         return false;
     }
