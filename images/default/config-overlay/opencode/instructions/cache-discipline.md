@@ -48,6 +48,7 @@ The forge pre-sets these. You don't need to set them — just run your tool norm
 | **Flutter/Dart** | `PUB_CACHE` | `~/.cache/tillandsias-project/pub/` | `pub cache list` |
 | **npm** | `npm_config_cache` | `~/.cache/tillandsias-project/npm/` | `npm config get cache` |
 | **Yarn** | `YARN_CACHE_FOLDER` | `~/.cache/tillandsias-project/yarn/` | `yarn config get cacheFolder` |
+| **Playwright browsers** | `PLAYWRIGHT_BROWSERS_PATH` | `~/.cache/tillandsias-project/ms-playwright/` | `echo $PLAYWRIGHT_BROWSERS_PATH` |
 | **pnpm** | `PNPM_HOME` | `~/.cache/tillandsias-project/pnpm/` | `pnpm config get dir` |
 | **uv** | `UV_CACHE_DIR` | `~/.cache/tillandsias-project/uv/` | `uv config --show` |
 | **pip** | `PIP_CACHE_DIR` | `~/.cache/tillandsias-project/pip/` | `pip cache dir` |

@@ -245,6 +245,10 @@ fn terminal_foreground_pgrp() -> Option<i32> {
 }
 
 fn main() {
+    // ORDER 1744-xjfw: first, so even a panic on the helper's FIRST write (a
+    // startup warning, before argument dispatch) is recorded. A no-op unless
+    // the detached image-ensure parent named a sidecar.
+    install_image_ensure_panic_hook();
     #[cfg(unix)]
     {
         // Own our process group so graceful shutdown can sweep stray children
@@ -2818,6 +2822,82 @@ const IMAGE_BUILD_DETACH_ENV: &str = "TILLANDSIAS_IMAGE_BUILD_DETACH";
 /// Set on the helper process so its own `ensure_image_exists` (including
 /// base-image recursion) stays in-process — one helper, never nested ones.
 const IMAGE_BUILD_HELPER_ENV: &str = "TILLANDSIAS_IMAGE_BUILD_HELPER";
+/// ORDER 1744-xjfw: where the helper's panic hook writes the panic text. The
+/// helper's stdout AND stderr are its build log, so one failed write to that
+/// file (a full disk mid-build, say) both panics the helper (`println!` panics
+/// on a write error) and loses the panic message: measured on the macOS guest,
+/// "exited 101" with a log holding nothing past the forge-base pull. This
+/// sidecar lives in the temp dir (tmpfs on the guest), not beside the log.
+const IMAGE_ENSURE_PANIC_FILE_ENV: &str = "TILLANDSIAS_IMAGE_ENSURE_PANIC_FILE";
+
+fn image_ensure_panic_path(image_name: &str) -> PathBuf {
+    std::env::temp_dir().join(format!("tillandsias-image-ensure-{image_name}.panic"))
+}
+
+/// Helper mode: record any panic to the sidecar named by
+/// [`IMAGE_ENSURE_PANIC_FILE_ENV`] before the default hook prints it.
+fn install_image_ensure_panic_hook() {
+    let Some(path) = std::env::var_os(IMAGE_ENSURE_PANIC_FILE_ENV).map(PathBuf::from) else {
+        return;
+    };
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = fs::write(&path, format!("{info}\n"));
+        default_hook(info);
+    }));
+}
+
+/// Free bytes on the filesystem holding `path`, for a failure message.
+#[cfg(unix)]
+// statvfs field widths differ by platform (f_bavail is u32 on macOS, u64 on
+// Linux), so the cast is needed on one and redundant on the other.
+#[allow(clippy::unnecessary_cast)]
+fn free_bytes_at(path: &Path) -> Option<u64> {
+    use std::os::unix::ffi::OsStrExt;
+    let c = std::ffi::CString::new(path.as_os_str().as_bytes()).ok()?;
+    let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
+    if unsafe { libc::statvfs(c.as_ptr(), &mut st) } != 0 {
+        return None;
+    }
+    Some(st.f_bavail as u64 * st.f_frsize as u64)
+}
+
+#[cfg(not(unix))]
+fn free_bytes_at(_path: &Path) -> Option<u64> {
+    None
+}
+
+/// ORDER 1744-xjfw: the error for a helper that exited non-zero. Says what a
+/// bare 101 means when no panic text survived, and how much space was left,
+/// so the next failure names its own cause instead of a progress bar.
+fn describe_image_ensure_failure(
+    image_name: &str,
+    code: i32,
+    log_path: &Path,
+    log_tail: &str,
+    panic_text: Option<&str>,
+    free_bytes: Option<u64>,
+) -> String {
+    let mut msg = match panic_text.map(str::trim).filter(|t| !t.is_empty()) {
+        Some(p) => {
+            format!("detached image ensure helper for {image_name} panicked (exit {code}): {p}")
+        }
+        None if code == 101 => format!(
+            "detached image ensure helper for {image_name} exited 101, a panic whose message was not recorded: a write to its build log failed (a full disk is the usual cause)"
+        ),
+        None => format!("detached image ensure helper for {image_name} exited {code}"),
+    };
+    if let Some(b) = free_bytes {
+        let dir = log_path.parent().unwrap_or(log_path);
+        msg.push_str(&format!(
+            "\nfree space under {}: {} MiB",
+            dir.display(),
+            b / (1024 * 1024)
+        ));
+    }
+    msg.push_str(&format!("\nlog tail ({}):\n{log_tail}", log_path.display()));
+    msg
+}
 
 /// Order 270: pure decision — should this ensure detach into a
 /// session-surviving helper? The multi-minute first-use `podman build` ran
@@ -2857,6 +2937,8 @@ struct DetachedEnsureRequest {
     image_name: String,
     image_tag: String,
     log_path: PathBuf,
+    /// 1744-xjfw: the sidecar the helper's panic hook writes.
+    panic_path: PathBuf,
     debug: bool,
 }
 
@@ -2891,6 +2973,7 @@ impl DetachedImageEnsure for SetsidImageEnsure {
             .arg(&request.image_name)
             .arg(&request.image_tag)
             .env(IMAGE_BUILD_HELPER_ENV, "1")
+            .env(IMAGE_ENSURE_PANIC_FILE_ENV, &request.panic_path)
             .stdin(Stdio::null())
             .stdout(log)
             .stderr(log_err);
@@ -2957,11 +3040,15 @@ fn run_image_ensure_detached<D: DetachedImageEnsure>(
             log_path.display()
         );
     }
+    let panic_path = image_ensure_panic_path(image_name);
+    // A sidecar left by an earlier run must not be read as this run's panic.
+    let _ = fs::remove_file(&panic_path);
     let request = DetachedEnsureRequest {
         root: root.to_path_buf(),
         image_name: image_name.to_string(),
         image_tag: image_tag.to_string(),
         log_path: log_path.clone(),
+        panic_path: panic_path.clone(),
         debug,
     };
     let code = detacher.run(&request)?;
@@ -2975,9 +3062,14 @@ fn run_image_ensure_detached<D: DetachedImageEnsure>(
             lines[start..].join("\n")
         })
         .unwrap_or_default();
-    Err(format!(
-        "detached image ensure helper for {image_name} exited {code}; log tail ({}):\n{tail}",
-        log_path.display()
+    let panic_text = fs::read_to_string(&panic_path).ok();
+    Err(describe_image_ensure_failure(
+        image_name,
+        code,
+        &log_path,
+        &tail,
+        panic_text.as_deref(),
+        free_bytes_at(log_path.parent().unwrap_or(&log_path)),
     ))
 }
 
@@ -25984,6 +26076,7 @@ mod tests {
                     image_name: request.image_name.clone(),
                     image_tag: request.image_tag.clone(),
                     log_path: request.log_path.clone(),
+                    panic_path: request.panic_path.clone(),
                     debug: request.debug,
                 });
                 Ok(self.exit_code)
@@ -26030,6 +26123,70 @@ mod tests {
         )
         .expect_err("helper non-zero exit is a failure");
         assert!(err.contains("exited 7"), "carries the helper exit: {err}");
+    }
+
+    /// ORDER 1744-xjfw: a helper whose build log could not be written exited
+    /// 101 with nothing in that log (macOS guest, v56.10.15.1). The error now
+    /// carries the panic text from the sidecar the helper's hook writes, says
+    /// what a bare 101 means when there is none, and never reports a sidecar
+    /// left by an earlier run as this run's panic.
+    #[test]
+    fn a_helper_panic_is_named_even_when_its_log_is_silent() {
+        struct PanickingHelper {
+            exit_code: i32,
+            panic_text: Option<&'static str>,
+        }
+        impl DetachedImageEnsure for PanickingHelper {
+            fn run(&self, request: &DetachedEnsureRequest) -> Result<i32, String> {
+                if let Some(t) = self.panic_text {
+                    fs::write(&request.panic_path, t).unwrap();
+                }
+                Ok(self.exit_code)
+            }
+        }
+        let run = |image: &str, helper: &PanickingHelper| {
+            run_image_ensure_detached(Path::new("/r"), image, "t:v1", false, helper)
+                .expect_err("non-zero exit is a failure")
+        };
+
+        let err = run(
+            "xjfw-panicked",
+            &PanickingHelper {
+                exit_code: 101,
+                panic_text: Some(
+                    "panicked at library/std/src/io/stdio.rs:1:1:\nfailed printing to stdout: No space left on device (os error 28)",
+                ),
+            },
+        );
+        assert!(err.contains("panicked (exit 101)"), "{err}");
+        assert!(err.contains("No space left on device"), "{err}");
+
+        let err = run(
+            "xjfw-silent",
+            &PanickingHelper {
+                exit_code: 101,
+                panic_text: None,
+            },
+        );
+        assert!(
+            err.contains("a panic whose message was not recorded"),
+            "{err}"
+        );
+
+        // A sidecar from an earlier run is removed before the helper starts.
+        fs::write(image_ensure_panic_path("xjfw-stale"), "an OLD panic").unwrap();
+        let err = run(
+            "xjfw-stale",
+            &PanickingHelper {
+                exit_code: 7,
+                panic_text: None,
+            },
+        );
+        assert!(!err.contains("an OLD panic"), "{err}");
+        assert!(err.contains("exited 7"), "{err}");
+        for image in ["xjfw-panicked", "xjfw-silent", "xjfw-stale"] {
+            let _ = fs::remove_file(image_ensure_panic_path(image));
+        }
     }
 
     /// Order 270 source-window pins: (a) the detach decision runs BEFORE the

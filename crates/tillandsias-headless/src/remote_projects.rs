@@ -382,7 +382,7 @@ if [ -z "$TOKEN" ]; then
   echo "github token missing in Vault; run tillandsias --github-login" >&2
   exit 2
 fi
-printf '%s\n' "$TOKEN" | gh auth login --hostname github.com --with-token >/dev/null 2>&1
+printf '%s\n' "$TOKEN" | gh auth login --hostname github.com --with-token >/dev/null
 gh api user --jq '[(.id|tostring), .login, (.name // "")] | @tsv'
 "#;
     match run_git_image_shell(script, &[], debug) {
@@ -542,7 +542,7 @@ if [ -z "$TOKEN" ]; then
   echo "github token missing in Vault; run tillandsias --github-login" >&2
   exit 2
 fi
-printf '%s\n' "$TOKEN" | gh auth login --hostname github.com --with-token >/dev/null 2>&1
+printf '%s\n' "$TOKEN" | gh auth login --hostname github.com --with-token >/dev/null
 exec gh api user/repos?per_page=100\&sort=pushed\&type=owner
 "#;
 
@@ -725,7 +725,7 @@ if [ -z "$TOKEN" ]; then
   echo "github token missing in Vault; run tillandsias --github-login" >&2
   exit 2
 fi
-printf '%s\n' "$TOKEN" | gh auth login --hostname github.com --with-token >/dev/null 2>&1
+printf '%s\n' "$TOKEN" | gh auth login --hostname github.com --with-token >/dev/null
 exec gh repo clone "$1" "$2"
 "#;
     ensure_git_image_available(&image, debug)?;
@@ -1356,6 +1356,26 @@ mod tests {
             unsafe { std::env::remove_var("TILLANDSIAS_PODMAN_BIN") };
         }
         unsafe { std::env::remove_var("TILLANDSIAS_GIT_IMAGE") };
+    }
+
+    /// 1742-zg7r: a rejected token must say why. `gh auth login` under
+    /// `set -eu` with its stderr sent to /dev/null exited 1 with an EMPTY
+    /// reason, so `cloud refresh: gh invocation failed` named nothing while
+    /// the access token had simply expired. Only stdout is discarded now.
+    #[test]
+    fn gh_auth_login_keeps_its_stderr_so_a_failure_names_its_reason() {
+        // source-pin-ok: the scripts are string literals run in a container;
+        // their redirection text is the contract and no function exposes it.
+        let src = include_str!("remote_projects.rs");
+        let prod = src.split("\n#[cfg(test)]\nmod tests {").next().unwrap();
+        let logins: Vec<&str> = prod
+            .lines()
+            .filter(|l| l.contains("| gh auth login") && l.contains("--with-token"))
+            .collect();
+        assert_eq!(logins.len(), 3, "the three gh scripts each log in once");
+        for l in logins {
+            assert!(!l.contains("2>&1"), "gh auth login discards its error: {l}");
+        }
     }
 
     #[test]

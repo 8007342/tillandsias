@@ -73,6 +73,7 @@ cargo build      # CACHE HIT — zero bytes downloaded
 | Maven | `MAVEN_OPTS -Dmaven.repo.local=` | `maven/` |
 | Gradle | `GRADLE_USER_HOME` | `gradle/` |
 | Yarn | `YARN_CACHE_FOLDER` | `yarn/` |
+| Playwright browsers | `PLAYWRIGHT_BROWSERS_PATH` | `ms-playwright/` |
 | pnpm | `PNPM_HOME` | `pnpm/` |
 | uv | `UV_CACHE_DIR` | `uv/` |
 | Flutter/Dart | `PUB_CACHE` | `pub/` |

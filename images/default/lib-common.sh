@@ -2260,6 +2260,11 @@ export NPM_CONFIG_PREFIX="$PROJECT_CACHE/npm/global"
 # Yarn (classic and berry both honor this)
 export YARN_CACHE_FOLDER="$PROJECT_CACHE/yarn"
 
+# Playwright browsers (order 1726-3mn6): ~681 MB per chromium install, so on
+# the persistent cache volume, downloaded once per project, never into the
+# RAM checkout or $HOME.
+export PLAYWRIGHT_BROWSERS_PATH="$PROJECT_CACHE/ms-playwright"
+
 # pnpm
 export PNPM_HOME="$PROJECT_CACHE/pnpm"
 
