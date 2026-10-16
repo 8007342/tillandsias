@@ -63,8 +63,15 @@ fn portable_menu_build_is_invokable_from_windows_tray_path() {
                 vec![
                     "status",
                     // 997-e4v2 removed "local-projects": cloud is the only
-                    // project path, so the parity contract is five items.
+                    // project path.
                     "cloud-projects",
+                    // 1719-83po slice 5: Cloudflare Login, APPROVED by the
+                    // Tlatoāni 2026-10-14 (openspec simplified-tray-ux
+                    // "Cloudflare Login Menu", req e0555b06). Shown disabled
+                    // here because the state starts Unknown; this tray now
+                    // asks the guest (refresh_cloudflare_login), so it is
+                    // live, not the dead row #482 kept out.
+                    "cloudflare-login",
                     "---",
                     "version",
                     "quit"
