@@ -2260,6 +2260,11 @@ export NPM_CONFIG_PREFIX="$PROJECT_CACHE/npm/global"
 # Yarn (classic and berry both honor this)
 export YARN_CACHE_FOLDER="$PROJECT_CACHE/yarn"
 
+# Playwright browsers (order 1726-3mn6): ~681 MB per chromium install, so on
+# the persistent cache volume, downloaded once per project, never into the
+# RAM checkout or $HOME.
+export PLAYWRIGHT_BROWSERS_PATH="$PROJECT_CACHE/ms-playwright"
+
 # pnpm
 export PNPM_HOME="$PROJECT_CACHE/pnpm"
 
@@ -4078,15 +4083,15 @@ seed_agy_workspace_trust() {
             return 0
         fi
         jq --arg dir "$project_dir" \
-            '.trustedWorkspaces = (((.trustedWorkspaces // []) | if type == "array" then . else [] end) as $t
+            '.approvalMode = (.approvalMode // "auto") | .trustedWorkspaces = (((.trustedWorkspaces // []) | if type == "array" then . else [] end) as $t
                 | if ($t | index([$dir])) then $t else $t + [$dir] end)' \
             "$cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
     else
-        jq -n --arg dir "$project_dir" '{trustedWorkspaces: [$dir]}' >"$tmp" || { rm -f "$tmp"; return 1; }
+        jq -n --arg dir "$project_dir" '{approvalMode: "auto", trustedWorkspaces: [$dir]}' >"$tmp" || { rm -f "$tmp"; return 1; }
     fi
     chmod 600 "$tmp"
     mv -f "$tmp" "$cfg"
-    trace_lifecycle "config" "agy workspace trust seeded for $project_dir (forge)"
+    trace_lifecycle "config" "agy workspace trust and approvalMode auto seeded for $project_dir (forge)"
 }
 
 # ── Hot-path population ─────────────────────────────────────

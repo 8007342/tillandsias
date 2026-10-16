@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by forge session tillandsias-87 (forge-tillandsias on yolanda, WSL2 host,
+# forge 56.10.16.1, base linux-next@f25d7c610), 2026-10-16T02:46:47Z, at the
+# request of the fleet coordinator (macuahuitl-fedora). All evidence was
+# collected inside the forge as uid 1000.
+packets:
+  - packet_id: forge-quick-intro-claims-chrome-debugging-browsers-are-preinstalled-but-the-forge-image-has-none
+    order: 1746-2szd
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [docs, skills, forge-image, browser, doc-image-mismatch]
+    estimated_hours: 1
+    related: [1713-1dnx, 1649-xqet, 1656-iktu]
+    title: |
+      The forge-quick-intro skill tells every agent "Headless and headful Chrome debugging browsers are pre-installed and configured", but the forge image ships no Chromium or Chrome binary. Agents trust the intro (its directive is "do not search for tools"), so they plan browser work that cannot run in the forge.
+    context: |
+      MEASURED 2026-10-16 in forge-tillandsias on yolanda (56.10.16.1):
+      - `command -v chromium chromium-browser google-chrome` printed nothing (rc=1); `ls /opt` = agents cheatsheets cheatsheets-image cheatsheet-sources skills tillandsias.
+      - The claim, in skills/forge-quick-intro/SKILL.md (also shipped at /opt/skills/forge-quick-intro/SKILL.md), under the "# Forge Quick Intro" heading, in the bullet list after "The Forge Environment is fully loaded": "- **Web & Browsers:** Headless and headful Chrome debugging browsers are pre-installed and configured."
+      By design, browser windows come from host-browser browser.open (the chromium-framework container, 1649-xqet), not from the forge. So the doc is wrong, not the image.
+    exit_criteria:
+      - 'forge-quick-intro states that the forge has no browser binary and that browsers are opened through host-browser browser.open (dev mode: browser.open{dev:true}, 1656-iktu), and names the fallback when host-browser is unreachable'
+      - 'a check fails when any shipped skill or cheatsheet claims a browser binary is pre-installed in the forge while the forge Containerfile installs none (mutation shown in the commit)'
+    unscoreable: "unpinnable-until-the-guard-exists: the future litmus is scripts/check-forge-skill-browser-claims-match-image.sh, written in the same commit as the reworded skill"
+    next_action: >
+      Reword the Web & Browsers bullet in skills/forge-quick-intro/SKILL.md, then add the doc-vs-image guard.
+    events:
+      - type: filed
+        ts: "2026-10-16T02:46:47Z"
+        host: yolanda
+        summary: |-
+          Doc/image mismatch found when an operator asked a forge to drive a chromium window: the forge has no browser binary, but forge-quick-intro says one is pre-installed.
+
+  - packet_id: forge-plan-msg-tools-call-an-empty-plan-bin-forever-when-the-mcp-server-starts-before-the-expert-build-finishes
+    order: 1746-4q34
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [mcp, forge-plan, fleet-messaging, msg, bash, subshell]
+    estimated_hours: 1
+    related: [1506-ssb5, 1713-1dnx]
+    title: |
+      msg_recv, msg_status and msg_send in images/default/config-overlay/mcp/forge-plan.sh answer only "forge-plan.sh: line 1207: : command not found" (line 1224 for msg_send) for the whole session when the forge-plan MCP server started before tillandsias-plan was installed. msg_capability_gap resolves PLAN_BIN, but its callers run it as gap="$(msg_capability_gap)", a subshell, so the resolved value never reaches the server process and "$PLAN_BIN" stays empty.
+    context: |
+      MEASURED 2026-10-16 in forge-tillandsias on yolanda (56.10.16.1). At session start, experts_state=building, so the global PLAN_BIN="$(resolve_plan_bin)" (line 508) was empty. Later, /home/forge/.local/bin/tillandsias-plan existed and plan tools that re-resolve in the parent shell worked (methodology_ask answered confidence=exact), but:
+      - msg_recv {keep:true}  -> "images/default/config-overlay/mcp/forge-plan.sh: line 1207: : command not found"
+      - msg_status {id:x}     -> same, line 1207
+      - msg_send {to:[yolanda/windows], ...} -> same, line 1224
+      The CLI itself works: `tillandsias-plan msg whoami` -> yolanda/tillandsias-default; `msg status probe-none` -> unknown:no-such-receipt.
+      The capability-gap text is lost as well: the subshell resolves PLAN_BIN, so gap comes back empty, and the parent then calls an empty command.
+    exit_criteria:
+      - 'the msg tools resolve PLAN_BIN in the server process (not in a command substitution); a test starts forge-plan.sh with no tillandsias-plan on PATH, installs a stub binary, then calls msg_status and gets the stub''s output, not "command not found" (red on f25d7c610)'
+    unscoreable: "unpinnable-until-the-guard-exists: the future litmus is scripts/test-forge-plan-msg-tools-resolve-late-plan-bin.sh, written in the same commit as the fix"
+    next_action: >
+      Resolve PLAN_BIN/PLAN_INDEX in msg_query and msg_send_tool before calling msg_capability_gap, the way the plan tools do at lines 513/550.
+    events:
+      - type: filed
+        ts: "2026-10-16T02:46:47Z"
+        host: yolanda
+        summary: |-
+          All three forge-plan msg tools are dead for the session when the MCP server beats the expert build: a subshell drops the PLAN_BIN resolution.
+
+events:
+  - packet_id: forges-in-the-macos-and-windows-vm-get-an-empty-lane-mcp-socket-dir-because-the-guest-binary-is-built-without-the-tray-feature-that-holds-the-listener
+    event:
+      type: note
+      ts: "2026-10-16T02:46:47Z"
+      agent_id: tillandsias-87@yolanda
+      summary: |-
+        WINDOWS (WSL2) LIVE ARM, 56.10.16.1, forge-tillandsias on yolanda: STILL RED, with a different symptom from the macOS one.
+        - id: uid=1000(forge) gid=1000(forge) groups=1000(forge),0(root)
+        - /run/host/tillandsias-mcp is root:root 700 (macOS: root:root 755, empty). ls -> "Permission denied", so its contents are unknown. The dir's tmpfs size is 60 (an empty tmpfs dir is 40), which suggests one entry, possibly mcp.sock, that uid 1000 cannot reach. Unconfirmed.
+        - mountinfo: "986 992 0:90 /tillandsias/mcp/tillandsias-default /run/host/tillandsias-mcp ro,nosuid,nodev,relatime - tmpfs tmpfs rw,size=813020k,nr_inodes=203255,mode=700". The source is a guest tmpfs mounted mode=700; the creating process is not visible from inside the forge.
+        - host-browser.sh by hand -> {"error":{"code":-32000,"message":"TILLANDSIAS_CONTROL_SOCKET does not exist"}} ([[ -e ]] fails on EACCES); Claude reports host-browser CONNECTION_CLOSED.
+        - ALSO NEW: the lane mailbox is unusable. /run/host/tillandsias-msg is 755, but dead, inbox, outbox and receipts are root:root 700 (a bind of /root/.local/state/tillandsias/msg/lanes/tillandsias-default on ext4), so `tillandsias-plan msg send|recv` -> "refused:msg:io:lane ... Permission denied (os error 13)". Fleet messaging from Windows forges is down (the MCP msg tools fail earlier still, see 1746-4q34).
+        So on Windows, adding the listener (tray feature) is not enough: the lane mcp and msg dirs must also be reachable by the forge uid (owner 1000, or a group the forge user is in). Per yolanda-windows, no in-forge workaround (chmod or a hand-made socket) was attempted.
+        Skills probe (1743-h9rz live arm): ~/.claude/skills has start-a-new-project -> /opt/skills/start-a-new-project, and the Claude harness lists it: PASS for Claude. ~/.config/opencode/skills does not exist (this forge does not cover the OpenCode arm).

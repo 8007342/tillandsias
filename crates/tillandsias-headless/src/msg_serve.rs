@@ -144,6 +144,10 @@ pub fn prepare_forge_lane_in(
         );
         return None;
     }
+    // ORDER 1713-1dnx: a root-run guest made the lane root 0700, so the forge's
+    // uid 1000 got EACCES on inbox/outbox; a no-op when not root (Linux native).
+    #[cfg(unix)]
+    crate::chown_tree_to_forge_uid(&source);
     Some(ForgeLaneMount {
         source,
         lane,
@@ -1431,5 +1435,30 @@ mod tests {
         );
         assert_eq!(args[3], "TILLANDSIAS_MSG_LANE=alpha-w1");
         assert!(args[5].starts_with("TILLANDSIAS_MSG_HOST="));
+    }
+
+    /// ORDER 1713-1dnx: a root-run guest handed the forge a root 0700 lane, so
+    /// its uid 1000 got EACCES on inbox/outbox. Served as root, every lane
+    /// entry belongs to the forge uid; otherwise ownership is untouched.
+    #[cfg(unix)]
+    #[test]
+    fn forge_lane_tree_belongs_to_the_forge_uid_only_when_served_as_root() {
+        use std::os::unix::fs::MetadataExt;
+        let t = tempfile::tempdir().unwrap();
+        let m = prepare_forge_lane_in(t.path(), "owner", Some("w1")).unwrap();
+        let euid = unsafe { libc::geteuid() };
+        let want = if euid == 0 { 1000 } else { euid };
+        let mut seen = 0;
+        let mut stack = vec![m.source.clone()];
+        while let Some(p) = stack.pop() {
+            let meta = std::fs::symlink_metadata(&p).unwrap();
+            assert_eq!(meta.uid(), want, "{} (server euid {euid})", p.display());
+            seen += 1;
+            if meta.is_dir() {
+                stack.extend(std::fs::read_dir(&p).unwrap().map(|e| e.unwrap().path()));
+            }
+        }
+        // the lane root plus inbox/outbox/dead/receipts and their subdirs
+        assert!(seen >= 5, "walked only {seen} entries");
     }
 }

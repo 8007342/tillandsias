@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-agents-are-told-never-to-pkill-f-which-kills-their-own-shell
+    field: status
+    value: implemented
+    ts: "2026-10-16T00:50:12Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: forge-agents-are-told-never-to-pkill-f-which-kills-their-own-shell
+    event:
+      type: progress
+      ts: "2026-10-16T00:50:12Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: landed #464 (land 72e729513), in the v56.10.16.1 cut ref 2770bd24e. Fixture-pinned: the bash_policy self_matching_kill test and crates/tillandsias-core/tests/forge_agent_guidance.rs. Live arm pending the release: in a released forge, a Claude pkill -f is refused and ~/.claude/CLAUDE.md carries the sentence

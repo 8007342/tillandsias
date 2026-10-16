@@ -2,8 +2,11 @@
 // @trace openspec/changes/cloudflare-login-and-fleet-vpn/specs/cloudflare-auth/spec.md
 //! The Cloudflare OAuth core: `begin`, `exchange`, `refresh`, `revoke`.
 //!
-//! Cloudflare offers no device grant (design.md, Decision 1; research §1 of
-//! `plan/issues/cloudflare-login-fleet-vpn-design-2026-09-29.md`), so this is
+//! Cloudflare offered no device grant when this was designed (design.md,
+//! Decision 1; research §1 of
+//! `plan/issues/cloudflare-login-fleet-vpn-design-2026-09-29.md`; its
+//! discovery document lists one as of 2026-10-14, see
+//! [`DEVICE_CODE_GRANT_TYPE`]), so this is
 //! Authorization Code + PKCE (`S256`), implemented as pure functions over an
 //! injected [`HttpClient`] trait object — the same seam
 //! `GitHubTokenStore` gives the GitHub token bundle, so ordering rules are
@@ -24,7 +27,8 @@
 //! - **Token storage** (Vault paths, rotation scheduler) is 1505-iysn /
 //!   1505-8w1c (Decision 2). [`Bundle`] is handed back in memory; nothing
 //!   here writes to disk.
-//! - **The device grant itself.** Cloudflare does not offer one. The
+//! - **The device grant itself.** Not implemented (Cloudflare didn't offer one
+//!   at design time; whether it grants one to this client is unmeasured). The
 //!   "device-flow shape... kept as an adapter" is [`device_grant_note`]: it
 //!   reads the discovery document's `grant_types_supported` the same way
 //!   `parse_device_code_response` reads a device-code reply, and reports
@@ -68,19 +72,26 @@ use sha2::{Digest, Sha256};
 pub const CLOUDFLARE_BASE_URL_DEFAULT: &str = "https://dash.cloudflare.com";
 
 /// The public OAuth client id (`token_endpoint_auth_method: none` — no
-/// client secret exists in this binary or in Vault). Cloudflare Apps are
-/// operator-created and irreversible once made public (design.md Risks), so
-/// this compiles in a placeholder until the operator registers the real
-/// App; `TILLANDSIAS_CLOUDFLARE_CLIENT_ID` overrides it everywhere,
-/// including in every fixture.
-pub const CLOUDFLARE_APP_CLIENT_ID: &str = "tillandsias-cloudflare-app-client-id-unregistered";
+/// client secret exists in this binary or in Vault). ORDER 1718-adra: the
+/// "Tillandsias" OAuth client the operator registered on 2026-10-14
+/// (Private: only members of the operator's Cloudflare account can authorize
+/// it; going public needs a logo, a client URL and DNS TXT verification and
+/// cannot be undone, design.md Risks). `TILLANDSIAS_CLOUDFLARE_CLIENT_ID`
+/// overrides it everywhere, including in every fixture.
+pub const CLOUDFLARE_APP_CLIENT_ID: &str = "d9d1303782dfe45c7e2d7bb9ce89c8a8";
 
-/// The device-code grant's URN, as `grant_types_supported` would spell it if
-/// Cloudflare ever listed it (RFC 8628 §1's registered value). Cloudflare
-/// does not support this grant today; this constant exists so
-/// [`device_grant_note`] has something exact to compare against, and so the
-/// fake server's `TILLANDSIAS_FAKE_CLOUDFLARE_GRANT_TYPES` knob can be set
-/// to exactly this string in a fixture.
+/// Every request names Tillandsias. MEASURED 2026-10-14: Cloudflare's
+/// discovery URL answers 403 to Python's default `Python-urllib/3.9`
+/// User-Agent and 200 to reqwest's (none) and curl's. That this client
+/// sends none at all only works by luck.
+const USER_AGENT: &str = concat!("tillandsias/", env!("CARGO_PKG_VERSION"));
+
+/// The device-code grant's URN (RFC 8628 §1's registered value). Cloudflare's
+/// discovery document LISTS it as of 2026-10-14 (measured, with a
+/// `device_authorization_endpoint`), which is what [`device_grant_note`]
+/// announces. Whether Cloudflare grants it to a third-party client is not
+/// yet measured. The fake server's `TILLANDSIAS_FAKE_CLOUDFLARE_GRANT_TYPES`
+/// knob can be set to exactly this string in a fixture.
 pub const DEVICE_CODE_GRANT_TYPE: &str = "urn:ietf:params:oauth:grant-type:device_code";
 
 /// RFC 7636 §4.1: the code verifier is 43..=128 characters. 64 random bytes,
@@ -201,6 +212,7 @@ impl HttpClient for ReqwestHttpClient {
         run_blocking(async move {
             let client = reqwest::Client::builder()
                 .timeout(timeout)
+                .user_agent(USER_AGENT)
                 .build()
                 .map_err(|_| "refused:cloudflare-login:transport-client".to_string())?;
             let resp = client
@@ -224,6 +236,7 @@ impl HttpClient for ReqwestHttpClient {
         run_blocking(async move {
             let client = reqwest::Client::builder()
                 .timeout(timeout)
+                .user_agent(USER_AGENT)
                 .build()
                 .map_err(|_| "refused:cloudflare-login:transport-client".to_string())?;
             let resp = client
@@ -282,8 +295,8 @@ pub fn discover_revocation_endpoint(
 }
 
 /// The device-grant adapter (design.md Decision 1: "The GitHub device-flow
-/// shape is kept as an adapter"). Cloudflare does not support
-/// [`DEVICE_CODE_GRANT_TYPE`] today; this reports whichever is true rather
+/// shape is kept as an adapter"). Cloudflare's discovery has listed
+/// [`DEVICE_CODE_GRANT_TYPE`] since at least 2026-10-14; this reports whichever is true rather
 /// than assuming the absence, so the switch — if Cloudflare ever ships one
 /// — is a discovery-driven note, not a code change nobody remembers to
 /// make. Pure and separately unit-tested so the decision does not depend on

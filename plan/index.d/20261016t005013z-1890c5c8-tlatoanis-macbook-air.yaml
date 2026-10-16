@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-guest-forge-image-builds-fail-two-of-four-times-kswapd-soft-lockup-and-a-silent-helper-exit-101
+    event:
+      type: progress
+      ts: "2026-10-16T00:50:13Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        Part 1 (fail loud) landed: #465, land 5eeab661c, in the v56.10.16.1 cut ref 2770bd24e. The detached image-ensure helper installs a panic hook first thing in main. It writes the panic text to a tmpfs sidecar (TILLANDSIAS_IMAGE_ENSURE_PANIC_FILE), and the parent's error reports that text; for a bare 101 it says a write to the build log failed, and it always adds the free space under the log's directory. Mechanism: the helper's stdout and stderr are its build log, so one failed write panics the helper and loses the message. The real-binary fixture (tests/image_ensure_helper_panic.rs, stdout/stderr on a dead pipe) is red without the hook. The cause of the smoke's 101 is still not established. Part 2, on the v56.10.16.1 smoke: five consecutive forge builds on a fresh macOS guest, recording memory and swap peaks for each, plus any failure's own named cause.

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: litmus-budgets-are-calibrated-against-a-corpus-that-only-grows-so-five-correct-steps-red-the-release-gate-on-the-busiest-host-first
+    event:
+      type: progress
+      ts: "2026-10-16T01:45:42Z"
+      agent_id: linux-yoga-claude-20261016t014541z
+      host: yoga
+      summary: |-
+        yoga 2026-10-16: criterion 1 reading at corpus size taken on yoga itself (timing log 116,745 >= 115,860; ledger 4,567 fragments), inside a real ci-full: the row's five steps ran 1,177 / 1,448 / 308 / 4,746 / 1,422 ms at their ORIGINAL budgets (see 1236-bmjh, PR #467). Criterion 4 negative control at the runner: test-litmus-budget-tally.sh arm 1. Still open: criterion 2 (timing-log readers still scale with history) and the regime line already in each restored budget's comment (criterion 5 is met by those comments).
