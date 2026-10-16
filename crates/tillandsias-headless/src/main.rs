@@ -16737,6 +16737,28 @@ fn tray_control_socket_path() -> PathBuf {
 /// here is a `NoTray` note, never an error the caller could propagate.
 #[cfg(unix)]
 pub(crate) fn notify_tray_github_login_stored(socket_path: &Path) -> TrayNotify {
+    notify_tray_login_stored(socket_path, |ts_unix| ControlMessage::GithubLoginStored {
+        seq: 1,
+        ts_unix,
+    })
+}
+
+/// Order 1719-83po: tell the Linux tray the Cloudflare bundle is stored, so it
+/// hides "Cloudflare Login" on an event. Same best-effort contract.
+#[cfg(unix)]
+pub(crate) fn notify_tray_cloudflare_login_stored(socket_path: &Path) -> TrayNotify {
+    notify_tray_login_stored(socket_path, |ts_unix| {
+        ControlMessage::CloudflareLoginStored { seq: 1, ts_unix }
+    })
+}
+
+/// The one CLI-to-tray "login stored" wake (679-rp9m), parameterised by the
+/// message so GitHub and Cloudflare share the framing, timeouts and ack check.
+#[cfg(unix)]
+fn notify_tray_login_stored(
+    socket_path: &Path,
+    body: impl FnOnce(u64) -> ControlMessage,
+) -> TrayNotify {
     let no = |why: String| TrayNotify::NoTray(why);
     let mut stream = match UnixStream::connect(socket_path) {
         Ok(s) => s,
@@ -16752,7 +16774,7 @@ pub(crate) fn notify_tray_github_login_stored(socket_path: &Path) -> TrayNotify 
     let envelope = ControlEnvelope {
         wire_version: WIRE_VERSION,
         seq: 1,
-        body: ControlMessage::GithubLoginStored { seq: 1, ts_unix },
+        body: body(ts_unix),
     };
     let Ok(encoded) = encode(&envelope) else {
         return no("encode failed".into());
@@ -16805,6 +16827,42 @@ mod tray_notify_tests {
         let out = notify_tray_github_login_stored(&path);
         t.join().unwrap();
         assert!(matches!(out, TrayNotify::NoTray(_)), "{out:?}");
+    }
+
+    /// Order 1719-83po: each notifier sends ITS OWN variant through the shared
+    /// framing and reads the ack; this also pins the GitHub path through the
+    /// refactor into notify_tray_login_stored.
+    #[test]
+    fn each_notifier_sends_its_own_variant_and_reads_the_ack() {
+        type Notify = fn(&Path) -> TrayNotify;
+        let cases: [(Notify, &str); 2] = [
+            (notify_tray_github_login_stored, "GithubLoginStored"),
+            (notify_tray_cloudflare_login_stored, "CloudflareLoginStored"),
+        ];
+        for (notify, want) in cases {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("control.sock");
+            let listener = UnixListener::bind(&path).unwrap();
+            let t = std::thread::spawn(move || {
+                let (mut s, _) = listener.accept().unwrap();
+                let body = read_control_frame_blocking(&mut s).unwrap();
+                let got = decode(&body).unwrap().body;
+                let ack = ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 1,
+                    body: ControlMessage::IssueAck { seq_acked: 1 },
+                };
+                let encoded = encode(&ack).unwrap();
+                let mut frame = (encoded.len() as u32).to_be_bytes().to_vec();
+                frame.extend_from_slice(&encoded);
+                s.write_all(&frame).unwrap();
+                got.kind()
+            });
+            let out = notify(&path);
+            let sent = t.join().unwrap();
+            assert_eq!(sent, want);
+            assert_eq!(out, TrayNotify::Acked, "{want}");
+        }
     }
 }
 

@@ -404,6 +404,10 @@ struct TrayUiState {
     /// or falls back to the actionable login row (invalid/missing token).
     /// Only meaningful while `is_authenticated == false`.
     login_in_progress: bool,
+    /// Order 1719-83po: whether a Cloudflare login is stored in this host's
+    /// Vault, read once at startup and once when a login wait settles (events,
+    /// no poll). `LoggingIn` is set locally on the click.
+    cloudflare_login: shared_menu::CloudflareLoginState,
     enclave_status: EnclaveStatus,
     revision: u32,
     /// Hash of projects list to detect when menu needs rebuild.
@@ -961,6 +965,15 @@ impl LoginSignal {
 /// The process-wide signal the control socket fires. Tests use their own.
 pub(crate) static GITHUB_LOGIN_SIGNAL: LoginSignal = LoginSignal::new();
 
+/// Order 1719-83po: fired by `CloudflareLoginStored` on the control socket.
+pub(crate) static CLOUDFLARE_LOGIN_SIGNAL: LoginSignal = LoginSignal::new();
+
+/// The Cloudflare login can wait up to `cloudflare_login::LOGIN_WINDOW`
+/// (5 min) for the browser consent, so the tray's one wait is that plus a
+/// margin, then ONE presence check settles it either way.
+pub(crate) const CLOUDFLARE_LOGIN_DEADLINE: std::time::Duration =
+    std::time::Duration::from_secs(360);
+
 /// How a login wait ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LoginWait {
@@ -1089,6 +1102,21 @@ fn handle_control_connection(
                         body: ControlMessage::IssueAck {
                             seq_acked: first.seq,
                         },
+                    };
+                    let _ = write_control_envelope(&mut stream, &ack);
+                }
+                ControlMessage::CloudflareLoginStored { seq, .. } => {
+                    // Order 1719-83po: the Cloudflare login CLI stored its
+                    // bundle; wake the tray's wait, then ack the sender.
+                    CLOUDFLARE_LOGIN_SIGNAL.notify();
+                    info!(
+                        spec = "tray-host-control-socket",
+                        "cloudflare-login: CloudflareLoginStored received on the control socket"
+                    );
+                    let ack = ControlEnvelope {
+                        wire_version: WIRE_VERSION,
+                        seq: first.seq,
+                        body: ControlMessage::IssueAck { seq_acked: seq },
                     };
                     let _ = write_control_envelope(&mut stream, &ack);
                 }
@@ -1464,6 +1492,7 @@ impl TrayUiState {
             // doc: claiming "signed out" before asking is the defect.
             login_observed: false,
             login_in_progress: false,
+            cloudflare_login: shared_menu::CloudflareLoginState::Unknown,
             enclave_status,
             revision: 1,
             projects_hash,
@@ -2590,6 +2619,39 @@ fn handle_init(service: Arc<TrayService>) {
     }
 }
 
+/// Order 1719-83po: open a terminal running `tillandsias --cloudflare-login`.
+/// On a Linux desktop the login's default receiver is loopback (a browser
+/// opener exists), so nothing is pasted.
+fn handle_cloudflare_login(service: Arc<TrayService>) {
+    let service_for_emit = service.clone();
+    if service
+        .task_executor
+        .spawn_task(move || {
+            let args = vec!["--cloudflare-login".to_string()];
+            if let Err(err) = launch_in_terminal("Cloudflare Login", "tillandsias", &args) {
+                warn!("Cloudflare login terminal spawn failed: {err}");
+                let _ = futures::executor::block_on(service_for_emit.set_status(
+                    format!("🥀 Cloudflare login: {err}"),
+                    TrayIconState::Dried,
+                    None,
+                ));
+            }
+            let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
+        })
+        .is_err()
+    {
+        warn!("task queue full: skipping Cloudflare login");
+    }
+}
+
+/// Order 1719-83po: this host's Vault, mapped for the menu. Unreadable is
+/// Unknown (shown disabled), never "signed out".
+fn read_cloudflare_login_state(debug: bool) -> shared_menu::CloudflareLoginState {
+    shared_menu::CloudflareLoginState::from_reply(
+        crate::vault_bootstrap::cloudflare_login_stored_live(debug).ok(),
+    )
+}
+
 fn handle_github_login(service: Arc<TrayService>) {
     // @trace spec:gh-auth-script, spec:tray-app, gap:TR-005
     let service_for_emit = service.clone();
@@ -3387,8 +3449,7 @@ fn tray_ui_state_to_menu_state(state: &TrayUiState) -> shared_menu::MenuState {
         status_text: state.status_text.clone(),
         version: state.version.clone(),
         login,
-        // Order 1719-83po: the Linux tray's own reading lands in slice 4.
-        cloudflare_login: shared_menu::CloudflareLoginState::Unknown,
+        cloudflare_login: state.cloudflare_login,
         cloud_projects,
         cloud_projects_loaded: state.last_fetched.is_some(),
         selected_agent: shared_menu::SelectedAgent::Claude,
@@ -3411,6 +3472,8 @@ const MENU_ID_LOGIN: i32 = 20;
 // about what row 21 is — the kind of split that is invisible until a client
 // built against one contract talks to a host built against the other.
 const MENU_ID_CLOUD_PROJECTS: i32 = 22;
+/// Order 1719-83po. 23 is new: 21 stays retired (see above).
+const MENU_ID_CLOUDFLARE_LOGIN: i32 = 23;
 const MENU_ID_SEPARATOR: i32 = 29;
 const MENU_ID_VERSION: i32 = 30;
 const MENU_ID_QUIT: i32 = 31;
@@ -3425,6 +3488,7 @@ fn shared_id_to_int(id: &str) -> i32 {
         shared_menu::ids::STATUS => MENU_ID_STATUS,
         shared_menu::ids::GITHUB_LOGIN => MENU_ID_LOGIN,
         shared_menu::ids::CLOUD_PROJECTS => MENU_ID_CLOUD_PROJECTS,
+        shared_menu::ids::CLOUDFLARE_LOGIN => MENU_ID_CLOUDFLARE_LOGIN,
         shared_menu::ids::SEPARATOR => MENU_ID_SEPARATOR,
         shared_menu::ids::VERSION => MENU_ID_VERSION,
         shared_menu::ids::QUIT => MENU_ID_QUIT,
@@ -4004,6 +4068,62 @@ impl DbusMenuIface {
                     sig.trigger();
                 }
             }
+            23 => {
+                // Order 1719-83po: Cloudflare Login, mirroring GitHub Login.
+                // Flip to "Logging in…" locally and re-render; a click while
+                // already in flight is a no-op.
+                let mut start = false;
+                self.0.with_state(|state| {
+                    if state.cloudflare_login == shared_menu::CloudflareLoginState::LoggedOut {
+                        state.cloudflare_login = shared_menu::CloudflareLoginState::LoggingIn;
+                        state.bump_revision();
+                        start = true;
+                    }
+                });
+                if !start {
+                    return Ok(());
+                }
+                let _ = self.0.rebuild_after_state_change().await;
+                // Snapshot BEFORE launching, so a notify that lands before the
+                // wait starts still counts (the 679-rp9m rule).
+                let seen = CLOUDFLARE_LOGIN_SIGNAL.generation();
+                handle_cloudflare_login(self.0.clone());
+                let service = self.0.clone();
+                let service_for_task = service.clone();
+                let state_handle = service.state_handle();
+                if service
+                    .task_executor
+                    .spawn_task(move || {
+                        // ONE wait on the CLI's CloudflareLoginStored notify,
+                        // then ONE Vault read settles it either way: no poll.
+                        let debug = service_for_task.snapshot().debug;
+                        let notified =
+                            CLOUDFLARE_LOGIN_SIGNAL.wait_past(seen, CLOUDFLARE_LOGIN_DEADLINE);
+                        let observed = read_cloudflare_login_state(debug);
+                        info!(
+                            spec = "tray-host-control-socket",
+                            notified,
+                            ?observed,
+                            "cloudflare-login: login wait settled"
+                        );
+                        {
+                            let mut state = state_handle.lock().expect("tray state lock");
+                            // A settled wait can't stay LoggingIn: an unreadable
+                            // Vault falls back to Unknown (shown disabled).
+                            if state.cloudflare_login != observed {
+                                state.cloudflare_login = observed;
+                                state.bump_revision();
+                            }
+                        }
+                        let _ = futures::executor::block_on(
+                            service_for_task.rebuild_after_state_change(),
+                        );
+                    })
+                    .is_err()
+                {
+                    warn!("task queue full: skipping the Cloudflare login wait");
+                }
+            }
             20 => {
                 // windows-260719-2: flip to the transitional "Logging in…"
                 // state IMMEDIATELY — a purely local signal, before the
@@ -4440,6 +4560,36 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
     // happened to open it twice. Chaining the fetch onto the probe removes the
     // TOCTOU: the list is populated exactly once auth is known good.
     // @trace spec:tray-ux, spec:remote-projects
+    // Order 1719-83po: the startup EVENT reads the Cloudflare login once from
+    // this host's Vault (no poll; the next read is when a login wait settles).
+    {
+        let service_for_cf = service.clone();
+        let state_handle = service.state_handle();
+        let debug = service.snapshot().debug;
+        if service
+            .task_executor
+            .spawn_task(move || {
+                let observed = read_cloudflare_login_state(debug);
+                let changed = {
+                    let mut state = state_handle.lock().expect("tray state lock");
+                    if state.cloudflare_login != observed {
+                        state.cloudflare_login = observed;
+                        state.bump_revision();
+                        true
+                    } else {
+                        false
+                    }
+                };
+                if changed {
+                    let _ =
+                        futures::executor::block_on(service_for_cf.rebuild_after_state_change());
+                }
+            })
+            .is_err()
+        {
+            warn!("task queue full: skipping the startup Cloudflare login read");
+        }
+    }
     {
         let service_for_probe = service.clone();
         let state_handle = service.state_handle();
@@ -4476,6 +4626,35 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
                     }
                     let _ =
                         futures::executor::block_on(service_for_probe.rebuild_after_state_change());
+
+                    // Order 1719-83po: the Cloudflare row appears only now
+                    // (GitHub signed in), and Vault has just answered. If the
+                    // startup read raced a cold Vault and left Unknown, settle
+                    // it on THIS event; otherwise the row would stay disabled
+                    // until the next launch, with nothing to wake it.
+                    let cf_unknown = state_handle
+                        .lock()
+                        .expect("tray state lock")
+                        .cloudflare_login
+                        == shared_menu::CloudflareLoginState::Unknown;
+                    if cf_unknown {
+                        let observed = read_cloudflare_login_state(debug);
+                        let changed = {
+                            let mut state = state_handle.lock().expect("tray state lock");
+                            if state.cloudflare_login != observed {
+                                state.cloudflare_login = observed;
+                                state.bump_revision();
+                                true
+                            } else {
+                                false
+                            }
+                        };
+                        if changed {
+                            let _ = futures::executor::block_on(
+                                service_for_probe.rebuild_after_state_change(),
+                            );
+                        }
+                    }
 
                     // Prepopulate the cloud list so the submenu is ready on the
                     // user's first open instead of racing an AboutToShow.
@@ -6502,6 +6681,7 @@ mod tests {
             // own dedicated test.
             login_observed: true,
             login_in_progress: false,
+            cloudflare_login: shared_menu::CloudflareLoginState::Unknown,
             enclave_status,
             revision: 1,
             projects_hash,
@@ -6663,6 +6843,7 @@ mod tests {
                 // explicitly to exercise the not-yet-asked path.
                 login_observed: self.login_observed,
                 login_in_progress: self.login_in_progress,
+                cloudflare_login: shared_menu::CloudflareLoginState::Unknown,
                 enclave_status: self.enclave_status,
                 revision: 1,
                 projects_hash,
@@ -8235,6 +8416,34 @@ mod tests {
         );
     }
 
+    /// Order 1719-83po: the Linux tray renders its own Cloudflare state.
+    /// Signed in to GitHub with no Cloudflare login, the row is an enabled
+    /// item (id 23 on the bus); once a login is stored it is gone.
+    #[test]
+    fn linux_menu_shows_cloudflare_login_from_its_own_state() {
+        use tillandsias_host_shell::menu_state::{CloudflareLoginState, ids};
+        let mut state = TrayStateBuilder::new()
+            .forge_available(true)
+            .enclave_status(EnclaveStatus::AllHealthy)
+            .authenticated(true)
+            .build();
+        state.cloudflare_login = CloudflareLoginState::LoggedOut;
+        let items = shared_menu_items(&state);
+        let row = items
+            .iter()
+            .find(|i| i.id == ids::CLOUDFLARE_LOGIN)
+            .expect("signed out of Cloudflare: the row is shown");
+        assert!(row.enabled, "an action, not a disabled row");
+        assert_eq!(shared_id_to_int(&row.id), MENU_ID_CLOUDFLARE_LOGIN);
+        state.cloudflare_login = CloudflareLoginState::LoggedIn;
+        assert!(
+            !shared_menu_items(&state)
+                .iter()
+                .any(|i| i.id == ids::CLOUDFLARE_LOGIN),
+            "a stored login hides the row"
+        );
+    }
+
     /// Order 628-p5tj: verify that the shared builder's string IDs map to
     /// the exact integer IDs the `event()` handler dispatches on. This is
     /// the cross-platform contract — a regression here means the tray
@@ -8252,6 +8461,8 @@ mod tests {
         assert_eq!(shared_id_to_int(ids::STATUS), 10);
         assert_eq!(shared_id_to_int(ids::GITHUB_LOGIN), 20);
         assert_eq!(shared_id_to_int(ids::CLOUD_PROJECTS), 22);
+        // Order 1719-83po: the click handler's `23 =>` arm.
+        assert_eq!(shared_id_to_int(ids::CLOUDFLARE_LOGIN), 23);
         assert_eq!(shared_id_to_int(ids::SEPARATOR), 29);
         assert_eq!(shared_id_to_int(ids::VERSION), 30);
         assert_eq!(shared_id_to_int(ids::QUIT), 31);

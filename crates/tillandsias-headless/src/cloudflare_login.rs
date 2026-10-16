@@ -1272,7 +1272,21 @@ pub fn run_cli(args: &[String]) -> i32 {
                     .map(|d| d.as_secs())
                     .unwrap_or(0),
             };
-            login(via, &mut deps, &mut stdout).map(|_| ())
+            let stored = login(via, &mut deps, &mut stdout).map(|_| ());
+            // Order 1719-83po: wake a waiting Linux tray so it hides "Cloudflare
+            // Login" on an event. Best-effort: no tray (or the VM guest, where
+            // the tray learns from the login session closing) is a note.
+            #[cfg(unix)]
+            if stored.is_ok() {
+                match crate::notify_tray_cloudflare_login_stored(&crate::tray_control_socket_path())
+                {
+                    crate::TrayNotify::Acked => {}
+                    crate::TrayNotify::NoTray(why) => {
+                        let _ = writeln!(stdout, "note:cloudflare-login:no-tray-notified:{why}");
+                    }
+                }
+            }
+            stored
         }
     };
     match result {
