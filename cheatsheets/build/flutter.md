@@ -39,7 +39,7 @@ pull_recipe: see-section-pull-on-demand
 | `flutter pub outdated` | Show deps with newer versions available |
 | `flutter pub add <pkg>` / `pub remove <pkg>` | Add or drop a dependency |
 | `flutter devices` | List available run targets (chrome, linux, web-server) |
-| `flutter run -d chrome` | Run app in Chrome with hot reload |
+| `flutter run -d chrome` | Run app in Chrome with hot reload (needs a local Chrome: not in the forge, use `-d web-server`) |
 | `flutter run -d linux` | Run app as a native Linux desktop window |
 | `flutter run -d web-server --web-port 8080` | Headless web target (useful in forge) |
 | `flutter build web --release` | Compile web bundle to `build/web/` |
@@ -59,7 +59,7 @@ pull_recipe: see-section-pull-on-demand
 flutter create --platforms=web,linux my_app
 cd my_app
 flutter pub get
-flutter run -d chrome
+flutter run -d web-server   # then open the printed URL with host-browser browser.open
 ```
 
 ### Pattern 2 — Web release build
@@ -103,7 +103,7 @@ flutter test --coverage
 ## Common pitfalls
 
 - **No Android / iOS / macOS / Windows toolchains** — image runs `flutter precache --no-android --no-ios --no-macos --no-windows`. `flutter run -d android` / `flutter build apk` / `flutter build ios` will fail. Use a different image for mobile builds.
-- **`flutter doctor` shows missing toolchains and that is OK** — red Xs against Android/Xcode/Visual Studio are expected in this forge. Only the "Flutter" and "Linux toolchain" / "Chrome" rows need to be green.
+- **`flutter doctor` shows missing toolchains and that is OK** — red Xs against Android/Xcode/Visual Studio are expected in this forge. Only the "Flutter" and "Linux toolchain" rows need to be green. The "Chrome" row is red too: the forge has no browser, so run `-d web-server` and open the URL with host-browser `browser.open`.
 - **`PUB_CACHE` is baked, not `~/.pub-cache`** — image sets `PUB_CACHE=/opt/flutter/.pub-cache` so prefetched packages are reused. Do not point it at `~/.pub-cache` unless you want a cold cache on every container start.
 - **`--web-renderer` choice matters** — `canvaskit` (default) ships ~2 MB WASM, pixel-perfect; `html` is smaller but loses some Skia features. Pick at build time, not runtime.
 - **Flutter SDK channel is pinned** — image is on `stable`. Do not switch channels (`flutter channel beta`) inside a forge: it tries to mutate `/opt/flutter` and fails.

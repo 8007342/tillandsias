@@ -3423,6 +3423,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Enclave membership documentation check passed"
+    # 1746-2szd: a shipped skill, cheatsheet or agent instruction must not tell
+    # a forge agent a browser is pre-installed while the forge image installs
+    # none — forge-quick-intro did, and agents planned browser work on it.
+    _step "Checking forge docs claim no browser the image does not ship (1746-2szd)..."
+    if ! _run_lua_decider "scripts/lua/check-forge-skill-browser-claims-match-image.lua" 2>&1; then
+        _error "a forge doc claims a pre-installed browser the image does not install (1746-2szd) — see the claim lines above"
+        exit 1
+    fi
+    _info "Forge browser-claim check passed"
     _info "Fast refusals passed"
 
     # 765-uti9 quick win (velocity audit F3): the dedicated `cargo check
@@ -5125,6 +5134,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Cheatsheet-reference fixture passed"
+
+    # The forge browser-claim guard's own fixture (1746-2szd): this tree, the
+    # pre-fix forge-quick-intro refused, negations, an image that ships a
+    # browser, and no Containerfile.
+    _step "Checking the forge browser-claim guard's fixture (1746-2szd)..."
+    if ! _run_lua_decider "scripts/lua/test-forge-skill-browser-claims-match-image.lua" 2>&1; then
+        _error "the forge browser-claim guard's fixture failed — see the FAIL lines above (1746-2szd)"
+        exit 1
+    fi
+    _info "Forge browser-claim fixture passed"
 
     # ORDER 1384-bxhk — the shell ratchet: prints the Lua migration's counts on
     # every --check, refuses a NEW .sh decider (check-/test-/verify-/guard-), a
