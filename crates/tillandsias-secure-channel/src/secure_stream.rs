@@ -291,6 +291,210 @@ where
     Ok(EncryptedStream::new(stream, transport))
 }
 
+// ── Noise XX with pinned static keys (order 1506-32k5) ───────────────────────
+//
+// The fleet-messaging coordination channel (openspec/changes/fleet-messaging-poc
+// design Decision 4). NNpsk0 above binds the key to the BUILD VERSION, which is
+// right for the control channel and wrong for a channel that must survive a
+// rollout; XX authenticates each end by a long-lived X25519 static key instead,
+// and the caller decides whether that key is a peer. There is no PSK and no
+// version binding here: protocol versioning is the caller's first in-tunnel
+// frame.
+//
+// THE PROPERTY: the remote static key is handed to the caller's `verify`
+// BEFORE the constructor returns a stream, so a caller cannot read a single
+// transport byte from a peer it has not accepted. On the initiator `verify`
+// runs after message 2 and BEFORE message 3 is written — a refused responder
+// never learns the initiator's static key and never completes; on the
+// responder it runs after message 3, before transport mode.
+
+/// Handshake pattern for the fleet-messaging channel.
+pub const NOISE_XX_PARAMS: &str = "Noise_XX_25519_ChaChaPoly_BLAKE2s";
+
+/// Bytes in a fingerprint: BLAKE2s with a 16-byte digest (BLAKE2s-128, a
+/// distinct parameterisation, NOT a truncated BLAKE2s-256).
+pub const STATIC_FINGERPRINT_BYTES: usize = 16;
+
+/// Lowercase hex of `bytes`.
+pub fn hex_lower(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
+    let mut s = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        let _ = write!(s, "{b:02x}");
+    }
+    s
+}
+
+/// Parse exactly 32 bytes of LOWERCASE hex (the one canonical spelling, so a
+/// key has one textual form and a fingerprint compare is a string compare).
+pub fn parse_static_hex(s: &str) -> Option<[u8; 32]> {
+    let s = s.as_bytes();
+    if s.len() != 64 {
+        return None;
+    }
+    let nib = |c: u8| match c {
+        b'0'..=b'9' => Some(c - b'0'),
+        b'a'..=b'f' => Some(c - b'a' + 10),
+        _ => None,
+    };
+    let mut out = [0u8; 32];
+    for (i, pair) in s.chunks(2).enumerate() {
+        out[i] = (nib(pair[0])? << 4) | nib(pair[1])?;
+    }
+    Some(out)
+}
+
+/// The fingerprint of a static public key: lowercase hex of BLAKE2s-128 over
+/// the 32 raw key bytes. Shown in every refusal so the remedy (land the peer's
+/// record) names the key it needs.
+pub fn static_fingerprint(public: &[u8; 32]) -> String {
+    use blake2::Blake2s;
+    use blake2::digest::Digest;
+    use blake2::digest::consts::U16;
+    hex_lower(&Blake2s::<U16>::digest(public))
+}
+
+/// One X25519 static keypair. The private half is zeroized on drop and has no
+/// `Debug`/`Display`; the public half is DERIVED from it, never trusted from a
+/// stored copy.
+pub struct StaticKeypair {
+    private: zeroize::Zeroizing<[u8; 32]>,
+    public: [u8; 32],
+}
+
+impl StaticKeypair {
+    /// A fresh keypair from snow's resolver RNG (the OS CSPRNG).
+    pub fn generate() -> io::Result<Self> {
+        let params: snow::params::NoiseParams = NOISE_XX_PARAMS.parse().map_err(snow_err)?;
+        let kp = snow::Builder::new(params)
+            .generate_keypair()
+            .map_err(snow_err)?;
+        let mut private = zeroize::Zeroizing::new([0u8; 32]);
+        if kp.private.len() != 32 {
+            return Err(io::Error::other("x25519 private key is not 32 bytes"));
+        }
+        private.copy_from_slice(&kp.private);
+        let mut raw = kp.private;
+        zeroize::Zeroize::zeroize(&mut raw);
+        Ok(Self::from_private(*private))
+    }
+
+    /// Rebuild a keypair from its private half (as Vault holds it).
+    pub fn from_private(private: [u8; 32]) -> Self {
+        let public =
+            curve25519_dalek::montgomery::MontgomeryPoint::mul_base_clamped(private).to_bytes();
+        Self {
+            private: zeroize::Zeroizing::new(private),
+            public,
+        }
+    }
+
+    pub fn public(&self) -> &[u8; 32] {
+        &self.public
+    }
+
+    /// The private half. Callers store it (Vault) and nothing else.
+    pub fn private_bytes(&self) -> &[u8; 32] {
+        &self.private
+    }
+
+    pub fn fingerprint(&self) -> String {
+        static_fingerprint(&self.public)
+    }
+}
+
+/// The caller's `verify` refused the remote static key. Carried inside an
+/// `io::Error` of kind `PermissionDenied`; `Display` is exactly the caller's
+/// refusal token (e.g. `refused:msg:unknown-peer:<fp>`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PeerRefused(pub String);
+
+impl std::fmt::Display for PeerRefused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for PeerRefused {}
+
+fn remote_static_of(hs: &snow::HandshakeState) -> io::Result<[u8; 32]> {
+    hs.get_remote_static()
+        .and_then(|k| <[u8; 32]>::try_from(k).ok())
+        .ok_or_else(|| io::Error::other("noise xx: no 32-byte remote static after its message"))
+}
+
+fn refuse(reason: String) -> io::Error {
+    io::Error::new(io::ErrorKind::PermissionDenied, PeerRefused(reason))
+}
+
+/// Noise XX as the **initiator** (the dialing daemon). `verify` receives the
+/// responder's static public key after message 2; an `Err(reason)` aborts
+/// before message 3 is written and surfaces as [`PeerRefused`]`(reason)`.
+pub async fn client_handshake_xx<S, F>(
+    mut stream: S,
+    local: &StaticKeypair,
+    verify: F,
+) -> io::Result<EncryptedStream<S>>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+    F: FnOnce(&[u8; 32]) -> Result<(), String>,
+{
+    let params = NOISE_XX_PARAMS.parse().map_err(snow_err)?;
+    let mut hs = snow::Builder::new(params)
+        .local_private_key(local.private_bytes())
+        .build_initiator()
+        .map_err(snow_err)?;
+    let mut buf = vec![0u8; 65535];
+    // -> e
+    let n = hs.write_message(&[], &mut buf).map_err(snow_err)?;
+    write_hs_frame(&mut stream, &buf[..n]).await?;
+    // <- e, ee, s, es
+    let msg = read_hs_frame(&mut stream).await?;
+    hs.read_message(&msg, &mut buf)
+        .map_err(|e| snow_err_with_frame(e, Some(msg.clone())))?;
+    verify(&remote_static_of(&hs)?).map_err(refuse)?;
+    // -> s, se
+    let n = hs.write_message(&[], &mut buf).map_err(snow_err)?;
+    write_hs_frame(&mut stream, &buf[..n]).await?;
+    let transport = hs.into_transport_mode().map_err(snow_err)?;
+    Ok(EncryptedStream::new(stream, transport))
+}
+
+/// Noise XX as the **responder** (the listening daemon). `verify` receives
+/// the initiator's static public key after message 3 and BEFORE transport
+/// mode: on `Err(reason)` no stream is returned, so not one byte the
+/// initiator sent after its handshake can be read through this constructor.
+pub async fn server_handshake_xx<S, F>(
+    mut stream: S,
+    local: &StaticKeypair,
+    verify: F,
+) -> io::Result<EncryptedStream<S>>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+    F: FnOnce(&[u8; 32]) -> Result<(), String>,
+{
+    let params = NOISE_XX_PARAMS.parse().map_err(snow_err)?;
+    let mut hs = snow::Builder::new(params)
+        .local_private_key(local.private_bytes())
+        .build_responder()
+        .map_err(snow_err)?;
+    let mut buf = vec![0u8; 65535];
+    // <- e
+    let msg = read_hs_frame(&mut stream).await?;
+    hs.read_message(&msg, &mut buf)
+        .map_err(|e| snow_err_with_frame(e, Some(msg.clone())))?;
+    // -> e, ee, s, es
+    let n = hs.write_message(&[], &mut buf).map_err(snow_err)?;
+    write_hs_frame(&mut stream, &buf[..n]).await?;
+    // <- s, se
+    let msg = read_hs_frame(&mut stream).await?;
+    hs.read_message(&msg, &mut buf)
+        .map_err(|e| snow_err_with_frame(e, Some(msg.clone())))?;
+    verify(&remote_static_of(&hs)?).map_err(refuse)?;
+    let transport = hs.into_transport_mode().map_err(snow_err)?;
+    Ok(EncryptedStream::new(stream, transport))
+}
+
 /// Read-side frame reassembly state.
 enum ReadState {
     /// Accumulating the 2-byte big-endian ciphertext-frame length prefix.
@@ -335,6 +539,16 @@ impl<S> EncryptedStream<S> {
             out_pos: 0,
             scratch: vec![0u8; 65535],
         }
+    }
+}
+
+impl<S> EncryptedStream<S> {
+    /// The remote static public key of an XX session (`None` for NNpsk0,
+    /// which has no static keys).
+    pub fn remote_static(&self) -> Option<[u8; 32]> {
+        self.transport
+            .get_remote_static()
+            .and_then(|k| <[u8; 32]>::try_from(k).ok())
     }
 }
 
@@ -813,5 +1027,260 @@ mod tests {
         // The ErrorKind discriminates too, for callers that never downcast.
         assert_eq!(short.kind(), io::ErrorKind::InvalidData);
         assert_eq!(crypto.kind(), io::ErrorKind::PermissionDenied);
+    }
+
+    // ── Noise XX with pinned static keys (order 1506-32k5) ──────────────────
+
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// A byte stream that counts what passes through it in each direction, and
+    /// optionally keeps a copy of what was written (the replay arm's capture).
+    struct Counting<S> {
+        inner: S,
+        read: Arc<AtomicUsize>,
+        written: Arc<AtomicUsize>,
+        tap: Option<Arc<std::sync::Mutex<Vec<u8>>>>,
+    }
+
+    type Counters = (Arc<AtomicUsize>, Arc<AtomicUsize>);
+
+    impl<S> Counting<S> {
+        fn new(inner: S) -> (Self, Counters) {
+            let read = Arc::new(AtomicUsize::new(0));
+            let written = Arc::new(AtomicUsize::new(0));
+            (
+                Self {
+                    inner,
+                    read: read.clone(),
+                    written: written.clone(),
+                    tap: None,
+                },
+                (read, written),
+            )
+        }
+    }
+
+    impl<S: AsyncRead + Unpin> AsyncRead for Counting<S> {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            buf: &mut ReadBuf<'_>,
+        ) -> Poll<io::Result<()>> {
+            let me = self.get_mut();
+            let before = buf.filled().len();
+            let r = Pin::new(&mut me.inner).poll_read(cx, buf);
+            me.read
+                .fetch_add(buf.filled().len() - before, Ordering::SeqCst);
+            r
+        }
+    }
+
+    impl<S: AsyncWrite + Unpin> AsyncWrite for Counting<S> {
+        fn poll_write(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            data: &[u8],
+        ) -> Poll<io::Result<usize>> {
+            let me = self.get_mut();
+            let r = Pin::new(&mut me.inner).poll_write(cx, data);
+            if let Poll::Ready(Ok(n)) = &r {
+                me.written.fetch_add(*n, Ordering::SeqCst);
+                if let Some(tap) = &me.tap {
+                    tap.lock().unwrap().extend_from_slice(&data[..*n]);
+                }
+            }
+            r
+        }
+        fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+            Pin::new(&mut self.get_mut().inner).poll_flush(cx)
+        }
+        fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+            Pin::new(&mut self.get_mut().inner).poll_shutdown(cx)
+        }
+    }
+
+    fn pin_to(want: [u8; 32]) -> impl FnOnce(&[u8; 32]) -> Result<(), String> {
+        move |got: &[u8; 32]| {
+            if *got == want {
+                Ok(())
+            } else {
+                Err(format!(
+                    "refused:msg:unknown-peer:{}",
+                    static_fingerprint(got)
+                ))
+            }
+        }
+    }
+
+    fn refusal(err: &io::Error) -> Option<String> {
+        err.get_ref()
+            .and_then(|e| e.downcast_ref::<PeerRefused>())
+            .map(|r| r.0.clone())
+    }
+
+    /// Two pinned statics complete XX and bytes flow through the tunnel.
+    #[tokio::test]
+    async fn xx_pinned_peers_complete_and_exchange_bytes() {
+        let (a, b) = (
+            StaticKeypair::generate().unwrap(),
+            StaticKeypair::generate().unwrap(),
+        );
+        let (c, s) = tokio::io::duplex(64 * 1024);
+        let (cr, sr) = tokio::join!(
+            client_handshake_xx(c, &a, pin_to(*b.public())),
+            server_handshake_xx(s, &b, pin_to(*a.public()))
+        );
+        let mut client = cr.expect("client xx");
+        let mut server = sr.expect("server xx");
+        client.write_all(b"proto: 1.0").await.unwrap();
+        client.flush().await.unwrap();
+        let mut got = [0u8; 10];
+        server.read_exact(&mut got).await.unwrap();
+        assert_eq!(&got, b"proto: 1.0");
+    }
+
+    /// THE PROPERTY (1506-32k5): a responder that refuses the initiator's
+    /// static reads NOT ONE byte beyond the handshake — the initiator's
+    /// pipelined transport bytes stay unread in the pipe. Mutation control:
+    /// moving `verify` after `into_transport_mode` plus a first read turns
+    /// this red (`read` exceeds the handshake bytes).
+    #[tokio::test]
+    async fn xx_unknown_initiator_is_refused_before_any_transport_byte_is_read() {
+        let (a, b, stranger) = (
+            StaticKeypair::generate().unwrap(),
+            StaticKeypair::generate().unwrap(),
+            StaticKeypair::generate().unwrap(),
+        );
+        let (c, s) = tokio::io::duplex(64 * 1024);
+        let (c, (_, c_written)) = Counting::new(c);
+        let (s, (s_read, _)) = Counting::new(s);
+        let b_pub = *b.public();
+        let client = async {
+            let mut st = client_handshake_xx(c, &stranger, pin_to(b_pub))
+                .await
+                .expect("the initiator completes: it does not wait for a verdict");
+            let handshake_bytes = c_written.load(Ordering::SeqCst);
+            st.write_all(&[0x42u8; 4096]).await.unwrap();
+            st.flush().await.unwrap();
+            (handshake_bytes, st)
+        };
+        let ((handshake_bytes, _keep_open), sr) =
+            tokio::join!(client, server_handshake_xx(s, &b, pin_to(*a.public())));
+        let err = sr.err().expect("an unknown initiator MUST be refused");
+        let why = refusal(&err).expect("the refusal is a PeerRefused");
+        assert_eq!(
+            why,
+            format!(
+                "refused:msg:unknown-peer:{}",
+                static_fingerprint(stranger.public())
+            )
+        );
+        assert_eq!(err.kind(), io::ErrorKind::PermissionDenied);
+        assert_eq!(
+            s_read.load(Ordering::SeqCst),
+            handshake_bytes,
+            "the responder read past the handshake from a peer it refused"
+        );
+    }
+
+    /// The initiator pins too: a responder whose static is not the expected
+    /// one is refused after message 2 and message 3 is never written, so the
+    /// responder never completes and never learns the initiator's static.
+    #[tokio::test]
+    async fn xx_unknown_responder_is_refused_and_message_3_is_never_sent() {
+        let (a, b, stranger) = (
+            StaticKeypair::generate().unwrap(),
+            StaticKeypair::generate().unwrap(),
+            StaticKeypair::generate().unwrap(),
+        );
+        let (c, s) = tokio::io::duplex(64 * 1024);
+        let server = async move {
+            server_handshake_xx(s, &stranger, |_: &[u8; 32]| Ok(()))
+                .await
+                .map(|_| ())
+        };
+        let b_pub = *b.public();
+        let client = async move {
+            // Dropping the stream on return closes the pipe: the responder
+            // sees EOF where message 3 should be.
+            client_handshake_xx(c, &a, pin_to(b_pub)).await.map(|_| ())
+        };
+        let (cr, sr) = tokio::join!(client, server);
+        let cerr = cr.expect_err("the initiator MUST refuse an unpinned responder");
+        assert!(
+            refusal(&cerr).is_some_and(|r| r.starts_with("refused:msg:unknown-peer:")),
+            "got {cerr}"
+        );
+        assert!(
+            sr.is_err(),
+            "the responder must not complete without message 3"
+        );
+    }
+
+    /// A captured initiator transcript replayed to a fresh responder fails:
+    /// message 3 is encrypted under the ORIGINAL responder ephemeral, so the
+    /// replay dies in the AEAD and `verify` is never consulted.
+    #[tokio::test]
+    async fn xx_replayed_initiator_handshake_is_refused() {
+        let (a, b) = (
+            StaticKeypair::generate().unwrap(),
+            StaticKeypair::generate().unwrap(),
+        );
+        let tap = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let (c, s) = tokio::io::duplex(64 * 1024);
+        let (mut c, _) = Counting::new(c);
+        c.tap = Some(tap.clone());
+        let (cr, sr) = tokio::join!(
+            client_handshake_xx(c, &a, pin_to(*b.public())),
+            server_handshake_xx(s, &b, pin_to(*a.public()))
+        );
+        assert!(cr.is_ok() && sr.is_ok(), "the original session completes");
+        let captured = tap.lock().unwrap().clone();
+
+        let (mut attacker, s2) = tokio::io::duplex(64 * 1024);
+        let consulted = Arc::new(AtomicUsize::new(0));
+        let seen = consulted.clone();
+        let server = tokio::spawn(async move {
+            server_handshake_xx(s2, &b, move |_: &[u8; 32]| {
+                seen.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            })
+            .await
+            .map(|_| ())
+        });
+        attacker.write_all(&captured).await.unwrap();
+        attacker.flush().await.unwrap();
+        let res = server.await.unwrap();
+        assert!(res.is_err(), "a replayed handshake MUST NOT complete");
+        assert_eq!(
+            consulted.load(Ordering::SeqCst),
+            0,
+            "verify ran on a replay"
+        );
+    }
+
+    /// The public half is derived from the private half and agrees with what
+    /// snow itself generated; the fingerprint is BLAKE2s-128 (a 16-byte
+    /// digest parameterisation), not a truncated BLAKE2s-256.
+    #[test]
+    fn static_public_is_derived_and_fingerprint_is_blake2s_128() {
+        let params: snow::params::NoiseParams = NOISE_XX_PARAMS.parse().unwrap();
+        let kp = snow::Builder::new(params).generate_keypair().unwrap();
+        let private: [u8; 32] = kp.private.as_slice().try_into().unwrap();
+        let derived = StaticKeypair::from_private(private);
+        assert_eq!(derived.public().as_slice(), kp.public.as_slice());
+
+        let fp = derived.fingerprint();
+        assert_eq!(fp.len(), STATIC_FINGERPRINT_BYTES * 2);
+        assert_eq!(fp, static_fingerprint(derived.public()));
+        use blake2::Digest as _;
+        let truncated = hex_lower(&blake2::Blake2s256::digest(derived.public())[..16]);
+        assert_ne!(fp, truncated, "BLAKE2s-128 is its own parameterisation");
+
+        let hex = hex_lower(derived.public());
+        assert_eq!(parse_static_hex(&hex), Some(*derived.public()));
+        assert_eq!(parse_static_hex(&hex.to_uppercase()), None);
+        assert_eq!(parse_static_hex("00"), None);
     }
 }

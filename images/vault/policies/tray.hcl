@@ -12,3 +12,9 @@ path "secret/*" {
 # the create/update the rotation needs. No forge, mirror, inference or login
 # policy may name anything under secret/data/cloudflare/ (asserted by
 # cloudflare_token_rotation_policies_keep_forges_out).
+
+# Order 1506-32k5: secret/data/fleet/msg/static (this host's fleet-messaging
+# X25519 static key, minted by `tillandsias --msg-serve --mint`) is covered by
+# secret/* above and by NO other policy: no forge, mirror, inference or login
+# policy may name anything under secret/data/fleet/msg/ (asserted by
+# msg_static_key_policies_keep_forges_out and scripts/test-fleet-msg-identity.sh).

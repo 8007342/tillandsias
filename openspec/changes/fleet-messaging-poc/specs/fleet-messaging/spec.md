@@ -204,7 +204,7 @@ so it survives the container.
 Each host SHALL hold one X25519 static key at `secret/fleet/msg/static` in
 its own Vault, minted by `--msg-serve --mint`, readable by no forge policy,
 and SHALL publish `plan/fleet/peers/<host>.yaml` carrying `host`,
-`noise_pub`, `fp` and optional `lan_hints` and `mesh_ip`. Two daemons SHALL
+`noise_pub`, `noise_fp` and optional `lan_hints` and `mesh_ip`. Two daemons SHALL
 complete `Noise_XX_25519_ChaChaPoly_BLAKE2s` and each SHALL look the
 remote static key up in the directory before reading any envelope; an
 unknown key SHALL be refused with `refused:msg:unknown-peer:<fp>` and the

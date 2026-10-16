@@ -85,3 +85,19 @@ its own evidence, and 1506-euvq's needs an operator-minted service token to fini
   adds zero commits. Not filed as a packet by this run; recorded here for the coordinator.
 - `lua_proc::managed_script::callbacks_cancel_owned_groups_even_when_caught_or_cpu_bound` is
   load-sensitive (above, landing log 5).
+
+## Later landings
+
+- `e889a1c0e` (1548-8ii6): completion events for 1505-svve/kyx8/iysn/kc5f/iky3 and 1548-mhyk/dylo, each
+  from its own closure run on trunk 02c199aa6. kc5f's tray waiter is split to 1505-hfim (not an exit
+  criterion). dylo's wasm32 criterion proven (`rustup target add wasm32-unknown-unknown` needed no sudo).
+- 1506-32k5 (this commit's branch): per-host X25519 identity in Vault, `plan/fleet/peers/`, Noise XX with
+  the directory lookup BEFORE any byte is read. Coordinator review blocked the first version: the
+  lookup-after-read mutation seam was reachable in RELEASE builds whenever `TILLANDSIAS_MSG_ROOT` (a
+  legitimate production store-root setting) was set — an authentication off-switch in a shipped
+  binary. Now `cfg(debug_assertions)`-only, with a release-profile test proving the variable is
+  ignored.
+- Spec conflict for the operator/coordinator: the fingerprint field is `fp` in the fleet-messaging
+  design + spec delta (1506-32k5's own wording) and `noise_fp` in fleet-wan-rendezvous Decision 6 /
+  1548-cii8. The code uses `noise_fp` (cii8 owns the schema); the fleet-messaging delta must be
+  reconciled before it is synced.

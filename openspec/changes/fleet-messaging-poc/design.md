@@ -127,7 +127,7 @@ lane `host` (one uid, one domain — open question 2 in the design note).
 Each host mints one X25519 static key with `--msg-serve --mint`, stored at
 `secret/fleet/msg/static` in its OWN Vault (the forge policy grants nothing
 under `secret/data/fleet/msg/`), and publishes `plan/fleet/peers/<host>.yaml`
-(`host`, `noise_pub`, `fp` = BLAKE2s-128 of the public key, `minted`,
+(`host`, `noise_pub`, `noise_fp` = BLAKE2s-128 of the public key, `minted`,
 optional `lan_hints: [ip:port]`, `mesh_ip:` once joined) by a normal
 landing. `tillandsias-secure-channel` gains
 `Noise_XX_25519_ChaChaPoly_BLAKE2s` with static keys beside the existing

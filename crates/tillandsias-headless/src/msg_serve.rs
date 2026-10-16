@@ -893,29 +893,68 @@ pub fn spawn_resident(stop: impl Fn() -> bool + Send + 'static) {
 }
 
 pub const USAGE: &str = "usage: tillandsias --msg-serve [--once]
+       tillandsias --msg-serve --mint [--rotate] [--peers DIR]
+       tillandsias --msg-serve --accept-once ADDR | --dial-once ADDR [--peers DIR]
   the same-host mover of the fleet message bus: delivers every lane's outbox
   into the destination lanes' inboxes on this host, acks after fsync, sweeps
-  at TTL. --once runs one pass and one sweep and exits.";
+  at TTL. --once runs one pass and one sweep and exits.
+  --mint (order 1506-32k5) generates this host's X25519 message identity into
+  its own Vault and writes plan/fleet/peers/<host>.yaml; an existing key is
+  kept unless --rotate. --accept-once / --dial-once run ONE Noise XX session
+  pinned to the peer directory (default ./plan/fleet/peers).";
 
-/// `tillandsias --msg-serve [--once]`. Returns the exit code.
+/// `tillandsias --msg-serve [--once]`, or one identity verb
+/// (crate::msg_identity). Returns the exit code.
 pub fn run_cli(args: &[String]) -> i32 {
+    use crate::msg_identity::{self, IdentityVerb};
+    let usage = |other: &str| {
+        eprintln!("refused:msg-serve:usage:{other}");
+        eprintln!(
+            "  why: --msg-serve takes --once, or one of --mint [--rotate] / --accept-once ADDR / --dial-once ADDR with an optional --peers DIR (and --debug); the store and the seams come from the environment"
+        );
+        eprintln!("  remedy: run `tillandsias --msg-serve` or `tillandsias --msg-serve --once`");
+        eprintln!("{USAGE}");
+        2
+    };
     let mut once = false;
-    for a in args {
+    let mut debug = false;
+    let mut rotate = false;
+    let mut peers: Option<String> = None;
+    let mut verbs: Vec<IdentityVerb> = Vec::new();
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
         match a.as_str() {
-            "--msg-serve" | "--debug" => {}
+            "--msg-serve" => {}
+            "--debug" => debug = true,
             "--once" => once = true,
-            other => {
-                eprintln!("refused:msg-serve:usage:{other}");
-                eprintln!(
-                    "  why: --msg-serve takes only --once (and --debug); the store and the seams come from the environment"
-                );
-                eprintln!(
-                    "  remedy: run `tillandsias --msg-serve` or `tillandsias --msg-serve --once`"
-                );
-                eprintln!("{USAGE}");
-                return 2;
+            "--mint" => verbs.push(IdentityVerb::Mint { rotate: false }),
+            "--rotate" => rotate = true,
+            flag @ ("--accept-once" | "--dial-once" | "--peers") => {
+                let Some(v) = it.next().filter(|v| !v.starts_with("--")) else {
+                    return usage(&format!("{flag}:missing-value"));
+                };
+                match flag {
+                    "--accept-once" => verbs.push(IdentityVerb::AcceptOnce(v.clone())),
+                    "--dial-once" => verbs.push(IdentityVerb::DialOnce(v.clone())),
+                    _ => peers = Some(v.clone()),
+                }
             }
+            other => return usage(other),
         }
+    }
+    if verbs.len() > 1 || (!verbs.is_empty() && once) {
+        return usage("one-verb-at-a-time");
+    }
+    if let Some(mut verb) = verbs.pop() {
+        if let IdentityVerb::Mint { rotate: r } = &mut verb {
+            *r = rotate;
+        } else if rotate {
+            return usage("--rotate-without-mint");
+        }
+        return msg_identity::run(verb, peers.as_deref(), debug);
+    }
+    if rotate || peers.is_some() {
+        return usage("--rotate/--peers-without-an-identity-verb");
     }
     let cfg = MoverConfig::from_env();
     let mut m = match Mover::start(cfg, stderr_log()) {

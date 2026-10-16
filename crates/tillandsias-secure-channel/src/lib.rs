@@ -184,7 +184,9 @@ pub fn channel_psk_for_guest(
 pub mod secure_stream;
 
 pub use secure_stream::{
-    EncryptedStream, client_handshake, server_handshake, server_handshake_or_reclaim,
+    EncryptedStream, NOISE_XX_PARAMS, PeerRefused, StaticKeypair, client_handshake,
+    client_handshake_xx, parse_static_hex, server_handshake, server_handshake_or_reclaim,
+    server_handshake_xx, static_fingerprint,
 };
 
 #[cfg(test)]
