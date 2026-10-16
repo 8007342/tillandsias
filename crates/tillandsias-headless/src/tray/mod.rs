@@ -3387,6 +3387,8 @@ fn tray_ui_state_to_menu_state(state: &TrayUiState) -> shared_menu::MenuState {
         status_text: state.status_text.clone(),
         version: state.version.clone(),
         login,
+        // Order 1719-83po: the Linux tray's own reading lands in slice 4.
+        cloudflare_login: shared_menu::CloudflareLoginState::Unknown,
         cloud_projects,
         cloud_projects_loaded: state.last_fetched.is_some(),
         selected_agent: shared_menu::SelectedAgent::Claude,
