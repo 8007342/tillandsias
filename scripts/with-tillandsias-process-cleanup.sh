@@ -60,10 +60,19 @@ describe_pids() {
     done
 }
 
-before="$(mktemp)"
-after="$(mktemp)"
-leaked="$(mktemp)"
-remaining="$(mktemp)"
+# ORDER 1637-cnxq — pid snapshots live under scratch/logs inside the checkout
+# (scripts/scratch-dir.sh), never under the host temp dir.
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+SCRATCH_DIR="$("$(dirname "${BASH_SOURCE[0]}")/scratch-dir.sh" logs)" || {
+    _afford "scripts/scratch-dir.sh named no directory inside the checkout, and the pid snapshots live there (1637-cnxq)" \
+        "run from a checkout that carries scripts/scratch-dir.sh, or set TILLANDSIAS_SCRATCH_ROOT to a writable absolute directory, then re-run"
+    echo "refused:process-cleanup:no-scratch-dir" >&2
+    exit 2
+}
+before="$(mktemp "$SCRATCH_DIR/process-cleanup-before.XXXXXX")"
+after="$(mktemp "$SCRATCH_DIR/process-cleanup-after.XXXXXX")"
+leaked="$(mktemp "$SCRATCH_DIR/process-cleanup-leaked.XXXXXX")"
+remaining="$(mktemp "$SCRATCH_DIR/process-cleanup-remaining.XXXXXX")"
 trap 'rm -f "$before" "$after" "$leaked" "$remaining"' EXIT
 
 snapshot_pids > "$before"

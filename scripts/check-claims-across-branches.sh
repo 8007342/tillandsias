@@ -123,10 +123,22 @@ if [ -z "$PLAN_BIN" ]; then
     exit 2
 fi
 
+# ORDER 1637-cnxq — THE EXTRACT LIVES INSIDE THE CHECKOUT. scratch-dir.sh names
+# <checkout>/scratch/xbranch (TILLANDSIAS_SCRATCH_ROOT overrides the root), so a
+# run reaped mid-fold leaves its extract where a bypass-mode session may delete
+# it without an operator prompt. Resolved after the plan binary: a tree with no
+# binary refuses above, before it needs scratch.
+SCRATCH_DIR="$("$ROOT/scripts/scratch-dir.sh" xbranch 2>/dev/null)" || SCRATCH_DIR=""
+if [ -z "$SCRATCH_DIR" ]; then
+    _afford "scripts/scratch-dir.sh named no scratch directory, and every sibling fold extracts a ledger into one (1637-cnxq)" \
+        "run from a checkout that carries scripts/scratch-dir.sh, or set TILLANDSIAS_SCRATCH_ROOT to a writable absolute directory, then re-run"
+    echo "blocked:no-scratch-dir"; exit 2
+fi
+
 SIBLINGS="linux-next windows-next osx-next"
 
 # ORDER 1423-ydy3 — THE EXTRACT DIES WITH THE RUN. Every fold extracts a
-# sibling's plan/ (~19 MB) into ${TMPDIR:-/tmp}/xbranch.*, and the normal paths
+# sibling's plan/ (~19 MB) into scratch/xbranch/xbranch.* (1637-cnxq); the normal paths
 # rm -rf it; a KILLED run (timeout, Ctrl-C, a cycle's lock-holder reaped) did
 # not, and yoga counted 49 leaked extracts (~700 MB). One trap covers both fold
 # loops, since both run in this shell and hold the live extract in $tmp.
@@ -222,7 +234,7 @@ if [ "$BATCH" = 1 ]; then
         git rev-parse --verify -q "origin/$b" >/dev/null 2>&1 || continue
         [ "$b" = "$CURRENT" ] && continue
         checked=$((checked + 1))
-        tmp="$(mktemp -d "${TMPDIR:-/tmp}/xbranch.XXXXXX")"
+        tmp="$(mktemp -d "$SCRATCH_DIR/xbranch.XXXXXX")"
         if git archive "origin/$b" plan/index.yaml plan/index.d 2>/dev/null | tar -x -C "$tmp" 2>/dev/null; then
             # TWO STAGES, because `status` answers ONE id per invocation at
             # ~650ms and each invocation re-folds the ledger. A frontier of 200
@@ -301,7 +313,7 @@ for b in $SIBLINGS; do
     # Fold that branch's ledger and ask it directly, rather than grepping
     # fragments: status is LWW and a later fragment can release a claim, so the
     # raw presence of a claim fragment is NOT the same question (635-i6vm).
-    tmp="$(mktemp -d "${TMPDIR:-/tmp}/xbranch.XXXXXX")"
+    tmp="$(mktemp -d "$SCRATCH_DIR/xbranch.XXXXXX")"
     if git archive "origin/$b" plan/index.yaml plan/index.d 2>/dev/null | tar -x -C "$tmp" 2>/dev/null; then
         st="$("$PLAN_BIN" --index "$tmp/plan/index.yaml" status "$PACKET" 2>/dev/null | awk '{print $2}')"
         [ -n "$st" ] && seen_anywhere=1

@@ -94,6 +94,18 @@ ROOT="${TILLANDSIAS_SALVAGE_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pw
 _SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 cd "$ROOT" || exit 2
+# ORDER 1637-cnxq — the temp index the salvage seeds lives inside the checkout
+# THIS SCRIPT lives in (scratch/logs via scripts/scratch-dir.sh next to it),
+# never under the host temp dir; $ROOT may be another, damaged tree. A missing
+# helper refuses by name rather than falling back to /tmp.
+SCRATCH_DIR="$("$_SELF_DIR/scratch-dir.sh" logs 2>/dev/null)" || SCRATCH_DIR=""
+if [ -z "$SCRATCH_DIR" ]; then
+    echo "fail:salvage:no-scratch-dir"
+    printf '  why: %s\n  remedy: %s\n' \
+        "scripts/scratch-dir.sh named no directory inside the checkout, and the salvage seeds its temp index there (1637-cnxq)" \
+        "run the copy of this script that sits next to scripts/scratch-dir.sh, or set TILLANDSIAS_SCRATCH_ROOT to a writable absolute directory, then re-run" >&2
+    exit 1
+fi
 
 # USAGE GUARD (2026-09-14): the slug used to be `${1:-dirty-start}` with no
 # check, so `--help` was taken AS the slug and, since the clean-tree extension
@@ -189,7 +201,7 @@ if [ -z "$(git status --porcelain=v1 --untracked-files=all 2>/dev/null)" ]; then
         exit 0
     fi
 
-    tmp="$(mktemp -d "${TMPDIR:-/tmp}/tillandsias-salvage.XXXXXX")" || {
+    tmp="$(mktemp -d "$SCRATCH_DIR/tillandsias-salvage.XXXXXX")" || {
         echo "fail:salvage:no-tmpdir"; exit 1
     }
     trap 'rm -rf "$tmp"' EXIT INT TERM
@@ -222,7 +234,7 @@ if [ -z "$(git status --porcelain=v1 --untracked-files=all 2>/dev/null)" ]; then
     exit 0
 fi
 
-tmp="$(mktemp -d "${TMPDIR:-/tmp}/tillandsias-salvage.XXXXXX")" || {
+tmp="$(mktemp -d "$SCRATCH_DIR/tillandsias-salvage.XXXXXX")" || {
     echo "fail:salvage:no-tmpdir"; exit 1
 }
 trap 'rm -rf "$tmp"' EXIT INT TERM

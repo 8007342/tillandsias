@@ -216,8 +216,21 @@ fn verdict_value_str(v: &LuaValue) -> Option<String> {
 /// record (1384-ddua: "the run trace records every widened read root").
 static READ_ROOTS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 
-/// Regular files under `base`, recursively, relative to it, symlinks not followed.
-fn walk_files(base: &std::path::Path, suffix: Option<&str>) -> Vec<String> {
+/// The canonical ignored scratch dir, `<root>/scratch` (1637-cnxq, criterion 3:
+/// every tree scanner skips it). A walk from ABOVE never descends into it; a
+/// walk whose base is inside it (a fixture over its own tree) is unaffected,
+/// because only a child directory met during the walk is compared.
+fn scratch_dir(root: &std::path::Path) -> std::path::PathBuf {
+    root.join("scratch")
+}
+
+/// Regular files under `base`, recursively, relative to it, symlinks not
+/// followed; a child directory equal to `skip` is not entered.
+fn walk_files(
+    base: &std::path::Path,
+    suffix: Option<&str>,
+    skip: Option<&std::path::Path>,
+) -> Vec<String> {
     let mut found = Vec::new();
     let mut stack = vec![base.to_path_buf()];
     while let Some(d) = stack.pop() {
@@ -228,6 +241,9 @@ fn walk_files(base: &std::path::Path, suffix: Option<&str>) -> Vec<String> {
             let Ok(ft) = e.file_type() else { continue };
             let p = e.path();
             if ft.is_dir() {
+                if skip.is_some_and(|s| p == s) {
+                    continue;
+                }
                 stack.push(p);
             } else if ft.is_file() {
                 let rel = p
@@ -623,9 +639,10 @@ fn register(
                         // An absolute path is walkable when its realpath is inside
                         // the repo (a fixture's target/plan-scratch) or inside a
                         // declared read root; anywhere else is refused.
-                        let in_repo = crate::lua_predicate::find_repo_root()
-                            .ok()
-                            .and_then(|r| std::fs::canonicalize(&dir).ok().filter(|c| c.starts_with(&r)));
+                        let root = crate::lua_predicate::find_repo_root().ok();
+                        let in_repo = root
+                            .as_ref()
+                            .and_then(|r| std::fs::canonicalize(&dir).ok().filter(|c| c.starts_with(r)));
                         let Some(base) = in_repo.or_else(|| within(&dir)) else {
                             return Err(LuaError::RuntimeError(format!(
                                 "fs.walk: '{dir}' is outside the repo and every declared read root (-- @read-env)"
@@ -635,7 +652,8 @@ fn register(
                             Some(o) => o.get("suffix")?,
                             None => None,
                         };
-                        let mut found = walk_files(&base, suffix.as_deref());
+                        let skip = root.as_deref().map(scratch_dir);
+                        let mut found = walk_files(&base, suffix.as_deref(), skip.as_deref());
                         found.sort();
                         let t = lua.create_table()?;
                         for (i, f) in found.into_iter().enumerate() {
@@ -668,6 +686,7 @@ fn register(
                         Some(o) => o.get("suffix")?,
                         None => None,
                     };
+                    let skip = scratch_dir(&root);
                     let mut found: Vec<String> = Vec::new();
                     let mut stack = vec![start];
                     while let Some(d) = stack.pop() {
@@ -676,6 +695,9 @@ fn register(
                             let Ok(ft) = e.file_type() else { continue };
                             let p = e.path();
                             if ft.is_dir() {
+                                if p == skip {
+                                    continue;
+                                }
                                 stack.push(p);
                             } else if ft.is_file() {
                                 let rel = p.strip_prefix(&root).unwrap_or(&p).to_string_lossy().replace('\\', "/");
@@ -1203,5 +1225,45 @@ mod tests {
         assert_eq!(parse_duration("2m"), Some(Duration::from_secs(120)));
         assert_eq!(parse_duration("7"), Some(Duration::from_secs(7)));
         assert_eq!(parse_duration("x"), None);
+    }
+
+    // 1637-cnxq: the canonical scratch dir is skipped when met from ABOVE, and
+    // only then. PREMISE FIRST: without the skip the planted files are seen, so
+    // their absence afterwards is the skip and not a walker that saw nothing.
+    // The tree is made under the checkout's own scratch/, the rule it tests.
+    #[test]
+    fn walk_files_skips_the_scratch_dir_only_when_met_from_above() {
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
+            .expect("cargo sets CARGO_MANIFEST_DIR per invocation");
+        let base = std::path::Path::new(&manifest_dir)
+            .join("../../scratch/fixtures")
+            .join(format!("script-run-walk-{}", std::process::id()));
+        let tree = base.join("tree");
+        let scratch = scratch_dir(&tree);
+        std::fs::create_dir_all(scratch.join("nested")).unwrap();
+        std::fs::create_dir_all(tree.join("ok")).unwrap();
+        std::fs::write(scratch.join("evil.lua"), "-- planted\n").unwrap();
+        std::fs::write(scratch.join("nested/deep.lua"), "-- planted\n").unwrap();
+        std::fs::write(tree.join("ok/good.lua"), "-- kept\n").unwrap();
+
+        let mut unskipped = walk_files(&tree, Some(".lua"), None);
+        unskipped.sort();
+        assert_eq!(
+            unskipped,
+            vec!["ok/good.lua", "scratch/evil.lua", "scratch/nested/deep.lua"],
+            "premise: without a skip the walker sees the planted files"
+        );
+        let skipped = walk_files(&tree, Some(".lua"), Some(&scratch));
+        assert_eq!(
+            skipped,
+            vec!["ok/good.lua"],
+            "the scratch dir is not entered"
+        );
+        // A walk whose BASE is the scratch dir still works: fixtures walk their
+        // own trees there.
+        let mut inside = walk_files(&scratch, Some(".lua"), Some(&scratch));
+        inside.sort();
+        assert_eq!(inside, vec!["evil.lua", "nested/deep.lua"]);
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

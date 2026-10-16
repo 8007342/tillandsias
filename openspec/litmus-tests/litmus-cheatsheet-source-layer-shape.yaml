@@ -3,7 +3,7 @@
 # Structural drift protection for the cheatsheet-source-layer spec.
 #
 # The existing `litmus:cheatsheet-source-layer-validation` runs the
-# validator script (`scripts/check-cheatsheet-sources.sh --no-sha`)
+# validator script (`scripts/lua/check-cheatsheet-sources.lua -- --no-sha`, on tillandsias-plan script run)
 # end-to-end against the live workspace — covers requirements 4
 # (Validator invariants) + 3 (Provenance binding) at the RUNTIME
 # behaviour level.
@@ -28,18 +28,18 @@ severity: medium
 size: instant
 
 preconditions:
-  - workspace contains scripts/check-cheatsheet-sources.sh
+  - workspace contains scripts/lua/check-cheatsheet-sources.lua
   - workspace contains cheatsheet-sources/
   - shell utilities (grep, test) are available in PATH
 
 critical_path:
-  - step: "validator script is executable at the canonical path"
-    command: "test -x scripts/check-cheatsheet-sources.sh && echo 'ok: validator executable'"
+  - step: "validator script is present at the canonical path (Lua, run by tillandsias-plan script run, so not an executable)"
+    command: "test -f scripts/lua/check-cheatsheet-sources.lua && echo 'ok: validator present'"
     timeout_ms: 3000
-    expected_behavior: "ok: validator executable"
+    expected_behavior: "ok: validator present"
 
   - step: "validator script carries the spec trace"
-    command: "grep -F '@trace spec:cheatsheet-source-layer' scripts/check-cheatsheet-sources.sh"
+    command: "grep -F '@trace spec:cheatsheet-source-layer' scripts/lua/check-cheatsheet-sources.lua"
     timeout_ms: 3000
     expected_behavior: "spec:cheatsheet-source-layer"
 
@@ -57,7 +57,7 @@ critical_path:
     # The script header explicitly enumerates 4 checks per spec
     # requirement 4 (Validator invariants). Drift here = a refactor
     # that quietly drops one of the spec's promised checks.
-    command: "grep -F '1. For every cheatsheet' scripts/check-cheatsheet-sources.sh && grep -F '2. For every local' scripts/check-cheatsheet-sources.sh && grep -F '3. Orphan detection' scripts/check-cheatsheet-sources.sh && grep -F '4. SHA-check' scripts/check-cheatsheet-sources.sh"
+    command: "grep -F '1. For every cheatsheet' scripts/lua/check-cheatsheet-sources.lua && grep -F '2. For every local' scripts/lua/check-cheatsheet-sources.lua && grep -F '3. Orphan detection' scripts/lua/check-cheatsheet-sources.lua && grep -F '4. SHA-check' scripts/lua/check-cheatsheet-sources.lua"
     timeout_ms: 3000
     expected_behavior: "4. SHA-check"
 
@@ -93,7 +93,7 @@ observability:
   log_fields:
     spec: "cheatsheet-source-layer"
     test: "cheatsheet-source-layer-shape"
-    validator_artifact: "scripts/check-cheatsheet-sources.sh"
+    validator_artifact: "scripts/lua/check-cheatsheet-sources.lua"
     sources_artifact: "cheatsheet-sources/INDEX.json"
 
 rollback:
@@ -104,4 +104,4 @@ rollback:
     `cheatsheet-sources/INDEX.json`, the four documented checks in
     the validator script header, and the `## Provenance` section
     in `cheatsheets/TEMPLATE.md`.
-  command: "ls -la scripts/check-cheatsheet-sources.sh cheatsheet-sources/INDEX.json && head -30 scripts/check-cheatsheet-sources.sh"
+  command: "ls -la scripts/lua/check-cheatsheet-sources.lua cheatsheet-sources/INDEX.json && head -30 scripts/lua/check-cheatsheet-sources.lua"

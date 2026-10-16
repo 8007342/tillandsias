@@ -12,7 +12,7 @@ preconditions:
 
 critical_path:
   - step: "run the source validator in no-sha mode"
-    command: "bash scripts/check-cheatsheet-sources.sh --no-sha"
+    command: ". scripts/plan-binary-probe.sh; b=\"$(resolve_plan_binary)\" || b=; [ -n \"$b\" ] || { echo 'ok: skipped-no-plan-binary'; exit 0; }; \"$b\" script run scripts/lua/check-cheatsheet-sources.lua -- --no-sha"
     timeout_ms: 5000
 
 observability:
@@ -24,5 +24,5 @@ observability:
     test: "cheatsheet-source-layer-validation"
 
 rollback:
-  on_failure: "inspect scripts/check-cheatsheet-sources.sh and openspec/specs/cheatsheet-source-layer/spec.md for drift"
-  command: "bash scripts/check-cheatsheet-sources.sh --no-sha"
+  on_failure: "inspect scripts/lua/check-cheatsheet-sources.lua (run by tillandsias-plan script run) and openspec/specs/cheatsheet-source-layer/spec.md for drift"
+  command: ". scripts/plan-binary-probe.sh; b=\"$(resolve_plan_binary)\" || b=; [ -n \"$b\" ] || { echo 'ok: skipped-no-plan-binary'; exit 0; }; \"$b\" script run scripts/lua/check-cheatsheet-sources.lua -- --no-sha"

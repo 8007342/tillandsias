@@ -35,7 +35,7 @@ committed_for_project: false
 | 1 | Pick a documentation package the forge image installs (or add one). |
 | 2 | Verify the on-disk path the package writes (typically `/usr/share/doc/...` or `/usr/share/javadoc/...`). |
 | 3 | Author the cheatsheet with `tier: distro-packaged` frontmatter, `package: <pkg-name>`, `local: <on-disk path>`. |
-| 4 | Run `scripts/check-cheatsheet-sources.sh` — validator confirms the package is in `flake.nix`/`Containerfile` and the local path exists in the built image. |
+| 4 | Run `tillandsias-plan script run scripts/lua/check-cheatsheet-sources.lua` — validator confirms the package is in `flake.nix`/`Containerfile` and the local path exists in the built image. |
 
 ## Common patterns
 
@@ -103,7 +103,7 @@ When a project needs documentation that's available as a distro package not yet 
 3. Rebuild the forge image (`scripts/build-image.sh forge`).
 4. Confirm the file exists: `podman run --rm tillandsias-forge ls <expected-path>`.
 5. Author the cheatsheet with `tier: distro-packaged`.
-6. Run `scripts/check-cheatsheet-sources.sh` — should pass.
+6. Run `tillandsias-plan script run scripts/lua/check-cheatsheet-sources.lua` — should pass.
 
 The forge image grows by the package's docs size. Budget accordingly: JDK docs are ~80 MB, Perl docs ~20 MB, glibc info ~5 MB.
 

@@ -24,7 +24,9 @@
 -- count, is NEW. A floor ABOVE the count is refused as stale, so a change that
 -- converts sites lowers the floor in the same commit. `--dump-floor` prints the
 -- floor the tree has now. THE REMEDY a refusal names:
---   mktemp -d "${TMPDIR:-/tmp}/<name>.XXXXXX"
+--   mktemp -d "$(scripts/scratch-dir.sh fixtures)/<name>.XXXXXX"
+-- (1637-cnxq: the template lives inside the checkout; a host temp template is
+-- refused on a new line by check-scratch-location-added.lua.)
 --
 -- Verdicts:
 --   ok:bare-mktemp:sites=<n>:floor=<f>:files=<k>:templated=<t>       exit 0
@@ -142,7 +144,7 @@ table.sort(site_files)
 if arg[1] == "--dump-floor" then
     out.line("# Per-file mktemp sites WITHOUT a template in scripts/**/*.sh (1619-7i9r). On darwin")
     out.line("# they ignore TMPDIR, so the preflight door's per-guard TMPDIR sweep never sees them.")
-    out.line("# May only DESCEND: give the site a \"${TMPDIR:-/tmp}/<name>.XXXXXX\" template and lower its line.")
+    out.line("# May only DESCEND: give the site a template inside the checkout, mktemp \"$(scripts/scratch-dir.sh logs)/<name>.XXXXXX\" (1637-cnxq), and lower its line.")
     for _, f in ipairs(site_files) do out.line(f .. " " .. count[f]) end
     verdict.ok("bare-mktemp-floor-dumped", tostring(#site_files))
 end
@@ -157,7 +159,7 @@ end
 -- A peer this bounces must be able to fix it without asking: the refusal names
 -- the darwin reason, the exact remedy and the file's bare sites, on stdout.
 local WHY = "  why: on darwin a mktemp without a template ignores TMPDIR (measured: /var/folders/.../T), so the preflight door's per-guard TMPDIR sweep never sees it (1619-7i9r)"
-local REMEDY = '  remedy: give the call a template, e.g. mktemp -d "${TMPDIR:-/tmp}/<name>.XXXXXX" (a file: mktemp "${TMPDIR:-/tmp}/<name>.XXXXXX")'
+local REMEDY = '  remedy: give the call a template inside the checkout, e.g. mktemp -d "$(scripts/scratch-dir.sh fixtures)/<name>.XXXXXX" (a file: mktemp "$(scripts/scratch-dir.sh logs)/<name>.XXXXXX"); a host temp template is refused on a new line by check-scratch-location-added.lua (1637-cnxq)'
 local violations, detail = {}, {}
 for _, f in ipairs(site_files) do
     local n, fl = count[f], floor[f] or 0
@@ -191,7 +193,7 @@ if #violations > 0 then
     end
     log.raw("[check-bare-mktemp] on darwin a mktemp without a template ignores TMPDIR, so the preflight door's")
     log.raw("  per-guard TMPDIR (deleted after every guard, killed or not) never contains it. Give it a template:")
-    log.raw("  mktemp -d \"${TMPDIR:-/tmp}/<name>.XXXXXX\"   (1619-7i9r)")
+    log.raw("  mktemp -d \"$(scripts/scratch-dir.sh fixtures)/<name>.XXXXXX\"   (1619-7i9r, 1637-cnxq)")
     log.raw("  A stale-floor line means sites were converted: lower " .. FLOOR_FILE .. " (--dump-floor prints it).")
     verdict.emit(violations[#violations], 1)
 end
