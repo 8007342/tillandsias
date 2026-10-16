@@ -268,6 +268,11 @@ scripts/release-freeze.sh set "${release_source_branch:-linux-next}" "cut ${new_
 #   ... land the fix ...
 #   scripts/release-freeze.sh set "${release_source_branch:-linux-next}"
 #   # the re-freeze writes the freeze marker BEFORE the landing marker goes
+# The land queue runs only on the cut host, and the cut host decides when to
+# start it, so hold the queue during a land: while the landing marker is live,
+# land the cut's fix alone and start no queue run until the re-freeze. The
+# queue cannot tell the cut's fix from anyone else's candidate (identity at
+# push time is self-declared), so this is procedure, not a check.
 # For every other host, frozen-landing means HOLD code exactly as frozen:
 # only ok:freeze-none is clear. There is no cut-host exemption in the hook;
 # host identity at push time is self-declared, so the freeze is a
