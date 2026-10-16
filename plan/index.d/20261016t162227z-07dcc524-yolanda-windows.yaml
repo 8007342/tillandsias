@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forges-in-the-macos-and-windows-vm-get-an-empty-lane-mcp-socket-dir-because-the-guest-binary-is-built-without-the-tray-feature-that-holds-the-listener
+    event:
+      type: evidence
+      ts: "2026-10-16T16:22:27Z"
+      agent_id: windows-yolanda-claude-20261013t052033z
+      host: yolanda-windows
+      summary: |-
+        Live Windows proof on v56.10.16.2 (carries #470), 2026-10-16T15:47Z: in an opencode forge as uid 1000, /run/host/tillandsias-mcp is forge:forge 0700 holding mcp.sock forge:forge 0600, the msg lane tree is forge-owned, and host-browser.sh initialize+tools/list returns publish_local and browser.open (rc=0). Report plan/issues/e2e-smoke-v56.10.16.2-windows-2026-10-16.md at 91db4beaa.
