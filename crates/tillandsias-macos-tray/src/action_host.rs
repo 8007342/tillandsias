@@ -5210,6 +5210,20 @@ mod tests {
     /// (commit 8992652a) — divergence between the two trays' chip
     /// composition would fail either suite.
     #[test]
+    fn a_vault_locked_guest_chip_still_says_vault_after_the_clamp() {
+        // ORDER 1752-nd3t: the guest's event for a rejected unseal key must
+        // survive the 37-character chip clamp on both phases it rides with.
+        let evt = "Vault locked: unseal key rejected; sign-ins are kept, not lost";
+        for phase in [
+            tillandsias_control_wire::VmPhase::Failed,
+            tillandsias_control_wire::VmPhase::Starting,
+        ] {
+            let chip = compose_chip_text(&vm_phase_status_text(phase, true), Some(evt));
+            assert!(chip.contains("Vault locked"), "{phase:?}: {chip}");
+        }
+    }
+
+    #[test]
     fn compose_chip_text_appends_last_event() {
         let base = "\u{1F7E2} Ready";
         // None: base unchanged.

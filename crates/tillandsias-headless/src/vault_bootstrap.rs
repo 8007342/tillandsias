@@ -1964,6 +1964,23 @@ pub trait CloudflareTokenStore {
     fn delete_record(&self, path: &str) -> Result<(), String>;
 }
 
+/// Order 1719-83po: is a Cloudflare login stored? `Ok(true)`/`Ok(false)` only
+/// when Vault answered, `Err` when it could not be read. The bundle is
+/// dropped here: only the boolean leaves this function, and only that crosses
+/// the control wire (`CloudflareLoginStatusReply`).
+// Called by the vsock handler; the Linux tray joins in 1719-83po slice 4.
+#[cfg_attr(not(feature = "listen-vsock"), allow(dead_code))]
+pub fn cloudflare_login_stored_in(store: &dyn CloudflareTokenStore) -> Result<bool, String> {
+    store.read_bundle().map(|bundle| bundle.is_some())
+}
+
+/// [`cloudflare_login_stored_in`] against the live Vault.
+// Called by the vsock handler; the Linux tray joins in 1719-83po slice 4.
+#[cfg_attr(not(feature = "listen-vsock"), allow(dead_code))]
+pub fn cloudflare_login_stored_live(debug: bool) -> Result<bool, String> {
+    cloudflare_login_stored_in(&VaultCloudflareTokenStore { debug })
+}
+
 /// Delete the Cloudflare bundle (1505-kc5f `--cloudflare-logout`): the
 /// long-lived REFRESH record first, then the token record, and NOTHING else —
 /// `secret/cloudflare/mesh` (the host's fleet-vpn service token) is not this
@@ -9835,6 +9852,45 @@ mod tests {
 // real Cloudflare). The fake-driven tests are `#[ignore]`d so a plain
 // `cargo test` needs no fake binary; scripts/test-cloudflare-token-rotation.sh
 // builds the fake and runs them by name.
+/// Order 1719-83po: the presence check is three-valued, and an unreadable
+/// Vault is never reported as "no login" (the tray would offer a login that
+/// may already exist).
+#[cfg(test)]
+mod cloudflare_login_presence_tests {
+    use super::*;
+
+    struct Fixed(Result<Option<CloudflareTokenBundle>, String>);
+    impl CloudflareTokenStore for Fixed {
+        fn read_bundle(&self) -> Result<Option<CloudflareTokenBundle>, String> {
+            self.0.clone()
+        }
+        fn write_record(&self, _: &str, _: serde_json::Value) -> Result<(), String> {
+            unreachable!("a presence check never writes")
+        }
+        fn delete_record(&self, _: &str) -> Result<(), String> {
+            unreachable!("a presence check never deletes")
+        }
+    }
+
+    #[test]
+    fn presence_is_stored_absent_or_unknown() {
+        let bundle = CloudflareTokenBundle {
+            access_token: "at".into(),
+            expires_at: None,
+            account_id: None,
+            client_id: "c".into(),
+            refresh_token: None,
+            refresh_token_expires_at: None,
+        };
+        assert_eq!(
+            cloudflare_login_stored_in(&Fixed(Ok(Some(bundle)))),
+            Ok(true)
+        );
+        assert_eq!(cloudflare_login_stored_in(&Fixed(Ok(None))), Ok(false));
+        assert!(cloudflare_login_stored_in(&Fixed(Err("vault sealed".into()))).is_err());
+    }
+}
+
 #[cfg(test)]
 mod cloudflare_token_rotation_tests {
     use super::*;
@@ -10836,5 +10892,59 @@ mod cloudflare_token_rotation_tests {
         ));
         let v = audit_policy_dir(&dir);
         assert!(v.is_empty(), "policy violations:\n{}", v.join("\n"));
+    }
+
+    /// ORDER 1751-ipuw: every unseal failure logs what VAULT said, never key
+    /// material. "HTTP 400: wrong key" was the entrypoint's assumption, with
+    /// Vault's own reason discarded, so two field failures could not say what
+    /// Vault refused. This runs the entrypoint's REAL function text in bash.
+    #[test]
+    fn unseal_failures_log_vaults_own_errors_and_never_key_material() {
+        let entrypoint = include_str!("../../../images/vault/entrypoint.sh");
+        let func: String = entrypoint
+            .split("# BEGIN unseal_error_detail")
+            .nth(1)
+            .and_then(|rest| rest.split_once('\n').map(|(_, body)| body))
+            .and_then(|rest| rest.split("# END unseal_error_detail").next())
+            .expect("entrypoint defines unseal_error_detail between its markers")
+            .to_string();
+        let run = |body: &str| -> String {
+            let out = std::process::Command::new("bash")
+                .arg("-c")
+                .arg(format!("{func}\nunseal_error_detail \"$1\""))
+                .arg("bash")
+                .arg(body)
+                .output()
+                .expect("run bash");
+            assert!(out.status.success(), "{:?}", out);
+            String::from_utf8(out.stdout).unwrap()
+        };
+        assert_eq!(
+            run(r#"{"errors":["Vault is sealed","invalid key"]}"#),
+            "Vault is sealed; invalid key"
+        );
+        let hex_key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let b64_key = "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVphYmNkZWZnaGlqa2xtbm9wcQ==";
+        let leaked = run(&format!(
+            r#"{{"errors":["key {hex_key}","b64 {b64_key}"]}}"#
+        ));
+        assert!(
+            !leaked.contains(hex_key) && !leaked.contains(b64_key),
+            "{leaked}"
+        );
+        assert!(leaked.contains("<redacted:hex>") && leaked.contains("<redacted:b64>"));
+        assert_eq!(run("not json"), "(no errors array in Vault's response)");
+        // Every FATAL unseal branch logs it.
+        let unseal = entrypoint
+            .split("# Step 4: Unseal.")
+            .nth(1)
+            .expect("the unseal step");
+        assert_eq!(
+            unseal
+                .matches(r#"log "vault said: $(unseal_error_detail "$RESPONSE")""#)
+                .count(),
+            3,
+            "the 400, other-status and still-sealed branches each log Vault's reason"
+        );
     }
 }

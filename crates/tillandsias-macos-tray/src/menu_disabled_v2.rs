@@ -89,6 +89,7 @@ mod tests {
             login: GithubLoginState::LoggedIn {
                 handle: "bulloncito".to_string(),
             },
+            cloudflare_login: Default::default(),
             // 997-e4v2: the per-project leaf properties these tests check are
             // unchanged, but the only project path is cloud now, so the
             // fixture supplies a cloud project instead of a local one.
@@ -305,6 +306,7 @@ mod tests {
     fn render_logged_out_collapses_to_login_leaf_on_macos() {
         let state = MenuState {
             login: GithubLoginState::LoggedOut,
+            cloudflare_login: Default::default(),
             target: TargetSurface::MacosTray,
             ..MenuState::initial()
         };

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: cloudflare-login-uses-the-registered-client-id-and-cloudflares-real-dotted-scope-ids-because-an-empty-scope-list-asks-for-zero-permissions
+    field: status
+    value: implemented
+    ts: "2026-10-16T04:01:44Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: cloudflare-login-uses-the-registered-client-id-and-cloudflares-real-dotted-scope-ids-because-an-empty-scope-list-asks-for-zero-permissions
+    event:
+      type: progress
+      ts: "2026-10-16T04:01:44Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: landed #442 (land 62570a6e2): the Cloudflare login uses the registered client d9d1303782dfe45c7e2d7bb9ce89c8a8 and the six live-granted scope ids. Live arm pending: the operator Cloudflare Login on a release
