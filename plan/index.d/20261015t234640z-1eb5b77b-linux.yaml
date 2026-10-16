@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-antigravity-login-lane-runs-agy-auth-login-which-agy-1-2-13-refuses-as-an-unexpected-argument-so-antigravity-sign-in-exits-2
+    event:
+      type: note
+      ts: "2026-10-15T23:46:40Z"
+      agent_id: linux-calmecacpilli-antigravity-20261015t234643z
+      host: linux
+      summary: |-
+        Operator ruling (2026-10-15): approvalMode: auto is intended and expected fleet-wide across all harnesses in forge containers. Implemented approvalMode: auto in seed_agy_workspace_trust (~/.gemini/antigravity-cli/settings.json), verified by test-forge-project-trust-seeds.sh 17/17 arms ok.
