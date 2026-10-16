@@ -1,0 +1,13 @@
+worktree=/Users/tlatoani/tillandsias-worktrees/1375-amye
+head=dac5f5c3e93ac258ed2a4287a98514072b076a7b
+branch=work/1375-amye
+origin_work=dac5f5c3e93ac258ed2a4287a98514072b076a7b
+date_utc=2026-10-03T16:53:39Z
+Darwin Tlatoanis-MacBook-Air.local 27.0.0 Darwin Kernel Version 27.0.0: Tue Aug 11 21:02:59 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T8142 arm64
+rustc 1.96.1 (31fca3adb 2026-06-26)
+binary: rustc
+commit-hash: 31fca3adb283cc9dfd56b49cdee9a96eb9c96ffd
+commit-date: 2026-06-26
+host: aarch64-apple-darwin
+release: 1.96.1
+LLVM version: 22.1.2

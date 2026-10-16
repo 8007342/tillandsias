@@ -1,0 +1,13 @@
+diff --git a/crates/tillandsias-exec/src/lib.rs b/crates/tillandsias-exec/src/lib.rs
+index 9968a03b9..997c9b0bb 100644
+--- a/crates/tillandsias-exec/src/lib.rs
++++ b/crates/tillandsias-exec/src/lib.rs
+@@ -793,7 +793,7 @@ impl Command {
+             // SAFETY: setsid is async-signal-safe and touches no Rust state.
+             unsafe {
+                 cmd.as_std_mut().pre_exec(|| {
+-                    if libc::setsid() == -1 {
++                    if libc::setpgid(0, 0) == -1 {
+                         Err(std::io::Error::last_os_error())
+                     } else {
+                         Ok(())

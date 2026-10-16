@@ -1,0 +1,6 @@
+ok: timeout deadline returns 124 promptly with measured status
+ok: argv remains tokenized; spaces and glob characters are not reinterpreted
+ok: detach returns promptly, enters a distinct session, and survives its caller
+ok: 24 concurrent advisory-lock runs serialize complete critical sections
+ok: bounded lock acquisition returns 75 without spawning on expiry
+ok:plan-run-verb:5
