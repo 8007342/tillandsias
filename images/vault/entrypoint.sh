@@ -37,6 +37,23 @@ log() {
     echo "$msg" >> "$ENTRYPOINT_LOG" 2>/dev/null || true
 }
 
+# BEGIN unseal_error_detail (1751-ipuw; run by vault_bootstrap's fixture)
+# What Vault itself said when /v1/sys/unseal failed. Every unseal failure used
+# to log only "HTTP 400: wrong key", an assumption: Vault answers 400 for other
+# refusals too, and its own reason was discarded with the response body. Prints
+# Vault's errors array, joined, one line. Key-shaped runs (32+ hex characters,
+# 40+ base64 characters) are redacted first, though Vault's errors do not echo
+# the key, so this line can never carry key material.
+unseal_error_detail() {
+    local body="$1" detail
+    detail="$(printf '%s' "$body" | jq -r 'if type == "object" and (.errors | type) == "array" then (.errors | map(tostring) | join("; ")) else empty end' 2>/dev/null || true)"
+    [ -n "$detail" ] || detail="(no errors array in Vault's response)"
+    printf '%s' "$detail" \
+        | sed -E 's/[0-9A-Fa-f]{32,}/<redacted:hex>/g; s/[A-Za-z0-9+\/]{40,}={0,2}/<redacted:b64>/g' \
+        | tr '\n' ' ' | cut -c1-300
+}
+# END unseal_error_detail
+
 UNSEAL_SECRET_PATH="/run/secrets/tillandsias-vault-unseal"
 VAULT_CONFIG="/vault/config/vault.hcl"
 POLICY_DIR="/vault/config/policies"
@@ -212,11 +229,13 @@ if [ "$SEALED" = "true" ]; then
         2*) ;;
         400)
             log "FATAL: unseal request returned HTTP 400: wrong key"
+            log "vault said: $(unseal_error_detail "$RESPONSE")"
             kill "$VAULT_PID" 2>/dev/null || true
             exit 1
             ;;
         *)
             log "FATAL: unseal request returned HTTP $UNSEAL_HTTP_CODE"
+            log "vault said: $(unseal_error_detail "$RESPONSE")"
             kill "$VAULT_PID" 2>/dev/null || true
             exit 1
             ;;
@@ -224,6 +243,7 @@ if [ "$SEALED" = "true" ]; then
     NOW_SEALED="$(echo "$RESPONSE" | jq -r '.sealed')"
     if [ "$NOW_SEALED" != "false" ]; then
         log "FATAL: unseal call returned sealed=$NOW_SEALED: wrong key"
+        log "vault said: $(unseal_error_detail "$RESPONSE")"
         kill "$VAULT_PID" 2>/dev/null || true
         exit 1
     fi
