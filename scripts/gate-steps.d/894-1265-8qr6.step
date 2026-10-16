@@ -1,0 +1,15 @@
+# Gate step 1265-8qr6 — landing the cut's own fix never empties the freeze.
+# release-freeze.sh `land` writes a successor marker
+# (refs/tillandsias/freeze-landing/<branch>/<host>/<epoch>) before it deletes
+# the freeze marker, and `set` re-freezes the same way round, so the marker set
+# on origin is never empty during a legitimate land and `status` reads
+# frozen-landing, never ok:freeze-none. A post-receive hook on the fixture's
+# origin records every intermediate state; the control arm shows the old
+# clear-then-set sequence is caught by the same recorder.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking that a cut's own land keeps the freeze visible (1265-8qr6)"
+STEP_LUA="scripts/lua/test-release-freeze-landing.lua"
+STEP_ERROR="release-freeze.sh land/re-freeze let the freeze markers go empty, or status stopped naming the land (1265-8qr6) — see the FAIL lines above"
+STEP_OK="Release-freeze landing fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-16 darwin ok:release-freeze-landing:10 arms"

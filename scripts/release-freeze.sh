@@ -34,12 +34,42 @@
 # has to remember to clear it. `clear` removes every marker for the branch,
 # whoever set it, so a coordinator can always clear a freeze another host set.
 #
+# LANDING THE CUT'S OWN FIX (order 1265-8qr6). The hook refuses the cut host's
+# own code push exactly as it refuses everyone's, so the only sequence was
+# clear -> land -> set, and for the whole land (gate included) `ls-remote`
+# returned NOTHING and `status` read ok:freeze-none — a true answer every host
+# was told to treat as "push". MEASURED on pirria-silverblue 2026-09-19: 42
+# consecutive clear samples across 7m26s of one such land. `land` replaces it:
+# it writes a SUCCESSOR marker first,
+#
+#   refs/tillandsias/freeze-landing/<branch>/<host>/<epoch>
+#
+# and only then deletes the freeze marker, and `set` re-freezes the same way
+# round (freeze marker first, then the landing marker goes). So the marker set
+# is never empty during a legitimate land, and `status` reads
+# frozen-landing:<branch>:by=<host> — "frozen, landing by <host>" — instead of
+# an absence. The landing marker is in its own namespace, which the pre-push
+# hook, the land queue and release-preflight do not read (they glob
+# refs/tillandsias/freeze/*), so the landing host's push goes through.
+# NO CUT-HOST EXEMPTION (coordinator ruling 2026-10-16): the freeze is a
+# coordination signal, not an authentication boundary. Host identity at push
+# time is self-declared, so a hook admitting "the host the marker names" would
+# admit any host that names itself; an exemption whose conditions cannot be
+# verified only looks like a boundary. During a land, a host reading
+# frozen-landing holds its code exactly as it would for frozen.
+#
 # VERDICTS (stdout, last line):
 #   ok:freeze-set:<ref>                       the branch is now frozen
 #   ok:freeze-already:<ref>                   a live marker for this branch already exists
 #   ok:freeze-cleared:<n>                     n marker(s) removed (0 is not an error)
+#   ok:freeze-landing:<ref>                   land: the successor marker is set and
+#                                             the freeze marker removed
+#   ok:freeze-landing-already:<ref>           land: already landing, nothing changed
 #   ok:freeze-none:<branch>                   status: not frozen
 #   frozen:<branch>:by=<host>:since=<epoch>:age=<n>s     status: frozen
+#   frozen-landing:<branch>:by=<host>:since=<epoch>:age=<n>s
+#                                             status: frozen, a fix landing by <host>
+#   refused:freeze:not-frozen:<branch>        land: there is no freeze to hand over
 #   refused:freeze:usage:<detail>             bad arguments
 #   refused:freeze:no-such-branch:<branch>    the branch does not exist on the remote
 #   refused:freeze:unreachable:<detail>       the remote could not be queried, fetched
@@ -71,10 +101,14 @@ NS="refs/tillandsias/freeze"
 
 _usage() {
     cat >&2 <<'USAGE'
-usage: scripts/release-freeze.sh set <branch> [reason] | clear <branch> | status <branch> | audit <branch>
+usage: scripts/release-freeze.sh set <branch> [reason] | land <branch> | clear <branch> | status <branch> | audit <branch>
        [--remote <name>]   (default: origin)
-  set     declare a freeze on <branch>; code pushes to it are refused by the pre-push hook
-  clear   remove every freeze marker for <branch>, whoever set it
+  set     declare a freeze on <branch>; code pushes to it are refused by the pre-push hook.
+          After a `land`, this is the re-freeze: the freeze marker is written
+          before the landing marker is removed
+  land    hand a freeze over to the cut's own fix: write the landing marker, THEN
+          remove the freeze marker, so <branch> reads frozen-landing, never clear
+  clear   remove every freeze and landing marker for <branch>, whoever set it
   status  report whether <branch> is frozen, by whom, and for how long
   audit   name every commit that brought a held path into <branch> since it froze
 A freeze holds CODE pushes only. Plan-only pushes stay admitted by design:
@@ -95,7 +129,7 @@ done
 set -- ${ARGS[@]+"${ARGS[@]}"}
 CMD="${1:-}"; BRANCH="${2:-}"; REASON="${3:-}"
 case "$CMD" in
-    set|clear|status|audit) ;;
+    set|land|clear|status|audit) ;;
     *) _usage; echo "refused:freeze:usage:${CMD:-<no command>}"; exit 2 ;;
 esac
 if [ -z "$BRANCH" ]; then
@@ -142,13 +176,60 @@ _markers() { # -> "<sha>\t<ref>" lines, oldest first, empty when not frozen
     freeze_markers "$REMOTE" "$BRANCH"
 }
 
+LNS="refs/tillandsias/freeze-landing"
+# The landing markers (1265-8qr6), same shape and order as _markers. Read only
+# here: the hook, the land queue and release-preflight never see them.
+_landings() {
+    local out
+    out="$(_t 10 git ls-remote "$REMOTE" "$LNS/$BRANCH/*" 2>/dev/null)" || return 1
+    [ -n "$out" ] || return 0
+    printf '%s\n' "$out" | awk -F'\t' '{ n = split($2, p, "/"); print p[n] "\t" $0 }' \
+        | sort -n | cut -f2-
+}
+
+# "<prefix>:<branch>:by=<host>:since=<epoch>:age=<n>s" for the first marker in $2
+# under namespace $3.
+_who_line() {
+    local ref rest who when now age
+    ref="$(printf '%s\n' "$2" | head -1 | cut -f2)"
+    rest="${ref#"$3/$BRANCH/"}"
+    who="${rest%%/*}"; when="${rest##*/}"
+    now="$(date -u +%s)"
+    case "$when" in ''|*[!0-9]*) age="unknown" ;; *) age="$((now - when))s" ;; esac
+    printf '%s:%s:by=%s:since=%s:age=%s\n' "$1" "$BRANCH" "$who" "$when" "$age"
+}
+
+# Delete every ref in a "<sha>\t<ref>" list, one "cleared: <ref>" per ref on
+# stderr; prints the count on stdout. On the first ref that will not go it
+# prints "failed: <ref>" on stderr and returns 1.
+_delete_all() {
+    local n=0 line r
+    while IFS= read -r line; do
+        [ -n "$line" ] || continue
+        r="$(printf '%s' "$line" | cut -f2)"
+        if _t 30 git push --quiet "$REMOTE" --delete "$r" 2>/dev/null; then
+            n=$((n+1)); echo "cleared: $r" >&2
+        else
+            echo "failed: $r" >&2; printf '%s' "$n"; return 1
+        fi
+    done <<REFS
+$1
+REFS
+    printf '%s' "$n"
+}
+
 # The audit body (1255-s4im). Prints its lines and verdict on stdout and
 # returns 0 clean/none, 1 breach, 3 could-not-ask.
 _audit() {
     local out rc oldest frozen_at ref tip held n k moved commits paths p
     rc=0; out="$(_markers)" || rc=$?
     if [ "$rc" -ne 0 ]; then echo "refused:freeze:unreachable:git ls-remote $REMOTE failed or timed out"; _afford "$REMOTE did not answer, so whether the freeze held is unknown — never clean (1255-s4im)" "check the network and credentials for $REMOTE (git ls-remote $REMOTE), then re-run scripts/release-freeze.sh audit $BRANCH"; return 3; fi
-    if [ -z "$out" ]; then echo "ok:freeze-none:$BRANCH"; return 0; fi
+    if [ -z "$out" ]; then
+        # A land in progress (1265-8qr6) is not "no freeze": say so.
+        rc=0; out="$(_landings)" || rc=$?
+        if [ "$rc" -eq 0 ] && [ -n "$out" ]; then _who_line ok:freeze-landing "$out" "$LNS"; return 0; fi
+        echo "ok:freeze-none:$BRANCH"; return 0
+    fi
     # The OLDEST marker is when the freeze began; a later marker cannot excuse
     # what arrived between the two.
     oldest="$(printf '%s\n' "$out" | head -n 1)"
@@ -197,13 +278,19 @@ case "$CMD" in
         if [ "$rc" -ne 0 ]; then
             echo "refused:freeze:unreachable:git ls-remote $REMOTE failed or timed out"; exit 1
         fi
-        if [ -z "$out" ]; then echo "ok:freeze-none:$BRANCH"; exit 0; fi
-        ref="$(printf '%s\n' "$out" | head -1 | cut -f2)"
-        rest="${ref#"$NS/$BRANCH/"}"
-        who="${rest%%/*}"; when="${rest##*/}"
-        now="$(date -u +%s)"
-        case "$when" in ''|*[!0-9]*) age="unknown" ;; *) age="$((now - when))s" ;; esac
-        printf 'frozen:%s:by=%s:since=%s:age=%s\n' "$BRANCH" "$who" "$when" "$age"
+        if [ -z "$out" ]; then
+            rc=0; out="$(_landings)" || rc=$?
+            if [ "$rc" -ne 0 ]; then
+                echo "refused:freeze:unreachable:git ls-remote $REMOTE failed or timed out"; exit 1
+            fi
+            if [ -n "$out" ]; then
+                # Frozen, the cut's own fix landing (1265-8qr6): hold code as
+                # for frozen; the freeze returns when the land does.
+                _who_line frozen-landing "$out" "$LNS"; exit 0
+            fi
+            echo "ok:freeze-none:$BRANCH"; exit 0
+        fi
+        _who_line frozen "$out" "$NS"
         # 1255-s4im: say whether the freeze has held, on stderr so the status
         # grammar (one stdout line) is unchanged.
         _audit 2>&1 | sed 's/^/  audit: /' >&2 || true
@@ -238,27 +325,62 @@ case "$CMD" in
         if [ "$rc" -ne 0 ]; then
             echo "refused:freeze:unreachable:could not push the marker to $REMOTE: $(_git_reason "$err")"; exit 1
         fi
+        # The re-freeze after a land (1265-8qr6): the landing marker goes only
+        # now, AFTER the freeze marker is on origin, so the set is never empty.
+        # A landing marker that will not go is harmless (status reads the
+        # freeze first), so it is named and the freeze still stands.
+        rc=0; landed="$(_landings)" || rc=$?
+        if [ "$rc" -eq 0 ] && [ -n "$landed" ]; then
+            _delete_all "$landed" >/dev/null 2>&1 \
+                || echo "  note: a landing marker for $BRANCH did not delete; clear it with scripts/release-freeze.sh clear $BRANCH at the end of the cut" >&2
+        fi
         [ -n "$REASON" ] && echo "freeze reason: $REASON" >&2
         echo "the branch is frozen for CODE pushes; plan-only pushes stay admitted" >&2
         echo "clear it at the back-merge push: scripts/release-freeze.sh clear $BRANCH" >&2
         echo "ok:freeze-set:$ref"
         ;;
+    land)
+        rc=0; out="$(_markers)" || rc=$?
+        [ "$rc" -eq 0 ] || { echo "refused:freeze:unreachable:git ls-remote $REMOTE failed or timed out"; exit 1; }
+        if [ -z "$out" ]; then
+            rc=0; landed="$(_landings)" || rc=$?
+            [ "$rc" -eq 0 ] || { echo "refused:freeze:unreachable:git ls-remote $REMOTE failed or timed out"; exit 1; }
+            if [ -n "$landed" ]; then
+                echo "ok:freeze-landing-already:$(printf '%s\n' "$landed" | head -1 | cut -f2)"; exit 0
+            fi
+            echo "refused:freeze:not-frozen:$BRANCH"
+            _afford "$BRANCH has no freeze marker on $REMOTE, so there is no freeze to hand over to a landing" \
+                "push the fix the ordinary way; to freeze first, run scripts/release-freeze.sh set $BRANCH"
+            exit 1
+        fi
+        # SUCCESSOR FIRST (1265-8qr6). The landing marker points at the same
+        # commit as the freeze marker (already on origin, so nothing uploads),
+        # and the freeze marker goes only once it is there.
+        sha="$(printf '%s\n' "$out" | head -1 | cut -f1)"
+        ref="$LNS/$BRANCH/$(_host)/$(date -u +%s)"
+        rc=0; err="$(_t 30 git push --quiet "$REMOTE" "$sha:$ref" 2>&1)" || rc=$?
+        if [ "$rc" -ne 0 ]; then
+            echo "refused:freeze:unreachable:could not push the landing marker to $REMOTE (the freeze still stands): $(_git_reason "$err")"; exit 1
+        fi
+        rc=0; _delete_all "$out" >/dev/null || rc=$?
+        if [ "$rc" -ne 0 ]; then
+            echo "refused:freeze:unreachable:the landing marker is set but a freeze marker would not delete, so the freeze still holds this land"
+            _afford "$REMOTE refused deleting the freeze marker for $BRANCH named above" \
+                "re-run scripts/release-freeze.sh land $BRANCH; it keeps the landing marker and retries the delete"
+            exit 1
+        fi
+        echo "$BRANCH reads frozen-landing until the fix lands; re-freeze then: scripts/release-freeze.sh set $BRANCH" >&2
+        echo "ok:freeze-landing:$ref"
+        ;;
     clear)
         rc=0; out="$(_markers)" || rc=$?
         [ "$rc" -eq 0 ] || { echo "refused:freeze:unreachable:git ls-remote $REMOTE failed or timed out"; exit 1; }
-        if [ -z "$out" ]; then echo "ok:freeze-cleared:0"; exit 0; fi
-        n=0
-        while IFS= read -r line; do
-            [ -n "$line" ] || continue
-            r="$(printf '%s' "$line" | cut -f2)"
-            if _t 30 git push --quiet "$REMOTE" --delete "$r" 2>/dev/null; then
-                n=$((n+1)); echo "cleared: $r" >&2
-            else
-                echo "refused:freeze:unreachable:could not delete $r"; exit 1
-            fi
-        done <<EOF
-$out
-EOF
+        rc=0; landed="$(_landings)" || rc=$?
+        [ "$rc" -eq 0 ] || { echo "refused:freeze:unreachable:git ls-remote $REMOTE failed or timed out"; exit 1; }
+        all="$(printf '%s\n%s\n' "$out" "$landed" | awk 'NF')"
+        if [ -z "$all" ]; then echo "ok:freeze-cleared:0"; exit 0; fi
+        rc=0; n="$(_delete_all "$all")" || rc=$?
+        [ "$rc" -eq 0 ] || { echo "refused:freeze:unreachable:could not delete the marker named above"; exit 1; }
         echo "ok:freeze-cleared:$n"
         ;;
 esac
