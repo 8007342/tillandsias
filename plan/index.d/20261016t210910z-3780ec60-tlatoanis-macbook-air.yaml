@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: every-push-guard-including-the-release-freeze-is-enforced-only-by-a-client-side-hook-that-build-sh-installs-so-a-host-with-no-rust-toolchain-runs-with-zero-enforcement-and-nothing-anywhere-reports-it
+    field: next_action
+    value: 'Part (a) LANDED as #487 (23d9dc736): scripts/lua/check-hooks-armed.lua, a read-only verdict wired into meta-orchestration Start Of Day and Start Of Cycle (test-hooks-armed.lua, gate step 887). LEFT: (b) criterion 6, the fleet survey. Each fleet host runs `tillandsias-plan script run scripts/lua/check-hooks-armed.lua` in its own checkout and records the one-line verdict on this row. Done: tlatoanis-macbook-air ok:hooks-armed:tillandsias-pre-push-v8 (2026-10-16). Live-only: it needs each host.'
+    ts: "2026-10-16T21:09:10Z"
+    host: tlatoanis-macbook-air
+    replaces_sha256: "d98e937ad6b978ff8a757baca4dd0973ada406202afd32ff6eb6ac2ef40dd5c4"

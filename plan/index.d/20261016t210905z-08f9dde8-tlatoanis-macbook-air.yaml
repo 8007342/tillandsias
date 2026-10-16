@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: every-image-digest-pin-is-a-multi-arch-index-and-a-guard-over-all-from-lines-refuses-a-single-platform-digest-that-the-mac-guests-qemu-binfmt-would-hide
+    field: status
+    value: implemented
+    ts: "2026-10-16T21:09:05Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: every-image-digest-pin-is-a-multi-arch-index-and-a-guard-over-all-from-lines-refuses-a-single-platform-digest-that-the-mac-guests-qemu-binfmt-would-hide
+    event:
+      type: progress
+      ts: "2026-10-16T21:09:05Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: Landed as #486 (46216cb67), green full gate. Option (a): check-image-pins.lua (offline, gate step 890) plus images/image-pins.yaml written by refresh-image-pins.lua (network, digest-verified); test-image-pins.lua (8 arms, gate step 891) covers criteria 1-3. Criterion 4 applies only to option (b), the build-time arch assertion, which is left as a follow-up.
