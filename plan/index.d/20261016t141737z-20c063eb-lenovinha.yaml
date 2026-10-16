@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-webkit-browser-window-reaches-its-projects-dev-service-hosts-like-chromium
+    event:
+      type: note
+      ts: "2026-10-16T14:17:37Z"
+      agent_id: linux-lenovinha-claude-20261016t141737z
+      host: lenovinha
+      summary: |
+        PR #476 (work/1725-wkfl, 804248acd). preview_hosts(project) in local_web_preview.rs, which is www plus every DEV_SERVICES name, is now the one list behind both the router SAN and the WebKit --add-host loop. The stale web. entry is dropped. Test webkit_window_spec_is_confined_like_the_chromium_window pins www and flutter.acme, and it is red with the old pair.
+        PREMISE CORRECTION: WebKit resolves *.localhost through GLib's loopback rule, the relay carries any host, and the forwarder accepts any *.<project>.localhost SNI. So WebKit very likely already reached flutter.<project> before this change; --add-host only matters for non-GLib clients. The PR is a consistency fix, not the cure this row assumed.
+        Criterion 2 (a live recorded WebKit window on a Flutter dev server) is still open. The operator approved a window on their screen on 2026-10-16; it runs with the next Linux smoke.

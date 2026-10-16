@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-16, split out of 1751-ipuw on the coordinator's request.
+packets:
+  - packet_id: the-macos-tray-shows-ready-with-an-empty-repo-list-and-no-error-while-the-guest-vault-is-stuck-at-operator-action-required
+    order: 1752-nd3t
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: S
+    pickup_role: any
+    capability_tags: [tray, macos, vault, fail-loud, sign-in]
+    related: [1751-ipuw, 731-eupn]
+    title: |
+      When the guest Vault cannot unseal and stops at "OPERATOR ACTION REQUIRED", the macOS tray still shows phase=Ready, the GitHub repo list goes to "(0 entries)", and nothing in the tray or its log says Vault is down. A user sees a working app with no repos and no reason, and the obvious response (sign in again) cannot help
+    context: |
+      MEASURED (v56.10.16.1 macOS smoke, 2026-10-16, during 1751-ipuw repro 2): the guest's `--list-cloud-projects` failed with "[vault-entrypoint] FATAL: unseal request returned HTTP 400: wrong key … OPERATOR ACTION REQUIRED". A normal tray launch on that disk then logged "phase=Ready podman_ready=true event=tillandsias-in-vm" (03:56:34Z), "github-login: menu_state updated" (03:56:55Z), then "cloud-projects: fetch unconfirmed; keeping previous list" and "cloud-projects: menu_state updated (0 entries)" (03:57:15Z). The tray log had no Vault line at all. A REBUILD recovered it (16 entries at 03:58:36Z).
+      This is distinct from 1751-ipuw (how the unseal breaks): whatever breaks Vault, the tray must not present it as Ready with an empty list.
+    exit_criteria:
+      - "a guest Vault in the operator-action state reaches the tray as a named state (menu line and/or notification naming Vault and the remedy), not Ready; a fixture over the vm-status/login mapping is red today"
+      - "the cloud list is not rendered as a confirmed empty list while Vault is down (731-eupn's rule: an unconfirmed answer is not an answer)"
+      - "live: a disk in the 1751-ipuw state shows the Vault state in the tray"
+    unscoreable: "the mapping fixture plus one live check on a broken-unseal disk"
+    next_action: >
+      Find what the guest publishes for Vault health on the push channel (vm-status events) and map the OPERATOR ACTION REQUIRED verdict to a tray state; then check why the login fetch reported a CONFIRMED empty list while Vault was sealed.
+    events:
+      - type: filed
+        ts: "2026-10-16T04:15:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Split from 1751-ipuw: with the guest Vault at OPERATOR ACTION REQUIRED, the tray shows Ready, 0 repos, and no error.

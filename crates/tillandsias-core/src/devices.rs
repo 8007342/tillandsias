@@ -453,6 +453,21 @@ mod tests {
         assert!(!m.approximated);
     }
 
+    /// ORDER 1713-8kff: the "open it as an iPhone 16" lane names this device;
+    /// pin the exact model (not the 16e, Plus or Pro) and its emulation shape.
+    #[test]
+    fn iphone_16_is_393x852_dpr3_mobile_touch_webkit() {
+        let m = r("iphone 16");
+        assert_eq!(m.id, "apple-iphone-16");
+        assert_eq!(m.viewport, Size { w: 393, h: 852 });
+        assert_eq!(m.dpr, 3.0);
+        assert_eq!(m.engine, "webkit");
+        assert!(m.device.mobile && m.device.touch);
+        assert!(m.device.ua.contains("iPhone OS 18_"));
+        assert!(!m.approximated);
+        assert_eq!(r("iPhone16").id, "apple-iphone-16");
+    }
+
     #[test]
     fn iphone_alone_is_the_newest_iphone_flagship() {
         let m = r("iphone");

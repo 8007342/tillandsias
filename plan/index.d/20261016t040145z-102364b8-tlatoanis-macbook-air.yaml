@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-macos-tray-quit-while-ready-still-says-securing-vault-leaves-an-unseal-secret-the-vault-rejects-so-every-later-boot-of-that-disk-has-no-sign-ins-while-the-tray-shows-ready
+    field: status
+    value: in_progress
+    ts: "2026-10-16T04:01:45Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: a-macos-tray-quit-while-ready-still-says-securing-vault-leaves-an-unseal-secret-the-vault-rejects-so-every-later-boot-of-that-disk-has-no-sign-ins-while-the-tray-shows-ready
+    event:
+      type: progress
+      ts: "2026-10-16T04:01:45Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: claimed on the coordinator assignment (top row); read first
