@@ -1,0 +1,13 @@
+# Gate step 1716-t2gi — every `FROM …@sha256:` pin under images/ and
+# observatorium/ must be a multi-arch INDEX digest carrying linux/amd64 and
+# linux/arm64, as recorded in images/image-pins.yaml. A single-platform digest
+# builds emulated and mislabelled on the macOS guest (qemu-x86_64 binfmt), and
+# nothing else fails. Offline: the record is written by
+# scripts/lua/refresh-image-pins.lua (network), never by this step.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking every image digest pin is a multi-arch index (1716-t2gi)"
+STEP_LUA="scripts/lua/check-image-pins.lua"
+STEP_ERROR="a FROM pins a digest that is not a recorded multi-arch index with amd64 and arm64 (1716-t2gi) — see the refused: lines above; pin the index digest, then run scripts/lua/refresh-image-pins.lua and commit images/image-pins.yaml"
+STEP_OK="Every image digest pin is a recorded multi-arch index"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-16 darwin ok:image-pins:from=17 pinned=3 tag=13 arg=1 stage=0"
