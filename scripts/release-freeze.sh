@@ -172,6 +172,14 @@ _git_reason() {
 
 _afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
 
+# The marker read itself failed: whether <branch> is frozen is unknown, never
+# "not frozen" (1265-8qr6 reads both namespaces, so either can fail).
+_ls_unreachable() {
+    echo "refused:freeze:unreachable:git ls-remote $REMOTE failed or timed out"
+    _afford "$REMOTE did not answer the marker read, so whether $BRANCH is frozen or landing is unknown — never read as clear" \
+        "check the network and credentials for $REMOTE (git ls-remote $REMOTE), then re-run scripts/release-freeze.sh $CMD $BRANCH"
+}
+
 _markers() { # -> "<sha>\t<ref>" lines, oldest first, empty when not frozen
     freeze_markers "$REMOTE" "$BRANCH"
 }
@@ -280,9 +288,7 @@ case "$CMD" in
         fi
         if [ -z "$out" ]; then
             rc=0; out="$(_landings)" || rc=$?
-            if [ "$rc" -ne 0 ]; then
-                echo "refused:freeze:unreachable:git ls-remote $REMOTE failed or timed out"; exit 1
-            fi
+            if [ "$rc" -ne 0 ]; then _ls_unreachable; exit 1; fi
             if [ -n "$out" ]; then
                 # Frozen, the cut's own fix landing (1265-8qr6): hold code as
                 # for frozen; the freeze returns when the land does.
@@ -341,10 +347,10 @@ case "$CMD" in
         ;;
     land)
         rc=0; out="$(_markers)" || rc=$?
-        [ "$rc" -eq 0 ] || { echo "refused:freeze:unreachable:git ls-remote $REMOTE failed or timed out"; exit 1; }
+        [ "$rc" -eq 0 ] || { _ls_unreachable; exit 1; }
         if [ -z "$out" ]; then
             rc=0; landed="$(_landings)" || rc=$?
-            [ "$rc" -eq 0 ] || { echo "refused:freeze:unreachable:git ls-remote $REMOTE failed or timed out"; exit 1; }
+            [ "$rc" -eq 0 ] || { _ls_unreachable; exit 1; }
             if [ -n "$landed" ]; then
                 echo "ok:freeze-landing-already:$(printf '%s\n' "$landed" | head -1 | cut -f2)"; exit 0
             fi
@@ -374,13 +380,18 @@ case "$CMD" in
         ;;
     clear)
         rc=0; out="$(_markers)" || rc=$?
-        [ "$rc" -eq 0 ] || { echo "refused:freeze:unreachable:git ls-remote $REMOTE failed or timed out"; exit 1; }
+        [ "$rc" -eq 0 ] || { _ls_unreachable; exit 1; }
         rc=0; landed="$(_landings)" || rc=$?
-        [ "$rc" -eq 0 ] || { echo "refused:freeze:unreachable:git ls-remote $REMOTE failed or timed out"; exit 1; }
+        [ "$rc" -eq 0 ] || { _ls_unreachable; exit 1; }
         all="$(printf '%s\n%s\n' "$out" "$landed" | awk 'NF')"
         if [ -z "$all" ]; then echo "ok:freeze-cleared:0"; exit 0; fi
         rc=0; n="$(_delete_all "$all")" || rc=$?
-        [ "$rc" -eq 0 ] || { echo "refused:freeze:unreachable:could not delete the marker named above"; exit 1; }
+        if [ "$rc" -ne 0 ]; then
+            echo "refused:freeze:unreachable:could not delete the marker named above"
+            _afford "$REMOTE refused deleting a marker for $BRANCH (the failed: line above), so some markers may remain" \
+                "re-run scripts/release-freeze.sh clear $BRANCH; it deletes whatever is left"
+            exit 1
+        fi
         echo "ok:freeze-cleared:$n"
         ;;
 esac
