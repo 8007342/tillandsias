@@ -29,6 +29,8 @@ size: instant
 # PRE-FIX RESULT: FAILS — tools/list has no msg tools, msg_send/msg_recv/
 # msg_list/msg_status do not exist, and both entrypoints print nothing under
 # the dry-run seam. Measured: 0/8 arms on the pre-1506-ssb5 tree.
+# Arm 9 (1746-4q34) FAILS on the pre-1746 tree: the second msg_send of a
+# server started before the binary existed answers ": command not found".
 
 preconditions:
   - workspace contains scripts/test-fleet-msg-mcp.sh
@@ -45,15 +47,15 @@ critical_path:
     expected_behavior: "ok: fleet-msg-mcp-fixture-parses"
 
   - step: "eight arms: surface (with the no-msg_ack negative control), round-trip, secret (negative control), degraded, argv, codex entrypoint, opencode entrypoint, protocol error"
-    command: "out=$(bash scripts/test-fleet-msg-mcp.sh 2>&1); rc=$?; case \"$out\" in (*'ok:fleet-msg-mcp:8/8'*) [ \"$rc\" = 0 ] && echo 'ok: fleet-msg-mcp 8/8' ;; (*) printf '%s\\n' \"$out\" | grep -E '^(FAIL|fail:)' | head -12; exit 1 ;; esac"
+    command: "out=$(bash scripts/test-fleet-msg-mcp.sh 2>&1); rc=$?; case \"$out\" in (*'ok:fleet-msg-mcp:9/9'*) [ \"$rc\" = 0 ] && echo 'ok: fleet-msg-mcp 9/9' ;; (*) printf '%s\\n' \"$out\" | grep -E '^(FAIL|fail:)' | head -12; exit 1 ;; esac"
     timeout_ms: 120000
-    expected_behavior: "ok: fleet-msg-mcp 8/8"
+    expected_behavior: "ok: fleet-msg-mcp 9/9"
 
 observability:
   traces:
     - "@trace order:1506-ssb5"
     - "@trace openspec/changes/fleet-messaging-poc/design.md#decision-1"
-  expected_log: "ok:fleet-msg-mcp:8/8"
+  expected_log: "ok:fleet-msg-mcp:9/9"
   log_fields:
     spec: "ci-release"
     test: "fleet-msg-mcp"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # MCP Server: Forge Plan + Methodology Query Tools
 # freshness: updated 2026-08-16 windows-yolanda-fable5-20260816t0921z
-# @trace order:456, order:394b, order:394c, spec:spec-traceability, invariant:plan_is_queried_via_mcp_server_avoiding_heuristic_parsing
+# @trace order:456, order:394b, order:394c, order:1746-4q34, spec:spec-traceability, invariant:plan_is_queried_via_mcp_server_avoiding_heuristic_parsing
 # Communicates via JSON-RPC over stdin/stdout (MCP stdio transport)
 #
 # Tools:
@@ -1177,9 +1177,19 @@ expert_capability_report() {
 # tillandsias-plan argv) and PIPES it, so it can never appear in `ps` or shell
 # history the way a `--body`/`-m` flag would (msg_store.rs refuses those
 # flags outright for the same reason).
-msg_capability_gap() {
+#
+# The lazy re-resolve lives in msg_resolve, called in the CALLER's shell, never
+# inside msg_capability_gap: the callers capture the gap as "$(...)", a
+# subshell, so a path resolved there died with it. A server started while the
+# experts were still building resolved the binary for the gap check only, then
+# exec'd an empty "$PLAN_BIN" ("line 1207: : command not found") on every msg
+# call for the rest of the session (1746-4q34).
+msg_resolve() {
     [ -n "$PLAN_BIN" ] || PLAN_BIN="$(resolve_plan_bin)"
     [ -n "$PLAN_INDEX" ] || PLAN_INDEX="$(resolve_plan_index)"
+}
+
+msg_capability_gap() {
     if [ -z "$PLAN_BIN" ]; then
         printf 'the msg tools need tillandsias-plan — experts state: %s' "$(experts_state_line)"
         return 0
@@ -1193,6 +1203,7 @@ msg_query() {
     local verb="$1"
     shift
     local gap
+    msg_resolve
     gap="$(msg_capability_gap)"
     if [ -n "$gap" ]; then
         unsupported_envelope "$gap"
@@ -1215,6 +1226,7 @@ msg_send_tool() {
     local body="$1"
     shift
     local gap
+    msg_resolve
     gap="$(msg_capability_gap)"
     if [ -n "$gap" ]; then
         unsupported_envelope "$gap"
