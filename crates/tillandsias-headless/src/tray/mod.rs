@@ -4627,6 +4627,35 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
                     let _ =
                         futures::executor::block_on(service_for_probe.rebuild_after_state_change());
 
+                    // Order 1719-83po: the Cloudflare row appears only now
+                    // (GitHub signed in), and Vault has just answered. If the
+                    // startup read raced a cold Vault and left Unknown, settle
+                    // it on THIS event; otherwise the row would stay disabled
+                    // until the next launch, with nothing to wake it.
+                    let cf_unknown = state_handle
+                        .lock()
+                        .expect("tray state lock")
+                        .cloudflare_login
+                        == shared_menu::CloudflareLoginState::Unknown;
+                    if cf_unknown {
+                        let observed = read_cloudflare_login_state(debug);
+                        let changed = {
+                            let mut state = state_handle.lock().expect("tray state lock");
+                            if state.cloudflare_login != observed {
+                                state.cloudflare_login = observed;
+                                state.bump_revision();
+                                true
+                            } else {
+                                false
+                            }
+                        };
+                        if changed {
+                            let _ = futures::executor::block_on(
+                                service_for_probe.rebuild_after_state_change(),
+                            );
+                        }
+                    }
+
                     // Prepopulate the cloud list so the submenu is ready on the
                     // user's first open instead of racing an AboutToShow.
                     match cloud::refresh_cloud_projects_if_stale(state_handle, false, debug) {
