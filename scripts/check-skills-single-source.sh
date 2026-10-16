@@ -224,6 +224,10 @@ EOF
         esac
         is_declared "$s" && continue
         echo "violation:missing-from-runtime:$d/skills/$s"
+        # 1247-amcu: why and remedy on stderr; stdout stays the one pinned
+        # line. Never offers HARNESS-SCOPED.txt as the fix (1256-f7td).
+        printf '  why: skills/%s is canonical but %s/skills does not link it, so an agent launched under that harness cannot see the skill\n' "$s" "$d" >&2
+        printf '  remedy: link it (ln -s ../../skills/%s %s/skills/%s && git add %s/skills/%s), or link the whole tree as .gemini does (%s/skills -> ../skills); skills/HARNESS-SCOPED.txt is only for a skill that exists for one runtime alone\n' "$s" "$d" "$s" "$d" "$s" "$d" >&2
         exit 1
     done
 done
