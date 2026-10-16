@@ -6401,6 +6401,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
         _stamp_verdict="$(bash "$SCRIPT_DIR/scripts/gate-stamp.sh" verify 2>/dev/null)" || true
         if [[ "$_stamp_verdict" != "ok:gate-fresh" ]]; then
             _error "refused:install-after-check:${_stamp_verdict:-no-verdict} — the check passed but its stamp does not vouch for this tree, so nothing is installed"
+            _error "  why: an install must name the green gate it builds; a stamp that is missing or stale for this tree names none (1237-f9dy)"
+            _error "  remedy: run ./build.sh --check --install again with nothing writing to the checkout; scripts/gate-stamp.sh verify says what moved"
             exit 1
         fi
         _stamp_digest="$(bash "$SCRIPT_DIR/scripts/gate-stamp.sh" compute 2>/dev/null)" || _stamp_digest=unknown
