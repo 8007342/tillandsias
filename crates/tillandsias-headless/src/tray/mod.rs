@@ -5782,6 +5782,46 @@ mod tests {
         }
     }
 
+    /// ORDER 1713-1dnx: a root-run server (the WSL / macOS VM guest, rootful
+    /// podman) hands the lane dir and socket to the forge's uid 1000, keeping
+    /// 0700 / 0600; a non-root server (Linux native, keep-id) leaves its own
+    /// uid on both. On a root runner (the tillandsias-build distro) this
+    /// exercises the real chown, not just the decision.
+    #[test]
+    fn mcp_lane_socket_is_handed_to_the_forge_uid_only_when_served_as_root() {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+        assert_eq!(crate::mcp_socket::forge_owner_for_euid(0), Some(1000));
+        assert_eq!(crate::mcp_socket::forge_owner_for_euid(1000), None);
+        assert_eq!(crate::mcp_socket::forge_owner_for_euid(501), None);
+
+        let _env_lock = crate::runtime_assets::env_lock();
+        let runtime = short_runtime_root();
+        let prior = std::env::var_os("XDG_RUNTIME_DIR");
+        unsafe { std::env::set_var("XDG_RUNTIME_DIR", runtime.path()) };
+        let res = start_mcp_socket_server_for_lane("ownerlane", "w1");
+        let sock = mcp_socket_path_for_lane("ownerlane", "w1");
+        let dir = mcp_socket_host_dir_for_lane("ownerlane", "w1");
+        let sock_meta = std::fs::symlink_metadata(&sock);
+        let dir_meta = std::fs::symlink_metadata(&dir);
+        match prior {
+            Some(value) => unsafe { std::env::set_var("XDG_RUNTIME_DIR", value) },
+            None => unsafe { std::env::remove_var("XDG_RUNTIME_DIR") },
+        }
+        assert!(
+            res.is_ok(),
+            "start_mcp_socket_server_for_lane failed: {res:?}"
+        );
+        let (sock_meta, dir_meta) = (sock_meta.expect("socket"), dir_meta.expect("dir"));
+
+        let euid = unsafe { libc::geteuid() };
+        let want = crate::mcp_socket::forge_owner_for_euid(euid).unwrap_or(euid);
+        assert_eq!(sock_meta.uid(), want, "socket owner (server euid {euid})");
+        assert_eq!(dir_meta.uid(), want, "lane dir owner (server euid {euid})");
+        assert_eq!(sock_meta.permissions().mode() & 0o777, 0o600);
+        assert_eq!(dir_meta.permissions().mode() & 0o777, 0o700);
+    }
+
     /// ORDER 1581-sunl. A runtime root short enough for a unix socket on every
     /// host: macOS caps sun_path at 104 bytes and its TMPDIR
     /// (/var/folders/<hash>/T/, 49 chars) pushed the derived
