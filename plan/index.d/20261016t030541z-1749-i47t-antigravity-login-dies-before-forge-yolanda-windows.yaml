@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yolanda-windows (2026-10-16) from the operator's v56.10.15.1 session.
+packets:
+  - packet_id: the-antigravity-lane-reaches-a-forge-or-names-why-its-login-step-ended
+    order: 1749-i47t
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [antigravity, agy, login, forge, windows, vm]
+    related: [1747-qc4d]
+    depends_on: []
+    title: |
+      The Antigravity lane never reached a forge on Windows v56.10.15.1: its login container's command died after 8 s and the lane ended without saying why
+    context: |
+      Operator report (2026-10-16): the Antigravity lane failed to start. Evidence from the WSL guest journal and the Windows tray log, read after the operator closed the tray:
+      - tray.log 02:27:05Z: Attach { scope: Cloud, name: "8007342/lakanoa", agent: Antigravity }, in-VM PTY opened in Windows Terminal.
+      - 19:27:09-19:27:12 PDT (02:27Z): only the lane's stack starts (router, git-lakanoa mirror). No forge container is created for the lane at any point.
+      - 19:28:35 PDT: container tillandsias-antigravity-login-346661 (forge image v56.10.15.1) is created and started. Its exec starts at 19:28:36, the proxy shows CONNECT antigravity.google:443 and the agy auto-updater at 19:28:37, and exec_died follows at 19:28:44 (8 s). The container is removed at 19:28:44, and the lane's git mirror shuts down at 19:29:26.
+      The exit code and stdout went to the operator's terminal and were not captured; the container was --rm, so /tmp/forge-lifecycle.log is gone. Cross-check: agy --version works inside a forge (forge tillandsias-87).
+    exit_criteria:
+      - 'a failed or cancelled Antigravity login step leaves a durable record (tray log or guest journal) naming the exit status and the reason, without secrets'
+      - 'live: on Windows, choosing Antigravity for a cloud project either reaches a running forge, or ends with that named reason visible in the terminal and the log'
+    unscoreable: "needs-live-repro: the 8 s exit is unexplained until the login step's status is captured"
+    next_action: >
+      Reproduce on Windows with the login exec's status and output kept, then decide whether the login step or the lane's handling of it is at fault.
+    provenance: |
+      Filed by yolanda-windows, 2026-10-16, at the request of yolanda-tillandsias-forge (relayed for 1747-qc4d).
+    events:
+      - type: filed
+        ts: "2026-10-16T03:05:41Z"
+        host: yolanda-windows
+        summary: |-
+          Antigravity login container died after 8 s; no forge was started.
