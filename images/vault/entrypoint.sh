@@ -48,9 +48,13 @@ unseal_error_detail() {
     local body="$1" detail
     detail="$(printf '%s' "$body" | jq -r 'if type == "object" and (.errors | type) == "array" then (.errors | map(tostring) | join("; ")) else empty end' 2>/dev/null || true)"
     [ -n "$detail" ] || detail="(no errors array in Vault's response)"
-    printf '%s' "$detail" \
-        | sed -E 's/[0-9A-Fa-f]{32,}/<redacted:hex>/g; s/[A-Za-z0-9+\/]{40,}={0,2}/<redacted:b64>/g' \
-        | tr '\n' ' ' | cut -c1-300
+    # Newline-exact on GNU and BSD alike: GNU `cut` (and some seds) end the
+    # last line with a newline that BSD's do not, so the text is captured with
+    # $(...), its trailing whitespace trimmed, and cut with a bash substring.
+    detail="$(printf '%s' "$detail" | tr '\n' ' ' \
+        | sed -E 's/[0-9A-Fa-f]{32,}/<redacted:hex>/g; s/[A-Za-z0-9+\/]{40,}={0,2}/<redacted:b64>/g')"
+    detail="${detail%"${detail##*[![:space:]]}"}"
+    printf '%s' "${detail:0:300}"
 }
 # END unseal_error_detail
 
