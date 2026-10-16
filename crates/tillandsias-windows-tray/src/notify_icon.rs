@@ -4590,8 +4590,9 @@ fn dispatch_action(hwnd: HWND, action: MenuAction) {
         | MenuAction::OpenOpenCodeWeb
         | MenuAction::ProjectObservatorium { .. }
         | MenuAction::ProjectOpenCodeWeb { .. } => {
-            // ShellExecute to the observatorium / OpenCode-Web URL lands with
-            // the router/VM (gui-passthrough); there is no URL until then.
+            // Order 1713-3v3f: these never open the host's browser. When they
+            // land they open in the dev browser (host-browser browser.open, a
+            // WSLg container window); until then there is nothing to open.
             tracing::info!(
                 ?action,
                 "browser action: no URL until the VM + router are up (gui-passthrough pending)"

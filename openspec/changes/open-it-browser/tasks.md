@@ -30,6 +30,7 @@
 
 - [ ] 5.1 WSLg browser window (Windows' own row)
 - [ ] 5.2 AppContainer-confined NPU inference helper (1656-kbfh, child of 483)
+- [ ] 5.3 No host-browser launch anywhere: remove the launch sites, add the guard (1713-3v3f); the toast hand-off lands with 1702-bpnx
 
 ## 6. Any host
 

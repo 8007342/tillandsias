@@ -3462,6 +3462,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Forge browser-claim check passed"
+    # 1713-3v3f: Tillandsias never launches or drives a host browser. Every
+    # launcher-shaped call site in crates/ must be on the guard's allowlist at
+    # its exact count (only file/app opens, never a URL).
+    _step "Checking no code path launches a host browser (1713-3v3f)..."
+    if ! _run_lua_decider "scripts/lua/check-no-host-browser-launch.lua" 2>&1; then
+        _error "a code path hands a URL to the host browser (1713-3v3f) — see the unlisted/count-mismatch lines above"
+        exit 1
+    fi
+    _info "No-host-browser-launch check passed"
     _info "Fast refusals passed"
 
     # 765-uti9 quick win (velocity audit F3): the dedicated `cargo check
@@ -5174,6 +5183,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Forge browser-claim fixture passed"
+
+    # The no-host-browser-launch guard's own fixture (1713-3v3f): this tree, a
+    # planted second launch site refused, cardinality, comment/test blindness,
+    # launcher context, and an empty root.
+    _step "Checking the no-host-browser-launch guard's fixture (1713-3v3f)..."
+    if ! _run_lua_decider "scripts/lua/test-no-host-browser-launch.lua" 2>&1; then
+        _error "the no-host-browser-launch guard's fixture failed — see the FAIL lines above (1713-3v3f)"
+        exit 1
+    fi
+    _info "No-host-browser-launch fixture passed"
 
     # 1750-a4re: the forge's Claude Bash hook fails CLOSED (no decider -> every
     # command refused, a decider that fails -> refused), the overlay names a
