@@ -329,6 +329,34 @@ const EMBEDDED_HEADLESS_AARCH64: &[u8] =
 /// bridge and the tray can never drift to different distros.
 pub const DISTRO_NAME: &str = tillandsias_vm_layer::wsl::DEFAULT_WSL_DISTRO;
 
+/// Order 1719-83po slice 5: where the Cloudflare login wrapper is injected; the
+/// tray's Cloudflare Login console runs this bare path (no shell
+/// metacharacters in the argv), as GitHub Login runs `github-login.sh`.
+pub const CLOUDFLARE_LOGIN_WRAPPER_PATH: &str = "/usr/local/lib/tillandsias/cloudflare-login.sh";
+
+/// The Cloudflare login wrapper: `github-login.sh`'s shape (environment, a
+/// full-output tee to a guest-side log, the login's own exit code, a pause on
+/// failure so the console doesn't vanish), running the paste-mode login the
+/// shared PTY intent runs. Paste mode: the browser runs on the Windows host,
+/// so the guest can't count on its loopback receiver being reachable.
+pub(crate) const CLOUDFLARE_LOGIN_WRAPPER: &str = r#"#!/usr/bin/env bash
+set -u
+export HOME="${HOME:-/root}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+install -d -m 0700 "$XDG_RUNTIME_DIR"
+export TILLANDSIAS_VAULT_API_BASE_URL="${TILLANDSIAS_VAULT_API_BASE_URL:-https://vault:8200}"
+LOG_DIR="$HOME/.cache/tillandsias"
+LOG="$LOG_DIR/cloudflare-login-last.log"
+install -d -m 0700 "$LOG_DIR"
+/usr/local/bin/tillandsias-headless --cloudflare-login --via paste 2>&1 | tee "$LOG"
+rc=${PIPESTATUS[0]}
+if [ "$rc" -ne 0 ]; then
+  printf '\n[tillandsias] cloudflare-login exited %s; full output saved to %s\n' "$rc" "$LOG"
+  sleep 10
+fi
+exit "$rc"
+"#;
+
 /// The derived-state wipe a SOFT reset runs inside the guest (order 1437-3iux).
 /// It matches the Linux SOFT reset's destroyed set without its trailing init;
 /// see `WslLifecycle::soft_wipe_guest` for why the init is left to
@@ -1740,6 +1768,15 @@ exit "$rc"
         )
         .await?;
 
+        // 1c. cloudflare-login.sh (1719-83po slice 5): the same shape for the
+        // tray's Cloudflare Login console. See CLOUDFLARE_LOGIN_WRAPPER.
+        self.wsl_root_write(
+            CLOUDFLARE_LOGIN_WRAPPER_PATH,
+            CLOUDFLARE_LOGIN_WRAPPER,
+            true,
+        )
+        .await?;
+
         // 2. headless-preflight.sh
         let preflight_script = r#"#!/usr/bin/env bash
 set -euo pipefail
@@ -2614,6 +2651,36 @@ mod tests {
         assert!(
             body.contains("rc=${PIPESTATUS[0]}"),
             "the login's own exit code must survive the pipeline, not tee's"
+        );
+    }
+
+    /// Order 1719-83po slice 5: the Cloudflare wrapper keeps github-login.sh's
+    /// diagnosable shape, and the tray's console argv is its bare path.
+    #[test]
+    fn cloudflare_login_wrapper_runs_the_paste_login_and_keeps_its_output() {
+        let launch = CLOUDFLARE_LOGIN_WRAPPER
+            .lines()
+            .find(|l| l.contains("--cloudflare-login"))
+            .expect("the wrapper must launch the Cloudflare login");
+        assert!(
+            launch
+                .starts_with("/usr/local/bin/tillandsias-headless --cloudflare-login --via paste"),
+            "absolute guest binary, paste mode (the browser is on the Windows host): {launch}"
+        );
+        assert!(
+            launch.contains("2>&1 | tee"),
+            "both streams reach the log: {launch}"
+        );
+        assert!(
+            CLOUDFLARE_LOGIN_WRAPPER.contains("rc=${PIPESTATUS[0]}")
+                && CLOUDFLARE_LOGIN_WRAPPER.contains("exit \"$rc\""),
+            "the login's own exit code must survive the pipeline"
+        );
+        assert!(
+            CLOUDFLARE_LOGIN_WRAPPER_PATH
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || "/-._".contains(c)),
+            "the console argv is one bare path with no shell metacharacters"
         );
     }
 

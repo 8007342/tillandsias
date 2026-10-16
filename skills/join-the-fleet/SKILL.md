@@ -218,7 +218,10 @@ there.
      THEN, still before `gh pr ready`, run the gate's own deciders on
      the MERGED work ref: `./build.sh --preflight` (order 1305-udgs;
      every guard that can refuse a push, in seconds, no build; `--full`
-     for the whole roster). A work-ref push only WARNS on a red decider,
+     for the whole roster). Read BOTH its exit status and its verdict
+     line: a non-zero exit beside `refused=0` is the door itself failing,
+     not a pass (darwin bash 3.2 crashed after printing `refused=0`,
+     1753-p925). A work-ref push only WARNS on a red decider,
      so nothing before this step refuses for you. MEASURED 2026-09-22:
      three of six reviewed, fixture-green PRs were dropped from one
      relay by sub-second deciders their authors never ran (an unguarded

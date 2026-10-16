@@ -1,0 +1,13 @@
+# Gate step 1753-p925 — the preflight door over 300 trivial guards, run under
+# /bin/bash (3.2 on darwin, 5 on Linux), exits 0 with its ok: verdict. Before
+# the fix, darwin's bash 3.2 aborted on heap corruption (exit 133, after the
+# verdict line) once the roster reached 260: the late worktree sweep ran one
+# process substitution per guard root. Also pins the cause: no _pf_* door
+# function reads a process substitution.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the preflight door survives a 300-guard roster (1753-p925)"
+STEP_LUA="scripts/lua/test-preflight-door-many-guards.lua"
+STEP_ERROR="the preflight door crashed or failed over 300 trivial guards, or a _pf_* function reads a process substitution again (1753-p925) — see the FAIL lines above"
+STEP_OK="Preflight door survives a 300-guard roster"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-16 darwin ok:preflight-door-many-guards:2 arms, N=300"

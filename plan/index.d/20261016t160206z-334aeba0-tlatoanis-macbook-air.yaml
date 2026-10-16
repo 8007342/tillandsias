@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-guest-forge-image-builds-fail-two-of-four-times-kswapd-soft-lockup-and-a-silent-helper-exit-101
+    event:
+      type: progress
+      ts: "2026-10-16T16:02:06Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        Part 2: 5th clean fresh-disk build on v56.10.16.2 macOS: REBUILD then --opencode rc=0 in 253 s, image built, 4.3G peak build step, 0 soft-lockup lines, root 5.5G/20G. Part 2 now stands at 5/5 builds on the product path (4 on 16.1, 1 on 16.2).

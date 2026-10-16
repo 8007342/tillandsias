@@ -393,8 +393,25 @@ _pf_classify() {  # $1 = rc, $2 = captured output file
 # with its OWN TMPDIR, and afterwards the door removes ONLY the worktrees whose
 # registered path lies under that directory (never by name pattern), prints
 # each as `swept:worktree:<path>` into <outfile>.swept, and deletes the dir.
-_pf_sweep_under() {  # $1 = resolved root, $2 = root as given, $3 = file to append to, $4 = tag
-    local _k _v
+#
+# ORDER 1753-p925. NO PROCESS SUBSTITUTION HERE. The worktree listing is read
+# from a FILE that a plain foreground `git … >file` wrote, never from
+# `< <(git …)`. In darwin's /bin/bash 3.2 a process substitution is an async
+# child, its SIGCHLD is reaped with malloc inside the signal handler, and the
+# late sweep below ran one per guard root: at a 260-guard roster the handler
+# landed inside a realloc every run and bash aborted on heap corruption
+# ("BUG IN CLIENT OF LIBMALLOC: memory corruption of free block"), exit 133
+# AFTER the verdict line. $5 = a listing file a caller already wrote (the late
+# sweep writes it once for all roots); without it this writes its own.
+_pf_worktree_list() {  # $1 = file to write
+    git -C "$SCRIPT_DIR" worktree list --porcelain > "$1" 2>/dev/null || : > "$1"
+}
+_pf_sweep_under() {  # $1 = resolved root, $2 = root as given, $3 = file to append to, $4 = tag, $5 = listing (optional)
+    local _k _v _list="${5:-}" _own=""
+    if [ -z "$_list" ]; then
+        _list="$3.wtlist"; _own=1
+        _pf_worktree_list "$_list"
+    fi
     while read -r _k _v; do
         [ "$_k" = worktree ] || continue
         case "$_v" in
@@ -407,7 +424,8 @@ _pf_sweep_under() {  # $1 = resolved root, $2 = root as given, $3 = file to appe
                     echo "$4-failed:$_v" >> "$3"
                 fi ;;
         esac
-    done < <(git -C "$SCRIPT_DIR" worktree list --porcelain 2>/dev/null)
+    done < "$_list"
+    [ -z "$_own" ] || rm -f "$_list"
 }
 _pf_sweep_guard_tmp() {  # $1 = the guard's TMPDIR, $2 = outfile
     local _gt="$1" _real
@@ -460,6 +478,8 @@ _pf_sweep_declared_artifacts() {  # $1 = guard path (roster-relative), $2 = outf
         fi
     done < "$_decl"
     [ "${#_globs[@]}" -gt 0 ] || return 0
+    # 1753-p925: listed into a file, never `< <(git …)` (see _pf_sweep_under)
+    git -C "$SCRIPT_DIR" ls-files --others --exclude-standard > "$2.untracked" 2>/dev/null || : > "$2.untracked"
     while IFS= read -r _f; do
         [ -n "$_f" ] || continue
         for _g in "${_globs[@]}"; do
@@ -474,7 +494,8 @@ _pf_sweep_declared_artifacts() {  # $1 = guard path (roster-relative), $2 = outf
                     break ;;
             esac
         done
-    done < <(git -C "$SCRIPT_DIR" ls-files --others --exclude-standard 2>/dev/null)
+    done < "$2.untracked"
+    rm -f "$2.untracked"
 }
 # ORDER 1650-fb7z. A STALE INDEX LOCK. Three preflights on yolanda (2026-10-12)
 # each left a 0-byte .git/index.lock with no git alive, and the next git add /
@@ -553,8 +574,10 @@ _pf_sweep_late() {  # $1 = the preflight run dir
     local _r
     [ -n "$1" ] && [ -d "$1" ] || return 0
     if [ -s "$1/guard-tmp-roots" ]; then
+        # 1753-p925: ONE listing for every root, read from a file.
+        _pf_worktree_list "$1/late.wtlist"
         while read -r _r; do
-            [ -n "$_r" ] && _pf_sweep_under "$_r" "$_r" "$1/late.swept" "swept:worktree-late"
+            [ -n "$_r" ] && _pf_sweep_under "$_r" "$_r" "$1/late.swept" "swept:worktree-late" "$1/late.wtlist"
         done < "$1/guard-tmp-roots"
     fi
     # ORDER 1650-fb7z: a guard the door never killed can still leave the lock.
@@ -979,6 +1002,13 @@ _pf_launcher() {  # $1 = work dir, $2 = deadline, $3 = jobs, $4 = decider deadli
 # substrate (check-cycle-flow-log-fresh reports the LOOP's staleness;
 # check-installer-channel the RELEASE's state).
 _preflight_roster() {
+    # ORDER 1753-p925 TEST SEAM: a file of roster lines replaces the roster, so
+    # scripts/lua/test-preflight-door-many-guards.lua can run the real door over N
+    # trivial guards. Never set outside that fixture.
+    if [ -n "${TILLANDSIAS_PREFLIGHT_ROSTER_FILE:-}" ]; then
+        cat "$TILLANDSIAS_PREFLIGHT_ROSTER_FILE"
+        return
+    fi
     # 1. the fast-refusal tier's own literal invocations
     awk '/# .. FAST REFUSALS \(order 1009-gccx\)/,/_info "Fast refusals passed"/' "$SCRIPT_DIR/build.sh" \
         | grep -ohE 'scripts/check-[a-z0-9-]+\.sh'
@@ -5144,6 +5174,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Forge browser-claim fixture passed"
+
+    # 1750-a4re: the forge's Claude Bash hook fails CLOSED (no decider -> every
+    # command refused, a decider that fails -> refused), the overlay names a
+    # shipped absolute path, the pre-1750 bare command exits 127 (the
+    # fail-open), and the host bridge still allows on the same missing binary.
+    _step "Checking the forge Bash policy hook fails closed (1750-a4re)..."
+    if ! _run_lua_decider "scripts/lua/test-forge-bash-policy-hook-fails-closed.lua" 2>&1; then
+        _error "the forge Bash policy hook fixture failed — see the FAIL lines above (1750-a4re)"
+        exit 1
+    fi
+    _info "Forge Bash policy hook fixture passed"
 
     # ORDER 1384-bxhk — the shell ratchet: prints the Lua migration's counts on
     # every --check, refuses a NEW .sh decider (check-/test-/verify-/guard-), a

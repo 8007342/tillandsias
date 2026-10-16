@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace order:1506-ssb5, openspec/changes/fleet-messaging-poc/specs/fleet-messaging/spec.md
+# @trace order:1506-ssb5, order:1746-4q34, openspec/changes/fleet-messaging-poc/specs/fleet-messaging/spec.md
 #
 # The fleet message bus's MCP surface (1506-ssb5): forge-plan.sh's
 # msg_send/msg_recv/msg_list/msg_status tools, wrapping `tillandsias-plan msg`
@@ -29,9 +29,15 @@
 #   7 opencode    the same property for the OpenCode entrypoint (task 3.2)
 #   8 protocol    an invalid msg_send call (no `to`) is a JSON-RPC protocol
 #                 error (-32602), not a silently-executed tool
+#   9 late-binary ONE server started before tillandsias-plan exists (the
+#                 experts still building) answers msg_send degraded, then,
+#                 once the binary is installed, queues the next msg_send
+#                 (1746-4q34: it exec'd an empty $PLAN_BIN, "line 1207: :
+#                 command not found", for the rest of the session)
 #
 # PRE-FIX RESULT: arms 1-3, 5, 8 fail (no such tools); arm 4 fails (nothing to
-# degrade); arms 6-7 fail (the entrypoints print nothing).
+# degrade); arms 6-7 fail (the entrypoints print nothing). Arm 9, against the
+# 1506-ssb5 tree: the second answer is ": command not found".
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -39,7 +45,7 @@ FP="$ROOT/images/default/config-overlay/mcp/forge-plan.sh"
 CODEX_ENTRYPOINT="$ROOT/images/default/entrypoint-forge-codex.sh"
 OPENCODE_ENTRYPOINT="$ROOT/images/default/entrypoint-forge-opencode.sh"
 pass=0
-total=8
+total=9
 ok() { echo "ok:   $1"; pass=$((pass + 1)); }
 bad() { echo "FAIL: $1" >&2; }
 
@@ -246,6 +252,48 @@ if [ "$("$PLAN" json get -r '.error.code // empty' <<<"$resp8" 2>/dev/null)" = "
     ok "8 protocol: msg_send with no 'to' is a JSON-RPC -32602 error, not a tool result"
 else
     bad "8 resp=[$resp8]"
+fi
+
+# ── arm 9: a server that starts before the binary exists ────────────────────
+# One long-lived server, so both calls hit the SAME process state (rpc() above
+# starts a fresh server per request and could never see a stale path). Run
+# outside any checkout, with no override, so the only binary it can find is the
+# canonical install that this arm creates between the two calls.
+late="$W/late"
+mkdir -p "$late/home" "$late/cwd"
+late_send='{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"msg_send","arguments":{"to":["'"$H"'/b-default"],"body":"FYI:1746-4q34:late binary\n- 1746-4q34"}}}'
+preinstalled=""
+for c in /usr/local/bin/tillandsias-plan /usr/bin/tillandsias-plan; do
+    [ -e "$c" ] && preinstalled="$preinstalled $c"
+done
+if [ -n "$preinstalled" ]; then
+    bad "9 could-not-run: a system tillandsias-plan exists (${preinstalled# }), so no server can start without a binary here"
+else
+    coproc LATE {
+        cd "$late/cwd" && env -u TILLANDSIAS_PLAN_BIN -u TILLANDSIAS_PLAN_INDEX \
+            -u TILLANDSIAS_MSG_ROOT -u TILLANDSIAS_MSG_LANE_DIR -u TILLANDSIAS_MSG_SHAPE_LAX \
+            HOME="$late/home" XDG_STATE_HOME="$late/state" TILLANDSIAS_MSG_HOST="$H" \
+            TILLANDSIAS_MSG_LANE=a-default TILLANDSIAS_MSG_FORGE_MOUNT="$late/no-forge-mount" \
+            TILLANDSIAS_MSG_FLEET_DIR="$late/fleet" bash "$FP" 2>"$late/err"
+    }
+    late_in="${LATE[1]}"
+    late_out="${LATE[0]}"
+    early="" later=""
+    printf '%s\n' "$late_send" >&"$late_in"
+    IFS= read -r -t 60 early <&"$late_out" || true
+    mkdir -p "$late/home/.local/bin"
+    cp "$PLAN" "$late/home/.local/bin/tillandsias-plan"
+    printf '%s\n' "$late_send" >&"$late_in"
+    IFS= read -r -t 60 later <&"$late_out" || true
+    exec {late_in}>&-
+    wait "$LATE_PID" 2>/dev/null || true
+    early_conf="$("$PLAN" json get -r '.confidence // empty' <<<"$(text "$early")" 2>/dev/null)"
+    later_text="$(text "$later")"
+    if [ "$early_conf" = "unsupported" ] && [ "${later_text#ok:msg:queued:m-}" != "$later_text" ]; then
+        ok "9 late-binary: one server started with no tillandsias-plan answers msg_send degraded (NEGATIVE CONTROL: the binary really was absent), then queues the next msg_send once the binary is installed"
+    else
+        bad "9 early_confidence=[$early_conf] later=[$later_text]"
+    fi
 fi
 
 if [ "$pass" = "$total" ]; then

@@ -37,6 +37,8 @@ impl ProjectScope {
 pub enum MenuAction {
     Quit,
     GithubLogin,
+    /// Order 1719-83po: open a VM terminal running the Cloudflare login.
+    CloudflareLogin,
     /// Per-project attach with an explicit agent (from the per-project submenu).
     Attach {
         scope: ProjectScope,
@@ -77,6 +79,7 @@ pub fn resolve(id: &str) -> MenuAction {
     match id {
         ids::QUIT => MenuAction::Quit,
         ids::GITHUB_LOGIN => MenuAction::GithubLogin,
+        ids::CLOUDFLARE_LOGIN => MenuAction::CloudflareLogin,
         // NOTE: `ids::RESET_GUEST` deliberately resolves to `Inert` (via the
         // fallthrough): the menu leaf was removed by operator order
         // 2026-07-22 (tray-ux "UX curation governance"); the reset
