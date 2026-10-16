@@ -103,12 +103,15 @@ case "$mode" in
         ;;
     container)
         # The toolchain inside is the one rust-toolchain.toml pins (rustup reads
-        # it from the mounted tree). Registry and target dir persist under $TDIR.
+        # it from the mounted tree). The target dir persists under $TDIR.
         image="docker.io/library/rust:$(sed -n 's/^channel = "\(.*\)"/\1/p' "$ROOT/rust-toolchain.toml")-slim"
-        mkdir -p "$TDIR/container-registry"
+        # The registry lives in the user cache, never in the checkout: crates
+        # carry their own .py helpers, and check-no-python-scripts scans the tree.
+        registry="${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/forge-plan-cargo-registry"
+        mkdir -p "$registry"
         echo "[build-forge-plan-bin] no musl C toolchain on this host: building in ${image} (musl-tools)"
         podman run --rm --security-opt label=disable \
-            -v "$ROOT:/src" -v "$TDIR:/musl-target" -v "$TDIR/container-registry:/usr/local/cargo/registry" \
+            -v "$ROOT:/src" -v "$TDIR:/musl-target" -v "$registry:/usr/local/cargo/registry" \
             -w /src -e CARGO_TARGET_DIR=/musl-target "$image" sh -c \
             "apt-get -qq update >/dev/null && apt-get -qq install -y musl-tools >/dev/null 2>&1 \
              && rustup target add ${TARGET} >/dev/null 2>&1 \
