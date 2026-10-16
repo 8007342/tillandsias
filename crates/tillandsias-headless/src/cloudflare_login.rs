@@ -9,7 +9,8 @@
 //!
 //! - **loopback**: a listener on `127.0.0.1` (never `0.0.0.0`) on the first
 //!   free port of [`REGISTERED_LOOPBACK_PORTS`] at [`CALLBACK_PATH`]; the
-//!   browser is opened on the authorize URL; the listener takes EXACTLY ONE
+//!   authorize URL is PRINTED for the operator to click (nothing launches a
+//!   host browser: 1713-3v3f); the listener takes EXACTLY ONE
 //!   callback, checks `state` before reading anything else, and closes. It
 //!   gives up after [`LOGIN_WINDOW`].
 //! - **qr**: a terminal QR of the authorize URL whose `redirect_uri` is the
@@ -328,13 +329,18 @@ impl Via {
     }
 }
 
-/// The default receiver (spec): loopback when a desktop session AND a
-/// browser opener exist, else qr when a relay is configured, else paste.
-pub fn default_via(desktop_with_opener: bool, relay_configured: bool) -> Via {
-    if desktop_with_opener {
-        Via::Loopback
-    } else if relay_configured {
+/// The default receiver. OPERATOR RULING 2026-10-16 (recorded on 1713-3v3f):
+/// QR FIRST on every platform, so the user can sign in on a phone with 2FA,
+/// with the printed URL as the local fallback. So: qr whenever a relay is
+/// configured (a phone cannot reach 127.0.0.1, so a QR needs the relay), else
+/// loopback on a desktop session (the URL is printed, never auto-opened),
+/// else paste. Before, a desktop always took loopback and auto-opened the
+/// host browser, so a configured relay never produced a QR there.
+pub fn default_via(desktop_session: bool, relay_configured: bool) -> Via {
+    if relay_configured {
         Via::Qr
+    } else if desktop_session {
+        Via::Loopback
     } else {
         Via::Paste
     }
@@ -448,7 +454,7 @@ fn receive_loopback(
             return Err(Refusal::login(
                 "timeout",
                 "no callback reached the loopback listener within the login window; the listener is closed",
-                "run `tillandsias --cloudflare-login` again and approve in the browser that opens, or use `--via paste`",
+                "run `tillandsias --cloudflare-login` again and open the printed URL, or use `--via paste`",
             ));
         }
         match listener.accept() {
@@ -641,9 +647,12 @@ pub struct LoginDeps<'a> {
     pub relay_url: Option<String>,
     pub relay_poll_url: Option<String>,
     pub loopback_ports: Vec<u16>,
-    /// Opens the system browser on a URL. Receives the authorize URL only.
-    pub open_browser: &'a dyn Fn(&str) -> Result<(), String>,
-    pub desktop_with_opener: bool,
+    /// TEST SEAM: what happens after the loopback URL is printed. Production
+    /// passes a no-op, because the operator clicks the printed URL; nothing
+    /// here launches a host browser (1713-3v3f). Tests pass a fake browser
+    /// that follows the URL. Receives the authorize URL only.
+    pub follow_url: &'a dyn Fn(&str) -> Result<(), String>,
+    pub desktop_session: bool,
     pub stdin_is_terminal: bool,
     /// Reads one pasted line from the terminal.
     pub read_paste: &'a mut dyn FnMut() -> Result<String, String>,
@@ -691,8 +700,7 @@ pub fn login(
     if deps.host_is_forge {
         return Err(forge_refusal("cloudflare-login"));
     }
-    let via =
-        via.unwrap_or_else(|| default_via(deps.desktop_with_opener, deps.relay_url.is_some()));
+    let via = via.unwrap_or_else(|| default_via(deps.desktop_session, deps.relay_url.is_some()));
 
     // Receiver preconditions, before any network call.
     if let Some(relay) = deps.relay_url.as_deref()
@@ -792,12 +800,7 @@ pub fn login(
     let deadline = Instant::now() + deps.window;
     let code = match via {
         Via::Loopback => {
-            if (deps.open_browser)(&pending.authorize_url).is_err() {
-                let _ = writeln!(
-                    out,
-                    "note:cloudflare-login:browser-not-opened (open the URL above in a browser on THIS machine)"
-                );
-            }
+            let _ = (deps.follow_url)(&pending.authorize_url);
             let l = listener.take().expect("loopback bound above");
             let r = receive_loopback(&l, &pending.state, deadline);
             drop(l);
@@ -938,7 +941,7 @@ fn show_authorize_url(via: Via, pending: &Pending, deps: &LoginDeps<'_>, out: &m
         Via::Loopback => {
             let _ = writeln!(
                 out,
-                "Opening your browser to sign in to Cloudflare. If it does not open, visit this URL on THIS machine:"
+                "Open this URL in a browser on THIS machine to sign in to Cloudflare (click it, or copy it):"
             );
             let _ = writeln!(out, "  {}", pending.authorize_url);
         }
@@ -1149,35 +1152,6 @@ pub fn parse_args(args: &[String]) -> Result<Command, Refusal> {
     })
 }
 
-/// The system browser opener, if one is on PATH.
-fn browser_opener() -> Option<std::path::PathBuf> {
-    let name = if cfg!(target_os = "macos") {
-        "open"
-    } else {
-        "xdg-open"
-    };
-    let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path)
-        .map(|d| d.join(name))
-        .find(|p| p.is_file())
-}
-
-/// Open `url` with the opener. The URL is the authorize URL (public data
-/// only); nothing secret is placed in argv or in the child's environment.
-fn open_with(opener: &std::path::Path, url: &str) -> Result<(), String> {
-    let mut child = std::process::Command::new(opener)
-        .arg(url)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .map_err(|_| "opener-spawn-failed".to_string())?;
-    std::thread::spawn(move || {
-        let _ = child.wait();
-    });
-    Ok(())
-}
-
 /// One line from the terminal with echo OFF (restored before returning), at
 /// most [`MAX_PASTE_BYTES`].
 fn read_paste_line_from_terminal() -> Result<String, String> {
@@ -1244,11 +1218,8 @@ pub fn run_cli(args: &[String]) -> i32 {
             &mut stdout,
         ),
         Command::Login { via } => {
-            let opener = browser_opener();
-            let open = |url: &str| match opener.as_deref() {
-                Some(o) => open_with(o, url),
-                None => Err("no-opener".to_string()),
-            };
+            // The URL is printed; nothing launches a host browser (1713-3v3f).
+            let follow = |_: &str| Ok(());
             let mut read = read_paste_line_from_terminal;
             let mut deps = LoginDeps {
                 http: &http,
@@ -1258,8 +1229,8 @@ pub fn run_cli(args: &[String]) -> i32 {
                 relay_url: nonempty(RELAY_URL_ENV),
                 relay_poll_url: nonempty(RELAY_POLL_URL_ENV),
                 loopback_ports: REGISTERED_LOOPBACK_PORTS.to_vec(),
-                open_browser: &open,
-                desktop_with_opener: crate::has_graphical_session() && opener.is_some(),
+                follow_url: &follow,
+                desktop_session: crate::has_graphical_session(),
                 stdin_is_terminal: std::io::stdin().is_terminal(),
                 read_paste: &mut read,
                 litmus_stop: std::env::var_os("LITMUS_PODMAN_MODE").is_some(),
@@ -1580,9 +1551,11 @@ mod tests {
 
     #[test]
     fn cloudflare_login_default_receiver_order() {
-        assert_eq!(default_via(true, true), Via::Loopback);
-        assert_eq!(default_via(true, false), Via::Loopback);
+        // QR FIRST wherever a relay exists, a desktop included (operator
+        // ruling 2026-10-16, 1713-3v3f); the printed URL otherwise.
+        assert_eq!(default_via(true, true), Via::Qr);
         assert_eq!(default_via(false, true), Via::Qr);
+        assert_eq!(default_via(true, false), Via::Loopback);
         assert_eq!(default_via(false, false), Via::Paste);
     }
 
@@ -1796,8 +1769,8 @@ mod tests {
             relay_url: None,
             relay_poll_url: None,
             loopback_ports: vec![0],
-            open_browser: open,
-            desktop_with_opener: false,
+            follow_url: open,
+            desktop_session: false,
             stdin_is_terminal: false,
             read_paste: read,
             litmus_stop: false,
