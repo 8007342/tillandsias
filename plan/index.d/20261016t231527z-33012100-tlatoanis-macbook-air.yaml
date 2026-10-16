@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: engine-selection-prefers-a-bare-metal-ollama-where-one-exists-and-falls-back-to-a-throwaway-container-with-measured-overhead-so-every-host-must-report-which-lane-served-rather-than-only-that-one-did
+    field: status
+    value: implemented
+    ts: "2026-10-16T23:15:27Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: engine-selection-prefers-a-bare-metal-ollama-where-one-exists-and-falls-back-to-a-throwaway-container-with-measured-overhead-so-every-host-must-report-which-lane-served-rather-than-only-that-one-did
+    event:
+      type: progress
+      ts: "2026-10-16T23:15:27Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: Landed on linux-next as 61425c28c (PR #488), full Linux gate green. Remaining live check: lenovinha runs --probe-fallback against a real container after its smoke.
