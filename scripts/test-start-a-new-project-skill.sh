@@ -43,7 +43,7 @@ if (HOME="$H" TILLANDSIAS_SHARED_SKILLS_ROOT="$W/opt-skills" \
         bash -c 'set -e; . "$1" >/dev/null 2>&1' _ "$ROOT/images/default/config-overlay/mcp/agent-profile.sh") \
     && [ -L "$H/.claude/skills/start-a-new-project" ] \
     && [ -L "$H/.codex/skills/start-a-new-project" ] \
-    && [ -L "$H/.config/opencode/skill/start-a-new-project" ]; then
+    && [ -L "$H/.config/opencode/skills/start-a-new-project" ]; then
     ok "ARM 2: a forge on any project links start-a-new-project for Claude Code, Codex and OpenCode"
 else
     bad "ARM 2: agent-profile.sh did not link start-a-new-project into every harness's skill dir"

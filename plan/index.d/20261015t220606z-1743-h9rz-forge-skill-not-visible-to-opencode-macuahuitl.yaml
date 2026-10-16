@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-start-a-new-project-skill-ships-in-the-forge-image-but-the-opencode-agent-does-not-list-it
+    order: 1743-h9rz
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: S
+    pickup_role: linux
+    capability_tags: [forge, skills, opencode, onboarding]
+    related: [1705-bgen, 1446-qkx4]
+    depends_on: []
+    title: |
+      The onboarding skill start-a-new-project is present at /opt/skills in the v56.10.15.1 forge, yet the OpenCode agent says it is not among its available skills. The onboarding release's headline feature is invisible to the agent, which blocks stable promotion
+    context: |
+      Windows smoke of v56.10.15.1 (yolanda, plan/issues/e2e-smoke-v56.10.15.1-windows-2026-10-15.md, section 4): /opt/skills/start-a-new-project exists in the image, but the OpenCode agent answered "no such skill exists in my available-skills list".
+      The registration path is link_forge_generic_skills in images/default/config-overlay/mcp/agent-profile.sh. It symlinks each generic skill into ~/.claude/skills, ~/.codex/skills, ~/.gemini/skills and ~/.config/opencode/skill. Candidate causes, not yet discriminated:
+        (a) the lane yolanda ran did not source agent-profile.sh, so no link was made;
+        (b) the link exists, but the installed OpenCode reads another directory (skills/ plural, say) or does not follow a symlink;
+        (c) the link exists and is read, but OpenCode's skill discovery needs something the SKILL.md lacks (frontmatter name/description shape).
+      The Windows lane was a directed in-guest lane, not the tray's OpenCode launch, so (a) is live. That makes the result not yet Windows-specific.
+    exit_criteria:
+      - "in a forge launched the way an end user launches it (tray -> project -> OpenCode), the agent's own skill listing contains start-a-new-project; recorded with the listing output"
+      - "a fixture that runs the installed OpenCode's skill discovery (or its documented search paths, read from the shipped version) against the agent-profile-linked HOME fails on today's tree and passes after the fix"
+    unscoreable: "unpinnable-until-the-guard-exists: the discovery fixture is the deliverable"
+    next_action: >
+      In a v56.10.15.1 forge, ls -la ~/.config/opencode/skill ~/.config/opencode/skills ~/.claude/skills. That separates (a) no link from (b)/(c) link present. Then read the shipped OpenCode version's skill search paths, fix the link target or the profile sourcing, and write the fixture.
+    provenance: |
+      Filed by macuahuitl-fedora, 2026-10-15T22:06:06Z, from yolanda's Windows smoke FAIL of v56.10.15.1.
+    events:
+      - type: filed
+        ts: "2026-10-15T22:06:06Z"
+        host: macuahuitl
+        summary: |-
+          Onboarding skill ships in /opt/skills but OpenCode does not list it; blocks v56.10.15.1 stable.

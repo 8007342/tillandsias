@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: an-opt-in-flutter-web-toolchain-reaches-forges-through-a-sibling-image-with-pub-dev-and-flutter-artifacts-allowed
+    field: status
+    value: completed
+    ts: "2026-10-15T19:39:32Z"
+    host: lenovinha
+
+events:
+  - packet_id: an-opt-in-flutter-web-toolchain-reaches-forges-through-a-sibling-image-with-pub-dev-and-flutter-artifacts-allowed
+    event:
+      type: completed
+      ts: "2026-10-15T19:39:32Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: Flutter fixes landed via PR #449 as 4453aadcc (head 541816353) and the first-navigation follow-up via PR #453 as d6026be0f; both on linux-next and in tag v56.10.15.1

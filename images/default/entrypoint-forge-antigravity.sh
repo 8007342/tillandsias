@@ -82,8 +82,12 @@ trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 # @trace order:1447-nmq3
 # Trust the checked-out project in agy's settings.json (trustedWorkspaces), so
 # the "Do you trust the contents of this project?" dialog does not appear.
-# Forge-gated inside the function.
+seed_agy_workspace_trust "/home/forge/src" || true
 seed_agy_workspace_trust "$PROJECT_DIR" || true
+
+# @trace order:1678-62p7, spec:host-browser-mcp
+# Configure forge MCP servers (forge-plan, project-info, host-browser, git-tools)
+apply_antigravity_config_overlay || true
 
 # ── Startup context injection ───────────────────────────────
 # @trace spec:project-bootstrap-readme

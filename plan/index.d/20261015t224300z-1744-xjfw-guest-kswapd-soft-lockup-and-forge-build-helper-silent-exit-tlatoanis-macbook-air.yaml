@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-15, from the v56.10.15.1 macOS smoke.
+packets:
+  - packet_id: macos-guest-forge-image-builds-fail-two-of-four-times-kswapd-soft-lockup-and-a-silent-helper-exit-101
+    order: 1744-xjfw
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: M
+    pickup_role: macos
+    capability_tags: [macos, vm, forge, image-build, memory, swap, fail-loud]
+    related: [1377-hcnv, 1376-8zdz, 919-jii2, 1744-jrjw]
+    title: |
+      On v56.10.15.1 macOS (8 vCPU / 8 GiB guest, 24 GiB disk swap plus 2 GiB zram), the forge image build failed in two of four attempts on a clean disk. In the first, an in-guest `tillandsias-headless --init` wedged the guest in a kswapd0 soft lockup on CPU 3 (943 s and growing, with RCU stalls). In the second, on a freshly rebuilt disk, the detached forge ensure helper exited 101 (Rust's panic code) and its log holds only the forge-base pull lines, so the failure says nothing about its cause
+    context: |
+      MEASURED, all on 2026-10-15 and all with the release binary.
+      (1) 21:26Z: --opencode ~/src/tillandsias built the forge image and ran the agent; exit 0 after 10.5 min.
+      (2) About 22:03Z: --exec-guest running `tillandsias-headless --init` (it builds every image). From about 218 s into the boot, the console shows "watchdog: BUG: soft lockup - CPU#3 stuck for Ns! [kswapd0:81]", rising to 943 s, plus "rcu_preempt detected expedited stalls on CPUs { 3 }". Vault went on logging on other CPUs. Both swaps were active: /dev/vdb 24 GiB and zram0 2 GiB. The run was stopped by PID after 20 minutes. Console saved: target/smoke-e2e/11-console-kswapd-lockup.log on the smoke host.
+      (3) 22:27Z, after a forced REBUILD gave a fresh rootfs: --opencode exited 1 with "detached image ensure helper for forge exited 101". The log tail is the forge-base pull only. The guest journal shows buildah steps between 22:27:53Z and 22:32:14Z, one of them "4.2G memory peak … 1min 12.891s", and no panic text anywhere. (A run at 22:23Z on the force-stopped disk died differently, with a Go register dump. It is discounted here as 1744-jrjw's dirty disk.)
+      (4) 22:33Z, the same disk, immediately after (3): --opencode built the forge image and ran the agent; exit 0 after 5.6 min.
+      A 4.2 GiB build step on an 8 GiB guest that also runs Vault, the proxy and git puts the guest deep into swap. Whether that is the cause of either failure is NOT established.
+    exit_criteria:
+      - "the forge ensure helper's panic or error text reaches its log file and the user-facing error (fail loud): a fixture that makes the helper panic asserts the message is in the log (red today)"
+      - "five consecutive forge builds on a fresh macOS guest succeed, or the failing one names its cause; record memory and swap peaks for each"
+      - "if memory pressure is the cause: the build step is bounded (podman build --memory or fewer parallel jobs) or the guest sizing accounts for it (919-jii2)"
+    unscoreable: "the helper-panic fixture plus the five-build live record"
+    next_action: >
+      First make the helper's stderr land in image-build-forge.log, so the next failure names its step. Then rerun builds with `free -m` and vmstat sampling to tie the lockup to the 4.2 GiB step, or rule it out.
+    events:
+      - type: filed
+        ts: "2026-10-15T22:43:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          macOS guest forge builds: 2 of 4 succeeded on a clean disk; a kswapd0 soft lockup under in-guest --init, and a silent helper exit 101 on a fresh disk.

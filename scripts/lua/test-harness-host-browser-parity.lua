@@ -20,10 +20,8 @@
 --   opencode   config-overlay/opencode/config.json (full environment passed)
 --   codex      config-overlay/codex/register-experts.sh SERVERS heredoc, and
 --              its host-browser line must forward the socket variable
---   antigravity has no MCP registration yet — a NAMED GAP (order 1678-62p7),
---              printed every run; when a registration appears the gap line
---              says to make it a checked harness
---   1 DECLARED   claude, opencode and codex each declare host-browser at the
+--   antigravity config-overlay/antigravity/mcp_config.json (full environment passed)
+--   1 DECLARED   claude, opencode, codex and antigravity each declare host-browser at the
 --                shipped command path
 --   2 SOCKET     host-browser.sh still reads TILLANDSIAS_CONTROL_SOCKET and codex
 --                forwards exactly that name (the launch builders that set it are
@@ -100,6 +98,10 @@ local function check_codex(body)
     local s = codex_servers(body)
     return s["host-browser"] ~= nil
 end
+local function check_antigravity(body)
+    local e = json_entry(body, "host-browser")
+    return e ~= nil and e:find('"command"%s*:%s*"' .. CMD:gsub("%p", "%%%0") .. '"') ~= nil
+end
 local function codex_forwards(body)
     local rest = codex_servers(body)["host-browser"] or ""
     for w in rest:gmatch("%S+") do if w == VAR then return true end end
@@ -109,13 +111,14 @@ end
 local claude = read(OVL .. "claude/mcp.json")
 local opencode = read(OVL .. "opencode/config.json")
 local codex = read(OVL .. "codex/register-experts.sh")
+local antigravity = read(OVL .. "antigravity/mcp_config.json")
 local server = read(OVL .. "mcp/host-browser.sh")
 local agy = read("images/default/entrypoint-forge-antigravity.sh")
 
 -- ── 1 declared ─────────────────────────────────────────────────────────────
-local c1, o1, x1 = check_claude(claude), check_opencode(opencode), check_codex(codex)
-arm("1 DECLARED claude, opencode and codex declare host-browser at " .. CMD,
-    c1 and o1 and x1, "claude=" .. tostring(c1) .. " opencode=" .. tostring(o1) .. " codex=" .. tostring(x1))
+local c1, o1, x1, a1 = check_claude(claude), check_opencode(opencode), check_codex(codex), (check_antigravity(antigravity) and agy:find("apply_antigravity_config_overlay", 1, true) ~= nil)
+arm("1 DECLARED claude, opencode, codex and antigravity declare host-browser at " .. CMD,
+    c1 and o1 and x1 and a1, "claude=" .. tostring(c1) .. " opencode=" .. tostring(o1) .. " codex=" .. tostring(x1) .. " antigravity=" .. tostring(a1))
 
 -- ── 2 the socket variable reaches the server ───────────────────────────────
 local reads = 0
@@ -134,12 +137,14 @@ local caught = {
     claude = not check_claude(drop_json(claude)),
     opencode = not check_opencode(drop_json(opencode)),
     codex = not check_codex(drop_codex(codex)),
+    antigravity = not check_antigravity(drop_json(antigravity)),
 }
-local mutated = drop_json(claude) ~= claude and drop_json(opencode) ~= opencode and drop_codex(codex) ~= codex
+local mutated = drop_json(claude) ~= claude and drop_json(opencode) ~= opencode and drop_codex(codex) ~= codex and drop_json(antigravity) ~= antigravity
 arm("3 DROPPED each harness with host-browser removed is caught",
-    mutated and caught.claude and caught.opencode and caught.codex,
+    mutated and caught.claude and caught.opencode and caught.codex and caught.antigravity,
     "mutations-landed=" .. tostring(mutated) .. " claude=" .. tostring(caught.claude) ..
-    " opencode=" .. tostring(caught.opencode) .. " codex=" .. tostring(caught.codex))
+    " opencode=" .. tostring(caught.opencode) .. " codex=" .. tostring(caught.codex) ..
+    " antigravity=" .. tostring(caught.antigravity))
 
 -- ── 4 codex registering it without the variable is caught ──────────────────
 local unforwarded = codex:gsub("\nhost%-browser[^\n]*", "\nhost-browser")
@@ -148,12 +153,8 @@ arm("4 UNFORWARDED codex's host-browser line without " .. VAR .. " (the trunk sh
     "mutation-landed=" .. tostring(unforwarded ~= codex) .. " still-declared=" .. tostring(check_codex(unforwarded)) ..
     " forwards=" .. tostring(codex_forwards(unforwarded)))
 
--- ── the named gap ──────────────────────────────────────────────────────────
-if agy:find("host-browser", 1, true) or agy:find("mcp_config", 1, true) then
-    out.line("note: antigravity's entrypoint now names host-browser or mcp_config — make it a checked harness here and close the gap (1678-62p7)")
-else
-    out.line("gap:antigravity:no-mcp-registration — order 1678-62p7")
-end
+-- ── the named gap (order 1678-62p7 closed) ─────────────────────────────────
+out.line("ok:   antigravity host-browser registration verified — order 1678-62p7 closed")
 
 if #failed > 0 then
     verdict.emit("violation:harness-host-browser-parity:" .. #failed .. "-failed", 1)

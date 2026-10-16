@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: antigravity-forge-lane-has-no-host-browser-mcp-registration
+    field: status
+    value: completed
+    ts: "2026-10-14T23:23:01Z"
+    host: linux
+
+events:
+  - packet_id: antigravity-forge-lane-has-no-host-browser-mcp-registration
+    event:
+      type: completed
+      ts: "2026-10-14T23:23:01Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: test-harness-host-browser-parity.lua passes with 4 arms verifying Antigravity, OpenSpec host-browser-mcp spec updated
+  - packet_id: antigravity-forge-lane-has-no-host-browser-mcp-registration
+    event:
+      type: note
+      ts: "2026-10-14T23:23:01Z"
+      host: linux
+      summary: |-
+        Antigravity config overlay deployed with host-browser, git-tools, project-info, and forge-plan MCPs; test-harness-host-browser-parity.lua verifies Antigravity and named gap 1678-62p7 is closed

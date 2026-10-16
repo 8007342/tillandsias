@@ -81,7 +81,9 @@ link_forge_generic_skills() {
     local src_root="${TILLANDSIAS_SHARED_SKILLS_ROOT:-/opt/skills}" home="${HOME:-/home/forge}" skill dir
     for skill in $TILLANDSIAS_FORGE_GENERIC_SKILLS; do
         [ -f "$src_root/$skill/SKILL.md" ] || continue
-        for dir in "$home/.claude/skills" "$home/.codex/skills" "$home/.gemini/skills" "$home/.config/opencode/skill"; do
+        # 1743-h9rz: OpenCode's global skill directory is skills/ (plural), per
+        # opencode.ai/docs/skills; the singular skill/ was never searched.
+        for dir in "$home/.claude/skills" "$home/.codex/skills" "$home/.gemini/skills" "$home/.config/opencode/skills"; do
             [ -e "$dir/$skill" ] || [ -L "$dir/$skill" ] && continue
             mkdir -p "$dir" 2>/dev/null && ln -s "$src_root/$skill" "$dir/$skill" 2>/dev/null
         done
@@ -89,6 +91,24 @@ link_forge_generic_skills() {
     return 0
 }
 link_forge_generic_skills || true
+
+# ORDER 1724-kcj4 — guidance every forge agent receives, whatever the project.
+# The startup-context addendum reaches only Tillandsias checkouts, and only
+# OpenCode is pointed at .forge-startup-context.md (1725-23q0), so guidance
+# there never reached a Claude or Codex agent elsewhere. ONE file, linked as
+# each harness's USER-level instructions, which every harness loads beneath a
+# project's own CLAUDE.md / AGENTS.md. Never overwrite a file already there.
+link_forge_agent_guidance() {
+    local src="${TILLANDSIAS_FORGE_GUIDANCE:-${HOME:-/home/forge}/.config-overlay/mcp/forge-agent-guidance.md}"
+    local home="${HOME:-/home/forge}" target
+    [ -f "$src" ] || return 0
+    for target in "$home/.claude/CLAUDE.md" "$home/.codex/AGENTS.md" "$home/.gemini/GEMINI.md" "$home/.config/opencode/AGENTS.md"; do
+        [ -e "$target" ] || [ -L "$target" ] && continue
+        mkdir -p "${target%/*}" 2>/dev/null && ln -s "$src" "$target" 2>/dev/null
+    done
+    return 0
+}
+link_forge_agent_guidance || true
 
 # Log agent profile activation (optional, useful for debugging)
 if [ "${TRACE_LIFECYCLE:-0}" = "1" ]; then
