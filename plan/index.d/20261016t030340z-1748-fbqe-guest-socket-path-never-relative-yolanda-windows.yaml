@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yolanda-windows at macuahuitl-fedora's request (2026-10-16).
+packets:
+  - packet_id: a-guest-socket-path-is-never-resolved-relative-to-root
+    order: 1748-fbqe
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, wsl, vm, mcp, msg, guest-binary]
+    related: [1713-1dnx]
+    depends_on: []
+    title: |
+      A guest socket path is never resolved relative to /: an empty XDG_RUNTIME_DIR counts as unset
+    context: |
+      Evidence (forge tillandsias-87 on Windows 56.10.16.1, recorded at 194352b39 and relayed by macuahuitl-fedora): mountinfo inside the forge shows /run/host/tillandsias-mcp and /run/host/tillandsias-msg with source /tillandsias/mcp/tillandsias-default. That is a path under the guest root, not under /run/user/<uid>.
+      Both control_socket_host_dir (crates/tillandsias-headless/src/main.rs) and mcp_socket_base_dir (crates/tillandsias-headless/src/mcp_socket.rs) take XDG_RUNTIME_DIR whenever env::var returns Ok, including when it is EMPTY. PathBuf::from("") joined with tillandsias/mcp is the relative tillandsias/mcp/..., which resolves against the process cwd (/).
+      Hypothesis, unproven: the guest attach child carries XDG_RUNTIME_DIR set but empty. Not fixed in 1713-1dnx on purpose, because control_socket_host_dir also places control.sock and other sockets, and moving them needs live proof.
+    exit_criteria:
+      - 'live: inside the WSL guest, the env of the attach child shows whether XDG_RUNTIME_DIR is empty, and the forge mountinfo source of /run/host/tillandsias-mcp is an absolute runtime dir, never under /tillandsias'
+      - 'both resolvers treat an empty XDG_RUNTIME_DIR as unset, with a unit test that sets it to "" and asserts an absolute path'
+      - 'every consumer of control_socket_host_dir in the guest (control.sock, mcp, browser) still agrees on the path after the change'
+    unscoreable: "needs-live-guest-evidence: the cause is a hypothesis until the attach child's env is read in a live WSL guest"
+    next_action: >
+      When the VM is free, read the attach child's environ and the forge mountinfo; then fix both resolvers together with the test.
+    provenance: |
+      Filed by yolanda-windows, 2026-10-16, while fixing 1713-1dnx; macuahuitl-fedora asked for it as its own p2 row.
+    events:
+      - type: filed
+        ts: "2026-10-16T03:03:40Z"
+        host: yolanda-windows
+        summary: |-
+          Empty XDG_RUNTIME_DIR resolves guest socket dirs relative to /.
