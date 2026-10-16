@@ -116,6 +116,10 @@ pub struct ContainerSpec {
     /// 1656-tjv4): a WebKit window maps exactly its project's names to its
     /// forwarder. Only a validated hostname and a parsed IP get here.
     hosts: Vec<(String, std::net::IpAddr)>,
+    /// No IPv6 in the container's network namespace (order 1725-cgh2), typed
+    /// rather than a sysctl passthrough: the one sysctl a container may ask
+    /// for, and it only removes capability.
+    ipv6_disabled: bool,
     options: Vec<String>,
     publish: Vec<String>,
     entrypoint: Option<String>,
@@ -149,6 +153,7 @@ impl ContainerSpec {
             tmpfs: Vec::new(),
             devices: Vec::new(),
             hosts: Vec::new(),
+            ipv6_disabled: false,
             options: Vec::new(),
             publish: Vec::new(),
             entrypoint: None,
@@ -302,6 +307,20 @@ impl ContainerSpec {
         Ok(self)
     }
 
+    /// Disable IPv6 in the container (`net.ipv6.conf.all.disable_ipv6=1`).
+    ///
+    /// Order 1725-cgh2: an interface's IPv6 link-local address is TENTATIVE
+    /// for ~2.5-3 s after the container starts (duplicate address detection,
+    /// measured on an --internal network), and its turn to valid reads to
+    /// Chromium as a new address: it aborts every in-flight request with
+    /// net::ERR_NETWORK_CHANGED. With the sysctl, the runtime applies it
+    /// before the process starts and eth0 never carries IPv6 (measured: no
+    /// address from t=0 to 3 s). For a container that needs no IPv6.
+    pub fn disable_ipv6(mut self) -> Self {
+        self.ipv6_disabled = true;
+        self
+    }
+
     pub fn entrypoint(mut self, value: impl Into<String>) -> Self {
         self.entrypoint = Some(value.into());
         self
@@ -413,6 +432,10 @@ impl ContainerSpec {
 
         for (host, ip) in &self.hosts {
             args.push(format!("--add-host={host}:{ip}"));
+        }
+
+        if self.ipv6_disabled {
+            args.push("--sysctl=net.ipv6.conf.all.disable_ipv6=1".to_string());
         }
 
         args.extend(self.options.iter().cloned());
@@ -727,6 +750,23 @@ mod tests {
         assert_eq!(handle.name(), "tillandsias-example");
         assert_eq!(handle.image(), "example:v1");
         assert_eq!(handle.spec(), &spec);
+    }
+
+    #[test]
+    fn disable_ipv6_is_one_typed_sysctl_and_off_by_default() {
+        let off = ContainerSpec::new("img").build_run_args();
+        assert!(!off.iter().any(|a| a.starts_with("--sysctl")), "{off:?}");
+        let spec = ContainerSpec::new("img").disable_ipv6();
+        let args = spec.build_run_args();
+        assert_eq!(
+            args.iter()
+                .filter(|a| a.starts_with("--sysctl"))
+                .collect::<Vec<_>>(),
+            vec!["--sysctl=net.ipv6.conf.all.disable_ipv6=1"]
+        );
+        // The `=` spelling keeps the policy's image boundary where it is.
+        let argv = spec.build_run_argv().expect("policy accepts it");
+        assert_eq!(argv.iter().filter(|a| *a == "img").count(), 1);
     }
 
     #[test]

@@ -13,6 +13,10 @@ use base64::Engine as _;
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
+
+/// Order 1725-5uue: how long browser.open waits, once the page has loaded,
+/// for a KEPT service worker to register before naming none.
+const SERVICE_WORKER_WAIT: Duration = Duration::from_secs(2);
 use url;
 
 /// Configuration for the MCP server.
@@ -355,6 +359,10 @@ impl BrowserMcpServer {
                             "type": "boolean",
                             "description": "Development mode: the lane that opens the window gets full browser control (browser.cdp, browser.eval, browser.navigate, console and network tails). The window's network is unchanged: it still reaches only this project."
                         },
+                        "keep_service_worker": {
+                            "type": "boolean",
+                            "description": "Development mode only. Default false: every page BYPASSES service workers, so a reload always reaches the preview and a stopped preview shows as down, never as a cached build. true keeps them (for testing offline and update flows), and the reply names the registered worker scripts. The reply's service_workers field says which applied."
+                        },
                         "device": {
                             "type": "string",
                             "description": "The device to emulate, e.g. \"iphone 12 pro max\", \"galaxy s24\", \"desktop\" (default: the project's .tillandsias/config.toml [browser] device, else desktop). The window opens at the device's CSS viewport with its dpr, UA and touch."
@@ -627,6 +635,12 @@ impl BrowserMcpServer {
             .and_then(|value| value.as_bool())
             .unwrap_or(false);
 
+        // Order 1725-5uue: dev windows bypass service workers unless kept.
+        let keep_service_worker = args
+            .get("keep_service_worker")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false);
+
         // Order 1655-urz9: resolve the device before anything starts.
         // Order 1656-tjv4: and the engine, from the device or `engine`.
         let device_query = args
@@ -718,7 +732,10 @@ impl BrowserMcpServer {
             &self.project_label,
             &self.launch_mode,
             &device,
-            dev,
+            launcher::DevMode {
+                dev,
+                keep_service_worker,
+            },
             engine,
             headless,
         ) {
@@ -740,6 +757,20 @@ impl BrowserMcpServer {
             (Some(a), Some(b)) => Some(format!("{a} {b}")),
             (a, b) => a.or(b),
         };
+        // Order 1725-5uue: say what the window does with service workers;
+        // a kept one is named, once the page registers it (bounded wait).
+        let service_workers = match (dev, keep_service_worker) {
+            (false, _) => json!({ "mode": "active" }),
+            (true, false) => json!({ "mode": "bypassed" }),
+            (true, true) => json!({
+                "mode": "kept",
+                "registered": entry
+                    .cdp
+                    .as_ref()
+                    .map(|cdp| cdp.service_workers(SERVICE_WORKER_WAIT))
+                    .unwrap_or_default(),
+            }),
+        };
         let notice = entry.notice.clone();
         let window_id = entry.window_id.clone();
         self.windows.insert(entry);
@@ -755,6 +786,7 @@ impl BrowserMcpServer {
                 "engine": engine.label(),
                 // Order 1712-3fsw: whether a human can see this window.
                 "headless": headless,
+                "service_workers": service_workers,
                 "notice": notice,
             }),
         }
@@ -970,12 +1002,19 @@ impl BrowserMcpServer {
         if !self.windows.owned_by(window_id, &self.owner()) {
             return Self::tool_error(id, format!("WINDOW_NOT_FOUND: {window_id}"));
         }
+        // The live page when the window has a CDP session (1637-5765): the
+        // registry keeps what browser.open saw, and a page that navigated or
+        // retitled itself since would otherwise be reported as it was.
+        let live = match self.windows.cdp_for(window_id, &self.owner()) {
+            Some((Some(cdp), _, _)) => cdp.page_info().ok(),
+            _ => None,
+        };
         match self.windows.get(window_id) {
             Some(window) => RpcResponse::Success {
                 id,
                 result: json!({
-                    "url": window.url,
-                    "title": window.title,
+                    "url": live.as_ref().map_or(window.url.as_str(), |(url, _)| url.as_str()),
+                    "title": live.as_ref().map_or(window.title.as_str(), |(_, title)| title.as_str()),
                     "engine": window.engine,
                     "headless": window.headless
                 }),
@@ -2296,6 +2335,29 @@ mod tests {
         assert_eq!(*host.launches.lock(), vec![(false, Engine::WebKit)]);
     }
 
+    /// Order 1725-5uue: the reply says what the window does with service
+    /// workers: a dev window bypasses them unless asked to keep them.
+    #[tokio::test]
+    async fn the_open_reply_says_whether_service_workers_were_bypassed() {
+        for (args, want) in [
+            (json!({ "url": PREVIEW }), json!({ "mode": "active" })),
+            (
+                json!({ "url": PREVIEW, "dev": true }),
+                json!({ "mode": "bypassed" }),
+            ),
+            (
+                json!({ "url": PREVIEW, "dev": true, "keep_service_worker": true }),
+                json!({ "mode": "kept", "registered": [] }),
+            ),
+        ] {
+            let (_host, server) = headless_host(false);
+            let seen = call_seen(&server, "browser.open", args.clone())
+                .await
+                .unwrap();
+            assert_eq!(seen["service_workers"], want, "{args} -> {seen}");
+        }
+    }
+
     /// headless: true on a display host runs headless: agents that drive
     /// themselves skip the compositor.
     #[tokio::test]
@@ -2534,6 +2596,11 @@ mod tests {
                     let result = match msg["method"].as_str() {
                         Some("Browser.getWindowForTarget") => json!({ "windowId": 1 }),
                         Some("Page.navigate") => json!({ "frameId": "F1" }),
+                        Some("Page.getNavigationHistory") => {
+                            json!({ "currentIndex": 0, "entries": [
+                                { "id": 1, "url": "https://www.acme.localhost:18443/", "title": "RETITLED-LIVE" }
+                            ]})
+                        }
                         Some("Runtime.evaluate") if msg["params"]["expression"] == "1+1" => {
                             json!({ "result": { "type": "number", "value": 2, "description": "2" } })
                         }
@@ -2642,20 +2709,20 @@ mod tests {
             "Emulation.setUserAgentOverride",
         ];
         assert_eq!(names[..4], emulation, "emulated as it attached: {names:?}");
-        assert_eq!(names[4], "Page.enable");
+        assert_eq!(names[4..6], ["Page.enable", "Network.enable"]);
         assert_eq!(
-            names[5..9],
+            names[6..10],
             emulation,
             "then the checked re-apply: {names:?}"
         );
         assert_eq!(
-            names[9], "Page.navigate",
+            names[10], "Page.navigate",
             "and only then navigated: {names:?}"
         );
         assert_eq!(p1[2].1["width"], 428);
         assert_eq!(p1[2].1["deviceScaleFactor"], 3.0);
         assert!(p1[0].1["maxTouchPoints"].as_u64().unwrap() > 0);
-        assert_eq!(p1[9].1["url"], url);
+        assert_eq!(p1[10].1["url"], url);
 
         let window = opened["window_id"].as_str().unwrap().to_string();
         let switched = call_tool(
@@ -2786,6 +2853,35 @@ mod tests {
             "acme",
             Some(host.clone() as Arc<dyn BrowserContainers>),
         )
+    }
+
+    /// Order 1637-5765: read_url reports the LIVE page, not what browser.open
+    /// stored, so an app that retitles itself (a hot reload) is seen — and a
+    /// window that is not in dev mode answers it without running page script.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn read_url_reports_the_live_title_without_page_script() {
+        let host = Arc::new(CdpContainers::default());
+        let lane = lane_server(&host);
+        let opened = call_tool(
+            &lane,
+            "browser.open",
+            json!({ "url": "https://www.acme.localhost:18443/" }),
+        )
+        .await;
+        let window = opened["window_id"].as_str().expect("opened").to_string();
+        let read = call_tool(&lane, "browser.read_url", json!({ "window_id": window })).await;
+        assert_eq!(read["title"], "RETITLED-LIVE", "{read}");
+        assert_eq!(read["url"], "https://www.acme.localhost:18443/", "{read}");
+        let page = host.methods_on("P1");
+        assert!(
+            page.iter().any(|(m, _)| m == "Page.getNavigationHistory"),
+            "{page:?}"
+        );
+        assert!(
+            !page.iter().any(|(m, _)| m == "Runtime.evaluate"),
+            "read_url must not run page script: {page:?}"
+        );
     }
 
     /// Exit criterion 1: from the owning lane, raw browser.cdp evaluates on

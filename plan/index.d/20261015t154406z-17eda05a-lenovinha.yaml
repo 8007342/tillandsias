@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-linux-soft-reset-removes-only-tillandsias-podman-objects-and-leaves-the-users-own-images-and-containers-untouched
+    field: priority
+    value: p3
+    ts: "2026-10-15T15:44:06Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-linux-soft-reset-removes-only-tillandsias-podman-objects-and-leaves-the-users-own-images-and-containers-untouched
+    event:
+      type: note
+      ts: "2026-10-15T15:44:06Z"
+      host: lenovinha
+      summary: |-
+        operator 2026-10-15: overkill; dev runtime is ephemeral by design

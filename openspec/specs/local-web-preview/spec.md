@@ -208,9 +208,14 @@ envelope and legacy result fields. Inputs are:
 | Tool | Arguments | Meaning |
 |---|---|---|
 | `publish_local` | `category: "WEB"`, optional `runtime: "auto"\|"static"\|"wrangler"` (default auto) | Start/publish or reconcile this lane's preview |
-| `service_status` | none | Observe, no launch/restart side effects |
+| `service_status` | none | Observe, no launch/restart side effects; `serving` says whether the route answers end to end, and after a failed reload `last_failure.previous_preview_serving` says whether the old preview is still served |
 | `service_stop` | `category: "WEB"` | Stop container and remove only its route; already absent is success |
-| `service_reload` | `category: "WEB"` | Restart the recorded profile on the same live source and URL; absent is `not_running` |
+| `service_reload` | `category: "WEB"` | Restart the recorded profile on the same live source and URL; a preview that exited is recreated the same way; absent is `not_running` |
+| `service_logs` | `category: "WEB"`, optional `lines` (1-500, default 100) | The preview's own output (stdout and stderr, tail kept, 64 KiB cap), its state and exit code; only for the lane that owns it |
+
+Removing a preview container never waits a stop grace period (1723-2fiq):
+the static server is PID 1 and ignores SIGTERM, so a graceful remove outlived
+the per-call budget and every reload timed out.
 
 Initial-phase prerequisite: the host binary MUST be built with the `tray`
 feature and its existing authenticated MCP listener must be available. Moving

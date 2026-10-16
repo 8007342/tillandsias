@@ -182,6 +182,14 @@ fn default_title(url: &Url) -> String {
 /// How long `launch` waits for the window container's CDP relay socket.
 const CDP_CONNECT_BUDGET: std::time::Duration = std::time::Duration::from_secs(30);
 
+/// Development mode for a window (order 1656-iktu), and whether its pages
+/// keep their service workers (order 1725-5uue; dev windows bypass them).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DevMode {
+    pub dev: bool,
+    pub keep_service_worker: bool,
+}
+
 /// Launch a browser window emulating `device` and return its registry entry.
 ///
 /// Order 1655-urz9: a container window starts on about:blank. The tray
@@ -194,7 +202,7 @@ pub fn launch(
     project_label: &str,
     mode: &LaunchMode,
     device: &DeviceEmulation,
-    dev: bool,
+    dev: DevMode,
     engine: Engine,
     headless: bool,
 ) -> Result<WindowEntry, LaunchError> {
@@ -217,7 +225,7 @@ pub fn launch(
             })?;
             let profile_dir = handle.profile_dir.clone();
             let socket = handle.cdp_socket.clone();
-            let notice = handle.notice.clone();
+            let mut notice = handle.notice.clone();
             let running = RunningContainer {
                 handle,
                 host: Arc::clone(host),
@@ -231,9 +239,27 @@ pub fn launch(
             };
             let cdp = match socket {
                 Some(socket) => {
-                    let cdp = WindowCdp::attach(&socket, device.clone(), dev, CDP_CONNECT_BUDGET)
-                        .and_then(|cdp| cdp.navigate(url.as_str()).map(|()| cdp))
-                        .map_err(|e| LaunchError::Cdp(e.to_string()))?;
+                    let cdp = WindowCdp::attach(
+                        &socket,
+                        device.clone(),
+                        dev.dev,
+                        dev.keep_service_worker,
+                        CDP_CONNECT_BUDGET,
+                    )
+                    .and_then(|cdp| cdp.navigate(url.as_str()).map(|()| cdp))
+                    .map_err(|e| LaunchError::Cdp(e.to_string()))?;
+                    // Order 1725-cgh2: say so when the first load had to
+                    // start over, so a slower open is explained.
+                    let recovered = cdp.network_recoveries();
+                    if recovered > 0 {
+                        let line = format!(
+                            "The page was loaded again {recovered} time(s): a network change at window start (net::ERR_NETWORK_CHANGED) interrupted its first load."
+                        );
+                        notice = Some(match notice.take() {
+                            Some(n) => format!("{n} {line}"),
+                            None => line,
+                        });
+                    }
                     Some(Arc::new(cdp))
                 }
                 None => None,
@@ -252,7 +278,7 @@ pub fn launch(
         opened_url: url.as_str().to_string(),
         title,
         owning_lane: String::new(),
-        dev,
+        dev: dev.dev,
         engine,
         headless,
         notice,

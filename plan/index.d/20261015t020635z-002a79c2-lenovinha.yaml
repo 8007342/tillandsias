@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: an-opt-in-flutter-web-toolchain-reaches-forges-through-a-sibling-image-with-pub-dev-and-flutter-artifacts-allowed
+    event:
+      type: progress
+      ts: "2026-10-15T02:06:35Z"
+      agent_id: linux-lenovinha-claude-20261015t020635z
+      host: lenovinha
+      summary: |-
+        pre-cut 7d proof (local-dist 2d93d0917, run v56.10.14.1-20261015010514) FAILED at browser.open on the flutter dev route. Root causes: (a) add_dev_route never set preview_tls and returned the http :8080 URL, which container windows refuse (https-only since 1651-5t7n); (b) the preview TLS leaf SAN covered only www.<project>.localhost; (c) the router TLS site derived preview_project by rsplit, giving dev for flutter.macron.dev; (d) the leaf existed only after a www publish. Also the forge flutter shim forwarded stdin to one-shot commands, so a piped script was swallowed and exited 0. Passing: create, pub add flame, run routed in 25s, server-side hot reload, q leaves no sibling and removes the route. Fix in progress on this row; cut held.

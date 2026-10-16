@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: codex-registration-fixture-defaults-to-the-stub-so-step-10-fits-its-budget
+    event:
+      type: progress
+      ts: "2026-10-16T00:31:48Z"
+      agent_id: linux-yoga-claude-20261016t003148z
+      host: yoga
+      summary: |-
+        RECURRENCE 2026-10-16 on yoga: inside ./build.sh --ci-full on tree f40d8daad (work/1236-bmjh, 23:21Z-00:28Z), litmus:forge-experts-discoverability-shape STEP 10/13 (Codex expert registration fixture) was killed at its 30 s budget, the only red of 445 verdicts (log /tmp/litmus-pre-build.log line 885). Second dated hit after 2026-09-27 (yoga gate on cc918b216, 30,007/30,000 ms). Unfixed; it cost #467 a pre-cut landing.

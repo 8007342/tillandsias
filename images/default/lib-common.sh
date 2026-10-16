@@ -2260,6 +2260,11 @@ export NPM_CONFIG_PREFIX="$PROJECT_CACHE/npm/global"
 # Yarn (classic and berry both honor this)
 export YARN_CACHE_FOLDER="$PROJECT_CACHE/yarn"
 
+# Playwright browsers (order 1726-3mn6): ~681 MB per chromium install, so on
+# the persistent cache volume, downloaded once per project, never into the
+# RAM checkout or $HOME.
+export PLAYWRIGHT_BROWSERS_PATH="$PROJECT_CACHE/ms-playwright"
+
 # pnpm
 export PNPM_HOME="$PROJECT_CACHE/pnpm"
 
@@ -2268,6 +2273,12 @@ export UV_CACHE_DIR="$PROJECT_CACHE/uv"
 
 # pip (per-project; pipx tools live in /opt/pipx, image-state)
 export PIP_CACHE_DIR="$PROJECT_CACHE/pip"
+
+# Order 1729-kg5q: build scratch goes to the cache volume (disk), not the
+# 256M /tmp tmpfs; measured 2026-10-15, TMPDIR was unset in the agent shell.
+# /tmp itself stays for the small sockets and files that expect it.
+export TMPDIR="$PROJECT_CACHE/tmp"
+mkdir -p "$TMPDIR" 2>/dev/null || true
 
 # PATH augmentation for per-project binaries, user home binaries, and system-wide toolchains
 export RUSTUP_HOME="/usr/local/rustup"
@@ -3646,7 +3657,15 @@ require_codex() {
 # (`tillandsias --agy-login` failed exit-2 when the login container assumed
 # agy was pre-installed — operator repro 2026-07-15).
 require_antigravity() {
-    command -v agy >/dev/null 2>&1 && return 0
+    local _target_dir="$HOME/.local/bin"
+    [ -w /usr/local/bin ] && _target_dir="/usr/local/bin"
+    mkdir -p "$_target_dir" 2>/dev/null || true
+
+    # If agy is already on PATH, ensure it is refreshed to latest on every launch (tillandsias style)
+    if command -v agy >/dev/null 2>&1; then
+        agy update >/dev/null 2>&1 || true
+        return 0
+    fi
 
     local _agy_installer _agy_url="https://antigravity.google/cli/install.sh"
     local _attempt _max_attempts=3 _delay=2
@@ -3655,9 +3674,10 @@ require_antigravity() {
         trace_lifecycle "tools" "agy install attempt $_attempt/$_max_attempts"
         _agy_installer="$(mktemp 2>/dev/null)"
         if [ -n "$_agy_installer" ] && curl -fsSL --max-time 90 "$_agy_url" -o "$_agy_installer" 2>/dev/null; then
-            if ANTIGRAVITY_BIN="/usr/local/bin/agy" bash "$_agy_installer" 2>/dev/null; then
+            if bash "$_agy_installer" --dir "$_target_dir" 2>/dev/null; then
                 rm -f "$_agy_installer" 2>/dev/null || true
                 command -v agy >/dev/null 2>&1 && return 0
+                [ -x "$_target_dir/agy" ] && return 0
             fi
         fi
         rm -f "$_agy_installer" 2>/dev/null || true
@@ -3665,6 +3685,9 @@ require_antigravity() {
         sleep "$_delay" 2>/dev/null || true
         _delay=$(( _delay * 2 ))
     done
+
+    command -v agy >/dev/null 2>&1 && return 0
+    [ -x "$_target_dir/agy" ] && return 0
     return 1
 }
 
@@ -3765,6 +3788,45 @@ apply_claude_config_overlay() {
     chmod 600 "$tmp"
     mv -f "$tmp" "$user_cfg"
     trace_lifecycle "config" "claude MCP overlay applied"
+}
+
+# ── Antigravity config overlay ──────────────────────────────
+# @trace spec:forge-environment-discoverability, order:1678-62p7
+# Antigravity reads MCP configuration from ~/.gemini/config/mcp_config.json.
+# Merge the forge MCP servers into the user configuration.
+apply_antigravity_config_overlay() {
+    local overlay_root="${TILLANDSIAS_CONFIG_OVERLAY_ROOT:-/home/forge/.config-overlay}"
+    local overlay_cfg="$overlay_root/antigravity/mcp_config.json"
+    local user_cfg="${AGY_MCP_CONFIG_FILE:-$HOME/.gemini/config/mcp_config.json}"
+    local tmp
+
+    [ -f "$overlay_cfg" ] || return 0
+    if ! jq -e 'type == "object" and (.mcpServers | type == "object")' \
+        "$overlay_cfg" >/dev/null 2>&1; then
+        trace_lifecycle "config" "antigravity MCP overlay invalid; existing config preserved"
+        return 1
+    fi
+
+    mkdir -p "$(dirname "$user_cfg")"
+    tmp="$(mktemp "${user_cfg}.tmp.XXXXXX")" || return 1
+    if [ -s "$user_cfg" ]; then
+        if ! jq -e 'type == "object"' "$user_cfg" >/dev/null 2>&1 \
+            || ! jq -s '.[0] * {mcpServers: ((.[0].mcpServers // {}) * .[1].mcpServers)}' \
+                "$user_cfg" "$overlay_cfg" >"$tmp"; then
+            rm -f "$tmp"
+            trace_lifecycle "config" "antigravity config invalid; existing file preserved"
+            return 1
+        fi
+    else
+        cp "$overlay_cfg" "$tmp" || {
+            rm -f "$tmp"
+            return 1
+        }
+    fi
+
+    chmod 600 "$tmp"
+    mv -f "$tmp" "$user_cfg"
+    trace_lifecycle "config" "antigravity MCP overlay applied"
 }
 
 # Seed first-run state so a FRESH forge's claude never blocks on an
@@ -4021,15 +4083,15 @@ seed_agy_workspace_trust() {
             return 0
         fi
         jq --arg dir "$project_dir" \
-            '.trustedWorkspaces = (((.trustedWorkspaces // []) | if type == "array" then . else [] end) as $t
+            '.approvalMode = (.approvalMode // "auto") | .trustedWorkspaces = (((.trustedWorkspaces // []) | if type == "array" then . else [] end) as $t
                 | if ($t | index([$dir])) then $t else $t + [$dir] end)' \
             "$cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
     else
-        jq -n --arg dir "$project_dir" '{trustedWorkspaces: [$dir]}' >"$tmp" || { rm -f "$tmp"; return 1; }
+        jq -n --arg dir "$project_dir" '{approvalMode: "auto", trustedWorkspaces: [$dir]}' >"$tmp" || { rm -f "$tmp"; return 1; }
     fi
     chmod 600 "$tmp"
     mv -f "$tmp" "$cfg"
-    trace_lifecycle "config" "agy workspace trust seeded for $project_dir (forge)"
+    trace_lifecycle "config" "agy workspace trust and approvalMode auto seeded for $project_dir (forge)"
 }
 
 # ── Hot-path population ─────────────────────────────────────

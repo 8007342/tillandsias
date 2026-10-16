@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-guest-github-token-rotation-first-due-check-runs-before-vault-is-up-and-reads-no-token-so-an-expired-token-stays-dead-for-15-minutes-after-every-boot
+    field: status
+    value: obsoleted
+    ts: "2026-10-15T22:42:00Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-guest-github-token-rotation-first-due-check-runs-before-vault-is-up-and-reads-no-token-so-an-expired-token-stays-dead-for-15-minutes-after-every-boot
+    event:
+      type: completed
+      ts: "2026-10-15T22:42:00Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'obsoleted' with evidence_refs: duplicate of 1742-zg7r (lenovinha, filed 21:51:46Z, same cause: the rotation reads Vault-down as NoToken and waits 15 min); the macOS measurement moved there as an event, per the coordinator

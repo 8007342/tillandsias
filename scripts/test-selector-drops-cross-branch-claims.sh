@@ -248,5 +248,75 @@ else
     bad "the could-not-fold path is silent; that reads as 'nobody holds these'"
 fi
 
+# ── 4. A DROP REOPENS THE URGENCY QUESTION (order 1740-urxb) ──────────────
+#
+# Two p1 rows and one p2, budget 1. The batch takes the first p1; a sibling
+# holds exactly that one. The order-645 override already ran (a p1-vs-p1 tie
+# displaces nothing), so before 1740-urxb the drop left an EMPTY batch while a
+# second p1 was claimable. Measured live on the v56.10.15.1 cut: the batch
+# offered p2 while 1233-jqp4 and 1236-bmjh sat on osx-next. The `some` stub
+# holds only the ids in XB_HELD, so the re-asked candidate is vetted and passes.
+cat > "$W/stub-some.sh" <<'STUB'
+#!/usr/bin/env bash
+shift
+rc=0
+for id in "$@"; do
+    case " ${XB_HELD:-} " in *" $id "*) echo "claimed-elsewhere:$id:osx-next"; rc=1 ;; esac
+done
+echo "ok:cross-branch-claims:2 sibling branch(es) checked"
+exit "$rc"
+STUB
+chmod +x "$W/stub-some.sh"
+_URGENT_INDEX="$W/urgent-index.yaml"
+cat > "$_URGENT_INDEX" <<'FIXTURE_LEDGER'
+plan_index:
+  - packet_id: xbranch-fixture-urgent-held
+    order: 9993-dddd
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    title: fixture p1 row that a sibling branch holds
+    unscoreable: fixture row, never landed — exists only to give the arms a subject
+  - packet_id: xbranch-fixture-urgent-free
+    order: 9994-eeee
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    title: fixture p1 row that nobody holds
+    unscoreable: fixture row, never landed — exists only to give the arms a subject
+  - packet_id: xbranch-fixture-routine
+    order: 9995-ffff
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    title: fixture p2 row
+    unscoreable: fixture row, never landed — exists only to give the arms a subject
+FIXTURE_LEDGER
+cat > "$W/plan-shim-urgent.sh" <<SHIM
+#!/usr/bin/env bash
+exec "$_REAL_PLAN" --index "$_URGENT_INDEX" "\$@"
+SHIM
+chmod +x "$W/plan-shim-urgent.sh"
+out="$(XB_HELD=9993-dddd TILLANDSIAS_HOST_TIER=general \
+    TILLANDSIAS_XBRANCH_CHECK="$W/stub-some.sh" \
+    TILLANDSIAS_PLAN_BIN="$W/plan-shim-urgent.sh" \
+    bash scripts/select-work-batch.sh linux --budget 1 2>&1)"
+if grep -q "^packet$(printf '\t')9994-eeee" <<<"$out"; then
+    ok "a dropped p1 is replaced by the next claimable p1, not by p2 work or nothing"
+else
+    bad "after the drop the batch did not offer the free p1 — it offered: $(grep -m1 '^packet' <<<"$out" || printf '(nothing)')"
+fi
+if grep -q "^packet$(printf '\t')9993-dddd" <<<"$out"; then
+    bad "the held p1 was still offered"
+else
+    ok "the held p1 is not offered"
+fi
+
 echo "selector-drops-cross-branch-claims: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

@@ -9,7 +9,7 @@
 //! until agents call the runtime directly (1443-8pur, 1443-r4cj) and the Bash
 //! tool stops being the default door. RETIREMENT_CONDITION says when.
 //!
-//! LEXICAL, NOT A PARSER, over the seven measured shapes (bash cannot be trusted
+//! LEXICAL, NOT A PARSER, over the eight measured shapes (bash cannot be trusted
 //! to parse bash; 1252-r72q's tree-sitter lint is the future parser):
 //!   1 unquoted heredoc whose body carries a backtick or `$(`       deny
 //!   2 pipefail + a pipeline ending in `grep -q` (SIGPIPE verdict)  deny
@@ -21,6 +21,8 @@
 //!   6 a shell string crossing a boundary (wsl.exe … bash -c "…",
 //!     bash -c "…") that carries a pipe, a backtick or `$(`         deny
 //!   7 a token-shaped literal on the command line                  deny
+//!   8 a whole-command-line kill (pkill -f, killall -r), directly or
+//!     inside a shell string: it kills its own shell (1724-kcj4)   deny
 //! ANYTHING ELSE IS ALLOWED: a bridge that refuses what it does not understand
 //! stops the fleet.
 
@@ -440,6 +442,65 @@ fn string_crosses_boundary(stage: &[String]) -> Option<String> {
     None
 }
 
+/// ORDER 1724-kcj4: a kill that matches WHOLE command lines (`pkill -f`,
+/// `killall -r`) run from a shell whose own argv holds the pattern. The Bash
+/// tool runs every command as `<shell> -c "<cmd>"`, so the pattern is always
+/// in the caller's command line and the kill takes its own shell with it
+/// (measured in the lakanoa forge: exit 144). `pgrep -f` only lists, so it is
+/// the safe first step and stays allowed. Looks through the usual wrappers and,
+/// to a small depth, into `bash -c "…"` strings.
+fn self_matching_kill(argv: &[String], depth: u8) -> Option<String> {
+    let mut i = 0;
+    while i < argv.len() {
+        match cp::program_name(&argv[i]).as_str() {
+            "sudo" | "env" | "nohup" | "exec" | "command" => i += 1,
+            "timeout" => {
+                i += 1;
+                while i < argv.len() && argv[i].starts_with('-') {
+                    i += 1;
+                }
+                i += 1; // the duration
+            }
+            _ => break,
+        }
+        // env's and sudo's own options and VAR=value words are not the program
+        while i < argv.len() && (argv[i].starts_with('-') || argv[i].contains('=')) {
+            i += 1;
+        }
+    }
+    let argv = argv.get(i..)?;
+    let prog = cp::program_name(argv.first()?);
+    let short_has =
+        |a: &str, c: char| a.starts_with('-') && !a.starts_with("--") && a[1..].contains(c);
+    let opts = argv.iter().skip(1).take_while(|a| a.as_str() != "--");
+    match prog.as_str() {
+        "pkill" => {
+            let hit = opts.into_iter().any(|a| short_has(a, 'f') || a == "--full");
+            return hit.then(|| "pkill -f".to_string());
+        }
+        "killall" => {
+            let hit = opts
+                .into_iter()
+                .any(|a| short_has(a, 'r') || a == "--regexp");
+            return hit.then(|| "killall -r".to_string());
+        }
+        _ => {}
+    }
+    if depth >= 3 || !cp::is_shell_string_call(argv) {
+        return None;
+    }
+    let pos = argv.iter().position(|a| {
+        let l = a.to_ascii_lowercase();
+        l.starts_with('-') && !l.starts_with("--") && l[1..].contains('c')
+    })?;
+    let inner = argv.get(pos + 1)?;
+    lex(inner)
+        .pipelines
+        .iter()
+        .flatten()
+        .find_map(|stage| self_matching_kill(&argv_of(stage), depth + 1))
+}
+
 /// Expand a leading `~` and `$VAR` / `${VAR}` / `${VAR:-default}` from the
 /// environment. `None` when the word depends on something the hook cannot know
 /// before the shell runs: an unset variable, `$(…)`, a backtick, or `$` followed
@@ -640,6 +701,15 @@ pub fn classify(cmd: &str, ctx: &Context) -> Classification {
             let mut argv = argv_of(stage);
             if argv.is_empty() {
                 continue;
+            }
+            if let Some(how) = self_matching_kill(&argv, 0) {
+                return Classification::deny(
+                    "self-matching-kill-pattern",
+                    &format!(
+                        "`{how}` matches against whole command lines, and the shell running this command carries the pattern in its own argv, so it kills its own shell (exit 144, 1724-kcj4)"
+                    ),
+                    "find the process first, then kill it by PID, skipping your own shell: `pgrep -f PATTERN` lists candidates, `kill <pid>` ends the one you mean ($$ is your own shell)",
+                );
             }
             // A plain shell string is the bridge's business only in shape 6.
             if cp::is_shell_string_call(&argv) {
@@ -1028,5 +1098,46 @@ mod tests {
             "TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 TILLANDSIAS_SKILL=smoke-curl-install-and-test-e2e tillandsias --reset-state",
         );
         assert!(!stage_env_preauthorises(&opt_out, "soft-reset", bm, bm));
+    }
+
+    /// ORDER 1724-kcj4: a whole-command-line kill run from a shell that holds
+    /// the pattern kills that shell (lakanoa, exit 144), directly or inside a
+    /// `bash -c` string or a wrapper. Listing with pgrep, killing by name and
+    /// killing by PID stay allowed, and so does text that only MENTIONS it.
+    #[test]
+    fn self_matching_kill_is_refused_and_pgrep_is_not() {
+        let c = ctx();
+        for cmd in [
+            "pkill -f vite",
+            "pkill -9f 'node server'",
+            "pkill --full vite",
+            "killall -r 'vi.*'",
+            "killall --regexp vite",
+            "bash -c \"pkill -f vite\"",
+            "bash -lc 'sleep 1; pkill -f vite'",
+            "sh -c \"bash -c 'pkill -f vite'\"",
+            "sudo pkill -f vite",
+            "timeout 5 pkill -f vite",
+            "env FOO=1 pkill -f vite",
+            "cd /tmp && pkill -f vite",
+        ] {
+            let got = classify(cmd, &c);
+            assert_eq!(got.verdict, Verdict::Deny, "{cmd}");
+            assert_eq!(got.rule, "self-matching-kill-pattern", "{cmd}");
+            assert!(got.remedy.unwrap().contains("pgrep -f"), "{cmd}");
+        }
+        for cmd in [
+            "pgrep -f vite",
+            "pgrep -af 'node server'",
+            "pkill vite",
+            "pkill -x vite",
+            "killall vite",
+            "kill 4242",
+            "bash -c \"pgrep -f vite\"",
+            "grep -n 'pkill -f' notes.md",
+            "echo pkill -f vite",
+        ] {
+            assert_eq!(classify(cmd, &c).verdict, Verdict::Allow, "{cmd}");
+        }
     }
 }

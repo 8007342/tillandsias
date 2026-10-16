@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-15, on the coordinator's approval
+# (macuahuitl 2026-10-14: "File and take (2), the Cloudflare Login tray item"
+# and "Probing the device-code grant is the right follow-up").
+packets:
+  - packet_id: every-tray-has-a-cloudflare-login-item-that-opens-a-terminal-on-the-vm-running-cloudflare-login-like-github-login
+    order: 1719-83po
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [cloudflare, login, tray, macos, windows, linux, pty, exec-allowlist, security]
+    estimated_hours: 5
+    depends_on:
+      - cloudflare-login-uses-the-registered-client-id-and-cloudflares-real-dotted-scope-ids-because-an-empty-scope-list-asks-for-zero-permissions
+    related: [1718-adra, 1719-7wd9, 1505-kc5f, 1707-g633]
+    title: |
+      No tray (macOS, Windows or Linux) has a "Cloudflare Login" item, although design Decision 7 called for one, so a user has no way to run `tillandsias --cloudflare-login` from the app. Add it, mirroring GitHub Login: a shared menu row, visible only while no Cloudflare bundle is stored, that opens a terminal on the VM running `tillandsias-headless --cloudflare-login` (paste mode in the guest, which has no browser opener).
+    context: |
+      Read 2026-10-14: `git grep -i cloudflare` finds no menu id, MenuAction or PtyIntent in tillandsias-host-shell, the macOS tray, the Windows tray or the Linux tray module. GitHub Login is the template: host-shell pty/mod.rs maps MenuAction::GithubLogin to PtyIntent::GithubLogin, built through vm_login_shell_argv; exec_allowlist.rs admits the "tillandsias-headless" arm only for `--github-login`.
+      Coordinator constraint (macuahuitl, 2026-10-14): the exec_allowlist extension must name EXACTLY `--cloudflare-login` plus its documented `--via` values (loopback, qr, paste), and every other headless flag stays refused.
+      On a Mac the login runs inside the VM, so it is PASTE mode: the user opens the printed link in the Mac browser, authorizes, lands on "can't connect to 127.0.0.1:48631" (the listener is in the VM, not on the Mac) and pastes the address-bar URL into the terminal. The operator wants to do this once, deliberately, to learn the friction ("We don't want n00b users awkwradly copying and pasteing random weird bytes"), recorded in plan/issues/cloudflare-login-friction-log-2026-10-15.md; the frictionless path is 1719-7wd9.
+    exit_criteria:
+      - 'a shared menu row "Cloudflare Login" exists in menu_state and is rendered by the macOS, Windows and Linux trays; visible iff no Cloudflare bundle is stored; a test drives menu_state both ways'
+      - 'clicking it opens a terminal attached to the VM running `tillandsias-headless --cloudflare-login` (argv asserted through vm_login_shell_argv, like GitHub Login)'
+      - 'exec_allowlist admits `tillandsias-headless --cloudflare-login` with no flag, or with `--via loopback|qr|paste`, and REFUSES every other headless flag: --cloudflare-login with an unknown --via value, --cloudflare-logout, --github-login plus extra args, and an arbitrary flag (arms written red first)'
+      - 'live, on the operator''s Mac from a published release: the item opens the terminal, paste mode completes, and the bundle lands in Vault; the operator''s friction notes are in the friction log'
+    unscoreable: "requires-native-regime for the live arm (the operator's Mac and Cloudflare account); the menu and allowlist arms are unit tests"
+    next_action: >
+      After 1718-adra lands: add the menu row and PtyIntent beside GitHub Login, then the exec_allowlist arm with its refusal arms red first. Aim at the release after the onboarding stable (coordinator).
+    events:
+      - type: filed
+        ts: "2026-10-15T00:28:28Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          A Cloudflare Login tray item on every platform, mirroring GitHub Login (paste mode in the VM). The allowlist names exactly --cloudflare-login plus --via values.
+  - packet_id: cloudflare-login-uses-the-device-code-grant-when-cloudflare-grants-it-to-the-tillandsias-client-so-no-user-pastes-a-url
+    order: 1719-7wd9
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [cloudflare, oauth, device-grant, login, ux]
+    estimated_hours: 4
+    related: [1718-adra, 1719-83po, 1505-kc5f, 1505-sm2j]
+    title: |
+      Cloudflare's discovery document now lists the device-code grant (urn:ietf:params:oauth:grant-type:device_code, with a device_authorization_endpoint), which the 1505 design assumed did not exist. If Cloudflare grants it to the Tillandsias client, the login can work like `--github-login`: a short code to approve on any device (phone included), with no redirect, no 127.0.0.1 page and nothing to paste. That's the frictionless path the operator asked for.
+    context: |
+      MEASURED 2026-10-14: https://dash.cloudflare.com/.well-known/openid-configuration lists grant_types_supported [authorization_code, implicit, client_credentials, refresh_token, urn:ietf:params:oauth:grant-type:device_code] and has a device_authorization_endpoint key. NOT measured: whether a third-party OAuth client can use it, and whether the dashboard client config needs the grant enabled.
+      Operator, 2026-10-14: "let's do the awkward one time flow in the mac, and see if we can simplify it later for our end users. We don't want n00b users awkwradly copying and pasteing random weird bytes. We want to make it frictionless for them".
+    exit_criteria:
+      - 'a probe against the operator''s registered client (operator present) POSTs to the device_authorization_endpoint and records the reply: a user_code + verification_uri, or the exact refusal'
+      - 'if granted: the operator approves a code on another device, the token endpoint returns a token whose scope equals the requested set, and both tokens are revoked; the result and the timings are recorded'
+      - 'a decision is recorded: device grant as the default receiver (where default_via chooses it, and what it means for loopback/qr/paste), or why not'
+    unscoreable: "requires-native-regime: the operator's Cloudflare account"
+    next_action: >
+      With the operator at the terminal: extend the 1707 PKCE probe with a device-code mode (POST client_id + scope to the device_authorization_endpoint, then poll the token endpoint at the interval the reply names), run it once, revoke.
+    events:
+      - type: filed
+        ts: "2026-10-15T00:28:28Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Probe and adopt Cloudflare's device-code grant (discovery lists it as of 2026-10-14) so no user pastes a URL.

@@ -71,7 +71,7 @@ src="$(cd "$P" && HOME="$H" TILLANDSIAS_SHARED_SKILLS_ROOT="$ROOT/skills" TILLAN
        bash -c 'set -euo pipefail; source "$1"; source "$1"; echo sourced' _ "$PROFILE" 2>&1)"; src_rc=$?
 arm4=1; detail=""
 [ "$src_rc" -eq 0 ] && [ "${src##*$'\n'}" = "sourced" ] || { arm4=0; detail="$detail source rc=$src_rc [$src]"; }
-for d in .claude/skills .gemini/skills .config/opencode/skill; do
+for d in .claude/skills .gemini/skills .config/opencode/skills; do
     [ -L "$H/$d/project-discipline" ] && [ -f "$H/$d/project-discipline/SKILL.md" ] || { arm4=0; detail="$detail missing:$d"; }
 done
 [ ! -L "$H/.codex/skills/project-discipline" ] || { arm4=0; detail="$detail clobbered:.codex"; }

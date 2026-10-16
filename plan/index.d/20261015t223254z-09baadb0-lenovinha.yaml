@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-linux-curl-installer-resets-soft-and-keeps-the-users-sign-ins
+    field: status
+    value: completed
+    ts: "2026-10-15T22:32:54Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-linux-curl-installer-resets-soft-and-keeps-the-users-sign-ins
+    event:
+      type: completed
+      ts: "2026-10-15T22:32:54Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: PR #454 landed as c054165a9 (head 4a0e73aba), shipped in v56.10.15.1. Live reinstall proof in plan/issues/e2e-smoke-v56.10.15.1-linux-2026-10-15.md (trunk 629c6dd6b): curl install rc=0 with 26 terminal lines and no debug output, SOFT reset into setup.log, Vault store unsealed not recreated, GitHub sign-in from the old v56.9.27.2 tray read and rotated by the new tray and 16 repos loaded

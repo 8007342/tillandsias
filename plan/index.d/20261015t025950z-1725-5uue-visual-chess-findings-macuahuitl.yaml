@@ -1,0 +1,186 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora from the visual-chess test project's field
+# report: github.com/8007342/visual-chess commit 497f976 (FORGE_DIAGNOSTICS.md,
+# session 2026-10-15 on yoga, Claude Code, forge order 835-h2wq). The operator:
+# "Hot reload didn't work out of the box, we're not sure if the thing reloaded,
+# the forge ended up testing the last pass on a headless chrome".
+packets:
+  - packet_id: a-dev-preview-window-never-shows-a-stale-build-without-saying-so
+    order: 1725-5uue
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: M
+    pickup_role: linux
+    capability_tags: [host-browser, browser, local-web-preview, service-worker]
+    related: [1723-2fiq, 1696-gz2y, 1699-rhy2]
+    depends_on: []
+    title: |
+      A preview window kept showing the FIRST build after the preview died, because the app's service worker served it from cache; the user read that as "hot reload doesn't work". Dev windows must bypass service workers by default (and say so), and a dead preview must be visible as dead
+    context: |
+      visual-chess field report, finding 7. The app's service worker is network-first with a cache fallback. With the preview down, the window loaded Build 01:22:43Z from the service-worker cache while dist/ held 01:54:19Z. The agent could not tell, because service_status was empty (1696-gz2y, fixed on trunk).
+      Proposal (the report's question 4, with a recommended default for the operator to confirm):
+      - Dev-mode windows run with service workers BYPASSED (CDP Network.setBypassServiceWorker, or a fresh profile per reload), and the browser_open reply states it.
+      - An explicit option keeps the service worker, for testing offline and update flows, and makes its presence visible: the reply names the registered worker and the page's build stamp when it shows one.
+      - A preview that is not running shows as not running in the window too, not as a cached page.
+    exit_criteria:
+      - "with the preview stopped, a dev window on an app with a network-first service worker shows that the preview is down, never the cached build (red today: the cached build renders)"
+      - "after a rebuild and service_reload, the window shows the new build without a manual hard reload, and the reply says service workers were bypassed"
+      - "an explicit keep-service-worker option leaves the worker active and names it in the reply"
+    unscoreable: "unpinnable-until-the-guard-exists: the stale-build arm needs a fixture app with a service worker"
+    next_action: >
+      Write a fixture app with a network-first service worker and a build stamp, reproduce the stale render with the preview stopped, then add the bypass to window_cdp's per-page setup.
+    provenance: |
+      Filed by macuahuitl-fedora, 2026-10-15T02:59:50Z, from the visual-chess field report.
+    events:
+      - type: filed
+        ts: "2026-10-15T02:59:50Z"
+        host: macuahuitl
+        summary: |-
+          Service workers in dev windows mask a dead preview as a stale build.
+
+  - packet_id: a-forge-can-run-a-projects-headless-browser-tests-without-downloading-a-browser
+    order: 1726-3mn6
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    size: M
+    pickup_role: linux
+    capability_tags: [forge, browser, testing, playwright, egress]
+    related: [1712-3fsw, 1715-xp6x, 1637-5765]
+    depends_on: []
+    title: |
+      A project's own browser tests (Playwright and the like) cannot install a browser in a forge, because cdn.playwright.dev and playwright.download.prss.microsoft.com are blocked; the agent had to hand-download Chrome for Testing from storage.googleapis.com. Ship a pinned headless shell and export its path, or admit those hosts
+    context: |
+      visual-chess field report: "headless Chrome inside the forge works end to end, the only way to verify the app in this session". The agent fetched chrome-headless-shell 156.0.8078.4 (125 MB zip) into ~/.cache/tillandsias-project and pointed PLAYWRIGHT_BROWSERS_PATH at it. It then ran the app's 8/8 tests and a desktop plus iPhone-13 smoke test with screenshots, DOM queries and console output.
+      This differs from browser.open's headless windows (1712-3fsw): a project's own test runner needs a browser inside the forge process tree.
+      Options:
+      - Pre-bake a pinned chrome-headless-shell (index digest, sha256) in an opt-in sibling or the cache volume, exporting CHROMIUM_PATH and PLAYWRIGHT_BROWSERS_PATH.
+      - Admit the Playwright download hosts at the proxy (read-only, pinned by the runner's own manifest).
+      Choose by size, update cadence and the 348 MB RAM-volume limit (1637-5765's measurement). The browser must live on the cache volume, not the tmpfs.
+    exit_criteria:
+      - "in a fresh forge, `npx playwright test` in a project that uses Playwright's chromium runs without any manual browser download (red today: the download host is blocked)"
+      - "the browser lives off the RAM project volume, and its version is pinned and recorded"
+    unscoreable: "unpinnable-until-the-guard-exists: the fresh-forge Playwright arm is the deliverable"
+    next_action: >
+      Measure what `npx playwright install chromium` fetches (hosts, sizes) through a CONNECT-logging proxy, the way 1637-5765 measured Flutter, then pick the option and record the measurement on this row.
+    provenance: |
+      Filed by macuahuitl-fedora, 2026-10-15T02:59:50Z, from the visual-chess field report.
+    events:
+      - type: filed
+        ts: "2026-10-15T02:59:50Z"
+        host: macuahuitl
+        summary: |-
+          Project browser tests cannot get a browser in a forge.
+
+  - packet_id: real-test-devices-reach-a-projects-live-preview-without-a-production-deploy
+    order: 1727-fi4j
+    status: pending
+    kind: research
+    priority: p2
+    desired_release: v0.6
+    size: L
+    pickup_role: any
+    capability_tags: [cloudflare, preview, devices, design, egress]
+    related: [1707-g633, 1703-j7vf, 1505-sm2j, 1684-tx37]
+    depends_on: []
+    title: |
+      Design: a real iPhone cannot reach a forge's preview (https://www.<project>.localhost:18443 is the host's loopback), so today every real-device test is a production deploy. Choose the path for phones on the user's LAN or account to reach a live preview
+    context: |
+      visual-chess field report, question 1. The app's iOS crash fix (one Stockfish engine instead of four, 104 MB NNUE each) needs a real iPhone, and emulation cannot reproduce iOS memory limits.
+      Options from the report:
+      - (a) a cloudflared tunnel from the host to an Access-protected hostname per project or lane;
+      - (b) `wrangler versions upload`: a non-promoted Worker version with its own URL. Real Cloudflare, not production traffic, and the build runs locally, so it spends no Workers Builds minutes (relevant to the operator's deploy budget);
+      - (c) bind the preview to the LAN with a CA the device trusts (messy on iOS).
+      Constraints:
+      - It publishes an enclave service outward, so it needs the operator's ruling and the workload-identity direction (1684-tx37).
+      - No Cloudflare credential ever enters a forge (the host acts).
+      - It must respect the deploy budget.
+    exit_criteria:
+      - "a design record with a recommended option, accepted by the operator"
+    unscoreable: "design row: closure is the operator's acceptance"
+    next_action: >
+      Measure option (b)'s cost (does versions upload count against Workers Builds minutes? what URL and lifetime does a version get?) and (a)'s setup steps on the operator's account. Then draft the recommendation.
+    provenance: |
+      Filed by macuahuitl-fedora, 2026-10-15T02:59:50Z, from the visual-chess field report.
+    events:
+      - type: filed
+        ts: "2026-10-15T02:59:50Z"
+        host: macuahuitl
+        summary: |-
+          Real devices cannot reach a forge preview; every device test is a production deploy.
+
+  - packet_id: a-non-flutter-web-project-gets-live-reload-in-its-preview-windows
+    order: 1728-ix79
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    size: M
+    pickup_role: any
+    capability_tags: [local-web-preview, live-reload, browser, onboarding]
+    related: [1637-5765, 1725-5uue, 1705-bgen]
+    depends_on: []
+    title: |
+      Live reload for any stack: when a project's build output changes, every preview window the lane opened reloads (or swaps CSS), so a TypeScript/WASM project gets the edit-and-see loop that Flutter gets from its own hot reload
+    context: |
+      visual-chess field report, question 2. The owner expected Flutter-style hot reload on every device ("that's why we chose Flutter"), but the project is TypeScript (esbuild) plus Rust/WASM (wasm-pack). The realistic equivalent is live reload: a watcher rebuilds dist/ and the attached windows reload. The forge already owns the windows (CDP per window) and the preview, so after service_reload, or on a dist/ change, it can reload each window the lane opened.
+      The onboarding skill (1705-bgen) should also set expectations: Flutter projects get hot reload, while others get live reload.
+    exit_criteria:
+      - "in a static-runtime preview, a rebuild that changes dist/ makes every window the lane opened show the new build within a bounded time, without a manual reload (red today)"
+    unscoreable: "unpinnable-until-the-guard-exists: the rebuild-then-window arm is the deliverable"
+    next_action: >
+      Decide the trigger (service_reload only, or a watcher on the published root), then reload windows through window_cdp (Page.reload, ignoreCache). Build on 1725-5uue's service-worker bypass.
+    provenance: |
+      Filed by macuahuitl-fedora, 2026-10-15T02:59:50Z, from the visual-chess field report.
+    events:
+      - type: filed
+        ts: "2026-10-15T02:59:50Z"
+        host: macuahuitl
+        summary: |-
+          Stack-agnostic live reload for preview windows.
+
+  - packet_id: real-web-and-rust-projects-fit-in-a-forge-without-hand-moving-build-dirs
+    order: 1729-kg5q
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: M
+    pickup_role: linux
+    capability_tags: [forge, tmpfs, cache-volume, onboarding]
+    related: [1637-5765, 1637-tpz3, 1705-bgen]
+    depends_on: []
+    title: |
+      The forge's RAM checkout (256-348 MB tmpfs) breaks any real web or Rust project: the agent had to move node_modules, .cache, target and TMPDIR onto ~/.cache/tillandsias-project by hand before ./build.sh --dev would run. Heavy build directories should land on the persistent cache volume automatically
+    context: |
+      visual-chess field report, question 5 and setup step 1. lenovinha measured that macron.dev plus one Flutter app use 246 of 348 MB (1637-5765). The RAM checkout is fast and disposable, which is deliberate for the source. But build artefacts (node_modules, target/, .dart_tool, build/, .cache) and TMPDIR belong on the cache volume, which already exists per project ($PROJECT_CACHE). Today an agent discovers this by failing.
+      Options:
+      - The forge pre-creates and links or bind-mounts the well-known heavy directories into the cache volume.
+      - Set env vars where tools honour them: CARGO_TARGET_DIR, npm_config_cache, TMPDIR, PUB_CACHE (already done for Flutter).
+      Watch the cache volume's own growth (1637-tpz3, 77 GB once).
+    exit_criteria:
+      - "in a fresh forge, a TypeScript+wasm-pack project and a Cargo project each build without the agent moving any directory (red today: the tmpfs fills)"
+      - "the source checkout stays on the RAM volume; only build artefacts and TMPDIR move"
+    unscoreable: "unpinnable-until-the-guard-exists: the fresh-forge build arm is the deliverable"
+    next_action: >
+      Measure a fresh forge building visual-chess (or a fixture with node_modules plus a Cargo target) to see which directories overflow. Then implement env vars first (cheapest), and directory links only where a tool has no env var.
+    provenance: |
+      Filed by macuahuitl-fedora, 2026-10-15T02:59:50Z, from the visual-chess field report.
+    events:
+      - type: filed
+        ts: "2026-10-15T02:59:50Z"
+        host: macuahuitl
+        summary: |-
+          The forge's RAM checkout is too small for real web and Rust builds.
+
+events:
+  - packet_id: service-reload-finishes-or-names-why-not-instead-of-a-bare-podman-run-timeout
+    event:
+      type: note
+      ts: "2026-10-15T02:59:50Z"
+      host: macuahuitl
+      summary: |-
+        Second field report (visual-chess, finding 7, on yoga): service_reload AND repeat publish_local both failed with "podman failed at step run (timeout)". Later the preview died outright ("not_running") and every publish_local retry hit the same timeout, so ONCE A PREVIEW DIES THE AGENT CANNOT REVIVE IT. Likely a leftover container or name conflict on the host (a guess; no logs are exposed). Add to this row's scope (the report's question 3): agents can read the preview's logs and a readiness signal, and can force-recreate a dead preview.

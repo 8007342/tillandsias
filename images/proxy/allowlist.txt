@@ -90,6 +90,15 @@ tmaproduction.blob.core.windows.net
 .skypack.dev
 .deno.land
 .esm.run
+# Playwright browser builds (order 1726-3mn6). `npx playwright install
+# chromium` (1.64.1) fetched ONLY from this host, measured 2026-10-15 on yoga
+# with DEBUG=pw:install: cft/<ver>/linux64/chrome-linux64.zip,
+# chrome-headless-shell-linux64.zip and ffmpeg-linux.zip, 681 MB unpacked.
+# Its fallback, playwright.download.prss.microsoft.com, is already covered
+# by .microsoft.com below. The browser version is pinned by the project's
+# own playwright package; the files land in PLAYWRIGHT_BROWSERS_PATH on the
+# project cache volume (lib-common.sh), never the RAM checkout.
+.playwright.dev
 
 # --- Language/framework tools ---
 .nodejs.org
