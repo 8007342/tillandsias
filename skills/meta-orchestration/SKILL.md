@@ -413,6 +413,9 @@ so is now REAL and CHECKABLE (order 801-qasc) — run the check, do not eyeball 
 scripts/check-daily-maintenance.sh check     # exit 0 = today's gate ran; skip the body
 ```
 
+Read the push guards too, every time, even when the day's gate is current
+(see "Push Guards Armed" below): `tillandsias-plan script run scripts/lua/check-hooks-armed.lua`.
+
 It prints exactly one line matching
 `^(ok:daily-maintenance-(current|stamped):[0-9]{4}-[0-9]{2}-[0-9]{2}|skip:forge-exempt|due:(no-marker|unreadable-marker|stale:[0-9]{4}-[0-9]{2}-[0-9]{2}))$`
 and exits 0 only when today's gate is recorded. **`due:*` means run the body**;
@@ -1222,6 +1225,23 @@ On `blocked:expert-sources-absent`, do NOT launch a forge expecting expert
 answers. Switch this checkout to a branch carrying the expert sources first. On
 `ok:no-plan-crate` the target project simply has no plan expert, which is normal
 off-Tillandsias.
+
+## Push Guards Armed (read-only; Start Of Day and Start Of Cycle, order 1255-s4im)
+
+```bash
+tillandsias-plan script run scripts/lua/check-hooks-armed.lua   # ok:hooks-armed:<marker>
+```
+
+It answers whether THIS checkout's pre-push hook carries the current
+`tillandsias-pre-push-v*` marker, and it installs nothing:
+`ok:hooks-armed:<marker>` (exit 0), `degraded:hooks:absent` or
+`degraded:hooks:stale:<have>-><want>` (exit 1), `refused:hooks:foreign-pre-push:*`
+or `refused:hooks:<scope>-hooks-path:*` (exit 3). **On `degraded:` run
+`bash scripts/ensure-hooks.sh` before any push**: until then a push from here
+runs none of the push guards, the release freeze among them. The plan-lane
+scripts arm the hooks on their own (`ensure-hooks.sh --prelude`), but a host
+whose first push is a WORK REF never runs one of them, which is why this is
+read at the start of the day and of every cycle.
 
 ## MCP Expert Health Probe (advisory — record, never block)
 
