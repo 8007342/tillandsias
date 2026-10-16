@@ -48,6 +48,18 @@ COPY cheatsheet-sources/ /opt/cheatsheet-sources/
 RUN mkdir -p /usr/local/lib/tillandsias
 COPY lib-common.sh /usr/local/lib/tillandsias/lib-common.sh
 COPY codex-safe-state.sh /usr/local/lib/tillandsias/codex-safe-state.sh
+# 1750-a4re: the Bash command policy for Claude in EVERY forge, not only in
+# Tillandsias checkouts. policy-bin/tillandsias-plan is a static musl build
+# staged by scripts/build-forge-plan-bin.sh (a build artifact, never committed;
+# the release's nix build always stages it). The directory is tracked, so a
+# dev tree without the binary still builds an image. bash-policy-hook is what
+# config-overlay/claude/settings.json names, and it refuses every command when
+# no binary can decide (fails closed).
+COPY policy-bin/ /usr/local/lib/tillandsias/policy-bin/
+COPY bash-policy-hook /usr/local/lib/tillandsias/bash-policy-hook
+RUN chmod 0755 /usr/local/lib/tillandsias/bash-policy-hook \
+    && { [ ! -e /usr/local/lib/tillandsias/policy-bin/tillandsias-plan ] \
+         || chmod 0755 /usr/local/lib/tillandsias/policy-bin/tillandsias-plan; }
 COPY brew-tools-allowlist.txt /usr/local/lib/tillandsias/brew-tools-allowlist.txt
 COPY brew-shim-exec.sh /usr/local/bin/tillandsias-brew-shim-exec
 # 767-nkkq: minimal PID-1 crash supervision for non-interactive harness runs —

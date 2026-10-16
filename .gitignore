@@ -60,6 +60,12 @@ images/router/tillandsias-router-sidecar
 # (765-5efu, e2a421b40). A build artifact of the same class as the binary above.
 images/router/.sidecar.stamp
 
+# 1750-a4re: the forge image's static musl tillandsias-plan (the Bash command
+# policy decider), staged by scripts/build-sidecar.sh beside the sidecar, plus
+# its evaluation stamp. Build artifacts of the same class.
+images/default/policy-bin/tillandsias-plan
+images/default/policy-bin/.stamp
+
 # cheatsheet-sources: TOMBSTONED by cheatsheets-license-tiered (replaced by
 # image-baked /opt/cheatsheet-sources/ + per-project pull cache). The whole
 # directory is now gitignored to guard against any local cache pollution that

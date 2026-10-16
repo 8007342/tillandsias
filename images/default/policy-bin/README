@@ -1,0 +1,7 @@
+policy-bin/ — the forge image's Bash command-policy decider (order 1750-a4re).
+
+scripts/build-forge-plan-bin.sh stages a static musl `tillandsias-plan` here
+(gitignored). The forge Containerfile copies this directory to
+/usr/local/lib/tillandsias/policy-bin/, where bash-policy-hook runs it. The
+directory is tracked so the image still builds without the binary; such a
+forge refuses every Claude Bash command until the binary is shipped.
