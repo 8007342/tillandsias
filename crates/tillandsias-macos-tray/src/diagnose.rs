@@ -962,6 +962,20 @@ async fn probe_phase_secure_or_plain(
     tillandsias_vm_layer::vsock_exec::probe_vm_phase(stream).await
 }
 
+/// ORDER 1751-ipuw: the phases in which `--exec-guest` may run. The guest
+/// service answering at all is enough: Starting (Ready is held until Vault
+/// is unsealed) and Failed (a broken Vault or provisioning, the cases this
+/// tool exists to diagnose) both map to Ready for this one caller.
+fn exec_guest_ready_phase(
+    phase: tillandsias_control_wire::VmPhase,
+) -> tillandsias_control_wire::VmPhase {
+    use tillandsias_control_wire::VmPhase;
+    match phase {
+        VmPhase::Starting | VmPhase::Failed => VmPhase::Ready,
+        other => other,
+    }
+}
+
 /// Output format selected via `--diagnose` (default) or
 /// `--diagnose --json`. Mirrors windows-tray's `DiagnoseFormat`
 /// (commit c4908438).
@@ -1701,10 +1715,15 @@ pub fn exec_guest_main(argv: Vec<String>, required_cap: Option<&'static str>) ->
             eprintln!("{{\"error\":\"start: {e}\"}}");
             return 1;
         }
-        eprintln!("[exec-guest] waiting for VM phase Ready…");
+        eprintln!("[exec-guest] waiting for the guest service to answer…");
+        // ORDER 1751-ipuw: Ready now waits for Vault to be unsealed, and
+        // exec-guest is the tool for diagnosing a guest whose Vault is NOT
+        // (or whose provisioning failed). It needs only the guest service, so
+        // any answered phase but Draining/Stopping lets it run.
         if let Err(e) = vz
             .wait_phase_ready(Duration::from_secs(300), |t| {
-                probe_phase_secure_or_plain(&vz, t)
+                let probe = probe_phase_secure_or_plain(&vz, t);
+                async move { probe.await.map(exec_guest_ready_phase) }
             })
             .await
         {
@@ -3129,6 +3148,18 @@ mod tests {
     /// even though the guest only speaks Noise, and could hang/fail even
     /// though the real user-facing traffic is correctly secured.
     /// @trace plan/issues/secure-channel-release-and-probe-hardening-2026-07-05.md
+    #[test]
+    fn exec_guest_runs_on_a_guest_whose_vault_holds_ready_or_failed() {
+        use super::exec_guest_ready_phase;
+        use tillandsias_control_wire::VmPhase;
+        for p in [VmPhase::Starting, VmPhase::Failed, VmPhase::Ready] {
+            assert_eq!(exec_guest_ready_phase(p), VmPhase::Ready, "{p:?}");
+        }
+        for p in [VmPhase::Draining, VmPhase::Stopping, VmPhase::Provisioning] {
+            assert_eq!(exec_guest_ready_phase(p), p, "{p:?}");
+        }
+    }
+
     #[test]
     fn probe_phase_secure_or_plain_uses_the_secure_or_plain_opener() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/diagnose.rs"));

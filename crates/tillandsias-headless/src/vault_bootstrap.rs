@@ -10893,4 +10893,58 @@ mod cloudflare_token_rotation_tests {
         let v = audit_policy_dir(&dir);
         assert!(v.is_empty(), "policy violations:\n{}", v.join("\n"));
     }
+
+    /// ORDER 1751-ipuw: every unseal failure logs what VAULT said, never key
+    /// material. "HTTP 400: wrong key" was the entrypoint's assumption, with
+    /// Vault's own reason discarded, so two field failures could not say what
+    /// Vault refused. This runs the entrypoint's REAL function text in bash.
+    #[test]
+    fn unseal_failures_log_vaults_own_errors_and_never_key_material() {
+        let entrypoint = include_str!("../../../images/vault/entrypoint.sh");
+        let func: String = entrypoint
+            .split("# BEGIN unseal_error_detail")
+            .nth(1)
+            .and_then(|rest| rest.split_once('\n').map(|(_, body)| body))
+            .and_then(|rest| rest.split("# END unseal_error_detail").next())
+            .expect("entrypoint defines unseal_error_detail between its markers")
+            .to_string();
+        let run = |body: &str| -> String {
+            let out = std::process::Command::new("bash")
+                .arg("-c")
+                .arg(format!("{func}\nunseal_error_detail \"$1\""))
+                .arg("bash")
+                .arg(body)
+                .output()
+                .expect("run bash");
+            assert!(out.status.success(), "{:?}", out);
+            String::from_utf8(out.stdout).unwrap()
+        };
+        assert_eq!(
+            run(r#"{"errors":["Vault is sealed","invalid key"]}"#),
+            "Vault is sealed; invalid key"
+        );
+        let hex_key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let b64_key = "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVphYmNkZWZnaGlqa2xtbm9wcQ==";
+        let leaked = run(&format!(
+            r#"{{"errors":["key {hex_key}","b64 {b64_key}"]}}"#
+        ));
+        assert!(
+            !leaked.contains(hex_key) && !leaked.contains(b64_key),
+            "{leaked}"
+        );
+        assert!(leaked.contains("<redacted:hex>") && leaked.contains("<redacted:b64>"));
+        assert_eq!(run("not json"), "(no errors array in Vault's response)");
+        // Every FATAL unseal branch logs it.
+        let unseal = entrypoint
+            .split("# Step 4: Unseal.")
+            .nth(1)
+            .expect("the unseal step");
+        assert_eq!(
+            unseal
+                .matches(r#"log "vault said: $(unseal_error_detail "$RESPONSE")""#)
+                .count(),
+            3,
+            "the 400, other-status and still-sealed branches each log Vault's reason"
+        );
+    }
 }
