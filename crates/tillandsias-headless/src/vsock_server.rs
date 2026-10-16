@@ -3851,6 +3851,12 @@ mod tests {
             window.contains("vault_bootstrap::ensure_vault_running("),
             "{window}"
         );
+        // Negative control: the ungated, socket-only advancer (the window
+        // this order closes) must not be what the service runs.
+        assert!(
+            !window.contains("advance_to_ready_when_podman_up("),
+            "{window}"
+        );
     }
 
     /// gap-6 contract: when the socket never appears within `timeout`,
