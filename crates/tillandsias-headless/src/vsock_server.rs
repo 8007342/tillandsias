@@ -1068,6 +1068,10 @@ async fn serve_ready_stream(
                 "CloudRefreshRequest".into(),
                 "VmShutdownRequest".into(),
                 "GithubLoginStatusRequest".into(),
+                // Order 1719-83po: a tray asks this guest about a stored
+                // Cloudflare login only when the guest advertises it, so an
+                // older guest is never sent a variant it cannot decode.
+                "CloudflareLoginStatusRequest".into(),
                 // Order 333: advertise guest metrics so a tray can feature-
                 // detect instead of probing a version table.
                 "MetricsSnapshotRequest".into(),
@@ -1535,6 +1539,31 @@ async fn serve_ready_stream(
                         seq_in_reply_to: seq,
                         logged_in,
                         handle,
+                    },
+                };
+                if write_envelope_with_shutdown(&mut write_half, &reply, &mut shutdown).await.is_err() {
+                    break 'connection;
+                }
+            }
+            ControlMessage::CloudflareLoginStatusRequest { seq } => {
+                // Order 1719-83po: whether a Cloudflare login is stored, for
+                // the tray's "Cloudflare Login" item. Only the boolean crosses
+                // the wire; the bundle is dropped inside the Vault helper. An
+                // unreadable Vault answers None (Unknown), never "signed out".
+                #[cfg(feature = "vault")]
+                let logged_in = tokio::task::spawn_blocking(|| {
+                    crate::vault_bootstrap::cloudflare_login_stored_live(false).ok()
+                })
+                .await
+                .unwrap_or(None);
+                #[cfg(not(feature = "vault"))]
+                let logged_in: Option<bool> = None;
+                let reply = ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: env.seq,
+                    body: ControlMessage::CloudflareLoginStatusReply {
+                        seq_in_reply_to: seq,
+                        logged_in,
                     },
                 };
                 if write_envelope_with_shutdown(&mut write_half, &reply, &mut shutdown).await.is_err() {

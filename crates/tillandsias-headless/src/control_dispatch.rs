@@ -170,6 +170,12 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
         (GithubLoginStatusRequest { .. }, Vsock) => Handle,
         (GithubLoginStatusRequest { .. }, UnixSocket) => Unsupported,
 
+        // Order 1719-83po: whether a Cloudflare login is stored is a GUEST
+        // Vault fact, asked by the macOS/Windows trays over vsock. A Linux
+        // tray reads its own Vault, so the unix socket has no handler.
+        (CloudflareLoginStatusRequest { .. }, Vsock) => Handle,
+        (CloudflareLoginStatusRequest { .. }, UnixSocket) => Unsupported,
+
         // Order 333: MetricsSnapshotRequest is vsock-only. The samples are
         // GUEST facts — per-container cgroup counters and per-mount I/O for
         // the enclave's own containers — so only the in-VM headless can
@@ -198,6 +204,7 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
             | DeliverCredentialsReply { .. }
             | VaultHandoverReply { .. }
             | GithubLoginStatusReply { .. }
+            | CloudflareLoginStatusReply { .. }
             | SubscribeAck
             | VmStatusPush { .. }
             | LoginStatePush { .. }
@@ -428,6 +435,17 @@ mod tests {
                 "GithubLoginStatusRequest",
             ),
             (
+                ControlMessage::CloudflareLoginStatusRequest { seq: 1 },
+                "CloudflareLoginStatusRequest",
+            ),
+            (
+                ControlMessage::CloudflareLoginStatusReply {
+                    seq_in_reply_to: 1,
+                    logged_in: Some(false),
+                },
+                "CloudflareLoginStatusReply",
+            ),
+            (
                 ControlMessage::GithubLoginStatusReply {
                     seq_in_reply_to: 1,
                     logged_in: true,
@@ -531,6 +549,7 @@ mod tests {
 | "DeliverCredentials"
 | "GetVaultHandover"
 | "GithubLoginStatusRequest"
+| "CloudflareLoginStatusRequest"
 // Order 333: guest-only facts (cgroup + /proc sampling).
 | "MetricsSnapshotRequest" => DispatchOutcome::Unsupported,
 "HelloAck"
@@ -541,6 +560,7 @@ mod tests {
 | "DeliverCredentialsReply"
 | "VaultHandoverReply"
 | "GithubLoginStatusReply"
+| "CloudflareLoginStatusReply"
 | "SubscribeAck"
 | "VmStatusPush"
 | "LoginStatePush"
@@ -577,6 +597,7 @@ _ => unreachable!("test fixture missing case for {name}"),
                 | "DeliverCredentials"
                 | "GetVaultHandover"
                 | "GithubLoginStatusRequest"
+                | "CloudflareLoginStatusRequest"
                 | "MetricsSnapshotRequest"
                 | "Subscribe" => DispatchOutcome::Handle,
                 "IssueWebSession" | "EvictProject" | "McpFrame" => DispatchOutcome::Unsupported,
@@ -588,6 +609,7 @@ _ => unreachable!("test fixture missing case for {name}"),
                 | "DeliverCredentialsReply"
                 | "VaultHandoverReply"
                 | "GithubLoginStatusReply"
+                | "CloudflareLoginStatusReply"
                 | "SubscribeAck"
                 | "VmStatusPush"
                 | "LoginStatePush"
@@ -675,6 +697,10 @@ _ => unreachable!("test fixture missing case for {name}"),
                 seq_in_reply_to: 1,
                 logged_in: true,
                 handle: Some("user".to_string()),
+            },
+            ControlMessage::CloudflareLoginStatusReply {
+                seq_in_reply_to: 1,
+                logged_in: None,
             },
             ControlMessage::SubscribeAck,
             ControlMessage::VmStatusPush {
