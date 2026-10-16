@@ -37,8 +37,10 @@
 # plus a kill, and the next run rebuilds it. Nothing here is precious.
 #
 # GRAMMAR (exactly one line on stdout)
-#   ok:dev-inference-ready:<generate-model>:<embed-model>
-#   ok:dev-inference-started:<generate-model>:<embed-model>
+#   ok:dev-inference-ready:<generate-model>:<embed-model>:lane=<bare-metal|container>
+#   ok:dev-inference-started:<generate-model>:<embed-model>:lane=<bare-metal|container>
+#                                        the lane that SERVED (1249-xngp)
+#   blocked:no-engine:macos-native       macOS: no host-native engine answers
 #   blocked:no-network                   cannot fetch the runtime or a model
 #   blocked:install-failed:<detail>   e.g. runtime-download, pull-<model>, no-zstd
 #   blocked:not-ready-after:<seconds>s
@@ -50,6 +52,12 @@
 #                                        THIS attempt (1248-j6vd)
 #   skip:unsupported-host                no lane was reasoned about for this host
 #   skip:no-local-inference              operator kill switch (620-ca7g)
+#
+# --probe-fallback (1249-xngp): the container fallback's own health, on the
+# next port, without touching the serving endpoint:
+#   ok:fallback-healthy:container:port=<n>
+#   blocked:fallback:(image-missing:build-inference|container-start-failed:<cause> log=<path>|not-ready-after:<s>s)
+#   skip:no-container-fallback:<lane>    wsl-native / macos-native have none
 #
 # Exit 0 on ok/skip, 1 on blocked.
 #
@@ -127,14 +135,46 @@ fi
 # Lane selection. Refuse to install into a host no lane was reasoned about —
 # the whole design rests on "the expert servers and this endpoint share a
 # loopback".
-if grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null; then
+if [ -n "${TILLANDSIAS_DEV_INFERENCE_LANE_OVERRIDE:-}" ]; then
+    # TEST SEAM (1249-xngp): scripts/lua/test-dev-inference-lane.lua pins each
+    # lane's verdict on any host. Never set outside that fixture.
+    LANE="$TILLANDSIAS_DEV_INFERENCE_LANE_OVERRIDE"
+elif grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null; then
     LANE="wsl-native"
 elif [ "$(uname -s 2>/dev/null)" = "Linux" ] && command -v podman >/dev/null 2>&1; then
     LANE="linux-container"
+elif [ "$(uname -s 2>/dev/null)" = "Darwin" ]; then
+    # ORDER 1249-xngp: on a macOS development host the bare-metal lane is a
+    # host-native ollama (the operator's own install). This script does not
+    # install one there; it reports whether one serves.
+    LANE="macos-native"
 else
     echo "skip:unsupported-host"
     exit 0
 fi
+
+# ORDER 1249-xngp. OPERATOR RULING 2026-09-18: prefer a BARE-METAL engine where
+# one exists; the throwaway container is the FALLBACK, with its measured
+# overhead. Because both are valid, every ok: verdict NAMES the lane that
+# served (`:lane=bare-metal` or `:lane=container`). Before this, a host-native
+# ollama answering the port read exactly like a healthy container, so
+# macuahuitl's container lane was dead from 2026-08-17 (1248-j6vd) and nothing
+# said so. The overhead the ruling accepts, measured on macuahuitl (A5000,
+# qwen2.5:0.5b, scripts/bench-accel-lane.sh): warm decode ~10%, COLD start 19x,
+# embedding 2.6x every rep. A baseline, not a fleet constant: re-measure per
+# host class.
+#
+# Which lane serves an answering endpoint: on linux-container, the container
+# when tillandsias-dev-inference is running, otherwise something host-native
+# holds the port. On wsl-native and macos-native, always bare metal.
+serving_lane() {
+    if [ "$LANE" = "linux-container" ] \
+        && [ "$(podman inspect -f '{{.State.Status}}' "$DEV_CONTAINER" 2>/dev/null)" = "running" ]; then
+        echo "container"
+    else
+        echo "bare-metal"
+    fi
+}
 
 api_up() { curl -fsS --max-time 2 "$ENDPOINT/api/version" >/dev/null 2>&1; }
 
@@ -362,9 +402,60 @@ wait_ready() {
     return 1
 }
 
+# ORDER 1249-xngp criterion 2: the FALLBACK's health, answerable without killing
+# the preferred engine by hand (which is how 1248-j6vd was finally found). A
+# throwaway container under its own name on the next port, brought up, asked
+# /api/version, and removed. It never touches the serving endpoint.
+if [ "${1:-}" = "--probe-fallback" ]; then
+    if [ "$LANE" != "linux-container" ]; then
+        echo "skip:no-container-fallback:$LANE"
+        exit 0
+    fi
+    DEV_CONTAINER="tillandsias-dev-inference-probe"
+    ENDPOINT_PORT=$((ENDPOINT_PORT + 1))
+    ENDPOINT="http://${ENDPOINT_HOST}:${ENDPOINT_PORT}"
+    mkdir -p "$STATE_DIR" 2>/dev/null || true
+    podman rm -f "$DEV_CONTAINER" >>"$LOG" 2>&1 || true
+    _log_mark="$(wc -c <"$LOG" 2>/dev/null | tr -d ' ')"
+    ensure_container
+    _pf_rc=$?
+    _pf_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+    if [ "$_pf_rc" -eq 2 ]; then
+        _pf_afford "the container fallback has no tillandsias-inference image on this host, so a host without a bare-metal engine would have no inference" \
+            "build it with ./build-inference.sh, then re-run --probe-fallback"
+        echo "blocked:fallback:image-missing:build-inference"
+        exit 1
+    elif [ "$_pf_rc" -ne 0 ]; then
+        _cause="$(tail -c +"$(( ${_log_mark:-0} + 1 ))" "$LOG" 2>/dev/null \
+            | grep -iE 'error|denied|no such|not found|failed' | tail -n 1 \
+            | tr -d '\r' | tr '\t' ' ' | cut -c1-240)"
+        podman rm -f "$DEV_CONTAINER" >>"$LOG" 2>&1 || true
+        _pf_afford "podman refused to start the fallback container (the 1248-j6vd shape: invisible while a bare-metal engine serves)" \
+            "fix the cause named in the verdict (full podman output in $LOG), then re-run --probe-fallback"
+        echo "blocked:fallback:container-start-failed:${_cause:-no-error-line-in-log} log=$LOG"
+        exit 1
+    fi
+    if ! wait_ready; then
+        podman rm -f "$DEV_CONTAINER" >>"$LOG" 2>&1 || true
+        _pf_afford "the fallback container started but its engine never answered within ${READY_BUDGET_SECS}s" \
+            "read $LOG for the engine's start-up; a first run may need a longer TILLANDSIAS_DEV_INFERENCE_READY_SECS"
+        echo "blocked:fallback:not-ready-after:${READY_BUDGET_SECS}s"
+        exit 1
+    fi
+    podman rm -f "$DEV_CONTAINER" >>"$LOG" 2>&1 || true
+    echo "ok:fallback-healthy:container:port=${ENDPOINT_PORT}"
+    exit 0
+fi
+
 started="no"
 
 if ! api_up; then
+    if [ "$LANE" = "macos-native" ]; then
+        echo "  why: no inference engine answers ${ENDPOINT}, and on macOS this script does not install one" >&2
+        echo "  remedy: start the host-native ollama (\`ollama serve\`, or its app), then re-run" >&2
+        echo "blocked:no-engine:macos-native"
+        exit 1
+    fi
     if [ "$LANE" = "linux-container" ]; then
         mkdir -p "$STATE_DIR" 2>/dev/null || true
         # ORDER 1248-j6vd criterion 2. Mark the log BEFORE the attempt, so the
@@ -413,8 +504,8 @@ for m in "$GEN_MODEL" "$EMBED_MODEL"; do
 done
 
 if [ "$started" = "yes" ]; then
-    echo "ok:dev-inference-started:${GEN_MODEL}:${EMBED_MODEL}"
+    echo "ok:dev-inference-started:${GEN_MODEL}:${EMBED_MODEL}:lane=$(serving_lane)"
 else
-    echo "ok:dev-inference-ready:${GEN_MODEL}:${EMBED_MODEL}"
+    echo "ok:dev-inference-ready:${GEN_MODEL}:${EMBED_MODEL}:lane=$(serving_lane)"
 fi
 exit 0
