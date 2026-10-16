@@ -1,0 +1,9 @@
+    Checking serde_core v1.0.228
+    Checking parking_lot v0.12.5
+    Checking once_cell v1.21.4
+    Checking thiserror v2.0.18
+    Checking tempfile v3.27.0
+    Checking tokio v1.52.2
+    Checking uuid v1.23.1
+    Checking tillandsias-exec v0.1.0 (/Users/tlatoani/claudia/wt-1558-ixih/crates/tillandsias-exec)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 9.13s
