@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-guest-forge-image-builds-fail-two-of-four-times-kswapd-soft-lockup-and-a-silent-helper-exit-101
+    event:
+      type: progress
+      ts: "2026-10-16T04:00:23Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        Part 2 MEASURED on v56.10.16.1 (macOS, the release tray only): 4 fresh-disk forge image builds through --opencode, each after a forced REBUILD. The image built every time; 0 soft-lockup/RCU-stall lines in each boot journal; the peak build step was 4.2G each time (the others under 700M); root disk 5.5G of 20G. Build 3 exited 1, but on 1751-ipuw (a Vault unseal key rejected after a quit during Securing Vault), not the image build. Neither 15.1 failure reproduced on the product path. The kswapd lockup was under an in-guest tillandsias-headless --init, which builds every image at once and is not a user path. The fail-loud message from part 1 was not exercised, because no build failed. Record: plan/issues/e2e-smoke-v56.10.16.1-macos-2026-10-16.md.

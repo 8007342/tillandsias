@@ -39,7 +39,18 @@ pub fn exec_argv_is_allowed(argv: &[String]) -> bool {
     match argv[0].as_str() {
         "/bin/bash" => argv.len() >= 2 && (argv[1] == "-l" || argv[1] == "-lc"),
         "tillandsias" => argv.len() == 3 && argv[1] == "--agent",
-        "tillandsias-headless" => argv.len() >= 2 && argv[1] == "--github-login",
+        // ORDER 1719-83po: exactly the two login lanes, each a whole argv.
+        // `--github-login` used to admit any trailing flags; nothing sent
+        // them (only a pty_handler test uses this bare form).
+        "tillandsias-headless" => match &argv[1..] {
+            [flag] => flag == "--github-login" || flag == "--cloudflare-login",
+            [flag, via, mode] => {
+                flag == "--cloudflare-login"
+                    && via == "--via"
+                    && matches!(mode.as_str(), "loopback" | "qr" | "paste")
+            }
+            _ => false,
+        },
         "podman" if argv.len() >= 4 && argv[1] == "exec" && argv[2] == "-it" => {
             let target = &argv[3];
             if target.starts_with("tillandsias-") && target.ends_with("-forge") {
@@ -131,6 +142,70 @@ mod exec_allowlist_tests {
 
     fn argv(items: &[&str]) -> Vec<String> {
         items.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// ORDER 1719-83po (coordinator constraint, 2026-10-14): the bare
+    /// `tillandsias-headless` arm names EXACTLY `--cloudflare-login`, alone or
+    /// with one documented `--via` value, beside today's `--github-login`.
+    /// Every other headless flag is refused.
+    #[test]
+    fn the_bare_headless_arm_admits_exactly_the_two_logins() {
+        for ok in [
+            &["tillandsias-headless", "--github-login"][..],
+            &["tillandsias-headless", "--cloudflare-login"],
+            &[
+                "tillandsias-headless",
+                "--cloudflare-login",
+                "--via",
+                "loopback",
+            ],
+            &["tillandsias-headless", "--cloudflare-login", "--via", "qr"],
+            &[
+                "tillandsias-headless",
+                "--cloudflare-login",
+                "--via",
+                "paste",
+            ],
+        ] {
+            assert!(exec_argv_is_allowed(&argv(ok)), "must admit {ok:?}");
+        }
+        for refused in [
+            &["tillandsias-headless"][..],
+            &[
+                "tillandsias-headless",
+                "--cloudflare-login",
+                "--via",
+                "bogus",
+            ],
+            &["tillandsias-headless", "--cloudflare-login", "--via"],
+            &["tillandsias-headless", "--cloudflare-login", "--debug"],
+            &[
+                "tillandsias-headless",
+                "--cloudflare-login",
+                "--via",
+                "paste",
+                "--x",
+            ],
+            &["tillandsias-headless", "--cloudflare-logout"],
+            &[
+                "tillandsias-headless",
+                "--github-login",
+                "--cloudflare-logout",
+            ],
+            &["tillandsias-headless", "--github-login", "--via", "paste"],
+            &["tillandsias-headless", "--reset-state"],
+            &[
+                "tillandsias-headless",
+                "--via",
+                "paste",
+                "--cloudflare-login",
+            ],
+        ] {
+            assert!(
+                !exec_argv_is_allowed(&argv(refused)),
+                "must refuse {refused:?}"
+            );
+        }
     }
 
     /// The shapes the trays actually send must keep working. This is the
