@@ -1,0 +1,33 @@
+# images/image-pins.yaml — written by scripts/lua/refresh-image-pins.lua (order 1716-t2gi).
+# One entry per `FROM …@sha256:` pin, read from its registry BY DIGEST. Checked
+# offline by scripts/lua/check-image-pins.lua: each pin must be a multi-arch
+# index carrying linux/amd64 and linux/arm64. Do not hand-edit; re-run the script.
+pins:
+  - ref: docker.io/library/debian:bookworm-slim
+    digest: sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587
+    media_type: application/vnd.oci.image.index.v1+json
+    platforms:
+      - linux/amd64
+      - linux/arm/v7
+      - linux/arm64/v8
+      - linux/386
+      - linux/ppc64le
+  - ref: docker.io/library/node:22.19.0-bookworm-slim
+    digest: sha256:4a4884e8a44826194dff92ba316264f392056cbe243dcc9fd3551e71cea02b90
+    media_type: application/vnd.oci.image.index.v1+json
+    platforms:
+      - linux/amd64
+      - linux/arm/v7
+      - linux/arm64/v8
+      - linux/ppc64le
+      - linux/s390x
+  - ref: docker.io/library/ubuntu:24.04
+    digest: sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
+    media_type: application/vnd.oci.image.index.v1+json
+    platforms:
+      - linux/amd64
+      - linux/arm/v7
+      - linux/arm64/v8
+      - linux/ppc64le
+      - linux/riscv64
+      - linux/s390x
