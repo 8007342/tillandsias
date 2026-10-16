@@ -5126,6 +5126,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Cheatsheet-reference fixture passed"
 
+    # 1750-a4re: the forge's Claude Bash hook fails CLOSED (no decider -> every
+    # command refused, a decider that fails -> refused), the overlay names a
+    # shipped absolute path, the pre-1750 bare command exits 127 (the
+    # fail-open), and the host bridge still allows on the same missing binary.
+    _step "Checking the forge Bash policy hook fails closed (1750-a4re)..."
+    if ! _run_lua_decider "scripts/lua/test-forge-bash-policy-hook-fails-closed.lua" 2>&1; then
+        _error "the forge Bash policy hook fixture failed — see the FAIL lines above (1750-a4re)"
+        exit 1
+    fi
+    _info "Forge Bash policy hook fixture passed"
+
     # ORDER 1384-bxhk — the shell ratchet: prints the Lua migration's counts on
     # every --check, refuses a NEW .sh decider (check-/test-/verify-/guard-), a
     # new pipe site beyond a file's floor and (once steps: exists) a new piped

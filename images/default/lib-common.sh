@@ -3924,8 +3924,9 @@ seed_claude_bypass_consent() {
 }
 
 # seed_claude_pretooluse_hook — order 1443-we89, THE TEMPORARY BRIDGE. Merge the
-# image's PreToolUse (matcher Bash) entry, which runs `tillandsias-plan policy
-# classify-bash --hook`, into ~/.claude/settings.json, so every Claude session
+# image's PreToolUse (matcher Bash) entry, which runs
+# /usr/local/lib/tillandsias/bash-policy-hook (1750-a4re: the image ships the
+# decider and the hook fails closed without it), into ~/.claude/settings.json, so every Claude session
 # in a forge on ANY project has its Bash commands checked (operator ruling 1,
 # 2026-09-27: "Commit the hook to the project"; the forge overlay carries it
 # for projects that are not Tillandsias). Additive: every other setting and
@@ -3950,13 +3951,20 @@ seed_claude_pretooluse_hook() {
             trace_lifecycle "config" "claude settings.json is not a JSON object; PreToolUse hook NOT seeded"
             return 1
         fi
-        # Already present (any hook running classify-bash): leave the file alone.
-        if jq -e '[.hooks.PreToolUse[]?.hooks[]?.command // empty] | any(test("classify-bash"))' \
+        # Already present (the overlay's own hook command): leave the file alone.
+        if jq -e --slurpfile ov "$overlay_cfg" \
+            '[.hooks.PreToolUse[]?.hooks[]?.command // empty] | any(. == $ov[0].hooks.PreToolUse[0].hooks[0].command)' \
             "$settings_cfg" >/dev/null 2>&1; then
             rm -f "$tmp"
             return 0
         fi
-        jq -s '.[0] * {hooks: ((.[0].hooks // {}) + {PreToolUse: ((.[0].hooks.PreToolUse // []) + .[1].hooks.PreToolUse)})}' \
+        # 1750-a4re: drop the pre-1750 entry that ran the bare
+        # `tillandsias-plan policy classify-bash --hook` (a settings.json
+        # restored from the approvals vault still carries it, and it exits 127
+        # in a forge with no binary on PATH), then append the overlay's.
+        jq -s '.[0] * {hooks: ((.[0].hooks // {}) + {PreToolUse: (([.[0].hooks.PreToolUse // [] | .[]
+                | select(([.hooks[]?.command // empty] | any(test("^tillandsias-plan policy classify-bash"))) | not)])
+                + .[1].hooks.PreToolUse)})}' \
             "$settings_cfg" "$overlay_cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
     else
         cp "$overlay_cfg" "$tmp" || { rm -f "$tmp"; return 1; }

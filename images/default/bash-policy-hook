@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# bash-policy-hook — the FORGE's Claude Code PreToolUse hook for the Bash tool.
+# @trace order:1750-a4re, order:1443-we89, spec:command-policies
+#
+# Installed at /usr/local/lib/tillandsias/bash-policy-hook and named by absolute
+# path in config-overlay/claude/settings.json. Every decision is made by the
+# tillandsias-plan the image ships in /usr/local/lib/tillandsias/policy-bin/
+# (staged by scripts/build-forge-plan-bin.sh; the release stages it through
+# nix), via
+# `policy classify-bash --hook`: deny = exit 2 with the refusal on stderr,
+# ask = the permissionDecision JSON on stdout, allow = exit 0, silent.
+#
+# FAILS CLOSED (coordinator ruling on 1750-a4re, 2026-10-16). This is NOT the
+# host bridge (scripts/hooks/claude-pretooluse-command-policy.sh), which allows
+# every command when it has no binary, by the 1443-we89 design: a developer
+# machine can legitimately lack the binary or carry a stale one. In a forge the
+# binary ships with the image, so a missing or failing decider means a broken
+# image, and a security boundary that cannot decide must refuse. Before this
+# file, settings.json named the bare `tillandsias-plan`, which no forge image
+# shipped: exit 127, which Claude Code treats as a non-blocking hook error, so
+# every rule was silently off outside Tillandsias checkouts.
+#
+# Resolution: the shipped binary; else the forge's expert build
+# ($FORGE_EXPERTS_BIN_DIR, default ~/.local/bin); else refuse.
+# TILLANDSIAS_FORGE_POLICY_BIN names the binary instead (fixture seam).
+set -u
+
+refuse() { # refuse <token> <why>
+    printf 'refused:bash-policy:%s\n' "$1" >&2
+    printf 'why: %s\n' "$2" >&2
+    printf 'remedy: rebuild the forge image (tillandsias --init), which ships /usr/local/lib/tillandsias/policy-bin/tillandsias-plan; the command policy refuses every command until it can decide (1750-a4re)\n' >&2
+    exit 2
+}
+
+runs() { [ -n "$1" ] && [ -x "$1" ] && "$1" capabilities >/dev/null 2>&1; }
+
+plan=""
+if [ -n "${TILLANDSIAS_FORGE_POLICY_BIN:-}" ]; then
+    runs "$TILLANDSIAS_FORGE_POLICY_BIN" && plan="$TILLANDSIAS_FORGE_POLICY_BIN"
+else
+    for c in /usr/local/lib/tillandsias/policy-bin/tillandsias-plan \
+        "${FORGE_EXPERTS_BIN_DIR:-${HOME:-/home/forge}/.local/bin}/tillandsias-plan"; do
+        if runs "$c"; then plan="$c"; break; fi
+    done
+fi
+[ -n "$plan" ] || refuse decider-absent "no runnable tillandsias-plan in this forge (looked for the image's /usr/local/lib/tillandsias/policy-bin/tillandsias-plan and \$FORGE_EXPERTS_BIN_DIR), so this Bash command cannot be checked"
+
+input="$(cat)"
+errf="$(mktemp "${TMPDIR:-/tmp}/bash-policy-hook-err.XXXXXX")" || refuse decider-failed "could not create a temp file for the decider's stderr"
+out="$("$plan" policy classify-bash --hook <<<"$input" 2>"$errf")"
+rc=$?
+err="$(cat "$errf")"
+rm -f "$errf"
+if [ "$rc" -eq 0 ]; then
+    [ -z "$out" ] || printf '%s\n' "$out"
+    exit 0
+fi
+case "$err" in
+    *refused:bash-policy:*)
+        printf '%s\n' "$err" >&2
+        exit 2
+        ;;
+esac
+refuse decider-failed "$plan policy classify-bash --hook exited $rc without a verdict: ${err:-no stderr}"

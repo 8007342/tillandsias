@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace order:1443-we89, spec:command-policies
+# @trace order:1443-we89, order:1750-a4re, spec:command-policies
 #
 # test-pretooluse-command-policy.sh — the Bash-tool bridge, driven with hook
 # JSON exactly as Claude Code sends it, so it never needs the hook installed.
@@ -199,8 +199,8 @@ repo_match="$(jget -r '.hooks.PreToolUse[0].matcher' "$ROOT/.claude/settings.jso
 OVERLAY="$ROOT/images/default/config-overlay/claude/settings.json"
 ov_cmd="$(jget -r '.hooks.PreToolUse[0].hooks[0].command' "$OVERLAY" 2>/dev/null)"
 [ "$(jget -r '.hooks.PreToolUse[0].matcher' "$OVERLAY" 2>/dev/null)" = Bash ] &&
-    [ "$ov_cmd" = "tillandsias-plan policy classify-bash --hook" ] &&
-    ok "arm 9: the forge overlay runs the classifier directly (projects without the stub)" ||
+    [ "$ov_cmd" = "/usr/local/lib/tillandsias/bash-policy-hook" ] &&
+    ok "arm 9: the forge overlay runs the image's fail-closed hook by absolute path (projects without the stub; 1750-a4re)" ||
     bad "arm 9: overlay command=[$ov_cmd]"
 if command -v jq >/dev/null 2>&1; then
     trace_lifecycle() { :; }
@@ -215,10 +215,19 @@ if command -v jq >/dev/null 2>&1; then
             seed_claude_pretooluse_hook
     done
     got="$(jget -c '[.skipDangerousModePermissionPrompt, .hooks.PostToolUse[0].matcher, .hooks.PreToolUse[0].hooks[0].command]' "$SETTINGS" 2>/dev/null)"
-    n="$(grep -o 'classify-bash' "$SETTINGS" | wc -l | tr -d ' ')"
-    [ "$got" = '[true,"Edit","tillandsias-plan policy classify-bash --hook"]' ] && [ "$n" = 1 ] &&
+    n="$(grep -o 'bash-policy-hook' "$SETTINGS" | wc -l | tr -d ' ')"
+    [ "$got" = '[true,"Edit","/usr/local/lib/tillandsias/bash-policy-hook"]' ] && [ "$n" = 1 ] &&
         ok "arm 9: the forge seed merges the hook once, keeping every other setting and hook" ||
         bad "arm 9: seed merge got=[$got] copies=$n"
+    # 1750-a4re: a restored settings.json carrying the pre-1750 bare command is
+    # migrated: that entry is replaced, another PreToolUse hook is kept.
+    printf '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"tillandsias-plan policy classify-bash --hook"}]},{"matcher":"Edit","hooks":[{"type":"command","command":"true"}]}]}}\n' >"$SETTINGS"
+    TILLANDSIAS_HOST_KIND=forge TILLANDSIAS_CONFIG_OVERLAY_ROOT="$W/overlay" CLAUDE_SETTINGS_FILE="$SETTINGS" \
+        seed_claude_pretooluse_hook
+    got="$(jget -c '[.hooks.PreToolUse[].hooks[0].command]' "$SETTINGS" 2>/dev/null)"
+    [ "$got" = '["true","/usr/local/lib/tillandsias/bash-policy-hook"]' ] &&
+        ok "arm 9: a restored pre-1750 bare classify-bash entry is replaced by the image hook; other PreToolUse hooks are kept" ||
+        bad "arm 9: migration got=[$got]"
     rm -f "$W/home/.claude/settings.json"
     TILLANDSIAS_HOST_KIND= TILLANDSIAS_CONFIG_OVERLAY_ROOT="$W/overlay" CLAUDE_SETTINGS_FILE="$SETTINGS" \
         seed_claude_pretooluse_hook

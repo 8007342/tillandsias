@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: the-forge-claude-pretooluse-hook-calls-tillandsias-plan-which-the-forge-image-never-ships-so-the-command-policy-is-silently-off-in-every-non-tillandsias-forge
+    event:
+      type: list-replace
+      ts: "2026-10-16T14:36:19Z"
+      agent_id: linux-lenovinha-claude-20261016t143619z
+      host: lenovinha
+      field: exit_criteria
+      items:
+        - "in a forge on a project that is NOT Tillandsias, a Claude session's `pkill -f x` is refused by the hook (exit 2 with the refusal); a live check in a released forge (Linux, plus one macOS aarch64 guest arm after the release)"
+        - "a fixture asserts the command the overlay's settings.json names resolves to an executable shipped in the forge image (red today)"
+        - "AMENDED 2026-10-16 by coordinator ruling, superseding \"if the binary is genuinely absent, the hook says so on stderr once per session instead of failing open silently\": the FORGE hook fails closed. With no runnable decider, every Bash command is refused (exit 2, refused:bash-policy:decider-absent, why, remedy). The image ships the decider, so absence means a broken image. The HOST bridge (scripts/hooks/claude-pretooluse-command-policy.sh) keeps failing open with a note, by the 1443-we89 design: a developer machine can legitimately lack the binary or carry a stale one. A fixture asserts the two diverge on the same missing binary."
+      summary: |-
+        coordinator ruling 2026-10-16: the forge hook fails closed once the image ships the decider; the host bridge keeps failing open (1443-we89)

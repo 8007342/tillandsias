@@ -162,6 +162,12 @@ jobs:
           nix build -L .#tillandsias-router-sidecar-x86_64-musl --out-link result-sidecar
           install -Dm0755 result-sidecar/bin/tillandsias-router-sidecar \
             images/router/tillandsias-router-sidecar
+          # ORDER 1750-a4re: the forge's fail-closed Bash command-policy decider,
+          # for the same reason: the binaries below get it through flake.nix's
+          # preBuild, and any image built later from this working tree reads it here.
+          nix build -L .#tillandsias-plan-x86_64-musl --out-link result-plan
+          install -Dm0755 result-plan/bin/tillandsias-plan \
+            images/default/policy-bin/tillandsias-plan
 
           nix build -L .#tillandsias-x86_64-musl              --out-link result-host
           nix build -L .#tillandsias-headless-x86_64-musl   --out-link result-hx
