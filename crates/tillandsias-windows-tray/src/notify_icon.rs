@@ -4579,6 +4579,13 @@ fn dispatch_action(hwnd: HWND, action: MenuAction) {
             }
             launch_open_shell_terminal(&action);
         }
+        // Order 1719-83po: the Windows Cloudflare Login lands in slice 5
+        // (yolanda). Until then this tray never asks the guest for the state,
+        // so the row stays Unknown (shown disabled) and this arm is
+        // unreachable from a click; it exists so the match stays exhaustive.
+        MenuAction::CloudflareLogin => {
+            tracing::info!("Cloudflare Login: not yet wired on Windows (1719-83po slice 5)");
+        }
         MenuAction::CloudOverflow | MenuAction::Inert => {}
     }
 }
