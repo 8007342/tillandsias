@@ -344,6 +344,35 @@ pub struct ProjectEntry {
 /// local-flag-preferred design), and no concrete cross-client in-progress
 /// coordination need has surfaced that would justify widening
 /// `LoginStatePush`.
+/// Order 1719-83po: whether a Cloudflare login is stored in the guest's Vault,
+/// for the "Cloudflare Login" item, which shows only while there is none, the
+/// way "GitHub Login" does.
+///
+/// `Unknown` is the initial state and what an unreadable Vault, or an older
+/// guest that does not advertise `CloudflareLoginStatusRequest`, maps to. As
+/// with [`GithubLoginState::Unknown`], it is never read as "signed out": the
+/// tray must not offer a login it has not ruled out.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub enum CloudflareLoginState {
+    #[default]
+    Unknown,
+    LoggedOut,
+    /// Local, set on the click, cleared by the next confirmed answer.
+    LoggingIn,
+    LoggedIn,
+}
+
+impl CloudflareLoginState {
+    /// Map a `CloudflareLoginStatusReply { logged_in }`.
+    pub fn from_reply(logged_in: Option<bool>) -> Self {
+        match logged_in {
+            Some(true) => CloudflareLoginState::LoggedIn,
+            Some(false) => CloudflareLoginState::LoggedOut,
+            None => CloudflareLoginState::Unknown,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum GithubLoginState {
     /// Order 626-r7kq: NOTHING has been observed yet — the tray has not had a
@@ -406,6 +435,10 @@ pub struct MenuState {
     pub status_text: String,
     pub version: String,
     pub login: GithubLoginState,
+    /// Order 1719-83po. `serde(default)` so a serialized state without the
+    /// field reads as Unknown.
+    #[serde(default)]
+    pub cloudflare_login: CloudflareLoginState,
     pub cloud_projects: Vec<ProjectEntry>,
     /// False until the first cloud-projects answer (push or refresh reply)
     /// lands. Distinguishes "still fetching your GitHub repos" from a
@@ -464,6 +497,7 @@ impl MenuState {
             // construction time, and claiming "signed out" before asking is
             // what put an actionable login leaf in front of signed-in users.
             login: GithubLoginState::Unknown,
+            cloudflare_login: CloudflareLoginState::Unknown,
             cloud_projects: Vec::new(),
             cloud_projects_loaded: false,
             selected_agent: SelectedAgent::Claude,
@@ -1004,6 +1038,27 @@ fn build_project_submenu(
 mod tests {
     use super::*;
 
+    /// Order 1719-83po: the reply maps three ways, and Unknown is the start.
+    #[test]
+    fn cloudflare_login_state_maps_the_reply_and_starts_unknown() {
+        assert_eq!(
+            CloudflareLoginState::from_reply(Some(true)),
+            CloudflareLoginState::LoggedIn
+        );
+        assert_eq!(
+            CloudflareLoginState::from_reply(Some(false)),
+            CloudflareLoginState::LoggedOut
+        );
+        assert_eq!(
+            CloudflareLoginState::from_reply(None),
+            CloudflareLoginState::Unknown
+        );
+        assert_eq!(
+            MenuState::initial().cloudflare_login,
+            CloudflareLoginState::Unknown
+        );
+    }
+
     /// @trace spec:host-shell-architecture
     /// @trace order:628-p5tj
     ///
@@ -1238,6 +1293,7 @@ mod tests {
             login: GithubLoginState::LoggedIn {
                 handle: "tlatoani".to_string(),
             },
+            cloudflare_login: CloudflareLoginState::Unknown,
             cloud_projects: cloud,
             cloud_projects_loaded: true,
             selected_agent: SelectedAgent::Claude,
