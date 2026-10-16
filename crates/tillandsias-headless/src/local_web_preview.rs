@@ -1215,11 +1215,22 @@ fn certificate_args(
 /// router actually serves for this project.
 pub(crate) const DEV_SERVICES: &[&str] = &["flutter"];
 
-/// The leaf's subjectAltName: `www` and every dev service of `project`.
-fn preview_san(project: &str) -> String {
+/// Every host the router serves over TLS for `project`: `www` and each dev
+/// service. The ONE list: the leaf's subjectAltName and the WebKit window's
+/// host map both read it (order 1725-wkfl), so a new dev service cannot be
+/// routed and certified yet missing from a window.
+pub(crate) fn preview_hosts(project: &str) -> Vec<String> {
     std::iter::once("www")
         .chain(DEV_SERVICES.iter().copied())
-        .map(|service| format!("DNS:{service}.{project}.localhost"))
+        .map(|service| format!("{service}.{project}.localhost"))
+        .collect()
+}
+
+/// The leaf's subjectAltName: `www` and every dev service of `project`.
+fn preview_san(project: &str) -> String {
+    preview_hosts(project)
+        .iter()
+        .map(|host| format!("DNS:{host}"))
         .collect::<Vec<_>>()
         .join(",")
 }
