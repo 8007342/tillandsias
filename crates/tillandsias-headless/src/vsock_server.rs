@@ -311,6 +311,26 @@ const PROGRESS_PUSH_CAPACITY: usize = 64;
 /// exit criterion).
 const PTY_OUTBOUND_CAPACITY: usize = 64;
 
+/// ORDER 1752-nd3t: the short, user-facing event for a failing Ready gate
+/// (the Vault bring-up). The tray renders it after the phase, clamped to
+/// TRAY_STATUS_CHIP_MAX_CHARS (37) in all, so the words that matter lead
+/// ("VM failed · Vault locked…"); the tray log keeps the whole line and the
+/// guest journal the full error. A rejected unseal key is named as such: signing in again cannot
+/// help there, and the sign-ins are kept, not lost. It promises no remedy,
+/// because the tray offers none yet (no reset item since 2026-07-22; the
+/// self-recovery is 1751-ipuw's fix).
+pub(crate) fn vault_gate_event(err: &str) -> String {
+    if err.contains("OPERATOR ACTION REQUIRED") || err.contains("REJECTED") {
+        return "Vault locked: unseal key rejected; sign-ins are kept, not lost".to_string();
+    }
+    let first = err.lines().next().unwrap_or("").trim();
+    let mut short: String = first.chars().take(140).collect();
+    if first.chars().count() > 140 {
+        short.push('…');
+    }
+    format!("Vault starting ({short})")
+}
+
 impl VmStateHandle {
     /// Construct with default `Starting` phase and the conventional podman
     /// socket path. Tests and lifecycle hooks may use [`set_phase`] /
@@ -709,6 +729,10 @@ impl VmStateHandle {
                     return;
                 }
                 Err(e) => {
+                    // 1752-nd3t: the tray shows last_event beside the phase,
+                    // so a held or failed Ready names Vault instead of
+                    // presenting an empty, error-free VM.
+                    self.set_last_event(vault_gate_event(&e));
                     if gate_start.elapsed() >= gate_budget {
                         eprintln!(
                             "[tillandsias] blocked:ready-gate:vault: Ready withheld; the Vault bring-up still fails after {}s: {e}",
@@ -3858,6 +3882,75 @@ mod tests {
             )
             .await;
         assert_eq!(state.current_phase(), VmPhase::Failed);
+    }
+
+    /// ORDER 1752-nd3t: a guest whose Vault cannot unseal is never presented
+    /// as a working VM with no reason. While the gate fails, the status the
+    /// tray renders names Vault; when the gate gives up, the Failed push
+    /// carries the Vault reason, and a rejected key is named as such.
+    #[tokio::test]
+    async fn a_held_or_failed_ready_names_vault_to_the_tray() {
+        use std::time::Duration;
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let sock = tmp.path().join("podman.sock");
+        std::fs::File::create(&sock).expect("create podman.sock");
+        let mut state = VmStateHandle::new();
+        state.set_podman_socket(sock);
+        let mut rx = state.subscribe_vm_status();
+        let gate: Arc<dyn Fn() -> Result<(), String> + Send + Sync> = Arc::new(|| {
+            Err("OPERATOR ACTION REQUIRED: the vault unseal secret does not unseal the existing vault storage".into())
+        });
+        state
+            .advance_gated(
+                Duration::from_secs(2),
+                Duration::from_millis(10),
+                gate,
+                Duration::from_millis(40),
+                Duration::from_millis(10),
+                Duration::from_millis(20),
+            )
+            .await;
+        let mut pushes = Vec::new();
+        while let Ok(m) = rx.try_recv() {
+            if let ControlMessage::VmStatusPush {
+                phase, last_event, ..
+            } = m
+            {
+                pushes.push((phase, last_event.unwrap_or_default()));
+            }
+        }
+        assert!(
+            pushes
+                .iter()
+                .any(|(p, e)| *p == VmPhase::Starting && e.starts_with("Vault locked: ")),
+            "a held Ready names Vault: {pushes:?}"
+        );
+        let last = pushes.last().expect("pushes");
+        assert_eq!(last.0, VmPhase::Failed, "{pushes:?}");
+        assert!(
+            last.1.starts_with("Vault locked"),
+            "the Failed push names Vault: {pushes:?}"
+        );
+        assert!(
+            !pushes.iter().any(|(p, _)| *p == VmPhase::Ready),
+            "{pushes:?}"
+        );
+    }
+
+    #[test]
+    fn vault_gate_event_is_short_and_names_vault() {
+        let e = vault_gate_event("connection refused while waiting for vault\nmore detail");
+        assert_eq!(
+            e,
+            "Vault starting (connection refused while waiting for vault)"
+        );
+        let long = "x".repeat(400);
+        let e = vault_gate_event(&long);
+        assert!(e.chars().count() < 170 && e.ends_with("…)"), "{e}");
+        assert!(
+            vault_gate_event("existing unseal secret was REJECTED")
+                .starts_with("Vault locked: unseal key rejected")
+        );
     }
 
     /// ORDER 1751-ipuw: the guest service's advancer passes the Vault
