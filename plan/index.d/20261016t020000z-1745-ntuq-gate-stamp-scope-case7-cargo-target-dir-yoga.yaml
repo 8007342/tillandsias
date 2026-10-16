@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga (claude) while live-testing 1237-f9dy, at the coordinator's
+# request (macuahuitl-fedora, 2026-10-16).
+packets:
+  - packet_id: the-gate-stamp-scope-fixture-never-resolves-its-lane-plan-binary-from-an-exported-cargo-target-dir
+    order: 1745-ntuq
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, fixture, hermeticity, plan-binary, check]
+    related: [1237-f9dy, 887-bz88, 1287-h6qn, 668-2xeh]
+    depends_on: []
+    owned_files:
+      - scripts/test-gate-stamp-scope.sh
+    title: |
+      test-gate-stamp-scope.sh case 7 reds every ./build.sh --check on a host that exports CARGO_TARGET_DIR: it resolves a real plan binary there, the plan-only lane refuses it as STALE against the fixture's temp repo, and the gate blames "the gate-stamp scope fixture regressed"
+    context: |
+      MEASURED on yoga 2026-10-16, same tree (work/1237-f9dy and trunk afa566d67 both), bare `bash scripts/test-gate-stamp-scope.sh`:
+        CARGO_TARGET_DIR=/var/home/tlatoani/claudia/tillandsias/target  -> rc=1, case 7 FAIL
+        CARGO_TARGET_DIR unset                                          -> rc=0
+      The case-7 push output names the cause: "plan-only lane: REFUSED — the resolved plan binary is STALE ... resolved: <CARGO_TARGET_DIR>/release/tillandsias-plan ... built-from=<real tree> checkout=4cde5f775021b5ee". The checkout hash is the fixture's own temp repo, so ANY real binary is stale against it; rebuilding the binary changed built-from and not the verdict.
+      Inside ./build.sh --check the fixture runs with whatever CARGO_TARGET_DIR the caller exported, so on such a host the whole check is red with "the gate-stamp scope fixture regressed — what the stamp covers is unproven", which points at stamp scope and not at the environment. Trunk's bare --check reproduced it in a linked worktree on yoga.
+      The fixture's LANE_PLAN_BIN comes from resolve_plan_binary in $ROOT (scripts/test-gate-stamp-scope.sh:33), and that resolver honours CARGO_TARGET_DIR.
+    exit_criteria:
+      - "the property: the fixture never resolves its lane plan binary from an exported CARGO_TARGET_DIR (or any other caller environment) — case 7 passes with CARGO_TARGET_DIR pointing at a target dir whose tillandsias-plan was built from a different tree (red today: rc=1, lane refuses STALE)"
+      - "case 7 still exercises the plan-only lane's stamp handling and still fails when that handling breaks (negative control: mutate the lane's legacy-stamp branch and watch case 7 red)"
+    next_action: >
+      Reproduce with the two commands in context, then make the lane's binary an explicit fixture input that is valid for the temp repo (or unset CARGO_TARGET_DIR for the nested push), and add the stale-binary environment as a case of its own.
+    provenance: |
+      Filed by yoga (claude), 2026-10-16, while three green arms of 1237-f9dy's --check --install went red on this fixture and not on the change.
+    events:
+      - type: filed
+        ts: "2026-10-16T02:00:00Z"
+        host: yoga
+        summary: |-
+          The fixture reads the caller's CARGO_TARGET_DIR, so --check is red on any host that exports it.
