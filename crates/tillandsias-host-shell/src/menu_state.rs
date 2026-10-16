@@ -909,7 +909,14 @@ fn build_agent_rows(state: &MenuState) -> Vec<MenuItem> {
 /// is hidden: a login is stored, or GitHub is not signed in yet. The signed-out
 /// short list stays GitHub-only (publishing needs GitHub first, and the first
 /// step must not be cluttered).
+///
+/// Never on the Windows tray until slice 5 wires it: that tray never asks the
+/// guest, so the state would stay Unknown and the row disabled forever, a dead
+/// row (yolanda, #482 review).
 fn cloudflare_login_item(state: &MenuState) -> Option<MenuItem> {
+    if state.target == TargetSurface::WindowsTray {
+        return None;
+    }
     if !matches!(state.login, GithubLoginState::LoggedIn { .. }) {
         return None;
     }
@@ -1129,6 +1136,46 @@ mod tests {
         );
     }
 
+    /// Order 1719-83po: no Cloudflare Login row anywhere in the Windows tray's
+    /// tree, in any state, until slice 5 wires that tray to the guest. A row
+    /// rendered there, even disabled, is dead: nothing ever moves it off
+    /// Unknown. The macOS control proves the same states DO render the row, so
+    /// this cannot pass merely because the row never renders at all.
+    #[test]
+    fn cloudflare_login_row_is_absent_on_the_windows_tray_until_slice_5() {
+        let has_row = |target: TargetSurface, cf: CloudflareLoginState, ready: bool| {
+            let state = MenuState {
+                login: GithubLoginState::LoggedIn { handle: "u".into() },
+                cloudflare_login: cf,
+                login_runtime_ready: ready,
+                podman_ready: ready,
+                target,
+                ..MenuState::initial()
+            };
+            let menu = build(&state);
+            let mut all_ids = Vec::new();
+            collect_ids(menu.top_items(), &mut all_ids);
+            all_ids.contains(&ids::CLOUDFLARE_LOGIN)
+        };
+        for cf in [
+            CloudflareLoginState::Unknown,
+            CloudflareLoginState::LoggedOut,
+            CloudflareLoginState::LoggingIn,
+        ] {
+            for ready in [false, true] {
+                assert!(
+                    !has_row(TargetSurface::WindowsTray, cf, ready),
+                    "Windows: {cf:?} ready={ready} rendered a cloudflare-login row \
+                     the Windows tray can never update (dead until slice 5)"
+                );
+                assert!(
+                    has_row(TargetSurface::MacosTray, cf, ready),
+                    "control: macOS {cf:?} ready={ready} must render the row"
+                );
+            }
+        }
+    }
+
     /// Order 1719-83po: the reply maps three ways, and Unknown is the start.
     #[test]
     fn cloudflare_login_state_maps_the_reply_and_starts_unknown() {
@@ -1317,6 +1364,17 @@ mod tests {
             win.sort();
             here.retain(|i| i != ids::SEPARATOR);
             win.retain(|i| i != ids::SEPARATOR);
+            // ONE sanctioned membership difference, stated per surface: the
+            // Cloudflare Login row is on macOS and Linux and not on Windows
+            // until slice 5 wires that tray (order 1719-83po). Asserted
+            // positively, then set aside, so nothing else may differ.
+            let cf_expected = target != TargetSurface::WindowsTray;
+            assert_eq!(
+                here.iter().any(|i| i == ids::CLOUDFLARE_LOGIN),
+                cf_expected,
+                "{target:?}: cloudflare-login presence must be {cf_expected}: {seq:?}"
+            );
+            here.retain(|i| i != ids::CLOUDFLARE_LOGIN);
             assert_eq!(
                 here, win,
                 "{target:?}: top-level id SET diverged from Windows (order may differ, membership may not)"
@@ -1416,15 +1474,16 @@ mod tests {
             other => panic!("expected MenuStructure::Ready, got {other:?}"),
         };
 
-        // status + cloud + cloudflare-login + separator + version + quit = 6.
+        // status + cloud + separator + version + quit = 5 top-level items.
         // Order 997-e4v2 removed the local-projects submenu: Cloud is the only
-        // project path. The unapproved reset-guest leaf went earlier (operator
-        // order 2026-07-22). Order 1719-83po added the APPROVED Cloudflare
-        // Login row (spec simplified-tray-ux e0555b06), shown here because
-        // the state starts Unknown.
+        // project path, so the Linux-parity contract is five, not six. The
+        // unapproved reset-guest leaf went earlier (operator order 2026-07-22).
+        // Order 1719-83po's Cloudflare Login row is not on this WINDOWS build
+        // until slice 5 wires that tray (cloudflare_login_row_is_absent_on_the_
+        // windows_tray_until_slice_5); macOS and Linux show it.
         assert_eq!(
             items.len(),
-            6,
+            5,
             "top-level item count (authenticated, Linux parity)"
         );
 
@@ -1434,7 +1493,6 @@ mod tests {
             vec![
                 ids::STATUS,
                 ids::CLOUD_PROJECTS,
-                ids::CLOUDFLARE_LOGIN,
                 ids::SEPARATOR,
                 ids::VERSION,
                 ids::QUIT,
@@ -2218,15 +2276,25 @@ mod tests {
             ids::VERSION,
             ids::QUIT,
         ];
+        // The Windows tray does not show it until slice 5 wires that tray to
+        // the guest (a row it can never update would be dead).
+        const APPROVED_LOGGED_IN_WINDOWS: [&str; 5] = [
+            ids::STATUS,
+            ids::CLOUD_PROJECTS,
+            ids::SEPARATOR,
+            ids::VERSION,
+            ids::QUIT,
+        ];
 
         for target in [TargetSurface::WindowsTray, TargetSurface::MacosTray] {
+            let logged_in = match target {
+                TargetSurface::WindowsTray => &APPROVED_LOGGED_IN_WINDOWS[..],
+                TargetSurface::MacosTray | TargetSurface::LinuxTray => &APPROVED_LOGGED_IN[..],
+            };
             for (login, approved) in [
                 (GithubLoginState::LoggedOut, &APPROVED_LOGGED_OUT[..]),
                 (GithubLoginState::LoggingIn, &APPROVED_LOGGED_OUT[..]),
-                (
-                    GithubLoginState::LoggedIn { handle: "u".into() },
-                    &APPROVED_LOGGED_IN[..],
-                ),
+                (GithubLoginState::LoggedIn { handle: "u".into() }, logged_in),
             ] {
                 let state = MenuState {
                     login,
