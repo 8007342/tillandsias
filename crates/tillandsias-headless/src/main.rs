@@ -19796,12 +19796,26 @@ fn maybe_spawn_vsock_listener(
         // during the Starting window, hard-bounded by the 60s timeout, and
         // the task EXITS after the transition; zero steady-state wakeups.
         // Removal condition: an inotify/event source for socket creation.
+        // ORDER 1751-ipuw: Ready also waits for Vault to be up AND unsealed.
+        // A quit while Ready said "Securing Vault" left a disk whose next
+        // boot could not unseal; the window is closed by not publishing
+        // Ready inside it. The bring-up is idempotent and holds the `vault`
+        // flock, so it composes with every other caller. 15 min covers a
+        // cold Vault image build; past it the phase is Failed, not Ready.
         let advancer_state = state.clone();
+        #[cfg(feature = "vault")]
+        let ready_gate: std::sync::Arc<dyn Fn() -> Result<(), String> + Send + Sync> =
+            std::sync::Arc::new(|| vault_bootstrap::ensure_vault_running(false));
+        #[cfg(not(feature = "vault"))]
+        let ready_gate: std::sync::Arc<dyn Fn() -> Result<(), String> + Send + Sync> =
+            std::sync::Arc::new(|| Ok(()));
         let advancer = tokio::spawn(async move {
             advancer_state
-                .advance_to_ready_when_podman_up(
+                .advance_to_ready_when_podman_and_gate_up(
                     std::time::Duration::from_secs(60),
                     std::time::Duration::from_millis(500),
+                    ready_gate,
+                    std::time::Duration::from_secs(15 * 60),
                 )
                 .await;
         });
