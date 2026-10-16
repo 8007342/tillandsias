@@ -28,8 +28,15 @@ use tracing::warn;
 ///
 /// @trace spec:mcp-tool-socket, spec:tray-host-control-socket
 pub(crate) fn mcp_socket_base_dir() -> PathBuf {
-    let runtime_dir = if let Ok(xdg) = env::var("XDG_RUNTIME_DIR") {
-        PathBuf::from(xdg)
+    mcp_socket_base_dir_from(env::var("XDG_RUNTIME_DIR").ok())
+}
+
+/// [`mcp_socket_base_dir`] for an explicit `XDG_RUNTIME_DIR` value, so a test
+/// can pass one without touching the process environment. An empty value
+/// counts as unset (order 1748-fbqe, see [`crate::nonempty_runtime_dir`]).
+pub(crate) fn mcp_socket_base_dir_from(xdg: Option<String>) -> PathBuf {
+    let runtime_dir = if let Some(xdg) = crate::nonempty_runtime_dir(xdg) {
+        xdg
     } else {
         #[cfg(unix)]
         {

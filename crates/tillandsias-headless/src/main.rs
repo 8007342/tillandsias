@@ -4712,6 +4712,48 @@ fn report_seed_staleness(project_path: &Path, seed: &str) {
 /// Order 823-u5zf: the runtime dir must land at 0700, because that mode is the
 /// whole reason the shell preamble said `install -d -m 0700` rather than
 /// relying on the `create_dir_all` every consumer already does.
+/// Order 1748-fbqe: an EMPTY `XDG_RUNTIME_DIR` must never place a guest socket
+/// dir relative to the cwd. The value is passed, never planted in the process
+/// environment (see `xdg_runtime_dir_tests` for why).
+#[cfg(test)]
+mod empty_runtime_dir_tests {
+    #[test]
+    fn an_empty_runtime_dir_counts_as_unset_and_never_yields_a_relative_socket_dir() {
+        assert_eq!(super::nonempty_runtime_dir(Some(String::new())), None);
+        assert_eq!(super::nonempty_runtime_dir(None), None);
+        assert_eq!(
+            super::nonempty_runtime_dir(Some("/run/user/0".into())),
+            Some(std::path::PathBuf::from("/run/user/0"))
+        );
+
+        let empty = super::control_socket_host_dir_from(Some(String::new()));
+        assert!(
+            empty.is_absolute(),
+            "control socket dir from an empty value: {empty:?}"
+        );
+        assert_eq!(empty, super::control_socket_host_dir_from(None));
+        assert_eq!(
+            super::control_socket_host_dir_from(Some("/run/user/0".into())),
+            std::path::PathBuf::from("/run/user/0/tillandsias")
+        );
+
+        #[cfg(feature = "host-services")]
+        {
+            let mcp = super::mcp_socket::mcp_socket_base_dir_from(Some(String::new()));
+            assert!(
+                mcp.is_absolute(),
+                "mcp socket base from an empty value: {mcp:?}"
+            );
+            assert_eq!(mcp, super::mcp_socket::mcp_socket_base_dir_from(None));
+            // Every consumer agrees: the mcp base sits under the control dir.
+            assert_eq!(
+                super::mcp_socket::mcp_socket_base_dir_from(Some("/run/user/0".into())),
+                super::control_socket_host_dir_from(Some("/run/user/0".into())).join("mcp")
+            );
+        }
+    }
+}
+
 #[cfg(all(test, unix))]
 mod xdg_runtime_dir_tests {
     use super::ensure_xdg_runtime_dir_from;
@@ -6479,8 +6521,23 @@ fn router_dynamic_caddyfile_host_path() -> PathBuf {
 }
 
 fn control_socket_host_dir() -> PathBuf {
-    let base = if let Ok(runtime_dir) = std::env::var("XDG_RUNTIME_DIR") {
-        PathBuf::from(runtime_dir)
+    control_socket_host_dir_from(std::env::var("XDG_RUNTIME_DIR").ok())
+}
+
+/// `$XDG_RUNTIME_DIR` as a base directory, or `None` when it is unset OR EMPTY.
+/// Order 1748-fbqe: `PathBuf::from("")` joined with `tillandsias/...` is a
+/// RELATIVE path that resolves against the process cwd, so an empty value takes
+/// the same fallback as an absent one — the `${VAR:-default}` rule that
+/// `ensure_lane_process_env` applies at startup, applied at the point of use too.
+fn nonempty_runtime_dir(value: Option<String>) -> Option<PathBuf> {
+    value.filter(|v| !v.is_empty()).map(PathBuf::from)
+}
+
+/// [`control_socket_host_dir`] for an explicit `XDG_RUNTIME_DIR` value. An
+/// empty value counts as unset (order 1748-fbqe, see [`nonempty_runtime_dir`]).
+fn control_socket_host_dir_from(xdg: Option<String>) -> PathBuf {
+    let base = if let Some(runtime_dir) = nonempty_runtime_dir(xdg) {
+        runtime_dir
     } else {
         #[cfg(unix)]
         {
