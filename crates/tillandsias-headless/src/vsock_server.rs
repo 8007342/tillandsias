@@ -3027,7 +3027,11 @@ mod tests {
         let (state, mut client, _caps, _stop) =
             progress_test_client(vec![tillandsias_control_wire::SubscriptionTopic::FlowState])
                 .await;
-        let (from, to, reason) = crate::flow_sink::ca_transition(Some("aa"), Some("bb")).unwrap();
+        let (from, to, reason) = crate::flow_sink::ca_transition(
+            &crate::flow_sink::CaBundleState::Current("aa".into()),
+            &crate::flow_sink::CaBundleState::Current("bb".into()),
+        )
+        .unwrap();
         state.publish_flow(
             tillandsias_control_wire::FlowSource::DependencyNode {
                 node: crate::flow_sink::CA_BUNDLE_NODE.into(),

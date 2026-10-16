@@ -245,6 +245,83 @@ pub fn ensure_forge_launch(debug: bool) -> Result<Up<ForgeLaunchReady>, String> 
     Ok(Up::new(ForgeLaunchReady))
 }
 
+/// Marker: the CA bundle came up THROUGH THE DEPENDENCY MODEL, so the
+/// certificate a consumer mounts is the one `satisfy_ca_bundle` checked —
+/// current by `ensure_ca_bundle`, trustable by `ca_bundle_trustable` (order
+/// 472 slice 4) — and every node ordered after `CaBundle`, the proxy among
+/// them, came up after that check.
+///
+/// Order 472, exit criterion 5. The forge-side CA mount is built only against
+/// this witness, and production code obtains it in exactly two ways, both of
+/// which run `satisfy_ca_bundle` through the model: as a projection of a
+/// launch witness whose target depends on `CaBundle` (the forge-agent lanes),
+/// or from [`ensure_ca_trusted`], which satisfies the `CaBundle` node itself
+/// and nothing above it (slice 8: the OpenCode and status-check lanes, which
+/// sequence the proxy and Vault on their own terms and must not inherit
+/// `ForgeLaunch`'s). A launch path that never ran the model has no value of
+/// this type to hand the mount builder, so skipping the prerequisite is a
+/// compile error at the builder rather than a `[trust] WARNING` line inside
+/// the container. `Up::new` is module-private; `ca_trusted_for_tests` below
+/// is the only other constructor and exists under `cfg(test)` alone.
+///
+/// The "every node after `CaBundle` came up after the check" half of the
+/// claim holds for the projections only. The direct form promises the
+/// certificate and nothing about the proxy's generation, which is criterion
+/// 3's territory.
+pub struct CaTrusted;
+
+impl Up<ForgeLaunchReady> {
+    /// `ForgeLaunch` reaches `CaBundle` (directly and through `Proxy` in
+    /// `DEPS`; pinned by `ca_trusted_projects_only_from_targets_that_reach_ca_bundle`).
+    pub fn ca_trusted(&self) -> Up<CaTrusted> {
+        Up::new(CaTrusted)
+    }
+}
+
+impl Up<GitLoginReady> {
+    /// `GitLogin` reaches `CaBundle` (same pin as above).
+    pub fn ca_trusted(&self) -> Up<CaTrusted> {
+        Up::new(CaTrusted)
+    }
+}
+
+/// Satisfy the `CaBundle` node through the model and return the witness.
+///
+/// Order 472 slice 8. The lanes that mount the CA into a forge without
+/// launching one through `ForgeLaunch` (`run_status_check`,
+/// `run_opencode_mode`, `run_opencode_web_mode`) used the bare
+/// `ensure_ca_bundle` chain, which checks that the certificate EXISTS and
+/// nothing else: slice 4's `ca_bundle_trustable` refusal never ran on them,
+/// and an unreadable certificate reached the container as vendor roots plus
+/// a `[trust] WARNING` line. This is the model's `CaBundle` satisfier
+/// (`ensure_with` on a node with no prerequisites), so those lanes get the
+/// same refusal and the same witness as the launch lanes without inheriting
+/// `ForgeLaunch`'s Vault and proxy bring-up, which they sequence themselves.
+pub fn ensure_ca_trusted(debug: bool) -> Result<Up<CaTrusted>, String> {
+    ensure_ca_trusted_with(&mut RealSatisfier { debug })
+}
+
+/// [`ensure_ca_trusted`] over any satisfier, so the witness-only-after-the-
+/// check property is testable with the recording fake
+/// (`ca_trusted_is_minted_only_after_the_ca_bundle_node_is_satisfied`).
+fn ensure_ca_trusted_with<S: Satisfier>(satisfier: &mut S) -> Result<Up<CaTrusted>, String> {
+    ensure_with(Service::CaBundle, satisfier)?;
+    Ok(Up::new(CaTrusted))
+}
+
+/// Test-only constructor for the arg builders' unit tests, which never run
+/// the satisfier (a unit test must not mutate host container state, audit
+/// 2026-07-09). Compiled out of every non-test build, so production code has
+/// exactly two ways to obtain the witness, a launch witness's `ca_trusted()`
+/// and `ensure_ca_trusted`, both of which run the node's satisfier.
+/// (`liveness_steady_state_containers` in main.rs anchors this file's test
+/// boundary on `#[cfg(test)]\nmod tests`, not on the first `cfg(test)`
+/// attribute, precisely so an item like this can live where it belongs.)
+#[cfg(test)]
+pub(crate) fn ca_trusted_for_tests() -> Up<CaTrusted> {
+    Up::new(CaTrusted)
+}
+
 pub struct CatalogServiceReady;
 
 pub fn ensure_service_catalog(debug: bool) -> Result<Up<CatalogServiceReady>, String> {
@@ -317,6 +394,16 @@ fn satisfy_ca_bundle(debug: bool) -> Result<(), String> {
     ca_bundle_trustable(&certs_dir)
 }
 
+/// The PEM test the forge's `init_runtime_ca_trust` applies: a BEGIN and an
+/// END CERTIFICATE line. One predicate for the refusal below AND for the
+/// generation read that names the state on the wire (`ca_generation`, order
+/// 472 slice 6), so `unreadable` is announced exactly when a consumer would
+/// be refused.
+pub(crate) fn is_pem_certificate(text: &str) -> bool {
+    let has = |marker: &str| text.lines().any(|l| l.trim_end() == marker);
+    has("-----BEGIN CERTIFICATE-----") && has("-----END CERTIFICATE-----")
+}
+
 /// Whether the published CA certificate can be handed to consumers: it
 /// reads, and it is a PEM certificate by the same test the forge's
 /// `init_runtime_ca_trust` applies (a BEGIN and an END CERTIFICATE line), so
@@ -330,8 +417,7 @@ pub(crate) fn ca_bundle_trustable(certs_dir: &std::path::Path) -> Result<(), Str
             crt.display()
         )
     })?;
-    let has = |marker: &str| text.lines().any(|l| l.trim_end() == marker);
-    if has("-----BEGIN CERTIFICATE-----") && has("-----END CERTIFICATE-----") {
+    if is_pem_certificate(&text) {
         Ok(())
     } else {
         Err(format!(
@@ -819,6 +905,89 @@ mod tests {
         assert!(
             !s2.calls.contains(&Service::GitLogin),
             "drift litmus: GitLogin must not be attempted when Vault prereq failed"
+        );
+
+        // Order 472, exit criterion 5: the CA bundle is reached by BOTH launch
+        // targets that project a `CaTrusted` witness, and failing it must stop
+        // the bring-up before the proxy (which mounts the CA) and before the
+        // target. Mutation control: `CaBundle` reaches `ForgeLaunch` directly
+        // AND through `Proxy`, so the control removes it from both rows of
+        // DEPS; `unwrap_err` then panics because nothing fails.
+        for target in [Service::ForgeLaunch, Service::GitLogin] {
+            let mut s3 = RecordingSatisfier::new();
+            s3.fail_on = Some(Service::CaBundle);
+            let err = ensure_with(target, &mut s3).unwrap_err();
+            assert!(
+                err.contains("ca-bundle"),
+                "drift litmus: skipping the CA bundle before {} must fail naming it: {err}",
+                target.name()
+            );
+            assert!(
+                !s3.calls.contains(&Service::Proxy),
+                "drift litmus: the proxy must not be attempted after the CA bundle failed ({})",
+                target.name()
+            );
+            assert!(
+                !s3.calls.contains(&target),
+                "drift litmus: {} must not be attempted when the CA bundle failed",
+                target.name()
+            );
+        }
+    }
+
+    /// Order 472, exit criterion 5. `Up<CaTrusted>` is a projection of the two
+    /// launch witnesses, which is sound only while both targets reach
+    /// `CaBundle` in the declared graph. Same mutation control as the arm
+    /// above (both rows).
+    #[test]
+    fn ca_trusted_projects_only_from_targets_that_reach_ca_bundle() {
+        for target in [Service::ForgeLaunch, Service::GitLogin] {
+            let order = topo_order(target).unwrap();
+            assert!(
+                order.contains(&Service::CaBundle),
+                "{} projects a CaTrusted witness but does not reach CaBundle: {order:?}",
+                target.name()
+            );
+        }
+        // Compile-time pins, same shape as `ensure_git_login_returns_up_gitloginready`:
+        // the only projections to `CaTrusted` are from these two witnesses.
+        let _from_forge_launch: fn(&Up<ForgeLaunchReady>) -> Up<CaTrusted> =
+            Up::<ForgeLaunchReady>::ca_trusted;
+        let _from_git_login: fn(&Up<GitLoginReady>) -> Up<CaTrusted> =
+            Up::<GitLoginReady>::ca_trusted;
+        // Slice 8: the third and last production constructor satisfies the
+        // node itself; its witness-only-after-the-check property is the test
+        // below.
+        let _direct: fn(bool) -> Result<Up<CaTrusted>, String> = ensure_ca_trusted;
+    }
+
+    /// Order 472 slice 8. The direct witness is minted only after the
+    /// `CaBundle` node's satisfier (`ensure_ca_bundle` + `ca_bundle_trustable`)
+    /// returned Ok, and that node is the ONLY one it touches: the OpenCode and
+    /// status-check lanes must not acquire Vault or proxy bring-up by taking
+    /// the witness. Mutation controls: returning the witness without calling
+    /// `ensure_with` fails the first arm; satisfying `ForgeLaunch` instead of
+    /// `CaBundle` fails the second.
+    #[test]
+    fn ca_trusted_is_minted_only_after_the_ca_bundle_node_is_satisfied() {
+        let mut refused = RecordingSatisfier::new();
+        refused.fail_on = Some(Service::CaBundle);
+        let err = match ensure_ca_trusted_with(&mut refused) {
+            Ok(_) => panic!("a failed CaBundle node must not mint the witness"),
+            Err(e) => e,
+        };
+        assert!(
+            err.contains("ca-bundle"),
+            "the refusal must name the node that failed: {err}"
+        );
+        assert_eq!(refused.calls, vec![Service::CaBundle]);
+
+        let mut ok = RecordingSatisfier::new();
+        let _witness: Up<CaTrusted> = ensure_ca_trusted_with(&mut ok).expect("satisfied");
+        assert_eq!(
+            ok.calls,
+            vec![Service::CaBundle],
+            "the direct witness satisfies CaBundle and nothing else"
         );
     }
 

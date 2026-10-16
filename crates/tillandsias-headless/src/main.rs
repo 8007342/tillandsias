@@ -3629,9 +3629,9 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     }
     let crt = certs_dir.join("intermediate.crt");
     let key = certs_dir.join("intermediate.key");
-    // Order 472 slice 3: the generation before any refresh, so a mint or a
+    // Order 472 slice 3: the state before any refresh, so a mint or a
     // rotation below is announced as a transition rather than inferred later.
-    let generation_before = ca_generation(&certs_dir);
+    let state_before = ca_generation(&certs_dir);
     std::fs::create_dir_all(&certs_dir)
         .map_err(|e| format!("Failed to create CA directory: {e}"))?;
 
@@ -3784,10 +3784,9 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         let _ = enforce_ca_key_mode(&key);
     }
 
-    if let Some((from, to, reason)) = flow_sink::ca_transition(
-        generation_before.as_deref(),
-        ca_generation(&certs_dir).as_deref(),
-    ) {
+    if let Some((from, to, reason)) =
+        flow_sink::ca_transition(&state_before, &ca_generation(&certs_dir))
+    {
         // Order 472 criterion 1: only a declared transition may reach the wire.
         debug_assert!(
             flow_sink::ca_transition_declared(&from, &to, reason),
@@ -3812,7 +3811,9 @@ fn build_stack_common_args(
     certs_dir: &Path,
     project_name: &str,
     project_path: &Path,
+    ca_trusted: &container_deps::Up<container_deps::CaTrusted>,
 ) -> Vec<String> {
+    let ca = forge_ca_chain_mount_spec(certs_dir, ca_trusted);
     let mut args = vec![
         "--name".into(),
         container_name.into(),
@@ -3853,14 +3854,11 @@ fn build_stack_common_args(
             "{}:/home/forge/src/{project_name}:rw",
             project_path.display()
         ),
-        // One runtime trust input feeds lib-common.sh's rootless initializer.
-        // Git, curl, Node, and Python then use the image's system-default path.
-        "--mount".into(),
-        format!(
-            "type=bind,source={},target=/run/tillandsias/ca-chain.crt,readonly=true",
-            certs_dir.join("intermediate.crt").display()
-        ),
     ]);
+    // One runtime trust input feeds lib-common.sh's rootless initializer.
+    // Git, curl, Node, and Python then use the image's system-default path.
+    // Order 472 slice 9: the mount and the generation label travel together.
+    args.extend(ca.run_args());
     append_git_identity_env_args(&mut args, project_name);
     args
 }
@@ -3998,26 +3996,50 @@ fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
     ];
     // Order 472: record WHICH CA this proxy was started with, so a running
     // proxy can be compared against the certificate on disk after a rotation.
-    if let Some(generation) = ca_generation(certs_dir) {
+    // An absent or unreadable certificate labels nothing: there is no
+    // generation to record, and the satisfier refuses consumers anyway.
+    if let Some(generation) = ca_generation(certs_dir).into_generation() {
         args.push("--label".into());
-        args.push(format!("{PROXY_CA_GENERATION_LABEL}={generation}"));
+        args.push(format!("{CA_GENERATION_LABEL}={generation}"));
     }
     args.push(image.into());
     args
 }
 
-/// Label on the proxy container naming the CA generation it signs with (order 472).
-const PROXY_CA_GENERATION_LABEL: &str = "tillandsias.ca-generation";
+/// Label naming the CA generation a container was started with (order 472).
+/// On the proxy it is the key the proxy signs with; on a consumer (slice 9,
+/// through [`ForgeCaMount`]) it is the certificate the consumer composed into
+/// its trust bundle at start. One name for both parties to a rotation, so
+/// `podman ps --filter label=` enumerates every container the rotation
+/// touches and `stale_ca_consumers` can name the ones it strands.
+const CA_GENERATION_LABEL: &str = "tillandsias.ca-generation";
 
-/// The CA generation: the first 16 hex digits of the SHA-256 of the published
-/// `intermediate.crt`. A rotation publishes a new certificate by rename, so the
-/// generation changes exactly when the certificate does. `None` when the file
-/// cannot be read.
-fn ca_generation(certs_dir: &Path) -> Option<String> {
+/// The CA bundle's state as the generation read sees it (order 472, slice 6):
+/// `Absent` when `intermediate.crt` does not exist, `Unreadable` when it
+/// exists but cannot be read or is not a PEM certificate (the predicate
+/// slice 4's `container_deps::ca_bundle_trustable` refuses on, shared so the
+/// wire and the refusal can never disagree), and otherwise `Current` with the
+/// generation: the first 16 hex digits of the SHA-256 of the file. A rotation
+/// publishes a new certificate by rename, so the generation changes exactly
+/// when the certificate does.
+///
+/// Before slice 6 this returned `Option<String>` and every non-current case
+/// read as `absent` on the wire; a present-but-unreadable certificate (the
+/// SELinux relabel incident) therefore announced the wrong state.
+fn ca_generation(certs_dir: &Path) -> flow_sink::CaBundleState {
     use sha2::{Digest, Sha256};
-    let bytes = std::fs::read(certs_dir.join("intermediate.crt")).ok()?;
+    let bytes = match std::fs::read(certs_dir.join("intermediate.crt")) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return flow_sink::CaBundleState::Absent;
+        }
+        Err(_) => return flow_sink::CaBundleState::Unreadable,
+    };
+    if !container_deps::is_pem_certificate(&String::from_utf8_lossy(&bytes)) {
+        return flow_sink::CaBundleState::Unreadable;
+    }
     let hex = format!("{:x}", Sha256::digest(&bytes));
-    Some(hex[..16].to_string())
+    flow_sink::CaBundleState::Current(hex[..16].to_string())
 }
 
 /// Whether a RUNNING proxy still signs with the CA consumers are given.
@@ -4031,8 +4053,9 @@ enum ProxyCaCheck {
         running: Option<String>,
         on_disk: String,
     },
-    /// Nothing to compare against (the certificate or the container could not
-    /// be read). Keep the serving proxy rather than restart on a guess.
+    /// Nothing to compare against (the certificate is absent or unreadable,
+    /// or the container could not be inspected). Keep the serving proxy
+    /// rather than restart on a guess.
     Unknown,
 }
 
@@ -4068,7 +4091,7 @@ fn running_proxy_ca_generation() -> Result<Option<String>, ()> {
             "container",
             "inspect",
             "--format",
-            &format!("{{{{index .Config.Labels \"{PROXY_CA_GENERATION_LABEL}\"}}}}"),
+            &format!("{{{{index .Config.Labels \"{CA_GENERATION_LABEL}\"}}}}"),
             "tillandsias-proxy",
         ])
         .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
@@ -4081,6 +4104,103 @@ fn running_proxy_ca_generation() -> Result<Option<String>, ()> {
         "" | "<no value>" => None,
         _ => Some(value),
     })
+}
+
+/// The running consumers a rotation strands (order 472 slice 9): every
+/// labelled container whose generation is not `on_disk`. The proxy is
+/// excluded because it is the party being replaced, not a consumer of the
+/// replacement. An unlabelled entry counts as stale by the proxy's own rule:
+/// its generation is unknowable.
+fn stale_ca_consumers(on_disk: &str, running: &[(String, Option<String>)]) -> Vec<String> {
+    running
+        .iter()
+        .filter(|(name, _)| name != "tillandsias-proxy")
+        .filter(|(_, generation)| generation.as_deref() != Some(on_disk))
+        .map(|(name, _)| name.clone())
+        .collect()
+}
+
+/// `podman ps` rows as (name, generation label), one per running container
+/// carrying [`CA_GENERATION_LABEL`]. An empty or `<no value>` label reads as
+/// none.
+fn parse_ca_consumer_generations(stdout: &str) -> Vec<(String, Option<String>)> {
+    stdout
+        .lines()
+        .filter_map(|line| {
+            let mut parts = line.splitn(2, '\t');
+            let name = parts.next()?.trim();
+            if name.is_empty() {
+                return None;
+            }
+            let generation = parts
+                .next()
+                .map(str::trim)
+                .filter(|value| !value.is_empty() && *value != "<no value>")
+                .map(String::from);
+            Some((name.to_string(), generation))
+        })
+        .collect()
+}
+
+/// Every running container labelled with a CA generation, by name. A
+/// consumer started by a binary older than slice 9 has no label and is not
+/// enumerable here; that is the one blind spot, and it closes by itself as
+/// those containers are restarted.
+fn running_ca_consumer_generations() -> Result<Vec<(String, Option<String>)>, String> {
+    let out = podman_cmd_sync()
+        .args([
+            "ps",
+            "--filter",
+            &format!("label={CA_GENERATION_LABEL}"),
+            "--format",
+            &format!("{{{{.Names}}}}\t{{{{index .Labels \"{CA_GENERATION_LABEL}\"}}}}"),
+        ])
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
+        .map_err(|e| format!("podman ps: {e:?}"))?;
+    if !out.status.success() {
+        return Err(format!("podman ps exited {}", out.status));
+    }
+    Ok(parse_ca_consumer_generations(&String::from_utf8_lossy(
+        &out.stdout,
+    )))
+}
+
+/// Name the consumers the proxy replacement is about to strand (order 472
+/// slice 9), LOUD on both streams (767-nkkq) and on the accountability log.
+/// Before this, the inverse of the split-trust window was silent: the
+/// launcher said "replacing the proxy" and every running forge that had
+/// composed the previous certificate began failing TLS on bumped hosts with
+/// nothing, anywhere, naming the cause.
+fn announce_stale_ca_consumers(on_disk: &str) {
+    match running_ca_consumer_generations() {
+        Ok(running) => {
+            let stale = stale_ca_consumers(on_disk, &running);
+            if stale.is_empty() {
+                return;
+            }
+            let line = format!(
+                "[tillandsias] {} running consumer(s) composed the previous CA into their trust bundle and will fail TLS through the replaced proxy until restarted: {}",
+                stale.len(),
+                stale.join(", ")
+            );
+            println!("{line}");
+            eprintln!("{line}");
+            warn!(
+                accountability = true,
+                category = "secrets",
+                spec = "secret-rotation",
+                secret_name = "tillandsias-ca-cert",
+                operation = "rotation_consumers_stale",
+                consumers = %stale.join(","),
+                "running consumers trust the previous CA"
+            );
+        }
+        Err(e) => {
+            eprintln!(
+                "[tillandsias] could not enumerate CA consumers before replacing the proxy: {e}"
+            );
+        }
+    }
 }
 
 /// Refresh the `tillandsias-ca-key` podman secret from the CA bundle.
@@ -4141,7 +4261,7 @@ fn ensure_proxy_running(debug: bool) -> Result<(), String> {
         // last CA rotation signs with a key no new consumer trusts.
         match proxy_ca_check(
             running_proxy_ca_generation(),
-            ca_generation(&PathBuf::from(ca_dir())),
+            ca_generation(&PathBuf::from(ca_dir())).into_generation(),
         ) {
             ProxyCaCheck::Stale { running, on_disk } => {
                 // LOUD, on both streams (767-nkkq: launchers capture different
@@ -4152,6 +4272,12 @@ fn ensure_proxy_running(debug: bool) -> Result<(), String> {
                 );
                 println!("{line}");
                 eprintln!("{line}");
+                // Order 472 slice 9: the replacement strands every running
+                // consumer whose trust bundle holds the previous certificate.
+                // Name them here, where the stranding is decided; restarting
+                // them is a policy the operator owns (it kills the agent
+                // inside a forge), not a side effect of a proxy ensure.
+                announce_stale_ca_consumers(&on_disk);
                 // Fall through: the launch below uses --replace.
             }
             ProxyCaCheck::Current | ProxyCaCheck::Unknown => {
@@ -7989,6 +8115,7 @@ fn build_forge_common_args(
     project_path: &Path,
     project_name: &str,
     certs_dir: &Path,
+    ca_trusted: &container_deps::Up<container_deps::CaTrusted>,
 ) -> Vec<String> {
     build_stack_common_args(
         &forge_container_name(project_name),
@@ -7996,6 +8123,7 @@ fn build_forge_common_args(
         certs_dir,
         project_name,
         project_path,
+        ca_trusted,
     )
 }
 
@@ -8473,8 +8601,9 @@ fn build_status_check_forge_args(
     mirror_id: Option<&str>,
     certs_dir: &Path,
     version: &str,
+    ca_trusted: &container_deps::Up<container_deps::CaTrusted>,
 ) -> Vec<String> {
-    let mut args = build_forge_common_args(project_path, project_name, certs_dir);
+    let mut args = build_forge_common_args(project_path, project_name, certs_dir, ca_trusted);
 
     args.extend([
         "--rm".into(),
@@ -8609,7 +8738,9 @@ fn build_opencode_forge_args(
     opencode_vault_secret: Option<&str>,
     diagnostics: bool,
     debug: bool,
+    ca_trusted: &container_deps::Up<container_deps::CaTrusted>,
 ) -> Vec<String> {
+    let ca = forge_ca_chain_mount_spec(certs_dir, ca_trusted);
     // CLI mode attaches stdio (--interactive --tty) for a real shell; Web
     // mode detaches the container so the run() call returns and the host
     // owns the lifecycle.
@@ -8777,12 +8908,9 @@ fn build_opencode_forge_args(
             "{}:/home/forge/.cache/tillandsias-project:rw",
             forge_tool_cache_volume(project_name)
         ),
-        "--mount".into(),
-        format!(
-            "type=bind,source={},target=/run/tillandsias/ca-chain.crt,readonly=true",
-            certs_dir.join("intermediate.crt").display()
-        ),
     ]);
+    // Order 472 slice 9: the mount and the generation label travel together.
+    args.extend(ca.run_args());
     // Project source routing. Both branches mount under
     // `/home/forge/src/…` conventions (not flat at `/home/forge/src`) so the
     // in-container tree matches the entrypoint clone path and
@@ -11526,6 +11654,10 @@ fn run_status_check(debug: bool) -> Result<(), String> {
     // its launch in flight so a sibling exiting during our pre-create window
     // does not tear the shared stack down under us. Held to end of function.
     let (launch_marker, _launch_guard) = acquire_launch_in_flight_marker(project_name, debug)?;
+    // Order 472 slice 8: the trust check and the witness the probe-forge
+    // builder demands come from the model's CaBundle node; ensure_ca_bundle
+    // below is the idempotent read of the certs_dir the stack mounts need.
+    let ca_trusted = container_deps::ensure_ca_trusted(debug)?;
     let certs_dir = ensure_ca_bundle(debug)?;
     ensure_enclave_network(debug)?;
 
@@ -11664,6 +11796,7 @@ fn run_status_check(debug: bool) -> Result<(), String> {
             status_mirror_id.as_deref(),
             &certs_dir,
             version,
+            &ca_trusted,
         );
         let result = client
             .run_container_observed(
@@ -15731,6 +15864,10 @@ fn run_opencode_mode(
     let mut progress = crate::bringup_progress::BringUpProgress::new(5);
 
     progress.step();
+    // Order 472 slice 8: the secure-channel stage is the model's CaBundle
+    // node (existence AND trustability, minting the witness the forge
+    // builder demands); ensure_ca_bundle is then the idempotent certs_dir read.
+    let ca_trusted = container_deps::ensure_ca_trusted(debug)?;
     let certs_dir = ensure_ca_bundle(debug)?;
     progress.step();
     ensure_enclave_network(debug)?;
@@ -15993,6 +16130,7 @@ fn run_opencode_mode(
             opencode_vault_secret,
             diagnostics,
             debug,
+            &ca_trusted,
         );
         let run_container_name = forge_container_name(project_name);
         let result = run_agent_container_attached(
@@ -17135,6 +17273,9 @@ pub(crate) fn run_opencode_web_mode(
     // git reads below can gate on it instead of on `project_path_resolved`,
     // which is a relative bare project name in cloud mode.
     let project_path_resolved = canonical_path.clone().unwrap_or(dummy_path);
+    // Order 472 slice 8: trust check + witness from the model's CaBundle
+    // node; ensure_ca_bundle is the idempotent certs_dir read.
+    let ca_trusted = container_deps::ensure_ca_trusted(debug)?;
     let certs_dir = ensure_ca_bundle(debug)?;
     ensure_enclave_network(debug)?;
 
@@ -17358,6 +17499,7 @@ pub(crate) fn run_opencode_web_mode(
             opencode_vault_secret,
             false,
             debug,
+            &ca_trusted,
         );
         client
             .run_container_observed(
@@ -17808,7 +17950,14 @@ pub(crate) fn ensure_enclave_for_project(
     project_path: Option<&Path>,
     own_launch_marker: Option<&str>,
     debug: bool,
-) -> Result<(PathBuf, Option<String>), String> {
+) -> Result<
+    (
+        PathBuf,
+        Option<String>,
+        container_deps::Up<container_deps::CaTrusted>,
+    ),
+    String,
+> {
     // Idempotent re-attach wipe FIRST, prerequisites AFTER. The shared-stack
     // cleanup removes tillandsias-proxy whenever no lane container is live —
     // and on a FIRST launch none is — so running it after ensure_forge_launch
@@ -17842,7 +17991,7 @@ pub(crate) fn ensure_enclave_for_project(
     // Prerequisites: enclave/egress networks, CA bundle, proxy — satisfied
     // through the container_deps topological model (order 252).  The proxy
     // image is verified by ensure_proxy_running inside the satisfier.
-    let _witness = container_deps::ensure_forge_launch(debug)
+    let witness = container_deps::ensure_forge_launch(debug)
         .map_err(|e| format!("[forge-launch] prerequisites: {e}"))?;
 
     let version = VERSION.trim();
@@ -17979,7 +18128,10 @@ pub(crate) fn ensure_enclave_for_project(
     #[cfg(feature = "vault")]
     crate::vault_bootstrap::spawn_cloudflare_token_rotation_scheduler(debug);
 
-    Ok((certs_dir, mirror_identity))
+    // Order 472 criterion 5: the launch witness leaves this function as the
+    // CA-trust projection the forge arg builders demand, so a lane that did
+    // not come through here has nothing to hand them.
+    Ok((certs_dir, mirror_identity, witness.ca_trusted()))
 }
 /// Ensure the project's git mirror and the shared inference container for a
 /// forge launch, per the operator's order-443 per-component concurrency rule:
@@ -18655,6 +18807,8 @@ pub(crate) fn build_forge_agent_run_args(
     // build_forge_agent_run_args_with_vault. The victim test reaches the cache
     // root THROUGH this function, so this is where it must be injectable.
     cache_root: &Path,
+    // ORDER 472 criterion 5: the CA-trust witness, passed through.
+    ca_trusted: &container_deps::Up<container_deps::CaTrusted>,
 ) -> Vec<String> {
     build_forge_agent_run_args_with_vault(
         project_path,
@@ -18673,7 +18827,103 @@ pub(crate) fn build_forge_agent_run_args(
         None,
         host_mount,
         cache_root,
+        ca_trusted,
     )
+}
+
+/// ORDER 472, exit criterion 5 (drift guardrail). The forge-side CA mount —
+/// the ONE runtime trust input lib-common.sh's rootless initializer reads —
+/// is built here and nowhere else on the forge-agent lanes, and building it
+/// takes the `CaTrusted` witness. The witness is a projection of the launch
+/// witness `container_deps::ensure_forge_launch` returns, so a launch path
+/// that skipped the dependency model has no value to pass: the omission is a
+/// compile error at the builder, not a `[trust] WARNING` inside the container
+/// (slice 4 made the host refuse an untrustable certificate; this makes that
+/// refusal impossible to route around on these lanes).
+/// `every_forge_ca_mount_emitter_takes_the_ca_trusted_witness` enumerates
+/// every emitter of the target path and requires the witness of each; since
+/// slice 8 the OpenCode and status-check builders take it too (through
+/// `forge_ca_chain_mount_spec` below), and no lane is outside the model.
+///
+/// The `exists()` gate is unchanged from before the witness: a certificate
+/// the model checked at bring-up and that vanished before the run is still
+/// skipped here, which is criterion 3's territory (reaction to rotation and
+/// loss), not this slice's.
+fn forge_ca_chain_mount(
+    certs_dir: &Path,
+    ca_trusted: &container_deps::Up<container_deps::CaTrusted>,
+) -> Option<ForgeCaMount> {
+    let ca = forge_ca_chain_mount_spec(certs_dir, ca_trusted);
+    Path::new(&ca.source).exists().then_some(ca)
+}
+
+/// The forge-side CA as a consumer receives it (order 472): the bind mount
+/// of the host certificate at the in-container path `lib-common.sh` composes
+/// into the trust bundle once, at start, and, since slice 9, the generation
+/// label naming WHICH certificate that was. The two are minted together and
+/// emitted together (`run_args` for the builders that assemble argv by hand,
+/// `apply` for the typed spec), so no consumer carries the mount without the
+/// label. The label is how a rotation finds the consumers it strands
+/// (`stale_ca_consumers`): a consumer's trust bundle is fixed at its start,
+/// so after the proxy is replaced with the rotated key every consumer still
+/// labelled with the previous generation fails TLS on bumped hosts until it
+/// is restarted. The generation is read at arg-build time by the same
+/// `ca_generation` the proxy labels itself with; absent or unreadable labels
+/// nothing, exactly as on the proxy.
+struct ForgeCaMount {
+    source: String,
+    target: &'static str,
+    generation: Option<String>,
+}
+
+impl ForgeCaMount {
+    fn label_arg(&self) -> Option<String> {
+        self.generation
+            .as_ref()
+            .map(|generation| format!("{CA_GENERATION_LABEL}={generation}"))
+    }
+
+    /// `--mount …` and, when there is a generation, `--label …`.
+    fn run_args(&self) -> Vec<String> {
+        let mut args = vec![
+            "--mount".to_string(),
+            format!(
+                "type=bind,source={},target={},readonly=true",
+                self.source, self.target
+            ),
+        ];
+        if let Some(label) = self.label_arg() {
+            args.push("--label".to_string());
+            args.push(label);
+        }
+        args
+    }
+
+    /// The same two facts on a typed spec.
+    fn apply(&self, spec: ContainerSpec) -> ContainerSpec {
+        let spec = spec.bind_mount(self.source.clone(), self.target, true);
+        match &self.generation {
+            Some(generation) => spec.label(CA_GENERATION_LABEL, generation.clone()),
+            None => spec,
+        }
+    }
+}
+
+/// The forge-side CA mount, and the ONLY production site that names the
+/// in-container path. Order 472 slice 8: the OpenCode and status-check
+/// builders mount unconditionally, as they always did (a missing source is
+/// podman's refusal on those lanes, not a silent skip), so they take this
+/// spec rather than the gated form above. Both forms demand the witness,
+/// which is what the scan test checks for.
+fn forge_ca_chain_mount_spec(
+    certs_dir: &Path,
+    _ca_trusted: &container_deps::Up<container_deps::CaTrusted>,
+) -> ForgeCaMount {
+    ForgeCaMount {
+        source: certs_dir.join("intermediate.crt").display().to_string(),
+        target: "/run/tillandsias/ca-chain.crt",
+        generation: ca_generation(certs_dir).into_generation(),
+    }
 }
 
 // All arguments are distinct, named forge-launch inputs; bundling them into a
@@ -18720,6 +18970,10 @@ fn build_forge_agent_run_args_with_vault(
     // is the one that CALLS the reader, so the seam has to sit where that caller
     // can inject it.
     cache_root: &Path,
+    // ORDER 472 criterion 5: the CA-trust witness, threaded to the mount
+    // (`forge_ca_chain_mount`). Production lanes get it from
+    // `ensure_enclave_for_project`; tests from `ca_trusted_for_tests`.
+    ca_trusted: &container_deps::Up<container_deps::CaTrusted>,
 ) -> Vec<String> {
     let image = forge_image_tag(version);
     // A prompt-driven Codex run is non-interactive (`codex exec "<prompt>"`):
@@ -18985,13 +19239,8 @@ fn build_forge_agent_run_args_with_vault(
         }
     }
 
-    let ca_cert = certs_dir.join("intermediate.crt");
-    if ca_cert.exists() {
-        spec = spec.bind_mount(
-            ca_cert.display().to_string(),
-            "/run/tillandsias/ca-chain.crt",
-            true,
-        );
+    if let Some(ca) = forge_ca_chain_mount(certs_dir, ca_trusted) {
+        spec = ca.apply(spec);
     }
 
     // Order 505: mount only the per-lane MCP tool socket directory
@@ -19208,6 +19457,8 @@ pub(crate) fn build_forge_agent_run_argv(
     // build_forge_agent_run_args_with_vault. The victim test reaches the cache
     // root THROUGH this function, so this is where it must be injectable.
     cache_root: &Path,
+    // ORDER 472 criterion 5: the CA-trust witness, passed through.
+    ca_trusted: &container_deps::Up<container_deps::CaTrusted>,
 ) -> Vec<String> {
     let mut argv = vec!["podman".to_string()];
     argv.push("run".to_string());
@@ -19244,6 +19495,7 @@ pub(crate) fn build_forge_agent_run_argv(
         debug,
         host_mount,
         cache_root,
+        ca_trusted,
     ));
     argv
 }
@@ -19378,7 +19630,7 @@ fn run_forge_agent_cli_mode(
     // during our pre-create window keeps the shared stack up for us. Held for
     // the whole session; the exit cleanup below excludes it by name.
     let (launch_marker, _launch_guard) = acquire_launch_in_flight_marker(project_name, debug)?;
-    let (certs_dir, mirror_identity) = ensure_enclave_for_project(
+    let (certs_dir, mirror_identity, ca_trusted) = ensure_enclave_for_project(
         project_name,
         canonical_path.as_deref(),
         Some(&launch_marker),
@@ -19436,6 +19688,7 @@ fn run_forge_agent_cli_mode(
         // ORDER 776-jcf3: and grant it only with a real checkout.
         forge_host_mount_granted(forge_uses_host_mount(), canonical_path.as_deref()),
         &tillandsias_core::cache_root::cache_root(),
+        &ca_trusted,
     );
 
     let rt = podman_runtime()?;
@@ -19573,7 +19826,7 @@ pub(crate) fn launch_forge_agent(
         // concern from the slice-2 progress note. Credentialed modes are
         // covered: they re-exec the CLI lane, which holds its own marker.
         let (launch_marker, _launch_guard) = acquire_launch_in_flight_marker(project_name, debug)?;
-        let (certs_dir, mirror_identity) = ensure_enclave_for_project(
+        let (certs_dir, mirror_identity, ca_trusted) = ensure_enclave_for_project(
             project_name,
             Some(&canonical),
             Some(&launch_marker),
@@ -19591,6 +19844,7 @@ pub(crate) fn launch_forge_agent(
             // launcher, and nowhere a test can reach concurrently.
             forge_uses_host_mount(),
             &tillandsias_core::cache_root::cache_root(),
+            &ca_trusted,
         )
     };
 
@@ -21741,6 +21995,7 @@ mod tests {
             None,
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
 
         // `run` is prepended downstream by run_container_attached_observed, so
@@ -23717,8 +23972,13 @@ mod tests {
         let set_at = liveness_src
             .find("let services = [")
             .expect("run_check must declare its steady-state `services` array");
+        // The boundary is the TEST MODULE, not the first `cfg(test)`
+        // attribute: order 472 slice 7 put a `#[cfg(test)]` constructor
+        // (`ca_trusted_for_tests`) among the production items above
+        // `run_check`, and anchoring on the attribute read the steady-state
+        // set as test scaffolding.
         let tests_at = liveness_src
-            .find("#[cfg(test)]")
+            .find("#[cfg(test)]\nmod tests")
             .unwrap_or(liveness_src.len());
         assert!(
             run_check_at < set_at && set_at < tests_at,
@@ -24450,6 +24710,13 @@ mod tests {
     /// lists agree in VALUE, only that a token appears in both.
     #[test]
     fn both_proxy_env_appliers_emit_the_same_contract() {
+        // Both appliers read `enclave_subnet()` from the process environment,
+        // at two different moments. `enclave_no_proxy_uses_subnet_override`
+        // sets the variable under the env lock, so without the lock here one
+        // read can land inside its override window and the two lists
+        // disagree on the subnet alone (measured on yoga 2026-10-12 under the
+        // `proxy_` filter: red in parallel, 21/21 green with one thread).
+        let _guard = env_lock();
         // The raw-args path.
         let raw = proxy_env_args();
         let mut from_args: Vec<String> = raw
@@ -24915,6 +25182,7 @@ mod tests {
             true,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
 
         assert_eq!(argv.first().map(|s| s.as_str()), Some("podman"));
@@ -25354,6 +25622,7 @@ mod tests {
                 false,
                 false,
                 &test_cache_root(),
+                &container_deps::ca_trusted_for_tests(),
             );
             assert!(
                 !has_arg(&argv, "--replace"),
@@ -25432,6 +25701,7 @@ mod tests {
             false,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
 
         // Source-scoped guard: forbid a HOST .cache/.config directory as a mount
@@ -25594,6 +25864,7 @@ mod tests {
             false,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
 
         let mut found_ssh = false;
@@ -25697,6 +25968,7 @@ mod tests {
             false,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
         let joined = argv.join(" ");
         assert!(
@@ -25733,6 +26005,7 @@ mod tests {
             false,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
         let joined = argv.join(" ");
         assert!(
@@ -25791,6 +26064,7 @@ mod tests {
             true,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
         eprintln!("=== SAMPLE ARGV (Claude, tillandsias project) ===");
         for (i, a) in argv.iter().enumerate() {
@@ -25901,24 +26175,273 @@ mod tests {
 
     // ---- order 472: the CaBundle -> Proxy generation edge -------------------
 
+    /// A PEM-shaped certificate body for the CA fixtures: the generation read
+    /// (slice 6) classifies anything else as `unreadable`, as the satisfier
+    /// would refuse it.
+    fn pem_cert(body: &str) -> String {
+        format!("-----BEGIN CERTIFICATE-----\n{body}\n-----END CERTIFICATE-----\n")
+    }
+
     #[test]
     fn proxy_args_label_the_ca_generation_and_keep_the_image_last() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("intermediate.crt"), "CERT-A").unwrap();
+        std::fs::write(dir.path().join("intermediate.crt"), pem_cert("CERT-A")).unwrap();
         let args = build_proxy_run_args(dir.path(), "tillandsias-proxy:v1");
-        let gen_a = ca_generation(dir.path()).unwrap();
+        let gen_a = ca_generation(dir.path()).into_generation().unwrap();
         assert_eq!(gen_a.len(), 16);
-        assert!(has_arg(
-            &args,
-            &format!("{PROXY_CA_GENERATION_LABEL}={gen_a}")
-        ));
+        assert!(has_arg(&args, &format!("{CA_GENERATION_LABEL}={gen_a}")));
         assert_eq!(
             args.last().map(String::as_str),
             Some("tillandsias-proxy:v1")
         );
         // A rotation publishes different bytes, so the generation moves.
-        std::fs::write(dir.path().join("intermediate.crt"), "CERT-B").unwrap();
-        assert_ne!(ca_generation(dir.path()).unwrap(), gen_a);
+        std::fs::write(dir.path().join("intermediate.crt"), pem_cert("CERT-B")).unwrap();
+        assert_ne!(ca_generation(dir.path()).into_generation().unwrap(), gen_a);
+    }
+
+    // ---- order 472 slice 9: the consumer side of a rotation ----------------
+
+    /// The mount and the generation label are one artefact: a consumer that
+    /// mounts the forge-side CA is labelled with the generation it mounted,
+    /// by both emitters, and an absent certificate labels nothing.
+    #[test]
+    fn forge_ca_mount_labels_the_generation_it_mounts() {
+        let witness = container_deps::ca_trusted_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        let absent = forge_ca_chain_mount_spec(dir.path(), &witness);
+        assert!(absent.generation.is_none());
+        assert!(
+            !has_arg(&absent.run_args(), "--label"),
+            "an absent certificate must not label: {:?}",
+            absent.run_args()
+        );
+        assert!(
+            forge_ca_chain_mount(dir.path(), &witness).is_none(),
+            "the gated form skips a missing source"
+        );
+
+        std::fs::write(dir.path().join("intermediate.crt"), pem_cert("CERT-A")).unwrap();
+        let expected = format!(
+            "{CA_GENERATION_LABEL}={}",
+            ca_generation(dir.path()).into_generation().unwrap()
+        );
+        let ca = forge_ca_chain_mount(dir.path(), &witness).expect("a present source mounts");
+        let raw = ca.run_args();
+        assert_eq!(raw[0], "--mount");
+        assert!(
+            raw[1].contains("target=/run/tillandsias/ca-chain.crt"),
+            "{raw:?}"
+        );
+        assert!(
+            has_arg(&raw, "--label") && has_arg(&raw, &expected),
+            "the raw emitter mounted without labelling: {raw:?}"
+        );
+        let typed = ca.apply(ContainerSpec::new("forge:v1")).build_run_args();
+        assert!(
+            typed
+                .iter()
+                .any(|a| a.contains("target=/run/tillandsias/ca-chain.crt")),
+            "{typed:?}"
+        );
+        assert!(
+            has_arg(&typed, "--label") && has_arg(&typed, &expected),
+            "the typed emitter mounted without labelling: {typed:?}"
+        );
+    }
+
+    /// Every builder that mounts the forge-side CA labels the container with
+    /// the generation it mounted: the status-check and OpenCode lanes (raw
+    /// argv) and the forge-agent lane (typed spec). This is the set
+    /// `stale_ca_consumers` enumerates after a rotation; a builder that
+    /// mounted without labelling would be invisible to it.
+    #[test]
+    fn every_ca_consumer_builder_labels_the_generation_it_mounts() {
+        let _env = env_lock();
+        let witness = container_deps::ca_trusted_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("intermediate.crt"), pem_cert("CERT-A")).unwrap();
+        let expected = format!(
+            "{CA_GENERATION_LABEL}={}",
+            ca_generation(dir.path()).into_generation().unwrap()
+        );
+        let project = PathBuf::from("/tmp/project");
+        let status = build_status_check_forge_args(
+            &PathBuf::from("/tmp/workspace"),
+            "alpha",
+            None,
+            dir.path(),
+            "1.2.3",
+            &witness,
+        );
+        let opencode = build_opencode_forge_args(
+            &project,
+            Some(&project),
+            None,
+            "alpha",
+            None,
+            None,
+            dir.path(),
+            "1.2.3",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+            &witness,
+        );
+        let agent = build_forge_agent_run_args_with_vault(
+            &project,
+            Some(&project),
+            None,
+            "alpha",
+            None,
+            dir.path(),
+            "1.2.3",
+            ForgeAgentMode::Codex,
+            false,
+            None,
+            None,
+            false,
+            &test_cache_root(),
+            &witness,
+        );
+        for (lane, args) in [
+            ("status-check", status),
+            ("opencode", opencode),
+            ("forge-agent", agent),
+        ] {
+            assert!(
+                args.iter()
+                    .any(|a| a.contains("target=/run/tillandsias/ca-chain.crt")),
+                "{lane}: no forge-side CA mount in {args:?}"
+            );
+            assert!(
+                has_arg(&args, &expected),
+                "{lane}: mounted the CA without labelling its generation: {args:?}"
+            );
+        }
+    }
+
+    /// The stale set after a rotation: every labelled consumer whose
+    /// generation is not the one on disk. The proxy is excluded (it is the
+    /// party being replaced), an unlabelled consumer counts as stale (its
+    /// generation is unknowable, the proxy's own rule), and a current one
+    /// does not.
+    #[test]
+    fn stale_ca_consumers_are_the_ones_not_on_the_disk_generation() {
+        let running = vec![
+            (
+                "tillandsias-forge-alpha".to_string(),
+                Some("aaaa".to_string()),
+            ),
+            (
+                "tillandsias-forge-beta".to_string(),
+                Some("bbbb".to_string()),
+            ),
+            ("tillandsias-forge-gamma".to_string(), None),
+            ("tillandsias-proxy".to_string(), Some("aaaa".to_string())),
+        ];
+        assert_eq!(
+            stale_ca_consumers("bbbb", &running),
+            vec!["tillandsias-forge-alpha", "tillandsias-forge-gamma"]
+        );
+        assert_eq!(
+            stale_ca_consumers("aaaa", &running),
+            vec!["tillandsias-forge-beta", "tillandsias-forge-gamma"]
+        );
+        assert!(stale_ca_consumers("bbbb", &[]).is_empty());
+    }
+
+    #[test]
+    fn ca_consumer_generations_parse_names_and_labels_from_podman_ps() {
+        let parsed = parse_ca_consumer_generations(
+            "tillandsias-forge-alpha\taaaa\ntillandsias-proxy\t<no value>\n\nbare\n",
+        );
+        assert_eq!(
+            parsed,
+            vec![
+                (
+                    "tillandsias-forge-alpha".to_string(),
+                    Some("aaaa".to_string())
+                ),
+                ("tillandsias-proxy".to_string(), None),
+                ("bare".to_string(), None),
+            ]
+        );
+    }
+
+    /// The announcement sits where the stranding is decided: after the stale
+    /// verdict and before the replacement launch. Moving it after the launch
+    /// would name consumers the proxy has already abandoned; deleting it
+    /// returns the inverse split-trust window to silence.
+    #[test]
+    fn ensure_proxy_running_announces_stale_consumers_before_replacing() {
+        // Read at runtime, never `env!`: with a shared CARGO_TARGET_DIR a test
+        // binary compiled in another worktree is reused unchanged (1590-j20f).
+        let whole = std::fs::read_to_string(
+            std::path::PathBuf::from(
+                std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+            )
+            .join("src/main.rs"),
+        )
+        .expect("read src/main.rs");
+        let body = source_window(&whole, "fn ensure_proxy_running(");
+        let stale = body.find("ProxyCaCheck::Stale").expect("the stale arm");
+        let announce = body
+            .find("announce_stale_ca_consumers(")
+            .expect("the announcement");
+        let replace = body
+            .find("build_proxy_run_args(")
+            .expect("the replacement launch");
+        assert!(
+            stale < announce && announce < replace,
+            "the stranded consumers must be named before the proxy is replaced"
+        );
+    }
+
+    /// Order 472 slice 6: the generation read answers three ways. A missing
+    /// certificate is `absent`; one that is present but not a PEM certificate
+    /// (or, where the OS refuses the read, present but unreadable) is
+    /// `unreadable`, never `absent`; and only a current one labels the proxy.
+    #[test]
+    fn a_present_but_untrustable_certificate_reads_unreadable_not_absent() {
+        use flow_sink::CaBundleState;
+        let dir = tempfile::tempdir().unwrap();
+        let crt = dir.path().join("intermediate.crt");
+        assert_eq!(ca_generation(dir.path()), CaBundleState::Absent);
+
+        std::fs::write(&crt, "CERT-A").unwrap();
+        assert_eq!(ca_generation(dir.path()), CaBundleState::Unreadable);
+        let args = build_proxy_run_args(dir.path(), "tillandsias-proxy:v1");
+        assert!(
+            !args
+                .iter()
+                .any(|a| a.starts_with(&format!("{CA_GENERATION_LABEL}="))),
+            "an unreadable certificate must not label the proxy: {args:?}"
+        );
+        // The satisfier's refusal and the wire state agree by construction:
+        // the same predicate decides both.
+        assert!(container_deps::ca_bundle_trustable(dir.path()).is_err());
+
+        std::fs::write(&crt, pem_cert("CERT-A")).unwrap();
+        assert!(matches!(
+            ca_generation(dir.path()),
+            CaBundleState::Current(ref g) if g.len() == 16
+        ));
+        assert!(container_deps::ca_bundle_trustable(dir.path()).is_ok());
+
+        // The OS-level arm (the SELinux relabel incident's shape): a mode-000
+        // file. Asserted only where the read actually fails, since a
+        // privileged test runner reads anything; the non-PEM arm above is the
+        // unconditional one.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&crt, std::fs::Permissions::from_mode(0o000)).unwrap();
+            if std::fs::read(&crt).is_err() {
+                assert_eq!(ca_generation(dir.path()), CaBundleState::Unreadable);
+            }
+            std::fs::set_permissions(&crt, std::fs::Permissions::from_mode(0o644)).unwrap();
+        }
     }
 
     #[test]
@@ -28241,6 +28764,139 @@ mod tests {
         );
     }
 
+    /// ORDER 472, exit criterion 5 — the drift guardrail's TEST arm. The
+    /// compile arm is the witness parameter itself: a lane that skipped
+    /// `ensure_forge_launch` has no `Up<CaTrusted>` to pass (mutation measured
+    /// on yoga 2026-10-12, issue slice 7). This arm covers what a type cannot:
+    /// a NEW emitter of the forge-side CA path written without the parameter.
+    /// Every production function whose body names the in-container path must
+    /// take the witness. Slice 7 carried a ratchet (`OUTSIDE_THE_MODEL`) for
+    /// the OpenCode and status-check builders, whose lanes brought the CA up
+    /// by the bare `ensure_ca_bundle` call and never ran slice 4's trust
+    /// check; slice 8 routed those lanes through
+    /// `container_deps::ensure_ca_trusted`, the builders took the witness,
+    /// and the ratchet emptied. It is gone rather than kept empty: an empty
+    /// allowlist is a list nobody can fail. The property is now total, and
+    /// any unwitnessed emitter fails this test by name.
+    #[test]
+    fn every_forge_ca_mount_emitter_takes_the_ca_trusted_witness() {
+        const TARGET: &str = "/run/tillandsias/ca-chain.crt";
+        const WITNESS: &str = "Up<container_deps::CaTrusted>";
+        fn is_fn_header(line: &str) -> bool {
+            [
+                "fn ",
+                "pub fn ",
+                "pub(crate) fn ",
+                "async fn ",
+                "pub async fn ",
+                "pub(crate) async fn ",
+            ]
+            .iter()
+            .any(|p| line.starts_with(p))
+        }
+        fn is_item_start(line: &str) -> bool {
+            let bare = line
+                .strip_prefix("pub(crate) ")
+                .or_else(|| line.strip_prefix("pub "))
+                .unwrap_or(line);
+            [
+                "impl ",
+                "impl<",
+                "struct ",
+                "enum ",
+                "const ",
+                "static ",
+                "mod ",
+                "trait ",
+                "type ",
+                "use ",
+                "macro_rules!",
+            ]
+            .iter()
+            .any(|p| bare.starts_with(p))
+        }
+        // Read at runtime, never `env!` (1590-j20f).
+        let whole = std::fs::read_to_string(
+            std::path::PathBuf::from(
+                std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+            )
+            .join("src/main.rs"),
+        )
+        .expect("read src/main.rs");
+        let source = whole.as_str();
+        let production = source.split("\nmod tests {").next().unwrap_or(source);
+        let lines: Vec<&str> = production.lines().collect();
+
+        // Attribute every emitting line to the top-level fn that owns it.
+        let mut current: Option<usize> = None;
+        let mut emitters: Vec<usize> = Vec::new();
+        for (i, line) in lines.iter().enumerate() {
+            if is_fn_header(line) {
+                current = Some(i);
+            } else if is_item_start(line) {
+                // Another top-level item (impl, const, struct…): no fn owns
+                // the lines below it until the next header. A column-0 `)`
+                // is the end of a multi-line signature and keeps the owner
+                // (the first draft reset on it and attributed every mount in
+                // a multi-line-signature builder to nobody).
+                current = None;
+            }
+            if line.contains(TARGET) && !line.trim_start().starts_with("//") {
+                let owner = current.unwrap_or_else(|| {
+                    panic!(
+                        "line {}: {TARGET} named outside any top-level fn: {line}",
+                        i + 1
+                    )
+                });
+                if !emitters.contains(&owner) {
+                    emitters.push(owner);
+                }
+            }
+        }
+        assert!(
+            !emitters.is_empty(),
+            "no production function names {TARGET}; the scan is reading the wrong file"
+        );
+
+        let mut witnessed: Vec<String> = Vec::new();
+        let mut unwitnessed: Vec<String> = Vec::new();
+        for &i in &emitters {
+            let header = lines[i];
+            let name = header
+                .split("fn ")
+                .nth(1)
+                .and_then(|s| s.split('(').next())
+                .unwrap_or_else(|| panic!("unparseable fn header: {header}"))
+                .to_string();
+            // The signature: the header alone when it closes on one line,
+            // else every line down to the column-0 `)` that ends the list.
+            let mut signature = String::new();
+            for l in &lines[i..] {
+                signature.push_str(l);
+                signature.push('\n');
+                if l.starts_with(')') || (*l == header && l.contains('{')) {
+                    break;
+                }
+            }
+            if signature.contains(WITNESS) {
+                witnessed.push(name);
+            } else {
+                unwitnessed.push(name);
+            }
+        }
+        assert!(
+            witnessed.iter().any(|n| n == "forge_ca_chain_mount_spec"),
+            "forge_ca_chain_mount_spec must name the forge-side CA mount against the witness; witnessed={witnessed:?}"
+        );
+        assert!(
+            unwitnessed.is_empty(),
+            "drift guardrail (472 criterion 5): {unwitnessed:?} name {TARGET} without a `{WITNESS}` \
+             parameter. Obtain the witness from a launch witness's ca_trusted(), or from \
+             container_deps::ensure_ca_trusted on a lane that sequences Vault and the proxy \
+             itself, and build the mount through forge_ca_chain_mount_spec"
+        );
+    }
+
     /// Drift litmus (order 229): every launch path that creates containers
     /// MUST route through the container dependency model.  A launch that
     /// skips a prerequisite must fail — this is proven at the crate level
@@ -28271,7 +28927,7 @@ mod tests {
 
         // Each function that dispatches a containerized launch must route
         // through the dependency model, directly or transitively.
-        let launch_fns: [(&str, Option<&[&str]>); 4] = [
+        let launch_fns: [(&str, Option<&[&str]>); 7] = [
             ("fn run_provider_login(", None),
             ("fn run_list_cloud_projects(debug: bool)", None),
             (
@@ -28281,6 +28937,20 @@ mod tests {
             (
                 "fn ensure_enclave_for_project(",
                 Some(&["container_deps::"]),
+            ),
+            // Order 472 slice 8: the lanes that mount the CA into a forge
+            // without a ForgeLaunch take the model's CaBundle node directly.
+            (
+                "fn run_status_check(debug: bool)",
+                Some(&["container_deps::ensure_ca_trusted(debug)?"]),
+            ),
+            (
+                "fn run_opencode_mode(",
+                Some(&["container_deps::ensure_ca_trusted(debug)?"]),
+            ),
+            (
+                "pub(crate) fn run_opencode_web_mode(",
+                Some(&["container_deps::ensure_ca_trusted(debug)?"]),
             ),
         ];
         for (fn_sig, expected_refs) in &launch_fns {
@@ -28427,6 +29097,7 @@ mod tests {
                 None,
                 false,
                 false,
+                &container_deps::ca_trusted_for_tests(),
             );
             assert!(
                 !has_arg(&argv, "--replace"),
@@ -28792,6 +29463,7 @@ mod tests {
             None,
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
+            &container_deps::ca_trusted_for_tests(),
         );
 
         assert!(has_arg(&args, "--rm"));
@@ -28852,6 +29524,7 @@ mod tests {
                 None,
                 false,
                 false,
+                &container_deps::ca_trusted_for_tests(),
             );
             let envelope = args
                 .iter()
@@ -28893,6 +29566,7 @@ mod tests {
             None,
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
         assert!(has_arg(&args, "--tty"));
         assert!(
@@ -28919,6 +29593,7 @@ mod tests {
             None,
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
         assert!(!prompted.iter().any(|a| a.starts_with("TERM=")));
     }
@@ -28957,6 +29632,7 @@ mod tests {
             None,
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
         let codex = build_forge_agent_run_args_with_vault(
             &project,
@@ -28973,6 +29649,7 @@ mod tests {
             Some("delegated codex"),
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
         for (lane, args) in [("opencode", opencode), ("codex", codex)] {
             assert!(
@@ -29003,6 +29680,7 @@ mod tests {
             None,
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
         assert!(
             !has_arg(&web, "TILLANDSIAS_AGENT_RESULT_FORMAT=json"),
@@ -29024,6 +29702,7 @@ mod tests {
             None,
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
         assert!(
             !has_arg(&unstructured, "TILLANDSIAS_AGENT_RESULT_FORMAT=json"),
@@ -29070,6 +29749,7 @@ mod tests {
             None,
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
         let agent = build_forge_agent_run_args_with_vault(
             &project,
@@ -29086,6 +29766,7 @@ mod tests {
             None,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
         for (lane, args) in [("opencode", &opencode), ("agent", &agent)] {
             assert!(
@@ -29111,6 +29792,7 @@ mod tests {
             None,
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
         let agent = build_forge_agent_run_args_with_vault(
             &no_repo,
@@ -29127,6 +29809,7 @@ mod tests {
             None,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
         for (lane, args) in [("opencode", &opencode), ("agent", &agent)] {
             assert!(
@@ -29213,6 +29896,7 @@ mod tests {
             None,
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
         let agent = build_forge_agent_run_args_with_vault(
             &project,
@@ -29229,6 +29913,7 @@ mod tests {
             None,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
         for (lane, args) in [("opencode", &opencode), ("agent", &agent)] {
             assert!(
@@ -29558,6 +30243,7 @@ mod tests {
                 None,
                 false,
                 false,
+                &container_deps::ca_trusted_for_tests(),
             )
         };
 
@@ -30051,6 +30737,7 @@ esac
             None,
             false,
             true,
+            &container_deps::ca_trusted_for_tests(),
         );
 
         // Prompted mode is non-interactive; podman should not claim a TTY.
@@ -30165,6 +30852,7 @@ esac
             None,
             false,
             true,
+            &container_deps::ca_trusted_for_tests(),
         );
         assert!(
             args.iter().any(|arg| arg
@@ -30190,6 +30878,7 @@ esac
             Some("opencode-forge-lease"),
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
         assert!(has_arg(&args, "--secret"));
         assert!(has_arg(
@@ -30223,6 +30912,7 @@ esac
             None,
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
         assert!(!has_arg(&args, "--secret"));
         assert!(!has_arg(&args, "TILLANDSIAS_OPENCODE_AUTH_EXPECTED=1"));
@@ -30251,6 +30941,7 @@ esac
             None,
             true,
             true,
+            &container_deps::ca_trusted_for_tests(),
         );
 
         assert!(!has_arg(&args, "--interactive"));
@@ -30339,6 +31030,7 @@ esac
             false,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
 
         assert!(has_arg(&argv, "PROJECT=alpha"));
@@ -30376,6 +31068,7 @@ esac
                 None,
                 false,
                 &test_cache_root(),
+                &container_deps::ca_trusted_for_tests(),
             );
             assert!(
                 has_arg(&args, "--secret"),
@@ -30404,6 +31097,7 @@ esac
                 None,
                 false,
                 &test_cache_root(),
+                &container_deps::ca_trusted_for_tests(),
             );
             assert!(
                 !args.iter().any(|arg| arg.contains("must-not-mount")),
@@ -30436,6 +31130,7 @@ esac
             Some(prompt),
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
         assert!(
             has_arg(&with_prompt, &format!("TILLANDSIAS_CODEX_PROMPT={prompt}")),
@@ -30462,6 +31157,7 @@ esac
             None,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
         assert!(
             has_arg(&no_prompt, "--tty") && has_arg(&no_prompt, "--interactive"),
@@ -30542,6 +31238,7 @@ esac
                 false,
                 false,
                 &test_cache_root(),
+                &container_deps::ca_trusted_for_tests(),
             );
             let identity = format!("TILLANDSIAS_AGENT={expected}");
             assert!(
@@ -30585,6 +31282,7 @@ esac
                 None,
                 false,
                 false,
+                &container_deps::ca_trusted_for_tests(),
             );
             let identity = format!("TILLANDSIAS_AGENT={expected}");
             assert!(
@@ -30614,6 +31312,7 @@ esac
             true,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
 
         assert_eq!(args.first().map(|s| s.as_str()), Some("--rm"));
@@ -30657,6 +31356,7 @@ esac
                 false,
                 false,
                 &test_cache_root(),
+                &container_deps::ca_trusted_for_tests(),
             );
             assert!(
                 has_arg(&args, "--tty"),
@@ -30970,6 +31670,7 @@ esac
             Some("do the thing"), // prompt — this is the arg that matters,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
         assert!(
             !has_arg(&args, "--tty"),
@@ -31891,6 +32592,7 @@ esac
             // process-global that every concurrently-running test could read.
             true,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
         let raw_args = build_opencode_forge_args(
             &project_path,
@@ -31906,6 +32608,7 @@ esac
             None,
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
         for args in [&agent_args, &raw_args] {
             let workspace = args
@@ -31970,6 +32673,7 @@ esac
             // ORDER 1021-hf9e: host_mount — this whole test exercises the opt-in lane.
             true,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
         let fail_closed_raw = build_opencode_forge_args(
             &project_path,
@@ -31985,6 +32689,7 @@ esac
             None,
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
         for args in [&fail_closed_agent, &fail_closed_raw] {
             assert!(
@@ -32643,8 +33348,14 @@ esac
             .and_then(|n| n.to_str())
             .unwrap_or("tillandsias");
         let certs_dir = ensure_ca_bundle(false).expect("ensure_ca_bundle");
-        let status_args =
-            build_status_check_forge_args(root.as_path(), project_name, None, &certs_dir, version);
+        let status_args = build_status_check_forge_args(
+            root.as_path(),
+            project_name,
+            None,
+            &certs_dir,
+            version,
+            &container_deps::ca_trusted_for_tests(),
+        );
         assert!(
             status_args.join(" ").contains("check_inference()"),
             "status-check plan should keep the inference probe"
@@ -34636,6 +35347,7 @@ esac
             None,
             false,
             &test_cache_root(),
+            &container_deps::ca_trusted_for_tests(),
         );
 
         let args_str = args.join(" ");
@@ -34855,6 +35567,7 @@ esac
             None,
             false,
             false,
+            &container_deps::ca_trusted_for_tests(),
         );
 
         let args_str = args.join(" ");
@@ -35437,6 +36150,7 @@ mod forge_budget_argv_tests {
             None,
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
+            &container_deps::ca_trusted_for_tests(),
         );
         assert_budget("build_status_check_forge_args", &args);
     }
@@ -35457,6 +36171,7 @@ mod forge_budget_argv_tests {
                 None,
                 false,
                 false,
+                &container_deps::ca_trusted_for_tests(),
             );
             assert_budget(&format!("build_opencode_forge_args({mode:?})"), &args);
         }
@@ -35482,6 +36197,7 @@ mod forge_budget_argv_tests {
                     false,
                     host_mount,
                     &test_cache_root(),
+                    &container_deps::ca_trusted_for_tests(),
                 );
                 assert_budget(
                     &format!("build_forge_agent_run_args({mode:?}, host_mount={host_mount})"),
