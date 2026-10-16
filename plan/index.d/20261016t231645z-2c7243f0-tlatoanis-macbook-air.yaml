@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-release-freeze-refuses-the-cut-hosts-own-push-so-the-only-way-to-land-the-cuts-own-fix-is-clear-land-re-set-and-the-freeze-is-therefore-genuinely-absent-for-the-whole-length-of-that-landing-gate-included
+    field: status
+    value: in_progress
+    ts: "2026-10-16T23:16:45Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-release-freeze-refuses-the-cut-hosts-own-push-so-the-only-way-to-land-the-cuts-own-fix-is-clear-land-re-set-and-the-freeze-is-therefore-genuinely-absent-for-the-whole-length-of-that-landing-gate-included
+    event:
+      type: progress
+      ts: "2026-10-16T23:16:45Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: Coordinator ruling 2026-10-16: ship fallbacks A+B only, NO cut-host exemption. The self-exemption was rejected because the freeze is a coordination signal, not an authentication boundary: host identity at push time is self-declared, so the hook cannot verify the marker host matches the pusher, and a land-queue push is an ordinary git push, so "pushed by the land queue" is unverifiable too. An exemption whose conditions cannot be verified is only the appearance of a boundary. Scope: (A) release-freeze.sh reset writes the successor marker before deleting the predecessor; (B) the successor reads "frozen, landing by <host>" and readers compare against the successor epoch, not against absence. Failing-today criterion: ls-remote sampled through clear->land->re-set is never empty. Claimed by tlatoanis-macbook-air as work/1265-8qr6.
