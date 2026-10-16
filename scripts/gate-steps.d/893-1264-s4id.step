@@ -1,0 +1,13 @@
+# Gate step 1264-s4id — the forge's push capability (images/default/
+# lib-push-capability.sh), sourced as lib-common.sh sources it: every mirror
+# verdict maps to its closed state and affordance (read-only is SUPPORTED,
+# revoked/sso/no-credential are loud), the newest verdict wins, and the branch
+# half asks the project's own push discipline (check-ref), following a seed
+# whose protected branch changes rather than a hard-coded "main".
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the forge push-capability report (1264-s4id)"
+STEP_LUA="scripts/lua/test-push-capability.lua"
+STEP_ERROR="lib-push-capability.sh no longer reports what its fixture constructs, or its branch check stopped following the project's discipline seed (1264-s4id) — see the FAIL lines above"
+STEP_OK="Forge push-capability report fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-16 darwin ok:push-capability:13 arms"

@@ -5029,6 +5029,31 @@ inject_startup_context() {
     else
         _expert_sources="absent"
     fi
+    # ORDER 1264-s4id: can this forge push to THIS repository? Asked at forge
+    # launch (not at login, where there is no repository), from the mirror's
+    # own push verdict, and REPORTED as a capability: read-only is a supported
+    # state, never a launch failure. The branch half asks the project's own
+    # push discipline about the startup branch. Loud states go to the launch
+    # terminal too.
+    local _push_line="push: unknown (helper-missing)" _push_machine="push_state=unknown push_reason=helper-missing"
+    local _push_branch_line="" _push_branch_machine="push_branch=unknown push_branch_reason=helper-missing"
+    local _push_lib="${BASH_SOURCE[0]%/*}/lib-push-capability.sh"
+    if [[ -r "$_push_lib" ]]; then
+        # shellcheck source=lib-push-capability.sh
+        source "$_push_lib"
+        tillandsias_push_capability "$project_dir" "${TILLANDSIAS_PROJECT:-$(basename "$project_dir")}"
+        _push_line="$TILLANDSIAS_PUSH_LINE"
+        _push_machine="$TILLANDSIAS_PUSH_MACHINE"
+        tillandsias_push_branch "$project_dir" "$branch"
+        _push_branch_line="$TILLANDSIAS_PUSH_BRANCH_LINE"
+        _push_branch_machine="$TILLANDSIAS_PUSH_BRANCH_MACHINE"
+        if [[ "$TILLANDSIAS_PUSH_LOUD" = 1 ]]; then
+            printf '[forge] %s\n' "$_push_line" >&2
+        fi
+        if [[ -n "$_push_branch_line" ]]; then
+            printf '[forge] %s\n' "$_push_branch_line" >&2
+        fi
+    fi
     version="$(cat "$project_dir/VERSION" 2>/dev/null | tr -d '[:space:]' || echo "unknown")"
     agent_name="${TILLANDSIAS_AGENT_NAME:-forge}"
     local project_name
@@ -5051,6 +5076,9 @@ inject_startup_context() {
 ## Infrastructure (all transparent — zero configuration needed)
 
 - **Git**: push/fetch route through the enclave git mirror; GitHub token is handled automatically.
+  - ${_push_line}${_push_branch_line:+
+  - ${_push_branch_line}}
+  - Machine-readable (branch on this): \`${_push_machine} ${_push_branch_machine}\`. A read-only token is SUPPORTED: build, run and serve locally; only pushing is unavailable (order 1264-s4id).
 - **HTTPS proxy**: outbound traffic is cached; CA is trusted at startup.
 - **Accelerators** — \`${_accel_envelope}\`
   - This is the HOST's hardware, projected onto a closed vocabulary so you can branch on it without probing devices you cannot see. \`accel_class\` is the one field worth reading first: \`workstation-gpu\` (a discrete GPU is deliverable to this container — larger models are cheap here), \`mobile-npu\` (an NPU is deliverable — prefer small quantized models), \`hybrid-gpu-npu\` (both), or \`cpu-only\`.
