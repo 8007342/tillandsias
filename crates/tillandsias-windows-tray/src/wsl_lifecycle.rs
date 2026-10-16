@@ -336,9 +336,11 @@ pub const CLOUDFLARE_LOGIN_WRAPPER_PATH: &str = "/usr/local/lib/tillandsias/clou
 
 /// The Cloudflare login wrapper: `github-login.sh`'s shape (environment, a
 /// full-output tee to a guest-side log, the login's own exit code, a pause on
-/// failure so the console doesn't vanish), running the paste-mode login the
-/// shared PTY intent runs. Paste mode: the browser runs on the Windows host,
-/// so the guest can't count on its loopback receiver being reachable.
+/// failure so the console doesn't vanish), running the login the shared PTY
+/// intent runs: no forced receiver, so a configured relay gives a QR first
+/// (operator ruling 2026-10-16, 1713-3v3f) and otherwise the printed URL plus
+/// paste, since the guest has no desktop and its loopback is not the Windows
+/// host's.
 pub(crate) const CLOUDFLARE_LOGIN_WRAPPER: &str = r#"#!/usr/bin/env bash
 set -u
 export HOME="${HOME:-/root}"
@@ -348,7 +350,7 @@ export TILLANDSIAS_VAULT_API_BASE_URL="${TILLANDSIAS_VAULT_API_BASE_URL:-https:/
 LOG_DIR="$HOME/.cache/tillandsias"
 LOG="$LOG_DIR/cloudflare-login-last.log"
 install -d -m 0700 "$LOG_DIR"
-/usr/local/bin/tillandsias-headless --cloudflare-login --via paste 2>&1 | tee "$LOG"
+/usr/local/bin/tillandsias-headless --cloudflare-login 2>&1 | tee "$LOG"
 rc=${PIPESTATUS[0]}
 if [ "$rc" -ne 0 ]; then
   printf '\n[tillandsias] cloudflare-login exited %s; full output saved to %s\n' "$rc" "$LOG"
@@ -2657,15 +2659,18 @@ mod tests {
     /// Order 1719-83po slice 5: the Cloudflare wrapper keeps github-login.sh's
     /// diagnosable shape, and the tray's console argv is its bare path.
     #[test]
-    fn cloudflare_login_wrapper_runs_the_paste_login_and_keeps_its_output() {
+    fn cloudflare_login_wrapper_lets_the_login_choose_qr_first_and_keeps_its_output() {
         let launch = CLOUDFLARE_LOGIN_WRAPPER
             .lines()
             .find(|l| l.contains("--cloudflare-login"))
             .expect("the wrapper must launch the Cloudflare login");
         assert!(
-            launch
-                .starts_with("/usr/local/bin/tillandsias-headless --cloudflare-login --via paste"),
-            "absolute guest binary, paste mode (the browser is on the Windows host): {launch}"
+            launch.starts_with("/usr/local/bin/tillandsias-headless --cloudflare-login 2>&1"),
+            "absolute guest binary, no forced receiver: {launch}"
+        );
+        assert!(
+            !launch.contains("--via"),
+            "a forced receiver would override QR first (operator ruling 2026-10-16): {launch}"
         );
         assert!(
             launch.contains("2>&1 | tee"),

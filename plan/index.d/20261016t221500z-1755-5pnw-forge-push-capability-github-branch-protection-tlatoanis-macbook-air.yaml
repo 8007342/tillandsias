@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-16, as 1264-s4id's outcome (B) on the coordinator's ruling.
+packets:
+  - packet_id: the-forge-push-capability-report-also-names-github-branch-protection-on-the-startup-branch-looked-up-by-the-mirror-within-its-existing-credential-scope
+    order: 1755-5pnw
+    status: ready
+    kind: enhancement
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [forge, credentials, github, git-mirror, affordance]
+    estimated_hours: 4
+    related: [1264-s4id, 1217-54vw]
+    title: |
+      The forge's push report (1264-s4id) names a GitHub BRANCH-PROTECTION refusal on the startup branch ("move away from <branch>"), which the mirror's push dry-run cannot see because --dry-run never sends a pack, so protection and pre-receive hooks never fire
+    context: |
+      1264-s4id reports the repository-level push capability from the mirror's existing dry-run verdict (refs/tillandsias/upstream-auth/*), and the branch level from the PROJECT's own push discipline (`tillandsias-plan discipline check-ref`, outcome A, coordinator ruling 2026-10-16). Server-side GitHub branch protection is a third source that neither sees: a dry-run push negotiates refs but sends no pack.
+      OUTWARD ACT, stated as the coordinator asked: the lookup is a GitHub API call (e.g. GET /repos/{owner}/{repo}/branches/{branch}, whose `protected` field needs only read access; or /rules/branches/{branch}) made with the OPERATOR's token. It must therefore run in the git mirror, which already holds that token via git-credential-tillandsias and already calls GitHub for the dry-run, and stay within that existing credential scope: no new token, no new permission, nothing written.
+    exit_criteria:
+      - "the mirror publishes the startup branch's protection state beside its upstream-auth verdict, and lib-push-capability.sh reads it into push_branch (a protected branch says `move away from <branch>`)"
+      - "the lookup uses only the mirror's existing credential and a read-only endpoint; a fixture shows no write call and no token in any output"
+      - "an unanswered lookup (rate limit, network) is unknown, never `ok`"
+    unscoreable: "a live protected branch on a real GitHub repository; a fixture with a stub API answers the mapping, the no-write rule and the unknown case"
+    next_action: >
+      Read images/git/probe-upstream-auth.sh (where the dry-run verdict is published) and lib-push-capability.sh's tillandsias_push_branch; publish a refs/tillandsias/branch-protection/<branch>/<state>/<epoch> ref from the mirror and read it in the forge.
+    events:
+      - type: filed
+        ts: "2026-10-16T22:15:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          1264-s4id outcome (B): GitHub branch protection on the startup branch, looked up by the mirror within its existing credential scope (an outward GitHub API call under the operator's token). p3, per the coordinator.

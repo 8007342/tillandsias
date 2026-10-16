@@ -75,12 +75,20 @@ BIN="${TILLANDSIAS_CLOUDFLARE_LOGIN_BIN:-$TARGET/tillandsias}"
 FAKEBIN="$scratch/fakebin"
 mkdir -p "$FAKEBIN" "$scratch/home" "$scratch/run"
 chmod 700 "$scratch/run"
-cat >"$FAKEBIN/xdg-open" <<'OPENER'
+# 1713-3v3f / 1719-83po QR slice: the binary PRINTS the authorize URL and never
+# launches a host browser. So the operator is played by `click`: it waits for
+# the printed URL in the arm's output, consents at the fake
+# (auto=approve|deny), and follows the redirect to the loopback listener. It
+# records the URL and the Location in the scratch dir and prints nothing.
+cat >"$FAKEBIN/click" <<'CLICK'
 #!/usr/bin/env bash
-# The operator's browser: consent at the fake (auto=approve|deny), then follow
-# the redirect to the loopback listener. Records the URL and the Location in
-# the scratch dir; prints nothing.
-url="$1"
+out="$1"; i=0; url=""
+while [ "$i" -lt 300 ]; do
+    url="$(grep -m1 -oE 'http://127\.0\.0\.1:[0-9]+/oauth2/auth[^[:space:]]*' "$out" 2>/dev/null)"
+    [ -n "$url" ] && break
+    sleep 0.1; i=$((i + 1))
+done
+[ -n "$url" ] || exit 0
 printf '%s\n' "$url" >"$CF_FAKE_BROWSER_DIR/url"
 loc="$(curl -s --noproxy '*' -o /dev/null -w '%{redirect_url}' "${url}&auto=${CF_FAKE_BROWSER_MODE:-approve}")"
 if [ "${CF_FAKE_BROWSER_TAMPER:-0}" = 1 ]; then
@@ -88,10 +96,16 @@ if [ "${CF_FAKE_BROWSER_TAMPER:-0}" = 1 ]; then
 fi
 printf '%s\n' "$loc" >"$CF_FAKE_BROWSER_DIR/location"
 curl -s --noproxy '*' -o /dev/null "$loc" || true
-OPENER
+CLICK
+# TRIPWIRES: an opener on PATH that only records being launched. The binary
+# must never call one (arm NOLAUNCH).
+cat >"$FAKEBIN/xdg-open" <<'TRIP'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$CF_FAKE_BROWSER_DIR/launched"
+TRIP
 cp "$FAKEBIN/xdg-open" "$FAKEBIN/open"
 printf '#!/bin/sh\nexit 125\n' >"$FAKEBIN/podman"
-chmod 755 "$FAKEBIN/xdg-open" "$FAKEBIN/open" "$FAKEBIN/podman"
+chmod 755 "$FAKEBIN/click" "$FAKEBIN/xdg-open" "$FAKEBIN/open" "$FAKEBIN/podman"
 
 start_fake() {   # <name> -> sets FAKE_URL, LEDGER
     LEDGER="$scratch/$1.ledger"
@@ -138,10 +152,20 @@ run_bin() {
     local pid=$!
     ( sleep 60; kill "$pid" 2>/dev/null ) &
     local wd=$!
+    # The operator, for an arm that names a browser mode: clicks the URL the
+    # binary printed (the binary never opens a browser itself).
+    local clicker=""
+    case " ${envs[*]+"${envs[*]}"} " in
+        *" CF_FAKE_BROWSER_MODE="*)
+            env CF_FAKE_BROWSER_DIR="$scratch/$name.browser" \
+                "${envs[@]+"${envs[@]}"}" bash "$FAKEBIN/click" "$scratch/$name.out" &
+            clicker=$! ;;
+    esac
     wait "$pid"
     RC=$?
     kill "$wd" 2>/dev/null
     wait "$wd" 2>/dev/null
+    [ -z "$clicker" ] || { kill "$clicker" 2>/dev/null; wait "$clicker" 2>/dev/null; }
     OUT="$(cat "$scratch/$name.out")"
 }
 
@@ -239,7 +263,7 @@ fi
 start_fake litmusctl
 run_bin litmusctl CF_FAKE_BROWSER_MODE=deny -- --cloudflare-login --via loopback
 if ! grep -q 'litmus-stop' <<<"$OUT" && [ -e "$scratch/litmusctl.browser/url" ]; then
-    ok "LITMUS CONTROL: without LITMUS_PODMAN_MODE the browser is opened"
+    ok "LITMUS CONTROL: without LITMUS_PODMAN_MODE the printed URL is followed"
 else
     bad "LITMUS CONTROL: the stop fired (or no browser) without the litmus flag"
 fi
@@ -267,6 +291,18 @@ printf '%s\n' '{"body":"","method":"GET","path":"/oauth2/auth?x=1"}' \
 [ "$(past_auth "$scratch/ctl.ledger")" = "/oauth2/token" ] \
     && ok "LEDGER CONTROL: the past-auth check sees a token request" \
     || bad "LEDGER CONTROL: the past-auth check is blind"
+
+# NOLAUNCH (1713-3v3f, operator ruling 2026-10-16): no arm launched a host
+# browser. The loopback arms above reached the listener only because `click`
+# followed the PRINTED URL; an opener on PATH records any launch. The binary
+# before this slice auto-opened, so this arm was red on it.
+launched="$(cat "$scratch"/*.browser/launched 2>/dev/null | head -n 3)"
+n_loop="$(ls -d "$scratch"/*.browser 2>/dev/null | wc -l | tr -d ' ')"
+if [ -z "$launched" ] && [ "$n_loop" -ge 5 ]; then
+    ok "NOLAUNCH no arm launched a browser opener (${n_loop} arms looked)"
+else
+    bad "NOLAUNCH an opener was launched or no arm ran: launched=[${launched}] arms=${n_loop}"
+fi
 
 # ── the relay page never calls out ──────────────────────────────────────────
 PAGE="$ROOT/assets/cloudflare-relay/index.html"
