@@ -412,6 +412,10 @@ if [ "${1:-}" = "--probe-fallback" ]; then
         exit 0
     fi
     DEV_CONTAINER="tillandsias-dev-inference-probe"
+    # The accelerator probe (`tillandsias --capabilities`, 967-6ax6) looks
+    # inside the container this names: the PROBE container, never the serving
+    # one (the Linux gate caught the probe exec-ing into the serving engine).
+    export TILLANDSIAS_INFERENCE_CONTAINER="$DEV_CONTAINER"
     ENDPOINT_PORT=$((ENDPOINT_PORT + 1))
     ENDPOINT="http://${ENDPOINT_HOST}:${ENDPOINT_PORT}"
     mkdir -p "$STATE_DIR" 2>/dev/null || true

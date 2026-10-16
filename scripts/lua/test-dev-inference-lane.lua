@@ -81,6 +81,17 @@ esac
 exit 0
 ]]
 
+-- tillandsias: on a host where the product is installed (the Linux gate),
+-- ensure_container asks `tillandsias --capabilities`, whose accelerator probe
+-- looks INSIDE the container named by TILLANDSIAS_INFERENCE_CONTAINER (967-6ax6).
+-- This stub does the same, so every host runs that path, not only the ones
+-- with the product installed (the Linux gate caught arm 6 that darwin missed).
+local TILLANDSIAS = [[#!/bin/bash
+[ "$1" = --capabilities ] || exit 0
+podman exec "${TILLANDSIAS_INFERENCE_CONTAINER:-tillandsias-inference}" ls /dev/dri >/dev/null 2>&1
+echo '{"legacy_tier":"cpu"}'
+]]
+
 local function case_dir(name)
     local d = REL .. "/" .. name
     fs.mkdir(d .. "/bin")
@@ -88,7 +99,9 @@ local function case_dir(name)
     fs.mkdir(d .. "/home")
     fs.write(d .. "/bin/curl", CURL)
     fs.write(d .. "/bin/podman", PODMAN)
-    proc.run({ argv = { "chmod", "+x", ABS .. "/" .. name .. "/bin/curl", ABS .. "/" .. name .. "/bin/podman" }, timeout_ms = 10000 })
+    fs.write(d .. "/bin/tillandsias", TILLANDSIAS)
+    proc.run({ argv = { "chmod", "+x", ABS .. "/" .. name .. "/bin/curl", ABS .. "/" .. name .. "/bin/podman",
+        ABS .. "/" .. name .. "/bin/tillandsias" }, timeout_ms = 10000 })
     return d, ABS .. "/" .. name
 end
 local function run_ensure(abs, lane, extra_arg)
@@ -151,7 +164,7 @@ arm("6 PROBE the fallback is probed on 11435 and removed, the serving engine unt
     and plog:find("127.0.0.1:11435:11434", 1, true) ~= nil
     and not fs.exists(d .. "/stub/container-tillandsias-dev-inference-probe")
     and fs.exists(d .. "/stub/up-11434")
-    and plog:find("tillandsias-dev-inference ", 1, true) == nil, rc .. " " .. o)
+    and plog:find("tillandsias-dev-inference ", 1, true) == nil, rc .. " " .. o .. " podman.log=[" .. plog .. "]")
 
 -- 7 PROBE-SKIP
 d, a = case_dir("probeskip")
