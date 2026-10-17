@@ -132,3 +132,48 @@ audio). Device names can fingerprint a host.
 - **THEN** the capture fails and no audio reaches the page
 - **AND** a client of the window's audio socket that records the default
   source or a sink monitor is refused with 0 bytes, and load-module is refused
+
+### Requirement: Tillandsias never launches or drives a host browser
+
+No Tillandsias binary SHALL launch, open a URL in, or drive a browser
+installed on the host: no ShellExecute, `open`, `xdg-open`, `start`,
+`explorer.exe` or library opener handed a URL. Browser windows are the engine
+containers of this spec (the dev browser), which an agent can drive.
+
+The ONE permitted hand-off to the user's real browser is the development
+preview's link toast (order 1702-bpnx). When a page in the dev browser follows
+a link, the toast reads like "This link wants to open <url>" and offers the
+dev browser (local, agent-drivable) or the host browser (the real internet,
+validated by the user). Links to the app's own paths stay in the dev browser.
+The host-browser choice runs only on the user's click, never on an agent's
+call. A deployed (production) app shows no toast: its links open as the app
+specifies, in a new tab or inline.
+
+Sign-ins do not open the host browser either. A device-code sign-in (such as
+Cloudflare) shows a QR code first, so the user can sign in on another device,
+and prints the clickable sign-in URL as the fallback. Clicking it is the
+user's own act in their terminal.
+
+Operator direction 2026-10-14 ("no native browser anywhere") and 2026-10-16
+(the toast, QR first). The rule is enforced by
+`scripts/lua/check-no-host-browser-launch.lua`: it counts every launcher-shaped
+call site in `crates/`, and refuses any site that is not on its allowlist at
+its exact count. The allowlist holds only sites that open a file or an app,
+never a URL, plus the toast's single hand-off once it lands.
+
+@trace spec:host-browser-mcp, order:1713-3v3f, order:1702-bpnx
+
+#### Scenario: An agent cannot reach the real internet through a browser
+- **WHEN** an agent asks for a URL outside the project's routes
+- **THEN** no host browser is launched, and the dev browser's allowlist refuses it
+
+#### Scenario: A second launch site is refused
+- **WHEN** a commit adds a call that hands a URL to a host browser outside
+  the toast's hand-off
+- **THEN** `check-no-host-browser-launch.lua` answers `violation:` naming the
+  file and line, and `build.sh --check` fails
+
+#### Scenario: An external link goes to the host browser only on a click
+- **WHEN** a page in the dev browser follows a link to an external address
+- **THEN** the toast offers the dev browser and the host browser
+- **AND** the host browser opens only after the user picks it
