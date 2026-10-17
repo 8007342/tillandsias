@@ -252,6 +252,23 @@ impl BrowserMcpServer {
         self
     }
 
+    /// Order 1754-bu07: share the window registry (and its debounce table)
+    /// that outlives this server. The tray keeps one per lane, so a window
+    /// stays open after the MCP connection that opened it ends, as the
+    /// host-browser-mcp spec requires ("Window survives MCP connection
+    /// drop"): until browser.close, the user closing it, or tray Quit. A
+    /// per-server registry dropped the window, and SIGKILLed its container,
+    /// when a one-shot `opencode run` exited.
+    pub fn with_windows(
+        mut self,
+        windows: Arc<WindowRegistry>,
+        debounce: Arc<DebounceTable>,
+    ) -> Self {
+        self.windows = windows;
+        self.debounce = debounce;
+        self
+    }
+
     /// The owner a window opened here records: `<project>/<instance>`.
     fn owner(&self) -> String {
         format!("{}/{}", self.project_label, self.lane)
@@ -415,7 +432,7 @@ impl BrowserMcpServer {
         let tools = json!([
             {
                 "name": "browser.open",
-                "description": "Open a browser window for a project-local URL. The reply's headless field says whether a human can see it: headless: true means NO human can see the window, and only agents drive it (over CDP in dev mode).",
+                "description": "Open a browser window for a project-local URL. The reply's headless field says whether a human can see it: headless: true means NO human can see the window, and only agents drive it (over CDP in dev mode). The window stays open after this session ends, until browser.close or the user closes it.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -1298,6 +1315,41 @@ mod tests {
     use super::*;
     fn test_server(containers: Option<Arc<dyn BrowserContainers>>) -> BrowserMcpServer {
         BrowserMcpServer::with_project_label(McpServerConfig::default(), "acme", containers)
+    }
+
+    // Order 1754-bu07: a window opened through one server is still listed
+    // through the next one on the same shared registry, after the first is
+    // gone (a one-shot agent run that opened it, then exited).
+    #[tokio::test]
+    async fn a_window_outlives_the_server_that_opened_it_on_a_shared_registry() {
+        let windows = Arc::new(WindowRegistry::default());
+        let debounce = Arc::new(DebounceTable::default());
+        let call = |name: &str, arguments: serde_json::Value| RpcRequest {
+            id: Some(1),
+            method: "tools/call".to_string(),
+            params: json!({ "name": name, "arguments": arguments }),
+        };
+        {
+            let first =
+                test_server_fake_launch(None).with_windows(windows.clone(), debounce.clone());
+            let opened = first
+                .handle_request(call(
+                    "browser.open",
+                    json!({ "url": "http://web.acme.localhost:8080/" }),
+                ))
+                .await;
+            assert!(matches!(opened, RpcResponse::Success { .. }), "{opened:?}");
+        }
+        let second = test_server_fake_launch(None).with_windows(windows.clone(), debounce);
+        let listed = second
+            .handle_request(call("browser.list_windows", json!({})))
+            .await;
+        let line = listed.to_line().unwrap();
+        assert!(
+            line.contains("web.acme.localhost"),
+            "the window survived its opener: {line}"
+        );
+        assert_eq!(windows.list_for_lane("acme/default").len(), 1);
     }
 
     fn test_server_fake_launch(containers: Option<Arc<dyn BrowserContainers>>) -> BrowserMcpServer {
