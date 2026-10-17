@@ -213,6 +213,59 @@ pub fn bar_line(image: &str, percent: usize, step: Option<(u64, u64, &str)>) -> 
     }
 }
 
+/// Where a running on-demand build of `image` is, from its helper log
+/// (order 1776-pr0g): `(n, m, what the step does)`.
+///
+/// The helper log is append-only across runs, so only the lines after this
+/// run's `[tillandsias] building image <image> (` announcement count. Both
+/// shapes a log can carry are read: podman's own `STEP n/m: <instruction>`
+/// (with `--debug`, or in a `--init` log) and the bar line the build prints,
+/// `Building <image>, step n/m: <what> [...]`. A finished build (`COMMIT`, or
+/// the step-less 100% bar) is `None`: nothing is running.
+pub fn progress_in_log(image: &str, log: &str) -> Option<(u64, u64, String)> {
+    let announce = format!("[tillandsias] building image {image} (");
+    let run = &log[log.rfind(&announce)?..];
+    let bar_prefix = format!("Building {image}, step ");
+    let done_prefix = format!("Building {image} [");
+    for line in run.lines().rev() {
+        let line = line.trim_start();
+        if line.starts_with(&done_prefix) {
+            return None;
+        }
+        if let Some(rest) = line.strip_prefix(&bar_prefix) {
+            let (frac, rest) = rest.split_once(": ")?;
+            let (n, m) = frac.split_once('/')?;
+            let what = rest.rsplit_once(" [").map_or(rest, |(w, _)| w);
+            return Some((n.parse().ok()?, m.parse().ok()?, what.to_string()));
+        }
+        match parse_build_line(line.rsplit_once("] ").map_or(line, |(_, l)| l)) {
+            Some(BuildSignal::Commit) => return None,
+            Some(BuildSignal::Step { n, m }) => {
+                let instruction = line.split_once(": ").map_or("", |(_, i)| i);
+                return Some((n, m, step_label(instruction).to_string()));
+            }
+            None => {}
+        }
+    }
+    None
+}
+
+/// [`progress_in_log`] over `image`'s helper log on this host.
+pub(crate) fn image_build_progress(image: &str) -> Option<(u64, u64, String)> {
+    let text = std::fs::read_to_string(crate::image_build_helper_log_path(image)).ok()?;
+    progress_in_log(image, &text)
+}
+
+/// The tray's status while an on-demand build runs, in the step wording the
+/// operator approved for the `--init` bar (1771-4iw3), without the bar.
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub fn building_status(image: &str, step: Option<(u64, u64, &str)>) -> String {
+    match step {
+        Some((n, m, what)) => format!("Building {image}, step {n}/{m}: {what}"),
+        None => format!("Building {image}"),
+    }
+}
+
 /// One line for the build log, marking a typed event so a reader (and the
 /// closure check) can find every event a build produced.
 pub fn event_log_line(event: &ProgressEvent) -> String {
@@ -360,5 +413,45 @@ Successfully tagged localhost/pbtest:1\n\
             event_log_line(&p.finish(&Ok(()))),
             "[progress-event] forge: done"
         );
+    }
+
+    /// 1776-pr0g: any image's helper log yields its step, in both shapes,
+    /// and only this run's lines count.
+    #[test]
+    fn image_build_progress_reads_any_image() {
+        let log = "\
+[tillandsias] building image chromium-framework (localhost/x:v1, digest_missing); this may take several minutes
+STEP 7/7: COPY . .
+COMMIT localhost/x
+[tillandsias] building image chromium-framework (localhost/x:v1, label_mismatch); this may take several minutes
+STEP 2/9: FROM localhost/tillandsias-chromium-core:v1
+STEP 3/9: RUN microdnf install -y fonts
+";
+        assert_eq!(
+            progress_in_log("chromium-framework", log),
+            Some((3, 9, "installing system packages".to_string()))
+        );
+        // The bar line the build itself prints round-trips.
+        let bar = bar_line("forge-base", 40, Some((5, 12, "installing Python tools")));
+        let log =
+            format!("[tillandsias] building image forge-base (t, digest_missing); x\n{bar}\n");
+        assert_eq!(
+            progress_in_log("forge-base", &log),
+            Some((5, 12, "installing Python tools".to_string()))
+        );
+        // NEGATIVE CONTROLS: a finished run, another image, no announcement.
+        let done = format!("{log}{}\n", bar_line("forge-base", 100, None));
+        assert_eq!(progress_in_log("forge-base", &done), None);
+        assert_eq!(progress_in_log("forge", &log), None);
+        assert_eq!(progress_in_log("forge-base", "STEP 1/2: FROM x\n"), None);
+    }
+
+    #[test]
+    fn image_build_progress_status_names_the_step() {
+        assert_eq!(
+            building_status("forge", Some((2, 4, "copying files"))),
+            "Building forge, step 2/4: copying files"
+        );
+        assert_eq!(building_status("forge", None), "Building forge");
     }
 }

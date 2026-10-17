@@ -44,9 +44,11 @@ today's code first (memory: exit criteria must fail on the pre-fix code).
 
 ## 5. Make it visible (v0.5)
 
-- [ ] 5.1 `image_build_progress(name)` generalised from the toolchain
+- [x] 5.1 `image_build_progress(name)` generalised from the toolchain
       `STEP n/m` parser; tray status and MCP replies carry `step n/m`
       during any on-demand build [1776-pr0g]
+      (browser.open no longer holds the call through the build: it answers
+      `state: "preparing"` with the step and opens on a later call)
 
 ## 6. Live
 

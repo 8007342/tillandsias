@@ -32,6 +32,15 @@ pub enum LaunchError {
     Cdp(String),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+    /// Order 1776-pr0g: the window's engine image is being built on first
+    /// use, in the background. Nothing was started; call browser.open again.
+    /// `step` is `(n, m)` while the build reports one.
+    #[error("{notice}")]
+    Preparing {
+        engine: Engine,
+        notice: String,
+        step: Option<(u64, u64)>,
+    },
 }
 
 /// The engine a window runs (order 1656-tjv4). Its user-facing name is
