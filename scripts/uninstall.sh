@@ -171,6 +171,7 @@ if [[ "$WIPE" == true ]]; then
     echo "    - tillandsias-forge:* container images"
     echo "    - tillandsias-web:* container images"
 fi
+echo "    - the Tillandsias Preview CA (localhost only) from your browsers' trust stores"
 echo ""
 echo "  Your project files will NOT be touched."
 echo ""
@@ -196,6 +197,15 @@ if [[ "$ASSUME_YES" != true ]]; then
         echo "  Run it from a terminal, or add --yes to confirm in a script." >&2
         exit 1
     fi
+fi
+
+# ── 1761-bvyn: take the preview CA out of the browser trust stores ──
+# While the binary still exists: it knows the stores it added the
+# localhost-only preview CA to (~/.pki/nssdb, Chromium-family Flatpaks,
+# Firefox profiles) and removes it from each. Never fatal to the uninstall.
+if [ -x "$INSTALL_DIR/tillandsias" ]; then
+    "$INSTALL_DIR/tillandsias" --internal-remove-preview-trust \
+        || echo "  Note: the Tillandsias Preview CA could not be removed from every browser trust store (see the line above)."
 fi
 
 # ── Remove binaries ───────────────────────────────────────────

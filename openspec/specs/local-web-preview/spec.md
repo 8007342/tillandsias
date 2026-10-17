@@ -284,15 +284,38 @@ Trust of the CA in a runtime container is NOT evidence of host-browser trust.
 Default `host_trust=unknown` unless a host-side verification actually establishes
 it. An explicitly CA-verified curl is transport evidence, not browser-trust
 evidence. A browser trust failure must be reported as such without calling the
-runtime stopped. MUST NOT run trust-store installation commands, disable TLS
-verification, or silently return HTTP as a successful HTTPS preview.
+runtime stopped. publish_local MUST NOT run trust-store installation commands
+on its own path, disable TLS verification, or silently return HTTP as a
+successful HTTPS preview.
+
+Order 1761-bvyn, operator ruling 2026-10-17 ("Automatic, user scope"): preview
+leaves are signed by a dedicated PREVIEW CA, never by the enclave CA. Its
+critical Name Constraints permit DNS `localhost` (and every name below it) and
+exclude every IP address, so its key can vouch for nothing but `*.localhost`.
+It lives a year and is re-minted at launch inside the enclave CA's 60-day
+margin; a re-mint re-issues every leaf it did not sign. At launch, the tray
+installs it, and nothing else, into the operator's USER-SCOPE NSS stores
+(`~/.pki/nssdb`, Chromium-family Flatpak `.pki/nssdb`, existing Firefox profile
+`cert9.db`), with no prompt and no menu item. It never writes a system store,
+and the uninstaller removes it. While the CA serving now is not verified,
+publish_local may start the same install in the background without waiting
+on it. `host_trust` is `verified` only when the CA serving now read back from
+every store found, `untrusted` when there is no store or every store refused
+it, and `unknown` otherwise. The enclave CA is never host-trusted
+(scripts/lua/check-enclave-ca-not-host-trusted.lua).
 
 #### Scenario: Host lacks CA trust
 
 - **WHEN** the backend and CA-verified HTTPS route work but browser trust fails
 - **THEN** status distinguishes healthy runtime/TLS from untrusted or unknown host trust
-- **AND** diagnostics explain the separate approval needed to install trust
-- **AND** no trust-store bytes are changed
+- **AND** the diagnostic names the stores that hold the preview CA and those that refused it
+- **AND** publish_local itself changes no trust-store bytes
+
+#### Scenario: The preview CA cannot vouch for a real site
+
+- **WHEN** a certificate for `example.com`, or for an IP address, is signed by the preview CA
+- **THEN** a verifier that uses the preview CA as its trust anchor rejects it
+- **AND** a certificate it signs for `www.<project>.localhost` verifies
 
 ### Requirement: Opt-in toolchain sessions
 <!-- req-id: bbc26ac2 -->

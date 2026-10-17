@@ -33,8 +33,13 @@
 FROM docker.io/library/caddy:2-alpine
 
 # Runtime deps (curl for health probes from the tray + entrypoint sidecar
-# wait, libcap for setcap).
-RUN apk add --no-cache curl libcap
+# wait, libcap for setcap, nss-tools for certutil).
+# nss-tools (order 1761-bvyn): the tray runs `certutil` from this image, never
+# as the router's entrypoint, to add the localhost-only preview CA to the
+# operator's user-scope NSS stores when the host has no certutil of its own
+# (measured on lenovinha, 2026-10-17: Fedora Atomic ships none, and no other
+# Tillandsias image did). The router itself never runs it.
+RUN apk add --no-cache curl libcap nss-tools
 
 # @trace spec:subdomain-routing-via-reverse-proxy
 # CRITICAL: strip the cap_net_bind_service file capability from the
