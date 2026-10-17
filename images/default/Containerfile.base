@@ -65,10 +65,31 @@ RUN microdnf install -y --nogpgcheck --setopt=install_weak_deps=0 \
 # @trace plan/issues/forge-harness-every-launch-latest-2026-07-04.md (order 181)
 
 # ── Python packages and developer tools ─────────────────────────
-RUN pip3 install --timeout 120 --no-cache-dir \
+# Order 1771-4iw3: a WALL-CLOCK budget, because pip's --timeout is per read
+# and multiplies by its attempts (measured 2026-10-17: --timeout 5 with the
+# default 5 retries held a stalled index 43 s, so --timeout 120 held one stalled
+# URL ~12 min, and `tillandsias --init` sat at 40% for 10-30 min on
+# macuahuitl). (retries+1) x --timeout per URL fits inside the budget, and a
+# stall fails the build with a named verdict instead of a frozen percentage.
+# scripts/lua/test-forge-base-pip-bounded.lua runs this step's text.
+ARG PIP_STALL_BUDGET_S=600
+RUN rc=0; \
+    timeout "${PIP_STALL_BUDGET_S}" pip3 install --timeout 30 --retries 2 --no-cache-dir \
         pyright==1.1.410 \
         bandit==1.9.2 \
-    && npm install -g \
+        || rc=$?; \
+    if [ "$rc" -eq 124 ]; then \
+        echo "refused:forge-base:pip-install-stalled:budget=${PIP_STALL_BUDGET_S}s (step: pip3 install pyright bandit)"; \
+        echo "  why: pip did not finish within the budget; a read from the package index stalled on this build's network"; \
+        echo "  remedy: check that podman build reaches pypi.org from this host (IPv6 route, DNS, pasta vs slirp4netns), then run the build again"; \
+        exit 1; \
+    elif [ "$rc" -ne 0 ]; then \
+        echo "refused:forge-base:pip-install-failed:rc=$rc (step: pip3 install pyright bandit)"; \
+        echo "  why: pip exited non-zero; its own error is printed above"; \
+        echo "  remedy: fix what pip names, then run the build again"; \
+        exit 1; \
+    fi; \
+    npm install -g \
         typescript@6.0.3 \
         typescript-language-server@5.3.0 \
         prettier@3.8.3 \
