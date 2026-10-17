@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-17, as the follow-up 1770-z575 left (the coordinator said the next row is this host's pick).
+packets:
+  - packet_id: the-cloudflare-token-rotation-failure-remedies-name-the-light-step-of-starting-the-tray-and-never-send-the-operator-to-a-full-init-image-rebuild
+    order: 1774-8j9v
+    status: in_progress
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [cloudflare, credentials, vault, remedies]
+    estimated_hours: 1
+    related: [1770-z575, 1719-83po]
+    owned_files:
+      - crates/tillandsias-headless/src/vault_bootstrap.rs
+    title: |
+      The Cloudflare token rotation's failure remedies (refresh-record-write-failed, read:*) say to start Tillandsias (the tray) so its Vault is up, never `tillandsias --init`
+    context: |
+      1770-z575 removed `--init` from the login and logout remedies after the operator's live finding: on a fresh install --init rebuilt every image and froze the desktop. SOURCE READ: cloudflare_rotation_remedy still named --init for refresh-record-write-failed and read:* reasons. Vault comes up with the tray (or alone, via ensure_vault_running), so the light step is the right remedy.
+    exit_criteria:
+      - "no cloudflare_rotation_remedy arm names --init; the read:* arm names starting the tray"
+    verifiable_closure: "cargo test -p tillandsias-headless --features host-services cloudflare_rotation_remedies_never_name_init passes (red on linux-next before the fix)"
+    next_action: >
+      Land the two rewordings and the test.
+    events:
+      - type: filed
+        ts: "2026-10-17T11:40:26Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Filed and claimed as 1770-z575's follow-up: two rotation remedies still sent the operator to --init.
