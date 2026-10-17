@@ -15,7 +15,8 @@
 # staged. The C toolchain is chosen below: mlua compiles Lua
 # from C, which needs a musl C compiler (see THE C TOOLCHAIN).
 #
-# Exit: 0 staged or up to date; 2 unsupported machine; 3/4 no/wrong artifact.
+# Exit: 0 staged, up to date or a named skip (TILLANDSIAS_FORGE_PLAN_OPTIONAL=1);
+# 2 unsupported machine; 3/4 no/wrong artifact; 6 the decider cannot be built.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -80,6 +81,24 @@ fi
 # named warning says what the forge will do: refuse every Claude Bash command.
 cc_var="CC_$(printf '%s' "$TARGET" | tr '-' '_')"
 arch="${TARGET%%-*}"
+# no_decider <token> <why> — the decider could not be built. LOUD by default
+# (coordinator ruling on 1750-a4re): a forge image built without it refuses
+# every Claude Bash command, which surfaces only at runtime, so every lane that
+# builds an image must stop here. A compile-only lane (`build.sh --check`,
+# `--test`, a bare debug build, local-ci, the litmus runner) sets
+# TILLANDSIAS_FORGE_PLAN_OPTIONAL=1 and gets a NAMED skip instead. The image
+# and release lanes never set it (build.sh --install/--release/--ci-full,
+# build-image.sh; the release builds the decider through nix).
+no_decider() {
+    if [ "${TILLANDSIAS_FORGE_PLAN_OPTIONAL:-0}" = 1 ]; then
+        echo "skip:forge-plan-bin:$1 — $2; ${DEST} not staged (a compile-only lane; an image built from this tree would refuse every Claude Bash command)" >&2
+        exit 0
+    fi
+    echo "refused:forge-plan-bin:$1 — $2, so the forge's Bash policy decider cannot be built (1750-a4re)" >&2
+    echo "  why: a forge image built without the decider refuses every Claude Bash command, and only at runtime" >&2
+    echo "  remedy: install musl-gcc (Fedora: musl-gcc, Debian: musl-tools) or cargo-zigbuild, or run where podman can pull rust:<pin>-slim" >&2
+    exit 6
+}
 mode=""
 if [ -n "${!cc_var:-}" ]; then
     mode=cargo
@@ -108,19 +127,24 @@ case "$mode" in
         # The registry lives in the user cache, never in the checkout: crates
         # carry their own .py helpers, and check-no-python-scripts scans the tree.
         registry="${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/forge-plan-cargo-registry"
-        mkdir -p "$registry"
+        # Both bind sources must exist: podman refuses a missing one ("statfs
+        # …/target-musl: no such file or directory"), which on a fresh checkout
+        # with no musl gcc aborted build-sidecar.sh under set -e, so the router
+        # sidecar was never staged and every cargo build panicked in
+        # tillandsias-headless/build.rs (measured, lenovinha, 2026-10-17).
+        mkdir -p "$registry" "$TDIR"
         echo "[build-forge-plan-bin] no musl C toolchain on this host: building in ${image} (musl-tools)"
-        podman run --rm --security-opt label=disable \
+        if ! podman run --rm --security-opt label=disable \
             -v "$ROOT:/src" -v "$TDIR:/musl-target" -v "$registry:/usr/local/cargo/registry" \
             -w /src -e CARGO_TARGET_DIR=/musl-target "$image" sh -c \
             "apt-get -qq update >/dev/null && apt-get -qq install -y musl-tools >/dev/null 2>&1 \
              && rustup target add ${TARGET} >/dev/null 2>&1 \
-             && cargo build --release --target ${TARGET} -p tillandsias-plan --bin tillandsias-plan"
+             && cargo build --release --target ${TARGET} -p tillandsias-plan --bin tillandsias-plan"; then
+            no_decider container-build-failed "the ${image} build failed (offline, or the image cannot be pulled)"
+        fi
         ;;
     *)
-        echo "warn:forge-plan-bin:no-musl-c-toolchain — ${DEST} not staged; a forge image built from this tree refuses every Claude Bash command (1750-a4re)" >&2
-        echo "  remedy: install musl-gcc (Fedora: musl-gcc, Debian: musl-tools) or cargo-zigbuild, or run on a podman host; release builds stage it through nix" >&2
-        exit 0
+        no_decider no-musl-toolchain "this host has no musl C compiler, no cargo-zigbuild and no podman"
         ;;
 esac
 [ -f "$SRC" ] || { echo "[build-forge-plan-bin] ERROR: build succeeded but no binary at $SRC" >&2; exit 3; }
