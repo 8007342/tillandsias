@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga on the coordinator's ruling (macuahuitl-fedora, 2026-10-17):
+# exit criterion 2 of 1759-3ezn as its own row and PR (the work-ref grammar
+# admits one PR per order). 1759-3ezn criterion 1 is PR #513.
+packets:
+  - packet_id: a-cloudflare-login-exchange-that-fails-after-the-code-was-sent-restarts-the-pkce-flow-instead-of-refusing
+    order: 1773-dywf
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    size: S
+    pickup_role: any
+    capability_tags: [cloudflare, auth]
+    related: [1759-3ezn]
+    depends_on: []
+    title: |
+      A Cloudflare login whose token exchange fails after the request was sent (timeout, reset mid-response) restarts the PKCE flow once with a fresh verifier and state, instead of refusing the user
+    context: |
+      Exit criterion 2 of 1759-3ezn, split out so it can ride its own work ref. After a post-send failure the single-use code may already be spent, so it is never resent; the login runs begin again (new verifier, new state, new code) one time, and only a failure of that second flow is shown as a refusal. The module (cloudflare_oauth.rs / cloudflare_login.rs) was authored by the Mac; yoga takes this on the coordinator's ruling while the Mac is on 1772-irs3.
+    exit_criteria:
+      - "a timeout, body or request failure on the first exchange restarts the flow with a new state and verifier and exchanges a new code, with no refusal shown (red today)"
+      - "a connect failure is not a restart (1759-3ezn retries it); a second post-send failure is refused; a token-endpoint error answer (HTTP 400) is refused without a restart"
+    verifiable_closure: "cargo test -p tillandsias-headless cloudflare_login"
+    next_action: >
+      Wrap the code flow in login so a post-send exchange failure runs it once more; red test first through the Scripted client.
+    provenance: |
+      Filed by yoga, 2026-10-17, on the coordinator's ruling.
+    events:
+      - type: filed
+        ts: "2026-10-17T11:16:14Z"
+        host: yoga
+        summary: |-
+          1759-3ezn criterion 2 split out: restart PKCE once after a post-send exchange failure.
