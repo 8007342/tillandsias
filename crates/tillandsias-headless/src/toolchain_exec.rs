@@ -95,20 +95,6 @@ fn image_present(tag: &str) -> Result<bool, String> {
     Ok(out.status.success())
 }
 
-/// `STEP n/m` from one podman build log line.
-fn parse_step(line: &str) -> Option<(u32, u32)> {
-    let rest = &line[line.find("STEP ")? + 5..];
-    let (n, rest) = rest.split_once('/')?;
-    let m: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
-    Some((n.trim().parse().ok()?, m.parse().ok()?))
-}
-
-/// The last `STEP n/m` the build helper logged, if any.
-fn build_progress(toolchain: &str) -> Option<(u32, u32)> {
-    let text = std::fs::read_to_string(crate::image_build_helper_log_path(toolchain)).ok()?;
-    text.lines().rev().find_map(parse_step)
-}
-
 /// Non-blocking: start the image build if needed and report where it is.
 pub(crate) fn prepare(params: &Value, debug: bool) -> Value {
     let toolchain = match known_toolchain(params) {
@@ -162,9 +148,12 @@ pub(crate) fn prepare(params: &Value, debug: bool) -> Value {
         "elapsed_s": elapsed,
         "message": format!("Preparing {toolchain} (one time, a few minutes): building the shared toolchain image"),
     });
-    if let Some((step, total)) = build_progress(toolchain) {
+    // 1776-pr0g: the one parser every on-demand image uses.
+    if let Some((step, total, what)) = crate::image_build_progress::image_build_progress(toolchain)
+    {
         answer["step"] = json!(step);
         answer["total"] = json!(total);
+        answer["doing"] = json!(what);
     }
     answer
 }
@@ -1097,11 +1086,25 @@ mod tests {
         assert_eq!(dev_server_argv(&[]), None);
     }
 
+    /// 1776-pr0g: prepare reads progress through the one shared parser,
+    /// which also reads a multi-stage build's prefixed STEP line.
     #[test]
-    fn progress_parses_podman_step_lines() {
-        assert_eq!(parse_step("STEP 4/9: RUN apt-get update"), Some((4, 9)));
-        assert_eq!(parse_step("[2/3] STEP 12/14: COPY . ."), Some((12, 14)));
-        assert_eq!(parse_step("COMMIT localhost/tillandsias-flutter"), None);
-        assert_eq!(parse_step("STEP x/9"), None);
+    fn image_build_progress_is_the_toolchain_parser() {
+        let dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let src = std::fs::read_to_string(std::path::Path::new(&dir).join("src/toolchain_exec.rs"))
+            .expect("read toolchain_exec.rs");
+        assert!(src.contains(concat!(
+            "image_build_progress::",
+            "image_build_progress(toolchain)"
+        )));
+        assert!(
+            !src.contains(concat!("fn parse_", "step(")),
+            "no private parser remains"
+        );
+        let log = "[tillandsias] building image flutter (t, digest_missing); x\n[2/3] STEP 12/14: COPY . .\n";
+        assert_eq!(
+            crate::image_build_progress::progress_in_log("flutter", log),
+            Some((12, 14, "copying files".to_string()))
+        );
     }
 }

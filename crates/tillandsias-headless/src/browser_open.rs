@@ -574,24 +574,138 @@ fn ensure_window_image(
     )))
 }
 
+/// Order 1776-pr0g: one background first-use build per engine, owned by this
+/// process (the seam's per-image lock still serialises across processes).
+/// `outcome` is the finished [`ensure_window_image`] result, kept until the
+/// next `browser.open` collects it.
+pub(crate) struct EngineBuild {
+    outcome: Option<Result<Option<String>, String>>,
+}
+
+static ENGINE_BUILDS: std::sync::Mutex<[Option<EngineBuild>; 2]> =
+    std::sync::Mutex::new([None, None]);
+
+fn engine_index(engine: Engine) -> usize {
+    match engine {
+        Engine::Chromium => 0,
+        Engine::WebKit => 1,
+    }
+}
+
+/// Order 1776-pr0g: never hold `browser.open` through a first-use build.
+///
+/// Missing images start ONE background build (`spawn`) and the call returns
+/// [`LaunchError::Preparing`] with the step the build is on; calls while it
+/// runs return the same with the newer step; the first call after it
+/// finished collects its outcome: the first-use notice, or the failure.
+/// `progress` reads a build's step (the helper log, live).
+pub(crate) fn engine_image_ready_or_preparing(
+    engine: Engine,
+    slot: &mut Option<EngineBuild>,
+    present: impl Fn(&str) -> bool,
+    spawn: impl FnOnce(),
+    progress: impl Fn(&str) -> Option<(u64, u64, String)>,
+) -> Result<Option<String>, LaunchError> {
+    if let Some(build) = slot.as_mut() {
+        match build.outcome.take() {
+            Some(Ok(notice)) => {
+                *slot = None;
+                return Ok(notice);
+            }
+            Some(Err(e)) => {
+                *slot = None;
+                return Err(LaunchError::Spawn(e));
+            }
+            None => return Err(preparing(engine, &progress)),
+        }
+    }
+    let site = match engine {
+        Engine::Chromium => crate::launch_images::LaunchSite::ChromiumWindow,
+        Engine::WebKit => crate::launch_images::LaunchSite::WebKitWindow,
+    };
+    let version = crate::VERSION.trim();
+    if crate::launch_images::launch_images(site)
+        .iter()
+        .all(|name| present(&crate::versioned_image_tag(name, version)))
+    {
+        return Ok(None);
+    }
+    *slot = Some(EngineBuild { outcome: None });
+    spawn();
+    Err(preparing(engine, &progress))
+}
+
+/// The reply while an engine's image builds: the step of whichever of its
+/// images (or their bases) is building.
+fn preparing(
+    engine: Engine,
+    progress: &impl Fn(&str) -> Option<(u64, u64, String)>,
+) -> LaunchError {
+    let site = match engine {
+        Engine::Chromium => crate::launch_images::LaunchSite::ChromiumWindow,
+        Engine::WebKit => crate::launch_images::LaunchSite::WebKitWindow,
+    };
+    let mut names: Vec<&str> = Vec::new();
+    for name in crate::launch_images::launch_images(site) {
+        if let Some(base) = crate::image_dependency(name) {
+            names.push(base);
+        }
+        names.push(name);
+    }
+    let step = names
+        .iter()
+        .rev()
+        .find_map(|name| progress(name).map(|p| (*name, p)));
+    let retry = tillandsias_browser_mcp::server::PREPARING_RETRY_AFTER_S;
+    let notice = match &step {
+        Some((name, (n, m, what))) => format!(
+            "Preparing the {} engine (first use) — building {name}, step {n}/{m}: {what}; call browser.open again in {retry} s",
+            engine.label()
+        ),
+        None => format!(
+            "Preparing the {} engine (first use) — starting the build; call browser.open again in {retry} s",
+            engine.label()
+        ),
+    };
+    LaunchError::Preparing {
+        engine,
+        notice,
+        step: step.map(|(_, (n, m, _))| (n, m)),
+    }
+}
+
 impl TrayBrowserContainers {
-    /// The live seams for [`ensure_window_image`].
+    /// The live seams for [`engine_image_ready_or_preparing`] and
+    /// [`ensure_window_image`].
     fn ensure_engine_image(&self, engine: Engine) -> Result<Option<String>, LaunchError> {
         let debug = self.debug;
-        ensure_window_image(
+        let present = |tag: &str| {
+            podman(
+                &["image", "exists", tag],
+                tillandsias_podman::OperationKind::Inspect.default_budget(),
+            )
+            .is_ok()
+        };
+        let mut slots = ENGINE_BUILDS.lock().unwrap_or_else(|p| p.into_inner());
+        engine_image_ready_or_preparing(
             engine,
-            |tag| {
-                podman(
-                    &["image", "exists", tag],
-                    tillandsias_podman::OperationKind::Inspect.default_budget(),
-                )
-                .is_ok()
+            &mut slots[engine_index(engine)],
+            present,
+            move || {
+                std::thread::spawn(move || {
+                    let outcome = ensure_window_image(engine, present, |images| {
+                        let version = crate::VERSION.trim();
+                        let root = crate::resolve_runtime_asset_root(version, debug)?;
+                        crate::ensure_versioned_images(&root, images, version, debug)
+                    })
+                    .map_err(|e| e.to_string());
+                    let mut slots = ENGINE_BUILDS.lock().unwrap_or_else(|p| p.into_inner());
+                    if let Some(build) = slots[engine_index(engine)].as_mut() {
+                        build.outcome = Some(outcome);
+                    }
+                });
             },
-            |images| {
-                let version = crate::VERSION.trim();
-                let root = crate::resolve_runtime_asset_root(version, debug)?;
-                crate::ensure_versioned_images(&root, images, version, debug)
-            },
+            crate::image_build_progress::image_build_progress,
         )
     }
 }
@@ -754,6 +868,101 @@ impl BrowserContainers for TrayBrowserContainers {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 1776-pr0g: browser.open is never held through a first-use build: the
+    /// first call starts ONE build and reports its step, later calls report
+    /// the newer step without a second build, and the call after it finished
+    /// collects the first-use notice.
+    #[test]
+    fn first_use_build_progress_reports_the_step_and_spawns_once() {
+        use std::cell::Cell;
+        let spawned = Cell::new(0);
+        let step = Cell::new(3u64);
+        let progress = |name: &str| {
+            (name == "chromium-core")
+                .then(|| (step.get(), 9, "installing system packages".to_string()))
+        };
+        let mut slot = None;
+        let first = engine_image_ready_or_preparing(
+            Engine::Chromium,
+            &mut slot,
+            |_| false,
+            || spawned.set(spawned.get() + 1),
+            progress,
+        )
+        .expect_err("missing: preparing");
+        match &first {
+            LaunchError::Preparing { step, notice, .. } => {
+                assert_eq!(*step, Some((3, 9)));
+                assert!(
+                    notice.contains("building chromium-core, step 3/9: installing system packages"),
+                    "{notice}"
+                );
+            }
+            other => panic!("{other:?}"),
+        }
+        step.set(5);
+        let second = engine_image_ready_or_preparing(
+            Engine::Chromium,
+            &mut slot,
+            |_| false,
+            || spawned.set(spawned.get() + 1),
+            progress,
+        )
+        .expect_err("still preparing");
+        assert!(
+            matches!(
+                second,
+                LaunchError::Preparing {
+                    step: Some((5, 9)),
+                    ..
+                }
+            ),
+            "{second:?}"
+        );
+        assert_eq!(spawned.get(), 1, "one build, not one per call");
+        slot.as_mut().unwrap().outcome = Some(Ok(Some("Prepared the Chromium engine on first use (95 s); later windows open without this wait.".into())));
+        let done = engine_image_ready_or_preparing(
+            Engine::Chromium,
+            &mut slot,
+            |_| true,
+            || spawned.set(spawned.get() + 1),
+            progress,
+        )
+        .expect("collected");
+        assert!(done.is_some_and(|n| n.contains("first use")));
+        assert!(slot.is_none());
+        // NEGATIVE CONTROL: present images open at once, with no build.
+        let ready = engine_image_ready_or_preparing(
+            Engine::Chromium,
+            &mut slot,
+            |_| true,
+            || spawned.set(spawned.get() + 1),
+            progress,
+        )
+        .expect("present");
+        assert_eq!(ready, None);
+        assert_eq!(spawned.get(), 1);
+        // A failed build is reported once, then a later call may start again.
+        slot = Some(EngineBuild {
+            outcome: Some(Err(
+                "refused:image-ensure:chromium-core:build-failed-previously".into(),
+            )),
+        });
+        let failed = engine_image_ready_or_preparing(
+            Engine::Chromium,
+            &mut slot,
+            |_| false,
+            || spawned.set(spawned.get() + 1),
+            progress,
+        )
+        .expect_err("failed");
+        assert!(
+            matches!(&failed, LaunchError::Spawn(m) if m.contains("build-failed-previously")),
+            "{failed:?}"
+        );
+        assert!(slot.is_none());
+    }
 
     /// 1776-ch4m, the operator's live hole: a forge's first browser.open on a
     /// host that never ran --init failed "image missing", because the
