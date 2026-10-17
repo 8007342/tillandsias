@@ -971,6 +971,33 @@ $o17b
 ---
 $o17c"
 fi
+
+# ── ARM 18 — A GATE THAT DIES (rc=255, the host going down) IS NOT A VERDICT:
+#            recorded as gate-aborted, and never stale-skipped. Measured on
+#            #505, 2026-10-17: macuahuitl crashed mid-gate and the queue evicted.
+scaffold abort
+candidate abort 1801-aaaa a.txt A
+cat > "$GH_PRS" <<'JSON'
+[{"number":1,"headRefName":"work/1801-aaaa","isDraft":false}]
+JSON
+sed "s|@LOG@|$GATE_LOG|" > "$GATE_BIN" <<'GATE'
+#!/usr/bin/env bash
+echo gated >> "@LOG@"
+exit 255
+GATE
+o18a="$(run_queue)"
+trunk_push plan/index.d/20261017t000000z-probe.yaml 'packets: []'
+o18b="$(run_queue)"; g18="$(gates)"
+if grep -q 'reason=gate-aborted:rc=255' "$GH_COMMENTS" && ! grep -q 'reason=gate-failed' "$GH_COMMENTS" \
+   && [ "$g18" -eq 2 ] && ! grep -q stale-head <<<"$o18b"; then
+    ok "ARM 18: an aborted gate (rc=255) is recorded as gate-aborted and re-gated after a plan-only move, never stale-skipped"
+else
+    bad "ARM 18: wanted reason=gate-aborted:rc=255 and a second gate; gates=$g18
+$o18a
+---
+$o18b
+comments: $(grep -o 'land-queue:evicted[^>]*' "$GH_COMMENTS")"
+fi
 printf '\n'
 if [ "$fail" -eq 0 ]; then
     if [ "$skipped" -gt 0 ]; then

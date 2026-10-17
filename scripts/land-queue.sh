@@ -374,8 +374,9 @@ while IFS=$'\t' read -r num head <&3; do
     _last_reason="$(marker_field "$_last" reason)"
     if [ -n "$_last" ] && [ "$_last_head" = "$head_sha" ]; then
         case "$_last_reason" in
-            conflict:*|flaky|'') ;;
-            *)
+            gate-failed|preflight-failed|carried-*)
+                # An allow-list: a conflict, a flaky or aborted gate, or any reason a
+                # later change adds is re-gated, never skipped.
                 _sdelta=""; _sclasses=""; _stale=0
                 if git cat-file -e "$_last_base^{commit}" 2>/dev/null; then
                     _sdelta="$(git diff --name-only "$_last_base" "$base_sha" 2>/dev/null)"
@@ -571,7 +572,13 @@ The queue continued with the next candidate.$(evict_marker "$num" "$head_sha" "$
             continue
         fi
         say "evict:land-queue:$num:gate-failed:rc=$_grc${_flaky:+:$_flaky}"
-        pr_comment "$num" "$(gate_failed_comment "$_glog" "$_grc" "$head" "$TRUNK" "$base_sha")$(evict_marker "$num" "$head_sha" "$base_sha" "$([ -n "$_flaky" ] && echo flaky || echo gate-failed)")"
+        # Only rc=1 is the gate's verdict on the tree. Any other code (255 is a host
+        # going down mid-run, 137 a kill) says nothing about the candidate, so it
+        # is recorded as gate-aborted, which the stale-head skip never acts on.
+        if [ -n "$_flaky" ]; then _greason=flaky
+        elif [ "$_grc" -eq 1 ]; then _greason=gate-failed
+        else _greason="gate-aborted:rc=$_grc"; fi
+        pr_comment "$num" "$(gate_failed_comment "$_glog" "$_grc" "$head" "$TRUNK" "$base_sha")$(evict_marker "$num" "$head_sha" "$base_sha" "$_greason")"
         evicted=$((evicted + 1))
         rm -f "$_glog"
         continue
