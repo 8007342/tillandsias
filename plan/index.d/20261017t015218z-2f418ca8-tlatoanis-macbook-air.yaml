@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-tray-has-a-cloudflare-login-item-that-opens-a-terminal-on-the-vm-running-cloudflare-login-like-github-login
+    event:
+      type: progress
+      ts: "2026-10-17T01:52:18Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        Recorded 2026-10-17 from the coordinator's relays of operator actions (not measured from this host):
+        - The Tillandsias Cloudflare OAuth client (d9d13037…) is now PUBLIC, with client URL https://tillandsias.org and the cloudflare_oauth_client_publisher TXT record live (confirmed on 1.1.1.1 and 8.8.8.8 by the coordinator). Any Cloudflare user can now authorize it, so every tray user's sign-in reaches it, not only the operator's.
+        - https://cloudflare.tillandsias.org/cloudflare/callback is registered as a redirect URI beside the three 127.0.0.1 loopback ones, and is live: static assets from the private repo 8007342/cloudflare.tillandsias.org, 200 with no-store and the connect-src 'none' CSP, unknown paths 404 (verified by the coordinator from macuahuitl).
+        - The login side is PR #497 (work/1757-k2dq): the default relay is that URL with no poll, still GATED OFF.
+        - Cloudflare's OIDC discovery now advertises the device grant (device_authorization_endpoint https://dash.cloudflare.com/oauth2/device/auth, measured by the coordinator 2026-10-17T01:40Z). It is the preferred path; the QR relay is its fallback.
+        LIVE CHECK ADDS: the consent page shows the BLUE outlined (verified-domain) shield for tillandsias.org.
