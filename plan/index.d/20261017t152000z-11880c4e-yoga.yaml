@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-output-only-pulse-server-exposes-no-source-to-a-browser-window-so-enumeratedevices-lists-no-audioinput
+    event:
+      type: ruling
+      ts: "2026-10-17T15:20:00Z"
+      agent_id: forge-yoga-opus5-20261017t110819z
+      host: yoga
+      summary: |-
+        Operator ruling, relayed by macuahuitl-fedora 2026-10-17: keep audio. The forge browser sees only generic device names, never host ones (no Realtek, no AirPlay peer name). Preferred, with no host config change: a private set of virtual devices, one 'Speakers' sink and at most one 'Microphone' source, each forwarding to the host default; the browser connects only to that set. If that is not feasible, report why before touching host WirePlumber config. Criterion: pactl list in the browser's view shows only generic names, and audio still plays. Scheduled after 1747-we43.
