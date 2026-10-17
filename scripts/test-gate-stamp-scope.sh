@@ -266,4 +266,63 @@ after="$(remote_head "$D")"
 [ "$before" != "$after" ] || fail "case 10: accepted after fetch + merge but the remote did not advance"
 echo "ok: case 10 — a moved remote is refused as a race with a fetch-and-merge remedy, and the same stamp carries the push after the merge"
 
-echo "PASS: gate-stamp-scope (11/11)"
+# ── ORDER 1768-2k56: a tag on a commit ALREADY ON MAIN skips the stamp ──────
+# MEASURED (coordinator, 2026-10-17): promoting v56.10.16.2 cost a full ~21-min
+# --check only to push refs/tags/stable, because the hook stamped the tag like
+# a branch and diffed old stable..new stable (three releases of change)
+# against the stamp's scope. A commit on main already passed the gate that
+# landed it; the tag uploads no new tree.
+#
+# Seeding goes straight into the bare remote (`fetch` INTO it), so no hook is
+# bypassed and the hook under test is the only one that runs. The local
+# origin/main is left stale on purpose: the arm must fetch main itself.
+tag_head() { git -C "$1/work" ls-remote origin "refs/tags/$2" 2>/dev/null | cut -f1; }
+seed_main_with_code() {
+    # $1 = case dir. base is tagged stable on origin; a code commit then lands
+    # on origin's main. Echoes that commit.
+    local d="$1" base next
+    base="$(git -C "$d/work" rev-parse HEAD)"
+    git --git-dir="$d/origin.git" update-ref refs/tags/stable "$base"
+    (cd "$d/work" && printf 'pub fn landed() {}\n' >> crates/demo/lib.rs && git add -A && git commit -qm landed) >/dev/null 2>&1
+    next="$(git -C "$d/work" rev-parse HEAD)"
+    git --git-dir="$d/origin.git" fetch -q "$d/work" "+refs/heads/main:refs/heads/main" 2>/dev/null
+    printf '%s\n' "$next"
+}
+
+# case 11 (RED on the pre-1768 hook): stable moves to a main commit under a
+# stamp scoped to plan-ledger. The old hook refused: "scoped to 'plan-ledger'
+# but this push also changes: rust".
+D="$WORK/c11"; make_repo "$D"
+target="$(seed_main_with_code "$D")"
+out="$(cd "$D/work" && issue_pass_token && bash scripts/gate-stamp.sh write --scope plan-ledger --dispatch check >/dev/null && git push -f origin "$target:refs/tags/stable" 2>&1)"
+rc=$?
+[ "$rc" = 0 ] || fail "case 11: a stable-tag move to a commit on main was refused under a scoped stamp: $out"
+[ "$(tag_head "$D" stable)" = "$target" ] || fail "case 11: accepted but the remote tag did not move"
+grep -q 'local gate: tag-on-main' <<<"$out" || fail "case 11: the exemption did not announce itself: $out"
+echo "ok: case 11 — a tag on a commit already on main skips the stamp and its scope (1768-2k56)"
+
+# case 12 (NEGATIVE CONTROL): a tag on a commit NOT on main, with no stamp at
+# all, keeps the full gate.
+D="$WORK/c12"; make_repo "$D"
+seed_main_with_code "$D" >/dev/null
+out="$(cd "$D/work" && printf 'pub fn unlanded() {}\n' >> crates/demo/lib.rs && git add -A && git commit -qm unlanded >/dev/null 2>&1 && git push origin "HEAD:refs/tags/v-off-main" 2>&1)"
+rc=$?
+[ "$rc" != 0 ] || fail "case 12: a tag on a commit not on main was accepted with no stamp: $out"
+[ -z "$(tag_head "$D" v-off-main)" ] || fail "case 12: refused but the tag reached the remote"
+if grep -q 'local gate: tag-on-main' <<<"$out"; then fail "case 12: the off-main tag was offered the exemption: $out"; fi
+grep -q 'tag-on-main:not-on-main:refs/tags/v-off-main' <<<"$out" || fail "case 12: the refusal did not say why the exemption was declined: $out"
+echo "ok: case 12 — a tag on a commit not on main keeps the full gate"
+
+# case 13 (NEGATIVE CONTROL): a tag pushed BESIDE a branch is not exempt,
+# even when the branch's commit is ALSO on main. The exemption is for tags;
+# branches keep the stamp. Only the all-tags rule can refuse this push.
+D="$WORK/c13"; make_repo "$D"
+target="$(seed_main_with_code "$D")"
+out="$(cd "$D/work" && issue_pass_token && bash scripts/gate-stamp.sh write --scope plan-ledger --dispatch check >/dev/null && git push -f origin "$target:refs/tags/stable" "$target:refs/heads/release" 2>&1)"
+rc=$?
+[ "$rc" != 0 ] || fail "case 13: a tag carried a branch push past the stamp: $out"
+if grep -q 'local gate: tag-on-main' <<<"$out"; then fail "case 13: a mixed push was offered the exemption: $out"; fi
+[ "$(tag_head "$D" stable)" != "$target" ] || fail "case 13: refused but the tag moved"
+echo "ok: case 13 — a tag beside a branch push gets no exemption, even with both on main"
+
+echo "PASS: gate-stamp-scope (14/14)"
