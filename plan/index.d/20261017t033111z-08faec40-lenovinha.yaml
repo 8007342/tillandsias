@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-forge-claude-pretooluse-hook-calls-tillandsias-plan-which-the-forge-image-never-ships-so-the-command-policy-is-silently-off-in-every-non-tillandsias-forge
+    field: status
+    value: implemented
+    ts: "2026-10-17T03:31:11Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-forge-claude-pretooluse-hook-calls-tillandsias-plan-which-the-forge-image-never-ships-so-the-command-policy-is-silently-off-in-every-non-tillandsias-forge
+    event:
+      type: progress
+      ts: "2026-10-17T03:31:11Z"
+      host: lenovinha
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: PR #479 landed on linux-next as ec9211697. Every forge ships a static musl tillandsias-plan at /usr/local/lib/tillandsias/policy-bin/, and settings.json names the fail-closed /usr/local/lib/tillandsias/bash-policy-hook. Fixture test-forge-bash-policy-hook-fails-closed.lua is 6/6: PRE-FIX exits 127, ABSENT refuses, and the host bridge still allows. Both nix derivations build. Open: the live arm in a released non-Tillandsias forge, and the Mac's aarch64 guest arm.

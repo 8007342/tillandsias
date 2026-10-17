@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-static-aarch64-headless-embeds-an-x86_64-router-sidecar-so-its-router-container-cannot-run-on-an-aarch64-host-and-the-release-arch-check-reads-only-the-outer-binary
+    field: status
+    value: in_progress
+    ts: "2026-10-17T03:31:18Z"
+    host: lenovinha
