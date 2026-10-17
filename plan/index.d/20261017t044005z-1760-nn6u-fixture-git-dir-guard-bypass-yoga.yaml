@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga on the coordinator's direction (macuahuitl-fedora), 2026-10-17,
+# from a finding while writing 1759-6z2m's fixture.
+packets:
+  - packet_id: the-fixture-regime-refuses-a-ref-write-to-the-real-git-dir-however-git-is-told-the-directory
+    order: 1760-nn6u
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    size: S
+    pickup_role: any
+    capability_tags: [policy, security, litmus]
+    related: [1443-fpck, 1759-6z2m]
+    depends_on: []
+    title: |
+      Under the fixture policy regime, `git --git-dir <dir> update-ref` (two arguments) and `GIT_DIR=<dir> git update-ref` write refs into the protected real git dir; only `-C` and `--git-dir=<dir>` are refused
+    context: |
+      MEASURED on yoga 2026-10-17 in a fixture, never against the real .git: a scratch repo was listed as the protected dir via TILLANDSIAS_FIXTURE_GIT_DIRS, with TILLANDSIAS_POLICY_REGIME=fixture, and a Lua proc.run tried four spellings of `update-ref` against it. `git -C <repo>` and `git --git-dir=<repo>/.git` were refused (fixture-writes-outside-scope). `git --git-dir <repo>/.git` (separate argument) and `git update-ref` with env GIT_DIR=<repo>/.git both EXITED and the refs were written (refs/probe/s and refs/probe/e present afterwards).
+      Cause, by source: the git arm of the fixture decision in crates/tillandsias-plan/src/command_policy.rs walks the global options; `--git-dir=` is parsed, but a bare `--git-dir` falls into the generic `-`-prefixed arm (one step), so the directory is read as the subcommand and the update-ref/push check never runs. The request's env is not consulted, so GIT_DIR (and GIT_COMMON_DIR) are invisible. The same holds for `push`.
+      A related false positive, measured the same day: `git -C <bare repo inside the checkout> update-ref` is refused although that repo is not the protected dir, because the -C path is judged by touches_real(cwd) (a location test) rather than by resolving the repository it names. 1759-6z2m's fixture had to use --git-dir= to work around it.
+    exit_criteria:
+      - "under the fixture regime, `git -C`, `git --git-dir=`, `git --git-dir <dir>` and `GIT_DIR=<dir>` (request env) are all refused alike for update-ref and push against a protected git dir (red today for the last two)"
+      - "a ref write to a separate scratch repository inside the checkout is allowed under every spelling, `-C` included"
+    verifiable_closure: "cargo test -p tillandsias-plan command_policy"
+    next_action: >
+      Add the red unit tests beside the existing via_c case in command_policy.rs (two-arg --git-dir, env GIT_DIR, and an allowed -C on a scratch bare repo), then parse `--git-dir <dir>` and read GIT_DIR/GIT_COMMON_DIR from the request env, and resolve -C to the repository it names (`rev-parse --absolute-git-dir` semantics) instead of a path-prefix test.
+    provenance: |
+      Filed by yoga, 2026-10-17; probe ran against a scratch repo listed as the protected dir.
+    events:
+      - type: filed
+        ts: "2026-10-17T04:40:05Z"
+        host: yoga
+        summary: |-
+          Fixture guard misses `--git-dir <dir>` and env GIT_DIR; -C false-positives on scratch repos.
