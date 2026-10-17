@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-cloudflare-login-qr-relay-is-deployed-at-a-path-on-observatorium-tillandsias-org-with-a-poll-endpoint-registered-as-a-redirect-uri-and-on-by-default-so-a-phone-scan-completes-a-tray-sign-in
+    event:
+      type: progress
+      ts: "2026-10-17T01:22:26Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        HELD 2026-10-17. The coordinator withdrew the observatorium-path approval: the operator questioned the placement (a callback on the observatorium subdomain does not read as an obvious intent). Nothing is pushed or published. The relay logic (observatorium/relay/relay.js, 8 node:test arms) and the gated-off login default (resolve_relay, RELAY_DEFAULT_ON=false, the gate arm shown red when flipped on) are committed only on local work/1757-n45b (51d4e7e7d), and carry over unchanged to a dedicated Worker.
+        (1) WHAT THE USER SEES. On the computer: the tray's terminal prints a QR and the authorize link. On the phone, after the scan:
+          - Cloudflare's own consent page at dash.cloudflare.com (a Cloudflare login first, if the phone is not signed in).
+          - Per developers.cloudflare.com/fundamentals/oauth/authorizing-an-application: the app's name and branding ("Tillandsias"); the publisher domain with its verification status; account selection; the requested scopes; Authorize.
+          - The shield beneath the title (changelog 2026-08-04): blue outlined = third party with verified domain ownership; amber filled = third party WITHOUT verified ownership. This client is unverified, so it should show amber; that is UNMEASURED, since nobody has photographed it.
+          - The docs do NOT say whether the consent screen shows the redirect URI or its hostname: unknown.
+          - After Authorize, the phone's address bar shows the relay hostname, and the page shows "Tillandsias sign-in". With the poll, the terminal finishes by itself; the page's paste line is the fallback. So the relay hostname is the one name the user reads that we choose, and a dedicated name (e.g. signin.tillandsias.org) states the intent. The page's wording then wants "you can close this page; the terminal finishes on its own" first, the paste line second: a page change for this row.
+        (2) DOMAIN VERIFICATION. Per developers.cloudflare.com/fundamentals/oauth/create-an-oauth-client:
+          - "Cloudflare requires client URL domain ownership verification before a client can become public"; "if the client is only for private use, domain ownership verification is not required".
+          - Verification is a DNS TXT record with the cloudflare_oauth_client_publisher= prefix, on the CLIENT URL's domain. The page ties it to the client URL only, and never mentions redirect URIs.
+          - The Tillandsias client is Private (memory of 2026-10-14, client d9d13037…), so no verification is required for it to work.
+          - Whether a redirect URI on a domain other than the client URL needs anything: the docs do not say. UNKNOWN from the docs. The one measurement is that the existing 127.0.0.1 redirects were registered on this private client with no verification.
+          - DNS, read 2026-10-17: `dig TXT tillandsias.org` returns NO TXT records at all, so no cloudflare_oauth_client_publisher record exists. It is needed only to make the client public, or to turn the consent shield blue for the client URL's domain.
+        REVISED HOSTING (the operator's lean): a dedicated single-purpose Worker on its own hostname under tillandsias.org, separate from the observatorium and from the 8007342/tillandsias.org site repo.
+          - Source: either a new top-level dir in this repo (cloudflare-relay/, its own wrangler.jsonc, its own Workers Builds trigger with path_includes cloudflare-relay/*), or its own repo.
+          - Operator steps then become TWO instead of one:
+            (a) connect that Worker to Workers Builds, or one-time `wrangler deploy` with its custom_domain route (the operator ruling of 2026-10-14 has users connect Builds by hand; the Tillandsias OAuth scopes carry no workers-scripts write);
+            (b) add https://<host>/tillandsias/cloudflare/callback to the client's redirect URIs.
+          - The login default and the gate are unchanged except the two URLs.
