@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, immutable once written.
+packets:
+  - packet_id: validate-and-repair-autonomous-codex-and-opencode-forge-launch-and-vault-auth-reuse
+    order: 1684-wtnn
+    status: ready
+    kind: implementation
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, codex, opencode, vault, autonomy, plan-only-peer-ok]
+    title: "Validate and repair fully autonomous Codex and OpenCode forge launch, including vault-backed OpenAI authentication reuse"
+    deliverable: plan/issues/autonomous-codex-opencode-forges-2026-10-14.md
+    depends_on: []
+    related: [1553-7uge, 1634-sab8, 1667-jna9]
+    owned_files:
+      - plan/issues/autonomous-codex-opencode-forges-2026-10-14.md
+    context: |
+      Operator request 2026-10-14: borrowed clean checkout, update linux-next without altering existing work branches; research with Sol, Astra, Terra; repair Codex forge launch with full permissions and no approval/sandbox prompts inside the ephemeral forge; validate OpenCode settings and reuse OpenAI credentials through Vault instead of /connect on every new forge.
+      Operator approved bounded live tests and API-credit use. Preserve the project's configured model default; do not substitute this session's model. Full permissions are scoped to the forge, not the host. No Podman reset, credential re-login, or unrelated branch mutation is authorized by this packet.
+      The SPIFFE/SPIRE ephemeral-region goal is architectural context, not proof that the current runtime implements SPIFFE/SPIRE. Keep identity-network boundaries intact.
+      Existing host-browser registration work (1667-jna9) is already in progress elsewhere; do not duplicate it. Reuse or reference the existing OpenCode auth compatibility/fixture packets when their scopes overlap.
+    exit_criteria:
+      - "Research findings cite actual launch/config/auth paths and distinguish installed runtime versions from checkout code."
+      - "Regression checks cover no-prompt forge permissions and vault-backed auth reuse without logging secrets."
+      - "Bounded fresh Codex and OpenCode forge launches execute a real tool with stdin closed, or record the exact unmet authentication/runtime prerequisite without claiming a live pass."
+      - "Spec updates describe the observed/required runtime contract; work refs and remaining live blockers are durably recorded."
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable includes the regression guard and version-qualified live measurements, not a source-only assertion of successful launch"
+    next_action: "Collect Sol/Astra/Terra research, reproduce the minimal live failing chain, then implement only the unclaimed launch/auth gaps on work/1684-wtnn."
+    events:
+      - type: filed
+        ts: "2026-10-14T16:43:21Z"
+        host: yoga
+        agent: linux-yoga-opencode-20261014t164321z
+        summary: "Operator approved bounded live forge testing and project-configured model defaults; branch updated to 2247d052e with the borrowed work branch unchanged."
