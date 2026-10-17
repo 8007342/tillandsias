@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha, 2026-10-17, at the coordinator's request (macuahuitl-fedora), from the 1761-bvyn investigation.
+packets:
+  - packet_id: a-tray-that-stays-running-past-the-tillandsias-ca-renewal-window-never-rotates-the-ca-or-the-vault-leaf-so-it-serves-them-after-notafter
+    order: 1762-bano
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: M
+    pickup_role: linux
+    capability_tags: [tls, ca, vault, tray, lifecycle, deadline]
+    related: [1761-bvyn, 755-qcxh]
+    title: |
+      The Tillandsias CA (30-day validity) is re-minted only when something calls ensure_ca_bundle and finds the crt or key mtime older than 25 days. Every caller is on-demand (a container start, publish_local, the Vault bootstrap), so a tray that is already running when the CA crosses 25 days, and starts nothing new, keeps serving the CA and the Vault leaf past notAfter. A re-mint triggered mid-session by one new container would also leave the containers already running on the old CA's certificates
+    context: |
+      MEASURED (lenovinha, 2026-10-17): ~/.local/state/tillandsias/ca/intermediate.crt ("CN=Tillandsias CA", self-signed) has notAfter 2026-10-29T07:28:07Z. The coordinator reports the same date on macuahuitl. That is the 30-day launch-triggered cycle, so any host whose tray started before about 2026-10-24 and stays up is exposed.
+      READ (linux-next, symbols): main.rs ca_bundle_needs_refresh(crt, key) returns true when either file's mtime age is over 25 days; ensure_ca_bundle refreshes on that. Its callers are container_deps.rs (container start), local_web_preview.rs (publish), vault_bootstrap.rs (Vault bring-up, which also re-issues the Vault leaf when the CA is newer or on `-checkend 86400`) and three main.rs launch paths. None is a timer. NOT MEASURED: what the router, proxy, git mirror and Vault do with an expired CA or leaf they already loaded, or after a re-mint they did not load.
+    exit_criteria:
+      - "an arm with a fixture clock or a back-dated crt/key mtime (25 d < age < 30 d) shows a RUNNING tray rotate the CA before notAfter with no relaunch, and the Vault leaf follow; red today, when rotation happens only at a launch or container start"
+      - "after a rotation, every long-lived container that holds a certificate from the CA (router, proxy, git mirror, Vault) is reloaded or restarted onto the new chain, or the arm shows it keeps working until its own leaf's notAfter"
+      - "a CA or Vault leaf inside 24 h of notAfter that cannot be rotated is a named tray state, not a silent TLS failure"
+    unscoreable: "the running-tray rotation arm, back-dated, then the dependent-containers arm"
+    next_action: >
+      DEADLINE 2026-10-24 (the first host whose tray started before then crosses notAfter on 2026-10-29). Add a resident check in the tray (the 15-minute due-check pattern the GitHub rotation scheduler uses) that calls ensure_ca_bundle and the Vault leaf re-issue, write the back-dated arm red first, then decide reload versus restart for the dependent containers.
+    events:
+      - type: filed
+        ts: "2026-10-17T04:05:23Z"
+        host: lenovinha
+        summary: |-
+          A long-running tray never rotates the 30-day Tillandsias CA or the Vault leaf: every refresh caller is on-demand. Deadline 2026-10-24.
