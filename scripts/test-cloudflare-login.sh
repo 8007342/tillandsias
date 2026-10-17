@@ -309,11 +309,21 @@ fi
 # never asks for it (the code flow runs; the fake browser declines it).
 start_fake devicectl
 run_bin devicectl CF_FAKE_BROWSER_MODE=deny -- --cloudflare-login
-if ! ledger_paths "$LEDGER" | grep -qx '/oauth2/device/auth' && ! grep -q 'enter the code' <<<"$OUT"; then
-    ok "DEVICE CONTROL bin: without the grant in discovery, device/auth is never asked"
-else
-    bad "DEVICE CONTROL bin: device/auth was asked although discovery does not offer the grant"
-fi
+ctl_paths="$(ledger_paths "$LEDGER")"
+case "
+$ctl_paths
+$OUT" in
+    *"
+/oauth2/device/auth
+"*|*"enter the code"*)
+        bad "DEVICE CONTROL bin: device/auth was asked although discovery does not offer the grant" ;;
+    *)
+        if [ -n "$ctl_paths" ]; then
+            ok "DEVICE CONTROL bin: without the grant in discovery, device/auth is never asked"
+        else
+            bad "DEVICE CONTROL bin: the fake saw no request at all, so the control examined nothing"
+        fi ;;
+esac
 
 # LEDGER CONTROL: past_auth sees a request after /oauth2/auth when there is one.
 printf '%s\n' '{"body":"","method":"GET","path":"/oauth2/auth?x=1"}' \
