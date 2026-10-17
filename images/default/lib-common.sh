@@ -1,10 +1,4 @@
-    resolve_embed_endpoint >/dev/null 2>&1 || true
-    # ORDER 1747-e9d6: the verdict says WHY an endpoint is unset (unreachable
-    # vs no-curl vs explicit); discarding it left a cold-launch race
-    # unconfirmable. Logged, never printed: this runs at source time.
-    trace_lifecycle "embed-endpoint" "${TILLANDSIAS_EMBED_ENDPOINT_VERDICT:-none}"
-fi
-unset _tlc_embed_lib#!/usr/bin/env bash
+#!/usr/bin/env bash
 # lib-common.sh — Shared setup for all Tillandsias entrypoints.
 #
 # This file is SOURCED (not executed) by per-type entrypoint scripts.
@@ -1423,6 +1417,10 @@ if [ -r "$_tlc_embed_lib" ]; then
     # shellcheck source=lib-embed-endpoint.sh
     source "$_tlc_embed_lib"
     resolve_embed_endpoint >/dev/null 2>&1 || true
+    # ORDER 1747-e9d6: the verdict says WHY an endpoint is unset (unreachable
+    # vs no-curl vs explicit); discarding it left a cold-launch race
+    # unconfirmable. Logged, never printed: this runs at source time.
+    trace_lifecycle "embed-endpoint" "${TILLANDSIAS_EMBED_ENDPOINT_VERDICT:-none}"
 fi
 unset _tlc_embed_lib
 if [ -z "${TILLANDSIAS_EMBED_MODEL:-}" ]; then
