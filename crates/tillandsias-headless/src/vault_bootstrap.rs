@@ -794,7 +794,15 @@ fn vault_tls_leaf_needs_refresh(
         return true;
     }
     match Command::new("openssl")
-        .args(["x509", "-checkend", "86400", "-noout", "-in"])
+        .args([
+            "x509",
+            "-checkend",
+            // 1762-bano: the same 60-day launch margin as the CA, so the leaf
+            // never expires inside a session that the CA outlives.
+            &crate::CERT_MIN_REMAINING_SECS.to_string(),
+            "-noout",
+            "-in",
+        ])
         .arg(cert)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -888,7 +896,9 @@ fn ensure_vault_tls_leaf(certs_dir: &std::path::Path, debug: bool) -> Result<(),
         .args([
             "-CAcreateserial",
             "-days",
-            "30",
+            // 1762-bano: the CA's lifetime. It is re-issued whenever the CA is
+            // newer, so it never outlives the CA that signed it.
+            crate::CA_VALIDITY_DAYS,
             "-sha256",
             "-copy_extensions",
             "copy",
@@ -2406,13 +2416,13 @@ pub fn cloudflare_token_rotation_due(expires_at: u64, now: u64) -> bool {
 #[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
 fn cloudflare_rotation_remedy(reason: &str) -> &'static str {
     if reason.starts_with("refresh-record-write-failed") {
-        "the new sign-in could not be stored in Vault and the old refresh token is spent: bring Vault up with `tillandsias --init`, then run `tillandsias --cloudflare-login`"
+        "the new sign-in could not be stored in Vault and the old refresh token is spent: start Tillandsias (the tray) so its Vault is up, then run `tillandsias --cloudflare-login`"
     } else if reason.starts_with("token-record-write-failed") {
         "the new refresh token IS stored; the access-token write is retried automatically"
     } else if reason.starts_with("refresh-refused:") && reason.ends_with(":invalid_grant") {
         "Cloudflare no longer accepts the stored sign-in: run `tillandsias --cloudflare-login`; both stored records were left untouched"
     } else if reason.starts_with("read:") {
-        "Vault is unreachable, sealed or refused the host's token: run `tillandsias --init`; retried automatically"
+        "Vault is unreachable, sealed or refused the host's token: start Tillandsias (the tray) so its Vault is up; retried automatically"
     } else if reason == "lock" {
         "another rotation holds the host lock; retried automatically"
     } else {
@@ -10518,6 +10528,27 @@ mod cloudflare_token_rotation_tests {
     /// the core `cloudflare_oauth::Bundle`'s DERIVED Debug, which printed the
     /// token; 1505-kc5f's prerequisite replaced it with a redacting impl, and
     /// the core Bundle is now asserted leak-free here too.)
+    /// Order 1774-8j9v: no rotation remedy sends the operator to `--init`,
+    /// which rebuilds every image and froze the operator's desktop (1770-z575).
+    #[test]
+    fn cloudflare_rotation_remedies_never_name_init() {
+        for reason in [
+            "refresh-record-write-failed:vault-sealed",
+            "token-record-write-failed:vault-sealed",
+            "refresh-refused:http-400:invalid_grant",
+            "read:vault-unavailable",
+            "lock",
+            "refresh-transport",
+        ] {
+            let remedy = cloudflare_rotation_remedy(reason);
+            assert!(
+                !remedy.contains(concat!("--", "init")),
+                "{reason}: {remedy}"
+            );
+        }
+        assert!(cloudflare_rotation_remedy("read:vault-unavailable").contains("start Tillandsias"));
+    }
+
     #[test]
     fn cloudflare_token_rotation_never_prints_a_token() {
         const A: &str = "cf-access-SECRET-abcdef012345";

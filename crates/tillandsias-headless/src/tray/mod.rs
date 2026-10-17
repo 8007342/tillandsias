@@ -919,6 +919,19 @@ fn notify_github_refresh_expiring(message: String) {
         .and_then(|mut c| c.wait());
 }
 
+/// Order 1762-bano: the desktop notification for certificates a running tray
+/// cannot renew on its own. Plain words only; the message is the whole action.
+fn notify_cert_expiring(message: String) {
+    let _ = std::process::Command::new("notify-send")
+        .args(["--app-name=Tillandsias", "--urgency=normal", "Tillandsias"])
+        .arg(&message)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .and_then(|mut c| c.wait());
+}
+
 /// "The GitHub token is in Vault" as an EVENT (order 679-rp9m).
 ///
 /// The login click used to poll Vault once a second for two minutes. Now
@@ -4533,6 +4546,10 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
     // no Cloudflare login is stored.
     #[cfg(feature = "vault")]
     crate::vault_bootstrap::spawn_cloudflare_token_rotation_scheduler(debug);
+    // Order 1762-bano: a long-lived tray renews preview leaves under the
+    // unchanged CA, and names a CA or Vault leaf near notAfter (launch renews
+    // those with a 60-day margin; a running tray never swaps the CA).
+    crate::spawn_cert_expiry_scheduler(debug, Some(Box::new(notify_cert_expiring)));
     // Order 363: the NDJSON MCP tool socket for in-forge agents. A bind
     // failure degrades the tray to no-agent-publish rather than killing
     // it — the control socket above is load-bearing, this one is not
