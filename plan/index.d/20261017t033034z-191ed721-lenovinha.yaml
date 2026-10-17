@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-webkit-browser-window-reaches-its-projects-dev-service-hosts-like-chromium
+    field: status
+    value: completed
+    ts: "2026-10-17T03:30:34Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-webkit-browser-window-reaches-its-projects-dev-service-hosts-like-chromium
+    event:
+      type: completed
+      ts: "2026-10-17T03:30:34Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: Criterion 1: PR #476 landed as 88a4e0857, in v56.10.16.2. preview_hosts(project) is the one host list; the spec test pins flutter.<project>.localhost and is red with the old pair. Criterion 2, live on the v56.10.16.2 Linux smoke (2026-10-17, plan/issues/e2e-smoke-v56.10.16.2-linux-2026-10-16.md): a WebKit window (tillandsias-webkit:v56.10.16.2, iPhone 15 preset) opened on the routed https://flutter.lakanoa.localhost:18443/ logged 'loaded ... status=200', the app connected to the dev server's debug service, and the operator saw the window at that URL. The app's blank render is split out to 1760-54sr.
