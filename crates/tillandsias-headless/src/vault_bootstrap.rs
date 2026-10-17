@@ -1681,6 +1681,40 @@ pub fn github_token_due_check_live(debug: bool) -> Result<DueCheck, String> {
     )
 }
 
+/// The due-check a GitHub caller runs before it reads the token (1776-74hj).
+///
+/// The scheduler's first check runs at tray start, before Vault is up, so it
+/// fails, and until its 60 s retry an expired token sat in Vault for anything
+/// that read it (HTTP 401 from the username probe and the cloud refresh in the
+/// v56.10.17.1 smoke). A caller that has just ensured Vault asks here first,
+/// under the same rotation lock, so it reads a rotated token.
+///
+/// It never blocks the call: a failed check is logged, and gh then fails with
+/// its own named error. Returns the line it logged, for the tests.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn github_token_check_before_use(
+    check: impl FnOnce() -> Result<DueCheck, String>,
+    debug: bool,
+) -> Option<String> {
+    let line = match check() {
+        Ok(DueCheck::RefusedInForge) => None,
+        Ok(v @ DueCheck::Rotated { .. }) => {
+            audit_github_token_auto_rotation("rotated");
+            Some(v.verdict())
+        }
+        Ok(v) if debug => Some(v.verdict()),
+        Ok(_) => None,
+        Err(e) => {
+            audit_github_token_auto_rotation("failed");
+            Some(format!("warn:{e}"))
+        }
+    };
+    if let Some(line) = &line {
+        eprintln!("[tillandsias] {line}");
+    }
+    line
+}
+
 /// The delay before the next check: the regular interval after a verdict, and
 /// a backoff after a failure (1 min doubling, capped at the interval), so a
 /// transient failure is retried well before the token dies.
@@ -7553,6 +7587,52 @@ mod tests {
             matches!(check(), Ok(DueCheck::Rotated { .. })),
             "once Vault is up the expired token rotates on the next check"
         );
+    }
+
+    /// 1776-74hj, the launch: the scheduler's first check fails because Vault
+    /// is not up, and a gh caller that runs once Vault is up must read a
+    /// rotated token, not the expired one. A failed check returns a line and
+    /// lets the call go on; it never panics or blocks.
+    #[test]
+    fn a_gh_caller_after_vault_is_up_reads_a_rotated_token() {
+        let store = SharedStore::with(&bundle_expiring_at(NOW - 60));
+        let lock = test_lock("74hj");
+        let check = |up: bool| {
+            github_store_reachable(up)?;
+            rotate_github_token_if_due(
+                &store,
+                &fresh_pair,
+                NOW,
+                false,
+                &lock,
+                std::time::Duration::from_secs(5),
+                false,
+            )
+        };
+
+        let launch = github_token_check_before_use(|| check(false), false);
+        assert!(
+            launch
+                .as_deref()
+                .is_some_and(|l| l.contains("vault-unavailable")),
+            "{launch:?}"
+        );
+        let stale = store.read_bundle().unwrap().unwrap();
+        assert_eq!(stale.expires_at, Some(NOW - 60), "nothing rotated yet");
+
+        let before_gh = github_token_check_before_use(|| check(true), false);
+        assert!(
+            before_gh
+                .as_deref()
+                .is_some_and(|l| l.starts_with("ok:github-token-rotation:rotated")),
+            "{before_gh:?}"
+        );
+        let read = store.read_bundle().unwrap().unwrap();
+        assert_eq!(read.token, "ghu_NEWACCESS", "gh reads the new token");
+        assert_eq!(read.expires_at, Some(NOW + 28_800));
+
+        // Quiet when there is nothing to say, outside debug.
+        assert_eq!(github_token_check_before_use(|| check(true), false), None);
     }
 
     /// Criterion 7, the other half: the token record the git-mirror service can

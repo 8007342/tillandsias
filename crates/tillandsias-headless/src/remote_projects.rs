@@ -261,6 +261,18 @@ impl RemoteVaultLease {
     }
 }
 
+/// The GitHub due-check before a gh call (1776-74hj). Inert under test, like
+/// the lease: the tests never reach a live Vault.
+fn github_token_fresh_before_gh(debug: bool) {
+    #[cfg(all(not(test), feature = "vault"))]
+    crate::vault_bootstrap::github_token_check_before_use(
+        || crate::vault_bootstrap::github_token_due_check_live(debug),
+        debug,
+    );
+    #[cfg(any(test, not(feature = "vault")))]
+    let _ = debug;
+}
+
 // The hand-rolled `run_command_with_timeout` that lived here was deleted by
 // order 714-4r6w: `SyncPodmanCommand::output_bounded` now provides the same
 // thing for every podman call rather than for these two. Its design was the
@@ -275,6 +287,9 @@ fn run_git_image_shell(script: &str, extra_args: &[&str], debug: bool) -> Result
     ensure_git_image_available(&image, debug)?;
     let vault_lease = RemoteVaultLease::acquire(debug)?;
     let vault_mount = vault_lease.mount_arg();
+    // Order 1776-74hj: the lease has ensured Vault, so rotate a due token now,
+    // before gh reads it, rather than wait for the scheduler's retry.
+    github_token_fresh_before_gh(debug);
     // The gh call egresses through squid; self-heal a dead proxy (VM restart,
     // squid segfault — Exited(139) observed 2026-07-02) instead of failing
     // every probe/list until some other flow restarts it. Cheap fast-path
@@ -731,6 +746,9 @@ exec gh repo clone "$1" "$2"
     ensure_git_image_available(&image, debug)?;
     let vault_lease = RemoteVaultLease::acquire(debug)?;
     let vault_mount = vault_lease.mount_arg();
+    // Order 1776-74hj: the lease has ensured Vault, so rotate a due token now,
+    // before gh reads it, rather than wait for the scheduler's retry.
+    github_token_fresh_before_gh(debug);
 
     // AFTER the lease: acquiring it may rebuild/recreate the Vault container
     // (image digest moved) which rotates the TLS secrets and tears the proxy
@@ -1025,7 +1043,37 @@ mod tests {
              test-inert wrapper, not crate::ensure_proxy_running (794-57bv)"
         );
 
+        // Order 1776-74hj: the tray's first rotation check runs before Vault
+        // is up, so a launch with an expired token reached gh with it (HTTP
+        // 401 for a minute, v56.10.17.1 smoke). The runner asks for a due-check
+        // AFTER the lease has ensured Vault and BEFORE gh reads the token.
+        let at = |needle: &str| {
+            runner
+                .find(needle)
+                .unwrap_or_else(|| panic!("run_git_image_shell lacks `{needle}`"))
+        };
+        let lease = at("RemoteVaultLease::acquire(debug)?");
+        let due_check = at("github_token_fresh_before_gh(debug)");
+        let podman = at("podman_cmd_sync()");
+        assert!(
+            lease < due_check && due_check < podman,
+            "the GitHub due-check must run between the Vault lease and the gh \
+             container (1776-74hj)"
+        );
+
         let clone = item("pub fn clone_project_from_github_with_debug");
+        let clone_at = |needle: &str| {
+            clone
+                .find(needle)
+                .unwrap_or_else(|| panic!("clone_project_from_github_with_debug lacks `{needle}`"))
+        };
+        assert!(
+            clone_at("RemoteVaultLease::acquire(debug)?")
+                < clone_at("github_token_fresh_before_gh(debug)")
+                && clone_at("github_token_fresh_before_gh(debug)") < clone_at("podman_cmd_sync()"),
+            "the cloud clone must run the GitHub due-check between the Vault \
+             lease and the gh container (1776-74hj)"
+        );
         assert!(
             clone.contains("ensure_git_image_available(&image, debug)?"),
             "cloud attach clone must build the git image before podman run"
