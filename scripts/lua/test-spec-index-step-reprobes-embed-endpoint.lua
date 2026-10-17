@@ -33,6 +33,23 @@ end
 
 local LIB = ROOT .. "/images/default/lib-common.sh"
 local EMBED_LIB = ROOT .. "/images/default/lib-embed-endpoint.sh"
+
+-- ORDER 1774-ibyx: the arms below test ONE function cut out by awk, so a
+-- lib-common.sh that cannot be sourced at all still passed them. That is
+-- what landed with 1747-e9d6: a stray `fi` at line 6, `source` aborting,
+-- and every forge starting without lib-common. The whole file must parse,
+-- and the source-time trace must come after trace_lifecycle is defined.
+local syn = proc.run({ argv = { "bash", "-n", LIB }, timeout_ms = 30000 })
+if syn.status ~= "exited" or syn.code ~= 0 then
+    verdict.emit("violation:spec-index-step-reprobes-embed-endpoint:whole-file:lib-common.sh does not parse (bash -n)", 1,
+        text.trim(syn.stderr or ""))
+end
+local whole = fs.read(LIB) or ""
+local def_at = whole:find("\ntrace_lifecycle() {", 1, true)
+local call_at = whole:find('trace_lifecycle "embed-endpoint"', 1, true)
+if not def_at or not call_at or call_at < def_at then
+    verdict.emit("violation:spec-index-step-reprobes-embed-endpoint:whole-file:the source-time embed-endpoint trace runs before trace_lifecycle is defined", 1)
+end
 local ex = proc.run({ argv = { "awk", "/^ensure_forge_spec_index\\(\\) \\{/,/^\\}/", LIB }, timeout_ms = 30000 })
 local IMPL = ex.stdout or ""
 -- PREMISE anchors on the skip line the step has always had, not on the
