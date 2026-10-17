@@ -3549,19 +3549,189 @@ fn ensure_egress_network(debug: bool) -> Result<(), String> {
     run_podman_command(command, debug)
 }
 
+/// ORDER 1762-bano (operator ruling 2026-10-17): the enclave CA and the Vault
+/// leaf it signs live a year (`CA_VALIDITY_DAYS`), and a launch re-mints them
+/// whenever less than 60 days would remain. A running tray never swaps the CA:
+/// every running container fixed its trust at start, so a mid-session CA would
+/// break them sooner than the old one expiring. Installing a release restarts
+/// the tray, so the renewal happens on its own.
+///
+/// Why a long CA is acceptable: its key is an owner-only file in the user's
+/// home, so anything able to read it already has the account; the 30-day
+/// lifetime bought little. It cannot carry name constraints (squid signs
+/// forge egress for real domains with it), and it is trusted only inside our
+/// containers, never by a host trust store (a host-trusted preview CA is
+/// 1761-bvyn's, and is name-constrained).
+pub(crate) const CERT_MIN_REMAINING_SECS: u64 = 60 * 24 * 60 * 60;
+/// Validity of the enclave CA and the Vault leaf, in days.
+pub(crate) const CA_VALIDITY_DAYS: &str = "365";
+
+/// `openssl x509 -checkend`: does `cert` stay valid for `secs` more seconds?
+/// An unreadable or unparsable certificate is not valid.
+pub(crate) fn cert_valid_for(cert: &Path, secs: u64) -> bool {
+    Command::new("openssl")
+        .args(["x509", "-checkend", &secs.to_string(), "-noout", "-in"])
+        .arg(cert)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+/// Decided from the certificate's own notAfter, not file mtimes: the old
+/// 25-day mtime rule on a 30-day CA let a tray that launched on day 24 serve it
+/// past notAfter, and an mtime says nothing about the bytes it dates.
 fn ca_bundle_needs_refresh(crt: &Path, key: &Path) -> bool {
-    let max_age = std::time::Duration::from_secs(25 * 24 * 60 * 60);
-    for path in [crt, key] {
-        match std::fs::metadata(path).and_then(|meta| meta.modified()) {
-            Ok(modified) => {
-                if modified.elapsed().map(|age| age > max_age).unwrap_or(true) {
-                    return true;
-                }
-            }
-            Err(_) => return true,
-        }
+    if !crt.is_file() || !key.is_file() {
+        return true;
     }
-    false
+    !cert_valid_for(crt, CERT_MIN_REMAINING_SECS)
+}
+
+/// ORDER 1762-bano: the enclave certificates that stay valid for less than
+/// `margin_secs`, by name ("ca", "vault-leaf"). A missing or unreadable one
+/// counts as expiring.
+pub(crate) fn expiring_enclave_certs(certs_dir: &Path, margin_secs: u64) -> Vec<&'static str> {
+    [("ca", "intermediate.crt"), ("vault-leaf", "vault.crt")]
+        .into_iter()
+        .filter(|(_, file)| !cert_valid_for(&certs_dir.join(file), margin_secs))
+        .map(|(name, _)| name)
+        .collect()
+}
+
+/// The one message a person sees, in plain words (coordinator ruling): no
+/// internals, and only when a renewal cannot happen on its own.
+pub(crate) const CERT_EXPIRY_MESSAGE: &str =
+    "Restart Tillandsias to renew its security certificates";
+
+/// ORDER 1762-bano, the resident check (operator ruling 2026-10-17: silent
+/// unless renewal fails). Once an hour in a long-lived tray:
+/// - re-issue any preview leaf within 48 h of notAfter, under the unchanged CA,
+///   and reload the router; silent, since nothing running loses trust;
+/// - if the CA or the Vault leaf is within 72 h of notAfter, which only happens
+///   when a tray has outlived the 60-day launch margin, say so once a day with
+///   `CERT_EXPIRY_MESSAGE`. It never swaps the CA under running containers.
+pub(crate) fn spawn_cert_expiry_scheduler(
+    debug: bool,
+    on_expiring: Option<Box<dyn Fn(String) + Send + 'static>>,
+) {
+    let _ = std::thread::Builder::new()
+        .name("cert-expiry".into())
+        .spawn(move || {
+            let mut last_warned_day: Option<u64> = None;
+            loop {
+                #[cfg(feature = "host-services")]
+                match local_web_preview::renew_expiring_preview_leaves(48 * 60 * 60) {
+                    Ok(renewed) if !renewed.is_empty() => {
+                        eprintln!("[tillandsias] ok:preview-leaf-renewed:{}", renewed.join(","));
+                    }
+                    Ok(_) => {}
+                    Err(e) => eprintln!("[tillandsias] warn:preview-leaf-renewal-failed: {e}"),
+                }
+                let expiring = expiring_enclave_certs(Path::new(&ca_dir()), 72 * 60 * 60);
+                if !expiring.is_empty() {
+                    let day = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs() / 86_400)
+                        .unwrap_or(0);
+                    if last_warned_day != Some(day) {
+                        last_warned_day = Some(day);
+                        eprintln!(
+                            "[tillandsias] warn:cert-expiring:{}: {CERT_EXPIRY_MESSAGE}",
+                            expiring.join(",")
+                        );
+                        if let Some(cb) = &on_expiring {
+                            cb(CERT_EXPIRY_MESSAGE.to_string());
+                        }
+                    }
+                } else if debug {
+                    eprintln!("[tillandsias] ok:cert-expiry:not-due");
+                }
+                std::thread::sleep(std::time::Duration::from_secs(60 * 60));
+            }
+        });
+}
+
+#[cfg(test)]
+mod ca_refresh_margin_tests {
+    use super::*;
+
+    // mint(dir, days) -> (crt, key): a self-signed CA valid for `days`, minted now.
+    fn mint(dir: &Path, days: u32) -> (PathBuf, PathBuf) {
+        let crt = dir.join("intermediate.crt");
+        let key = dir.join("intermediate.key");
+        let status = Command::new("openssl")
+            .args(["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=test CA"])
+            .args(["-days", &days.to_string(), "-keyout"])
+            .arg(&key)
+            .arg("-out")
+            .arg(&crt)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .expect("openssl");
+        assert!(status.success(), "openssl req");
+        (crt, key)
+    }
+
+    #[test]
+    fn a_ca_with_more_than_sixty_days_left_is_kept() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (crt, key) = mint(tmp.path(), 365);
+        assert!(!ca_bundle_needs_refresh(&crt, &key));
+        let (crt, key) = mint(tmp.path(), 61);
+        assert!(!ca_bundle_needs_refresh(&crt, &key));
+    }
+
+    // 1762-bano, the arm that must ship before 2026-10-29: every host holds a
+    // 30-DAY CA, freshly dated, that the old 25-day mtime rule keeps; a tray
+    // launched on day 24 serves it past notAfter. Under 60 days left re-mints:
+    // red with the mtime rule restored.
+    #[test]
+    fn a_thirty_day_ca_is_reminted_at_launch_even_with_a_fresh_mtime() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (crt, key) = mint(tmp.path(), 30);
+        assert!(ca_bundle_needs_refresh(&crt, &key));
+        let (crt, key) = mint(tmp.path(), 59);
+        assert!(ca_bundle_needs_refresh(&crt, &key));
+    }
+
+    // 1762-bano: inside 72 h is named (the warning arm), a year is not; a
+    // missing Vault leaf counts as expiring.
+    #[test]
+    fn enclave_certs_inside_seventy_two_hours_are_named_as_expiring() {
+        let tmp = tempfile::tempdir().unwrap();
+        mint(tmp.path(), 2);
+        assert_eq!(
+            expiring_enclave_certs(tmp.path(), 72 * 60 * 60),
+            vec!["ca", "vault-leaf"]
+        );
+        mint(tmp.path(), 365);
+        std::fs::copy(tmp.path().join("intermediate.crt"), tmp.path().join("vault.crt")).unwrap();
+        assert!(expiring_enclave_certs(tmp.path(), 72 * 60 * 60).is_empty());
+        assert_eq!(CERT_EXPIRY_MESSAGE, "Restart Tillandsias to renew its security certificates");
+    }
+
+    #[test]
+    fn a_reminted_ca_lives_a_year() {
+        assert_eq!(CA_VALIDITY_DAYS, "365");
+        let tmp = tempfile::tempdir().unwrap();
+        let (crt, _) = mint(tmp.path(), CA_VALIDITY_DAYS.parse().unwrap());
+        assert!(cert_valid_for(&crt, 364 * 24 * 60 * 60));
+        assert!(!cert_valid_for(&crt, 366 * 24 * 60 * 60));
+    }
+
+    #[test]
+    fn a_missing_key_or_an_unparsable_cert_is_reminted() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (crt, key) = mint(tmp.path(), 30);
+        std::fs::remove_file(&key).unwrap();
+        assert!(ca_bundle_needs_refresh(&crt, &key));
+        let (crt, key) = mint(tmp.path(), 30);
+        std::fs::write(&crt, "not a certificate\n").unwrap();
+        assert!(ca_bundle_needs_refresh(&crt, &key));
+    }
 }
 
 /// Clamp the CA private key to owner-only access (0600) — 755-qcxh.
@@ -3700,7 +3870,7 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
                 .to_str()
                 .ok_or_else(|| "CA cert path contains invalid UTF-8".to_string())?,
             "-days",
-            "30",
+            CA_VALIDITY_DAYS,
             "-nodes",
             "-subj",
             "/C=US/ST=Privacy/L=Local/O=Tillandsias/CN=Tillandsias CA",
