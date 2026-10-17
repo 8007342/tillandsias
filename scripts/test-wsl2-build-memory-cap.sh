@@ -10,6 +10,7 @@
 #   3 OFF       "off" touches nothing (NEGATIVE CONTROL: no group created)
 #   4 NO-MEM    a tree whose controllers lack memory: skip, exit 0, no group
 #   5 WIRED     with-wsl2-builder.sh runs it in the guest prefix, before the build
+#   6 NESTED    wsl-guest-session.sh nests its teardown cgroup inside the cap
 # Prints one summary line; exit 0/1.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -68,6 +69,17 @@ if grep -q '^_ENV_PREFIX="\$_ENV_PREFIX bash scripts/wsl2-build-memory-cap.sh >&
     ok "5 WIRED with-wsl2-builder.sh runs the cap in the guest prefix"
 else
     bad "5 WIRED with-wsl2-builder.sh no longer runs scripts/wsl2-build-memory-cap.sh in _ENV_PREFIX"
+fi
+
+# The session supervisor makes a cgroup of its own for teardown (1567-9fgi). At
+# the root it escaped the cap: measured 2026-10-17, Windows fell to 1.2 GB free
+# with the build outside tillandsias-build. It must nest under its own cgroup.
+# (Verified live in tillandsias-build: 0::/tillandsias-build/tillandsias-session-<pid>.)
+if grep -q '^    _gs_base="\$_gs_root\$(sed -n '"'"'s/^0:://p'"'"' /proc/\$\$/cgroup 2>/dev/null)"$' "$ROOT/scripts/wsl-guest-session.sh" \
+   && grep -q '^    _gs_cg="\$_gs_base/tillandsias-session-\$\$"$' "$ROOT/scripts/wsl-guest-session.sh"; then
+    ok "6 NESTED the guest session cgroup is created under the supervisor's own cgroup, inside the cap"
+else
+    bad "6 NESTED wsl-guest-session.sh creates its cgroup outside the supervisor's own — the build escapes the memory cap"
 fi
 
 echo "wsl2-build-memory-cap: $pass passed, $fail failed"
