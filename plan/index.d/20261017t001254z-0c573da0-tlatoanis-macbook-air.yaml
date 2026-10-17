@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-release-freeze-refuses-the-cut-hosts-own-push-so-the-only-way-to-land-the-cuts-own-fix-is-clear-land-re-set-and-the-freeze-is-therefore-genuinely-absent-for-the-whole-length-of-that-landing-gate-included
+    field: status
+    value: implemented
+    ts: "2026-10-17T00:12:54Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-release-freeze-refuses-the-cut-hosts-own-push-so-the-only-way-to-land-the-cuts-own-fix-is-clear-land-re-set-and-the-freeze-is-therefore-genuinely-absent-for-the-whole-length-of-that-landing-gate-included
+    event:
+      type: progress
+      ts: "2026-10-17T00:12:54Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: Landed on linux-next as 928dc2f51 (PR #492, full Linux gate green). release-freeze.sh land writes refs/tillandsias/freeze-landing/<branch>/<host>/<epoch> before deleting the freeze marker; set re-freezes successor-first; status reads frozen-landing:<branch>:by=<host>; no cut-host exemption (coordinator ruling: host identity is self-declared). Gate step 894 asserts the marker set is never empty across set -> land -> re-freeze, with a control arm catching the old clear-then-set. Runbook follow-up (hold the land queue during a land) is PR #495. Remaining live check: the next cut uses land instead of clear for a fix to the frozen branch.
