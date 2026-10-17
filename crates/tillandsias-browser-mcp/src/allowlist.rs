@@ -286,9 +286,14 @@ pub fn validate_with_preview(
 
     let service_label = labels[0].to_string();
     let host_project_label = labels[1..labels.len() - 1].join(".");
-    if host_project_label != project_label {
+    // Order 1763-nc9d: the host carries the project's HOST LABEL (lowercase,
+    // `_` mapped to `-`), never the raw name, so the comparison is against
+    // the same mapping the router and the leaf used. A raw name that maps to
+    // no label matches nothing.
+    let expected_label = crate::host_label::project_host_label(project_label).ok();
+    if expected_label.as_deref() != Some(host_project_label.as_str()) {
         return Err(AllowlistDeny::ProjectMismatch {
-            expected: project_label.to_string(),
+            expected: expected_label.unwrap_or_else(|| project_label.to_string()),
             actual: host_project_label,
         });
     }
@@ -348,6 +353,29 @@ mod tests {
             }
             other => panic!("expected ProjectMismatch, got {other:?}"),
         }
+    }
+
+    /// Order 1763-nc9d: a mixed-case, underscored project is compared by its
+    /// host label, the one the router and the leaf name; the raw spelling in
+    /// a host (which the URL parser lowercases but keeps `_`) is refused.
+    #[test]
+    fn host_label_project_opens_by_its_label_only() {
+        let ok = validate(
+            "http://www.devxsd-gamejam.localhost:8080/",
+            "DEVxSD_gameJam",
+        );
+        assert!(ok.is_ok(), "{ok:?}");
+        match validate(
+            "http://www.DEVxSD_gameJam.localhost:8080/",
+            "DEVxSD_gameJam",
+        ) {
+            Err(AllowlistDeny::ProjectMismatch { expected, .. }) => {
+                assert_eq!(expected, "devxsd-gamejam");
+            }
+            other => panic!("expected ProjectMismatch, got {other:?}"),
+        }
+        // A raw name that maps to no label matches nothing.
+        assert!(validate("http://www.x.localhost:8080/", "___").is_err());
     }
 
     /// The floor the widening must not lower: two labels is still a bad shape.
