@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: land-queue-pre-gate-checks-stale-head-skip-auto-draft-preflight-door-and-bounded-retry-of-host-state-flaky-gate-steps
+    event:
+      type: implemented
+      ts: "2026-10-17T05:54:01Z"
+      agent_id: windows-yolanda-claude-20261013t052033z
+      host: yolanda-windows
+      summary: |-
+        Implemented on salvage/yolanda/2026-10-17-1765-q7rg (613d56f65, commit 0c3647cef) for relay to work/1765-q7rg. Fixtures red first: test-land-queue.sh arms 14-17, 7 of 8 red on trunk, 32/32 with the change; test-gate-step-host-state-retry.sh (step 895), 2 of 4 red on trunk build.sh, 4/4 with it; both run in tillandsias-build. Preflight refused=0 (107 deadline-skipped). Full gate not run on this host: a parallel build starves the Windows host (see 667-kfyn). Carried-Waiver shell-to-lua trailer present.
