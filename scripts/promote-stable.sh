@@ -27,6 +27,7 @@
 #   ^demoted:<mistaken>:latest-now:<intended>$    demotion happened AND verified
 #   ^would-demote:<mistaken>:latest-would-be:<intended>$   --dry-run
 #   ^verified:stable-tag:<sha>$                   step 3 landed on origin (1061-zd83)
+#   ^refused:stable-tag-push-refused:<sha>$       release flipped, tag push failed (1768-2k56)
 #   ^refused:(no-evidence|no-release|bad-tag|missing-target|demote-verify-failed
 #            |promote-commit-unresolvable|stable-tag-not-moved|stable-tag-unverified):.*$
 #                                                 refusal (exit 1)
@@ -379,7 +380,21 @@ if [ -z "$COMMIT" ]; then
     exit 1
 fi
 git -C "$REPO_ROOT" tag -f -a stable -m "Stable channel: promoted $TAG" "$COMMIT"
-git -C "$REPO_ROOT" push origin refs/tags/stable --force
+# ORDER 1768-2k56. Under `set -e` a refused tag push used to end the script
+# HERE, silently, after `gh release edit` had already flipped the release: a
+# half-promotion (measured 2026-10-17, a promotion during a land run). Say so,
+# and say how to finish.
+_stable_push_rc=0
+git -C "$REPO_ROOT" push origin refs/tags/stable --force || _stable_push_rc=$?
+if [ "$_stable_push_rc" -ne 0 ]; then
+    echo "HALF-PROMOTED: $TAG is flipped to stable on GitHub, but the stable tag push failed (rc=$_stable_push_rc)," >&2
+    echo "so the release and refs/tags/stable disagree (1061-zd83)." >&2
+    echo "  why: the pre-push hook refused (its lines above name the guard) or origin was unreachable" >&2
+    echo "  remedy: wait for an idle land queue, then finish with: git -C \"$REPO_ROOT\" push origin refs/tags/stable --force" >&2
+    echo "          a tag on a commit already on origin/main needs no ./build.sh --check (1768-2k56)" >&2
+    echo "refused:stable-tag-push-refused:$COMMIT"
+    exit 1
+fi
 
 # VERIFY ON ORIGIN, not locally. The claim this script makes is about the ref
 # other people fetch; a local tag that never reached origin is exactly the
@@ -410,4 +425,6 @@ echo "Stable channel now serves $TAG (README /releases/latest URLs resolve to it
 echo "NEXT: run a ONE-SHOT stable curl-install smoke to prove the promoted" >&2
 echo "artifact installs — SMOKE_CHANNEL=stable /smoke-curl-install-and-test-e2e —" >&2
 echo "then routine smoke goes back to the daily channel (default)." >&2
+echo "The stable tag push needed no ./build.sh --check: a tag on a commit already on" >&2
+echo "origin/main skips the gate stamp (1768-2k56). Promote only while the land queue is idle." >&2
 echo "promoted:$TAG"

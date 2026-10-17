@@ -757,7 +757,39 @@ pub fn login(
         return Ok(outcome);
     }
     let via = via.unwrap_or_else(|| default_via(deps.desktop_session, deps.relay_url.is_some()));
+    match login_code_flow(via, deps, out) {
+        // Order 1773-dywf: the exchange failed AFTER the request was sent, so
+        // the single-use code may be spent. Never resend it: run the whole
+        // flow once more (new verifier, new state, new code). A connect
+        // failure never reaches here (cloudflare_oauth::exchange retries it)
+        // and a token-endpoint answer is a decision, not a fault.
+        Err(r) if exchange_failed_after_send(&r) => {
+            let _ = writeln!(
+                out,
+                "note:cloudflare-login:restarting-the-sign-in (the token request failed after it was sent, so that code is not reused)"
+            );
+            login_code_flow(via, deps, out)
+        }
+        r => r,
+    }
+}
 
+fn exchange_failed_after_send(r: &Refusal) -> bool {
+    matches!(
+        r.reason.as_str(),
+        "exchange:transport-post-timeout"
+            | "exchange:transport-post-body"
+            | "exchange:transport-post-request"
+    )
+}
+
+/// One run of the authorization-code flow: receiver, `begin`, the code, the
+/// Vault preflight, the exchange, the store.
+fn login_code_flow(
+    via: Via,
+    deps: &mut LoginDeps<'_>,
+    out: &mut dyn Write,
+) -> Result<LoginOutcome, Refusal> {
     // Receiver preconditions, before any network call.
     if let Some(relay) = deps.relay_url.as_deref()
         && via != Via::Loopback
@@ -911,6 +943,13 @@ pub fn login(
     store_and_report(deps, previous, bundle, out)
 }
 
+/// Order 1770-z575: the light remedy when Vault is not usable. The store
+/// already starts the Vault enclave alone when it is stopped, so the next
+/// step is never `tillandsias --init`, which rebuilds EVERY image (measured
+/// on macuahuitl, v56.10.16.2: it froze the operator's desktop).
+const REMEDY_VAULT_LOGIN: &str = "start Tillandsias (the tray) so its Vault is up, then run `tillandsias --cloudflare-login` again; `tillandsias --cloudflare-login --debug` shows why Vault did not start";
+const REMEDY_VAULT_LOGOUT: &str = "start Tillandsias (the tray) so its Vault is up, then run `tillandsias --cloudflare-logout` again";
+
 /// Vault preflight shared by both grants: read the stored bundle (or none)
 /// BEFORE anything single-use is spent.
 fn vault_preflight(
@@ -920,8 +959,8 @@ fn vault_preflight(
     let previous = deps.store.read_bundle().map_err(|r| {
         Refusal::login(
             format!("vault:{}", fixed_word(&r)),
-            "the Vault that must hold the Cloudflare credential is unreachable, sealed or refused the host; the code was NOT exchanged",
-            "run `tillandsias --init`, then `tillandsias --cloudflare-login` again",
+            "the Vault that must hold the Cloudflare credential could not be started, is unreachable, sealed or refused the host; the code was NOT exchanged",
+            REMEDY_VAULT_LOGIN,
         )
     })?;
     if previous.is_some() {
@@ -958,7 +997,7 @@ fn store_and_report(
         Refusal::login(
             format!("store-failed:{}", fixed_word(&r)),
             "the token pair was issued but could not be stored in Vault; it exists only in this exiting process",
-            "run `tillandsias --init`, then `tillandsias --cloudflare-login` again",
+            REMEDY_VAULT_LOGIN,
         )
     })?;
 
@@ -1232,7 +1271,7 @@ pub fn logout(deps: &LogoutDeps<'_>, out: &mut dyn Write) -> Result<(), Refusal>
         Refusal::logout(
             format!("vault:{}", fixed_word(&r)),
             "the Vault that holds the Cloudflare credential is unreachable, sealed or refused the host; nothing was revoked or deleted",
-            "run `tillandsias --init`, then `tillandsias --cloudflare-logout` again",
+            REMEDY_VAULT_LOGOUT,
         )
     })?;
     match &stored {
@@ -1245,7 +1284,7 @@ pub fn logout(deps: &LogoutDeps<'_>, out: &mut dyn Write) -> Result<(), Refusal>
         Refusal::logout(
             format!("delete-failed:{}", fixed_word(&r)),
             "a Cloudflare record could not be deleted from Vault (the reason names which one remains)",
-            "run `tillandsias --init`, then `tillandsias --cloudflare-logout` again",
+            REMEDY_VAULT_LOGOUT,
         )
     })?;
     let _ = writeln!(out, "ok:cloudflare-logout:deleted");
@@ -1715,6 +1754,11 @@ mod tests {
     struct Scripted {
         gets: RefCell<Vec<(String, HttpResponse)>>,
         posts: RefCell<Vec<(String, HttpResponse)>>,
+        /// Transport failures the next POSTs return, in order, before any
+        /// scripted answer (1773-dywf).
+        post_failures: RefCell<Vec<String>>,
+        /// Every POST's form, in order.
+        forms: RefCell<Vec<Vec<(String, String)>>>,
         calls: RefCell<Vec<String>>,
     }
     const BASE: &str = "https://fake.invalid";
@@ -1777,8 +1821,16 @@ mod tests {
             self.calls.borrow_mut().push(format!("GET {url}"));
             Self::answer(&self.gets, url)
         }
-        fn post_form(&self, url: &str, _: &[(&str, &str)]) -> Result<HttpResponse, String> {
+        fn post_form(&self, url: &str, form: &[(&str, &str)]) -> Result<HttpResponse, String> {
             self.calls.borrow_mut().push(format!("POST {url}"));
+            self.forms.borrow_mut().push(
+                form.iter()
+                    .map(|(k, v)| (k.to_string(), v.to_string()))
+                    .collect(),
+            );
+            if !self.post_failures.borrow().is_empty() {
+                return Err(self.post_failures.borrow_mut().remove(0));
+            }
             Self::answer(&self.posts, url)
         }
     }
@@ -2533,6 +2585,117 @@ mod tests {
         );
         assert_absent(&e.render(), &[LEAK_R], "exchange refusal");
         assert!(!store.snapshot().contains_key(CLOUDFLARE_TOKEN_PATH));
+    }
+
+    // ── 1773-dywf: a post-send exchange failure restarts the flow once ─────
+
+    /// A paste login over `http` whose reader answers each prompt with
+    /// `code-<n>` and the state of the LATEST authorize URL shown.
+    fn paste_login(http: &Scripted, store: &MemStore) -> (Result<LoginOutcome, Refusal>, String) {
+        let out = Rc::new(RefCell::new(Vec::new()));
+        let out2 = out.clone();
+        let mut n = 0;
+        let mut read = move || -> Result<String, String> {
+            n += 1;
+            let text = String::from_utf8(out2.borrow().clone()).unwrap();
+            // The paste prompt itself says "code=…&state=…", so read the
+            // state from the latest authorize URL line, not the last match.
+            let url = text.lines().rfind(|l| l.contains("/oauth2/auth?")).unwrap();
+            let st = url
+                .split("&state=")
+                .nth(1)
+                .unwrap()
+                .split('&')
+                .next()
+                .unwrap()
+                .to_string();
+            Ok(format!("code=code-{n}&state={st}"))
+        };
+        let mut d = deps(http, store, &no_open, &mut read);
+        d.stdin_is_terminal = true;
+        let r = login(Some(Via::Paste), &mut d, &mut SharedOut(out.clone()));
+        let text = String::from_utf8(out.borrow().clone()).unwrap();
+        (r, text)
+    }
+
+    fn form_value(form: &[(String, String)], key: &str) -> String {
+        form.iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.clone())
+            .unwrap_or_default()
+    }
+
+    fn restart_token_ok() -> String {
+        serde_json::json!({"access_token": LEAK_A, "refresh_token": LEAK_R, "expires_in": 3600})
+            .to_string()
+    }
+
+    #[test]
+    fn cloudflare_login_post_send_failure_restarts_the_flow_with_a_fresh_code() {
+        for kind in ["timeout", "body", "request"] {
+            let http = Scripted::with_discovery("").post_then(
+                &format!("{BASE}/oauth2/token"),
+                200,
+                &restart_token_ok(),
+            );
+            http.post_failures
+                .borrow_mut()
+                .push(format!("refused:cloudflare-login:transport-post-{kind}"));
+            let store = MemStore::default();
+            let (r, text) = paste_login(&http, &store);
+            assert!(r.is_ok(), "{kind}: {r:?}\n{text}");
+            assert!(
+                text.contains("note:cloudflare-login:restarting-the-sign-in"),
+                "{kind}: {text}"
+            );
+            let forms = http.forms.borrow();
+            assert_eq!(forms.len(), 2, "{kind}: one failed and one fresh exchange");
+            // The spent code is never resent, and the second flow has its
+            // own verifier (and so its own state and authorize URL).
+            assert_eq!(form_value(&forms[0], "code"), "code-1");
+            assert_eq!(form_value(&forms[1], "code"), "code-2");
+            assert_ne!(
+                form_value(&forms[0], "code_verifier"),
+                form_value(&forms[1], "code_verifier")
+            );
+            assert_eq!(text.matches("/oauth2/auth?").count(), 2, "{kind}: {text}");
+            assert!(store.snapshot().contains_key(CLOUDFLARE_TOKEN_PATH));
+        }
+    }
+
+    #[test]
+    fn cloudflare_login_restarts_at_most_once_and_never_for_an_answer() {
+        // A second post-send failure is refused.
+        let http = Scripted::with_discovery("").post_then(
+            &format!("{BASE}/oauth2/token"),
+            200,
+            &restart_token_ok(),
+        );
+        http.post_failures.borrow_mut().extend([
+            "refused:cloudflare-login:transport-post-timeout".to_string(),
+            "refused:cloudflare-login:transport-post-timeout".to_string(),
+        ]);
+        let store = MemStore::default();
+        let (r, _) = paste_login(&http, &store);
+        assert_eq!(
+            r.unwrap_err().verdict(),
+            "refused:cloudflare-login:exchange:transport-post-timeout"
+        );
+        assert_eq!(http.forms.borrow().len(), 2);
+        // NEGATIVE CONTROL: an HTTP 400 answer from the token endpoint is a
+        // decision, not a transport fault: no restart, even though a second
+        // exchange would succeed.
+        let http = Scripted::with_discovery("")
+            .post_then(
+                &format!("{BASE}/oauth2/token"),
+                400,
+                r#"{"error":"invalid_grant"}"#,
+            )
+            .post_then(&format!("{BASE}/oauth2/token"), 200, &restart_token_ok());
+        let (r, text) = paste_login(&http, &store);
+        assert!(r.is_err(), "{text}");
+        assert_eq!(http.forms.borrow().len(), 1);
+        assert!(!text.contains("restarting-the-sign-in"), "{text}");
     }
 
     #[test]

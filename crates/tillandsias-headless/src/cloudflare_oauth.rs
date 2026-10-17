@@ -172,6 +172,13 @@ pub trait HttpClient {
     /// `POST url` with an `application/x-www-form-urlencoded` body built
     /// from `form`, in order.
     fn post_form(&self, url: &str, form: &[(&str, &str)]) -> Result<HttpResponse, String>;
+    /// `GET url` with `Authorization: Bearer <bearer>`, no request body: the
+    /// read-only Cloudflare tools' only way to the API (1772-irs3). There is
+    /// deliberately no bearer POST/PUT/DELETE on this seam. Clients that never
+    /// call the API keep this default refusal.
+    fn get_with_bearer(&self, _url: &str, _bearer: &str) -> Result<HttpResponse, String> {
+        Err("refused:cloudflare-login:transport-get-unsupported".into())
+    }
 }
 
 /// The real client: `reqwest` behind a short-lived current-thread `tokio`
@@ -218,6 +225,28 @@ impl HttpClient for ReqwestHttpClient {
                 .map_err(|_| "refused:cloudflare-login:transport-client".to_string())?;
             let resp = client
                 .get(&url)
+                .send()
+                .await
+                .map_err(|e| transport_error("get", &e))?;
+            let status = resp.status().as_u16();
+            let body = resp.text().await.map_err(|e| transport_error("get", &e))?;
+            Ok(HttpResponse { status, body })
+        })
+    }
+
+    fn get_with_bearer(&self, url: &str, bearer: &str) -> Result<HttpResponse, String> {
+        let url = url.to_string();
+        let bearer = bearer.to_string();
+        let timeout = self.timeout;
+        run_blocking(async move {
+            let client = reqwest::Client::builder()
+                .timeout(timeout)
+                .user_agent(USER_AGENT)
+                .build()
+                .map_err(|_| "refused:cloudflare-login:transport-client".to_string())?;
+            let resp = client
+                .get(&url)
+                .bearer_auth(&bearer)
                 .send()
                 .await
                 .map_err(|e| transport_error("get", &e))?;
@@ -558,6 +587,26 @@ pub fn exchange(
     returned_state: &str,
     code: &str,
 ) -> Result<Bundle, String> {
+    exchange_with_retry(
+        http,
+        pending,
+        returned_state,
+        code,
+        EXCHANGE_CONNECT_BACKOFF,
+    )
+}
+
+/// Token-exchange attempts when the POST fails to connect (1759-3ezn).
+const EXCHANGE_CONNECT_ATTEMPTS: usize = 3;
+const EXCHANGE_CONNECT_BACKOFF: Duration = Duration::from_millis(750);
+
+fn exchange_with_retry(
+    http: &dyn HttpClient,
+    pending: &Pending,
+    returned_state: &str,
+    code: &str,
+    backoff: Duration,
+) -> Result<Bundle, String> {
     if returned_state != pending.state {
         return Err("refused:cloudflare-login:state-mismatch".to_string());
     }
@@ -568,8 +617,24 @@ pub fn exchange(
         ("code_verifier", pending.verifier.as_str()),
         ("client_id", pending.client_id.as_str()),
     ];
-    let resp = http.post_form(&pending.token_endpoint, &form)?;
-    parse_token_response(&resp)
+    // Only a connect failure is retried: reqwest's is_connect() is hyper's
+    // Kind::Connect, raised when the connector fails, before any request
+    // byte is written, so the single-use code was never sent. A timeout or
+    // body failure may have spent it, so those are returned as they are.
+    let mut attempt = 1;
+    loop {
+        match http.post_form(&pending.token_endpoint, &form) {
+            Ok(resp) => return parse_token_response(&resp),
+            Err(e)
+                if e == "refused:cloudflare-login:transport-post-connect"
+                    && attempt < EXCHANGE_CONNECT_ATTEMPTS =>
+            {
+                attempt += 1;
+                std::thread::sleep(backoff);
+            }
+            Err(e) => return Err(e),
+        }
+    }
 }
 
 /// `grant_type=refresh_token` against `token_endpoint` (the same endpoint
@@ -801,6 +866,9 @@ mod tests {
     struct MockHttpClient {
         get_responses: HashMap<String, HttpResponse>,
         post_responses: HashMap<String, HttpResponse>,
+        /// Transport failures returned, in order, by the next POSTs before
+        /// any stubbed response is served (1759-3ezn).
+        post_failures: RefCell<std::collections::VecDeque<String>>,
         calls: RefCell<Vec<(String, String)>>,
     }
 
@@ -824,6 +892,13 @@ mod tests {
                     body: body.to_string(),
                 },
             );
+            self
+        }
+
+        fn failing_posts(self, failures: &[&str]) -> Self {
+            self.post_failures
+                .borrow_mut()
+                .extend(failures.iter().map(|f| f.to_string()));
             self
         }
 
@@ -851,6 +926,9 @@ mod tests {
             self.calls
                 .borrow_mut()
                 .push(("POST".to_string(), url.to_string()));
+            if let Some(failure) = self.post_failures.borrow_mut().pop_front() {
+                return Err(failure);
+            }
             self.post_responses
                 .get(url)
                 .cloned()
@@ -1147,6 +1225,75 @@ mod tests {
         assert_eq!(bundle.access_token, "at-1");
         assert_eq!(bundle.refresh_token.as_deref(), Some("rt-1"));
         assert_eq!(bundle.expires_in, Some(3600));
+    }
+
+    // ── 1759-3ezn: a connect failure on the exchange is retried ─────────────
+
+    const CONNECT_FAILURE: &str = "refused:cloudflare-login:transport-post-connect";
+
+    fn token_ok_mock() -> MockHttpClient {
+        mock_with_discovery(&["authorization_code", "refresh_token"]).with_post(
+            TOKEN_ENDPOINT,
+            200,
+            &serde_json::json!({"access_token": "at-retry", "expires_in": 3600}).to_string(),
+        )
+    }
+
+    #[test]
+    fn exchange_retries_the_same_code_after_a_connect_failure() {
+        // Operator-observed on yoga 2026-10-17: the first attempt refused
+        // with transport-post-connect, the second (by hand) stored a token.
+        let mock = token_ok_mock().failing_posts(&[CONNECT_FAILURE, CONNECT_FAILURE]);
+        let pending = begin(&mock, "https://fake.invalid", "c", REDIRECT_URI, &[]).unwrap();
+        let bundle = exchange_with_retry(
+            &mock,
+            &pending,
+            &pending.state.clone(),
+            "code",
+            Duration::ZERO,
+        )
+        .expect("a connect failure never sent the code, so the retry completes");
+        assert_eq!(bundle.access_token, "at-retry");
+        assert_eq!(mock.post_call_count(), 3);
+    }
+
+    #[test]
+    fn exchange_gives_up_after_bounded_connect_failures() {
+        let failures = [CONNECT_FAILURE; EXCHANGE_CONNECT_ATTEMPTS];
+        let mock = token_ok_mock().failing_posts(&failures);
+        let pending = begin(&mock, "https://fake.invalid", "c", REDIRECT_URI, &[]).unwrap();
+        let err = exchange_with_retry(
+            &mock,
+            &pending,
+            &pending.state.clone(),
+            "code",
+            Duration::ZERO,
+        )
+        .unwrap_err();
+        assert_eq!(err, CONNECT_FAILURE);
+        assert_eq!(mock.post_call_count(), EXCHANGE_CONNECT_ATTEMPTS);
+    }
+
+    #[test]
+    fn exchange_never_resends_a_code_after_a_post_send_failure() {
+        // NEGATIVE CONTROL: the token endpoint would succeed if reached
+        // again, so only the absence of a retry keeps this an Err. A
+        // timeout or body failure may have spent the single-use code.
+        for kind in ["timeout", "body", "request"] {
+            let failure = format!("refused:cloudflare-login:transport-post-{kind}");
+            let mock = token_ok_mock().failing_posts(&[failure.as_str()]);
+            let pending = begin(&mock, "https://fake.invalid", "c", REDIRECT_URI, &[]).unwrap();
+            let err = exchange_with_retry(
+                &mock,
+                &pending,
+                &pending.state.clone(),
+                "code",
+                Duration::ZERO,
+            )
+            .unwrap_err();
+            assert_eq!(err, failure);
+            assert_eq!(mock.post_call_count(), 1, "{kind} must not resend the code");
+        }
     }
 
     #[test]

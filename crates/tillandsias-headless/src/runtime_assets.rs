@@ -377,6 +377,43 @@ mod tests {
         }
     }
 
+    /// ORDER 1767-5q4b. A browser window plays sound but never captures: the
+    /// chromium-framework image installs a managed policy that denies audio,
+    /// video and screen capture. Measured on yoga 2026-10-17 with this policy:
+    /// getUserMedia({audio:true}) rejects NotAllowedError in 112 ms with no
+    /// prompt, permissions report `denied`, and a CDP
+    /// Browser.grantPermissions(audioCapture) does not lift it.
+    #[test]
+    fn the_chromium_framework_image_denies_capture_by_managed_policy() {
+        let asset = |p: &str| {
+            let a = EMBEDDED_RUNTIME_ASSETS
+                .iter()
+                .find(|a| a.path == p)
+                .unwrap_or_else(|| panic!("{p} is not embedded"));
+            std::str::from_utf8(a.bytes).expect("utf-8").to_string()
+        };
+        let cf = asset("images/chromium/Containerfile.framework");
+        assert!(
+            cf.lines().any(|l| l.trim()
+                == "COPY chromium-capture-policy.json /etc/chromium/policies/managed/tillandsias-capture.json"),
+            "the framework image must install the capture policy into Chromium's managed policy dir"
+        );
+        let policy: serde_json::Value =
+            serde_json::from_str(&asset("images/chromium/chromium-capture-policy.json"))
+                .expect("the capture policy is JSON");
+        for key in [
+            "AudioCaptureAllowed",
+            "VideoCaptureAllowed",
+            "ScreenCaptureAllowed",
+        ] {
+            assert_eq!(
+                policy[key],
+                serde_json::json!(false),
+                "{key} must be false: {policy}"
+            );
+        }
+    }
+
     #[test]
     fn every_containerfile_copy_source_exists_in_embedded_assets() {
         let embedded_paths = EMBEDDED_RUNTIME_ASSETS

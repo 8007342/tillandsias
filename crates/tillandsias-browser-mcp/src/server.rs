@@ -32,6 +32,79 @@ pub struct SessionState {
     pub project_label: String,
 }
 
+/// ORDER 1767-5q4b. The CDP domains `browser.cdp` forwards: the window's own
+/// page, and nothing that reaches past it. Browser.*, Target.*, SystemInfo.*,
+/// Storage.*, Tracing.* and every other domain are refused, because from a
+/// page session they act on the whole browser: Browser.grantPermissions lifts
+/// the microphone prompt, Target.* opens or attaches to other contexts,
+/// Storage.* reads other origins. A domain is added here by name, with why.
+const CDP_PAGE_DOMAINS: &[&str] = &[
+    "Accessibility",
+    "Animation",
+    "CSS",
+    "Console",
+    "DOM",
+    "DOMDebugger",
+    "DOMSnapshot",
+    "Debugger",
+    "Emulation",
+    "Fetch",
+    "HeapProfiler",
+    "Input",
+    "LayerTree",
+    "Log",
+    "Network",
+    "Overlay",
+    "Page",
+    "Performance",
+    "Profiler",
+    "Runtime",
+];
+
+/// Methods inside an allowed domain that still reach past the window.
+const CDP_REFUSED_METHODS: &[(&str, &str)] = &[
+    (
+        "Page.setDownloadBehavior",
+        "it lets the page write downloads to the container",
+    ),
+    (
+        "Network.getAllCookies",
+        "it returns every origin's cookies, not this window's",
+    ),
+    (
+        "Network.clearBrowserCookies",
+        "it clears every origin's cookies",
+    ),
+];
+
+/// Whether a raw CDP call stays on the window's page. `Err` carries why.
+fn cdp_method_allowed(
+    method: &str,
+    browser_level: bool,
+    session: Option<&str>,
+    page: &str,
+) -> Result<(), String> {
+    if browser_level {
+        return Err(
+            "browser-level CDP is not available; raw CDP runs on the window's page session".into(),
+        );
+    }
+    if session.is_some_and(|s| s != page) {
+        return Err("only the window's own page session is reachable".into());
+    }
+    if let Some((_, why)) = CDP_REFUSED_METHODS.iter().find(|(m, _)| *m == method) {
+        return Err((*why).into());
+    }
+    let domain = method.split('.').next().unwrap_or("");
+    if !CDP_PAGE_DOMAINS.contains(&domain) {
+        return Err(format!(
+            "the {domain} domain acts beyond the window's page; allowed domains: {}",
+            CDP_PAGE_DOMAINS.join(", ")
+        ));
+    }
+    Ok(())
+}
+
 /// The MCP server instance.
 ///
 /// **No concurrent-call limit (order 779-dqsv).** This server used to hold a
@@ -377,7 +450,7 @@ impl BrowserMcpServer {
             },
             {
                 "name": "browser.cdp",
-                "description": "Development-mode windows only (browser.open{dev:true}): send any Chrome DevTools Protocol command to the window, on its page session by default (sessionId to pick another, browser_level:true for the browser target), and return CDP's result. Full CDP exposes the window's session cookies (Network.getCookies, Storage.getCookies) and storage to the owning lane, the lane that opened the window, and to no other lane. It does not widen the window's network: the window still reaches only this project's routes.",
+                "description": "Development-mode windows only (browser.open{dev:true}): send a Chrome DevTools Protocol command to the window's page session and return CDP's result. Page-level domains only (Page, Runtime, DOM, CSS, Input, Network, Emulation, Debugger, Log, Console, Overlay and the like); browser-level CDP, other sessions, and domains that act beyond the page (Browser, Target, Storage, SystemInfo, ...) are refused with CDP_METHOD_REFUSED, so a lane cannot grant itself permissions such as the microphone. Page CDP exposes the window's own session cookies (Network.getCookies) to the owning lane, the lane that opened the window, and to no other lane. It does not widen the window's network: the window still reaches only this project's routes.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -893,7 +966,11 @@ impl BrowserMcpServer {
             .get("browser_level")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
-        let session = match args.get("sessionId").and_then(|v| v.as_str()) {
+        let explicit = args.get("sessionId").and_then(|v| v.as_str());
+        if let Err(why) = cdp_method_allowed(method, browser_level, explicit, &page) {
+            return Self::tool_error(id, format!("CDP_METHOD_REFUSED: {method}: {why}"));
+        }
+        let session = match explicit {
             _ if browser_level => None,
             Some(explicit) => Some(explicit.to_string()),
             None => Some(page),
@@ -2939,6 +3016,112 @@ mod tests {
             assert!(
                 tool_text(&got).starts_with("WINDOW_NOT_FOUND:"),
                 "{tool} from lane B: {got}"
+            );
+        }
+    }
+
+    /// ORDER 1767-5q4b. Raw CDP is the page's protocol, not the browser's: a
+    /// browser-level method, a domain outside the page allowlist, a page-domain
+    /// method that reaches past the window, or another session is refused
+    /// BEFORE anything is sent. Browser.grantPermissions(audioCapture) would
+    /// skip the microphone prompt; that is the arm this order exists for.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn raw_cdp_refuses_methods_that_reach_past_the_page() {
+        let host = Arc::new(CdpContainers::default());
+        let lane_a = lane_server(&host);
+        let opened = call_tool(
+            &lane_a,
+            "browser.open",
+            json!({ "url": "https://www.acme.localhost:18443/", "dev": true }),
+        )
+        .await;
+        let window = opened["window_id"].as_str().expect("opened").to_string();
+        let sent_before = host.seen.lock().len();
+        for (name, args) in [
+            (
+                "grantPermissions at browser level",
+                json!({ "method": "Browser.grantPermissions", "params": { "permissions": ["audioCapture"] }, "browser_level": true }),
+            ),
+            (
+                "grantPermissions on the page session",
+                json!({ "method": "Browser.grantPermissions", "params": { "permissions": ["audioCapture"] } }),
+            ),
+            (
+                "setPermission",
+                json!({ "method": "Browser.setPermission", "params": { "permission": { "name": "microphone" }, "setting": "granted" } }),
+            ),
+            (
+                "setDownloadBehavior",
+                json!({ "method": "Browser.setDownloadBehavior", "params": { "behavior": "allow" } }),
+            ),
+            (
+                "Page.setDownloadBehavior",
+                json!({ "method": "Page.setDownloadBehavior", "params": { "behavior": "allow" } }),
+            ),
+            (
+                "createBrowserContext",
+                json!({ "method": "Target.createBrowserContext" }),
+            ),
+            (
+                "attachToTarget",
+                json!({ "method": "Target.attachToTarget", "params": { "targetId": "x" } }),
+            ),
+            ("SystemInfo", json!({ "method": "SystemInfo.getInfo" })),
+            (
+                "Storage of another origin",
+                json!({ "method": "Storage.getCookies" }),
+            ),
+            (
+                "every origin's cookies",
+                json!({ "method": "Network.getAllCookies" }),
+            ),
+            (
+                "clear every origin's cookies",
+                json!({ "method": "Network.clearBrowserCookies" }),
+            ),
+            (
+                "any method at browser level",
+                json!({ "method": "Runtime.evaluate", "params": { "expression": "1" }, "browser_level": true }),
+            ),
+            (
+                "another session",
+                json!({ "method": "Runtime.evaluate", "params": { "expression": "1" }, "sessionId": "not-the-page" }),
+            ),
+        ] {
+            let mut a = args.clone();
+            a["window_id"] = json!(window);
+            let got = call_tool(&lane_a, "browser.cdp", a).await;
+            assert!(
+                tool_text(&got).starts_with("CDP_METHOD_REFUSED:"),
+                "{name}: {got}"
+            );
+        }
+        assert_eq!(
+            host.seen.lock().len(),
+            sent_before,
+            "a refused method must not reach Chromium"
+        );
+        // The page's own protocol is untouched.
+        for (method, params) in [
+            ("Runtime.evaluate", json!({ "expression": "1+1" })),
+            ("Page.reload", json!({})),
+            ("DOM.getDocument", json!({})),
+            (
+                "Input.dispatchMouseEvent",
+                json!({ "type": "mousePressed", "x": 1, "y": 1 }),
+            ),
+            ("Network.getCookies", json!({})),
+        ] {
+            let got = call_tool(
+                &lane_a,
+                "browser.cdp",
+                json!({ "window_id": window, "method": method, "params": params }),
+            )
+            .await;
+            assert!(
+                !tool_text(&got).starts_with("CDP_METHOD_REFUSED:"),
+                "{method} must stay allowed: {got}"
             );
         }
     }

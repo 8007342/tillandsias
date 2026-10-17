@@ -794,7 +794,15 @@ fn vault_tls_leaf_needs_refresh(
         return true;
     }
     match Command::new("openssl")
-        .args(["x509", "-checkend", "86400", "-noout", "-in"])
+        .args([
+            "x509",
+            "-checkend",
+            // 1762-bano: the same 60-day launch margin as the CA, so the leaf
+            // never expires inside a session that the CA outlives.
+            &crate::CERT_MIN_REMAINING_SECS.to_string(),
+            "-noout",
+            "-in",
+        ])
         .arg(cert)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -888,7 +896,9 @@ fn ensure_vault_tls_leaf(certs_dir: &std::path::Path, debug: bool) -> Result<(),
         .args([
             "-CAcreateserial",
             "-days",
-            "30",
+            // 1762-bano: the CA's lifetime. It is re-issued whenever the CA is
+            // newer, so it never outlives the CA that signed it.
+            crate::CA_VALIDITY_DAYS,
             "-sha256",
             "-copy_extensions",
             "copy",
@@ -2099,11 +2109,35 @@ impl VaultCloudflareTokenStore {
     }
 }
 
+/// Order 1770-z575: the Cloudflare store's ONE answer to "Vault is stopped":
+/// start the Vault enclave alone (ensure_vault_running builds or reuses the
+/// single vault image, then launches and unseals it), never the full `--init`
+/// image set. MEASURED on macuahuitl, v56.10.16.2, no tray running: the read
+/// refused vault-unavailable and its remedy sent the operator to `--init`,
+/// which rebuilt every image and froze the desktop, while the write path
+/// already knew how to start Vault by itself.
+fn vault_up_or_start(
+    running: impl FnOnce() -> bool,
+    start: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    if running() {
+        return Ok(());
+    }
+    eprintln!(
+        "note:cloudflare-store:vault-not-running:starting-the-vault-enclave-only (no other image is built or started)"
+    );
+    start().map_err(|_| "vault-start-failed".to_string())
+}
+
 impl CloudflareTokenStore for VaultCloudflareTokenStore {
     fn read_bundle(&self) -> Result<Option<CloudflareTokenBundle>, String> {
-        if !container_running(VAULT_CONTAINER_NAME) {
-            return Err("vault-unavailable".into());
-        }
+        // Start Vault alone when it is stopped (1770-z575); the login reads
+        // here BEFORE anything single-use is spent, so a start that fails
+        // still refuses before the browser step.
+        vault_up_or_start(
+            || container_running(VAULT_CONTAINER_NAME),
+            || ensure_vault_running(self.debug),
+        )?;
         let (_stability, rt, client) = self.client()?;
         let token_rec = match rt.block_on(client.read_secret(CLOUDFLARE_TOKEN_PATH)) {
             Ok(v) => v,
@@ -2144,11 +2178,13 @@ impl CloudflareTokenStore for VaultCloudflareTokenStore {
     }
 
     fn write_record(&self, path: &str, value: serde_json::Value) -> Result<(), String> {
-        if !container_running(VAULT_CONTAINER_NAME) {
-            // Bring Vault itself up (the same idempotent path `--init` uses);
-            // if that fails the write is REFUSED. There is no other store.
-            ensure_vault_running(self.debug).map_err(|_| "vault-unavailable".to_string())?;
-        }
+        // Bring Vault itself up (the same idempotent path `--init` uses, for
+        // Vault alone); if that fails the write is REFUSED. There is no other
+        // store.
+        vault_up_or_start(
+            || container_running(VAULT_CONTAINER_NAME),
+            || ensure_vault_running(self.debug),
+        )?;
         let (_stability, rt, client) = self.client()?;
         rt.block_on(client.write_secret(path, value.clone()))
             .map_err(|e| cloudflare_vault_reason(&e).to_string())?;
@@ -2380,13 +2416,13 @@ pub fn cloudflare_token_rotation_due(expires_at: u64, now: u64) -> bool {
 #[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
 fn cloudflare_rotation_remedy(reason: &str) -> &'static str {
     if reason.starts_with("refresh-record-write-failed") {
-        "the new sign-in could not be stored in Vault and the old refresh token is spent: bring Vault up with `tillandsias --init`, then run `tillandsias --cloudflare-login`"
+        "the new sign-in could not be stored in Vault and the old refresh token is spent: start Tillandsias (the tray) so its Vault is up, then run `tillandsias --cloudflare-login`"
     } else if reason.starts_with("token-record-write-failed") {
         "the new refresh token IS stored; the access-token write is retried automatically"
     } else if reason.starts_with("refresh-refused:") && reason.ends_with(":invalid_grant") {
         "Cloudflare no longer accepts the stored sign-in: run `tillandsias --cloudflare-login`; both stored records were left untouched"
     } else if reason.starts_with("read:") {
-        "Vault is unreachable, sealed or refused the host's token: run `tillandsias --init`; retried automatically"
+        "Vault is unreachable, sealed or refused the host's token: start Tillandsias (the tray) so its Vault is up; retried automatically"
     } else if reason == "lock" {
         "another rotation holds the host lock; retried automatically"
     } else {
@@ -3621,7 +3657,7 @@ fn build_vault_image(debug: bool) -> Result<String, String> {
         return Ok(identity.canonical_tag);
     }
     eprintln!(
-        "[tillandsias-vault] vault image missing — building on demand; run `tillandsias --init` to pre-build it (order 253)"
+        "[tillandsias-vault] vault image missing — building the Vault image alone, on demand (order 253; no other image is built)"
     );
 
     let cache_dir = crate::init_cache_dir()?;
@@ -10492,6 +10528,27 @@ mod cloudflare_token_rotation_tests {
     /// the core `cloudflare_oauth::Bundle`'s DERIVED Debug, which printed the
     /// token; 1505-kc5f's prerequisite replaced it with a redacting impl, and
     /// the core Bundle is now asserted leak-free here too.)
+    /// Order 1774-8j9v: no rotation remedy sends the operator to `--init`,
+    /// which rebuilds every image and froze the operator's desktop (1770-z575).
+    #[test]
+    fn cloudflare_rotation_remedies_never_name_init() {
+        for reason in [
+            "refresh-record-write-failed:vault-sealed",
+            "token-record-write-failed:vault-sealed",
+            "refresh-refused:http-400:invalid_grant",
+            "read:vault-unavailable",
+            "lock",
+            "refresh-transport",
+        ] {
+            let remedy = cloudflare_rotation_remedy(reason);
+            assert!(
+                !remedy.contains(concat!("--", "init")),
+                "{reason}: {remedy}"
+            );
+        }
+        assert!(cloudflare_rotation_remedy("read:vault-unavailable").contains("start Tillandsias"));
+    }
+
     #[test]
     fn cloudflare_token_rotation_never_prints_a_token() {
         const A: &str = "cf-access-SECRET-abcdef012345";
@@ -10946,5 +11003,78 @@ mod cloudflare_token_rotation_tests {
             3,
             "the 400, other-status and still-sealed branches each log Vault's reason"
         );
+    }
+
+    /// Order 1770-z575: with no tray running, `--cloudflare-login` read the
+    /// stored bundle, found the Vault container stopped and refused
+    /// vault-unavailable, sending the operator to `--init` (every image). The
+    /// read must start Vault alone, as the write already did.
+    #[test]
+    fn cloudflare_store_starts_only_vault_on_read_and_write() {
+        let source = std::fs::read_to_string(
+            std::path::PathBuf::from(
+                std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+            )
+            .join("src/vault_bootstrap.rs"),
+        )
+        .expect("vault_bootstrap.rs readable");
+        let store = source
+            .split("impl CloudflareTokenStore for VaultCloudflareTokenStore {")
+            .nth(1)
+            .expect("the Vault-backed Cloudflare store");
+        let read = store
+            .split("fn read_bundle(&self)")
+            .nth(1)
+            .and_then(|rest| rest.split("fn write_record(").next())
+            .expect("read_bundle body");
+        let write = store
+            .split("fn write_record(")
+            .nth(1)
+            .and_then(|rest| rest.split("fn delete_record(").next())
+            .expect("write_record body");
+        // Needle split so this test's own text cannot match it.
+        let needle = concat!("vault_up_or", "_start(");
+        let mut misses = Vec::new();
+        if !read.contains(needle) {
+            misses.push("read_bundle does not start Vault when it is stopped");
+        }
+        if !write.contains(needle) {
+            misses.push("write_record does not use the same start");
+        }
+        assert!(misses.is_empty(), "{}", misses.join("; "));
+    }
+
+    #[test]
+    fn cloudflare_store_starts_only_vault_when_it_is_stopped() {
+        let mut starts = 0;
+        assert_eq!(
+            super::vault_up_or_start(
+                || false,
+                || {
+                    starts += 1;
+                    Ok(())
+                }
+            ),
+            Ok(())
+        );
+        assert_eq!(starts, 1, "a stopped Vault is started exactly once");
+        // A failed start refuses by a fixed word; the caller never proceeds.
+        assert_eq!(
+            super::vault_up_or_start(|| false, || Err("podman: no such image".into())),
+            Err("vault-start-failed".to_string())
+        );
+        // NEGATIVE CONTROL: a running Vault is never started again.
+        let mut started = false;
+        assert_eq!(
+            super::vault_up_or_start(
+                || true,
+                || {
+                    started = true;
+                    Ok(())
+                }
+            ),
+            Ok(())
+        );
+        assert!(!started);
     }
 }

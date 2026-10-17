@@ -70,6 +70,19 @@ m_unset="$(/usr/bin/grep -c 'unset or 1' "$ROOT/methodology.yaml")"
     bad "arm 1: methodology.yaml still says 'unset or 1' ($m_unset)"
 
 cd "$W/cwd" || exit 1
+# ORDER 1764-ca9x: arm 2 drives the run door, which executes what it allows,
+# so it runs a STUB tillandsias by absolute path (the class is decided by the
+# basename). PREMISE: the stub argv is still a soft reset, or arm 2 would be
+# judged on an argv the policy simply allows.
+mkdir -p "$W/bin"
+STUB_T="$W/bin/tillandsias"
+printf '#!/bin/sh\necho "STUB-tillandsias $*"\n' >"$STUB_T"
+chmod +x "$STUB_T"
+pe="$("$PLAN" policy eval -- "$STUB_T" --reset-state 2>/dev/null)"
+if [ "$pe" != "consent:policy:soft-reset" ]; then
+    echo "FAIL: PREMISE — the stub argv left the soft-reset class ([$pe]); refusing to run arm 2" >&2
+    exit 1
+fi
 if [ -e /run/.containerenv ]; then
     skip "arms 2, 3, 4: /run/.containerenv is present, so the evidence says forge; run on bare metal, and see cargo test -p tillandsias-plan --lib bash_policy command_policy"
 else
@@ -80,14 +93,17 @@ else
         [ -n "$pfx" ] || { bad "arms 2-4: $s has no extracted prefix (arm 1 failed)"; continue; }
         read -r -a ENVW <<<"$pfx"
         # ── 2 ───────────────────────────────────────────────────────────────
-        out="$(env "${ENVW[@]}" "$PLAN" policy eval -- tillandsias --reset-state 2>/dev/null)"; rc=$?
+        # ORDER 1764-ca9x: the env pre-authorisation is honoured at the RUN
+        # door (`policy eval` only inspects since 87c7e9bdc). The argv is a STUB
+        # tillandsias by absolute path, so an allowed run never resets anything.
+        r="$(env "${ENVW[@]}" "$PLAN" run --json -- "$STUB_T" --reset-state 2>/dev/null)"; rc=$?
         src="$("$PLAN" json get -r '.consent_source' <<<"$(tail -n 1 "$TILLANDSIAS_POLICY_AUDIT_LOG")" 2>/dev/null)"
-        outu="$(env "${ENVW[0]}" TILLANDSIAS_SKILL=not-a-smoke-skill "$PLAN" policy eval -- tillandsias --reset-state 2>/dev/null)"; rcu=$?
-        if [ "$rc" -eq 0 ] && [ "$out" = "ok:policy:soft-reset:env-preauthorised" ] && [ "$src" = env ] &&
-            [ "$rcu" -eq 4 ] && [ "$outu" = "consent:policy:soft-reset" ]; then
-            ok "arm 2: $s env is env-preauthorised (consent_source=env); an unregistered skill asks"
+        ru="$(env "${ENVW[0]}" TILLANDSIAS_SKILL=not-a-smoke-skill "$PLAN" run --json -- "$STUB_T" --reset-state 2>/dev/null)"; rcu=$?
+        if [ "$rc" -eq 0 ] && [ "$("$PLAN" json get -r '.status' <<<"$r")" = exited ] && [ "$src" = env ] &&
+            [ "$rcu" -eq 4 ] && [ "$("$PLAN" json get -r '.policy.rule_id' <<<"$ru")" = soft-reset ]; then
+            ok "arm 2: $s env runs the reset at the run door (consent_source=env); an unregistered skill asks"
         else
-            bad "arm 2: $s [$out] rc=$rc src=[$src]; unregistered [$outu] rc=$rcu"
+            bad "arm 2: $s run rc=$rc [$r] src=[$src]; unregistered rc=$rcu [$ru]"
         fi
         # ── 3 ───────────────────────────────────────────────────────────────
         "$PLAN" policy classify-bash --command "$pfx tillandsias --reset-state" --cwd "$W/cwd" >/dev/null 2>&1; rp=$?

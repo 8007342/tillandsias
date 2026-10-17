@@ -84,7 +84,13 @@ during the v56.8.31.3 stable promotion):**
   existing tag, skip tag/dispatch/watch (steps 5-7), and instead flip the
   existing release: `gh release edit vX.Y.Z.N --prerelease=false --latest`.
   Verify `/releases/latest` resolves to it. Stable then serves byte-for-byte
-  what was blessed.
+  what was blessed. Use `scripts/promote-stable.sh <tag>`, which also moves
+  the `stable` tag; that push needs no `./build.sh --check`, because a tag on
+  a commit already on origin/main skips the gate stamp (1768-2k56).
+  **Promote only while the land queue is idle.** A promotion during a land
+  run half-promoted on 2026-10-17: the release flipped, the tag push did not.
+  The script now says `refused:stable-tag-push-refused:<sha>` and prints the
+  push that finishes it.
   **Reading a channel tag in a clone? Sync it first** (1271-ff72):
   `git fetch origin '+refs/tags/stable:refs/tags/stable' '+refs/tags/unstable:refs/tags/unstable'`.
   A plain `git fetch --tags` REFUSES to move these two ("would clobber
@@ -329,7 +335,7 @@ content at all. Step 3's local gate is what stands in for it, and it already ran
 against this tree. **But the bump branch still needs its own `./build.sh
 --check` before the push** (measured on the v56.9.2.1 cut, 2026-09-02): the
 pre-push hook compares the gate STAMP against the tree bytes, and the bump
-changes VERSION plus every crate's `Cargo.toml` — so the push is refused with
+changes VERSION — so the push is refused with
 "the tree changed since ./build.sh --check last passed". Run
 `TILLANDSIAS_CLASS_SELECTOR=off TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --check`
 on the bump branch. The selector must be OFF here: since 765-xpct a plain
@@ -340,6 +346,10 @@ has no usable local base"). Measured on the v56.9.23.1 cut, one wasted gate.
 The same applies to the step-5 back-merge gate. Then
 `git add Cargo.lock` and `--amend` it into the bump commit if the check
 touched it (still VERSION + Cargo only, 702-eusw), then push.
+**Corrected 2026-10-17 (order 1768-2k56):** the bump changes VERSION ONLY;
+the crates' `Cargo.toml` versions do not move (measured on the v56.10.16.2
+cut). The `git add` below still names them so a future bump that does touch
+them is not silently left out.
 
 ```bash
 git checkout main
@@ -477,7 +487,10 @@ git fetch origin
 git merge origin/main          # back-merge the VERSION bump; merge, never rebase
 TILLANDSIAS_CLASS_SELECTOR=off TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --check
                                # the merge changed VERSION, so the gate stamp is
-                               # stale and the pushes below would be refused
+                               # stale and the pushes below would be refused.
+                               # MEASURED 2026-10-17 (1768-2k56): this is a ~3 s
+                               # memo hit, not a full gate; the bytes it covers
+                               # already passed step 3's gate
 
 # CLEAR THE FREEZE BEFORE THE BACK-MERGE PUSH, and note WHY it is here rather
 # than at the end of the cut (order 1176-9vqn): the back-merge push below is
@@ -494,7 +507,9 @@ scripts/release-freeze.sh clear "${release_source_branch:-linux-next}"
 
 # NOW both pushes succeed. Order between them does not matter; both are gated
 # on the back-merge above, not on each other. The tag push is unaffected by a
-# freeze either way: the check only looks at refs/heads/*.
+# freeze either way: the check only looks at refs/heads/*. A tag on a commit
+# already on origin/main skips the gate stamp (1768-2k56); release-preflight and
+# the version guard still run on it, which is the 898-zhf3 ordering above.
 git push origin "${new_tag}"
 git push origin "${release_source_branch:-linux-next}"
 ```

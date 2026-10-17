@@ -1417,6 +1417,10 @@ if [ -r "$_tlc_embed_lib" ]; then
     # shellcheck source=lib-embed-endpoint.sh
     source "$_tlc_embed_lib"
     resolve_embed_endpoint >/dev/null 2>&1 || true
+    # ORDER 1747-e9d6: the verdict says WHY an endpoint is unset (unreachable
+    # vs no-curl vs explicit); discarding it left a cold-launch race
+    # unconfirmable. Logged, never printed: this runs at source time.
+    trace_lifecycle "embed-endpoint" "${TILLANDSIAS_EMBED_ENDPOINT_VERDICT:-none}"
 fi
 unset _tlc_embed_lib
 if [ -z "${TILLANDSIAS_EMBED_MODEL:-}" ]; then
@@ -1795,9 +1799,24 @@ ensure_forge_spec_index() {
         echo "[spec-index] skipped (no-ensure-script): ${ensure} absent — this project has no spec index producer"
         return 0
     fi
+    # ORDER 1747-e9d6: the source-time probe races a cold inference service
+    # (3 s ceiling, once). Re-probe here, bounded, before giving up: measured
+    # on yolanda 2026-10-16, the endpoint answered in 29 ms ten minutes after
+    # the launch probe had left it unset for the whole session. Called
+    # directly, never in $(…): its export must reach this shell.
+    if [ -z "${TILLANDSIAS_EMBED_ENDPOINT:-}" ] && declare -F resolve_embed_endpoint >/dev/null; then
+        local reprobe_until
+        reprobe_until=$(( $(date +%s 2>/dev/null || echo 0) + ${FORGE_EMBED_REPROBE_WAIT:-60} ))
+        while :; do
+            resolve_embed_endpoint >/dev/null 2>&1 && break
+            [ "$(date +%s 2>/dev/null || echo 0)" -ge "$reprobe_until" ] && break
+            sleep ${FORGE_EMBED_REPROBE_INTERVAL:-3}
+        done
+        echo "[spec-index] embed endpoint re-probed: ${TILLANDSIAS_EMBED_ENDPOINT_VERDICT:-none}"
+    fi
     ep="${TILLANDSIAS_EMBED_ENDPOINT:-}"
     if [ -z "$ep" ]; then
-        echo "[spec-index] skipped (no-embed-endpoint): TILLANDSIAS_EMBED_ENDPOINT is unset — spec_answer keeps its typed refusal (712-r5x8)"
+        echo "[spec-index] skipped (no-embed-endpoint): TILLANDSIAS_EMBED_ENDPOINT is unset (${TILLANDSIAS_EMBED_ENDPOINT_VERDICT:-no verdict}) — spec_answer keeps its typed refusal (712-r5x8)"
         return 0
     fi
     # A cold inference volume is still PULLING the embed model (the inference

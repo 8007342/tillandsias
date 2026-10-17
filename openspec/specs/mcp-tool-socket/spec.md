@@ -157,3 +157,39 @@ name its reason.
 - **WHEN** a client calls a tool name neither family implements
 - **THEN** the tray replies `-32601` naming the unknown tool
 - **AND** the connection remains open for further requests
+
+### Requirement: Read-only Cloudflare tools hold the sign-in on the host
+<!-- req-id: 5a1fe1ad -->
+
+The socket SHALL also carry the `cloudflare.*` family (order 1772-irs3,
+operator-approved 2026-10-17): `cloudflare.scope_probe` first, then one tool
+per allowlisted Cloudflare API read (accounts, zones, Workers scripts and
+their settings and deployments, Workers Builds triggers, builds and build
+logs, Pages projects and deployments). The process that serves the socket
+SHALL read the Vault-stored Cloudflare sign-in itself, refresh it when due,
+and send the request; the forge SHALL only name a tool and its ids.
+
+- Every tool SHALL be one fixed GET path template. No tool SHALL take a
+  method, path or URL, and any method other than GET SHALL be refused before
+  anything is sent.
+- The account SHALL be the one stored with the sign-in (or the only one
+  Cloudflare lists); a call naming another account SHALL be refused
+  `refused:cloudflare-mcp:account-not-bound`.
+- A read Cloudflare refuses for lack of a scope SHALL be refused
+  `refused:cloudflare-mcp:scope-missing:<scope>` with the remedy.
+- The access and refresh tokens SHALL appear in no tool result, log line or
+  error, and an error SHALL never quote Cloudflare's message text.
+
+@trace spec:mcp-tool-socket, order:1772-irs3
+
+#### Scenario: A forge cannot write to the account
+
+- **WHEN** a client asks for a non-GET, a path, or an unlisted tool
+- **THEN** the call is refused with a named reason
+- **AND** no request reaches Cloudflare
+
+#### Scenario: The token never reaches the forge
+
+- **WHEN** Cloudflare's answer, a 401, a transport error or a malformed body
+  carries the token's text
+- **THEN** the tool's result or error shows `<redacted>` in its place

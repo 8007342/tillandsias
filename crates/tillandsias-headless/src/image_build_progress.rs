@@ -56,6 +56,9 @@ pub struct ImageBuildProgress {
     image: String,
     done: u64,
     total: Option<u64>,
+    /// The step podman last announced: `n`, `m` and its instruction text
+    /// (order 1771-4iw3, so the bar can say which step it is on).
+    step: Option<(u64, u64, String)>,
     now_ms: fn() -> u64,
 }
 
@@ -77,6 +80,7 @@ impl ImageBuildProgress {
             image: image.to_string(),
             done: 0,
             total: None,
+            step: None,
             now_ms,
         }
     }
@@ -104,6 +108,11 @@ impl ImageBuildProgress {
         let before = (self.done, self.total);
         match parse_build_line(line)? {
             BuildSignal::Step { n, m } => {
+                let instruction = line
+                    .trim_start()
+                    .split_once(':')
+                    .map_or("", |(_, rest)| rest.trim());
+                self.step = Some((n, m, instruction.to_string()));
                 // Grow-only: a total that changes (a multi-stage build restarts
                 // its count) never moves `done` backwards.
                 self.total = Some(self.total.map_or(m, |t| t.max(m)));
@@ -129,7 +138,14 @@ impl ImageBuildProgress {
         }
     }
 
-    /// Whole-percent completion for the legacy one-line bar, from real counts.
+    /// The step podman last announced, as `(n, m, what it does)`.
+    pub fn current_step(&self) -> Option<(u64, u64, &'static str)> {
+        self.step
+            .as_ref()
+            .map(|(n, m, instruction)| (*n, *m, step_label(instruction)))
+    }
+
+    /// Whole-percent completion for the one-line bar, from real counts.
     pub fn percent(&self) -> usize {
         match self.total {
             Some(t) if t > 0 => ((self.done * 100) / t) as usize,
@@ -138,18 +154,63 @@ impl ImageBuildProgress {
     }
 }
 
-/// The legacy stdout line, same format as before, now fed by real counts.
-/// Its WORDING is unchanged on purpose: changing user-facing text needs the
-/// operator's approval under spec:tray-ux, which this row does not carry.
-pub fn legacy_bar_line(image: &str, percent: usize) -> String {
-    let filled = (percent.min(100)) / 10;
-    format!(
-        "Pulling image {} [{}{}] {}%",
-        image,
+/// What a build step does, in words, from podman's instruction text. The
+/// first recognised tool in the instruction wins, so a RUN that installs
+/// Python tools and then Node tools reads as the Python step it starts with.
+pub fn step_label(instruction: &str) -> &'static str {
+    let keyword = instruction
+        .split_whitespace()
+        .next()
+        .unwrap_or("")
+        .to_ascii_uppercase();
+    match keyword.as_str() {
+        "FROM" => return "fetching the base image",
+        "COPY" | "ADD" => return "copying files",
+        "ENV" | "ARG" | "LABEL" | "WORKDIR" | "USER" | "EXPOSE" | "ENTRYPOINT" | "CMD"
+        | "VOLUME" | "SHELL" | "STOPSIGNAL" | "HEALTHCHECK" => return "configuring the image",
+        _ => {}
+    }
+    const TOOLS: &[(&str, &str)] = &[
+        ("pip3 install", "installing Python tools"),
+        ("pip install", "installing Python tools"),
+        ("npm install", "installing Node tools"),
+        ("cargo install", "installing Rust tools"),
+        ("rustup", "installing the Rust toolchain"),
+        ("microdnf install", "installing system packages"),
+        ("dnf install", "installing system packages"),
+        ("apk add", "installing system packages"),
+        ("apt-get install", "installing system packages"),
+        ("curl ", "downloading"),
+        ("git clone", "downloading"),
+    ];
+    TOOLS
+        .iter()
+        .filter_map(|(needle, label)| instruction.find(needle).map(|at| (at, *label)))
+        .min_by_key(|(at, _)| *at)
+        .map_or("running a build step", |(_, label)| label)
+}
+
+/// The stdout line for one image's build, fed by real counts.
+///
+/// WORDING APPROVED by the operator, 2026-10-17 (order 1771-4iw3), under
+/// spec:tray-ux. It used to read "Pulling image forge-base [████░░░░░░] 40%"
+/// for a BUILD, and it held that frozen line through a 10-30 min pip stall
+/// without saying which step was running. It now names the step.
+pub fn bar_line(image: &str, percent: usize, step: Option<(u64, u64, &str)>) -> String {
+    let percent = percent.min(100);
+    let filled = percent / 10;
+    let bar = format!(
+        "[{}{}] {}%",
         "█".repeat(filled),
         "░".repeat(10 - filled),
-        percent.min(100)
-    )
+        percent
+    );
+    match step {
+        Some((n, m, what)) if percent < 100 => {
+            format!("Building {image}, step {n}/{m}: {what} {bar}")
+        }
+        _ => format!("Building {image} {bar}"),
+    }
 }
 
 /// One line for the build log, marking a typed event so a reader (and the
@@ -257,16 +318,39 @@ Successfully tagged localhost/pbtest:1\n\
         );
     }
 
+    /// Order 1771-4iw3 (wording approved by the operator, 2026-10-17): the
+    /// bar names the image as BUILT and the step it is on.
     #[test]
-    fn legacy_line_keeps_its_format() {
+    fn bar_line_names_the_step() {
         assert_eq!(
-            legacy_bar_line("forge", 40),
-            "Pulling image forge [████░░░░░░] 40%"
+            bar_line("forge-base", 40, Some((5, 12, "installing Python tools"))),
+            "Building forge-base, step 5/12: installing Python tools [████░░░░░░] 40%"
         );
         assert_eq!(
-            legacy_bar_line("forge", 100),
-            "Pulling image forge [██████████] 100%"
+            bar_line("forge", 100, Some((12, 12, "copying files"))),
+            "Building forge [██████████] 100%"
         );
+        assert_eq!(bar_line("forge", 0, None), "Building forge [░░░░░░░░░░] 0%");
+    }
+
+    #[test]
+    fn step_label_reads_what_the_step_does() {
+        let mut p = ImageBuildProgress::with_clock("forge-base", clock);
+        p.observe("STEP 5/12: RUN rc=0;     timeout \"${PIP_STALL_BUDGET_S}\" pip3 install --timeout 30 pyright     && npm install -g typescript");
+        assert_eq!(p.current_step(), Some((5, 12, "installing Python tools")));
+        for (instruction, label) in [
+            (
+                "FROM registry.fedoraproject.org/fedora-minimal:44",
+                "fetching the base image",
+            ),
+            ("COPY entrypoint.sh /usr/local/bin/", "copying files"),
+            ("ENV CARGO_HOME=/usr/local/cargo", "configuring the image"),
+            ("RUN microdnf install -y git", "installing system packages"),
+            ("RUN npm install -g prettier", "installing Node tools"),
+            ("RUN chmod +x /usr/local/bin/x", "running a build step"),
+        ] {
+            assert_eq!(step_label(instruction), label, "{instruction}");
+        }
     }
 
     #[test]

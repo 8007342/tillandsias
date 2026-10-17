@@ -3544,6 +3544,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Forge browser-claim check passed"
+    # 1762-bano: the enclave CA (a year, unconstrained: squid signs real domains
+    # with it) is never installed in a HOST trust store; only 1761-bvyn's
+    # name-constrained preview CA may be, on a line marked host-trust-ok.
+    _step "Checking no host trust store gets the enclave CA (1762-bano)..."
+    if ! _run_lua_decider "scripts/lua/check-enclave-ca-not-host-trusted.lua" 2>&1; then
+        _error "host code installs a CA into a host trust store (1762-bano) — see the site lines above"
+        exit 1
+    fi
+    _info "Host trust-store check passed"
     # 1713-3v3f: Tillandsias never launches or drives a host browser. Every
     # launcher-shaped call site in crates/ must be on the guard's allowlist at
     # its exact count (only file/app opens, never a URL).
@@ -5286,6 +5295,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Forge Bash policy hook fixture passed"
+
+    # 1762-bano: the host trust-store guard's fixture (live tree, an NSS add
+    # refused, a Rust update-ca-trust refused, a marked preview CA allowed, a
+    # comment ignored).
+    _step "Checking the host trust-store guard's fixture (1762-bano)..."
+    if ! _run_lua_decider "scripts/lua/test-enclave-ca-not-host-trusted.lua" 2>&1; then
+        _error "the host trust-store guard's fixture failed — see the FAIL lines above (1762-bano)"
+        exit 1
+    fi
+    _info "Host trust-store fixture passed"
 
     # 1756-z3kz: the embedded-ELF arch check release.yml runs on every binary:
     # matching images pass, a foreign one is refused by offset, a decoy magic is
