@@ -33104,7 +33104,13 @@ esac
             opencode_web_url("tillandsias.org", 80),
             "http://opencode.tillandsias.org.localhost/"
         );
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let source = std::fs::read_to_string(
+            std::path::PathBuf::from(
+                std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+            )
+            .join("src/main.rs"),
+        )
+        .expect("main.rs readable");
         // Needles are split so this test's own text cannot match them.
         assert!(source.contains(concat!(
             "format!(\"opencode.{}\", router_host",
