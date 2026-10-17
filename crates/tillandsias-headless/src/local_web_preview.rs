@@ -1404,6 +1404,54 @@ fn ensure_router(project: &str, debug: bool) -> Result<PathBuf, String> {
     Ok(ca)
 }
 
+/// ORDER 1762-bano: the projects whose preview leaf in `tls_dir` stays valid for
+/// less than `margin_secs` (an unreadable leaf counts as due). The leaf lives
+/// 7 days and is re-issued on every publish; a preview left running longer
+/// than that without a republish would otherwise serve an expired leaf.
+#[cfg(feature = "tray")]
+pub(crate) fn preview_leaves_due(tls_dir: &Path, margin_secs: u64) -> Vec<String> {
+    let mut due = Vec::new();
+    let Ok(entries) = std::fs::read_dir(tls_dir) else {
+        return due;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("crt") {
+            continue;
+        }
+        let Some(project) = path.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        if !crate::cert_valid_for(&path, margin_secs) {
+            due.push(project.to_string());
+        }
+    }
+    due.sort();
+    due
+}
+
+/// ORDER 1762-bano: re-issue every preview leaf within `margin_secs` of its
+/// notAfter under the unchanged CA, then reload a running router so it serves
+/// them. Silent by design (operator ruling 2026-10-17): the CA does not change,
+/// so nothing that is running loses trust. Returns the renewed projects.
+#[cfg(feature = "tray")]
+pub(crate) fn renew_expiring_preview_leaves(margin_secs: u64) -> Result<Vec<String>, String> {
+    let due = preview_leaves_due(&router_dir().join("preview-tls"), margin_secs);
+    if due.is_empty() {
+        return Ok(due);
+    }
+    let ca = PathBuf::from(crate::ca_dir());
+    for project in &due {
+        prepare_tls(project, &ca)?;
+    }
+    let running =
+        inspect("tillandsias-router")?.is_some_and(|row| row["State"]["Status"] == "running");
+    if running {
+        strict_reload()?;
+    }
+    Ok(due)
+}
+
 fn strict_reload() -> Result<(), String> {
     podman_at(
         Step::Router,
@@ -3410,6 +3458,34 @@ mod tests {
                 .iter()
                 .flatten()
                 .any(|s| s.contains("trust") || s == "-CAcreateserial")
+        );
+    }
+
+    #[cfg(feature = "tray")]
+    #[test]
+    fn a_preview_leaf_inside_the_margin_is_due_and_one_outside_is_not() {
+        let tmp = tempfile::tempdir().unwrap();
+        for (project, days) in [("soon", "1"), ("later", "7")] {
+            let status = std::process::Command::new("openssl")
+                .args([
+                    "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=leaf",
+                ])
+                .args(["-days", days, "-keyout"])
+                .arg(tmp.path().join(format!("{project}.key")))
+                .arg("-out")
+                .arg(tmp.path().join(format!("{project}.crt")))
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .unwrap();
+            assert!(status.success());
+        }
+        std::fs::write(tmp.path().join("broken.crt"), "not a certificate\n").unwrap();
+        // 48 h margin: the 1-day leaf and the unreadable one are due; the 7-day
+        // leaf and the .key files are not.
+        assert_eq!(
+            preview_leaves_due(tmp.path(), 48 * 60 * 60),
+            vec!["broken".to_string(), "soon".to_string()]
         );
     }
 

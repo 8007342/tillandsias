@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: a-tray-that-stays-running-past-the-tillandsias-ca-renewal-window-never-rotates-the-ca-or-the-vault-leaf-so-it-serves-them-after-notafter
+    event:
+      type: list-replace
+      ts: "2026-10-17T06:13:28Z"
+      agent_id: linux-lenovinha-claude-20261017t061327z
+      host: lenovinha
+      field: exit_criteria
+      items:
+        - "AMENDED 2026-10-17 by OPERATOR RULING (asked directly; the tray menu is under their UX approval), superseding the coordinator's options A and B. A launch re-mints the enclave CA, and the Vault leaf it signs, whenever less than 60 days would remain, to a 365-day validity. Decided from notAfter (openssl -checkend), not file mtimes. A unit test over today's 30-day CA is red with the old 25-day mtime rule. This is the arm that must ship before 2026-10-29: installing the release restarts every tray, which re-mints."
+        - "A running tray NEVER swaps the CA. Option A, a coordinated in-session rotation, and B's restart prompt and menu item were dropped: every running container fixes its trust at start (the proxy signs with the CA key, forges and mirrors mount the bundle, Vault reads its leaf from a podman secret), so a mid-session CA breaks them sooner than expiry would. The resident hourly check renews preview leaves within 48 h under the unchanged CA and reloads the router, silently. Only when the CA or the Vault leaf is within 72 h does it show \"Restart Tillandsias to renew its security certificates\" (a notification, at most once a day), with no menu item. Unit tests cover the selections."
+        - "The enclave CA, a year and unconstrained because squid signs real domains with it, is never installed in a HOST trust store. scripts/lua/check-enclave-ca-not-host-trusted.lua refuses any host trust-store install not marked host-trust-ok (only 1761-bvyn's name-constrained preview CA may be). Its fixture has a mutation arm: an NSS add of the enclave CA is refused."
+        - "Live, after the release: a host holding a 30-day CA relaunches on the new version and its intermediate.crt and vault.crt read notAfter about a year out."
+      summary: |-
+        operator ruling 2026-10-17: 1-year enclave CA renewed at launch with a 60-day margin, silent leaf renewal, no menu item; the coordinator option A and B were dropped because a mid-session CA breaks running containers

@@ -794,7 +794,15 @@ fn vault_tls_leaf_needs_refresh(
         return true;
     }
     match Command::new("openssl")
-        .args(["x509", "-checkend", "86400", "-noout", "-in"])
+        .args([
+            "x509",
+            "-checkend",
+            // 1762-bano: the same 60-day launch margin as the CA, so the leaf
+            // never expires inside a session that the CA outlives.
+            &crate::CERT_MIN_REMAINING_SECS.to_string(),
+            "-noout",
+            "-in",
+        ])
         .arg(cert)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -888,7 +896,9 @@ fn ensure_vault_tls_leaf(certs_dir: &std::path::Path, debug: bool) -> Result<(),
         .args([
             "-CAcreateserial",
             "-days",
-            "30",
+            // 1762-bano: the CA's lifetime. It is re-issued whenever the CA is
+            // newer, so it never outlives the CA that signed it.
+            crate::CA_VALIDITY_DAYS,
             "-sha256",
             "-copy_extensions",
             "copy",
