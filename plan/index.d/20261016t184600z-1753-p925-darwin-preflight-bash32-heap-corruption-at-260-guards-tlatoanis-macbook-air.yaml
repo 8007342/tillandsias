@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-16, found while gating 1716-t2gi.
+packets:
+  - packet_id: on-darwin-build-sh-preflight-crashes-bash-3-2-with-heap-corruption-once-the-gate-roster-reaches-260-guards-so-one-more-gate-step-turns-every-mac-preflight-into-exit-133
+    order: 1753-p925
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: S
+    pickup_role: any
+    capability_tags: [build, preflight, macos, bash, portability, fail-loud]
+    related: [1716-t2gi, 1614-5x7m, 1650-fb7z]
+    title: |
+      On darwin, `./build.sh --preflight` exits 133 (SIGTRAP) once the gate roster reaches 260 guards: /bin/bash 3.2 aborts on heap corruption inside realloc entered from a signal handler. Trunk sits at 259, so the next host to add any gate step makes every Mac preflight end in a bash crash after its verdict line
+    context: |
+      MEASURED 2026-10-16 on tlatoanis-macbook-air (macOS 27.0.1, /bin/bash 3.2), from trunk 2ad994748:
+      - Trunk as it is: sum=259, exit 0.
+      - Trunk plus ONE trivial staged gate step (a Lua guard that only emits ok, 895-1716-t2gi): sum=260, exit 133. The 1716-t2gi branch (2 new steps): sum=261, exit 133, every run. Removing the fixture step, the refresh script, or every byte of the guard's output did not change it; only the roster size did.
+      - In every crashing run the summary line prints normally (partial:preflight ... refused=0) and the crash comes after it, in the exit path.
+      - ~/Library/Logs/DiagnosticReports has six bash-2026-10-16-*.ips crash reports, one per run with 260 or more guards and none for 259. Each says: EXC_BREAKPOINT / SIGTRAP, asi "BUG IN CLIENT OF LIBMALLOC: memory corruption of free block". The faulting stack is malloc_type_realloc, then _sigtramp, then bash frames.
+      HYPOTHESIS, not established: bash 3.2's job table grows by realloc, and a SIGCHLD handler that runs during that realloc is not reentrant. The door launches one background job per guard (build.sh ~1454: the EXIT trap kills and waits on the launcher and lane pids), so 260 jobs crosses a growth point. bash 5 (Linux hosts) is not affected as far as measured; only darwin's /bin/bash 3.2 crashed.
+      Impact: the verdict is printed before the crash, so refused=0 still reads correctly. But the exit code is wrong, so any caller keyed on the exit status fails. And the crash is silent unless someone reads the exit code.
+    exit_criteria:
+      - "a darwin preflight with a roster of 261 or more guards exits 0 (or its real verdict's code) with no bash crash report; measured with the 1716-t2gi branch or a staged dummy step, before and after"
+      - "a fixture or check pins the cause, not the number: e.g. the door reaps its finished guard jobs as it goes, so the job table stays bounded, and a test runs the door over N >= 300 trivial guards under /bin/bash 3.2 and asserts exit 0"
+      - "build.sh reports a crashed door as its own named verdict instead of a bare 133"
+    unscoreable: "needs darwin /bin/bash 3.2; the dummy-step reproduction above is the red arm"
+    next_action: >
+      Reproduce with the staged dummy step (scripts/lua/check-zz-dummy.lua plus 895-*.step; see context). Then find which job/array growth in the --preflight door the crash lands in (bash -x on the EXIT trap, or bisect the roster size against a reaping `wait` per batch), and keep the door's job table bounded.
+    events:
+      - type: filed
+        ts: "2026-10-16T18:46:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Darwin preflight exits 133 once the roster reaches 260 guards: bash 3.2 heap corruption (realloc in a signal handler), six crash reports, a trivial dummy step reproduces it. Trunk is at 259. Blocks 1716-t2gi's landing on darwin hosts.

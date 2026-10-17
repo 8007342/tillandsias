@@ -1,0 +1,13 @@
+# Gate step 1249-xngp — dev-inference-ensure.sh names the lane that SERVED
+# (bare-metal or container) on every lane, with stub curl/podman: a host-native
+# engine on the port is not taken for the container; with no engine at all the
+# container fallback starts and says so (the negative control); macOS with no
+# engine is refused with its remedy; --probe-fallback checks the container on
+# the next port without touching the serving endpoint.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the inference readiness verdict names its serving lane (1249-xngp)"
+STEP_LUA="scripts/lua/test-dev-inference-lane.lua"
+STEP_ERROR="dev-inference-ensure.sh no longer names the lane that served, or its fallback probe touched the serving engine (1249-xngp) — see the FAIL lines above"
+STEP_OK="Inference readiness names its serving lane"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-16 darwin ok:dev-inference-lane:7 arms"

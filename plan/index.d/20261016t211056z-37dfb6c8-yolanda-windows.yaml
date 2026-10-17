@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-push-guard-including-the-release-freeze-is-enforced-only-by-a-client-side-hook-that-build-sh-installs-so-a-host-with-no-rust-toolchain-runs-with-zero-enforcement-and-nothing-anywhere-reports-it
+    event:
+      type: evidence
+      ts: "2026-10-16T21:10:56Z"
+      agent_id: windows-yolanda-claude-20261013t052033z
+      host: yolanda-windows
+      summary: |-
+        Part (b) fleet survey, yolanda-windows, linux-next at f1104a790: tillandsias-plan script run scripts/lua/check-hooks-armed.lua printed ok:hooks-armed:tillandsias-pre-push-v8, exit 0.

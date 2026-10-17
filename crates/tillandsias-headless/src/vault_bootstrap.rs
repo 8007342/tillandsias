@@ -1251,6 +1251,28 @@ pub fn store_github_token_bundle(
         .map_err(|e| format!("could not store the rotated access token: {e}"))
 }
 
+/// 1742-zg7r: the Vault container must be running for a read to mean anything.
+fn github_store_reachable(vault_running: bool) -> Result<(), String> {
+    if vault_running {
+        Ok(())
+    } else {
+        Err("vault-unavailable".into())
+    }
+}
+
+/// 1742-zg7r: what one GitHub record read means for the rotation. Only
+/// NotFound is "absent"; every other failure is a reason, so the scheduler
+/// retries on the error backoff instead of believing there is no token.
+fn github_vault_read(
+    res: Result<serde_json::Value, VaultError>,
+) -> Result<Option<serde_json::Value>, String> {
+    match res {
+        Ok(v) => Ok(Some(v)),
+        Err(VaultError::NotFound(_)) => Ok(None),
+        Err(e) => Err(cloudflare_vault_reason(&e).into()),
+    }
+}
+
 /// The live store: Vault through the root token, the same client the rest of
 /// this module uses.
 pub struct VaultGitHubTokenStore {
@@ -1260,20 +1282,21 @@ pub struct VaultGitHubTokenStore {
 impl GitHubTokenStore for VaultGitHubTokenStore {
     fn read_bundle(&self) -> Result<Option<GitHubTokenBundle>, String> {
         let debug = self.debug;
-        if !container_running(VAULT_CONTAINER_NAME) {
-            return Ok(None);
-        }
+        // 1742-zg7r: a Vault that is not up yet is UNREACHABLE, not empty.
+        // Answering Ok(None) made the scheduler report `no-token` and wait the
+        // full check interval at every tray start, because the tray starts the
+        // rotation before it starts Vault; Err takes the 60 s error backoff.
+        // The Cloudflare store already fails closed the same way.
+        github_store_reachable(container_running(VAULT_CONTAINER_NAME))?;
         let _stability = vault_stability_lease(debug)?;
         let rt = tokio_runtime()?;
         let base_url = vault_api_base_url();
-        let root_token = match read_and_handover_root_token(debug) {
-            Ok(t) => t,
-            Err(_) => return Ok(None),
-        };
+        let root_token = read_and_handover_root_token(debug)
+            .map_err(|_| "vault-root-token-unavailable".to_string())?;
         let client = vault_client(&base_url, &root_token, debug)?;
-        let secret = match rt.block_on(client.read_secret(GITHUB_TOKEN_PATH)) {
-            Ok(s) => s,
-            Err(_) => return Ok(None),
+        let Some(secret) = github_vault_read(rt.block_on(client.read_secret(GITHUB_TOKEN_PATH)))?
+        else {
+            return Ok(None);
         };
         let token = match secret["token"].as_str() {
             Some(t) if !t.is_empty() => t.to_string(),
@@ -1281,7 +1304,8 @@ impl GitHubTokenStore for VaultGitHubTokenStore {
         };
         // An absent refresh record is a legitimate state (a token-only login);
         // a read error is not the same thing and is reported as one.
-        let refresh = rt.block_on(client.read_secret(GITHUB_REFRESH_PATH)).ok();
+        let refresh = github_vault_read(rt.block_on(client.read_secret(GITHUB_REFRESH_PATH)))
+            .map_err(|e| format!("refresh-{e}"))?;
         let refresh_token = refresh
             .as_ref()
             .and_then(|r| r["refresh_token"].as_str())
@@ -1938,6 +1962,23 @@ pub trait CloudflareTokenStore {
     /// CONFIRM it is gone. Idempotent: an absent record is `Ok`. Unreachable,
     /// sealed or refusing is `Err` — never read as "already deleted".
     fn delete_record(&self, path: &str) -> Result<(), String>;
+}
+
+/// Order 1719-83po: is a Cloudflare login stored? `Ok(true)`/`Ok(false)` only
+/// when Vault answered, `Err` when it could not be read. The bundle is
+/// dropped here: only the boolean leaves this function, and only that crosses
+/// the control wire (`CloudflareLoginStatusReply`).
+// Called by the vsock handler; the Linux tray joins in 1719-83po slice 4.
+#[cfg_attr(not(feature = "listen-vsock"), allow(dead_code))]
+pub fn cloudflare_login_stored_in(store: &dyn CloudflareTokenStore) -> Result<bool, String> {
+    store.read_bundle().map(|bundle| bundle.is_some())
+}
+
+/// [`cloudflare_login_stored_in`] against the live Vault.
+// Called by the vsock handler; the Linux tray joins in 1719-83po slice 4.
+#[cfg_attr(not(feature = "listen-vsock"), allow(dead_code))]
+pub fn cloudflare_login_stored_live(debug: bool) -> Result<bool, String> {
+    cloudflare_login_stored_in(&VaultCloudflareTokenStore { debug })
 }
 
 /// Delete the Cloudflare bundle (1505-kc5f `--cloudflare-logout`): the
@@ -7403,6 +7444,81 @@ mod tests {
         );
     }
 
+    /// 1742-zg7r: the live store's two decisions, each a pure function so the
+    /// gate can run them. A Vault that is not up is a REASON, not an absence.
+    #[test]
+    fn github_rotation_store_reports_an_unreachable_vault_as_a_reason() {
+        assert_eq!(
+            github_store_reachable(false),
+            Err("vault-unavailable".to_string())
+        );
+        assert_eq!(github_store_reachable(true), Ok(()));
+        let absent = github_vault_read(Err(VaultError::NotFound("secret/github/token".into())));
+        assert_eq!(absent, Ok(None), "only NotFound means there is no token");
+        for (err, reason) in [
+            (
+                VaultError::Network("connection refused".into()),
+                "vault-unavailable",
+            ),
+            (VaultError::Sealed("sealed".into()), "vault-sealed"),
+            (VaultError::Unauthorized("403".into()), "vault-unauthorized"),
+        ] {
+            assert_eq!(github_vault_read(Err(err)), Err(reason.to_string()));
+        }
+    }
+
+    /// 1742-zg7r, the field shape: the tray starts the rotation before Vault.
+    /// A store that is not up yet, then up with an EXPIRED token, must rotate
+    /// on the 60 s error backoff, not after the 15 min check interval. Before
+    /// the fix the first read was Ok(None) -> NoToken -> a 15 min wait.
+    #[test]
+    fn github_rotation_retries_on_the_error_backoff_until_vault_is_up() {
+        struct NotUpYet {
+            up: std::cell::Cell<bool>,
+            inner: SharedStore,
+        }
+        impl GitHubTokenStore for NotUpYet {
+            fn read_bundle(&self) -> Result<Option<GitHubTokenBundle>, String> {
+                github_store_reachable(self.up.get())?;
+                self.inner.read_bundle()
+            }
+            fn write_record(&self, path: &str, value: serde_json::Value) -> Result<(), String> {
+                self.inner.write_record(path, value)
+            }
+        }
+        let store = NotUpYet {
+            up: std::cell::Cell::new(false),
+            inner: SharedStore::with(&bundle_expiring_at(NOW - 60)),
+        };
+        let lock = test_lock("zg7r");
+        let check = || {
+            rotate_github_token_if_due(
+                &store,
+                &fresh_pair,
+                NOW,
+                false,
+                &lock,
+                std::time::Duration::from_secs(5),
+                false,
+            )
+        };
+        let first = check();
+        assert!(
+            matches!(&first, Err(e) if e.contains("vault-unavailable")),
+            "Vault not up must be an error, got {first:?}"
+        );
+        assert_eq!(
+            github_rotation_next_delay(&first, Duration::ZERO),
+            Duration::from_secs(60),
+            "an unreachable Vault is retried on the error backoff"
+        );
+        store.up.set(true);
+        assert!(
+            matches!(check(), Ok(DueCheck::Rotated { .. })),
+            "once Vault is up the expired token rotates on the next check"
+        );
+    }
+
     /// Criterion 7, the other half: the token record the git-mirror service can
     /// read never carries the refresh token.
     #[test]
@@ -9736,6 +9852,45 @@ mod tests {
 // real Cloudflare). The fake-driven tests are `#[ignore]`d so a plain
 // `cargo test` needs no fake binary; scripts/test-cloudflare-token-rotation.sh
 // builds the fake and runs them by name.
+/// Order 1719-83po: the presence check is three-valued, and an unreadable
+/// Vault is never reported as "no login" (the tray would offer a login that
+/// may already exist).
+#[cfg(test)]
+mod cloudflare_login_presence_tests {
+    use super::*;
+
+    struct Fixed(Result<Option<CloudflareTokenBundle>, String>);
+    impl CloudflareTokenStore for Fixed {
+        fn read_bundle(&self) -> Result<Option<CloudflareTokenBundle>, String> {
+            self.0.clone()
+        }
+        fn write_record(&self, _: &str, _: serde_json::Value) -> Result<(), String> {
+            unreachable!("a presence check never writes")
+        }
+        fn delete_record(&self, _: &str) -> Result<(), String> {
+            unreachable!("a presence check never deletes")
+        }
+    }
+
+    #[test]
+    fn presence_is_stored_absent_or_unknown() {
+        let bundle = CloudflareTokenBundle {
+            access_token: "at".into(),
+            expires_at: None,
+            account_id: None,
+            client_id: "c".into(),
+            refresh_token: None,
+            refresh_token_expires_at: None,
+        };
+        assert_eq!(
+            cloudflare_login_stored_in(&Fixed(Ok(Some(bundle)))),
+            Ok(true)
+        );
+        assert_eq!(cloudflare_login_stored_in(&Fixed(Ok(None))), Ok(false));
+        assert!(cloudflare_login_stored_in(&Fixed(Err("vault sealed".into()))).is_err());
+    }
+}
+
 #[cfg(test)]
 mod cloudflare_token_rotation_tests {
     use super::*;
@@ -10737,5 +10892,59 @@ mod cloudflare_token_rotation_tests {
         ));
         let v = audit_policy_dir(&dir);
         assert!(v.is_empty(), "policy violations:\n{}", v.join("\n"));
+    }
+
+    /// ORDER 1751-ipuw: every unseal failure logs what VAULT said, never key
+    /// material. "HTTP 400: wrong key" was the entrypoint's assumption, with
+    /// Vault's own reason discarded, so two field failures could not say what
+    /// Vault refused. This runs the entrypoint's REAL function text in bash.
+    #[test]
+    fn unseal_failures_log_vaults_own_errors_and_never_key_material() {
+        let entrypoint = include_str!("../../../images/vault/entrypoint.sh");
+        let func: String = entrypoint
+            .split("# BEGIN unseal_error_detail")
+            .nth(1)
+            .and_then(|rest| rest.split_once('\n').map(|(_, body)| body))
+            .and_then(|rest| rest.split("# END unseal_error_detail").next())
+            .expect("entrypoint defines unseal_error_detail between its markers")
+            .to_string();
+        let run = |body: &str| -> String {
+            let out = std::process::Command::new("bash")
+                .arg("-c")
+                .arg(format!("{func}\nunseal_error_detail \"$1\""))
+                .arg("bash")
+                .arg(body)
+                .output()
+                .expect("run bash");
+            assert!(out.status.success(), "{:?}", out);
+            String::from_utf8(out.stdout).unwrap()
+        };
+        assert_eq!(
+            run(r#"{"errors":["Vault is sealed","invalid key"]}"#),
+            "Vault is sealed; invalid key"
+        );
+        let hex_key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let b64_key = "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVphYmNkZWZnaGlqa2xtbm9wcQ==";
+        let leaked = run(&format!(
+            r#"{{"errors":["key {hex_key}","b64 {b64_key}"]}}"#
+        ));
+        assert!(
+            !leaked.contains(hex_key) && !leaked.contains(b64_key),
+            "{leaked}"
+        );
+        assert!(leaked.contains("<redacted:hex>") && leaked.contains("<redacted:b64>"));
+        assert_eq!(run("not json"), "(no errors array in Vault's response)");
+        // Every FATAL unseal branch logs it.
+        let unseal = entrypoint
+            .split("# Step 4: Unseal.")
+            .nth(1)
+            .expect("the unseal step");
+        assert_eq!(
+            unseal
+                .matches(r#"log "vault said: $(unseal_error_detail "$RESPONSE")""#)
+                .count(),
+            3,
+            "the 400, other-status and still-sealed branches each log Vault's reason"
+        );
     }
 }

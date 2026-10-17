@@ -71,7 +71,8 @@ use std::sync::Mutex;
 
 use tillandsias_host_shell::menu_action::{self, MenuAction};
 use tillandsias_host_shell::menu_state::{
-    self, GithubLoginState, MenuItem, MenuState, MenuStructure, ProjectEntry, SelectedAgent,
+    self, CloudflareLoginState, GithubLoginState, MenuItem, MenuState, MenuStructure, ProjectEntry,
+    SelectedAgent,
 };
 use tillandsias_host_shell::provisioning::{ProvisionPhase, ProvisionProgress};
 use tillandsias_host_shell::pty::{PtyIntent, intent_for_action, launch_spec};
@@ -2799,6 +2800,7 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
         // after Subscribe", and the tick loop's fallback poll already
         // covered it while the subscription was down.
         refresh_github_login(hwnd).await;
+        refresh_cloudflare_login(hwnd).await;
         refresh_cloud_projects(hwnd).await;
 
         // ORDER 1439-p853: guest progress through the 1420-9vpk renderer. The
@@ -3068,6 +3070,61 @@ async fn refresh_github_login(hwnd: HwndHandle) {
             );
         }
     }
+}
+
+/// Order 1719-83po slice 5: write an observed Cloudflare login state into the
+/// shared menu state with the rule every asking tray uses
+/// (`CloudflareLoginState::settled_by`).
+fn apply_cloudflare_login(observed: CloudflareLoginState) {
+    if let Ok(mut guard) = MENU_STATE.lock() {
+        let menu = guard.get_or_insert_with(MenuState::initial);
+        let next = menu.cloudflare_login.settled_by(observed);
+        if menu.cloudflare_login != next {
+            tracing::info!(from = ?menu.cloudflare_login, to = ?next, "cloudflare sign-in state resolved");
+            menu.cloudflare_login = next;
+        }
+    }
+}
+
+/// Order 1719-83po slice 5: ask the in-VM headless whether a Cloudflare login
+/// is stored. The token lives in the guest's Vault, so, like
+/// `refresh_github_login`, this asks over HvSocket. It runs only on events:
+/// the push subscription coming up, and the confirm round after the login
+/// console exits (or a fallback round while pushes are down). An older guest
+/// answers Error, which leaves the state Unknown (the row shown disabled),
+/// never "signed out".
+async fn refresh_cloudflare_login(hwnd: HwndHandle) {
+    use tillandsias_control_wire::ControlMessage;
+
+    let observed = match live_client_request(
+        "cloudflare login refresh",
+        |seq| ControlMessage::CloudflareLoginStatusRequest { seq },
+        hwnd,
+    )
+    .await
+    {
+        Some(reply) => match reply.body {
+            ControlMessage::CloudflareLoginStatusReply { logged_in, .. } => {
+                CloudflareLoginState::from_reply(logged_in)
+            }
+            ControlMessage::Error { code, message, .. } => {
+                tracing::debug!(
+                    "cloudflare login refresh: {}",
+                    describe_wire_error(code, &message)
+                );
+                CloudflareLoginState::Unknown
+            }
+            other => {
+                tracing::debug!(
+                    "cloudflare login refresh: unexpected reply variant {}",
+                    other.kind()
+                );
+                CloudflareLoginState::Unknown
+            }
+        },
+        None => CloudflareLoginState::Unknown,
+    };
+    apply_cloudflare_login(observed);
 }
 
 /// Parse the SHA-256 pin for `key` (e.g. `"x86_64.tar"`) out of the embedded
@@ -4092,6 +4149,10 @@ fn spawn_provisioning(hwnd: HWND) {
                                     // Linux in-process is_github_logged_in gate;
                                     // plan vault-flow/xplat-gating-parity).
                                     refresh_github_login(hwnd).await;
+                                    // 1719-83po slice 5: the Cloudflare login
+                                    // has no push, so this round is also how
+                                    // the login console's exit is confirmed.
+                                    refresh_cloudflare_login(hwnd).await;
                                 }
 
                                 if fast_poll > 0 {
@@ -4529,8 +4590,9 @@ fn dispatch_action(hwnd: HWND, action: MenuAction) {
         | MenuAction::OpenOpenCodeWeb
         | MenuAction::ProjectObservatorium { .. }
         | MenuAction::ProjectOpenCodeWeb { .. } => {
-            // ShellExecute to the observatorium / OpenCode-Web URL lands with
-            // the router/VM (gui-passthrough); there is no URL until then.
+            // Order 1713-3v3f: these never open the host's browser. When they
+            // land they open in the dev browser (host-browser browser.open, a
+            // WSLg container window); until then there is nothing to open.
             tracing::info!(
                 ?action,
                 "browser action: no URL until the VM + router are up (gui-passthrough pending)"
@@ -4578,6 +4640,18 @@ fn dispatch_action(hwnd: HWND, action: MenuAction) {
                 request_fast_poll_burst(5);
             }
             launch_open_shell_terminal(&action);
+        }
+        // Order 1719-83po slice 5: the row is an action only while the guest
+        // said no login is stored (LoggedOut). Show "Logging in…" at once;
+        // the console's exit confirms the outcome (launch_cloudflare_login).
+        MenuAction::CloudflareLogin => {
+            if let Ok(mut guard) = MENU_STATE.lock() {
+                let state = guard.get_or_insert_with(MenuState::initial);
+                if state.cloudflare_login == CloudflareLoginState::LoggedOut {
+                    state.cloudflare_login = CloudflareLoginState::LoggingIn;
+                }
+            }
+            launch_cloudflare_login();
         }
         MenuAction::CloudOverflow | MenuAction::Inert => {}
     }
@@ -4738,6 +4812,15 @@ pub(crate) fn launch_pty(intent: &PtyIntent, project: Option<&str>) -> Result<()
 /// verbatim via CreateProcess — no wt.exe command-line re-parse in the chain.
 /// Used for the login lane; identical to `spawn_wsl_terminal`'s fallback arm.
 fn spawn_wsl_console(distro: &str, in_vm_argv: &[String]) -> std::io::Result<()> {
+    spawn_wsl_console_child(distro, in_vm_argv).map(|_| ())
+}
+
+/// `spawn_wsl_console`, keeping the child so a caller can act when the console's
+/// command exits (the Cloudflare login's confirm round, 1719-83po slice 5).
+fn spawn_wsl_console_child(
+    distro: &str,
+    in_vm_argv: &[String],
+) -> std::io::Result<std::process::Child> {
     const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
     // Encoding policy from the shared constructor; the VISIBLE console is the
     // deliberate part here, so no no_window_sync.
@@ -4748,7 +4831,45 @@ fn spawn_wsl_console(distro: &str, in_vm_argv: &[String]) -> std::io::Result<()>
         .args(in_vm_argv)
         .creation_flags(CREATE_NEW_CONSOLE)
         .spawn()
-        .map(|_| ())
+}
+
+/// Order 1719-83po slice 5: open the Cloudflare login in its own console and
+/// confirm the outcome on the console's EXIT, not on a timer.
+///
+/// Like GitHub Login it runs an INJECTED wrapper by bare path
+/// (`wsl_lifecycle::CLOUDFLARE_LOGIN_WRAPPER_PATH`) in a plain conhost: the
+/// shared `bash -lc '<script>'` intent argv carries quotes and parentheses,
+/// which is the shape that arrived mangled on Windows before (Esmeralda,
+/// 2026-08-09). A waiter thread holds the child; when it exits, one
+/// fast-poll round asks the guest (`refresh_cloudflare_login`) and settles
+/// the row. A failed spawn ends the local LoggingIn at once.
+fn launch_cloudflare_login() {
+    let argv = [crate::wsl_lifecycle::CLOUDFLARE_LOGIN_WRAPPER_PATH.to_string()];
+    tracing::info!(
+        terminal = "conhost",
+        intent = ?PtyIntent::CloudflareLogin,
+        project = "-",
+        "spawning in-VM PTY"
+    );
+    match spawn_wsl_console_child(crate::wsl_lifecycle::DISTRO_NAME, &argv) {
+        Ok(mut child) => {
+            let spawned = std::thread::Builder::new()
+                .name("cloudflare-login-wait".into())
+                .spawn(move || {
+                    let status = child.wait();
+                    tracing::info!(?status, "cloudflare login console exited; confirming");
+                    request_fast_poll_burst(1);
+                });
+            if let Err(err) = spawned {
+                tracing::warn!(%err, "cloudflare login: no waiter thread; confirming now");
+                request_fast_poll_burst(1);
+            }
+        }
+        Err(err) => {
+            tracing::error!(%err, "failed to open the Cloudflare login console");
+            apply_cloudflare_login(CloudflareLoginState::Unknown);
+        }
+    }
 }
 
 fn terminal_title(intent: &PtyIntent, project: Option<&str>) -> String {

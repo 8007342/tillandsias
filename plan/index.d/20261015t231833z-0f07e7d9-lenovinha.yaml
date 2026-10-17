@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-start-a-new-project-skill-ships-in-the-forge-image-but-the-opencode-agent-does-not-list-it
+    field: status
+    value: completed
+    ts: "2026-10-15T23:18:33Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-start-a-new-project-skill-ships-in-the-forge-image-but-the-opencode-agent-does-not-list-it
+    event:
+      type: completed
+      ts: "2026-10-15T23:18:33Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: PR #461 landed as cf712b4e2 on linux-next: entrypoint-forge-opencode.sh calls load_agent_profile and the profile links OpenCode's copy into ~/.config/opencode/skills. Fixture scripts/lua/test-forge-agents-discover-generic-skills.lua (bound in litmus-forge-entrypoints-source-agent-profile) is red 3/4 on the pre-fix tree and green after. The live in-forge listing is to be re-checked by the next cut's smoke

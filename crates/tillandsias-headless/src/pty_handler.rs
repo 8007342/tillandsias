@@ -762,7 +762,9 @@ fn openpty_owned(rows: u16, cols: u16) -> nix::Result<OpenptyOwned> {
 /// `-lc` provisioning stream types blind — that lane is output-only by
 /// design.
 fn argv_wants_kernel_echo(argv: &[String]) -> bool {
-    argv.iter().any(|a| a.contains("--github-login"))
+    // ORDER 1719-83po: the Cloudflare login's paste prompt is typed input too.
+    argv.iter()
+        .any(|a| a.contains("--github-login") || a.contains("--cloudflare-login"))
         || matches!(argv, [bash, flag] if bash == "/bin/bash" && flag == "-l")
 }
 
@@ -1757,6 +1759,15 @@ mod tests {
         assert!(argv_wants_kernel_echo(&direct));
         let debug_shell = vec!["/bin/bash".to_string(), "-l".to_string()];
         assert!(argv_wants_kernel_echo(&debug_shell));
+        // ORDER 1719-83po: Cloudflare login in the VM is paste mode, so the
+        // user pastes an address-bar URL at a cooked prompt; with echo cleared
+        // they would paste blind.
+        let cloudflare = vec![
+            "/bin/bash".to_string(),
+            "-lc".to_string(),
+            "exec tillandsias-headless --cloudflare-login || false".to_string(),
+        ];
+        assert!(argv_wants_kernel_echo(&cloudflare));
         let provisioning = vec![
             "/bin/bash".to_string(),
             "-lc".to_string(),

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-guest-forge-image-builds-fail-two-of-four-times-kswapd-soft-lockup-and-a-silent-helper-exit-101
+    field: status
+    value: implemented
+    ts: "2026-10-16T05:09:07Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: macos-guest-forge-image-builds-fail-two-of-four-times-kswapd-soft-lockup-and-a-silent-helper-exit-101
+    event:
+      type: progress
+      ts: "2026-10-16T05:09:07Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: part 1 landed #465 (5eeab661c): helper panic sidecar plus a named failure message, fixture red without the hook. Part 2 measured on v56.10.16.1: 4 fresh-disk forge builds, the image built every time, 0 lockup lines, 4.2G peak step. Remaining live arm: one more clean fresh-disk build on the next release (5 in total)

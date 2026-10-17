@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: no-code-path-launches-or-drives-a-host-browser-and-a-guard-allows-exactly-one-user-gesture-hand-off
+    event:
+      type: decision
+      ts: "2026-10-16T21:10:48Z"
+      agent_id: windows-yolanda-claude-20261013t052033z
+      host: yolanda-windows
+      summary: |-
+        Operator rulings 2026-10-16 (direct, to yolanda-windows), unblocking this row. (1) External links: in the DEV app only, show a toast like "This link wants to open <url>" with a dropdown choosing the dev browser (agent-drivable, local) or the host browser (real internet, user-validated); links to the app's own paths stay local, external addresses are validated by the user. In a prod deployment there is no prompt: links open directly (new tab or inline as specified). Purpose: delimit what the agent can drive; the agent never opens external links to the real internet. (2) Cloudflare sign-in: QR code is the preferred method everywhere (sign in on a phone with 2FA); keep the clickable device-login URL in the terminal as a near-free local-browser fallback. (3) macron.dev: agents push freely.

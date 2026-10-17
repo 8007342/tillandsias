@@ -1008,6 +1008,69 @@ async fn poll_cloud_projects_once(
     }
 }
 
+/// Order 1719-83po: one-shot CloudflareLoginStatusRequest, asked only on an
+/// event (the login session closing). Every failure maps to Unknown: a guest
+/// that doesn't advertise the request, a wire error, or an Error reply. The
+/// item is then shown disabled, never as a login the tray hasn't ruled out.
+async fn poll_cloudflare_login_once(
+    vz: &VzRuntime,
+) -> tillandsias_host_shell::menu_state::CloudflareLoginState {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+    use tillandsias_host_shell::menu_state::CloudflareLoginState;
+    use tillandsias_host_shell::vsock_client::Client;
+    let Ok(stream) =
+        open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(5)).await
+    else {
+        return CloudflareLoginState::Unknown;
+    };
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: TILLANDSIAS_GUEST_CID,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    if client.handshake().await.is_err()
+        || !client
+            .server_caps()
+            .iter()
+            .any(|c| c == "CloudflareLoginStatusRequest")
+    {
+        return CloudflareLoginState::Unknown;
+    }
+    let seq = client.allocate_seq();
+    let envelope = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq,
+        body: ControlMessage::CloudflareLoginStatusRequest { seq },
+    };
+    match client.request(&envelope).await.map(|r| r.body) {
+        Ok(ControlMessage::CloudflareLoginStatusReply { logged_in, .. }) => {
+            CloudflareLoginState::from_reply(logged_in)
+        }
+        _ => CloudflareLoginState::Unknown,
+    }
+}
+
+/// Order 1719-83po: write an observed Cloudflare login state; true when the
+/// menu must be rebuilt. Answers arrive only on events (Ready, the login
+/// session closing), each final, so a confirmed answer always replaces the
+/// local LoggingIn, and Unknown never overwrites a confirmed answer (the
+/// shared `CloudflareLoginState::settled_by`, also used by the Windows tray).
+fn apply_cloudflare_login_state(
+    observed: tillandsias_host_shell::menu_state::CloudflareLoginState,
+    menu_state: &Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
+) -> bool {
+    let mut guard = menu_state.lock().unwrap();
+    let next = guard.cloudflare_login.settled_by(observed);
+    if guard.cloudflare_login == next {
+        return false;
+    }
+    guard.cloudflare_login = next;
+    true
+}
+
 /// One-shot GithubLoginStatusRequest over the in-VM control wire. Mirrors
 /// `tillandsias-windows-tray::notify_icon::refresh_github_login` but
 /// drives the macOS-specific `GuestTransport` backend over VZ virtio-vsock.
@@ -1485,8 +1548,42 @@ impl TrayActionHost {
             None => None,
         };
         eprintln!("[tillandsias-tray] {label}: spawning attach worker (project={project:?})");
+        let ask_cloudflare_after = matches!(
+            intent,
+            tillandsias_host_shell::pty::PtyIntent::CloudflareLogin
+        );
+        let menu_state = ivars.menu_state.clone();
+        let status_item = ivars.status_item.clone();
+        let status_menu_item = ivars.status_menu_item.clone();
+        let self_handle = ivars.self_handle.clone();
+        let vz_after = vz.clone();
         runtime.spawn(async move {
-            let result = run_pty_attach(vz, intent, project).await;
+            let result = match run_pty_attach(vz, intent, project).await {
+                Ok((slave_path, pump_join)) => {
+                    if ask_cloudflare_after {
+                        // Order 1719-83po: when the login session closes, ask
+                        // the guest ONCE whether a Cloudflare login is now
+                        // stored. Event-driven: no poll, no timer.
+                        tokio::spawn(async move {
+                            let _ = pump_join.await;
+                            let cf = poll_cloudflare_login_once(&vz_after).await;
+                            eprintln!(
+                                "[tillandsias-tray] cloudflare-login: session closed; state {cf:?}"
+                            );
+                            if apply_cloudflare_login_state(cf, &menu_state) {
+                                dispatch_rebuild(
+                                    &menu_state,
+                                    &status_item,
+                                    &status_menu_item,
+                                    &self_handle,
+                                );
+                            }
+                        });
+                    }
+                    Ok(slave_path)
+                }
+                Err(e) => Err(e),
+            };
             dispatch_to_main_thread(move || {
                 let _project_launch_lease = project_launch_lease;
                 match result {
@@ -1533,7 +1630,7 @@ async fn run_pty_attach(
     vz: std::sync::Arc<VzRuntime>,
     intent: tillandsias_host_shell::pty::PtyIntent,
     project: Option<String>,
-) -> Result<String, String> {
+) -> Result<(String, tokio::task::JoinHandle<()>), String> {
     use std::sync::Arc;
     use std::time::Duration;
     use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
@@ -1770,8 +1867,10 @@ async fn run_pty_attach(
         });
     }
 
-    let _pump_join = pump_io(session, master);
-    Ok(slave_path)
+    // Order 1719-83po: the pump ends when the guest closes the session, the
+    // event the Cloudflare login waits on (no timer).
+    let pump_join = pump_io(session, master);
+    Ok((slave_path, pump_join))
 }
 
 /// Worker body for `startVm:`. Constructs the VzRuntime, fails fast
@@ -2182,6 +2281,38 @@ impl TrayActionHost {
                 self.attach_pty(
                     "GitHub login",
                     tillandsias_host_shell::pty::PtyIntent::GithubLogin,
+                    None,
+                );
+            }
+            MenuAction::CloudflareLogin => {
+                // Order 1719-83po: mirror GitHub Login. Flip to the local
+                // "Logging in…" state, rebuild, then open the VM terminal
+                // running the paste-mode login. The answer that clears it
+                // comes when the login session closes (attach_pty).
+                let flipped = {
+                    let mut state = self.ivars().menu_state.lock().unwrap();
+                    if state.cloudflare_login
+                        == tillandsias_host_shell::menu_state::CloudflareLoginState::LoggedOut
+                    {
+                        state.cloudflare_login =
+                            tillandsias_host_shell::menu_state::CloudflareLoginState::LoggingIn;
+                        true
+                    } else {
+                        false
+                    }
+                };
+                if flipped {
+                    let ivars = self.ivars();
+                    dispatch_rebuild(
+                        &ivars.menu_state,
+                        &ivars.status_item,
+                        &ivars.status_menu_item,
+                        &ivars.self_handle,
+                    );
+                }
+                self.attach_pty(
+                    "Cloudflare login",
+                    tillandsias_host_shell::pty::PtyIntent::CloudflareLogin,
                     None,
                 );
             }
@@ -3433,6 +3564,26 @@ async fn run_push_listener(
             tracing::debug!(%err, "cloud-projects initial-sync request failed; reconnecting");
             continue;
         }
+        // Order 1719-83po: the Ready event asks once whether a Cloudflare login
+        // is stored, and ONLY a guest that advertises the request is asked, so
+        // an older guest never sees a variant it cannot decode (the item stays
+        // Unknown, shown disabled). The reply is read by the loop below.
+        if client
+            .server_caps()
+            .iter()
+            .any(|c| c == "CloudflareLoginStatusRequest")
+        {
+            let seq = client.allocate_seq();
+            let prime_cloudflare = ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: client.allocate_seq(),
+                body: ControlMessage::CloudflareLoginStatusRequest { seq },
+            };
+            if let Err(err) = client.send_envelope(&prime_cloudflare).await {
+                tracing::debug!(%err, "cloudflare-login initial-sync request failed; reconnecting");
+                continue;
+            }
+        }
 
         let mut progress_log = ProgressLog::default();
         loop {
@@ -3462,6 +3613,20 @@ async fn run_push_listener(
                             &status_menu_item,
                         );
                         if rebuild_needed {
+                            dispatch_rebuild(
+                                &menu_state,
+                                &status_item,
+                                &status_menu_item,
+                                &self_handle,
+                            );
+                        }
+                    }
+                    ControlMessage::CloudflareLoginStatusReply { logged_in, .. } => {
+                        let cf =
+                            tillandsias_host_shell::menu_state::CloudflareLoginState::from_reply(
+                                logged_in,
+                            );
+                        if apply_cloudflare_login_state(cf, &menu_state) {
                             dispatch_rebuild(
                                 &menu_state,
                                 &status_item,
@@ -4902,6 +5067,59 @@ mod tests {
 
     /// `apply_login_state` reports a rebuild exactly on change and is
     /// idempotent on repeat (order 155 slice 2 — shared by poll + push).
+    /// Order 1719-83po: answers arrive only on events and each is final, so
+    /// a confirmed answer always lands; an unreadable one (Unknown) never
+    /// overwrites a confirmed answer, but does end a LoggingIn whose session
+    /// closed. Rebuild only on change.
+    #[test]
+    fn apply_cloudflare_login_state_follows_confirmed_answers() {
+        use tillandsias_host_shell::menu_state::CloudflareLoginState as Cf;
+        let menu_state = Arc::new(Mutex::new(
+            tillandsias_host_shell::menu_state::MenuState::initial(),
+        ));
+        let now = |m: &Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>| {
+            m.lock().unwrap().cloudflare_login
+        };
+        assert_eq!(now(&menu_state), Cf::Unknown);
+        assert!(!apply_cloudflare_login_state(Cf::Unknown, &menu_state));
+        assert!(apply_cloudflare_login_state(Cf::LoggedOut, &menu_state));
+        assert!(!apply_cloudflare_login_state(Cf::LoggedOut, &menu_state));
+        assert!(
+            !apply_cloudflare_login_state(Cf::Unknown, &menu_state),
+            "an unreadable answer keeps a confirmed LoggedOut"
+        );
+        assert_eq!(now(&menu_state), Cf::LoggedOut);
+        // The click flips LoggedOut -> LoggingIn locally; the answer at session
+        // close is final either way.
+        menu_state.lock().unwrap().cloudflare_login = Cf::LoggingIn;
+        assert!(apply_cloudflare_login_state(Cf::LoggedIn, &menu_state));
+        assert_eq!(now(&menu_state), Cf::LoggedIn);
+        assert!(!apply_cloudflare_login_state(Cf::Unknown, &menu_state));
+        assert_eq!(
+            now(&menu_state),
+            Cf::LoggedIn,
+            "Unknown never hides a stored login's absence"
+        );
+        menu_state.lock().unwrap().cloudflare_login = Cf::LoggingIn;
+        assert!(apply_cloudflare_login_state(Cf::Unknown, &menu_state));
+        assert_eq!(
+            now(&menu_state),
+            Cf::Unknown,
+            "a closed session can't stay LoggingIn"
+        );
+        // The click maps to the paste-mode login intent.
+        let (intent, project) = tillandsias_host_shell::pty::intent_for_action(
+            &tillandsias_host_shell::menu_action::MenuAction::CloudflareLogin,
+            tillandsias_host_shell::menu_state::SelectedAgent::Claude,
+        )
+        .expect("an intent");
+        assert!(matches!(
+            intent,
+            tillandsias_host_shell::pty::PtyIntent::CloudflareLogin
+        ));
+        assert_eq!(project, None);
+    }
+
     #[test]
     fn apply_login_state_reports_rebuild_only_on_change() {
         use tillandsias_host_shell::menu_state::GithubLoginState;
@@ -5209,6 +5427,20 @@ mod tests {
     /// the windows-tray test `compose_chip_text_appends_last_event`
     /// (commit 8992652a) — divergence between the two trays' chip
     /// composition would fail either suite.
+    #[test]
+    fn a_vault_locked_guest_chip_still_says_vault_after_the_clamp() {
+        // ORDER 1752-nd3t: the guest's event for a rejected unseal key must
+        // survive the 37-character chip clamp on both phases it rides with.
+        let evt = "Vault locked: unseal key rejected; sign-ins are kept, not lost";
+        for phase in [
+            tillandsias_control_wire::VmPhase::Failed,
+            tillandsias_control_wire::VmPhase::Starting,
+        ] {
+            let chip = compose_chip_text(&vm_phase_status_text(phase, true), Some(evt));
+            assert!(chip.contains("Vault locked"), "{phase:?}: {chip}");
+        }
+    }
+
     #[test]
     fn compose_chip_text_appends_last_event() {
         let base = "\u{1F7E2} Ready";

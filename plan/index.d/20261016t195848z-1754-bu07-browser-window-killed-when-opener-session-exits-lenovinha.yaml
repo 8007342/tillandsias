@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha from the v56.10.16.2 Linux smoke, 2026-10-16, at the coordinator's request.
+packets:
+  - packet_id: a-browser-open-window-is-sigkilled-about-twenty-seconds-after-the-agent-session-that-opened-it-exits
+    order: 1754-bu07
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    size: S
+    pickup_role: linux
+    capability_tags: [host-browser, browser, lifecycle, mcp]
+    related: [1649-xqet, 1722-2haw, 1656-iktu]
+    title: |
+      A host-browser `browser.open` window opened by a one-shot agent run (`opencode run …` in a forge) is SIGKILLed about 20 s after that run exits, so the operator never sees the window the agent reported as open ("headless": false, a window_id). An interactive session keeps it alive only as long as the session lasts
+    context: |
+      MEASURED (v56.10.16.2 Linux smoke, lenovinha, 2026-10-16). In the tray-launched lakanoa forge, `podman exec … opencode run "<publish_local, then browser.open>"`:
+      - publish_local returned serving at https://www.lakanoa.localhost:18443;
+      - browser.open returned window_id win-79b3d4a3-a7d3-4644-9cf4-07efa77a5858, device desktop-chrome, headless false;
+      - the lane's attached-sessions log then shows container_start for tillandsias-browser-lakanoa-79b3d4a3a7d3 and tillandsias-browser-fwd-79b3d4a3a7d3 at 16:09:22Z, and container_signal SIGKILL plus container_exit 137 for both at 16:09:42Z, right after the agent run ended.
+      The operator saw no window. The same call from a run that then slept 240 s kept the window up, and the game played (1722-2haw PASS).
+      HYPOTHESIS, not established: the window's lifetime is scoped to the MCP connection or session that opened it, so it is reaped when that client disconnects. Whether that is intended (no orphan windows) or a defect (the agent tells the user a window is open that is about to die), the agent is not told: browser.open's result does not say the window ends with the session.
+    exit_criteria:
+      - "a window opened by browser.open outlives the agent session that opened it by more than 60 s (a fixture that opens through a short-lived MCP client, disconnects, and asserts the window container is still running 60 s later; red today)"
+      - "if a session-scoped lifetime is kept on purpose, browser.open's result names it (for example `lifetime: session`) and the forge agent instructions say so, instead of reporting an open window that dies with the caller"
+    unscoreable: "the outlive fixture plus one live run: opencode run that opens a window and exits, window still visible 60 s later"
+    next_action: >
+      Find what reaps the browser and fwd containers at caller disconnect (the per-lane MCP listener's connection teardown, or the window registry), and decide between a window lifetime bound to the lane and an explicit lifetime field.
+    events:
+      - type: filed
+        ts: "2026-10-16T19:58:48Z"
+        host: lenovinha
+        summary: |-
+          browser.open windows die about 20 s after a one-shot agent run exits; the agent reported them open.

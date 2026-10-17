@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-bash-lane-launch-spawns-the-tray-whose-default-lane-mcp-socket-the-lane-then-refuses-as-a-live-owner-so-the-shell-dies-after-the-whole-project-stack-is-up
+    event:
+      type: note
+      ts: "2026-10-16T19:58:35Z"
+      agent_id: linux-lenovinha-claude-20261016t195835z
+      host: lenovinha
+      summary: |
+        v56.10.16.2 Linux smoke (lenovinha, 2026-10-16) measured the case this row left UNMEASURED: launching with the tray already running.
+        - The tray (pid 4157554) owned hello-world-default, lakanoa-default, tillandsias-default and tillandsias.org-default mcp.sock, one per ~/src project.
+        - `tillandsias --opencode ~/src/hello-world --prompt ...` exited 1: "Error: runtime_unavailable: per-lane MCP listener failed: mcp socket already has a live owner; refusing to unlink: .../hello-world-default/mcp.sock".
+        - The tray menu's OpenCode -> 8007342/lakanoa, with ~/src/lakanoa cloned, ran `--cloud 8007342/lakanoa --opencode`. That lane died with the same error, and its --hold-window terminal stayed open.
+        - The same click for a cloud project with no ~/src clone (visual-chess), and lakanoa after the clone was removed and the tray restarted, both opened normally.
+        So while the tray runs, no project with a local clone can be opened from the tray or the CLI. Evidence: lenovinha target/smoke-e2e/06-opencode-skill-probe.log and 06-lakanoa-lane-rerun.log.

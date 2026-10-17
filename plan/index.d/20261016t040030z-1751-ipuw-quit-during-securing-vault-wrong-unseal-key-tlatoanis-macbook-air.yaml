@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-16, from the v56.10.16.1 macOS smoke.
+packets:
+  - packet_id: a-macos-tray-quit-while-ready-still-says-securing-vault-leaves-an-unseal-secret-the-vault-rejects-so-every-later-boot-of-that-disk-has-no-sign-ins-while-the-tray-shows-ready
+    order: 1751-ipuw
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: M
+    pickup_role: any
+    capability_tags: [vault, macos, guest, shutdown, sign-in, fail-loud]
+    related: [1642-cc54, 1658-6ca6, 1200-ih38, 1744-xjfw]
+    title: |
+      After an unclean-stop REBUILD, the macOS tray reports phase=Ready while its event is still "Securing Vault". A quit in that window drains "cleanly", but the next boot of the same guest disk fails "unseal request returned HTTP 400: wrong key" and stops at "OPERATOR ACTION REQUIRED". The tray shows Ready with the GitHub repo list at 0 entries and no error. The store itself is intact: a later REBUILD unseals it with every sign-in. Reproduced 2 of 2
+    context: |
+      MEASURED (v56.10.16.1 macOS smoke, release tray only, 2026-10-16). Hit once by accident and once on purpose:
+      (1) 03:41:14Z: REBUILD after a kill -9. At 03:42:45.231Z: "phase=Ready podman_ready=true event=Securing Vault". The runner's quit came 0.3 s later: "in-VM headless acked shutdown request", then "Quit: VM drained cleanly" at 03:42:56Z. The next boot of the same disk (--opencode, 03:45:59Z): "[vault-entrypoint] subsequent boot: using unseal key from secret", then "FATAL: unseal request returned HTTP 400: wrong key", "existing unseal secret was REJECTED by the initialized vault storage", "OPERATOR ACTION REQUIRED … self-recovery is not possible (the only recoverable share is byte-identical to the secret vault just rejected). Vault storage was left untouched".
+      (2) Deliberate repro: kill -9, relaunch (REBUILD 03:54:45Z). Ready came with event=Securing Vault at 03:55:35.383Z, and the quit followed 0.5 s later, drained cleanly at 03:55:46Z. `--list-cloud-projects` on that disk: rc=1, with the same "wrong key" and "OPERATOR ACTION REQUIRED". A normal tray launch then: "phase=Ready … event=tillandsias-in-vm", github-login updated, and at 03:57:15Z "cloud-projects: fetch unconfirmed" and then "(0 entries)". No Vault error reached the tray log.
+      Recovery: a kill -9 and relaunch forced a REBUILD (03:57:29Z), and the cloud list was back at 16 entries at 03:58:36Z. Every boot's journal says "subsequent boot … provisioning persisted from a prior boot": the store on the identity disk was never re-initialized.
+      Builds where Ready arrived with event=Routing Proxy (Vault done) and the quit came after it never failed (3 of 3 in the same run).
+      HYPOTHESIS, not established: the bootstrap is still writing the `tillandsias-vault-unseal` podman secret (on the rootfs, which a REBUILD replaces) when the quit lands, and it leaves bytes that are not the identity disk's key. The one-shot recovery in vault_bootstrap.rs (create_unseal_secret / unseal_recovery_write_decision) then finds the only recoverable share equal to the rejected bytes and refuses.
+    exit_criteria:
+      - "phase=Ready is not reported while the Vault bootstrap is still securing (or the tray's quit waits for it); a fixture over the readiness event order is red today"
+      - "a quit at any point of the post-REBUILD Vault bootstrap leaves a disk whose next boot unseals; a live repro of the kill -9, relaunch, quit-at-Securing-Vault sequence then --list-cloud-projects returns the repos"
+      - "when the guest does reach OPERATOR ACTION REQUIRED, the tray says so (menu or notification), never Ready with an empty list"
+    unscoreable: "the event-order fixture plus the live quit-at-Securing-Vault repro"
+    next_action: >
+      Reproduce with --debug on the guest bootstrap to see which write the quit interrupts (the unseal secret or the identity-disk fallback share), then make that write atomic (write-temp-then-rename for the secret) and hold Ready until Vault is unsealed.
+    events:
+      - type: filed
+        ts: "2026-10-16T04:00:30Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          A quit while Ready says "Securing Vault" leaves an unseal secret Vault rejects; the next boot has no sign-ins while the tray shows Ready (reproduced 2/2; recovered by a REBUILD).

@@ -311,6 +311,26 @@ const PROGRESS_PUSH_CAPACITY: usize = 64;
 /// exit criterion).
 const PTY_OUTBOUND_CAPACITY: usize = 64;
 
+/// ORDER 1752-nd3t: the short, user-facing event for a failing Ready gate
+/// (the Vault bring-up). The tray renders it after the phase, clamped to
+/// TRAY_STATUS_CHIP_MAX_CHARS (37) in all, so the words that matter lead
+/// ("VM failed · Vault locked…"); the tray log keeps the whole line and the
+/// guest journal the full error. A rejected unseal key is named as such: signing in again cannot
+/// help there, and the sign-ins are kept, not lost. It promises no remedy,
+/// because the tray offers none yet (no reset item since 2026-07-22; the
+/// self-recovery is 1751-ipuw's fix).
+pub(crate) fn vault_gate_event(err: &str) -> String {
+    if err.contains("OPERATOR ACTION REQUIRED") || err.contains("REJECTED") {
+        return "Vault locked: unseal key rejected; sign-ins are kept, not lost".to_string();
+    }
+    let first = err.lines().next().unwrap_or("").trim();
+    let mut short: String = first.chars().take(140).collect();
+    if first.chars().count() > 140 {
+        short.push('…');
+    }
+    format!("Vault starting ({short})")
+}
+
 impl VmStateHandle {
     /// Construct with default `Starting` phase and the conventional podman
     /// socket path. Tests and lifecycle hooks may use [`set_phase`] /
@@ -618,10 +638,62 @@ impl VmStateHandle {
     /// path) is left alone — this method only advances `Starting`.
     ///
     /// @trace spec:vsock-transport, spec:vm-provisioning-lifecycle
+    // The guest service gates Ready on Vault (1751-ipuw) through
+    // `advance_to_ready_when_podman_and_gate_up`; this ungated form remains
+    // for the socket-only contract its tests pin.
+    #[cfg(test)]
     pub async fn advance_to_ready_when_podman_up(
         &self,
         timeout: std::time::Duration,
         poll_interval: std::time::Duration,
+    ) {
+        self.advance_to_ready_when_podman_and_gate_up(
+            timeout,
+            poll_interval,
+            std::sync::Arc::new(|| Ok(())),
+            std::time::Duration::ZERO,
+        )
+        .await;
+    }
+
+    /// ORDER 1751-ipuw: as [`advance_to_ready_when_podman_up`], but Ready
+    /// also waits for `gate` (the guest service passes the Vault bring-up:
+    /// built, launched AND unsealed). Ready used to be published the moment
+    /// podman's socket appeared, while the Vault bootstrap was still building
+    /// or unsealing ("phase=Ready … event=Securing Vault"); a user who quit
+    /// there left a disk whose next boot could not unseal.
+    ///
+    /// The gate runs off the async workers, is retried with a backoff (5 s
+    /// doubling to 30 s) while it fails, and is abandoned after
+    /// `gate_budget` with Failed, never with Ready: a Vault that cannot
+    /// unseal must not be presented as a working VM (1752-nd3t). A phase
+    /// change from elsewhere (Stopping on shutdown) ends the wait.
+    pub async fn advance_to_ready_when_podman_and_gate_up(
+        &self,
+        timeout: std::time::Duration,
+        poll_interval: std::time::Duration,
+        gate: std::sync::Arc<dyn Fn() -> Result<(), String> + Send + Sync>,
+        gate_budget: std::time::Duration,
+    ) {
+        self.advance_gated(
+            timeout,
+            poll_interval,
+            gate,
+            gate_budget,
+            std::time::Duration::from_secs(5),
+            std::time::Duration::from_secs(30),
+        )
+        .await;
+    }
+
+    async fn advance_gated(
+        &self,
+        timeout: std::time::Duration,
+        poll_interval: std::time::Duration,
+        gate: std::sync::Arc<dyn Fn() -> Result<(), String> + Send + Sync>,
+        gate_budget: std::time::Duration,
+        first_backoff: std::time::Duration,
+        max_backoff: std::time::Duration,
     ) {
         let start = std::time::Instant::now();
         loop {
@@ -631,14 +703,52 @@ impl VmStateHandle {
                 return;
             }
             if self.podman_ready() {
-                self.set_phase(VmPhase::Ready);
-                return;
+                break;
             }
             if start.elapsed() >= timeout {
                 self.set_phase(VmPhase::Failed);
                 return;
             }
             tokio::time::sleep(poll_interval).await;
+        }
+        let gate_start = std::time::Instant::now();
+        let mut backoff = first_backoff;
+        loop {
+            if self.current_phase() != VmPhase::Starting {
+                return;
+            }
+            let g = std::sync::Arc::clone(&gate);
+            let outcome = tokio::task::spawn_blocking(move || g())
+                .await
+                .unwrap_or_else(|e| Err(format!("gate panicked: {e}")));
+            match outcome {
+                Ok(()) => {
+                    if self.current_phase() == VmPhase::Starting {
+                        self.set_phase(VmPhase::Ready);
+                    }
+                    return;
+                }
+                Err(e) => {
+                    // 1752-nd3t: the tray shows last_event beside the phase,
+                    // so a held or failed Ready names Vault instead of
+                    // presenting an empty, error-free VM.
+                    self.set_last_event(vault_gate_event(&e));
+                    if gate_start.elapsed() >= gate_budget {
+                        eprintln!(
+                            "[tillandsias] blocked:ready-gate:vault: Ready withheld; the Vault bring-up still fails after {}s: {e}",
+                            gate_budget.as_secs()
+                        );
+                        self.set_phase(VmPhase::Failed);
+                        return;
+                    }
+                    eprintln!(
+                        "[tillandsias] wait:ready-gate:vault: Ready held until Vault is unsealed (retry in {}ms): {e}",
+                        backoff.as_millis()
+                    );
+                    tokio::time::sleep(backoff).await;
+                    backoff = (backoff * 2).min(max_backoff);
+                }
+            }
         }
     }
 
@@ -982,6 +1092,10 @@ async fn serve_ready_stream(
                 "CloudRefreshRequest".into(),
                 "VmShutdownRequest".into(),
                 "GithubLoginStatusRequest".into(),
+                // Order 1719-83po: a tray asks this guest about a stored
+                // Cloudflare login only when the guest advertises it, so an
+                // older guest is never sent a variant it cannot decode.
+                "CloudflareLoginStatusRequest".into(),
                 // Order 333: advertise guest metrics so a tray can feature-
                 // detect instead of probing a version table.
                 "MetricsSnapshotRequest".into(),
@@ -1449,6 +1563,31 @@ async fn serve_ready_stream(
                         seq_in_reply_to: seq,
                         logged_in,
                         handle,
+                    },
+                };
+                if write_envelope_with_shutdown(&mut write_half, &reply, &mut shutdown).await.is_err() {
+                    break 'connection;
+                }
+            }
+            ControlMessage::CloudflareLoginStatusRequest { seq } => {
+                // Order 1719-83po: whether a Cloudflare login is stored, for
+                // the tray's "Cloudflare Login" item. Only the boolean crosses
+                // the wire; the bundle is dropped inside the Vault helper. An
+                // unreadable Vault answers None (Unknown), never "signed out".
+                #[cfg(feature = "vault")]
+                let logged_in = tokio::task::spawn_blocking(|| {
+                    crate::vault_bootstrap::cloudflare_login_stored_live(false).ok()
+                })
+                .await
+                .unwrap_or(None);
+                #[cfg(not(feature = "vault"))]
+                let logged_in: Option<bool> = None;
+                let reply = ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: env.seq,
+                    body: ControlMessage::CloudflareLoginStatusReply {
+                        seq_in_reply_to: seq,
+                        logged_in,
                     },
                 };
                 if write_envelope_with_shutdown(&mut write_half, &reply, &mut shutdown).await.is_err() {
@@ -3673,6 +3812,173 @@ mod tests {
 
         advancer.await.expect("advancer join");
         assert_eq!(state.current_phase(), VmPhase::Ready);
+    }
+
+    /// ORDER 1751-ipuw: Ready never precedes the gate (the guest passes the
+    /// Vault bring-up, unsealed). The socket exists from the start; the gate
+    /// fails twice, then succeeds. At EVERY gate call the phase is still not
+    /// Ready, and Ready comes only after the gate's first success.
+    #[tokio::test]
+    async fn ready_never_precedes_the_vault_gate() {
+        use std::sync::atomic::{AtomicUsize, Ordering as O};
+        use std::time::Duration;
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let sock = tmp.path().join("podman.sock");
+        std::fs::File::create(&sock).expect("create podman.sock");
+        let mut state = VmStateHandle::new();
+        state.set_podman_socket(sock);
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen_ready_at_call = Arc::new(AtomicUsize::new(0));
+        let observer = state.clone();
+        let (c, r) = (Arc::clone(&calls), Arc::clone(&seen_ready_at_call));
+        let gate: Arc<dyn Fn() -> Result<(), String> + Send + Sync> = Arc::new(move || {
+            if observer.current_phase() == VmPhase::Ready {
+                r.fetch_add(1, O::SeqCst);
+            }
+            match c.fetch_add(1, O::SeqCst) {
+                0 | 1 => Err("vault: unseal pending".into()),
+                _ => Ok(()),
+            }
+        });
+        state
+            .advance_gated(
+                Duration::from_secs(2),
+                Duration::from_millis(10),
+                gate,
+                Duration::from_secs(5),
+                Duration::from_millis(10),
+                Duration::from_millis(20),
+            )
+            .await;
+        assert_eq!(calls.load(O::SeqCst), 3, "two failures, then the success");
+        assert_eq!(
+            seen_ready_at_call.load(O::SeqCst),
+            0,
+            "Ready was published before the gate passed"
+        );
+        assert_eq!(state.current_phase(), VmPhase::Ready);
+    }
+
+    /// ORDER 1751-ipuw / 1752-nd3t: a gate that never passes ends in Failed,
+    /// never in Ready.
+    #[tokio::test]
+    async fn a_vault_gate_that_never_passes_is_failed_not_ready() {
+        use std::time::Duration;
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let sock = tmp.path().join("podman.sock");
+        std::fs::File::create(&sock).expect("create podman.sock");
+        let mut state = VmStateHandle::new();
+        state.set_podman_socket(sock);
+        let gate: Arc<dyn Fn() -> Result<(), String> + Send + Sync> =
+            Arc::new(|| Err("OPERATOR ACTION REQUIRED".into()));
+        state
+            .advance_gated(
+                Duration::from_secs(2),
+                Duration::from_millis(10),
+                gate,
+                Duration::from_millis(60),
+                Duration::from_millis(10),
+                Duration::from_millis(20),
+            )
+            .await;
+        assert_eq!(state.current_phase(), VmPhase::Failed);
+    }
+
+    /// ORDER 1752-nd3t: a guest whose Vault cannot unseal is never presented
+    /// as a working VM with no reason. While the gate fails, the status the
+    /// tray renders names Vault; when the gate gives up, the Failed push
+    /// carries the Vault reason, and a rejected key is named as such.
+    #[tokio::test]
+    async fn a_held_or_failed_ready_names_vault_to_the_tray() {
+        use std::time::Duration;
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let sock = tmp.path().join("podman.sock");
+        std::fs::File::create(&sock).expect("create podman.sock");
+        let mut state = VmStateHandle::new();
+        state.set_podman_socket(sock);
+        let mut rx = state.subscribe_vm_status();
+        let gate: Arc<dyn Fn() -> Result<(), String> + Send + Sync> = Arc::new(|| {
+            Err("OPERATOR ACTION REQUIRED: the vault unseal secret does not unseal the existing vault storage".into())
+        });
+        state
+            .advance_gated(
+                Duration::from_secs(2),
+                Duration::from_millis(10),
+                gate,
+                Duration::from_millis(40),
+                Duration::from_millis(10),
+                Duration::from_millis(20),
+            )
+            .await;
+        let mut pushes = Vec::new();
+        while let Ok(m) = rx.try_recv() {
+            if let ControlMessage::VmStatusPush {
+                phase, last_event, ..
+            } = m
+            {
+                pushes.push((phase, last_event.unwrap_or_default()));
+            }
+        }
+        assert!(
+            pushes
+                .iter()
+                .any(|(p, e)| *p == VmPhase::Starting && e.starts_with("Vault locked: ")),
+            "a held Ready names Vault: {pushes:?}"
+        );
+        let last = pushes.last().expect("pushes");
+        assert_eq!(last.0, VmPhase::Failed, "{pushes:?}");
+        assert!(
+            last.1.starts_with("Vault locked"),
+            "the Failed push names Vault: {pushes:?}"
+        );
+        assert!(
+            !pushes.iter().any(|(p, _)| *p == VmPhase::Ready),
+            "{pushes:?}"
+        );
+    }
+
+    #[test]
+    fn vault_gate_event_is_short_and_names_vault() {
+        let e = vault_gate_event("connection refused while waiting for vault\nmore detail");
+        assert_eq!(
+            e,
+            "Vault starting (connection refused while waiting for vault)"
+        );
+        let long = "x".repeat(400);
+        let e = vault_gate_event(&long);
+        assert!(e.chars().count() < 170 && e.ends_with("…)"), "{e}");
+        assert!(
+            vault_gate_event("existing unseal secret was REJECTED")
+                .starts_with("Vault locked: unseal key rejected")
+        );
+    }
+
+    /// ORDER 1751-ipuw: the guest service's advancer passes the Vault
+    /// bring-up as its Ready gate (red before: it advanced on the socket alone).
+    #[test]
+    fn the_guest_service_gates_ready_on_the_vault_bring_up() {
+        let main_src = include_str!("main.rs");
+        let window = main_src
+            .split("let advancer_state = state.clone();")
+            .nth(1)
+            .expect("the service advancer")
+            .split("let watcher_state")
+            .next()
+            .unwrap();
+        assert!(
+            window.contains("advance_to_ready_when_podman_and_gate_up("),
+            "{window}"
+        );
+        assert!(
+            window.contains("vault_bootstrap::ensure_vault_running("),
+            "{window}"
+        );
+        // Negative control: the ungated, socket-only advancer (the window
+        // this order closes) must not be what the service runs.
+        assert!(
+            !window.contains("advance_to_ready_when_podman_up("),
+            "{window}"
+        );
     }
 
     /// gap-6 contract: when the socket never appears within `timeout`,

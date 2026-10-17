@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-16, from the v56.10.16.1 macOS smoke.
+packets:
+  - packet_id: the-forge-claude-pretooluse-hook-calls-tillandsias-plan-which-the-forge-image-never-ships-so-the-command-policy-is-silently-off-in-every-non-tillandsias-forge
+    order: 1750-a4re
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: S
+    pickup_role: any
+    capability_tags: [forge, claude, hooks, command-policy, image]
+    related: [1443-we89, 1724-kcj4]
+    title: |
+      seed_claude_pretooluse_hook puts `tillandsias-plan policy classify-bash --hook` into every forge's ~/.claude/settings.json "so every Claude session in a forge on ANY project has its Bash commands checked". But the forge image never ships tillandsias-plan: a forge builds it asynchronously, and only from a Tillandsias checkout's own crate. In any other project the hook's command is never found (exit 127), which Claude Code treats as a non-blocking hook error, so every rule (credential mutation, unquoted heredocs, 1724's pkill -f) is silently off
+    context: |
+      MEASURED (v56.10.16.1 macOS smoke, a real OpenCode forge on ~/src/tillandsias via the release tray's --opencode, 2026-10-16 03:24-03:28Z): `printf '{"tool_name":"Bash",...}' | tillandsias-plan policy classify-bash --hook` answered "/usr/sbin/bash: line 1: tillandsias-plan: command not found", rc=127, for both "pkill -f vite" and "pgrep -f vite". That was a Tillandsias checkout, about 3 minutes after launch, so the async build had not landed. A forge on any other project never builds it.
+      READ (source at the tag): the Containerfile has no tillandsias-plan. lib-common.sh builds it from "$project_dir/crates/tillandsias-plan" into FORGE_EXPERTS_BIN_DIR (the expert-serve path), and resolves it elsewhere with `command -v tillandsias-plan`. images/default/config-overlay/claude/settings.json names the bare command. NOT measured: the PATH a Claude session's Bash tool sees (this probe ran in OpenCode's shell). The non-Tillandsias case does not depend on PATH, because no binary exists to find.
+    exit_criteria:
+      - "in a forge on a project that is NOT Tillandsias, a Claude session's `pkill -f x` is refused by the hook (exit 2 with the refusal); a live check in a released forge"
+      - "a fixture asserts the command the overlay's settings.json names resolves to an executable shipped in the forge image (red today)"
+      - "if the binary is genuinely absent, the hook says so on stderr once per session instead of failing open silently"
+    unscoreable: "the shipped-executable fixture plus one live non-Tillandsias forge check"
+    next_action: >
+      Ship a prebuilt tillandsias-plan (the host build's own artifact, as the guest binary is staged) at a fixed path in the forge image, and point settings.json at that absolute path. Or ship a tiny classifier stub that fails closed with a message when the binary is missing.
+    events:
+      - type: filed
+        ts: "2026-10-16T03:35:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          The forge Claude PreToolUse hook names tillandsias-plan, which no forge image ships; measured rc=127 in a released forge, so the command policy is silently off outside Tillandsias forges.

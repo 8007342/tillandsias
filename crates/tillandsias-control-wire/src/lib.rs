@@ -792,6 +792,41 @@ pub enum ControlMessage {
     ///
     /// @trace order:1503-qrgz, spec:vsock-transport
     HostClockSync { seq: u64, host_unix_ms: u64 },
+    /// Host → in-VM headless: is a Cloudflare login stored in Vault? The tray
+    /// shows "Cloudflare Login" only while none is (order 1719-83po), the way
+    /// it shows "GitHub Login".
+    ///
+    /// Asked on EVENTS only, never on a timer: when the VM reaches Ready, and
+    /// when a Cloudflare login PTY session closes.
+    ///
+    /// New trailing variant: additive per the `WIRE_VERSION` doc (does not
+    /// bump the version). An older in-VM headless rejects it with
+    /// `Error::UnknownVariant`, and the tray treats that as Unknown and leaves
+    /// the menu item disabled.
+    ///
+    /// @trace order:1719-83po, spec:cloudflare-auth
+    CloudflareLoginStatusRequest { seq: u64 },
+    /// In-VM headless → host: whether a Cloudflare login is stored.
+    /// `Some(true)` = a bundle is in Vault; `Some(false)` = Vault answered
+    /// that there is none; `None` = Vault could not be read (unreachable,
+    /// sealed or refusing), which the tray shows as Unknown, never as signed
+    /// out. No token, account id or other part of the bundle crosses the wire.
+    ///
+    /// @trace order:1719-83po, spec:cloudflare-auth
+    CloudflareLoginStatusReply {
+        seq_in_reply_to: u64,
+        logged_in: Option<bool>,
+    },
+    /// `tillandsias --cloudflare-login` → the Linux tray, over the local unix
+    /// control socket: the bundle is stored in Vault. Wakes the tray's login
+    /// wait so it hides "Cloudflare Login" on an event, not a poll, the way
+    /// `GithubLoginStored` does for GitHub (679-rp9m). Best-effort: the login
+    /// succeeds with no tray. The tray answers `IssueAck { seq_acked }`.
+    ///
+    /// New trailing variant (additive, no WIRE_VERSION bump).
+    ///
+    /// @trace order:1719-83po, spec:tray-host-control-socket
+    CloudflareLoginStored { seq: u64, ts_unix: u64 },
 }
 
 /// What the guest established about a PTY session's foreground process.
@@ -1163,6 +1198,9 @@ impl ControlMessage {
             ControlMessage::ProgressPush { .. } => "ProgressPush",
             ControlMessage::GithubLoginStored { .. } => "GithubLoginStored",
             ControlMessage::HostClockSync { .. } => "HostClockSync",
+            ControlMessage::CloudflareLoginStatusRequest { .. } => "CloudflareLoginStatusRequest",
+            ControlMessage::CloudflareLoginStatusReply { .. } => "CloudflareLoginStatusReply",
+            ControlMessage::CloudflareLoginStored { .. } => "CloudflareLoginStored",
         }
     }
 }
@@ -2891,6 +2929,24 @@ mod tests {
                 },
                 "HostClockSync",
             ),
+            (
+                ControlMessage::CloudflareLoginStatusRequest { seq: 1 },
+                "CloudflareLoginStatusRequest",
+            ),
+            (
+                ControlMessage::CloudflareLoginStatusReply {
+                    seq_in_reply_to: 1,
+                    logged_in: Some(true),
+                },
+                "CloudflareLoginStatusReply",
+            ),
+            (
+                ControlMessage::CloudflareLoginStored {
+                    seq: 1,
+                    ts_unix: 1_790_000_000,
+                },
+                "CloudflareLoginStored",
+            ),
         ]
     }
 
@@ -3167,6 +3223,10 @@ mod tests {
             ControlMessage::GithubLoginStored { .. } => 35,
             // 1503-qrgz: trailing addition.
             ControlMessage::HostClockSync { .. } => 36,
+            // 1719-83po: trailing additions.
+            ControlMessage::CloudflareLoginStatusRequest { .. } => 37,
+            ControlMessage::CloudflareLoginStatusReply { .. } => 38,
+            ControlMessage::CloudflareLoginStored { .. } => 39,
         }
     }
 
@@ -3201,7 +3261,7 @@ mod tests {
         /// The number of `ControlMessage` variants. An independent literal for
         /// the same reason the discriminants are: anything computed from the
         /// enum agrees with the enum by construction.
-        const DECLARED_VARIANTS: usize = 37;
+        const DECLARED_VARIANTS: usize = 40;
 
         let samples = one_sample_per_variant();
         assert_eq!(

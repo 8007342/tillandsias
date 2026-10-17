@@ -1,0 +1,141 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by forge session tillandsias-87 (forge-tillandsias on yolanda, WSL2 host,
+# forge 56.10.16.1, base linux-next@f25d7c610), 2026-10-16T02:54:15Z.
+# Full timeline and evidence: plan/issues/forge-landing-silent-failures-yolanda-2026-10-16.md
+packets:
+  - packet_id: forge-launch-embed-endpoint-probe-fails-silently-and-is-never-retried-so-spec-answer-is-dead-for-the-whole-session-while-inference-is-ready
+    order: 1747-e9d6
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [experts, spec-index, embed, inference, forge-launch, silent-failure]
+    estimated_hours: 2
+    related: [712-r5x8, 919-vvyv, 964-fwvh, 967-xq5e, 1746-4q34]
+    title: |
+      A cold forge launch leaves TILLANDSIAS_EMBED_ENDPOINT unset even though the enclave inference service is ready, so the spec index is skipped ("[spec-index] skipped (no-embed-endpoint)") and spec_answer refuses for the whole session. lib-common.sh calls resolve_embed_endpoint with ">/dev/null 2>&1", so the probe's verdict (why it failed) is never logged, and nothing retries it when the spec-index step runs 3 minutes later.
+    context: |
+      MEASURED 2026-10-16, forge-tillandsias on yolanda (56.10.16.1, cpu-only):
+      - startup context at 02:40Z: inference_state=ready, warm=nomic-embed-text:latest,qwen2.5:0.5b; capability line: spec_index=absent embed_endpoint=unset.
+      - lifecycle log after the expert build (02:42:35Z): "[spec-index] skipped (no-embed-endpoint): TILLANDSIAS_EMBED_ENDPOINT is unset — spec_answer keeps its typed refusal (712-r5x8)".
+      - spec_answer at ~02:51Z: "unsupported: the spec RAG index is not built at …/spec-index … publishes no 'current' pointer".
+      - By hand at ~02:52Z: curl -m 3 http://inference:11434/v1/models -> 200 in 29 ms; resolve_embed_endpoint -> ok:embed-endpoint:derived:http://inference:11434/v1.
+      Most likely the launch probe ran before inference answered (3 s ceiling). The verdict was discarded, so this cannot be confirmed. Either way, it is a race with no retry.
+    exit_criteria:
+      - 'the spec-index launch step re-runs resolve_embed_endpoint when TILLANDSIAS_EMBED_ENDPOINT is unset, and logs the verdict line (ok:/skip:) in /tmp/forge-lifecycle.log; red on f25d7c610'
+      - 'a test with an inference stub that answers only after the first probe shows the index step still derives the endpoint (mutation: drop the re-probe and the test fails)'
+      - 'the startup context names the embed verdict reason, not only embed_endpoint=unset'
+    unscoreable: "unpinnable-until-the-guard-exists: the future litmus is scripts/test-spec-index-step-reprobes-embed-endpoint.sh, written in the same commit as the fix"
+    next_action: >
+      In images/default/lib-common.sh, stop discarding resolve_embed_endpoint's verdict, and call it again from the spec-index step before the no-embed-endpoint skip.
+    events:
+      - type: filed
+        ts: "2026-10-16T02:54:15Z"
+        host: yolanda
+        summary: |-
+          spec_answer is permanently dead in a cold forge whose inference service is ready: the launch embed probe fails silently and is never retried.
+
+  - packet_id: forge-hot-paths-cheatsheet-copy-fails-on-preserving-times-and-only-the-lifecycle-log-knows
+    order: 1747-we43
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [cheatsheets, forge-launch, silent-failure, startup-context]
+    estimated_hours: 1
+    related: [1747-e9d6]
+    title: |
+      At every forge launch on yolanda, the first lifecycle line after pull-cache is "hot-paths | FAILED: cp /opt/cheatsheets-image/. -> /opt/cheatsheets/ (cp=1): cp: preserving times for '/opt/cheatsheets/.': Operation not permitted". The failure appears nowhere the agent reads (.forge-startup-context.md has no line for it), so whether /opt/cheatsheets is complete is unknown to the agent.
+    context: |
+      MEASURED 2026-10-16, forge-tillandsias on yolanda (56.10.16.1), /tmp/forge-lifecycle.log line 3. The likely cause is cp -a (or -p) setting times on a directory the forge uid does not own. The file copies may have succeeded; the exit status is 1 regardless, and the log says FAILED.
+      More generally: lifecycle FAILED lines are not projected into the startup context. This row is the first concrete instance; the general fix is the second exit criterion.
+    exit_criteria:
+      - 'the hot-paths copy does not fail on a root-owned /opt/cheatsheets (it stops preserving times on the target root, or the target is created owned by the forge uid); red on 56.10.16.1'
+      - 'any "| FAILED:" line in the lifecycle log before agent launch appears as a typed line in .forge-startup-context.md (e.g. launch_failures=hot-paths)'
+    unscoreable: "unpinnable-until-the-guard-exists: the future litmus is scripts/test-forge-lifecycle-failures-reach-startup-context.sh, written in the same commit as the fix"
+    next_action: >
+      Find the hot-paths cp in images/default (populate-hot-paths), reproduce as uid 1000 with a root-owned target, then fix and project FAILED lines into the startup context.
+    events:
+      - type: filed
+        ts: "2026-10-16T02:54:15Z"
+        host: yolanda
+        summary: |-
+          hot-paths cheatsheet copy reports FAILED on every launch, and only the lifecycle log knows.
+
+  - packet_id: cargo-through-the-enclave-proxy-logs-97-http2-framing-layer-retries-on-a-cold-expert-build
+    order: 1747-nghx
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [proxy, cargo, http2, forge-launch, performance]
+    estimated_hours: 2
+    related: [1747-qc4d]
+    title: |
+      The cold tillandsias-plan build in a forge logged 97 "warning: spurious network error (3 tries remaining): [16] Error in the HTTP2 framing layer" lines fetching crates through the enclave proxy. The build succeeded (184 s), but each warning is a retried download on the agent's critical path to working experts.
+    context: |
+      MEASURED 2026-10-16, forge-tillandsias on yolanda (56.10.16.1), /tmp/forge-lifecycle.log lines 87-183, between "experts | building" (~02:39:31Z) and "Finished release in 3m 03s". The same window had the all-harness refresh (codex 411 MB npm, agy 208 MB installer; see 1747-qc4d) downloading through the same proxy, so contention is a possible factor (unconfirmed). Not yet compared with a Linux host.
+    exit_criteria:
+      - 'the cause is named (squid HTTP/2 handling, cargo multiplexing through a CONNECT proxy, or contention) with a measurement; if it is cargo multiplexing, CARGO_HTTP_MULTIPLEXING=false (or the proxy fix) brings a cold expert build to zero framing retries'
+    unscoreable: "requires-native-regime: needs a cold cargo fetch through the live enclave proxy"
+    next_action: >
+      Re-run a cold `cargo fetch` in a forge with CARGO_HTTP_MULTIPLEXING=false and compare the retry count and the wall time.
+    events:
+      - type: filed
+        ts: "2026-10-16T02:54:15Z"
+        host: yolanda
+        summary: |-
+          97 HTTP2 framing retries in one cold cargo build through the enclave proxy.
+
+  - packet_id: every-forge-lane-installs-every-agent-harness-so-a-claude-lane-downloads-codex-and-antigravity-on-each-launch
+    order: 1747-qc4d
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [harness, antigravity, codex, forge-launch, performance, disk]
+    estimated_hours: 2
+    related: [1747-nghx, 1678-62p7, 1496-x76p]
+    title: |
+      ensure_forge_harnesses (images/default/lib-common.sh) refreshes EVERY harness on EVERY lane: a Claude lane npm-installs @openai/codex (411 MB) and runs the Antigravity installer for agy (208 MB) on each launch. The operator expects a lane to install only its own harness. The extra work also held the npm update lock, and the Claude lane's foreground path waited 18 s on it for openspec.
+    context: |
+      MEASURED 2026-10-16, forge-tillandsias on yolanda (56.10.16.1), TILLANDSIAS_AGENT=claude:
+      - lifecycle log: "tools | agy install attempt 1/3" ... "Antigravity CLI installed successfully at /home/forge/.local/bin/agy" ... "harness | agent harnesses up to date".
+      - ~/.local/bin/agy (208 MB) mtime 02:40:17Z; $NPM_CONFIG_PREFIX/bin/codex -> @openai/codex (411 MB) at 02:40:10Z.
+      - "harness | openspec not visible while updater lock held — waiting for sibling npm update" ... "openspec appeared after 18s (sibling updater)".
+      - agy --version in this forge -> 1.3.6, rc=0 (the binary runs).
+      HISTORY: this is the documented contract, not a recent regression. ef9520dc8 (2026-07-21, "fix(forge): refresh all harnesses on every launch", order 181) wrote "the launch contract is that every ephemeral forge launch attempts to refresh all harnesses", and added require_antigravity to that loop. The recent Antigravity changes (cbf2b396c, 2026-10-14) did not introduce it. The operator ruling it conflicts with (one harness per lane) needs confirming before the fix.
+      The Antigravity installer is fetched from https://antigravity.google/cli/install.sh and run on every launch with no checksum or pin (order 307 chose download-then-run over curl|bash, but nothing verifies the script).
+    exit_criteria:
+      - 'operator ruling recorded: a lane installs only its own harness (plus openspec), or the all-harness contract stays'
+      - 'if one-per-lane: a Claude lane launch neither runs the agy installer nor npm-installs @openai/codex; a test drives ensure_forge_harnesses with TILLANDSIAS_AGENT=claude and stub installers and fails if another harness installer runs (mutation shown); red on f25d7c610'
+      - 'the --agy-login container (provider-device-auth.sh) still installs agy on demand'
+    unscoreable: "unpinnable-until-the-guard-exists: the future litmus is scripts/test-forge-lane-installs-only-its-harness.sh, written in the same commit as the fix"
+    next_action: >
+      Ask the operator to rule (one harness per lane vs. all). Then gate the codex npm refresh and require_antigravity in ensure_forge_harnesses on TILLANDSIAS_AGENT.
+    events:
+      - type: filed
+        ts: "2026-10-16T02:54:15Z"
+        host: yolanda
+        summary: |-
+          A Claude lane installed Codex (411 MB) and Antigravity (208 MB) at launch; the all-harness refresh is the July contract, which the operator now expects to be one harness per lane.
+
+events:
+  - packet_id: forge-quick-intro-claims-chrome-debugging-browsers-are-preinstalled-but-the-forge-image-has-none
+    event:
+      type: note
+      ts: "2026-10-16T02:54:15Z"
+      agent_id: tillandsias-87@yolanda
+      summary: |-
+        A sanctioned in-forge browser path already exists: f92aa2063 (2026-10-15, 1726-3mn6) lets a forge install Playwright's browser into the project cache (allowlisted in images/proxy/allowlist.txt). The corrected forge-quick-intro bullet should point there, and at host-browser browser.open, instead of claiming a preinstalled Chrome.
+  - packet_id: forges-in-the-macos-and-windows-vm-get-an-empty-lane-mcp-socket-dir-because-the-guest-binary-is-built-without-the-tray-feature-that-holds-the-listener
+    event:
+      type: note
+      ts: "2026-10-16T02:54:15Z"
+      agent_id: tillandsias-87@yolanda
+      summary: |-
+        The host-browser.sh error text misleads. It tests [[ -e "$TILLANDSIAS_CONTROL_SOCKET" ]], which is false on EACCES as well as ENOENT, so a forge that may not traverse a root 0700 lane dir reports "TILLANDSIAS_CONTROL_SOCKET does not exist". The fix should distinguish the two (e.g. test the parent dir with [[ -x ]] and say "permission denied: <dir> is <owner> <mode>, forge uid <n>"). Full timeline: plan/issues/forge-landing-silent-failures-yolanda-2026-10-16.md.

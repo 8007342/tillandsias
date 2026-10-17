@@ -2260,6 +2260,11 @@ export NPM_CONFIG_PREFIX="$PROJECT_CACHE/npm/global"
 # Yarn (classic and berry both honor this)
 export YARN_CACHE_FOLDER="$PROJECT_CACHE/yarn"
 
+# Playwright browsers (order 1726-3mn6): ~681 MB per chromium install, so on
+# the persistent cache volume, downloaded once per project, never into the
+# RAM checkout or $HOME.
+export PLAYWRIGHT_BROWSERS_PATH="$PROJECT_CACHE/ms-playwright"
+
 # pnpm
 export PNPM_HOME="$PROJECT_CACHE/pnpm"
 
@@ -3919,8 +3924,9 @@ seed_claude_bypass_consent() {
 }
 
 # seed_claude_pretooluse_hook — order 1443-we89, THE TEMPORARY BRIDGE. Merge the
-# image's PreToolUse (matcher Bash) entry, which runs `tillandsias-plan policy
-# classify-bash --hook`, into ~/.claude/settings.json, so every Claude session
+# image's PreToolUse (matcher Bash) entry, which runs
+# /usr/local/lib/tillandsias/bash-policy-hook (1750-a4re: the image ships the
+# decider and the hook fails closed without it), into ~/.claude/settings.json, so every Claude session
 # in a forge on ANY project has its Bash commands checked (operator ruling 1,
 # 2026-09-27: "Commit the hook to the project"; the forge overlay carries it
 # for projects that are not Tillandsias). Additive: every other setting and
@@ -3945,13 +3951,20 @@ seed_claude_pretooluse_hook() {
             trace_lifecycle "config" "claude settings.json is not a JSON object; PreToolUse hook NOT seeded"
             return 1
         fi
-        # Already present (any hook running classify-bash): leave the file alone.
-        if jq -e '[.hooks.PreToolUse[]?.hooks[]?.command // empty] | any(test("classify-bash"))' \
+        # Already present (the overlay's own hook command): leave the file alone.
+        if jq -e --slurpfile ov "$overlay_cfg" \
+            '[.hooks.PreToolUse[]?.hooks[]?.command // empty] | any(. == $ov[0].hooks.PreToolUse[0].hooks[0].command)' \
             "$settings_cfg" >/dev/null 2>&1; then
             rm -f "$tmp"
             return 0
         fi
-        jq -s '.[0] * {hooks: ((.[0].hooks // {}) + {PreToolUse: ((.[0].hooks.PreToolUse // []) + .[1].hooks.PreToolUse)})}' \
+        # 1750-a4re: drop the pre-1750 entry that ran the bare
+        # `tillandsias-plan policy classify-bash --hook` (a settings.json
+        # restored from the approvals vault still carries it, and it exits 127
+        # in a forge with no binary on PATH), then append the overlay's.
+        jq -s '.[0] * {hooks: ((.[0].hooks // {}) + {PreToolUse: (([.[0].hooks.PreToolUse // [] | .[]
+                | select(([.hooks[]?.command // empty] | any(test("^tillandsias-plan policy classify-bash"))) | not)])
+                + .[1].hooks.PreToolUse)})}' \
             "$settings_cfg" "$overlay_cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
     else
         cp "$overlay_cfg" "$tmp" || { rm -f "$tmp"; return 1; }
@@ -4078,15 +4091,15 @@ seed_agy_workspace_trust() {
             return 0
         fi
         jq --arg dir "$project_dir" \
-            '.trustedWorkspaces = (((.trustedWorkspaces // []) | if type == "array" then . else [] end) as $t
+            '.approvalMode = (.approvalMode // "auto") | .trustedWorkspaces = (((.trustedWorkspaces // []) | if type == "array" then . else [] end) as $t
                 | if ($t | index([$dir])) then $t else $t + [$dir] end)' \
             "$cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
     else
-        jq -n --arg dir "$project_dir" '{trustedWorkspaces: [$dir]}' >"$tmp" || { rm -f "$tmp"; return 1; }
+        jq -n --arg dir "$project_dir" '{approvalMode: "auto", trustedWorkspaces: [$dir]}' >"$tmp" || { rm -f "$tmp"; return 1; }
     fi
     chmod 600 "$tmp"
     mv -f "$tmp" "$cfg"
-    trace_lifecycle "config" "agy workspace trust seeded for $project_dir (forge)"
+    trace_lifecycle "config" "agy workspace trust and approvalMode auto seeded for $project_dir (forge)"
 }
 
 # ── Hot-path population ─────────────────────────────────────
@@ -5016,6 +5029,31 @@ inject_startup_context() {
     else
         _expert_sources="absent"
     fi
+    # ORDER 1264-s4id: can this forge push to THIS repository? Asked at forge
+    # launch (not at login, where there is no repository), from the mirror's
+    # own push verdict, and REPORTED as a capability: read-only is a supported
+    # state, never a launch failure. The branch half asks the project's own
+    # push discipline about the startup branch. Loud states go to the launch
+    # terminal too.
+    local _push_line="push: unknown (helper-missing)" _push_machine="push_state=unknown push_reason=helper-missing"
+    local _push_branch_line="" _push_branch_machine="push_branch=unknown push_branch_reason=helper-missing"
+    local _push_lib="${BASH_SOURCE[0]%/*}/lib-push-capability.sh"
+    if [[ -r "$_push_lib" ]]; then
+        # shellcheck source=lib-push-capability.sh
+        source "$_push_lib"
+        tillandsias_push_capability "$project_dir" "${TILLANDSIAS_PROJECT:-$(basename "$project_dir")}"
+        _push_line="$TILLANDSIAS_PUSH_LINE"
+        _push_machine="$TILLANDSIAS_PUSH_MACHINE"
+        tillandsias_push_branch "$project_dir" "$branch"
+        _push_branch_line="$TILLANDSIAS_PUSH_BRANCH_LINE"
+        _push_branch_machine="$TILLANDSIAS_PUSH_BRANCH_MACHINE"
+        if [[ "$TILLANDSIAS_PUSH_LOUD" = 1 ]]; then
+            printf '[forge] %s\n' "$_push_line" >&2
+        fi
+        if [[ -n "$_push_branch_line" ]]; then
+            printf '[forge] %s\n' "$_push_branch_line" >&2
+        fi
+    fi
     version="$(cat "$project_dir/VERSION" 2>/dev/null | tr -d '[:space:]' || echo "unknown")"
     agent_name="${TILLANDSIAS_AGENT_NAME:-forge}"
     local project_name
@@ -5038,6 +5076,9 @@ inject_startup_context() {
 ## Infrastructure (all transparent — zero configuration needed)
 
 - **Git**: push/fetch route through the enclave git mirror; GitHub token is handled automatically.
+  - ${_push_line}${_push_branch_line:+
+  - ${_push_branch_line}}
+  - Machine-readable (branch on this): \`${_push_machine} ${_push_branch_machine}\`. A read-only token is SUPPORTED: build, run and serve locally; only pushing is unavailable (order 1264-s4id).
 - **HTTPS proxy**: outbound traffic is cached; CA is trusted at startup.
 - **Accelerators** — \`${_accel_envelope}\`
   - This is the HOST's hardware, projected onto a closed vocabulary so you can branch on it without probing devices you cannot see. \`accel_class\` is the one field worth reading first: \`workstation-gpu\` (a discrete GPU is deliverable to this container — larger models are cheap here), \`mobile-npu\` (an NPU is deliverable — prefer small quantized models), \`hybrid-gpu-npu\` (both), or \`cpu-only\`.

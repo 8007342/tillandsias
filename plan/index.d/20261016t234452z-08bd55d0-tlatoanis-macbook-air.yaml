@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-linux-install-path-serves-aarch64-so-a-raspberry-pi-5-curl-installs-and-runs-the-headless-binary-on-bare-metal-the-release-already-builds-the-static-aarch64-headless-but-the-installer-refuses-the-arch
+    field: depends_on
+    value:
+      - the-static-aarch64-headless-embeds-an-x86_64-router-sidecar-so-its-router-container-cannot-run-on-an-aarch64-host-and-the-release-arch-check-reads-only-the-outer-binary
+    ts: "2026-10-16T23:44:52Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-linux-install-path-serves-aarch64-so-a-raspberry-pi-5-curl-installs-and-runs-the-headless-binary-on-bare-metal-the-release-already-builds-the-static-aarch64-headless-but-the-installer-refuses-the-arch
+    event:
+      type: progress
+      ts: "2026-10-16T23:44:52Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status '[1756-z3kz]' (not terminal) with evidence_refs: Blocked on 1756-z3kz (aarch64 router sidecar), filed on the coordinator's ruling 2026-10-16: the aarch64 headless embeds an x86_64 sidecar.

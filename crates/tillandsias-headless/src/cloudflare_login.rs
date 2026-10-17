@@ -9,13 +9,16 @@
 //!
 //! - **loopback**: a listener on `127.0.0.1` (never `0.0.0.0`) on the first
 //!   free port of [`REGISTERED_LOOPBACK_PORTS`] at [`CALLBACK_PATH`]; the
-//!   browser is opened on the authorize URL; the listener takes EXACTLY ONE
+//!   authorize URL is PRINTED for the operator to click (nothing launches a
+//!   host browser: 1713-3v3f); the listener takes EXACTLY ONE
 //!   callback, checks `state` before reading anything else, and closes. It
 //!   gives up after [`LOGIN_WINDOW`].
 //! - **qr**: a terminal QR of the authorize URL whose `redirect_uri` is the
 //!   operator's static relay page (`TILLANDSIAS_CLOUDFLARE_RELAY_URL`,
 //!   `assets/cloudflare-relay/index.html`); the code comes back by paste, or
-//!   by polling `TILLANDSIAS_CLOUDFLARE_RELAY_POLL_URL` when set.
+//!   by polling `TILLANDSIAS_CLOUDFLARE_RELAY_POLL_URL` when set. The default
+//!   relay is [`DEFAULT_RELAY_URL`], GATED OFF ([`RELAY_DEFAULT_ON`]) until
+//!   the operator confirms its registration (1757-n45b).
 //! - **paste**: the operator pastes the line the relay page shows
 //!   (`code=…&state=…`) or the whole address-bar URL. This is an
 //!   AUTHORIZATION CODE — single-use and useless without the PKCE verifier
@@ -56,20 +59,75 @@ use crate::vault_bootstrap::{
 /// redirect URI must equal a registered one including the port, so each port
 /// is its own registration (design note, operator checklist item 3).
 pub const REGISTERED_LOOPBACK_PORTS: [u16; 3] = [48631, 48632, 48633];
-/// The redirect path, on loopback and on the relay host alike.
+/// The LOOPBACK redirect path, registered with the Cloudflare App on each of
+/// [`REGISTERED_LOOPBACK_PORTS`].
 pub const CALLBACK_PATH: &str = "/tillandsias/cloudflare/callback";
-/// The operator's static relay page, e.g.
-/// `https://<relay-host>/tillandsias/cloudflare/callback`.
+/// The RELAY's callback path (1757-n45b, operator ruling 2026-10-17): the
+/// relay host serves more than this one provider, so its paths are per
+/// provider.
+pub const RELAY_CALLBACK_PATH: &str = "/cloudflare/callback";
+/// The operator's relay page, e.g.
+/// `https://cloudflare.tillandsias.org/cloudflare/callback`.
 pub const RELAY_URL_ENV: &str = "TILLANDSIAS_CLOUDFLARE_RELAY_URL";
 /// Optional: a relay Worker the host polls with `?state=` for the code.
 pub const RELAY_POLL_URL_ENV: &str = "TILLANDSIAS_CLOUDFLARE_RELAY_POLL_URL";
+/// ORDER 1757-n45b. The operator's relay page on its own host (private repo
+/// 8007342/cloudflare.tillandsias.org, operator ruling 2026-10-17). It is
+/// STATIC ONLY and stores nothing (the privacy policy says we store no data),
+/// so there is no default poll: the phone shows the paste line. A poll URL is
+/// used only when the operator sets [`RELAY_POLL_URL_ENV`] themselves.
+pub const DEFAULT_RELAY_URL: &str = "https://cloudflare.tillandsias.org/cloudflare/callback";
+/// GATED OFF until the operator confirms DEFAULT_RELAY_URL is registered as a
+/// redirect URI on the Cloudflare App. Before that, Cloudflare refuses the
+/// authorize request outright, so defaulting to the relay would break every
+/// login, not only QR. Flip it in the release after the confirmation, and
+/// invert `relay_default_is_gated_off_until_registration_is_confirmed` in
+/// the same commit.
+pub const RELAY_DEFAULT_ON: bool = false;
+
+/// The relay and poll URLs from their env values (`None` = unset). A set but
+/// empty value turns the relay off even when the default is on. The poll has
+/// no default: the default relay stores nothing, so there is nothing to poll.
+pub fn resolve_relay(
+    relay_env: Option<&str>,
+    poll_env: Option<&str>,
+    default_on: bool,
+) -> (Option<String>, Option<String>) {
+    let set = |v: Option<&str>| v.map(str::trim).map(str::to_string);
+    let relay = match set(relay_env) {
+        Some(v) if v.is_empty() => None,
+        Some(v) => Some(v),
+        None if default_on => Some(DEFAULT_RELAY_URL.to_string()),
+        None => None,
+    };
+    let poll = set(poll_env).filter(|v| !v.is_empty());
+    (relay, poll)
+}
 /// How long any receiver waits (spec: "for at most five minutes").
 pub const LOGIN_WINDOW: Duration = Duration::from_secs(300);
-/// Scopes requested at login. EMPTY until the operator registers the App and
-/// records the exact scope ids its consent screen lists (the design note's
-/// scope names are UNVERIFIED permission names, not ids); Cloudflare adds
-/// `openid`/`offline_access` itself.
-pub const CLOUDFLARE_LOGIN_SCOPES: &[&str] = &[];
+/// Scopes requested at login. ORDER 1718-adra, MEASURED 2026-10-14 on the
+/// operator's account: Cloudflare's ids are dotted (GET
+/// /client/v4/oauth/scopes lists them), this exact set was granted to the
+/// registered Tillandsias client, and an EMPTY list makes the consent screen
+/// ask for zero permissions with Authorize disabled. `openid` is refused for
+/// this client, so it is never requested. A scope added here must also be
+/// configured on the client in the Cloudflare dashboard.
+///
+/// - `offline_access`: a refresh token (rotation, Decision 2).
+/// - `workers-ci.read` / `.write`: Workers Builds triggers, builds and logs
+///   (1707-g633).
+/// - `workers-routes.read`: zone Worker routes (a wildcard route can shadow a
+///   custom domain, measured on tillandsias.org).
+/// - `workers-scripts.metadata_read`: list Workers and their tags.
+/// - `account-settings.read`: find the account id.
+pub const CLOUDFLARE_LOGIN_SCOPES: &[&str] = &[
+    "offline_access",
+    "workers-ci.read",
+    "workers-ci.write",
+    "workers-routes.read",
+    "workers-scripts.metadata_read",
+    "account-settings.read",
+];
 
 const RELAY_POLL_INTERVAL: Duration = Duration::from_secs(2);
 const RELAY_POLL_MAX_TRANSPORT_FAILURES: u32 = 5;
@@ -310,13 +368,18 @@ impl Via {
     }
 }
 
-/// The default receiver (spec): loopback when a desktop session AND a
-/// browser opener exist, else qr when a relay is configured, else paste.
-pub fn default_via(desktop_with_opener: bool, relay_configured: bool) -> Via {
-    if desktop_with_opener {
-        Via::Loopback
-    } else if relay_configured {
+/// The default receiver. OPERATOR RULING 2026-10-16 (recorded on 1713-3v3f):
+/// QR FIRST on every platform, so the user can sign in on a phone with 2FA,
+/// with the printed URL as the local fallback. So: qr whenever a relay is
+/// configured (a phone cannot reach 127.0.0.1, so a QR needs the relay), else
+/// loopback on a desktop session (the URL is printed, never auto-opened),
+/// else paste. Before, a desktop always took loopback and auto-opened the
+/// host browser, so a configured relay never produced a QR there.
+pub fn default_via(desktop_session: bool, relay_configured: bool) -> Via {
+    if relay_configured {
         Via::Qr
+    } else if desktop_session {
+        Via::Loopback
     } else {
         Via::Paste
     }
@@ -430,7 +493,7 @@ fn receive_loopback(
             return Err(Refusal::login(
                 "timeout",
                 "no callback reached the loopback listener within the login window; the listener is closed",
-                "run `tillandsias --cloudflare-login` again and approve in the browser that opens, or use `--via paste`",
+                "run `tillandsias --cloudflare-login` again and open the printed URL, or use `--via paste`",
             ));
         }
         match listener.accept() {
@@ -603,7 +666,7 @@ fn validate_relay_url(url: &str) -> Result<(), Refusal> {
             format!(
                 "{RELAY_URL_ENV} must be an https URL with a path and no userinfo, query or fragment, exactly as registered with the Cloudflare App"
             ),
-            format!("set {RELAY_URL_ENV}=https://<relay-host>{CALLBACK_PATH}"),
+            format!("set {RELAY_URL_ENV}=https://<relay-host>{RELAY_CALLBACK_PATH}"),
         ))
     }
 }
@@ -623,9 +686,12 @@ pub struct LoginDeps<'a> {
     pub relay_url: Option<String>,
     pub relay_poll_url: Option<String>,
     pub loopback_ports: Vec<u16>,
-    /// Opens the system browser on a URL. Receives the authorize URL only.
-    pub open_browser: &'a dyn Fn(&str) -> Result<(), String>,
-    pub desktop_with_opener: bool,
+    /// TEST SEAM: what happens after the loopback URL is printed. Production
+    /// passes a no-op, because the operator clicks the printed URL; nothing
+    /// here launches a host browser (1713-3v3f). Tests pass a fake browser
+    /// that follows the URL. Receives the authorize URL only.
+    pub follow_url: &'a dyn Fn(&str) -> Result<(), String>,
+    pub desktop_session: bool,
     pub stdin_is_terminal: bool,
     /// Reads one pasted line from the terminal.
     pub read_paste: &'a mut dyn FnMut() -> Result<String, String>,
@@ -673,8 +739,7 @@ pub fn login(
     if deps.host_is_forge {
         return Err(forge_refusal("cloudflare-login"));
     }
-    let via =
-        via.unwrap_or_else(|| default_via(deps.desktop_with_opener, deps.relay_url.is_some()));
+    let via = via.unwrap_or_else(|| default_via(deps.desktop_session, deps.relay_url.is_some()));
 
     // Receiver preconditions, before any network call.
     if let Some(relay) = deps.relay_url.as_deref()
@@ -703,7 +768,7 @@ pub fn login(
                         "a phone that scans the QR cannot reach 127.0.0.1 on this host, so the QR redirect must be the operator's relay page, and {RELAY_URL_ENV} is not set"
                     ),
                     format!(
-                        "use `--via loopback` on a desktop with a browser, or `--via paste`; or set {RELAY_URL_ENV}=https://<relay-host>{CALLBACK_PATH}"
+                        "use `--via loopback` on a desktop with a browser, or `--via paste`; or set {RELAY_URL_ENV}=https://<relay-host>{RELAY_CALLBACK_PATH}"
                     ),
                 ));
             }
@@ -774,12 +839,7 @@ pub fn login(
     let deadline = Instant::now() + deps.window;
     let code = match via {
         Via::Loopback => {
-            if (deps.open_browser)(&pending.authorize_url).is_err() {
-                let _ = writeln!(
-                    out,
-                    "note:cloudflare-login:browser-not-opened (open the URL above in a browser on THIS machine)"
-                );
-            }
+            let _ = (deps.follow_url)(&pending.authorize_url);
             let l = listener.take().expect("loopback bound above");
             let r = receive_loopback(&l, &pending.state, deadline);
             drop(l);
@@ -920,7 +980,7 @@ fn show_authorize_url(via: Via, pending: &Pending, deps: &LoginDeps<'_>, out: &m
         Via::Loopback => {
             let _ = writeln!(
                 out,
-                "Opening your browser to sign in to Cloudflare. If it does not open, visit this URL on THIS machine:"
+                "Open this URL in a browser on THIS machine to sign in to Cloudflare (click it, or copy it):"
             );
             let _ = writeln!(out, "  {}", pending.authorize_url);
         }
@@ -1131,35 +1191,6 @@ pub fn parse_args(args: &[String]) -> Result<Command, Refusal> {
     })
 }
 
-/// The system browser opener, if one is on PATH.
-fn browser_opener() -> Option<std::path::PathBuf> {
-    let name = if cfg!(target_os = "macos") {
-        "open"
-    } else {
-        "xdg-open"
-    };
-    let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path)
-        .map(|d| d.join(name))
-        .find(|p| p.is_file())
-}
-
-/// Open `url` with the opener. The URL is the authorize URL (public data
-/// only); nothing secret is placed in argv or in the child's environment.
-fn open_with(opener: &std::path::Path, url: &str) -> Result<(), String> {
-    let mut child = std::process::Command::new(opener)
-        .arg(url)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .map_err(|_| "opener-spawn-failed".to_string())?;
-    std::thread::spawn(move || {
-        let _ = child.wait();
-    });
-    Ok(())
-}
-
 /// One line from the terminal with echo OFF (restored before returning), at
 /// most [`MAX_PASTE_BYTES`].
 fn read_paste_line_from_terminal() -> Result<String, String> {
@@ -1213,7 +1244,6 @@ pub fn run_cli(args: &[String]) -> i32 {
     let http = cloudflare_oauth::ReqwestHttpClient::default();
     let store = vault_bootstrap::VaultCloudflareTokenStore { debug };
     let host_is_forge = std::env::var("TILLANDSIAS_HOST_KIND").as_deref() == Ok("forge");
-    let nonempty = |k: &str| std::env::var(k).ok().filter(|v| !v.trim().is_empty());
     let mut stdout = std::io::stdout();
     let result = match cmd {
         Command::Logout => logout(
@@ -1226,22 +1256,23 @@ pub fn run_cli(args: &[String]) -> i32 {
             &mut stdout,
         ),
         Command::Login { via } => {
-            let opener = browser_opener();
-            let open = |url: &str| match opener.as_deref() {
-                Some(o) => open_with(o, url),
-                None => Err("no-opener".to_string()),
-            };
+            let relay_env = std::env::var(RELAY_URL_ENV).ok();
+            let poll_env = std::env::var(RELAY_POLL_URL_ENV).ok();
+            let (relay_url, relay_poll_url) =
+                resolve_relay(relay_env.as_deref(), poll_env.as_deref(), RELAY_DEFAULT_ON);
+            // The URL is printed; nothing launches a host browser (1713-3v3f).
+            let follow = |_: &str| Ok(());
             let mut read = read_paste_line_from_terminal;
             let mut deps = LoginDeps {
                 http: &http,
                 store: &store,
                 base_url: cloudflare_oauth::base_url(),
                 client_id: cloudflare_oauth::client_id(),
-                relay_url: nonempty(RELAY_URL_ENV),
-                relay_poll_url: nonempty(RELAY_POLL_URL_ENV),
+                relay_url,
+                relay_poll_url,
                 loopback_ports: REGISTERED_LOOPBACK_PORTS.to_vec(),
-                open_browser: &open,
-                desktop_with_opener: crate::has_graphical_session() && opener.is_some(),
+                follow_url: &follow,
+                desktop_session: crate::has_graphical_session(),
                 stdin_is_terminal: std::io::stdin().is_terminal(),
                 read_paste: &mut read,
                 litmus_stop: std::env::var_os("LITMUS_PODMAN_MODE").is_some(),
@@ -1254,7 +1285,21 @@ pub fn run_cli(args: &[String]) -> i32 {
                     .map(|d| d.as_secs())
                     .unwrap_or(0),
             };
-            login(via, &mut deps, &mut stdout).map(|_| ())
+            let stored = login(via, &mut deps, &mut stdout).map(|_| ());
+            // Order 1719-83po: wake a waiting Linux tray so it hides "Cloudflare
+            // Login" on an event. Best-effort: no tray (or the VM guest, where
+            // the tray learns from the login session closing) is a note.
+            #[cfg(unix)]
+            if stored.is_ok() {
+                match crate::notify_tray_cloudflare_login_stored(&crate::tray_control_socket_path())
+                {
+                    crate::TrayNotify::Acked => {}
+                    crate::TrayNotify::NoTray(why) => {
+                        let _ = writeln!(stdout, "note:cloudflare-login:no-tray-notified:{why}");
+                    }
+                }
+            }
+            stored
         }
     };
     match result {
@@ -1276,6 +1321,119 @@ mod tests {
     use std::rc::Rc;
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    // ── 1757-n45b: the relay default, gated off until registration ──────────
+
+    #[test]
+    fn relay_default_is_gated_off_until_registration_is_confirmed() {
+        // FAILS if the default is baked on before the operator confirms the
+        // redirect URI: an unregistered redirect makes Cloudflare refuse the
+        // authorize request, so every login would break, not only QR.
+        // Invert this in the release that flips RELAY_DEFAULT_ON.
+        // black_box: a runtime arm (clippy refuses assertions on constants),
+        // so a flipped default is a named FAILED test, not a build break.
+        let on = std::hint::black_box(RELAY_DEFAULT_ON);
+        assert!(
+            !on,
+            "RELAY_DEFAULT_ON is true before the operator confirmed {DEFAULT_RELAY_URL} is registered (1757-n45b)"
+        );
+        assert_eq!(resolve_relay(None, None, RELAY_DEFAULT_ON), (None, None));
+    }
+
+    #[test]
+    fn an_empty_relay_env_turns_the_default_off() {
+        for empty in ["", "   "] {
+            assert_eq!(
+                resolve_relay(Some(empty), None, true),
+                (None, None),
+                "{empty:?}"
+            );
+            assert_eq!(resolve_relay(Some(empty), Some(empty), true), (None, None));
+        }
+        // An explicitly empty poll keeps the default relay, and no poll.
+        assert_eq!(
+            resolve_relay(None, Some(""), true),
+            (Some(DEFAULT_RELAY_URL.to_string()), None)
+        );
+    }
+
+    #[test]
+    fn with_the_default_on_an_unset_env_reaches_the_static_relay_and_never_a_poll() {
+        // The default relay is static and stores nothing (privacy policy), so
+        // the default never polls: the flow is QR, phone page, paste.
+        assert_eq!(
+            resolve_relay(None, None, true),
+            (Some(DEFAULT_RELAY_URL.to_string()), None)
+        );
+        assert_eq!(
+            DEFAULT_RELAY_URL,
+            "https://cloudflare.tillandsias.org/cloudflare/callback"
+        );
+        validate_relay_url(DEFAULT_RELAY_URL)
+            .expect("the default relay passes the login's own URL rule");
+        assert!(DEFAULT_RELAY_URL.ends_with(RELAY_CALLBACK_PATH));
+    }
+
+    #[test]
+    fn an_operator_set_relay_wins_and_polls_only_what_the_operator_set() {
+        let mine = "https://relay.example.invalid/tillandsias/cloudflare/callback";
+        for on in [true, false] {
+            assert_eq!(
+                resolve_relay(Some(mine), None, on),
+                (Some(mine.to_string()), None)
+            );
+        }
+        let poll = "https://relay.example.invalid/poll";
+        assert_eq!(
+            resolve_relay(Some(mine), Some(poll), true),
+            (Some(mine.to_string()), Some(poll.to_string()))
+        );
+    }
+
+    /// ORDER 1718-adra. MEASURED 2026-10-14 against the operator's account: an
+    /// authorize request with NO scope makes Cloudflare's consent screen ask
+    /// for "0 total permissions" with Authorize disabled, so an empty list is a
+    /// login that cannot complete. Cloudflare's ids are dotted, from
+    /// GET /client/v4/oauth/scopes (`workers-ci.write`,
+    /// `workers-scripts.metadata_read`), and `openid` is refused for this
+    /// client ("not allowed to request scope 'openid'").
+    #[test]
+    fn the_login_requests_cloudflares_measured_scope_ids_and_the_registered_client() {
+        assert!(
+            !CLOUDFLARE_LOGIN_SCOPES.is_empty(),
+            "an empty scope list asks Cloudflare for zero permissions"
+        );
+        assert!(CLOUDFLARE_LOGIN_SCOPES.contains(&"offline_access"));
+        assert!(
+            !CLOUDFLARE_LOGIN_SCOPES.contains(&"openid"),
+            "Cloudflare refuses openid for this client"
+        );
+        for scope in CLOUDFLARE_LOGIN_SCOPES {
+            if *scope == "offline_access" {
+                continue;
+            }
+            let (resource, access) = scope
+                .split_once('.')
+                .unwrap_or_else(|| panic!("{scope}: not a dotted Cloudflare scope id"));
+            assert!(
+                !resource.is_empty()
+                    && resource
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+                    && !access.is_empty()
+                    && access.chars().all(|c| c.is_ascii_lowercase() || c == '_'),
+                "{scope}: Cloudflare ids look like workers-ci.write, not wrangler's workers_builds:write"
+            );
+        }
+        // The Workers Builds scope 1707-g633 needs, granted live.
+        assert!(CLOUDFLARE_LOGIN_SCOPES.contains(&"workers-ci.write"));
+
+        let id = crate::cloudflare_oauth::CLOUDFLARE_APP_CLIENT_ID;
+        assert!(
+            id.len() == 32 && id.chars().all(|c| c.is_ascii_hexdigit()),
+            "the registered client id, not a placeholder: {id}"
+        );
+    }
 
     // ── the in-memory Vault seam (the 1505-iysn CloudflareTokenStore trait) ──
 
@@ -1503,9 +1661,11 @@ mod tests {
 
     #[test]
     fn cloudflare_login_default_receiver_order() {
-        assert_eq!(default_via(true, true), Via::Loopback);
-        assert_eq!(default_via(true, false), Via::Loopback);
+        // QR FIRST wherever a relay exists, a desktop included (operator
+        // ruling 2026-10-16, 1713-3v3f); the printed URL otherwise.
+        assert_eq!(default_via(true, true), Via::Qr);
         assert_eq!(default_via(false, true), Via::Qr);
+        assert_eq!(default_via(true, false), Via::Loopback);
         assert_eq!(default_via(false, false), Via::Paste);
     }
 
@@ -1719,8 +1879,8 @@ mod tests {
             relay_url: None,
             relay_poll_url: None,
             loopback_ports: vec![0],
-            open_browser: open,
-            desktop_with_opener: false,
+            follow_url: open,
+            desktop_session: false,
             stdin_is_terminal: false,
             read_paste: read,
             litmus_stop: false,

@@ -78,6 +78,13 @@ pub enum PtyIntent {
     Shell,
     /// "GitHub login" — the `gh` device-code flow inside the VM.
     GithubLogin,
+    /// Order 1719-83po: `tillandsias-headless --cloudflare-login` inside the VM,
+    /// with NO forced receiver: the login picks it (`default_via`), which is
+    /// a QR whenever a relay is configured (operator ruling 2026-10-16, QR
+    /// first on every platform, 1713-3v3f) and otherwise the printed URL plus
+    /// paste, since the guest has no desktop. Kernel echo stays on for this
+    /// lane (pty_handler keys on `--cloudflare-login`).
+    CloudflareLogin,
     /// Launch the selected coding agent via the forge entrypoint.
     Agent(SelectedAgent),
 }
@@ -273,6 +280,7 @@ pub fn intent_for_action(
 ) -> Option<(PtyIntent, Option<String>)> {
     match action {
         MenuAction::GithubLogin => Some((PtyIntent::GithubLogin, None)),
+        MenuAction::CloudflareLogin => Some((PtyIntent::CloudflareLogin, None)),
         MenuAction::Attach { name, agent, .. } => {
             Some((PtyIntent::Agent(*agent), Some(name.clone())))
         }
@@ -358,6 +366,11 @@ pub fn launch_spec(
                 "exec tillandsias-headless --github-login || (echo 'tillandsias-headless failed' && sleep 10 && false)",
             )
         }
+        // Order 1719-83po: the same login-shell route as GitHub Login (an
+        // absolute /bin/bash, PATH rebuilt by -l, `&&` never `;` for wt.exe).
+        PtyIntent::CloudflareLogin => vm_login_shell_argv(
+            "exec tillandsias-headless --cloudflare-login || (echo 'tillandsias-headless failed' && sleep 10 && false)",
+        ),
         PtyIntent::Agent(agent) => {
             vec!["tillandsias".to_string(), agent_flag(*agent).to_string()]
         }
@@ -1073,6 +1086,31 @@ mod tests {
             bytes: vec![0u8; MAX_PTY_FRAME_BYTES + 1],
         };
         assert!(r.route(&oversized).await.is_err());
+    }
+
+    /// Order 1719-83po: the Cloudflare Login item opens a login shell running
+    /// `tillandsias-headless --cloudflare-login` with NO forced receiver, so
+    /// the login chooses QR first (operator ruling 2026-10-16, 1713-3v3f), on
+    /// the same `/bin/bash -lc` route as GitHub Login, with no `;` (wt.exe
+    /// splits on it) and no project. Red on the paste-only intent.
+    #[test]
+    fn cloudflare_login_intent_lets_the_login_choose_qr_first() {
+        let (intent, project) =
+            intent_for_action(&MenuAction::CloudflareLogin, SelectedAgent::Claude)
+                .expect("an intent");
+        assert!(matches!(intent, PtyIntent::CloudflareLogin));
+        assert_eq!(project, None);
+        let argv = launch_spec(&intent, None, 24, 80).unwrap().argv;
+        assert_eq!(&argv[..2], &["/bin/bash".to_string(), "-lc".to_string()]);
+        assert!(
+            argv[2].contains("exec tillandsias-headless --cloudflare-login ||"),
+            "{argv:?}"
+        );
+        assert!(
+            !argv[2].contains("--via"),
+            "a forced receiver would override QR first: {argv:?}"
+        );
+        assert!(!argv[2].contains(';'), "wt.exe splits on ';': {argv:?}");
     }
 
     #[test]

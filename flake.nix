@@ -124,6 +124,52 @@
             images/router/tillandsias-router-sidecar
         '';
 
+        # ORDER 1750-a4re. The forge image's Bash command-policy decider: a
+        # static musl tillandsias-plan that tillandsias-headless/build.rs embeds
+        # (images/default/policy-bin/, a tracked dir the forge Containerfile
+        # copies) and images/default/bash-policy-hook runs. That hook FAILS
+        # CLOSED, so a release built without it would refuse every Claude Bash
+        # command in every forge; staging it in preBuild makes it a dependency
+        # edge, exactly like the sidecar above. mlua vendors Lua as C, and a
+        # glibc cc cannot build that for musl (its headers rename fopen & co.
+        # to *64 symbols musl does not export), so BOTH arches take a musl C
+        # compiler from pkgsCross. Build-dev hosts use
+        # scripts/build-forge-plan-bin.sh instead.
+        x86MuslPkgs = pkgs.pkgsCross.musl64;
+        x86MuslCc = "${x86MuslPkgs.stdenv.cc}/bin/${x86MuslPkgs.stdenv.cc.targetPrefix}cc";
+        x86MuslAr = "${x86MuslPkgs.stdenv.cc.bintools.bintools}/bin/${x86MuslPkgs.stdenv.cc.targetPrefix}ar";
+        planX86Args = {
+          CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
+          cargoExtraArgs = "-p tillandsias-plan --bin tillandsias-plan";
+          depsBuildBuild = [ x86MuslPkgs.stdenv.cc ];
+          CC_x86_64_unknown_linux_musl = x86MuslCc;
+          AR_x86_64_unknown_linux_musl = x86MuslAr;
+          HOST_CC = "${pkgs.stdenv.cc}/bin/cc";
+        };
+        planAarch64Args = {
+          CARGO_BUILD_TARGET = "aarch64-unknown-linux-musl";
+          cargoExtraArgs = "-p tillandsias-plan --bin tillandsias-plan";
+          depsBuildBuild = [ crossPkgs.stdenv.cc ];
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER = aarch64Cc;
+          CC_aarch64_unknown_linux_musl = aarch64Cc;
+          AR_aarch64_unknown_linux_musl = aarch64Ar;
+          TARGET_CC = aarch64Cc;
+          HOST_CC = "${pkgs.stdenv.cc}/bin/cc";
+        };
+        tillandsias-plan-x86_64-musl = craneLib.buildPackage (commonCraneArgs // planX86Args // {
+          cargoArtifacts = craneLib.buildDepsOnly (commonCraneArgs // planX86Args);
+          pname = "tillandsias-plan-x86_64";
+          version = "0.0.0";
+        });
+        tillandsias-plan-aarch64-musl = craneLib.buildPackage (commonCraneArgs // planAarch64Args // {
+          cargoArtifacts = craneLib.buildDepsOnly (commonCraneArgs // planAarch64Args);
+          pname = "tillandsias-plan-aarch64";
+          version = "0.0.0";
+        });
+        stagePlanBin = plan: ''
+          install -Dm0755 ${plan}/bin/tillandsias-plan images/default/policy-bin/tillandsias-plan
+        '';
+
         tillandsias-x86_64-musl =
           let
             cargoArtifacts = craneLib.buildDepsOnly (commonCraneArgs // {
@@ -137,7 +183,7 @@
             version = "0.0.0";
             CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
             cargoExtraArgs = "--bin tillandsias --features tray";
-            preBuild = stageRouterSidecar;
+            preBuild = stageRouterSidecar + stagePlanBin tillandsias-plan-x86_64-musl;
           });
 
         tillandsias-headless-x86_64-musl =
@@ -153,7 +199,7 @@
             version = "0.0.0";
             CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
             cargoExtraArgs = "-p tillandsias-headless --bin tillandsias --features listen-vsock";
-            preBuild = stageRouterSidecar;
+            preBuild = stageRouterSidecar + stagePlanBin tillandsias-plan-x86_64-musl;
           });
 
         tillandsias-headless-aarch64-musl =
@@ -176,7 +222,7 @@
             version = "0.0.0";
             CARGO_BUILD_TARGET = "aarch64-unknown-linux-musl";
             cargoExtraArgs = "-p tillandsias-headless --bin tillandsias --features listen-vsock";
-            preBuild = stageRouterSidecar;
+            preBuild = stageRouterSidecar + stagePlanBin tillandsias-plan-aarch64-musl;
             # aarch64-musl cross toolchain (ring's build.rs + linker).
             depsBuildBuild = [ crossPkgs.stdenv.cc ];
             CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER = aarch64Cc;
@@ -313,7 +359,9 @@
           inherit tillandsias-x86_64-musl
                   tillandsias-headless-x86_64-musl
                   tillandsias-headless-aarch64-musl
-                  tillandsias-router-sidecar-x86_64-musl;
+                  tillandsias-router-sidecar-x86_64-musl
+                  tillandsias-plan-x86_64-musl
+                  tillandsias-plan-aarch64-musl;
 
           forge-image = pkgs.dockerTools.buildLayeredImage {
             name = "tillandsias-forge";

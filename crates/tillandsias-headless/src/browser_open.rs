@@ -509,10 +509,9 @@ pub(crate) fn webkit_window_spec(
             .volume(socket, &inside, tillandsias_podman::MountMode::ReadWrite)
             .env("PULSE_SERVER", format!("unix:{inside}"));
     }
-    for name in [
-        format!("www.{project}.localhost"),
-        format!("web.{project}.localhost"),
-    ] {
+    // 1725-wkfl: the router's own host list (www and every dev service), not
+    // a second literal pair; `web.` was never in the leaf's SAN.
+    for name in crate::local_web_preview::preview_hosts(project) {
         spec = spec.add_host(&name, forwarder_ip)?;
     }
     Ok(spec)
@@ -1017,7 +1016,8 @@ mod tests {
             hosts,
             [
                 "--add-host=www.acme.localhost:10.89.1.2",
-                "--add-host=web.acme.localhost:10.89.1.2"
+                // 1725-wkfl: every dev service the router serves, from its list.
+                "--add-host=flutter.acme.localhost:10.89.1.2"
             ]
         );
         assert!(

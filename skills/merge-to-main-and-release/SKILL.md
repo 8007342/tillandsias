@@ -256,6 +256,27 @@ scripts/release-freeze.sh set "${release_source_branch:-linux-next}" "cut ${new_
 # -> ok:freeze-set:refs/tillandsias/freeze/<branch>/<host>/<epoch>
 # A `refused:freeze:unreachable:*` here is a STOP: an unreachable origin means
 # the cut cannot publish either. Do not proceed with an undeclared freeze.
+#
+# LANDING A FIX TO THE CUT WHILE FROZEN (order 1265-8qr6). The hook refuses
+# the cut host's own code push like anyone's. Do NOT clear for it: a clear
+# leaves origin with no marker for the whole land, gate included, and every
+# host reads ok:freeze-none. Hand the freeze over instead:
+#   scripts/release-freeze.sh land "${release_source_branch:-linux-next}"
+#   # -> ok:freeze-landing:refs/tillandsias/freeze-landing/<branch>/<host>/<epoch>
+#   #    (written BEFORE the freeze marker goes; status reads
+#   #    frozen-landing:<branch>:by=<host>)
+#   ... land the fix ...
+#   scripts/release-freeze.sh set "${release_source_branch:-linux-next}"
+#   # the re-freeze writes the freeze marker BEFORE the landing marker goes
+# The land queue runs only on the cut host, and the cut host decides when to
+# start it, so hold the queue during a land: while the landing marker is live,
+# land the cut's fix alone and start no queue run until the re-freeze. The
+# queue cannot tell the cut's fix from anyone else's candidate (identity at
+# push time is self-declared), so this is procedure, not a check.
+# For every other host, frozen-landing means HOLD code exactly as frozen:
+# only ok:freeze-none is clear. There is no cut-host exemption in the hook;
+# host identity at push time is self-declared, so the freeze is a
+# coordination signal, not an authentication boundary.
 
 # THE GATE. This is the whole safety net now — there is nothing server-side.
 ./build.sh --ci-full || { echo "gate failed — do NOT merge"; exit 1; }
@@ -467,8 +488,8 @@ TILLANDSIAS_CLASS_SELECTOR=off TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --chec
 # declared policy (hold code lands on the release branch from the gate start to
 # the stage-2 back-merge push) expressed as a lifetime rather than a promise.
 scripts/release-freeze.sh clear "${release_source_branch:-linux-next}"
-# -> ok:freeze-cleared:<n>; clearing removes every marker for the branch,
-#    whoever set it, so a coordinator can always clear a freeze another host
+# -> ok:freeze-cleared:<n>; clearing removes every marker for the branch
+#    (freeze and landing markers alike), whoever set it, so a coordinator can always clear a freeze another host
 #    declared. `ok:freeze-cleared:0` means it was already clear — not an error.
 
 # NOW both pushes succeed. Order between them does not matter; both are gated

@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "tillandsias-plan policy classify-bash --hook"
+            "command": "/usr/local/lib/tillandsias/bash-policy-hook"
           }
         ]
       }

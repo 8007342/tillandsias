@@ -89,6 +89,7 @@ mod tests {
             login: GithubLoginState::LoggedIn {
                 handle: "bulloncito".to_string(),
             },
+            cloudflare_login: Default::default(),
             // 997-e4v2: the per-project leaf properties these tests check are
             // unchanged, but the only project path is cloud now, so the
             // fixture supplies a cloud project instead of a local one.
@@ -263,16 +264,21 @@ mod tests {
     fn render_ready_top_level_matches_macos_parity_contract() {
         let specs = render(&macos_ready_menu());
         let top_ids: Vec<&str> = specs.iter().map(|s| s.id.as_str()).collect();
+        // Order 1719-83po: `cloudflare-login` APPROVED by the Tlatoāni
+        // 2026-10-14 (openspec simplified-tray-ux "Cloudflare Login Menu",
+        // req e0555b06; placement provisional until 1720-pqwj). The fixture's
+        // state is Unknown, so the row shows (disabled).
         assert_eq!(
             top_ids,
             vec![
                 ids::STATUS,
                 ids::CLOUD_PROJECTS,
+                ids::CLOUDFLARE_LOGIN,
                 ids::SEPARATOR,
                 ids::VERSION,
                 ids::QUIT,
             ],
-            "macOS authed Ready menu must match the 5-item Linux parity contract \
+            "macOS authed Ready menu must match the 6-item Linux parity contract \
              (997-e4v2 removed the local-projects submenu)"
         );
         assert!(
@@ -305,6 +311,7 @@ mod tests {
     fn render_logged_out_collapses_to_login_leaf_on_macos() {
         let state = MenuState {
             login: GithubLoginState::LoggedOut,
+            cloudflare_login: Default::default(),
             target: TargetSurface::MacosTray,
             ..MenuState::initial()
         };

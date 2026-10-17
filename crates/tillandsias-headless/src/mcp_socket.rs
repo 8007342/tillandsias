@@ -28,8 +28,15 @@ use tracing::warn;
 ///
 /// @trace spec:mcp-tool-socket, spec:tray-host-control-socket
 pub(crate) fn mcp_socket_base_dir() -> PathBuf {
-    let runtime_dir = if let Ok(xdg) = env::var("XDG_RUNTIME_DIR") {
-        PathBuf::from(xdg)
+    mcp_socket_base_dir_from(env::var("XDG_RUNTIME_DIR").ok())
+}
+
+/// [`mcp_socket_base_dir`] for an explicit `XDG_RUNTIME_DIR` value, so a test
+/// can pass one without touching the process environment. An empty value
+/// counts as unset (order 1748-fbqe, see [`crate::nonempty_runtime_dir`]).
+pub(crate) fn mcp_socket_base_dir_from(xdg: Option<String>) -> PathBuf {
+    let runtime_dir = if let Some(xdg) = crate::nonempty_runtime_dir(xdg) {
+        xdg
     } else {
         #[cfg(unix)]
         {
@@ -77,6 +84,31 @@ pub fn mcp_socket_host_dir_for_lane(project: &str, instance: &str) -> PathBuf {
 /// @trace spec:mcp-tool-socket, spec:tray-host-control-socket
 pub fn mcp_socket_path_for_lane(project: &str, instance: &str) -> PathBuf {
     mcp_socket_host_dir_for_lane(project, instance).join("mcp.sock")
+}
+
+/// ORDER 1713-1dnx: the owner a lane's socket dir and socket are handed to,
+/// given the serving process's effective uid. Linux native serves as the
+/// desktop user and `--userns=keep-id` maps that uid onto the forge's, so the
+/// 0700 dir and 0600 socket are already the forge's: `None`, nothing changes.
+/// The WSL and macOS VM guests serve as root under rootful podman, where the
+/// forge's uid 1000 met a root-owned 0700 dir and got EACCES on connect.
+/// The modes stay owner-only; only the owner moves to the forge account.
+pub(crate) fn forge_owner_for_euid(euid: u32) -> Option<u32> {
+    // The forge image's only interactive account (see chown_tree_to_forge_uid).
+    const FORGE_UID: u32 = 1000;
+    (euid == 0).then_some(FORGE_UID)
+}
+
+#[cfg(unix)]
+fn hand_lane_socket_to_forge_uid(socket_path: &std::path::Path) {
+    let Some(uid) = forge_owner_for_euid(unsafe { libc::geteuid() }) else {
+        return;
+    };
+    // lchown: never follow a link planted where the socket or dir should be.
+    if let Some(dir) = socket_path.parent() {
+        let _ = std::os::unix::fs::lchown(dir, Some(uid), Some(uid));
+    }
+    let _ = std::os::unix::fs::lchown(socket_path, Some(uid), Some(uid));
 }
 
 /// Legacy fallback socket path.
@@ -816,6 +848,8 @@ pub fn start_mcp_socket_server_for_lane(project: &str, instance: &str) -> Result
     #[cfg(unix)]
     fs::set_permissions(&socket_path, fs::Permissions::from_mode(0o600))
         .map_err(|err| format!("failed to chmod mcp socket: {err}"))?;
+    #[cfg(unix)]
+    hand_lane_socket_to_forge_uid(&socket_path);
 
     registry.insert(lane_key);
     drop(registry);

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: five-litmus-timeouts-were-elevated-to-unblock-a-release-and-must-come-back-down-one-at-a-time-as-the-fold-fix-lands
+    event:
+      type: progress
+      ts: "2026-10-16T01:45:41Z"
+      agent_id: linux-yoga-claude-20261016t014541z
+      host: yoga
+      summary: |-
+        yoga 2026-10-16: the four still-elevated budgets restored as four separate commits on work/1236-bmjh (PR #467, draft until the v56.10.16.1 back-merge): 61c1abf09 implausible-guard s1 20000, a128d01c3 cycle-flow s2 10000, d0c4db138 build-test s2 10000, f40d8daad batch-triage s14 15000; banners removed with each. Inside ./build.sh --ci-full on yoga (tree f40d8daad, timing log 116,745 records, ledger 4,567 fragments, gate compiling): 1,177 / 1,448 / 308 / 4,746 ms, plus cycle-metrics s1 1,422/10000 (restored 2026-09-26). Gate rc=1 on one unrelated litmus (forge-experts-discoverability s10, 1437-wcn9). Negative control: test-litmus-budget-tally.sh 7/7, arm 1 budget kill exits non-zero.

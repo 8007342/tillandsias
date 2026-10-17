@@ -1242,6 +1242,34 @@ timing_commit smoke-forge-lane smoke "$_T0" "${LANE_RC:-1}"
 > the lane most likely to be run on one, since a curl-install smoke is floor
 > work. A script FILE and a terminal `rc=` marker are required on both.
 
+**Windows: the tray must be running, and the lane runs as a `systemd-run`
+unit inside the guest** (yolanda, v56.10.15.1, 2026-10-15). There is no host
+CLI forge lane on Windows; the lane is `tillandsias-headless --cloud <owner/repo>
+--opencode` inside the `tillandsias` distro. Two attempts were lost before the
+form below worked, and neither was a product defect:
+
+- `setsid nohup <script> &` piped through `wsl.exe -d tillandsias -u root --
+  bash -s` dies when that wsl.exe session returns, before writing a byte.
+- A `systemd-run` unit is stopped about 20 s in when nothing holds the guest
+  open. §2 stops the tray and `--provision-once` exits, so after §3 the guest
+  idles out with the lane in it.
+
+Restart the tray first, then start the lane as a transient unit and watch it:
+
+```powershell
+if (-not (Get-Process tillandsias-tray -ErrorAction SilentlyContinue)) {
+  Start-Process "$env:LOCALAPPDATA\Programs\Tillandsias\tillandsias-tray.exe"
+}
+# /root/smoke/lane.sh: runs the lane > /root/smoke/lane.log 2>&1, then appends rc=$?
+wsl.exe -d tillandsias -u root -- systemd-run --unit=smoke-lane --collect /root/smoke/lane.sh
+wsl.exe -d tillandsias -u root -- systemctl is-active smoke-lane   # poll until inactive
+```
+
+Write the lane script into the guest by piping a script FILE on stdin, never
+as a `bash -c` string. The unit also survived 4% free host memory, because the
+harness's memory reaper only stops host-side shells. Record host free memory
+at the start and sample it during the lane.
+
 ### 4a — What a killed supervisor looks like, and what it is not
 
 **Containers alive, wrapper gone.** Measured on pirria 2026-09-04: the agent

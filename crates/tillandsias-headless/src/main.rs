@@ -245,6 +245,10 @@ fn terminal_foreground_pgrp() -> Option<i32> {
 }
 
 fn main() {
+    // ORDER 1744-xjfw: first, so even a panic on the helper's FIRST write (a
+    // startup warning, before argument dispatch) is recorded. A no-op unless
+    // the detached image-ensure parent named a sidecar.
+    install_image_ensure_panic_hook();
     #[cfg(unix)]
     {
         // Own our process group so graceful shutdown can sweep stray children
@@ -2818,6 +2822,82 @@ const IMAGE_BUILD_DETACH_ENV: &str = "TILLANDSIAS_IMAGE_BUILD_DETACH";
 /// Set on the helper process so its own `ensure_image_exists` (including
 /// base-image recursion) stays in-process — one helper, never nested ones.
 const IMAGE_BUILD_HELPER_ENV: &str = "TILLANDSIAS_IMAGE_BUILD_HELPER";
+/// ORDER 1744-xjfw: where the helper's panic hook writes the panic text. The
+/// helper's stdout AND stderr are its build log, so one failed write to that
+/// file (a full disk mid-build, say) both panics the helper (`println!` panics
+/// on a write error) and loses the panic message: measured on the macOS guest,
+/// "exited 101" with a log holding nothing past the forge-base pull. This
+/// sidecar lives in the temp dir (tmpfs on the guest), not beside the log.
+const IMAGE_ENSURE_PANIC_FILE_ENV: &str = "TILLANDSIAS_IMAGE_ENSURE_PANIC_FILE";
+
+fn image_ensure_panic_path(image_name: &str) -> PathBuf {
+    std::env::temp_dir().join(format!("tillandsias-image-ensure-{image_name}.panic"))
+}
+
+/// Helper mode: record any panic to the sidecar named by
+/// [`IMAGE_ENSURE_PANIC_FILE_ENV`] before the default hook prints it.
+fn install_image_ensure_panic_hook() {
+    let Some(path) = std::env::var_os(IMAGE_ENSURE_PANIC_FILE_ENV).map(PathBuf::from) else {
+        return;
+    };
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = fs::write(&path, format!("{info}\n"));
+        default_hook(info);
+    }));
+}
+
+/// Free bytes on the filesystem holding `path`, for a failure message.
+#[cfg(unix)]
+// statvfs field widths differ by platform (f_bavail is u32 on macOS, u64 on
+// Linux), so the cast is needed on one and redundant on the other.
+#[allow(clippy::unnecessary_cast)]
+fn free_bytes_at(path: &Path) -> Option<u64> {
+    use std::os::unix::ffi::OsStrExt;
+    let c = std::ffi::CString::new(path.as_os_str().as_bytes()).ok()?;
+    let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
+    if unsafe { libc::statvfs(c.as_ptr(), &mut st) } != 0 {
+        return None;
+    }
+    Some(st.f_bavail as u64 * st.f_frsize as u64)
+}
+
+#[cfg(not(unix))]
+fn free_bytes_at(_path: &Path) -> Option<u64> {
+    None
+}
+
+/// ORDER 1744-xjfw: the error for a helper that exited non-zero. Says what a
+/// bare 101 means when no panic text survived, and how much space was left,
+/// so the next failure names its own cause instead of a progress bar.
+fn describe_image_ensure_failure(
+    image_name: &str,
+    code: i32,
+    log_path: &Path,
+    log_tail: &str,
+    panic_text: Option<&str>,
+    free_bytes: Option<u64>,
+) -> String {
+    let mut msg = match panic_text.map(str::trim).filter(|t| !t.is_empty()) {
+        Some(p) => {
+            format!("detached image ensure helper for {image_name} panicked (exit {code}): {p}")
+        }
+        None if code == 101 => format!(
+            "detached image ensure helper for {image_name} exited 101, a panic whose message was not recorded: a write to its build log failed (a full disk is the usual cause)"
+        ),
+        None => format!("detached image ensure helper for {image_name} exited {code}"),
+    };
+    if let Some(b) = free_bytes {
+        let dir = log_path.parent().unwrap_or(log_path);
+        msg.push_str(&format!(
+            "\nfree space under {}: {} MiB",
+            dir.display(),
+            b / (1024 * 1024)
+        ));
+    }
+    msg.push_str(&format!("\nlog tail ({}):\n{log_tail}", log_path.display()));
+    msg
+}
 
 /// Order 270: pure decision — should this ensure detach into a
 /// session-surviving helper? The multi-minute first-use `podman build` ran
@@ -2857,6 +2937,8 @@ struct DetachedEnsureRequest {
     image_name: String,
     image_tag: String,
     log_path: PathBuf,
+    /// 1744-xjfw: the sidecar the helper's panic hook writes.
+    panic_path: PathBuf,
     debug: bool,
 }
 
@@ -2891,6 +2973,7 @@ impl DetachedImageEnsure for SetsidImageEnsure {
             .arg(&request.image_name)
             .arg(&request.image_tag)
             .env(IMAGE_BUILD_HELPER_ENV, "1")
+            .env(IMAGE_ENSURE_PANIC_FILE_ENV, &request.panic_path)
             .stdin(Stdio::null())
             .stdout(log)
             .stderr(log_err);
@@ -2957,11 +3040,15 @@ fn run_image_ensure_detached<D: DetachedImageEnsure>(
             log_path.display()
         );
     }
+    let panic_path = image_ensure_panic_path(image_name);
+    // A sidecar left by an earlier run must not be read as this run's panic.
+    let _ = fs::remove_file(&panic_path);
     let request = DetachedEnsureRequest {
         root: root.to_path_buf(),
         image_name: image_name.to_string(),
         image_tag: image_tag.to_string(),
         log_path: log_path.clone(),
+        panic_path: panic_path.clone(),
         debug,
     };
     let code = detacher.run(&request)?;
@@ -2975,9 +3062,14 @@ fn run_image_ensure_detached<D: DetachedImageEnsure>(
             lines[start..].join("\n")
         })
         .unwrap_or_default();
-    Err(format!(
-        "detached image ensure helper for {image_name} exited {code}; log tail ({}):\n{tail}",
-        log_path.display()
+    let panic_text = fs::read_to_string(&panic_path).ok();
+    Err(describe_image_ensure_failure(
+        image_name,
+        code,
+        &log_path,
+        &tail,
+        panic_text.as_deref(),
+        free_bytes_at(log_path.parent().unwrap_or(&log_path)),
     ))
 }
 
@@ -4216,100 +4308,6 @@ pub(crate) fn resolve_host_project_origin(project_path: &Path) -> OriginResoluti
     }
 }
 
-/// ORDER 1211-34v6. The refusal an operator reads when the login cannot resolve
-/// a repository — lifted out of the call site so it can be pinned by a test.
-///
-/// It used to end "or set TILLANDSIAS_PROJECT_REMOTE_URL, then try again". That
-/// advice is INERT for this path: the resolver above reads `git config` and
-/// .git-pointer files and never consults the environment, so an operator
-/// following it got the identical refusal and learned nothing. The variable is
-/// real — the cloud lanes read it — which is exactly what made the wrong advice
-/// plausible.
-///
-/// Replacing it with SILENCE would have been worse: a refusal with no way
-/// forward. So the text now carries the remedy that was measured to work (the
-/// CLI lane from inside a checkout) and says plainly that the tray lane cannot
-/// satisfy it, because the tray runs in the guest at /root with no checkout —
-/// which is 759-vceg's CWD dependency, filed separately by yolanda.
-/// ORDER 1215-xazj, criterion 4. Build the one-line statement of WHAT THE
-/// PROBE EXAMINED, from the directory it resolved and whatever origin it found
-/// there.
-///
-/// EXTRACTED SO IT CAN BE FALSIFIED. It first lived inline at the call site,
-/// and a mutation collapsing its two arms back together — the very conflation
-/// this row exists to remove — left the unit tests GREEN, because those tests
-/// hand the refusal builder a subject string of their own making and therefore
-/// cannot see a CALLER that builds the wrong one. A test that supplies its
-/// subject's input can only check formatting; one that supplies the DECISION's
-/// input can check the decision.
-///
-/// The two cases are different diagnoses and an operator needs them apart: no
-/// origin at all means "you are in the wrong directory"; a non-GitHub origin
-/// means "you are in a checkout, but not of a GitHub repository".
-#[allow(dead_code)] // ORDER 1264-s4id: caller-to-be. Kept by 1217-54vw's deletion of the
-// login-time push probe (operator ruling 2026-09-18: login validates "can this token list
-// repos?"; the push question moves to forge launch). 1264-s4id calls these and removes this
-// attribute in the same commit. If 1264-s4id is abandoned, DELETE these seven rather than
-// leaving a permanent allow citing a row nobody picked up.
-fn github_login_probe_subject(cwd_display: &str, origin: Option<&str>) -> String {
-    match origin {
-        Some(url) => format!(
-            "WHAT WAS CHECKED: {cwd_display} has origin {url}, which is not a GitHub \
-             repository, so there is no GitHub repo to verify push permission against."
-        ),
-        None => format!(
-            "WHAT WAS CHECKED: {cwd_display} — no git origin was found there. That \
-             directory is this login process's working directory, and it is the ONLY \
-             thing consulted."
-        ),
-    }
-}
-
-/// ORDER 1215-xazj, criterion 4. `subject` states WHAT THE PROBE LOOKED AT:
-/// the directory it resolved from, and whether that directory had no origin at
-/// all or an origin that is not a GitHub repository. Those are DIFFERENT
-/// FACTS and this arm conflated them — both produced the identical
-/// "no GitHub upstream is configured", so an operator with, say, a GitLab
-/// origin read a message about absence.
-///
-/// WHY IT IS WORTH A PARAMETER. The whole cost of 1215-xazj was three hosts
-/// inferring this probe's subject from the process CWD: a session of guest
-/// forensics, two hosts' worth of discarded eliminations, and finally the
-/// operator running two arms by hand to discover that cwd was the only
-/// variable. The probe knew which directory it consulted and never said.
-#[allow(dead_code)] // ORDER 1264-s4id: caller-to-be. Kept by 1217-54vw's deletion of the
-// login-time push probe (operator ruling 2026-09-18: login validates "can this token list
-// repos?"; the push question moves to forge launch). 1264-s4id calls these and removes this
-// attribute in the same commit. If 1264-s4id is abandoned, DELETE these seven rather than
-// leaving a permanent allow citing a row nobody picked up.
-fn github_login_no_upstream_refusal(subject: &str) -> String {
-    format!(
-        "no GitHub upstream is configured for this checkout, so push permission \
-                 cannot be verified against a repository.\n\
-                 \n\
-                 {subject}\n\
-                 \n\
-                 Nothing was written to Vault. Seeding on authentication alone is the \
-                 state order 759-vceg exists to prevent: the token looks accepted here \
-                 and fails at the first push, which is how a release looked healthy and \
-                 broke the operator forty minutes later (803-49re).\n\
-                 \n\
-                 Run this login from the CLI, with your shell in a checkout whose \
-                 `origin` points at the target repository. The repository is resolved \
-                 from this process's CWD by `git config --get remote.origin.url` with a \
-                 .git-pointer fallback, so the checkout must be where the command runs.\n\
-                 \n\
-                 THE TRAY'S LOGIN CANNOT SATISFY THIS: it runs inside the guest, whose \
-                 CWD is /root and which holds no checkout, so it reaches this refusal \
-                 every time regardless of your token (order 1211-34v6).\n\
-                 \n\
-                 Setting TILLANDSIAS_PROJECT_REMOTE_URL does NOT help here. That \
-                 variable is real and the cloud lanes read it, but the resolver this \
-                 check uses never consults the environment — earlier text advertised it \
-                 and sent operators in a circle (order 1211-34v6, order 759-vceg)."
-    )
-}
-
 fn read_host_project_origin_url(project_path: &Path) -> Option<String> {
     if let Ok(output) = std::process::Command::new("git")
         .arg("-C")
@@ -4714,6 +4712,48 @@ fn report_seed_staleness(project_path: &Path, seed: &str) {
 /// Order 823-u5zf: the runtime dir must land at 0700, because that mode is the
 /// whole reason the shell preamble said `install -d -m 0700` rather than
 /// relying on the `create_dir_all` every consumer already does.
+/// Order 1748-fbqe: an EMPTY `XDG_RUNTIME_DIR` must never place a guest socket
+/// dir relative to the cwd. The value is passed, never planted in the process
+/// environment (see `xdg_runtime_dir_tests` for why).
+#[cfg(test)]
+mod empty_runtime_dir_tests {
+    #[test]
+    fn an_empty_runtime_dir_counts_as_unset_and_never_yields_a_relative_socket_dir() {
+        assert_eq!(super::nonempty_runtime_dir(Some(String::new())), None);
+        assert_eq!(super::nonempty_runtime_dir(None), None);
+        assert_eq!(
+            super::nonempty_runtime_dir(Some("/run/user/0".into())),
+            Some(std::path::PathBuf::from("/run/user/0"))
+        );
+
+        let empty = super::control_socket_host_dir_from(Some(String::new()));
+        assert!(
+            empty.is_absolute(),
+            "control socket dir from an empty value: {empty:?}"
+        );
+        assert_eq!(empty, super::control_socket_host_dir_from(None));
+        assert_eq!(
+            super::control_socket_host_dir_from(Some("/run/user/0".into())),
+            std::path::PathBuf::from("/run/user/0/tillandsias")
+        );
+
+        #[cfg(feature = "host-services")]
+        {
+            let mcp = super::mcp_socket::mcp_socket_base_dir_from(Some(String::new()));
+            assert!(
+                mcp.is_absolute(),
+                "mcp socket base from an empty value: {mcp:?}"
+            );
+            assert_eq!(mcp, super::mcp_socket::mcp_socket_base_dir_from(None));
+            // Every consumer agrees: the mcp base sits under the control dir.
+            assert_eq!(
+                super::mcp_socket::mcp_socket_base_dir_from(Some("/run/user/0".into())),
+                super::control_socket_host_dir_from(Some("/run/user/0".into())).join("mcp")
+            );
+        }
+    }
+}
+
 #[cfg(all(test, unix))]
 mod xdg_runtime_dir_tests {
     use super::ensure_xdg_runtime_dir_from;
@@ -6481,8 +6521,23 @@ fn router_dynamic_caddyfile_host_path() -> PathBuf {
 }
 
 fn control_socket_host_dir() -> PathBuf {
-    let base = if let Ok(runtime_dir) = std::env::var("XDG_RUNTIME_DIR") {
-        PathBuf::from(runtime_dir)
+    control_socket_host_dir_from(std::env::var("XDG_RUNTIME_DIR").ok())
+}
+
+/// `$XDG_RUNTIME_DIR` as a base directory, or `None` when it is unset OR EMPTY.
+/// Order 1748-fbqe: `PathBuf::from("")` joined with `tillandsias/...` is a
+/// RELATIVE path that resolves against the process cwd, so an empty value takes
+/// the same fallback as an absent one — the `${VAR:-default}` rule that
+/// `ensure_lane_process_env` applies at startup, applied at the point of use too.
+fn nonempty_runtime_dir(value: Option<String>) -> Option<PathBuf> {
+    value.filter(|v| !v.is_empty()).map(PathBuf::from)
+}
+
+/// [`control_socket_host_dir`] for an explicit `XDG_RUNTIME_DIR` value. An
+/// empty value counts as unset (order 1748-fbqe, see [`nonempty_runtime_dir`]).
+fn control_socket_host_dir_from(xdg: Option<String>) -> PathBuf {
+    let base = if let Some(runtime_dir) = nonempty_runtime_dir(xdg) {
+        runtime_dir
     } else {
         #[cfg(unix)]
         {
@@ -12612,270 +12667,6 @@ fn select_github_login_input_mode(
     )
 }
 
-/// ORDER 759-vceg. Derive `owner/repo` from a git origin URL, for the
-/// push-AUTHORIZATION probe.
-///
-/// Accepts the two shapes an operator's origin actually takes — `https://` and
-/// `git@host:` — and refuses anything that is not a GitHub repository path,
-/// because a probe against the wrong repo answers a question nobody asked.
-#[allow(dead_code)] // ORDER 1264-s4id: caller-to-be. Kept by 1217-54vw's deletion of the
-// login-time push probe (operator ruling 2026-09-18: login validates "can this token list
-// repos?"; the push question moves to forge launch). 1264-s4id calls these and removes this
-// attribute in the same commit. If 1264-s4id is abandoned, DELETE these seven rather than
-// leaving a permanent allow citing a row nobody picked up.
-fn github_owner_repo_from_origin(origin: &str) -> Option<String> {
-    let trimmed = origin.trim();
-    // The prefixes an operator's origin actually takes. Anything else is not a
-    // GitHub repository path and must yield None, so the caller says "could not
-    // verify" rather than probing some other host.
-    let rest = [
-        "https://github.com/",
-        "http://github.com/",
-        "git@github.com:",
-        "ssh://git@github.com/",
-    ]
-    .iter()
-    .find_map(|prefix| trimmed.strip_prefix(prefix))?;
-    let rest = rest.strip_suffix(".git").unwrap_or(rest);
-    let rest = rest.trim_end_matches('/');
-    let mut parts = rest.split('/');
-    let owner = parts.next()?;
-    let repo = parts.next()?;
-    if owner.is_empty() || repo.is_empty() || parts.next().is_some() {
-        return None;
-    }
-    Some(format!("{owner}/{repo}"))
-}
-
-/// ORDER 759-vceg, CORRECTED BY 1106-k2df. The in-container push-authorization
-/// probe.
-///
-/// Runs INSIDE the ephemeral login container, exactly where `gh auth status`
-/// already runs, so the token never reaches host disk, argv, or env — the
-/// property the whole login lane is built around. That property is why this is
-/// a container `exec` and not a host-side `git push`, and it is not negotiable:
-/// the token is handed to git by `gh auth git-credential` over git's credential
-/// protocol, in-container, and is never interpolated into this argv.
-///
-/// WHAT 1106-k2df CORRECTED. The original probe read `.permissions.push` from
-/// `GET /repos/{owner}/{repo}`. That field reports the AUTHENTICATED USER'S
-/// ROLE on the repository — it is not a property of the token. A repository
-/// owner holding a fine-grained PAT with no Contents:write is still an admin of
-/// their own repository, so the field answers `true` and the lane seeds a
-/// credential that is denied at push time. The value is true about the artefact
-/// (this user may push) and false about the property it was read as (this token
-/// may push), so no reinterpretation of it helps; the signal had to be
-/// replaced.
-///
-/// The replacement is the negotiation the token itself must survive:
-/// `git push --dry-run`. Dry-run does the full connect, authenticate, and
-/// receive-pack advertisement, and then sends no pack and applies no ref
-/// update, so it answers the authorization question without writing anything.
-/// A token that cannot push is refused by GitHub at the
-/// `?service=git-receive-pack` step, which is precisely the hours-downstream
-/// failure order 759-vceg was filed against, moved to login time.
-///
-/// The script always exits 0 and reports its outcome on stdout, so a denied
-/// push arrives at [`github_push_authorization_verdict`] as a value to
-/// classify rather than as a command failure indistinguishable from podman
-/// being unable to run at all.
-#[allow(dead_code)] // ORDER 1264-s4id: caller-to-be. Kept by 1217-54vw's deletion of the
-// login-time push probe (operator ruling 2026-09-18: login validates "can this token list
-// repos?"; the push question moves to forge launch). 1264-s4id calls these and removes this
-// attribute in the same commit. If 1264-s4id is abandoned, DELETE these seven rather than
-// leaving a permanent allow citing a row nobody picked up.
-fn github_push_authorization_probe_args(container: &str, owner_repo: &str) -> Vec<String> {
-    let script = format!(
-        r#"set -u
-command -v git >/dev/null 2>&1 || {{ printf 'push-probe: unavailable no-git
-'; exit 0; }}
-d=$(mktemp -d) || {{ printf 'push-probe: unavailable no-tmpdir
-'; exit 0; }}
-cd "$d" || {{ printf 'push-probe: unavailable no-tmpdir
-'; exit 0; }}
-git init -q . >/dev/null 2>&1
-git -c user.email=probe@localhost -c user.name=probe     commit -q --allow-empty -m push-probe >/dev/null 2>&1
-out=$(git -c credential.helper= -c 'credential.helper=!gh auth git-credential'     push --dry-run "https://github.com/{owner_repo}.git"     HEAD:refs/heads/tillandsias-push-authorization-probe 2>&1)
-rc=$?
-cd / && rm -rf "$d"
-if [ "$rc" -eq 0 ]; then
-    printf 'push-probe: allowed
-'
-else
-    printf 'push-probe: denied rc=%s
-%s
-' "$rc" "$out"
-fi
-"#
-    );
-    vec![
-        "exec".to_string(),
-        container.to_string(),
-        "/bin/bash".to_string(),
-        "-c".to_string(),
-        script,
-    ]
-}
-
-/// ORDER 759-vceg. Classify the probe's output into seed-or-refuse.
-///
-/// THE DEFECT THIS EXISTS FOR. The login flow checked non-emptiness, `gh auth
-/// status`, and a Vault round-trip — every one of which is AUTHENTICATION. None
-/// asked whether the token may PUSH. A fine-grained PAT missing Contents:write
-/// authenticates perfectly as its owner and is denied at push time, which is
-/// how "Permission to 8007342/tillandsias.git denied to 8007342" surfaced hours
-/// into a work cycle on 2026-08-15, long after the credential was seeded.
-///
-/// An UNPARSEABLE answer is refused, not waved through. "I could not tell"
-/// resolving to "seed it anyway" is how the original defect reads to an
-/// operator: a credential accepted with no evidence it works.
-///
-/// ORDER 1106-k2df. The input is now the outcome of an in-container
-/// `git push --dry-run` rather than `.permissions.push`. See
-/// [`github_push_authorization_probe_args`] for why that field had to be
-/// retired; the consequence here is that the ONLY accepting arm is a push
-/// negotiation the server completed.
-#[allow(dead_code)] // ORDER 1264-s4id: caller-to-be. Kept by 1217-54vw's deletion of the
-// login-time push probe (operator ruling 2026-09-18: login validates "can this token list
-// repos?"; the push question moves to forge launch). 1264-s4id calls these and removes this
-// attribute in the same commit. If 1264-s4id is abandoned, DELETE these seven rather than
-// leaving a permanent allow citing a row nobody picked up.
-fn github_push_authorization_verdict(owner_repo: &str, probe_stdout: &str) -> Result<(), String> {
-    let answer = probe_stdout.trim();
-    // ORDER 1106-k2df. Only a completed push negotiation seeds. `true` — the
-    // old user-role answer — deliberately falls through to a refusal rather
-    // than being kept as a second accepting arm: a lane that still accepts the
-    // signal that could not discriminate has not stopped accepting it.
-    if answer.starts_with("push-probe: allowed") {
-        return Ok(());
-    }
-    if let Some(rest) = answer.strip_prefix("push-probe: unavailable") {
-        return Err(format!(
-            "could not check push permission on {owner_repo}: the login container could not \
-             run the probe ({}).\n\
-             \n\
-             Nothing was written to Vault. This is refused rather than assumed, because a \
-             credential seeded on a check that did not run is the state order 759-vceg exists \
-             to prevent (order 1106-k2df).",
-            rest.trim()
-        ));
-    }
-    // A revoked credential is classified BEFORE the push-probe framing is
-    // examined, because the REST shapes below reach this function from a
-    // container still running the pre-1106 probe, and those carry no
-    // `push-probe:` prefix to be found under.
-    //
-    // ORDER 1106-k2df. MEASURED, not guessed. The strings below are what
-    // `git push --dry-run` actually prints, captured on this host on
-    // 2026-09-06 against github.com with an invalid token in the URL:
-    //
-    //   remote: Invalid username or token. Password authentication is not
-    //           supported for Git operations.
-    //   fatal: Authentication failed for 'https://github.com/o/r.git/'
-    //
-    // Note what is ABSENT: no "Bad credentials", no "401". Those are the
-    // REST API's words, and carrying the old `gh api` discriminator over
-    // unchanged would have sent every revoked credential to the generic
-    // scope advice — re-opening exactly the defect esmeraldinha closed,
-    // through the door of a probe rewrite.
-    if answer.contains("Invalid username or token")
-        || answer.contains("Authentication failed")
-        || answer.contains("Bad credentials")
-        || answer.contains(" 401")
-    {
-        return Err(github_push_authorization_revoked_message(
-            owner_repo, answer,
-        ));
-    }
-    if answer.starts_with("push-probe: denied") {
-        if answer.contains("denied to")
-            || answer.contains("Permission to")
-            || answer.contains(" 403")
-            || answer.contains("read-only")
-        {
-            return Err(github_push_authorization_cannot_push_message(owner_repo));
-        }
-        return Err(format!(
-            "could not determine push permission on {owner_repo}: the push negotiation failed \
-             for a reason that is neither an authorization refusal nor a revoked \
-             credential.\n\
-             \n\
-             {answer}\n\
-             \n\
-             Nothing was written to Vault. A network or DNS failure inside the login container \
-             reads exactly like a denied push if it is waved through, so it is refused instead \
-             (order 1106-k2df)."
-        ));
-    }
-    // ORDER 1106-k2df. Everything else — including `true`/`false`, the values
-    // the pre-1106 `.permissions.push` probe produced — is refused. `true`
-    // arriving here means the running binary and the probe script disagree
-    // about which question was asked, and that is exactly the condition under
-    // which a credential must NOT be seeded.
-    Err(format!(
-        "could not determine push permission on {owner_repo}: the push probe answered \
-         {answer:?}, which is not an outcome of a push negotiation.\n\
-         \n\
-         Nothing was written to Vault. This is refused rather than assumed, because a \
-         credential seeded on an unreadable answer is exactly the state order 759-vceg \
-         exists to prevent — it looks seeded and fails at push time.\n\
-         \n\
-         Check that the token can read the repository at all (repository access must \
-         include {owner_repo}, Metadata read-only), then run the login again.\n\
-         \n\
-         If the answer above is \"true\" or \"false\", the probe is reporting the repository \
-         role of the signed-in USER rather than the grants of the TOKEN; that signal was \
-         retired by order 1106-k2df and must not be trusted."
-    ))
-}
-
-/// ORDER 759-vceg, message retained by 1106-k2df. A token that authenticates
-/// and is refused by `git-receive-pack`.
-#[allow(dead_code)] // ORDER 1264-s4id: caller-to-be. Kept by 1217-54vw's deletion of the
-// login-time push probe (operator ruling 2026-09-18: login validates "can this token list
-// repos?"; the push question moves to forge launch). 1264-s4id calls these and removes this
-// attribute in the same commit. If 1264-s4id is abandoned, DELETE these seven rather than
-// leaving a permanent allow citing a row nobody picked up.
-fn github_push_authorization_cannot_push_message(owner_repo: &str) -> String {
-    format!(
-        "the pasted token authenticates, but it CANNOT PUSH to {owner_repo}.\n\
-         \n\
-         Missing permission: Contents - Read and write.\n\
-         \n\
-         Nothing was written to Vault; the previous credential (if any) is untouched.\n\
-         \n\
-         Fix the token at https://github.com/settings/personal-access-tokens :\n\
-           - Repository access must INCLUDE {owner_repo}\n\
-           - Contents  - Read and write  (clone, fetch, push)\n\
-           - Metadata  - Read-only       (required by GitHub)\n\
-         \n\
-         Then run the login again. Seeding a token that cannot push moves this\n\
-         failure hours downstream, into the middle of a work cycle (order 759-vceg)."
-    )
-}
-
-/// ORDER 759-vceg. A REVOKED CREDENTIAL IS NOT A SCOPE PROBLEM, and the generic
-/// remedy sent operators to edit permissions that were never the cause.
-/// esmeraldinha measured this shape with a revoked credential — the one input a
-/// healthy host cannot manufacture — and three hosts hit it on 2026-09-06. No
-/// scope edit helps; only a re-login does. Discriminated ahead of the generic
-/// refusal, which still owns the cases where the scope advice IS right.
-#[allow(dead_code)] // ORDER 1264-s4id: caller-to-be. Kept by 1217-54vw's deletion of the
-// login-time push probe (operator ruling 2026-09-18: login validates "can this token list
-// repos?"; the push question moves to forge launch). 1264-s4id calls these and removes this
-// attribute in the same commit. If 1264-s4id is abandoned, DELETE these seven rather than
-// leaving a permanent allow citing a row nobody picked up.
-fn github_push_authorization_revoked_message(owner_repo: &str, answer: &str) -> String {
-    format!(
-        "the GitHub credential is REVOKED or invalid: the push-permission probe on \
-         {owner_repo} answered {answer:?}.\n\
-         \n\
-         Nothing was written to Vault. This is NOT a repository-scope problem, and \
-         editing repository permissions will not fix it — the token itself is no \
-         longer accepted. Mint a new one with `gh auth login`, then run this login \
-         again (order 759-vceg)."
-    )
-}
 fn provider_login_exec_args(
     container: &str,
     token_script: &str,
@@ -16645,6 +16436,28 @@ fn tray_control_socket_path() -> PathBuf {
 /// here is a `NoTray` note, never an error the caller could propagate.
 #[cfg(unix)]
 pub(crate) fn notify_tray_github_login_stored(socket_path: &Path) -> TrayNotify {
+    notify_tray_login_stored(socket_path, |ts_unix| ControlMessage::GithubLoginStored {
+        seq: 1,
+        ts_unix,
+    })
+}
+
+/// Order 1719-83po: tell the Linux tray the Cloudflare bundle is stored, so it
+/// hides "Cloudflare Login" on an event. Same best-effort contract.
+#[cfg(unix)]
+pub(crate) fn notify_tray_cloudflare_login_stored(socket_path: &Path) -> TrayNotify {
+    notify_tray_login_stored(socket_path, |ts_unix| {
+        ControlMessage::CloudflareLoginStored { seq: 1, ts_unix }
+    })
+}
+
+/// The one CLI-to-tray "login stored" wake (679-rp9m), parameterised by the
+/// message so GitHub and Cloudflare share the framing, timeouts and ack check.
+#[cfg(unix)]
+fn notify_tray_login_stored(
+    socket_path: &Path,
+    body: impl FnOnce(u64) -> ControlMessage,
+) -> TrayNotify {
     let no = |why: String| TrayNotify::NoTray(why);
     let mut stream = match UnixStream::connect(socket_path) {
         Ok(s) => s,
@@ -16660,7 +16473,7 @@ pub(crate) fn notify_tray_github_login_stored(socket_path: &Path) -> TrayNotify 
     let envelope = ControlEnvelope {
         wire_version: WIRE_VERSION,
         seq: 1,
-        body: ControlMessage::GithubLoginStored { seq: 1, ts_unix },
+        body: body(ts_unix),
     };
     let Ok(encoded) = encode(&envelope) else {
         return no("encode failed".into());
@@ -16713,6 +16526,42 @@ mod tray_notify_tests {
         let out = notify_tray_github_login_stored(&path);
         t.join().unwrap();
         assert!(matches!(out, TrayNotify::NoTray(_)), "{out:?}");
+    }
+
+    /// Order 1719-83po: each notifier sends ITS OWN variant through the shared
+    /// framing and reads the ack; this also pins the GitHub path through the
+    /// refactor into notify_tray_login_stored.
+    #[test]
+    fn each_notifier_sends_its_own_variant_and_reads_the_ack() {
+        type Notify = fn(&Path) -> TrayNotify;
+        let cases: [(Notify, &str); 2] = [
+            (notify_tray_github_login_stored, "GithubLoginStored"),
+            (notify_tray_cloudflare_login_stored, "CloudflareLoginStored"),
+        ];
+        for (notify, want) in cases {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("control.sock");
+            let listener = UnixListener::bind(&path).unwrap();
+            let t = std::thread::spawn(move || {
+                let (mut s, _) = listener.accept().unwrap();
+                let body = read_control_frame_blocking(&mut s).unwrap();
+                let got = decode(&body).unwrap().body;
+                let ack = ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 1,
+                    body: ControlMessage::IssueAck { seq_acked: 1 },
+                };
+                let encoded = encode(&ack).unwrap();
+                let mut frame = (encoded.len() as u32).to_be_bytes().to_vec();
+                frame.extend_from_slice(&encoded);
+                s.write_all(&frame).unwrap();
+                got.kind()
+            });
+            let out = notify(&path);
+            let sent = t.join().unwrap();
+            assert_eq!(sent, want);
+            assert_eq!(out, TrayNotify::Acked, "{want}");
+        }
     }
 }
 
@@ -19704,12 +19553,26 @@ fn maybe_spawn_vsock_listener(
         // during the Starting window, hard-bounded by the 60s timeout, and
         // the task EXITS after the transition; zero steady-state wakeups.
         // Removal condition: an inotify/event source for socket creation.
+        // ORDER 1751-ipuw: Ready also waits for Vault to be up AND unsealed.
+        // A quit while Ready said "Securing Vault" left a disk whose next
+        // boot could not unseal; the window is closed by not publishing
+        // Ready inside it. The bring-up is idempotent and holds the `vault`
+        // flock, so it composes with every other caller. 15 min covers a
+        // cold Vault image build; past it the phase is Failed, not Ready.
         let advancer_state = state.clone();
+        #[cfg(feature = "vault")]
+        let ready_gate: std::sync::Arc<dyn Fn() -> Result<(), String> + Send + Sync> =
+            std::sync::Arc::new(|| vault_bootstrap::ensure_vault_running(false));
+        #[cfg(not(feature = "vault"))]
+        let ready_gate: std::sync::Arc<dyn Fn() -> Result<(), String> + Send + Sync> =
+            std::sync::Arc::new(|| Ok(()));
         let advancer = tokio::spawn(async move {
             advancer_state
-                .advance_to_ready_when_podman_up(
+                .advance_to_ready_when_podman_and_gate_up(
                     std::time::Duration::from_secs(60),
                     std::time::Duration::from_millis(500),
+                    ready_gate,
+                    std::time::Duration::from_secs(15 * 60),
                 )
                 .await;
         });
@@ -25984,6 +25847,7 @@ mod tests {
                     image_name: request.image_name.clone(),
                     image_tag: request.image_tag.clone(),
                     log_path: request.log_path.clone(),
+                    panic_path: request.panic_path.clone(),
                     debug: request.debug,
                 });
                 Ok(self.exit_code)
@@ -26030,6 +25894,70 @@ mod tests {
         )
         .expect_err("helper non-zero exit is a failure");
         assert!(err.contains("exited 7"), "carries the helper exit: {err}");
+    }
+
+    /// ORDER 1744-xjfw: a helper whose build log could not be written exited
+    /// 101 with nothing in that log (macOS guest, v56.10.15.1). The error now
+    /// carries the panic text from the sidecar the helper's hook writes, says
+    /// what a bare 101 means when there is none, and never reports a sidecar
+    /// left by an earlier run as this run's panic.
+    #[test]
+    fn a_helper_panic_is_named_even_when_its_log_is_silent() {
+        struct PanickingHelper {
+            exit_code: i32,
+            panic_text: Option<&'static str>,
+        }
+        impl DetachedImageEnsure for PanickingHelper {
+            fn run(&self, request: &DetachedEnsureRequest) -> Result<i32, String> {
+                if let Some(t) = self.panic_text {
+                    fs::write(&request.panic_path, t).unwrap();
+                }
+                Ok(self.exit_code)
+            }
+        }
+        let run = |image: &str, helper: &PanickingHelper| {
+            run_image_ensure_detached(Path::new("/r"), image, "t:v1", false, helper)
+                .expect_err("non-zero exit is a failure")
+        };
+
+        let err = run(
+            "xjfw-panicked",
+            &PanickingHelper {
+                exit_code: 101,
+                panic_text: Some(
+                    "panicked at library/std/src/io/stdio.rs:1:1:\nfailed printing to stdout: No space left on device (os error 28)",
+                ),
+            },
+        );
+        assert!(err.contains("panicked (exit 101)"), "{err}");
+        assert!(err.contains("No space left on device"), "{err}");
+
+        let err = run(
+            "xjfw-silent",
+            &PanickingHelper {
+                exit_code: 101,
+                panic_text: None,
+            },
+        );
+        assert!(
+            err.contains("a panic whose message was not recorded"),
+            "{err}"
+        );
+
+        // A sidecar from an earlier run is removed before the helper starts.
+        fs::write(image_ensure_panic_path("xjfw-stale"), "an OLD panic").unwrap();
+        let err = run(
+            "xjfw-stale",
+            &PanickingHelper {
+                exit_code: 7,
+                panic_text: None,
+            },
+        );
+        assert!(!err.contains("an OLD panic"), "{err}");
+        assert!(err.contains("exited 7"), "{err}");
+        for image in ["xjfw-panicked", "xjfw-silent", "xjfw-stale"] {
+            let _ = fs::remove_file(image_ensure_panic_path(image));
+        }
     }
 
     /// Order 270 source-window pins: (a) the detach decision runs BEFORE the
@@ -30517,278 +30445,6 @@ esac
         }
     }
 
-    /// ORDER 759-vceg. The incident shape: a fine-grained PAT that
-    /// AUTHENTICATES as the repo owner and cannot push. Every check the login
-    /// flow had — non-emptiness, `gh auth status`, a Vault round-trip — passes
-    /// for this token.
-    ///
-    /// ORDER 1106-k2df: the input is now the MEASURED output of an in-container
-    /// `git push --dry-run` against a repository this host cannot push to,
-    /// captured on 2026-09-06. `.permissions.push` used to stand here and did
-    /// not in fact distinguish this token — that is why the probe changed.
-    #[test]
-    fn a_token_without_push_permission_is_refused_with_the_missing_permission_named() {
-        let err = github_push_authorization_verdict(
-            "8007342/tillandsias",
-            "push-probe: denied rc=128\n\
-             remote: Permission to 8007342/tillandsias.git denied to 8007342.\n\
-             fatal: unable to access \
-             'https://github.com/8007342/tillandsias.git/': The requested URL returned \
-             error: 403\n",
-        )
-        .expect_err("a denied push must refuse");
-        assert!(
-            err.contains("CANNOT PUSH"),
-            "refusal must say what is wrong, got: {err}"
-        );
-        assert!(
-            err.contains("Contents - Read and write"),
-            "refusal must NAME the missing permission, not just fail: {err}"
-        );
-        assert!(
-            err.contains("Nothing was written to Vault"),
-            "refusal must state that no credential was persisted: {err}"
-        );
-        assert!(
-            err.contains("8007342/tillandsias"),
-            "refusal must name the repo it checked: {err}"
-        );
-    }
-
-    /// POSITIVE CONTROL. Without it, every arm above is satisfied by a verdict
-    /// function that refuses unconditionally — which would break every login.
-    ///
-    /// ORDER 1106-k2df repointed the accepting value from `true` to the
-    /// outcome of a completed push negotiation. `true` is now asserted to
-    /// REFUSE, in `only_a_completed_push_negotiation_seeds_the_credential`.
-    #[test]
-    fn a_push_capable_token_seeds_exactly_as_before() {
-        assert!(
-            github_push_authorization_verdict("8007342/tillandsias", "push-probe: allowed\n")
-                .is_ok(),
-            "a push negotiation the server completed must seed"
-        );
-        assert!(
-            github_push_authorization_verdict("o/r", "push-probe: allowed").is_ok(),
-            "a probe answer without a trailing newline must still seed"
-        );
-    }
-
-    /// AN UNREADABLE ANSWER IS REFUSED, NOT WAVED THROUGH. "I could not tell"
-    /// resolving to "seed it anyway" reproduces the original defect exactly: a
-    /// credential accepted with no evidence it works.
-    #[test]
-    fn an_unparseable_probe_answer_refuses_rather_than_assuming_permission() {
-        for answer in ["", "null", "gh: Not Found (HTTP 404)", "TRUE", "1"] {
-            let err = github_push_authorization_verdict("o/r", answer)
-                .expect_err("an unreadable answer must be refused, never treated as permission");
-            assert!(
-                err.contains("Nothing was written to Vault"),
-                "{answer:?} refusal must state no credential was persisted: {err}"
-            );
-        }
-    }
-
-    /// ORDER 759-vceg. A REVOKED CREDENTIAL MUST NOT BE SENT TO EDIT SCOPES.
-    ///
-    /// The generic refusal says "repository access must include <repo>,
-    /// Metadata read-only" — correct for 404, useless for 401, where the token
-    /// itself is no longer accepted and only a re-login helps. Three hosts hit
-    /// the 401 shape on 2026-09-06 and the advice pointed at the wrong thing.
-    ///
-    /// ORDER 1106-k2df CARRIED THIS PROPERTY ACROSS THE PROBE REWRITE, AND THE
-    /// STRINGS DID NOT CARRY WITH IT. `git push` does not speak the REST API's
-    /// words: measured on this host on 2026-09-06 against github.com with an
-    /// invalid token, the whole of what it prints is
-    ///
-    ///   remote: Invalid username or token. Password authentication is not
-    ///           supported for Git operations.
-    ///   fatal: Authentication failed for 'https://github.com/o/r.git/'
-    ///
-    /// — no "Bad credentials", no "401". Keeping only esmeraldinha's original
-    /// discriminator would have left every revoked credential falling through
-    /// to the scope advice again, with all its tests still green, because the
-    /// tests carried the OLD probe's inputs. So arm 1 below is the git shape
-    /// and arm 2 keeps the REST shapes, which still reach here from a stale
-    /// container.
-    ///
-    /// ARM 3 IS THE CONTROL AND IT IS WHAT STOPS THIS BEING A WIDENING. A 404
-    /// and a permissions-less 200 must KEEP the scope advice — a discriminator
-    /// that sent every unparseable answer to `gh auth login` would be the same
-    /// defect pointing the other way.
-    #[test]
-    fn a_revoked_credential_is_told_to_re_login_not_to_edit_scopes() {
-        for body in [
-            "push-probe: denied rc=128\n\
-             remote: Invalid username or token. Password authentication is not supported \
-             for Git operations.\n\
-             fatal: Authentication failed for 'https://github.com/o/r.git/'\n",
-            r#"{"message":"Bad credentials","documentation_url":"https://docs.github.com/rest","status":"401"}"#,
-            "gh: Bad credentials (HTTP 401)",
-        ] {
-            let err = github_push_authorization_verdict("o/r", body)
-                .expect_err("a revoked credential must still be refused");
-            assert!(
-                err.contains("gh auth login"),
-                "a 401 must name the re-login as the remedy: {err}"
-            );
-            assert!(
-                err.contains("NOT a repository-scope problem"),
-                "a 401 must say the scope advice does not apply: {err}"
-            );
-            assert!(
-                err.contains("Nothing was written to Vault"),
-                "every refusal must still state no credential was persisted: {err}"
-            );
-        }
-
-        // CONTROL: the shapes that are genuinely about scope keep the scope
-        // advice and must NOT be told to re-login.
-        for body in ["null", "gh: Not Found (HTTP 404)", ""] {
-            let err = github_push_authorization_verdict("o/r", body)
-                .expect_err("an unreadable answer must be refused");
-            assert!(
-                err.contains("Metadata read-only"),
-                "{body:?} is a scope-shaped failure and must keep the scope remedy: {err}"
-            );
-            assert!(
-                !err.contains("gh auth login"),
-                "{body:?} must NOT be diagnosed as a revoked credential: {err}"
-            );
-        }
-    }
-
-    #[test]
-    fn owner_repo_is_derived_from_every_origin_shape_an_operator_actually_has() {
-        for origin in [
-            "https://github.com/8007342/tillandsias.git",
-            "https://github.com/8007342/tillandsias",
-            "git@github.com:8007342/tillandsias.git",
-            "ssh://git@github.com/8007342/tillandsias.git",
-            "  https://github.com/8007342/tillandsias.git  ",
-        ] {
-            assert_eq!(
-                github_owner_repo_from_origin(origin).as_deref(),
-                Some("8007342/tillandsias"),
-                "failed to derive owner/repo from {origin}"
-            );
-        }
-    }
-
-    /// NEGATIVE CONTROL for the parser. A non-GitHub or malformed origin must
-    /// yield None so the caller takes the "cannot verify, say so" branch —
-    /// probing the WRONG repo would answer a question nobody asked and could
-    /// pass a token that cannot push where it matters.
-    #[test]
-    fn a_non_github_or_malformed_origin_yields_no_repo_to_probe() {
-        for origin in [
-            "https://gitlab.com/8007342/tillandsias.git",
-            "https://github.com/8007342",
-            "https://github.com/",
-            "https://github.com/a/b/c",
-            "",
-            "not a url",
-        ] {
-            assert!(
-                github_owner_repo_from_origin(origin).is_none(),
-                "{origin} must not produce a repo to probe"
-            );
-        }
-    }
-
-    /// ORDER 1106-k2df, RED ARM, WRITTEN BEFORE THE FIX.
-    ///
-    /// `GET /repos/{owner}/{repo}` reports `permissions` for the AUTHENTICATED
-    /// USER'S ROLE on the repository. It is not a property of the token. A
-    /// repository owner holding a fine-grained PAT with no Contents:write is
-    /// still an admin of their own repository, so `.permissions.push` answers
-    /// `true` and the lane seeds a credential that is denied at push time —
-    /// the exact 2026-08-15 failure order 759-vceg was filed to stop.
-    ///
-    /// So `true` from that endpoint is a value that is TRUE about the artefact
-    /// (the user may push) and FALSE about the property it was read as (this
-    /// token may push). The signal has to be replaced, not reinterpreted, and
-    /// the only thing that answers the actual question is a push negotiation
-    /// carried out with the token itself.
-    #[test]
-    fn the_probe_does_not_rest_on_the_user_role_permissions_field() {
-        let args = github_push_authorization_probe_args("tillandsias-git-login", "o/r");
-        let joined = args.join(" ");
-        assert!(
-            !joined.contains(".permissions"),
-            "the probe must not read `permissions` from the repos endpoint — that field \
-             describes the USER'S ROLE, not the TOKEN'S grants, and answers `true` for a \
-             repo owner whose fine-grained PAT cannot push: {args:?}"
-        );
-        assert!(
-            joined.contains("push") && joined.contains("--dry-run"),
-            "the probe must attempt an actual push negotiation, which is the only check \
-             the token itself has to satisfy: {args:?}"
-        );
-    }
-
-    /// ORDER 1106-k2df, RED ARM. The seeding decision must be made from the
-    /// push negotiation's own answer, and `true` — the old signal — must no
-    /// longer be enough to seed.
-    #[test]
-    fn only_a_completed_push_negotiation_seeds_the_credential() {
-        assert!(
-            github_push_authorization_verdict("o/r", "push-probe: allowed").is_ok(),
-            "a dry-run push that the server accepted must seed"
-        );
-        assert!(
-            github_push_authorization_verdict("o/r", "true").is_err(),
-            "`true` was the user-role answer; it must no longer seed a credential"
-        );
-        let denied = github_push_authorization_verdict(
-            "o/r",
-            "push-probe: denied rc=128\n             remote: Permission to o/r.git denied to someone.\n             fatal: unable to access 'https://github.com/o/r.git/': The requested URL \
-             returned error: 403",
-        )
-        .expect_err("a denied push must refuse");
-        assert!(
-            denied.contains("CANNOT PUSH"),
-            "the refusal must name the authorization failure: {denied}"
-        );
-    }
-
-    /// The probe must run in the SAME container as the login — the token
-    /// isolation property the lane exists for — and must negotiate against the
-    /// repository this installation actually pushes to.
-    ///
-    /// ORDER 1106-k2df REPOINTED THIS TEST. It previously asserted the probe
-    /// asked for `.permissions.push`, described as "the field reported for
-    /// classic AND fine-grained tokens". That was false, and the test pinned
-    /// the false claim in place: the field reports the signed-in USER'S role,
-    /// so a repo owner's fine-grained PAT without Contents:write answers
-    /// `true`. What survives is the container requirement and the repo
-    /// targeting; what replaced the field is asserted in
-    /// `the_probe_does_not_rest_on_the_user_role_permissions_field`.
-    #[test]
-    fn the_probe_runs_in_container_and_negotiates_against_the_repo() {
-        let args = github_push_authorization_probe_args("tillandsias-git-login", "o/r");
-        assert_eq!(args.first().map(String::as_str), Some("exec"));
-        assert!(
-            args.iter().any(|a| a == "tillandsias-git-login"),
-            "probe must run inside the ephemeral login container so the token never \
-             reaches host disk: {args:?}"
-        );
-        let script = args.last().expect("probe must carry a script");
-        assert!(
-            script.contains("https://github.com/o/r.git"),
-            "the negotiation must target the installation's own repository: {script}"
-        );
-        assert!(
-            !script.contains("$TOKEN") && !script.contains("x-access-token:"),
-            "the token must reach git through `gh auth git-credential`, never through \
-             this argv: {script}"
-        );
-        assert!(
-            script.contains("gh auth git-credential"),
-            "the credential must come from the container's own gh session: {script}"
-        );
-    }
-
     /// The NEGATIVE CONTROL for the test above, and the reason it cannot simply
     /// assert "always set TERM": a prompt-driven Codex run deliberately does NOT
     /// claim a TTY, because podman refuses with "input device is not a TTY" when
@@ -31483,102 +31139,6 @@ esac
     // the Command::new("git") path returns None and the wire lane lost its
     // push channel). The parser must read a plain clone's config without
     // shelling out.
-    /// ORDER 1211-34v6. The refusal must not advertise a remedy that does
-    /// nothing, and must not go silent either.
-    ///
-    /// The old text told a stuck operator to set TILLANDSIAS_PROJECT_REMOTE_URL.
-    /// The resolver this check uses reads `git config` and .git-pointer files
-    /// and never consults the environment, so that advice returned the operator
-    /// to the same refusal — measured on yolanda's Windows host 2026-09-15,
-    /// where every tray login reached this arm regardless of the token.
-    ///
-    /// This asserts three things, and the third is why the test exists: the
-    /// working remedy is NAMED, the tray's inability to satisfy it is STATED
-    /// (otherwise an operator retries the lane that cannot work), and the env
-    /// var is never offered as a fix. The var may still be MENTIONED — the text
-    /// explains why it does not help — so the assertion is about the advice,
-    /// not about the string's presence.
-    #[test]
-    fn github_login_refusal_names_a_remedy_that_works() {
-        let msg = github_login_no_upstream_refusal(
-            "WHAT WAS CHECKED: /probe/dir — no git origin was found there.",
-        );
-        assert!(
-            msg.contains("from the CLI") && msg.contains("checkout"),
-            "the refusal must name the CLI-from-a-checkout lane: {msg}"
-        );
-        assert!(
-            msg.contains("TRAY'S LOGIN CANNOT SATISFY THIS"),
-            "the refusal must say the tray lane cannot satisfy it, or an operator retries it forever: {msg}"
-        );
-        assert!(
-            msg.contains("does NOT help"),
-            "if TILLANDSIAS_PROJECT_REMOTE_URL is mentioned it must be marked inert, never offered: {msg}"
-        );
-        assert!(
-            !msg.contains("or set TILLANDSIAS_PROJECT_REMOTE_URL"),
-            "the inert remedy must not return: {msg}"
-        );
-    }
-
-    /// ORDER 1215-xazj, criterion 4: the refusal STATES ITS SUBJECT.
-    ///
-    /// REGIME: pure string assertion over the refusal builder. No host state,
-    /// no filesystem, no wall clock, and deliberately no absolute timestamp —
-    /// the text is a function of its argument only.
-    ///
-    /// WHY THIS IS A SEPARATE TEST from the remedy pin above: that one asserts
-    /// the refusal names a way FORWARD. This one asserts it names what it
-    /// LOOKED AT. A refusal can do the first perfectly and still leave an
-    /// operator unable to tell which directory was consulted, which is exactly
-    /// what happened — three hosts spent a day establishing that the process
-    /// CWD was the only variable, a fact the probe held the whole time.
-    #[test]
-    fn github_login_refusal_states_the_subject_it_examined() {
-        let absent = github_login_no_upstream_refusal(
-            "WHAT WAS CHECKED: /var/home/x/src/p — no git origin was found there.",
-        );
-        assert!(
-            absent.contains("/var/home/x/src/p"),
-            "the refusal must name the directory it resolved from: {absent}"
-        );
-        assert!(
-            absent.contains("no git origin was found"),
-            "the refusal must say what it found there: {absent}"
-        );
-
-        // THE DECISION, not the formatting. These call the SUBJECT BUILDER with
-        // the inputs the call site gives it, so a caller that collapses the two
-        // cases is visible here. Asserting over subjects the test itself wrote
-        // could only check interpolation — measured: a mutation collapsing the
-        // two arms left that version of this test green.
-        let no_origin = github_login_probe_subject("/var/home/x/src/p", None);
-        let foreign_origin =
-            github_login_probe_subject("/var/home/x/src/p", Some("https://gitlab.example/x.git"));
-        assert!(
-            no_origin.contains("no git origin was found"),
-            "an absent origin must say so: {no_origin}"
-        );
-        assert!(
-            foreign_origin.contains("gitlab.example") && foreign_origin.contains("not a GitHub"),
-            "a non-GitHub origin must be quoted back and named as such: {foreign_origin}"
-        );
-        assert!(
-            !foreign_origin.contains("no git origin was found"),
-            "a checkout WITH an origin must never be reported as absence: {foreign_origin}"
-        );
-        assert_ne!(
-            no_origin, foreign_origin,
-            "an absent origin and a non-GitHub origin are different diagnoses and must not \
-             produce the identical subject line"
-        );
-        // And both must survive into the refusal an operator actually reads.
-        assert!(
-            github_login_no_upstream_refusal(&foreign_origin).contains("gitlab.example"),
-            "the subject must reach the refusal text, not stop at the builder"
-        );
-    }
-
     #[test]
     fn parse_gitdir_origin_url_reads_plain_clone_config() {
         let tmp = tempfile::tempdir().expect("temp dir");
