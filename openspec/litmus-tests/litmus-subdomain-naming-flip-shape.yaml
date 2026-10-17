@@ -70,7 +70,8 @@ critical_path:
     # route uses the new `opencode.<project>` order. A regression
     # to `{project}.opencode` would silently break browser-MCP
     # allowlists AND the cookie scoping invariant.
-    command: "grep -F 'format!(\"opencode.{}\", project_name)' crates/tillandsias-headless/src/main.rs"
+    # Negative control: the flipped `format!("{}.opencode", …)` must FAIL the step.
+    command: "M=crates/tillandsias-headless/src/main.rs; grep -F 'format!(\"opencode.{}\", router_host_label(project_name))' \"$M\" && ! grep -qF 'format!(\"{}.opencode\"' \"$M\""
     timeout_ms: 3000
     expected_behavior: "opencode.{}"
 
