@@ -1272,6 +1272,8 @@ Build flags:
 
 Install flags:
   --install         Build release + install binary to ~/.local/bin/
+  --check --install Install ONLY after a green --check, building the exact tree
+                    the check stamped (order 1237-f9dy); a red check installs nothing
 
 Maintenance flags:
   --wipe            Remove target/, ~/.cache/tillandsias/, temp files
@@ -1289,6 +1291,24 @@ EOF
     esac
     shift
 done
+
+# ORDER 1237-f9dy — `--check --install` INSTALLS ONLY AFTER A GREEN CHECK.
+#
+# A host builds several times a day but routinely runs only --check, which
+# installs nothing, and --ci-full --install installs only when the WHOLE release
+# gate passes. Measured 2026-10-15: yoga's launcher one release behind, and
+# macuahuitl's at v56.9.27.3, 18 days old. The install block also sits ABOVE
+# the check block, so `--check --install` used to install first and verify
+# after. Now the pair defers: the install flag is held back, the check runs as a
+# check-only dispatch, and only its green completion (after the gate stamp is
+# written) starts `--install` on the stamped tree. A red check exits before
+# that point, so it installs nothing; a bare --check is untouched.
+DEFER_INSTALL_UNTIL_CHECK=false
+if [[ "$FLAG_CHECK" == true && "$FLAG_INSTALL" == true && "$FLAG_CI" == false \
+    && "$FLAG_CI_FULL" == false && "$FLAG_RELEASE" == false && "$FLAG_TEST" == false ]]; then
+    DEFER_INSTALL_UNTIL_CHECK=true
+    FLAG_INSTALL=false
+fi
 
 # ORDER 1592-idmu — THE DIFF BASE IS FROZEN AT GATE START.
 #
@@ -1432,6 +1452,25 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
         esac
     fi
     # END-STALE-PLAN-BINARY-CHECK
+
+    # ORDER 1237-f9dy — ADVISORY ONLY: is the installed launcher older than the
+    # newest release tag this checkout knows? Nothing pulls a new release onto a
+    # host (macuahuitl ran v56.9.27.3 on 2026-10-15, 18 days old). Local tags
+    # only, no network; this line never refuses and never changes the verdict.
+    _pf_launcher="$(command -v tillandsias 2>/dev/null)" || _pf_launcher=""
+    if [ -n "$_pf_launcher" ]; then
+        _pf_installed="$("$_pf_launcher" --version 2>/dev/null)" || _pf_installed=""
+        _pf_installed="v${_pf_installed##* v}"
+        case "$_pf_installed" in v[0-9]*.[0-9]*.[0-9]*.[0-9]*) ;; *) _pf_installed="v" ;; esac
+        _pf_newest="$(git -C "$SCRIPT_DIR" tag --list 'v[0-9]*.[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname 2>/dev/null)" || _pf_newest=""
+        _pf_newest="${_pf_newest%%$'\n'*}"
+        if [ "$_pf_installed" != "v" ] && [ -n "$_pf_newest" ] && [ "$_pf_installed" != "$_pf_newest" ]; then
+            _pf_lower="$(printf '%s\n%s\n' "$_pf_installed" "$_pf_newest" | sort -V)" || _pf_lower=""
+            if [ "${_pf_lower%%$'\n'*}" = "$_pf_installed" ]; then
+                echo "advisory:preflight:launcher-older-than-release installed=$_pf_installed newest=$_pf_newest ($_pf_launcher) — not a refusal; update from the release, or ./build.sh --check --install" >&2
+            fi
+        fi
+    fi
 
     # 5s, SET FROM THE DISTRIBUTION AND NOT CHOSEN. Measured over all 105 roster
     # entries on pirria: 94 finish under 5s for 55.3s of work, and the next costs
@@ -2754,7 +2793,9 @@ _prepare_ci_full_install_inputs() {
 # between the gate and the forge dirty-start guard. The call inside the install
 # block is latched to a no-op by this one. The release dispatch owns its own
 # gate and regenerates at the top of its own block.
-if [[ "$FLAG_INSTALL" == true ]]; then
+# Order 1237-f9dy: a deferred `--check --install` bumps HERE, before the check,
+# so the tree the check stamps is the tree the install builds.
+if [[ "$FLAG_INSTALL" == true || "$DEFER_INSTALL_UNTIL_CHECK" == true ]]; then
     _bump_build_version
     _check_trace_coverage
 fi
@@ -2836,6 +2877,14 @@ if [[ "$FLAG_INSTALL" == true ]]; then
         exit 1
     fi
 
+    # Order 1237-f9dy: say what this install was verified by, or that it was not.
+    if [[ -n "${TILLANDSIAS_INSTALL_VERIFIED_BY:-}" ]]; then
+        _info "install:verified-by:$TILLANDSIAS_INSTALL_VERIFIED_BY"
+    elif [[ "$FLAG_CI" == true || "$FLAG_CI_FULL" == true ]]; then
+        _info "install:verified-by:ci-gate (passed above)"
+    else
+        _warn "install:verified-by:nothing — a bare --install builds and installs without a gate; ./build.sh --check --install installs only after a green check"
+    fi
     _step "Building portable launcher (musl-static) with tray support for install..."
     _bump_build_version
     _check_trace_coverage
@@ -6422,6 +6471,25 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # the same log; the flush consumes it).
     _phase_emit_timing
     timing_emit build-check check "$_CHECK_T0" 0
+
+    # Order 1237-f9dy: the check is green and its stamp is written; install the
+    # tree it stamped. The child verifies the stamp against the tree before it
+    # builds anything, skips the version bump (done before the check), and
+    # prints which gate it is installing on the strength of.
+    if [[ "$DEFER_INSTALL_UNTIL_CHECK" == true ]]; then
+        _stamp_verdict="$(bash "$SCRIPT_DIR/scripts/gate-stamp.sh" verify 2>/dev/null)" || true
+        if [[ "$_stamp_verdict" != "ok:gate-fresh" ]]; then
+            _error "refused:install-after-check:${_stamp_verdict:-no-verdict} — the check passed but its stamp does not vouch for this tree, so nothing is installed"
+            _error "  why: an install must name the green gate it builds; a stamp that is missing or stale for this tree names none (1237-f9dy)"
+            _error "  remedy: run ./build.sh --check --install again with nothing writing to the checkout; scripts/gate-stamp.sh verify says what moved"
+            exit 1
+        fi
+        _stamp_digest="$(bash "$SCRIPT_DIR/scripts/gate-stamp.sh" compute 2>/dev/null)" || _stamp_digest=unknown
+        _info "Green --check stamped tree ${_stamp_digest:0:12}; installing it (1237-f9dy)"
+        TILLANDSIAS_SKIP_VERSION_BUMP=1 \
+            TILLANDSIAS_INSTALL_VERIFIED_BY="check:gate-stamp:${_stamp_digest}" \
+            exec "$SCRIPT_DIR/build.sh" --install
+    fi
 
     # If --check is the only remaining flag, exit
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CLEAN$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]]; then
