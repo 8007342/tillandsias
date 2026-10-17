@@ -1,6 +1,6 @@
 // @trace order:1505-kc5f, openspec/changes/cloudflare-login-and-fleet-vpn/design.md (Decision 1, Decision 7)
 // @trace openspec/changes/cloudflare-login-and-fleet-vpn/specs/cloudflare-auth/spec.md
-//! `tillandsias --cloudflare-login [--via loopback|qr|paste]` and
+//! `tillandsias --cloudflare-login [--via device|loopback|qr|paste]` and
 //! `tillandsias --cloudflare-logout`.
 //!
 //! Cloudflare offers NO device grant (design.md Decision 1), so this is the
@@ -355,6 +355,9 @@ pub enum Via {
     Loopback,
     Qr,
     Paste,
+    /// RFC 8628 device grant (1758-wdvf): a user code plus a QR of the
+    /// verification URI; this host polls Cloudflare directly.
+    Device,
 }
 
 impl Via {
@@ -363,6 +366,7 @@ impl Via {
             "loopback" => Some(Self::Loopback),
             "qr" => Some(Self::Qr),
             "paste" => Some(Self::Paste),
+            "device" => Some(Self::Device),
             _ => None,
         }
     }
@@ -699,6 +703,10 @@ pub struct LoginDeps<'a> {
     pub host_is_forge: bool,
     pub window: Duration,
     pub poll_interval: Duration,
+    /// TEST SEAM (1758-wdvf): one "second" of the device grant's poll
+    /// interval. Production is one second; tests shrink it so a slow_down
+    /// arm does not wait five real seconds.
+    pub device_interval_unit: Duration,
     pub qr_tier: tillandsias_progress_tty::Tier,
     pub now_unix: u64,
 }
@@ -738,6 +746,15 @@ pub fn login(
 ) -> Result<LoginOutcome, Refusal> {
     if deps.host_is_forge {
         return Err(forge_refusal("cloudflare-login"));
+    }
+    // 1758-wdvf: the device grant FIRST, whenever no receiver was forced and
+    // discovery offers it (no callback, nothing stored on our side). `None`
+    // means it was not offered or Cloudflare refused it for this client: the
+    // code flow below takes over.
+    if matches!(via, None | Some(Via::Device))
+        && let Some(outcome) = login_device(deps, via == Some(Via::Device), out)?
+    {
+        return Ok(outcome);
     }
     let via = via.unwrap_or_else(|| default_via(deps.desktop_session, deps.relay_url.is_some()));
 
@@ -793,6 +810,7 @@ pub fn login(
             listener = Some(l);
             format!("http://127.0.0.1:{port}{CALLBACK_PATH}")
         }
+        Via::Device => unreachable!("login_device answers every --via device"),
     };
 
     let pending = cloudflare_oauth::begin(
@@ -864,20 +882,12 @@ pub fn login(
             }
         },
         Via::Paste => read_and_judge_paste(deps, &pending, out)?,
+        Via::Device => unreachable!("login_device answers every --via device"),
     };
 
     // Vault preflight: an unreachable, sealed or refusing Vault is refused
     // BEFORE the single-use code is spent.
-    let previous = deps.store.read_bundle().map_err(|r| {
-        Refusal::login(
-            format!("vault:{}", fixed_word(&r)),
-            "the Vault that must hold the Cloudflare credential is unreachable, sealed or refused the host; the code was NOT exchanged",
-            "run `tillandsias --init`, then `tillandsias --cloudflare-login` again",
-        )
-    })?;
-    if previous.is_some() {
-        let _ = writeln!(out, "note:cloudflare-login:replacing-the-stored-sign-in");
-    }
+    let previous = vault_preflight(deps, out)?;
 
     let bundle = cloudflare_oauth::exchange(
         deps.http,
@@ -898,6 +908,35 @@ pub fn login(
             remedy,
         )
     })?;
+    store_and_report(deps, previous, bundle, out)
+}
+
+/// Vault preflight shared by both grants: read the stored bundle (or none)
+/// BEFORE anything single-use is spent.
+fn vault_preflight(
+    deps: &LoginDeps<'_>,
+    out: &mut dyn Write,
+) -> Result<Option<CloudflareTokenBundle>, Refusal> {
+    let previous = deps.store.read_bundle().map_err(|r| {
+        Refusal::login(
+            format!("vault:{}", fixed_word(&r)),
+            "the Vault that must hold the Cloudflare credential is unreachable, sealed or refused the host; the code was NOT exchanged",
+            "run `tillandsias --init`, then `tillandsias --cloudflare-login` again",
+        )
+    })?;
+    if previous.is_some() {
+        let _ = writeln!(out, "note:cloudflare-login:replacing-the-stored-sign-in");
+    }
+    Ok(previous)
+}
+
+/// Store an issued bundle and report it; shared by both grants.
+fn store_and_report(
+    deps: &LoginDeps<'_>,
+    previous: Option<CloudflareTokenBundle>,
+    bundle: cloudflare_oauth::Bundle,
+    out: &mut dyn Write,
+) -> Result<LoginOutcome, Refusal> {
     if bundle.access_token.is_empty() {
         return Err(Refusal::login(
             "exchange:token-response-unusable",
@@ -945,6 +984,167 @@ pub fn login(
         }
     }
     Ok(LoginOutcome::Stored { expires_at })
+}
+
+/// The device grant (1758-wdvf, RFC 8628). `Ok(None)` hands over to the code
+/// flow: discovery does not offer the grant, or Cloudflare refused it for this
+/// client. With `explicit` (`--via device`) both are refusals instead.
+fn login_device(
+    deps: &mut LoginDeps<'_>,
+    explicit: bool,
+    out: &mut dyn Write,
+) -> Result<Option<LoginOutcome>, Refusal> {
+    let endpoints = match cloudflare_oauth::discover_device_grant(deps.http, &deps.base_url) {
+        Ok(Some(e)) => e,
+        Ok(None) if explicit => {
+            return Err(Refusal::login(
+                "device-grant-not-offered",
+                "Cloudflare's discovery document does not offer the device grant (it lists no device_code grant type or no device_authorization_endpoint)",
+                "run `tillandsias --cloudflare-login` without --via to use the browser sign-in",
+            ));
+        }
+        Ok(None) => return Ok(None),
+        // Not explicit: the code flow fetches discovery again and refuses
+        // with its own words if it is really down.
+        Err(_) if !explicit => return Ok(None),
+        Err(e) => {
+            return Err(Refusal::login(
+                core_reason(&e),
+                "the Cloudflare OpenID discovery document could not be read",
+                "check the network and TILLANDSIAS_CLOUDFLARE_BASE_URL, then retry",
+            ));
+        }
+    };
+    if !vault_bootstrap::cloudflare_token_endpoint_is_safe(&endpoints.device_authorization_endpoint)
+    {
+        return Err(endpoint_refusal(
+            "device-endpoint-not-https",
+            "device authorization endpoint",
+        ));
+    }
+    if !vault_bootstrap::cloudflare_token_endpoint_is_safe(&endpoints.token_endpoint) {
+        return Err(endpoint_refusal(
+            "token-endpoint-not-https",
+            "token endpoint",
+        ));
+    }
+    let auth = match cloudflare_oauth::device_authorize(
+        deps.http,
+        &endpoints,
+        &deps.client_id,
+        CLOUDFLARE_LOGIN_SCOPES,
+    ) {
+        Ok(cloudflare_oauth::DeviceStart::Started(a)) => a,
+        Ok(cloudflare_oauth::DeviceStart::Refused(word)) => {
+            if explicit {
+                return Err(Refusal::login(
+                    format!("device-grant-refused:{word}"),
+                    "Cloudflare would not start a device sign-in for this client",
+                    "allow the device grant on the Tillandsias OAuth client in the Cloudflare dashboard, or run `tillandsias --cloudflare-login` without --via",
+                ));
+            }
+            let _ = writeln!(
+                out,
+                "note:cloudflare-login:device-grant-refused:{word} (using the browser sign-in instead)"
+            );
+            return Ok(None);
+        }
+        Err(e) => {
+            return Err(Refusal::login(
+                core_reason(&e),
+                "Cloudflare's device authorization endpoint did not start a sign-in",
+                REMEDY_RETRY,
+            ));
+        }
+    };
+    let shown = auth
+        .verification_uri_complete
+        .clone()
+        .unwrap_or_else(|| auth.verification_uri.clone());
+    for u in [&auth.verification_uri, &shown] {
+        if !vault_bootstrap::cloudflare_token_endpoint_is_safe(u) {
+            return Err(endpoint_refusal(
+                "verification-uri-not-https",
+                "verification URI",
+            ));
+        }
+    }
+
+    // What the user sees: public data only. The QR is the verification URI
+    // (with the code filled in when Cloudflare offers that), NEVER the
+    // device_code, which this module cannot even read.
+    let _ = writeln!(
+        out,
+        "\nScan this QR code with your phone to sign in to Cloudflare:\n"
+    );
+    match crate::render_terminal_qr_in(&shown, deps.qr_tier) {
+        Ok(qr) => {
+            let _ = write!(out, "{qr}");
+        }
+        Err(_) => {
+            let _ = writeln!(out, "note:cloudflare-login:qr-unrenderable");
+        }
+    }
+    let _ = writeln!(out);
+    let _ = writeln!(
+        out,
+        "  Or open {} and enter the code: {}",
+        auth.verification_uri, auth.user_code
+    );
+    let _ = out.flush();
+
+    if deps.litmus_stop {
+        let _ = writeln!(
+            out,
+            "skip:cloudflare-login:litmus-stop-before-exchange (nothing was written)"
+        );
+        return Ok(Some(LoginOutcome::LitmusStopped));
+    }
+    let previous = vault_preflight(deps, out)?;
+    let _ = writeln!(out, "Waiting for the approval on Cloudflare...");
+    let _ = out.flush();
+
+    // The device code's own lifetime, bounded by the login window.
+    let lifetime = Duration::from_secs(auth.expires_in).min(deps.window);
+    let deadline = Instant::now() + lifetime;
+    let mut interval = auth.interval;
+    let bundle = loop {
+        std::thread::sleep(deps.device_interval_unit * interval as u32);
+        if Instant::now() >= deadline {
+            return Err(device_expired());
+        }
+        match cloudflare_oauth::device_poll(deps.http, &auth, &deps.client_id) {
+            Ok(cloudflare_oauth::DevicePoll::Pending) => {}
+            // RFC 8628 §3.5: slow_down adds 5 seconds, for this and every
+            // later poll.
+            Ok(cloudflare_oauth::DevicePoll::SlowDown) => interval += 5,
+            Ok(cloudflare_oauth::DevicePoll::Denied) => {
+                return Err(Refusal::login(
+                    "access-denied",
+                    "the Cloudflare sign-in was declined on the approval page; nothing was stored",
+                    "run `tillandsias --cloudflare-login` again and approve the Tillandsias App",
+                ));
+            }
+            Ok(cloudflare_oauth::DevicePoll::Expired) => return Err(device_expired()),
+            Ok(cloudflare_oauth::DevicePoll::Token(b)) => break b,
+            Err(e) => {
+                return Err(Refusal::login(
+                    format!("exchange:{}", core_reason(&e)),
+                    "the token endpoint did not issue a token for the approved device code",
+                    REMEDY_RETRY,
+                ));
+            }
+        }
+    };
+    store_and_report(deps, previous, bundle, out).map(Some)
+}
+
+fn device_expired() -> Refusal {
+    Refusal::login(
+        "device-code-expired",
+        "the device code expired before the sign-in was approved; nothing was stored",
+        "run `tillandsias --cloudflare-login` again and approve within the time shown",
+    )
 }
 
 fn paste_needs_terminal() -> Refusal {
@@ -1007,6 +1207,7 @@ fn show_authorize_url(via: Via, pending: &Pending, deps: &LoginDeps<'_>, out: &m
             );
             let _ = writeln!(out, "  {}", pending.authorize_url);
         }
+        Via::Device => {}
     }
     let _ = out.flush();
 }
@@ -1126,7 +1327,7 @@ fn describe_arg(a: &str) -> String {
     }
 }
 
-/// Parse `--cloudflare-login [--via loopback|qr|paste] [--debug]` or
+/// Parse `--cloudflare-login [--via device|loopback|qr|paste] [--debug]` or
 /// `--cloudflare-logout [--debug]`. Anything else is refused.
 pub fn parse_args(args: &[String]) -> Result<Command, Refusal> {
     let login = args.iter().any(|a| a == "--cloudflare-login");
@@ -1160,8 +1361,8 @@ pub fn parse_args(args: &[String]) -> Result<Command, Refusal> {
                 via = Some(Via::parse(v).ok_or_else(|| {
                     refuse(
                         "bad-via",
-                        "--via takes exactly one of loopback, qr, paste".into(),
-                        "tillandsias --cloudflare-login --via loopback|qr|paste",
+                        "--via takes exactly one of device, loopback, qr, paste".into(),
+                        "tillandsias --cloudflare-login --via device|loopback|qr|paste",
                     )
                 })?);
                 i += 1;
@@ -1178,7 +1379,7 @@ pub fn parse_args(args: &[String]) -> Result<Command, Refusal> {
                 return Err(refuse(
                     "unsupported-argument",
                     why,
-                    "tillandsias --cloudflare-login [--via loopback|qr|paste] [--debug] | tillandsias --cloudflare-logout [--debug]",
+                    "tillandsias --cloudflare-login [--via device|loopback|qr|paste] [--debug] | tillandsias --cloudflare-logout [--debug]",
                 ));
             }
         }
@@ -1279,6 +1480,7 @@ pub fn run_cli(args: &[String]) -> i32 {
                 host_is_forge,
                 window: LOGIN_WINDOW,
                 poll_interval: RELAY_POLL_INTERVAL,
+                device_interval_unit: Duration::from_secs(1),
                 qr_tier: crate::qr_tier(),
                 now_unix: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -1581,6 +1783,206 @@ mod tests {
         }
     }
 
+    // ── 1758-wdvf: the device grant ──────────────────────────────────────
+
+    const DEVICE_SECRET: &str = "cf-dc-WDVFPROBE-8c1e44b07a";
+
+    fn device_discovery(offered: bool) -> Scripted {
+        let s = Scripted::default();
+        let mut d = serde_json::json!({
+            "authorization_endpoint": format!("{BASE}/oauth2/auth"),
+            "token_endpoint": format!("{BASE}/oauth2/token"),
+            "revocation_endpoint": "",
+            "grant_types_supported": ["authorization_code", "refresh_token"],
+        });
+        if offered {
+            d["grant_types_supported"] = serde_json::json!([
+                "authorization_code",
+                "refresh_token",
+                cloudflare_oauth::DEVICE_CODE_GRANT_TYPE
+            ]);
+            d["device_authorization_endpoint"] =
+                serde_json::json!(format!("{BASE}/oauth2/device/auth"));
+        }
+        s.gets.borrow_mut().push((
+            format!("{BASE}/.well-known/openid-configuration"),
+            HttpResponse {
+                status: 200,
+                body: d.to_string(),
+            },
+        ));
+        s
+    }
+
+    fn device_started(s: Scripted) -> Scripted {
+        s.post_then(
+            &format!("{BASE}/oauth2/device/auth"),
+            200,
+            &serde_json::json!({
+                "device_code": DEVICE_SECRET,
+                "user_code": "WDJB-MJHT",
+                "verification_uri": format!("{BASE}/device"),
+                "verification_uri_complete": format!("{BASE}/device?user_code=WDJB-MJHT"),
+                "expires_in": 900,
+                "interval": 0,
+            })
+            .to_string(),
+        )
+    }
+
+    fn token_error(s: Scripted, word: &str) -> Scripted {
+        s.post_then(
+            &format!("{BASE}/oauth2/token"),
+            400,
+            &serde_json::json!({ "error": word }).to_string(),
+        )
+    }
+
+    fn token_ok(s: Scripted) -> Scripted {
+        s.post_then(
+            &format!("{BASE}/oauth2/token"),
+            200,
+            &serde_json::json!({"access_token": LEAK_A, "refresh_token": LEAK_R, "expires_in": 3600})
+                .to_string(),
+        )
+    }
+
+    fn run_device(
+        http: &Scripted,
+        store: &MemStore,
+        via: Option<Via>,
+    ) -> (Result<LoginOutcome, Refusal>, String) {
+        let out = Rc::new(RefCell::new(Vec::new()));
+        let mut read = || -> Result<String, String> { panic!("the device grant reads no paste") };
+        let result;
+        {
+            let mut d = deps(http, store, &no_open, &mut read);
+            let mut w = SharedOut(out.clone());
+            result = login(via, &mut d, &mut w);
+        }
+        let text = String::from_utf8(out.borrow().clone()).unwrap();
+        (result, text)
+    }
+
+    fn posts_to(http: &Scripted, path: &str) -> usize {
+        let want = format!("POST {BASE}{path}");
+        http.calls.borrow().iter().filter(|c| **c == want).count()
+    }
+
+    #[test]
+    fn device_grant_is_the_default_when_offered_and_stores_after_pending_and_slow_down() {
+        let http = token_ok(token_error(
+            token_error(
+                device_started(device_discovery(true)),
+                "authorization_pending",
+            ),
+            "slow_down",
+        ));
+        let store = MemStore::with_mesh();
+        let (r, text) = run_device(&http, &store, None);
+        assert!(
+            matches!(r, Ok(LoginOutcome::Stored { .. })),
+            "{r:?}\n{text}"
+        );
+        assert!(text.contains("enter the code: WDJB-MJHT"), "{text}");
+        assert!(text.contains(&format!("{BASE}/device")), "{text}");
+        assert!(text.contains("ok:cloudflare-login:stored"), "{text}");
+        assert_absent(
+            &text,
+            &[DEVICE_SECRET, LEAK_A, LEAK_R],
+            "device-grant output",
+        );
+        assert_eq!(posts_to(&http, "/oauth2/device/auth"), 1);
+        assert_eq!(
+            posts_to(&http, "/oauth2/token"),
+            3,
+            "pending, slow_down, then the token"
+        );
+        assert!(store.snapshot().contains_key("secret/cloudflare/token"));
+    }
+
+    #[test]
+    fn device_grant_declined_or_expired_stores_nothing() {
+        for (word, reason) in [
+            ("access_denied", "access-denied"),
+            ("expired_token", "device-code-expired"),
+        ] {
+            let http = token_error(device_started(device_discovery(true)), word);
+            let store = MemStore::with_mesh();
+            let before = store.snapshot();
+            let (r, _) = run_device(&http, &store, None);
+            assert_eq!(r.unwrap_err().reason, reason, "{word}");
+            assert_eq!(store.snapshot(), before, "{word}: nothing stored");
+        }
+    }
+
+    #[test]
+    fn device_grant_vault_preflight_refuses_before_any_poll() {
+        let http = token_ok(device_started(device_discovery(true)));
+        let store = MemStore {
+            fail_read: true,
+            ..MemStore::with_mesh()
+        };
+        let (r, _) = run_device(&http, &store, None);
+        assert!(r.unwrap_err().reason.starts_with("vault:"));
+        assert_eq!(
+            posts_to(&http, "/oauth2/token"),
+            0,
+            "no poll with Vault down"
+        );
+    }
+
+    #[test]
+    fn a_client_cloudflare_refuses_the_grant_falls_back_to_the_browser_sign_in() {
+        let refused = || {
+            device_discovery(true).post_then(
+                &format!("{BASE}/oauth2/device/auth"),
+                400,
+                r#"{"error":"unauthorized_client"}"#,
+            )
+        };
+        // Default: a named note, then the code flow takes over (here it reaches
+        // the paste receiver, which refuses a non-terminal stdin).
+        let http = refused();
+        let (r, text) = run_device(&http, &MemStore::with_mesh(), None);
+        assert!(
+            text.contains("note:cloudflare-login:device-grant-refused:unauthorized_client"),
+            "{text}"
+        );
+        assert_eq!(r.unwrap_err().reason, "paste-needs-a-terminal");
+        assert_eq!(posts_to(&http, "/oauth2/token"), 0);
+        // Explicit --via device: a refusal naming the dashboard setting.
+        let http = refused();
+        let (r, _) = run_device(&http, &MemStore::with_mesh(), Some(Via::Device));
+        let e = r.unwrap_err();
+        assert_eq!(e.reason, "device-grant-refused:unauthorized_client");
+        assert!(e.remedy.contains("allow the device grant"), "{}", e.remedy);
+    }
+
+    #[test]
+    fn negative_control_without_the_grant_in_discovery_device_auth_is_never_asked() {
+        let http = device_discovery(false);
+        let (r, _) = run_device(&http, &MemStore::with_mesh(), None);
+        assert_eq!(
+            r.unwrap_err().reason,
+            "paste-needs-a-terminal",
+            "the code flow took over"
+        );
+        assert_eq!(posts_to(&http, "/oauth2/device/auth"), 0);
+        let http = device_discovery(false);
+        let (r, _) = run_device(&http, &MemStore::with_mesh(), Some(Via::Device));
+        assert_eq!(r.unwrap_err().reason, "device-grant-not-offered");
+        assert_eq!(posts_to(&http, "/oauth2/device/auth"), 0);
+    }
+
+    #[test]
+    fn a_forced_receiver_never_asks_for_the_device_grant() {
+        let http = device_discovery(true);
+        let (r, _) = run_device(&http, &MemStore::with_mesh(), Some(Via::Paste));
+        assert_eq!(r.unwrap_err().reason, "paste-needs-a-terminal");
+        assert_eq!(posts_to(&http, "/oauth2/device/auth"), 0);
+    }
+
     const LEAK_A: &str = "cf-at-KC5FPROBE-19e2d7c4b8a1";
     const LEAK_R: &str = "cf-rt-KC5FPROBE-6b3f0a9d2e57";
 
@@ -1794,8 +2196,15 @@ mod tests {
             parse_args(&a(&["--cloudflare-logout"])).unwrap(),
             Command::Logout
         );
+        // 1758-wdvf: the device grant is a receiver now.
         assert_eq!(
-            parse_args(&a(&["--cloudflare-login", "--via", "device"]))
+            parse_args(&a(&["--cloudflare-login", "--via", "device"])).unwrap(),
+            Command::Login {
+                via: Some(Via::Device)
+            }
+        );
+        assert_eq!(
+            parse_args(&a(&["--cloudflare-login", "--via", "fax"]))
                 .unwrap_err()
                 .reason,
             "bad-via"
@@ -1887,6 +2296,7 @@ mod tests {
             host_is_forge: false,
             window: Duration::from_secs(20),
             poll_interval: Duration::from_millis(10),
+            device_interval_unit: Duration::from_millis(1),
             qr_tier: tillandsias_progress_tty::Tier::Plain,
             now_unix: 1_000_000,
         }
@@ -2258,6 +2668,13 @@ mod tests {
         }
 
         pub(super) fn start(name: &str) -> FakeServer {
+            start_with(name, &[])
+        }
+
+        /// 1758-wdvf: the fake reads its knobs at startup, so each arm sets
+        /// them on ITS fake's command; the test process's env is shared by
+        /// parallel tests and is never touched.
+        pub(super) fn start_with(name: &str, envs: &[(&str, &str)]) -> FakeServer {
             let bin = std::env::var("TILLANDSIAS_FAKE_CLOUDFLARE_BIN")
                 .map(PathBuf::from)
                 .unwrap_or_else(|_| {
@@ -2275,6 +2692,7 @@ mod tests {
             let mut child = std::process::Command::new(&bin)
                 .arg("--ledger")
                 .arg(&ledger)
+                .envs(envs.iter().copied())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::null())
                 .spawn()
@@ -2760,6 +3178,165 @@ mod tests {
         );
         assert!(text.contains("ok:cloudflare-logout:deleted"), "{text}");
         assert_absent(&text, &[&access, &refresh], "logout output");
+    }
+
+    // ── 1758-wdvf: the device grant against the fake over real loopback ──
+
+    const GRANTS_WITH_DEVICE: &str =
+        "authorization_code,refresh_token,urn:ietf:params:oauth:grant-type:device_code";
+
+    fn device_fake(name: &str, mode: &str) -> fake::FakeServer {
+        fake::start_with(
+            name,
+            &[
+                (
+                    "TILLANDSIAS_FAKE_CLOUDFLARE_GRANT_TYPES",
+                    GRANTS_WITH_DEVICE,
+                ),
+                ("TILLANDSIAS_FAKE_CLOUDFLARE_DEVICE_MODE", mode),
+            ],
+        )
+    }
+
+    fn run_fake_device(
+        server: &fake::FakeServer,
+        store: &MemStore,
+    ) -> (Result<LoginOutcome, Refusal>, String) {
+        let http = cloudflare_oauth::ReqwestHttpClient::default();
+        let mut read = || -> Result<String, String> { panic!("the device grant reads no paste") };
+        let mut d = fake_deps(server, &http, store, &no_open, &mut read);
+        let mut out = Vec::new();
+        let r = login(None, &mut d, &mut out);
+        (r, String::from_utf8(out).unwrap())
+    }
+
+    /// The device_code the login polled with, read from the fake's ledger.
+    fn polled_device_code(ledger: &std::path::Path) -> String {
+        fake::ledger(ledger)
+            .iter()
+            .filter(|e| e["path"].as_str() == Some("/oauth2/token"))
+            .find_map(|e| {
+                let body = e["body"].as_str().unwrap_or("");
+                parse_query(body)?
+                    .into_iter()
+                    .find(|(k, _)| k == "device_code")
+                    .map(|(_, v)| v)
+            })
+            .expect("the login polled with a device_code")
+    }
+
+    #[test]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-login.sh"]
+    fn cloudflare_login_fake_device_approve_stores_and_qr_is_only_the_verification_uri() {
+        let server = device_fake("device-approve", "approve");
+        let store = MemStore::with_mesh();
+        let (r, text) = run_fake_device(&server, &store);
+        assert!(
+            matches!(r, Ok(LoginOutcome::Stored { .. })),
+            "{r:?}\n{text}"
+        );
+        assert_eq!(
+            fake::paths(&server.ledger),
+            vec![
+                "/.well-known/openid-configuration",
+                "/oauth2/device/auth",
+                "/oauth2/token",
+                "/oauth2/token"
+            ],
+            "discovery, one device authorization, one pending poll, the token"
+        );
+        let complete = format!("{}/device?user_code=WDJB-MJHT", server.base_url);
+        let qr =
+            crate::render_terminal_qr_in(&complete, tillandsias_progress_tty::Tier::Plain).unwrap();
+        assert!(text.contains(&qr), "the QR is verification_uri_complete");
+        let other = crate::render_terminal_qr_in(
+            &format!("{complete}x"),
+            tillandsias_progress_tty::Tier::Plain,
+        )
+        .unwrap();
+        assert!(
+            !text.contains(&other),
+            "CONTROL: the comparison tells payloads apart"
+        );
+        assert!(text.contains("enter the code: WDJB-MJHT"), "{text}");
+        let device_code = polled_device_code(&server.ledger);
+        let (access, refresh) = secrets_of(&store);
+        assert_absent(
+            &text,
+            &[&device_code, &access, &refresh],
+            "device login output",
+        );
+        assert!(store.snapshot().contains_key("secret/cloudflare/mesh"));
+    }
+
+    #[test]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-login.sh"]
+    fn cloudflare_login_fake_device_slow_down_widens_and_still_stores() {
+        let server = device_fake("device-slow", "slow_down");
+        let store = MemStore::with_mesh();
+        let t0 = Instant::now();
+        let (r, text) = run_fake_device(&server, &store);
+        assert!(
+            matches!(r, Ok(LoginOutcome::Stored { .. })),
+            "{r:?}\n{text}"
+        );
+        let polls = fake::paths(&server.ledger)
+            .iter()
+            .filter(|p| *p == "/oauth2/token")
+            .count();
+        assert_eq!(polls, 3, "slow_down, pending, then the token");
+        // interval 0 + slow_down's 5 units (1 ms in tests) on each later poll.
+        assert!(
+            t0.elapsed() >= Duration::from_millis(10),
+            "slow_down did not widen the interval"
+        );
+    }
+
+    #[test]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-login.sh"]
+    fn cloudflare_login_fake_device_deny_and_expire_store_nothing() {
+        for (mode, reason) in [("deny", "access-denied"), ("expire", "device-code-expired")] {
+            let server = device_fake(&format!("device-{mode}"), mode);
+            let store = MemStore::with_mesh();
+            let before = store.snapshot();
+            let (r, _) = run_fake_device(&server, &store);
+            assert_eq!(r.unwrap_err().reason, reason, "{mode}");
+            assert_eq!(store.snapshot(), before, "{mode}: nothing stored");
+        }
+    }
+
+    #[test]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-login.sh"]
+    fn cloudflare_login_fake_device_refused_falls_back_and_no_grant_never_asks() {
+        // Cloudflare refuses this client the grant: a named note, then the code
+        // flow (here: paste, which refuses a non-terminal stdin).
+        let server = device_fake("device-refuse", "refuse");
+        let (r, text) = run_fake_device(&server, &MemStore::with_mesh());
+        assert!(
+            text.contains("note:cloudflare-login:device-grant-refused:unauthorized_client"),
+            "{text}"
+        );
+        assert_eq!(r.unwrap_err().reason, "paste-needs-a-terminal");
+        assert!(!fake::paths(&server.ledger).contains(&"/oauth2/token".to_string()));
+        // NEGATIVE CONTROL: discovery without the grant never reaches device/auth.
+        let server = fake::start("device-nogrant");
+        let (r, _) = run_fake_device(&server, &MemStore::with_mesh());
+        assert_eq!(r.unwrap_err().reason, "paste-needs-a-terminal");
+        assert!(!fake::paths(&server.ledger).contains(&"/oauth2/device/auth".to_string()));
+        // The grant listed but no endpoint named is not an offer either.
+        let server = fake::start_with(
+            "device-noendpoint",
+            &[
+                (
+                    "TILLANDSIAS_FAKE_CLOUDFLARE_GRANT_TYPES",
+                    GRANTS_WITH_DEVICE,
+                ),
+                ("TILLANDSIAS_FAKE_CLOUDFLARE_DEVICE_ENDPOINT", "0"),
+            ],
+        );
+        let (r, _) = run_fake_device(&server, &MemStore::with_mesh());
+        assert_eq!(r.unwrap_err().reason, "paste-needs-a-terminal");
+        assert!(!fake::paths(&server.ledger).contains(&"/oauth2/device/auth".to_string()));
     }
 
     /// The REAL binary's `--via qr` output (captured by the script under

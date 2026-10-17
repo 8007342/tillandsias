@@ -27,13 +27,14 @@
 //! - **Token storage** (Vault paths, rotation scheduler) is 1505-iysn /
 //!   1505-8w1c (Decision 2). [`Bundle`] is handed back in memory; nothing
 //!   here writes to disk.
-//! - **The device grant itself.** Not implemented (Cloudflare didn't offer one
-//!   at design time; whether it grants one to this client is unmeasured). The
-//!   "device-flow shape... kept as an adapter" is [`device_grant_note`]: it
-//!   reads the discovery document's `grant_types_supported` the same way
-//!   `parse_device_code_response` reads a device-code reply, and reports
-//!   the absence (or, the day Cloudflare ever lists it, the presence) as a
-//!   `note:` line — never a fabricated device flow.
+//! - **The device grant** is now here too (1758-wdvf): Cloudflare's
+//!   discovery lists it and its endpoint (measured 2026-10-17), so
+//!   [`discover_device_grant`], [`device_authorize`] and [`device_poll`]
+//!   implement RFC 8628 over the same [`HttpClient`]. It is offered only
+//!   when discovery names BOTH the grant and the endpoint, and a client
+//!   Cloudflare refuses it to is a typed [`DeviceStart::Refused`] the login
+//!   falls back from. [`device_grant_note`] remains the one place the
+//!   grant's presence is decided.
 //!
 //! # PKCE and state, concretely
 //!
@@ -263,6 +264,10 @@ struct Discovery {
     revocation_endpoint: Option<String>,
     #[serde(default)]
     grant_types_supported: Vec<String>,
+    /// RFC 8628 §4 (1758-wdvf). Present in Cloudflare's discovery as of
+    /// 2026-10-17 (measured by the coordinator).
+    #[serde(default)]
+    device_authorization_endpoint: Option<String>,
 }
 
 fn fetch_discovery(http: &dyn HttpClient, base_url: &str) -> Result<Discovery, String> {
@@ -607,6 +612,179 @@ pub fn revoke(
     }
 }
 
+// ── the device grant (RFC 8628), 1758-wdvf ──────────────────────────────────
+//
+// Cloudflare's discovery lists the grant and its endpoint (measured
+// 2026-10-17), so the login asks for it FIRST: the phone approves on
+// Cloudflare's own page and this host polls Cloudflare's token endpoint, with
+// no callback and nothing stored on our side. Whether Cloudflare grants it to
+// a given client is answered by the device-authorization request itself, so
+// a refusal there is a typed [`DeviceStart::Refused`] the login falls back
+// from, never a dead end.
+
+/// The endpoints the device grant needs, when discovery offers it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceEndpoints {
+    pub device_authorization_endpoint: String,
+    pub token_endpoint: String,
+    pub revocation_endpoint: Option<String>,
+}
+
+/// `Some` only when discovery BOTH lists [`DEVICE_CODE_GRANT_TYPE`] and names
+/// a non-empty `device_authorization_endpoint`: one without the other is not
+/// an offer.
+pub fn discover_device_grant(
+    http: &dyn HttpClient,
+    base_url: &str,
+) -> Result<Option<DeviceEndpoints>, String> {
+    let d = fetch_discovery(http, base_url)?;
+    if device_grant_note(&d.grant_types_supported).is_none() {
+        return Ok(None);
+    }
+    Ok(d.device_authorization_endpoint
+        .filter(|e| !e.is_empty())
+        .map(|e| DeviceEndpoints {
+            device_authorization_endpoint: e,
+            token_endpoint: d.token_endpoint,
+            revocation_endpoint: d.revocation_endpoint,
+        }))
+}
+
+/// One device authorization. `device_code` is a bearer-like secret until it
+/// is exchanged, so it is not `pub`, has no accessor outside this module, and
+/// is redacted from `Debug`; only [`device_poll`] reads it. Everything else
+/// is public data the user is shown.
+pub struct DeviceAuthorization {
+    pub user_code: String,
+    pub verification_uri: String,
+    pub verification_uri_complete: Option<String>,
+    pub expires_in: u64,
+    /// Seconds between polls (RFC 8628 §3.2: 5 when absent).
+    pub interval: u64,
+    pub token_endpoint: String,
+    pub revocation_endpoint: Option<String>,
+    device_code: String,
+}
+
+impl std::fmt::Debug for DeviceAuthorization {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DeviceAuthorization")
+            .field("user_code", &self.user_code)
+            .field("verification_uri", &self.verification_uri)
+            .field("verification_uri_complete", &self.verification_uri_complete)
+            .field("expires_in", &self.expires_in)
+            .field("interval", &self.interval)
+            .field("device_code", &"<redacted>")
+            .finish()
+    }
+}
+
+#[derive(Deserialize)]
+struct DeviceAuthorizationResponse {
+    device_code: String,
+    user_code: String,
+    verification_uri: String,
+    #[serde(default)]
+    verification_uri_complete: Option<String>,
+    expires_in: u64,
+    #[serde(default)]
+    interval: Option<u64>,
+}
+
+/// What the device-authorization request answered.
+#[derive(Debug)]
+pub enum DeviceStart {
+    Started(DeviceAuthorization),
+    /// Cloudflare refused to start a device flow for this client (an
+    /// allow-listed OAuth error word, e.g. `unauthorized_client`): the login
+    /// falls back to the code flow.
+    Refused(&'static str),
+}
+
+/// RFC 8628 §3.1: `POST device_authorization_endpoint` with the client id
+/// and the scopes.
+pub fn device_authorize(
+    http: &dyn HttpClient,
+    endpoints: &DeviceEndpoints,
+    client_id: &str,
+    scopes: &[&str],
+) -> Result<DeviceStart, String> {
+    let scope = scopes.join(" ");
+    let mut form: Vec<(&str, &str)> = vec![("client_id", client_id)];
+    if !scope.is_empty() {
+        form.push(("scope", &scope));
+    }
+    let resp = http.post_form(&endpoints.device_authorization_endpoint, &form)?;
+    if resp.status == 400 || resp.status == 401 || resp.status == 403 {
+        let code = oauth_error_code(&resp.body);
+        if code != "no-error-code" && code != "unrecognised-error-code" {
+            return Ok(DeviceStart::Refused(code));
+        }
+    }
+    if resp.status != 200 {
+        return Err(format!(
+            "refused:cloudflare-login:device-auth-http-{}:{}",
+            resp.status,
+            oauth_error_code(&resp.body)
+        ));
+    }
+    let r: DeviceAuthorizationResponse = serde_json::from_str(&resp.body)
+        .map_err(|_| "refused:cloudflare-login:device-auth-unusable".to_string())?;
+    if r.device_code.is_empty() || r.user_code.is_empty() || r.verification_uri.is_empty() {
+        return Err("refused:cloudflare-login:device-auth-unusable".to_string());
+    }
+    Ok(DeviceStart::Started(DeviceAuthorization {
+        user_code: r.user_code,
+        verification_uri: r.verification_uri,
+        verification_uri_complete: r.verification_uri_complete.filter(|u| !u.is_empty()),
+        expires_in: r.expires_in,
+        interval: r.interval.unwrap_or(5),
+        token_endpoint: endpoints.token_endpoint.clone(),
+        revocation_endpoint: endpoints.revocation_endpoint.clone(),
+        device_code: r.device_code,
+    }))
+}
+
+/// One poll of the token endpoint (RFC 8628 §3.4, §3.5).
+#[derive(Debug)]
+pub enum DevicePoll {
+    Pending,
+    SlowDown,
+    Denied,
+    Expired,
+    Token(Bundle),
+}
+
+pub fn device_poll(
+    http: &dyn HttpClient,
+    auth: &DeviceAuthorization,
+    client_id: &str,
+) -> Result<DevicePoll, String> {
+    let form = [
+        ("grant_type", DEVICE_CODE_GRANT_TYPE),
+        ("device_code", auth.device_code.as_str()),
+        ("client_id", client_id),
+    ];
+    let resp = http.post_form(&auth.token_endpoint, &form)?;
+    if resp.status == 200 {
+        return parse_token_response(&resp).map(DevicePoll::Token);
+    }
+    // The four RFC 8628 §3.5 words are matched EXACTLY; anything else is the
+    // allow-listed fixed word of parse_token_response's error, never bytes
+    // from the body.
+    match serde_json::from_str::<ErrorResponse>(&resp.body)
+        .ok()
+        .map(|e| e.error)
+        .as_deref()
+    {
+        Some("authorization_pending") => Ok(DevicePoll::Pending),
+        Some("slow_down") => Ok(DevicePoll::SlowDown),
+        Some("access_denied") => Ok(DevicePoll::Denied),
+        Some("expired_token") => Ok(DevicePoll::Expired),
+        _ => parse_token_response(&resp).map(DevicePoll::Token),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -684,6 +862,165 @@ mod tests {
     const AUTH_ENDPOINT: &str = "https://fake.invalid/oauth2/auth";
     const TOKEN_ENDPOINT: &str = "https://fake.invalid/oauth2/token";
     const REVOKE_ENDPOINT: &str = "https://fake.invalid/oauth2/revoke";
+
+    // ── 1758-wdvf: the device grant ──────────────────────────────────────────
+
+    const DEVICE_ENDPOINT: &str = "https://fake.invalid/oauth2/device/auth";
+
+    fn discovery_with(grant: bool, endpoint: bool) -> String {
+        let grants = if grant {
+            format!(r#"["authorization_code","refresh_token","{DEVICE_CODE_GRANT_TYPE}"]"#)
+        } else {
+            r#"["authorization_code","refresh_token"]"#.to_string()
+        };
+        let dev = if endpoint {
+            format!(r#","device_authorization_endpoint":"{DEVICE_ENDPOINT}""#)
+        } else {
+            String::new()
+        };
+        format!(
+            r#"{{"authorization_endpoint":"{AUTH_ENDPOINT}","token_endpoint":"{TOKEN_ENDPOINT}","revocation_endpoint":"{REVOKE_ENDPOINT}","grant_types_supported":{grants}{dev}}}"#
+        )
+    }
+
+    fn device_endpoints() -> DeviceEndpoints {
+        DeviceEndpoints {
+            device_authorization_endpoint: DEVICE_ENDPOINT.into(),
+            token_endpoint: TOKEN_ENDPOINT.into(),
+            revocation_endpoint: None,
+        }
+    }
+
+    const DEVICE_REPLY: &str = r#"{"device_code":"DEVSECRET123","user_code":"WDJB-MJHT","verification_uri":"https://fake.invalid/device","verification_uri_complete":"https://fake.invalid/device?user_code=WDJB-MJHT","expires_in":900,"interval":7}"#;
+
+    #[test]
+    fn device_grant_is_offered_only_with_both_the_grant_and_its_endpoint() {
+        for (grant, endpoint, offered) in [
+            (true, true, true),
+            (true, false, false),
+            (false, true, false),
+            (false, false, false),
+        ] {
+            let http = MockHttpClient::default().with_get(
+                DISCOVERY_URL,
+                200,
+                &discovery_with(grant, endpoint),
+            );
+            let got = discover_device_grant(&http, "https://fake.invalid").unwrap();
+            assert_eq!(got.is_some(), offered, "grant={grant} endpoint={endpoint}");
+            if let Some(e) = got {
+                assert_eq!(e.device_authorization_endpoint, DEVICE_ENDPOINT);
+                assert_eq!(e.token_endpoint, TOKEN_ENDPOINT);
+            }
+            assert_eq!(http.post_call_count(), 0, "discovery alone posts nothing");
+        }
+    }
+
+    #[test]
+    fn device_authorize_reads_the_reply_and_redacts_the_device_code() {
+        let http = MockHttpClient::default().with_post(DEVICE_ENDPOINT, 200, DEVICE_REPLY);
+        let DeviceStart::Started(a) =
+            device_authorize(&http, &device_endpoints(), "cid", &["zone.read"]).unwrap()
+        else {
+            panic!("expected a started device flow");
+        };
+        assert_eq!(a.user_code, "WDJB-MJHT");
+        assert_eq!(a.verification_uri, "https://fake.invalid/device");
+        assert_eq!(
+            a.verification_uri_complete.as_deref(),
+            Some("https://fake.invalid/device?user_code=WDJB-MJHT")
+        );
+        assert_eq!((a.expires_in, a.interval), (900, 7));
+        let dbg = format!("{a:?}");
+        assert!(
+            !dbg.contains("DEVSECRET123"),
+            "Debug leaks the device_code: {dbg}"
+        );
+    }
+
+    #[test]
+    fn device_authorize_interval_defaults_to_five() {
+        let reply = r#"{"device_code":"D","user_code":"U","verification_uri":"https://fake.invalid/device","expires_in":60}"#;
+        let http = MockHttpClient::default().with_post(DEVICE_ENDPOINT, 200, reply);
+        let DeviceStart::Started(a) =
+            device_authorize(&http, &device_endpoints(), "cid", &[]).unwrap()
+        else {
+            panic!("expected a started device flow");
+        };
+        assert_eq!(a.interval, 5);
+        assert_eq!(a.verification_uri_complete, None);
+    }
+
+    #[test]
+    fn a_client_cloudflare_will_not_give_the_grant_is_a_typed_refusal_not_an_error() {
+        for (status, word) in [
+            (400, "unauthorized_client"),
+            (400, "unsupported_grant_type"),
+            (401, "invalid_client"),
+        ] {
+            let http = MockHttpClient::default().with_post(
+                DEVICE_ENDPOINT,
+                status,
+                &format!(r#"{{"error":"{word}"}}"#),
+            );
+            match device_authorize(&http, &device_endpoints(), "cid", &[]).unwrap() {
+                DeviceStart::Refused(w) => assert_eq!(w, word),
+                other => panic!("expected Refused({word}), got {other:?}"),
+            }
+        }
+        // A server error is an Err (retryable), not a refusal to fall back from.
+        let http = MockHttpClient::default().with_post(DEVICE_ENDPOINT, 500, "oops");
+        assert!(device_authorize(&http, &device_endpoints(), "cid", &[]).is_err());
+    }
+
+    #[test]
+    fn device_poll_maps_each_rfc_8628_word_and_a_token() {
+        let start =
+            |http: &MockHttpClient| match device_authorize(http, &device_endpoints(), "cid", &[])
+                .unwrap()
+            {
+                DeviceStart::Started(a) => a,
+                other => panic!("{other:?}"),
+            };
+        for (word, want) in [
+            ("authorization_pending", "Pending"),
+            ("slow_down", "SlowDown"),
+            ("access_denied", "Denied"),
+            ("expired_token", "Expired"),
+        ] {
+            let http = MockHttpClient::default()
+                .with_post(DEVICE_ENDPOINT, 200, DEVICE_REPLY)
+                .with_post(TOKEN_ENDPOINT, 400, &format!(r#"{{"error":"{word}"}}"#));
+            let a = start(&http);
+            let got = format!("{:?}", device_poll(&http, &a, "cid").unwrap());
+            assert_eq!(got, want, "{word}");
+        }
+        let http = MockHttpClient::default()
+            .with_post(DEVICE_ENDPOINT, 200, DEVICE_REPLY)
+            .with_post(
+                TOKEN_ENDPOINT,
+                200,
+                r#"{"access_token":"AT","refresh_token":"RT","expires_in":3600,"token_type":"bearer"}"#,
+            );
+        let a = start(&http);
+        match device_poll(&http, &a, "cid").unwrap() {
+            DevicePoll::Token(b) => {
+                assert_eq!(b.access_token, "AT");
+                assert_eq!(b.refresh_token.as_deref(), Some("RT"));
+            }
+            other => panic!("{other:?}"),
+        }
+        // Any other error is a fixed word, never body bytes.
+        let http = MockHttpClient::default()
+            .with_post(DEVICE_ENDPOINT, 200, DEVICE_REPLY)
+            .with_post(TOKEN_ENDPOINT, 400, r#"{"error":"invalid_grant"}"#);
+        let a = start(&http);
+        let e = device_poll(&http, &a, "cid").unwrap_err();
+        assert_eq!(
+            e,
+            "refused:cloudflare-login:token-exchange-http-400:invalid_grant"
+        );
+    }
     const REDIRECT_URI: &str = "http://127.0.0.1:48631/tillandsias/cloudflare/callback";
 
     fn discovery_body(grant_types: &[&str]) -> String {

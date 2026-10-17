@@ -148,7 +148,7 @@ pub mod cloudflare_names;
 // `pub` so the redirect-receiver packet (1505-kc5f) and the rotation
 // scheduler (siblings under 1505-sm2j) can reach it.
 pub mod cloudflare_oauth;
-// @trace order:1505-kc5f — `--cloudflare-login [--via loopback|qr|paste]` and
+// @trace order:1505-kc5f — `--cloudflare-login [--via device|loopback|qr|paste]` and
 // `--cloudflare-logout`: the three redirect receivers over cloudflare_oauth,
 // storing through the 1505-iysn Vault functions. Needs Vault, so `vault`-gated.
 #[cfg(feature = "vault")]
@@ -1726,7 +1726,7 @@ fn print_usage(version: &str) {
     println!("       tillandsias --status-check [--debug]");
     println!("       tillandsias --swap on|off|status [--prefix DIR] [--user NAME]");
     println!("       tillandsias --github-login [--with-token] [--debug]");
-    println!("       tillandsias --cloudflare-login [--via loopback|qr|paste] [--debug]");
+    println!("       tillandsias --cloudflare-login [--via device|loopback|qr|paste] [--debug]");
     println!("       tillandsias --msg-serve [--once]");
     println!("       tillandsias --cloudflare-logout [--debug]");
     println!("       tillandsias --refresh-github-token [--debug]");
