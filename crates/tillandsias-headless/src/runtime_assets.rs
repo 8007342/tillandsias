@@ -251,7 +251,7 @@ pub(crate) fn image_identity(
     compute_image_build_identity(&spec).map_err(|e| e.to_string())
 }
 
-fn image_context_rel(image_name: &str) -> Result<&'static str, String> {
+pub(crate) fn image_context_rel(image_name: &str) -> Result<&'static str, String> {
     match image_name {
         "forge-base" | "forge" => Ok("images/default"),
         "proxy" => Ok("images/proxy"),

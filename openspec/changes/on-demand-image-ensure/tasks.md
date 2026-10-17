@@ -6,10 +6,12 @@ today's code first (memory: exit criteria must fail on the pre-fix code).
 
 ## 1. Close the live hole (v0.5, first)
 
-- [ ] 1.1 `browser_open::start`'s Chromium branch ensures `chromium-framework`
+- [x] 1.1 `browser_open::start`'s Chromium branch ensures `chromium-framework`
       (and so `chromium-core`) before `network create`, with the WebKit
       first-use notice; `prepare`-style progress in the MCP reply [1776-ch4m]
-- [ ] 1.2 One `launch_images(site)` table replaces the four inline ensure
+      (done: the ensure and the notice; live progress during the wait is
+      1776-pr0g, as the ch4m packet scopes it)
+- [x] 1.2 One `launch_images(site)` table replaces the four inline ensure
       arrays; a Lua guard refuses a `tillandsias-<name>:v` spec literal in a
       module whose site neither lists nor ensures it [1776-ch4m]
 

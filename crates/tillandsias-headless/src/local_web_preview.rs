@@ -1374,6 +1374,8 @@ fn ensure_router(project: &str, debug: bool) -> Result<PathBuf, String> {
     // path, which never waits for it.
     crate::host_trust::retry_in_background(debug);
     let mut http_port = None;
+    // launch-images-ok: publish_local refuses router_not_ready rather than build;
+    // the forge launch serving this call ensured the router (EnclaveForProject).
     let mut router_image = crate::versioned_image_tag("router", crate::VERSION.trim());
     let mut running = false;
     if let Some(row) = inspect("tillandsias-router")? {
