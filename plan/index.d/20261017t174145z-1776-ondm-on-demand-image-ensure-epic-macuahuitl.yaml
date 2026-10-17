@@ -227,7 +227,7 @@ packets:
     estimated_hours: 3
     size: S
     related: [1770-z575, 1637-5765, 253]
-    depends_on: [1776-brk3]
+    depends_on: [a-failed-on-demand-image-build-is-remembered-by-image-and-inputs-digest-and-every-later-launch-refuses-within-seconds-with-the-cause-and-remedy-until-the-inputs-change-or-the-operator-retries]
     owned_files:
       - crates/tillandsias-headless/src/vault_bootstrap.rs
       - crates/tillandsias-headless/src/toolchain_exec.rs
@@ -330,7 +330,7 @@ packets:
     estimated_hours: 3
     size: S
     related: [1656-tjv4, 1637-5765, 1771-4iw3]
-    depends_on: [1776-ch4m]
+    depends_on: [the-tray-browser-window-path-ensures-the-chromium-framework-image-on-first-use-and-one-launch-images-table-replaces-the-four-drifted-ensure-arrays]
     owned_files:
       - crates/tillandsias-headless/src/image_build_progress.rs
       - crates/tillandsias-headless/src/toolchain_exec.rs
