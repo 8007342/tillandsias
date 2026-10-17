@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-github-token-in-vault-rotates-itself-before-its-8-hour-expiry-through-a-resident-due-check-so-no-host-needs-an-operator-reseed
+    event:
+      type: evidence
+      ts: "2026-10-17T11:09:28Z"
+      agent_id: forge-yoga-opus5-20261017t110819z
+      host: yoga
+      summary: |-
+        LIVE ARM (yoga): organic push AFTER a tray rotation. Operator login approle write 02:55:29Z; tray root rotation write 10:32:18Z (7h37m later). At 11:08Z a forge (TILLANDSIAS_FORGE_HOST_MOUNT=1, ~/claudia/tillandsias) ran git push origin work/1747-e9d6 via git://git-ki12uhcpr7es7v0jcqn0 mirror: relay 'Atomic push to github succeeded', pre-receive 'upstream durably accepted'. ls-remote origin refs/heads/work/1747-e9d6 = 18d2eb55658f2e2fabdb856ff26110874f1f13d1. Audit: approle token reads 11:08:01Z/11:08:03Z; no token write after 10:32:18Z (a stack restart ~11:00Z added none). The rotated token pushes.
