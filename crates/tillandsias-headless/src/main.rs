@@ -77,6 +77,7 @@ mod bringup_progress;
 mod device_poll_view;
 mod flow_sink;
 mod image_build_progress;
+mod image_build_scope;
 mod progress_sink;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
 // macOS and WSL2 VMs carry their own per-boot swap, design §9.2/§9.3).
@@ -2911,6 +2912,15 @@ fn describe_image_ensure_failure(
     msg
 }
 
+/// The last `refused:image-ensure:` the helper logged (its own error line),
+/// from the refusal on.
+fn helper_refusal(log_tail: &str) -> Option<String> {
+    log_tail.lines().rev().find_map(|l| {
+        l.find("refused:image-ensure:")
+            .map(|at| l[at..].to_string())
+    })
+}
+
 /// Order 270: pure decision — should this ensure detach into a
 /// session-surviving helper? The multi-minute first-use `podman build` ran
 /// as a direct child of the guest attach/login process in the same
@@ -3074,6 +3084,11 @@ fn run_image_ensure_detached<D: DetachedImageEnsure>(
             lines[start..].join("\n")
         })
         .unwrap_or_default();
+    // Order 1776-d5k2: a named refusal the helper raised (the disk preflight)
+    // reaches the caller as itself, not as "helper exited 1" plus a log tail.
+    if let Some(refusal) = helper_refusal(&tail) {
+        return Err(refusal);
+    }
     let panic_text = fs::read_to_string(&panic_path).ok();
     Err(describe_image_ensure_failure(
         image_name,
@@ -3234,6 +3249,10 @@ pub(crate) fn ensure_image_exists(
             rt.block_on(apply_image_aliases(&client, &identity))?;
         }
         ImageBuildAction::Build | ImageBuildAction::ForceRebuild => {
+            // Order 1776-d5k2: refuse a build the store cannot hold, before it
+            // starts, rather than find the full disk mid-build (1744-xjfw).
+            // Decided here, under the image lock, where a build is certain.
+            image_build_scope::disk_preflight(image_name, debug)?;
             eprintln!(
                 "[tillandsias] building image {image_name} ({image_tag}, {}); this may take several minutes",
                 image_build_reason_label(decision.reason)
@@ -10559,7 +10578,13 @@ pub(crate) fn build_image_with_logging(
     // @trace gap:ON-005 — show progress % during image pull
     let (containerfile, context_dir) = image_specs(root, image_name)?;
 
-    let mut command = podman_command();
+    // Order 1776-d5k2: under a CPU/IO/memory scope (or nice), so a floor-tier
+    // host stays usable while it builds. Still the one caller-owned spawn.
+    let scope = image_build_scope::current();
+    if _debug {
+        eprintln!("[tillandsias] build-{image_name}: scope {scope:?}");
+    }
+    let mut command = tillandsias_podman::podman_cmd_sync_under(&image_build_scope::prefix(scope));
     let argv = podman_build_argv(&containerfile, &context_dir, identity, build_args)?;
     command.args(&argv);
 
