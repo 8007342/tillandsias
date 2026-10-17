@@ -540,7 +540,10 @@ _tillandsias_expert_capability_emit() {
     # litmus:capability-manifest-guard and
     # litmus:expert-capability-skew-honesty, so growing the line at the end
     # is additive for every current reader.
-    TILLANDSIAS_EXPERT_CAPABILITY_LINE="expert_capability: now=${TILLANDSIAS_EXPERT_CAP_NOW} after_relaunch=${TILLANDSIAS_EXPERT_CAP_AFTER} skew=${TILLANDSIAS_EXPERT_CAP_SKEW} blocked_capabilities=${TILLANDSIAS_EXPERT_CAP_BLOCKED} lost_on_relaunch=${TILLANDSIAS_EXPERT_CAP_LOST} spec_index=${TILLANDSIAS_EXPERT_CAP_SPEC_INDEX} embed_endpoint=${TILLANDSIAS_EXPERT_CAP_EMBED} embed_model=${TILLANDSIAS_EXPERT_CAP_EMBED_MODEL}"
+    # ORDER 1747-e9d6: embed_verdict= says WHY embed_endpoint is unset (the
+    # resolve_embed_endpoint verdict: unreachable:, no-curl:, ok:...), not only
+    # that it is. Appended last, like the fields above.
+    TILLANDSIAS_EXPERT_CAPABILITY_LINE="expert_capability: now=${TILLANDSIAS_EXPERT_CAP_NOW} after_relaunch=${TILLANDSIAS_EXPERT_CAP_AFTER} skew=${TILLANDSIAS_EXPERT_CAP_SKEW} blocked_capabilities=${TILLANDSIAS_EXPERT_CAP_BLOCKED} lost_on_relaunch=${TILLANDSIAS_EXPERT_CAP_LOST} spec_index=${TILLANDSIAS_EXPERT_CAP_SPEC_INDEX} embed_endpoint=${TILLANDSIAS_EXPERT_CAP_EMBED} embed_model=${TILLANDSIAS_EXPERT_CAP_EMBED_MODEL} embed_verdict=${TILLANDSIAS_EMBED_ENDPOINT_VERDICT:-none}"
 }
 
 # tillandsias_expert_capability_advice — the one-sentence action for the verdict.
