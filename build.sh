@@ -5263,7 +5263,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Forge Bash policy hook fixture passed"
 
-<<<<<<< HEAD
     # 1762-bano: the host trust-store guard's fixture (live tree, an NSS add
     # refused, a Rust update-ca-trust refused, a marked preview CA allowed, a
     # comment ignored).
@@ -5273,7 +5272,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Host trust-store fixture passed"
-=======
+
     # 1756-z3kz: the embedded-ELF arch check release.yml runs on every binary:
     # matching images pass, a foreign one is refused by offset, a decoy magic is
     # not an image, too few images are refused, a non-ELF is could-not-run.
@@ -5283,7 +5282,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Embedded-ELF arch fixture passed"
->>>>>>> origin/linux-next
 
     # ORDER 1384-bxhk — the shell ratchet: prints the Lua migration's counts on
     # every --check, refuses a NEW .sh decider (check-/test-/verify-/guard-), a
