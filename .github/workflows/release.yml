@@ -160,6 +160,9 @@ jobs:
           # reads the working tree, not the flake source. It is no longer what
           # the binaries depend on.
           nix build -L .#tillandsias-router-sidecar-x86_64-musl --out-link result-sidecar
+          # ORDER 1756-z3kz: the aarch64 sidecar, which the aarch64 headless embeds
+          # (flake.nix preBuild) and this release publishes for ARM64 consumers.
+          nix build -L .#tillandsias-router-sidecar-aarch64-musl --out-link result-sidecar-aarch64
           install -Dm0755 result-sidecar/bin/tillandsias-router-sidecar \
             images/router/tillandsias-router-sidecar
           # ORDER 1750-a4re: the forge's fail-closed Bash command-policy decider,
@@ -265,6 +268,7 @@ jobs:
           install -m 0755 result-hx/bin/tillandsias             release-artifacts/tillandsias-headless-x86_64-unknown-linux-musl
           install -m 0755 result-ha/bin/tillandsias             release-artifacts/tillandsias-headless-aarch64-unknown-linux-musl
           install -m 0755 result-sidecar/bin/tillandsias-router-sidecar release-artifacts/tillandsias-router-sidecar-x86_64-unknown-linux-musl
+          install -m 0755 result-sidecar-aarch64/bin/tillandsias-router-sidecar release-artifacts/tillandsias-router-sidecar-aarch64-unknown-linux-musl
           install -m 0755 scripts/install.sh   release-artifacts/install.sh
           install -m 0755 scripts/uninstall.sh release-artifacts/uninstall.sh
           install -m 0755 scripts/verify.sh    release-artifacts/verify.sh
@@ -276,6 +280,17 @@ jobs:
           file release-artifacts/tillandsias-headless-x86_64-unknown-linux-musl | grep -F "x86-64"
           file release-artifacts/tillandsias-headless-aarch64-unknown-linux-musl | grep -F "aarch64"
           file release-artifacts/tillandsias-router-sidecar-x86_64-unknown-linux-musl | grep -F "x86-64"
+          file release-artifacts/tillandsias-router-sidecar-aarch64-unknown-linux-musl | grep -F "aarch64"
+          # ORDER 1756-z3kz: `file` above reads only the OUTER binary. The router
+          # sidecar (and the forge's policy decider, 1750-a4re) are EMBEDDED, and
+          # v56.10.16.2's aarch64 headless embedded an x86-64 sidecar while its
+          # outer header said aarch64. Assert every embedded ELF image matches the
+          # binary's own machine (at least 2: the sidecar and the decider).
+          for bin in tillandsias-linux-x86_64 \
+              tillandsias-headless-x86_64-unknown-linux-musl \
+              tillandsias-headless-aarch64-unknown-linux-musl; do
+            result-plan/bin/tillandsias-plan script run scripts/lua/check-embedded-elf-arch.lua -- "release-artifacts/$bin" 2
+          done
 
           # Smoke the host binary's headless mode (runs on this x86_64 runner).
           release-artifacts/tillandsias-linux-x86_64 --version

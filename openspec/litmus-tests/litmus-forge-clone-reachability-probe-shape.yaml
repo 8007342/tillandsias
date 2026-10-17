@@ -83,6 +83,16 @@ critical_path:
     timeout_ms: 60000
     expected_behavior: "ok:forge-clone-wait-is-bounded"
 
+  # ORDER 1759-6z2m. The empty-checkout guard admits exactly one HEAD-less
+  # clone: an empty project (no refs/heads/* AND the mirror's upstream-auth
+  # verdict is local-only), the onboarding entry point. Negative arms keep a
+  # HEAD-less clone with an upstream, with no verdict, and the unborn-HEAD
+  # mirror defect refused. Real git against local bare repos; offline (scripts/lua/test-forge-empty-project-starts.lua).
+  - step: "an empty project starts; every other HEAD-less clone is still refused"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-empty-project-starts.lua 2>&1"
+    timeout_ms: 60000
+    expected_behavior: "ok:forge-empty-project-starts"
+
   - step: "the probe runs BEFORE the clone loop in the launch path"
     # Property check (call precedes the retry loop), not a literal source pin.
     command: "probe=$(grep -n 'probe_mirror_reachable \"$(git_mirror_host)\"' images/default/lib-common.sh | head -1 | cut -d: -f1); loop=$(grep -n 'for i in $(seq 1 $max_retries)' images/default/lib-common.sh | head -1 | cut -d: -f1); if [ -n \"$probe\" ] && [ -n \"$loop\" ] && [ \"$probe\" -lt \"$loop\" ]; then echo 'ok: probe precedes the clone loop'; else echo \"FAIL: probe not before clone loop (probe=$probe loop=$loop)\"; exit 1; fi"

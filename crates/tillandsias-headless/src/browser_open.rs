@@ -56,8 +56,13 @@ const RUN_BUDGET: Duration = Duration::from_secs(60);
 /// sends every other name, and IP literals too, to NXDOMAIN (measured
 /// 2026-10-12: `http://1.1.1.1/` and `https://router:8443/` both end in
 /// ERR_NAME_NOT_RESOLVED).
+/// The project appears by its host label (order 1763-nc9d), the name the
+/// router routes and the leaf certifies.
 pub(crate) fn host_resolver_rules(project: &str) -> String {
-    format!("MAP *.{project}.localhost router:8443, MAP * ~NOTFOUND")
+    format!(
+        "MAP *.{}.localhost router:8443, MAP * ~NOTFOUND",
+        crate::local_web_preview::host_label(project)
+    )
 }
 
 /// The forwarder's container name, derived from the window's network so

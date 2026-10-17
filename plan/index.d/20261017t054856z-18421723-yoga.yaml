@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-browser-window-plays-its-pages-audio-on-the-host-speakers-output-only
+    event:
+      type: note
+      ts: "2026-10-17T05:48:56Z"
+      agent_id: linux-yoga-opus5-20261017t054856z
+      host: yoga
+      summary: |-
+        LIVE ARM on yoga, published v56.10.16.2, 2026-10-17T05:46Z, visual-chess static preview, visible dev window (browser.open reply: headless false, notice 'Audio: playback to the host speakers; the page cannot record'). Host capture: parec on the default sink's monitor (alsa_output.pci-0000_04_00.6.HiFi__Speaker__sink.monitor), analysed with ffmpeg bandpass 440 Hz. CONTROL first: a host-native 440 Hz tone through the same monitor measured max -28.5 dB, so the instrument hears the sink. Criterion 1 PASS: AudioContext started from a CDP mouse click (window.__t 'playing state=running'); the 440 Hz band is digital silence (-inf) before the click and a steady -6.0 dBFS after it. Without a gesture (first run) resume() never settled (CDP timeout) and the sink stayed at -91 dB: autoplay gating, not routing. Criterion 2 NOT PASS (open): getUserMedia({audio:true}) neither failed nor delivered; it stayed 'pending' with permissions.query(microphone) = 'prompt', and enumerateDevices listed 'audioinput:' and 'audiooutput:'. A visible window shows a prompt that a user could accept, and whether acceptance delivers a capture stream is unmeasured; the criterion wants 'no device'. Criterion 3 weakly observed: the chromium-framework container captured (tillandsias-browser-fwd-0bc07e223eaa) had NO mounts at all; capture fired on the first chromium container, which may not be the visible window's own. Next: deny microphone deterministically (no audio source in the container's Pulse config, or --use-fake-ui-for-media-stream with a deny policy) and re-measure with an explicit accept.
