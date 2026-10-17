@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-consent-fixtures-ask-policy-eval-to-spend-a-token-that-only-an-execution-door-spends
+    event:
+      type: note
+      ts: "2026-10-17T05:25:53Z"
+      agent_id: linux-yoga-opus5-20261017t052553z
+      host: yoga
+      summary: |-
+        MEASURED on macuahuitl (coordinator, 2026-10-17): trunk b168dea56, target/release/tillandsias-plan rebuilt from current source; run-litmus-test.sh command-policies --phase pre-build --size instant passed=4 failed=2 — command-policy-consent-shape 'command-policy-consent 5/9 skipped=1 (1443-9f5w)' and smoke-skill-reset-env-matches-policy FAIL, identical to yoga. NOT host-specific. Class: the gate you pass is not the tier that ships — the ./build.sh --check land tier does not execute this pre-build litmus, so macuahuitl's green land gates never ran these steps. Exit criterion 2 is met by this note.

@@ -122,19 +122,58 @@ fn validate_identity(project: &str, instance: &str) -> Result<(), String> {
     // Equality, not sanitization. A known cloud label is necessary but not
     // sufficient: resolve_live additionally proves the accepting lane's mount.
     crate::local_projects::validate_project_label(project)?;
-    validate_components(project, instance)
+    validate_components(project, instance)?;
+    host_label_collision(
+        project,
+        crate::local_projects::known_project_labels()
+            .iter()
+            .map(String::as_str),
+    )
+}
+
+/// Order 1763-nc9d: two projects must never share a preview host. A name
+/// whose host label differs from it (`Foo_Bar` → `foo-bar`) is refused when
+/// another known project already is, or maps to, that label; an already-valid
+/// name is never the one refused, so mapping cannot take a working preview
+/// away from anyone.
+fn host_label_collision<'a>(
+    project: &str,
+    known: impl IntoIterator<Item = &'a str>,
+) -> Result<(), String> {
+    let label = host_label(project);
+    if label == project {
+        return Ok(());
+    }
+    let clash = known.into_iter().find(|other| {
+        *other != project
+            && tillandsias_browser_mcp::host_label::project_host_label(other).as_deref()
+                == Ok(label.as_str())
+    });
+    match clash {
+        Some(other) => Err(format!(
+            "preview_host_collision: project '{project}' previews at www.{label}.localhost, \
+             which project '{other}' already names, so the two would share a router route and \
+             a certificate; rename one project directory so their names differ after \
+             lowercasing and mapping '_' to '-'"
+        )),
+        None => Ok(()),
+    }
 }
 
 fn validate_components(project: &str, instance: &str) -> Result<(), String> {
+    // The RAW name names the forge container, /home/forge/src/<project> and
+    // the lock, so it stays a safe path component; its HOST is the label
+    // (order 1763-nc9d), which must exist. `_` and uppercase are fine here.
     let hostname_ok = !project.is_empty()
         && project.len() <= 200
         && project.split('.').all(|part| {
             !part.is_empty()
-                && part.len() <= 63
                 && !part.starts_with('-')
-                && !part.ends_with('-')
-                && part.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
-        });
+                && part
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+        })
+        && tillandsias_browser_mcp::host_label::project_host_label(project).is_ok();
     let instance_ok = !instance.is_empty()
         && instance.len() <= 128
         && instance
@@ -1134,7 +1173,29 @@ pub(crate) fn tls_port() -> Result<u16, String> {
 }
 
 fn url(project: &str) -> Result<String, String> {
-    Ok(format!("https://www.{project}.localhost:{}", tls_port()?))
+    Ok(format!(
+        "https://www.{}.localhost:{}",
+        host_label(project),
+        tls_port()?
+    ))
+}
+
+/// Order 1763-nc9d: the project's name in every host this module builds:
+/// the route subdomain, the leaf's CN/SAN and file names, and the URL. The
+/// ONE mapping (tillandsias_browser_mcp::host_label) is the one browser.open's
+/// allowlist and the window's resolver rules read, so a mixed-case or
+/// underscored name (`DEVxSD_gameJam` → `devxsd-gamejam`) cannot be routed
+/// under one spelling and asked for under another. Every entry point refuses
+/// an unmappable name in validate_identity first, so the lowercase fallback
+/// is never what a router or a leaf is built from.
+pub(crate) fn host_label(project: &str) -> String {
+    tillandsias_browser_mcp::host_label::project_host_label(project)
+        .unwrap_or_else(|_| project.to_ascii_lowercase())
+}
+
+/// The router subdomain (`<service>.<label>`) of one of `project`'s services.
+fn subdomain(service: &str, project: &str) -> String {
+    format!("{service}.{}", host_label(project))
 }
 
 fn host_command(args: &[String]) -> Result<(), String> {
@@ -1222,7 +1283,7 @@ pub(crate) const DEV_SERVICES: &[&str] = &["flutter"];
 pub(crate) fn preview_hosts(project: &str) -> Vec<String> {
     std::iter::once("www")
         .chain(DEV_SERVICES.iter().copied())
-        .map(|service| format!("{service}.{project}.localhost"))
+        .map(|service| format!("{}.localhost", subdomain(service, project)))
         .collect()
 }
 
@@ -1241,7 +1302,7 @@ fn prepare_tls(project: &str, ca: &Path) -> Result<(), String> {
     std::fs::create_dir_all(&tls).map_err(|_| "router_not_ready: TLS directory unavailable")?;
     let temporary =
         tempfile::tempdir_in(&tls).map_err(|_| "router_not_ready: TLS staging unavailable")?;
-    let host = format!("www.{project}.localhost");
+    let host = format!("{}.localhost", subdomain("www", project));
     let crt = temporary.path().join("leaf.crt");
     let key = temporary.path().join("leaf.key");
     let csr = temporary.path().join("leaf.csr");
@@ -1273,9 +1334,9 @@ fn prepare_tls(project: &str, ca: &Path) -> Result<(), String> {
         std::fs::set_permissions(&key, std::fs::Permissions::from_mode(0o600))
             .map_err(|_| "router_not_ready: leaf key permissions failed")?;
     }
-    std::fs::rename(&key, tls.join(format!("{project}.key")))
+    std::fs::rename(&key, tls.join(format!("{}.key", host_label(project))))
         .map_err(|_| "router_not_ready: leaf key publication failed")?;
-    std::fs::rename(&crt, tls.join(format!("{project}.crt")))
+    std::fs::rename(&crt, tls.join(format!("{}.crt", host_label(project))))
         .map_err(|_| "router_not_ready: leaf certificate publication failed")?;
     if tls_port().is_err() {
         let port = [18443, 28443, 38443, 48443, 58443]
@@ -1347,6 +1408,7 @@ fn ensure_router(project: &str, debug: bool) -> Result<PathBuf, String> {
 /// less than `margin_secs` (an unreadable leaf counts as due). The leaf lives
 /// 7 days and is re-issued on every publish; a preview left running longer
 /// than that without a republish would otherwise serve an expired leaf.
+#[cfg(feature = "tray")]
 pub(crate) fn preview_leaves_due(tls_dir: &Path, margin_secs: u64) -> Vec<String> {
     let mut due = Vec::new();
     let Ok(entries) = std::fs::read_dir(tls_dir) else {
@@ -1372,6 +1434,7 @@ pub(crate) fn preview_leaves_due(tls_dir: &Path, margin_secs: u64) -> Vec<String
 /// notAfter under the unchanged CA, then reload a running router so it serves
 /// them. Silent by design (operator ruling 2026-10-17): the CA does not change,
 /// so nothing that is running loses trust. Returns the renewed projects.
+#[cfg(feature = "tray")]
 pub(crate) fn renew_expiring_preview_leaves(margin_secs: u64) -> Result<Vec<String>, String> {
     let due = preview_leaves_due(&router_dir().join("preview-tls"), margin_secs);
     if due.is_empty() {
@@ -1381,8 +1444,8 @@ pub(crate) fn renew_expiring_preview_leaves(margin_secs: u64) -> Result<Vec<Stri
     for project in &due {
         prepare_tls(project, &ca)?;
     }
-    let running = inspect("tillandsias-router")?
-        .is_some_and(|row| row["State"]["Status"] == "running");
+    let running =
+        inspect("tillandsias-router")?.is_some_and(|row| row["State"]["Status"] == "running");
     if running {
         strict_reload()?;
     }
@@ -1422,8 +1485,7 @@ pub(crate) fn add_dev_route(
         command_budget(Duration::from_secs(5))?,
         debug,
     )?;
-    let mut route =
-        crate::RouterRoute::public_service(format!("{service}.{project}"), upstream, port);
+    let mut route = crate::RouterRoute::public_service(subdomain(service, project), upstream, port);
     route.preview_tls = true;
     let mut routes = read_routes(debug)?;
     routes.retain(|r| r.subdomain != route.subdomain);
@@ -1437,7 +1499,8 @@ pub(crate) fn add_dev_route(
 /// only scheme a browser.open window loads (order 1637-5765).
 fn dev_url(service: &str, project: &str) -> Result<String, String> {
     Ok(format!(
-        "https://{service}.{project}.localhost:{}/",
+        "https://{}.localhost:{}/",
+        subdomain(service, project),
         tls_port()?
     ))
 }
@@ -1455,7 +1518,7 @@ pub(crate) fn remove_dev_route(
         command_budget(Duration::from_secs(5))?,
         debug,
     )?;
-    let subdomain = format!("{service}.{project}");
+    let subdomain = subdomain(service, project);
     let mut routes = read_routes(debug)?;
     let count = routes.len();
     routes.retain(|r| !(r.subdomain == subdomain && r.upstream_host == upstream));
@@ -1481,13 +1544,13 @@ fn read_routes(debug: bool) -> Result<Vec<crate::RouterRoute>, String> {
 async fn probe_route(project: &str, ca: &Path) -> Result<(), String> {
     let route = read_routes(false)?
         .into_iter()
-        .find(|r| r.subdomain == format!("www.{project}") && r.public && r.preview_tls)
+        .find(|r| r.subdomain == subdomain("www", project) && r.public && r.preview_tls)
         .ok_or("router_not_ready: preview route is absent")?;
     let cert = std::fs::read(ca.join("intermediate.crt"))
         .map_err(|_| "router_not_ready: CA certificate unavailable")?;
     let cert = reqwest::Certificate::from_pem(&cert)
         .map_err(|_| "router_not_ready: invalid CA certificate")?;
-    let host = format!("www.{project}.localhost");
+    let host = format!("{}.localhost", subdomain("www", project));
     let port = tls_port()?;
     let client = reqwest::Client::builder()
         .no_proxy()
@@ -1575,7 +1638,7 @@ async fn ready_backend_inner(name: &str) -> Result<(), String> {
 
 fn remove_route(project: &str, debug: bool) -> Result<(), String> {
     let mut routes = read_routes(debug)?;
-    let subdomain = format!("www.{project}");
+    let subdomain = subdomain("www", project);
     let count = routes.len();
     routes.retain(|r| r.subdomain != subdomain);
     if count != routes.len() {
@@ -1671,7 +1734,7 @@ async fn publish_prepared(
         )?;
         // Explicit creation-time DNS alias survives the container rename.
         let mut route =
-            crate::RouterRoute::public_service(format!("www.{project}"), &candidate, 8080);
+            crate::RouterRoute::public_service(subdomain("www", project), &candidate, 8080);
         route.preview_tls = true;
         let mut routes = read_routes(debug)?;
         routes.retain(|r| r.subdomain != route.subdomain);
@@ -3263,6 +3326,106 @@ mod tests {
         );
     }
 
+    /// Order 1763-nc9d: the operator's live finding. A project named
+    /// `DEVxSD_gameJam` got no preview: the `_` refused the lane identity, and
+    /// the mixed case minted a SAN and a resolver rule the browser (which
+    /// lowercases hosts) never asks for. Every host-boundary caller must name
+    /// the same label.
+    #[test]
+    fn preview_host_label_devxsd_gamejam_is_one_label_from_every_caller() {
+        let project = "DEVxSD_gameJam";
+        // Every caller is checked and every miss reported, so one red run
+        // measures each hypothesis rather than stopping at the first.
+        let mut misses = Vec::new();
+        let identity = validate_components(project, "lane-1");
+        if identity.is_err() {
+            misses.push(format!("lane identity refused: {identity:?}"));
+        }
+        let hosts = preview_hosts(project);
+        if hosts
+            != [
+                "www.devxsd-gamejam.localhost",
+                "flutter.devxsd-gamejam.localhost",
+            ]
+        {
+            misses.push(format!("preview_hosts: {hosts:?}"));
+        }
+        let san = preview_san(project);
+        if san != "DNS:www.devxsd-gamejam.localhost,DNS:flutter.devxsd-gamejam.localhost" {
+            misses.push(format!("leaf SAN: {san}"));
+        }
+        let rules = crate::browser_open::host_resolver_rules(project);
+        if rules != "MAP *.devxsd-gamejam.localhost router:8443, MAP * ~NOTFOUND" {
+            misses.push(format!("resolver rule: {rules}"));
+        }
+        let allowed = tillandsias_browser_mcp::allowlist::validate_with_preview(
+            "https://www.devxsd-gamejam.localhost:8443/",
+            project,
+            Some(8443),
+        );
+        if let Err(deny) = allowed {
+            misses.push(format!("browser.open allowlist: {deny}"));
+        }
+        let mut route = crate::RouterRoute::public_service(subdomain("www", project), "web", 8080);
+        route.preview_tls = true;
+        let caddy = crate::generate_dynamic_caddyfile(&[route]);
+        if !caddy.contains("https://www.devxsd-gamejam.localhost:8443")
+            || !caddy
+                .contains("preview/devxsd-gamejam.crt /etc/tillandsias/preview/devxsd-gamejam.key")
+        {
+            misses.push(format!("router site or leaf file: {caddy}"));
+        }
+        let args = certificate_args(
+            &format!("{}.localhost", subdomain("www", project)),
+            Path::new("leaf.crt"),
+            Path::new("leaf.csr"),
+            Path::new("leaf.key"),
+            Path::new("ca"),
+            Path::new("leaf.ext"),
+        );
+        if !args[0].contains(&"/CN=www.devxsd-gamejam.localhost".to_string()) {
+            misses.push(format!("leaf CN: {:?}", args[0]));
+        }
+        assert!(misses.is_empty(), "{}", misses.join("\n"));
+    }
+
+    /// NEGATIVE CONTROL: a name that is already a valid host label is
+    /// byte-identical at every caller, so no existing preview moves.
+    #[test]
+    fn preview_host_label_leaves_valid_names_unchanged() {
+        for project in ["acme", "macron.dev", "tillandsias.org"] {
+            assert_eq!(host_label(project), project);
+            assert_eq!(
+                preview_hosts(project)[0],
+                format!("www.{project}.localhost")
+            );
+            assert_eq!(
+                crate::browser_open::host_resolver_rules(project),
+                format!("MAP *.{project}.localhost router:8443, MAP * ~NOTFOUND")
+            );
+            assert_eq!(validate_components(project, "default"), Ok(()));
+            assert_eq!(
+                host_label_collision(project, ["ACME", "Macron_Dev"]),
+                Ok(())
+            );
+        }
+    }
+
+    #[test]
+    fn preview_host_label_collision_refuses_only_the_mapped_name() {
+        let err = host_label_collision("Foo_Bar", ["foo-bar", "Foo_Bar"]).unwrap_err();
+        assert!(err.starts_with("preview_host_collision:"), "{err}");
+        assert!(err.contains("'foo-bar'") && err.contains("rename"), "{err}");
+        // Two mapped names that meet are both refused, whichever asks.
+        assert!(host_label_collision("FOO_bar", ["Foo_Bar"]).is_err());
+        // The valid name keeps its preview.
+        assert_eq!(host_label_collision("foo-bar", ["Foo_Bar"]), Ok(()));
+        // Itself in the known list is not a clash.
+        assert_eq!(host_label_collision("Foo_Bar", ["Foo_Bar", "acme"]), Ok(()));
+        // A raw name that maps to no host is refused at the lane identity.
+        assert!(validate_components("___", "default").is_err());
+    }
+
     #[test]
     fn tls_is_exact_san_and_preserves_http_and_private_routes() {
         let mut preview =
@@ -3298,12 +3461,15 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "tray")]
     #[test]
     fn a_preview_leaf_inside_the_margin_is_due_and_one_outside_is_not() {
         let tmp = tempfile::tempdir().unwrap();
         for (project, days) in [("soon", "1"), ("later", "7")] {
             let status = std::process::Command::new("openssl")
-                .args(["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=leaf"])
+                .args([
+                    "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=leaf",
+                ])
                 .args(["-days", days, "-keyout"])
                 .arg(tmp.path().join(format!("{project}.key")))
                 .arg("-out")

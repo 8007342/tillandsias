@@ -3592,6 +3592,7 @@ fn ca_bundle_needs_refresh(crt: &Path, key: &Path) -> bool {
 /// ORDER 1762-bano: the enclave certificates that stay valid for less than
 /// `margin_secs`, by name ("ca", "vault-leaf"). A missing or unreadable one
 /// counts as expiring.
+#[cfg(feature = "tray")]
 pub(crate) fn expiring_enclave_certs(certs_dir: &Path, margin_secs: u64) -> Vec<&'static str> {
     [("ca", "intermediate.crt"), ("vault-leaf", "vault.crt")]
         .into_iter()
@@ -3602,6 +3603,7 @@ pub(crate) fn expiring_enclave_certs(certs_dir: &Path, margin_secs: u64) -> Vec<
 
 /// The one message a person sees, in plain words (coordinator ruling): no
 /// internals, and only when a renewal cannot happen on its own.
+#[cfg(feature = "tray")]
 pub(crate) const CERT_EXPIRY_MESSAGE: &str =
     "Restart Tillandsias to renew its security certificates";
 
@@ -3612,6 +3614,7 @@ pub(crate) const CERT_EXPIRY_MESSAGE: &str =
 /// - if the CA or the Vault leaf is within 72 h of notAfter, which only happens
 ///   when a tray has outlived the 60-day launch margin, say so once a day with
 ///   `CERT_EXPIRY_MESSAGE`. It never swaps the CA under running containers.
+#[cfg(feature = "tray")]
 pub(crate) fn spawn_cert_expiry_scheduler(
     debug: bool,
     on_expiring: Option<Box<dyn Fn(String) + Send + 'static>>,
@@ -3624,7 +3627,10 @@ pub(crate) fn spawn_cert_expiry_scheduler(
                 #[cfg(feature = "host-services")]
                 match local_web_preview::renew_expiring_preview_leaves(48 * 60 * 60) {
                     Ok(renewed) if !renewed.is_empty() => {
-                        eprintln!("[tillandsias] ok:preview-leaf-renewed:{}", renewed.join(","));
+                        eprintln!(
+                            "[tillandsias] ok:preview-leaf-renewed:{}",
+                            renewed.join(",")
+                        );
                     }
                     Ok(_) => {}
                     Err(e) => eprintln!("[tillandsias] warn:preview-leaf-renewal-failed: {e}"),
@@ -3662,7 +3668,15 @@ mod ca_refresh_margin_tests {
         let crt = dir.join("intermediate.crt");
         let key = dir.join("intermediate.key");
         let status = Command::new("openssl")
-            .args(["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=test CA"])
+            .args([
+                "req",
+                "-x509",
+                "-newkey",
+                "rsa:2048",
+                "-nodes",
+                "-subj",
+                "/CN=test CA",
+            ])
             .args(["-days", &days.to_string(), "-keyout"])
             .arg(&key)
             .arg("-out")
@@ -3699,6 +3713,7 @@ mod ca_refresh_margin_tests {
 
     // 1762-bano: inside 72 h is named (the warning arm), a year is not; a
     // missing Vault leaf counts as expiring.
+    #[cfg(feature = "tray")]
     #[test]
     fn enclave_certs_inside_seventy_two_hours_are_named_as_expiring() {
         let tmp = tempfile::tempdir().unwrap();
@@ -3708,9 +3723,16 @@ mod ca_refresh_margin_tests {
             vec!["ca", "vault-leaf"]
         );
         mint(tmp.path(), 365);
-        std::fs::copy(tmp.path().join("intermediate.crt"), tmp.path().join("vault.crt")).unwrap();
+        std::fs::copy(
+            tmp.path().join("intermediate.crt"),
+            tmp.path().join("vault.crt"),
+        )
+        .unwrap();
         assert!(expiring_enclave_certs(tmp.path(), 72 * 60 * 60).is_empty());
-        assert_eq!(CERT_EXPIRY_MESSAGE, "Restart Tillandsias to renew its security certificates");
+        assert_eq!(
+            CERT_EXPIRY_MESSAGE,
+            "Restart Tillandsias to renew its security certificates"
+        );
     }
 
     #[test]
@@ -14804,7 +14826,7 @@ fn launch_observatorium_browser(
         })?;
     let profile_path = profile_dir.keep();
 
-    let project_label = project_name.to_string();
+    let project_label = router_host_label(project_name);
     let otp = tillandsias_otp::issue_session(&project_label);
     let origin_url = observatorium_origin_url(project_name, router_host_port);
     let login_url = tillandsias_otp::build_login_data_url(&origin_url, &otp);
@@ -15897,7 +15919,18 @@ fn run_opencode_mode(
     })
 }
 
+/// Order 1763-nc9d: a project's name in a router host (`<service>.<label>
+/// .localhost`). The one mapping local_web_preview and browser.open's
+/// allowlist read, so the route, the URL and the sidecar's Host-derived
+/// project agree for a name like `DEVxSD_gameJam` (→ `devxsd-gamejam`).
+/// An already-valid name is unchanged.
+fn router_host_label(project_name: &str) -> String {
+    tillandsias_browser_mcp::host_label::project_host_label(project_name)
+        .unwrap_or_else(|_| project_name.to_ascii_lowercase())
+}
+
 fn project_service_url(service_name: &str, project_name: &str, host_port: u16) -> String {
+    let project_name = router_host_label(project_name);
     // The router publishes :8080 in-container to host_port via
     // `127.0.0.1:host_port:8080`. host_port is normally 80 (privileged) or
     // 8080 (fallback) per select_router_host_port(); rootless containers
@@ -16872,7 +16905,7 @@ fn launch_opencode_web_browser(
     // The label must match what the router-sidecar extracts from the Host
     // header (`extract_project_label("opencode.<project>.localhost")` →
     // `"<project>"`), otherwise `/validate` and `/_auth/login` both 401.
-    let project_label = project_name.to_string();
+    let project_label = router_host_label(project_name);
     let otp = tillandsias_otp::issue_session(&project_label);
     let login_url = tillandsias_otp::build_login_data_url(&url, &otp);
     let spec = build_opencode_web_browser_spec(
@@ -17338,7 +17371,7 @@ pub(crate) fn run_opencode_web_mode(
         // --port 4096` (see images/default/entrypoint-forge-opencode-web.sh:142), so the
         // router upstream must target 4096 — not 8080, which is the router's own listener.
         let route = RouterRoute::new(
-            format!("opencode.{}", project_name),
+            format!("opencode.{}", router_host_label(project_name)),
             forge_container_name(project_name),
             4096u16,
         );
@@ -33245,6 +33278,45 @@ esac
         assert_eq!(
             args.last().map(|s| s.as_str()),
             Some("tillandsias-web:v1.2.3")
+        );
+    }
+
+    /// Order 1763-nc9d: the OpenCode Web route, its URL and its session
+    /// label all name the project by its host label, the value the router
+    /// sidecar derives from the (lowercased) Host header.
+    #[test]
+    fn opencode_web_names_the_project_by_its_host_label() {
+        assert_eq!(router_host_label("DEVxSD_gameJam"), "devxsd-gamejam");
+        assert_eq!(
+            opencode_web_url("DEVxSD_gameJam", 8080),
+            "http://opencode.devxsd-gamejam.localhost:8080/"
+        );
+        // NEGATIVE CONTROL: a valid name is unchanged.
+        assert_eq!(
+            opencode_web_url("tillandsias.org", 80),
+            "http://opencode.tillandsias.org.localhost/"
+        );
+        let source = std::fs::read_to_string(
+            std::path::PathBuf::from(
+                std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+            )
+            .join("src/main.rs"),
+        )
+        .expect("main.rs readable");
+        // Needles are split so this test's own text cannot match them.
+        assert!(source.contains(concat!(
+            "format!(\"opencode.{}\", router_host",
+            "_label(project_name))"
+        )));
+        assert_eq!(
+            source
+                .matches(concat!(
+                    "let project_label = router_host",
+                    "_label(project_name);"
+                ))
+                .count(),
+            2,
+            "both session labels (OpenCode Web and the observatorium) use the host label"
         );
     }
 
