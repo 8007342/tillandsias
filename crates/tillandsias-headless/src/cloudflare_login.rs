@@ -64,6 +64,47 @@ pub const CALLBACK_PATH: &str = "/tillandsias/cloudflare/callback";
 pub const RELAY_URL_ENV: &str = "TILLANDSIAS_CLOUDFLARE_RELAY_URL";
 /// Optional: a relay Worker the host polls with `?state=` for the code.
 pub const RELAY_POLL_URL_ENV: &str = "TILLANDSIAS_CLOUDFLARE_RELAY_POLL_URL";
+/// ORDER 1757-n45b. The relay the observatorium Worker serves
+/// (observatorium/relay/), and the poll beside it.
+pub const DEFAULT_RELAY_URL: &str =
+    "https://observatorium.tillandsias.org/tillandsias/cloudflare/callback";
+pub const DEFAULT_RELAY_POLL_URL: &str =
+    "https://observatorium.tillandsias.org/tillandsias/cloudflare/poll";
+/// GATED OFF until the operator confirms DEFAULT_RELAY_URL is registered as a
+/// redirect URI on the Cloudflare App. Before that, Cloudflare refuses the
+/// authorize request outright, so defaulting to the relay would break every
+/// login, not only QR. Flip it in the release after the confirmation, and
+/// invert `relay_default_is_gated_off_until_registration_is_confirmed` in
+/// the same commit.
+pub const RELAY_DEFAULT_ON: bool = false;
+
+/// The relay and poll URLs from their env values (`None` = unset). A set but
+/// empty value turns the relay off even when the default is on. The default
+/// poll pairs only with the default relay: a relay the operator set
+/// themselves gets no poll unless they set one, so this host's states are
+/// never sent to a relay it is not using.
+pub fn resolve_relay(
+    relay_env: Option<&str>,
+    poll_env: Option<&str>,
+    default_on: bool,
+) -> (Option<String>, Option<String>) {
+    let set = |v: Option<&str>| v.map(str::trim).map(str::to_string);
+    let relay = match set(relay_env) {
+        Some(v) if v.is_empty() => None,
+        Some(v) => Some(v),
+        None if default_on => Some(DEFAULT_RELAY_URL.to_string()),
+        None => None,
+    };
+    let poll = match set(poll_env) {
+        Some(v) if v.is_empty() => None,
+        Some(v) => Some(v),
+        None if default_on && relay.as_deref() == Some(DEFAULT_RELAY_URL) => {
+            Some(DEFAULT_RELAY_POLL_URL.to_string())
+        }
+        None => None,
+    };
+    (relay, poll)
+}
 /// How long any receiver waits (spec: "for at most five minutes").
 pub const LOGIN_WINDOW: Duration = Duration::from_secs(300);
 /// Scopes requested at login. ORDER 1718-adra, MEASURED 2026-10-14 on the
@@ -1205,7 +1246,6 @@ pub fn run_cli(args: &[String]) -> i32 {
     let http = cloudflare_oauth::ReqwestHttpClient::default();
     let store = vault_bootstrap::VaultCloudflareTokenStore { debug };
     let host_is_forge = std::env::var("TILLANDSIAS_HOST_KIND").as_deref() == Ok("forge");
-    let nonempty = |k: &str| std::env::var(k).ok().filter(|v| !v.trim().is_empty());
     let mut stdout = std::io::stdout();
     let result = match cmd {
         Command::Logout => logout(
@@ -1218,6 +1258,10 @@ pub fn run_cli(args: &[String]) -> i32 {
             &mut stdout,
         ),
         Command::Login { via } => {
+            let relay_env = std::env::var(RELAY_URL_ENV).ok();
+            let poll_env = std::env::var(RELAY_POLL_URL_ENV).ok();
+            let (relay_url, relay_poll_url) =
+                resolve_relay(relay_env.as_deref(), poll_env.as_deref(), RELAY_DEFAULT_ON);
             // The URL is printed; nothing launches a host browser (1713-3v3f).
             let follow = |_: &str| Ok(());
             let mut read = read_paste_line_from_terminal;
@@ -1226,8 +1270,8 @@ pub fn run_cli(args: &[String]) -> i32 {
                 store: &store,
                 base_url: cloudflare_oauth::base_url(),
                 client_id: cloudflare_oauth::client_id(),
-                relay_url: nonempty(RELAY_URL_ENV),
-                relay_poll_url: nonempty(RELAY_POLL_URL_ENV),
+                relay_url,
+                relay_poll_url,
                 loopback_ports: REGISTERED_LOOPBACK_PORTS.to_vec(),
                 follow_url: &follow,
                 desktop_session: crate::has_graphical_session(),
@@ -1279,6 +1323,59 @@ mod tests {
     use std::rc::Rc;
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    // ── 1757-n45b: the relay default, gated off until registration ──────────
+
+    #[test]
+    fn relay_default_is_gated_off_until_registration_is_confirmed() {
+        // FAILS if the default is baked on before the operator confirms the
+        // redirect URI: an unregistered redirect makes Cloudflare refuse the
+        // authorize request, so every login would break, not only QR.
+        // Invert this in the release that flips RELAY_DEFAULT_ON.
+        assert!(
+            !RELAY_DEFAULT_ON,
+            "RELAY_DEFAULT_ON is true before the operator confirmed {DEFAULT_RELAY_URL} is registered (1757-n45b)"
+        );
+        assert_eq!(resolve_relay(None, None, RELAY_DEFAULT_ON), (None, None));
+    }
+
+    #[test]
+    fn an_empty_relay_env_turns_the_default_off() {
+        for empty in ["", "   "] {
+            assert_eq!(resolve_relay(Some(empty), None, true), (None, None), "{empty:?}");
+            assert_eq!(resolve_relay(Some(empty), Some(empty), true), (None, None));
+        }
+        // An explicitly empty poll keeps the default relay but no poll.
+        assert_eq!(
+            resolve_relay(None, Some(""), true),
+            (Some(DEFAULT_RELAY_URL.to_string()), None)
+        );
+    }
+
+    #[test]
+    fn with_the_default_on_an_unset_env_reaches_the_observatorium_relay_and_its_poll() {
+        assert_eq!(
+            resolve_relay(None, None, true),
+            (Some(DEFAULT_RELAY_URL.to_string()), Some(DEFAULT_RELAY_POLL_URL.to_string()))
+        );
+        validate_relay_url(DEFAULT_RELAY_URL).expect("the default relay passes the login's own URL rule");
+        assert!(DEFAULT_RELAY_POLL_URL.starts_with("https://"));
+        assert!(DEFAULT_RELAY_URL.ends_with(CALLBACK_PATH));
+    }
+
+    #[test]
+    fn an_operator_set_relay_wins_and_never_gets_the_default_poll() {
+        let mine = "https://relay.example.invalid/tillandsias/cloudflare/callback";
+        for on in [true, false] {
+            assert_eq!(resolve_relay(Some(mine), None, on), (Some(mine.to_string()), None));
+        }
+        let poll = "https://relay.example.invalid/poll";
+        assert_eq!(
+            resolve_relay(Some(mine), Some(poll), true),
+            (Some(mine.to_string()), Some(poll.to_string()))
+        );
+    }
+
 
     /// ORDER 1718-adra. MEASURED 2026-10-14 against the operator's account: an
     /// authorize request with NO scope makes Cloudflare's consent screen ask

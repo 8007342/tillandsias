@@ -8,8 +8,21 @@
     { "pattern": "observatorium.tillandsias.org", "custom_domain": true }
   ],
   "build": { "command": "npm run build" },
+  // ORDER 1757-n45b: the Cloudflare sign-in relay. The script runs FIRST only
+  // for /tillandsias/cloudflare/* (run_worker_first); every other path is the
+  // static site exactly as before, SPA fallback included. relay/relay.js says
+  // what it holds (one {state, code} per state, <=600 s, handed back once).
+  "main": "relay/worker.js",
+  "rules": [{ "type": "Text", "globs": ["**/*.html"], "fallthrough": true }],
+  "durable_objects": {
+    "bindings": [{ "name": "RELAY", "class_name": "RelayState" }]
+  },
+  "migrations": [{ "tag": "v1-relay", "new_sqlite_classes": ["RelayState"] }],
+  // No Workers Logs: a callback URL carries a (PKCE-bound, single-use) code.
+  "observability": { "enabled": false },
   "assets": {
     "directory": "./build/web",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/tillandsias/cloudflare/*"]
   }
 }
