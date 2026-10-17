@@ -313,6 +313,8 @@ fn real_certutil(db: &Path, ca: &Path, op: Op) -> Result<(bool, String), String>
         ));
     }
     let image = [
+        // launch-images-ok: a probe for certutil, never a launch; it falls back
+        // to :latest, and the install retries once a launch built the router.
         crate::versioned_image_tag("router", crate::VERSION.trim()),
         "localhost/tillandsias-router:latest".to_string(),
     ]
