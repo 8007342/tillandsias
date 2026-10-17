@@ -911,6 +911,13 @@ pub fn login(
     store_and_report(deps, previous, bundle, out)
 }
 
+/// Order 1770-z575: the light remedy when Vault is not usable. The store
+/// already starts the Vault enclave alone when it is stopped, so the next
+/// step is never `tillandsias --init`, which rebuilds EVERY image (measured
+/// on macuahuitl, v56.10.16.2: it froze the operator's desktop).
+const REMEDY_VAULT_LOGIN: &str = "start Tillandsias (the tray) so its Vault is up, then run `tillandsias --cloudflare-login` again; `tillandsias --cloudflare-login --debug` shows why Vault did not start";
+const REMEDY_VAULT_LOGOUT: &str = "start Tillandsias (the tray) so its Vault is up, then run `tillandsias --cloudflare-logout` again";
+
 /// Vault preflight shared by both grants: read the stored bundle (or none)
 /// BEFORE anything single-use is spent.
 fn vault_preflight(
@@ -920,8 +927,8 @@ fn vault_preflight(
     let previous = deps.store.read_bundle().map_err(|r| {
         Refusal::login(
             format!("vault:{}", fixed_word(&r)),
-            "the Vault that must hold the Cloudflare credential is unreachable, sealed or refused the host; the code was NOT exchanged",
-            "run `tillandsias --init`, then `tillandsias --cloudflare-login` again",
+            "the Vault that must hold the Cloudflare credential could not be started, is unreachable, sealed or refused the host; the code was NOT exchanged",
+            REMEDY_VAULT_LOGIN,
         )
     })?;
     if previous.is_some() {
@@ -958,7 +965,7 @@ fn store_and_report(
         Refusal::login(
             format!("store-failed:{}", fixed_word(&r)),
             "the token pair was issued but could not be stored in Vault; it exists only in this exiting process",
-            "run `tillandsias --init`, then `tillandsias --cloudflare-login` again",
+            REMEDY_VAULT_LOGIN,
         )
     })?;
 
@@ -1232,7 +1239,7 @@ pub fn logout(deps: &LogoutDeps<'_>, out: &mut dyn Write) -> Result<(), Refusal>
         Refusal::logout(
             format!("vault:{}", fixed_word(&r)),
             "the Vault that holds the Cloudflare credential is unreachable, sealed or refused the host; nothing was revoked or deleted",
-            "run `tillandsias --init`, then `tillandsias --cloudflare-logout` again",
+            REMEDY_VAULT_LOGOUT,
         )
     })?;
     match &stored {
@@ -1245,7 +1252,7 @@ pub fn logout(deps: &LogoutDeps<'_>, out: &mut dyn Write) -> Result<(), Refusal>
         Refusal::logout(
             format!("delete-failed:{}", fixed_word(&r)),
             "a Cloudflare record could not be deleted from Vault (the reason names which one remains)",
-            "run `tillandsias --init`, then `tillandsias --cloudflare-logout` again",
+            REMEDY_VAULT_LOGOUT,
         )
     })?;
     let _ = writeln!(out, "ok:cloudflare-logout:deleted");
