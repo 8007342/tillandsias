@@ -1404,6 +1404,54 @@ fn ensure_router(project: &str, debug: bool) -> Result<PathBuf, String> {
     Ok(ca)
 }
 
+/// ORDER 1762-bano: the projects whose preview leaf in `tls_dir` stays valid for
+/// less than `margin_secs` (an unreadable leaf counts as due). The leaf lives
+/// 7 days and is re-issued on every publish; a preview left running longer
+/// than that without a republish would otherwise serve an expired leaf.
+#[cfg(feature = "tray")]
+pub(crate) fn preview_leaves_due(tls_dir: &Path, margin_secs: u64) -> Vec<String> {
+    let mut due = Vec::new();
+    let Ok(entries) = std::fs::read_dir(tls_dir) else {
+        return due;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("crt") {
+            continue;
+        }
+        let Some(project) = path.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        if !crate::cert_valid_for(&path, margin_secs) {
+            due.push(project.to_string());
+        }
+    }
+    due.sort();
+    due
+}
+
+/// ORDER 1762-bano: re-issue every preview leaf within `margin_secs` of its
+/// notAfter under the unchanged CA, then reload a running router so it serves
+/// them. Silent by design (operator ruling 2026-10-17): the CA does not change,
+/// so nothing that is running loses trust. Returns the renewed projects.
+#[cfg(feature = "tray")]
+pub(crate) fn renew_expiring_preview_leaves(margin_secs: u64) -> Result<Vec<String>, String> {
+    let due = preview_leaves_due(&router_dir().join("preview-tls"), margin_secs);
+    if due.is_empty() {
+        return Ok(due);
+    }
+    let ca = PathBuf::from(crate::ca_dir());
+    for project in &due {
+        prepare_tls(project, &ca)?;
+    }
+    let running =
+        inspect("tillandsias-router")?.is_some_and(|row| row["State"]["Status"] == "running");
+    if running {
+        strict_reload()?;
+    }
+    Ok(due)
+}
+
 fn strict_reload() -> Result<(), String> {
     podman_at(
         Step::Router,
@@ -1549,14 +1597,27 @@ async fn ready_backend_inner(name: &str) -> Result<(), String> {
         if row["State"]["Status"] != "running" {
             // Surface the guard's stable refusal without returning config/log
             // contents. Every other failed start remains runtime_not_ready.
-            if podman_at(Step::Ready, &["logs", "--tail", "20", name])
-                .is_ok_and(|s| s.contains("remote_binding_forbidden"))
-            {
+            // 1766-qpvb: read BOTH streams (wrangler reports on stderr), and
+            // keep the tail: the candidate is removed next, and with it the
+            // only record of why it stopped.
+            let tail = podman_output(&["logs", "--tail", "20", name])
+                .ok()
+                .map(|out| {
+                    let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
+                    text.push_str(&String::from_utf8_lossy(&out.stderr));
+                    text
+                })
+                .unwrap_or_default();
+            if tail.contains("remote_binding_forbidden") {
                 return Err(
                     "remote_binding_forbidden: local preview refuses remote bindings".into(),
                 );
             }
-            return Err("runtime_not_ready: managed runtime exited".into());
+            let code = row["State"]["ExitCode"].as_i64().unwrap_or(-1);
+            keep_exit_tail(name, code, tail);
+            return Err(format!(
+                "runtime_exited: managed runtime exited with code {code} during startup; service_logs shows its last lines"
+            ));
         }
         let endpoint = format!("http://{name}:8080/");
         if let Ok(code) = podman_at(
@@ -1779,6 +1840,9 @@ fn classify_failure(reason: &str) -> (&'static str, &'static str, &'static str) 
             ("image", "timeout", "host-retry")
         }
         "runtime_not_ready" => ("ready", "timeout", "host-retry"),
+        // 1766-qpvb: the runtime ran and stopped itself; retrying the same
+        // source gives the same exit.
+        "runtime_exited" => ("ready", "exit", "agent"),
         "runtime_unavailable" if reason.contains("image build failed") => {
             ("image", "exit", "operator")
         }
@@ -1797,16 +1861,57 @@ fn record_outcome(project: &str, instance: &str, outcome: &Result<Value, String>
         }
         Err(reason) => {
             let (step, class, remedy) = classify_failure(reason);
-            failures.insert(
-                key,
-                json!({
-                    "step": step, "class": class, "reason": reason,
-                    "at": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
-                    "remedy": remedy,
-                }),
-            );
+            let mut failure = json!({
+                "step": step, "class": class, "reason": reason,
+                "at": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+                "remedy": remedy,
+            });
+            if reason.starts_with("runtime_exited")
+                && let Some((code, tail)) = take_exit_tail(project)
+            {
+                failure["exit_code"] = json!(code);
+                failure[LOG_TAIL] = json!(tail);
+            }
+            failures.insert(key, failure);
         }
     }
+}
+
+/// 1766-qpvb: the output of a candidate that exited during startup, by
+/// project, until its publish records the failure. The candidate is removed
+/// right after, so this is the only copy; it is served only to the owning
+/// lane by service_logs, exactly as a running preview's logs are.
+static EXIT_TAILS: std::sync::Mutex<std::collections::BTreeMap<String, (i64, String)>> =
+    std::sync::Mutex::new(std::collections::BTreeMap::new());
+
+/// The failure-record field holding that output; never shown by status.
+const LOG_TAIL: &str = "log_tail";
+
+/// "tillandsias-<project>-web-candidate-…" → "<project>".
+fn candidate_project(name: &str) -> Option<&str> {
+    name.strip_prefix("tillandsias-")?
+        .split_once("-web-candidate-")
+        .map(|(project, _)| project)
+}
+
+fn keep_exit_tail(candidate: &str, code: i64, mut tail: String) {
+    let Some(project) = candidate_project(candidate) else {
+        return;
+    };
+    if tail.len() > LOG_BYTES_MAX {
+        let mut cut = tail.len() - LOG_BYTES_MAX;
+        while !tail.is_char_boundary(cut) {
+            cut += 1;
+        }
+        tail = tail.split_off(cut);
+    }
+    if let Ok(mut tails) = EXIT_TAILS.lock() {
+        tails.insert(project.to_string(), (code, tail));
+    }
+}
+
+fn take_exit_tail(project: &str) -> Option<(i64, String)> {
+    EXIT_TAILS.lock().ok()?.remove(project)
 }
 
 fn last_failure(project: &str, instance: &str) -> Option<Value> {
@@ -1849,6 +1954,9 @@ pub(crate) async fn status(project: &str, instance: &str) -> Result<Value, Strin
         // 1723-2fiq: after a failed reload, say whether the previous preview
         // is still the one being served.
         failure["previous_preview_serving"] = value["serving"].clone();
+        if let Some(map) = failure.as_object_mut() {
+            map.remove(LOG_TAIL);
+        }
         value["last_failure"] = failure;
     }
     Ok(value)
@@ -1964,7 +2072,23 @@ pub(crate) async fn logs(project: &str, instance: &str, lines: u32) -> Result<Va
 async fn logs_inner(project: &str, instance: &str, lines: u32) -> Result<Value, String> {
     validate_identity(project, instance)?;
     let name = format!("tillandsias-{project}-web");
-    let row = inspect(&name)?.ok_or("not_running: no preview container; publish_local first")?;
+    let Some(row) = inspect(&name)? else {
+        // 1766-qpvb: no container, but a start that exited left its output.
+        if let Some(failure) = last_failure(project, instance)
+            && let Some(tail) = failure[LOG_TAIL].as_str()
+        {
+            return Ok(json!({
+                "state": "exited",
+                "exit_code": failure["exit_code"],
+                "source": "last_failed_start",
+                "at": failure["at"],
+                "lines": tail.lines().count(),
+                "truncated": false,
+                "log": tail,
+            }));
+        }
+        return Err("not_running: no preview container; publish_local first".into());
+    };
     check_owner(Some(&row), instance, None)?;
     let lines = lines.clamp(1, LOG_LINES_MAX);
     let tail = lines.to_string();
@@ -2397,6 +2521,62 @@ mod tests {
         });
         let err = rt.block_on(logs("proj", "default", 10)).unwrap_err();
         assert!(err.starts_with("lane_conflict"), "{err}");
+    }
+
+    /// 1766-qpvb: a runtime that exits during startup is removed, so its
+    /// output used to be lost (service_logs said not_running) and the reason
+    /// was a bare "managed runtime exited", remedy host-retry, 7 of 7 times.
+    #[test]
+    fn a_runtime_that_exits_at_startup_keeps_its_tail_for_service_logs() {
+        with_stub("exit 0", |_| {
+            a_runtime_that_exits_at_startup_keeps_its_tail_for_service_logs_body()
+        });
+    }
+
+    fn a_runtime_that_exits_at_startup_keeps_its_tail_for_service_logs_body() {
+        let candidate = "tillandsias-proj-web-candidate-1-2";
+        let _fake = Fake::install(move |args| match args[0] {
+            "ps" => output(0, &format!("{candidate} abc\n"), ""),
+            "inspect" => output(0, &preview_row("exited", 1, "default"), ""),
+            // wrangler writes its failure to STDERR.
+            "logs" => output(
+                0,
+                " ⛅️ wrangler 4.42.0\n",
+                "✘ [ERROR] workerd exited: no such compatibility date\n",
+            ),
+            _ => output(0, "", ""),
+        });
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let err = rt.block_on(ready_backend_inner(candidate)).unwrap_err();
+        assert!(err.starts_with("runtime_exited:"), "{err}");
+        assert!(err.contains("code 1"), "{err}");
+        // A deterministic exit is the project's to fix, not a host retry.
+        assert_eq!(classify_failure(&err), ("ready", "exit", "agent"));
+        record_outcome("proj", "default", &Err(err));
+        drop(_fake);
+
+        // The candidate is gone; service_logs answers from the failed start.
+        let _gone = Fake::install(|args| match args[0] {
+            "ps" => output(0, "", ""),
+            "logs" => panic!("no container is left to read"),
+            _ => output(0, "", ""),
+        });
+        let got = rt.block_on(logs("proj", "default", 50)).unwrap();
+        assert_eq!(got["state"], "exited");
+        assert_eq!(got["exit_code"], 1);
+        assert_eq!(got["source"], "last_failed_start");
+        let text = got["log"].as_str().unwrap();
+        assert!(text.contains("no such compatibility date"), "{text}");
+        // Another lane never reads it.
+        let err = rt.block_on(logs("proj", "other-lane", 50)).unwrap_err();
+        assert!(err.starts_with("not_running"), "{err}");
+        // A later success clears it.
+        record_outcome("proj", "default", &Ok(json!({"state": "running"})));
+        let err = rt.block_on(logs("proj", "default", 50)).unwrap_err();
+        assert!(err.starts_with("not_running"), "{err}");
     }
 
     /// 1723-2fiq: every result carries `serving`; an exited preview says so
@@ -3410,6 +3590,34 @@ mod tests {
                 .iter()
                 .flatten()
                 .any(|s| s.contains("trust") || s == "-CAcreateserial")
+        );
+    }
+
+    #[cfg(feature = "tray")]
+    #[test]
+    fn a_preview_leaf_inside_the_margin_is_due_and_one_outside_is_not() {
+        let tmp = tempfile::tempdir().unwrap();
+        for (project, days) in [("soon", "1"), ("later", "7")] {
+            let status = std::process::Command::new("openssl")
+                .args([
+                    "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=leaf",
+                ])
+                .args(["-days", days, "-keyout"])
+                .arg(tmp.path().join(format!("{project}.key")))
+                .arg("-out")
+                .arg(tmp.path().join(format!("{project}.crt")))
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .unwrap();
+            assert!(status.success());
+        }
+        std::fs::write(tmp.path().join("broken.crt"), "not a certificate\n").unwrap();
+        // 48 h margin: the 1-day leaf and the unreadable one are due; the 7-day
+        // leaf and the .key files are not.
+        assert_eq!(
+            preview_leaves_due(tmp.path(), 48 * 60 * 60),
+            vec!["broken".to_string(), "soon".to_string()]
         );
     }
 

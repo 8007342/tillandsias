@@ -56,7 +56,25 @@ export TILLANDSIAS_POLICY_AUDIT_LOG="$W/audit.jsonl"
 mkdir -p "$W/cwd"
 cd "$W/cwd" || exit 1
 HOST="$(uname -n | tr '[:upper:]' '[:lower:]')"
-SOFT=(podman system reset --force)
+# ORDER 1764-ca9x: the arms now drive the RUN door, which executes what it
+# allows, so the reset argv names STUB executables by absolute path. The policy
+# classifies by program basename, so the class is unchanged; an honoured token
+# runs the stub, never a real `podman system reset` or `wsl --unregister`.
+mkdir -p "$W/bin"
+for p in podman wsl; do
+    printf '#!/bin/sh\necho "STUB-%s $*"\n' "$p" >"$W/bin/$p"
+    chmod +x "$W/bin/$p"
+done
+SOFT=("$W/bin/podman" system reset --force)
+WSL=("$W/bin/wsl" --unregister)
+# PREMISE: the stub argv is still in the destructive classes. If it were not,
+# every arm below would be judged on an argv the policy simply allows.
+pe="$("$PLAN" policy eval -- "${SOFT[@]}" 2>/dev/null)"
+pw="$("$PLAN" policy eval -- "${WSL[@]}" x 2>/dev/null)"
+if [ "$pe" != "consent:policy:soft-reset" ] || [ "$pw" != "consent:policy:hard-reset" ]; then
+    echo "FAIL: PREMISE — the stub argv left its class (soft=[$pe] hard=[$pw]); refusing to run the arms" >&2
+    exit 1
+fi
 tokens() { find "$TILLANDSIAS_CONSENT_DIR" -name '*.json' 2>/dev/null | grep -c .; }
 plant() { # plant <file> <class> <host> <expires_at>
     mkdir -p "$TILLANDSIAS_CONSENT_DIR"
@@ -120,54 +138,66 @@ else
     fi
 
     # ── 2 ───────────────────────────────────────────────────────────────────
-    out="$("$PLAN" policy eval -- "${SOFT[@]}" 2>/dev/null)"; rc=$?
+    # ORDER 1764-ca9x: `policy eval` is inspection and never spends (87c7e9bdc);
+    # the run door is the one that spends. The argv is the STUB podman, so an
+    # honoured token runs the stub, never a real reset.
+    out="$("$PLAN" policy eval -- "${SOFT[@]}" 2>/dev/null)"; rce=$?
+    te="$(tokens)"
+    r1="$("$PLAN" run --json -- "${SOFT[@]}" 2>/dev/null)"; rc1=$?
     src="$(jget -r '.consent_source' <<<"$(tail -n 1 "$TILLANDSIAS_POLICY_AUDIT_LOG")" 2>/dev/null)"
-    out2="$("$PLAN" policy eval -- "${SOFT[@]}" 2>"$W/err")"; rc2=$?
-    if [ "$rc" -eq 0 ] && [ "$out" = "ok:policy:soft-reset:consented" ] && [ "$src" = token ] &&
-        [ "$rc2" -eq 4 ] && [ "$out2" = "consent:policy:soft-reset" ] && grep -qF 'already spent' "$W/err"; then
-        ok "arm 2: the token allows ONE eval (consent_source=token); the replay asks again and says the token was spent"
+    r2="$("$PLAN" run --json -- "${SOFT[@]}" 2>/dev/null)"; rc2=$?
+    if [ "$rce" -eq 4 ] && [ "$out" = "consent:policy:soft-reset" ] && [ "$te" = 1 ] &&
+        [ "$rc1" -eq 0 ] && [ "$(jget -r '.status' <<<"$r1")" = exited ] &&
+        grep -qF 'STUB-podman system reset --force' <<<"$(jget -r '.stdout' <<<"$r1")" && [ "$src" = token ] &&
+        [ "$rc2" -eq 4 ] && [ "$(jget -r '.status' <<<"$r2")" = policy_consent ] &&
+        grep -qF 'already spent' <<<"$(jget -r '.policy.why' <<<"$r2")"; then
+        ok "arm 2: eval inspects without spending; the run door spends the token for ONE run (consent_source=token); the replay asks again and says the token was spent"
     else
-        bad "arm 2: [$out] rc=$rc src=[$src] then [$out2] rc=$rc2 err=[$(cat "$W/err")]"
+        bad "arm 2: eval [$out] rc=$rce tokens=$te; run1 rc=$rc1 [$r1] src=[$src]; run2 rc=$rc2 [$r2]"
     fi
 
     # ── 3 ───────────────────────────────────────────────────────────────────
     plant "soft-reset-foreign.json" soft-reset "not-$HOST" "2099-01-01T00:00:00Z"
-    out="$("$PLAN" policy eval -- "${SOFT[@]}" 2>/dev/null)"; rc=$?
+    r="$("$PLAN" run --json -- "${SOFT[@]}" 2>/dev/null)"; rc=$?
     gone1=0; [ -e "$TILLANDSIAS_CONSENT_DIR/soft-reset-foreign.json" ] || gone1=1
     plant "soft-reset-old.json" soft-reset "$HOST" "2020-01-01T00:00:00Z"
-    outb="$("$PLAN" policy eval -- "${SOFT[@]}" 2>/dev/null)"; rcb=$?
+    rb="$("$PLAN" run --json -- "${SOFT[@]}" 2>/dev/null)"; rcb=$?
     gone2=0; [ -e "$TILLANDSIAS_CONSENT_DIR/soft-reset-old.json" ] || gone2=1
-    if [ "$rc" -eq 1 ] && [ "$out" = "refused:consent:invalid:foreign-host" ] && [ "$gone1" = 1 ] &&
-        [ "$rcb" -eq 1 ] && [ "$outb" = "refused:consent:invalid:expired" ] && [ "$gone2" = 1 ]; then
-        ok "arm 3: foreign-host and expired tokens are refused:consent:invalid:<reason> and deleted"
+    if [ "$rc" -eq 1 ] && [ "$(jget -r '.status' <<<"$r")" = policy_denied ] &&
+        grep -qF 'minted on another host' <<<"$(jget -r '.policy.why' <<<"$r")" && [ "$gone1" = 1 ] &&
+        [ "$rcb" -eq 1 ] && grep -qF 'expired unused' <<<"$(jget -r '.policy.why' <<<"$rb")" && [ "$gone2" = 1 ]; then
+        ok "arm 3: foreign-host and expired tokens are refused at the run door, named, and deleted"
     else
-        bad "arm 3: [$out] rc=$rc gone=$gone1; [$outb] rc=$rcb gone=$gone2"
+        bad "arm 3: foreign rc=$rc [$r] gone=$gone1; expired rc=$rcb [$rb] gone=$gone2"
     fi
-    "$PLAN" policy consent grant hard-reset -- wsl --unregister distro-a >/dev/null 2>&1
-    out="$("$PLAN" policy eval -- wsl --unregister distro-b 2>/dev/null)"; rc=$?
-    if [ "$rc" -eq 1 ] && [ "$out" = "refused:consent:invalid:argv-mismatch" ] && [ "$(tokens)" = 1 ]; then
-        ok "arm 3: a token for a different argv is refused:consent:invalid:argv-mismatch and kept for its own run"
+    "$PLAN" policy consent grant hard-reset -- "${WSL[@]}" distro-a >/dev/null 2>&1
+    r="$("$PLAN" run --json -- "${WSL[@]}" distro-b 2>/dev/null)"; rc=$?
+    if [ "$rc" -eq 1 ] && grep -qF 'DIFFERENT argv' <<<"$(jget -r '.policy.why' <<<"$r")" && [ "$(tokens)" = 1 ]; then
+        ok "arm 3: a token for a different argv is refused at the run door (argv-mismatch) and kept for its own run"
     else
-        bad "arm 3 mismatch: rc=$rc out=[$out] tokens=$(tokens)"
+        bad "arm 3 mismatch: rc=$rc [$r] tokens=$(tokens)"
     fi
     rm -rf "$TILLANDSIAS_CONSENT_DIR"
 
     # ── 5 ───────────────────────────────────────────────────────────────────
-    out="$(TILLANDSIAS_DESTRUCTIVE_RESET_OK=1 TILLANDSIAS_SKILL=smoke-curl-install-and-test-e2e \
-        "$PLAN" policy eval -- "${SOFT[@]}" 2>/dev/null)"; rc=$?
+    r="$(TILLANDSIAS_DESTRUCTIVE_RESET_OK=1 TILLANDSIAS_SKILL=smoke-curl-install-and-test-e2e \
+        "$PLAN" run --json -- "${SOFT[@]}" 2>/dev/null)"; rc=$?
     src="$(jget -r '.consent_source' <<<"$(tail -n 1 "$TILLANDSIAS_POLICY_AUDIT_LOG")" 2>/dev/null)"
-    outn="$(TILLANDSIAS_DESTRUCTIVE_RESET_OK=1 "$PLAN" policy eval -- "${SOFT[@]}" 2>/dev/null)"; rcn=$?
-    outh="$(TILLANDSIAS_DESTRUCTIVE_RESET_OK=1 TILLANDSIAS_SKILL=smoke-curl-install-and-test-e2e \
-        "$PLAN" policy eval -- wsl --unregister x 2>/dev/null)"; rch=$?
-    if [ "$rc" -eq 0 ] && [ "$out" = "ok:policy:soft-reset:env-preauthorised" ] && [ "$src" = env ] &&
-        [ "$rcn" -eq 4 ] && [ "$outn" = "consent:policy:soft-reset" ] &&
-        [ "$rch" -eq 4 ] && [ "$outh" = "consent:policy:hard-reset" ]; then
-        ok "arm 5: the registered smoke skill's env allows soft-reset (consent_source=env); without the skill it asks; hard-reset never takes it"
+    outi="$(TILLANDSIAS_DESTRUCTIVE_RESET_OK=1 TILLANDSIAS_SKILL=smoke-curl-install-and-test-e2e \
+        "$PLAN" policy eval -- "${SOFT[@]}" 2>/dev/null)"; rci=$?
+    rn="$(TILLANDSIAS_DESTRUCTIVE_RESET_OK=1 "$PLAN" run --json -- "${SOFT[@]}" 2>/dev/null)"; rcn=$?
+    rh="$(TILLANDSIAS_DESTRUCTIVE_RESET_OK=1 TILLANDSIAS_SKILL=smoke-curl-install-and-test-e2e \
+        "$PLAN" run --json -- "${WSL[@]}" x 2>/dev/null)"; rch=$?
+    if [ "$rc" -eq 0 ] && [ "$(jget -r '.status' <<<"$r")" = exited ] && [ "$src" = env ] &&
+        [ "$rci" -eq 4 ] && [ "$outi" = "consent:policy:soft-reset" ] &&
+        [ "$rcn" -eq 4 ] && [ "$(jget -r '.policy.rule_id' <<<"$rn")" = soft-reset ] &&
+        [ "$rch" -eq 4 ] && [ "$(jget -r '.policy.rule_id' <<<"$rh")" = hard-reset ]; then
+        ok "arm 5: the registered smoke skill's env runs soft-reset at the run door (consent_source=env) while eval still only inspects; without the skill it asks; hard-reset never takes it"
     else
-        bad "arm 5: [$out] rc=$rc src=[$src]; no skill [$outn] rc=$rcn; hard [$outh] rc=$rch"
+        bad "arm 5: run rc=$rc [$r] src=[$src]; eval [$outi] rc=$rci; no skill rc=$rcn [$rn]; hard rc=$rch [$rh]"
     fi
 
-    # ── 9: the run door spends a token exactly as eval does ─────────────────
+    # ── 9: the run door spends a token for a workspace destroy too ──────────
     mkdir -p "$W/victim"
     "$PLAN" policy consent grant workspace-destroy -- rm -rf "$W/victim" >/dev/null 2>&1
     out="$("$PLAN" run --json -- rm -rf "$W/victim" 2>/dev/null)"; rc=$?

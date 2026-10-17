@@ -1340,6 +1340,7 @@ specs:
   - litmus:expert-serve-refusal-not-fallback
   - litmus:expert-serve-citations-only-if-used
   - litmus:expert-serve-endpoint-shape
+  - litmus:spec-index-step-reprobes-embed-endpoint
   coverage_ratio: 100
   last_verified: '2026-08-28'
 - spec_id: command-runtime

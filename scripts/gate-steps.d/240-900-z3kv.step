@@ -9,4 +9,7 @@ STEP_DESC="Checking the credential-state probe cannot report could-not-run as co
 STEP_SCRIPT="scripts/test-credential-cold-state-probe.sh"
 STEP_ERROR="the credential-state probe can report an unaskable question as a clean room, materialise the secret, or disagree with itself between runs (900-z3kv) — see the verdict line above"
 STEP_OK="Credential-state probe contract passed"
+# 1765-q7rg: the keyring answers from host state (a cold daemon, a locked
+# collection), so one red is retried once after a settle and a second reads flaky:.
+STEP_HOST_STATE="keyring"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   an empty keychain with NO fallback still reads cold"

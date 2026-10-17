@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-output-only-pulse-server-exposes-no-source-to-a-browser-window-so-enumeratedevices-lists-no-audioinput
+    field: next_action
+    value: 'INTERIM RESIDUAL (C), coordinator 2026-10-17: what leaks today to a client of the output-only server is the names of both host microphones (Mic1 and Mic2), the speaker sink monitor, and a LAN AirPlay sink (raop, carrying a peer host name). Metadata only; capture stays refused. PROPOSED FIX, pending an operator ruling on the host-config stance: (A) a WirePlumber access drop-in whose permission manager hides Audio/Source from this server''s clients, plus a virtual sink so no host monitor enumerates.'
+    ts: "2026-10-17T15:05:00Z"
+    host: yoga
+    replaces_sha256: "c92d6083cb81abff293ccecdbbf9787fed7a33e4d4f167e9b15ad8f02be1a4ca"
+
+events:
+  - packet_id: the-output-only-pulse-server-exposes-no-source-to-a-browser-window-so-enumeratedevices-lists-no-audioinput
+    event:
+      type: note
+      ts: "2026-10-17T15:05:00Z"
+      host: yoga
+      summary: |-
+        coordinator ruling: interim residual (C), (A) proposed

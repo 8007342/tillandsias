@@ -1,0 +1,14 @@
+# Gate step 1771-4iw3 — the forge-base pip step cannot hold a build hostage.
+# pip's --timeout is per read and multiplies by its attempts (measured
+# 2026-10-17: --timeout 5 x 6 attempts = 43 s on one stalled URL), so the step
+# runs under a wall-clock budget. The fixture reads the step's text from
+# images/default/Containerfile.base and runs it with a stalled fake pip3 (fails
+# inside the budget with refused:forge-base:pip-install-stalled, never reaches
+# npm) and a healthy one (negative control: rc 0, npm runs, no refusal).
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking that the forge-base pip step has a wall-clock budget (1771-4iw3)"
+STEP_LUA="scripts/lua/test-forge-base-pip-bounded.lua"
+STEP_ERROR="the forge-base pip step can stall without a bound, or stopped naming its verdict (1771-4iw3) — see the FAIL lines above"
+STEP_OK="forge-base pip budget fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-17 darwin ok:forge-base-pip-bounded:static + stall + control arms"
