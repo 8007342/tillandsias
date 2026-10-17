@@ -2394,6 +2394,30 @@ _run() {
     return "$_run_rc"
 }
 
+# ORDER 1765-q7rg — one execution of the step the loop below has sourced, into
+# _step_out / _step_rc. A function so a host-state step can run it twice.
+_gs_exec_step() {
+    _step_rc=0
+    _step_out="$(mktemp "${TMPDIR:-/tmp}/gate-step.XXXXXX")"
+    if [ -n "$STEP_LUA" ]; then
+        # 1600-nn5b: handed the runner that runs it, the _run_lua_decider and
+        # preflight-door contract (1570-mxcg), so a fixture that must ask the
+        # plan binary finds one in the land queue's clean env too.
+        _run env "TILLANDSIAS_SCRIPT_RUNNER_BIN=$_gs_plan" "$_gs_plan" script run "$_gs_root/$STEP_LUA" > >(tee "$_step_out") 2>&1 || _step_rc=$?
+    else
+        _run bash "$_gs_root/$STEP_SCRIPT" > >(tee "$_step_out") 2>&1 || _step_rc=$?
+    fi
+    wait "$!" 2>/dev/null || true
+}
+
+# _gs_verdict_token <output file> <rc> — the step's verdict as one token for a
+# flaky: line: its last verdict-shaped line's head, else rc=<n>.
+_gs_verdict_token() {
+    local _v
+    _v="$(grep -E '^(ok|violation|refused|could-not-run|FAIL|fail)[: ]' "$1" 2>/dev/null | tail -n 1 | cut -d' ' -f1 | cut -c1-80)"
+    printf '%s' "${_v:-rc=$2}" | tr ',' ';'
+}
+
 # ORDER 1384-bqhy — the gate-steps.d loop, as a function over a ROOT whose
 # scripts/gate-steps.d it reads, so --check runs it over the checkout and the
 # fixture over a scratch tree, through the SAME code. A step names STEP_SCRIPT
@@ -2406,7 +2430,7 @@ _run_gate_steps() {  # $1 = root
     for _step_file in "$_gs_root"/scripts/gate-steps.d/*.step; do
         [ -e "$_step_file" ] || continue
         STEP_DESC=""; STEP_SCRIPT=""; STEP_LUA=""; STEP_ERROR=""; STEP_OK=""
-        STEP_SKIP_EXIT=""; STEP_SKIP_DESC=""
+        STEP_SKIP_EXIT=""; STEP_SKIP_DESC=""; STEP_HOST_STATE=""
         # shellcheck disable=SC1090
         . "$_step_file"
         if [ -z "$STEP_DESC" ] || { [ -z "$STEP_SCRIPT" ] && [ -z "$STEP_LUA" ]; }; then
@@ -2475,17 +2499,26 @@ _run_gate_steps() {  # $1 = root
 
         # The output streams as before AND is kept, so a refusal can be named
         # by the one classifier the preflight door also reads (1384-bqhy).
-        _step_rc=0
-        _step_out="$(mktemp "${TMPDIR:-/tmp}/gate-step.XXXXXX")"
-        if [ -n "$STEP_LUA" ]; then
-            # 1600-nn5b: handed the runner that runs it, the _run_lua_decider and
-            # preflight-door contract (1570-mxcg), so a fixture that must ask the
-            # plan binary finds one in the land queue's clean env too.
-            _run env "TILLANDSIAS_SCRIPT_RUNNER_BIN=$_gs_plan" "$_gs_plan" script run "$_gs_root/$STEP_LUA" > >(tee "$_step_out") 2>&1 || _step_rc=$?
-        else
-            _run bash "$_gs_root/$STEP_SCRIPT" > >(tee "$_step_out") 2>&1 || _step_rc=$?
+        _gs_exec_step
+        # ORDER 1765-q7rg — A HOST-STATE STEP GETS ONE RETRY, NEVER A SKIP.
+        # A step that declares STEP_HOST_STATE (a keyring cold state, a lock
+        # under load) can disagree with itself on a healthy tree. It runs once
+        # more after a settle; a pass then is a pass, and a second red stays red
+        # but is named flaky:<step>:<first>,<second> instead of violation:, so
+        # the land queue re-queues it once rather than evicting a good PR. A
+        # step that declares nothing never retries, and the could-not-run code
+        # is never retried either.
+        if [ "$_step_rc" -ne 0 ] && [ -n "$STEP_HOST_STATE" ] \
+           && { [ -z "$STEP_SKIP_EXIT" ] || [ "$_step_rc" -ne "$STEP_SKIP_EXIT" ]; }; then
+            _gs_first_verdict="$(_gs_verdict_token "$_step_out" "$_step_rc")"
+            rm -f "$_step_out"
+            _info "retry:${_step_path##*/}:host-state=$STEP_HOST_STATE — first run red ($_gs_first_verdict); settling ${TILLANDSIAS_GATE_HOST_STATE_SETTLE_S:-10}s and running it once more"
+            sleep "${TILLANDSIAS_GATE_HOST_STATE_SETTLE_S:-10}"
+            _gs_exec_step
+            if [ "$_step_rc" -ne 0 ]; then
+                echo "flaky:${_step_path##*/}:${_gs_first_verdict},$(_gs_verdict_token "$_step_out" "$_step_rc")"
+            fi
         fi
-        wait "$!" 2>/dev/null || true
 
         if [ -f /tmp/tillandsias-timing.jsonl ]; then
             _metrics_shared_after="$(wc -l < /tmp/tillandsias-timing.jsonl 2>/dev/null || echo 0)"

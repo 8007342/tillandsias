@@ -42,6 +42,7 @@ scaffold() {
     WORK_DIR="$TMP/$name/work"
     GH_PRS="$TMP/$name/prs.json"
     GH_COMMENTS="$TMP/$name/comments.log"
+    GH_DRAFTS="$TMP/$name/drafts.log"
     GATE_LOG="$TMP/$name/gate.log"
     GH_BIN="$TMP/$name/gh"
     GATE_BIN="$TMP/$name/gate.sh"
@@ -65,7 +66,7 @@ scaffold() {
     git -C "$REMOTE_DIR" symbolic-ref HEAD refs/heads/linux-next
     git -C "$WORK_DIR" fetch -q origin
 
-    : > "$GH_COMMENTS"; : > "$GATE_LOG"
+    : > "$GH_COMMENTS"; : > "$GATE_LOG"; : > "$GH_DRAFTS"
 
     cat > "$GH_BIN" <<GH
 #!/usr/bin/env bash
@@ -73,6 +74,14 @@ scaffold() {
 case "\$1 \$2" in
     "pr list")    cat "$GH_PRS" ;;
     "pr comment") shift 2; printf '%s\n' "\$*" >> "$GH_COMMENTS" ;;
+    # 1765-q7rg: the PR's comments as gh's JSON, carrying only the queue's own
+    # eviction markers for that PR (the part the queue reads back).
+    "pr view")
+        printf '{"comments":['
+        grep -o "<!-- land-queue:evicted pr=\$3 [^>]*-->" "$GH_COMMENTS" \
+            | sed 's/.*/{"body":"&"}/' | paste -sd, -
+        printf ']}\n' ;;
+    "pr ready")   shift 2; printf '%s\n' "\$*" >> "$GH_DRAFTS" ;;
     *) exit 1 ;;
 esac
 GH
@@ -94,6 +103,7 @@ run_queue() {
     ( cd "$WORK_DIR" && env \
         TILLANDSIAS_LAND_QUEUE_GH="$GH_BIN" \
         TILLANDSIAS_LAND_QUEUE_GATE="bash $GATE_BIN" \
+        TILLANDSIAS_LAND_QUEUE_PREFLIGHT="${PREFLIGHT_CMD:-}" \
         TILLANDSIAS_LAND_QUEUE_REMOTE=origin \
         TILLANDSIAS_TRUNK_BRANCH=linux-next \
         bash "$QUEUE" "$@" 2>&1 )
@@ -775,6 +785,192 @@ $out13
 comments: $(cat "$GH_COMMENTS")"
 fi
 
+
+# ──────────────────────────────────────────────────────────── ARMS 14-17
+# ORDER 1765-q7rg: the queue's pre-gate checks and its bounded flaky retry.
+# trunk_push <file> <content> — a commit straight onto the remote trunk, from
+# the lander clone, between queue runs.
+trunk_push() {
+    git -C "$WORK_DIR" checkout -q linux-next
+    git -C "$WORK_DIR" pull -q --ff-only origin linux-next
+    mkdir -p "$WORK_DIR/$(dirname "$1")"
+    printf '%s\n' "$2" > "$WORK_DIR/$1"
+    git -C "$WORK_DIR" add -A && git -C "$WORK_DIR" commit -q -m "trunk: $1"
+    git -C "$WORK_DIR" push -q origin linux-next
+}
+gates() { grep -c . "$GATE_LOG"; }
+
+# ── ARM 14 — A HEAD THE QUEUE ALREADY EVICTED IS NOT RE-GATED OVER A
+#            PLAN-ONLY TRUNK MOVE; A CODE MOVE OR A NEW HEAD IS.
+scaffold stale
+candidate stale 1401-aaaa a.txt A
+cat > "$GH_PRS" <<'JSON'
+[{"number":1,"headRefName":"work/1401-aaaa","isDraft":false}]
+JSON
+sed "s|@LOG@|$GATE_LOG|" > "$GATE_BIN" <<'GATE'
+#!/usr/bin/env bash
+echo "gated $(git rev-parse HEAD)" >> "@LOG@"
+echo "violation:stub-gate:red"
+exit 1
+GATE
+o14a="$(run_queue)"
+trunk_push plan/index.d/20261017t000000z-probe.yaml 'packets: []'
+o14b="$(run_queue)"
+g14b="$(gates)"
+trunk_push code.txt C
+o14c="$(run_queue)"
+g14c="$(gates)"
+git -C "$WORK_DIR" checkout -q work/1401-aaaa
+echo A2 > "$WORK_DIR/a.txt"; git -C "$WORK_DIR" commit -qam "work(1401): new head"
+git -C "$WORK_DIR" push -q origin work/1401-aaaa; git -C "$WORK_DIR" checkout -q linux-next
+o14d="$(run_queue)"
+g14d="$(gates)"
+if grep -q '^evict:land-queue:1:gate-failed' <<<"$o14a" \
+   && grep -q 'land-queue:evicted pr=1 head=[0-9a-f]* base=[0-9a-f]* reason=gate-failed' "$GH_COMMENTS" \
+   && grep -q '^skip:land-queue:1:stale-head:.*classes=plan-ledger' <<<"$o14b" && [ "$g14b" -eq 1 ]; then
+    ok "ARM 14a: an evicted head over a PLAN-ONLY trunk move is skipped, no gate spent (gates=$g14b)"
+else
+    bad "ARM 14a: wanted gate-failed eviction with a marker, then skip:stale-head and still 1 gate; gates=$g14b
+$o14a
+---
+$o14b"
+fi
+if [ "$g14c" -eq 2 ] && ! grep -q 'stale-head' <<<"$o14c"; then
+    ok "ARM 14b: the same head over a CODE trunk move is re-gated (NEGATIVE CONTROL)"
+else
+    bad "ARM 14b: wanted a second gate after a code move; gates=$g14c
+$o14c"
+fi
+if [ "$g14d" -eq 3 ] && ! grep -q 'stale-head' <<<"$o14d"; then
+    ok "ARM 14c: a CHANGED head is re-gated (NEGATIVE CONTROL)"
+else
+    bad "ARM 14c: wanted a third gate after a new head; gates=$g14d
+$o14d"
+fi
+
+# ── ARM 15 — THE SECOND IDENTICAL CONFLICT AT AN UNCHANGED HEAD DRAFTS THE PR.
+scaffold draft
+candidate draft 1501-aaaa base.txt candidate-side
+cat > "$GH_PRS" <<'JSON'
+[{"number":1,"headRefName":"work/1501-aaaa","isDraft":false}]
+JSON
+printf '#!/usr/bin/env bash\nexit 0\n' > "$GATE_BIN"
+trunk_push base.txt trunk-side
+o15a="$(run_queue)"; d15a="$(grep -c . "$GH_DRAFTS")"
+o15b="$(run_queue)"; d15b="$(grep -c . "$GH_DRAFTS")"
+if grep -q '^evict:land-queue:1:conflict:base.txt' <<<"$o15a" && [ "$d15a" -eq 0 ] \
+   && grep -q '^draft:land-queue:1:repeat-conflict' <<<"$o15b" && [ "$d15b" -eq 1 ] \
+   && grep -qx '1 --undo' "$GH_DRAFTS" && grep -q 'converted this PR to a \*\*draft\*\*' "$GH_COMMENTS"; then
+    ok "ARM 15: the first conflict evicts, the second identical one at the same head drafts the PR and says so"
+else
+    bad "ARM 15: wanted no draft on the first conflict and one on the second; drafts=$d15a/$d15b
+$o15a
+---
+$o15b
+drafts: $(cat "$GH_DRAFTS")"
+fi
+
+# ── ARM 16 — THE PREFLIGHT DOOR EVICTS A DECIDER RED BEFORE THE GATE; A STALE
+#            PLAN BINARY ON THE LANDER DOES NOT.
+scaffold door
+candidate door 1601-aaaa a.txt A
+cat > "$GH_PRS" <<'JSON'
+[{"number":1,"headRefName":"work/1601-aaaa","isDraft":false}]
+JSON
+sed "s|@LOG@|$GATE_LOG|" > "$GATE_BIN" <<'GATE'
+#!/usr/bin/env bash
+echo gated >> "@LOG@"
+exit 0
+GATE
+PF_BIN="$TMP/door/pf.sh"
+printf '#!/usr/bin/env bash\necho "violation:stub-decider:red"\nexit 1\n' > "$PF_BIN"
+o16a="$(PREFLIGHT_CMD="bash $PF_BIN" run_queue)"; g16a="$(gates)"; c16a="$(cat "$GH_COMMENTS")"
+# A fresh scaffold: the same head over an unchanged trunk would now (rightly)
+# be stale-skipped by arm 14's rule, and this arm is about the door.
+scaffold door2
+candidate door2 1602-aaaa a.txt A
+cat > "$GH_PRS" <<'JSON'
+[{"number":1,"headRefName":"work/1602-aaaa","isDraft":false}]
+JSON
+sed "s|@LOG@|$GATE_LOG|" > "$GATE_BIN" <<'GATE'
+#!/usr/bin/env bash
+echo gated >> "@LOG@"
+exit 0
+GATE
+PF_BIN="$TMP/door2/pf.sh"
+printf '#!/usr/bin/env bash\necho "refused:preflight:stale-plan-binary — stub"\nexit 1\n' > "$PF_BIN"
+o16b="$(PREFLIGHT_CMD="bash $PF_BIN" run_queue)"; g16b="$(gates)"
+if grep -q '^evict:land-queue:1:preflight-failed' <<<"$o16a" && [ "$g16a" -eq 0 ] \
+   && grep -q 'violation:stub-decider:red' <<<"$c16a" && grep -q 'reason=preflight-failed' <<<"$c16a"; then
+    ok "ARM 16a: a decider-level preflight red evicts with no full gate spent"
+else
+    bad "ARM 16a: wanted evict preflight-failed and 0 gates; gates=$g16a
+$o16a"
+fi
+if [ "$g16b" -eq 1 ] && grep -q '^land:1 ' <<<"$o16b"; then
+    ok "ARM 16b: a stale plan binary on the lander is not the candidate's red — the full gate decides (NEGATIVE CONTROL)"
+else
+    bad "ARM 16b: wanted the full gate to run and land; gates=$g16b
+$o16b"
+fi
+
+# ── ARM 17 — flaky: RE-QUEUES ONCE AT THE BACK; A SECOND flaky: EVICTS.
+scaffold flaky
+candidate flaky 1701-aaaa a.txt A
+candidate flaky 1702-bbbb b.txt B
+cat > "$GH_PRS" <<'JSON'
+[{"number":1,"headRefName":"work/1701-aaaa","isDraft":false},
+ {"number":2,"headRefName":"work/1702-bbbb","isDraft":false}]
+JSON
+FLAKES="$TMP/flaky/flakes"; echo 1 > "$FLAKES"
+sed -e "s|@LOG@|$GATE_LOG|" -e "s|@FLAKES@|$FLAKES|" > "$GATE_BIN" <<'GATE'
+#!/usr/bin/env bash
+echo gated >> "@LOG@"
+left="$(cat "@FLAKES@")"
+if [ -f a.txt ] && [ "$left" -gt 0 ]; then
+    echo $((left - 1)) > "@FLAKES@"
+    echo "flaky:240-900-z3kv.step:violation:x,violation:y"
+    exit 1
+fi
+exit 0
+GATE
+o17a="$(run_queue)"
+order17="$(printf '%s' "$o17a" | sed -n 's/^land:\([0-9]*\) .*/\1/p' | tr '\n' ',')"
+if grep -q '^requeue:land-queue:1:flaky:240-900-z3kv.step' <<<"$o17a" && [ "$order17" = "2,1," ]; then
+    ok "ARM 17a: a flaky: red re-queues ONCE at the back and then lands (order 2,1)"
+else
+    bad "ARM 17a: wanted requeue flaky for #1 and landings 2,1; got '$order17'
+$o17a"
+fi
+scaffold flaky2
+candidate flaky2 1701-aaaa a.txt A
+cat > "$GH_PRS" <<'JSON'
+[{"number":1,"headRefName":"work/1701-aaaa","isDraft":false}]
+JSON
+FLAKES="$TMP/flaky2/flakes"; echo 9 > "$FLAKES"
+sed -e "s|@LOG@|$GATE_LOG|" -e "s|@FLAKES@|$FLAKES|" > "$GATE_BIN" <<'GATE'
+#!/usr/bin/env bash
+echo gated >> "@LOG@"
+left="$(cat "@FLAKES@")"
+if [ -f a.txt ] && [ "$left" -gt 0 ]; then
+    echo $((left - 1)) > "@FLAKES@"
+    echo "flaky:240-900-z3kv.step:violation:x,violation:y"
+    exit 1
+fi
+exit 0
+GATE
+o17b="$(run_queue)"; g17b="$(gates)"
+o17c="$(run_queue)"; g17c="$(gates)"
+if [ "$g17b" -eq 2 ] && grep -q '^evict:land-queue:1:gate-failed:rc=1:flaky:' <<<"$o17b" \
+   && grep -q 'reason=flaky' "$GH_COMMENTS" && grep -q '^flaky:240-900-z3kv.step' "$GH_COMMENTS" \
+   && [ "$g17c" -eq 4 ] && ! grep -q stale-head <<<"$o17c"; then
+    ok "ARM 17b: a second flaky: evicts, the comment names the token, and a flaky eviction is never stale-skipped"
+else
+    bad "ARM 17b: wanted 2 gates then an eviction naming flaky:, then two more (re-queue, evict) — never stale-skipped; gates=$g17b/$g17c
+$o17b
+---
+$o17c"
+fi
 printf '\n'
 if [ "$fail" -eq 0 ]; then
     if [ "$skipped" -gt 0 ]; then
