@@ -19616,6 +19616,12 @@ mod tray;
 #[cfg(feature = "host-services")]
 mod mcp_socket;
 
+// @trace order:1772-irs3 — read-only Cloudflare tools on the lane's MCP
+// socket: a GET-only allowlist over the Vault-stored sign-in, the account
+// bound to the tray. Needs the store, so `vault` as well.
+#[cfg(all(feature = "host-services", feature = "vault"))]
+mod cloudflare_mcp;
+
 // @trace spec:local-web-preview
 #[cfg(feature = "host-services")]
 mod local_web_preview;

@@ -172,6 +172,13 @@ pub trait HttpClient {
     /// `POST url` with an `application/x-www-form-urlencoded` body built
     /// from `form`, in order.
     fn post_form(&self, url: &str, form: &[(&str, &str)]) -> Result<HttpResponse, String>;
+    /// `GET url` with `Authorization: Bearer <bearer>`, no request body: the
+    /// read-only Cloudflare tools' only way to the API (1772-irs3). There is
+    /// deliberately no bearer POST/PUT/DELETE on this seam. Clients that never
+    /// call the API keep this default refusal.
+    fn get_with_bearer(&self, _url: &str, _bearer: &str) -> Result<HttpResponse, String> {
+        Err("refused:cloudflare-login:transport-get-unsupported".into())
+    }
 }
 
 /// The real client: `reqwest` behind a short-lived current-thread `tokio`
@@ -218,6 +225,28 @@ impl HttpClient for ReqwestHttpClient {
                 .map_err(|_| "refused:cloudflare-login:transport-client".to_string())?;
             let resp = client
                 .get(&url)
+                .send()
+                .await
+                .map_err(|e| transport_error("get", &e))?;
+            let status = resp.status().as_u16();
+            let body = resp.text().await.map_err(|e| transport_error("get", &e))?;
+            Ok(HttpResponse { status, body })
+        })
+    }
+
+    fn get_with_bearer(&self, url: &str, bearer: &str) -> Result<HttpResponse, String> {
+        let url = url.to_string();
+        let bearer = bearer.to_string();
+        let timeout = self.timeout;
+        run_blocking(async move {
+            let client = reqwest::Client::builder()
+                .timeout(timeout)
+                .user_agent(USER_AGENT)
+                .build()
+                .map_err(|_| "refused:cloudflare-login:transport-client".to_string())?;
+            let resp = client
+                .get(&url)
+                .bearer_auth(&bearer)
                 .send()
                 .await
                 .map_err(|e| transport_error("get", &e))?;

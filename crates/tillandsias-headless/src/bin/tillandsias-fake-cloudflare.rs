@@ -42,6 +42,11 @@
 //!     profile (`PUT /accounts/{id}/devices/policy`), its split-tunnel
 //!     exclude list (`PUT /accounts/{id}/devices/policy/exclude`), and a
 //!     Gateway rule (`POST /accounts/{id}/gateway/rules`).
+//!   * ORDER 1772-irs3, the forge's read-only Cloudflare tools: `GET /zones`,
+//!     the account's Workers scripts (list, settings, deployments), Workers
+//!     Builds (a Worker's triggers and builds, one build, and its log in two
+//!     cursor pages), and Pages projects and deployments. Each needs a
+//!     `Bearer` header and answers 401 without one.
 //!
 //! EVERY request — OAuth and API alike — appends one JSON line
 //! `{"method","path","body"}` to the file named by `--ledger`, in arrival
@@ -761,11 +766,109 @@ fn handle_api(stream: &mut TcpStream, req: &Request) {
         return;
     }
 
+    // ORDER 1772-irs3: the reads the forge's read-only Cloudflare tools make.
+    // Each needs a bearer, as the real API does.
+    if req.method == "GET"
+        && let Some(result) = read_only_result(&segments, req)
+    {
+        let bearer = req
+            .headers
+            .get("authorization")
+            .and_then(|v| v.strip_prefix("Bearer "))
+            .is_some_and(|t| !t.is_empty());
+        if !bearer {
+            respond_json(
+                stream,
+                "401 Unauthorized",
+                &serde_json::json!({"success": false, "errors": [{"code": 10001, "message": "unauthorized"}]}),
+            );
+            return;
+        }
+        respond_json(stream, "200 OK", &cf_envelope(result));
+        return;
+    }
+
     respond_json(
         stream,
         "404 Not Found",
         &serde_json::json!({"success": false, "errors": [{"code": 1000, "message": "no such route"}]}),
     );
+}
+
+const FAKE_SCRIPT: &str = "observatorium";
+const FAKE_SCRIPT_TAG: &str = "fa4e0b0c0e0f4a1b8c9d0e1f2a3b4c5d";
+const FAKE_BUILD: &str = "7c1d2e3f-0a1b-4c5d-8e9f-0a1b2c3d4e5f";
+
+/// The read-only routes (1772-irs3): zones, Workers scripts and their
+/// settings and deployments, Workers Builds triggers, builds and a two-page
+/// build log, Pages projects and deployments. `None` for any other path.
+fn read_only_result(segments: &[&str], req: &Request) -> Option<serde_json::Value> {
+    let acct = FAKE_ACCOUNT_ID;
+    match segments {
+        ["zones"] => Some(serde_json::json!([{"id": "zone1", "name": "example.org"}])),
+        ["accounts", a, "workers", "scripts"] if *a == acct => Some(serde_json::json!([
+            {"id": FAKE_SCRIPT, "tag": FAKE_SCRIPT_TAG, "modified_on": "2026-10-17T00:00:00Z"}
+        ])),
+        ["accounts", a, "workers", "scripts", s, "settings"] if *a == acct && *s == FAKE_SCRIPT => {
+            Some(serde_json::json!({"compatibility_date": "2026-01-01", "bindings": []}))
+        }
+        ["accounts", a, "workers", "scripts", s, "deployments"]
+            if *a == acct && *s == FAKE_SCRIPT =>
+        {
+            Some(serde_json::json!({"deployments": []}))
+        }
+        ["accounts", a, "builds", "workers", t, "triggers"]
+            if *a == acct && *t == FAKE_SCRIPT_TAG =>
+        {
+            Some(serde_json::json!([{
+                "trigger_uuid": "0b1c2d3e-trigger",
+                "trigger_name": "Deploy default branch",
+                "branch_includes": ["*"],
+                "branch_excludes": [],
+                "path_includes": ["*"],
+                "path_excludes": [],
+                "build_command": "npm run build",
+                "deploy_command": "npx wrangler deploy",
+            }]))
+        }
+        ["accounts", a, "builds", "workers", t, "builds"]
+            if *a == acct && *t == FAKE_SCRIPT_TAG =>
+        {
+            Some(serde_json::json!([{
+                "build_uuid": FAKE_BUILD,
+                "status": "stopped",
+                "build_outcome": "success",
+                "created_on": "2026-10-17T00:00:00Z",
+                "build_trigger_metadata": {
+                    "branch": "work/1234-abcd",
+                    "commit_hash": "0123abc",
+                    "build_trigger_source": "push_event",
+                },
+            }]))
+        }
+        ["accounts", a, "builds", "builds", b] if *a == acct && *b == FAKE_BUILD => {
+            Some(serde_json::json!({"build_uuid": FAKE_BUILD, "status": "stopped"}))
+        }
+        ["accounts", a, "builds", "builds", b, "logs"] if *a == acct && *b == FAKE_BUILD => {
+            Some(match req.query.get("cursor").map(String::as_str) {
+                None => serde_json::json!({
+                    "lines": [[1, "Cloning repository..."]],
+                    "truncated": true,
+                    "cursor": "page+2/of=2",
+                }),
+                Some("page+2/of=2") => serde_json::json!({
+                    "lines": [[2, "Success: Build command completed"]],
+                    "truncated": false,
+                }),
+                Some(_) => return None,
+            })
+        }
+        ["accounts", a, "pages", "projects"] if *a == acct => Some(serde_json::json!([])),
+        ["accounts", a, "pages", "projects", _, "deployments"] if *a == acct => {
+            Some(serde_json::json!([]))
+        }
+        _ => None,
+    }
 }
 
 fn main() {
