@@ -75,6 +75,9 @@ sync_mirror() {
     [ -n "$want" ] || die3 "no-source-digest"
     if [ ! -d "$mirror/.git" ]; then
         mkdir -p "$(dirname "$mirror")"
+        # World-readable: gate fixtures source repo files as an unprivileged
+        # user (920-tqhs runs `runuser -u nobody`), as they can from /mnt/c.
+        chmod 0755 "$(dirname "$mirror")"
         echo "[wsl2-src-mirror] first run: cloning $src into $mirror (one-time pack copy)" >&2
         git clone -q --no-checkout "$src" "$mirror"
     fi

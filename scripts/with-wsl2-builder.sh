@@ -382,7 +382,10 @@ SCRIPT_REL="$(realpath --relative-to="$(pwd)" "$0")"
 # TILLANDSIAS_WSL2_SRC_MIRROR=1). From /mnt/c every source read crosses 9p
 # onto NTFS: on yolanda the expert-groundtruth litmus timed out at its 120 s
 # budget from /mnt/c and passed from an ext4 clone of the same tree. The copy
-# lives at /root/.cache/tillandsias-wsl2-src/<repo>. scripts/wsl2-src-mirror.sh
+# lives at /srv/tillandsias-wsl2-src/<repo>, NOT under /root: gate fixtures
+# drop to an unprivileged user (runuser -u nobody) and source repo files, and
+# /root is 0700 (populate_hot_paths, 920-tqhs, red from /root, measured).
+# scripts/wsl2-src-mirror.sh
 # syncs it per run and REFUSES unless its gate-stamp digest equals the one
 # computed here on the source side, the digest the pre-push hook checks, so the
 # stamp a mirror run writes is one this checkout accepts; writeback then copies
@@ -402,7 +405,7 @@ if [[ "${TILLANDSIAS_WSL2_SRC_MIRROR:-}" == 1 && "${TILLANDSIAS_WSL2_SRC_IN_TREE
 fi
 if [[ "$_w2_mirror" == 1 ]]; then
     _w2_src_linux="/mnt$(cygpath -u "$PWD_WIN")"
-    _w2_mirror_dir="/root/.cache/tillandsias-wsl2-src/$REPO_BASENAME"
+    _w2_mirror_dir="/srv/tillandsias-wsl2-src/$REPO_BASENAME"
     _w2_want="$(bash scripts/gate-stamp.sh compute)" || {
         echo "[wsl2-builder] refused:wsl2-src-mirror:no-source-digest — scripts/gate-stamp.sh compute failed on this checkout; re-run with TILLANDSIAS_WSL2_SRC_IN_TREE=1 to build in-tree" >&2
         exit 1
