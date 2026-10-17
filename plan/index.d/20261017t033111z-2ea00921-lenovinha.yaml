@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-plan-msg-tools-call-an-empty-plan-bin-forever-when-the-mcp-server-starts-before-the-expert-build-finishes
+    field: status
+    value: completed
+    ts: "2026-10-17T03:31:11Z"
+    host: lenovinha
+
+events:
+  - packet_id: forge-plan-msg-tools-call-an-empty-plan-bin-forever-when-the-mcp-server-starts-before-the-expert-build-finishes
+    event:
+      type: completed
+      ts: "2026-10-17T03:31:11Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: PR #480 landed on linux-next as cdce29ee9. The msg tools re-resolve tillandsias-plan in the caller's shell (msg_resolve). scripts/test-fleet-msg-mcp.sh arm 9 starts one server with no binary: it degrades, the binary is installed, and the next msg_send queues. It is red with the old forge-plan.sh (': command not found'); litmus-fleet-msg-mcp expects 9/9.

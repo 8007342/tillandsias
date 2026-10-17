@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-17, at the coordinator's request (macuahuitl-fedora), from an operator live finding.
+packets:
+  - packet_id: one-shared-project-name-to-host-label-function-feeds-the-router-the-preview-cert-publish-local-and-browser-open-so-a-project-named-devxsd-gamejam-gets-a-local-preview
+    order: 1763-nc9d
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [local-web-preview, router, tls, browser-open, onboarding, naming]
+    estimated_hours: 6
+    related: [1761-bvyn, 1118-dwgx, 1725-wkfl, 1649-xqet]
+    owned_files:
+      - crates/tillandsias-browser-mcp/src/host_label.rs
+      - crates/tillandsias-browser-mcp/src/allowlist.rs
+      - crates/tillandsias-headless/src/local_web_preview.rs
+      - crates/tillandsias-headless/src/browser_open.rs
+    title: |
+      A project with uppercase letters or an underscore in its name (github.com/8007342/DEVxSD_gameJam) gets a local web preview: one shared project-name → host-label function lowercases, maps invalid characters to '-', and caps each label at 63, and the router route, the preview leaf's CN/SAN and file names, publish_local's URL and browser.open's allowlist and host map all read it; a mapped name that collides with another known project is refused by name
+    context: |
+      LIVE (operator, relayed by the coordinator, 2026-10-17): Codex in a forge for github.com/8007342/DEVxSD_gameJam could not open the local web preview.
+      SOURCE READ on linux-next (to be confirmed by the red fixture):
+        - local_web_preview.rs validate_components requires every dot-part of the RAW project to be [A-Za-z0-9-], so '_' refuses every publish_local, status, stop and reload with "live_worktree_unavailable: lane identity is not safely addressable" (hypothesis b).
+        - Even without the '_', url(), preview_hosts(), prepare_tls's CN/SAN, the cert file names, the RouterRoute subdomain and browser_open's host_resolver_rules all interpolate the raw name. The SAN would be minted mixed-case (hypothesis c).
+        - tillandsias-browser-mcp allowlist::validate_with_preview compares the URL's host project, which Url::parse has lowercased, to the RAW lane label for exact equality, so browser.open refuses ProjectMismatch for any uppercase name (hypothesis a).
+      The lane identity (forge container name, /home/forge/src/<project>, locks, the mirror) stays the RAW name; podman names accept it. Only the host boundary maps.
+      main.rs project_label_from_path already normalizes the same way for the observatorium; it is the model, not yet the shared function.
+      1761-bvyn (lenovinha, name-constrained CA): every label stays under .localhost, which this row never changes.
+    exit_criteria:
+      - "one pure function (tillandsias_browser_mcp::host_label::project_host_label) maps a project name to its host label: per dot-separated part, ASCII lowercase; every character outside [a-z0-9] becomes '-', runs collapse, and leading or trailing '-' trim; each part caps at 63 with no trailing '-'; an empty part or a label over 200 refuses by name"
+      - "every host-boundary caller reads it: local_web_preview url/preview_hosts/prepare_tls/cert file names/route subdomains and lookups, browser_open host_resolver_rules and the WebKit host map, and allowlist::validate_with_preview's project comparison"
+      - "COLLISION: a mapped name (label != raw) whose label equals another known project's raw name or label refuses publish_local with why and remedy; an already-valid name is never the one refused"
+      - "FIXTURE red on today's code: DEVxSD_gameJam resolves to devxsd-gamejam from every caller (URL, SAN, route, resolver rule, allowlist), and the leaf's SAN names www.devxsd-gamejam.localhost; NEGATIVE CONTROL: an already-valid lowercase name (acme, macron.dev, tillandsias.org) is byte-identical"
+      - "LIVE (stable release, the regular way): publish_local from a forge for DEVxSD_gameJam serves https://www.devxsd-gamejam.localhost:<port>/ and browser.open opens it"
+    verifiable_closure: "cargo test -p tillandsias-browser-mcp host_label passes, and cargo test -p tillandsias-headless preview_host_label passes (red on linux-next before the fix)"
+    next_action: >
+      Add host_label.rs to tillandsias-browser-mcp with its table test; route every host-boundary caller through it; write the red fixture first and show it red on linux-next.
+    events:
+      - type: filed
+        ts: "2026-10-17T04:30:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Filed and claimed at the coordinator's request, p1, from the operator's live finding (DEVxSD_gameJam had no preview). Source read: '_' refuses at validate_components, and uppercase misses at browser.open's allowlist and mints a mixed-case SAN. The fix is one shared label function at the host boundary.

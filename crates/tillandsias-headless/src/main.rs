@@ -148,7 +148,7 @@ pub mod cloudflare_names;
 // `pub` so the redirect-receiver packet (1505-kc5f) and the rotation
 // scheduler (siblings under 1505-sm2j) can reach it.
 pub mod cloudflare_oauth;
-// @trace order:1505-kc5f — `--cloudflare-login [--via loopback|qr|paste]` and
+// @trace order:1505-kc5f — `--cloudflare-login [--via device|loopback|qr|paste]` and
 // `--cloudflare-logout`: the three redirect receivers over cloudflare_oauth,
 // storing through the 1505-iysn Vault functions. Needs Vault, so `vault`-gated.
 #[cfg(feature = "vault")]
@@ -1726,7 +1726,7 @@ fn print_usage(version: &str) {
     println!("       tillandsias --status-check [--debug]");
     println!("       tillandsias --swap on|off|status [--prefix DIR] [--user NAME]");
     println!("       tillandsias --github-login [--with-token] [--debug]");
-    println!("       tillandsias --cloudflare-login [--via loopback|qr|paste] [--debug]");
+    println!("       tillandsias --cloudflare-login [--via device|loopback|qr|paste] [--debug]");
     println!("       tillandsias --msg-serve [--once]");
     println!("       tillandsias --cloudflare-logout [--debug]");
     println!("       tillandsias --refresh-github-token [--debug]");
@@ -14634,7 +14634,7 @@ fn launch_observatorium_browser(
         })?;
     let profile_path = profile_dir.keep();
 
-    let project_label = project_name.to_string();
+    let project_label = router_host_label(project_name);
     let otp = tillandsias_otp::issue_session(&project_label);
     let origin_url = observatorium_origin_url(project_name, router_host_port);
     let login_url = tillandsias_otp::build_login_data_url(&origin_url, &otp);
@@ -15727,7 +15727,18 @@ fn run_opencode_mode(
     })
 }
 
+/// Order 1763-nc9d: a project's name in a router host (`<service>.<label>
+/// .localhost`). The one mapping local_web_preview and browser.open's
+/// allowlist read, so the route, the URL and the sidecar's Host-derived
+/// project agree for a name like `DEVxSD_gameJam` (→ `devxsd-gamejam`).
+/// An already-valid name is unchanged.
+fn router_host_label(project_name: &str) -> String {
+    tillandsias_browser_mcp::host_label::project_host_label(project_name)
+        .unwrap_or_else(|_| project_name.to_ascii_lowercase())
+}
+
 fn project_service_url(service_name: &str, project_name: &str, host_port: u16) -> String {
+    let project_name = router_host_label(project_name);
     // The router publishes :8080 in-container to host_port via
     // `127.0.0.1:host_port:8080`. host_port is normally 80 (privileged) or
     // 8080 (fallback) per select_router_host_port(); rootless containers
@@ -16702,7 +16713,7 @@ fn launch_opencode_web_browser(
     // The label must match what the router-sidecar extracts from the Host
     // header (`extract_project_label("opencode.<project>.localhost")` →
     // `"<project>"`), otherwise `/validate` and `/_auth/login` both 401.
-    let project_label = project_name.to_string();
+    let project_label = router_host_label(project_name);
     let otp = tillandsias_otp::issue_session(&project_label);
     let login_url = tillandsias_otp::build_login_data_url(&url, &otp);
     let spec = build_opencode_web_browser_spec(
@@ -17168,7 +17179,7 @@ pub(crate) fn run_opencode_web_mode(
         // --port 4096` (see images/default/entrypoint-forge-opencode-web.sh:142), so the
         // router upstream must target 4096 — not 8080, which is the router's own listener.
         let route = RouterRoute::new(
-            format!("opencode.{}", project_name),
+            format!("opencode.{}", router_host_label(project_name)),
             forge_container_name(project_name),
             4096u16,
         );
@@ -33075,6 +33086,45 @@ esac
         assert_eq!(
             args.last().map(|s| s.as_str()),
             Some("tillandsias-web:v1.2.3")
+        );
+    }
+
+    /// Order 1763-nc9d: the OpenCode Web route, its URL and its session
+    /// label all name the project by its host label, the value the router
+    /// sidecar derives from the (lowercased) Host header.
+    #[test]
+    fn opencode_web_names_the_project_by_its_host_label() {
+        assert_eq!(router_host_label("DEVxSD_gameJam"), "devxsd-gamejam");
+        assert_eq!(
+            opencode_web_url("DEVxSD_gameJam", 8080),
+            "http://opencode.devxsd-gamejam.localhost:8080/"
+        );
+        // NEGATIVE CONTROL: a valid name is unchanged.
+        assert_eq!(
+            opencode_web_url("tillandsias.org", 80),
+            "http://opencode.tillandsias.org.localhost/"
+        );
+        let source = std::fs::read_to_string(
+            std::path::PathBuf::from(
+                std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+            )
+            .join("src/main.rs"),
+        )
+        .expect("main.rs readable");
+        // Needles are split so this test's own text cannot match them.
+        assert!(source.contains(concat!(
+            "format!(\"opencode.{}\", router_host",
+            "_label(project_name))"
+        )));
+        assert_eq!(
+            source
+                .matches(concat!(
+                    "let project_label = router_host",
+                    "_label(project_name);"
+                ))
+                .count(),
+            2,
+            "both session labels (OpenCode Web and the observatorium) use the host label"
         );
     }
 

@@ -139,7 +139,9 @@ fi
 # a slash would make the name ambiguous to parse back. Freezes are declared on
 # trunk-shaped branches; refuse rather than mis-parse.
 case "$BRANCH" in
-    */*) echo "refused:freeze:usage:branch '$BRANCH' contains a slash; freezes are declared on trunk-shaped branches"; exit 2 ;;
+    */*) echo "refused:freeze:usage:branch '$BRANCH' contains a slash; freezes are declared on trunk-shaped branches"
+         printf '  why: the marker ref encodes <branch>/<host>/<epoch>, so a slash in the branch could not be parsed back\n  remedy: freeze the trunk-shaped branch the cut gates (usually linux-next)\n' >&2
+         exit 2 ;;
 esac
 
 _host() {
@@ -283,9 +285,7 @@ COMMITS
 case "$CMD" in
     status)
         rc=0; out="$(_markers)" || rc=$?
-        if [ "$rc" -ne 0 ]; then
-            echo "refused:freeze:unreachable:git ls-remote $REMOTE failed or timed out"; exit 1
-        fi
+        if [ "$rc" -ne 0 ]; then _ls_unreachable; exit 1; fi
         if [ -z "$out" ]; then
             rc=0; out="$(_landings)" || rc=$?
             if [ "$rc" -ne 0 ]; then _ls_unreachable; exit 1; fi
@@ -308,13 +308,18 @@ case "$CMD" in
         ;;
     set)
         rc=0; out="$(_markers)" || rc=$?
-        [ "$rc" -eq 0 ] || { echo "refused:freeze:unreachable:git ls-remote $REMOTE failed or timed out"; exit 1; }
+        [ "$rc" -eq 0 ] || { _ls_unreachable; exit 1; }
         if [ -n "$out" ]; then
             echo "ok:freeze-already:$(printf '%s\n' "$out" | head -1 | cut -f2)"; exit 0
         fi
         rc=0; tip="$(_t 10 git ls-remote "$REMOTE" "refs/heads/$BRANCH" 2>/dev/null | cut -f1)" || rc=$?
-        [ "$rc" -eq 0 ] || { echo "refused:freeze:unreachable:git ls-remote $REMOTE failed or timed out"; exit 1; }
-        [ -n "$tip" ] || { echo "refused:freeze:no-such-branch:$BRANCH"; exit 1; }
+        [ "$rc" -eq 0 ] || { _ls_unreachable; exit 1; }
+        if [ -z "$tip" ]; then
+            echo "refused:freeze:no-such-branch:$BRANCH"
+            _afford "$REMOTE has no branch $BRANCH, so there is no tip to freeze" \
+                "name the branch the cut gates (usually linux-next): scripts/release-freeze.sh set <branch>"
+            exit 1
+        fi
         ref="$NS/$BRANCH/$(_host)/$(date -u +%s)"
         # 1422-fvce: the tip comes from ls-remote, so when the branch moved since
         # this clone last fetched, the object is not local and `git push` cannot
@@ -324,12 +329,18 @@ case "$CMD" in
         if ! git cat-file -e "$tip^{commit}" 2>/dev/null; then
             rc=0; err="$(_t 30 git fetch --quiet "$REMOTE" "refs/heads/$BRANCH" 2>&1)" || rc=$?
             if [ "$rc" -ne 0 ] || ! git cat-file -e "$tip^{commit}" 2>/dev/null; then
-                echo "refused:freeze:unreachable:could not fetch $BRANCH@${tip:0:12} from $REMOTE: $(_git_reason "$err")"; exit 1
+                echo "refused:freeze:unreachable:could not fetch $BRANCH@${tip:0:12} from $REMOTE: $(_git_reason "$err")"
+                _afford "the marker must point at $BRANCH's tip, and this clone could not fetch it, so no freeze was declared" \
+                    "fix what git said above (network or credentials for $REMOTE), then re-run scripts/release-freeze.sh set $BRANCH; until then the branch is NOT frozen"
+                exit 1
             fi
         fi
         rc=0; err="$(_t 30 git push --quiet "$REMOTE" "$tip:$ref" 2>&1)" || rc=$?
         if [ "$rc" -ne 0 ]; then
-            echo "refused:freeze:unreachable:could not push the marker to $REMOTE: $(_git_reason "$err")"; exit 1
+            echo "refused:freeze:unreachable:could not push the marker to $REMOTE: $(_git_reason "$err")"
+            _afford "$REMOTE refused the freeze marker push, so no freeze was declared" \
+                "fix what git said above (credentials, or a pre-push refusal), then re-run scripts/release-freeze.sh set $BRANCH; until then the branch is NOT frozen"
+            exit 1
         fi
         # The re-freeze after a land (1265-8qr6): the landing marker goes only
         # now, AFTER the freeze marker is on origin, so the set is never empty.
@@ -366,7 +377,10 @@ case "$CMD" in
         ref="$LNS/$BRANCH/$(_host)/$(date -u +%s)"
         rc=0; err="$(_t 30 git push --quiet "$REMOTE" "$sha:$ref" 2>&1)" || rc=$?
         if [ "$rc" -ne 0 ]; then
-            echo "refused:freeze:unreachable:could not push the landing marker to $REMOTE (the freeze still stands): $(_git_reason "$err")"; exit 1
+            echo "refused:freeze:unreachable:could not push the landing marker to $REMOTE (the freeze still stands): $(_git_reason "$err")"
+            _afford "$REMOTE refused the landing marker push; the freeze marker was left in place, so the branch is still frozen and still refuses this land" \
+                "fix what git said above, then re-run scripts/release-freeze.sh land $BRANCH"
+            exit 1
         fi
         rc=0; _delete_all "$out" >/dev/null || rc=$?
         if [ "$rc" -ne 0 ]; then

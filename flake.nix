@@ -118,9 +118,15 @@
         # Making it a `preBuild` closes the class rather than the instance: the
         # sidecar derivation becomes a dependency edge, so it is impossible to
         # build these binaries without it, on any host, in any lane.
-        stageRouterSidecar = ''
+        # ORDER 1756-z3kz: parameterised by the sidecar derivation, like
+        # stagePlanBin, so each binary embeds the sidecar for its OWN target.
+        # This was the x86_64 sidecar for every binary, so the aarch64 headless
+        # embedded an x86-64 router sidecar and an aarch64 host's router
+        # container hit an exec-format error (measured on v56.10.16.2 with
+        # scripts/lua/check-embedded-elf-arch.lua: mismatch=1:x86_64@12384266).
+        stageRouterSidecar = sidecar: ''
           install -Dm0755 \
-            ${tillandsias-router-sidecar-x86_64-musl}/bin/tillandsias-router-sidecar \
+            ${sidecar}/bin/tillandsias-router-sidecar \
             images/router/tillandsias-router-sidecar
         '';
 
@@ -183,7 +189,7 @@
             version = "0.0.0";
             CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
             cargoExtraArgs = "--bin tillandsias --features tray";
-            preBuild = stageRouterSidecar + stagePlanBin tillandsias-plan-x86_64-musl;
+            preBuild = stageRouterSidecar tillandsias-router-sidecar-x86_64-musl + stagePlanBin tillandsias-plan-x86_64-musl;
           });
 
         tillandsias-headless-x86_64-musl =
@@ -199,7 +205,7 @@
             version = "0.0.0";
             CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
             cargoExtraArgs = "-p tillandsias-headless --bin tillandsias --features listen-vsock";
-            preBuild = stageRouterSidecar + stagePlanBin tillandsias-plan-x86_64-musl;
+            preBuild = stageRouterSidecar tillandsias-router-sidecar-x86_64-musl + stagePlanBin tillandsias-plan-x86_64-musl;
           });
 
         tillandsias-headless-aarch64-musl =
@@ -222,7 +228,7 @@
             version = "0.0.0";
             CARGO_BUILD_TARGET = "aarch64-unknown-linux-musl";
             cargoExtraArgs = "-p tillandsias-headless --bin tillandsias --features listen-vsock";
-            preBuild = stageRouterSidecar + stagePlanBin tillandsias-plan-aarch64-musl;
+            preBuild = stageRouterSidecar tillandsias-router-sidecar-aarch64-musl + stagePlanBin tillandsias-plan-aarch64-musl;
             # aarch64-musl cross toolchain (ring's build.rs + linker).
             depsBuildBuild = [ crossPkgs.stdenv.cc ];
             CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER = aarch64Cc;
@@ -251,6 +257,25 @@
             CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
             cargoExtraArgs = "-p tillandsias-router-sidecar --bin tillandsias-router-sidecar --features unix-only";
           });
+
+        # ORDER 1756-z3kz: the aarch64 sidecar the aarch64 headless embeds and the
+        # release publishes, built with the same cross toolchain as
+        # tillandsias-plan-aarch64-musl (pkgsCross.aarch64-multiplatform-musl).
+        sidecarAarch64Args = {
+          CARGO_BUILD_TARGET = "aarch64-unknown-linux-musl";
+          cargoExtraArgs = "-p tillandsias-router-sidecar --bin tillandsias-router-sidecar --features unix-only";
+          depsBuildBuild = [ crossPkgs.stdenv.cc ];
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER = aarch64Cc;
+          CC_aarch64_unknown_linux_musl = aarch64Cc;
+          AR_aarch64_unknown_linux_musl = aarch64Ar;
+          TARGET_CC = aarch64Cc;
+          HOST_CC = "${pkgs.stdenv.cc}/bin/cc";
+        };
+        tillandsias-router-sidecar-aarch64-musl = craneLib.buildPackage (commonCraneArgs // sidecarAarch64Args // {
+          cargoArtifacts = craneLib.buildDepsOnly (commonCraneArgs // sidecarAarch64Args);
+          pname = "tillandsias-router-sidecar-aarch64";
+          version = "0.0.0";
+        });
 
         # Local files — changing these triggers rebuild
         forgeEntrypoint = ./images/default/entrypoint.sh;
@@ -360,6 +385,7 @@
                   tillandsias-headless-x86_64-musl
                   tillandsias-headless-aarch64-musl
                   tillandsias-router-sidecar-x86_64-musl
+                  tillandsias-router-sidecar-aarch64-musl
                   tillandsias-plan-x86_64-musl
                   tillandsias-plan-aarch64-musl;
 

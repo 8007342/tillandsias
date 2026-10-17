@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-17, on the operator's own approval in this host's session ("I approve"), after the coordinator (macuahuitl-fedora) relayed the ruling and design.
+packets:
+  - packet_id: forge-agents-read-the-operators-cloudflare-account-through-a-host-side-get-only-mcp-allowlist-that-holds-the-vault-stored-sign-in-itself-so-the-token-never-enters-the-forge-a-tool-result-a-log-or-an-error
+    order: 1772-irs3
+    status: in_progress
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [cloudflare, mcp, credentials, vault, forge, security, workers-builds, read-only]
+    estimated_hours: 12
+    related: [1758-wdvf, 1770-z575, 1505-kc5f, 1718-adra]
+    owned_files:
+      - crates/tillandsias-headless/src/cloudflare_mcp.rs
+      - crates/tillandsias-headless/src/mcp_socket.rs
+    title: |
+      Forge agents launched by the operator's own tray get read-only Cloudflare MCP tools (accounts/zones, workers scripts and settings, Workers Builds triggers, builds and logs, deployments) through a host-side server that reads and refreshes the Vault-stored sign-in itself; every tool is a named GET on an allowlist, a non-GET is refused before sending, the first tool probes which scopes the grant carries, and the token never appears in the forge, a result, a log or an error
+    context: |
+      OPERATOR APPROVAL: given directly in tlatoanis-macbook-air's session, 2026-10-17 ("I approve"), for the design the coordinator relayed. The coordinator's relay alone did not count, because this crosses a security boundary (a forge gains the use of the operator's stored Cloudflare sign-in, even read-only).
+      WHY: diagnostics like "why does the observatorium build on every push" should need no manual dashboard work.
+      DESIGN (the coordinator's, plus one change from this host):
+        - Shape: host-side MCP, the host-browser-mcp pattern, on the lane's existing tool socket (mcp_socket.rs). The host process reads the bundle from Vault (VaultCloudflareTokenStore) and refreshes it (the 1719 rotation path); the forge only names a tool.
+        - Allowlist, GET only: accounts list; zones list; workers scripts list and get settings; Workers Builds triggers (with branch and path filters), builds (branch, commit, trigger, duration), a build's log (paged by cursor while truncated); pages/workers deployments list. No generic endpoint tool.
+        - Any non-GET is refused before it is sent; a fixture proves a POST/PUT/DELETE path is refused.
+        - Scope probe: the first tool reports which allowlisted calls the stored grant permits; a missing one is refused:cloudflare-mcp:scope-missing:<scope> with the remedy (re-run Cloudflare Login with the scope added).
+        - Redaction: a fake token string appears in no tool output, including error paths.
+        - Exposure: only lanes launched by the operator's own tray. CHANGE FROM THIS HOST: the account is bound to the tray, never to anything a forge passes. The account_id stored with the bundle (or the one the scope probe resolves) is the only account any tool reaches; a forge-supplied account id is refused.
+    exit_criteria:
+      - "cloudflare_mcp.rs exposes the named GET tools on the lane's MCP socket; each maps to one fixed Cloudflare API path template with only the tray-bound account id and validated ids/cursors interpolated; there is no tool that takes a path or method"
+      - "a non-GET (POST/PUT/PATCH/DELETE) is refused before any request is sent: fixture against the fake Cloudflare (tillandsias-fake-cloudflare) with a request ledger showing nothing sent"
+      - "the scope probe names what the grant permits, and an allowlisted call whose scope is missing returns refused:cloudflare-mcp:scope-missing:<scope> plus the remedy"
+      - "REDACTION: with a fake token, the token string appears in no tool result, log line or error, including a 401, a network error and a malformed response"
+      - "BINDING: a tool call carrying another account id is refused; NEGATIVE CONTROL: the tray-bound account is served"
+      - "LIVE (stable release, the regular way): the operator's forge agent lists the observatorium's Workers Builds triggers and recent builds and explains why it builds on every push"
+    unscoreable: "unpinnable-until-the-guard-exists: the fixture lands in the same commit as cloudflare_mcp.rs (1136-n8sh); the live diagnosis needs the operator's forge and account"
+    next_action: >
+      When a WIP slot frees (#508/#509/#510): read mcp_socket.rs's tool dispatch and the browser-mcp allowlist pattern; write cloudflare_mcp.rs with the allowlist table, the GET-only client over the existing HttpClient seam, the scope probe and redaction; extend the fake with the Builds endpoints; add the fixture arms.
+    events:
+      - type: filed
+        ts: "2026-10-17T08:16:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Filed and claimed on the operator's own approval in this host's session (2026-10-17), on the coordinator's design: a host-side, GET-only Cloudflare MCP allowlist for tray-launched forges. This host adds that the account is bound to the tray, never to a forge's input. Starts when a WIP slot frees.

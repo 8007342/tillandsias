@@ -246,6 +246,8 @@ done
 
 if [ "$violations" -gt 0 ]; then
     echo "violation:salvage-refs-ledger:$violations"
+    echo "  why: $violations salvage-ledger line(s) name a ref that is gone from $REMOTE and carry no ' deleted' marker (each REFUSED line above names one)" >&2
+    echo "  remedy: append ' deleted' to each named line, or fetch and re-run where a line says the trunk copy could not be read" >&2
     exit 1
 fi
 if [ -n "${marker_on_trunk:-}" ]; then

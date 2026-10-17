@@ -60,7 +60,10 @@ Cloudflare offers no device grant (proposal, research §1). The flow:
    - **qr** (`--via qr`, default without a desktop session): the QR
      (`render_terminal_qr_in`, unchanged) encodes the authorize URL whose
      `redirect_uri` is the operator's relay page
-     `https://<relay-host>/tillandsias/cloudflare/callback`. The relay is a
+     `https://<relay-host>/cloudflare/callback` (1757-n45b: the operator's relay
+     is https://cloudflare.tillandsias.org/cloudflare/callback, static assets
+     only from the private repo 8007342/cloudflare.tillandsias.org, with NO
+     poll: the privacy policy says we store no data). The relay is a
      STATIC page: it reads `code` and `state` from its query string and
      shows them for paste. Optional second step (same packet, behind
      `TILLANDSIAS_CLOUDFLARE_RELAY_POLL_URL`): the page POSTs `(state, code)`

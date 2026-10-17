@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-17, at the coordinator's request (macuahuitl-fedora), operator-approved from the coordinator's gate review.
+packets:
+  - packet_id: a-tag-push-whose-commit-is-already-on-a-freshly-fetched-origin-main-skips-the-gate-stamp-and-its-scope-but-keeps-release-preflight-and-the-version-guard-and-the-release-runbook-matches-what-was-measured
+    order: 1768-2k56
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [release, pre-push, gate-stamp, tags, runbook]
+    estimated_hours: 4
+    related: [898-zhf3, 765-dt8h, 1521-y72e, 1265-8qr6]
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+      - scripts/test-gate-stamp-scope.sh
+      - scripts/promote-stable.sh
+      - skills/merge-to-main-and-release/SKILL.md
+    title: |
+      Pushing refs/tags/* that names a commit already on a freshly fetched origin/main is exempt from the gate stamp and its scope (release-preflight and the version guard still run; a tag on a commit NOT on main keeps the full gate), so promoting stable no longer costs a ~21-minute --check; and the release runbook's bump, back-merge and land-queue lines match what was measured
+    context: |
+      MEASURED by the coordinator (gate review, 2026-10-17): promoting v56.10.16.2 needed a full ~21-min ./build.sh --check only to push refs/tags/stable.
+      CAUSE: pre-push-local-gate.sh treats a tag like a branch. enforce_stamp_scope diffs old stable..new stable (three releases of change), so any scoped stamp refuses every promotion, and the tree the stamp hashes is the worktree, not the tag's.
+      WHY THE EXEMPTION IS SAFE: a commit on origin/main already passed the gate that landed it there; the tag uploads no new tree. release-preflight and pre-push-version-guard.sh stay (898-zhf3, tag before back-merge).
+      RUNBOOK (P8, measured by the coordinator): §4's bump changes VERSION only (not every Cargo.toml); §5's back-merge --check is a ~3 s memo hit, not a full gate; promotion needs an idle land queue (a promotion during a land run half-promoted, 2026-10-17).
+      KEEP: the stamp for branches; FULL on main and on gate-owning files; release-preflight on tags.
+    exit_criteria:
+      - "pre-push-local-gate.sh: an all-tag push (no deletions) whose every <sha>^{commit} is an ancestor of a freshly fetched <remote>/main exits 0 after release-preflight, before the stamp; a failed fetch, a mixed push or any tag off main falls through to the full gate"
+      - "scripts/test-gate-stamp-scope.sh: RED on today's hook, a stable-tag move to a main commit is refused under a scoped stamp; NEGATIVE CONTROL, a tag on a commit not on main is refused with no stamp; and a tag pushed beside a branch is not exempt"
+      - "promote-stable.sh's NEXT text and the merge-to-main-and-release runbook (§4 VERSION only, §5 memo hit, idle land queue before promotion) match the measurements"
+    verifiable_closure: "bash scripts/test-gate-stamp-scope.sh passes with the tag cases (red on linux-next before the fix)"
+    next_action: >
+      Add the tag arm before the plan-only lane in pre-push-local-gate.sh; add the fixture cases; fix promote-stable.sh's NEXT text and the runbook.
+    events:
+      - type: filed
+        ts: "2026-10-17T06:12:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Filed and claimed at the coordinator's request, p1, operator-approved from the coordinator's gate review. Promoting stable cost a full ~21-min gate because the hook stamped a tag like a branch.

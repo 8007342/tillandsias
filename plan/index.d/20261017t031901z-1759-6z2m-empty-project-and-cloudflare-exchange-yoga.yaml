@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga during the v56.10.16.2 prerelease smoke (2026-10-17), on the
+# coordinator's direction (macuahuitl-fedora): one live onboarding failure and
+# one operator-observed Cloudflare login refusal.
+# Report: plan/issues/v56-10-16-2-silverblue-smoke-yoga-2026-10-17.md
+packets:
+  - packet_id: a-forge-launched-on-a-local-empty-project-starts-the-agent-instead-of-refusing-an-unborn-head-clone
+    order: 1759-6z2m
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: M
+    pickup_role: any
+    capability_tags: [forge, git-mirror, onboarding]
+    related: [1705-bgen, 1706-f9gr]
+    depends_on: []
+    title: |
+      A forge launched on an empty local project (a plain empty directory, or a git init with no commits) refuses to start the agent because the mirror clone has an unborn HEAD, so the empty-project onboarding the operator will test never runs
+    context: |
+      Measured on yoga with the published v56.10.16.2 prerelease. `tillandsias . --opencode --prompt …` in either kind of empty directory exits 1 after the forge prints `git clone … produced an EMPTY checkout (no HEAD) after 12 attempts`, names it the unborn-HEAD mirror defect, and refuses to launch on an empty working tree. An empty project is the starting point of 1705-bgen's onboarding, so that row cannot pass its operator test on any build that carries this refusal. 1706-f9gr covers the GitHub-repo entry point to the same step; this row is the local one and needs no outward act to reproduce. The forge's guard treats every unborn HEAD as mirror damage; for a project that has never had a commit, an empty working tree on the default branch is the correct result.
+    exit_criteria:
+      - "in a forge launched on a plain empty directory and on a `git init` with no commits, the agent starts on an empty working tree on the default branch, and a first commit in the forge pushes back to the mirror (red today on v56.10.16.2)"
+      - "a mirror whose HEAD is unset while it holds commits is still refused, so the original guard keeps catching real mirror damage"
+    verifiable_closure: "scripts/test-forge-empty-project-starts.sh"
+    next_action: >
+      Read the forge entrypoint's empty-checkout guard and ensure-mirror-head (images/git/ensure-mirror-head.sh), tell "the repo has no commits" apart from "the mirror lost HEAD", and write the fixture red first against both cases.
+    provenance: |
+      Filed by yoga, 2026-10-17, from the v56.10.16.2 smoke.
+    events:
+      - type: filed
+        ts: "2026-10-17T03:19:01Z"
+        host: yoga
+        summary: |-
+          Empty local project → forge refuses an unborn-HEAD clone; onboarding unreachable.
+
+  - packet_id: a-cloudflare-login-connect-failure-on-the-code-exchange-retries-instead-of-refusing-the-user
+    order: 1759-3ezn
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    size: S
+    pickup_role: any
+    capability_tags: [cloudflare, auth]
+    related: [1719-83po]
+    depends_on: []
+    title: |
+      `tillandsias --cloudflare-login` showed the user `refused:cloudflare-login:exchange:transport-post-connect` on a transient connect failure of the token exchange; a second attempt succeeded
+    context: |
+      Operator-observed on yoga, 2026-10-17, from the terminal: the first attempt refused with transport-post-connect and stored nothing; the second stored secret/cloudflare/token and secret/cloudflare/refresh (expires_in 3600). The run logged nothing beyond the terminal.
+      The reason word reads like "failed after connecting" but is `transport-{method}-{kind}` built by `transport_error` in crates/tillandsias-headless/src/cloudflare_oauth.rs: method `post`, kind `connect`, i.e. reqwest `is_connect()` (DNS, TCP or TLS handshake failure). So far as that classification holds, the form carrying the single-use code was never sent, so retrying the same code is safe. A timeout or a body error after the request was written is not: the code may already be spent, and the right response there is to restart the flow.
+    exit_criteria:
+      - "against the fake token endpoint, a refused or dropped connection before the request is accepted on the first exchange completes on an automatic retry of the same code, with no refusal shown"
+      - "a failure after the request was sent (timeout, reset mid-response) restarts the PKCE flow with a new code instead of resending the spent one, and is still never shown to the user as a refusal on its first occurrence"
+    verifiable_closure: "cargo test -p tillandsias-headless cloudflare_oauth"
+    next_action: >
+      Confirm against reqwest/hyper that is_connect() is only ever set before the request bytes are written; then add the retry in `exchange` for that kind only, red test first through the HttpClient mock. Loop in the Mac (the module's author) on the restart-the-flow path.
+    provenance: |
+      Filed by yoga, 2026-10-17, from the operator's report relayed by macuahuitl-fedora.
+    events:
+      - type: filed
+        ts: "2026-10-17T03:19:01Z"
+        host: yoga
+        summary: |-
+          Cloudflare login refused on a transient connect failure; connect-kind is retry-safe.
+
+events:
+  - packet_id: a-forge-launched-on-a-brand-new-empty-github-repo-starts-commits-and-first-pushes-through-the-mirror
+    event:
+      type: note
+      ts: "2026-10-17T03:19:01Z"
+      host: yoga
+      summary: |-
+        MEASURED the clone step locally, no outward act needed: on v56.10.16.2 a forge on an empty local project refuses with "EMPTY checkout (no HEAD) after 12 attempts" (unborn-HEAD guard). The GitHub-empty-repo path almost certainly hits the same guard. Filed as 1759-6z2m; evidence in plan/issues/v56-10-16-2-silverblue-smoke-yoga-2026-10-17.md.
+  - packet_id: every-tray-has-a-cloudflare-login-item-that-opens-a-terminal-on-the-vm-running-cloudflare-login-like-github-login
+    event:
+      type: note
+      ts: "2026-10-17T03:19:01Z"
+      host: yoga
+      summary: |-
+        LIVE EVIDENCE (operator, yoga, 2026-10-17): Linux terminal `tillandsias --cloudflare-login` returned ok:cloudflare-login:stored with secret/cloudflare/token and secret/cloudflare/refresh, expires_in 3600 (second attempt; the first refused on a transient connect failure, filed as 1759-3ezn).

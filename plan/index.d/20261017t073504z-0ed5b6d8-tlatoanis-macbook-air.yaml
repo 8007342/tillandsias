@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: tillandsias-cloudflare-login-with-no-tray-running-starts-only-the-vault-enclave-before-the-browser-step-and-never-sends-the-user-to-a-full-init-image-rebuild
+    event:
+      type: progress
+      ts: "2026-10-17T07:35:04Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        PR #509 (work/1770-z575). The store's read now starts Vault alone (vault_up_or_start -> ensure_vault_running, the one Vault image), as its write already did; a failed start refuses vault-start-failed before the browser step. Login/logout remedies say 'start Tillandsias (the tray)', never --init. Source arm red on linux-next; seam arms with a negative control; test-cloudflare-login.sh NOVAULT bin arm against an argv-recording podman shows only the Vault image is asked for. Preflight rc=0 refused=0. Tray rotation remedies (cloudflare_rotation_remedy) still name --init: left, since they run inside a live tray.

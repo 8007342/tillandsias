@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga on the coordinator's ruling (macuahuitl-fedora, 2026-10-17):
+# 1722-2haw criterion 2 is not acceptable as measured; p1.
+packets:
+  - packet_id: a-container-browser-window-denies-the-microphone-at-once-with-no-prompt-and-no-audioinput-while-playback-still-reaches-the-host
+    order: 1767-5q4b
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: M
+    pickup_role: any
+    capability_tags: [browser, security, audio]
+    related: [1722-2haw]
+    depends_on: []
+    title: |
+      A container Chromium window lists an audioinput device and leaves getUserMedia({audio:true}) pending at a visible microphone prompt; sound out is wanted, microphone in must be denied by default with no prompt
+    context: |
+      MEASURED on yoga 2026-10-17, published v56.10.16.2, visible dev window on a static preview (1722-2haw live arm): getUserMedia({audio:true}) neither resolved nor rejected (window.__m stayed 'pending' after 5 s), navigator.permissions.query({name:'microphone'}) = 'prompt', and enumerateDevices() = ["audioinput:","audiooutput:"]. Playback works: a 440 Hz tone reached the host sink at -6 dBFS.
+      Defence today is one layer: the container's only audio path is a dedicated Pulse-protocol server that refuses record streams and module loads (crates/tillandsias-headless/src/host_audio.rs, host_audio_pulse.conf). The browser layer has none: no capture policy and no flag found in the launcher.
+      THE REAL THREAT, by source, not executed: browser.cdp (crates/tillandsias-browser-mcp/src/server.rs, handle_browser_cdp) forwards ANY CDP method for a dev-mode window, including at browser level (browser_level: true). So an agent can call Browser.grantPermissions {permissions:["audioCapture"]} and skip the prompt entirely. Unmeasured: whether a grant then yields a MediaStream, and whether that stream is silent because the Pulse server refuses the record stream, or carries host audio.
+    exit_criteria:
+      - "getUserMedia({audio:true}) in a container window rejects at once with NotAllowedError, with no prompt, and enumerateDevices lists no audioinput (red today: pending + prompt + audioinput listed)"
+      - "enforced at both layers: a Chromium policy or flag that denies audio capture, AND no capture source exposed (the Pulse server keeps refusing record streams), each with its own arm"
+      - "an agent cannot lift it: browser.cdp Browser.grantPermissions(audioCapture) (and Browser.setPermission microphone) is refused or has no effect, and getUserMedia still rejects afterwards (measure this arm first and record whether a grant yields a stream today)"
+      - "NEGATIVE CONTROL: playback still reaches the host sink (440 Hz tone measured on the default sink's monitor after a user gesture)"
+    verifiable_closure: "cargo test -p tillandsias-browser-mcp"
+    next_action: >
+      First measure the threat arm on a Linux host: browser.cdp {browser_level:true, method:"Browser.grantPermissions", params:{permissions:["audioCapture"]}}, then getUserMedia; record whether a stream arrives and whether it carries signal (host-side Pulse server log shows the refused record stream). Then the red arms: a launcher flag/policy test and a browser.cdp method refusal test, red first.
+    provenance: |
+      Filed by yoga, 2026-10-17, on the coordinator's p1 ruling.
+    events:
+      - type: filed
+        ts: "2026-10-17T05:49:44Z"
+        host: yoga
+        summary: |-
+          Container Chromium prompts for the microphone; browser.cdp can grant it. p1.

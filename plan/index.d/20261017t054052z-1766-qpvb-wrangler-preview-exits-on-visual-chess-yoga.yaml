@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga from the v56.10.16.2 live arms (1723-2fiq, 1725-5uue), 2026-10-17.
+packets:
+  - packet_id: publish-local-auto-on-a-wrangler-project-starts-the-wrangler-preview-or-keeps-the-exited-containers-logs-to-say-why
+    order: 1766-qpvb
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    size: M
+    pickup_role: any
+    capability_tags: [forge, web-preview, wrangler]
+    related: [1723-2fiq, 1625-6iwd]
+    depends_on: []
+    title: |
+      On visual-chess (wrangler.jsonc), publish_local {"runtime":"auto"} fails every time with `runtime_not_ready: managed runtime exited`, and the exited container is gone, so service_logs answers `not_running` and nobody can say why
+    context: |
+      MEASURED on yoga 2026-10-17 with published v56.10.16.2, a fresh OpenCode forge on visual-chess@497f976 after a green `npm ci` + `./build.sh --dev`: publish_local {"category":"WEB","runtime":"auto"} returned `MCP error -32000: runtime_not_ready: managed runtime exited` on 7 of 7 attempts across two rebuilds. service_status then said {"state":"stopped","last_failure":{"step":"ready","class":"timeout","reason":"runtime_not_ready: managed runtime exited","remedy":"host-retry","previous_preview_serving":false}}, and service_logs said `not_running: no preview container; publish_local first`. `podman ps -a` on the host held no preview container afterwards. runtime "static" published the same dist/ fine every time.
+      By source: auto selects the wrangler profile when a wrangler config is present (local_web_preview.rs), and ready_backend_inner returns "managed runtime exited" when the container's State.Status is not running inside the 30 s window; it reads the last 20 log lines only to look for remote_binding_forbidden and keeps nothing else. The remedy "host-retry" is wrong for a deterministic exit.
+    exit_criteria:
+      - "on a wrangler project (visual-chess, or a fixture with a wrangler.jsonc Worker), publish_local auto reaches a serving wrangler preview, or refuses with a reason that names what the runtime printed before it exited (red today: a bare 'managed runtime exited' every time)"
+      - "after a failed start, service_logs returns the exited container's last lines (or service_status carries a bounded, redacted tail), instead of not_running"
+      - "a deterministic exit is not classed as remedy host-retry"
+    verifiable_closure: "cargo test -p tillandsias-headless local_web_preview"
+    next_action: >
+      Reproduce on a Linux host: publish_local auto on visual-chess, capture `podman logs` of the web-wrangler container before it is removed (or run the same image and argv by hand), and name the exit cause; then keep a redacted tail on the failure path, red unit test first.
+    provenance: |
+      Filed by yoga, 2026-10-17, from the 1723-2fiq live arm.
+    events:
+      - type: filed
+        ts: "2026-10-17T05:40:52Z"
+        host: yoga
+        summary: |-
+          publish_local auto on visual-chess: wrangler runtime exits 7/7, logs discarded.
+
+events:
+  - packet_id: service-reload-finishes-or-names-why-not-instead-of-a-bare-podman-run-timeout
+    event:
+      type: note
+      ts: "2026-10-17T05:40:52Z"
+      host: yoga
+      summary: |-
+        LIVE ARM on yoga, published v56.10.16.2, visual-chess@497f976 (static runtime; auto fails, filed 1766-qpvb). Criterion 1 PASS with a caveat: marker.txt MARKER-A published, changed to MARKER-B, service_reload returned {"state":"running","serving":true} and service_status agreed; a cache-busted read (?cb=2) then showed MARKER-B. The FIRST read after the reload showed MARKER-A from the browser's HTTP cache, in a dev window with service_workers bypassed. Criterion 2 observed on the auto-runtime failure: service_status.last_failure named step "ready", class "timeout" and previous_preview_serving false. Not yet observed: a failure of service_reload itself.
+  - packet_id: a-dev-preview-window-never-shows-a-stale-build-without-saying-so
+    event:
+      type: note
+      ts: "2026-10-17T05:40:52Z"
+      host: yoga
+      summary: |-
+        LIVE ARM on yoga, published v56.10.16.2, visual-chess (network-first service worker). Criterion 1 PASS: dev window (service_workers.mode "bypassed"), service_stop, reload → chrome-error ERR_CONNECTION_CLOSED, never the cached build. Criterion 3 PASS: browser.open keep_service_worker:true replied service_workers.mode "active". Criterion 2 UNPROVEN, leaning red: the reply does say bypassed, but the app has no build stamp, and a marker read in the same kind of dev window returned the PRE-reload bytes from the HTTP cache until cache-busted. A dev window probably needs the HTTP cache disabled (CDP Network.setCacheDisabled) as well as service workers bypassed. Re-run with a stamped build.
