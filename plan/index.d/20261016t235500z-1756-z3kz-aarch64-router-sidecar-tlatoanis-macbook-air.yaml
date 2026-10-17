@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-16, from the 1291-38mt sidecar check, on the coordinator's ruling.
+packets:
+  - packet_id: the-static-aarch64-headless-embeds-an-x86_64-router-sidecar-so-its-router-container-cannot-run-on-an-aarch64-host-and-the-release-arch-check-reads-only-the-outer-binary
+    order: 1756-z3kz
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [aarch64, router, sidecar, nix, release, raspberry-pi]
+    estimated_hours: 4
+    related: [1291-38mt, 1269-6fcn, 723-sazx, 710-w9kc, 1750-a4re]
+    owned_files:
+      - flake.nix
+      - .github/workflows/release.yml
+    title: |
+      The published static aarch64 headless (tillandsias-headless-aarch64-unknown-linux-musl) embeds an x86_64 router sidecar, because flake.nix has no aarch64 sidecar derivation and the aarch64 headless's preBuild stages the x86_64 one; the release's `file | grep aarch64` reads only the outer binary, so it passes. Blocks 1291-38mt (the aarch64 install path)
+    context: |
+      READ at linux-next 3476bc5f0 by tlatoanis-macbook-air, stopping 1291-38mt at its sidecar check on the coordinator's instruction ("if the sidecar is missing for aarch64, say so on the row and stop there"):
+      (1) flake.nix defines only tillandsias-router-sidecar-x86_64-musl (:240). There is no aarch64 sidecar derivation.
+      (2) tillandsias-headless-aarch64-musl's preBuild is stageRouterSidecar (:225), which installs the x86_64-musl sidecar (:121-124) into images/router/tillandsias-router-sidecar. crates/tillandsias-headless/build.rs:106 embeds that file as a required runtime asset, and images/router/Containerfile:81 COPYs it into the router image. So the aarch64 headless's router image holds an x86_64 sidecar, which fails with an exec-format error on an aarch64 host without binfmt/qemu (a Pi 5).
+      (3) release.yml:277 asserts `file ...headless-aarch64... | grep -F aarch64`, which reads only the outer binary, never the asset it embeds.
+      (4) release.yml:706 (1269-6fcn) maps runner.arch ARM64 to tillandsias-router-sidecar-aarch64-unknown-linux-musl, but the Linux job publishes only the x86_64 sidecar (:267), so the mapping names an asset that does not exist.
+      Routed to lenovinha by the coordinator: it built the musl aarch64 derivation for tillandsias-plan in 1750-a4re (flake.nix tillandsias-plan-aarch64-musl, with the same cross toolchain).
+    exit_criteria:
+      - "flake.nix gains tillandsias-router-sidecar-aarch64-musl (same cargoExtraArgs as the x86_64 one, aarch64 cross toolchain as tillandsias-plan-aarch64-musl), and tillandsias-headless-aarch64-musl's preBuild stages THAT sidecar; the x86_64 headless and host binaries keep staging the x86_64 one"
+      - "the Linux release job publishes tillandsias-router-sidecar-aarch64-unknown-linux-musl beside the x86_64 one (signed and checksummed by the existing loop), so the 1269-6fcn ARM64 mapping resolves"
+      - "release.yml asserts the arch of the sidecar EMBEDDED in each headless, not only the outer binary: extract it (or assert on the derivation's staged file before embedding) and `file` it, x86_64 for the x86_64 headless, aarch64 for the aarch64 headless"
+      - "FAILING ARM, red today: that embedded-sidecar assertion run against the current tillandsias-headless-aarch64-unknown-linux-musl reports x86-64 and fails"
+      - "NEGATIVE CONTROL: the x86_64 host binary, the x86_64 headless and their embedded sidecar are byte-identical in arch and the x86_64 smoke is unchanged"
+    unscoreable: "the assertion runs in the release job on a Linux runner; a local `nix build` on a Linux host plus `file` on the embedded sidecar is the pre-merge evidence"
+    next_action: >
+      Add tillandsias-router-sidecar-aarch64-musl to flake.nix beside tillandsias-plan-aarch64-musl; make stageRouterSidecar take the sidecar derivation as a parameter (as stagePlanBin does) and pass the aarch64 one in the aarch64 headless; publish the asset in release.yml's Collect step; add the embedded-sidecar arch assertion and show it red on today's aarch64 headless first.
+    events:
+      - type: filed
+        ts: "2026-10-16T23:55:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Filed from the 1291-38mt sidecar check: the aarch64 headless embeds an x86_64 router sidecar, and no aarch64 sidecar is built or published. pickup linux, p1, blocks 1291-38mt; routed to lenovinha per the coordinator.
