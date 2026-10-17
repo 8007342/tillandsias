@@ -5931,8 +5931,20 @@ mod tests {
             // Host-service lifecycle tools, service_logs (1723-2fiq),
             // toolchain_prepare (1637-5765) and
             // the thirteen browser.* tools compose on this socket (the
-            // lifecycle family includes reload).
-            assert_eq!(resp["result"]["tools"].as_array().expect("tools").len(), 19);
+            // lifecycle family includes reload), beside the 1772-irs3
+            // cloudflare.* family.
+            let tools = resp["result"]["tools"].as_array().expect("tools");
+            let cloudflare = tools
+                .iter()
+                .filter(|t| {
+                    t["name"]
+                        .as_str()
+                        .is_some_and(|n| n.starts_with("cloudflare."))
+                })
+                .count();
+            #[cfg(feature = "vault")]
+            assert_eq!(cloudflare, crate::cloudflare_mcp::TOOLS.len() + 1);
+            assert_eq!(tools.len() - cloudflare, 19);
 
             drop(writer);
             drop(lines);
