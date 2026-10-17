@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-tray-that-stays-running-past-the-tillandsias-ca-renewal-window-never-rotates-the-ca-or-the-vault-leaf-so-it-serves-them-after-notafter
+    field: status
+    value: implemented
+    ts: "2026-10-17T15:43:12Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-tray-that-stays-running-past-the-tillandsias-ca-renewal-window-never-rotates-the-ca-or-the-vault-leaf-so-it-serves-them-after-notafter
+    event:
+      type: note
+      ts: "2026-10-17T15:43:12Z"
+      host: lenovinha
+      summary: |-
+        PR #511 landed on linux-next as ba588963f. The enclave CA and the Vault leaf live 365 days and are re-minted at launch when fewer than 60 days remain (openssl -checkend, not mtime). The hourly tray scheduler renews preview leaves within 48 h silently and warns once a day only if the CA or the Vault leaf is within 72 h. check-enclave-ca-not-host-trusted.lua keeps the unconstrained CA out of host trust stores. Unit arms are red with the old 25-day mtime rule. Open: the post-release arm, where a host holding the 30-day CA relaunches and reads notAfter about a year out on intermediate.crt and vault.crt, before 2026-10-29.
