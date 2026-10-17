@@ -192,6 +192,9 @@ pub struct Request {
     pub host_kind: HostKind,
     pub regime: String,
     pub caller: String,
+    /// What the child's environment adds to the base set (proc.run `env`, the
+    /// run verb's --env). The fixture rules read GIT_DIR/GIT_COMMON_DIR here.
+    pub env: Vec<(String, String)>,
 }
 
 // ── decision ────────────────────────────────────────────────────────────────
@@ -526,6 +529,45 @@ fn is_credential_mutation(argv: &[String]) -> Option<&'static str> {
         _ => {}
     }
     None
+}
+
+/// ORDER 1760-nn6u. The index of the program `argv` actually runs and the
+/// `NAME=value` assignments it runs under: `env [opts] [NAME=value]… prog …`
+/// or `NAME=value… prog …`. `None` when no program follows. Extra strictness
+/// is the safe side, so `env -i` still keeps the caller's additions.
+fn env_prefix(argv: &[String]) -> (Option<usize>, Vec<(String, String)>) {
+    let assignment = |w: &str| {
+        let (k, v) = w.split_once('=')?;
+        (!k.is_empty() && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+            .then(|| (k.to_string(), v.to_string()))
+    };
+    let mut i = 0;
+    if argv.first().is_some_and(|a| program_name(a) == "env") {
+        i = 1;
+        while let Some(a) = argv.get(i) {
+            match a.as_str() {
+                "-u" | "--unset" | "-C" | "--chdir" => i += 2,
+                "--" => {
+                    i += 1;
+                    break;
+                }
+                _ if a.starts_with('-') && a.len() > 1 => i += 1,
+                _ => break,
+            }
+        }
+    }
+    let mut env = Vec::new();
+    while let Some(kv) = argv.get(i).and_then(|w| assignment(w)) {
+        env.push(kv);
+        i += 1;
+    }
+    ((i < argv.len()).then_some(i), env)
+}
+
+/// Is `p` itself a git directory (a bare repository, or a `.git`)? The same
+/// shape git's own discovery accepts: HEAD, objects/ and refs/.
+fn is_git_dir(p: &Path) -> bool {
+    p.join("HEAD").is_file() && p.join("objects").is_dir() && p.join("refs").is_dir()
 }
 
 /// Lexically resolve `p` against `cwd` (no filesystem access: the target may
@@ -942,9 +984,19 @@ pub fn fixture_decide(req: &Request, scope: &FixtureScope) -> Option<Decision> {
             ),
         ));
     }
-    if prog == "git" {
-        let args = &req.argv[1..];
+    // ORDER 1760-nn6u: `env [-i] [NAME=value]… git …` and leading `NAME=value`
+    // words run git with those variables; judge the git they run.
+    let (git_at, mut env) = env_prefix(&req.argv);
+    if git_at.is_some_and(|i| program_name(&req.argv[i]) == "git") {
+        let args = &req.argv[git_at.unwrap_or(0) + 1..];
         let mut cwd = req.cwd.clone();
+        env.extend(req.env.iter().cloned());
+        let var = |name: &str| {
+            env.iter()
+                .rev()
+                .find(|(k, _)| k == name)
+                .map(|(_, v)| v.clone())
+        };
         let mut git_dir: Option<PathBuf> = None;
         let mut i = 0;
         let mut sub: Option<&str> = None;
@@ -957,7 +1009,20 @@ pub fn fixture_decide(req: &Request, scope: &FixtureScope) -> Option<Decision> {
                     }
                     i += 2;
                 }
-                "-c" | "--namespace" | "--exec-path" => i += 2,
+                "--git-dir" => {
+                    if let Some(p) = args.get(i + 1) {
+                        git_dir = Some(lexical_abs(&cwd, p));
+                    }
+                    i += 2;
+                }
+                // Value-taking options other than the two above: skipping only
+                // the flag read its VALUE as the subcommand, so the check below
+                // never ran (`git --work-tree /x update-ref` passed).
+                _ if GIT_VALUE_FLAGS.contains(&a)
+                    || matches!(a, "--exec-path" | "--config-env" | "--super-prefix") =>
+                {
+                    i += 2
+                }
                 _ if a.starts_with("--git-dir=") => {
                     git_dir = Some(lexical_abs(&cwd, &a["--git-dir=".len()..]));
                     i += 1;
@@ -969,11 +1034,22 @@ pub fn fixture_decide(req: &Request, scope: &FixtureScope) -> Option<Decision> {
                 }
             }
         }
+        // GIT_DIR names the repository like --git-dir (the flag wins); refs
+        // shared across worktrees live in GIT_COMMON_DIR, so it is checked too.
+        if git_dir.is_none() {
+            git_dir = var("GIT_DIR").map(|g| lexical_abs(&cwd, &g));
+        }
+        let common = var("GIT_COMMON_DIR").map(|g| lexical_abs(&cwd, &g));
         if let Some(s @ ("update-ref" | "push")) = sub {
-            let real = match &git_dir {
-                Some(g) => scope.git_dirs.contains(&resolve_for_compare(g)),
-                None => touches_real(&cwd),
-            };
+            let named_real = |g: &PathBuf| scope.git_dirs.contains(&resolve_for_compare(g));
+            let real = common.as_ref().is_some_and(named_real)
+                || match &git_dir {
+                    Some(g) => named_real(g),
+                    // A cwd that IS a git dir (a bare repo) is that repository;
+                    // walking up from it would find the checkout's `.git`.
+                    None if is_git_dir(&cwd) => named_real(&cwd),
+                    None => touches_real(&cwd),
+                };
             if real {
                 return Some(Decision::deny(
                     "fixture-writes-outside-scope",
@@ -1219,6 +1295,7 @@ pub fn check_cannot_loosen(
                 host_kind: k,
                 regime: "interactive".into(),
                 caller: "seed-load".into(),
+                env: Vec::new(),
             };
             if let Some(f) = floor_decide(&req, protected)
                 && f.strictness > r.decision
@@ -1922,6 +1999,7 @@ mod tests {
             host_kind: k,
             regime: "interactive".into(),
             caller: "test".into(),
+            env: Vec::new(),
         }
     }
     fn prot() -> Vec<String> {
@@ -2450,6 +2528,7 @@ mod tests {
             host_kind: HostKind::BareMetal,
             regime: "fixture".into(),
             caller: "test".into(),
+            env: Vec::new(),
         }
     }
 
@@ -2508,6 +2587,232 @@ mod tests {
         assert!(fixture_decide(&freq(&["git", "status"], &repo), &scope).is_none());
         assert!(fixture_decide(&freq(&["rm", "-f", ".git/index.lock"], &repo), &scope).is_some());
         assert!(fixture_decide(&freq(&["rm", "-rf", "scratch/tmp"], &repo), &scope).is_none());
+    }
+
+    // ORDER 1760-nn6u. Measured on yoga 2026-10-17: `--git-dir <dir>` (two
+    // arguments) and GIT_DIR in the child's environment wrote refs into the
+    // protected git dir while `-C` and `--git-dir=` were refused. Every way of
+    // telling git the directory must be judged the same.
+    fn freq_env(argv: &[&str], cwd: &Path, env: &[(&str, &str)]) -> Request {
+        let mut r = freq(argv, cwd);
+        r.env = env
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        r
+    }
+
+    #[test]
+    fn every_spelling_of_the_git_dir_is_judged_alike() {
+        let (_t, root, scope) = fixture_repo();
+        let inner = root.join("repo/scratch/inner");
+        let real = root.join("repo/.git");
+        let real_s = real.display().to_string();
+        let denied = |r: Request| {
+            fixture_decide(&r, &scope)
+                .map(|d| d.rule_id)
+                .unwrap_or_default()
+                == "fixture-writes-outside-scope"
+        };
+        let gd_eq = format!("--git-dir={real_s}");
+        let env_gd = format!("GIT_DIR={real_s}");
+        let env_cd = format!("GIT_COMMON_DIR={real_s}");
+        for (name, argv, env) in [
+            (
+                "-C",
+                vec!["git", "-C", "../..", "update-ref", "refs/x", "HEAD"],
+                vec![],
+            ),
+            (
+                "--git-dir=",
+                vec!["git", gd_eq.as_str(), "update-ref", "refs/x", "HEAD"],
+                vec![],
+            ),
+            (
+                "--git-dir <abs>",
+                vec![
+                    "git",
+                    "--git-dir",
+                    real_s.as_str(),
+                    "update-ref",
+                    "refs/x",
+                    "HEAD",
+                ],
+                vec![],
+            ),
+            (
+                "--git-dir <rel>",
+                vec![
+                    "git",
+                    "--git-dir",
+                    "../../.git",
+                    "update-ref",
+                    "refs/x",
+                    "HEAD",
+                ],
+                vec![],
+            ),
+            (
+                "--work-tree + --git-dir",
+                vec![
+                    "git",
+                    "--work-tree",
+                    "/tmp",
+                    "--git-dir",
+                    real_s.as_str(),
+                    "update-ref",
+                    "refs/x",
+                    "HEAD",
+                ],
+                vec![],
+            ),
+            (
+                "--work-tree hides the subcommand",
+                vec![
+                    "git",
+                    "--work-tree",
+                    "/tmp",
+                    "-C",
+                    "../..",
+                    "update-ref",
+                    "refs/x",
+                    "HEAD",
+                ],
+                vec![],
+            ),
+            (
+                "push via --git-dir <abs>",
+                vec!["git", "--git-dir", real_s.as_str(), "push", "origin", "x"],
+                vec![],
+            ),
+            (
+                "env GIT_DIR (request env)",
+                vec!["git", "update-ref", "refs/x", "HEAD"],
+                vec![("GIT_DIR", real_s.as_str())],
+            ),
+            (
+                "env GIT_COMMON_DIR (request env)",
+                vec!["git", "update-ref", "refs/x", "HEAD"],
+                vec![("GIT_COMMON_DIR", real_s.as_str())],
+            ),
+            (
+                "`env GIT_DIR=x git …`",
+                vec![
+                    "env",
+                    env_gd.as_str(),
+                    "git",
+                    "update-ref",
+                    "refs/x",
+                    "HEAD",
+                ],
+                vec![],
+            ),
+            (
+                "`env -i GIT_COMMON_DIR=x git …`",
+                vec![
+                    "env",
+                    "-i",
+                    env_cd.as_str(),
+                    "git",
+                    "update-ref",
+                    "refs/x",
+                    "HEAD",
+                ],
+                vec![],
+            ),
+            (
+                "`GIT_DIR=x git …` as argv",
+                vec![env_gd.as_str(), "git", "update-ref", "refs/x", "HEAD"],
+                vec![],
+            ),
+        ] {
+            assert!(
+                denied(freq_env(&argv, &inner, &env)),
+                "{name}: {argv:?} env={env:?} was not refused"
+            );
+        }
+        // The same spellings aimed at the fixture's OWN scratch repo are allowed.
+        let own = inner.join(".git").display().to_string();
+        let own_eq = format!("--git-dir={own}");
+        for argv in [
+            vec!["git", "update-ref", "refs/x", "HEAD"],
+            vec!["git", own_eq.as_str(), "update-ref", "refs/x", "HEAD"],
+            vec![
+                "git",
+                "--git-dir",
+                own.as_str(),
+                "update-ref",
+                "refs/x",
+                "HEAD",
+            ],
+            vec!["git", "--work-tree", "/tmp", "update-ref", "refs/x", "HEAD"],
+        ] {
+            assert!(
+                fixture_decide(&freq(&argv, &inner), &scope).is_none(),
+                "{argv:?}"
+            );
+        }
+        assert!(
+            fixture_decide(
+                &freq_env(
+                    &["git", "update-ref", "refs/x", "HEAD"],
+                    &inner,
+                    &[("GIT_DIR", own.as_str())]
+                ),
+                &scope
+            )
+            .is_none()
+        );
+        // A read is never refused, however the directory is named.
+        assert!(
+            fixture_decide(
+                &freq(&["git", "--git-dir", real_s.as_str(), "log"], &inner),
+                &scope
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn a_bare_scratch_repo_inside_the_checkout_is_the_fixtures_own() {
+        // The false positive: `git -C <bare repo>` was judged by walking up to
+        // the first `.git`, which for a bare repo is the CHECKOUT's.
+        let (_t, root, scope) = fixture_repo();
+        let bare = root.join("repo/scratch/mirror.git");
+        for d in ["objects", "refs"] {
+            std::fs::create_dir_all(bare.join(d)).unwrap();
+        }
+        std::fs::write(bare.join("HEAD"), "ref: refs/heads/main\n").unwrap();
+        let b = bare.display().to_string();
+        let repo = root.join("repo");
+        assert!(
+            fixture_decide(
+                &freq(
+                    &["git", "-C", b.as_str(), "update-ref", "refs/x", "HEAD"],
+                    &repo
+                ),
+                &scope
+            )
+            .is_none()
+        );
+        assert!(
+            fixture_decide(
+                &freq(&["git", "update-ref", "refs/x", "HEAD"], &bare),
+                &scope
+            )
+            .is_none()
+        );
+        // A plain directory inside the checkout still resolves to the real repo.
+        assert!(
+            fixture_decide(
+                &freq(
+                    &["git", "-C", "scratch", "update-ref", "refs/x", "HEAD"],
+                    &repo
+                ),
+                &scope
+            )
+            .is_some()
+        );
     }
 
     #[test]

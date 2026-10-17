@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-tag-push-whose-commit-is-already-on-a-freshly-fetched-origin-main-skips-the-gate-stamp-and-its-scope-but-keeps-release-preflight-and-the-version-guard-and-the-release-runbook-matches-what-was-measured
+    event:
+      type: progress
+      ts: "2026-10-17T06:27:22Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        PR #508 (work/1768-2k56). Section 1c: an all-tag push whose commits are on a freshly fetched main skips the stamp; release-preflight and the version guard still run. Fixture 14/14: case 11 was red on linux-next with the scoped-stamp refusal; cases 12 and 13 are the negative controls, each red under its mutation. promote-stable.sh names a half-promotion (refused:stable-tag-push-refused) instead of exiting silently under set -e. Runbook: bump is VERSION only; back-merge check is a ~3 s memo hit; promote with an idle land queue. Preflight rc=0 refused=0.

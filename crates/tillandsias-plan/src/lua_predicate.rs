@@ -247,7 +247,7 @@ pub(crate) fn prepare_shell(
     let cwd = default_cwd().map_err(|e| {
         mlua::Error::RuntimeError(format!("sh.run: cannot resolve effective cwd: {e}"))
     })?;
-    if let Some(d) = policy_gate(&argv, Some(&cwd), "sh.run") {
+    if let Some(d) = policy_gate(&argv, Some(&cwd), "sh.run", &[]) {
         return Err(mlua::Error::RuntimeError(format!(
             "{}\n  why: {}\n  remedy: {}",
             d.token,
@@ -272,6 +272,7 @@ pub fn policy_gate(
     argv: &[String],
     cwd: Option<&Path>,
     caller: &str,
+    env: &[(String, String)],
 ) -> Option<crate::command_policy::Decision> {
     use crate::command_policy as cp;
     let here = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -289,6 +290,7 @@ pub fn policy_gate(
         host_kind: cp::read_host_kind(&root).kind,
         regime,
         caller: caller.to_string(),
+        env: env.to_vec(),
     };
     let d = cp::decide_execution(
         &req,
@@ -322,6 +324,8 @@ pub(crate) struct ProcSnapshot {
     pub command: tillandsias_exec::Command,
     pub cwd: PathBuf,
     pub explicit_stdin: bool,
+    /// The `env` table's additions, for the policy decision (1760-nn6u).
+    pub env: Vec<(String, String)>,
 }
 
 // @trace order:1534-puyz
@@ -428,6 +432,7 @@ pub(crate) fn validate_proc(
     };
     cmd = cmd.current_dir(&cwd);
 
+    let mut env_added: Vec<(String, String)> = Vec::new();
     match spec.get::<LuaValue>("env")? {
         LuaValue::Nil => {}
         LuaValue::Table(t) => {
@@ -441,6 +446,7 @@ pub(crate) fn validate_proc(
                         "env names must be nonempty without NUL or '=', values without NUL".into(),
                     ));
                 }
+                env_added.push((k.clone(), v.clone()));
                 cmd = cmd.env(k, v);
             }
         }
@@ -514,6 +520,7 @@ pub(crate) fn validate_proc(
         command: cmd,
         cwd,
         explicit_stdin,
+        env: env_added,
     })
 }
 
@@ -523,9 +530,13 @@ pub(crate) fn authorize_proc(
     caller: &str,
 ) -> LuaResult<PreparedProc> {
     let ProcSnapshot {
-        argv, command, cwd, ..
+        argv,
+        command,
+        cwd,
+        env,
+        ..
     } = snapshot;
-    if let Some(d) = policy_gate(&argv, Some(&cwd), caller) {
+    if let Some(d) = policy_gate(&argv, Some(&cwd), caller, &env) {
         let t = lua.create_table()?;
         let echo = lua.create_table()?;
         for (i, a) in argv.iter().enumerate() {
@@ -749,6 +760,7 @@ fn fixture_write_guard(root: &Path, target: &Path, verb: &str) -> Result<(), mlu
         host_kind: cp::read_host_kind(root).kind,
         regime: "fixture".into(),
         caller: verb.to_string(),
+        env: Vec::new(),
     };
     cp::audit_decision(&req, &d, None);
     Err(mlua::Error::RuntimeError(format!(

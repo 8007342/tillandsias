@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-container-browser-window-denies-the-microphone-at-once-with-no-prompt-and-no-audioinput-while-playback-still-reaches-the-host
+    event:
+      type: progress
+      ts: "2026-10-17T06:11:51Z"
+      agent_id: linux-yoga-opus5-20261017t061151z
+      host: yoga
+      summary: |-
+        PR #507 work/1767-5q4b@7665a9e8b (non-draft). LIVE on yoga 2026-10-17 with the PR's chromium-framework image built locally under the v56.10.16.2 tag (restored afterwards): getUserMedia({audio:true}) NotAllowedError in 112 ms, no prompt; permissions.query(microphone)=denied; browser-level CDP Browser.grantPermissions(audioCapture) against the RELEASED browser-mcp returned {} yet getUserMedia still NotAllowedError (5 ms), so the managed policy holds against the grant; NEG control 440 Hz at -6 dBFS on the host sink. Threat arm answered: on v56.10.16.2 the grant IS forwarded (unit test red: {}); with the PR browser.cdp refuses it before sending. STILL RED: enumerateDevices lists audioinput (the Pulse server's listable-sources residual, host_audio_pulse.conf); --disable-audio-input did not remove it and was dropped.

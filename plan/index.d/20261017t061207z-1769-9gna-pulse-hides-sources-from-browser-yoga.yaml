@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga on the coordinator's ruling (macuahuitl-fedora, 2026-10-17):
+# the enumerateDevices residual of 1767-5q4b is p3, not accepted as nothing.
+packets:
+  - packet_id: the-output-only-pulse-server-exposes-no-source-to-a-browser-window-so-enumeratedevices-lists-no-audioinput
+    order: 1769-9gna
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    size: S
+    pickup_role: any
+    capability_tags: [browser, security, audio]
+    related: [1767-5q4b, 1722-2haw]
+    depends_on: []
+    title: |
+      A container browser window's enumerateDevices still lists an audioinput, because the output-only Pulse server lets a client list source names; a device label can carry a host device name (minor fingerprinting)
+    context: |
+      MEASURED on yoga 2026-10-17 with 1767-5q4b's image (managed policy denies capture): getUserMedia rejects NotAllowedError with no prompt, yet enumerateDevices() still returns ["audioinput","audiooutput"]. Chromium's --disable-audio-input did not remove the entry (tried and dropped in 1767-5q4b). The source of the entry is the output-only server's documented residual in crates/tillandsias-headless/src/host_audio_pulse.conf: "a client can LIST source and sink names (metadata only, no audio). Device names can fingerprint a host." Capture itself is refused at two layers (managed policy, block-record-stream), so this is metadata only.
+    exit_criteria:
+      - "in a container browser window, enumerateDevices lists no audioinput (red today), and a client of the output-only server cannot list host source names"
+      - "NEGATIVE CONTROL: a 440 Hz tone from the window still reaches the host's default sink"
+    verifiable_closure: "cargo test -p tillandsias-headless host_audio"
+    next_action: >
+      Find the PipeWire/pulse-server rule that hides sources from a restricted client (a permission or object filter on the restricted address), measure enumerateDevices and `pactl -s <socket> list sources short` before and after, red first.
+    provenance: |
+      Filed by yoga, 2026-10-17, on the coordinator's p3 ruling.
+    events:
+      - type: filed
+        ts: "2026-10-17T06:12:07Z"
+        host: yoga
+        summary: |-
+          Output-only Pulse server lists source names to the browser; audioinput enumerated. p3.

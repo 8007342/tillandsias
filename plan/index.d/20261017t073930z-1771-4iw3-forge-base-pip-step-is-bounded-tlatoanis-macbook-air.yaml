@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-17, at the coordinator's request (macuahuitl-fedora), from an operator live finding on macuahuitl.
+packets:
+  - packet_id: the-forge-base-pip-install-step-has-a-wall-clock-budget-and-a-per-read-timeout-whose-retries-fit-inside-it-so-a-stalled-index-fails-the-build-loudly-with-a-named-verdict-instead-of-holding-init-at-a-frozen-percentage
+    order: 1771-4iw3
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [init, image-build, forge-base, network, pip, progress]
+    estimated_hours: 4
+    related: [1770-z575, 1420-6brx]
+    owned_files:
+      - images/default/Containerfile.base
+      - scripts/lua/test-forge-base-pip-bounded.lua
+    title: |
+      forge-base's `pip3 install pyright bandit` step runs under a wall-clock budget (timeout PIP_STALL_BUDGET_S) with a per-read timeout and retry count whose worst case fits inside it, and a stall fails the build with refused:forge-base:pip-install-stalled naming the step, why and remedy, instead of `tillandsias --init` sitting at "Pulling image forge-base 40%" for 10–30 minutes
+    context: |
+      LIVE (operator on macuahuitl, relayed by the coordinator 2026-10-17): `tillandsias --init` sat at "Pulling image forge-base [████░░░░░░] 40%" for many minutes, twice in a row. The process was the Containerfile.base step `pip3 install --timeout 120 --no-cache-dir pyright==1.1.410 bandit==1.9.2`: pip idle at 0% CPU with one socket in poll for 6+ min. Earlier the same step during the stable install sat ~30 min and then completed. CONTROL (coordinator): the same pip install in a plain `podman run --dns 8.8.8.8 fedora-toolbox:44` finished in seconds (PyPI over IPv4 fine; IPv6 fails fast there), so the stall is specific to the build's network, unmeasured beyond that.
+      MEASURED here (tlatoanis-macbook-air, pip 21.2.4, a local index that accepts and never answers): `--timeout 5` with pip's default 5 retries took 43 s (6 attempts, 5 ReadTimeoutError retries). So the per-read timeout multiplies by the attempts per URL: at --timeout 120 one stalled URL holds ~12+ min, and pip fetches several URLs, which fits the observed 10–30 min. Retries keep a stall alive; they do not bound it.
+      UNMEASURED: why the build network stalls on macuahuitl (pasta vs slirp4netns, an IPv6 route, a CDN read). That needs that host; the measurement recipe goes to the coordinator.
+      OUT OF SCOPE HERE: the bar's wording ("Pulling image …") is pinned by image_build_progress.rs under spec:tray-ux; renaming it to name the step needs the operator's own approval, asked separately.
+    exit_criteria:
+      - "Containerfile.base's pip step runs under `timeout ${PIP_STALL_BUDGET_S}` (default 600) with --timeout and --retries whose worst case (retries+1)×timeout per URL fits the budget, and any failure prints refused:forge-base:pip-install-stalled (rc=124) or refused:forge-base:pip-install-failed with why and remedy, then fails the build"
+      - "fixture (Lua): the step text is EXTRACTED from Containerfile.base and run with a stalled fake pip3 and PIP_STALL_BUDGET_S=3; it fails within the budget plus slack with the named verdict and never reaches npm; NEGATIVE CONTROL: a fake pip3 that succeeds reaches npm with rc 0 and no refusal; a static arm proves (retries+1)×timeout ≤ budget"
+      - "LIVE (macuahuitl, next --init): a stalled index ends in the named verdict within the budget, not a frozen percentage"
+    unscoreable: "unpinnable-until-the-guard-exists: the fixture is scripts/lua/test-forge-base-pip-bounded.lua, written in the same commit as the bounded step (1136-n8sh); red on linux-next, where the step has no budget"
+    next_action: >
+      Wrap the pip step; write the Lua fixture over the extracted step text; send the coordinator the build-network measurement recipe.
+    events:
+      - type: filed
+        ts: "2026-10-17T07:39:30Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Filed and claimed at the coordinator's request, p1. A stalled index held forge-base's pip step for 10–30 min; measured here, the per-read timeout multiplies by pip's retries. The step gets a wall-clock budget and a named verdict.

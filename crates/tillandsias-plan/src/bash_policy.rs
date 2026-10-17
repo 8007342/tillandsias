@@ -588,6 +588,7 @@ fn floor_on(argv: &[String], ctx: &Context, workspace: &Path) -> Option<cp::Deci
         host_kind: ctx.host_kind,
         regime: "hook".into(),
         caller: "pretooluse".into(),
+        env: Vec::new(),
     };
     cp::floor_decide(&req, &ctx.protected)
 }
