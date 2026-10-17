@@ -3,7 +3,7 @@
 --
 -- test-forge-plan-bin-staging.lua — how the forge's Bash policy decider is
 -- staged when it cannot be built, in a scratch tree with a stub cargo and NO
--- musl toolchain (no musl-gcc, no cargo-zigbuild, the podman arm disabled):
+-- musl toolchain (the host musl gcc, cargo-zigbuild and podman arms all disabled):
 --   1 LOUD      build-forge-plan-bin.sh refuses: exit 6, refused:forge-plan-bin:no-musl-toolchain
 --               (an image built without the decider refuses every Bash call)
 --   2 SKIP      with TILLANDSIAS_FORGE_PLAN_OPTIONAL=1 it is a NAMED skip: exit 0,
@@ -50,7 +50,10 @@ fs.write(REL .. "/tree/VERSION", "0.0.0.1\n")
 
 -- A stub cargo that "builds" the sidecar as a minimal x86-64 ELF (the scripts
 -- assert the format with file(1)), and a no-op strip. No rustup, musl-gcc or
--- cargo-zigbuild on this PATH, and the podman arm is disabled below.
+-- cargo-zigbuild on this PATH, and the podman arm is disabled below. /usr/bin
+-- stays on PATH for bash, file and coreutils, so a host musl-gcc there is
+-- masked by TILLANDSIAS_FORGE_PLAN_NO_HOST_TOOLCHAIN (land run 129: a landing
+-- host with musl-gcc took the cargo arm into this stub, rc=3).
 fs.mkdir(REL .. "/bin")
 fs.write(REL .. "/bin/cargo", table.concat({
     "#!/bin/bash",
@@ -60,10 +63,14 @@ fs.write(REL .. "/bin/cargo", table.concat({
     "done",
     "exit 0", "" }, "\n"))
 fs.write(REL .. "/bin/strip", "#!/bin/bash\nexit 0\n")
-proc.run({ argv = { "chmod", "+x", W .. "/bin/cargo", W .. "/bin/strip" }, timeout_ms = 10000 })
+-- A musl-gcc on PATH, so every host runs these arms as the landing host does:
+-- only the seam, not this host's /usr/bin, decides that there is no toolchain.
+fs.write(REL .. "/bin/musl-gcc", "#!/bin/bash\nexit 1\n")
+proc.run({ argv = { "chmod", "+x", W .. "/bin/cargo", W .. "/bin/strip", W .. "/bin/musl-gcc" }, timeout_ms = 10000 })
 
 local function run(script, optional)
     local e = { PATH = W .. "/bin:/usr/bin:/bin", HOME = W .. "/home", TILLANDSIAS_FORGE_PLAN_NO_CONTAINER = "1",
+        TILLANDSIAS_FORGE_PLAN_NO_HOST_TOOLCHAIN = "1",
         TILLANDSIAS_SIDECAR_TARGET = "x86_64-unknown-linux-musl" }
     if optional then e.TILLANDSIAS_FORGE_PLAN_OPTIONAL = "1" end
     local r = proc.run({ argv = { "bash", W .. "/tree/scripts/" .. script }, cwd = W .. "/tree", env = e, timeout_ms = 60000 })

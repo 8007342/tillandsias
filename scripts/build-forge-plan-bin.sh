@@ -99,12 +99,18 @@ no_decider() {
     echo "  remedy: install musl-gcc (Fedora: musl-gcc, Debian: musl-tools) or cargo-zigbuild, or run where podman can pull rust:<pin>-slim" >&2
     exit 6
 }
+# TILLANDSIAS_FORGE_PLAN_NO_HOST_TOOLCHAIN=1 ignores the host's musl gcc and
+# cargo-zigbuild, as TILLANDSIAS_FORGE_PLAN_NO_CONTAINER=1 ignores podman: the
+# seams test-forge-plan-bin-staging.lua uses to model a host with none, since a
+# landing host may ship musl-gcc in /usr/bin (land run 129, 2026-10-17).
+host_tc=1
+[ "${TILLANDSIAS_FORGE_PLAN_NO_HOST_TOOLCHAIN:-0}" = 1 ] && host_tc=0
 mode=""
-if [ -n "${!cc_var:-}" ]; then
+if [ "$host_tc" = 1 ] && [ -n "${!cc_var:-}" ]; then
     mode=cargo
-elif command -v "${arch}-linux-musl-gcc" >/dev/null 2>&1 || command -v musl-gcc >/dev/null 2>&1; then
+elif [ "$host_tc" = 1 ] && { command -v "${arch}-linux-musl-gcc" >/dev/null 2>&1 || command -v musl-gcc >/dev/null 2>&1; }; then
     mode=cargo
-elif command -v cargo-zigbuild >/dev/null 2>&1; then
+elif [ "$host_tc" = 1 ] && command -v cargo-zigbuild >/dev/null 2>&1; then
     mode=zigbuild
 elif command -v podman >/dev/null 2>&1 && [ "${TILLANDSIAS_FORGE_PLAN_NO_CONTAINER:-0}" != 1 ]; then
     mode=container
