@@ -1343,7 +1343,11 @@ mod tests {
     #[test]
     fn an_empty_relay_env_turns_the_default_off() {
         for empty in ["", "   "] {
-            assert_eq!(resolve_relay(Some(empty), None, true), (None, None), "{empty:?}");
+            assert_eq!(
+                resolve_relay(Some(empty), None, true),
+                (None, None),
+                "{empty:?}"
+            );
             assert_eq!(resolve_relay(Some(empty), Some(empty), true), (None, None));
         }
         // An explicitly empty poll keeps the default relay, and no poll.
@@ -1357,9 +1361,16 @@ mod tests {
     fn with_the_default_on_an_unset_env_reaches_the_static_relay_and_never_a_poll() {
         // The default relay is static and stores nothing (privacy policy), so
         // the default never polls: the flow is QR, phone page, paste.
-        assert_eq!(resolve_relay(None, None, true), (Some(DEFAULT_RELAY_URL.to_string()), None));
-        assert_eq!(DEFAULT_RELAY_URL, "https://cloudflare.tillandsias.org/cloudflare/callback");
-        validate_relay_url(DEFAULT_RELAY_URL).expect("the default relay passes the login's own URL rule");
+        assert_eq!(
+            resolve_relay(None, None, true),
+            (Some(DEFAULT_RELAY_URL.to_string()), None)
+        );
+        assert_eq!(
+            DEFAULT_RELAY_URL,
+            "https://cloudflare.tillandsias.org/cloudflare/callback"
+        );
+        validate_relay_url(DEFAULT_RELAY_URL)
+            .expect("the default relay passes the login's own URL rule");
         assert!(DEFAULT_RELAY_URL.ends_with(RELAY_CALLBACK_PATH));
     }
 
@@ -1367,7 +1378,10 @@ mod tests {
     fn an_operator_set_relay_wins_and_polls_only_what_the_operator_set() {
         let mine = "https://relay.example.invalid/tillandsias/cloudflare/callback";
         for on in [true, false] {
-            assert_eq!(resolve_relay(Some(mine), None, on), (Some(mine.to_string()), None));
+            assert_eq!(
+                resolve_relay(Some(mine), None, on),
+                (Some(mine.to_string()), None)
+            );
         }
         let poll = "https://relay.example.invalid/poll";
         assert_eq!(
@@ -1375,7 +1389,6 @@ mod tests {
             (Some(mine.to_string()), Some(poll.to_string()))
         );
     }
-
 
     /// ORDER 1718-adra. MEASURED 2026-10-14 against the operator's account: an
     /// authorize request with NO scope makes Cloudflare's consent screen ask
