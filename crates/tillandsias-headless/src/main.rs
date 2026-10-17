@@ -89,6 +89,7 @@ mod control_dispatch;
 #[cfg(target_os = "linux")]
 mod forge_swap;
 // RAM-only source-volume identity is needed by default CLI launchers too.
+mod launch_images;
 mod local_projects;
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
 pub mod remote_projects;
@@ -11707,20 +11708,12 @@ fn run_status_check(debug: bool) -> Result<(), String> {
     let certs_dir = ensure_ca_bundle(debug)?;
     ensure_enclave_network(debug)?;
 
-    let images = [
-        "proxy",
-        "git",
-        "inference",
-        "chromium-core",
-        "chromium-framework",
-        "forge",
-        // router-web-images-ondemand-ensure-gap (2026-07-16): both were
-        // missing from every ensure list; the publish path then hit a
-        // phantom registry pull (125) on any version handover.
-        "router",
-        "web",
-    ];
-    ensure_versioned_images(&root, &images, version, debug)?;
+    ensure_versioned_images(
+        &root,
+        launch_images::launch_images(launch_images::LaunchSite::Status),
+        version,
+        debug,
+    )?;
 
     let probe_image = versioned_image_tag("forge", version);
     podman_runtime_health_probe(debug, &probe_image)?;
@@ -14920,8 +14913,12 @@ fn run_observatorium_mode(
     let certs_dir = ensure_ca_bundle(debug)?;
     ensure_enclave_network(debug)?;
 
-    let images = ["web", "router", "chromium-core", "chromium-framework"];
-    ensure_versioned_images(&root, &images, version, debug)?;
+    ensure_versioned_images(
+        &root,
+        launch_images::launch_images(launch_images::LaunchSite::Observatorium),
+        version,
+        debug,
+    )?;
 
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
@@ -15654,9 +15651,13 @@ fn run_opencode_mode(
     // dies pulling localhost/tillandsias-router from a nonexistent registry
     // (order-327 class; the OpenCode CLI lane was the one lane the 293/327
     // fixes missed — reproduced live on macOS cold-forge 2026-07-15).
-    let images = ["proxy", "router", "git", "inference", "forge"];
     progress.step();
-    ensure_versioned_images(&root, &images, version, debug)?;
+    ensure_versioned_images(
+        &root,
+        launch_images::launch_images(launch_images::LaunchSite::Opencode),
+        version,
+        debug,
+    )?;
     progress.step();
     ensure_provider_auth(ForgeAgentMode::OpenCode, debug)?;
     // Fifth and last announced stage: everything after this is the workspace
@@ -17121,16 +17122,12 @@ pub(crate) fn run_opencode_web_mode(
     let certs_dir = ensure_ca_bundle(debug)?;
     ensure_enclave_network(debug)?;
 
-    let images = [
-        "proxy",
-        "git",
-        "inference",
-        "chromium-core",
-        "chromium-framework",
-        "forge",
-        "router",
-    ];
-    ensure_versioned_images(&root, &images, version, debug)?;
+    ensure_versioned_images(
+        &root,
+        launch_images::launch_images(launch_images::LaunchSite::OpencodeWeb),
+        version,
+        debug,
+    )?;
 
     if debug {
         eprintln!("[tillandsias] [OpenCode Web] Repo root: {}", root.display());
@@ -17839,8 +17836,12 @@ pub(crate) fn ensure_enclave_for_project(
     // launch died trying to pull localhost/tillandsias-router:v<new> from a
     // nonexistent registry (same bump-window class as the order-267
     // run-observatorium finding).
-    let images = ["router", "git", "inference", "forge"];
-    ensure_versioned_images(&root, &images, version, debug)?;
+    ensure_versioned_images(
+        &root,
+        launch_images::launch_images(launch_images::LaunchSite::EnclaveForProject),
+        version,
+        debug,
+    )?;
 
     let project_remote_url = project_path
         .and_then(read_host_project_origin_url)
@@ -32261,8 +32262,9 @@ esac
             "observatorium mode must use PodmanClient"
         );
         assert!(
-            observatorium_window
-                .contains("ensure_versioned_images(&root, &images, version, debug)?;"),
+            // source-pin-ok: the call site reading the table is the contract
+            // (1776-ch4m); the list's value is asserted in launch_images.rs.
+            observatorium_window.contains("launch_images::LaunchSite::Observatorium"),
             "observatorium mode must preflight required images"
         );
 
@@ -32325,14 +32327,14 @@ esac
     fn observatorium_mode_preflights_web_image() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
         let window = source_window(source, "fn run_observatorium_mode(");
-        assert!(
-            window.contains(
-                "let images = [\"web\", \"router\", \"chromium-core\", \"chromium-framework\"];"
-            ),
+        assert_eq!(
+            launch_images::launch_images(launch_images::LaunchSite::Observatorium),
+            &["web", "router", "chromium-core", "chromium-framework"],
             "observatorium mode must preflight the web image"
         );
         assert!(
-            window.contains("ensure_versioned_images(&root, &images, version, debug)?;"),
+            window
+                .contains("launch_images::launch_images(launch_images::LaunchSite::Observatorium)"),
             "observatorium mode must ensure the web image exists before launch"
         );
     }
@@ -32841,9 +32843,10 @@ esac
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
         let window = source_window(source, "fn run_opencode_mode(");
         assert!(
-            window.contains(
-                "let images = [\"proxy\", \"router\", \"git\", \"inference\", \"forge\"];"
-            ) && window.contains("ensure_versioned_images(&root, &images, version, debug)?;"),
+            launch_images::launch_images(launch_images::LaunchSite::Opencode)
+                == ["proxy", "router", "git", "inference", "forge"]
+                && window
+                    .contains("launch_images::launch_images(launch_images::LaunchSite::Opencode)"),
             "OpenCode CLI lane must build the router image before ensure_router_running \
              (order-327 class; macOS cold-forge live repro 2026-07-15)"
         );
@@ -32855,8 +32858,13 @@ esac
         let window = source_window(source, "pub(crate) fn ensure_enclave_for_project(");
 
         assert!(
-            window.contains("let images = [\"router\", \"git\", \"inference\", \"forge\"];")
-                && window.contains("ensure_versioned_images(&root, &images, version, debug)?;"),
+            launch_images::launch_images(launch_images::LaunchSite::EnclaveForProject)
+                == ["router", "git", "inference", "forge"]
+                // source-pin-ok: the call site reading the table is the
+                // contract (1776-ch4m); the list's value is asserted above.
+                && window.contains(
+                    "launch_images::launch_images(launch_images::LaunchSite::EnclaveForProject)"
+                ),
             "cold forge launch must build the router image before starting its container"
         );
     }

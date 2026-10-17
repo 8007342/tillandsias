@@ -230,35 +230,11 @@ impl TrayBrowserContainers {
         request: &ContainerLaunchRequest<'_>,
         display: &crate::BrowserDisplayContext,
     ) -> Result<ContainerHandle, LaunchError> {
-        let version = crate::VERSION.trim();
-        let root =
-            crate::resolve_runtime_asset_root(version, self.debug).map_err(LaunchError::Spawn)?;
-        // First use builds the image (~90 s, 1.5 GB): say so in the result,
-        // rather than a silent wait. ensure_versioned_images also pushes the
-        // build label ("Preparing the WebKit engine (first use)…") wherever
-        // build progress is shown; live progress DURING the wait is a follow-up.
-        let tag = crate::versioned_image_tag("webkit", version);
-        let present = podman(
-            &["image", "exists", &tag],
-            tillandsias_podman::OperationKind::Inspect.default_budget(),
-        )
-        .is_ok();
-        let started_build = std::time::Instant::now();
-        crate::ensure_versioned_images(&root, &["webkit"], version, self.debug).map_err(|e| {
-            LaunchError::Spawn(format!(
-                "the {} image is not available: {e}",
-                Engine::WebKit.label()
-            ))
-        })?;
+        // First use builds the image (~90 s, 1.5 GB) and says so (1776-ch4m:
+        // the same seam as a Chromium window).
+        let notice = self.ensure_engine_image(Engine::WebKit)?;
         let preview_port = request.url.port_or_known_default().unwrap_or(443);
         let suffix = window_suffix(request.window_id);
-        let notice = (!present).then(|| {
-            format!(
-                "Prepared the {} engine on first use ({} s); later windows open without this wait.",
-                Engine::WebKit.label(),
-                started_build.elapsed().as_secs()
-            )
-        });
         let handle = ContainerHandle {
             container_name: format!("tillandsias-browser-{}-{suffix}", request.project_label),
             network_name: format!("tillandsias-browser-net-{suffix}"),
@@ -556,6 +532,70 @@ fn forwarder_ip_on(handle: &ContainerHandle) -> Result<std::net::IpAddr, String>
         .map_err(|e| format!("forwarder address {ip:?} on {}: {e}", handle.network_name))
 }
 
+/// Order 1776-ch4m: a window's image is built on first use, for either engine.
+///
+/// A host that never ran `--init` has no Chromium image, and the forge launch
+/// does not build it (the operator's low-end-host ruling), so the first
+/// `browser.open` builds it here, once, under the seam's per-image lock.
+/// `present` and `ensure` are the seams the tests count. Returns the
+/// first-use notice when it built.
+fn ensure_window_image(
+    engine: Engine,
+    present: impl Fn(&str) -> bool,
+    ensure: impl FnOnce(&[&str]) -> Result<(), String>,
+) -> Result<Option<String>, LaunchError> {
+    let site = match engine {
+        Engine::Chromium => crate::launch_images::LaunchSite::ChromiumWindow,
+        Engine::WebKit => crate::launch_images::LaunchSite::WebKitWindow,
+    };
+    let images = crate::launch_images::launch_images(site);
+    let version = crate::VERSION.trim();
+    if images
+        .iter()
+        .all(|name| present(&crate::versioned_image_tag(name, version)))
+    {
+        return Ok(None);
+    }
+    // First use builds the image (WebKit ~90 s; Chromium several minutes):
+    // say so in the result rather than a silent wait. The seam also pushes
+    // the build label wherever build progress is shown (1776-pr0g makes it
+    // live during the wait).
+    let started = std::time::Instant::now();
+    ensure(images).map_err(|e| {
+        LaunchError::Spawn(format!(
+            "the {} image is not available: {e}",
+            engine.label()
+        ))
+    })?;
+    Ok(Some(format!(
+        "Prepared the {} engine on first use ({} s); later windows open without this wait.",
+        engine.label(),
+        started.elapsed().as_secs()
+    )))
+}
+
+impl TrayBrowserContainers {
+    /// The live seams for [`ensure_window_image`].
+    fn ensure_engine_image(&self, engine: Engine) -> Result<Option<String>, LaunchError> {
+        let debug = self.debug;
+        ensure_window_image(
+            engine,
+            |tag| {
+                podman(
+                    &["image", "exists", tag],
+                    tillandsias_podman::OperationKind::Inspect.default_budget(),
+                )
+                .is_ok()
+            },
+            |images| {
+                let version = crate::VERSION.trim();
+                let root = crate::resolve_runtime_asset_root(version, debug)?;
+                crate::ensure_versioned_images(&root, images, version, debug)
+            },
+        )
+    }
+}
+
 impl BrowserContainers for TrayBrowserContainers {
     fn preview_tls_port(&self) -> Option<u16> {
         crate::local_web_preview::tls_port().ok()
@@ -613,6 +653,9 @@ impl BrowserContainers for TrayBrowserContainers {
             }
             return self.start_webkit(request, &display).map(add_audio);
         }
+        // 1776-ch4m: a host that never ran --init has no Chromium image; build
+        // it now, once, before anything is created that would need undoing.
+        let first_use = self.ensure_engine_image(Engine::Chromium)?;
         // Order 1712-3fsw: headless mounts nothing of the display stack.
         let surface = if request.headless {
             crate::BrowserSurface::Headless
@@ -632,7 +675,7 @@ impl BrowserContainers for TrayBrowserContainers {
             network_name: format!("tillandsias-browser-net-{suffix}"),
             profile_dir,
             cdp_socket: Some(cdp_dir.join("cdp.sock")),
-            notice: None,
+            notice: first_use,
         };
         // From here every failure undoes what was made.
         let started = (|| {
@@ -711,6 +754,73 @@ impl BrowserContainers for TrayBrowserContainers {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 1776-ch4m, the operator's live hole: a forge's first browser.open on a
+    /// host that never ran --init failed "image missing", because the
+    /// Chromium branch of `start` never ensured its image (WebKit's did).
+    #[test]
+    fn chromium_window_ensures_its_image() {
+        use std::cell::RefCell;
+        let ensured: RefCell<Vec<String>> = RefCell::new(Vec::new());
+        let ensure = |images: &[&str]| {
+            ensured
+                .borrow_mut()
+                .extend(images.iter().map(|s| s.to_string()));
+            Ok(())
+        };
+
+        // Absent: the seam is asked exactly once, for chromium-framework (its
+        // base, chromium-core, comes through the seam's own dependency), and
+        // the result names the first-use build.
+        let notice = ensure_window_image(Engine::Chromium, |_| false, ensure).expect("ensured");
+        assert_eq!(*ensured.borrow(), vec!["chromium-framework".to_string()]);
+        assert!(
+            notice
+                .as_deref()
+                .is_some_and(|n| n.contains("Chromium engine on first use")),
+            "{notice:?}"
+        );
+
+        // NEGATIVE CONTROL: present, so no ensure and no notice.
+        ensured.borrow_mut().clear();
+        let ensure = |images: &[&str]| {
+            ensured
+                .borrow_mut()
+                .extend(images.iter().map(|s| s.to_string()));
+            Ok(())
+        };
+        let notice = ensure_window_image(Engine::Chromium, |_| true, ensure).expect("present");
+        assert!(ensured.borrow().is_empty(), "{:?}", ensured.borrow());
+        assert_eq!(notice, None);
+
+        // A failed build names the engine and the cause.
+        let err = ensure_window_image(Engine::Chromium, |_| false, |_| Err("no space".into()))
+            .expect_err("a failed build refuses");
+        assert!(
+            matches!(&err, LaunchError::Spawn(m) if m.contains("Chromium image is not available: no space")),
+            "{err:?}"
+        );
+
+        // Source arm: `start` asks for the Chromium image BEFORE it creates the
+        // window network, so a missing image leaves nothing to undo.
+        let source = include_str!("browser_open.rs");
+        let source = source.split("#[cfg(test)]\nmod tests").next().unwrap();
+        let start_at = source
+            .find("fn start(&self, request: &ContainerLaunchRequest<'_>)")
+            .expect("start");
+        let start = &source[start_at..];
+        let start = &start[..start.find("\n    }\n").expect("end of start")];
+        let ensure_at = start
+            .find("self.ensure_engine_image(Engine::Chromium)")
+            .expect("the Chromium branch of start ensures its image (1776-ch4m)");
+        let network_at = start
+            .find("\"network\",\n                    \"create\"")
+            .expect("start creates the window network");
+        assert!(
+            ensure_at < network_at,
+            "the Chromium image is ensured before the window network is created"
+        );
+    }
 
     // The argv tests need an existing socket path, not the caller's compositor.
     fn display_fixture() -> (tempfile::TempDir, crate::BrowserDisplayContext) {
