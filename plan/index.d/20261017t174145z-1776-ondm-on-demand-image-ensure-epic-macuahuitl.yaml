@@ -1,0 +1,364 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl, 2026-10-17, from the operator's live finding: an agent
+# in a forge asked for a browser window and the tray said the
+# chromium-framework image was missing (the tray never ran --init).
+# Operator direction (verbatim intent): "Container launch should create
+# missing images/containers on demand … Make it robust: actual build failures
+# must NOT keep retrying and kill host resources."
+# Epic 1776-ondm and its five children.
+# Change: openspec/changes/on-demand-image-ensure/ (proposal, design, tasks,
+# spec deltas on-demand-image-ensure and containerfile-staleness).
+# Code is cited by symbol, never by line.
+packets:
+  - packet_id: every-container-launch-ensures-its-image-through-one-seam-that-builds-a-missing-image-once-under-a-lock-remembers-a-failed-build-by-its-inputs-digest-and-refuses-fast-instead-of-rebuilding
+    order: 1776-ondm
+    status: ready
+    kind: epic
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [images, image-build, on-demand, forge, browser, vault, tray, low-end-hosts, epic]
+    estimated_hours: 4
+    related: [1770-z575, 1771-4iw3, 1775-8tx5, 1744-xjfw, 1502-utcy, 1656-tjv4]
+    owned_files:
+      - openspec/changes/on-demand-image-ensure/
+    title: |
+      EPIC — every container launch (tray, CLI, forge MCP) ensures the image it is about to run through the ONE seam `ensure_image_exists` (present and current → go; missing or stale → build exactly once under the per-image lock, deps first, bounded in disk and CPU/IO, visible in the tray); a failed build is remembered by (image, inputs digest) and every later launch refuses within seconds with the cause and a named remedy until the inputs change or the operator retries; today the forge's first browser.open dies on a missing chromium-framework image and a Containerfile that cannot build is rebuilt by every launch
+    context: |
+      LIVE (operator, 2026-10-17): a forge agent's browser window request was
+      refused "chromium-framework image missing". The tray had never run
+      --init; the forge launch (`run_opencode_mode`) ensures only proxy,
+      router, git, inference, forge.
+      SOURCE READ (macuahuitl, 2026-10-17, headless crate): the mechanism
+      mostly exists in `main.rs` `ensure_image_exists` — per-image flock
+      (`resource_lock`, 900 s), detached helper (`--internal-ensure-image`),
+      content identity over the whole build context (`image_identity` →
+      `compute_image_build_identity`), dependency recursion
+      (`image_dependency`: forge→forge-base, chromium-framework→chromium-core),
+      downgrade guard. The gaps are coverage and memory:
+      (1) `browser_open.rs` `TrayBrowserContainers::start`'s Chromium branch
+      starts `forwarder_spec` and the window from
+      `tillandsias-chromium-framework:v<VERSION>` with pull_never and NO
+      ensure; its WebKit branch (`start_webkit`, 1656-tjv4) does ensure on
+      first use with a notice — the precedent.
+      (2) Four inline ensure arrays have drifted (`run_opencode_mode`,
+      `run_opencode_web_mode`, `ensure_enclave_for_project`,
+      `run_status_check`).
+      (3) `vault_bootstrap.rs` `build_vault_image` is a second mechanism
+      (identity + build, no lock, no detach); `toolchain_exec.rs` `prepare`
+      is a third and "a failed build is reported once, then a later call
+      retries".
+      (4) Nothing records a failed on-demand build; `IMAGE_BUILD_REMEDY`
+      says "the build is retried on each launch". `InitBuildState` records
+      `failed` for --init only and the launch path never reads it.
+      (5) `free_bytes_at` exists but only DESCRIBES a failure (1744-xjfw);
+      nothing checks space before a build; no CPU/IO bound wraps the build.
+      (6) 1775-8tx5 (yoga) measured a stale forge image reused under one
+      version string; the content identity should have rebuilt it and the
+      launch printed nothing to show which digest it decided on.
+      DESIGN (binding on every child): ONE seam; a refusal names
+      `refused:image-ensure:<image>:<why>` with log and remedy; a failure
+      marker keyed on (image, source digest) with backoff 10 min / 1 h /
+      operator-only; the marker clears on digest change, on success, or on
+      `tillandsias --retry-image <name>` / the tray's Retry; a disk refusal
+      records NO marker; builds run under systemd-run --user weights or
+      nice; every decision prints one verdict line with both digests;
+      --init is unchanged and clears markers for what it rebuilds.
+      NOT PRE-BUILDING chromium in `run_opencode_mode`: the operator's
+      low-end-host ruling is to never build what the session may not use;
+      first browser.open builds it, visibly, once.
+      PICKUP BY PLATFORM: all children are Linux-first (the headless crate;
+      the macOS and Windows guests run the same code inside the VM). A
+      macOS or Windows host can take 1776-brk3 and 1776-pr0g (pure
+      Rust + Lua fixtures over a podman shim, no live podman needed);
+      1776-ch4m, 1776-v1t4 and 1776-d5k2 want a Linux host with podman for
+      their live arms.
+    children:
+      - 1776-ch4m
+      - 1776-brk3
+      - 1776-v1t4
+      - 1776-d5k2
+      - 1776-pr0g
+    exit_criteria:
+      - "all five children complete"
+      - "LIVE (Linux host, no --init ever run, stable release): launch the forge; from inside it browser.open opens a Chromium window after one visible first-use build; a second browser.open opens with no build; pre-fix result: FAILS (chromium-framework image missing)"
+      - "LIVE: with images/chromium/Containerfile.framework made unbuildable under TILLANDSIAS_ROOT, two forge browser.open calls produce ONE podman build and one refusal within 5 s naming build-failed-previously; pre-fix result: FAILS (two builds)"
+    unscoreable: "an epic; its closure is the children's fixtures plus the two live arms above, recorded as events on this row"
+    next_action: >
+      Children in order ch4m → brk3 → v1t4 → d5k2 → pr0g (brk3 and pr0g may
+      run in parallel on a non-Linux host). Do not pre-build chromium in the
+      forge launch; do not add a fourth build path. Run the two live arms
+      last and record them here.
+    events:
+      - type: filed
+        ts: "2026-10-17T17:41:45Z"
+        host: macuahuitl
+        summary: |-
+          Epic and five children from the operator's live finding (forge browser window refused: chromium-framework missing, tray never ran --init). The seam exists; three launch sites bypass it and nothing remembers a failed build.
+
+  - packet_id: the-tray-browser-window-path-ensures-the-chromium-framework-image-on-first-use-and-one-launch-images-table-replaces-the-four-drifted-ensure-arrays
+    order: 1776-ch4m
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: every-container-launch-ensures-its-image-through-one-seam-that-builds-a-missing-image-once-under-a-lock-remembers-a-failed-build-by-its-inputs-digest-and-refuses-fast-instead-of-rebuilding
+    parent: 1776-ondm
+    pickup_role: any
+    capability_tags: [browser, chromium, images, on-demand, forge, mcp, lua]
+    estimated_hours: 4
+    size: M
+    related: [1656-tjv4, 1649-xqet, 1775-8tx5]
+    depends_on: []
+    owned_files:
+      - crates/tillandsias-headless/src/browser_open.rs
+      - crates/tillandsias-headless/src/launch_images.rs
+      - scripts/lua/check-launch-images-table.lua
+      - scripts/lua/test-launch-images-table.lua
+    title: |
+      `TrayBrowserContainers::start`'s Chromium branch ensures `chromium-framework` (and through it `chromium-core`) before creating the window network, with the same first-use notice `start_webkit` already gives, so a forge's first browser.open on a host that never ran --init builds the image once and opens the window instead of failing "image missing"; one `launch_images(site)` table replaces the four inline ensure arrays and a Lua guard refuses a `tillandsias-<name>:v` spec literal in a module that neither lists nor ensures it
+    context: |
+      LIVE (operator, 2026-10-17): forge agent's browser.open → tray →
+      `TrayBrowserContainers::start` → `forwarder_spec` /
+      `chromium_window_spec` with pull_never → podman run fails on the
+      absent image. `run_opencode_mode`'s ensure array (proxy, router, git,
+      inference, forge) never builds chromium; `run_opencode_web_mode` and
+      `run_status_check` list it; `ensure_enclave_for_project` lists neither
+      proxy nor chromium. The WebKit branch (`start_webkit`) is the model:
+      podman image exists → `ensure_versioned_images(["webkit"])` → notice
+      "Prepared the … engine on first use (N s)". MCP progress during the
+      wait is 1776-pr0g, not this row.
+      KEEP: `run_opencode_mode` does NOT gain chromium (operator's low-end
+      ruling; first use builds it).
+    exit_criteria:
+      - "the Chromium branch of `TrayBrowserContainers::start` calls the ensure seam for chromium-framework BEFORE `podman network create`, and a ContainerHandle.notice names the first-use build when the image was absent; pre-fix result: FAILS (no ensure in that branch)"
+      - "fixture: cargo test chromium_window_ensures_its_image — a counting ensure seam is called exactly once for an absent image and zero times for a present one (NEGATIVE CONTROL), and the source-window arm finds the ensure call textually before the network create in `start`; red today"
+      - "`launch_images(LaunchSite)` is the only source of the ensure lists for opencode, opencode-web, enclave-for-project, observatorium and status; the four inline arrays are gone; pre-fix result: FAILS (four arrays exist)"
+      - "scripts/lua/check-launch-images-table.lua: every `ContainerSpec::new(format!(\"tillandsias-<name>:v` and `versioned_image_tag(\"<name>\"` literal in the headless crate is in its module's site list or has an ensure call in the same module; the guard refuses on ZERO literals found (population assert); it is wired into ./build.sh --check; pre-fix result: FAILS on browser_open.rs chromium-framework"
+      - "LIVE (Linux, chromium images removed with podman rmi): forge browser.open opens a window after one visible build; second call no build"
+    verifiable_closure: "cargo test -p tillandsias-headless chromium_window_ensures_its_image && lua scripts/lua/test-launch-images-table.lua (both red on linux-next before the fix)"
+    next_action: >
+      Write the red cargo test over a seam (`fn ensure_window_image(&self)`
+      injected like the WebKit path); make it green by calling the seam in
+      the Chromium branch; add launch_images.rs and the Lua guard with its
+      population assert; wire the guard; run the live arm; record it.
+    events:
+      - type: filed
+        ts: "2026-10-17T17:41:45Z"
+        host: macuahuitl
+        summary: |-
+          The live hole: the Chromium window path never ensures its image; WebKit's does. One table for the launch lists, guarded.
+
+  - packet_id: a-failed-on-demand-image-build-is-remembered-by-image-and-inputs-digest-and-every-later-launch-refuses-within-seconds-with-the-cause-and-remedy-until-the-inputs-change-or-the-operator-retries
+    order: 1776-brk3
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    release_target: every-container-launch-ensures-its-image-through-one-seam-that-builds-a-missing-image-once-under-a-lock-remembers-a-failed-build-by-its-inputs-digest-and-refuses-fast-instead-of-rebuilding
+    parent: 1776-ondm
+    pickup_role: any
+    capability_tags: [images, image-build, on-demand, circuit-breaker, tray, cli, lua]
+    estimated_hours: 6
+    size: L
+    related: [1744-xjfw, 1502-utcy, 1771-4iw3, 1775-8tx5]
+    depends_on: []
+    owned_files:
+      - crates/tillandsias-headless/src/image_ensure_marker.rs
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-headless/src/tray/mod.rs
+      - scripts/lua/test-image-ensure-breaker.lua
+    title: |
+      `ensure_image_exists` records a failure marker keyed on (image, source digest) under the init cache dir after a failed build, and while the marker matches the current identity every ensure refuses within seconds with `refused:image-ensure:<image>:build-failed-previously`, the first failure's cause, the log path and the remedy — no podman build spawned; automatic retry after 10 min, then 1 h, then operator-only; the marker clears when the digest changes, on success, or on `tillandsias --retry-image <name>` / the tray's "Retry build" (forced rebuild, foreground); every decision prints one verdict line with both digests; `IMAGE_BUILD_REMEDY` stops saying "retried on each launch"
+    context: |
+      SOURCE READ (2026-10-17): nothing remembers a failed on-demand build.
+      `IMAGE_BUILD_REMEDY` says the build "is retried on each launch";
+      `toolchain_exec::prepare` retries after reporting once; the tray's
+      forge launch calls `ensure_image_exists` on every click. A Containerfile
+      that cannot build (1771-4iw3's stalled index, a vanished pin, a full
+      disk) therefore costs minutes of host CPU per launch, per click, per
+      MCP call. `InitBuildState` has `failed` entries but only --init writes
+      or reads them.
+      DESIGN: marker file `init_cache_dir()/image-ensure-failures/<image>.json`
+      {image, source_digest, attempts, first_failed_at, last_failed_at,
+      next_retry_at|null, cause (the `describe_image_ensure_failure` text),
+      log}. Checked after identity, before the decision; re-checked by the
+      helper under the flock (a lock waiter must see the winner's marker).
+      A dependent (forge) refuses with forge-base's marker and writes none
+      of its own. A disk refusal (1776-d5k2) writes no marker.
+      VERDICT LINE: `[tillandsias] image-ensure <name> decided=<action>
+      digest=<identity> present=<label|none> reason=<reason> marker=<none|n>`
+      — the instrument 1775-8tx5 lacked; that row keeps its own fixture.
+      The forced path reuses `ImageBuildAction::ForceRebuild`, which
+      `decide_image_build` already has.
+    exit_criteria:
+      - "fixture scripts/lua/test-image-ensure-breaker.lua (podman shim counting `build` calls; TILLANDSIAS_ROOT at a context whose Containerfile is `FROM scratch` + `RUN false`): run 1 of --internal-ensure-image fails and writes the marker with attempts=1 and a cause; run 2 exits non-zero within 5 s, prints build-failed-previously with the log path, and the shim counted ZERO new builds; editing the Containerfile makes run 3 build again and the old marker is gone; NEGATIVE CONTROL: a context that builds leaves no marker and run 2 decides Skip; pre-fix result: FAILS (run 2 builds again)"
+      - "`tillandsias --retry-image <name>` removes the marker and runs a ForceRebuild in the foreground; the tray shows a 'Retry build: <image>' item only while a marker exists; pre-fix result: FAILS (neither exists)"
+      - "fixture: cargo test image_build_remedy_never_says_retried_on_each_launch; red today"
+      - "every ensure prints exactly one verdict line (cargo test ensure_prints_one_verdict_line over the helper log of the breaker fixture); red today"
+      - "a dependent image's refusal names the base's marker and no marker file exists for the dependent (arm in the Lua fixture with forge-base broken); red today"
+    verifiable_closure: "lua scripts/lua/test-image-ensure-breaker.lua && cargo test -p tillandsias-headless image_ensure_marker (red on linux-next before the fix)"
+    unscoreable: "unpinnable-until-the-guard-exists: litmus-image-ensure-breaker.yaml lands in the same commit as the marker (1136-n8sh)"
+    next_action: >
+      Write the Lua fixture red first (the shim is the one
+      test-litmus-podman-preflight-trigger.sh style uses); add
+      image_ensure_marker.rs (load/record/clear/retry_allowed, pure, unit
+      tested); thread it into ensure_image_exists before the decision and
+      inside the helper under the lock; add --retry-image and the tray item;
+      reword IMAGE_BUILD_REMEDY; add the verdict line. Portable: no live
+      podman needed, so a macOS or Windows host can take this.
+    events:
+      - type: filed
+        ts: "2026-10-17T17:41:45Z"
+        host: macuahuitl
+        summary: |-
+          The retry storm the operator named: no memory of a failed build, so every launch rebuilds. Marker keyed on inputs digest, fast refusal, operator retry.
+
+  - packet_id: the-vault-image-and-the-forge-toolchain-images-are-built-through-ensure-image-exists-so-there-is-one-build-path-with-one-lock-one-marker-and-one-verdict
+    order: 1776-v1t4
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: every-container-launch-ensures-its-image-through-one-seam-that-builds-a-missing-image-once-under-a-lock-remembers-a-failed-build-by-its-inputs-digest-and-refuses-fast-instead-of-rebuilding
+    parent: 1776-ondm
+    pickup_role: any
+    capability_tags: [vault, images, toolchain, flutter, on-demand]
+    estimated_hours: 3
+    size: S
+    related: [1770-z575, 1637-5765, 253]
+    depends_on: [1776-brk3]
+    owned_files:
+      - crates/tillandsias-headless/src/vault_bootstrap.rs
+      - crates/tillandsias-headless/src/toolchain_exec.rs
+    title: |
+      `build_vault_image` delegates to `ensure_image_exists("vault")` (per-image flock, detached helper, failure marker, verdict line) instead of its own identity-then-build path, and `toolchain_exec::prepare` reports a marker's refusal instead of spawning a new build thread after a failure, so Tillandsias has one image build path outside --init
+    context: |
+      SOURCE READ (2026-10-17): `vault_bootstrap.rs` `build_vault_image`
+      computes `image_identity("vault")`, checks the canonical tag with
+      `image_exists_sync`, and calls `build_image_with_logging` directly: no
+      `resource_lock`, no detach, so two concurrent Vault ensures (a
+      --cloudflare-login racing the tray, 1770-z575's new path) can both
+      build; no marker, so a broken vault Containerfile is rebuilt by every
+      login. `toolchain_exec.rs` `prepare` says "a failed build is reported
+      once, then a later call retries" and respawns the build thread.
+      KEEP: the vault path builds ONLY vault (order 253) — vault has no
+      dependency in `image_dependency`, so the seam builds nothing else.
+    exit_criteria:
+      - "`build_vault_image` has no call to `build_image_with_logging`; it calls the seam and returns the identity's canonical tag; fixture: cargo test vault_image_goes_through_ensure_image_exists (source arm) plus an arm that holds the `image-vault` resource lock in another process and observes `build_vault_image` WAIT (no build until release); pre-fix result: FAILS (builds while the lock is held)"
+      - "`prepare` after a failure returns state=failed with the marker's refusal text and spawns no thread until the marker clears or force=true is passed; fixture: cargo test toolchain_prepare_does_not_respawn_after_failure; red today"
+      - "the vault login paths' refusal text on a vault build failure is the seam's named refusal (not a bare build error) and never names `tillandsias --init` (1774-8j9v)"
+    verifiable_closure: "cargo test -p tillandsias-headless vault_image_goes_through_ensure_image_exists toolchain_prepare_does_not_respawn_after_failure (red on linux-next before the fix)"
+    next_action: >
+      After 1776-brk3 lands: replace build_vault_image's body with the seam
+      call; keep its debug line; make prepare consult the marker; red tests
+      first. Linux host for the lock arm.
+    events:
+      - type: filed
+        ts: "2026-10-17T17:41:45Z"
+        host: macuahuitl
+        summary: |-
+          Two more build paths fold into the seam so the lock and the marker cover Vault and the toolchains.
+
+  - packet_id: an-on-demand-image-build-refuses-before-building-when-the-podman-store-lacks-the-images-declared-space-and-runs-podman-build-under-a-cpu-io-memory-scope-so-a-floor-tier-host-stays-usable
+    order: 1776-d5k2
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    release_target: every-container-launch-ensures-its-image-through-one-seam-that-builds-a-missing-image-once-under-a-lock-remembers-a-failed-build-by-its-inputs-digest-and-refuses-fast-instead-of-rebuilding
+    parent: 1776-ondm
+    pickup_role: any
+    capability_tags: [images, image-build, disk, low-end-hosts, systemd, lua]
+    estimated_hours: 4
+    size: M
+    related: [1744-xjfw, 1771-4iw3, 863-iicc]
+    depends_on: []
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-headless/src/image_build_scope.rs
+      - scripts/lua/test-image-ensure-disk-preflight.lua
+      - scripts/lua/test-image-build-scope.lua
+    title: |
+      before any on-demand build the seam compares free space on the podman graph root with the image's declared need plus 1 GiB and refuses `refused:image-ensure:<image>:disk:<free>/<need>` without building and without a failure marker; `build_image_with_logging` runs the podman child under `systemd-run --user --scope -p CPUWeight=50 -p IOWeight=50 -p MemoryHigh=<60% MemTotal>` when available, else `nice -n 10`, with `TILLANDSIAS_IMAGE_BUILD_UNBOUNDED=1` as the gate's opt-out
+    context: |
+      SOURCE READ (2026-10-17): `free_bytes_at` (statvfs) exists and is used
+      only by `describe_image_ensure_failure` to explain a dead helper
+      (1744-xjfw: a full disk mid-build lost the panic text). Nothing checks
+      before. `build_image_with_logging` spawns `podman build` bare; the
+      operator reported --init "froze the desktop" (1770-z575) and the
+      floor-tier hosts (4 cores, 863-iicc) lose tens of minutes to a build.
+      The resource-scope wrapper keeps the child caller-owned (714-4r6w,
+      counted by scripts/check-podman-sync-budgets.sh) and the log
+      streaming unchanged.
+      NEEDS per image (constants beside the curated label, rounded-up
+      measured sizes; adjust with evidence): forge-base 8 GiB, chromium-core
+      6 GiB, flutter 6 GiB, inference 4 GiB, forge / chromium-framework /
+      webkit 2 GiB, others 1 GiB. Graph root from `podman info --format
+      {{.Store.GraphRoot}}`, cached per process.
+      UNMEASURED: whether `systemd-run --user` works inside the WSL2 guest;
+      the fallback is nice, and the fixture covers both branches.
+    exit_criteria:
+      - "fixture scripts/lua/test-image-ensure-disk-preflight.lua: with TILLANDSIAS_IMAGE_DISK_NEED_OVERRIDE=1152921504606846976 the ensure refuses `:disk:` naming free and need, the podman shim saw ZERO build calls, and no marker file exists; NEGATIVE CONTROL: override=1 builds; pre-fix result: FAILS (builds)"
+      - "fixture scripts/lua/test-image-build-scope.lua: the podman shim records its parent's argv; with systemd-run on PATH the build runs under `systemd-run --user --scope` with CPUWeight, IOWeight and MemoryHigh; with systemd-run absent it runs under `nice -n 10`; with TILLANDSIAS_IMAGE_BUILD_UNBOUNDED=1 it runs bare; pre-fix result: FAILS (always bare)"
+      - "scripts/check-podman-sync-budgets.sh still counts exactly the same caller-owned spawn (the wrapper does not add a second exception)"
+      - "LIVE (a 4-core host): a forge-base build under the scope leaves the tray menu responsive (open within 2 s) throughout; recorded as an event with the host's tier"
+    verifiable_closure: "lua scripts/lua/test-image-ensure-disk-preflight.lua && lua scripts/lua/test-image-build-scope.lua (red on linux-next before the fix)"
+    unscoreable: "unpinnable-until-the-guard-exists: litmus-image-ensure-disk-preflight.yaml lands in the same commit as the preflight (1136-n8sh)"
+    next_action: >
+      Red fixtures first (shim records argv and counts builds); add
+      image_disk_need, the graph-root probe and the preflight before the
+      detach; add image_build_scope.rs wrapping the command; keep the
+      spawn site count unchanged; live arm on a floor-tier Linux host.
+    events:
+      - type: filed
+        ts: "2026-10-17T17:41:45Z"
+        host: macuahuitl
+        summary: |-
+          The "kill host resources" half: disk preflight before, cgroup/nice during; low-end hosts are the target.
+
+  - packet_id: an-on-demand-image-build-shows-its-step-progress-in-the-tray-status-and-in-the-requesting-callers-reply-so-a-forge-or-operator-waiting-on-a-first-use-build-sees-it-moving
+    order: 1776-pr0g
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: every-container-launch-ensures-its-image-through-one-seam-that-builds-a-missing-image-once-under-a-lock-remembers-a-failed-build-by-its-inputs-digest-and-refuses-fast-instead-of-rebuilding
+    parent: 1776-ondm
+    pickup_role: any
+    capability_tags: [tray, progress, images, mcp, ux]
+    estimated_hours: 3
+    size: S
+    related: [1656-tjv4, 1637-5765, 1771-4iw3]
+    depends_on: [1776-ch4m]
+    owned_files:
+      - crates/tillandsias-headless/src/image_build_progress.rs
+      - crates/tillandsias-headless/src/toolchain_exec.rs
+      - crates/tillandsias-headless/src/tray/mod.rs
+      - crates/tillandsias-browser-mcp/src/server.rs
+    title: |
+      the `STEP n/m` parser `toolchain_exec::build_progress` is generalised to `image_build_progress(name)` over the helper log, the tray's Building status and the MCP browser.open / prepare replies carry `Preparing <label> (first use) — step n/m` while an on-demand build runs, and the first-use notice `start_webkit` already returns is given for every on-demand image
+    context: |
+      SOURCE READ (2026-10-17): `build_image_with_logging` pushes only the
+      curated label (`push_udp_event("Polishing Chromium")`) once; the
+      toolchain path parses `STEP n/m` from `image_build_helper_log_path`
+      for flutter only; `start_webkit` returns a one-line notice AFTER the
+      build. During a multi-minute first-use build the forge's MCP caller
+      and the tray see nothing moving (1771-4iw3's frozen percentage, from
+      the other side). The bar's wording under spec:tray-ux is NOT changed
+      here (that needs the operator, noted in 1771-4iw3).
+    exit_criteria:
+      - "fixture: cargo test image_build_progress_reads_any_image — a helper log with STEP 3/9 for chromium-framework yields (3, 9); the toolchain path uses the same function; red today (function is toolchain-only)"
+      - "the tray status during an on-demand build updates at least every 10 s with the step (fixture over the status seam with a fake log); red today"
+      - "MCP browser.open while the window image builds returns a progress notice naming the step, and the final reply carries the first-use notice; fixture in tillandsias-browser-mcp over a fake host; red today"
+    verifiable_closure: "cargo test -p tillandsias-headless image_build_progress && cargo test -p tillandsias-browser-mcp first_use_build_progress (red on linux-next before the fix)"
+    next_action: >
+      After 1776-ch4m: move the parser to image_build_progress.rs; poll it
+      from the tray's Building status and from the MCP wait loop; reuse the
+      WebKit notice text. Portable; no live podman.
+    events:
+      - type: filed
+        ts: "2026-10-17T17:41:45Z"
+        host: macuahuitl
+        summary: |-
+          Visible progress for every first-use build, in the tray and in the caller's reply.
