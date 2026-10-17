@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha, 2026-10-17, from operator feedback relayed by the coordinator (macuahuitl-fedora).
+packets:
+  - packet_id: opening-a-forge-localhost-preview-in-the-operators-own-browser-shows-a-certificate-warning-because-the-tillandsias-ca-is-in-no-host-trust-store
+    order: 1761-bvyn
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    size: M
+    pickup_role: linux
+    capability_tags: [tls, ca, host-browser, onboarding, security]
+    related: [1552-e3wf, 1649-xqet, 1722-2haw]
+    title: |
+      Opening a forge's published preview (https://www.<project>.localhost:18443/) in the operator's own host browser shows a certificate warning they must click through. Prompt-to-app onboarding should have no such step. The served certificate is correct for the name; the issuing Tillandsias CA is in no host trust store, and that CA cannot simply be trusted as it stands
+    context: |
+      REPORTED by the operator (v56.10.16.2, lenovinha, 2026-10-16): https://www.lakanoa.localhost:18443/ "loads lakanoa after a cert warning".
+      MEASURED (lenovinha, 2026-10-17, read-only, no key material read):
+      - The server's certificate is correct for the name: subject CN=www.lakanoa.localhost, SAN DNS:www.lakanoa.localhost and DNS:flutter.lakanoa.localhost (`openssl s_client -connect 127.0.0.1:18443 -servername www.lakanoa.localhost`).
+      - Its issuer is "C=US, ST=Privacy, L=Local, O=Tillandsias, CN=Tillandsias CA", which is self-signed: ~/.local/state/tillandsias/ca/intermediate.crt has the same subject and issuer.
+      - That CA has Basic Constraints CA:TRUE (critical) and NO Name Constraints. It expires 2026-10-29.
+      - By design, nothing installs it in a host trust store: publish_local reports tls.host_trust "unknown" and "Local CA transport verification is separate from host-browser trust; no host trust store was changed" (local_web_preview.rs result()).
+      So the warning is the host not trusting the issuer, not a name mismatch.
+      WHY NOT JUST TRUST IT: the CA's private key is a file on the host (~/.local/state/tillandsias/ca/intermediate.key). Trusting an unconstrained CA lets anything that can read that key mint a certificate the operator's browser accepts for ANY domain, which weakens TLS for the whole browser. Any fix must keep the trusted issuer able to sign only *.localhost names.
+      Directions to weigh:
+      (a) a dedicated preview CA with a critical Name Constraints extension permitting only DNS ".localhost" (browsers enforce name constraints on trust anchors), trusted at USER scope: ~/.pki/nssdb for Chromium and Chrome via certutil, and Firefox through enterprise policies or its NSS profile, never /etc/pki without consent;
+      (b) a short-lived leaf rotated with the CA, plus a documented removal path at uninstall.
+    exit_criteria:
+      - "in a fresh host browser profile (Chromium, and Firefox where present), https://www.<project>.localhost:18443/ from publish_local opens with no certificate warning"
+      - "the issuer the host trusts carries a critical Name Constraints extension permitting only .localhost names; a fixture proves a certificate it signs for a non-.localhost name (for example example.com) is REJECTED by a verifier that uses that trust anchor (red-first)"
+      - "the trust is installed at user scope and removed by the uninstaller, and publish_local's tls.host_trust reports the real state instead of unknown"
+    unscoreable: "the name-constraint rejection fixture plus one fresh-profile browser run"
+    next_action: >
+      Decide the anchor: a new name-constrained preview CA (separate from the Vault/enclave CA) or re-issuing the existing one with name constraints. Write the example.com-rejected fixture first, then the user-scope NSS install and uninstall.
+    events:
+      - type: filed
+        ts: "2026-10-17T04:03:56Z"
+        host: lenovinha
+        summary: |-
+          The host browser warns on forge localhost previews: the Tillandsias CA is unconstrained and in no host trust store, so the fix needs a .localhost-only anchor at user scope.
