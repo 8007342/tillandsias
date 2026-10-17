@@ -345,6 +345,8 @@ EOF
 if [ "$violations" -gt 0 ]; then
     echo "violation:sigpipe-verdict-added:$violations"
     echo "This check is diff-scoped — it flags ONLY pipelines added in this change, never the existing corpus." >&2
+    echo "  why: $violations added pipeline(s) let SIGPIPE decide a verdict under pipefail (each REFUSED block above names one)" >&2
+    echo "  remedy: at each site, capture the output first or use a here-string (grep -q PATTERN <<<\"\$var\"); a genuinely bounded one takes # sigpipe-ok: <reason>" >&2
     exit 1
 fi
 echo "ok:sigpipe-verdict-added:$checked checked"

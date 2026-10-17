@@ -126,6 +126,8 @@ if [ "$avail_mb" -lt "$FLOOR_MB" ]; then
     echo "  which is indistinguishable from a hang (1176-fn2p). Refusing in seconds instead." >&2
     echo "  This is a LEGIBILITY floor, not a capacity claim: a host above it is never refused here." >&2
     echo "  Raise or lower it deliberately with TILLANDSIAS_GATE_MEMORY_FLOOR_MB." >&2
+    echo "  why: ${avail_mb}MB is available against a ${FLOOR_MB}MB floor, so the gate would likely be killed without a verdict" >&2
+    echo "  remedy: free memory (stop other gates, VMs or browsers on this host) and re-run; change TILLANDSIAS_GATE_MEMORY_FLOOR_MB only deliberately" >&2
     exit 1
 fi
 
