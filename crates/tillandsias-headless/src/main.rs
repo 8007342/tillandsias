@@ -124,6 +124,9 @@ compile_error!(
 mod vault_bootstrap;
 // Advisory per-resource flocks for container check+act sections (order 232, R4).
 mod resource_lock;
+// @trace order:1776-brk3 — the on-demand image build breaker: a failed build
+// is remembered by (image, inputs digest) and later ensures refuse fast.
+mod image_ensure_marker;
 // The crate-wide env_lock() every env-mutating test serializes on (1437-5czv).
 #[cfg(test)]
 mod test_support;
@@ -416,6 +419,39 @@ fn main() {
             Ok(()) => std::process::exit(0),
             Err(e) => {
                 eprintln!("[tillandsias] --internal-ensure-image {image_name} failed: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    // Order 1776-brk3: `--retry-image <name>` — clear a failed build's
+    // marker and rebuild that image in the foreground.
+    if let Some(i) = user_args.iter().position(|a| a == "--retry-image") {
+        let debug = user_args.iter().any(|a| a == "--debug");
+        let Some(image_name) = user_args.get(i + 1).filter(|a| !a.starts_with('-')) else {
+            let failed: Vec<String> = image_ensure_marker_dir()
+                .map(|d| image_ensure_marker::list(&d))
+                .unwrap_or_default()
+                .into_iter()
+                .map(|m| m.image)
+                .collect();
+            eprintln!(
+                "Error: --retry-image requires <image-name>; images whose last build failed: {}",
+                if failed.is_empty() {
+                    "none".to_string()
+                } else {
+                    failed.join(", ")
+                }
+            );
+            std::process::exit(2);
+        };
+        match run_retry_image(image_name, debug) {
+            Ok(()) => {
+                eprintln!("[tillandsias] retry-image {image_name}: built");
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("[tillandsias] retry-image {image_name} failed: {e}");
                 std::process::exit(1);
             }
         }
@@ -2245,6 +2281,10 @@ impl InitBuildState {
 
     fn mark_success(&mut self, image: &str) {
         self.images.insert(image.to_string(), "success".to_string());
+        // 1776-brk3: a successful --init build clears the launch breaker.
+        if let Some(d) = image_ensure_marker_dir() {
+            let _ = image_ensure_marker::clear(&d, image);
+        }
     }
 
     fn mark_failed(&mut self, image: &str) {
@@ -3207,9 +3247,22 @@ pub(crate) fn ensure_image_exists(
 
     // Resolve the base image first. Its own content check runs inside this same
     // function, so a stale base is rebuilt rather than accepted on tag presence.
+    // 1776-brk3: a base that refuses (its own marker) or fails records ITS
+    // marker; the dependent records none, so a fixed base retries it at once.
     if let Some(dependency) = image_dependency(image_name) {
         let dependency_tag = versioned_image_tag(dependency, version);
         ensure_image_exists(root, dependency, &dependency_tag, debug).map_err(|e| {
+            eprintln!(
+                "{}",
+                image_ensure_marker::verdict_line(
+                    image_name,
+                    "refuse",
+                    None,
+                    None,
+                    &format!("base-{dependency}-failed"),
+                    None,
+                )
+            );
             format!(
                 "Required base image '{}' is absent or stale and failed to build on demand: {}.\n\
                  {IMAGE_BUILD_REMEDY}",
@@ -3223,8 +3276,53 @@ pub(crate) fn ensure_image_exists(
     // change — the old explicit managed-layer-policy tag probe is subsumed
     // rather than dropped.
     let (identity, build_args) = ensure_image_identity(root, image_name, version)?;
-    let (observation, _) = rt.block_on(observe_image_build(&client, &identity, false));
+
+    // 1776-brk3: the breaker, checked here under the image lock so a waiter
+    // sees the winner's marker instead of rebuilding.
+    let marker_dir = image_ensure_marker_dir();
+    let now = unix_now_secs();
+    let forced = image_ensure_forced(image_name);
+    let mut marker = marker_dir
+        .as_deref()
+        .and_then(|d| image_ensure_marker::load(d, image_name));
+    match image_ensure_marker::decide(marker.as_ref(), &identity.source_digest, now) {
+        image_ensure_marker::Breaker::Refuse if !forced => {
+            let m = marker.as_ref().expect("Refuse implies a marker");
+            eprintln!(
+                "{}",
+                image_ensure_marker::verdict_line(
+                    image_name,
+                    "refuse",
+                    Some(&identity.source_digest),
+                    None,
+                    "build-failed-previously",
+                    Some(m.attempts),
+                )
+            );
+            return Err(image_ensure_marker::refusal(m, now));
+        }
+        image_ensure_marker::Breaker::InputsChanged => {
+            if let Some(d) = marker_dir.as_deref() {
+                let _ = image_ensure_marker::clear(d, image_name);
+            }
+            marker = None;
+        }
+        _ => {}
+    }
+
+    let (observation, _) = rt.block_on(observe_image_build(&client, &identity, forced));
     let decision = ensure_image_decision(&identity, &observation);
+    eprintln!(
+        "{}",
+        image_ensure_marker::verdict_line(
+            image_name,
+            image_build_action_label(decision.action),
+            Some(&identity.source_digest),
+            observation.canonical_source_digest.as_deref(),
+            image_build_reason_label(decision.reason),
+            marker.as_ref().map(|m| m.attempts),
+        )
+    );
 
     match decision.action {
         ImageBuildAction::Skip => {}
@@ -3239,9 +3337,43 @@ pub(crate) fn ensure_image_exists(
                 "[tillandsias] building image {image_name} ({image_tag}, {}); this may take several minutes",
                 image_build_reason_label(decision.reason)
             );
-            build_image_with_logging(root, image_name, &identity, &build_args, &None, debug)
-                .map_err(|e| format_on_demand_image_build_error(image_tag, &e))?;
+            if let Err(e) =
+                build_image_with_logging(root, image_name, &identity, &build_args, &None, debug)
+            {
+                // 1776-brk3: remember these inputs failed, so the next ensure
+                // refuses in seconds instead of building again.
+                if let Some(d) = marker_dir.as_deref() {
+                    let log = image_build_helper_log_path(image_name);
+                    match image_ensure_marker::record(
+                        d,
+                        image_name,
+                        &identity.source_digest,
+                        &e,
+                        &log.display().to_string(),
+                        now,
+                    ) {
+                        Ok(m) => eprintln!(
+                            "[tillandsias] image-ensure {image_name}: build failed (attempt {}); later ensures refuse until {} — `tillandsias --retry-image {image_name}` retries now",
+                            m.attempts,
+                            m.next_retry_at.map_or_else(
+                                || "an input changes or the operator retries".to_string(),
+                                |t| format!(
+                                    "{} min have passed or an input changes",
+                                    t.saturating_sub(now) / 60
+                                )
+                            )
+                        ),
+                        Err(w) => eprintln!(
+                            "[tillandsias] WARNING: could not record the failed build of {image_name}: {w}"
+                        ),
+                    }
+                }
+                return Err(format_on_demand_image_build_error(image_tag, &e));
+            }
             rt.block_on(apply_image_aliases(&client, &identity))?;
+            if let Some(d) = marker_dir.as_deref() {
+                let _ = image_ensure_marker::clear(d, image_name);
+            }
             if debug {
                 eprintln!(
                     "[tillandsias] built image {image_name}: {}",
@@ -3288,9 +3420,66 @@ fn build_failure_message<'a>(status: &str, stderr_tail: impl Iterator<Item = &'a
 /// The remedy line for an image that failed to build (order 1502-utcy). The
 /// guest cannot tell which host it runs under, so it names the action for each:
 /// "tillandsias --init" alone is Linux-only and unrunnable for a tray user.
-const IMAGE_BUILD_REMEDY: &str = "To retry: on Linux run `tillandsias --init`; from the macOS or \
-     Windows tray, launch the forge again (the build is retried on each launch). The lines above \
-     name the step that failed.";
+/// 1776-brk3: a failed build is remembered by its inputs digest, so the
+/// remedy names the explicit retry (and that a fix to an input retries
+/// automatically) instead of promising a rebuild on every launch.
+const IMAGE_BUILD_REMEDY: &str = "The lines above name the step that failed. Later launches do not \
+     rebuild these same inputs every time: they refuse fast and retry automatically (10 min after \
+     the first failure, 1 h after the second, then once a day). To retry now: on Linux run \
+     `tillandsias --retry-image <image>` (or `tillandsias --init`); from the macOS or Windows tray, \
+     launch the forge again once the retry is due. A change to any image input retries at the next \
+     launch.";
+
+/// 1776-brk3: where the build breaker keeps its markers.
+pub(crate) fn image_ensure_marker_dir() -> Option<PathBuf> {
+    init_cache_dir()
+        .ok()
+        .map(|d| d.join(image_ensure_marker::MARKER_DIR))
+}
+
+fn unix_now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// 1776-brk3: `tillandsias --retry-image <name>` sets this (inherited by
+/// the detached helper) to force one rebuild of exactly that image.
+const IMAGE_ENSURE_FORCE_ENV: &str = "TILLANDSIAS_IMAGE_ENSURE_FORCE";
+
+fn image_ensure_forced(image_name: &str) -> bool {
+    std::env::var(IMAGE_ENSURE_FORCE_ENV).is_ok_and(|v| v == image_name)
+}
+
+/// 1776-brk3: `tillandsias --retry-image <name>`: clear the marker and
+/// rebuild in the foreground.
+fn run_retry_image(image_name: &str, debug: bool) -> Result<(), String> {
+    let version = VERSION.trim();
+    let root = resolve_runtime_asset_root(version, debug)?;
+    if image_specs(&root, image_name).is_err() {
+        return Err(format!(
+            "refused:retry-image:unknown-image:{image_name}\n  why: no image of that name is built by Tillandsias\n  remedy: name one shown in a build-failed-previously refusal"
+        ));
+    }
+    if let Some(d) = image_ensure_marker_dir()
+        && image_ensure_marker::clear(&d, image_name)?
+    {
+        eprintln!("[tillandsias] retry-image {image_name}: cleared its failed-build marker");
+    }
+    // SAFETY: set before any thread is spawned by this command; the detached
+    // helper inherits it.
+    unsafe { std::env::set_var(IMAGE_ENSURE_FORCE_ENV, image_name) };
+    eprintln!(
+        "[tillandsias] retry-image {image_name}: rebuilding now (this may take several minutes)"
+    );
+    ensure_image_exists(
+        &root,
+        image_name,
+        &versioned_image_tag(image_name, version),
+        debug,
+    )
+}
 
 fn format_on_demand_image_build_error(image_tag: &str, error: &str) -> String {
     format!(
@@ -32964,6 +33153,70 @@ esac
     /// `ensure_image_exists` CALLS the guard: delete the call and all eleven
     /// stay green while every launch silently rolls the enclave back.
     ///
+    /// 1776-brk3: a failed build is remembered, so the remedy must not
+    /// promise a rebuild on every launch, and it names the explicit retry.
+    #[test]
+    fn image_build_remedy_never_says_retried_on_each_launch() {
+        assert!(
+            !IMAGE_BUILD_REMEDY.contains(concat!("retried on each ", "launch")),
+            "{IMAGE_BUILD_REMEDY}"
+        );
+        assert!(IMAGE_BUILD_REMEDY.contains("tillandsias --retry-image"));
+        // 1502-utcy still holds: each platform gets a step it can run.
+        assert!(IMAGE_BUILD_REMEDY.contains("tillandsias --init"));
+        assert!(IMAGE_BUILD_REMEDY.contains("launch the forge again"));
+        let e = format_on_demand_image_build_error("localhost/tillandsias-proxy:v1", "boom");
+        assert!(e.contains("--retry-image"), "{e}");
+    }
+
+    /// 1776-brk3: every ensure prints exactly ONE verdict line. The locked
+    /// path has three exits that decide (a failed base, the breaker's
+    /// refusal, the build decision), each prints the line once, and the two
+    /// refusals return right after printing it. The Lua fixture
+    /// (scripts/lua/test-image-ensure-breaker.lua) counts the lines in the
+    /// helper log of a real run.
+    #[test]
+    fn ensure_prints_one_verdict_line() {
+        let dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let source = std::fs::read_to_string(std::path::Path::new(&dir).join("src/main.rs"))
+            .expect("read main.rs");
+        let body = source_window(&source, concat!("pub(crate) fn ensure_", "image_exists("));
+        let call = concat!("image_ensure_marker::", "verdict_line(");
+        assert_eq!(
+            body.matches(call).count(),
+            3,
+            "three deciding exits, one line each"
+        );
+        let refuse = body
+            .find(concat!("Breaker::Refuse ", "if !forced"))
+            .expect("the breaker refusal arm");
+        let after = &body[refuse..];
+        let line = after.find(call).expect("the refusal prints its verdict");
+        let ret = after
+            .find(concat!("return Err(image_ensure_marker::", "refusal("))
+            .expect("the refusal returns");
+        assert!(
+            line < ret,
+            "the verdict is printed before the refusal returns"
+        );
+        assert!(
+            body.find(call).unwrap()
+                < body
+                    .find(concat!("let (identity, ", "build_args)"))
+                    .unwrap(),
+            "the failed-base verdict comes before identity"
+        );
+        let shape = image_ensure_marker::verdict_line(
+            "git",
+            "skip",
+            Some("sha256:a"),
+            Some("sha256:a"),
+            "digest_present",
+            None,
+        );
+        assert!(shape.starts_with("[tillandsias] image-ensure git decided=skip digest=sha256:a"));
+    }
+
     /// THE ORDERING IS THE LOAD-BEARING HALF AND IT HAS A STATED REASON. The
     /// refusal must be raised BEFORE the detach, because the helper runs in its
     /// own session with no controlling tty — a refusal raised in there reaches
