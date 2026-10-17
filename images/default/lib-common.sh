@@ -1189,6 +1189,32 @@ _clone_project_from_mirror_impl() {
                 # rather than proceeding, and FAIL LOUD (never launch on an empty
                 # tree) once retries are exhausted.
                 if ! git -C "$clone_dir" rev-parse --verify --quiet HEAD >/dev/null 2>&1; then
+                    # @trace order:1759-6z2m
+                    # An EMPTY PROJECT (no files, no commits) is the one HEAD-less
+                    # clone that is correct: the onboarding entry point. It is told
+                    # apart by two facts the mirror advertises, BOTH required: no
+                    # refs/heads/* at all (its own refs/tillandsias/* state refs are
+                    # always there, so "no refs" never holds), and the upstream-auth
+                    # verdict `local-only` (no origin, so no seed is coming;
+                    # images/git/probe-upstream-auth.sh). With an upstream, or with no
+                    # verdict yet, the retry and refusal below stay in force.
+                    local advertised_now
+                    advertised_now=$'\n'"$(git ls-remote "git://$(git_mirror_host)/${TILLANDSIAS_PROJECT}" 2>/dev/null || true)"
+                    if [[ "$advertised_now" != *$'\trefs/heads/'* ]] && \
+                       [[ "$advertised_now" == *$'\trefs/tillandsias/upstream-auth/local-only/'* ]]; then
+                        cd "$clone_dir" || return 1
+                        if [[ -n "${TILLANDSIAS_FORGE_SEED_BRANCH:-}" ]]; then
+                            git symbolic-ref HEAD "refs/heads/${TILLANDSIAS_FORGE_SEED_BRANCH}" 2>/dev/null || true
+                        fi
+                        git remote set-url --push origin "git://$(git_mirror_host)/${TILLANDSIAS_PROJECT}" 2>/dev/null || \
+                            echo "[entrypoint] WARNING: Failed to set push URL — git push may not work" >&2
+                        configure_git_identity
+                        rewrite_origin_for_enclave_push
+                        trace_lifecycle "git-mirror" "empty project: no branches and no upstream; starting on unborn '$(git symbolic-ref --short -q HEAD)'"
+                        echo "[forge] New empty project: starting on branch '$(git symbolic-ref --short -q HEAD)' with no commits yet."
+                        echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
+                        return 0
+                    fi
                     rm -rf "$clone_dir" 2>/dev/null || true
                     if [[ $i -lt $max_retries ]]; then
                         trace_lifecycle "git-mirror" "clone returned an EMPTY tree (mirror still seeding), retrying ($i/$max_retries, ${backoff}s)..."
