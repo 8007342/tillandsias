@@ -892,6 +892,7 @@ specs:
   - litmus:drain-vs-self-heal
   - litmus:teardown-liveness-shared-scope-agreement
   - litmus:gate-podman-mode-is-configuration-not-inference
+  - litmus:image-ensure-disk-preflight
   coverage_ratio: 100
   last_verified: '2026-08-17'
 - spec_id: podman-container-spec

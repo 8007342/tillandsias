@@ -1123,12 +1123,29 @@ fn read_capped<R: std::io::Read>(pipe: Option<R>) -> (Vec<u8>, u64) {
 /// [`SyncPodmanCommand`], which has no unbounded run method (order 714-4r6w).
 pub fn podman_cmd_sync() -> SyncPodmanCommand {
     SyncPodmanCommand {
-        inner: podman_cmd_sync_std(),
+        inner: podman_cmd_sync_std(&[]),
     }
 }
 
-fn podman_cmd_sync_std() -> std::process::Command {
-    let mut cmd = std::process::Command::new(find_podman_path());
+/// A podman command run UNDER `prefix`, a resource wrapper that execs its
+/// argument (order 1776-d5k2: `systemd-run --user --scope -p CPUWeight=50 …` or
+/// `nice -n 10`). The podman path, environment and fd hygiene are exactly
+/// [`podman_cmd_sync`]'s; an empty prefix IS `podman_cmd_sync`.
+pub fn podman_cmd_sync_under(prefix: &[String]) -> SyncPodmanCommand {
+    SyncPodmanCommand {
+        inner: podman_cmd_sync_std(prefix),
+    }
+}
+
+fn podman_cmd_sync_std(prefix: &[String]) -> std::process::Command {
+    let mut cmd = match prefix.split_first() {
+        None => std::process::Command::new(find_podman_path()),
+        Some((wrapper, rest)) => {
+            let mut c = std::process::Command::new(wrapper);
+            c.args(rest).arg(find_podman_path());
+            c
+        }
+    };
     env_remove_if_present(&mut cmd, "LD_LIBRARY_PATH");
     env_remove_if_present(&mut cmd, "LD_PRELOAD");
     configure_podman_environment(&mut cmd);

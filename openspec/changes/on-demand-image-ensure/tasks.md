@@ -41,10 +41,10 @@ today's code first (memory: exit criteria must fail on the pre-fix code).
 
 ## 4. Bound the build (v0.5)
 
-- [ ] 4.1 Free-space preflight on the podman graph root against a per-image
+- [x] 4.1 Free-space preflight on the podman graph root against a per-image
       need; `refused:image-ensure:<image>:disk:<free>/<need>`, no marker
       [1776-d5k2]
-- [ ] 4.2 `podman build` under `systemd-run --user --scope` weights
+- [x] 4.2 `podman build` under `systemd-run --user --scope` weights
       (fallback `nice -n 10`); opt-out env for the gate [1776-d5k2]
 
 ## 5. Make it visible (v0.5)
