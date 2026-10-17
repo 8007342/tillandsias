@@ -4989,6 +4989,7 @@ fn run_policy(args: &[String]) -> ! {
             host_kind: cp::HostKind::BareMetal,
             regime: "interactive".into(),
             caller: "consent-grant".into(),
+            env: Vec::new(),
         };
         let d = cp::decide_loaded(&req, loaded.as_ref(), &load, &protected);
         if d.strictness != cp::Strictness::Consent || d.rule_id != class {
@@ -5106,6 +5107,7 @@ fn run_policy(args: &[String]) -> ! {
                 host_kind: reading.kind,
                 regime,
                 caller,
+                env: Vec::new(),
             };
             let d = cp::decide_loaded(&req, loaded.as_ref(), &load, &protected);
             cp::audit_decision(&req, &d, None);
