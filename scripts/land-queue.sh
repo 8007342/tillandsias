@@ -128,6 +128,9 @@ cd "$ROOT" || exit 1
 # can drive the script; every default is the production value.
 GH="${TILLANDSIAS_LAND_QUEUE_GH:-gh}"
 GATE="${TILLANDSIAS_LAND_QUEUE_GATE:-./build.sh --check}"
+# ORDER 1765-q7rg: the ~1-min decider door run on the merge result BEFORE the
+# ~21-min gate. Set to the empty string to disable (the fixture's default).
+PREFLIGHT="${TILLANDSIAS_LAND_QUEUE_PREFLIGHT-./build.sh --preflight}"
 REMOTE="${TILLANDSIAS_LAND_QUEUE_REMOTE:-origin}"
 TRUNK="${TILLANDSIAS_TRUNK_BRANCH:-linux-next}"
 LOCKDIR="${TILLANDSIAS_LAND_QUEUE_LOCK:-$ROOT/.git/tillandsias-land-queue.lock}"
@@ -176,6 +179,29 @@ pr_comment() {
     fi
 }
 
+# ── ORDER 1765-q7rg: THE QUEUE REMEMBERS ITS OWN EVICTIONS ON THE PR ─────────
+# Every eviction comment ends with one machine line naming the head it evicted,
+# the trunk base it merged onto and why. The PR's comments are remote state the
+# queue already writes and trusts, so a later run can ask "did I already reject
+# exactly this head?" without a local cache that another host would not have.
+#   <!-- land-queue:evicted pr=<n> head=<sha> base=<sha> reason=<token> -->
+# reason is gate-failed | preflight-failed | flaky | carried-<kind>:<backlog>
+# | conflict:<path>,<path>,...  (no spaces, so the line splits on them).
+evict_marker() {  # <pr> <head sha> <base sha> <reason>
+    printf '\n\n<!-- land-queue:evicted pr=%s head=%s base=%s reason=%s -->\n' "$1" "$2" "$3" "$4"
+}
+# last_eviction <pr> — the newest marker line on the PR, or nothing. A failed
+# read is nothing: the queue then gates as it always did.
+last_eviction() {
+    "$GH" pr view "$1" --json comments 2>/dev/null \
+        | "$PLAN" json get -r '.comments[].body' 2>/dev/null \
+        | grep -o "<!-- land-queue:evicted pr=$1 head=[0-9a-f]* base=[0-9a-f]* reason=[^ ]* -->" \
+        | tail -n 1
+}
+marker_field() {  # <marker line> <field>
+    printf '%s\n' "$1" | sed -n "s/.* $2=\([^ ]*\) .*/\1/p"
+}
+
 # gate_failed_comment <gate log> <rc> <head> <trunk> <base sha> — the body of a
 # gate-failed eviction comment, on stdout.
 #
@@ -193,7 +219,7 @@ gate_failed_comment() {
     fails="$(awk '
         { line = $0; gsub(/\033\[[0-9;]*m/, "", line); sub(/^[ \t]+/, "", line) }
         # A sum of single-pattern tests, not an alternation: no "|" for the pipe-site counter to misread.
-        { verdict = (line ~ /^FAIL/) + (line ~ /^\[FAIL\]/) + (line ~ /^refused:/) + (line ~ /^violation:/) + (line ~ /^blocked:/) }
+        { verdict = (line ~ /^FAIL/) + (line ~ /^\[FAIL\]/) + (line ~ /^refused:/) + (line ~ /^violation:/) + (line ~ /^blocked:/) + (line ~ /^flaky:/) }
         verdict && !(line in seen) && n < 20 { seen[line] = 1; n++; print line }
     ' "$glog" 2>/dev/null)"
     # END-FAIL-LINES
@@ -279,6 +305,7 @@ fi
 git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null || true
 
 _n=0
+_deferred=""
 # THE CANDIDATE LIST IS READ ON FD 3, NOT STDIN, AND THAT IS NOT STYLE.
 #
 # MEASURED IN THE FIELD ON THIS SCRIPT'S SECOND REAL USE, 2026-09-21: invoked
@@ -295,10 +322,20 @@ _n=0
 #
 # fd 3 makes the body's stdin habits irrelevant instead of forbidding them: any
 # future step may read stdin freely and the candidate list is untouchable.
+# ORDER 1765-q7rg: TWO PASSES. Pass 1 is the queue; pass 2 re-gates, once, the
+# candidates pass 1 deferred for a flaky: verdict, at the back of the run. A
+# second flaky: in pass 2 evicts. --limit counts pass-1 candidates only.
+for _pass in 1 2; do
+if [ "$_pass" -eq 2 ]; then
+    [ -n "$_deferred" ] || break
+    _cands="$_deferred"; _deferred=""
+fi
 while IFS=$'\t' read -r num head <&3; do
     [ -n "$num" ] || continue
-    if [ "$LIMIT" -gt 0 ] && [ "$_n" -ge "$LIMIT" ]; then break; fi
-    _n=$((_n + 1))
+    if [ "$_pass" -eq 1 ]; then
+        if [ "$LIMIT" -gt 0 ] && [ "$_n" -ge "$LIMIT" ]; then break; fi
+        _n=$((_n + 1))
+    fi
 
     # A PR whose head is not a work ref is not a queue entry. Named, not
     # silently dropped: the author needs to know which lane the queue reads.
@@ -322,6 +359,50 @@ while IFS=$'\t' read -r num head <&3; do
 
     say "land-queue: #$num $head tier=full base=${base_sha:0:9} head=${head_sha:0:9}"
 
+    # ── ORDER 1765-q7rg: A HEAD THIS QUEUE ALREADY REJECTED IS NOT RE-GATED ──
+    # Measured: ~44 min in one session (#488, #498) re-gating heads the queue
+    # had just evicted, onto a trunk that had moved only in the ledger. When
+    # the PR's newest eviction marker names THIS head and the trunk delta since
+    # that eviction's base is empty or plan-ledger only — the 1335-2nzf adopt
+    # classifier, never a time window — the verdict would be the same, so skip.
+    # A conflict is not skipped here (the merge is cheap and answers it again,
+    # and the auto-draft below acts on a repeat); neither is a flaky eviction,
+    # whose whole meaning is that the same head may pass.
+    _last="$(last_eviction "$num")"
+    _last_head="$(marker_field "$_last" head)"
+    _last_base="$(marker_field "$_last" base)"
+    _last_reason="$(marker_field "$_last" reason)"
+    if [ -n "$_last" ] && [ "$_last_head" = "$head_sha" ]; then
+        case "$_last_reason" in
+            gate-failed|preflight-failed|carried-*)
+                # An allow-list: a conflict, a flaky or aborted gate, or any reason a
+                # later change adds is re-gated, never skipped.
+                _sdelta=""; _sclasses=""; _stale=0
+                if git cat-file -e "$_last_base^{commit}" 2>/dev/null; then
+                    _sdelta="$(git diff --name-only "$_last_base" "$base_sha" 2>/dev/null)"
+                    [ -n "$_sdelta" ] || _sclasses="unchanged-base"
+                    if [ -z "$_sdelta" ]; then
+                        _stale=1
+                    else
+                        _sclasses="$(printf '%s\n' "$_sdelta" | bash "$_SELF_DIR/gate-stamp.sh" classify 2>/dev/null)"
+                        if [ -n "$_sclasses" ]; then
+                            _stale=1
+                            while IFS= read -r _c; do
+                                [ -n "$_c" ] || continue
+                                [ "$_c" = "plan-ledger" ] || { _stale=0; break; }
+                            done <<< "$_sclasses"
+                        fi
+                    fi
+                fi
+                if [ "$_stale" -eq 1 ]; then
+                    say "skip:land-queue:$num:stale-head:${head_sha:0:9}:last=$_last_reason:since=${_last_base:0:9}:classes=$(printf '%s' "${_sclasses:-none}" | tr '\n' ',' | sed 's/,$//') — evicted at this head and trunk moved only in the ledger; push a new head to re-enter"
+                    skipped=$((skipped + 1))
+                    continue
+                fi
+                ;;
+        esac
+    fi
+
     # ── MERGE TARGET + CANDIDATE ─────────────────────────────────────────────
     git checkout -q --detach "$base_sha" 2>/dev/null || {
         say "skip:land-queue:$num:cannot-detach"; skipped=$((skipped + 1)); continue
@@ -337,9 +418,27 @@ while IFS=$'\t' read -r num head <&3; do
         git merge --abort 2>/dev/null || true
         [ -n "$_conf" ] || _conf="(none reported — see the merge log)"
         say "evict:land-queue:$num:conflict:$_conf"
+        _creason="conflict:$(printf '%s' "$_conf" | sed 's/ *$//' | tr ' ' ',')"
+        # ORDER 1765-q7rg: THE SECOND IDENTICAL CONFLICT AT AN UNCHANGED HEAD
+        # DRAFTS THE PR. The queue re-merges it every run and gets the same
+        # answer; only the author can change it, so take it out of the queue
+        # (a draft is not a candidate) and say so where the author will look.
+        _drafted=""
+        if [ "$_last_head" = "$head_sha" ] && [ "$_last_reason" = "$_creason" ]; then
+            if [ "$DRY_RUN" -eq 1 ]; then
+                say "dry-run: would convert #$num to draft"
+            elif "$GH" pr ready "$num" --undo >/dev/null 2>&1; then
+                _drafted=1
+                say "draft:land-queue:$num:repeat-conflict:${head_sha:0:9}"
+            else
+                say "advisory:land-queue:$num:draft-failed — the PR stays in the queue"
+            fi
+        fi
         pr_comment "$num" "Evicted from the landing queue: merging with \`$TRUNK\` at \`${base_sha:0:9}\` conflicts in: $_conf
 
-Rebase or merge \`$TRUNK\` into \`$head\` and the queue will pick it up again. The queue continued with the next candidate."
+Rebase or merge \`$TRUNK\` into \`$head\` and the queue will pick it up again. The queue continued with the next candidate.${_drafted:+
+
+This is the second identical conflict at this unchanged head (\`${head_sha:0:9}\`), so the queue converted this PR to a **draft**. Resolve the conflict, push, and mark it ready for review to re-enter the queue.}$(evict_marker "$num" "$head_sha" "$base_sha" "$_creason")"
         evicted=$((evicted + 1))
         rm -f "$_mlog"
         continue
@@ -414,7 +513,7 @@ Pay it: port ${_cdue:-one item} to scripts/lua/ and delete the .sh. Or waive it 
 ${_cwaiver:-Carried-Waiver: $_cb <reason>}
 \`\`\`
 
-The queue continued with the next candidate."
+The queue continued with the next candidate.$(evict_marker "$num" "$head_sha" "$base_sha" "carried-$_ck:$_cb")"
         evicted=$((evicted + 1))
         continue
     fi
@@ -432,14 +531,54 @@ The queue continued with the next candidate."
         say "dry-run: would gate ${merge_sha:0:9} then push to $TRUNK"
         continue
     fi
+    # ── ORDER 1765-q7rg: THE PREFLIGHT DOOR BEFORE THE FULL GATE ─────────────
+    # The tree-only deciders answer in about a minute; a decider-level red
+    # (exit 1) here is the same red the full gate would reach after ~21 min.
+    # A stale plan binary on THIS host also exits 1 but says nothing about the
+    # candidate, and any other code is the door failing to run: both go on to
+    # the full gate, which decides as it always did.
+    if [ -n "$PREFLIGHT" ]; then
+        _plog="$(mktemp "${TMPDIR:-/tmp}/land-queue-preflight.XXXXXX")"
+        ( eval "$PREFLIGHT" ) < /dev/null > "$_plog" 2>&1
+        _prc_pf=$?
+        if [ "$_prc_pf" -eq 1 ] && ! grep -q 'refused:preflight:stale-plan-binary' "$_plog"; then
+            say "evict:land-queue:$num:preflight-failed:rc=1"
+            pr_comment "$num" "$(gate_failed_comment "$_plog" 1 "$head" "$TRUNK" "$base_sha" | sed '1s/the gate failed/the preflight door (`build.sh --preflight`) refused/')$(evict_marker "$num" "$head_sha" "$base_sha" preflight-failed)"
+            evicted=$((evicted + 1))
+            rm -f "$_plog"
+            continue
+        elif [ "$_prc_pf" -ne 0 ]; then
+            say "advisory:land-queue:$num:preflight-not-decisive:rc=$_prc_pf — running the full gate"
+        fi
+        rm -f "$_plog"
+    fi
+
     _glog="$(mktemp)"
     # No pipeline: a `$GATE | tee` would hand us tee's status, which is the
     # 859-4jny bug one layer over.
     ( eval "$GATE" ) < /dev/null > "$_glog" 2>&1
     _grc=$?
     if [ "$_grc" -ne 0 ]; then
-        say "evict:land-queue:$num:gate-failed:rc=$_grc"
-        pr_comment "$num" "$(gate_failed_comment "$_glog" "$_grc" "$head" "$TRUNK" "$base_sha")"
+        # ORDER 1765-q7rg: A flaky:<step>:<verdicts> line is the step runner's
+        # word that a host-state step disagreed with itself twice on this host
+        # (STEP_HOST_STATE). The first such red re-queues the candidate ONCE at
+        # the back of this run; a second evicts like any red.
+        _flaky="$(grep -m 1 '^flaky:' "$_glog" 2>/dev/null)"
+        if [ -n "$_flaky" ] && [ "$_pass" -eq 1 ]; then
+            say "requeue:land-queue:$num:$_flaky — re-gating once at the back of the queue"
+            _deferred="${_deferred}${num}	${head}"$'\n'
+            requeued=$((requeued + 1))
+            rm -f "$_glog"
+            continue
+        fi
+        say "evict:land-queue:$num:gate-failed:rc=$_grc${_flaky:+:$_flaky}"
+        # Only rc=1 is the gate's verdict on the tree. Any other code (255 is a host
+        # going down mid-run, 137 a kill) says nothing about the candidate, so it
+        # is recorded as gate-aborted, which the stale-head skip never acts on.
+        if [ -n "$_flaky" ]; then _greason=flaky
+        elif [ "$_grc" -eq 1 ]; then _greason=gate-failed
+        else _greason="gate-aborted:rc=$_grc"; fi
+        pr_comment "$num" "$(gate_failed_comment "$_glog" "$_grc" "$head" "$TRUNK" "$base_sha")$(evict_marker "$num" "$head_sha" "$base_sha" "$_greason")"
         evicted=$((evicted + 1))
         rm -f "$_glog"
         continue
@@ -537,6 +676,7 @@ The queue continued with the next candidate."
     say "requeue:land-queue:$num:push-did-not-land:rc=$_prc — the remote does not have ${merge_sha:0:9}"
     requeued=$((requeued + 1))
 done 3<<< "$_cands"
+done
 
 say "ok:land-queue:$_n landed=$landed evicted=$evicted requeued=$requeued skipped=$skipped"
 exit 0
