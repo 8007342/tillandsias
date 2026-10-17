@@ -10447,6 +10447,7 @@ pub(crate) fn build_image_with_logging(
     // lines as typed ProgressEvents, not from keyword-triggered 50/75/100.
     let mut progress = image_build_progress::ImageBuildProgress::new(image_name);
     let mut last_reported: Option<usize> = None;
+    let mut last_step: Option<u64> = None;
 
     if let Some(stdout_reader) = stdout {
         let buf_reader = std::io::BufReader::new(stdout_reader);
@@ -10469,15 +10470,20 @@ pub(crate) fn build_image_with_logging(
                     let _ = writeln!(f, "{}", image_build_progress::event_log_line(&event));
                 }
                 progress_sink::publish(event);
-                // The user-facing line keeps its approved format; only the
-                // number is now real. Printed once per whole-ten change.
+                // Printed once per whole-ten change AND once per new step, so
+                // the line always names the step that is running (order
+                // 1771-4iw3; wording approved by the operator 2026-10-17).
                 let percent = progress.percent();
-                if last_reported.is_none_or(|last| percent / 10 > last / 10) {
+                let step = progress.current_step();
+                let step_n = step.map(|(n, _, _)| n);
+                if last_reported.is_none_or(|last| percent / 10 > last / 10) || step_n != last_step
+                {
                     println!(
                         "{}",
-                        image_build_progress::legacy_bar_line(image_name, percent)
+                        image_build_progress::bar_line(image_name, percent, step)
                     );
                     last_reported = Some(percent);
+                    last_step = step_n;
                 }
             }
         }
@@ -10492,7 +10498,7 @@ pub(crate) fn build_image_with_logging(
 
     let result = if status.success() {
         if last_reported != Some(100) {
-            println!("{}", image_build_progress::legacy_bar_line(image_name, 100));
+            println!("{}", image_build_progress::bar_line(image_name, 100, None));
         }
         Ok(())
     } else {
@@ -33830,7 +33836,7 @@ esac
 
     // progress_output_format_is_valid was retired by order 1420-6brx: it
     // asserted a format string it built itself, so it pinned nothing about
-    // the emitter. image_build_progress::tests::legacy_line_keeps_its_format
+    // the emitter. image_build_progress::tests::bar_line_names_the_step
     // and a_real_build_yields_determinate_events_before_done replace it.
 
     #[test]
