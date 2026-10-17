@@ -80,7 +80,21 @@ fi
 # so every lane that stages the sidecar before compiling stages it as well.
 # It skips an unchanged tree on its own stamp, and stages nothing (with a named
 # warning) on a host with no musl C toolchain.
-[ ! -f "$SCRIPT_DIR/build-forge-plan-bin.sh" ] || bash "$SCRIPT_DIR/build-forge-plan-bin.sh"
+# Decoupled from the sidecar (coordinator ruling): the two are independent
+# outputs, so a decider failure must not skip the sidecar. Its status is kept
+# and re-raised when this script exits, so it stays loud.
+plan_rc=0
+[ ! -f "$SCRIPT_DIR/build-forge-plan-bin.sh" ] || bash "$SCRIPT_DIR/build-forge-plan-bin.sh" || plan_rc=$?
+_reraise_plan_rc() {
+    local rc=$?
+    if [ "$rc" -eq 0 ] && [ "$plan_rc" -ne 0 ]; then
+        echo "refused:build-sidecar:forge-plan-bin-failed:rc=${plan_rc} — the router sidecar was still staged" >&2
+        echo "  why: the forge's Bash policy decider was not built, and an image built from this tree would refuse every Claude Bash command" >&2
+        echo "  remedy: fix what the refused:forge-plan-bin line above names, or for a compile-only build set TILLANDSIAS_FORGE_PLAN_OPTIONAL=1" >&2
+        exit "$plan_rc"
+    fi
+}
+trap _reraise_plan_rc EXIT
 SIDECAR_DEST="$ROOT/images/router/tillandsias-router-sidecar"
 # Use a SEPARATE target dir so a nested invocation (e.g. build.rs calling
 # this script while the parent cargo holds target/'s lock) cannot deadlock.
