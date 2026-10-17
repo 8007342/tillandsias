@@ -5254,6 +5254,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Forge Bash policy hook fixture passed"
 
+    # 1756-z3kz: the embedded-ELF arch check release.yml runs on every binary:
+    # matching images pass, a foreign one is refused by offset, a decoy magic is
+    # not an image, too few images are refused, a non-ELF is could-not-run.
+    _step "Checking the embedded-ELF arch checker's fixture (1756-z3kz)..."
+    if ! _run_lua_decider "scripts/lua/test-embedded-elf-arch.lua" 2>&1; then
+        _error "the embedded-ELF arch checker's fixture failed — see the FAIL lines above (1756-z3kz)"
+        exit 1
+    fi
+    _info "Embedded-ELF arch fixture passed"
+
     # ORDER 1384-bxhk — the shell ratchet: prints the Lua migration's counts on
     # every --check, refuses a NEW .sh decider (check-/test-/verify-/guard-), a
     # new pipe site beyond a file's floor and (once steps: exists) a new piped
