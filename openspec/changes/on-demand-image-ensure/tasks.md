@@ -15,14 +15,19 @@ today's code first (memory: exit criteria must fail on the pre-fix code).
 
 ## 2. Stop the retry storm (v0.5)
 
-- [ ] 2.1 `FailureMarker` keyed on `(image, source_digest)` beside the init
+- [x] 2.1 `FailureMarker` keyed on `(image, source_digest)` beside the init
       state; `ensure_image_exists` refuses fast on a matching marker with
       the named cause, log and remedy; backoff 10 min / 1 h / operator;
       marker cleared when the digest changes or on success [1776-brk3]
+      (third arm is once a day, not operator-only, until 2.2's tray item
+      exists: a macOS/Windows tray user has no other retry)
 - [ ] 2.2 `tillandsias --retry-image <name>` (foreground, forced rebuild) and
       the tray's "Retry build" item; MCP `prepare(force)`; `IMAGE_BUILD_REMEDY`
       no longer says "retried on each launch" [1776-brk3]
-- [ ] 2.3 The verdict line on every ensure decision (decided / digest /
+      (done: `--retry-image`, the remedy. Open: the tray item, which adds a
+      menu row and so needs the operator's approval under tray-ux curation;
+      `prepare(force)` with 3.2)
+- [x] 2.3 The verdict line on every ensure decision (decided / digest /
       present / reason / marker) [1776-brk3]
 
 ## 3. One seam (v0.5)
