@@ -333,6 +333,11 @@ _ENV_FORWARD="$(tillandsias_env_forward_prefix)"
 # flag cleared, with-tillandsias-builder.sh passes straight through inside the
 # tillandsias-build distro.
 _ENV_PREFIX="${_ENV_FORWARD}export TILLANDSIAS_SKIP_WSL2=1; . /root/.cargo/env 2>/dev/null || true;"
+# ORDER 667-kfyn — the guest's page cache, not the build, starves Windows: a
+# soft cap (memory.high, default 3G) on one shared cgroup bounds the cache the
+# build creates. It joins THIS shell before the run, so every child inherits
+# it; it never kills and never fails the run (scripts/wsl2-build-memory-cap.sh).
+_ENV_PREFIX="$_ENV_PREFIX bash scripts/wsl2-build-memory-cap.sh >&2 || true;"
 if [[ "${TILLANDSIAS_WSL2_TARGET_IN_TREE:-}" != "1" ]]; then
     # ORDER 1129-4su6 READS THIS LINE; KEEP THE SHAPE.
     # scripts/hooks/pre-push-local-gate.sh derives this path to name the fresher
