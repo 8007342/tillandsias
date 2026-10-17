@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tillandsias-cloudflare-login-with-no-tray-running-starts-only-the-vault-enclave-before-the-browser-step-and-never-sends-the-user-to-a-full-init-image-rebuild
+    field: status
+    value: implemented
+    ts: "2026-10-17T11:10:53Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: tillandsias-cloudflare-login-with-no-tray-running-starts-only-the-vault-enclave-before-the-browser-step-and-never-sends-the-user-to-a-full-init-image-rebuild
+    event:
+      type: progress
+      ts: "2026-10-17T11:10:53Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: landed on linux-next in land run 129 (#508 0a9a914b7 / #509 f04b7562f / #510 6339e3896); live arm pending the next stable release
