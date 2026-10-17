@@ -319,6 +319,10 @@ pub(crate) fn handle_mcp_jsonrpc(
                 }),
             ];
             tools.extend(browser_tool_descriptors(browser, rt));
+            // 1772-irs3: the read-only Cloudflare tools, after the browser
+            // family (both lists above are pinned).
+            #[cfg(feature = "vault")]
+            tools.extend(crate::cloudflare_mcp::tool_descriptors());
             serde_json::json!({ "result": { "tools": tools } })
         }
         "tools/call" => {
@@ -344,6 +348,25 @@ pub(crate) fn handle_mcp_jsonrpc(
                         .ok()
                         .and_then(|line| serde_json::from_str(&line).ok()),
                 };
+            }
+
+            // 1772-irs3: served by this process with the operator's stored
+            // Cloudflare sign-in; the forge only names the tool. Nothing in
+            // the request chooses the account, method or path.
+            #[cfg(feature = "vault")]
+            if tool_name.starts_with("cloudflare.") {
+                let body = match crate::cloudflare_mcp::call_live(tool_name, args, debug) {
+                    Ok(result) => serde_json::json!({
+                        "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                    }),
+                    Err(e) => return Some(mcp_error(req, e)),
+                };
+                let mut resp = body;
+                resp["jsonrpc"] = serde_json::json!("2.0");
+                if let Some(id) = req.get("id") {
+                    resp["id"] = id.clone();
+                }
+                return Some(resp);
             }
 
             match tool_name {

@@ -5346,10 +5346,21 @@ mod tests {
             tools.contains(&"toolchain_prepare"),
             "the opt-in toolchain tool is advertised (1637-5765): {tools:?}"
         );
+        // 1772-irs3: the read-only Cloudflare family (the probe + the table).
+        let cloudflare = tools
+            .iter()
+            .filter(|t| t.starts_with("cloudflare."))
+            .count();
+        #[cfg(feature = "vault")]
         assert_eq!(
-            tools.len(),
+            cloudflare,
+            crate::cloudflare_mcp::TOOLS.len() + 1,
+            "{tools:?}"
+        );
+        assert_eq!(
+            tools.len() - cloudflare,
             19,
-            "lifecycle tools + service_logs + toolchain_prepare + browser family, nothing else"
+            "lifecycle tools + service_logs + toolchain_prepare + browser family + cloudflare family, nothing else"
         );
 
         let note = serde_json::json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
@@ -5413,10 +5424,14 @@ mod tests {
                 .iter()
                 .map(|t| t["name"].as_str().expect("tool name"))
                 .collect();
+            let cloudflare = tools
+                .iter()
+                .filter(|t| t.starts_with("cloudflare."))
+                .count();
             assert_eq!(
-                tools.len(),
+                tools.len() - cloudflare,
                 19,
-                "over the transport: lifecycle tools, service_logs (1723-2fiq), toolchain_prepare (1637-5765) + thirteen browser tools, got {tools:?}"
+                "over the transport (beside the 1772-irs3 cloudflare family): lifecycle tools, service_logs (1723-2fiq), toolchain_prepare (1637-5765) + thirteen browser tools, got {tools:?}"
             );
             assert!(tools.contains(&"browser.open") && tools.contains(&"publish_local"));
 
