@@ -10,6 +10,10 @@
 --               (1761-bvyn's constrained CA is the one allowed host anchor)
 --   5 COMMENT   a comment that mentions update-ca-trust is not a site
 --               (NEGATIVE CONTROL for arm 2's matcher)
+--   6 SPLIT     an NSS add built as an argument list, "-A" on a line without
+--               the word certutil, is refused (1761-bvyn's Rust shape)
+--   7 SPLIT-OK  the same list marked host-trust-ok passes, and a quoted "-A"
+--               in a file that never runs certutil is not a site
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-enclave-ca-not-host-trusted.lua
 
@@ -74,6 +78,19 @@ rc, o = run(d)
 arm("5 COMMENT a comment mentioning update-ca-trust is not a site",
     rc == 0 and o:find(":allowed=0", 1, true) ~= nil, rc .. " " .. o)
 
+local SPLIT = 'fn add() -> std::process::Command {\n    let mut c = std::process::Command::new("certutil");\n    c.args(["-d", "sql:/nssdb"]);\n    c.args(\n        ["-A", "-t", "C,,", "-n", "x", "-i", "/ca.crt"],\n    );\n    c\n}\n'
+d = tree("split", "crates/x/src/trust.rs", SPLIT)
+rc, o = run(d)
+arm("6 SPLIT an argument-list NSS add (quoted -A, no certutil on that line) is refused",
+    rc == 1 and o:find("site: " .. d .. "/crates/x/src/trust.rs:5:", 1, true) ~= nil, rc .. " " .. o)
+
+d = tree("split-ok", "crates/x/src/trust.rs", (SPLIT:gsub("    c.args%(\n        %[", "    c.args(\n        // host-trust-ok: the preview CA, localhost-only\n        [")))
+fs.mkdir(d .. "/scripts")
+fs.write(d .. "/scripts/flags.sh", "#!/bin/bash\nls '-A' /tmp\n")
+rc, o = run(d)
+arm("7 SPLIT-OK the marked list passes, and a quoted -A without certutil is not a site",
+    rc == 0 and o:find(":allowed=1", 1, true) ~= nil, rc .. " " .. o)
+
 proc.run({ argv = { "rm", "-rf", ROOT .. "/" .. REL }, timeout_ms = 30000 })
-if #failed > 0 then verdict.emit("refused:enclave-ca-not-host-trusted-fixture:" .. #failed .. "-of-5", 1) end
-verdict.emit("ok:enclave-ca-not-host-trusted-fixture:5", 0)
+if #failed > 0 then verdict.emit("refused:enclave-ca-not-host-trusted-fixture:" .. #failed .. "-of-7", 1) end
+verdict.emit("ok:enclave-ca-not-host-trusted-fixture:7", 0)

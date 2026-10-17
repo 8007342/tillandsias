@@ -12,7 +12,8 @@
 //!   no other project, no plaintext, no host, no internet;
 //! - with Chromium host-resolver rules that send the project's hosts to the
 //!   router and resolve every other name, and every IP literal, to nothing;
-//! - trusting the enclave CA through an SPKI pin, never the host trust store;
+//! - trusting the preview CA (1761-bvyn: the localhost-only issuer of every
+//!   router leaf) through an SPKI pin, never the host trust store;
 //! - with NO DevTools port and no host listener: a host TCP port would hand
 //!   full control of the window, cookies included, to every local process.
 //!   Order 1655-urz9: Chromium runs with `--remote-debugging-pipe` under a
@@ -227,7 +228,6 @@ impl TrayBrowserContainers {
     fn start_webkit(
         &self,
         request: &ContainerLaunchRequest<'_>,
-        certs_dir: &Path,
         display: &crate::BrowserDisplayContext,
     ) -> Result<ContainerHandle, LaunchError> {
         let version = crate::VERSION.trim();
@@ -299,7 +299,9 @@ impl TrayBrowserContainers {
             let argv = webkit_window_spec(
                 request.project_label,
                 &handle,
-                &certs_dir.join("intermediate.crt"),
+                // 1761-bvyn: the window reaches only the router's previews,
+                // so it trusts only the CA that signs them.
+                &crate::preview_ca::dir().join(crate::preview_ca::CRT),
                 display,
                 &WebKitTarget {
                     url: request.url.as_str(),
@@ -585,9 +587,12 @@ impl BrowserContainers for TrayBrowserContainers {
             )));
         }
         let certs_dir = PathBuf::from(crate::ca_dir());
-        let pem = std::fs::read_to_string(certs_dir.join("intermediate.crt")).map_err(|e| {
-            LaunchError::Spawn(format!("the enclave CA certificate is unreadable: {e}"))
-        })?;
+        // 1761-bvyn: pin the preview CA, the issuer of every leaf the router
+        // serves; the window is allowlisted to those previews only.
+        let pem = std::fs::read_to_string(crate::preview_ca::dir().join(crate::preview_ca::CRT))
+            .map_err(|e| {
+                LaunchError::Spawn(format!("the preview CA certificate is unreadable: {e}"))
+            })?;
         let ca_spki = spki_sha256_base64(&pem).map_err(LaunchError::Spawn)?;
         let display = crate::BrowserDisplayContext::from_env().map_err(LaunchError::Spawn)?;
         let (display, audio) = with_output_audio(display, request.headless);
@@ -606,9 +611,7 @@ impl BrowserContainers for TrayBrowserContainers {
                     "a headless window is Chromium; the WebKit engine needs a display".into(),
                 ));
             }
-            return self
-                .start_webkit(request, &certs_dir, &display)
-                .map(add_audio);
+            return self.start_webkit(request, &display).map(add_audio);
         }
         // Order 1712-3fsw: headless mounts nothing of the display stack.
         let surface = if request.headless {
@@ -1000,7 +1003,7 @@ mod tests {
         let argv = webkit_window_spec(
             "acme",
             &handle,
-            Path::new("/tmp/ca/intermediate.crt"),
+            Path::new("/tmp/preview-ca/preview-ca.crt"),
             &display,
             &WebKitTarget {
                 url: "https://www.acme.localhost:18443/",
@@ -1034,9 +1037,9 @@ mod tests {
             "{joined}"
         );
         assert!(
-            joined.contains("intermediate.crt,target=/etc/ssl/certs/ca-certificates.crt")
+            joined.contains("preview-ca.crt,target=/etc/ssl/certs/ca-certificates.crt")
                 && joined.contains("readonly"),
-            "the enclave CA is the read-only system bundle: {joined}"
+            "the preview CA is the read-only system bundle: {joined}"
         );
         assert!(
             joined.contains(&format!(

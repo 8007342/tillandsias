@@ -14,7 +14,8 @@
 --
 -- A SITE is a non-comment line of HOST-run code, crates/**/*.rs and
 -- scripts/**/*.{sh,lua,ps1}, that runs a trust-store install: update-ca-trust,
--- `trust anchor`, certutil -A (an NSS add), the anchors directories,
+-- `trust anchor`, certutil -A (an NSS add, or a quoted "-A" in a file that
+-- runs certutil), the anchors directories,
 -- `security add-trusted-cert` or Import-Certificate. A site is allowed only
 -- when the line or the one above carries `host-trust-ok: <which CA>`.
 -- images/** is NOT scanned: those entrypoints run inside our containers,
@@ -35,9 +36,12 @@ local PATTERNS = {
     "update%-ca%-trust", "trust anchor", "certutil[^\n]-%-A[%s\"']", "ca%-trust/source/anchors",
     "share/ca%-certificates", "add%-trusted%-cert", "Import%-Certificate",
 }
-local function is_site(l)
+-- 1761-bvyn: an NSS add built as an argument list (Rust's
+-- `vec!["-A", "-t", ...]`, a shell array) puts `-A` on a line without the word
+-- certutil. In a file that runs certutil, a quoted "-A" token is a site too.
+local function is_site(l, runs_certutil)
     for _, p in ipairs(PATTERNS) do if l:find(p) then return true end end
-    return false
+    return runs_certutil and l:find("[\"']%-A[\"']") ~= nil
 end
 local SUFFIX = { rs = true, sh = true, lua = true, ps1 = true }
 local SELF = "check-enclave-ca-not-host-trusted.lua"
@@ -55,9 +59,10 @@ for _, root in ipairs(roots) do
                 if okr and src then
                     files = files + 1
                     local prev = ""
+                    local runs_certutil = src:find("certutil", 1, true) ~= nil
                     for i, l in ipairs(text.lines(src)) do
                         local code = not (l:match("^%s*#") or l:match("^%s*//") or l:match("^%s*%-%-"))
-                        if code and is_site(l) then
+                        if code and is_site(l, runs_certutil) then
                             if l:find("host-trust-ok:", 1, true) or prev:find("host-trust-ok:", 1, true) then
                                 allowed = allowed + 1
                             else
