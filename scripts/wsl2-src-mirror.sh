@@ -42,12 +42,15 @@ die3() { echo "could-not-run:wsl2-src-mirror:$1"; exit 3; }
 # copy_list <src> <mirror>: NUL-separated relative paths on stdin; copy each
 # file whose size or mtime differs (cp -p keeps mtime, so an unchanged file is
 # skipped on the next run without reading its bytes across 9p).
+# size_mtime <path>: "<bytes> <mtime>", GNU stat or BSD stat.
+size_mtime() { stat -c '%s %Y' "$1" 2>/dev/null || stat -f '%z %m' "$1" 2>/dev/null; }
+
 copy_list() {
-    local src="$1" mirror="$2" rel s m n=0
+    local src="$1" mirror="$2" rel n=0
     while IFS= read -r -d '' rel; do
         [ -e "$src/$rel" ] || [ -L "$src/$rel" ] || continue
         if [ -L "$src/$rel" ] || [ ! -e "$mirror/$rel" ] \
-            || [ "$(stat -c '%s %Y' "$src/$rel")" != "$(stat -c '%s %Y' "$mirror/$rel" 2>/dev/null)" ]; then
+            || [ "$(size_mtime "$src/$rel")" != "$(size_mtime "$mirror/$rel")" ]; then
             mkdir -p "$mirror/$(dirname "$rel")"
             rm -rf "${mirror:?}/$rel"
             cp -pP "$src/$rel" "$mirror/$rel"
