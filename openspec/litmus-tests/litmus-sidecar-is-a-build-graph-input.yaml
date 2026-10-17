@@ -45,15 +45,17 @@ critical_path:
     # passes `--bin tillandsias` compiles the crate whose build.rs requires the
     # asset, so each must carry the preBuild. A new target added without it
     # would ship a binary that cannot build in CI.
-    command: "need=$(grep -c 'cargoExtraArgs = \".*--bin tillandsias .*\";' flake.nix); have=$(grep -c 'preBuild = stageRouterSidecar;' flake.nix); [ \"$need\" -gt 0 ] && [ \"$have\" -gt 0 ] && [ $(( need / 2 )) -le \"$have\" ] && echo 'ok: every asset-embedding derivation stages the sidecar'"
+    command: "need=$(grep -c 'cargoExtraArgs = \".*--bin tillandsias .*\";' flake.nix); have=$(grep -c 'preBuild = stageRouterSidecar[ ;]' flake.nix); [ \"$need\" -gt 0 ] && [ \"$have\" -gt 0 ] && [ $(( need / 2 )) -le \"$have\" ] && echo 'ok: every asset-embedding derivation stages the sidecar'"
     timeout_ms: 3000
     expected_behavior: "ok: every asset-embedding derivation stages the sidecar"
 
   - step: "the staging expression references the sidecar DERIVATION, not a path in the working tree"
-    # `install … ${tillandsias-router-sidecar-x86_64-musl}/bin/…` is what makes
+    # stageRouterSidecar takes the derivation as an argument (1756-z3kz):
+    # `install … ${sidecar}/bin/…`, called with tillandsias-router-sidecar-<arch>-musl.
+    # That argument is what makes
     # this a dependency edge. Copying from a relative path would reintroduce the
     # exact bug — a file the build hopes is already there.
-    command: "mf_stage prod 0 OUT -- awk '/stageRouterSidecar = /,/'\\'''\\'''\\''/' flake.nix && mf_holds OUT 'tillandsias-router-sidecar-x86_64-musl}/bin/tillandsias-router-sidecar' && echo 'ok: staged from the derivation output'"
+    command: "mf_stage prod 0 OUT -- awk '/stageRouterSidecar = /,/'\\'''\\'''\\''/' flake.nix && mf_holds OUT '${sidecar}/bin/tillandsias-router-sidecar' && grep -qE 'preBuild = stageRouterSidecar tillandsias-router-sidecar-[a-z0-9_]+-musl' flake.nix && echo 'ok: staged from the derivation output'"
     timeout_ms: 3000
     expected_behavior: "ok: staged from the derivation output"
 

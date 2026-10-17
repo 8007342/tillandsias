@@ -3167,7 +3167,11 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # the metric the velocity work steers by.
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CLEAN$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]] &&
         [[ "${TILLANDSIAS_FORCE_CHECK:-0}" != "1" ]] &&
+        [[ "$DEFER_INSTALL_UNTIL_CHECK" != true ]] &&
         [[ -f "$SCRIPT_DIR/scripts/gate-stamp.sh" ]]; then
+        # A deferred `--check --install` (1237-f9dy) clears FLAG_INSTALL, so
+        # without the guard above a fresh stamp exited 0 here and installed
+        # nothing. A combined dispatch never memoizes.
         _memo_verdict="$(bash "$SCRIPT_DIR/scripts/gate-stamp.sh" memo-check check 2>/dev/null)" || _memo_verdict=""
         case "$_memo_verdict" in
             "ok:gate-fresh-except-plan "*)
