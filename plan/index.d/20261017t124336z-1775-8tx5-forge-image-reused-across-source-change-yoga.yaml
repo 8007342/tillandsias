@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga on the coordinator's direction (macuahuitl-fedora, 2026-10-17),
+# from the 1766-qpvb live arm.
+packets:
+  - packet_id: a-rebuilt-binary-whose-version-string-did-not-change-keeps-launching-the-forge-image-built-from-the-previous-tree
+    order: 1775-8tx5
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    size: M
+    pickup_role: any
+    capability_tags: [forge, images, build]
+    related: [1774-ibyx, 1766-qpvb]
+    depends_on: []
+    title: |
+      A binary rebuilt from a different tree but with the same version string reuses the forge image built from the previous tree, so an image-side fix (lib-common.sh) never reaches the forge until someone removes the image tag by hand
+    context: |
+      MEASURED on yoga 2026-10-17. Two ./build.sh --install runs, about 50 minutes apart, both reported Tillandsias v56.10.17.1. The first tree was linux-next with an unparseable images/default/lib-common.sh (1774-ibyx). The second carried the fix (bash -n passes in the checkout). After the second install and a tray restart, localhost/tillandsias-forge:v56.10.17.1 was the image from the first build: `podman run --rm --entrypoint bash localhost/tillandsias-forge:v56.10.17.1 -n /usr/local/lib/tillandsias/lib-common.sh` failed at line 6. Only after `podman rmi` of the forge tags (v56.10.17.1, latest, sha256-595153dd…) did the next launch rebuild the forge, and the fix appeared. The forge image is keyed by version tag, not by the content of the files it copies, so a dev rebuild of an image input is silently invisible, and so is the fix a reviewer believes they are testing.
+    exit_criteria:
+      - "after a change to an image input (e.g. images/default/lib-common.sh) and a rebuild that keeps the version string, the next forge launch runs an image containing the changed file (red today)"
+      - "an unchanged tree still reuses the cached image (no rebuild on every launch)"
+    unscoreable: "unpinnable-until-the-guard-exists: the fixture that builds two trees under one version and inspects the launched image is this row's deliverable; name it litmus-forge-image-follows-its-inputs.yaml in the same commit"
+    next_action: >
+      Find where the launcher decides an image is current (tag lookup by version) and key it on a digest of the image's build inputs, as the sha256-<digest> tags already suggest; red fixture first.
+    provenance: |
+      Filed by yoga, 2026-10-17, from the 1766-qpvb live arm.
+    events:
+      - type: filed
+        ts: "2026-10-17T12:43:36Z"
+        host: yoga
+        summary: |-
+          Same version string -> forge image from the previous tree reused; image-side fixes invisible until rmi.

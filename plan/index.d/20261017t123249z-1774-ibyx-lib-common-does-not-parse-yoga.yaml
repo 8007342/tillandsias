@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga: a regression it landed itself (1747-e9d6, PR #512).
+packets:
+  - packet_id: images-default-lib-common-sh-parses-again-so-every-forge-sources-it-the-1747-e9d6-landing-prepended-a-stray-fragment-whose-fi-aborts-source
+    order: 1774-ibyx
+    status: ready
+    kind: bug
+    priority: p0
+    desired_release: v0.5
+    size: S
+    pickup_role: any
+    capability_tags: [forge, entrypoint, regression]
+    related: [1747-e9d6, 1766-qpvb]
+    depends_on: []
+    title: |
+      Since f78b12c99 (land of #512) images/default/lib-common.sh does not parse: a stray 7-line fragment ending in an unmatched fi sits above the shebang, so source aborts and every forge starts without lib-common (no project checkout, trace_lifecycle undefined)
+    context: |
+      MEASURED on yoga 2026-10-17 with a build of linux-next: a fresh forge on visual-chess logged "entrypoint-terminal.sh: line 135: trace_lifecycle: command not found" and /home/forge/src was empty. bash -n on f78b12c99:images/default/lib-common.sh fails at line 6 (unexpected fi); on 18d2eb556^ it passes. Commit 18d2eb556 (1747-e9d6, by yoga) put its source-time trace edit at the top of the file instead of in the embed-probe block. Its fixture awk-extracts one function and never parses the whole file, and the preflight has no bash -n over images/, so both stayed green.
+    exit_criteria:
+      - "bash -n images/default/lib-common.sh passes, and a forge launched from a build of the fix sources it (project checked out, no trace_lifecycle: command not found)"
+      - "the 1747-e9d6 fixture refuses a lib-common.sh that does not parse (red on f78b12c99's file)"
+    verifiable_closure: "litmus:spec-index-step-reprobes-embed-endpoint"
+    next_action: >
+      Land work/1774-ibyx; then relaunch a forge on a build of trunk and confirm the checkout.
+    provenance: |
+      Filed by yoga, 2026-10-17, during the 1766-qpvb live arm.
+    events:
+      - type: filed
+        ts: "2026-10-17T12:32:49Z"
+        host: yoga
+        summary: |-
+          P0 regression from yoga's own #512: lib-common.sh does not parse; every forge starts without it.
