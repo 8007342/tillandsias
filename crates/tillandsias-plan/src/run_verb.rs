@@ -228,6 +228,7 @@ pub fn execute(spec: &RunSpec, caller: &str) -> RunOutcome {
         host_kind: cp::read_host_kind(&root).kind,
         regime,
         caller: caller.to_string(),
+        env: spec.env.clone(),
     };
     // Honor refused loads before resolving consent. Audit once below when the
     // run identity (if any) is known. Only this execution path may spend a token.
