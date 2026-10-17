@@ -380,6 +380,66 @@ if [[ -f scripts/stage-image-cheatsheets.sh ]]; then
     fi
 fi
 
+# ── 1c. A tag on a commit ALREADY ON MAIN uploads no new tree (1768-2k56) ────
+# MEASURED (coordinator's gate review, 2026-10-17): promoting v56.10.16.2 cost
+# a full ~21-min ./build.sh --check only to push refs/tags/stable. The stamp
+# section below treats a tag like a branch: enforce_stamp_scope diffs old
+# stable..new stable (three releases of change), so ANY scoped stamp refuses
+# every promotion, and the tree the stamp hashes is this worktree, not the
+# tag's. A commit already on main passed the gate that landed it there.
+#
+# Exempt ONLY when every ref is a tag UPDATE (a tag deletion keeps the gate:
+# 1427-r2d2 protects tags) and every <sha>^{commit} is an ancestor of main as
+# FRESHLY fetched from this push's remote. A failed fetch, a mixed push, or one
+# tag off main falls through to the full gate. release-preflight (section 1,
+# above) and pre-push-version-guard.sh (run before this hook) are NOT skipped:
+# 898-zhf3's tag-before-back-merge check lives there.
+_tag_remote="origin"
+if [[ -n "${1:-}" ]] && git remote 2>/dev/null | grep -qxF -- "$1"; then
+    _tag_remote="$1"
+fi
+_all_tag_on_main=0
+_tag_off_main=""
+if [[ "$_any_ref" -eq 1 ]]; then
+    _all_tag_on_main=1
+    while read -r _l _ls _remote_ref _rs; do
+        [[ -z "${_remote_ref:-}" ]] && continue
+        case "$_remote_ref" in
+            refs/tags/*) ;;
+            *) _all_tag_on_main=0; break ;;
+        esac
+        if [[ "$_ls" =~ ^0+$ ]]; then _all_tag_on_main=0; break; fi
+    done < <(printf '%s\n' "$REFS")
+fi
+if [[ "$_all_tag_on_main" -eq 1 ]]; then
+    _tag_fetch_rc=0
+    git fetch -q "$_tag_remote" "+refs/heads/main:refs/remotes/$_tag_remote/main" 2>/dev/null || _tag_fetch_rc=$?
+    _tag_main="$(git rev-parse -q --verify "refs/remotes/$_tag_remote/main^{commit}" 2>/dev/null)" || _tag_main=""
+    if [[ "$_tag_fetch_rc" -ne 0 || -z "$_tag_main" ]]; then
+        echo "note:pre-push:tag-on-main:fetch-failed:rc=$_tag_fetch_rc — could not read $_tag_remote/main fresh, so the tag keeps the full gate" >&2
+        _all_tag_on_main=0
+    else
+        while read -r _l _ls _remote_ref _rs; do
+            [[ -z "${_remote_ref:-}" ]] && continue
+            _tag_commit="$(git rev-parse -q --verify "$_ls^{commit}" 2>/dev/null)" || _tag_commit=""
+            _tag_anc_rc=1
+            [[ -n "$_tag_commit" ]] && { git merge-base --is-ancestor "$_tag_commit" "$_tag_main" 2>/dev/null; _tag_anc_rc=$?; }
+            if [[ "$_tag_anc_rc" -ne 0 ]]; then
+                _all_tag_on_main=0
+                _tag_off_main="$_remote_ref"
+                break
+            fi
+        done < <(printf '%s\n' "$REFS")
+    fi
+fi
+if [[ "$_all_tag_on_main" -eq 1 ]]; then
+    echo "${GRN}✓ local gate: tag-on-main — every tag in this push names a commit already on $_tag_remote/main (fetched now), which passed the gate that landed it; the stamp does not apply (1768-2k56). release-preflight and the version guard still ran.${RST}" >&2
+    exit 0
+fi
+if [[ -n "$_tag_off_main" ]]; then
+    echo "note:pre-push:tag-on-main:not-on-main:$_tag_off_main — its commit is not on $_tag_remote/main, so it keeps the full gate" >&2
+fi
+
 # ── Plan-only fast lane (order 668-2xeh) ───────────────────────────────────────
 # Attempted only when the stamp is missing/stale. Emits one line per validated
 # file — "plan-only lane: validated <path>" — so the push record names exactly
