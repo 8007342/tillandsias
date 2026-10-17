@@ -309,7 +309,7 @@ multi_host_development:
       push and WARN, and every existing refusal carries an AFFORDANCE naming
       the complete preferred workflow rather than a fragment of it. Enforcement
       is a later, operator-triggered decision, and its trigger is a NUMBER:
-      scripts/check-landing-provenance.sh classifies how integration actually
+      scripts/lua/check-landing-provenance.lua classifies how integration actually
       arrives, so the flip rests on measured behaviour and not on preference.
     pre_push_gate_amendment: >
       pull_merge_cadence.pre_push_gate.applies_to EXCLUDES agent/*,

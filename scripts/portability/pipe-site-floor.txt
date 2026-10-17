@@ -384,7 +384,6 @@ scripts scripts/check-host-tools.sh 105
 scripts scripts/check-issue-citation-convention.sh 8
 scripts scripts/check-jq-callsite-ratchet.sh 17
 scripts scripts/check-landed-but-open.sh 9
-scripts scripts/check-landing-provenance.sh 4
 scripts scripts/check-ledger-distillation.sh 2
 scripts scripts/check-litmus-expression-pinning-added.sh 5
 scripts scripts/check-litmus-line-windows.sh 8
