@@ -76,6 +76,11 @@ if [[ "${1:-}" == "--print-target" ]]; then
     echo "$TARGET"
     exit 0
 fi
+# 1750-a4re: the forge image's Bash command-policy decider is staged here too,
+# so every lane that stages the sidecar before compiling stages it as well.
+# It skips an unchanged tree on its own stamp, and stages nothing (with a named
+# warning) on a host with no musl C toolchain.
+[ ! -f "$SCRIPT_DIR/build-forge-plan-bin.sh" ] || bash "$SCRIPT_DIR/build-forge-plan-bin.sh"
 SIDECAR_DEST="$ROOT/images/router/tillandsias-router-sidecar"
 # Use a SEPARATE target dir so a nested invocation (e.g. build.rs calling
 # this script while the parent cargo holds target/'s lock) cannot deadlock.

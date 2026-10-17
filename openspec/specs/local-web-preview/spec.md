@@ -259,6 +259,18 @@ use the existing in-container reload mechanism. TLS certificate SAN must cover
 the actual returned multi-label hostname; `*.localhost` alone does not cover
 `www.<project>.localhost`. Probe with the actual hostname/SNI and CA verification.
 
+`<project>` in every host is the project's HOST LABEL, not its raw name (order
+1763-nc9d). Each dot-separated part is ASCII-lowercased, every character outside
+`[a-z0-9]` becomes `-` (runs collapse, edges trim), and the part caps at 63, so
+`DEVxSD_gameJam` previews at `www.devxsd-gamejam.localhost`. One function
+(`tillandsias_browser_mcp::host_label::project_host_label`) feeds the router
+route, the leaf's CN/SAN and file names, the returned URL, browser.open's
+allowlist and the window's resolver rules and host map; an already-valid name is
+unchanged. The lane identity (forge container, `/home/forge/src/<project>`)
+keeps the raw name. A mapped name whose label another known project already
+names refuses `preview_host_collision`, and the already-valid name is never the
+one refused.
+
 Narrow routing amendment proposed by this draft: the routing spec's
 exactly-one-host-address rule continues to govern the existing HTTP ingress
 `127.0.0.1:<http_host_port> -> :8080`. For this preview profile only, permit

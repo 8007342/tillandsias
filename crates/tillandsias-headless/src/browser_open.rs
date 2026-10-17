@@ -56,8 +56,13 @@ const RUN_BUDGET: Duration = Duration::from_secs(60);
 /// sends every other name, and IP literals too, to NXDOMAIN (measured
 /// 2026-10-12: `http://1.1.1.1/` and `https://router:8443/` both end in
 /// ERR_NAME_NOT_RESOLVED).
+/// The project appears by its host label (order 1763-nc9d), the name the
+/// router routes and the leaf certifies.
 pub(crate) fn host_resolver_rules(project: &str) -> String {
-    format!("MAP *.{project}.localhost router:8443, MAP * ~NOTFOUND")
+    format!(
+        "MAP *.{}.localhost router:8443, MAP * ~NOTFOUND",
+        crate::local_web_preview::host_label(project)
+    )
 }
 
 /// The forwarder's container name, derived from the window's network so
@@ -509,10 +514,9 @@ pub(crate) fn webkit_window_spec(
             .volume(socket, &inside, tillandsias_podman::MountMode::ReadWrite)
             .env("PULSE_SERVER", format!("unix:{inside}"));
     }
-    for name in [
-        format!("www.{project}.localhost"),
-        format!("web.{project}.localhost"),
-    ] {
+    // 1725-wkfl: the router's own host list (www and every dev service), not
+    // a second literal pair; `web.` was never in the leaf's SAN.
+    for name in crate::local_web_preview::preview_hosts(project) {
         spec = spec.add_host(&name, forwarder_ip)?;
     }
     Ok(spec)
@@ -1017,7 +1021,8 @@ mod tests {
             hosts,
             [
                 "--add-host=www.acme.localhost:10.89.1.2",
-                "--add-host=web.acme.localhost:10.89.1.2"
+                // 1725-wkfl: every dev service the router serves, from its list.
+                "--add-host=flutter.acme.localhost:10.89.1.2"
             ]
         );
         assert!(

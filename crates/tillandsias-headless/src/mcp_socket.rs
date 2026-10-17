@@ -28,8 +28,15 @@ use tracing::warn;
 ///
 /// @trace spec:mcp-tool-socket, spec:tray-host-control-socket
 pub(crate) fn mcp_socket_base_dir() -> PathBuf {
-    let runtime_dir = if let Ok(xdg) = env::var("XDG_RUNTIME_DIR") {
-        PathBuf::from(xdg)
+    mcp_socket_base_dir_from(env::var("XDG_RUNTIME_DIR").ok())
+}
+
+/// [`mcp_socket_base_dir`] for an explicit `XDG_RUNTIME_DIR` value, so a test
+/// can pass one without touching the process environment. An empty value
+/// counts as unset (order 1748-fbqe, see [`crate::nonempty_runtime_dir`]).
+pub(crate) fn mcp_socket_base_dir_from(xdg: Option<String>) -> PathBuf {
+    let runtime_dir = if let Some(xdg) = crate::nonempty_runtime_dir(xdg) {
+        xdg
     } else {
         #[cfg(unix)]
         {
@@ -312,6 +319,10 @@ pub(crate) fn handle_mcp_jsonrpc(
                 }),
             ];
             tools.extend(browser_tool_descriptors(browser, rt));
+            // 1772-irs3: the read-only Cloudflare tools, after the browser
+            // family (both lists above are pinned).
+            #[cfg(feature = "vault")]
+            tools.extend(crate::cloudflare_mcp::tool_descriptors());
             serde_json::json!({ "result": { "tools": tools } })
         }
         "tools/call" => {
@@ -337,6 +348,25 @@ pub(crate) fn handle_mcp_jsonrpc(
                         .ok()
                         .and_then(|line| serde_json::from_str(&line).ok()),
                 };
+            }
+
+            // 1772-irs3: served by this process with the operator's stored
+            // Cloudflare sign-in; the forge only names the tool. Nothing in
+            // the request chooses the account, method or path.
+            #[cfg(feature = "vault")]
+            if tool_name.starts_with("cloudflare.") {
+                let body = match crate::cloudflare_mcp::call_live(tool_name, args, debug) {
+                    Ok(result) => serde_json::json!({
+                        "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                    }),
+                    Err(e) => return Some(mcp_error(req, e)),
+                };
+                let mut resp = body;
+                resp["jsonrpc"] = serde_json::json!("2.0");
+                if let Some(id) = req.get("id") {
+                    resp["id"] = id.clone();
+                }
+                return Some(resp);
             }
 
             match tool_name {

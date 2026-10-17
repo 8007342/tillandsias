@@ -1,0 +1,13 @@
+# Gate step 1716-t2gi — the image-pin guard's arms on constructed roots: the
+# measured single-platform pin (debian bookworm-slim AMD64, a4672c0cb26f…) is
+# refused; the three live index pins pass; an unrecorded digest, an index with
+# no arm64 and an ARG-substituted red pin are refused; an unresolvable ARG FROM
+# is named; the guard spawns nothing and passes with every proxy dead; no
+# record fails closed; this checkout passes.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the image-pin guard's fixture (1716-t2gi)"
+STEP_LUA="scripts/lua/test-image-pins.lua"
+STEP_ERROR="the image-pin guard no longer does what its fixture constructs (1716-t2gi) — see the FAIL lines above"
+STEP_OK="Image-pin guard fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-16 darwin ok:image-pins-fixture:8 arms"

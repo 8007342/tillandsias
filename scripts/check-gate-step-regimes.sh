@@ -57,6 +57,21 @@ detail=""
 for step in "$DIR"/*.step; do
     [ -e "$step" ] || continue
     name="$(basename "$step")"
+    # ORDER 1765-q7rg — STEP_HOST_STATE, when present, names WHY a step may
+    # disagree with itself on a healthy tree, from a CLOSED set: the runner
+    # retries such a step once, so a new word here is a decision to let one
+    # more step retry, made in this file rather than by a step.
+    hs_line="$(grep -E '^[[:space:]]*STEP_HOST_STATE=' "$step" 2>/dev/null | head -1)"
+    if [ -n "$hs_line" ]; then
+        hs="${hs_line#*=}"; hs="${hs%\"}"; hs="${hs#\"}"
+        case "$hs" in
+            keyring|load) : ;;
+            *)
+                malformed=$((malformed + 1))
+                detail="${detail}violation:gate-step-host-state:${name}:${hs:-empty}-is-not-keyring-or-load"$'\n'
+                continue ;;
+        esac
+    fi
     # Read the value without sourcing: a .step is data, and sourcing it would
     # execute whatever a future step happens to contain.
     line="$(grep -E '^[[:space:]]*STEP_SECOND_REGIME=' "$step" 2>/dev/null | head -1)"

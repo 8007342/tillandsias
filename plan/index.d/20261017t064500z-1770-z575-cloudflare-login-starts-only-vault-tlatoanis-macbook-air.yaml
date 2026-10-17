@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-17, at the coordinator's request (macuahuitl-fedora), from an operator live finding on v56.10.16.2.
+packets:
+  - packet_id: tillandsias-cloudflare-login-with-no-tray-running-starts-only-the-vault-enclave-before-the-browser-step-and-never-sends-the-user-to-a-full-init-image-rebuild
+    order: 1770-z575
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [cloudflare, credentials, vault, cli, onboarding]
+    estimated_hours: 3
+    related: [1758-wdvf, 1505-kc5f, 1719-83po]
+    owned_files:
+      - crates/tillandsias-headless/src/vault_bootstrap.rs
+      - crates/tillandsias-headless/src/cloudflare_login.rs
+    title: |
+      `tillandsias --cloudflare-login` on a host with images present but no tray starts ONLY the Vault enclave (the same idempotent ensure_vault_running the store's write already uses) before the browser step, instead of refusing vault-unavailable with a remedy of `tillandsias --init`, which rebuilds every image and froze the operator's desktop
+    context: |
+      LIVE (operator on macuahuitl, v56.10.16.2, fresh install, no tray running, relayed by the coordinator 2026-10-17): `tillandsias --cloudflare-login` refused `refused:cloudflare-login:vault:vault-unavailable`, remedy "run `tillandsias --init`". On a fresh install --init rebuilds forge-base and every other image; it took a long time and froze the desktop. yoga's earlier login worked because a tray was running there.
+      SOURCE READ: VaultCloudflareTokenStore::read_bundle returns vault-unavailable at once when the vault container is not running, while write_record already calls ensure_vault_running (Vault only: build_vault_image builds or reuses the ONE vault image, then launches and unseals). The login's vault_preflight reads first, before anything single-use is spent, so it refuses on a state the store itself knows how to fix.
+      KEEP: settle with Vault BEFORE the browser step (the code or device grant is never spent against a Vault that cannot hold the result).
+    exit_criteria:
+      - "read_bundle starts Vault through ensure_vault_running when the container is not running (one note on stderr naming that only Vault starts), then reads; a failed start refuses vault-start-failed before the browser step"
+      - "the login/logout Vault refusals' remedy names the light step (start Tillandsias, the tray, or retry once Vault is up) and never `tillandsias --init`"
+      - "fixture: a store whose Vault is not running calls the ensure seam exactly once and proceeds to the browser step; a failed ensure refuses vault-start-failed and never reaches it; NEGATIVE CONTROL: a running Vault never calls ensure"
+      - "LIVE (stable release, a Linux host with images present and no tray): `tillandsias --cloudflare-login` reaches the browser step within 60 s with no image rebuild"
+    verifiable_closure: "cargo test -p tillandsias-headless cloudflare_store_starts_only_vault passes (red on linux-next before the fix)"
+    next_action: >
+      Factor read_bundle's running check into a seam with an injected ensure; call ensure_vault_running there; reword the four --init remedies; add the fixture.
+    events:
+      - type: filed
+        ts: "2026-10-17T06:45:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Filed and claimed at the coordinator's request, p1, from the operator's live finding: with no tray running, the CLI login refused vault-unavailable and sent the operator to --init, which rebuilt every image. The store's write already starts Vault alone; its read did not.

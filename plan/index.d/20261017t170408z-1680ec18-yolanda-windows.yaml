@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: wsl2-builder-distro-native-source-mirror
+    event:
+      type: implemented
+      ts: "2026-10-17T17:04:08Z"
+      agent_id: windows-yolanda-claude-20261013t052033z
+      host: yolanda-windows
+      summary: |
+        Implemented on salvage/yolanda/2026-10-17-667-kfyn (1a02bc352, origin/linux-next merged) for relay to work/667-kfyn. Carried-Waiver shell-to-lua trailer present.
+
+        What it does: TILLANDSIAS_WSL2_SRC_MIRROR=1 (OPT-IN, deviation from an always-on mirror) makes with-wsl2-builder.sh run --check/--test from a distro-native copy at /srv/tillandsias-wsl2-src/<repo> (DEVIATION: /srv, not under the user's home), synced by scripts/wsl2-src-mirror.sh and proved byte-identical by gate-stamp.sh compute before anything builds; gate records are written back to the source .git. Other modes still build in-tree.
+
+        Measured on yolanda-windows 2026-10-17: the full gate from the mirror passed (gate-mirror9, pre-merge head 3632e6d84), gate phases 1863s. The in-tree --check took 2773s and failed two vault_bootstrap tests that are a /mnt/c mode artifact (every file reads 0777), absent from the mirror.
+
+        Memory (same order, scripts/wsl2-build-memory-cap.sh): nothing OOMed in the guest; the guest page cache (up to 5.2 GB) kept vmmemWSL at 6.5-7 GB and Windows fell under the ~1 GiB at which Claude Code reaps background tasks. Every builder run now joins cgroup tillandsias-build with memory.high=3G (TILLANDSIAS_WSL2_BUILD_MEMORY_HIGH, "off" disables; never kills), and wsl-guest-session.sh nests its teardown cgroup inside it (it used to escape the cap at the root). Under the cap: memory.events oom=0, Windows never below ~3.2 GB free through gate 9 (was 0.5-1.2 GB). Fixture: step 897, test-wsl2-build-memory-cap.sh 6/6, WIRED arm red under sabotage.
+
+        Fixtures fixed on the way, first mirror gates to reach them: 1750-a4re forge hook fixture blanks CARGO_TARGET_DIR (passed through by proc.run, 1593-1ny6; under the builder it holds a real plan binary) - overlaps lenovinha's #503, reconcile at second landing; step 414 (1269-gfdi) ARM 0 treats the WSL2 build distro as a builder (named skip), not bare metal; 1563-u2yx arm 7 counts 6 lib call sites (3 new for the mirror, bypass list empty).

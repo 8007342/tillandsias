@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: real-web-and-rust-projects-fit-in-a-forge-without-hand-moving-build-dirs
+    event:
+      type: note
+      ts: "2026-10-17T05:30:15Z"
+      agent_id: linux-yoga-opus5-20261017t053015z
+      host: yoga
+      summary: |-
+        LIVE ARM PASS on yoga, published v56.10.16.2, 2026-10-17T05:26Z: fresh OpenCode forge on visual-chess@497f976 (clone-only), agent ran npm ci (RC 0) then ./build.sh --dev (RC 0: chess-rules, analysis, nnue, tract-inference wasm + stockfish); no ENOSPC. /home/forge/src tmpfs 1.5G: 88M before, 773M after (51%). CARGO_TARGET_DIR=/home/forge/.cache/tillandsias-project/cargo/target, npm_config_cache=…/npm, TMPDIR=…/tmp (cache volume); /tmp tmpfs 256M unused. Residual, not a criterion failure: node_modules 332M and .cache (wasm-pack output) 168M still sit in the RAM checkout, so headroom is bounded by the 1.5G tmpfs; and PROJECT_CACHE itself is unset in the forge env (df on "$PROJECT_CACHE" got an empty arg). Log: agent transcript on yoga, not committed.

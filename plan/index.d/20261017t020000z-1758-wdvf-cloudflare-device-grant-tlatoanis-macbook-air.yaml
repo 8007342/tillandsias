@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-17, on the coordinator's finding that Cloudflare's discovery now advertises the device grant (offered to this host).
+packets:
+  - packet_id: tillandsias-cloudflare-login-uses-the-rfc-8628-device-grant-when-discovery-lists-it-showing-the-user-code-and-a-qr-of-the-complete-verification-uri-and-polling-cloudflare-directly-with-no-callback-and-no-storage
+    order: 1758-wdvf
+    status: in_progress
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [cloudflare, oauth, device-grant, qr, credentials, tray, privacy]
+    estimated_hours: 8
+    related: [1719-83po, 1757-n45b, 1505-kyx8, 1505-kc5f, 1719-7wd9]
+    owned_files:
+      - crates/tillandsias-headless/src/cloudflare_oauth.rs
+      - crates/tillandsias-headless/src/cloudflare_login.rs
+      - crates/tillandsias-headless/src/bin/tillandsias-fake-cloudflare.rs
+      - scripts/test-cloudflare-login.sh
+    title: |
+      tillandsias --cloudflare-login uses Cloudflare's device grant (RFC 8628) whenever discovery lists it: it shows the user_code and a terminal QR of verification_uri_complete, and polls the token endpoint directly, so a phone approves with no callback page and nothing stored on our side; the QR-relay and loopback receivers become the fallback
+    context: |
+      MEASURED by the coordinator from macuahuitl, 2026-10-17T01:40Z, at https://dash.cloudflare.com/.well-known/openid-configuration:
+        - device_authorization_endpoint = https://dash.cloudflare.com/oauth2/device/auth
+        - grant_types_supported includes urn:ietf:params:oauth:grant-type:device_code
+      This is the case cloudflare_oauth.rs's device_grant_note (1505-kyx8) was built to announce ("never a fabricated device flow"). It makes 1719-7wd9's ask real.
+      WHY IT IS PREFERRED: no callback and no storage on our side, which fits the privacy policy (we store no data). The relay at cloudflare.tillandsias.org stays the static fallback (1757-n45b, login default gated OFF until the coordinator picks the winning path).
+      The Tillandsias client is now PUBLIC (client URL https://tillandsias.org, publisher TXT live; operator 2026-10-17), so every tray user's sign-in reaches it.
+      UNMEASURED: whether Cloudflare grants device_code to THIS client. The client's allowed grant types are a dashboard setting the operator may need to tick. One live device/auth request on a stable release settles it; it authorizes nothing until a user approves.
+      SHAPE, modelled on the GitHub device flow (main.rs parse_device_code_response and its poll: authorization_pending, slow_down +5 s, expired_token, access_denied), but in Rust over the existing injected HttpClient, so it runs against the fake like the rest of the login:
+        1. POST device_authorization_endpoint with client_id and the same scopes. That returns device_code, user_code, verification_uri, verification_uri_complete?, expires_in and interval.
+        2. Print the user_code and verification_uri. Render the QR of verification_uri_complete, falling back to verification_uri when it is absent. The QR carries public data only, never the device_code.
+        3. Poll the token endpoint with grant_type=urn:ietf:params:oauth:grant-type:device_code: pending waits, slow_down adds 5 s, expired_token or access_denied refuses by name, and success stores the bundle through the same TokenStore path as the code flow.
+      The device_code is a bearer-like secret until exchanged, so it goes on no argv, no log and no QR.
+    exit_criteria:
+      - "Via gains Device, and default_via picks Device whenever discovery lists the device grant AND advertises a device_authorization_endpoint; otherwise today's choice (qr with a relay, loopback on a desktop, paste). `--via loopback|qr|paste` still forces those."
+      - "tillandsias-fake-cloudflare serves POST /oauth2/device/auth and the device_code token grant when TILLANDSIAS_FAKE_CLOUDFLARE_GRANT_TYPES lists it, with ?auto=approve|deny|slow_down|expire knobs like the code flow's"
+      - "arms against the fake: approve stores ok:cloudflare-login:stored; slow_down widens the interval and still stores; deny refuses access-denied with nothing stored; expiry refuses device-code-expired; the printed QR decodes to verification_uri_complete and contains no device_code; NEGATIVE CONTROL: discovery that omits the grant (or the endpoint) never reaches /oauth2/device/auth and takes the old receivers"
+      - "a client that discovery says supports the grant but Cloudflare refuses (unauthorized_client / invalid_grant at device/auth) falls back to the code flow with a named note, never a dead end"
+      - "LIVE (stable release, macOS tray, the regular way): Cloudflare Login shows a user code and QR; a phone approves; the tray reads stored. The consent page shows the BLUE verified shield (public client, 2026-10-17). If Cloudflare refuses this client the grant, the row records the exact error and the one dashboard setting."
+    unscoreable: "the live approval needs the operator's phone and account; the fake-backed arms and the negative control are the pre-merge evidence"
+    next_action: >
+      Read cloudflare_oauth.rs begin/discovery and the fake; add the device endpoint to Discovery, the device authorization + poll over HttpClient, Via::Device and its default; extend the fake and test-cloudflare-login.sh with the arms above.
+    events:
+      - type: filed
+        ts: "2026-10-17T02:00:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Filed and claimed on the coordinator's offer, after they measured Cloudflare's discovery listing the device grant. Preferred over the QR relay: no callback, no storage. Whether this client may use the grant is unmeasured.

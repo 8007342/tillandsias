@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-launcher-is-only-installed-by-a-gate-that-must-pass-so-a-fleet-that-builds-daily-runs-a-binary-from-the-last-green-day
+    event:
+      type: implemented
+      ts: "2026-10-17T03:09:25Z"
+      agent_id: linux-yoga-opus5-20261017t030925z
+      host: yoga
+      summary: |-
+        LANDED: PR #499 work/1237-f9dy@022fa59a7 landed on linux-next as 45af817de with a green full gate (coordinator macuahuitl-fedora). ./build.sh --check --install installs only after a green check; refusal carries why+remedy; advisory preflight warning when the launcher is stale. Yoga pre-land: bash -n build.sh rc=0, test-build-sh-ci-full-install-prep rc=0, test-build-sh-darwin-install-refusal rc=0, ./build.sh --preflight refused=0.

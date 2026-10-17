@@ -269,6 +269,34 @@ ensure_toolbox_nix() {
     toolbox_nix_works
 }
 
+# 1247-amcu: the why and remedy for a blocked rung, on stderr beside the pinned
+# blocked:nix-toolbox:<reason> verdict (test-nix-toolbox.sh pins stdout only).
+# The detail:nix-toolbox:* lines resolve_rung already printed carry the cause.
+_rung_afford() { # <reason>
+    case "$1" in
+        no-nix-and-no-toolbox)
+            printf '  why: no nix daemon answers, the chroot store at %s does not work, and no %s toolbox with nix could be made, so this host has no nix lane\n' "$CHROOT_STORE" "$TOOLBOX_NAME" >&2
+            printf '  remedy: install nix, or install toolbox and re-run scripts/nix-toolbox.sh ensure (it creates %s and installs nix in it); inside a forge there is no nix lane by design, so build on the host\n' "$TOOLBOX_NAME" >&2 ;;
+        image-pull-failed)
+            printf '  why: pulling the toolbox image %s failed (the detail:nix-toolbox:pull line above is podman'"'"'s reason)\n' "$TOOLBOX_IMAGE" >&2
+            printf '  remedy: check the network or proxy (with the enclave down, unset http_proxy and https_proxy), run podman pull %s, then re-run scripts/nix-toolbox.sh ensure\n' "$TOOLBOX_IMAGE" >&2 ;;
+        create-failed)
+            # ensure_toolbox lands here both when toolbox is absent (nothing
+            # was ever created) and when `toolbox create` failed; the remedy
+            # differs, and "run toolbox create by hand" is wrong for the first.
+            if ! command -v toolbox >/dev/null 2>&1; then
+                printf '  why: the chroot rung did not work (the detail:nix-toolbox:chroot line above says why) and toolbox is not installed, so there is no toolbox rung either; nothing was created and nothing failed to create\n' >&2
+                printf '  remedy: fix what the chroot detail names (usually: install nix), or install toolbox (Fedora: dnf install toolbox), then re-run scripts/nix-toolbox.sh ensure\n' >&2
+            else
+                printf '  why: the %s toolbox could not be created (a detail:nix-toolbox:create line above, when present, says why)\n' "$TOOLBOX_NAME" >&2
+                printf '  remedy: run toolbox create -y %s by hand to see its error, fix that, then re-run scripts/nix-toolbox.sh ensure\n' "$TOOLBOX_NAME" >&2
+            fi ;;
+        *)
+            printf '  why: no nix rung resolved (%s)\n' "$1" >&2
+            printf '  remedy: run scripts/nix-toolbox.sh ensure and read its detail:nix-toolbox:* lines\n' >&2 ;;
+    esac
+}
+
 resolve_rung() {
     if daemon_live; then
         printf 'daemon\n'
@@ -507,7 +535,7 @@ case "$cmd" in
     ensure)
         rung="$(resolve_rung)"
         case "$rung" in
-            blocked:*) echo "blocked:nix-toolbox:${rung#blocked:}"; exit 1 ;;
+            blocked:*) echo "blocked:nix-toolbox:${rung#blocked:}"; _rung_afford "${rung#blocked:}"; exit 1 ;;
             *) echo "ok:nix-toolbox:$rung"; exit 0 ;;
         esac
         ;;
@@ -531,7 +559,7 @@ case "$cmd" in
             # through `run` invoked nix against the container's root-owned
             # /nix and failed at the first store write (914-ahsy follow-on).
             toolbox) printf '%s\n' "${NIX_FEATURES[@]}" --store "$CHROOT_STORE" ;;
-            *)       echo "blocked:nix-toolbox:${rung#blocked:}" >&2; exit 1 ;;
+            *)       echo "blocked:nix-toolbox:${rung#blocked:}" >&2; _rung_afford "${rung#blocked:}"; exit 1 ;;
         esac
         ;;
     run)
@@ -564,7 +592,7 @@ case "$cmd" in
             toolbox)       exec env http_proxy= https_proxy= HTTP_PROXY= HTTPS_PROXY= \
                                 toolbox run -c "$TOOLBOX_NAME" \
                                 env NIX_REMOTE="$CHROOT_STORE" NIX_CONFIG="$RUN_NIX_CONFIG" "$@" ;;
-            *)             echo "blocked:nix-toolbox:${rung#blocked:}" >&2; exit 1 ;;
+            *)             echo "blocked:nix-toolbox:${rung#blocked:}" >&2; _rung_afford "${rung#blocked:}"; exit 1 ;;
         esac
         ;;
     store-path)

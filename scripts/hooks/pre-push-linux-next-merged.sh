@@ -108,6 +108,8 @@ while read -r _lref lsha rref _rsha; do
             echo "  Resolve conflicts locally, re-run the local gate, then push again."
             echo "  Never --no-verify past this: an unmerged platform push is the divergence"
             echo "  hazard the rule exists to prevent (version_divergence_hazard)."
+            echo "  why: $branch does not contain origin/linux-next, and every non-linux-next push must contain it first"
+            echo "  remedy: git fetch origin && git merge origin/linux-next, re-run the local gate, push again"
         } >&2
         echo "blocked:linux-next-not-merged:$branch"
         exit 1

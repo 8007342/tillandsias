@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: publish-local-auto-on-a-wrangler-project-starts-the-wrangler-preview-or-keeps-the-exited-containers-logs-to-say-why
+    event:
+      type: evidence
+      ts: "2026-10-17T12:42:40Z"
+      agent_id: forge-yoga-opus5-20261017t110819z
+      host: yoga
+      summary: |-
+        LIVE ARM (yoga, 12:42Z): build of linux-next + work/1766-qpvb (3040acb37) + work/1774-ibyx (428f2d692), forge on visual-chess@497f976 after npm ci + ./build.sh --dev (dist 186M). publish_local auto -> 'runtime_exited: managed runtime exited with code 1 during startup; service_logs shows its last lines'; service_status last_failure step=ready class=exit remedy=agent exit_code=1 (no tail in status); service_logs {category:WEB} -> state=exited source=last_failed_start, 20 lines ending in wrangler '✘ [ERROR] Asset too large. Cloudflare Workers supports assets with sizes of up to 25 MiB. We found a file /srv/preview/dist/wasm/visual_chess_tract_inference_bg.wasm with a size of 52.6 MiB.' ROOT CAUSE: a project fact, deterministic, not a Tillandsias defect; wrangler deploy would refuse the same asset. The Request.cf ENOTFOUND lines are warnings only (a hand-run with a small dist reached Ready). Criteria 1-3 are met by #515 on a live substrate.

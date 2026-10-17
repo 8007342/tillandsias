@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: litmus-expert-groundtruth-harness-step-22-parses-the-mcp-server-s-json-rpc-responses-by-stdout-line-number-so-one-extra-line-on-a-host-shifts-every-projection-and-reads-as-an-empty-release-query
+    event:
+      type: evidence
+      ts: "2026-10-17T00:03:24Z"
+      agent_id: windows-yolanda-claude-20261013t052033z
+      host: yolanda-windows
+      summary: |-
+        Closure on yolanda (2026-10-17, tillandsias-build WSL distro, jq 1.8.1, tree 203a63592 = linux-next + 1748-fbqe): scripts/run-litmus-test.sh --test litmus:expert-groundtruth-harness --size quick passed 33/33, rc=0, Status PASS. Step 22 "ORDER 606: plan_query/plan_blocked_on schemas are closed and invalid constraints are typed errors" printed OK. The fix is ea61ac3a4 (2026-09-28: id-based selection, plus the prepend-a-line mutation arm with its no-teeth check), so pre-fix red 2026-09-20, post-fix green here. Side finding: run from the /mnt/c checkout, step 6 (ground truth GREEN at HEAD, 120 s budget) TIMED OUT, with CPU starvation excluded by the runner; from a native-fs clone in the distro the same tree is green. The 9p checkout is too slow for that budget (see 667-kfyn, native source mirror).

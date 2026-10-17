@@ -1,0 +1,12 @@
+# Gate step 1765-q7rg — a step that declares STEP_HOST_STATE (keyring, load) is
+# retried ONCE after a settle: red then green passes, red twice stays red and
+# prints flaky:<step>:<v1>,<v2> for the land queue, and a step that declares
+# nothing is never retried. Every arm executes the real loop through
+# ./build.sh --gate-steps over a scratch root whose stub counts its own runs.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking a host-state gate step is retried once, never skipped (1765-q7rg)"
+STEP_SCRIPT="scripts/test-gate-step-host-state-retry.sh"
+STEP_ERROR="the gate-step runner no longer retries a STEP_HOST_STATE step exactly once, retried a step that declares none, or let a twice-red step pass (1765-q7rg) — see the FAIL lines above"
+STEP_OK="Host-state step retry fixture passed"
+STEP_SECOND_REGIME="yolanda-windows 2026-10-17 msys skip:gate-step-host-state-retry:MINGW64-re-execs-build-sh-into-wsl (4/4 inside tillandsias-build)"

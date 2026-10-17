@@ -6,11 +6,11 @@ description: Jumpstarts an agent's awareness of the pre-configured Forge environ
 # Forge Quick Intro
 
 **Purpose:**
-Immediately bootstrap a new agent's awareness of the Forge environment. Instead of wasting tokens exploring the environment to see what compilers, tools, or browsers are installed, agents should read this brief intro.
+Immediately bootstrap a new agent's awareness of the Forge environment. Instead of wasting tokens exploring the environment to see what compilers and tools are installed, agents should read this brief intro.
 
 **The Forge Environment is fully loaded. You DO NOT need to install or search for these tools. They are ready to use:**
 - **Compilers & Languages:** Rust, Cargo, Java (OpenJDK), Python 3, Node.js, Go, Dart, and Flutter.
-- **Web & Browsers:** Headless and headful Chrome debugging browsers are pre-installed and configured.
+- **Web & Browsers:** The forge has **no browser binary** (no Chrome, Chromium or Firefox), by design. Browser windows open on the HOST: call `browser.open {"url": "http://<service>.<project>.localhost/"}` on the `host-browser` MCP server, and add `"dev": true` to debug your own lane's page over CDP. If host-browser is unreachable, check the page with `curl -fsS http://<service>.$TILLANDSIAS_PROJECT.localhost/` and give the user that URL to open. Playwright fetches its own browsers per project (`npx playwright install`).
 - **Tools:** Git, GitHub CLI (`gh`), `curl`, `wget`, `jq`, `ripgrep`, `fd-find`, `bat`, `yq`, `just`, etc.
 - **Package Manager:** `dnf` (`microdnf`) is available for additional packages if absolutely needed, though most dev tools are already present.
 - **Safe Mode:** You are operating in a highly permissive "YOLO" environment designed for autonomous coding.

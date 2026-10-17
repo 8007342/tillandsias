@@ -2,7 +2,7 @@
 # @trace order:1505-kc5f, openspec/changes/cloudflare-login-and-fleet-vpn/design.md (Decision 1, Decision 7)
 # @trace openspec/changes/cloudflare-login-and-fleet-vpn/specs/cloudflare-auth/spec.md
 #
-# tillandsias --cloudflare-login [--via loopback|qr|paste] and
+# tillandsias --cloudflare-login [--via device|loopback|qr|paste] and
 # --cloudflare-logout, against tillandsias-fake-cloudflare. No real
 # Cloudflare, no real Vault, no real credential.
 #
@@ -31,6 +31,10 @@
 #   --via qr without a relay refuses naming loopback and paste  BIN no-relay
 #   LITMUS_PODMAN_MODE stops with nothing written               BIN litmus + CARGO litmus
 #   --cloudflare-logout deletes token+refresh, keeps mesh       CARGO logout
+#   1758-wdvf device grant, default when discovery offers it    BIN device + CARGO device-*
+#     (approve stores and the QR is verification_uri_complete; slow_down
+#     widens; deny/expire store nothing; a refused grant falls back with a
+#     note; NEGATIVE CONTROL: no grant, or no endpoint, never asks)
 # plus: state mismatch makes no exchange; no token, verifier or code in any
 # output; the relay page never calls out (with two mutation controls).
 #
@@ -75,12 +79,20 @@ BIN="${TILLANDSIAS_CLOUDFLARE_LOGIN_BIN:-$TARGET/tillandsias}"
 FAKEBIN="$scratch/fakebin"
 mkdir -p "$FAKEBIN" "$scratch/home" "$scratch/run"
 chmod 700 "$scratch/run"
-cat >"$FAKEBIN/xdg-open" <<'OPENER'
+# 1713-3v3f / 1719-83po QR slice: the binary PRINTS the authorize URL and never
+# launches a host browser. So the operator is played by `click`: it waits for
+# the printed URL in the arm's output, consents at the fake
+# (auto=approve|deny), and follows the redirect to the loopback listener. It
+# records the URL and the Location in the scratch dir and prints nothing.
+cat >"$FAKEBIN/click" <<'CLICK'
 #!/usr/bin/env bash
-# The operator's browser: consent at the fake (auto=approve|deny), then follow
-# the redirect to the loopback listener. Records the URL and the Location in
-# the scratch dir; prints nothing.
-url="$1"
+out="$1"; i=0; url=""
+while [ "$i" -lt 300 ]; do
+    url="$(grep -m1 -oE 'http://127\.0\.0\.1:[0-9]+/oauth2/auth[^[:space:]]*' "$out" 2>/dev/null)"
+    [ -n "$url" ] && break
+    sleep 0.1; i=$((i + 1))
+done
+[ -n "$url" ] || exit 0
 printf '%s\n' "$url" >"$CF_FAKE_BROWSER_DIR/url"
 loc="$(curl -s --noproxy '*' -o /dev/null -w '%{redirect_url}' "${url}&auto=${CF_FAKE_BROWSER_MODE:-approve}")"
 if [ "${CF_FAKE_BROWSER_TAMPER:-0}" = 1 ]; then
@@ -88,15 +100,26 @@ if [ "${CF_FAKE_BROWSER_TAMPER:-0}" = 1 ]; then
 fi
 printf '%s\n' "$loc" >"$CF_FAKE_BROWSER_DIR/location"
 curl -s --noproxy '*' -o /dev/null "$loc" || true
-OPENER
+CLICK
+# TRIPWIRES: an opener on PATH that only records being launched. The binary
+# must never call one (arm NOLAUNCH).
+cat >"$FAKEBIN/xdg-open" <<'TRIP'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$CF_FAKE_BROWSER_DIR/launched"
+TRIP
 cp "$FAKEBIN/xdg-open" "$FAKEBIN/open"
-printf '#!/bin/sh\nexit 125\n' >"$FAKEBIN/podman"
-chmod 755 "$FAKEBIN/xdg-open" "$FAKEBIN/open" "$FAKEBIN/podman"
+# 1770-z575: the fake podman RECORDS its argv, so an arm can prove the login
+# asked podman for the Vault enclave alone and never for a full image set.
+PODMAN_LOG="$scratch/podman.log"
+: >"$PODMAN_LOG"
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >>"%s"\nexit 125\n' "$PODMAN_LOG" >"$FAKEBIN/podman"
+chmod 755 "$FAKEBIN/click" "$FAKEBIN/xdg-open" "$FAKEBIN/open" "$FAKEBIN/podman"
 
-start_fake() {   # <name> -> sets FAKE_URL, LEDGER
+start_fake() {   # <name> [VAR=value...] -> sets FAKE_URL, LEDGER
     LEDGER="$scratch/$1.ledger"
     : >"$LEDGER"
-    "$FAKE" --ledger "$LEDGER" >"$scratch/$1.port" 2>/dev/null &
+    # 1758-wdvf: the fake reads its knobs at startup, so they ride on its env.
+    env "${@:2}" "$FAKE" --ledger "$LEDGER" >"$scratch/$1.port" 2>/dev/null &
     FAKE_PIDS="$FAKE_PIDS $!"
     local i=0 port=""
     while [ "$i" -lt 100 ]; do
@@ -138,10 +161,20 @@ run_bin() {
     local pid=$!
     ( sleep 60; kill "$pid" 2>/dev/null ) &
     local wd=$!
+    # The operator, for an arm that names a browser mode: clicks the URL the
+    # binary printed (the binary never opens a browser itself).
+    local clicker=""
+    case " ${envs[*]+"${envs[*]}"} " in
+        *" CF_FAKE_BROWSER_MODE="*)
+            env CF_FAKE_BROWSER_DIR="$scratch/$name.browser" \
+                "${envs[@]+"${envs[@]}"}" bash "$FAKEBIN/click" "$scratch/$name.out" &
+            clicker=$! ;;
+    esac
     wait "$pid"
     RC=$?
     kill "$wd" 2>/dev/null
     wait "$wd" 2>/dev/null
+    [ -z "$clicker" ] || { kill "$clicker" 2>/dev/null; wait "$clicker" 2>/dev/null; }
     OUT="$(cat "$scratch/$name.out")"
 }
 
@@ -196,12 +229,32 @@ no_leak "state" "$OUT" "$(code_of state)"
 
 start_fake novault
 run_bin novault CF_FAKE_BROWSER_MODE=approve -- --cloudflare-login --via loopback
-if [ "$RC" -ne 0 ] && grep -q '^refused:cloudflare-login:vault:vault-unavailable$' <<<"$OUT" \
+if [ "$RC" -ne 0 ] && grep -q '^refused:cloudflare-login:vault:vault-start-failed$' <<<"$OUT" \
     && ! ledger_paths "$LEDGER" | grep -qx '/oauth2/token' && ledger_paths "$LEDGER" | grep -qx '/oauth2/auth'; then
-    ok "NOVAULT bin: approved, Vault unreachable -> refused before the code is spent (no /oauth2/token)"
+    ok "NOVAULT bin: approved, Vault cannot start -> refused before the code is spent (no /oauth2/token)"
 else
-    bad "NOVAULT bin: expected refused:cloudflare-login:vault:vault-unavailable and no token request, rc=$RC"
+    bad "NOVAULT bin: expected refused:cloudflare-login:vault:vault-start-failed and no token request, rc=$RC"
     printf '%s\n' "$OUT" | head -5
+fi
+# 1770-z575: a stopped Vault is STARTED, alone, and the remedy is the light
+# step. The operator's v56.10.16.2 login refused vault-unavailable and named
+# `tillandsias --init`, which rebuilt every image and froze the desktop.
+if grep -q '^note:cloudflare-store:vault-not-running:starting-the-vault-enclave-only' <<<"$OUT"; then
+    ok "NOVAULT bin: a stopped Vault is started (the Vault enclave only)"
+else
+    bad "NOVAULT bin: the login did not try to start Vault: $(printf '%s' "$OUT" | head -3)"
+fi
+case "$OUT" in
+    *'tillandsias --init'*) bad "NOVAULT bin: the remedy still sends the operator to tillandsias --init" ;;
+    *'start Tillandsias (the tray)'*) ok "NOVAULT bin: the remedy is the light step (start the tray), never --init" ;;
+    *) bad "NOVAULT bin: the remedy names no next step: $(printf '%s' "$OUT" | tail -3)" ;;
+esac
+_builds="$(grep -E '(^| )build( |$)' "$PODMAN_LOG" || true)"
+_other_builds="$(printf '%s\n' "$_builds" | grep -v -i 'vault' | grep -v '^$' || true)"
+if [ -z "$_other_builds" ]; then
+    ok "NOVAULT bin: podman was never asked to build anything but the Vault image ($(printf '%s\n' "$_builds" | grep -c -i vault) vault build attempt(s))"
+else
+    bad "NOVAULT bin: the login asked podman to build a non-Vault image: $(printf '%s' "$_other_builds" | head -2)"
 fi
 no_leak "novault" "$OUT" "$(code_of novault)"
 
@@ -239,7 +292,7 @@ fi
 start_fake litmusctl
 run_bin litmusctl CF_FAKE_BROWSER_MODE=deny -- --cloudflare-login --via loopback
 if ! grep -q 'litmus-stop' <<<"$OUT" && [ -e "$scratch/litmusctl.browser/url" ]; then
-    ok "LITMUS CONTROL: without LITMUS_PODMAN_MODE the browser is opened"
+    ok "LITMUS CONTROL: without LITMUS_PODMAN_MODE the printed URL is followed"
 else
     bad "LITMUS CONTROL: the stop fired (or no browser) without the litmus flag"
 fi
@@ -261,12 +314,59 @@ else
 fi
 no_leak "argv" "$OUT" "CODEONARGV-0123456789"
 
+# DEVICE (1758-wdvf): with the grant in discovery and no --via, the real binary
+# takes the device grant: it asks /oauth2/device/auth, shows the user code, and
+# refuses at the Vault preflight BEFORE its first poll (no /oauth2/token).
+DEVICE_GRANTS='authorization_code,refresh_token,urn:ietf:params:oauth:grant-type:device_code'
+start_fake device TILLANDSIAS_FAKE_CLOUDFLARE_GRANT_TYPES="$DEVICE_GRANTS"
+run_bin device -- --cloudflare-login
+if [ "$RC" -ne 0 ] && grep -q '^refused:cloudflare-login:vault:vault-start-failed$' <<<"$OUT" \
+    && grep -q 'enter the code: WDJB-MJHT' <<<"$OUT" \
+    && ledger_paths "$LEDGER" | grep -qx '/oauth2/device/auth' \
+    && ! ledger_paths "$LEDGER" | grep -qx '/oauth2/token'; then
+    ok "DEVICE bin: the default takes the device grant, shows the code, refuses at the Vault before any poll"
+else
+    bad "DEVICE bin: expected the device grant then refused:cloudflare-login:vault:vault-start-failed, rc=$RC: $(ledger_paths "$LEDGER" | tr '\n' ' ')"
+    printf '%s\n' "$OUT" | head -5
+fi
+# NEGATIVE CONTROL: the same invocation against discovery WITHOUT the grant
+# never asks for it (the code flow runs; the fake browser declines it).
+start_fake devicectl
+run_bin devicectl CF_FAKE_BROWSER_MODE=deny -- --cloudflare-login
+ctl_paths="$(ledger_paths "$LEDGER")"
+case "
+$ctl_paths
+$OUT" in
+    *"
+/oauth2/device/auth
+"*|*"enter the code"*)
+        bad "DEVICE CONTROL bin: device/auth was asked although discovery does not offer the grant" ;;
+    *)
+        if [ -n "$ctl_paths" ]; then
+            ok "DEVICE CONTROL bin: without the grant in discovery, device/auth is never asked"
+        else
+            bad "DEVICE CONTROL bin: the fake saw no request at all, so the control examined nothing"
+        fi ;;
+esac
+
 # LEDGER CONTROL: past_auth sees a request after /oauth2/auth when there is one.
 printf '%s\n' '{"body":"","method":"GET","path":"/oauth2/auth?x=1"}' \
     '{"body":"grant_type=authorization_code","method":"POST","path":"/oauth2/token"}' >"$scratch/ctl.ledger"
 [ "$(past_auth "$scratch/ctl.ledger")" = "/oauth2/token" ] \
     && ok "LEDGER CONTROL: the past-auth check sees a token request" \
     || bad "LEDGER CONTROL: the past-auth check is blind"
+
+# NOLAUNCH (1713-3v3f, operator ruling 2026-10-16): no arm launched a host
+# browser. The loopback arms above reached the listener only because `click`
+# followed the PRINTED URL; an opener on PATH records any launch. The binary
+# before this slice auto-opened, so this arm was red on it.
+launched="$(cat "$scratch"/*.browser/launched 2>/dev/null | head -n 3)"
+n_loop="$(ls -d "$scratch"/*.browser 2>/dev/null | wc -l | tr -d ' ')"
+if [ -z "$launched" ] && [ "$n_loop" -ge 5 ]; then
+    ok "NOLAUNCH no arm launched a browser opener (${n_loop} arms looked)"
+else
+    bad "NOLAUNCH an opener was launched or no arm ran: launched=[${launched}] arms=${n_loop}"
+fi
 
 # ── the relay page never calls out ──────────────────────────────────────────
 PAGE="$ROOT/assets/cloudflare-relay/index.html"
@@ -340,7 +440,11 @@ NORELAY|cloudflare_login_qr_without_relay_is_refused_before_any_network_call
 PASTE-TTY|cloudflare_login_paste_without_a_terminal_is_refused_before_any_network_call
 POLL|cloudflare_login_relay_poll_state_first_then_code
 PASTE-STATE|cloudflare_login_paste_needs_the_state_with_the_code
-ARGS|cloudflare_login_parse_args"
+ARGS|cloudflare_login_parse_args
+DEVICE|cloudflare_login_fake_device_approve_stores_and_qr_is_only_the_verification_uri
+DEVICE-SLOW|cloudflare_login_fake_device_slow_down_widens_and_still_stores
+DEVICE-DENY|cloudflare_login_fake_device_deny_and_expire_store_nothing
+DEVICE-FALLBACK|cloudflare_login_fake_device_refused_falls_back_and_no_grant_never_asks"
 while IFS= read -r line; do
     label="${line%%|*}"; arm="${line#*|}"
     if grep -qE "^test ${T}::${arm} \.\.\. ok$" <<<"$out"; then

@@ -1189,6 +1189,32 @@ _clone_project_from_mirror_impl() {
                 # rather than proceeding, and FAIL LOUD (never launch on an empty
                 # tree) once retries are exhausted.
                 if ! git -C "$clone_dir" rev-parse --verify --quiet HEAD >/dev/null 2>&1; then
+                    # @trace order:1759-6z2m
+                    # An EMPTY PROJECT (no files, no commits) is the one HEAD-less
+                    # clone that is correct: the onboarding entry point. It is told
+                    # apart by two facts the mirror advertises, BOTH required: no
+                    # refs/heads/* at all (its own refs/tillandsias/* state refs are
+                    # always there, so "no refs" never holds), and the upstream-auth
+                    # verdict `local-only` (no origin, so no seed is coming;
+                    # images/git/probe-upstream-auth.sh). With an upstream, or with no
+                    # verdict yet, the retry and refusal below stay in force.
+                    local advertised_now
+                    advertised_now=$'\n'"$(git ls-remote "git://$(git_mirror_host)/${TILLANDSIAS_PROJECT}" 2>/dev/null || true)"
+                    if [[ "$advertised_now" != *$'\trefs/heads/'* ]] && \
+                       [[ "$advertised_now" == *$'\trefs/tillandsias/upstream-auth/local-only/'* ]]; then
+                        cd "$clone_dir" || return 1
+                        if [[ -n "${TILLANDSIAS_FORGE_SEED_BRANCH:-}" ]]; then
+                            git symbolic-ref HEAD "refs/heads/${TILLANDSIAS_FORGE_SEED_BRANCH}" 2>/dev/null || true
+                        fi
+                        git remote set-url --push origin "git://$(git_mirror_host)/${TILLANDSIAS_PROJECT}" 2>/dev/null || \
+                            echo "[entrypoint] WARNING: Failed to set push URL — git push may not work" >&2
+                        configure_git_identity
+                        rewrite_origin_for_enclave_push
+                        trace_lifecycle "git-mirror" "empty project: no branches and no upstream; starting on unborn '$(git symbolic-ref --short -q HEAD)'"
+                        echo "[forge] New empty project: starting on branch '$(git symbolic-ref --short -q HEAD)' with no commits yet."
+                        echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
+                        return 0
+                    fi
                     rm -rf "$clone_dir" 2>/dev/null || true
                     if [[ $i -lt $max_retries ]]; then
                         trace_lifecycle "git-mirror" "clone returned an EMPTY tree (mirror still seeding), retrying ($i/$max_retries, ${backoff}s)..."
@@ -1391,6 +1417,10 @@ if [ -r "$_tlc_embed_lib" ]; then
     # shellcheck source=lib-embed-endpoint.sh
     source "$_tlc_embed_lib"
     resolve_embed_endpoint >/dev/null 2>&1 || true
+    # ORDER 1747-e9d6: the verdict says WHY an endpoint is unset (unreachable
+    # vs no-curl vs explicit); discarding it left a cold-launch race
+    # unconfirmable. Logged, never printed: this runs at source time.
+    trace_lifecycle "embed-endpoint" "${TILLANDSIAS_EMBED_ENDPOINT_VERDICT:-none}"
 fi
 unset _tlc_embed_lib
 if [ -z "${TILLANDSIAS_EMBED_MODEL:-}" ]; then
@@ -1769,9 +1799,24 @@ ensure_forge_spec_index() {
         echo "[spec-index] skipped (no-ensure-script): ${ensure} absent — this project has no spec index producer"
         return 0
     fi
+    # ORDER 1747-e9d6: the source-time probe races a cold inference service
+    # (3 s ceiling, once). Re-probe here, bounded, before giving up: measured
+    # on yolanda 2026-10-16, the endpoint answered in 29 ms ten minutes after
+    # the launch probe had left it unset for the whole session. Called
+    # directly, never in $(…): its export must reach this shell.
+    if [ -z "${TILLANDSIAS_EMBED_ENDPOINT:-}" ] && declare -F resolve_embed_endpoint >/dev/null; then
+        local reprobe_until
+        reprobe_until=$(( $(date +%s 2>/dev/null || echo 0) + ${FORGE_EMBED_REPROBE_WAIT:-60} ))
+        while :; do
+            resolve_embed_endpoint >/dev/null 2>&1 && break
+            [ "$(date +%s 2>/dev/null || echo 0)" -ge "$reprobe_until" ] && break
+            sleep ${FORGE_EMBED_REPROBE_INTERVAL:-3}
+        done
+        echo "[spec-index] embed endpoint re-probed: ${TILLANDSIAS_EMBED_ENDPOINT_VERDICT:-none}"
+    fi
     ep="${TILLANDSIAS_EMBED_ENDPOINT:-}"
     if [ -z "$ep" ]; then
-        echo "[spec-index] skipped (no-embed-endpoint): TILLANDSIAS_EMBED_ENDPOINT is unset — spec_answer keeps its typed refusal (712-r5x8)"
+        echo "[spec-index] skipped (no-embed-endpoint): TILLANDSIAS_EMBED_ENDPOINT is unset (${TILLANDSIAS_EMBED_ENDPOINT_VERDICT:-no verdict}) — spec_answer keeps its typed refusal (712-r5x8)"
         return 0
     fi
     # A cold inference volume is still PULLING the embed model (the inference
@@ -3924,8 +3969,9 @@ seed_claude_bypass_consent() {
 }
 
 # seed_claude_pretooluse_hook — order 1443-we89, THE TEMPORARY BRIDGE. Merge the
-# image's PreToolUse (matcher Bash) entry, which runs `tillandsias-plan policy
-# classify-bash --hook`, into ~/.claude/settings.json, so every Claude session
+# image's PreToolUse (matcher Bash) entry, which runs
+# /usr/local/lib/tillandsias/bash-policy-hook (1750-a4re: the image ships the
+# decider and the hook fails closed without it), into ~/.claude/settings.json, so every Claude session
 # in a forge on ANY project has its Bash commands checked (operator ruling 1,
 # 2026-09-27: "Commit the hook to the project"; the forge overlay carries it
 # for projects that are not Tillandsias). Additive: every other setting and
@@ -3950,13 +3996,20 @@ seed_claude_pretooluse_hook() {
             trace_lifecycle "config" "claude settings.json is not a JSON object; PreToolUse hook NOT seeded"
             return 1
         fi
-        # Already present (any hook running classify-bash): leave the file alone.
-        if jq -e '[.hooks.PreToolUse[]?.hooks[]?.command // empty] | any(test("classify-bash"))' \
+        # Already present (the overlay's own hook command): leave the file alone.
+        if jq -e --slurpfile ov "$overlay_cfg" \
+            '[.hooks.PreToolUse[]?.hooks[]?.command // empty] | any(. == $ov[0].hooks.PreToolUse[0].hooks[0].command)' \
             "$settings_cfg" >/dev/null 2>&1; then
             rm -f "$tmp"
             return 0
         fi
-        jq -s '.[0] * {hooks: ((.[0].hooks // {}) + {PreToolUse: ((.[0].hooks.PreToolUse // []) + .[1].hooks.PreToolUse)})}' \
+        # 1750-a4re: drop the pre-1750 entry that ran the bare
+        # `tillandsias-plan policy classify-bash --hook` (a settings.json
+        # restored from the approvals vault still carries it, and it exits 127
+        # in a forge with no binary on PATH), then append the overlay's.
+        jq -s '.[0] * {hooks: ((.[0].hooks // {}) + {PreToolUse: (([.[0].hooks.PreToolUse // [] | .[]
+                | select(([.hooks[]?.command // empty] | any(test("^tillandsias-plan policy classify-bash"))) | not)])
+                + .[1].hooks.PreToolUse)})}' \
             "$settings_cfg" "$overlay_cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
     else
         cp "$overlay_cfg" "$tmp" || { rm -f "$tmp"; return 1; }
@@ -5021,6 +5074,31 @@ inject_startup_context() {
     else
         _expert_sources="absent"
     fi
+    # ORDER 1264-s4id: can this forge push to THIS repository? Asked at forge
+    # launch (not at login, where there is no repository), from the mirror's
+    # own push verdict, and REPORTED as a capability: read-only is a supported
+    # state, never a launch failure. The branch half asks the project's own
+    # push discipline about the startup branch. Loud states go to the launch
+    # terminal too.
+    local _push_line="push: unknown (helper-missing)" _push_machine="push_state=unknown push_reason=helper-missing"
+    local _push_branch_line="" _push_branch_machine="push_branch=unknown push_branch_reason=helper-missing"
+    local _push_lib="${BASH_SOURCE[0]%/*}/lib-push-capability.sh"
+    if [[ -r "$_push_lib" ]]; then
+        # shellcheck source=lib-push-capability.sh
+        source "$_push_lib"
+        tillandsias_push_capability "$project_dir" "${TILLANDSIAS_PROJECT:-$(basename "$project_dir")}"
+        _push_line="$TILLANDSIAS_PUSH_LINE"
+        _push_machine="$TILLANDSIAS_PUSH_MACHINE"
+        tillandsias_push_branch "$project_dir" "$branch"
+        _push_branch_line="$TILLANDSIAS_PUSH_BRANCH_LINE"
+        _push_branch_machine="$TILLANDSIAS_PUSH_BRANCH_MACHINE"
+        if [[ "$TILLANDSIAS_PUSH_LOUD" = 1 ]]; then
+            printf '[forge] %s\n' "$_push_line" >&2
+        fi
+        if [[ -n "$_push_branch_line" ]]; then
+            printf '[forge] %s\n' "$_push_branch_line" >&2
+        fi
+    fi
     version="$(cat "$project_dir/VERSION" 2>/dev/null | tr -d '[:space:]' || echo "unknown")"
     agent_name="${TILLANDSIAS_AGENT_NAME:-forge}"
     local project_name
@@ -5043,6 +5121,9 @@ inject_startup_context() {
 ## Infrastructure (all transparent — zero configuration needed)
 
 - **Git**: push/fetch route through the enclave git mirror; GitHub token is handled automatically.
+  - ${_push_line}${_push_branch_line:+
+  - ${_push_branch_line}}
+  - Machine-readable (branch on this): \`${_push_machine} ${_push_branch_machine}\`. A read-only token is SUPPORTED: build, run and serve locally; only pushing is unavailable (order 1264-s4id).
 - **HTTPS proxy**: outbound traffic is cached; CA is trusted at startup.
 - **Accelerators** — \`${_accel_envelope}\`
   - This is the HOST's hardware, projected onto a closed vocabulary so you can branch on it without probing devices you cannot see. \`accel_class\` is the one field worth reading first: \`workstation-gpu\` (a discrete GPU is deliverable to this container — larger models are cheap here), \`mobile-npu\` (an NPU is deliverable — prefer small quantized models), \`hybrid-gpu-npu\` (both), or \`cpu-only\`.

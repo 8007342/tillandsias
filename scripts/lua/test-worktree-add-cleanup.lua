@@ -122,9 +122,9 @@ local function extract(text_, name)
 end
 local build = fs.read("build.sh")
 -- Every helper _pf_run_guard calls is extracted with it (1618-baia added
--- _pf_sweep_fixture_scratch to the killed path, 1630-dwab _pf_sweep_declared_artifacts, 1650-fb7z _pf_sweep_index_lock): an absent one would print
+-- _pf_sweep_fixture_scratch to the killed path, 1630-dwab _pf_sweep_declared_artifacts, 1650-fb7z _pf_sweep_index_lock, 1753-p925 _pf_worktree_list): an absent one would print
 -- "command not found" there and pass only because nothing checks that call.
-local fns = extract(build, "_pf_sweep_under") .. "\n" .. extract(build, "_pf_sweep_guard_tmp") .. "\n" ..
+local fns = extract(build, "_pf_worktree_list") .. "\n" .. extract(build, "_pf_sweep_under") .. "\n" .. extract(build, "_pf_sweep_guard_tmp") .. "\n" ..
     extract(build, "_pf_sweep_fixture_scratch") .. "\n" .. extract(build, "_pf_sweep_declared_artifacts") .. "\n" ..
     extract(build, "_pf_index_lock_held") .. "\n" .. extract(build, "_pf_sweep_index_lock") .. "\n" ..
     extract(build, "_pf_now") .. "\n" ..

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-bash-lane-launch-spawns-the-tray-whose-default-lane-mcp-socket-the-lane-then-refuses-as-a-live-owner-so-the-shell-dies-after-the-whole-project-stack-is-up
+    field: priority
+    value: p1
+    ts: "2026-10-16T19:58:35Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-bash-lane-launch-spawns-the-tray-whose-default-lane-mcp-socket-the-lane-then-refuses-as-a-live-owner-so-the-shell-dies-after-the-whole-project-stack-is-up
+    event:
+      type: note
+      ts: "2026-10-16T19:58:35Z"
+      host: lenovinha
+      summary: |-
+        v56.10.16.2 Linux smoke 2026-10-16: reproduced with the tray already running (the row's UNMEASURED case). Any project with a ~/src clone cannot be opened from the tray menu or the CLI while the tray runs: the tray binds <project>-default/mcp.sock for every local project, and the lane it launches refuses that socket as a live owner. Not a regression (row measured on v56.10.9.1; the refusal is in stable v56.10.13.1). Raised by coordinator ruling because it blocks the operator's everyday flow.

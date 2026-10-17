@@ -1,0 +1,12 @@
+# Gate step 1255-s4im — the read-only push-guard verdict the Start Of Day and
+# Start Of Cycle guards read (scripts/lua/check-hooks-armed.lua), on scratch
+# repos: no hook and an older marker are degraded, the current marker is ok, a
+# foreign hook is refused, a non-checkout is blocked, the check installs
+# nothing, and this checkout answers in the grammar.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the read-only push-guard verdict (1255-s4im)"
+STEP_LUA="scripts/lua/test-hooks-armed.lua"
+STEP_ERROR="check-hooks-armed.lua no longer answers what its fixture constructs, or it installed something (1255-s4im) — see the FAIL lines above"
+STEP_OK="Read-only push-guard verdict fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-16 darwin ok:hooks-armed-fixture:7 arms"

@@ -393,8 +393,25 @@ _pf_classify() {  # $1 = rc, $2 = captured output file
 # with its OWN TMPDIR, and afterwards the door removes ONLY the worktrees whose
 # registered path lies under that directory (never by name pattern), prints
 # each as `swept:worktree:<path>` into <outfile>.swept, and deletes the dir.
-_pf_sweep_under() {  # $1 = resolved root, $2 = root as given, $3 = file to append to, $4 = tag
-    local _k _v
+#
+# ORDER 1753-p925. NO PROCESS SUBSTITUTION HERE. The worktree listing is read
+# from a FILE that a plain foreground `git … >file` wrote, never from
+# `< <(git …)`. In darwin's /bin/bash 3.2 a process substitution is an async
+# child, its SIGCHLD is reaped with malloc inside the signal handler, and the
+# late sweep below ran one per guard root: at a 260-guard roster the handler
+# landed inside a realloc every run and bash aborted on heap corruption
+# ("BUG IN CLIENT OF LIBMALLOC: memory corruption of free block"), exit 133
+# AFTER the verdict line. $5 = a listing file a caller already wrote (the late
+# sweep writes it once for all roots); without it this writes its own.
+_pf_worktree_list() {  # $1 = file to write
+    git -C "$SCRIPT_DIR" worktree list --porcelain > "$1" 2>/dev/null || : > "$1"
+}
+_pf_sweep_under() {  # $1 = resolved root, $2 = root as given, $3 = file to append to, $4 = tag, $5 = listing (optional)
+    local _k _v _list="${5:-}" _own=""
+    if [ -z "$_list" ]; then
+        _list="$3.wtlist"; _own=1
+        _pf_worktree_list "$_list"
+    fi
     while read -r _k _v; do
         [ "$_k" = worktree ] || continue
         case "$_v" in
@@ -407,7 +424,8 @@ _pf_sweep_under() {  # $1 = resolved root, $2 = root as given, $3 = file to appe
                     echo "$4-failed:$_v" >> "$3"
                 fi ;;
         esac
-    done < <(git -C "$SCRIPT_DIR" worktree list --porcelain 2>/dev/null)
+    done < "$_list"
+    [ -z "$_own" ] || rm -f "$_list"
 }
 _pf_sweep_guard_tmp() {  # $1 = the guard's TMPDIR, $2 = outfile
     local _gt="$1" _real
@@ -460,6 +478,8 @@ _pf_sweep_declared_artifacts() {  # $1 = guard path (roster-relative), $2 = outf
         fi
     done < "$_decl"
     [ "${#_globs[@]}" -gt 0 ] || return 0
+    # 1753-p925: listed into a file, never `< <(git …)` (see _pf_sweep_under)
+    git -C "$SCRIPT_DIR" ls-files --others --exclude-standard > "$2.untracked" 2>/dev/null || : > "$2.untracked"
     while IFS= read -r _f; do
         [ -n "$_f" ] || continue
         for _g in "${_globs[@]}"; do
@@ -474,7 +494,8 @@ _pf_sweep_declared_artifacts() {  # $1 = guard path (roster-relative), $2 = outf
                     break ;;
             esac
         done
-    done < <(git -C "$SCRIPT_DIR" ls-files --others --exclude-standard 2>/dev/null)
+    done < "$2.untracked"
+    rm -f "$2.untracked"
 }
 # ORDER 1650-fb7z. A STALE INDEX LOCK. Three preflights on yolanda (2026-10-12)
 # each left a 0-byte .git/index.lock with no git alive, and the next git add /
@@ -553,8 +574,10 @@ _pf_sweep_late() {  # $1 = the preflight run dir
     local _r
     [ -n "$1" ] && [ -d "$1" ] || return 0
     if [ -s "$1/guard-tmp-roots" ]; then
+        # 1753-p925: ONE listing for every root, read from a file.
+        _pf_worktree_list "$1/late.wtlist"
         while read -r _r; do
-            [ -n "$_r" ] && _pf_sweep_under "$_r" "$_r" "$1/late.swept" "swept:worktree-late"
+            [ -n "$_r" ] && _pf_sweep_under "$_r" "$_r" "$1/late.swept" "swept:worktree-late" "$1/late.wtlist"
         done < "$1/guard-tmp-roots"
     fi
     # ORDER 1650-fb7z: a guard the door never killed can still leave the lock.
@@ -979,6 +1002,13 @@ _pf_launcher() {  # $1 = work dir, $2 = deadline, $3 = jobs, $4 = decider deadli
 # substrate (check-cycle-flow-log-fresh reports the LOOP's staleness;
 # check-installer-channel the RELEASE's state).
 _preflight_roster() {
+    # ORDER 1753-p925 TEST SEAM: a file of roster lines replaces the roster, so
+    # scripts/lua/test-preflight-door-many-guards.lua can run the real door over N
+    # trivial guards. Never set outside that fixture.
+    if [ -n "${TILLANDSIAS_PREFLIGHT_ROSTER_FILE:-}" ]; then
+        cat "$TILLANDSIAS_PREFLIGHT_ROSTER_FILE"
+        return
+    fi
     # 1. the fast-refusal tier's own literal invocations
     awk '/# .. FAST REFUSALS \(order 1009-gccx\)/,/_info "Fast refusals passed"/' "$SCRIPT_DIR/build.sh" \
         | grep -ohE 'scripts/check-[a-z0-9-]+\.sh'
@@ -1242,6 +1272,8 @@ Build flags:
 
 Install flags:
   --install         Build release + install binary to ~/.local/bin/
+  --check --install Install ONLY after a green --check, building the exact tree
+                    the check stamped (order 1237-f9dy); a red check installs nothing
 
 Maintenance flags:
   --wipe            Remove target/, ~/.cache/tillandsias/, temp files
@@ -1259,6 +1291,24 @@ EOF
     esac
     shift
 done
+
+# ORDER 1237-f9dy — `--check --install` INSTALLS ONLY AFTER A GREEN CHECK.
+#
+# A host builds several times a day but routinely runs only --check, which
+# installs nothing, and --ci-full --install installs only when the WHOLE release
+# gate passes. Measured 2026-10-15: yoga's launcher one release behind, and
+# macuahuitl's at v56.9.27.3, 18 days old. The install block also sits ABOVE
+# the check block, so `--check --install` used to install first and verify
+# after. Now the pair defers: the install flag is held back, the check runs as a
+# check-only dispatch, and only its green completion (after the gate stamp is
+# written) starts `--install` on the stamped tree. A red check exits before
+# that point, so it installs nothing; a bare --check is untouched.
+DEFER_INSTALL_UNTIL_CHECK=false
+if [[ "$FLAG_CHECK" == true && "$FLAG_INSTALL" == true && "$FLAG_CI" == false \
+    && "$FLAG_CI_FULL" == false && "$FLAG_RELEASE" == false && "$FLAG_TEST" == false ]]; then
+    DEFER_INSTALL_UNTIL_CHECK=true
+    FLAG_INSTALL=false
+fi
 
 # ORDER 1592-idmu — THE DIFF BASE IS FROZEN AT GATE START.
 #
@@ -1402,6 +1452,25 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
         esac
     fi
     # END-STALE-PLAN-BINARY-CHECK
+
+    # ORDER 1237-f9dy — ADVISORY ONLY: is the installed launcher older than the
+    # newest release tag this checkout knows? Nothing pulls a new release onto a
+    # host (macuahuitl ran v56.9.27.3 on 2026-10-15, 18 days old). Local tags
+    # only, no network; this line never refuses and never changes the verdict.
+    _pf_launcher="$(command -v tillandsias 2>/dev/null)" || _pf_launcher=""
+    if [ -n "$_pf_launcher" ]; then
+        _pf_installed="$("$_pf_launcher" --version 2>/dev/null)" || _pf_installed=""
+        _pf_installed="v${_pf_installed##* v}"
+        case "$_pf_installed" in v[0-9]*.[0-9]*.[0-9]*.[0-9]*) ;; *) _pf_installed="v" ;; esac
+        _pf_newest="$(git -C "$SCRIPT_DIR" tag --list 'v[0-9]*.[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname 2>/dev/null)" || _pf_newest=""
+        _pf_newest="${_pf_newest%%$'\n'*}"
+        if [ "$_pf_installed" != "v" ] && [ -n "$_pf_newest" ] && [ "$_pf_installed" != "$_pf_newest" ]; then
+            _pf_lower="$(printf '%s\n%s\n' "$_pf_installed" "$_pf_newest" | sort -V)" || _pf_lower=""
+            if [ "${_pf_lower%%$'\n'*}" = "$_pf_installed" ]; then
+                echo "advisory:preflight:launcher-older-than-release installed=$_pf_installed newest=$_pf_newest ($_pf_launcher) — not a refusal; update from the release, or ./build.sh --check --install" >&2
+            fi
+        fi
+    fi
 
     # 5s, SET FROM THE DISTRIBUTION AND NOT CHOSEN. Measured over all 105 roster
     # entries on pirria: 94 finish under 5s for 55.3s of work, and the next costs
@@ -2325,6 +2394,30 @@ _run() {
     return "$_run_rc"
 }
 
+# ORDER 1765-q7rg — one execution of the step the loop below has sourced, into
+# _step_out / _step_rc. A function so a host-state step can run it twice.
+_gs_exec_step() {
+    _step_rc=0
+    _step_out="$(mktemp "${TMPDIR:-/tmp}/gate-step.XXXXXX")"
+    if [ -n "$STEP_LUA" ]; then
+        # 1600-nn5b: handed the runner that runs it, the _run_lua_decider and
+        # preflight-door contract (1570-mxcg), so a fixture that must ask the
+        # plan binary finds one in the land queue's clean env too.
+        _run env "TILLANDSIAS_SCRIPT_RUNNER_BIN=$_gs_plan" "$_gs_plan" script run "$_gs_root/$STEP_LUA" > >(tee "$_step_out") 2>&1 || _step_rc=$?
+    else
+        _run bash "$_gs_root/$STEP_SCRIPT" > >(tee "$_step_out") 2>&1 || _step_rc=$?
+    fi
+    wait "$!" 2>/dev/null || true
+}
+
+# _gs_verdict_token <output file> <rc> — the step's verdict as one token for a
+# flaky: line: its last verdict-shaped line's head, else rc=<n>.
+_gs_verdict_token() {
+    local _v
+    _v="$(grep -E '^(ok|violation|refused|could-not-run|FAIL|fail)[: ]' "$1" 2>/dev/null | tail -n 1 | cut -d' ' -f1 | cut -c1-80)"
+    printf '%s' "${_v:-rc=$2}" | tr ',' ';'
+}
+
 # ORDER 1384-bqhy — the gate-steps.d loop, as a function over a ROOT whose
 # scripts/gate-steps.d it reads, so --check runs it over the checkout and the
 # fixture over a scratch tree, through the SAME code. A step names STEP_SCRIPT
@@ -2337,7 +2430,7 @@ _run_gate_steps() {  # $1 = root
     for _step_file in "$_gs_root"/scripts/gate-steps.d/*.step; do
         [ -e "$_step_file" ] || continue
         STEP_DESC=""; STEP_SCRIPT=""; STEP_LUA=""; STEP_ERROR=""; STEP_OK=""
-        STEP_SKIP_EXIT=""; STEP_SKIP_DESC=""
+        STEP_SKIP_EXIT=""; STEP_SKIP_DESC=""; STEP_HOST_STATE=""
         # shellcheck disable=SC1090
         . "$_step_file"
         if [ -z "$STEP_DESC" ] || { [ -z "$STEP_SCRIPT" ] && [ -z "$STEP_LUA" ]; }; then
@@ -2406,17 +2499,26 @@ _run_gate_steps() {  # $1 = root
 
         # The output streams as before AND is kept, so a refusal can be named
         # by the one classifier the preflight door also reads (1384-bqhy).
-        _step_rc=0
-        _step_out="$(mktemp "${TMPDIR:-/tmp}/gate-step.XXXXXX")"
-        if [ -n "$STEP_LUA" ]; then
-            # 1600-nn5b: handed the runner that runs it, the _run_lua_decider and
-            # preflight-door contract (1570-mxcg), so a fixture that must ask the
-            # plan binary finds one in the land queue's clean env too.
-            _run env "TILLANDSIAS_SCRIPT_RUNNER_BIN=$_gs_plan" "$_gs_plan" script run "$_gs_root/$STEP_LUA" > >(tee "$_step_out") 2>&1 || _step_rc=$?
-        else
-            _run bash "$_gs_root/$STEP_SCRIPT" > >(tee "$_step_out") 2>&1 || _step_rc=$?
+        _gs_exec_step
+        # ORDER 1765-q7rg — A HOST-STATE STEP GETS ONE RETRY, NEVER A SKIP.
+        # A step that declares STEP_HOST_STATE (a keyring cold state, a lock
+        # under load) can disagree with itself on a healthy tree. It runs once
+        # more after a settle; a pass then is a pass, and a second red stays red
+        # but is named flaky:<step>:<first>,<second> instead of violation:, so
+        # the land queue re-queues it once rather than evicting a good PR. A
+        # step that declares nothing never retries, and the could-not-run code
+        # is never retried either.
+        if [ "$_step_rc" -ne 0 ] && [ -n "$STEP_HOST_STATE" ] \
+           && { [ -z "$STEP_SKIP_EXIT" ] || [ "$_step_rc" -ne "$STEP_SKIP_EXIT" ]; }; then
+            _gs_first_verdict="$(_gs_verdict_token "$_step_out" "$_step_rc")"
+            rm -f "$_step_out"
+            _info "retry:${_step_path##*/}:host-state=$STEP_HOST_STATE — first run red ($_gs_first_verdict); settling ${TILLANDSIAS_GATE_HOST_STATE_SETTLE_S:-10}s and running it once more"
+            sleep "${TILLANDSIAS_GATE_HOST_STATE_SETTLE_S:-10}"
+            _gs_exec_step
+            if [ "$_step_rc" -ne 0 ]; then
+                echo "flaky:${_step_path##*/}:${_gs_first_verdict},$(_gs_verdict_token "$_step_out" "$_step_rc")"
+            fi
         fi
-        wait "$!" 2>/dev/null || true
 
         if [ -f /tmp/tillandsias-timing.jsonl ]; then
             _metrics_shared_after="$(wc -l < /tmp/tillandsias-timing.jsonl 2>/dev/null || echo 0)"
@@ -2724,7 +2826,9 @@ _prepare_ci_full_install_inputs() {
 # between the gate and the forge dirty-start guard. The call inside the install
 # block is latched to a no-op by this one. The release dispatch owns its own
 # gate and regenerates at the top of its own block.
-if [[ "$FLAG_INSTALL" == true ]]; then
+# Order 1237-f9dy: a deferred `--check --install` bumps HERE, before the check,
+# so the tree the check stamps is the tree the install builds.
+if [[ "$FLAG_INSTALL" == true || "$DEFER_INSTALL_UNTIL_CHECK" == true ]]; then
     _bump_build_version
     _check_trace_coverage
 fi
@@ -2806,6 +2910,14 @@ if [[ "$FLAG_INSTALL" == true ]]; then
         exit 1
     fi
 
+    # Order 1237-f9dy: say what this install was verified by, or that it was not.
+    if [[ -n "${TILLANDSIAS_INSTALL_VERIFIED_BY:-}" ]]; then
+        _info "install:verified-by:$TILLANDSIAS_INSTALL_VERIFIED_BY"
+    elif [[ "$FLAG_CI" == true || "$FLAG_CI_FULL" == true ]]; then
+        _info "install:verified-by:ci-gate (passed above)"
+    else
+        _warn "install:verified-by:nothing — a bare --install builds and installs without a gate; ./build.sh --check --install installs only after a green check"
+    fi
     _step "Building portable launcher (musl-static) with tray support for install..."
     _bump_build_version
     _check_trace_coverage
@@ -3055,7 +3167,11 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # the metric the velocity work steers by.
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CLEAN$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]] &&
         [[ "${TILLANDSIAS_FORCE_CHECK:-0}" != "1" ]] &&
+        [[ "$DEFER_INSTALL_UNTIL_CHECK" != true ]] &&
         [[ -f "$SCRIPT_DIR/scripts/gate-stamp.sh" ]]; then
+        # A deferred `--check --install` (1237-f9dy) clears FLAG_INSTALL, so
+        # without the guard above a fresh stamp exited 0 here and installed
+        # nothing. A combined dispatch never memoizes.
         _memo_verdict="$(bash "$SCRIPT_DIR/scripts/gate-stamp.sh" memo-check check 2>/dev/null)" || _memo_verdict=""
         case "$_memo_verdict" in
             "ok:gate-fresh-except-plan "*)
@@ -3423,6 +3539,33 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Enclave membership documentation check passed"
+    # 1746-2szd: a shipped skill, cheatsheet or agent instruction must not tell
+    # a forge agent a browser is pre-installed while the forge image installs
+    # none — forge-quick-intro did, and agents planned browser work on it.
+    _step "Checking forge docs claim no browser the image does not ship (1746-2szd)..."
+    if ! _run_lua_decider "scripts/lua/check-forge-skill-browser-claims-match-image.lua" 2>&1; then
+        _error "a forge doc claims a pre-installed browser the image does not install (1746-2szd) — see the claim lines above"
+        exit 1
+    fi
+    _info "Forge browser-claim check passed"
+    # 1762-bano: the enclave CA (a year, unconstrained: squid signs real domains
+    # with it) is never installed in a HOST trust store; only 1761-bvyn's
+    # name-constrained preview CA may be, on a line marked host-trust-ok.
+    _step "Checking no host trust store gets the enclave CA (1762-bano)..."
+    if ! _run_lua_decider "scripts/lua/check-enclave-ca-not-host-trusted.lua" 2>&1; then
+        _error "host code installs a CA into a host trust store (1762-bano) — see the site lines above"
+        exit 1
+    fi
+    _info "Host trust-store check passed"
+    # 1713-3v3f: Tillandsias never launches or drives a host browser. Every
+    # launcher-shaped call site in crates/ must be on the guard's allowlist at
+    # its exact count (only file/app opens, never a URL).
+    _step "Checking no code path launches a host browser (1713-3v3f)..."
+    if ! _run_lua_decider "scripts/lua/check-no-host-browser-launch.lua" 2>&1; then
+        _error "a code path hands a URL to the host browser (1713-3v3f) — see the unlisted/count-mismatch lines above"
+        exit 1
+    fi
+    _info "No-host-browser-launch check passed"
     _info "Fast refusals passed"
 
     # 765-uti9 quick win (velocity audit F3): the dedicated `cargo check
@@ -5126,6 +5269,57 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Cheatsheet-reference fixture passed"
 
+    # The forge browser-claim guard's own fixture (1746-2szd): this tree, the
+    # pre-fix forge-quick-intro refused, negations, an image that ships a
+    # browser, and no Containerfile.
+    _step "Checking the forge browser-claim guard's fixture (1746-2szd)..."
+    if ! _run_lua_decider "scripts/lua/test-forge-skill-browser-claims-match-image.lua" 2>&1; then
+        _error "the forge browser-claim guard's fixture failed — see the FAIL lines above (1746-2szd)"
+        exit 1
+    fi
+    _info "Forge browser-claim fixture passed"
+
+    # The no-host-browser-launch guard's own fixture (1713-3v3f): this tree, a
+    # planted second launch site refused, cardinality, comment/test blindness,
+    # launcher context, and an empty root.
+    _step "Checking the no-host-browser-launch guard's fixture (1713-3v3f)..."
+    if ! _run_lua_decider "scripts/lua/test-no-host-browser-launch.lua" 2>&1; then
+        _error "the no-host-browser-launch guard's fixture failed — see the FAIL lines above (1713-3v3f)"
+        exit 1
+    fi
+    _info "No-host-browser-launch fixture passed"
+
+    # 1750-a4re: the forge's Claude Bash hook fails CLOSED (no decider -> every
+    # command refused, a decider that fails -> refused), the overlay names a
+    # shipped absolute path, the pre-1750 bare command exits 127 (the
+    # fail-open), and the host bridge still allows on the same missing binary.
+    _step "Checking the forge Bash policy hook fails closed (1750-a4re)..."
+    if ! _run_lua_decider "scripts/lua/test-forge-bash-policy-hook-fails-closed.lua" 2>&1; then
+        _error "the forge Bash policy hook fixture failed — see the FAIL lines above (1750-a4re)"
+        exit 1
+    fi
+    _info "Forge Bash policy hook fixture passed"
+
+    # 1762-bano: the host trust-store guard's fixture (live tree, an NSS add
+    # refused, a Rust update-ca-trust refused, a marked preview CA allowed, a
+    # comment ignored).
+    _step "Checking the host trust-store guard's fixture (1762-bano)..."
+    if ! _run_lua_decider "scripts/lua/test-enclave-ca-not-host-trusted.lua" 2>&1; then
+        _error "the host trust-store guard's fixture failed — see the FAIL lines above (1762-bano)"
+        exit 1
+    fi
+    _info "Host trust-store fixture passed"
+
+    # 1756-z3kz: the embedded-ELF arch check release.yml runs on every binary:
+    # matching images pass, a foreign one is refused by offset, a decoy magic is
+    # not an image, too few images are refused, a non-ELF is could-not-run.
+    _step "Checking the embedded-ELF arch checker's fixture (1756-z3kz)..."
+    if ! _run_lua_decider "scripts/lua/test-embedded-elf-arch.lua" 2>&1; then
+        _error "the embedded-ELF arch checker's fixture failed — see the FAIL lines above (1756-z3kz)"
+        exit 1
+    fi
+    _info "Embedded-ELF arch fixture passed"
+
     # ORDER 1384-bxhk — the shell ratchet: prints the Lua migration's counts on
     # every --check, refuses a NEW .sh decider (check-/test-/verify-/guard-), a
     # new pipe site beyond a file's floor and (once steps: exists) a new piped
@@ -6343,6 +6537,25 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # the same log; the flush consumes it).
     _phase_emit_timing
     timing_emit build-check check "$_CHECK_T0" 0
+
+    # Order 1237-f9dy: the check is green and its stamp is written; install the
+    # tree it stamped. The child verifies the stamp against the tree before it
+    # builds anything, skips the version bump (done before the check), and
+    # prints which gate it is installing on the strength of.
+    if [[ "$DEFER_INSTALL_UNTIL_CHECK" == true ]]; then
+        _stamp_verdict="$(bash "$SCRIPT_DIR/scripts/gate-stamp.sh" verify 2>/dev/null)" || true
+        if [[ "$_stamp_verdict" != "ok:gate-fresh" ]]; then
+            _error "refused:install-after-check:${_stamp_verdict:-no-verdict} — the check passed but its stamp does not vouch for this tree, so nothing is installed"
+            _error "  why: an install must name the green gate it builds; a stamp that is missing or stale for this tree names none (1237-f9dy)"
+            _error "  remedy: run ./build.sh --check --install again with nothing writing to the checkout; scripts/gate-stamp.sh verify says what moved"
+            exit 1
+        fi
+        _stamp_digest="$(bash "$SCRIPT_DIR/scripts/gate-stamp.sh" compute 2>/dev/null)" || _stamp_digest=unknown
+        _info "Green --check stamped tree ${_stamp_digest:0:12}; installing it (1237-f9dy)"
+        TILLANDSIAS_SKIP_VERSION_BUMP=1 \
+            TILLANDSIAS_INSTALL_VERIFIED_BY="check:gate-stamp:${_stamp_digest}" \
+            exec "$SCRIPT_DIR/build.sh" --install
+    fi
 
     # If --check is the only remaining flag, exit
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CLEAN$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]]; then

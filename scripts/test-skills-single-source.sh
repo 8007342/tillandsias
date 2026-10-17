@@ -95,7 +95,13 @@ rc=$?
 [ "$rc" -ne 0 ] || fail "case 4: a missing skill must be refused"
 [ "$out" = "violation:missing-from-runtime:.harnessB/skills/beta" ] \
     || fail "case 4: expected the missing link to be named, got '$out'"
-echo "ok: case 4 — a canonical skill missing from a runtime is caught and named"
+# 1247-amcu: the refusal carries its why and the link remedy on stderr.
+err="$(run 2>&1 >/dev/null)"
+case "$err" in
+    *"why: skills/beta is canonical"*"remedy: link it (ln -s ../../skills/beta .harnessB/skills/beta"*) ;;
+    *) fail "case 4: expected a why and a link remedy on stderr, got '$err'" ;;
+esac
+echo "ok: case 4 — a canonical skill missing from a runtime is caught and named, with its remedy"
 
 # --- case 5: the index is the truth, not the filesystem ----------------------
 # A Windows checkout without symlink support materializes links as real

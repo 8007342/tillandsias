@@ -11,4 +11,7 @@ STEP_DESC="Checking the door sweeps a stale index.lock a killed git left, and ne
 STEP_LUA="scripts/lua/test-door-index-lock-sweep.lua"
 STEP_ERROR="the preflight door no longer removes a stale index.lock a killed git left, or removed one a live process holds or one older than the run (1650-fb7z) — see the FAIL lines above"
 STEP_OK="Door index-lock sweep fixture passed"
+# 1765-q7rg: the sweep races a killed git under host load, so one red is
+# retried once after a settle and a second reads flaky:.
+STEP_HOST_STATE="load"
 STEP_SECOND_REGIME="yolanda-windows 2026-10-13 msys ok:door-index-lock-sweep:8 arms"

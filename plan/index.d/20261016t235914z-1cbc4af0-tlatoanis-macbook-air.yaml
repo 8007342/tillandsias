@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-refusal-in-the-tree-must-say-why-it-refused-and-what-would-make-it-not-a-refusal-because-a-verdict-token-alone-tells-an-agent-it-is-stuck-without-telling-it-how-to-stop-being-stuck
+    event:
+      type: progress
+      ts: "2026-10-16T23:59:14Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        Slice landed-pending as PR (work/1247-n7tx, 72f414806): the bare producers at ranks 6-7 of the 1494-kkbi conversion order now carry why/remedy on stderr. nix-toolbox.sh blocked:nix-toolbox:<reason> (3 sites, per reason, create-failed split on toolbox-absent after a live run here showed the first remedy was wrong) and check-skills-single-source.sh violation:missing-from-runtime (link remedy, never HARNESS-SCOPED, 1256-f7td; fixture case 4 asserts it, red without the fix). Re-scan of the top 10 at 115c38333: of six flagged producer sites two were false positives (check-host-tools.sh:100 is a data table; pre-push-linux-next-merged.sh:112 prints its remedy as prose). Ranks 1-5 and 8-10 already carry affordances at their producer sites.

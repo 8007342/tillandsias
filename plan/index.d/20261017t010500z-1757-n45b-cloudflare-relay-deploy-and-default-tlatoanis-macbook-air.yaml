@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-10-17, on the coordinator's relay of operator consent (additional redirect URIs are acceptable; the running tray's Cloudflare Login validates them).
+packets:
+  - packet_id: the-cloudflare-login-qr-relay-is-deployed-at-a-path-on-observatorium-tillandsias-org-with-a-poll-endpoint-registered-as-a-redirect-uri-and-on-by-default-so-a-phone-scan-completes-a-tray-sign-in
+    order: 1757-n45b
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [cloudflare, oauth, qr, relay, workers, observatorium, credentials, operator-step]
+    estimated_hours: 6
+    related: [1719-83po, 1505-kc5f, 1718-adra, 1661-vckd, 1707-g633]
+    owned_files:
+      - observatorium/wrangler.jsonc
+      - observatorium/relay/
+      - assets/cloudflare-relay/index.html
+      - crates/tillandsias-headless/src/cloudflare_login.rs
+      - scripts/test-cloudflare-login.sh
+    title: |
+      The QR sign-in relay (assets/cloudflare-relay/index.html, 1505-kc5f) is deployed at https://observatorium.tillandsias.org/tillandsias/cloudflare/callback with a poll endpoint at /tillandsias/cloudflare/poll, registered as a redirect URI on the Tillandsias Cloudflare app, and is the login's default, so the tray's Cloudflare Login completes from a phone scan with no env var set
+    context: |
+      OPERATOR CONSENT, relayed by the coordinator 2026-10-17: additional redirect URIs on the operator's Cloudflare app are acceptable, and the running tray's Cloudflare Login is expected to validate them. Nothing is to be published under the operator's identity until this row is reviewed.
+      WHAT EXISTS: the login (cloudflare_login.rs) already speaks the whole contract.
+        - TILLANDSIAS_CLOUDFLARE_RELAY_URL is the redirect, and validate_relay_url wants https, a path, and no query or fragment.
+        - TILLANDSIAS_CLOUDFLARE_RELAY_POLL_URL is polled as GET <poll>?state=<state> every 2 s. 200 with {state, code} or {state, error} ends the poll (state checked first); 202/204/404 mean "not yet".
+        - default_via picks qr whenever a relay is configured (1719 QR slice, ee7a246b7).
+        - The page is static. Its CSP is connect-src 'none', it never calls out, and it shows the paste line.
+        - Today nothing is deployed and no default is set, so qr refuses no-relay-configured and the tray falls back to the printed loopback link.
+      PROPOSED HOSTING (for review): a path on the existing observatorium Worker (`tillandsias`, custom domain observatorium.tillandsias.org).
+        - It already deploys through Workers Builds from this repo (root observatorium/, trigger path_includes observatorium/*, production branch main, openspec/specs/observatorium-dashboard/deployment.md).
+        - So the relay needs NO new Worker, custom domain, repo connection or Builds trigger: the only operator act is the redirect URI.
+        - A dedicated hostname (e.g. signin.tillandsias.org) would read better but adds a custom-domain step and a Worker connection; it is the fallback if the review wants the relay apart from the dashboard.
+        - PUBLISH POINT: production is main, so landing this on linux-next publishes nothing; it goes live at the next release merge to main. That merge is the review gate.
+      DESIGN.
+        - The Worker runs first only for /tillandsias/cloudflare/* (assets.run_worker_first). Everything else stays the observatorium's static SPA, unchanged.
+        - GET /callback?code&state (or ?error&state) stores {state, code|error} in a SQLite-backed Durable Object keyed by state, for 600 s, then serves the existing static page, which still shows the paste line as a fallback.
+        - A Durable Object, not KV: the phone and the host reach different colos, and KV's eventual consistency would make the poll lag.
+        - GET /poll?state= answers 200 {state, code|error} once and deletes it, or 404.
+        - The callback refuses state/code that fail the page's own ^[A-Za-z0-9._~-]{1,2048}$ grammar.
+        - No Workers Logs or observability on these paths. The code is PKCE-bound (useless without the verifier that never leaves the host process) and single-use, so a compromised relay can at most deny a login.
+    exit_criteria:
+      - "observatorium/wrangler.jsonc gains main (observatorium/relay/worker.js), a Durable Object binding and migration, and assets.run_worker_first limited to /tillandsias/cloudflare/*; every other path is byte-identical in behaviour (the SPA and its not_found_handling unchanged)"
+      - "a fixture over the Worker (miniflare or the workerd test runner, or a pure-JS unit over its fetch handler with a fake DO) proves: callback stores and serves the page; poll returns 200 {state, code} once, then 404; an error callback round-trips as {state, error}; an expired entry (TTL 600 s) is 404; a state or code outside the grammar is refused and stores nothing; NEGATIVE CONTROL: a poll for a different state never sees another state's code"
+      - "cloudflare_login.rs defaults RELAY_URL to https://observatorium.tillandsias.org/tillandsias/cloudflare/callback and RELAY_POLL_URL to https://observatorium.tillandsias.org/tillandsias/cloudflare/poll; an explicitly empty env value turns the relay off (the pre-default behaviour, loopback/paste); test-cloudflare-login.sh pins both, and the existing fake-backed arms keep overriding the URLs"
+      - "SEQUENCING: the default ships only in a release cut AFTER the operator confirms the redirect URI is registered. Until then the code lands with the default gated off, because an unregistered redirect makes Cloudflare refuse the authorize request and would break every login, not only QR."
+      - "ONE OPERATOR STEP, exact: in the Cloudflare dashboard, open the Tillandsias OAuth app (client d9d1303782dfe45c7e2d7bb9ce89c8a8, the one whose redirect URIs already list http://127.0.0.1:48631, :48632 and :48633 /tillandsias/cloudflare/callback) and ADD the redirect URI https://observatorium.tillandsias.org/tillandsias/cloudflare/callback, then save. Nothing else changes; the existing loopback redirects stay."
+      - "LIVE (on a stable release, through the tray, the regular way): Cloudflare Login from the macOS tray shows a QR, a phone scan approves, and the tray reads the stored state without a paste; and the printed loopback link still completes on the same release (negative control: the desktop path did not regress)"
+    unscoreable: "the redirect registration and the live phone scan need the operator's account and phone; the Worker fixture and the default/override arms are the pre-merge evidence"
+    next_action: >
+      Review the hosting proposal (path on observatorium.tillandsias.org vs a dedicated hostname). On approval: write observatorium/relay/worker.js with its DO and fixture, wire wrangler.jsonc, land with the login default gated off, pass the ONE operator step to the operator, and flip the default in the release after they confirm it.
+    events:
+      - type: filed
+        ts: "2026-10-17T01:05:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Filed on the operator's consent, relayed by the coordinator. Proposed hosting is a path on the observatorium Worker (no new Worker, domain or trigger; it goes live at the next merge to main). The only operator act is ONE redirect URI. Nothing is published until review.

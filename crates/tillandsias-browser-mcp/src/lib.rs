@@ -9,6 +9,7 @@
 pub mod allowlist;
 pub mod cdp_client;
 pub mod framing;
+pub mod host_label;
 pub mod launcher;
 pub mod server;
 pub mod window_cdp;

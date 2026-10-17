@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: tillandsias-cloudflare-login-uses-the-rfc-8628-device-grant-when-discovery-lists-it-showing-the-user-code-and-a-qr-of-the-complete-verification-uri-and-polling-cloudflare-directly-with-no-callback-and-no-storage
+    event:
+      type: progress
+      ts: "2026-10-17T02:35:23Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        Up as PR #498 (work/1758-wdvf at 498e9de5a, merged over #497 f784bcb84). The device grant is the login default whenever discovery names both the grant and its endpoint; a client Cloudflare refuses falls back to the browser sign-in with note:cloudflare-login:device-grant-refused:<word>, and --via device refuses instead. 17 arms (5 OAuth unit, 6 login unit, 4 fake-over-loopback, 2 binary) with negative controls; cloudflare tests 86/86; test-cloudflare-login all-arms+controls; preflight rc=0 refused=0. Remaining: the live arm on a stable release through the macOS tray (user code + QR, phone approval, stored; blue verified shield; or the exact refusal if Cloudflare will not grant this client the device code).

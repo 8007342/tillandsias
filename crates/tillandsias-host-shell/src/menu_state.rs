@@ -131,6 +131,8 @@ pub mod ids {
     /// Separator rendered before the footer (version/quit).
     pub const SEPARATOR: &str = "---";
     pub const GITHUB_LOGIN: &str = "github-login";
+    /// Order 1719-83po: shown only while the guest reports no Cloudflare login.
+    pub const CLOUDFLARE_LOGIN: &str = "cloudflare-login";
     pub const VERSION: &str = "version";
     pub const QUIT: &str = "quit";
 
@@ -369,6 +371,21 @@ impl CloudflareLoginState {
             Some(true) => CloudflareLoginState::LoggedIn,
             Some(false) => CloudflareLoginState::LoggedOut,
             None => CloudflareLoginState::Unknown,
+        }
+    }
+
+    /// The state after `observed` arrives, shared by every tray that asks the
+    /// guest (macOS, Windows). A confirmed answer always lands. An unreadable
+    /// one (Unknown) keeps what was known, except a LoggingIn whose session is
+    /// over: that falls back to Unknown (shown disabled), never a stale
+    /// in-progress row.
+    pub fn settled_by(self, observed: Self) -> Self {
+        match (self, observed) {
+            (CloudflareLoginState::LoggingIn, CloudflareLoginState::Unknown) => {
+                CloudflareLoginState::Unknown
+            }
+            (known, CloudflareLoginState::Unknown) => known,
+            (_, confirmed) => confirmed,
         }
     }
 }
@@ -702,6 +719,15 @@ pub fn build(state: &MenuState) -> MenuStructure {
         }
     }
 
+    // (2b) Order 1719-83po: Cloudflare Login mirrors GitHub Login. Placement
+    // is PROVISIONAL until the menu UX review (1720-pqwj). Shown while no
+    // Cloudflare login is stored, hidden once one is; Unknown (not yet asked,
+    // or an older guest that cannot answer) is shown DISABLED, never as an
+    // action, so the tray never offers a login it has not ruled out.
+    if let Some(item) = cloudflare_login_item(state) {
+        items.push(item);
+    }
+
     // (3) Separator before footer — matches Linux tray.
     items.push(MenuItem::separator());
 
@@ -894,6 +920,42 @@ fn build_agent_rows(state: &MenuState) -> Vec<MenuItem> {
         .collect()
 }
 
+/// Order 1719-83po: the "Cloudflare Login" row for `state`, or `None` when it
+/// is hidden: a login is stored, or GitHub is not signed in yet. The signed-out
+/// short list stays GitHub-only (publishing needs GitHub first, and the first
+/// step must not be cluttered).
+///
+/// Every surface renders it the same way. Each tray must therefore ask for the
+/// state (slice 5 wired Windows); a tray that never asks would leave a dead,
+/// disabled row (yolanda, #482 review).
+fn cloudflare_login_item(state: &MenuState) -> Option<MenuItem> {
+    if !matches!(state.login, GithubLoginState::LoggedIn { .. }) {
+        return None;
+    }
+    match state.cloudflare_login {
+        CloudflareLoginState::LoggedIn => None,
+        CloudflareLoginState::LoggedOut if state.login_runtime_ready => Some(MenuItem::leaf(
+            ids::CLOUDFLARE_LOGIN,
+            "\u{2601}\u{FE0F} Cloudflare Login",
+        )),
+        CloudflareLoginState::LoggedOut => Some(MenuItem::disabled(
+            ids::CLOUDFLARE_LOGIN,
+            "\u{2601}\u{FE0F} Cloudflare Login",
+            "login runtime not ready",
+        )),
+        CloudflareLoginState::LoggingIn => Some(MenuItem::disabled(
+            ids::CLOUDFLARE_LOGIN,
+            "\u{1F504} Logging in to Cloudflare\u{2026}",
+            "login in progress",
+        )),
+        CloudflareLoginState::Unknown => Some(MenuItem::disabled(
+            ids::CLOUDFLARE_LOGIN,
+            "\u{2601}\u{FE0F} Cloudflare Login",
+            "Cloudflare sign-in state not yet known",
+        )),
+    }
+}
+
 fn build_cloud_projects(state: &MenuState) -> MenuItem {
     let mut children: Vec<MenuItem> = if state.cloud_projects.is_empty() {
         Vec::new()
@@ -1037,6 +1099,121 @@ fn build_project_submenu(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Order 1719-83po: the Cloudflare Login row follows the spec. Signed in
+    /// to GitHub: LoggedOut is an action, Unknown and LoggingIn are disabled,
+    /// LoggedIn hides it. Signed out of GitHub: never shown.
+    #[test]
+    fn cloudflare_login_row_shows_only_while_no_login_is_stored() {
+        let row = |cf: CloudflareLoginState, ready: bool, gh: GithubLoginState| {
+            let state = MenuState {
+                login: gh,
+                cloudflare_login: cf,
+                login_runtime_ready: ready,
+                target: TargetSurface::MacosTray,
+                ..MenuState::initial()
+            };
+            match build(&state) {
+                MenuStructure::Ready { items } => {
+                    items.into_iter().find(|i| i.id == ids::CLOUDFLARE_LOGIN)
+                }
+                other => panic!("expected Ready, got {other:?}"),
+            }
+        };
+        let gh = || GithubLoginState::LoggedIn { handle: "u".into() };
+        let out = row(CloudflareLoginState::LoggedOut, true, gh()).expect("shown");
+        assert!(out.enabled, "signed out of Cloudflare: an action");
+        for cf in [
+            CloudflareLoginState::Unknown,
+            CloudflareLoginState::LoggingIn,
+        ] {
+            let r = row(cf, true, gh()).expect("shown");
+            assert!(!r.enabled, "{cf:?} must be disabled, never an action");
+        }
+        let not_ready = row(CloudflareLoginState::LoggedOut, false, gh()).expect("shown");
+        assert!(!not_ready.enabled, "runtime not ready: disabled");
+        assert!(
+            row(CloudflareLoginState::LoggedIn, true, gh()).is_none(),
+            "hidden once stored"
+        );
+        for gh_state in [GithubLoginState::LoggedOut, GithubLoginState::Unknown] {
+            assert!(
+                row(CloudflareLoginState::LoggedOut, true, gh_state).is_none(),
+                "the GitHub-signed-out short list stays GitHub-only"
+            );
+        }
+        assert_eq!(
+            crate::menu_action::resolve(ids::CLOUDFLARE_LOGIN),
+            crate::menu_action::MenuAction::CloudflareLogin
+        );
+    }
+
+    /// Order 1719-83po slice 5: the Windows tray now asks the guest, so its
+    /// Cloudflare Login row is the SAME item as macOS and Linux in every state
+    /// (present, label, enabled). This replaces slice 3's absence test; the
+    /// Windows tray's asking is pinned in that crate.
+    #[test]
+    fn cloudflare_login_row_is_identical_on_every_surface() {
+        let row = |target: TargetSurface, cf: CloudflareLoginState, ready: bool| {
+            let state = MenuState {
+                login: GithubLoginState::LoggedIn { handle: "u".into() },
+                cloudflare_login: cf,
+                login_runtime_ready: ready,
+                podman_ready: ready,
+                target,
+                ..MenuState::initial()
+            };
+            match build(&state) {
+                MenuStructure::Ready { items } => {
+                    items.into_iter().find(|i| i.id == ids::CLOUDFLARE_LOGIN)
+                }
+                other => panic!("expected Ready, got {other:?}"),
+            }
+        };
+        for cf in [
+            CloudflareLoginState::Unknown,
+            CloudflareLoginState::LoggedOut,
+            CloudflareLoginState::LoggingIn,
+            CloudflareLoginState::LoggedIn,
+        ] {
+            for ready in [false, true] {
+                let mac = row(TargetSurface::MacosTray, cf, ready);
+                for target in [TargetSurface::WindowsTray, TargetSurface::LinuxTray] {
+                    assert_eq!(
+                        row(target, cf, ready),
+                        mac,
+                        "{target:?} {cf:?} ready={ready}: the row must match macOS"
+                    );
+                }
+            }
+        }
+        assert!(
+            row(
+                TargetSurface::WindowsTray,
+                CloudflareLoginState::LoggedOut,
+                true
+            )
+            .is_some_and(|i| i.enabled),
+            "Windows offers the login once the guest says none is stored"
+        );
+    }
+
+    /// Order 1719-83po: the one transition rule every asking tray uses.
+    #[test]
+    fn cloudflare_login_state_settles_on_confirmed_answers_only() {
+        use CloudflareLoginState as Cf;
+        for from in [Cf::Unknown, Cf::LoggedOut, Cf::LoggingIn, Cf::LoggedIn] {
+            assert_eq!(from.settled_by(Cf::LoggedIn), Cf::LoggedIn, "{from:?}");
+            assert_eq!(from.settled_by(Cf::LoggedOut), Cf::LoggedOut, "{from:?}");
+        }
+        assert_eq!(Cf::LoggedIn.settled_by(Cf::Unknown), Cf::LoggedIn);
+        assert_eq!(Cf::LoggedOut.settled_by(Cf::Unknown), Cf::LoggedOut);
+        assert_eq!(
+            Cf::LoggingIn.settled_by(Cf::Unknown),
+            Cf::Unknown,
+            "a finished session with no answer must not stay 'Logging in…'"
+        );
+    }
 
     /// Order 1719-83po: the reply maps three ways, and Unknown is the start.
     #[test]
@@ -1325,13 +1502,15 @@ mod tests {
             other => panic!("expected MenuStructure::Ready, got {other:?}"),
         };
 
-        // status + cloud + separator + version + quit = 5 top-level items.
+        // status + cloud + cloudflare-login + separator + version + quit = 6.
         // Order 997-e4v2 removed the local-projects submenu: Cloud is the only
-        // project path, so the Linux-parity contract is five, not six. The
-        // unapproved reset-guest leaf went earlier (operator order 2026-07-22).
+        // project path. The unapproved reset-guest leaf went earlier (operator
+        // order 2026-07-22). Order 1719-83po added the APPROVED Cloudflare
+        // Login row (spec simplified-tray-ux e0555b06), shown here because
+        // the state starts Unknown; slice 5 wired it on this Windows build.
         assert_eq!(
             items.len(),
-            5,
+            6,
             "top-level item count (authenticated, Linux parity)"
         );
 
@@ -1341,6 +1520,7 @@ mod tests {
             vec![
                 ids::STATUS,
                 ids::CLOUD_PROJECTS,
+                ids::CLOUDFLARE_LOGIN,
                 ids::SEPARATOR,
                 ids::VERSION,
                 ids::QUIT,
@@ -2111,9 +2291,15 @@ mod tests {
             ids::VERSION,
             ids::QUIT,
         ];
-        const APPROVED_LOGGED_IN: [&str; 5] = [
+        // Order 1719-83po: `cloudflare-login` APPROVED by the Tlatoāni
+        // 2026-10-14 (openspec simplified-tray-ux "Cloudflare Login Menu",
+        // req e0555b06; placement provisional until 1720-pqwj). It shows here
+        // because the state starts Unknown (shown disabled); it is hidden once
+        // a login is stored, and never in the signed-out short list.
+        const APPROVED_LOGGED_IN: [&str; 6] = [
             ids::STATUS,
             ids::CLOUD_PROJECTS,
+            ids::CLOUDFLARE_LOGIN,
             ids::SEPARATOR,
             ids::VERSION,
             ids::QUIT,

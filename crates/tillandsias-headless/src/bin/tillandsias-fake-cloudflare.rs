@@ -26,12 +26,27 @@
 //!     query knob short-circuits to `invalid_grant` for callers that just
 //!     need a scripted failure.
 //!   * `POST /oauth2/revoke`, `GET /oauth2/userinfo`.
+//!   * ORDER 1758-wdvf, the device grant (RFC 8628), offered only when
+//!     `TILLANDSIAS_FAKE_CLOUDFLARE_GRANT_TYPES` lists the device_code URN:
+//!     discovery then names `device_authorization_endpoint` (unless
+//!     `TILLANDSIAS_FAKE_CLOUDFLARE_DEVICE_ENDPOINT=0`), `POST
+//!     /oauth2/device/auth` issues a device code, and `POST /oauth2/token`
+//!     with that grant answers per `TILLANDSIAS_FAKE_CLOUDFLARE_DEVICE_MODE`:
+//!     `approve` (default: one authorization_pending, then the pair),
+//!     `slow_down` (slow_down, then pending, then the pair), `deny`
+//!     (pending, then access_denied), `expire` (expired_token), or `refuse`
+//!     (device/auth itself answers 400 unauthorized_client).
 //!   * The Zero Trust API routes `fleet-vpn init` needs: `GET /accounts`,
 //!     `POST`/`DELETE /accounts/{id}/access/service_tokens[/{id}]`,
 //!     `POST /accounts/{id}/teamnet/virtual_networks`, the default device
 //!     profile (`PUT /accounts/{id}/devices/policy`), its split-tunnel
 //!     exclude list (`PUT /accounts/{id}/devices/policy/exclude`), and a
 //!     Gateway rule (`POST /accounts/{id}/gateway/rules`).
+//!   * ORDER 1772-irs3, the forge's read-only Cloudflare tools: `GET /zones`,
+//!     the account's Workers scripts (list, settings, deployments), Workers
+//!     Builds (a Worker's triggers and builds, one build, and its log in two
+//!     cursor pages), and Pages projects and deployments. Each needs a
+//!     `Bearer` header and answers 401 without one.
 //!
 //! EVERY request — OAuth and API alike — appends one JSON line
 //! `{"method","path","body"}` to the file named by `--ledger`, in arrival
@@ -73,10 +88,19 @@ struct TokenGrant {
     scope: String,
 }
 
+struct DeviceGrant {
+    client_id: String,
+    scope: String,
+    polls: u32,
+}
+
 struct State {
     ledger_path: String,
     lax: bool,
     grant_types: Vec<String>,
+    device_endpoint: bool,
+    device_mode: String,
+    devices: HashMap<String, DeviceGrant>,
     codes: HashMap<String, AuthCode>,
     access_tokens: HashMap<String, TokenGrant>,
     refresh_tokens: HashMap<String, TokenGrant>,
@@ -266,8 +290,14 @@ fn redirect_with(redirect_uri: &str, params: &[(&str, &str)]) -> String {
     out
 }
 
+const DEVICE_GRANT: &str = "urn:ietf:params:oauth:grant-type:device_code";
+
+fn device_offered(state: &State) -> bool {
+    state.grant_types.iter().any(|g| g == DEVICE_GRANT)
+}
+
 fn handle_discovery(state: &State, stream: &mut TcpStream, base: &str) {
-    let body = serde_json::json!({
+    let mut body = serde_json::json!({
         "issuer": base,
         "authorization_endpoint": format!("{base}/oauth2/auth"),
         "token_endpoint": format!("{base}/oauth2/token"),
@@ -277,7 +307,104 @@ fn handle_discovery(state: &State, stream: &mut TcpStream, base: &str) {
         "code_challenge_methods_supported": ["S256"],
         "response_types_supported": ["code"],
     });
+    if device_offered(state) && state.device_endpoint {
+        body["device_authorization_endpoint"] =
+            serde_json::json!(format!("{base}/oauth2/device/auth"));
+    }
     respond_json(stream, "200 OK", &body);
+}
+
+fn handle_device_auth(state: &mut State, stream: &mut TcpStream, req: &Request, base: &str) {
+    if !device_offered(state) || state.device_mode == "refuse" {
+        respond_json(
+            stream,
+            "400 Bad Request",
+            &serde_json::json!({"error": "unauthorized_client"}),
+        );
+        return;
+    }
+    let form = parse_form(&req.body);
+    let device_code = random_hex(24);
+    let user_code = "WDJB-MJHT";
+    state.devices.insert(
+        device_code.clone(),
+        DeviceGrant {
+            client_id: form.get("client_id").cloned().unwrap_or_default(),
+            scope: form.get("scope").cloned().unwrap_or_default(),
+            polls: 0,
+        },
+    );
+    respond_json(
+        stream,
+        "200 OK",
+        &serde_json::json!({
+            "device_code": device_code,
+            "user_code": user_code,
+            "verification_uri": format!("{base}/device"),
+            "verification_uri_complete": format!("{base}/device?user_code={user_code}"),
+            "expires_in": 900,
+            "interval": 0,
+        }),
+    );
+}
+
+/// The device_code token grant: the scripted answer for this poll.
+fn device_token(state: &mut State, stream: &mut TcpStream, form: &HashMap<String, String>) {
+    let code = form.get("device_code").cloned().unwrap_or_default();
+    let Some(grant) = state.devices.get_mut(&code) else {
+        respond_json(
+            stream,
+            "400 Bad Request",
+            &serde_json::json!({"error": "invalid_grant"}),
+        );
+        return;
+    };
+    grant.polls += 1;
+    let n = grant.polls;
+    let word = match (state.device_mode.as_str(), n) {
+        ("slow_down", 1) => Some("slow_down"),
+        ("slow_down", 2) | ("approve", 1) | ("deny", 1) => Some("authorization_pending"),
+        ("deny", _) => Some("access_denied"),
+        ("expire", _) => Some("expired_token"),
+        _ => None,
+    };
+    if let Some(word) = word {
+        respond_json(
+            stream,
+            "400 Bad Request",
+            &serde_json::json!({"error": word}),
+        );
+        return;
+    }
+    let Some(grant) = state.devices.remove(&code) else {
+        return;
+    };
+    let access = random_hex(24);
+    let refresh = random_hex(24);
+    state.access_tokens.insert(
+        access.clone(),
+        TokenGrant {
+            client_id: grant.client_id.clone(),
+            scope: grant.scope.clone(),
+        },
+    );
+    state.refresh_tokens.insert(
+        refresh.clone(),
+        TokenGrant {
+            client_id: grant.client_id,
+            scope: grant.scope,
+        },
+    );
+    respond_json(
+        stream,
+        "200 OK",
+        &serde_json::json!({
+            "access_token": access,
+            "refresh_token": refresh,
+            "expires_in": 3600,
+            "token_type": "bearer",
+        }),
+    );
 }
 
 fn handle_authorize(state: &mut State, stream: &mut TcpStream, req: &Request) {
@@ -366,6 +493,7 @@ fn handle_token(state: &mut State, stream: &mut TcpStream, req: &Request) {
     }
     let form = parse_form(&req.body);
     match form.get("grant_type").map(|s| s.as_str()) {
+        Some(DEVICE_GRANT) if device_offered(state) => device_token(state, stream, &form),
         Some("authorization_code") => {
             let code = form.get("code").cloned().unwrap_or_default();
             let redirect_uri = form.get("redirect_uri").cloned().unwrap_or_default();
@@ -638,11 +766,109 @@ fn handle_api(stream: &mut TcpStream, req: &Request) {
         return;
     }
 
+    // ORDER 1772-irs3: the reads the forge's read-only Cloudflare tools make.
+    // Each needs a bearer, as the real API does.
+    if req.method == "GET"
+        && let Some(result) = read_only_result(&segments, req)
+    {
+        let bearer = req
+            .headers
+            .get("authorization")
+            .and_then(|v| v.strip_prefix("Bearer "))
+            .is_some_and(|t| !t.is_empty());
+        if !bearer {
+            respond_json(
+                stream,
+                "401 Unauthorized",
+                &serde_json::json!({"success": false, "errors": [{"code": 10001, "message": "unauthorized"}]}),
+            );
+            return;
+        }
+        respond_json(stream, "200 OK", &cf_envelope(result));
+        return;
+    }
+
     respond_json(
         stream,
         "404 Not Found",
         &serde_json::json!({"success": false, "errors": [{"code": 1000, "message": "no such route"}]}),
     );
+}
+
+const FAKE_SCRIPT: &str = "observatorium";
+const FAKE_SCRIPT_TAG: &str = "fa4e0b0c0e0f4a1b8c9d0e1f2a3b4c5d";
+const FAKE_BUILD: &str = "7c1d2e3f-0a1b-4c5d-8e9f-0a1b2c3d4e5f";
+
+/// The read-only routes (1772-irs3): zones, Workers scripts and their
+/// settings and deployments, Workers Builds triggers, builds and a two-page
+/// build log, Pages projects and deployments. `None` for any other path.
+fn read_only_result(segments: &[&str], req: &Request) -> Option<serde_json::Value> {
+    let acct = FAKE_ACCOUNT_ID;
+    match segments {
+        ["zones"] => Some(serde_json::json!([{"id": "zone1", "name": "example.org"}])),
+        ["accounts", a, "workers", "scripts"] if *a == acct => Some(serde_json::json!([
+            {"id": FAKE_SCRIPT, "tag": FAKE_SCRIPT_TAG, "modified_on": "2026-10-17T00:00:00Z"}
+        ])),
+        ["accounts", a, "workers", "scripts", s, "settings"] if *a == acct && *s == FAKE_SCRIPT => {
+            Some(serde_json::json!({"compatibility_date": "2026-01-01", "bindings": []}))
+        }
+        ["accounts", a, "workers", "scripts", s, "deployments"]
+            if *a == acct && *s == FAKE_SCRIPT =>
+        {
+            Some(serde_json::json!({"deployments": []}))
+        }
+        ["accounts", a, "builds", "workers", t, "triggers"]
+            if *a == acct && *t == FAKE_SCRIPT_TAG =>
+        {
+            Some(serde_json::json!([{
+                "trigger_uuid": "0b1c2d3e-trigger",
+                "trigger_name": "Deploy default branch",
+                "branch_includes": ["*"],
+                "branch_excludes": [],
+                "path_includes": ["*"],
+                "path_excludes": [],
+                "build_command": "npm run build",
+                "deploy_command": "npx wrangler deploy",
+            }]))
+        }
+        ["accounts", a, "builds", "workers", t, "builds"]
+            if *a == acct && *t == FAKE_SCRIPT_TAG =>
+        {
+            Some(serde_json::json!([{
+                "build_uuid": FAKE_BUILD,
+                "status": "stopped",
+                "build_outcome": "success",
+                "created_on": "2026-10-17T00:00:00Z",
+                "build_trigger_metadata": {
+                    "branch": "work/1234-abcd",
+                    "commit_hash": "0123abc",
+                    "build_trigger_source": "push_event",
+                },
+            }]))
+        }
+        ["accounts", a, "builds", "builds", b] if *a == acct && *b == FAKE_BUILD => {
+            Some(serde_json::json!({"build_uuid": FAKE_BUILD, "status": "stopped"}))
+        }
+        ["accounts", a, "builds", "builds", b, "logs"] if *a == acct && *b == FAKE_BUILD => {
+            Some(match req.query.get("cursor").map(String::as_str) {
+                None => serde_json::json!({
+                    "lines": [[1, "Cloning repository..."]],
+                    "truncated": true,
+                    "cursor": "page+2/of=2",
+                }),
+                Some("page+2/of=2") => serde_json::json!({
+                    "lines": [[2, "Success: Build command completed"]],
+                    "truncated": false,
+                }),
+                Some(_) => return None,
+            })
+        }
+        ["accounts", a, "pages", "projects"] if *a == acct => Some(serde_json::json!([])),
+        ["accounts", a, "pages", "projects", _, "deployments"] if *a == acct => {
+            Some(serde_json::json!([]))
+        }
+        _ => None,
+    }
 }
 
 fn main() {
@@ -688,10 +914,17 @@ fn main() {
         "tillandsias-fake-cloudflare: listening on 127.0.0.1:{bound_port}, ledger={ledger_path}"
     );
 
+    let device_endpoint =
+        std::env::var("TILLANDSIAS_FAKE_CLOUDFLARE_DEVICE_ENDPOINT").as_deref() != Ok("0");
+    let device_mode = std::env::var("TILLANDSIAS_FAKE_CLOUDFLARE_DEVICE_MODE")
+        .unwrap_or_else(|_| "approve".to_string());
     let mut state = State {
         ledger_path,
         lax,
         grant_types,
+        device_endpoint,
+        device_mode,
+        devices: HashMap::new(),
         codes: HashMap::new(),
         access_tokens: HashMap::new(),
         refresh_tokens: HashMap::new(),
@@ -710,6 +943,9 @@ fn main() {
             }
             ("GET", "/oauth2/auth") => handle_authorize(&mut state, &mut stream, &req),
             ("POST", "/oauth2/token") => handle_token(&mut state, &mut stream, &req),
+            ("POST", "/oauth2/device/auth") => {
+                handle_device_auth(&mut state, &mut stream, &req, &base)
+            }
             ("POST", "/oauth2/revoke") => handle_revoke(&mut state, &mut stream, &req),
             ("GET", "/oauth2/userinfo") => handle_userinfo(&state, &mut stream, &req),
             _ => handle_api(&mut stream, &req),

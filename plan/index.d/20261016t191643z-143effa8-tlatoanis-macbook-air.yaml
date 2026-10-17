@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-darwin-build-sh-preflight-crashes-bash-3-2-with-heap-corruption-once-the-gate-roster-reaches-260-guards-so-one-more-gate-step-turns-every-mac-preflight-into-exit-133
+    event:
+      type: progress
+      ts: "2026-10-16T19:16:43Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        Fix up as PR #485 (work/1753-p925). Cause: the EXIT trap late sweep read a process substitution, < <(git worktree list), once per guard root, and bash 3.2 reaps each one with malloc in the SIGCHLD handler. The listing is now written by a foreground git > file and read from that file. Fixture: test-preflight-door-many-guards.lua, gate step 885 (300 guards under /bin/bash exit 0, plus a static arm with no < <( in _pf_*). Before the fix 300 guards gave rc=133; after it 300/300/500 gave rc=0; the real preflight at sum=260 gave rc=0.
+        Exit criterion 3 (report a crashed door as a named verdict) is CLOSED WITHOUT CODE, accepted by the coordinator 2026-10-16: a crashed bash cannot report itself; the fix removes the crash, and join-the-fleet now tells agents to read the exit status AND the verdict line. No wrapper.

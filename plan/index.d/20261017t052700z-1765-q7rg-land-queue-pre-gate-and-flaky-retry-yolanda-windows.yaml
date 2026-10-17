@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yolanda-windows, 2026-10-17, on the coordinator's relay of an operator-approved gate review.
+packets:
+  - packet_id: land-queue-pre-gate-checks-stale-head-skip-auto-draft-preflight-door-and-bounded-retry-of-host-state-flaky-gate-steps
+    order: 1765-q7rg
+    status: ready
+    kind: improvement
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [land-queue, gate, flaky, preflight, lua, shell]
+    estimated_hours: 8
+    related: [1335-2nzf, 900-z3kv, 1650-fb7z, 667-kfyn]
+    owned_files:
+      - scripts/land-queue.sh
+      - scripts/test-land-queue.sh
+      - scripts/gate-steps.d/
+      - scripts/check-gate-step-regimes.sh
+      - build.sh
+    title: |
+      The land queue spends a full ~21-min gate on candidates it could reject or skip first (a stale head re-evicted for a plan-only trunk delta, a repeated identical conflict, a decider-level red), and a host-state flaky step (keyring cold state, door-index lock under load) evicts as violation: with no bounded retry
+    context: |
+      Operator-approved from the coordinator's gate review on 2026-10-16 (macuahuitl-fedora relay). Measured waste: about 44 min in one session (#488, #498) re-gating unchanged heads.
+      P5 sits in scripts/land-queue.sh between the carried-obligation block and "GATE THE MERGE RESULT".
+      P6 adds a STEP_HOST_STATE= field to scripts/gate-steps.d/*.step. A verdict string is an interface: the new flaky: token must have its consumers listed.
+    exit_criteria:
+      - "P5.1 stale-head skip: a candidate whose head sha equals its last evicted head (read from the queue's own eviction PR comment) is skipped when the trunk delta since that eviction's base classifies as plan-ledger only by the 1335-2nzf adopt classifier, never a time window"
+      - "P5.2 auto-draft: a second identical conflict:<paths> eviction at an unchanged head converts the PR to draft and the comment says so"
+      - "P5.3 preflight door: ./build.sh --preflight runs on the merge result before the full gate; a decider-level red evicts"
+      - "P6.1 STEP_HOST_STATE= field validated by check-gate-step-regimes.sh; set on credential-cold-state-probe (900-z3kv, keyring) and door-index-lock-sweep (1650-fb7z, load)"
+      - "P6.2 the build.sh step runner retries a host-state step ONCE after a 10 s settle; a second disagreement emits flaky:<step>:<verdicts>, not violation:; a real failure stays red, the step is never skipped"
+      - "P6.3 land-queue treats flaky: as one re-queue at the back and names the token in gate_failed_comment; the flaky: consumers are listed"
+      - "FIXTURES red first in scripts/test-land-queue.sh and the step-runner test: a stale head is skipped and a changed head is not; a host-state step flaking once passes and failing twice reads flaky:; a non-host-state step never retries"
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is the fixtures themselves, new arms in scripts/test-land-queue.sh and a step-runner retry fixture, written in the same commit as P5/P6"
+    next_action: >
+      After 667-kfyn: read land-queue.sh around the carried-obligation block and the 1335-2nzf classifier; write the three fixture arms red; then implement P5 and P6.
+    events:
+      - type: filed
+        ts: "2026-10-17T05:27:00Z"
+        host: yolanda-windows
+        summary: |-
+          Filed on the coordinator's relay of an operator-approved gate review: land-queue pre-gate checks (stale-head skip, auto-draft, preflight door) plus bounded retry of host-state flaky steps. p1, queued after 667-kfyn on yolanda-windows.

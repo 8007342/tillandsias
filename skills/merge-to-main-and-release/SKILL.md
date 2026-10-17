@@ -84,7 +84,13 @@ during the v56.8.31.3 stable promotion):**
   existing tag, skip tag/dispatch/watch (steps 5-7), and instead flip the
   existing release: `gh release edit vX.Y.Z.N --prerelease=false --latest`.
   Verify `/releases/latest` resolves to it. Stable then serves byte-for-byte
-  what was blessed.
+  what was blessed. Use `scripts/promote-stable.sh <tag>`, which also moves
+  the `stable` tag; that push needs no `./build.sh --check`, because a tag on
+  a commit already on origin/main skips the gate stamp (1768-2k56).
+  **Promote only while the land queue is idle.** A promotion during a land
+  run half-promoted on 2026-10-17: the release flipped, the tag push did not.
+  The script now says `refused:stable-tag-push-refused:<sha>` and prints the
+  push that finishes it.
   **Reading a channel tag in a clone? Sync it first** (1271-ff72):
   `git fetch origin '+refs/tags/stable:refs/tags/stable' '+refs/tags/unstable:refs/tags/unstable'`.
   A plain `git fetch --tags` REFUSES to move these two ("would clobber
@@ -256,6 +262,27 @@ scripts/release-freeze.sh set "${release_source_branch:-linux-next}" "cut ${new_
 # -> ok:freeze-set:refs/tillandsias/freeze/<branch>/<host>/<epoch>
 # A `refused:freeze:unreachable:*` here is a STOP: an unreachable origin means
 # the cut cannot publish either. Do not proceed with an undeclared freeze.
+#
+# LANDING A FIX TO THE CUT WHILE FROZEN (order 1265-8qr6). The hook refuses
+# the cut host's own code push like anyone's. Do NOT clear for it: a clear
+# leaves origin with no marker for the whole land, gate included, and every
+# host reads ok:freeze-none. Hand the freeze over instead:
+#   scripts/release-freeze.sh land "${release_source_branch:-linux-next}"
+#   # -> ok:freeze-landing:refs/tillandsias/freeze-landing/<branch>/<host>/<epoch>
+#   #    (written BEFORE the freeze marker goes; status reads
+#   #    frozen-landing:<branch>:by=<host>)
+#   ... land the fix ...
+#   scripts/release-freeze.sh set "${release_source_branch:-linux-next}"
+#   # the re-freeze writes the freeze marker BEFORE the landing marker goes
+# The land queue runs only on the cut host, and the cut host decides when to
+# start it, so hold the queue during a land: while the landing marker is live,
+# land the cut's fix alone and start no queue run until the re-freeze. The
+# queue cannot tell the cut's fix from anyone else's candidate (identity at
+# push time is self-declared), so this is procedure, not a check.
+# For every other host, frozen-landing means HOLD code exactly as frozen:
+# only ok:freeze-none is clear. There is no cut-host exemption in the hook;
+# host identity at push time is self-declared, so the freeze is a
+# coordination signal, not an authentication boundary.
 
 # THE GATE. This is the whole safety net now — there is nothing server-side.
 ./build.sh --ci-full || { echo "gate failed — do NOT merge"; exit 1; }
@@ -308,7 +335,7 @@ content at all. Step 3's local gate is what stands in for it, and it already ran
 against this tree. **But the bump branch still needs its own `./build.sh
 --check` before the push** (measured on the v56.9.2.1 cut, 2026-09-02): the
 pre-push hook compares the gate STAMP against the tree bytes, and the bump
-changes VERSION plus every crate's `Cargo.toml` — so the push is refused with
+changes VERSION — so the push is refused with
 "the tree changed since ./build.sh --check last passed". Run
 `TILLANDSIAS_CLASS_SELECTOR=off TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --check`
 on the bump branch. The selector must be OFF here: since 765-xpct a plain
@@ -319,6 +346,10 @@ has no usable local base"). Measured on the v56.9.23.1 cut, one wasted gate.
 The same applies to the step-5 back-merge gate. Then
 `git add Cargo.lock` and `--amend` it into the bump commit if the check
 touched it (still VERSION + Cargo only, 702-eusw), then push.
+**Corrected 2026-10-17 (order 1768-2k56):** the bump changes VERSION ONLY;
+the crates' `Cargo.toml` versions do not move (measured on the v56.10.16.2
+cut). The `git add` below still names them so a future bump that does touch
+them is not silently left out.
 
 ```bash
 git checkout main
@@ -456,7 +487,10 @@ git fetch origin
 git merge origin/main          # back-merge the VERSION bump; merge, never rebase
 TILLANDSIAS_CLASS_SELECTOR=off TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --check
                                # the merge changed VERSION, so the gate stamp is
-                               # stale and the pushes below would be refused
+                               # stale and the pushes below would be refused.
+                               # MEASURED 2026-10-17 (1768-2k56): this is a ~3 s
+                               # memo hit, not a full gate; the bytes it covers
+                               # already passed step 3's gate
 
 # CLEAR THE FREEZE BEFORE THE BACK-MERGE PUSH, and note WHY it is here rather
 # than at the end of the cut (order 1176-9vqn): the back-merge push below is
@@ -467,13 +501,15 @@ TILLANDSIAS_CLASS_SELECTOR=off TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --chec
 # declared policy (hold code lands on the release branch from the gate start to
 # the stage-2 back-merge push) expressed as a lifetime rather than a promise.
 scripts/release-freeze.sh clear "${release_source_branch:-linux-next}"
-# -> ok:freeze-cleared:<n>; clearing removes every marker for the branch,
-#    whoever set it, so a coordinator can always clear a freeze another host
+# -> ok:freeze-cleared:<n>; clearing removes every marker for the branch
+#    (freeze and landing markers alike), whoever set it, so a coordinator can always clear a freeze another host
 #    declared. `ok:freeze-cleared:0` means it was already clear — not an error.
 
 # NOW both pushes succeed. Order between them does not matter; both are gated
 # on the back-merge above, not on each other. The tag push is unaffected by a
-# freeze either way: the check only looks at refs/heads/*.
+# freeze either way: the check only looks at refs/heads/*. A tag on a commit
+# already on origin/main skips the gate stamp (1768-2k56); release-preflight and
+# the version guard still run on it, which is the 898-zhf3 ordering above.
 git push origin "${new_tag}"
 git push origin "${release_source_branch:-linux-next}"
 ```
