@@ -222,6 +222,7 @@ pub fn bar_line(image: &str, percent: usize, step: Option<(u64, u64, &str)>) -> 
 /// (with `--debug`, or in a `--init` log) and the bar line the build prints,
 /// `Building <image>, step n/m: <what> [...]`. A finished build (`COMMIT`, or
 /// the step-less 100% bar) is `None`: nothing is running.
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
 pub fn progress_in_log(image: &str, log: &str) -> Option<(u64, u64, String)> {
     let announce = format!("[tillandsias] building image {image} (");
     let run = &log[log.rfind(&announce)?..];
@@ -251,6 +252,7 @@ pub fn progress_in_log(image: &str, log: &str) -> Option<(u64, u64, String)> {
 }
 
 /// [`progress_in_log`] over `image`'s helper log on this host.
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
 pub(crate) fn image_build_progress(image: &str) -> Option<(u64, u64, String)> {
     let text = std::fs::read_to_string(crate::image_build_helper_log_path(image)).ok()?;
     progress_in_log(image, &text)
