@@ -656,16 +656,14 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
     };
     // Order 1649-xqet: browser.open runs the chromium-framework container on
     // a per-launch internal network, never host Chromium.
-    let browser = tillandsias_browser_mcp::BrowserMcpServer::with_project_label(
-        tillandsias_browser_mcp::McpServerConfig::default(),
+    let browser = lane_browser_server(
         &project_label,
+        &lane_instance,
         Some(std::sync::Arc::new(
             crate::browser_open::TrayBrowserContainers::new(false),
         )),
-    )
-    // Order 1656-iktu: windows record the lane that opened them; another
-    // lane's window answers WINDOW_NOT_FOUND.
-    .with_lane(lane_instance);
+        false,
+    );
     // Order 1655-urz9: a window emulates the project's `[browser] device`
     // when browser.open names none, else desktop. The label is the
     // listener's (validated, order 505), so the path is the project's own.
@@ -789,6 +787,54 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
     }
 }
 
+/// Order 1754-bu07: the browser windows of each lane, for the life of this
+/// process. A connection's server shares its lane's registry instead of
+/// owning one, so a window outlives the connection that opened it (the
+/// host-browser-mcp requirement "Window survives MCP connection drop"): a
+/// one-shot `opencode run` that opened a window used to drop the registry on
+/// exit, and dropping it SIGKILLed the window's containers 20 s later. Tray
+/// Quit still ends every window: graceful_shutdown_async stops each
+/// `tillandsias-browser-*` container.
+type LaneWindows = (
+    std::sync::Arc<tillandsias_browser_mcp::window_registry::WindowRegistry>,
+    std::sync::Arc<tillandsias_browser_mcp::window_registry::DebounceTable>,
+);
+
+static LANE_WINDOWS: OnceLock<Mutex<std::collections::HashMap<LaneListenerKey, LaneWindows>>> =
+    OnceLock::new();
+
+/// The window registry of lane `(project, instance)`, created on first use.
+pub(crate) fn lane_windows(project: &str, instance: &str) -> LaneWindows {
+    let mut map = LANE_WINDOWS
+        .get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    map.entry((project.to_owned(), instance.to_owned()))
+        .or_insert_with(|| (Default::default(), Default::default()))
+        .clone()
+}
+
+/// The browser server for one connection of lane `(project, instance)`: its
+/// windows record that lane (order 1656-iktu: another lane's window answers
+/// WINDOW_NOT_FOUND) and live in the lane's registry (order 1754-bu07).
+/// `fake_launch` registers windows without starting containers (tests).
+pub(crate) fn lane_browser_server(
+    project: &str,
+    instance: &str,
+    containers: Option<std::sync::Arc<dyn tillandsias_browser_mcp::launcher::BrowserContainers>>,
+    fake_launch: bool,
+) -> tillandsias_browser_mcp::BrowserMcpServer {
+    let (windows, debounce) = lane_windows(project, instance);
+    tillandsias_browser_mcp::BrowserMcpServer::with_project_label_and_mode(
+        tillandsias_browser_mcp::McpServerConfig::default(),
+        project,
+        containers,
+        fake_launch,
+    )
+    .with_lane(instance)
+    .with_windows(windows, debounce)
+}
+
 /// Global registry tracking active per-lane MCP listeners.
 /// This is a tuple rather than a hyphen-concatenated string: `(a-b, c)` and
 /// `(a, b-c)` are distinct lanes even though their display form is identical.
@@ -895,4 +941,54 @@ pub fn start_mcp_socket_server_for_lane(project: &str, instance: &str) -> Result
     });
 
     Ok(())
+}
+
+#[cfg(test)]
+mod lane_window_tests {
+    use super::*;
+    use tillandsias_browser_mcp::framing::{RpcRequest, RpcResponse};
+
+    fn call(name: &str, arguments: serde_json::Value) -> RpcRequest {
+        RpcRequest {
+            id: Some(1),
+            method: "tools/call".to_string(),
+            params: serde_json::json!({ "name": name, "arguments": arguments }),
+        }
+    }
+
+    // Order 1754-bu07, exit criterion 1: a window opened through one lane
+    // connection is still there after that connection's server is gone, and
+    // the next connection of the same lane lists it. RED before: each
+    // connection built its own registry, so the second listed nothing.
+    #[test]
+    fn a_window_outlives_the_connection_that_opened_it() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let project = "bu07-outlive";
+        {
+            let opener = lane_browser_server(project, "default", None, true);
+            let opened = rt.block_on(opener.handle_request(call(
+                "browser.open",
+                serde_json::json!({ "url": format!("http://web.{project}.localhost:8080/") }),
+            )));
+            assert!(matches!(opened, RpcResponse::Success { .. }), "{opened:?}");
+        }
+        let next = lane_browser_server(project, "default", None, true);
+        let listed = rt
+            .block_on(next.handle_request(call("browser.list_windows", serde_json::json!({}))))
+            .to_line()
+            .unwrap();
+        assert!(
+            listed.contains(&format!("web.{project}.localhost")),
+            "{listed}"
+        );
+    }
+
+    #[test]
+    fn each_lane_has_its_own_registry() {
+        let (a, _) = lane_windows("bu07-lanes", "default");
+        let (again, _) = lane_windows("bu07-lanes", "default");
+        let (other, _) = lane_windows("bu07-lanes", "second");
+        assert!(std::sync::Arc::ptr_eq(&a, &again));
+        assert!(!std::sync::Arc::ptr_eq(&a, &other));
+    }
 }

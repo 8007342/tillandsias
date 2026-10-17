@@ -420,6 +420,18 @@ fn main() {
         }
     }
 
+    // Order 1761-bvyn: hidden uninstall helper. scripts/uninstall.sh runs it
+    // before it removes this binary, to take the localhost-only preview CA out
+    // of every user-scope browser trust store. Not operator surface; absent
+    // from --help like --internal-ensure-image.
+    #[cfg(feature = "host-services")]
+    if user_args
+        .iter()
+        .any(|a| a == "--internal-remove-preview-trust")
+    {
+        std::process::exit(host_trust::remove_cli());
+    }
+
     // Order 482c: hidden harness mode for the engine-parity smoke. `ensure`
     // runs the launch path's own inference ensure plus its soft readiness
     // report; `teardown` runs the shutdown path's shared-stack cleanup. Both
@@ -3622,6 +3634,11 @@ pub(crate) fn spawn_cert_expiry_scheduler(
     let _ = std::thread::Builder::new()
         .name("cert-expiry".into())
         .spawn(move || {
+            // 1761-bvyn: the launch step for the preview CA. Re-mint it inside
+            // the margin and install it at user scope, before the first leaf
+            // pass below re-issues every leaf an older preview CA signed.
+            #[cfg(feature = "host-services")]
+            host_trust::install_at_launch(debug);
             let mut last_warned_day: Option<u64> = None;
             loop {
                 #[cfg(feature = "host-services")]
@@ -19625,6 +19642,13 @@ mod cloudflare_mcp;
 // @trace spec:local-web-preview
 #[cfg(feature = "host-services")]
 mod local_web_preview;
+
+// @trace spec:local-web-preview (order 1761-bvyn): the localhost-only preview
+// CA, and its install into the operator's user-scope browser trust stores.
+#[cfg(feature = "host-services")]
+mod host_trust;
+#[cfg(feature = "host-services")]
+mod preview_ca;
 
 // @trace spec:host-browser-mcp (order 1649-xqet)
 #[cfg(feature = "host-services")]

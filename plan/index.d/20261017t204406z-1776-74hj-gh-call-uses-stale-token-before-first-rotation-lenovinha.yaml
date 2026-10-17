@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha from the v56.10.17.1 Linux smoke, 2026-10-17, at the coordinator's request.
+packets:
+  - packet_id: a-tray-launched-with-an-expired-github-token-calls-github-with-it-because-the-first-rotation-check-runs-before-vault-is-up
+    order: 1776-74hj
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    size: S
+    pickup_role: linux
+    capability_tags: [github, vault, token-rotation, tray, remote-projects]
+    related: [1461-8tyy]
+    title: |
+      A tray launched with an expired GitHub access token calls GitHub with it: the rotation scheduler's first due-check runs before Vault is up and fails, and the username probe and the cloud refresh then read the stale token and get HTTP 401 until the 60 s retry rotates it
+    context: |
+      MEASURED (v56.10.17.1 Linux smoke, lenovinha, 2026-10-17, target/smoke-e2e/03-tray.log):
+      - line 9, at launch: blocked:github-token-rotation-failed:read:vault-unavailable (the 1461-8tyy scheduler's first check; Vault was not started yet);
+      - lines 107-111, after Vault came up: probe_github_username and the cloud refresh both ran gh with the stored token and got "HTTP 401: Bad credentials";
+      - line 118, about 60 s later: ok:github-token-rotation:rotated (the backoff retry).
+      It heals itself, but every launch with an expired token spends a minute of failed GitHub calls, and the cloud list is not refreshed in that window.
+      CAUSE: run_git_image_shell (remote_projects.rs), the one runner every gh consumer shares, reads secret/github/token without asking whether it is due; the only due-check is the scheduler's, and its first one cannot reach Vault.
+    exit_criteria:
+      - "before run_git_image_shell starts gh, it runs the GitHub due-check against the Vault its lease just ensured, so an expired token is rotated before the first call (a fixture that is red against the current order)"
+      - "a due-check that fails does not block the call; the gh error still names its cause"
+    unscoreable: "one live relaunch with an expired access token: no HTTP 401 in the tray log, and the cloud list loads on the first refresh"
+    next_action: >
+      Gate run_git_image_shell on vault_bootstrap::github_token_due_check_live after the lease acquire, behind a seam the tests can see.
+    events:
+      - type: filed
+        ts: "2026-10-17T20:44:06Z"
+        host: lenovinha
+        summary: |-
+          the first GitHub rotation check runs before Vault is up, so a launch with an expired token calls GitHub with it and gets 401 for about a minute.

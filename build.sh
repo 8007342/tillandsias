@@ -2222,7 +2222,17 @@ _check_trace_coverage() {
 _stage_router_sidecar() {
     [[ -f "$SCRIPT_DIR/scripts/build-sidecar.sh" ]] || return 0
     _step "Staging router sidecar (build artifact — not committed)..."
-    bash "$SCRIPT_DIR/scripts/build-sidecar.sh"
+    # 1750-a4re: the forge's Bash policy decider is staged here too. A lane
+    # that produces an installable binary or an image (--install, --release,
+    # --ci-full) needs it, and a failure to build it stops the lane; a
+    # compile-only lane gets a named skip (skip:forge-plan-bin:…) instead, so a
+    # `--check` in a fresh tree without a musl toolchain still compiles.
+    local optional=1
+    if [[ "${FLAG_INSTALL:-false}" == true || "${FLAG_RELEASE:-false}" == true \
+          || "${FLAG_CI_FULL:-false}" == true ]]; then
+        optional=0
+    fi
+    TILLANDSIAS_FORGE_PLAN_OPTIONAL="$optional" bash "$SCRIPT_DIR/scripts/build-sidecar.sh"
 }
 
 # Stage before every dispatch that compiles Rust. Pure teardown flags
@@ -3167,7 +3177,11 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # the metric the velocity work steers by.
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CLEAN$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]] &&
         [[ "${TILLANDSIAS_FORCE_CHECK:-0}" != "1" ]] &&
+        [[ "$DEFER_INSTALL_UNTIL_CHECK" != true ]] &&
         [[ -f "$SCRIPT_DIR/scripts/gate-stamp.sh" ]]; then
+        # A deferred `--check --install` (1237-f9dy) clears FLAG_INSTALL, so
+        # without the guard above a fresh stamp exited 0 here and installed
+        # nothing. A combined dispatch never memoizes.
         _memo_verdict="$(bash "$SCRIPT_DIR/scripts/gate-stamp.sh" memo-check check 2>/dev/null)" || _memo_verdict=""
         case "$_memo_verdict" in
             "ok:gate-fresh-except-plan "*)
@@ -5295,6 +5309,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Forge Bash policy hook fixture passed"
+
+    # 1750-a4re: staging the decider is loud where an image is built, a named
+    # skip on compile-only lanes, and never blocks the router sidecar.
+    _step "Checking forge decider staging (1750-a4re)..."
+    if ! _run_lua_decider "scripts/lua/test-forge-plan-bin-staging.lua" 2>&1; then
+        _error "the forge decider staging fixture failed — see the FAIL lines above (1750-a4re)"
+        exit 1
+    fi
+    _info "Forge decider staging fixture passed"
 
     # 1762-bano: the host trust-store guard's fixture (live tree, an NSS add
     # refused, a Rust update-ca-trust refused, a marked preview CA allowed, a
