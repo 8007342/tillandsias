@@ -1,0 +1,23 @@
+# Order 1769-9gna: the private PulseAudio server a browser window plays to.
+# Operator ruling 2026-10-17: the browser sees only generic device names, never
+# a host one; no host WirePlumber change, no renaming of host devices.
+#
+# chromium-framework-launch.sh starts this server inside the window's
+# container and points the browser at it. Its ONLY device is one sink,
+# "Speakers", a tunnel to the tray's output-only server (the socket file the
+# window is given, see crates/tillandsias-headless/src/host_audio_pulse.conf),
+# which plays to the host's default sink and refuses every record stream.
+# So the browser can list exactly:
+#   - Speakers             (the tunnel sink)
+#   - Monitor of Speakers  (every PulseAudio sink has one; it carries only this
+#                           window's own sound, and capture is denied anyway
+#                           by the managed policy, 1767-5q4b)
+# No device module, no network module, no other source. Clients of this
+# server cannot load modules (the launcher passes --disallow-module-loading).
+#
+# @SOCKET@ (this server's socket) and @UPSTREAM@ (the output-only socket) are
+# the only substitutions.
+.fail
+load-module module-native-protocol-unix socket=@SOCKET@ auth-anonymous=1
+load-module module-tunnel-sink-new server=unix:@UPSTREAM@ sink_name=speakers sink_properties=device.description=Speakers
+set-default-sink speakers

@@ -213,6 +213,51 @@ mod tests {
         );
     }
 
+    /// 1769-9gna: the private server inside the browser image, the only audio
+    /// server the browser talks to.
+    const BROWSER_AUDIO_PA: &str = include_str!("../../../images/chromium/browser-audio.pa");
+    const BROWSER_LAUNCHER: &str =
+        include_str!("../../../images/chromium/chromium-framework-launch.sh");
+
+    /// The modules a PulseAudio script loads, with their arguments.
+    fn loaded_modules(pa: &str) -> Vec<(&str, &str)> {
+        pa.lines()
+            .filter_map(|l| l.trim().strip_prefix("load-module "))
+            .map(|rest| rest.split_once(' ').unwrap_or((rest, "")))
+            .collect()
+    }
+
+    /// The browser's whole audio world is one socket and one "Speakers" sink
+    /// that tunnels to the output-only server: no device, network or source
+    /// module, so no host name can be listed through it. The text IS the
+    /// boundary here, as with `shipped_conf_is_output_only_and_local`; the
+    /// live fixture test-browser-audio-generic-names.lua measures the view.
+    #[test]
+    fn host_audio_browser_view_is_one_generic_speakers_sink() {
+        let modules = loaded_modules(BROWSER_AUDIO_PA);
+        let names: Vec<&str> = modules.iter().map(|(n, _)| *n).collect();
+        assert_eq!(
+            names,
+            ["module-native-protocol-unix", "module-tunnel-sink-new"],
+            "one socket and one tunnel sink, nothing else"
+        );
+        assert_eq!(
+            modules[1].1,
+            "server=unix:@UPSTREAM@ sink_name=speakers sink_properties=device.description=Speakers"
+        );
+        assert!(BROWSER_AUDIO_PA.contains("set-default-sink speakers"));
+        // NEGATIVE CONTROL: the check above rejects a config that also loads a
+        // device module, the shape that would list a host's sound card.
+        let mutant = format!("{BROWSER_AUDIO_PA}load-module module-udev-detect\n");
+        assert_ne!(loaded_modules(&mutant).len(), names.len());
+
+        // The launcher keeps clients from loading modules, and a window whose
+        // private server does not start gets no server rather than the host's.
+        // source-pin-ok: the launcher's flags and fallback are the contract.
+        assert!(BROWSER_LAUNCHER.contains("--disallow-module-loading=yes"));
+        assert!(BROWSER_LAUNCHER.contains("unset PULSE_SERVER"));
+    }
+
     #[test]
     fn a_socket_path_too_long_for_sun_path_is_refused_by_name() {
         let long = PathBuf::from(format!("/{}/native", "r".repeat(110)));
