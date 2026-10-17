@@ -401,8 +401,16 @@ mod tests {
         let policy: serde_json::Value =
             serde_json::from_str(&asset("images/chromium/chromium-capture-policy.json"))
                 .expect("the capture policy is JSON");
-        for key in ["AudioCaptureAllowed", "VideoCaptureAllowed", "ScreenCaptureAllowed"] {
-            assert_eq!(policy[key], serde_json::json!(false), "{key} must be false: {policy}");
+        for key in [
+            "AudioCaptureAllowed",
+            "VideoCaptureAllowed",
+            "ScreenCaptureAllowed",
+        ] {
+            assert_eq!(
+                policy[key],
+                serde_json::json!(false),
+                "{key} must be false: {policy}"
+            );
         }
     }
 

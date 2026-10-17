@@ -63,9 +63,18 @@ const CDP_PAGE_DOMAINS: &[&str] = &[
 
 /// Methods inside an allowed domain that still reach past the window.
 const CDP_REFUSED_METHODS: &[(&str, &str)] = &[
-    ("Page.setDownloadBehavior", "it lets the page write downloads to the container"),
-    ("Network.getAllCookies", "it returns every origin's cookies, not this window's"),
-    ("Network.clearBrowserCookies", "it clears every origin's cookies"),
+    (
+        "Page.setDownloadBehavior",
+        "it lets the page write downloads to the container",
+    ),
+    (
+        "Network.getAllCookies",
+        "it returns every origin's cookies, not this window's",
+    ),
+    (
+        "Network.clearBrowserCookies",
+        "it clears every origin's cookies",
+    ),
 ];
 
 /// Whether a raw CDP call stays on the window's page. `Err` carries why.
@@ -76,7 +85,9 @@ fn cdp_method_allowed(
     page: &str,
 ) -> Result<(), String> {
     if browser_level {
-        return Err("browser-level CDP is not available; raw CDP runs on the window's page session".into());
+        return Err(
+            "browser-level CDP is not available; raw CDP runs on the window's page session".into(),
+        );
     }
     if session.is_some_and(|s| s != page) {
         return Err("only the window's own page session is reachable".into());
@@ -3028,19 +3039,55 @@ mod tests {
         let window = opened["window_id"].as_str().expect("opened").to_string();
         let sent_before = host.seen.lock().len();
         for (name, args) in [
-            ("grantPermissions at browser level", json!({ "method": "Browser.grantPermissions", "params": { "permissions": ["audioCapture"] }, "browser_level": true })),
-            ("grantPermissions on the page session", json!({ "method": "Browser.grantPermissions", "params": { "permissions": ["audioCapture"] } })),
-            ("setPermission", json!({ "method": "Browser.setPermission", "params": { "permission": { "name": "microphone" }, "setting": "granted" } })),
-            ("setDownloadBehavior", json!({ "method": "Browser.setDownloadBehavior", "params": { "behavior": "allow" } })),
-            ("Page.setDownloadBehavior", json!({ "method": "Page.setDownloadBehavior", "params": { "behavior": "allow" } })),
-            ("createBrowserContext", json!({ "method": "Target.createBrowserContext" })),
-            ("attachToTarget", json!({ "method": "Target.attachToTarget", "params": { "targetId": "x" } })),
+            (
+                "grantPermissions at browser level",
+                json!({ "method": "Browser.grantPermissions", "params": { "permissions": ["audioCapture"] }, "browser_level": true }),
+            ),
+            (
+                "grantPermissions on the page session",
+                json!({ "method": "Browser.grantPermissions", "params": { "permissions": ["audioCapture"] } }),
+            ),
+            (
+                "setPermission",
+                json!({ "method": "Browser.setPermission", "params": { "permission": { "name": "microphone" }, "setting": "granted" } }),
+            ),
+            (
+                "setDownloadBehavior",
+                json!({ "method": "Browser.setDownloadBehavior", "params": { "behavior": "allow" } }),
+            ),
+            (
+                "Page.setDownloadBehavior",
+                json!({ "method": "Page.setDownloadBehavior", "params": { "behavior": "allow" } }),
+            ),
+            (
+                "createBrowserContext",
+                json!({ "method": "Target.createBrowserContext" }),
+            ),
+            (
+                "attachToTarget",
+                json!({ "method": "Target.attachToTarget", "params": { "targetId": "x" } }),
+            ),
             ("SystemInfo", json!({ "method": "SystemInfo.getInfo" })),
-            ("Storage of another origin", json!({ "method": "Storage.getCookies" })),
-            ("every origin's cookies", json!({ "method": "Network.getAllCookies" })),
-            ("clear every origin's cookies", json!({ "method": "Network.clearBrowserCookies" })),
-            ("any method at browser level", json!({ "method": "Runtime.evaluate", "params": { "expression": "1" }, "browser_level": true })),
-            ("another session", json!({ "method": "Runtime.evaluate", "params": { "expression": "1" }, "sessionId": "not-the-page" })),
+            (
+                "Storage of another origin",
+                json!({ "method": "Storage.getCookies" }),
+            ),
+            (
+                "every origin's cookies",
+                json!({ "method": "Network.getAllCookies" }),
+            ),
+            (
+                "clear every origin's cookies",
+                json!({ "method": "Network.clearBrowserCookies" }),
+            ),
+            (
+                "any method at browser level",
+                json!({ "method": "Runtime.evaluate", "params": { "expression": "1" }, "browser_level": true }),
+            ),
+            (
+                "another session",
+                json!({ "method": "Runtime.evaluate", "params": { "expression": "1" }, "sessionId": "not-the-page" }),
+            ),
         ] {
             let mut a = args.clone();
             a["window_id"] = json!(window);
@@ -3050,16 +3097,28 @@ mod tests {
                 "{name}: {got}"
             );
         }
-        assert_eq!(host.seen.lock().len(), sent_before, "a refused method must not reach Chromium");
+        assert_eq!(
+            host.seen.lock().len(),
+            sent_before,
+            "a refused method must not reach Chromium"
+        );
         // The page's own protocol is untouched.
         for (method, params) in [
             ("Runtime.evaluate", json!({ "expression": "1+1" })),
             ("Page.reload", json!({})),
             ("DOM.getDocument", json!({})),
-            ("Input.dispatchMouseEvent", json!({ "type": "mousePressed", "x": 1, "y": 1 })),
+            (
+                "Input.dispatchMouseEvent",
+                json!({ "type": "mousePressed", "x": 1, "y": 1 }),
+            ),
             ("Network.getCookies", json!({})),
         ] {
-            let got = call_tool(&lane_a, "browser.cdp", json!({ "window_id": window, "method": method, "params": params })).await;
+            let got = call_tool(
+                &lane_a,
+                "browser.cdp",
+                json!({ "window_id": window, "method": method, "params": params }),
+            )
+            .await;
             assert!(
                 !tool_text(&got).starts_with("CDP_METHOD_REFUSED:"),
                 "{method} must stay allowed: {got}"
