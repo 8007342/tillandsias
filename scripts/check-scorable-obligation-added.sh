@@ -503,6 +503,8 @@ if [ "$parse_failures" -gt 0 ]; then
     echo "  The obligation is IN the fragment at the line named above." >&2
     echo "  A row this checker cannot parse must never pass by deferral, and" >&2
     echo "  must never be reported as a row that says nothing (1331-884p)." >&2
+    echo "  why: $parse_failures added plan fragment(s) could not be parsed, so their scoring obligation was never judged" >&2
+    echo "  remedy: fix the YAML at the line named above so the fragment parses, then re-run" >&2
     exit 1
 fi
 
@@ -511,6 +513,8 @@ if [ "$violations" -gt 0 ]; then
     printf '%s' "$detail" >&2
     echo "  A new row that says nothing about how it could be scored is the row" >&2
     echo "  rung 4 could not backfill. State the pin, or state why there is none." >&2
+    echo "  why: $violations new row(s) say nothing about how they could be scored" >&2
+    echo "  remedy: give each row named above its pin (a litmus or fixture that scores it), or, only when none can exist, unscoreable: <the reason>" >&2
     exit 1
 fi
 
