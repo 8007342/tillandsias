@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga on the coordinator's direction (macuahuitl-fedora), 2026-10-17:
+# two command-policies litmus reds seen on yoga while gating 1760-nn6u.
+packets:
+  - packet_id: the-consent-fixtures-ask-policy-eval-to-spend-a-token-that-only-an-execution-door-spends
+    order: 1764-ca9x
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    size: S
+    pickup_role: any
+    capability_tags: [policy, litmus]
+    related: [1443-9f5w, 1760-nn6u]
+    depends_on: []
+    title: |
+      litmus:command-policy-consent-shape (5/9) and litmus:smoke-skill-reset-env-matches-policy (7/9) are red on yoga at trunk 0d8678a41 because their arms expect `policy eval` to honour a consent token or the env pre-authorisation, which since 87c7e9bdc only an execution door does
+    context: |
+      MEASURED on yoga 2026-10-17 at trunk 0d8678a41: `scripts/run-litmus-test.sh command-policies --phase pre-build --size instant` passed=4 failed=2, identically on the 1760-nn6u ref. Direct runs: scripts/test-command-policy-consent.sh fails arms 2, 3, 3-mismatch and 5 (each eval answers `consent:policy:soft-reset` rc=4 with consent_source null after a token was granted or planted); scripts/test-smoke-skill-reset-env-matches-policy.sh fails arm 2 for both smoke skills the same way.
+      Cause, by source and history: 87c7e9bdc (2026-10-01, "refuse invalid seeds at execution doors and preserve inspection consent") made the `policy eval` arm in main.rs call decide_loaded, which never calls resolve_consent; only decide_execution (proc.run, the run verb) spends a token or honours TILLANDSIAS_SKILL/TILLANDSIAS_DESTRUCTIVE_RESET_OK. Both fixtures were last changed 2026-09-28 (854bce299, 589cbc3f0), before it, and still use `policy eval` as the door that spends.
+      Host difference, as far as yoga can see it: NOT the host name (uname -n, gethostname and the fixture's HOST agree), NOT the host kind (no /run/.containerenv, TILLANDSIAS_HOST_KIND unset, read as bare metal with no disagreement), and NOT a stale binary here (resolve_plan_binary gives target/release with build-id = source-revision 1845cefd, built from a tree containing 87c7e9bdc). By source the arms should be red on every bare-metal host running a current binary, so macuahuitl's green full gate most likely either did not execute these two steps (diff scope / not-run) or resolved an older plan binary. Unmeasured on macuahuitl.
+    exit_criteria:
+      - "the consent arms exercise the door that actually spends: a granted token is honoured once and then refused as spent through an execution door (tillandsias-plan run, or proc.run in a Lua fixture), and `policy eval` is asserted NOT to spend it (inspection stays side-effect free); both litmus steps green on yoga"
+      - "the macuahuitl side is measured: which plan binary its gate resolves for these steps and whether they ran, recorded on this row"
+    verifiable_closure: "scripts/test-command-policy-consent.sh"
+    next_action: >
+      On macuahuitl, run `scripts/run-litmus-test.sh command-policies --phase pre-build --size instant` at trunk and record each step's verdict and the resolved plan binary's build-id; then move arms 2, 3 and 5 (and the smoke-skill arm 2) to an execution door, red first on a binary carrying 87c7e9bdc.
+    provenance: |
+      Filed by yoga, 2026-10-17.
+    events:
+      - type: filed
+        ts: "2026-10-17T04:55:35Z"
+        host: yoga
+        summary: |-
+          Consent fixtures predate inspection-only `policy eval` (87c7e9bdc); red on yoga.
