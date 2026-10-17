@@ -2099,11 +2099,35 @@ impl VaultCloudflareTokenStore {
     }
 }
 
+/// Order 1770-z575: the Cloudflare store's ONE answer to "Vault is stopped":
+/// start the Vault enclave alone (ensure_vault_running builds or reuses the
+/// single vault image, then launches and unseals it), never the full `--init`
+/// image set. MEASURED on macuahuitl, v56.10.16.2, no tray running: the read
+/// refused vault-unavailable and its remedy sent the operator to `--init`,
+/// which rebuilt every image and froze the desktop, while the write path
+/// already knew how to start Vault by itself.
+fn vault_up_or_start(
+    running: impl FnOnce() -> bool,
+    start: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    if running() {
+        return Ok(());
+    }
+    eprintln!(
+        "note:cloudflare-store:vault-not-running:starting-the-vault-enclave-only (no other image is built or started)"
+    );
+    start().map_err(|_| "vault-start-failed".to_string())
+}
+
 impl CloudflareTokenStore for VaultCloudflareTokenStore {
     fn read_bundle(&self) -> Result<Option<CloudflareTokenBundle>, String> {
-        if !container_running(VAULT_CONTAINER_NAME) {
-            return Err("vault-unavailable".into());
-        }
+        // Start Vault alone when it is stopped (1770-z575); the login reads
+        // here BEFORE anything single-use is spent, so a start that fails
+        // still refuses before the browser step.
+        vault_up_or_start(
+            || container_running(VAULT_CONTAINER_NAME),
+            || ensure_vault_running(self.debug),
+        )?;
         let (_stability, rt, client) = self.client()?;
         let token_rec = match rt.block_on(client.read_secret(CLOUDFLARE_TOKEN_PATH)) {
             Ok(v) => v,
@@ -2144,11 +2168,13 @@ impl CloudflareTokenStore for VaultCloudflareTokenStore {
     }
 
     fn write_record(&self, path: &str, value: serde_json::Value) -> Result<(), String> {
-        if !container_running(VAULT_CONTAINER_NAME) {
-            // Bring Vault itself up (the same idempotent path `--init` uses);
-            // if that fails the write is REFUSED. There is no other store.
-            ensure_vault_running(self.debug).map_err(|_| "vault-unavailable".to_string())?;
-        }
+        // Bring Vault itself up (the same idempotent path `--init` uses, for
+        // Vault alone); if that fails the write is REFUSED. There is no other
+        // store.
+        vault_up_or_start(
+            || container_running(VAULT_CONTAINER_NAME),
+            || ensure_vault_running(self.debug),
+        )?;
         let (_stability, rt, client) = self.client()?;
         rt.block_on(client.write_secret(path, value.clone()))
             .map_err(|e| cloudflare_vault_reason(&e).to_string())?;
@@ -3621,7 +3647,7 @@ fn build_vault_image(debug: bool) -> Result<String, String> {
         return Ok(identity.canonical_tag);
     }
     eprintln!(
-        "[tillandsias-vault] vault image missing — building on demand; run `tillandsias --init` to pre-build it (order 253)"
+        "[tillandsias-vault] vault image missing — building the Vault image alone, on demand (order 253; no other image is built)"
     );
 
     let cache_dir = crate::init_cache_dir()?;
@@ -10946,5 +10972,78 @@ mod cloudflare_token_rotation_tests {
             3,
             "the 400, other-status and still-sealed branches each log Vault's reason"
         );
+    }
+
+    /// Order 1770-z575: with no tray running, `--cloudflare-login` read the
+    /// stored bundle, found the Vault container stopped and refused
+    /// vault-unavailable, sending the operator to `--init` (every image). The
+    /// read must start Vault alone, as the write already did.
+    #[test]
+    fn cloudflare_store_starts_only_vault_on_read_and_write() {
+        let source = std::fs::read_to_string(
+            std::path::PathBuf::from(
+                std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+            )
+            .join("src/vault_bootstrap.rs"),
+        )
+        .expect("vault_bootstrap.rs readable");
+        let store = source
+            .split("impl CloudflareTokenStore for VaultCloudflareTokenStore {")
+            .nth(1)
+            .expect("the Vault-backed Cloudflare store");
+        let read = store
+            .split("fn read_bundle(&self)")
+            .nth(1)
+            .and_then(|rest| rest.split("fn write_record(").next())
+            .expect("read_bundle body");
+        let write = store
+            .split("fn write_record(")
+            .nth(1)
+            .and_then(|rest| rest.split("fn delete_record(").next())
+            .expect("write_record body");
+        // Needle split so this test's own text cannot match it.
+        let needle = concat!("vault_up_or", "_start(");
+        let mut misses = Vec::new();
+        if !read.contains(needle) {
+            misses.push("read_bundle does not start Vault when it is stopped");
+        }
+        if !write.contains(needle) {
+            misses.push("write_record does not use the same start");
+        }
+        assert!(misses.is_empty(), "{}", misses.join("; "));
+    }
+
+    #[test]
+    fn cloudflare_store_starts_only_vault_when_it_is_stopped() {
+        let mut starts = 0;
+        assert_eq!(
+            super::vault_up_or_start(
+                || false,
+                || {
+                    starts += 1;
+                    Ok(())
+                }
+            ),
+            Ok(())
+        );
+        assert_eq!(starts, 1, "a stopped Vault is started exactly once");
+        // A failed start refuses by a fixed word; the caller never proceeds.
+        assert_eq!(
+            super::vault_up_or_start(|| false, || Err("podman: no such image".into())),
+            Err("vault-start-failed".to_string())
+        );
+        // NEGATIVE CONTROL: a running Vault is never started again.
+        let mut started = false;
+        assert_eq!(
+            super::vault_up_or_start(
+                || true,
+                || {
+                    started = true;
+                    Ok(())
+                }
+            ),
+            Ok(())
+        );
+        assert!(!started);
     }
 }

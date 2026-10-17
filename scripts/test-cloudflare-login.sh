@@ -108,7 +108,11 @@ cat >"$FAKEBIN/xdg-open" <<'TRIP'
 printf '%s\n' "$*" >>"$CF_FAKE_BROWSER_DIR/launched"
 TRIP
 cp "$FAKEBIN/xdg-open" "$FAKEBIN/open"
-printf '#!/bin/sh\nexit 125\n' >"$FAKEBIN/podman"
+# 1770-z575: the fake podman RECORDS its argv, so an arm can prove the login
+# asked podman for the Vault enclave alone and never for a full image set.
+PODMAN_LOG="$scratch/podman.log"
+: >"$PODMAN_LOG"
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >>"%s"\nexit 125\n' "$PODMAN_LOG" >"$FAKEBIN/podman"
 chmod 755 "$FAKEBIN/click" "$FAKEBIN/xdg-open" "$FAKEBIN/open" "$FAKEBIN/podman"
 
 start_fake() {   # <name> [VAR=value...] -> sets FAKE_URL, LEDGER
@@ -225,12 +229,32 @@ no_leak "state" "$OUT" "$(code_of state)"
 
 start_fake novault
 run_bin novault CF_FAKE_BROWSER_MODE=approve -- --cloudflare-login --via loopback
-if [ "$RC" -ne 0 ] && grep -q '^refused:cloudflare-login:vault:vault-unavailable$' <<<"$OUT" \
+if [ "$RC" -ne 0 ] && grep -q '^refused:cloudflare-login:vault:vault-start-failed$' <<<"$OUT" \
     && ! ledger_paths "$LEDGER" | grep -qx '/oauth2/token' && ledger_paths "$LEDGER" | grep -qx '/oauth2/auth'; then
-    ok "NOVAULT bin: approved, Vault unreachable -> refused before the code is spent (no /oauth2/token)"
+    ok "NOVAULT bin: approved, Vault cannot start -> refused before the code is spent (no /oauth2/token)"
 else
-    bad "NOVAULT bin: expected refused:cloudflare-login:vault:vault-unavailable and no token request, rc=$RC"
+    bad "NOVAULT bin: expected refused:cloudflare-login:vault:vault-start-failed and no token request, rc=$RC"
     printf '%s\n' "$OUT" | head -5
+fi
+# 1770-z575: a stopped Vault is STARTED, alone, and the remedy is the light
+# step. The operator's v56.10.16.2 login refused vault-unavailable and named
+# `tillandsias --init`, which rebuilt every image and froze the desktop.
+if grep -q '^note:cloudflare-store:vault-not-running:starting-the-vault-enclave-only' <<<"$OUT"; then
+    ok "NOVAULT bin: a stopped Vault is started (the Vault enclave only)"
+else
+    bad "NOVAULT bin: the login did not try to start Vault: $(printf '%s' "$OUT" | head -3)"
+fi
+case "$OUT" in
+    *'tillandsias --init'*) bad "NOVAULT bin: the remedy still sends the operator to tillandsias --init" ;;
+    *'start Tillandsias (the tray)'*) ok "NOVAULT bin: the remedy is the light step (start the tray), never --init" ;;
+    *) bad "NOVAULT bin: the remedy names no next step: $(printf '%s' "$OUT" | tail -3)" ;;
+esac
+_builds="$(grep -E '(^| )build( |$)' "$PODMAN_LOG" || true)"
+_other_builds="$(printf '%s\n' "$_builds" | grep -v -i 'vault' | grep -v '^$' || true)"
+if [ -z "$_other_builds" ]; then
+    ok "NOVAULT bin: podman was never asked to build anything but the Vault image ($(printf '%s\n' "$_builds" | grep -c -i vault) vault build attempt(s))"
+else
+    bad "NOVAULT bin: the login asked podman to build a non-Vault image: $(printf '%s' "$_other_builds" | head -2)"
 fi
 no_leak "novault" "$OUT" "$(code_of novault)"
 
@@ -296,13 +320,13 @@ no_leak "argv" "$OUT" "CODEONARGV-0123456789"
 DEVICE_GRANTS='authorization_code,refresh_token,urn:ietf:params:oauth:grant-type:device_code'
 start_fake device TILLANDSIAS_FAKE_CLOUDFLARE_GRANT_TYPES="$DEVICE_GRANTS"
 run_bin device -- --cloudflare-login
-if [ "$RC" -ne 0 ] && grep -q '^refused:cloudflare-login:vault:vault-unavailable$' <<<"$OUT" \
+if [ "$RC" -ne 0 ] && grep -q '^refused:cloudflare-login:vault:vault-start-failed$' <<<"$OUT" \
     && grep -q 'enter the code: WDJB-MJHT' <<<"$OUT" \
     && ledger_paths "$LEDGER" | grep -qx '/oauth2/device/auth' \
     && ! ledger_paths "$LEDGER" | grep -qx '/oauth2/token'; then
     ok "DEVICE bin: the default takes the device grant, shows the code, refuses at the Vault before any poll"
 else
-    bad "DEVICE bin: expected the device grant then refused:cloudflare-login:vault:vault-unavailable, rc=$RC: $(ledger_paths "$LEDGER" | tr '\n' ' ')"
+    bad "DEVICE bin: expected the device grant then refused:cloudflare-login:vault:vault-start-failed, rc=$RC: $(ledger_paths "$LEDGER" | tr '\n' ' ')"
     printf '%s\n' "$OUT" | head -5
 fi
 # NEGATIVE CONTROL: the same invocation against discovery WITHOUT the grant
