@@ -3,9 +3,15 @@
   @trace order:1505-kc5f, openspec/changes/cloudflare-login-and-fleet-vpn/design.md (Decision 1)
 
   The Tillandsias Cloudflare sign-in relay page. The operator hosts this ONE
-  static file at https://<relay-host>/tillandsias/cloudflare/callback and
-  registers that URL with the Cloudflare App; `tillandsias --cloudflare-login
-  --via qr` then points the phone's redirect here.
+  static file at https://<relay-host>/cloudflare/callback and registers that
+  URL with the Cloudflare App; `tillandsias --cloudflare-login --via qr` then
+  points the phone's redirect here.
+
+  The operator's copy (1757-n45b) is served at
+  https://cloudflare.tillandsias.org/cloudflare/callback as static assets only
+  (no Worker script, no storage, logs off) from the private repo
+  8007342/cloudflare.tillandsias.org, whose README names THIS file as the
+  page's source of truth.
 
   What it sees: the `code` and `state` from its own query string. Never a
   token, never the PKCE verifier: those exist only inside the tillandsias
