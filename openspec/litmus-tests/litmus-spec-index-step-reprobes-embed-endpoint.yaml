@@ -1,0 +1,31 @@
+# @trace spec:expert-serve-grounded-pipeline
+# @trace order:1747-e9d6
+#
+# Order 1747-e9d6: a cold forge launch probed the embed endpoint once, at
+# source time, with a 3 s ceiling, and discarded the verdict. On yolanda
+# (2026-10-16) inference was ready and answered in 29 ms by hand, yet
+# embed_endpoint stayed unset, the spec-index step skipped, and spec_answer
+# refused for the whole session. The step now re-probes, bounded, before the
+# skip, and the skip line names the verdict.
+name: litmus:spec-index-step-reprobes-embed-endpoint
+spec: expert-serve-grounded-pipeline
+phase: pre-build
+description: >
+  The forge spec-index step (ensure_forge_spec_index) re-runs
+  resolve_embed_endpoint when the endpoint is unset: a stub inference that
+  answers only on the third probe still yields a derived endpoint and an
+  ensure run with it; a stub that never answers yields a skip line carrying
+  the unreachable verdict; an explicit endpoint is never re-probed; and a copy
+  with the re-probe removed fails the first arm.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/lua/test-spec-index-step-reprobes-embed-endpoint.lua
+  - a runnable tillandsias-plan that knows `script`, or the fixture answers could-not-run
+
+critical_path:
+  - step: "the re-probe, the named skip, the explicit pass-through and the mutant all hold"
+    command: ". scripts/plan-binary-probe.sh; P=$(resolve_plan_binary) && \"$P\" script run scripts/lua/test-spec-index-step-reprobes-embed-endpoint.lua"
+    timeout_ms: 120000
+    expected_behavior: "ok:spec-index-step-reprobes-embed-endpoint:4:of:4"
