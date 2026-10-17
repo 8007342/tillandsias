@@ -1,4 +1,4 @@
-# v56.10.16.2 e2e smoke — linux PASS, with one known open issue (2026-10-16)
+# v56.10.16.2 e2e smoke — linux PASS, with one known open issue (2026-10-16, WebKit arm 2026-10-17)
 
 **PASS.** Every directed arm passes on the installed release:
 
@@ -13,7 +13,7 @@
 
 **Known open issue, not a regression: 1630-pz77, raised to p1.** While the tray runs, a project with a local `~/src` clone cannot be opened, from the tray menu or from the CLI. The row measured it on v56.10.9.1, and the refusal it hits has been in stable v56.10.13.1 since d74d07f4b. By the coordinator's ruling, 16.2 is no worse than stable here, so this does not block promotion.
 
-**Not run: 1725-wkfl criterion 2,** the live WebKit window on a Flutter dev server. It was in progress in the lakanoa forge when the operator began their own development session there. I stopped it so it would not touch their forge, and it can run on its own later. It does not gate this verdict.
+**1725-wkfl criterion 2 (WebKit window): PASS for reach.** It ran after the operator's session, on 2026-10-17. A WebKit window on the routed Flutter dev URL loads it with status 200, and the app connects to the dev server. The app then renders a blank page, which is filed as **1760-54sr** (p2). Chromium renders the same app, and WebKit windows are newer than stable, so this is not a regression and does not gate the verdict.
 
 Release: https://github.com/8007342/tillandsias/releases/tag/v56.10.16.2. It is a prerelease, published 2026-10-16T15:16:11Z with 32 assets, from target c6641b45c. The coordinator (macuahuitl-fedora) gave the go once it was published. The install base was pinned with `TILLANDSIAS_RELEASE_BASE=…/releases/download/v56.10.16.2`.
 
@@ -86,9 +86,16 @@ The macOS "phase=Ready while Securing Vault" window is a guest phase that the Li
 - The operator saw no `[tillandsias]` lines over the tray-launched OpenCode TUIs, through a long development session afterwards. They will report it if one shows up later.
 - The forge's `attached-sessions/<container>.log` holds the lifecycle events instead (container_start and the rest).
 
-### 1725-wkfl criterion 2: WebKit window — NOT RUN, deferred
-- The forge agent had started `flutter run -d web-server` in `arkanoid_game/`, and the shared Flutter sibling container had come up.
-- The operator then started their own OpenCode development session in that same lakanoa forge. I stopped my run, the Flutter process included, before any WebKit window opened, so the check would not interfere with their work.
+### 1725-wkfl criterion 2: WebKit window — PASS for reach; the app renders blank (1760-54sr)
+- **First attempt, 2026-10-16.** It was in progress in the lakanoa forge when the operator started their own development session there. I stopped it.
+- **Rerun, 2026-10-17.**
+  1. Clicked the tray menu at 02:25Z, which started a fresh lakanoa forge.
+  2. The forge agent ran `flutter run -d web-server` in `arkanoid_game/`. Its log: "Dev server routed: open https://flutter.lakanoa.localhost:18443/".
+  3. One `browser.open` with the "iPhone 15" preset started `tillandsias-browser-lakanoa-24a741964d96`, image `tillandsias-webkit:v56.10.16.2`, at 03:21:22Z.
+- **What the window logged:** `webkit-window: loopback relay 127.0.0.1:18443 -> 10.89.1.2`, then `webkit-window: loaded https://flutter.lakanoa.localhost:18443/ status=200`. The flutter run log then printed `Debug service listening on ws://…`, so the app's JavaScript ran and reached the dev server.
+- **What the operator saw** while it was alive: "a playwright window open in portrait aspect ratio at https://flutter.lakanoa.localhost:18443/ but no app shows up, blank screen".
+- **Verdict:** criterion 2 ("loads it") holds. That is the routing reach 1725-wkfl was about. The blank render is filed as 1760-54sr; Chromium windows on the same server read `document.title = "Lakanoa"`.
+- **An earlier attempt the same night** had its windows SIGKILLed at 02:33:34Z, when its agent run ended. That is 1754-bu07 again: the operator never saw them.
 
 ## Findings
 
@@ -98,6 +105,7 @@ The macOS "phase=Ready while Securing Vault" window is a guest phase that the Li
   - visual-chess (no clone), and lakanoa once the clone was removed and the tray restarted, both opened.
   - The row first measured this on v56.10.9.1 (yoga). The refusal (d74d07f4b) is in stable v56.10.13.1. This run measured the row's UNMEASURED case, a launch with the tray already running.
 - **1754-bu07, filed (p2).** A `browser.open` window opened by a one-shot `opencode run` was SIGKILLed about 20 s after that run exited. The window and its forwarder were both killed (`exit_code=137`, 16:09:22 → 16:09:42Z). The agent had already reported the window open (`headless:false`, a window_id). The same call from a session that stayed alive kept the window up. The hypothesis is a session-scoped lifetime.
+- **1760-54sr, filed (p2).** A Flutter app renders blank in a WebKit window, although the page loads and the app connects (above).
 - **Host-browser certificate warning, to be filed** (the operator, via the coordinator). The operator opened `https://www.lakanoa.localhost:18443/` in their own host browser and had to accept a certificate warning, a step that prompt-to-app onboarding should not have.
 
 ## Provenance

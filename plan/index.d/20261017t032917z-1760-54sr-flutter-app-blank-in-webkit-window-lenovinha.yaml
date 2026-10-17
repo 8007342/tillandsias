@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha from the v56.10.16.2 Linux smoke (1725-wkfl criterion 2 arm), 2026-10-17.
+packets:
+  - packet_id: a-flutter-web-app-renders-a-blank-page-in-a-webkit-browser-window-although-the-page-loads-and-the-app-connects-to-its-dev-server
+    order: 1760-54sr
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    size: M
+    pickup_role: linux
+    capability_tags: [host-browser, webkit, flutter, rendering]
+    related: [1725-wkfl, 1656-tjv4, 1649-xqet, 1754-bu07]
+    title: |
+      A host-browser WebKit window (an Apple device preset, "WebKit (approximates Safari)") opened on a project's Flutter dev server loads the page (status 200), and the app connects back to the dev server's debug service, yet the window stays blank. A Chromium window on the same dev server renders the app
+    context: |
+      MEASURED (v56.10.16.2 Linux smoke, lenovinha, 2026-10-17). In the tray-launched lakanoa forge, `flutter run -d web-server` in arkanoid_game/ was routed at https://flutter.lakanoa.localhost:18443/. The agent's browser.open with the "iPhone 15" preset started tillandsias-browser-lakanoa-24a741964d96 (image tillandsias-webkit:v56.10.16.2) at 03:21:22Z:
+      - The container log: "webkit-window: loopback relay 127.0.0.1:18443 -> 10.89.1.2", then "webkit-window: loaded https://flutter.lakanoa.localhost:18443/ status=200".
+      - The flutter run log then printed "Debug service listening on ws://127.0.0.1:44363/…", so the app's JavaScript ran in the window and reached the dev server.
+      - The operator saw "a playwright window open in portrait aspect ratio at https://flutter.lakanoa.localhost:18443/ but no app shows up, blank screen".
+      Earlier in the same forge, Chromium windows on the same server answered document.title = "Lakanoa" over CDP. The agent cannot inspect the WebKit window itself: browser_screenshot answers ENGINE_UNSUPPORTED (engine-neutral tools are 1656-twhk).
+      HYPOTHESES, not established: (1) Flutter's renderer (CanvasKit or skwasm, WebGL2 and WASM) gets no usable WebGL in the WebKit container (Wayland socket only, no render node), so it draws nothing; (2) a renderer asset, such as CanvasKit from www.gstatic.com, cannot be fetched from the WebKit container's network position; (3) a WebKitGTK feature gap in Flutter's bootstrap. A console capture from webkit-window.js would discriminate between them.
+    exit_criteria:
+      - "webkit-window.js forwards the page's console errors and failed requests to the container log (or an engine-neutral tool returns them), so a blank WebKit page names its cause; red today, when the log says only loaded status=200"
+      - "a Flutter web app opened in a WebKit window on a routed dev URL renders: proven by an engine-neutral screenshot or the operator's eye in a recorded run"
+    unscoreable: "the console-forwarding arm, then one live recorded render"
+    next_action: >
+      Make webkit-window.js log page console messages and failed requests, reopen the lakanoa dev server in WebKit, and read which hypothesis holds before changing the container.
+    events:
+      - type: filed
+        ts: "2026-10-17T03:29:17Z"
+        host: lenovinha
+        summary: |-
+          A Flutter app loads in a WebKit window (status 200, debug service connected) but renders blank; Chromium renders it.
