@@ -126,8 +126,10 @@ pub trait BrowserContainers: Send + Sync {
 }
 
 /// A running window's container. Dropping it stops the container, so a
-/// window cannot outlive the server (and the lane connection) that opened
-/// it: a leaked one would also leave its network attached to the router.
+/// window cannot outlive the registry that holds it: a leaked one would also
+/// leave its network attached to the router. The tray keeps one registry per
+/// lane for the life of the process (order 1754-bu07), so a window outlives
+/// the MCP connection that opened it and ends at browser.close or tray Quit.
 pub struct RunningContainer {
     handle: ContainerHandle,
     host: Arc<dyn BrowserContainers>,
