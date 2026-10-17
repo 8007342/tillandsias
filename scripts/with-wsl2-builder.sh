@@ -412,7 +412,9 @@ if [[ "$_w2_mirror" == 1 ]]; then
     _w2_src_linux="/mnt$(cygpath -u "$PWD_WIN")"
     _w2_mirror_dir="/srv/tillandsias-wsl2-src/$REPO_BASENAME"
     _w2_want="$(bash scripts/gate-stamp.sh compute)" || {
-        echo "[wsl2-builder] refused:wsl2-src-mirror:no-source-digest — scripts/gate-stamp.sh compute failed on this checkout; re-run with TILLANDSIAS_WSL2_SRC_IN_TREE=1 to build in-tree" >&2
+        echo "[wsl2-builder] refused:wsl2-src-mirror:no-source-digest" >&2
+        echo "  why: scripts/gate-stamp.sh compute failed on this checkout, so the mirror's fidelity cannot be proven against it (667-kfyn)" >&2
+        echo "  remedy: fix what gate-stamp.sh printed above, or re-run with TILLANDSIAS_WSL2_SRC_IN_TREE=1 to build in-tree" >&2
         exit 1
     }
     echo "[wsl2-builder] syncing the distro-native source mirror $_w2_mirror_dir (667-kfyn)..."
