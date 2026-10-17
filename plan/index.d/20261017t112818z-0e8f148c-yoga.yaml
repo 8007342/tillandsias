@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: publish-local-auto-on-a-wrangler-project-starts-the-wrangler-preview-or-keeps-the-exited-containers-logs-to-say-why
+    field: verifiable_closure
+    value: cargo test -p tillandsias-headless --features host-services local_web_preview
+    ts: "2026-10-17T11:28:18Z"
+    host: yoga
+    replaces_sha256: "8c676f730dc00580747f2eef02d37b65eb0cc130cfdbff58212c035542f3dbc4"
+
+events:
+  - packet_id: publish-local-auto-on-a-wrangler-project-starts-the-wrangler-preview-or-keeps-the-exited-containers-logs-to-say-why
+    event:
+      type: note
+      ts: "2026-10-17T11:28:18Z"
+      host: yoga
+      summary: |-
+        without --features host-services the module is compiled out and the closure runs zero tests (measured on yoga, PR #515)
