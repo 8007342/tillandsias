@@ -26,6 +26,16 @@
 //!     query knob short-circuits to `invalid_grant` for callers that just
 //!     need a scripted failure.
 //!   * `POST /oauth2/revoke`, `GET /oauth2/userinfo`.
+//!   * ORDER 1758-wdvf, the device grant (RFC 8628), offered only when
+//!     `TILLANDSIAS_FAKE_CLOUDFLARE_GRANT_TYPES` lists the device_code URN:
+//!     discovery then names `device_authorization_endpoint` (unless
+//!     `TILLANDSIAS_FAKE_CLOUDFLARE_DEVICE_ENDPOINT=0`), `POST
+//!     /oauth2/device/auth` issues a device code, and `POST /oauth2/token`
+//!     with that grant answers per `TILLANDSIAS_FAKE_CLOUDFLARE_DEVICE_MODE`:
+//!     `approve` (default: one authorization_pending, then the pair),
+//!     `slow_down` (slow_down, then pending, then the pair), `deny`
+//!     (pending, then access_denied), `expire` (expired_token), or `refuse`
+//!     (device/auth itself answers 400 unauthorized_client).
 //!   * The Zero Trust API routes `fleet-vpn init` needs: `GET /accounts`,
 //!     `POST`/`DELETE /accounts/{id}/access/service_tokens[/{id}]`,
 //!     `POST /accounts/{id}/teamnet/virtual_networks`, the default device
@@ -73,10 +83,19 @@ struct TokenGrant {
     scope: String,
 }
 
+struct DeviceGrant {
+    client_id: String,
+    scope: String,
+    polls: u32,
+}
+
 struct State {
     ledger_path: String,
     lax: bool,
     grant_types: Vec<String>,
+    device_endpoint: bool,
+    device_mode: String,
+    devices: HashMap<String, DeviceGrant>,
     codes: HashMap<String, AuthCode>,
     access_tokens: HashMap<String, TokenGrant>,
     refresh_tokens: HashMap<String, TokenGrant>,
@@ -266,8 +285,14 @@ fn redirect_with(redirect_uri: &str, params: &[(&str, &str)]) -> String {
     out
 }
 
+const DEVICE_GRANT: &str = "urn:ietf:params:oauth:grant-type:device_code";
+
+fn device_offered(state: &State) -> bool {
+    state.grant_types.iter().any(|g| g == DEVICE_GRANT)
+}
+
 fn handle_discovery(state: &State, stream: &mut TcpStream, base: &str) {
-    let body = serde_json::json!({
+    let mut body = serde_json::json!({
         "issuer": base,
         "authorization_endpoint": format!("{base}/oauth2/auth"),
         "token_endpoint": format!("{base}/oauth2/token"),
@@ -277,7 +302,104 @@ fn handle_discovery(state: &State, stream: &mut TcpStream, base: &str) {
         "code_challenge_methods_supported": ["S256"],
         "response_types_supported": ["code"],
     });
+    if device_offered(state) && state.device_endpoint {
+        body["device_authorization_endpoint"] =
+            serde_json::json!(format!("{base}/oauth2/device/auth"));
+    }
     respond_json(stream, "200 OK", &body);
+}
+
+fn handle_device_auth(state: &mut State, stream: &mut TcpStream, req: &Request, base: &str) {
+    if !device_offered(state) || state.device_mode == "refuse" {
+        respond_json(
+            stream,
+            "400 Bad Request",
+            &serde_json::json!({"error": "unauthorized_client"}),
+        );
+        return;
+    }
+    let form = parse_form(&req.body);
+    let device_code = random_hex(24);
+    let user_code = "WDJB-MJHT";
+    state.devices.insert(
+        device_code.clone(),
+        DeviceGrant {
+            client_id: form.get("client_id").cloned().unwrap_or_default(),
+            scope: form.get("scope").cloned().unwrap_or_default(),
+            polls: 0,
+        },
+    );
+    respond_json(
+        stream,
+        "200 OK",
+        &serde_json::json!({
+            "device_code": device_code,
+            "user_code": user_code,
+            "verification_uri": format!("{base}/device"),
+            "verification_uri_complete": format!("{base}/device?user_code={user_code}"),
+            "expires_in": 900,
+            "interval": 0,
+        }),
+    );
+}
+
+/// The device_code token grant: the scripted answer for this poll.
+fn device_token(state: &mut State, stream: &mut TcpStream, form: &HashMap<String, String>) {
+    let code = form.get("device_code").cloned().unwrap_or_default();
+    let Some(grant) = state.devices.get_mut(&code) else {
+        respond_json(
+            stream,
+            "400 Bad Request",
+            &serde_json::json!({"error": "invalid_grant"}),
+        );
+        return;
+    };
+    grant.polls += 1;
+    let n = grant.polls;
+    let word = match (state.device_mode.as_str(), n) {
+        ("slow_down", 1) => Some("slow_down"),
+        ("slow_down", 2) | ("approve", 1) | ("deny", 1) => Some("authorization_pending"),
+        ("deny", _) => Some("access_denied"),
+        ("expire", _) => Some("expired_token"),
+        _ => None,
+    };
+    if let Some(word) = word {
+        respond_json(
+            stream,
+            "400 Bad Request",
+            &serde_json::json!({"error": word}),
+        );
+        return;
+    }
+    let Some(grant) = state.devices.remove(&code) else {
+        return;
+    };
+    let access = random_hex(24);
+    let refresh = random_hex(24);
+    state.access_tokens.insert(
+        access.clone(),
+        TokenGrant {
+            client_id: grant.client_id.clone(),
+            scope: grant.scope.clone(),
+        },
+    );
+    state.refresh_tokens.insert(
+        refresh.clone(),
+        TokenGrant {
+            client_id: grant.client_id,
+            scope: grant.scope,
+        },
+    );
+    respond_json(
+        stream,
+        "200 OK",
+        &serde_json::json!({
+            "access_token": access,
+            "refresh_token": refresh,
+            "expires_in": 3600,
+            "token_type": "bearer",
+        }),
+    );
 }
 
 fn handle_authorize(state: &mut State, stream: &mut TcpStream, req: &Request) {
@@ -366,6 +488,7 @@ fn handle_token(state: &mut State, stream: &mut TcpStream, req: &Request) {
     }
     let form = parse_form(&req.body);
     match form.get("grant_type").map(|s| s.as_str()) {
+        Some(DEVICE_GRANT) if device_offered(state) => device_token(state, stream, &form),
         Some("authorization_code") => {
             let code = form.get("code").cloned().unwrap_or_default();
             let redirect_uri = form.get("redirect_uri").cloned().unwrap_or_default();
@@ -688,10 +811,17 @@ fn main() {
         "tillandsias-fake-cloudflare: listening on 127.0.0.1:{bound_port}, ledger={ledger_path}"
     );
 
+    let device_endpoint =
+        std::env::var("TILLANDSIAS_FAKE_CLOUDFLARE_DEVICE_ENDPOINT").as_deref() != Ok("0");
+    let device_mode = std::env::var("TILLANDSIAS_FAKE_CLOUDFLARE_DEVICE_MODE")
+        .unwrap_or_else(|_| "approve".to_string());
     let mut state = State {
         ledger_path,
         lax,
         grant_types,
+        device_endpoint,
+        device_mode,
+        devices: HashMap::new(),
         codes: HashMap::new(),
         access_tokens: HashMap::new(),
         refresh_tokens: HashMap::new(),
@@ -710,6 +840,9 @@ fn main() {
             }
             ("GET", "/oauth2/auth") => handle_authorize(&mut state, &mut stream, &req),
             ("POST", "/oauth2/token") => handle_token(&mut state, &mut stream, &req),
+            ("POST", "/oauth2/device/auth") => {
+                handle_device_auth(&mut state, &mut stream, &req, &base)
+            }
             ("POST", "/oauth2/revoke") => handle_revoke(&mut state, &mut stream, &req),
             ("GET", "/oauth2/userinfo") => handle_userinfo(&state, &mut stream, &req),
             _ => handle_api(&mut stream, &req),

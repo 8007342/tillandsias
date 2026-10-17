@@ -2,7 +2,7 @@
 # @trace order:1505-kc5f, openspec/changes/cloudflare-login-and-fleet-vpn/design.md (Decision 1, Decision 7)
 # @trace openspec/changes/cloudflare-login-and-fleet-vpn/specs/cloudflare-auth/spec.md
 #
-# tillandsias --cloudflare-login [--via loopback|qr|paste] and
+# tillandsias --cloudflare-login [--via device|loopback|qr|paste] and
 # --cloudflare-logout, against tillandsias-fake-cloudflare. No real
 # Cloudflare, no real Vault, no real credential.
 #
@@ -31,6 +31,10 @@
 #   --via qr without a relay refuses naming loopback and paste  BIN no-relay
 #   LITMUS_PODMAN_MODE stops with nothing written               BIN litmus + CARGO litmus
 #   --cloudflare-logout deletes token+refresh, keeps mesh       CARGO logout
+#   1758-wdvf device grant, default when discovery offers it    BIN device + CARGO device-*
+#     (approve stores and the QR is verification_uri_complete; slow_down
+#     widens; deny/expire store nothing; a refused grant falls back with a
+#     note; NEGATIVE CONTROL: no grant, or no endpoint, never asks)
 # plus: state mismatch makes no exchange; no token, verifier or code in any
 # output; the relay page never calls out (with two mutation controls).
 #
@@ -107,10 +111,11 @@ cp "$FAKEBIN/xdg-open" "$FAKEBIN/open"
 printf '#!/bin/sh\nexit 125\n' >"$FAKEBIN/podman"
 chmod 755 "$FAKEBIN/click" "$FAKEBIN/xdg-open" "$FAKEBIN/open" "$FAKEBIN/podman"
 
-start_fake() {   # <name> -> sets FAKE_URL, LEDGER
+start_fake() {   # <name> [VAR=value...] -> sets FAKE_URL, LEDGER
     LEDGER="$scratch/$1.ledger"
     : >"$LEDGER"
-    "$FAKE" --ledger "$LEDGER" >"$scratch/$1.port" 2>/dev/null &
+    # 1758-wdvf: the fake reads its knobs at startup, so they ride on its env.
+    env "${@:2}" "$FAKE" --ledger "$LEDGER" >"$scratch/$1.port" 2>/dev/null &
     FAKE_PIDS="$FAKE_PIDS $!"
     local i=0 port=""
     while [ "$i" -lt 100 ]; do
@@ -285,6 +290,31 @@ else
 fi
 no_leak "argv" "$OUT" "CODEONARGV-0123456789"
 
+# DEVICE (1758-wdvf): with the grant in discovery and no --via, the real binary
+# takes the device grant: it asks /oauth2/device/auth, shows the user code, and
+# refuses at the Vault preflight BEFORE its first poll (no /oauth2/token).
+DEVICE_GRANTS='authorization_code,refresh_token,urn:ietf:params:oauth:grant-type:device_code'
+start_fake device TILLANDSIAS_FAKE_CLOUDFLARE_GRANT_TYPES="$DEVICE_GRANTS"
+run_bin device -- --cloudflare-login
+if [ "$RC" -ne 0 ] && grep -q '^refused:cloudflare-login:vault:vault-unavailable$' <<<"$OUT" \
+    && grep -q 'enter the code: WDJB-MJHT' <<<"$OUT" \
+    && ledger_paths "$LEDGER" | grep -qx '/oauth2/device/auth' \
+    && ! ledger_paths "$LEDGER" | grep -qx '/oauth2/token'; then
+    ok "DEVICE bin: the default takes the device grant, shows the code, refuses at the Vault before any poll"
+else
+    bad "DEVICE bin: expected the device grant then refused:cloudflare-login:vault:vault-unavailable, rc=$RC: $(ledger_paths "$LEDGER" | tr '\n' ' ')"
+    printf '%s\n' "$OUT" | head -5
+fi
+# NEGATIVE CONTROL: the same invocation against discovery WITHOUT the grant
+# never asks for it (the code flow runs; the fake browser declines it).
+start_fake devicectl
+run_bin devicectl CF_FAKE_BROWSER_MODE=deny -- --cloudflare-login
+if ! ledger_paths "$LEDGER" | grep -qx '/oauth2/device/auth' && ! grep -q 'enter the code' <<<"$OUT"; then
+    ok "DEVICE CONTROL bin: without the grant in discovery, device/auth is never asked"
+else
+    bad "DEVICE CONTROL bin: device/auth was asked although discovery does not offer the grant"
+fi
+
 # LEDGER CONTROL: past_auth sees a request after /oauth2/auth when there is one.
 printf '%s\n' '{"body":"","method":"GET","path":"/oauth2/auth?x=1"}' \
     '{"body":"grant_type=authorization_code","method":"POST","path":"/oauth2/token"}' >"$scratch/ctl.ledger"
@@ -376,7 +406,11 @@ NORELAY|cloudflare_login_qr_without_relay_is_refused_before_any_network_call
 PASTE-TTY|cloudflare_login_paste_without_a_terminal_is_refused_before_any_network_call
 POLL|cloudflare_login_relay_poll_state_first_then_code
 PASTE-STATE|cloudflare_login_paste_needs_the_state_with_the_code
-ARGS|cloudflare_login_parse_args"
+ARGS|cloudflare_login_parse_args
+DEVICE|cloudflare_login_fake_device_approve_stores_and_qr_is_only_the_verification_uri
+DEVICE-SLOW|cloudflare_login_fake_device_slow_down_widens_and_still_stores
+DEVICE-DENY|cloudflare_login_fake_device_deny_and_expire_store_nothing
+DEVICE-FALLBACK|cloudflare_login_fake_device_refused_falls_back_and_no_grant_never_asks"
 while IFS= read -r line; do
     label="${line%%|*}"; arm="${line#*|}"
     if grep -qE "^test ${T}::${arm} \.\.\. ok$" <<<"$out"; then
