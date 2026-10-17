@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-tray-launched-with-an-expired-github-token-calls-github-with-it-because-the-first-rotation-check-runs-before-vault-is-up
+    field: status
+    value: implemented
+    ts: "2026-10-17T21:43:51Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-tray-launched-with-an-expired-github-token-calls-github-with-it-because-the-first-rotation-check-runs-before-vault-is-up
+    event:
+      type: note
+      ts: "2026-10-17T21:43:51Z"
+      host: lenovinha
+      summary: |-
+        PR #527 landed (linux-next 219fe5467); live arm open: relaunch with an expired access token, no HTTP 401 in the tray log
