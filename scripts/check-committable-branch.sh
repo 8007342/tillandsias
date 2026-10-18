@@ -39,18 +39,31 @@
 
 set -u
 
+# 1247-cbg7 (1247-amcu): why it refused and what clears it, on stderr, so
+# stdout stays the one verdict line every caller and the litmus pin read. The
+# remedy names the RULE and a command shape, never a hardcoded branch: this
+# guard runs in any project's checkout, and not every project has a
+# linux-next.
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+
 committable_branch_verdict() {
   if ! git rev-parse --git-dir >/dev/null 2>&1; then
     echo "blocked:not-a-git-repo"
+    _afford "a committable cycle commits and pushes, and $(pwd) is not inside a git checkout" \
+      "cd into the checkout you mean to commit in (git clone it first if there is none), then re-run this guard"
     return 1
   fi
   branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
   if [ -z "$branch" ]; then
     echo "blocked:detached-head"
+    _afford "HEAD is detached, so a commit made here belongs to no branch and there is nothing to push" \
+      "git switch <branch> to work on an existing one, or git switch -c <topic> to keep this commit on a new one, then re-run"
     return 1
   fi
   if [ "$branch" = "main" ]; then
     echo "blocked:committable-cycle-on-main"
+    _afford "main advances only through a reviewed PR merge (breach 34e60965, order 476), so no cycle commits on it directly" \
+      "git switch -c <topic> (or switch to this project's integration branch: see the forge's branch rules, or git branch -r), commit there, and land on main through a PR"
     return 1
   fi
   # ORDER 1005-m6rz. The other half of "can this cycle commit here": a branch

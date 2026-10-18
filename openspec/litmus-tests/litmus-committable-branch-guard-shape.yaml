@@ -83,6 +83,25 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: well-formed verdict"
 
+  # 1247-cbg7 (1247-amcu): each blocked verdict says WHY and WHAT CLEARS IT on
+  # stderr, while stdout stays the bare verdict the steps above pin. For on-main
+  # and detached-head, the remedy is EXECUTED (git switch -c <topic>) and must
+  # clear the refusal: an affordance that cannot clear its refusal is a lie.
+  - step: "on main, the refusal says why and names git switch -c, and running it clears the refusal"
+    command: "d=$(mktemp -d); git init -q -b main \"$d/repo\"; git -C \"$d/repo\" config user.email litmus@tillandsias; git -C \"$d/repo\" config user.name litmus; cp scripts/check-committable-branch.sh \"$d/repo/\"; err=$( cd \"$d/repo\" && bash check-committable-branch.sh 2>&1 >/dev/null ); git -C \"$d/repo\" switch -q -c topic-1247; out=$( cd \"$d/repo\" && bash check-committable-branch.sh 2>/dev/null ); rm -rf \"$d\"; case \"$err\" in *'why: '*'remedy: '*'git switch -c'*) ;; *) echo \"FAIL: on-main carries no why/remedy naming git switch -c: $err\"; exit 1 ;; esac; [ \"$out\" = 'ok:branch-topic-1247' ] && echo 'ok: main-remedy-clears' || { echo \"FAIL: the on-main remedy did not clear it: $out\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: main-remedy-clears"
+
+  - step: "on a detached HEAD, the refusal says why and names git switch -c, and running it clears the refusal"
+    command: "d=$(mktemp -d); git init -q -b scratch \"$d/repo\"; git -C \"$d/repo\" config user.email litmus@tillandsias; git -C \"$d/repo\" config user.name litmus; git -C \"$d/repo\" commit -q --allow-empty -m fixture; git -C \"$d/repo\" checkout -q --detach; cp scripts/check-committable-branch.sh \"$d/repo/\"; err=$( cd \"$d/repo\" && bash check-committable-branch.sh 2>&1 >/dev/null ); git -C \"$d/repo\" switch -q -c topic-1247; out=$( cd \"$d/repo\" && bash check-committable-branch.sh 2>/dev/null ); rm -rf \"$d\"; case \"$err\" in *'why: '*'remedy: '*'git switch -c'*) ;; *) echo \"FAIL: detached-head carries no why/remedy naming git switch -c: $err\"; exit 1 ;; esac; [ \"$out\" = 'ok:branch-topic-1247' ] && echo 'ok: detached-remedy-clears' || { echo \"FAIL: the detached-head remedy did not clear it: $out\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: detached-remedy-clears"
+
+  - step: "outside a git checkout, the refusal says why and what to do"
+    command: "d=$(mktemp -d); cp scripts/check-committable-branch.sh \"$d/\"; out=$( cd \"$d\" && env GIT_CEILING_DIRECTORIES=\"$d\" bash check-committable-branch.sh 2>/dev/null ); err=$( cd \"$d\" && env GIT_CEILING_DIRECTORIES=\"$d\" bash check-committable-branch.sh 2>&1 >/dev/null ); rm -rf \"$d\"; [ \"$out\" = 'blocked:not-a-git-repo' ] || { echo \"FAIL: premise: $out\"; exit 1; }; case \"$err\" in *'why: '*'remedy: '*) echo 'ok: not-a-repo-affords' ;; *) echo \"FAIL: not-a-git-repo carries no why/remedy: $err\"; exit 1 ;; esac"
+    timeout_ms: 5000
+    expected_behavior: "ok: not-a-repo-affords"
+
   - step: "the meta-orchestration and advance-work-from-plan bootstraps consult the probe (wiring is real, not prose)"
     command: "[ \"$(grep -c 'check-committable-branch.sh' skills/meta-orchestration/SKILL.md)\" -ge 1 ] && [ \"$(grep -c 'check-committable-branch.sh' skills/advance-work-from-plan/SKILL.md)\" -ge 1 ] && echo 'ok: skills-consult-probe'"
     timeout_ms: 3000
