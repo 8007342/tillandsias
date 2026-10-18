@@ -796,7 +796,13 @@ fn subset_mount(live: &LiveSource, path: &str, destination: &str) -> Result<Stri
 
 fn verify_subset(live: &LiveSource, path: &str) -> Result<(), String> {
     let relative = safe_relative(path)?;
-    let expected = format!("/home/forge/src/{}/{relative}", live.root);
+    verify_tree(live, &format!("/home/forge/src/{}/{relative}", live.root))
+}
+
+/// `expected` resolves to itself (no symlink escape) and holds no symlink,
+/// .git, .env*, node_modules, .cache or credentials anywhere below it.
+fn verify_tree(live: &LiveSource, expected: &str) -> Result<(), String> {
+    let expected = expected.to_string();
     let actual = podman_at(
         Step::Source,
         &["exec", &live.forge_id, "realpath", "-e", "--", &expected],
@@ -1041,6 +1047,17 @@ fn source_mounts(live: &LiveSource, profile: &Profile) -> Result<Vec<String>, St
                 return Err(NO_SERVABLE_ROOT.into());
             }
             verify_subset(live, "index.html")?;
+            // 1788-qlwq slice 11: an app the caller NAMED (app_dir, e.g. a
+            // Flutter build/web) is a build output, so it is served whole, as
+            // public/ and dist/ are, under the same private-path scan. The
+            // project root keeps the narrow list below: source sits beside it.
+            if live.app_dir.is_some() {
+                verify_tree(live, &format!("/home/forge/src/{}", live.root))?;
+                return Ok(vec![format!(
+                    "type=volume,source={},target=/var/www,volume-subpath={},readonly=true",
+                    live.volume, live.root
+                )]);
+            }
             let mut mounts = vec![subset_mount(live, "index.html", "/var/www/index.html")?];
             let root = format!("/home/forge/src/{}", live.root);
             let files = podman_at(
@@ -2871,6 +2888,55 @@ mod tests {
                 format!("invalid_app_dir: {dir:?} is not a directory in the project")
             );
         }
+    }
+
+    /// 1788-qlwq slice 11: a root-index app named by app_dir (a Flutter
+    /// build/web) is served WHOLE, so canvaskit/, music/, version.json and
+    /// .wasm resolve; kumbia-kombat measured 404s on every subdirectory but
+    /// assets/. NEGATIVE CONTROL: the project root keeps the narrow mounts, so
+    /// source beside a root index.html is never published.
+    #[test]
+    fn an_app_dir_root_index_is_served_whole_and_the_project_root_stays_narrow() {
+        let (_fake, mut live) = fake_forge(
+            &[
+                "build/web/index.html",
+                "build/web/flutter_bootstrap.js",
+                "build/web/version.json",
+                "build/web/canvaskit/canvaskit.wasm",
+                "build/web/music/theme.ogg",
+                "build/web/assets/AssetManifest.bin",
+            ],
+            r#"{"remote":false,"assets":null,"main":null,"build":null,"raw":"{}"}"#,
+        );
+        live.root = "proj/build/web".into();
+        live.app_dir = Some("build/web".into());
+        assert_eq!(
+            source_mounts(&live, &Profile::Static).unwrap(),
+            vec![
+                "type=volume,source=vol,target=/var/www,volume-subpath=proj/build/web,readonly=true"
+            ]
+        );
+
+        let (_fake, live) = fake_forge(
+            &[
+                "index.html",
+                "src/main.dart",
+                "canvaskit/canvaskit.wasm",
+                "assets/a.png",
+            ],
+            r#"{"remote":false,"assets":null,"main":null,"build":null,"raw":"{}"}"#,
+        );
+        let mounts = source_mounts(&live, &Profile::Static).unwrap();
+        assert!(
+            mounts.iter().all(|m| !m.contains("canvaskit")
+                && !m.contains("src")
+                && !m.ends_with("volume-subpath=proj,readonly=true")),
+            "the project root must stay narrow: {mounts:?}"
+        );
+        assert!(
+            mounts.iter().any(|m| m.contains("target=/var/www/assets,")),
+            "{mounts:?}"
+        );
     }
 
     /// Order 1667-6rtp: with app_dir, the config, its assets and the static
