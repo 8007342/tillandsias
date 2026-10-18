@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: affordance-slice-every-blocked-verdict-of-check-committable-branch-says-why-and-what-clears-it
+    order: 1247-cbg7
+    parent_order: 1247-amcu
+    status: in_progress
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [affordance, refusal, git, fail-loud]
+    estimated_hours: 1
+    owned_files:
+      - scripts/check-committable-branch.sh
+      - openspec/litmus-tests/litmus-committable-branch-guard-shape.yaml
+    related: [1781-wves]
+    title: |
+      1247-amcu slice — FAMILY: the bare blocked verdicts of scripts/check-committable-branch.sh (committable-cycle-on-main, detached-head, not-a-git-repo) carry a why: and a remedy: line, as no-git-identity already does
+    context: |
+      Picked by lenovinha at the coordinator's request (2026-10-18) as the next family by scripts/rank-refusal-hits.sh, with cycle-preflight skipped because #386 holds those hunks. blocked:committable-cycle-on-main is rank 15 (2 recorded hits). It and its two siblings print only the token, while blocked:no-git-identity (rank 10) already carries its remedy. Ranks 11-14 were read, and except for cycle-preflight they already carry prose remedies.
+      The remedy names the RULE (main advances only through a PR; commit on another branch) and a command shape, never a hardcoded branch, because the app is project-agnostic (1247-amcu criterion 4). Stdout stays the one verdict line the litmus pin and every caller read. The port to Lua is 1781-wves's; this slice changes text only, so that port carries it over.
+    exit_criteria:
+      - 'each of committable-cycle-on-main, detached-head and not-a-git-repo emits why: and remedy: on stderr beside its unchanged stdout verdict (pre-fix: FAILS on all three)'
+      - 'NEGATIVE CONTROL (1247-amcu criterion 5): for on-main and detached-head, the remedy command (git switch -c <topic>) is EXECUTED in litmus-committable-branch-guard-shape and the guard then answers ok:branch-<topic>'
+      - 'the existing litmus-committable-branch-guard-shape steps stay green'
+    verifiable_closure: |
+      scripts/run-litmus-test.sh committable-branch-guard-shape passes with the new steps; pre-fix: the new steps FAIL.
+    provenance: |
+      Filed by lenovinha at the coordinator's request, 2026-10-18.
+    events:
+      - type: filed
+        ts: "2026-10-18T14:22:54Z"
+        host: lenovinha
+        summary: |-
+          Next 1247-amcu slice: the bare blocked verdicts of check-committable-branch.sh. Filed and claimed in one fragment by lenovinha.
