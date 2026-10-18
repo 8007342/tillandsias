@@ -134,9 +134,50 @@ printf '%s' "$OPENCODE_AUTH_CONTENT" \
 [ ! -e "$XDG_DATA_HOME/opencode/auth.json" ] \
     || fail "Vault-backed preparation created auth.json"
 
-# The real locally installed OpenCode is evidence for the undocumented
-# upstream contract. Hosts without it retain hermetic source/stub coverage.
-REAL_OPENCODE="$(command -v opencode 2>/dev/null || true)"
+# NEGATIVE CONTROL for the contract probe itself (1787-i2ir): a binary that
+# IGNORES OPENCODE_AUTH_CONTENT must be refused, and one that honours it must
+# pass, so a probe that stopped asking cannot go green. The ignoring stub
+# answers exactly what opencode 2.0.25 (Homebrew) answered on lenovinha
+# 2026-10-18; the honouring one answers what opencode-ai 1.19.3 (npm) did.
+mkdir -p "$WORK/stub"
+cat >"$WORK/stub/opencode-ignores" <<'STUB'
+#!/usr/bin/env bash
+[ "$*" = "auth list" ] || exit 64
+echo "No authenticated integrations"
+STUB
+cat >"$WORK/stub/opencode-honours" <<'STUB'
+#!/usr/bin/env bash
+[ "$*" = "auth list" ] || exit 64
+name="$(printf '%s' "${OPENCODE_AUTH_CONTENT:-}" | jq -r 'keys[0] // empty' 2>/dev/null)"
+[ -n "$name" ] || { echo "No authenticated integrations"; exit 0; }
+printf '%s\n' "●  $name api" "└  1 credentials"
+STUB
+chmod +x "$WORK/stub/opencode-ignores" "$WORK/stub/opencode-honours"
+if opencode_auth_contract_ok "$WORK/stub/opencode-ignores"; then
+    fail "the contract probe accepted an opencode that ignores OPENCODE_AUTH_CONTENT"
+fi
+opencode_auth_contract_ok "$WORK/stub/opencode-honours" \
+    || fail "the contract probe refused an opencode that honours OPENCODE_AUTH_CONTENT"
+
+# The installed-binary arm judges the opencode a FORGE runs, never whatever is
+# first on this host's PATH (1787-i2ir). Forges install opencode-ai from npm
+# (_require_harness opencode opencode-ai), so a PATH binary from another
+# channel says nothing about them. Measured on lenovinha 2026-10-18: Homebrew's
+# opencode 2.0.25 ignores OPENCODE_AUTH_CONTENT and reddened this arm, while a
+# fresh forge installed npm opencode-ai 1.19.3, which honours it.
+# TILLANDSIAS_FORGE_OPENCODE_BIN names one explicitly (a forge, a scratch npm
+# prefix, or a stub). Otherwise a PATH opencode counts only when it resolves
+# into an npm opencode-ai package. Any other one is skipped by name.
+REAL_OPENCODE="${TILLANDSIAS_FORGE_OPENCODE_BIN:-}"
+if [ -z "$REAL_OPENCODE" ]; then
+    _path_opencode="$(command -v opencode 2>/dev/null || true)"
+    _real_path="$(readlink -f "$_path_opencode" 2>/dev/null || printf '%s' "$_path_opencode")"
+    case "$_real_path" in
+        */node_modules/opencode-ai/*) REAL_OPENCODE="$_path_opencode" ;;
+        "") ;;
+        *) echo "SKIP: PATH opencode $_path_opencode resolves to $_real_path, not an npm opencode-ai package; forges install opencode-ai from npm, so this binary is not what they run (set TILLANDSIAS_FORGE_OPENCODE_BIN to judge one)" ;;
+    esac
+fi
 if [ -n "$REAL_OPENCODE" ] && [ -x "$REAL_OPENCODE" ]; then
     opencode_auth_contract_ok "$REAL_OPENCODE" \
         || fail "installed OpenCode rejected the isolated sentinel contract"
@@ -148,8 +189,10 @@ if [ -n "$REAL_OPENCODE" ] && [ -x "$REAL_OPENCODE" ]; then
     fi
     REAL_VERSION="$("$REAL_OPENCODE" --version 2>/dev/null || echo unknown)"
     echo "installed OpenCode evidence: version=$REAL_VERSION provider=google count=1 auth.json=absent"
+elif [ -n "${TILLANDSIAS_FORGE_OPENCODE_BIN:-}" ]; then
+    fail "TILLANDSIAS_FORGE_OPENCODE_BIN=$TILLANDSIAS_FORGE_OPENCODE_BIN is not an executable"
 else
-    echo "SKIP: locally installed OpenCode unavailable; hermetic contract coverage continues"
+    echo "SKIP: no forge OpenCode (npm opencode-ai) on this host; hermetic contract coverage continues"
 fi
 
 # Rollback regression. Both harnesses are generated in isolated test state.
