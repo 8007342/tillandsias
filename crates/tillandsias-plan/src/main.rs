@@ -5303,6 +5303,9 @@ fn run_discipline(args: &[String], index: Option<&Path>) -> ! {
         // ORDER 1446-xqi6 — install the level's hook stubs for this project.
         Some("install-hooks") if positional.len() == 1 => match dh::install(&root, d.level) {
             Ok(done) => {
+                if let Some(line) = &done.hooks_path_set {
+                    println!("{line}");
+                }
                 for (event, path) in &done.not_ours {
                     eprintln!(
                         "skip:discipline:hook-not-ours:{event} ({}) — left untouched",
@@ -5336,11 +5339,16 @@ fn run_discipline(args: &[String], index: Option<&Path>) -> ! {
                     println!("{verdict}");
                     let d = bd::load(&root, None);
                     match dh::install(&root, d.level) {
-                        Ok(done) => println!(
-                            "ok:discipline:hooks-installed:level={}:{} hooks",
-                            done.level,
-                            done.ours.len()
-                        ),
+                        Ok(done) => {
+                            if let Some(line) = &done.hooks_path_set {
+                                println!("{line}");
+                            }
+                            println!(
+                                "ok:discipline:hooks-installed:level={}:{} hooks",
+                                done.level,
+                                done.ours.len()
+                            )
+                        }
                         Err(v) => println!("{v}"),
                     }
                     std::process::exit(0);
