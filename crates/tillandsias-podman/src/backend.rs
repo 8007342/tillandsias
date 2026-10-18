@@ -175,7 +175,12 @@ impl PodmanBackend for RealBackend {
                     // NAME the operation, the budget, and the command. A bare
                     // "timed out" reproduces the original defect at a smaller
                     // scale: the operator still cannot tell WHAT stopped.
-                    stderr: timeout_message(operation, &redact_argv(argv), budget),
+                    // Order 1784-skfj: plus where the process capture went.
+                    stderr: crate::wedge_capture::annotate(timeout_message(
+                        operation,
+                        &redact_argv(argv),
+                        budget,
+                    )),
                     duration: started.elapsed(),
                 };
                 crate::log_podman_failure(&label, "timeout", &output.stderr);

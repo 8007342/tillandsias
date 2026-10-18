@@ -6001,6 +6001,28 @@ pub(crate) fn container_exit_state(name: &str) -> Option<(String, i64)> {
     Some((status, code))
 }
 
+/// Order 1784-skfj: whether `name` is running, or `None` when podman did not
+/// answer (a budget kill, a spawn error, any failure that is not "no such
+/// container"). [`container_running`] folds that `None` into `false`, which is
+/// right for "should I start it?" and wrong for "did it die?": on the
+/// v56.10.17.1 smoke a wedged podman made a live Vault read as dead and the
+/// supervisor re-ensured it.
+pub(crate) fn container_running_answer(name: &str) -> Option<bool> {
+    let out = podman_cmd_sync()
+        .args(["inspect", "--format", "{{.State.Running}}", name])
+        .output_bounded(tillandsias_podman::OperationKind::Inspect.default_budget())
+        .ok()?;
+    if out.status.success() {
+        return Some(String::from_utf8_lossy(&out.stdout).trim() == "true");
+    }
+    inspect_says_absent(&String::from_utf8_lossy(&out.stderr)).then_some(false)
+}
+
+/// podman's refusal for a name it has no object for.
+pub(crate) fn inspect_says_absent(stderr: &str) -> bool {
+    stderr.to_ascii_lowercase().contains("no such")
+}
+
 pub(crate) fn container_running(name: &str) -> bool {
     let out = podman_cmd_sync()
         .args(["inspect", "--format", "{{.State.Running}}", name])

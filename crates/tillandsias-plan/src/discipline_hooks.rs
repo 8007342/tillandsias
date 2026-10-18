@@ -89,10 +89,17 @@ pub fn stub(event: &str) -> String {
 }
 
 fn git(root: &Path, args: &[&str]) -> Option<String> {
+    git_env(root, args, &[])
+}
+
+/// `git` with extra environment, so a test can point git at a scratch global
+/// config without mutating this process's environment.
+fn git_env(root: &Path, args: &[&str], env: &[(&str, &str)]) -> Option<String> {
     let out = Command::new("git")
         .arg("-C")
         .arg(root)
         .args(args)
+        .envs(env.iter().copied())
         .output()
         .ok()?;
     if !out.status.success() {
@@ -112,15 +119,39 @@ pub struct Installed {
     pub changed: usize,
     /// (event, path) of a hook file that exists and is not ours: left alone.
     pub not_ours: Vec<(String, PathBuf)>,
+    /// When this run set the repo-local core.hooksPath beside a global or
+    /// system one, the line that says so (1788-qlwq slice 1).
+    pub hooks_path_set: Option<String>,
 }
 
 /// Install the level's stubs. `Err` carries a one-line refusal verdict.
 ///
 /// The hooks dir: a repo-LOCAL (or worktree) core.hooksPath is honoured; with
 /// none set, the common git dir's `hooks/` is used and set LOCALLY. A
-/// core.hooksPath from global or system config is REFUSED with the 1442-wyf9
-/// token: writing there would arm these hooks in every repository on the box.
+/// core.hooksPath from global or system config is never written into (1442-wyf9:
+/// that would arm these hooks in every repository on the box); the local one is
+/// set beside it and `hooks_path_set` says so (1788-qlwq). Any other scope is
+/// refused.
 pub fn install(root: &Path, level: u8) -> Result<Installed, String> {
+    install_env(root, level, &[])
+}
+
+fn install_env(root: &Path, level: u8, env: &[(&str, &str)]) -> Result<Installed, String> {
+    let git = |root: &Path, args: &[&str]| git_env(root, args, env);
+    // Set the common git dir's `hooks/` as this repo's LOCAL core.hooksPath.
+    let set_local = || -> Result<PathBuf, String> {
+        let common = git(
+            root,
+            &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+        )
+        .ok_or_else(|| "refused:discipline:install-hooks:not-a-git-repo".to_string())?;
+        let dir = PathBuf::from(common).join("hooks");
+        let dir_s = dir.to_string_lossy().to_string();
+        git(root, &["config", "core.hooksPath", &dir_s])
+            .ok_or_else(|| "refused:discipline:install-hooks:cannot-set-hooks-path".to_string())?;
+        Ok(dir)
+    };
+    let mut hooks_path_set = None;
     let dir = match git(root, &["config", "--show-scope", "--get", "core.hooksPath"]) {
         Some(line) => {
             let (scope, value) = line.split_once('\t').unwrap_or(("", line.as_str()));
@@ -129,25 +160,26 @@ pub fn install(root: &Path, level: u8) -> Result<Installed, String> {
                     let p = PathBuf::from(value);
                     if p.is_absolute() { p } else { root.join(p) }
                 }
+                // 1788-qlwq: the forge image sets a GLOBAL hooksPath, so every
+                // new project met this as a refusal. Writing into the global
+                // dir stays forbidden (1442-wyf9); a local hooksPath beside it
+                // overrides it for this repo only, and the run says so.
+                "global" | "system" => {
+                    let dir = set_local()?;
+                    hooks_path_set = Some(format!(
+                        "set:discipline:install-hooks:local-hooks-path:{} \
+                         (this repo's core.hooksPath now overrides the {scope} one, {value}, which is left untouched)",
+                        dir.display()
+                    ));
+                    dir
+                }
                 other => {
                     let other = if other.is_empty() { "unknown" } else { other };
                     return Err(format!("refused:install-hooks:{other}-hooks-path:{value}"));
                 }
             }
         }
-        None => {
-            let common = git(
-                root,
-                &["rev-parse", "--path-format=absolute", "--git-common-dir"],
-            )
-            .ok_or_else(|| "refused:discipline:install-hooks:not-a-git-repo".to_string())?;
-            let dir = PathBuf::from(common).join("hooks");
-            let dir_s = dir.to_string_lossy().to_string();
-            git(root, &["config", "core.hooksPath", &dir_s]).ok_or_else(|| {
-                "refused:discipline:install-hooks:cannot-set-hooks-path".to_string()
-            })?;
-            dir
-        }
+        None => set_local()?,
     };
     std::fs::create_dir_all(&dir)
         .map_err(|e| format!("refused:discipline:install-hooks:hooks-dir-unwritable:{e}"))?;
@@ -183,6 +215,7 @@ pub fn install(root: &Path, level: u8) -> Result<Installed, String> {
         ours,
         changed,
         not_ours,
+        hooks_path_set,
     })
 }
 
@@ -376,5 +409,81 @@ pub fn run_hook(root: &Path, event: &str, git_args: &[String]) -> i32 {
         0
     } else {
         1
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A repo whose only core.hooksPath comes from a scratch GLOBAL config,
+    /// as in the forge image (~/.gitconfig). Returns (tempdir, repo, global
+    /// hooks dir, env for git).
+    fn repo_under_global_hooks_path() -> (tempfile::TempDir, PathBuf, PathBuf, PathBuf) {
+        let t = tempfile::tempdir().unwrap();
+        let repo = t.path().join("project");
+        let global_hooks = t.path().join("global-hooks");
+        std::fs::create_dir_all(&global_hooks).unwrap();
+        let cfg = t.path().join("gitconfig");
+        std::fs::write(
+            &cfg,
+            format!("[core]\n\thooksPath = {}\n", global_hooks.display()),
+        )
+        .unwrap();
+        let st = Command::new("git")
+            .args(["init", "-q"])
+            .arg(&repo)
+            .env("GIT_CONFIG_GLOBAL", &cfg)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .status()
+            .unwrap();
+        assert!(st.success());
+        (t, repo, global_hooks, cfg)
+    }
+
+    #[test]
+    fn a_global_hooks_path_gets_a_local_one_beside_it_and_the_global_dir_stays_empty() {
+        let (_t, repo, global_hooks, cfg) = repo_under_global_hooks_path();
+        let cfg_s = cfg.to_string_lossy().to_string();
+        let env = [
+            ("GIT_CONFIG_GLOBAL", cfg_s.as_str()),
+            ("GIT_CONFIG_NOSYSTEM", "1"),
+        ];
+        let done = install_env(&repo, 0, &env).expect("install under a global hooksPath");
+        let local = git_env(
+            &repo,
+            &["config", "--show-scope", "--get", "core.hooksPath"],
+            &env,
+        )
+        .unwrap();
+        let (scope, value) = local.split_once('\t').unwrap();
+        assert_eq!(scope, "local", "the repo now carries its own hooksPath");
+        assert_eq!(PathBuf::from(value), done.dir);
+        assert!(done.dir.ends_with("hooks") && done.dir.starts_with(repo.canonicalize().unwrap()));
+        assert!(done.dir.join("pre-push").is_file());
+        let note = done
+            .hooks_path_set
+            .as_deref()
+            .expect("it says that it set it");
+        assert!(note.contains(value) && note.contains(&global_hooks.to_string_lossy().to_string()));
+        // NEGATIVE CONTROL (1442-wyf9): nothing lands in the global dir.
+        assert_eq!(std::fs::read_dir(&global_hooks).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn a_local_hooks_path_is_honoured_and_not_announced() {
+        let (_t, repo, global_hooks, cfg) = repo_under_global_hooks_path();
+        let cfg_s = cfg.to_string_lossy().to_string();
+        let env = [
+            ("GIT_CONFIG_GLOBAL", cfg_s.as_str()),
+            ("GIT_CONFIG_NOSYSTEM", "1"),
+        ];
+        let mine = repo.join("my-hooks");
+        let mine_s = mine.to_string_lossy().to_string();
+        git_env(&repo, &["config", "core.hooksPath", &mine_s], &env).unwrap();
+        let done = install_env(&repo, 0, &env).unwrap();
+        assert_eq!(done.dir, mine);
+        assert!(done.hooks_path_set.is_none());
+        assert_eq!(std::fs::read_dir(&global_hooks).unwrap().count(), 0);
     }
 }

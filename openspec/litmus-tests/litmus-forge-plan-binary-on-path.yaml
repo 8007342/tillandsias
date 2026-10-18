@@ -1,0 +1,38 @@
+# @trace spec:default-image, order:1788-qlwq
+# Litmus: the forge image puts tillandsias-plan on PATH, so a new project's
+# discipline hook stubs run instead of refusing with no-plan-binary.
+name: litmus:forge-plan-binary-on-path
+spec: default-image
+phase: pre-build
+# Runs inside a forge only: it asks the forge image's own PATH. On a host the
+# runner skips it with the reason named (661-emqi).
+host_kind: forge
+description: >
+  1788-qlwq slice 2. The image shipped tillandsias-plan only in
+  /usr/local/lib/tillandsias/policy-bin, which is on neither PATH, so in a
+  project that is not a Tillandsias checkout (no source-built ~/.local/bin copy)
+  `command -v tillandsias-plan` failed and every installed hook stub printed
+  blocked:hook:<event>:no-plan-binary. MEASURED red on the published
+  v56.10.17.1 forge image (tlatoanis-macbook-air, 2026-10-18): rc=1 under both
+  `bash -c` (PATH=/usr/local/cargo/bin:/usr/local/bin:/usr/bin) and `bash -lc`.
+  The non-login step pins the image's PATH and drops ~/.local/bin on purpose,
+  so a source-built copy in a Tillandsias forge cannot make it pass.
+severity: high
+size: instant
+
+preconditions:
+  - images/default/Containerfile exists
+
+critical_path:
+  - step: "non-login shell with the image's PATH resolves a runnable tillandsias-plan"
+    command: "p=$(env -i HOME=\"$HOME\" PATH=/usr/local/cargo/bin:/usr/local/bin:/usr/bin bash -c 'command -v tillandsias-plan') && \"$p\" capabilities >/dev/null && echo \"ok: non-login $p\""
+    timeout_ms: 30000
+    expected_behavior: "ok: non-login /usr/local/bin/tillandsias-plan"
+  - step: "login shell resolves a runnable tillandsias-plan"
+    command: "p=$(env -i HOME=\"$HOME\" PATH=/usr/local/cargo/bin:/usr/local/bin:/usr/bin bash -lc 'command -v tillandsias-plan') && \"$p\" capabilities >/dev/null && echo 'ok: login shell resolves tillandsias-plan'"
+    timeout_ms: 30000
+    expected_behavior: "ok: login shell resolves tillandsias-plan"
+  - step: "an installed pre-push stub in a fresh project runs the plan binary instead of refusing"
+    command: "t=$(mktemp -d \"$HOME/.cache/litmus-plan-on-path.XXXXXX\") && git init -q \"$t\" && (cd \"$t\" && env -u TILLANDSIAS_PLAN_BIN PATH=/usr/local/cargo/bin:/usr/local/bin:/usr/bin tillandsias-plan discipline install-hooks >/dev/null) && out=$(cd \"$t\" && env -u TILLANDSIAS_PLAN_BIN PATH=/usr/local/cargo/bin:/usr/local/bin:/usr/bin bash .git/hooks/pre-push origin \"$t\" </dev/null 2>&1); rc=$?; rm -rf \"$t\"; case \"$out\" in *no-plan-binary*) echo \"FAIL: stub refused: $out\"; exit 1;; esac; [ \"$rc\" -eq 0 ] && echo 'ok: pre-push stub ran the plan binary'"
+    timeout_ms: 60000
+    expected_behavior: "ok: pre-push stub ran the plan binary"

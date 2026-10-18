@@ -5,8 +5,9 @@
 # templates embedded in the plan binary, installed on demand per project.
 #
 #   1  no seed: install-hooks installs the level-0 set into a repo-LOCAL
-#      core.hooksPath (and refuses a global one with the 1442-wyf9 token); a
-#      push to main is not refused and prints nothing
+#      core.hooksPath; under a GLOBAL one (the forge image's) it sets the local
+#      one beside it, says so, and writes nothing into the global dir
+#      (1442-wyf9, 1788-qlwq); a push to main is not refused and prints nothing
 #   2  raise --to 1: the seed reads level 1, a push to main is refused with the
 #      affordance naming the integration branch and /project-discipline;
 #      raise --to 0 is refused (forward-only)
@@ -83,12 +84,16 @@ PG="$(new_project globalpath)"
 mkdir -p "$W/global-hooks"
 git config --global core.hooksPath "$W/global-hooks"
 out="$(cd "$PG" && "$PLAN" discipline install-hooks 2>/dev/null)"; rc=$?
+scope="$(git -C "$PG" config --show-scope --get core.hooksPath)"
 git config --global --unset core.hooksPath
-if [ "$rc" -eq 3 ] && [ "$out" = "refused:install-hooks:global-hooks-path:$W/global-hooks" ] &&
-    [ -z "$(ls -A "$W/global-hooks")" ]; then
-    ok "arm 1: a global core.hooksPath is refused with the 1442-wyf9 token, nothing written"
+local_dir="${scope#*$'\t'}"
+if [ "$rc" -eq 0 ] && [ "${scope%%$'\t'*}" = local ] &&
+    grep -qx "set:discipline:install-hooks:local-hooks-path:$local_dir (this repo's core.hooksPath now overrides the global one, $W/global-hooks, which is left untouched)" <<<"$out" &&
+    grep -qx 'ok:discipline:hooks-installed:level=0:3 hooks' <<<"$out" &&
+    [ -x "$local_dir/pre-push" ] && [ -z "$(ls -A "$W/global-hooks")" ]; then
+    ok "arm 1: under a global core.hooksPath a local one is set and named, nothing written to the global dir"
 else
-    bad "arm 1: global hooksPath: rc=$rc [$out] wrote=[$(ls -A "$W/global-hooks")]"
+    bad "arm 1: global hooksPath: rc=$rc [$out] scope=[$scope] wrote=[$(ls -A "$W/global-hooks")]"
 fi
 
 # ── arm 2 ────────────────────────────────────────────────────────────────────
