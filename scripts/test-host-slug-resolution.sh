@@ -209,7 +209,7 @@ done
 # resolution gate (arm 5's checkpoints). A remedy that cannot clear its refusal
 # is a lie (1247-amcu criterion 5).
 for _subj in push-plan-fragments-to-trunk.sh salvage-dirty-worktree.sh; do
-    _r="$(mktemp -d)"; mkdir -p "$_r/scripts"
+    _r="$(mktemp -d "${TMPDIR:-/tmp}/host-slug-arm7.XXXXXX")"; mkdir -p "$_r/scripts"
     git -C "$_r" init -q
     git -C "$_r" config user.email t@example.invalid; git -C "$_r" config user.name t
     printf 'x\n' > "$_r/f"; git -C "$_r" add -A; git -C "$_r" commit -qm base >/dev/null 2>&1
