@@ -19,18 +19,14 @@ today's code first (memory: exit criteria must fail on the pre-fix code).
 
 - [x] 2.1 `FailureMarker` keyed on `(image, source_digest)` beside the init
       state; `ensure_image_exists` refuses fast on a matching marker with
-      the named cause, log and remedy; backoff 10 min / 1 h / operator;
-      marker cleared when the digest changes or on success [1776-brk3]
-      (third arm is once a day, not operator-only, until 2.2's tray item
-      exists: a macOS/Windows tray user has no other retry)
-- [ ] 2.2 `tillandsias --retry-image <name>` (foreground, forced rebuild) and
-      the tray's "Retry build" item; MCP `prepare(force)`; `IMAGE_BUILD_REMEDY`
-      no longer says "retried on each launch" [1776-brk3]
-      (done: `--retry-image`, the remedy. Open: the tray item, which adds a
-      menu row and so needs the operator's approval under tray-ux curation;
-      `prepare(force)` with 3.2; done in 1776-v1t4, replying busy with
-      retry_after_s while a retry is pending, per the operator's 2026-10-17
-      ruling)
+      the named cause, log and remedy; two automatic background retries on
+      exponential backoff, then declared failed (operator ruling
+      2026-10-17); agents get "busy" + `retry_after_s` meanwhile; marker
+      cleared when the digest changes or on success [1776-brk3]
+- [x] 2.2 `tillandsias --retry-image <name>` (foreground, forced rebuild);
+      `IMAGE_BUILD_REMEDY` no longer says "retried on each launch"
+      [1776-brk3] (no tray "Retry build" item: operator ruling 2026-10-17;
+      MCP `prepare(force)` moves to 3.2 [1776-v1t4])
 - [x] 2.3 The verdict line on every ensure decision (decided / digest /
       present / reason / marker) [1776-brk3]
 
@@ -39,7 +35,8 @@ today's code first (memory: exit criteria must fail on the pre-fix code).
 - [x] 3.1 `build_vault_image` delegates to `ensure_image_exists` (lock,
       detach, marker, verdict) [1776-v1t4]
 - [x] 3.2 `toolchain_exec::prepare` stops re-spawning a build after a
-      failure; reports the marker's refusal [1776-v1t4]
+      failure; reports the marker's refusal (or "busy" + `retry_after_s`
+      while a retry is scheduled); MCP `prepare(force)` [1776-v1t4]
 
 ## 4. Bound the build (v0.5)
 

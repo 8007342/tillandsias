@@ -6848,6 +6848,7 @@ mod tests {
             "TILLANDSIAS_ROOT",
             "PATH",
             "TILLANDSIAS_PODMAN_REFUSE_REAL",
+            crate::image_ensure_marker::RETRY_BASE_ENV,
         ]
         .into_iter()
         .map(|k| (k, std::env::var_os(k)))
@@ -6864,6 +6865,8 @@ mod tests {
             std::env::set_var("PATH", format!("{}:/usr/bin:/bin", bin.display()));
             // The PATH podman is the fake; the tripwire would refuse it.
             std::env::remove_var("TILLANDSIAS_PODMAN_REFUSE_REAL");
+            // 1776-brk3's background retries run in milliseconds, not minutes.
+            std::env::set_var(crate::image_ensure_marker::RETRY_BASE_ENV, "10");
         }
         std::fs::create_dir_all(scratch.join("run")).unwrap();
         let held = crate::resource_lock::acquire("image-vault", Duration::from_secs(5), false)

@@ -34,12 +34,16 @@ pub enum LaunchError {
     Io(#[from] std::io::Error),
     /// Order 1776-pr0g: the window's engine image is being built on first
     /// use, in the background. Nothing was started; call browser.open again.
-    /// `step` is `(n, m)` while the build reports one.
+    /// `step` is `(n, m)` while the build reports one. `retry_after_s` is
+    /// when to ask again: [`crate::server::PREPARING_RETRY_AFTER_S`] while it
+    /// builds, longer while a failed build waits for its automatic retry
+    /// (1776-brk3: "busy, try again in N").
     #[error("{notice}")]
     Preparing {
         engine: Engine,
         notice: String,
         step: Option<(u64, u64)>,
+        retry_after_s: u64,
     },
 }
 

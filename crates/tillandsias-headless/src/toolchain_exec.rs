@@ -129,13 +129,19 @@ fn prepare_action(
     }
     // Inputs that cannot be read now are judged as the marker's own.
     let digest = current_digest.unwrap_or(&m.source_digest);
-    match crate::image_ensure_marker::decide(Some(m), digest, now) {
-        Breaker::Proceed | Breaker::InputsChanged | Breaker::RetryDue => PrepareAction::Build,
-        Breaker::Refuse => match m.next_retry_at {
-            Some(t) => PrepareAction::Busy {
-                retry_after_s: t.saturating_sub(now).max(1),
+    match crate::image_ensure_marker::decide(Some(m), digest) {
+        Breaker::Proceed | Breaker::InputsChanged => PrepareAction::Build,
+        Breaker::Refuse => PrepareAction::Failed(crate::image_ensure_marker::refusal(m, now)),
+        // A background retry is scheduled (1776-brk3). Until it is due the
+        // agent is told busy; once it is due and the marker still stands, the
+        // ensure that scheduled it is gone, so prepare resumes the budget (the
+        // image lock keeps a live retry and this one from both building).
+        Breaker::Resume => match m.next_retry_at {
+            Some(t) if now < t => PrepareAction::Busy {
+                retry_after_s: crate::image_ensure_marker::busy_retry_after_secs(m, now)
+                    .unwrap_or(1),
             },
-            None => PrepareAction::Failed(crate::image_ensure_marker::refusal(m, now)),
+            _ => PrepareAction::Build,
         },
     }
 }

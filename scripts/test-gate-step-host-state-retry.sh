@@ -50,7 +50,7 @@ root() {
     sed -e "s|@RUNS@|$r/runs.log|" -e "s|@REDS@|$reds|" > "$r/scripts/stub-hs.sh" <<'STUB'
 #!/usr/bin/env bash
 echo run >> "@RUNS@"
-n="$(wc -l < "@RUNS@")"
+n="$(wc -l < "@RUNS@" | tr -d ' ')"  # BSD wc pads the count
 if [ "$n" -le @REDS@ ]; then echo "violation:stub-hs:run-$n"; exit 1; fi
 echo "ok:stub-hs:run-$n"
 STUB
