@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: affordance-slice-every-blocked-nix-store-gc-verdict-of-nix-toolbox-says-why-and-what-clears-it
+    order: 1247-ngc5
+    parent_order: 1247-amcu
+    status: in_progress
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [affordance, refusal, nix, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - scripts/nix-toolbox.sh
+      - scripts/test-nix-toolbox.sh
+    title: |
+      1247-amcu slice — FAMILY: the three blocked:nix-store-gc:* verdicts of scripts/nix-toolbox.sh store_gc (nix-unusable, unresolved-deps, collection-failed) carry a why: and a remedy: line
+    context: |
+      Picked by lenovinha at the coordinator's request (2026-10-18) as the next family by scripts/rank-refusal-hits.sh that actually lacks why/remedy. blocked:nix-store-gc:nix-unusable is rank 5 (4 recorded hits; 1421-3pd6 measured it on yoga), and it prints nothing but the token. unresolved-deps says why but its remedy is "Fix the flake evaluation first". collection-failed says what failed but not what to do.
+      Ranks 2-4 and 6-9 were read and already carry their remedy as prose, so they are left alone (relabelling them would move the audit count without unsticking anyone). The cycle-preflight.sh blocked:preflight:plan:* family (ranks 11, 27, 28) is genuinely bare, but draft PR #386 (1637-cnxq) edits the same hunks of that file, so it waits. nix-toolbox.sh:320-326 are false positives: every caller prints _rung_afford.
+      The verdict lines stay byte-identical (test-nix-toolbox.sh pins stdout); why/remedy go to stderr beside them, naming the rule rather than a host-specific answer.
+    exit_criteria:
+      - 'each blocked:nix-store-gc:* site emits a why: and a remedy: line on stderr beside its unchanged verdict line (pre-fix: FAILS on all three)'
+      - 'NEGATIVE CONTROL (1247-amcu criterion 5): for nix-unusable, the stated remedy (scripts/nix-toolbox.sh ensure, then gc) is EXECUTED in a fixture on a host whose toolbox exists without nix, and gc then gets past the store ping'
+      - 'the 17 existing test-nix-toolbox.sh arms stay green'
+    verifiable_closure: |
+      bash scripts/test-nix-toolbox.sh passes with the new affordance arms; pre-fix: the new arms FAIL.
+    provenance: |
+      Filed by lenovinha at the coordinator's request, 2026-10-18.
+    events:
+      - type: filed
+        ts: "2026-10-18T14:02:10Z"
+        host: lenovinha
+        summary: |-
+          The next 1247-amcu slice: the blocked:nix-store-gc:* family of nix-toolbox.sh. Filed and claimed in one fragment by lenovinha.
