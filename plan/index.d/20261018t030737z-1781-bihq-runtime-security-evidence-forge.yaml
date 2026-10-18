@@ -1,0 +1,77 @@
+packets:
+  - packet_id: runtime-security-evidence-closes-the-gap-between-declared-and-enforced-selinux-identity-and-encrypted-service-access
+    order: 1781-bihq
+    status: pending
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    size: L
+    pickup_role: linux
+    capability_tags: [security, selinux, identity, tls, audit, verification, cross-platform]
+    related: [1252-qyii, 142, 1684-tx37, 1685-kwmr, 1688-ideu, 1689-echb, 1690-iqh5, 1691-96gk, 1692-37qz, 1693-9qfb, 1694-j2sk, 1780-jxc3]
+    depends_on: []
+    title: "Runtime security evidence: prove SELinux, authenticated authorization and protected service paths rather than configured intent"
+    context: |
+      Operator 2026-10-18 requested a delegated security audit and specs/plan for SELinux, SPIFFE/SPIRE-like identity, git/inference transport and CA coverage, while preserving agent productivity. Planning only: no production policy toggle, CA rotation, privilege or UX change performed.
+      Three delegated agents audited SELinux/runtime, identity/authorization and transport/CA. Read-only code observations at linux-next@b476105364b876034b002f15c1605151a6c9f6ea. Observed siblings main=bf21de9673c93ac299844ef9afff30a8e5dae4b6; windows-next=b38f7105262afdd2805e947e50d126ea58a4cbfa; osx-next=49731c152273395cf95fd9f63249844cac707a57. Bootstrap intent spec_authoring; read methodology/spec-system.yaml, litmus.yaml, verification.yaml, provenance.yaml and router plus relevant active/draft specs. Broad forge-plan questions returned unsupported; spec RAG index unavailable; used project-info and documented unavailable file-discovery fallback.
+      Existing work: 1684-tx37 umbrella pending with eleven unchecked tasks in workload-identity-plane; 1252-qyii ready SELinux research; 142 pending per-boot channel hardening. Security-tagged in_progress query returned no rows at this baseline. Other active work includes browser and credential/launch paths, so absence of a tagged claim is not evidence no one is working privately. No external agent messages were sent. Reuse these owners and append the findings below rather than file duplicate remedies.
+      Supplemental OpenSpec change enforce-runtime-security-evidence is at openspec/changes/enforce-runtime-security-evidence on work/1781-bihq. Proposal/design/spec/tasks all created; strict OpenSpec validation passed. It adds runtime-security-evidence acceptance behavior, not a competing identity plane. This planning artifact has NO runtime verification claim and NO executable litmus binding yet.
+      P1 confirmed code gaps:
+      - crates/tillandsias-podman/src/policy.rs:17-22 mandates label=disable, :214-219 calls alternative labels weaker; container_spec.rs:130-146 defaults disabled labels. Active security-privacy-isolation/podman-orchestration specs also require this; reconcile with 1693 rather than silently invert code.
+      - images/selinux/vault_container.cil:41 declares typepermissive vault_container_t; vault_bootstrap.rs:4386-4407 selects it or falls back to disabled labels. Global Enforcing does not prove that workload domain enforces.
+      - crates/tillandsias-secure-channel/src/lib.rs:67-119,143-192 derives PSK from public guest executable digest and public context. This can bind version but is not private node/workload identity material. Existing order142 owns real secret provisioning; test release-bytes-only impersonation in an isolated fixture and require refusal after remediation.
+      - crates/tillandsias-plan/src/pipeline.rs:130,173-218 only supports http:// and uses TcpStream; semantic_expert.rs:293 constructs HTTP. Inference TLS front alone cannot fix clients; include embeddings/experts, validated CA/client identity and backend-port denial in1690.
+      - main.rs:14370 deliberately retains anonymous git:// fetch even with SSH push; images/git/entrypoint.sh:512 enables anonymous receive-pack. 1685 owns receive retirement; add protected-fetch decision to1688. main.rs:14386 handles known-hosts write only on success; reproduce failure before claiming an accepting-path bypass.
+      - main.rs:16274-16275 readiness follows redirects and accepts invalid certs; vault_bootstrap.rs:2678,2721 uses HTTPS loopback with VAULT_SKIP_VERIFY=true (a verification exception, not plaintext). Router base.Caddyfile:18 keeps HTTP8080 and TLS8443. browser_open.rs:416 Chromium uses targeted enclave-key SPKI exemption; test actual hostname/expiry/server identity rather than asserting ordinary CA verification.
+      P1/P2 identity design gaps:
+      - workload-identity-plane/specs/workload-identity/spec.md:21 permits MCS alone as listener authentication; isolation is defense in depth, not caller-role attestation. Require lifecycle-safe kernel peer identity or authenticated cryptographic identity, then service/action/resource authorization. CertA+tokenB, wrong-service server cert, cross-lane target and forged identity headers must refuse.
+      - Draft defines one-hour lane certs but lacks finite session/revocation bounds, key rotation, trust-bundle rollover and stopped-lane invalidation. images/git/ssh-lane-sidecar.sh:155,228 re-signs existing keys; renewal is not private-key rotation and token revocation does not revoke signed certs.
+      - peer_table.rs:15 PID-to-project map is not proof accepting path checks lifetime/cgroup; targeted investigation needed for PID reuse, namespace lookup and restart, not a confirmed bypass claim.
+      Process-only live evidence: this forge reports spc_t:s0, zero caps including bounding set, NoNewPrivs=1, Seccomp=2; AF_VSOCK socket creation returns EPERM. Host/global enforce path unavailable. Default seccomp is documented as the forge-to-guest42420 barrier at main.rs:22661-22735; test deployed syscall denial per backend. WSL unit wsl_lifecycle.rs:1957-1990 has no explicit User/SELinuxContext/systemd sandbox; daemon intentionally manages Podman and least-privilege split is already309. No current privileged production launch or forge-mounted Podman socket was confirmed.
+      Productive positive matrix: builds/toolchains, agents, sibling launch/monitoring, preview, Chromium-framework, GPU/local inference, scoped diagnostics and credential refresh must work under confinement. Negative matrix: reachable cross-lane files/sockets denied with attributable AVC; no-cert/wrong-lane/expired/wrong-CA/wrong-service refused; direct backend/plaintext fallback refused; public-release-only control peer refused; renewal outage through expiry, CA rollover and stopped long-lived session refused at declared finite bounds. Static patterns, skipped/unavailable probes or another platform's result cannot pass hardened acceptance.
+      Normal launch behavior on hosts without enforcing SELinux is a pending operator clarification (block versus explicitly approved reduced mode). This supplement does not choose either or authorize an exception; it requires missing enforcement never pass hardened acceptance. Record the answer on1252/1693 before activation.
+      Official provenance reviewed2026-10-18: https://docs.podman.io/en/latest/markdown/podman-run.1.html ; https://spiffe.io/docs/latest/spire-about/spire-concepts/ ; https://spiffe.io/docs/latest/spiffe-about/spiffe-concepts/ ; https://github.com/spiffe/spiffe/blob/main/standards/X509-SVID.md . Preserve existing borrow-SPIFFE/Vault/no-SPIRE decision; no full API/SVID conformance claim. Public digests are not node attestation.
+    exit_criteria:
+      - "Inventory every actual role/listener/caller edge and bind release/instance/platform observations; empty/missing/stale/forged/unsupported evidence cannot pass hardened acceptance"
+      - "Existing remedy owners include the audit refusal scenarios; new executable tests and litmus bindings cover every runtime-security-evidence requirement, with isolated mutation controls"
+      - "Native Linux and macOS/WSL Linux guests independently prove SELinux domain/MCS/seccomp decisions and actual TLS/SSH/socket identity plus scoped authorization"
+      - "Approved productive workloads succeed beside forbidden-operation controls; no silent label-disable, skip-verify, anonymous transport or direct backend fallback"
+      - "Record operator disposition for unsupported SELinux normal launches in the existing enforcement change before activation; no draft or unavailable test is labeled verified"
+    unscoreable: "unpinnable-until-the-guard-exists: this planning packet defines the runtime-security-evidence acceptance verifier and its adversarial fixtures; add the executable test and litmus binding together when implementing, then replace this explanation with the actual bound pin. Strict OpenSpec validation proves syntax only."
+    next_action: "Review enforce-runtime-security-evidence on work/1781-bihq and append findings to existing owners; create inventory/evidence-validator negative controls first. Keep runtime rollout separate and settle unsupported-SELinux launch policy with the operator."
+    events:
+      - type: filed
+        ts: "2026-10-18T03:07:37Z"
+        host: forge-container
+        summary: "Three-agent security audit and complete draft OpenSpec proposal/design/spec/tasks. Existing implementation owners retained; no live host enforcement claimed."
+events:
+  - packet_id: selinux-from-audit-to-enforcement-starting-with-the-forge-container-because-the-policy-sources-already-exist-unloaded-while-one-spec-mandates-label-disable-as-a-security-default-and-another-spec-asserts-guarantees-that-cannot-hold-under-it
+    event:
+      type: note
+      ts: "2026-10-18T03:07:37Z"
+      host: forge-container
+      summary: "1781-bihq audit confirms mandatory label disabling and Vault typepermissive domain. Distinguish global mode, permissive-domain list and per-container labeling; require attributable runtime denials plus productive workflows. Supplemental draft enforce-runtime-security-evidence on work/1781-bihq. Unsupported-SELinux normal-launch question pending; no exception authorized."
+  - packet_id: encrypted-channel-perboot-key-hardening
+    event:
+      type: note
+      ts: "2026-10-18T03:07:37Z"
+      host: forge-container
+      summary: "1781-bihq audit: secure-channel/lib.rs derives current PSK from PUBLIC release digest/context. Correct secret/attestation claims; require isolated release-bytes-only handshake refusal after independently provisioned non-public material is added. Confidential provisioning and install/boot scope must be explicit; encryption/version binding is not workload identity."
+  - packet_id: workload-identity-plane-spiffe-model-enclave-mtls-and-selinux-lane-confinement
+    event:
+      type: note
+      ts: "2026-10-18T03:07:37Z"
+      host: forge-container
+      summary: "1781-bihq supplements existing umbrella, not a duplicate. Draft MCS-only authentication alternative must be reconciled; require per-action/resource authorization, certA/tokenB binding, exact server identity, finite credential/session lifecycle and runtime evidence. Public binary digest is not node attestation. Preserve Vault/no-SPIRE choice; new evidence-contract proposal on work/1781-bihq."
+  - packet_id: the-inference-service-admits-only-lanes-presenting-an-enclave-client-cert
+    event:
+      type: note
+      ts: "2026-10-18T03:07:37Z"
+      host: forge-container
+      summary: "1781-bihq: migrate clients WITH frontend. pipeline.rs:173-218 rejects HTTPS and sends raw HTTP; semantic_expert.rs:293 constructs HTTP. Acceptance must prove expert/embedding success with CA validation/client identity, wrong-service/cross-lane refusal, no plaintext retry and engine-backend bypass denial."
+  - packet_id: every-enclave-listener-is-inventoried-with-its-client-authentication-mode-and-none-needs-a-waiver
+    event:
+      type: note
+      ts: "2026-10-18T03:07:37Z"
+      host: forge-container
+      summary: "1781-bihq transport map includes git fetch vs push, readiness redirects+danger_accept_invalid_certs, Vault exec loopback skip-verify, Chromium SPKI exception, router8080/8443 and backend engine ports. Inventory effective caller path/trust/authz, not URL presence. Exceptions cannot count as verified TLS; empty/missing/stale observations fail acceptance."
