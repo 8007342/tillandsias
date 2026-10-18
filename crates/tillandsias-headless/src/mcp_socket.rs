@@ -992,3 +992,211 @@ mod lane_window_tests {
         assert!(!std::sync::Arc::ptr_eq(&a, &other));
     }
 }
+
+/// Order 1779-sq9g: the red fixtures of openspec/changes/forge-diagnostics-scope.
+///
+/// Operator rulings, 2026-10-18: a forge sees exactly (a) itself, (b) the
+/// containers the host started for its lane, and (c) curated global events,
+/// which reach every concurrent forge; sibling forges and their children are
+/// never visible; retention is the current session. Each test drives the real
+/// lane dispatch (`handle_mcp_jsonrpc`) as two lanes, `a` and `b`, of ONE
+/// project, so project membership cannot be what isolates them. A fake podman
+/// lists both lanes' forge and preview containers, each with its host-set
+/// `tillandsias.lane` label, and answers `logs <name>` with `LOG-OF-<name>`.
+///
+/// RED until 1779-sq9g is implemented: the tools do not exist yet. Run with
+/// `cargo test -p tillandsias-headless --bin tillandsias --features tray --
+/// --ignored forge_diagnostics_scope_fixtures`. The implementation removes
+/// the ignores.
+#[cfg(test)]
+mod forge_diagnostics_scope_fixtures {
+    use super::*;
+
+    const PROJECT: &str = "sq9g-scope";
+    const A_FORGE: &str = "tillandsias-sq9g-scope-forge-a";
+    const A_WEB: &str = "tillandsias-web-sq9g-scope-a";
+    const B_FORGE: &str = "tillandsias-sq9g-scope-forge-b";
+    const B_WEB: &str = "tillandsias-web-sq9g-scope-b";
+
+    /// The fake podman: every container of both lanes, labelled by the host.
+    const FAKE_PODMAN: &str = r#"#!/bin/sh
+for last; do :; done
+row() { printf '{"Names":["%s"],"Id":"%s","State":"running","Labels":{"tillandsias.lane":"%s","tillandsias.role":"%s"}}' "$1" "$1" "$2" "$3"; }
+case "$1" in
+  ps|container)
+    printf '['
+    row tillandsias-sq9g-scope-forge-a sq9g-scope/a forge; printf ','
+    row tillandsias-web-sq9g-scope-a sq9g-scope/a web; printf ','
+    row tillandsias-sq9g-scope-forge-b sq9g-scope/b forge; printf ','
+    row tillandsias-web-sq9g-scope-b sq9g-scope/b web
+    printf ']\n' ;;
+  inspect)
+    case "$last" in
+      *-a) printf '[{"Name":"%s","Config":{"Labels":{"tillandsias.lane":"sq9g-scope/a"}}}]\n' "$last" ;;
+      *-b) printf '[{"Name":"%s","Config":{"Labels":{"tillandsias.lane":"sq9g-scope/b"}}}]\n' "$last" ;;
+      *) echo "Error: no such object: $last" >&2; exit 125 ;;
+    esac ;;
+  logs) echo "LOG-OF-$last" ;;
+esac
+"#;
+
+    /// Holds the podman seam and the env lock, and restores what it changed.
+    struct Seams {
+        _podman: std::sync::MutexGuard<'static, ()>,
+        _env: std::sync::MutexGuard<'static, ()>,
+        _dir: tempfile::TempDir,
+        saved: Vec<(&'static str, Option<std::ffi::OsString>)>,
+    }
+
+    impl Seams {
+        fn new(extra: &[(&'static str, String)]) -> Self {
+            let podman = crate::runtime_assets::podman_seam_lock();
+            let env = crate::test_support::env_lock();
+            let dir = tempfile::tempdir().unwrap();
+            let bin = dir.path().join("podman");
+            std::fs::write(&bin, FAKE_PODMAN).unwrap();
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+            }
+            let mut vars: Vec<(&'static str, String)> =
+                vec![("TILLANDSIAS_PODMAN_BIN", bin.display().to_string())];
+            vars.extend(extra.iter().cloned());
+            let saved = vars
+                .iter()
+                .map(|(k, _)| (*k, std::env::var_os(k)))
+                .collect();
+            for (k, v) in &vars {
+                // SAFETY: env_lock and the podman seam lock are held.
+                unsafe { std::env::set_var(k, v) };
+            }
+            Self {
+                _podman: podman,
+                _env: env,
+                _dir: dir,
+                saved,
+            }
+        }
+    }
+
+    impl Drop for Seams {
+        fn drop(&mut self) {
+            for (k, v) in self.saved.drain(..) {
+                // SAFETY: the locks are still held; they drop after this.
+                unsafe {
+                    match v {
+                        Some(v) => std::env::set_var(k, v),
+                        None => std::env::remove_var(k),
+                    }
+                }
+            }
+        }
+    }
+
+    /// One tools/call through the lane dispatch, as lane `instance`.
+    fn ask(instance: &str, tool: &str, arguments: serde_json::Value) -> serde_json::Value {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let browser = lane_browser_server(PROJECT, instance, None, true);
+        let req = serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": { "name": tool, "arguments": arguments },
+        });
+        handle_mcp_jsonrpc(PROJECT, instance, &req, &browser, &rt).expect("a reply")
+    }
+
+    fn refusal(reply: &serde_json::Value) -> &str {
+        reply["error"]["message"].as_str().unwrap_or("")
+    }
+
+    /// Arm 1: a forge cannot read a sibling forge's logs, nor its children's,
+    /// and cannot tell a sibling's container from one that does not exist.
+    #[test]
+    #[ignore = "red until 1779-sq9g is implemented (openspec/changes/forge-diagnostics-scope)"]
+    fn a_forge_cannot_read_a_siblings_or_its_childrens_logs() {
+        let _seams = Seams::new(&[]);
+        for source in [B_WEB, B_FORGE, "tillandsias-does-not-exist"] {
+            let reply = ask("a", "forge_logs", serde_json::json!({ "source": source }));
+            assert_eq!(
+                refusal(&reply),
+                format!("refused:diagnostics-scope:not-in-scope:{source}"),
+                "{reply}"
+            );
+            assert!(!reply.to_string().contains("LOG-OF-"), "{reply}");
+        }
+        let listed = ask("a", "forge_logs", serde_json::json!({}));
+        assert!(
+            listed.get("result").is_some(),
+            "the source list answers: {listed}"
+        );
+        let text = listed.to_string();
+        assert!(!text.contains(B_FORGE) && !text.contains(B_WEB), "{listed}");
+    }
+
+    /// Arm 2: a forge lists itself and the containers its lane started, and
+    /// reads its children's logs.
+    #[test]
+    #[ignore = "red until 1779-sq9g is implemented (openspec/changes/forge-diagnostics-scope)"]
+    fn a_forge_reads_its_own_childrens_logs() {
+        let _seams = Seams::new(&[]);
+        let listed = ask("a", "forge_logs", serde_json::json!({}));
+        let text = listed["result"]["structuredContent"].to_string();
+        assert!(text.contains(A_FORGE) && text.contains(A_WEB), "{listed}");
+        let read = ask("a", "forge_logs", serde_json::json!({ "source": A_WEB }));
+        assert!(
+            read["result"]["structuredContent"]
+                .to_string()
+                .contains(&format!("LOG-OF-{A_WEB}")),
+            "{read}"
+        );
+    }
+
+    /// Arm 3: a producer-authored global event (a GitHub token refresh)
+    /// reaches every concurrent forge, carries only the envelope and its
+    /// kind's allowlisted fields, and no credential present in the producing
+    /// process reaches either reply.
+    #[cfg(feature = "vault")]
+    #[test]
+    #[ignore = "red until 1779-sq9g is implemented (openspec/changes/forge-diagnostics-scope)"]
+    fn a_global_event_reaches_every_forge_with_only_allowlisted_fields() {
+        let canary = format!("CANARY-sq9g-{}", std::process::id());
+        let _seams = Seams::new(&[
+            ("GH_TOKEN", canary.clone()),
+            ("GITHUB_TOKEN", canary.clone()),
+            ("VAULT_TOKEN", canary.clone()),
+        ]);
+        // Both lanes are live (their rings exist) before the event.
+        let _ = ask("a", "forge_events", serde_json::json!({}));
+        let _ = ask("b", "forge_events", serde_json::json!({}));
+        crate::vault_bootstrap::github_token_check_before_use(
+            || {
+                Ok(crate::vault_bootstrap::DueCheck::Rotated {
+                    expires_at: 1_800_000_000,
+                    refresh_expires_at: None,
+                })
+            },
+            false,
+        );
+        const ENVELOPE: [&str; 5] = ["schema_version", "seq", "at", "scope", "kind"];
+        const ALLOWED: [&str; 2] = ["service", "outcome"];
+        for lane in ["a", "b"] {
+            let reply = ask(lane, "forge_events", serde_json::json!({}));
+            assert!(!reply.to_string().contains(&canary), "lane {lane}: {reply}");
+            let events = reply["result"]["structuredContent"]["events"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            let refresh: Vec<_> = events
+                .iter()
+                .filter(|e| e["kind"] == "credential.refresh")
+                .collect();
+            assert_eq!(refresh.len(), 1, "lane {lane}: {reply}");
+            let keys: Vec<&String> = refresh[0].as_object().unwrap().keys().collect();
+            assert!(
+                keys.iter()
+                    .all(|k| ENVELOPE.contains(&k.as_str()) || ALLOWED.contains(&k.as_str())),
+                "lane {lane}: only the envelope and the allowlist, got {keys:?}"
+            );
+            assert_eq!(refresh[0]["scope"], "global");
+        }
+    }
+}
