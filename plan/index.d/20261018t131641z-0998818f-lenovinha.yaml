@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: an-image-built-by-init-or-build-image-outside-the-on-demand-ensure-is-keep-id-warmed-on-a-store-that-cannot-shift
+    field: status
+    value: in_progress
+    ts: "2026-10-18T13:16:41Z"
+    host: lenovinha
+
+events:
+  - packet_id: an-image-built-by-init-or-build-image-outside-the-on-demand-ensure-is-keep-id-warmed-on-a-store-that-cannot-shift
+    event:
+      type: note
+      ts: "2026-10-18T13:16:41Z"
+      host: lenovinha
+      summary: |-
+        picked up by lenovinha; slots freed by #539 and #543
