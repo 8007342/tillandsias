@@ -74,9 +74,10 @@ SOURCE READ (2026-10-17, `crates/tillandsias-headless`):
   with `refused:image-ensure:<image>:build-failed-previously` naming the
   log, the first failure's cause (1744-xjfw's text) and the remedy. The
   marker clears itself when the inputs digest changes (a fix shipped) and on
-  an explicit operator retry (`tillandsias --retry-image <name>`, the tray's
-  "Retry build" item, or the forge's `prepare(force=true)`). A second
-  attempt is allowed only after a backoff (10 min, then 1 h, then operator).
+  an explicit operator retry (`tillandsias --retry-image <name>` or the
+  forge's `prepare(force=true)`; no tray item). The failing ensure retries
+  twice in the background on exponential backoff, then declares the image
+  failed (operator ruling 2026-10-17).
 - **Bounded.** Before a build: free space on the podman store ≥ the image's
   declared need (a per-image constant: forge-base 8 GiB, chromium-core
   6 GiB, others 2 GiB) plus 1 GiB, else refuse

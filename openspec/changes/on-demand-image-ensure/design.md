@@ -53,8 +53,9 @@ ensure_image(root, name, tag, caller) -> Result<Ensured, EnsureRefusal>
        progress -> push_udp_event + helper log `STEP n/m` (exists for toolchains)
   9. Ok  -> apply aliases (exists), marker.clear(), verdict line
      Err -> marker.record(digest, cause = describe_image_ensure_failure(...),
-                           attempt += 1, next_retry_at = backoff(attempt)),
-            verdict line, Err(format_on_demand_image_build_error)
+                           attempt += 1, next_retry_at = now + delay | null);
+            attempts left: sleep delay, back to 8 (same lock, same verdict);
+            none left: Err(format_on_demand_image_build_error)
 ```
 
 Dependencies resolve in order through the existing recursion in step 3/7:
@@ -75,10 +76,17 @@ with the session, a known-bad build input does not).
   "log": "/home/u/.cache/tillandsias/tillandsias-init-chromium-framework.log" }
 ```
 
-Backoff: attempt 1 → retry allowed after 10 min; attempt 2 → 1 h; attempt ≥ 3
-→ never automatically (`next_retry_at: null`), operator retry only. The
-digest key is the whole reason this is safe: a fix to any input changes the
-digest and the marker is ignored and removed.
+Retries (operator ruling 2026-10-17, superseding 10 min / 1 h / operator):
+the failing ensure retries in the background twice, 30 s then 2 min after
+the failures (`RETRY_BUDGET`, `retry_delay_ms`), then records
+`next_retry_at: null` — declared failed, operator retry or an input change
+only. While a retry is scheduled the marker carries its time: the tray keeps
+showing the build status line, and an agent asking (`browser.open`) gets
+`state: preparing`, "busy", `retry_after_s` = the time left. A marker with a
+scheduled retry found under the lock means its ensure was killed mid-backoff,
+so the next ensure resumes the budget. There is no tray "Retry build" item.
+The digest key is the whole reason this is safe: a fix to any input changes
+the digest and the marker is ignored and removed.
 
 Refusal text (fast, no podman build spawned):
 
@@ -86,8 +94,9 @@ Refusal text (fast, no podman build spawned):
 refused:image-ensure:chromium-framework:build-failed-previously
   inputs sha256:ab12… failed 2× (last 2026-10-17T16:02Z): <cause, first line>
   log: ~/.cache/tillandsias/tillandsias-init-chromium-framework.log
-  next automatic retry: none — run `tillandsias --retry-image chromium-framework`
-  (or the tray's "Retry build"), or change an image input.
+  remedy: no automatic retry is left; a change to any image input (a
+  Tillandsias update) retries at once; on Linux `tillandsias --retry-image
+  chromium-framework` retries now
 ```
 
 `IMAGE_BUILD_REMEDY` stops saying "retried on each launch".
