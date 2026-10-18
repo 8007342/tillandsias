@@ -143,7 +143,8 @@ pub struct BrowserMcpServer {
 }
 
 /// Order 1776-pr0g: how long a caller waits before asking again while a
-/// window's engine image builds on first use.
+/// window's engine image builds on first use (the usual
+/// [`LaunchError::Preparing`] `retry_after_s`).
 pub const PREPARING_RETRY_AFTER_S: u64 = 10;
 
 impl BrowserMcpServer {
@@ -847,12 +848,13 @@ impl BrowserMcpServer {
                 engine,
                 notice,
                 step,
+                retry_after_s,
             }) => {
                 let mut result = json!({
                     "state": "preparing",
                     "engine": engine.label(),
                     "notice": notice,
-                    "retry_after_s": PREPARING_RETRY_AFTER_S,
+                    "retry_after_s": retry_after_s,
                 });
                 if let Some((n, m)) = step {
                     result["step"] = json!(n);
@@ -2312,6 +2314,7 @@ mod tests {
                     engine: request.engine,
                     notice: "Preparing the Chromium engine (first use) — step 3/9: installing system packages; call browser.open again in a few seconds".into(),
                     step: Some((3, 9)),
+                    retry_after_s: PREPARING_RETRY_AFTER_S,
                 });
             }
             Ok(launcher::ContainerHandle {

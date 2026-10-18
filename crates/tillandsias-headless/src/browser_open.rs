@@ -598,13 +598,17 @@ fn engine_index(engine: Engine) -> usize {
 /// [`LaunchError::Preparing`] with the step the build is on; calls while it
 /// runs return the same with the newer step; the first call after it
 /// finished collects its outcome: the first-use notice, or the failure.
-/// `progress` reads a build's step (the helper log, live).
+/// `progress` reads a build's step (the helper log, live). `busy` reads the
+/// seconds until a failed build's scheduled automatic retry (its marker,
+/// 1776-brk3), so the caller is told "busy, try again in N" rather than
+/// that anything failed.
 pub(crate) fn engine_image_ready_or_preparing(
     engine: Engine,
     slot: &mut Option<EngineBuild>,
     present: impl Fn(&str) -> bool,
     spawn: impl FnOnce(),
     progress: impl Fn(&str) -> Option<(u64, u64, String)>,
+    busy: impl Fn(&str) -> Option<u64>,
 ) -> Result<Option<String>, LaunchError> {
     if let Some(build) = slot.as_mut() {
         match build.outcome.take() {
@@ -616,7 +620,7 @@ pub(crate) fn engine_image_ready_or_preparing(
                 *slot = None;
                 return Err(LaunchError::Spawn(e));
             }
-            None => return Err(preparing(engine, &progress)),
+            None => return Err(preparing(engine, &progress, &busy)),
         }
     }
     let site = match engine {
@@ -632,14 +636,16 @@ pub(crate) fn engine_image_ready_or_preparing(
     }
     *slot = Some(EngineBuild { outcome: None });
     spawn();
-    Err(preparing(engine, &progress))
+    Err(preparing(engine, &progress, &busy))
 }
 
 /// The reply while an engine's image builds: the step of whichever of its
-/// images (or their bases) is building.
+/// images (or their bases) is building, or, while one waits for its
+/// automatic retry, how long to wait.
 fn preparing(
     engine: Engine,
     progress: &impl Fn(&str) -> Option<(u64, u64, String)>,
+    busy: &impl Fn(&str) -> Option<u64>,
 ) -> LaunchError {
     let site = match engine {
         Engine::Chromium => crate::launch_images::LaunchSite::ChromiumWindow,
@@ -652,11 +658,24 @@ fn preparing(
         }
         names.push(name);
     }
+    let retry = tillandsias_browser_mcp::server::PREPARING_RETRY_AFTER_S;
+    if let Some(wait) = names.iter().rev().find_map(|name| busy(name)) {
+        let wait = wait.max(retry);
+        return LaunchError::Preparing {
+            engine,
+            notice: format!(
+                "Preparing the {} engine (first use) — busy; call browser.open again in {} min",
+                engine.label(),
+                wait.div_ceil(60)
+            ),
+            step: None,
+            retry_after_s: wait,
+        };
+    }
     let step = names
         .iter()
         .rev()
         .find_map(|name| progress(name).map(|p| (*name, p)));
-    let retry = tillandsias_browser_mcp::server::PREPARING_RETRY_AFTER_S;
     let notice = match &step {
         Some((name, (n, m, what))) => format!(
             "Preparing the {} engine (first use) — building {name}, step {n}/{m}: {what}; call browser.open again in {retry} s",
@@ -671,6 +690,7 @@ fn preparing(
         engine,
         notice,
         step: step.map(|(_, (n, m, _))| (n, m)),
+        retry_after_s: retry,
     }
 }
 
@@ -706,6 +726,14 @@ impl TrayBrowserContainers {
                 });
             },
             crate::image_build_progress::image_build_progress,
+            |name: &str| {
+                let dir = crate::image_ensure_marker_dir()?;
+                let marker = crate::image_ensure_marker::load(&dir, name)?;
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0, |d| d.as_secs());
+                crate::image_ensure_marker::busy_retry_after_secs(&marker, now)
+            },
         )
     }
 }
@@ -882,6 +910,7 @@ mod tests {
             (name == "chromium-core")
                 .then(|| (step.get(), 9, "installing system packages".to_string()))
         };
+        let no_wait = |_: &str| None;
         let mut slot = None;
         let first = engine_image_ready_or_preparing(
             Engine::Chromium,
@@ -889,6 +918,7 @@ mod tests {
             |_| false,
             || spawned.set(spawned.get() + 1),
             progress,
+            no_wait,
         )
         .expect_err("missing: preparing");
         match &first {
@@ -908,6 +938,7 @@ mod tests {
             |_| false,
             || spawned.set(spawned.get() + 1),
             progress,
+            no_wait,
         )
         .expect_err("still preparing");
         assert!(
@@ -928,6 +959,7 @@ mod tests {
             |_| true,
             || spawned.set(spawned.get() + 1),
             progress,
+            no_wait,
         )
         .expect("collected");
         assert!(done.is_some_and(|n| n.contains("first use")));
@@ -939,6 +971,7 @@ mod tests {
             |_| true,
             || spawned.set(spawned.get() + 1),
             progress,
+            no_wait,
         )
         .expect("present");
         assert_eq!(ready, None);
@@ -955,6 +988,7 @@ mod tests {
             |_| false,
             || spawned.set(spawned.get() + 1),
             progress,
+            no_wait,
         )
         .expect_err("failed");
         assert!(
@@ -962,6 +996,64 @@ mod tests {
             "{failed:?}"
         );
         assert!(slot.is_none());
+    }
+
+    /// 1776-brk3, operator ruling 2026-10-17: while a failed build waits for
+    /// its automatic retry, an agent is told "busy, try again in N min" with
+    /// a matching retry_after, never that anything failed.
+    #[test]
+    fn a_build_waiting_for_its_automatic_retry_reports_busy_with_a_retry_after() {
+        let progress =
+            |name: &str| (name == "chromium-core").then(|| (7, 9, "installing fonts".to_string()));
+        let busy = |name: &str| (name == "chromium-core").then_some(150);
+        let mut slot = Some(EngineBuild { outcome: None });
+        let waiting = engine_image_ready_or_preparing(
+            Engine::Chromium,
+            &mut slot,
+            |_| false,
+            || {},
+            progress,
+            busy,
+        )
+        .expect_err("busy");
+        match &waiting {
+            LaunchError::Preparing {
+                notice,
+                step,
+                retry_after_s,
+                ..
+            } => {
+                assert_eq!(*retry_after_s, 150);
+                assert_eq!(*step, None, "the failed attempt's step is not reported");
+                assert!(
+                    notice.contains("busy") && notice.contains("in 3 min"),
+                    "{notice}"
+                );
+                assert!(!notice.contains("fail"), "{notice}");
+            }
+            other => panic!("{other:?}"),
+        }
+        // NEGATIVE CONTROL: no scheduled retry, so the usual step and wait.
+        let building = engine_image_ready_or_preparing(
+            Engine::Chromium,
+            &mut slot,
+            |_| false,
+            || {},
+            progress,
+            |_: &str| None,
+        )
+        .expect_err("building");
+        assert!(
+            matches!(
+                building,
+                LaunchError::Preparing {
+                    step: Some((7, 9)),
+                    retry_after_s: tillandsias_browser_mcp::server::PREPARING_RETRY_AFTER_S,
+                    ..
+                }
+            ),
+            "{building:?}"
+        );
     }
 
     /// 1776-ch4m, the operator's live hole: a forge's first browser.open on a
