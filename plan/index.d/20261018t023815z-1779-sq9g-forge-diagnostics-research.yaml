@@ -1,0 +1,69 @@
+# Research intake only; no implementation or UX approval is implied.
+packets:
+  - packet_id: scoped-forge-diagnostics-collection-query-and-curated-events-research
+    order: 1779-sq9g
+    status: pending
+    kind: research
+    priority: p2
+    desired_release: v0.5
+    size: L
+    pickup_role: linux
+    capability_tags: [research, observability, mcp, privacy, forge]
+    depends_on: []
+    title: "Scoped forge diagnostics: compare Kafka/Flume alternatives and extend lane MCP evidence queries"
+    context: |
+      Operator request 2026-10-18: investigate Kafka, Flume and popular alternatives for transparent agent access to relevant web/sibling/forge, build and launch evidence; broadcast curated operational facts without exposing Vault internals or credentials. Research authorized; no behavior, UX or access expansion implemented or approved here.
+      Scope: source-backed design hypothesis, not measured performance or a popularity ranking. Three research agents examined transport, collection/query, and repository integration. Selected bootstrap intent investigation_only; evidence read through project-info, forge-plan and official web documentation. Broad expert queries returned unsupported, so repository discovery used the documented unavailable fallback. Missing referenced markdown-distillation audit file: used methodology/markdown-distillation.yaml instead. Research preserved directly in the canonical plan fragment surface.
+      Checkout inspected at bdc9285f8 on linux-next (updated from 468e42147). Observed sibling heads: main=bf21de9673c93ac299844ef9afff30a8e5dae4b6; linux-next=bdc9285f8cc45a0d2a8618587a1114d5b4ce506b; windows-next=b38f7105262afdd2805e947e50d126ea58a4cbfa; osx-next=49731c152273395cf95fd9f63249844cac707a57.
+      Existing foundation:
+      - crates/tillandsias-headless/src/mcp_socket.rs:294-307 advertises service_logs for the lane's WEB preview; dispatch uses listener-derived project/instance, not caller-selected tenancy.
+      - crates/tillandsias-headless/src/local_web_preview.rs:2072-2137 validates identity/ownership, caps output at 500 lines/64 KiB and 15 seconds, and retrieves last failed startup output. It concatenates stdout/stderr, so this is not a complete ordered cross-source timeline. No redaction found in that implementation; do not describe existing raw preview output as curated.
+      - openspec/specs/external-logs-layer/spec.md:19-60 specifies producer RW and consumer parent-directory RO mounts. This broader all-producer model needs reconciliation with scoped query access, not automatic implementation. Current ContainerProfile implementation was not found to expose the declared external log fields; distinguish spec from shipped behavior.
+      - methodology/forge-diagnostics.yaml:12-34 prohibits broader host mounts, host credential exposure, privileged containers or socket escapes. A trusted collector may use existing runtime authority, but agents must not receive that authority.
+      - images/default/lib-common.sh:197 appends startup/build lifecycle output to /tmp/forge-lifecycle.log; container_profile.rs:89 already models private container logs. These are useful initial sources.
+      - images/vault/external-logs.yaml:7 declares audit request/response records and startup/unseal/policy output. A declared manifest is not sufficient evidence that a file is safe for other forges. Any replacement manifest needs audience, ownership, confidentiality, allowed fields and retention.
+      Transport comparison (widely used relevant alternatives, no quantitative popularity claim):
+      - Kafka: durable event backbone, ACLs and replay; requires operational ownership and a separate search backend. Consider shared fleet-scale deployment if already present, not default per forge. https://kafka.apache.org/43/operations/kraft/ and https://kafka.apache.org/43/operations/multi-tenancy/
+      - Flume: sources/channels/sinks collect and forward; delivery channels are not historical search. Homepage lists 1.11.0 (2022-10-24) as latest at review; slow cadence does not prove retirement. Poor greenfield fit. https://flume.apache.org/ and https://flume.staged.apache.org/FlumeUserGuide.html
+      - NATS JetStream: preferred optional broker for curated event fan-out and replay on reconnect. Account subject isolation supports explicitly shared status. Core NATS alone misses disconnected consumers. Explicitly cap stream/account storage and process resources; storage limits are not RSS limits. File-store sync/durability settings require review. https://docs.nats.io/concepts/jetstream and https://docs.nats.io/learn/security/accounts-and-multitenancy and https://docs.nats.io/reference/config/jetstream/
+      - Redpanda: Kafka-compatible alternative when compatibility matters; production sizing and development durability concessions prevent assuming a cheap durable per-forge deployment. https://docs.redpanda.com/25.2/deploy/redpanda/manual/production/requirements/ and https://docs.redpanda.com/current/deploy/redpanda/manual/production/dev-deployment/
+      - Pulsar: brokers, BookKeeper and metadata service suit shared infrastructure; more components than needed initially. Current project describes Oxia as recommended for new clusters, so do not claim ZooKeeper is mandatory. https://pulsar.apache.org/
+      - RabbitMQ Streams: retained replayable append-only logs, sensible if RabbitMQ already exists. https://www.rabbitmq.com/docs/streams
+      - Redis Streams: bounded short status history if Redis already exists; memory and retention need explicit limits. https://redis.io/docs/latest/develop/data-types/streams/
+      Collection and query comparison:
+      - Vector is preferred collector hypothesis for explicit parsing, remapping and curation. Fluent Bit is a strong alternative for collection footprint; OTel Collector is attractive when logs/metrics/traces should share a standard pipeline. None is a historical query store. https://vector.dev/docs/reference/configuration/transforms/ and https://docs.fluentbit.io/manual/about/what-is-fluent-bit and https://opentelemetry.io/docs/collector/
+      - VictoriaLogs single-node is preferred query-store hypothesis: HTTP search, tail, statistics and surrounding evidence. Tenant IDs are NOT authentication; put it behind the trusted gateway. https://docs.victoriametrics.com/victorialogs/querying/ and https://docs.victoriametrics.com/victorialogs/#multitenancy
+      - Loki is credible if Grafana exists; supports single-process mode but ephemeral run/build IDs must not become unbounded stream labels. Requires an external authorization layer. https://grafana.com/docs/loki/latest/get-started/deployment-modes/ and https://grafana.com/docs/loki/latest/get-started/labels/bp-labels/ and https://grafana.com/docs/loki/latest/operations/authentication/
+      - ClickHouse is strong for SQL fleet analytics but brings schema/ordering/partition/merge operations. https://clickhouse.com/docs/guides/use-cases/observability/build-your-own/managing-data
+      - SQLite FTS5 plus structured events is a serious embedded baseline for bounded local histories; compare before adding services. Retention, ingestion, tailing and concurrency become our responsibility. https://www.sqlite.org/fts5.html
+      Proposed architecture (engineering inference, not ratified):
+      Trusted launch/build/runtime producers -> allowlisted collector/curation -> bounded query history -> existing authenticated lane MCP -> agents. Keep the service outside the forge it diagnoses where the existing enclave lifecycle permits; no new host filesystem exposure. Start without a broker; add JetStream when independent live consumers or replay justify it. Use OTel-compatible fields/optional OTLP rather than requiring a full tracing deployment.
+      Scope and privacy contract to design before implementation:
+      - Own-lane stdout/stderr, builds, launches, readiness, exit and OOM events are accessible; sibling details require trusted dependency/ownership mapping, not membership in the same network. Same project is not automatically same lane authorization.
+      - Shared services emit producer-authored safe facts such as credentials.refresh_succeeded/failed, service capability and affected scope. Never ingest Vault audit/entrypoint/debug logs into an agent-readable store and assume regex makes them safe.
+      - Identity/scope comes from trusted collector metadata and authenticated MCP listener; caller-supplied forge_id, tenant headers, container labels, query predicates or log-message fields cannot widen access. Backend inaccessible directly from agent lanes.
+      - Allowlist structured fields. Exclude credential values, authorization/cookie headers, environment dumps, request bodies and secret paths. Arbitrary app logs can contain secrets: redaction is best effort, so avoid claiming complete scrubbing. Separate private raw evidence policy from curated shared events.
+      - Curate before any agent-visible storage, broker, retry buffer or dead-letter route. Vector remap defaults drop_on_error=false (can forward the original event); mandatory curation must drop errors/aborts and never expose rejected raw output. https://vector.dev/docs/reference/configuration/transforms/remap/
+      - OTel sensitive-data guidance supports minimization/allowlisting; processors do not prove arbitrary free-text is secret-free. https://opentelemetry.io/docs/security/handling-sensitive-data/
+      - Log content is untrusted data, including embedded agent instructions. Retrieval must not execute log-supplied commands, paths or URLs. Sanitization is not a complete prompt-injection defense.
+      Evidence/query contract:
+      - Correlate trusted project/forge/lane, source/container, launch_id/build_id/run_id, event_id/source sequence, event/ingest time, severity/type, sanitized message, exit/OOM reason, optional trace/span IDs and curation-policy version. Avoid secrets in identifiers.
+      - Capture before container creation: build output, launch wrappers and early provisioning failures matter as much as running-container logs. Keep source ordering and distinguish event time from ingestion time; do not invent a global order.
+      - Proposed tool operations: diagnose_launch(launch_id), query_logs(filters), log_context(event_id), recent_events(cursor). Names illustrative, not approved UX. Deterministic bounded retrieval returns timeline/evidence IDs, state, collection gaps, retention bounds, truncation, cursor and next checks; an optional model summary must cite evidence and distinguish inference.
+      - Derive affected recipient sets for broadcasts. Separate retained history, live delivery and current-state projection. Deduplicate replayed events using stable IDs; use bounded long-poll/cursors for MCP rather than assuming every harness supports unsolicited delivery.
+      - Total byte/time/row/query limits, per-scope quotas and loss counters required. No silent sampling of critical lifecycle failures. Collector/backend failure must not block application launch or produce false healthy status.
+      - Retention proposal: short bounded diagnostic-output window and longer sanitized failure/lifecycle summaries. Exact TTL and byte budget unresolved. File storage on tmpfs survives process restart, not forge teardown; teardown survival requires a separately authorized existing service storage lifecycle.
+      Decision limits:
+      No live stack installed or benchmarked. No fixed RAM, throughput, latency or reliability claims established. Product/license/version review, Podman source support (Vector docker_logs is not proof of Podman compatibility), multiline handling and Linux/macOS/WSL lifecycle support remain unverified. Existing privileged Docker socket examples must not be copied into forges.
+    exit_criteria:
+      - "Review scope policy, reconcile external-logs-layer spec, and record operator/orchestrator disposition before any access or UX change"
+      - "Benchmark Vector/VictoriaLogs against SQLite baseline with representative simultaneous build storms and container churn; record idle/peak RSS, CPU, ingestion lag, p95 query latency, startup time, retention bytes and completeness"
+      - "Prove lane/dependency authorization and fail-closed curation with negative controls: cross-lane IDs/forged tenants denied, credential canaries absent, transform failures cannot expose raw data, untrusted log instructions remain evidence"
+      - "Prove early launch/build failure, OOM, exited container, reconnect replay/gaps, noisy source, backend outage, restart and teardown retention semantics through the existing lane MCP path"
+    next_action: "Review this research and settle retention, expected concurrency and sibling visibility; then author an OpenSpec change for a bounded prototype extending service_logs, without automatically deploying a broker."
+    unscoreable: "Research comparison and operator selection have no executable truth oracle; implementation is not authorized by this intake. A subsequent prototype must define and bind isolation, curation and lifecycle litmus tests before claiming delivered behavior."
+    events:
+      - type: filed
+        ts: "2026-10-18T02:38:15Z"
+        host: forge-container
+        summary: "Source-backed research from three delegated agents; proposal only, no services installed and no UX/access changes. Preserve comparison, existing service_logs seam, scoped curation risks and falsifiable prototype criteria."
