@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha on the coordinator's request (macuahuitl-fedora,
+# 2026-10-18), from a side finding while reproducing 1780-jxc3.
+packets:
+  - packet_id: a-cli-lane-for-a-project-the-running-tray-serves-fails-raw-on-the-trays-mcp-socket-instead-of-attaching-or-refusing-by-name
+    order: 1783-k5hm
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    size: S
+    pickup_role: linux
+    capability_tags: [lane, mcp, tray, cli, ux]
+    related: [1780-jxc3, 1452-ihxp]
+    depends_on: []
+    title: |
+      `tillandsias --bash <project>` while the tray runs, for a project under ~/src the tray already serves, aborts with the raw "per-lane MCP listener failed: mcp socket already has a live owner" after starting the git mirror; it should attach through the tray's socket or refuse up front with a named message telling the user to launch from the tray
+    context: |
+      MEASURED on lenovinha 2026-10-18 (v56.10.17.1 tray running, pid 2277276): a no-tty `tillandsias --bash ~/src/hello-world --debug` started tillandsias-git-hello-world and then exited with
+      `Error: runtime_unavailable: per-lane MCP listener failed: mcp socket already has a live owner; refusing to unlink: /run/user/1000/tillandsias/mcp/hello-world-default/mcp.sock`
+      (the refusal is in mcp_socket.rs, the listener's stale-socket check). The tray owns the lane socket for every project it knows; the launching CLI also tries to own it (memory: the lane's mcp.sock is served by the launching process). The same command for a path outside ~/src worked, because no listener existed for it. The git mirror container the failed launch started was left running.
+      Coordinator ruling (2026-10-18): a raw failure is wrong either way. The CLI lane should either attach through the tray's socket, or refuse with a named message telling the user to use the tray.
+    exit_criteria:
+      - "a CLI lane for a project whose lane socket the running tray owns either attaches (the forge's MCP calls are served by the tray's listener) or refuses BEFORE starting any container with a named refusal that tells the user to launch from the tray; fixture red today (raw error after the git mirror starts)"
+      - "a CLI lane for a project with no live socket owner launches as today (NEGATIVE CONTROL)"
+      - "no container started by a refused launch is left running"
+    verifiable_closure: "cargo test -p tillandsias-headless <the lane-socket-owner fixture> (red on linux-next before the fix)"
+    next_action: >
+      After 1779-sq9g: decide attach versus refuse (attach needs the tray's listener to serve a CLI-launched forge's lane; refuse is a preflight on the socket owner before any podman call), write the fixture red over a held listener, then fix.
+    events:
+      - type: filed
+        ts: "2026-10-18T04:58:50Z"
+        host: lenovinha
+        summary: |-
+          CLI --bash lane for a tray-served project fails raw on the tray's mcp.sock after starting the git mirror.
