@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: retire-host-src-checkout-behind-proven-transparent-push
+    field: next_action
+    value: |-
+      WHAT IS LEFT (reconciled 2026-10-18 by lenovinha; every remaining step is the operator's):
+      1. CRITERION 3d, OPERATOR YES. The cutover plan needs the operator's approval in a ledger event, covering: whether the tray's ~/src scanning (the home submenu and the order-505 MCP sockets) stays as transitional observability or is removed; and deleting the local-launch handlers kept as #[allow(dead_code)]. The coordinator puts this question to the operator.
+      2. GAP, OPERATOR TO AUTHORIZE. The verifiable_closure asks for a launch on a host with NO ~/src/<project>. lenovinha's proofs ran with ~/src/tillandsias present, although the launch printed "host disk untouched". A no-~/src run needs ~/src/tillandsias moved aside, which is the operator's call.
+      3. CRITERION 4, OPERATOR-EXECUTED, LAST. Delete ~/src/<project> by hand; never automated.
+      DONE: criterion 1 on all three platforms (macOS 349; windows 594-pm5h; linux 778849e29, 2026-09-25); criterion 2 (8f518b30f); residual 3a (1362-u8ww: the forge resolves its own seed branch, and the launcher states CLOUD MODE); 3b (bfc383e79, #181); 3c (the cloud_mode_* tests in main.rs); the trace of 440cde994 (macuahuitl's 2026-09-11 reconciliation event).
+    ts: "2026-10-18T13:40:21Z"
+    host: lenovinha
+    replaces_sha256: "f9bb4aef1f6a29375176f00f34744258a1b66fcc240b2c47b72061d36bb62ddc"
+
+events:
+  - packet_id: retire-host-src-checkout-behind-proven-transparent-push
+    event:
+      type: note
+      ts: "2026-10-18T13:40:21Z"
+      host: lenovinha
+      summary: |-
+        reconciled: only operator steps remain
