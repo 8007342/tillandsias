@@ -28,15 +28,17 @@ today's code first (memory: exit criteria must fail on the pre-fix code).
       no longer says "retried on each launch" [1776-brk3]
       (done: `--retry-image`, the remedy. Open: the tray item, which adds a
       menu row and so needs the operator's approval under tray-ux curation;
-      `prepare(force)` with 3.2)
+      `prepare(force)` with 3.2; done in 1776-v1t4, replying busy with
+      retry_after_s while a retry is pending, per the operator's 2026-10-17
+      ruling)
 - [x] 2.3 The verdict line on every ensure decision (decided / digest /
       present / reason / marker) [1776-brk3]
 
 ## 3. One seam (v0.5)
 
-- [ ] 3.1 `build_vault_image` delegates to `ensure_image_exists` (lock,
+- [x] 3.1 `build_vault_image` delegates to `ensure_image_exists` (lock,
       detach, marker, verdict) [1776-v1t4]
-- [ ] 3.2 `toolchain_exec::prepare` stops re-spawning a build after a
+- [x] 3.2 `toolchain_exec::prepare` stops re-spawning a build after a
       failure; reports the marker's refusal [1776-v1t4]
 
 ## 4. Bound the build (v0.5)

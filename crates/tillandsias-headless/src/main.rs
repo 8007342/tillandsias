@@ -2835,7 +2835,7 @@ fn image_dependency(image_name: &str) -> Option<&'static str> {
 /// `image_build_inputs` does under `run_init` — otherwise the two paths would
 /// derive different digests for identical content and each would rebuild what
 /// the other just built.
-fn ensure_image_identity(
+pub(crate) fn ensure_image_identity(
     root: &Path,
     image_name: &str,
     version: &str,
@@ -3442,7 +3442,7 @@ fn build_failure_message<'a>(status: &str, stderr_tail: impl Iterator<Item = &'a
 /// 1776-brk3: a failed build is remembered by its inputs digest, so the
 /// remedy names the explicit retry (and that a fix to an input retries
 /// automatically) instead of promising a rebuild on every launch.
-const IMAGE_BUILD_REMEDY: &str = "The lines above name the step that failed. Later launches do not \
+pub(crate) const IMAGE_BUILD_REMEDY: &str = "The lines above name the step that failed. Later launches do not \
      rebuild these same inputs every time: they refuse fast and retry automatically (10 min after \
      the first failure, 1 h after the second, then once a day). To retry now: on Linux run \
      `tillandsias --retry-image <image>` (or `tillandsias --init`); from the macOS or Windows tray, \
@@ -3456,7 +3456,7 @@ pub(crate) fn image_ensure_marker_dir() -> Option<PathBuf> {
         .map(|d| d.join(image_ensure_marker::MARKER_DIR))
 }
 
-fn unix_now_secs() -> u64 {
+pub(crate) fn unix_now_secs() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())

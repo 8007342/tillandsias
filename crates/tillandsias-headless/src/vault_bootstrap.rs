@@ -3666,45 +3666,48 @@ pub async fn revoke_pending_container_tokens(debug: bool) {
 fn build_vault_image(debug: bool) -> Result<String, String> {
     let version = crate::VERSION.trim();
     let root = crate::resolve_runtime_asset_root(version, debug)?;
-    let build_args = std::collections::BTreeMap::new();
-    let dependency_digests = std::collections::BTreeMap::new();
+    // Order 1776-v1t4: through the one seam, so a Vault build has the per-image
+    // lock (a --cloudflare-login racing the tray no longer builds twice), the
+    // detached helper, the failure marker and the verdict line. Order 253
+    // holds: vault has no image_dependency, so the seam builds only vault; and
+    // an image --init already built is a Skip there, not a rebuild.
+    let tag = crate::versioned_image_tag("vault", version);
+    crate::ensure_image_exists(&root, "vault", &tag, debug).map_err(|e| {
+        let marker = crate::image_ensure_marker_dir()
+            .and_then(|d| crate::image_ensure_marker::load(&d, "vault"));
+        vault_image_refusal(&e, marker.as_ref(), crate::unix_now_secs())
+    })?;
     let identity = crate::runtime_assets::image_identity(
         &root,
         "vault",
         version,
-        build_args.clone(),
-        dependency_digests,
+        std::collections::BTreeMap::new(),
+        std::collections::BTreeMap::new(),
     )?;
-
-    // Order 253: --init pre-builds vault into this same identity tag, so the
-    // login path is zero-build on an initialized runtime. Skipping here also
-    // stops every login from re-invoking `podman build` (the repeated-login
-    // rebuild observed in the order-245 audit). The build below stays as the
-    // fail-soft fallback for runtimes that skipped --init.
-    if tillandsias_podman::image_exists_sync(&identity.canonical_tag) {
-        if debug {
-            eprintln!(
-                "[tillandsias-vault] image {} already built; skipping build",
-                identity.canonical_tag
-            );
-        }
-        return Ok(identity.canonical_tag);
-    }
-    eprintln!(
-        "[tillandsias-vault] vault image missing — building the Vault image alone, on demand (order 253; no other image is built)"
-    );
-
-    let cache_dir = crate::init_cache_dir()?;
-    let log_file = if debug {
-        Some(cache_dir.join("tillandsias-init-vault.log"))
-    } else {
-        None
-    };
-
-    crate::build_image_with_logging(&root, "vault", &identity, &build_args, &log_file, debug)?;
-
     Ok(identity.canonical_tag)
 }
+
+/// What a sign-in path says when the Vault image cannot be built
+/// (1776-v1t4): the seam's named refusal, never a bare build error, and never
+/// `tillandsias --init`, which a macOS or Windows tray user cannot run
+/// (1774-8j9v). A failed build has just left its marker, whose refusal names
+/// the cause, the log and the retry.
+fn vault_image_refusal(
+    error: &str,
+    marker: Option<&crate::image_ensure_marker::FailureMarker>,
+    now: u64,
+) -> String {
+    if error.starts_with("refused:") {
+        return error.to_string();
+    }
+    if let Some(m) = marker {
+        return crate::image_ensure_marker::refusal(m, now);
+    }
+    error.replace(crate::IMAGE_BUILD_REMEDY, VAULT_IMAGE_REMEDY)
+}
+
+/// The Vault image's remedy, for an error the marker does not cover.
+const VAULT_IMAGE_REMEDY: &str = "The lines above name the step that failed. On Linux retry with      `tillandsias --retry-image vault`; from the macOS or Windows tray, sign in again in a few      minutes.";
 
 #[cfg(feature = "vault")]
 /// ORDER 1286-4437. Clear the HOST-HELD vault credentials, preserving the
@@ -6813,6 +6816,117 @@ pub async fn ensure_mirror_identity_provisioned(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- 1776-v1t4: the Vault image goes through the one seam -----------------
+
+    /// `build_vault_image` builds through `ensure_image_exists`, so it waits
+    /// on the per-image lock another process holds instead of building
+    /// alongside it, and its refusal never names `tillandsias --init`.
+    #[test]
+    fn vault_image_goes_through_ensure_image_exists() {
+        // Source arm: no build of its own.
+        let src = include_str!("vault_bootstrap.rs");
+        let body = &src[src.find("fn build_vault_image(").expect("fn")..];
+        let body = &body[..body.find("\n}\n").expect("end")];
+        // source-pin-ok: "no second build path" is a property of the text.
+        assert!(!body.contains("build_image_with_logging("), "{body}");
+        assert!(body.contains("crate::ensure_image_exists("), "{body}");
+
+        // Lock arm. Everything the seam touches is scratch: runtime dir (the
+        // lock), cache (a failure marker must never reach the real cache),
+        // the checkout as the runtime root, and a podman that always fails.
+        let _seam = crate::runtime_assets::podman_seam_lock();
+        let _env = crate::test_support::env_lock();
+        let scratch = identity_scratch("v1t4-lock");
+        // A podman that fails every call: first on PATH, a link to /bin/false.
+        let bin = scratch.join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::os::unix::fs::symlink("/bin/false", bin.join("podman")).unwrap();
+        let saved: Vec<(&str, Option<std::ffi::OsString>)> = [
+            "XDG_RUNTIME_DIR",
+            "XDG_CACHE_HOME",
+            "TILLANDSIAS_ROOT",
+            "PATH",
+            "TILLANDSIAS_PODMAN_REFUSE_REAL",
+        ]
+        .into_iter()
+        .map(|k| (k, std::env::var_os(k)))
+        .collect();
+        let checkout = PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../..");
+        // SAFETY: env_lock serialises every env-mutating test.
+        unsafe {
+            std::env::set_var("XDG_RUNTIME_DIR", scratch.join("run"));
+            std::env::set_var("XDG_CACHE_HOME", scratch.join("cache"));
+            std::env::set_var("TILLANDSIAS_ROOT", &checkout);
+            std::env::set_var("PATH", format!("{}:/usr/bin:/bin", bin.display()));
+            // The PATH podman is the fake; the tripwire would refuse it.
+            std::env::remove_var("TILLANDSIAS_PODMAN_REFUSE_REAL");
+        }
+        std::fs::create_dir_all(scratch.join("run")).unwrap();
+        let held = crate::resource_lock::acquire("image-vault", Duration::from_secs(5), false)
+            .expect("take the vault image lock");
+        let (tx, rx) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            let _ = tx.send(build_vault_image(false));
+        });
+        std::thread::sleep(Duration::from_millis(1500));
+        let waited = rx.try_recv().is_err();
+        drop(held);
+        let after = rx.recv_timeout(Duration::from_secs(120));
+        let _ = worker.join();
+        for (k, v) in saved {
+            // SAFETY: as above.
+            unsafe {
+                match v {
+                    Some(v) => std::env::set_var(k, v),
+                    None => std::env::remove_var(k),
+                }
+            }
+        }
+        let _ = std::fs::remove_dir_all(&scratch);
+        assert!(
+            waited,
+            "build_vault_image must wait while another holds image-vault"
+        );
+        assert!(
+            after.is_ok(),
+            "once the lock is free it proceeds and answers"
+        );
+
+        // Refusal arm: never `tillandsias --init` (1774-8j9v).
+        let build_error = format!(
+            "Required image 'x' failed: boom.\n{}",
+            crate::IMAGE_BUILD_REMEDY
+        );
+        assert!(
+            crate::IMAGE_BUILD_REMEDY.contains("tillandsias --init"),
+            "precondition"
+        );
+        let plain = vault_image_refusal(&build_error, None, 0);
+        assert!(!plain.contains("--init"), "{plain}");
+        assert!(plain.contains("tillandsias --retry-image vault"), "{plain}");
+        let m = crate::image_ensure_marker::FailureMarker {
+            image: "vault".into(),
+            source_digest: "sha256:aa".into(),
+            attempts: 1,
+            first_failed_at: 100,
+            last_failed_at: 100,
+            next_retry_at: Some(700),
+            cause: "Build exited with status 1".into(),
+            log: "/l".into(),
+        };
+        let named = vault_image_refusal(&build_error, Some(&m), 200);
+        assert!(
+            named.starts_with("refused:image-ensure:vault:build-failed-previously"),
+            "{named}"
+        );
+        assert!(!named.contains("--init"), "{named}");
+        let disk = "refused:image-ensure:vault:disk:1MiB/2048MiB — …";
+        assert_eq!(vault_image_refusal(disk, None, 0), disk);
+    }
 
     // ---- 1642-cc54: the Vault store lives on the identity disk ---------------
 
