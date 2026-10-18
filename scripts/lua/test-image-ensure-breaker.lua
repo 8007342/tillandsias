@@ -12,12 +12,17 @@
 -- and otherwise records the built tag with its source-digest label, so
 -- `image exists` / `image inspect` answer as a real store would.
 --
---   run 1   a broken proxy context fails and writes the marker (attempts 1,
---           a cause);
+--   run 1   a broken proxy context is built once plus the retry budget (2
+--           automatic background retries, backoff shortened by
+--           TILLANDSIAS_IMAGE_RETRY_BASE_MS), then declared failed: the
+--           marker has attempts 3, a cause and no next retry (operator
+--           ruling 2026-10-17);
 --   run 2   the same inputs exit non-zero within 5 s, print
 --           build-failed-previously with the log path, and ZERO new builds;
---   run 3   an edited Containerfile builds again, and the marker it leaves
---           is for the NEW digest (the old one is gone);
+--   run 3   an edited Containerfile builds again (with its own budget), and
+--           the marker it leaves is for the NEW digest (the old one is gone);
+--   transient a context that fails once and then builds is retried in the
+--           same ensure, which succeeds and leaves no marker;
 --   dep     a broken forge-base: ensuring forge records forge-base's marker
 --           and none for forge; a second forge ensure refuses naming
 --           forge-base without building;
@@ -26,7 +31,8 @@
 --   verdict every ensure prints exactly one `image-ensure <name> decided=`
 --           line into the helper log.
 --
--- PRE-FIX RESULT: FAILS (run 2 builds again; there is no marker).
+-- PRE-FIX RESULT: FAILS (run 1 builds once and schedules a retry 10 min out;
+-- the transient context fails).
 local NAME = "image-ensure-breaker"
 
 local top = proc.run({ argv = { "git", "rev-parse", "--show-toplevel" }, timeout_ms = 30000 })
@@ -67,6 +73,10 @@ key() { printf '%s' "$1" | tr '/:' '__'; }
 case "$1" in
   build)
     echo build >> "$st/builds"
+    # `heal_after` N: the outside cause goes away from the Nth build on.
+    if [ -f "$st/heal_after" ] && [ "$(wc -l < "$st/builds")" -ge "$(cat "$st/heal_after")" ]; then
+      touch "$st/heal"
+    fi
     tag=""; digest=""; cf=""
     while [ $# -gt 0 ]; do
       case "$1" in
@@ -133,6 +143,7 @@ local function run_bin(abs, argv)
             XDG_CACHE_HOME = abs .. "/cache",
             HOME = abs .. "/home",
             XDG_RUNTIME_DIR = abs .. "/run",
+            TILLANDSIAS_IMAGE_RETRY_BASE_MS = "50",
         },
         timeout_ms = 120000,
     })
@@ -164,6 +175,7 @@ local function marker(rel, image)
         attempts = tonumber(s:match('"attempts"%s*:%s*(%d+)')),
         digest = s:match('"source_digest"%s*:%s*"([^"]*)"'),
         cause = s:match('"cause"%s*:%s*"([^"]*)"'),
+        failed = s:match('"next_retry_at"%s*:%s*null') ~= nil,
     }
 end
 
@@ -186,10 +198,13 @@ fs.write(rel .. "/root/images/proxy/Containerfile", "FROM scratch\nRUN false\n")
 local r1, _, o1 = ensure(abs, "proxy")
 local m1 = marker(rel, "proxy")
 arm("run 1: a broken context fails", r1.status == "exited" and r1.code ~= 0, r1.status .. ":" .. tostring(r1.code))
-arm("run 1: one build was spawned", builds(rel) == 1, builds(rel))
-arm("run 1: the marker exists with attempts=1 and a cause",
-    m1 ~= nil and m1.attempts == 1 and (m1.cause or "") ~= "", m1 and m1.text or o1:sub(-300))
+arm("run 1: exactly 1 + the retry budget (2) builds", builds(rel) == 3, builds(rel))
+arm("run 1: the marker exists with attempts=3 and a cause",
+    m1 ~= nil and m1.attempts == 3 and (m1.cause or "") ~= "", m1 and m1.text or o1:sub(-300))
+arm("run 1: the image is declared failed (no next automatic retry)", m1 ~= nil and m1.failed, m1 and m1.text)
 local log1 = log_text(rel, "proxy")
+arm("run 1: each attempt announced its build (the progress reader's anchor)",
+    count(log1, "[tillandsias] building image proxy (") == 3, count(log1, "[tillandsias] building image proxy ("))
 arm("verdict: run 1 printed exactly one proxy verdict line",
     count(log1, "image-ensure proxy decided=") == 1, count(log1, "image-ensure proxy decided="))
 
@@ -198,7 +213,7 @@ arm("run 2: exits non-zero", r2.status == "exited" and r2.code ~= 0, r2.status .
 arm("run 2: within 5 s", secs2 <= 5, string.format("%.1f s", secs2))
 arm("run 2: says build-failed-previously", o2:find("build-failed-previously", 1, true) ~= nil, o2:sub(-400))
 arm("run 2: names the log path", o2:find("image-build-proxy.log", 1, true) ~= nil, o2:sub(-400))
-arm("run 2: ZERO new builds", builds(rel) == 1, builds(rel))
+arm("run 2: ZERO new builds", builds(rel) == 3, builds(rel))
 local log2 = log_text(rel, "proxy")
 arm("verdict: run 2 printed exactly one more proxy verdict line, decided=refuse",
     count(log2, "image-ensure proxy decided=") == 2 and log2:find("image-ensure proxy decided=refuse", 1, true) ~= nil,
@@ -207,9 +222,9 @@ arm("verdict: run 2 printed exactly one more proxy verdict line, decided=refuse"
 fs.write(rel .. "/root/images/proxy/Containerfile", "FROM scratch\n# edited\nRUN false\n")
 local r3, _, o3 = ensure(abs, "proxy")
 local m3 = marker(rel, "proxy")
-arm("run 3: edited inputs build again", builds(rel) == 2, builds(rel) .. " / " .. o3:sub(-200))
-arm("run 3: the old marker is gone (the marker is for the new digest, attempts 1)",
-    m1 ~= nil and m3 ~= nil and m3.digest ~= m1.digest and m3.attempts == 1, m3 and m3.text)
+arm("run 3: edited inputs build again, with a fresh budget", builds(rel) == 6, builds(rel) .. " / " .. o3:sub(-200))
+arm("run 3: the old marker is gone (the marker is for the new digest, attempts 3)",
+    m1 ~= nil and m3 ~= nil and m3.digest ~= m1.digest and m3.attempts == 3, m3 and m3.text)
 arm("run 3: still fails", r3.status == "exited" and r3.code ~= 0, r3.status .. ":" .. tostring(r3.code))
 
 -- ── the operator's retry ─────────────────────────────────────────────────────
@@ -217,11 +232,11 @@ arm("run 3: still fails", r3.status == "exited" and r3.code ~= 0, r3.status .. "
 fs.write(rel .. "/state/heal", "")
 local r4, _, o4 = ensure(abs, "proxy")
 arm("heal: the same inputs still refuse without a retry",
-    r4.code ~= 0 and builds(rel) == 2 and o4:find("build-failed-previously", 1, true) ~= nil, builds(rel))
+    r4.code ~= 0 and builds(rel) == 6 and o4:find("build-failed-previously", 1, true) ~= nil, builds(rel))
 local rr, _, orr = run_bin(abs, { "--retry-image", "proxy" })
 arm("retry-image: exits 0 after a forced rebuild", rr.status == "exited" and rr.code == 0,
     tostring(rr.code) .. " " .. orr:sub(-300))
-arm("retry-image: built once more", builds(rel) == 3, builds(rel))
+arm("retry-image: built once more", builds(rel) == 7, builds(rel))
 arm("retry-image: the marker is gone", marker(rel, "proxy") == nil, marker(rel, "proxy") and marker(rel, "proxy").text)
 arm("retry-image: its verdict says decided=force_rebuild",
     log_text(rel, "proxy"):find("image-ensure proxy decided=force_rebuild", 1, true) ~= nil, log_text(rel, "proxy"):sub(-300))
@@ -243,6 +258,17 @@ arm("dep: a second forge ensure refuses naming forge-base's marker",
     d2.code ~= 0 and od2:find("image-ensure:forge-base:build-failed-previously", 1, true) ~= nil, od2:sub(-400))
 arm("dep: and builds nothing", builds(rel) == before, builds(rel) .. " vs " .. before)
 
+-- ── a transient failure: the background retry heals it ──────────────────────
+rel, abs = setup("transient")
+fs.write(rel .. "/root/images/proxy/Containerfile", "FROM scratch\nRUN false\n")
+fs.write(rel .. "/state/heal_after", "2\n")
+local t1, _, ot1 = ensure(abs, "proxy")
+arm("transient: the ensure succeeds on its first automatic retry",
+    t1.status == "exited" and t1.code == 0 and builds(rel) == 2, tostring(t1.code) .. " builds=" .. builds(rel) .. " " .. ot1:sub(-200))
+arm("transient: no marker is left", marker(rel, "proxy") == nil, marker(rel, "proxy") and marker(rel, "proxy").text)
+arm("transient: one verdict line for the whole ensure",
+    count(log_text(rel, "proxy"), "image-ensure proxy decided=") == 1, count(log_text(rel, "proxy"), "image-ensure proxy decided="))
+
 -- ── NEGATIVE CONTROL: a context that builds ─────────────────────────────────
 rel, abs = setup("ok")
 fs.write(rel .. "/root/images/proxy/Containerfile", "FROM scratch\n")
@@ -259,4 +285,4 @@ arm("control: and its verdict says decided=skip",
 if #failed > 0 then
     verdict.emit("violation:" .. NAME .. ":" .. #failed .. "-failed", 1)
 end
-verdict.ok(NAME, "run1 + run2 + run3 + dependent + control + verdict arms")
+verdict.ok(NAME, "run1 + run2 + run3 + transient + dependent + control + verdict arms")

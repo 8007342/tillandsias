@@ -17,12 +17,18 @@ Any code path that starts a Tillandsias-built container (`tillandsias-<name>:v<v
 
 ### Requirement: A failed on-demand build is remembered and not retried blindly
 
-When an on-demand build fails, the seam SHALL record a failure marker keyed on the image name and the identity's source digest, carrying the attempt count, the failure's cause, the log path and the next time an automatic retry is allowed (10 minutes after the first failure, 1 hour after the second, never after the third). While a marker matches the current identity and the retry time has not passed, every ensure for that image SHALL refuse within seconds, without spawning a build, with `refused:image-ensure:<image>:build-failed-previously`, the cause, the log and the remedy. The marker SHALL be removed when the image's source digest changes, when a build succeeds, or when the operator retries explicitly. A dependent image SHALL refuse with its base's marker and SHALL NOT record a marker of its own for a base failure. No remedy text SHALL say the build is retried on each launch.
+When an on-demand build fails, the seam SHALL record a failure marker keyed on the image name and the identity's source digest, carrying the attempt count, the failure's cause, the log path and the time of the next automatic retry. The ensure that hit the failure SHALL retry the build itself, in the background, twice on exponential backoff (30 s, then 2 min), and then SHALL declare the image failed (no next retry). No tray text SHALL say a build failed and was retried; while a retry is scheduled, an agent calling a service that needs the image SHALL be answered "busy" with a `retry_after` (operator ruling 2026-10-17). While a marker for a declared-failed image matches the current identity, every ensure for that image SHALL refuse within seconds, without spawning a build, with `refused:image-ensure:<image>:build-failed-previously`, the cause, the log and the remedy. The marker SHALL be removed when the image's source digest changes, when a build succeeds, or when the operator retries explicitly. A dependent image SHALL refuse with its base's marker and SHALL NOT record a marker of its own for a base failure. No remedy text SHALL say the build is retried on each launch.
 
 #### Scenario: the same broken input is launched twice
 
-- **WHEN** an image's Containerfile fails to build and a second launch needs the same image within 10 minutes
-- **THEN** the second launch refuses within 5 seconds naming the first failure, and `podman build` is not run
+- **WHEN** an image's Containerfile fails to build
+- **THEN** that ensure runs `podman build` exactly three times (once plus two automatic retries) and declares the image failed
+- **AND** a second launch that needs the same image refuses within 5 seconds naming the first failure, and `podman build` is not run
+
+#### Scenario: a transient failure heals on its retry
+
+- **WHEN** a build fails once and its first automatic retry succeeds
+- **THEN** the ensure succeeds and no marker is left
 
 #### Scenario: the input is fixed
 
@@ -31,8 +37,8 @@ When an on-demand build fails, the seam SHALL record a failure marker keyed on t
 
 #### Scenario: the operator retries
 
-- **WHEN** the operator runs `tillandsias --retry-image <name>` or picks the tray's "Retry build" item
-- **THEN** the marker is removed and the image is force-rebuilt in the foreground with progress; a failure records a fresh marker with attempts=1
+- **WHEN** the operator runs `tillandsias --retry-image <name>` (there is no tray "Retry build" item, by operator ruling 2026-10-17)
+- **THEN** the marker is removed and the image is force-rebuilt in the foreground with progress, with a fresh retry budget
 
 #### Scenario: a successful build leaves no marker
 
