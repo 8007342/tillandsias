@@ -6,9 +6,11 @@
 # it where every host lands rather than once a day on the release gate.
 #
 # STEP_SCRIPT is a LITERAL path on purpose (1063-nraf): a binding assembled
-# from a variable is invisible to every name-based scan.
+# from a variable is invisible to every name-based scan. 1572-nqx5 ported the
+# checker to Lua, so the binding is STEP_LUA; the ok line is byte-identical,
+# so the regime pin below still quotes it.
 STEP_DESC="Checking cheatsheet frontmatter"
-STEP_SCRIPT="scripts/check-cheatsheet-frontmatter.sh"
+STEP_LUA="scripts/lua/check-cheatsheet-frontmatter.lua"
 STEP_ERROR="a cheatsheet has malformed frontmatter (1087-h2z9)"
 STEP_OK="Cheatsheet frontmatter passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:cheatsheet-frontmatter:238"

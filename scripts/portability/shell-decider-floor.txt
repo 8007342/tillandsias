@@ -10,7 +10,6 @@ scripts/check-base-ledger-status-loss.sh
 scripts/check-build-cache-sweep.sh
 scripts/check-capability-row.sh
 scripts/check-carry-forward.sh
-scripts/check-cheatsheet-frontmatter.sh
 scripts/check-cheatsheet-sources.sh
 scripts/check-cheatsheet-tiers.sh
 scripts/check-claim-confirmed.sh
