@@ -545,6 +545,27 @@ _resolve_timeout_bin() {
     fi
 }
 TIMEOUT_BIN="$(_resolve_timeout_bin)"
+
+# 1786-tzce: the shell twin of warm_keep_id_mapping in
+# crates/tillandsias-headless/src/main.rs (1785-655p). On a rootless store
+# whose overlay cannot shift IDs, podman copies the whole image into an
+# ID-mapped layer at its first `--userns=keep-id` create, so the first enclave
+# start of a fresh image paid that copy inside its 300 s start budget. Make the
+# copy here, at build time. Same question as store_supports_shifting; a store
+# that shifts or cannot say is not warmed. Best-effort: a failed warm only
+# means the first start pays the copy, as before.
+_warm_keep_id_mapping() {
+    local tag="$1" shifting name
+    shifting="$("$PODMAN" info --format '{{index .Store.GraphStatus "Supports shifting"}}' 2>/dev/null || true)"
+    [[ "${shifting//[[:space:]]/}" == "false" ]] || return 0
+    name="tillandsias-keepid-warm-${IMAGE_NAME:-image}-$$"
+    if [[ -n "$TIMEOUT_BIN" ]]; then
+        "$TIMEOUT_BIN" 600 "$PODMAN" create --userns=keep-id --name "$name" "$tag" true >/dev/null || _warn "keep-id warm of ${tag} failed; its first start pays the copy"
+    else
+        "$PODMAN" create --userns=keep-id --name "$name" "$tag" true >/dev/null || _warn "keep-id warm of ${tag} failed; its first start pays the copy"
+    fi
+    "$PODMAN" rm -f "$name" >/dev/null 2>&1 || true
+}
 _timeout_podman_build() {
     local rc=0
     if [[ -n "$TIMEOUT_BIN" ]]; then
@@ -683,6 +704,8 @@ _remove_stale_image_tags
         _error "  REMEDY: TILLANDSIAS_BUILD_NO_CACHE=1 $0 ${IMAGE_NAME:-<image>} --force"
         exit 1
     fi
+
+    _warm_keep_id_mapping "$IMAGE_TAG"
 
     _remove_stale_image_tags
     "$PODMAN" image prune -f 2>/dev/null || true
