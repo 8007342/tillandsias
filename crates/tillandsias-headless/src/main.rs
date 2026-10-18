@@ -15855,6 +15855,11 @@ fn run_opencode_mode(
             "cannot use TILLANDSIAS_FORGE_HOST_MOUNT for ephemeral cloud project".to_string(),
         );
     }
+    // 1783-k5hm: before any podman call, so a refused launch starts nothing.
+    refuse_lane_socket_owned_elsewhere(
+        project_name,
+        forge_host_mount_granted(forge_uses_host_mount(), canonical_path.as_deref()),
+    )?;
 
     if debug {
         if let Some(ref c) = canonical_path {
@@ -17348,6 +17353,11 @@ pub(crate) fn run_opencode_web_mode(
             "cannot use TILLANDSIAS_FORGE_HOST_MOUNT for ephemeral cloud project".to_string(),
         );
     }
+    // 1783-k5hm: before any podman call, so a refused launch starts nothing.
+    refuse_lane_socket_owned_elsewhere(
+        project_name,
+        forge_host_mount_granted(forge_uses_host_mount(), canonical_path.as_deref()),
+    )?;
 
     if debug {
         if let Some(ref c) = canonical_path {
@@ -18590,6 +18600,40 @@ fn forge_ram_workspace_volume(project: &str) -> String {
     crate::local_projects::ram_workspace_volume(project, instance.trim())
 }
 
+/// 1783-k5hm: refuse a CLI lane whose MCP socket another live process (the
+/// running tray) already serves, BEFORE the launch touches podman. Measured on
+/// lenovinha 2026-10-18: `tillandsias --bash ~/src/hello-world` with the tray
+/// running started the project's git mirror and only then died in
+/// [`prepare_forge_ram_workspace`] on the raw "mcp socket already has a live
+/// owner", leaving the mirror running. Same condition, same lanes, asked first.
+/// A host-mount lane never binds there (its listener start is best-effort), so
+/// it is not refused here either.
+fn refuse_lane_socket_owned_elsewhere(project: &str, host_mount: bool) -> Result<(), String> {
+    #[cfg(feature = "host-services")]
+    if !host_mount {
+        let instance = std::env::var("TILLANDSIAS_FORGE_INSTANCE")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| "default".into());
+        if let Some(path) = mcp_socket::lane_socket_foreign_owner(project, &instance) {
+            return Err(lane_socket_owned_refusal(project, instance.trim(), &path));
+        }
+    }
+    let _ = (project, host_mount);
+    Ok(())
+}
+
+/// The named refusal for [`refuse_lane_socket_owned_elsewhere`].
+#[cfg(feature = "host-services")]
+fn lane_socket_owned_refusal(project: &str, instance: &str, socket: &Path) -> String {
+    format!(
+        "refused:lane-socket-owned:{project}-{instance}: the running Tillandsias tray already \
+         serves this project's lane ({}). Launch it from the tray menu instead, or quit the \
+         tray and run this command again. Nothing was started.",
+        socket.display()
+    )
+}
+
 fn prepare_forge_ram_workspace(
     project: &str,
     host_mount: bool,
@@ -19592,6 +19636,11 @@ fn run_forge_agent_cli_mode(
             "cannot use TILLANDSIAS_FORGE_HOST_MOUNT for ephemeral cloud project".to_string(),
         );
     }
+    // 1783-k5hm: before any podman call, so a refused launch starts nothing.
+    refuse_lane_socket_owned_elsewhere(
+        project_name,
+        forge_host_mount_granted(forge_uses_host_mount(), canonical_path.as_deref()),
+    )?;
 
     if debug {
         if let Some(ref c) = canonical_path {
@@ -35628,5 +35677,122 @@ mod mirror_seed_failure_tests {
             entry.contains(&format!("retry_msg \"{GIT_MIRROR_SEED_FAILURE_MARKER}")),
             "images/git/entrypoint.sh no longer prints {GIT_MIRROR_SEED_FAILURE_MARKER:?}; the launcher would never surface a seed failure"
         );
+    }
+}
+
+#[cfg(all(test, feature = "host-services"))]
+mod lane_socket_owner_tests {
+    use super::*;
+
+    /// 1783-k5hm: a CLI lane whose MCP socket another live process serves is
+    /// refused by name, BEFORE any podman call, so nothing is left running.
+    /// The held listener stands in for the tray: a raw bind this process's
+    /// lane registry does not know, exactly what a tray in another process is.
+    #[test]
+    fn a_cli_lane_refuses_by_name_when_another_process_owns_its_socket() {
+        let _env = crate::test_support::env_lock();
+        // The kernel caps a socket path near 108 bytes, so the scratch runtime
+        // dir is short and under the real runtime dir, not the checkout.
+        let base = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir);
+        let scratch = base.join(format!("k5hm-{}", std::process::id()));
+        let saved = std::env::var_os("XDG_RUNTIME_DIR");
+        let saved_instance = std::env::var_os("TILLANDSIAS_FORGE_INSTANCE");
+        // SAFETY: env_lock serialises every env-mutating test.
+        unsafe {
+            std::env::set_var("XDG_RUNTIME_DIR", &scratch);
+            std::env::remove_var("TILLANDSIAS_FORGE_INSTANCE");
+        }
+        let project = "k5hm-held";
+        let socket = mcp_socket::mcp_socket_path_for_lane(project, "default");
+        std::fs::create_dir_all(socket.parent().unwrap()).unwrap();
+
+        // Negative control: no owner, the launch proceeds as today.
+        let free = refuse_lane_socket_owned_elsewhere(project, false);
+
+        let held = std::os::unix::net::UnixListener::bind(&socket).expect("hold the lane socket");
+        let refused = refuse_lane_socket_owned_elsewhere(project, false);
+        // A host-mount lane never binds the socket, so it is not refused.
+        let host_mount = refuse_lane_socket_owned_elsewhere(project, true);
+        // A lane THIS process serves (the tray's own launches) is not refused.
+        let key = (project.to_string(), "default".to_string());
+        mcp_socket::lane_listener_registry()
+            .lock()
+            .unwrap()
+            .insert(key.clone());
+        let own = refuse_lane_socket_owned_elsewhere(project, false);
+        mcp_socket::lane_listener_registry()
+            .lock()
+            .unwrap()
+            .remove(&key);
+        drop(held);
+        // A departed owner (connection refused) is not refused either: the
+        // listener reclaims that socket.
+        let stale = refuse_lane_socket_owned_elsewhere(project, false);
+
+        // SAFETY: as above.
+        unsafe {
+            match saved {
+                Some(v) => std::env::set_var("XDG_RUNTIME_DIR", v),
+                None => std::env::remove_var("XDG_RUNTIME_DIR"),
+            }
+            if let Some(v) = saved_instance {
+                std::env::set_var("TILLANDSIAS_FORGE_INSTANCE", v);
+            }
+        }
+        let _ = std::fs::remove_dir_all(&scratch);
+
+        assert_eq!(free, Ok(()), "no owner: launch as today");
+        let msg = refused.expect_err("a live foreign owner must be refused");
+        assert!(
+            msg.starts_with("refused:lane-socket-owned:k5hm-held-default:"),
+            "{msg}"
+        );
+        assert!(msg.contains("from the tray menu"), "{msg}");
+        assert!(msg.contains("Nothing was started"), "{msg}");
+        assert!(
+            !msg.contains("refusing to unlink"),
+            "the raw error leaked: {msg}"
+        );
+        assert_eq!(host_mount, Ok(()), "host-mount lane");
+        assert_eq!(own, Ok(()), "a lane this process serves");
+        assert_eq!(stale, Ok(()), "a departed owner's socket");
+    }
+
+    /// 1783-k5hm: each CLI launch path asks BEFORE its first step that can
+    /// start a container, so a refused launch leaves nothing running. The
+    /// measured failure started the git mirror first.
+    #[test]
+    fn every_cli_lane_asks_before_it_touches_podman() {
+        let src = include_str!("main.rs");
+        for fn_head in [
+            "\nfn run_opencode_mode(",
+            "\npub(crate) fn run_opencode_web_mode(",
+            "\nfn run_forge_agent_cli_mode(",
+        ] {
+            let start = src.find(fn_head).expect(fn_head);
+            let body = &src[start + 1..];
+            let body = &body[..body.find("\n}\n").expect("end of fn")];
+            // source-pin-ok: the property is call ORDER inside the launch fn.
+            let ask = body
+                .find("refuse_lane_socket_owned_elsewhere(")
+                .unwrap_or_else(|| panic!("{fn_head}: never asks who owns the lane socket"));
+            for first_container_step in [
+                "ensure_ca_bundle(",
+                "ensure_enclave_network(",
+                "ensure_enclave_for_project(",
+                "acquire_launch_in_flight_marker(",
+                "podman_runtime(",
+                "prepare_forge_ram_workspace(",
+            ] {
+                if let Some(at) = body.find(first_container_step) {
+                    assert!(
+                        ask < at,
+                        "{fn_head}: asks after {first_container_step}, so a refused launch may leave a container running"
+                    );
+                }
+            }
+        }
     }
 }

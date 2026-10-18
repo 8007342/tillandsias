@@ -847,6 +847,29 @@ pub(crate) fn lane_listener_registry() -> &'static Mutex<HashSet<LaneListenerKey
     ACTIVE_LANE_LISTENERS.get_or_init(|| Mutex::new(HashSet::new()))
 }
 
+/// 1783-k5hm: the lane's socket path when ANOTHER live process serves it,
+/// the exact case in which [`start_mcp_socket_server_for_lane`] refuses
+/// ("already has a live owner"). Asked before a launch touches podman, so
+/// the refusal comes before any container starts, not after the git mirror.
+/// `None` when this process owns the lane or nothing answers.
+pub(crate) fn lane_socket_foreign_owner(project: &str, instance: &str) -> Option<PathBuf> {
+    let instance = if instance.trim().is_empty() {
+        "default"
+    } else {
+        instance.trim()
+    };
+    let key = (project.to_owned(), instance.to_owned());
+    if lane_listener_registry()
+        .lock()
+        .expect("lane registry lock")
+        .contains(&key)
+    {
+        return None;
+    }
+    let path = mcp_socket_path_for_lane(project, instance);
+    UnixStream::connect(&path).ok().map(|_| path)
+}
+
 /// Bind the NDJSON MCP tool socket for lane `(project, instance)` and serve
 /// it from detached threads (order 505).
 /// The socket is mode 0600 in `$XDG_RUNTIME_DIR/tillandsias/mcp/<project>-<instance>/mcp.sock`.
