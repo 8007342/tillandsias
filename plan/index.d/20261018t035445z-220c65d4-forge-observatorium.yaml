@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: observatorium-verifiable-convergence-repair
+    field: status
+    value: implemented
+    ts: "2026-10-18T03:54:45Z"
+    host: forge-observatorium
+
+events:
+  - packet_id: observatorium-verifiable-convergence-repair
+    event:
+      type: progress
+      ts: "2026-10-18T03:54:45Z"
+      host: forge-observatorium
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: Node22 and Flutter11 tests pass; analyze and web build pass; managed Chromium desktop/mobile render and filter; full gate five known1780-jxc3 environment failures. READY work/1782-bek5 for integration after review.

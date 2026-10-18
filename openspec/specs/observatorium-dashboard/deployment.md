@@ -49,7 +49,8 @@ The same script runs on Cloudflare, in a forge, in a toolbox, and for a local
    (`scripts/centicolon-grade.sh`), then precomputation against the COMMITTED
    history (`history/snapshots.jsonl`). The live observation is display-only
    and is never written back.
-4. **Flutter:** the pinned Flutter SDK, then `flutter pub get` and
+4. **Flutter:** the forge's managed sibling command when a forge is attached,
+   otherwise the pinned Flutter SDK, then `flutter pub get` and
    `flutter build web --release` into `build/web` (the assets directory).
 
 `npm run metrics` stops after step 3.
@@ -102,8 +103,9 @@ instead, and the rest still deploys.
 In a forge: `npm run build`, then the host-browser MCP tool `publish_local`
 serves `build/web`. The preview never runs `build.command` (order 1663-6mns).
 Because this app's `wrangler.jsonc` lives in `observatorium/`, not at the
-repository root, publishing it needs the project-confined app-directory
-selector filed as its own row.
+repository root, publish with `app_dir: "observatorium"`. An isolated worktree
+under the lane's project can instead name its own project-relative app path;
+the preview must serve that worktree's `build/web`, not another checkout.
 
 The portable `Containerfile` consumes an already-built `build/web`;
 `npm run serve` is for bounded development checks.

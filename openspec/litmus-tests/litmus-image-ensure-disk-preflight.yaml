@@ -1,0 +1,69 @@
+# @trace spec:podman-orchestration
+#
+# Regression pin for order 1776-d5k2 (epic 1776-ondm), the operator's "actual
+# build failures must NOT keep retrying and kill host resources".
+#
+# Before it, an on-demand `podman build` ran bare and unchecked: a forge-base
+# build froze a 4-core host's desktop (1770-z575, 863-iicc), and a full disk was
+# discovered mid-build, losing the panic text with it (1744-xjfw). Now the seam
+# refuses a build the store cannot hold BEFORE it starts, and runs the build
+# under a systemd user scope (CPUWeight, IOWeight, MemoryHigh), falling back to
+# nice where no user manager answers. Both fixtures drive the real binary's
+# --internal-ensure-image over shims; both were red against v56.10.17.1.
+name: litmus:image-ensure-disk-preflight
+spec: podman-orchestration
+phase: post-build
+description: >
+  Pin that an on-demand image build refuses `refused:image-ensure:<image>:disk:`
+  with free and need named, spawning no podman build and writing no failure
+  marker, when podman's store cannot hold the image; that an unknown store is
+  not a refusal; that the detached helper's refusal reaches the caller as
+  itself; and that the build runs under `systemd-run --user --scope` with
+  CPUWeight, IOWeight and MemoryHigh, else under `nice -n 10`, else bare on
+  TILLANDSIAS_IMAGE_BUILD_UNBOUNDED=1.
+severity: high
+size: quick
+
+inputs:
+  - crates/tillandsias-headless/src/image_build_scope.rs
+  - crates/tillandsias-headless/src/main.rs
+  - scripts/lua/test-image-ensure-disk-preflight.lua
+  - scripts/lua/test-image-build-scope.lua
+
+preconditions:
+  - the headless binary is built (target/debug/tillandsias, or TILLANDSIAS_HEADLESS_BIN); the fixtures report could-not-run otherwise
+  - a tillandsias-plan resolves (scripts/plan-binary-probe.sh)
+
+critical_path:
+  - step: "disk preflight: a need the store cannot hold refuses before building, need 1 builds, an unknown store builds, the detached refusal arrives as itself"
+    command: ". scripts/plan-binary-probe.sh; \"$(resolve_plan_binary)\" script run scripts/lua/test-image-ensure-disk-preflight.lua"
+    timeout_ms: 300000
+    success_pattern: "ok:image-ensure-disk-preflight-fixture:4"
+    failure_pattern: "refused:|FAIL:"
+
+  - step: "build scope: systemd user scope with the three properties, nice without systemd-run or without a user manager, bare on the opt-out"
+    command: ". scripts/plan-binary-probe.sh; \"$(resolve_plan_binary)\" script run scripts/lua/test-image-build-scope.lua"
+    timeout_ms: 300000
+    success_pattern: "ok:image-build-scope-fixture:4"
+    failure_pattern: "refused:|FAIL:"
+
+observability:
+  traces:
+    - "@trace spec:podman-orchestration"
+  expected_log: "ok:image-ensure-disk-preflight-fixture:4"
+  log_fields:
+    spec: "podman-orchestration"
+    test: "image-ensure-disk-preflight"
+    artifact: "crates/tillandsias-headless/src/image_build_scope.rs"
+
+rollback:
+  on_failure: >
+    Disk arm 1 red means a build started on a store that cannot hold it: check
+    that ensure_image_exists calls image_build_scope::disk_preflight in the
+    Build arm before build_image_with_logging. Arm 4 red means
+    run_image_ensure_detached no longer passes the helper's
+    refused:image-ensure: line through. A scope arm red means
+    build_image_with_logging stopped building its command with
+    podman_cmd_sync_under(prefix(current())), or the probe in
+    systemd_scope_usable stopped falling back.
+  command: "grep -n 'disk_preflight\\|podman_cmd_sync_under\\|helper_refusal' crates/tillandsias-headless/src/main.rs"

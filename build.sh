@@ -3567,6 +3567,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Host trust-store check passed"
+    # 1776-ch4m: a module that runs a versioned image also ensures it (through
+    # launch_images.rs or an ensure call), so a host that never ran --init
+    # builds on first use instead of failing "image missing".
+    _step "Checking every image a module runs is ensured (1776-ch4m)..."
+    if ! _run_lua_decider "scripts/lua/check-launch-images-table.lua" 2>&1; then
+        _error "a module runs an image it never ensures (1776-ch4m) — see the site lines above"
+        exit 1
+    fi
+    _info "Launch-images check passed"
     # 1713-3v3f: Tillandsias never launches or drives a host browser. Every
     # launcher-shaped call site in crates/ must be on the guard's allowlist at
     # its exact count (only file/app opens, never a URL).
@@ -5329,6 +5338,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Host trust-store fixture passed"
 
+    # 1776-ch4m: the launch-images guard's fixture (live tree, the operator's
+    # chromium-framework hole refused, a site / ensure line / dependency /
+    # marker covering it, test code ignored, zero literals refused).
+    _step "Checking the launch-images guard's fixture (1776-ch4m)..."
+    if ! _run_lua_decider "scripts/lua/test-launch-images-table.lua" 2>&1; then
+        _error "the launch-images guard's fixture failed — see the FAIL lines above (1776-ch4m)"
+        exit 1
+    fi
+    _info "Launch-images fixture passed"
+
     # 1756-z3kz: the embedded-ELF arch check release.yml runs on every binary:
     # matching images pass, a foreign one is refused by offset, a decoy magic is
     # not an image, too few images are refused, a non-ELF is could-not-run.
@@ -6372,7 +6391,9 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Ten formerly-orphaned fixtures passed (1063-nraf)"
 
     _step "Checking litmus steps can actually fail (972-cvdg)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-steps-can-fail.sh" 2>&1; then
+    # 1247-ngc5: ported to scripts/lua (the shell-to-lua carried obligation);
+    # the verdict grammar is unchanged.
+    if ! _run_lua_decider "scripts/lua/check-litmus-steps-can-fail.lua" 2>&1; then
         _error "a litmus step prints the same token on success and failure (972-cvdg) — see the verdict line above"
         exit 1
     fi

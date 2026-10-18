@@ -375,9 +375,94 @@ if [ -n "$TMPROOT" ] && [ -n "${B14H:-}" ]; then
         || failures+=("gc with no nix and no toolbox must still refuse nix-unusable, got: $o17")
 fi
 
+# 18/19/20. EVERY blocked:nix-store-gc:* VERDICT SAYS WHY AND WHAT CLEARS IT
+#     (1247-ngc5, slice of 1247-amcu). The verdict lines stay byte-identical
+#     (arms 9 and 17 pin them); the why:/remedy: pair goes to stderr beside
+#     them. Built from fakes only, so they run on a host with no nix at all.
+if [ -n "$TMPROOT" ] && [ -n "${B14H:-}" ]; then
+    # 18: nix-unusable on a host whose toolbox EXISTS but has no nix yet. The
+    #     remedy names `ensure`; the arm EXECUTES it (the fake toolbox's `sudo
+    #     dnf install -y nix` installs a working nix into the container) and gc
+    #     must then get past the store ping (1247-amcu criterion 5).
+    B18="$TMPROOT/bin18"; B18H="$TMPROOT/bin18host"; mkdir -p "$B18" "$B18H" "$TMPROOT/s18/nix/store"
+    printf '#!/usr/bin/env bash\nexit 127\n' > "$B18/nix"; chmod +x "$B18/nix"
+    printf '#!/usr/bin/env bash\nexit 127\n' > "$B18H/nix"; chmod +x "$B18H/nix"
+    mk_nix "$B18/nix.installed" toolbox
+    cat > "$B18H/toolbox" <<EOF18
+#!/usr/bin/env bash
+case "\$1" in
+    list) printf 'CONTAINER ID  CONTAINER NAME  CREATED\n0000  tillandsias-nix  now\n' ;;
+    run)  shift; [ "\$1" = "-c" ] && shift 2
+          if [ "\$*" = "sudo dnf install -y nix" ]; then cp "$B18/nix.installed" "$B18/nix"; exit 0; fi
+          exec env PATH="$B18:/usr/bin:/bin" "\$@" ;;
+    *) exit 1 ;;
+esac
+EOF18
+    chmod +x "$B18H/toolbox"
+    e18=(env PATH="$B18H:/usr/bin:/bin" HOME="$TMPROOT/h18" TILLANDSIAS_NIX_CHROOT_STORE="$TMPROOT/s18")
+    o18="$("${e18[@]}" bash "$SCRIPT" gc 2>&1)"
+    [ "$(tail -1 <<<"$o18")" = "blocked:nix-store-gc:nix-unusable" ] \
+        || failures+=("arm 18 premise: a toolbox without nix must answer nix-unusable, got: $(tail -1 <<<"$o18")")
+    grep -q '^  why: ' <<<"$o18" \
+        || failures+=("nix-unusable carries no why: line — 1247-ngc5")
+    grep -q '^  remedy: .*scripts/nix-toolbox\.sh ensure' <<<"$o18" \
+        || failures+=("nix-unusable's remedy does not name scripts/nix-toolbox.sh ensure — 1247-ngc5")
+    "${e18[@]}" bash "$SCRIPT" ensure >/dev/null 2>&1
+    o18b="$("${e18[@]}" bash "$SCRIPT" gc 2>&1)"
+    case "$(tail -1 <<<"$o18b")" in
+        blocked:nix-store-gc:nix-unusable|"")
+            failures+=("nix-unusable's remedy, executed (ensure, then gc), did not clear it: $(tail -1 <<<"$o18b")") ;;
+    esac
+
+    # mk_eval_nix <file> <derivation-show:ok|fail> <gc:ok|fail> — a host nix
+    # that can address the store, answers `derivation show` with a deps input
+    # (or fails it, like a broken flake), and fails `store gc` on demand.
+    mk_eval_nix() {
+        cat > "$1" <<EOFEN
+#!/usr/bin/env bash
+while [ \$# -gt 0 ]; do
+    case "\$1" in --store) shift 2 ;; --extra-experimental-features) shift 2 ;; *) break ;; esac
+done
+case "\$1 \$2" in
+    "store ping"|"store info") exit 0 ;;
+    "derivation show")
+        [ "$2" = ok ] || { echo "error: fixture flake does not evaluate" >&2; exit 1; }
+        printf '{"/nix/store/aaaa-x.drv":{"inputDrvs":{"/nix/store/bbbb-x-deps-1.drv":{}},"outputs":{"out":{"path":"/nix/store/cccc-x-deps-1"}}}}\n' ;;
+    "path-info "*|"path-info") exit 1 ;;
+    "store gc")
+        [ "$3" = ok ] || { echo "error: fixture gc refused: the store is locked by another process" >&2; exit 1; }
+        exit 0 ;;
+esac
+EOFEN
+        chmod +x "$1"
+    }
+    # 19: unresolved-deps. Its remedy must name the command that shows the
+    #     evaluation error for the FIRST output that did not resolve.
+    B19="$TMPROOT/bin19"; mkdir -p "$B19" "$TMPROOT/s19/nix/store"
+    mk_eval_nix "$B19/nix" fail ok
+    o19="$(env PATH="$B19:/usr/bin:/bin" HOME="$TMPROOT/h19" TILLANDSIAS_NIX_CHROOT_STORE="$TMPROOT/s19" \
+             bash "$SCRIPT" gc 2>&1)"
+    [ "$(tail -1 <<<"$o19")" = "blocked:nix-store-gc:unresolved-deps" ] \
+        || failures+=("arm 19 premise: a flake that does not evaluate must answer unresolved-deps, got: $(tail -1 <<<"$o19")")
+    { grep -q '^  why: ' <<<"$o19" && grep -q '^  remedy: .*derivation show \.#tillandsias-x86_64-musl' <<<"$o19"; } \
+        || failures+=("unresolved-deps lacks why:, or a remedy naming the derivation show for its first unresolved output — 1247-ngc5")
+    # 20: collection-failed. nix's own error must reach the reader (it used to
+    #     go to /dev/null), beside a why: and a remedy:. A ceiling of -1 GiB is
+    #     the one way to put an empty fixture store "over" it.
+    B20="$TMPROOT/bin20"; mkdir -p "$B20" "$TMPROOT/s20/nix/store"
+    mk_eval_nix "$B20/nix" ok fail
+    o20="$(env PATH="$B20:/usr/bin:/bin" HOME="$TMPROOT/h20" TILLANDSIAS_NIX_CHROOT_STORE="$TMPROOT/s20" \
+             TILLANDSIAS_NIX_STORE_CEILING_GIB=-1 bash "$SCRIPT" gc 2>&1)"
+    [ "$(tail -1 <<<"$o20")" = "blocked:nix-store-gc:collection-failed" ] \
+        || failures+=("arm 20 premise: a failing store gc must answer collection-failed, got: $(tail -1 <<<"$o20")")
+    { grep -q 'fixture gc refused: the store is locked by another process' <<<"$o20" \
+        && grep -q '^  why: ' <<<"$o20" && grep -q '^  remedy: ' <<<"$o20"; } \
+        || failures+=("collection-failed hides nix's error, or lacks why:/remedy: — 1247-ngc5")
+fi
+
 if [ "${#failures[@]}" -gt 0 ]; then
     printf 'FAIL: %s\n' "${failures[@]}" >&2
     echo "nix-toolbox: FAIL ${#failures[@]} scenario(s)"
     exit 1
 fi
-echo "PASS: nix-toolbox fixture 17/17 (grammar, exit-code agreement, idempotence, store-probe-not-pure-eval, nix-args usable, store-path override, delete-and-rebuild, pinned-survives-gc, gc-refuses-when-deps-unresolved, capability-grammar, capability-never-creates, toolbox-only-nix-is-capable, callers-off-host-binary, run-reaches-rung-store x2, store-subcommands-reach-toolbox + negative control) rung=${out#ok:nix-toolbox:}"
+echo "PASS: nix-toolbox fixture 20/20 (grammar, exit-code agreement, idempotence, store-probe-not-pure-eval, nix-args usable, store-path override, delete-and-rebuild, pinned-survives-gc, gc-refuses-when-deps-unresolved, capability-grammar, capability-never-creates, toolbox-only-nix-is-capable, callers-off-host-binary, run-reaches-rung-store x2, store-subcommands-reach-toolbox + negative control, store-gc affordances x3 with an executed remedy) rung=${out#ok:nix-toolbox:}"

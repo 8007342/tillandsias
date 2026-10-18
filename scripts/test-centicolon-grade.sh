@@ -139,6 +139,43 @@ else bad "Z: $(grep -E '^(warn|ok|unmeasured|blocked):' <<<"$OUT" | head -3)"; f
 [ "$(jg '.measured' "$(cat "$H/target/centicolon/grade.json")")" = true ] \
     && ok "H (keys resolved) grade.json says measured:true" || bad "H grade.json measured is not true"
 
+# ── AFFORDANCE: every blocked verdict says why and what clears it ────────────
+# 1572-nqx5 / 1247-amcu. O: an output dir outside the graded root used to reach
+# the static grader, whose fs.read is rooted at the repository, and come back
+# as "blocked:centicolon-grade:static:" with nothing after the colon. Now it
+# is refused before any predicate runs, and the remedy is EXECUTED: the dir it
+# names is re-run and must grade, so the affordance cannot lie.
+OD="$WORK/outside-out"
+OUT="$(TILLANDSIAS_REPO_ROOT="$H" TILLANDSIAS_TIMING_LOG="$WORK/green.jsonl" TILLANDSIAS_CENTICOLON_DIR="$OD" bash "$GRADE" 2>&1)"
+if [ "$(grep -m1 '^blocked:centicolon-grade:' <<<"$OUT")" = "blocked:centicolon-grade:out-dir-outside-root:$OD" ] \
+    && grep -q '^  why: ' <<<"$OUT" && grep -q '^  remedy: ' <<<"$OUT" && [ ! -e "$OD" ]; then
+    ok "O an out dir outside the graded root is refused up front, with why and remedy, before anything is written"
+else bad "O: $(grep -E '^(blocked|ok|unmeasured):|^  (why|remedy):' <<<"$OUT" | head -3)"; fi
+RD_O="$(sed -n 's/^  remedy: .*TILLANDSIAS_CENTICOLON_DIR=\([^ ,;)]*\).*/\1/p' <<<"$OUT")"
+OUT="$(TILLANDSIAS_REPO_ROOT="$H" TILLANDSIAS_TIMING_LOG="$WORK/green.jsonl" TILLANDSIAS_CENTICOLON_DIR="$RD_O" bash "$GRADE" 2>&1)"
+if [ -n "$RD_O" ] && grep -q '^ok:centicolon-grade:R=3 ' <<<"$OUT"; then
+    ok "O's remedy, executed (TILLANDSIAS_CENTICOLON_DIR=$RD_O), clears the refusal"
+else bad "O remedy '$RD_O' did not clear it: $(tail -1 <<<"$OUT")"; fi
+
+# P: a predicate that dies without a verdict line. A stand-in plan binary fails
+# ONLY the static grader, the way a Lua runtime error does, and passes every
+# other call to the real one. The blocked reason must carry the error's first
+# line, and the remedy must name a file that holds the predicate's full stderr.
+STUB="$WORK/plan-stub"
+printf '#!/usr/bin/env bash\nfor a in "$@"; do case "$a" in */centicolon-grade-static.lua) echo "error: predicate failed: lua vm error: fixture-injected static failure" >&2; exit 1 ;; esac; done\nexec "%s" "$@"\n' "$PLAN" >"$STUB"
+chmod +x "$STUB"
+OUT="$(TILLANDSIAS_PLAN_BIN="$STUB" TILLANDSIAS_REPO_ROOT="$H" TILLANDSIAS_TIMING_LOG="$WORK/green.jsonl" bash "$GRADE" 2>&1)"
+v="$(grep -m1 '^blocked:centicolon-grade:' <<<"$OUT")"
+case "$v" in
+    "blocked:centicolon-grade:static:"*"fixture-injected static failure"*) ok "P a predicate that dies with no verdict line names its error in the blocked reason" ;;
+    *) bad "P: '$v'" ;;
+esac
+SE="$(sed -n 's/^  remedy: .* \([^ ]*centicolon-grade-static\.stderr\).*/\1/p' <<<"$OUT")"
+case "$SE" in /*) ;; ?*) SE="$H/$SE" ;; esac
+if grep -q '^  why: ' <<<"$OUT" && [ -n "$SE" ] && grep -q 'fixture-injected static failure' "$SE" 2>/dev/null; then
+    ok "P's remedy names a file holding the predicate's full stderr ($SE)"
+else bad "P remedy: $(grep -E '^  (why|remedy):' <<<"$OUT" | head -2)"; fi
+
 # ── REAL: the real corpus's verdict agrees with its own resolved-key count ────
 RD="target/centicolon-real-$$"
 REAL="$(TILLANDSIAS_CENTICOLON_DIR="$RD" bash "$GRADE" 2>&1)"

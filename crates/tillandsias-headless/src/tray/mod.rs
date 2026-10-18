@@ -2285,6 +2285,26 @@ fn forge_missing_actionable_message(version: &str, project_name: &str) -> String
     )
 }
 
+/// 1776-pr0g: how often the tray's Building status re-reads the build's step
+/// (the exit criterion asks for at least every 10 s).
+const BUILD_STATUS_POLL: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// The tray's status while the forge builds on demand: the step of
+/// forge-base (built first) or else forge, in the step wording the operator
+/// approved for the `--init` bar. `None` while neither reports a step.
+fn forge_build_status_line(
+    progress: impl Fn(&str) -> Option<(u64, u64, String)>,
+) -> Option<String> {
+    ["forge-base", "forge"].iter().find_map(|name| {
+        progress(name).map(|(n, m, what)| {
+            format!(
+                "🔨 {}",
+                crate::image_build_progress::building_status(name, Some((n, m, &what)))
+            )
+        })
+    })
+}
+
 /// Attempt to build the forge image for the running binary's version on
 /// demand, so a tray launched after a `--install` version bump can recover
 /// without a manual `tillandsias --init`. Order 411: the missing-image branch
@@ -2304,8 +2324,38 @@ fn try_build_forge_image_on_demand(service: &Arc<TrayService>, snapshot: &TrayUi
     ));
 
     let forge_tag = format!("tillandsias-forge:v{}", snapshot.version);
+    // 1776-pr0g: while the build runs, the status names its step.
+    let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let poller = {
+        let service = service.clone();
+        let stop = stop.clone();
+        std::thread::spawn(move || {
+            let mut last: Option<String> = None;
+            while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+                let line =
+                    forge_build_status_line(crate::image_build_progress::image_build_progress);
+                if line.is_some() && line != last {
+                    let _ = futures::executor::block_on(service.set_status(
+                        line.clone().unwrap_or_default(),
+                        TrayIconState::Building,
+                        None,
+                    ));
+                    last = line;
+                }
+                // Short naps, so the poller stops promptly when the build ends.
+                let until = std::time::Instant::now() + BUILD_STATUS_POLL;
+                while std::time::Instant::now() < until
+                    && !stop.load(std::sync::atomic::Ordering::Relaxed)
+                {
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                }
+            }
+        })
+    };
     let build_result =
         crate::ensure_image_exists(&snapshot.root, "forge", &forge_tag, snapshot.debug);
+    stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    let _ = poller.join();
 
     match build_result {
         Ok(()) => {
@@ -5293,6 +5343,22 @@ mod tests {
             .enable_all()
             .build()
             .expect("test runtime")
+    }
+
+    /// 1776-pr0g: during an on-demand forge build the tray status names the
+    /// step from the helper log, and is re-read at least every 10 s.
+    #[test]
+    fn image_build_progress_drives_the_tray_building_status() {
+        let log = "[tillandsias] building image forge-base (t, digest_missing); x\n\
+                   Building forge-base, step 5/12: installing Python tools [███░░░░░░░] 33%\n";
+        let read = |name: &str| crate::image_build_progress::progress_in_log(name, log);
+        assert_eq!(
+            forge_build_status_line(read).as_deref(),
+            Some("🔨 Building forge-base, step 5/12: installing Python tools")
+        );
+        // NEGATIVE CONTROL: no build running, no status line.
+        assert_eq!(forge_build_status_line(|_| None), None);
+        assert!(BUILD_STATUS_POLL <= std::time::Duration::from_secs(10));
     }
 
     #[test]

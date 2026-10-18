@@ -11,11 +11,15 @@
 //
 // THE TWO ENTRY POINTS, both reached from the forge's `flutter` shim:
 //
-//   tools/call toolchain_prepare {toolchain}   request/response, never blocks:
-//       {state: ready|preparing|failed, step?, total?, elapsed_s?, reason?}.
-//       The first call starts the image build on a detached thread; later
-//       calls report its progress from the build log. A multi-minute build is
-//       therefore never a silent hang (1660-kuaa class).
+//   tools/call toolchain_prepare {toolchain, force?}   request/response, never
+//       blocks: {state: ready|preparing|failed, retry_after_s?, step?, total?,
+//       elapsed_s?, reason?}. The first call starts the image build on a
+//       detached thread; later calls report its progress from the build log.
+//       A multi-minute build is therefore never a silent hang (1660-kuaa
+//       class). After a failed build the failure marker (1776-brk3) answers:
+//       busy with retry_after_s until the automatic retry, failed once none is
+//       left, and no build thread in between; force: true retries now
+//       (1776-v1t4).
 //
 //   tillandsias/exec {toolchain, argv, cwd, tty, rows, cols}   STREAMING:
 //       after a one-line JSON-RPC result the connection carries NDJSON frames
@@ -95,29 +99,133 @@ fn image_present(tag: &str) -> Result<bool, String> {
     Ok(out.status.success())
 }
 
-/// `STEP n/m` from one podman build log line.
-fn parse_step(line: &str) -> Option<(u32, u32)> {
-    let rest = &line[line.find("STEP ")? + 5..];
-    let (n, rest) = rest.split_once('/')?;
-    let m: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
-    Some((n.trim().parse().ok()?, m.parse().ok()?))
+/// What prepare does next, decided from the failure marker an earlier build
+/// left (1776-brk3), so a failed build is never respawned on every call
+/// (1776-v1t4).
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PrepareAction {
+    /// Start the build on its thread.
+    Build,
+    /// A failed build waits for its automatic retry. The operator's ruling
+    /// (2026-10-17): the agent is told "busy, try again in N", not an error,
+    /// and nothing tells it about retries.
+    Busy { retry_after_s: u64 },
+    /// Declared failed: no automatic retry is left.
+    Failed(String),
 }
 
-/// The last `STEP n/m` the build helper logged, if any.
-fn build_progress(toolchain: &str) -> Option<(u32, u32)> {
-    let text = std::fs::read_to_string(crate::image_build_helper_log_path(toolchain)).ok()?;
-    text.lines().rev().find_map(parse_step)
+fn prepare_action(
+    marker: Option<&crate::image_ensure_marker::FailureMarker>,
+    current_digest: Option<&str>,
+    force: bool,
+    now: u64,
+) -> PrepareAction {
+    use crate::image_ensure_marker::Breaker;
+    let Some(m) = marker else {
+        return PrepareAction::Build;
+    };
+    if force {
+        return PrepareAction::Build;
+    }
+    // Inputs that cannot be read now are judged as the marker's own.
+    let digest = current_digest.unwrap_or(&m.source_digest);
+    match crate::image_ensure_marker::decide(Some(m), digest) {
+        Breaker::Proceed | Breaker::InputsChanged => PrepareAction::Build,
+        Breaker::Refuse => PrepareAction::Failed(crate::image_ensure_marker::refusal(m, now)),
+        // A background retry is scheduled (1776-brk3). Until it is due the
+        // agent is told busy; once it is due and the marker still stands, the
+        // ensure that scheduled it is gone, so prepare resumes the budget (the
+        // image lock keeps a live retry and this one from both building).
+        Breaker::Resume => match m.next_retry_at {
+            Some(t) if now < t => PrepareAction::Busy {
+                retry_after_s: crate::image_ensure_marker::busy_retry_after_secs(m, now)
+                    .unwrap_or(1),
+            },
+            _ => PrepareAction::Build,
+        },
+    }
+}
+
+/// What prepare needs from the host; the tests fake it.
+trait PrepareHost {
+    fn image_present(&self, tag: &str) -> Result<bool, String>;
+    fn marker(&self, toolchain: &str) -> Option<crate::image_ensure_marker::FailureMarker>;
+    fn clear_marker(&self, toolchain: &str);
+    fn current_digest(&self, toolchain: &str) -> Option<String>;
+    /// Start the build; `done` is called with its outcome.
+    fn spawn_build(
+        &self,
+        toolchain: &'static str,
+        tag: String,
+        done: Box<dyn FnOnce(Result<(), String>) + Send>,
+    );
+}
+
+struct LiveHost {
+    debug: bool,
+}
+
+impl PrepareHost for LiveHost {
+    fn image_present(&self, tag: &str) -> Result<bool, String> {
+        image_present(tag)
+    }
+    fn marker(&self, toolchain: &str) -> Option<crate::image_ensure_marker::FailureMarker> {
+        crate::image_ensure_marker_dir()
+            .and_then(|d| crate::image_ensure_marker::load(&d, toolchain))
+    }
+    fn clear_marker(&self, toolchain: &str) {
+        if let Some(d) = crate::image_ensure_marker_dir() {
+            let _ = crate::image_ensure_marker::clear(&d, toolchain);
+        }
+    }
+    fn current_digest(&self, toolchain: &str) -> Option<String> {
+        let version = crate::VERSION.trim();
+        let root = crate::resolve_runtime_asset_root(version, self.debug).ok()?;
+        crate::ensure_image_identity(&root, toolchain, version)
+            .ok()
+            .map(|(identity, _)| identity.source_digest)
+    }
+    fn spawn_build(
+        &self,
+        toolchain: &'static str,
+        tag: String,
+        done: Box<dyn FnOnce(Result<(), String>) + Send>,
+    ) {
+        let debug = self.debug;
+        std::thread::spawn(move || {
+            done(
+                crate::resolve_runtime_asset_root(crate::VERSION.trim(), debug)
+                    .and_then(|root| crate::ensure_image_exists(&root, toolchain, &tag, debug)),
+            )
+        });
+    }
 }
 
 /// Non-blocking: start the image build if needed and report where it is.
+/// `force: true` clears a failed build's marker and builds now.
 pub(crate) fn prepare(params: &Value, debug: bool) -> Value {
+    prepare_with(
+        params,
+        &LiveHost { debug },
+        &PREPARING,
+        crate::unix_now_secs(),
+    )
+}
+
+fn prepare_with(
+    params: &Value,
+    host: &dyn PrepareHost,
+    preparing: &'static Mutex<Option<Preparing>>,
+    now: u64,
+) -> Value {
     let toolchain = match known_toolchain(params) {
         Ok(t) => t,
         Err(reason) => return json!({"state": "failed", "reason": reason}),
     };
+    let force = params["force"].as_bool() == Some(true);
     let tag = image_tag(toolchain);
-    let mut slot = PREPARING.lock().unwrap_or_else(|p| p.into_inner());
-    match image_present(&tag) {
+    let mut slot = preparing.lock().unwrap_or_else(|p| p.into_inner());
+    match host.image_present(&tag) {
         Ok(true) => {
             *slot = None;
             return json!({"state": "ready", "image": tag});
@@ -125,46 +233,87 @@ pub(crate) fn prepare(params: &Value, debug: bool) -> Value {
         Ok(false) => {}
         Err(reason) => return json!({"state": "failed", "reason": reason}),
     }
+    let marker = host.marker(toolchain);
     if let Some(p) = slot.as_ref() {
-        if let Some(Err(reason)) = &p.outcome {
-            let reason = reason.clone();
-            // A failed build is reported once, then a later call retries.
-            *slot = None;
-            return json!({"state": "failed", "reason": reason});
+        match &p.outcome {
+            // In flight.
+            None => return preparing_reply(toolchain, p.started.elapsed().as_secs()),
+            // A failure that left no marker (a full store refuses before it
+            // builds, and records none): say it once, as before.
+            Some(Err(reason)) if marker.is_none() && !force => {
+                let reason = reason.clone();
+                *slot = None;
+                return json!({"state": "failed", "reason": reason});
+            }
+            // Finished: the marker, if any, decides what comes next.
+            Some(_) => *slot = None,
         }
-    } else {
-        *slot = Some(Preparing {
-            started: Instant::now(),
-            outcome: None,
-        });
-        let tag_for_build = tag.clone();
-        std::thread::spawn(move || {
-            let result =
-                crate::resolve_runtime_asset_root(crate::VERSION.trim(), debug).and_then(|root| {
-                    crate::ensure_image_exists(&root, toolchain, &tag_for_build, debug)
-                });
-            let mut slot = PREPARING.lock().unwrap_or_else(|p| p.into_inner());
+    }
+    let digest = marker.as_ref().and_then(|_| host.current_digest(toolchain));
+    match prepare_action(marker.as_ref(), digest.as_deref(), force, now) {
+        PrepareAction::Busy { retry_after_s } => {
+            return json!({
+                "state": "preparing",
+                "toolchain": toolchain,
+                "retry_after_s": retry_after_s,
+                "message": format!(
+                    "{toolchain} is not ready yet: its toolchain image is still being prepared; try again in {} min",
+                    retry_after_s.div_ceil(60)
+                ),
+            });
+        }
+        PrepareAction::Failed(reason) => return json!({"state": "failed", "reason": reason}),
+        PrepareAction::Build => {}
+    }
+    if force && marker.is_some() {
+        host.clear_marker(toolchain);
+    }
+    *slot = Some(Preparing {
+        started: Instant::now(),
+        outcome: None,
+    });
+    // Released before the spawn: the build's completion takes this lock, and
+    // a build that ends at once must not wait on its own caller.
+    drop(slot);
+    host.spawn_build(
+        toolchain,
+        tag,
+        Box::new(move |result| {
+            let mut slot = preparing.lock().unwrap_or_else(|p| p.into_inner());
             if let Some(p) = slot.as_mut() {
-                p.outcome = Some(result.map_err(|_| {
-                    "runtime_unavailable: the toolchain image build failed on the host; see the tray log"
-                        .to_string()
+                p.outcome = Some(result.map_err(|e| {
+                    // A named refusal (a full store) is the agent's to act on.
+                    if e.starts_with("refused:") {
+                        e
+                    } else {
+                        "runtime_unavailable: the toolchain image build failed on the host; see the tray log"
+                            .to_string()
+                    }
                 }));
             }
-        });
-    }
-    let elapsed = slot
-        .as_ref()
-        .map(|p| p.started.elapsed().as_secs())
-        .unwrap_or(0);
+        }),
+    );
+    preparing_reply(toolchain, 0)
+}
+
+/// How often a caller polls while a build runs (the browser.open
+/// "preparing" reply's interval, 1776-pr0g).
+const PREPARING_RETRY_AFTER_S: u64 = tillandsias_browser_mcp::server::PREPARING_RETRY_AFTER_S;
+
+fn preparing_reply(toolchain: &str, elapsed: u64) -> Value {
     let mut answer = json!({
         "state": "preparing",
         "toolchain": toolchain,
         "elapsed_s": elapsed,
+        "retry_after_s": PREPARING_RETRY_AFTER_S,
         "message": format!("Preparing {toolchain} (one time, a few minutes): building the shared toolchain image"),
     });
-    if let Some((step, total)) = build_progress(toolchain) {
+    // 1776-pr0g: the one parser every on-demand image uses.
+    if let Some((step, total, what)) = crate::image_build_progress::image_build_progress(toolchain)
+    {
         answer["step"] = json!(step);
         answer["total"] = json!(total);
+        answer["doing"] = json!(what);
     }
     answer
 }
@@ -731,6 +880,153 @@ static SESSION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::image_ensure_marker::FailureMarker;
+    use std::cell::{Cell, RefCell};
+
+    const NOW: u64 = 1_800_000_000;
+
+    /// A host with no image, an optional marker, and a counted spawn whose
+    /// build ends with `outcome` at once.
+    struct FakeHost {
+        marker: RefCell<Option<FailureMarker>>,
+        digest: String,
+        spawns: Cell<usize>,
+        cleared: Cell<usize>,
+        outcome: Result<(), String>,
+    }
+
+    impl FakeHost {
+        fn new(marker: Option<FailureMarker>, outcome: Result<(), String>) -> Self {
+            Self {
+                marker: RefCell::new(marker),
+                digest: "sha256:inputs".into(),
+                spawns: Cell::new(0),
+                cleared: Cell::new(0),
+                outcome,
+            }
+        }
+    }
+
+    impl PrepareHost for FakeHost {
+        fn image_present(&self, _tag: &str) -> Result<bool, String> {
+            Ok(false)
+        }
+        fn marker(&self, _toolchain: &str) -> Option<FailureMarker> {
+            self.marker.borrow().clone()
+        }
+        fn clear_marker(&self, _toolchain: &str) {
+            self.cleared.set(self.cleared.get() + 1);
+            *self.marker.borrow_mut() = None;
+        }
+        fn current_digest(&self, _toolchain: &str) -> Option<String> {
+            Some(self.digest.clone())
+        }
+        fn spawn_build(
+            &self,
+            _toolchain: &'static str,
+            _tag: String,
+            done: Box<dyn FnOnce(Result<(), String>) + Send>,
+        ) {
+            self.spawns.set(self.spawns.get() + 1);
+            done(self.outcome.clone());
+        }
+    }
+
+    fn marker(next_retry_at: Option<u64>) -> FailureMarker {
+        FailureMarker {
+            image: "flutter".into(),
+            source_digest: "sha256:inputs".into(),
+            attempts: 1,
+            first_failed_at: NOW - 60,
+            last_failed_at: NOW - 60,
+            next_retry_at,
+            cause: "Build exited with status 1: STEP 4/9 failed".into(),
+            log: "/cache/image-build-flutter.log".into(),
+        }
+    }
+
+    fn flutter(force: bool) -> Value {
+        json!({"toolchain": "flutter", "force": force})
+    }
+
+    /// 1776-v1t4: after a failed build, prepare answers from the marker and
+    /// spawns nothing until the marker allows a retry, it is forced, or the
+    /// inputs change. The operator's ruling: while a retry is pending the agent
+    /// is told busy with retry_after_s, never an error.
+    #[test]
+    fn toolchain_prepare_does_not_respawn_after_failure() {
+        // A retry pending in 9 minutes: busy, no thread, no word of a failure.
+        static SLOT_BUSY: Mutex<Option<Preparing>> = Mutex::new(None);
+        let host = FakeHost::new(Some(marker(Some(NOW + 540))), Ok(()));
+        for _ in 0..3 {
+            let reply = prepare_with(&flutter(false), &host, &SLOT_BUSY, NOW);
+            assert_eq!(reply["state"], "preparing", "{reply}");
+            assert_eq!(reply["retry_after_s"], 540, "{reply}");
+            assert!(
+                reply["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("try again in 9 min")
+            );
+            assert!(!reply.to_string().contains("fail"), "{reply}");
+        }
+        assert_eq!(
+            host.spawns.get(),
+            0,
+            "no build thread while the marker refuses"
+        );
+
+        // force: true clears the marker and builds once.
+        let reply = prepare_with(&flutter(true), &host, &SLOT_BUSY, NOW);
+        assert_eq!(reply["state"], "preparing");
+        assert_eq!((host.spawns.get(), host.cleared.get()), (1, 1));
+
+        // Retry due: one build.
+        static SLOT_DUE: Mutex<Option<Preparing>> = Mutex::new(None);
+        let host = FakeHost::new(Some(marker(Some(NOW - 1))), Ok(()));
+        prepare_with(&flutter(false), &host, &SLOT_DUE, NOW);
+        assert_eq!(host.spawns.get(), 1);
+
+        // Inputs changed since the failure: one build.
+        static SLOT_NEW: Mutex<Option<Preparing>> = Mutex::new(None);
+        let mut host = FakeHost::new(Some(marker(Some(NOW + 540))), Ok(()));
+        host.digest = "sha256:edited".into();
+        prepare_with(&flutter(false), &host, &SLOT_NEW, NOW);
+        assert_eq!(host.spawns.get(), 1);
+
+        // Declared failed (no retry left): failed with the named refusal.
+        static SLOT_DEAD: Mutex<Option<Preparing>> = Mutex::new(None);
+        let host = FakeHost::new(Some(marker(None)), Ok(()));
+        let reply = prepare_with(&flutter(false), &host, &SLOT_DEAD, NOW);
+        assert_eq!(reply["state"], "failed");
+        assert!(
+            reply["reason"]
+                .as_str()
+                .unwrap()
+                .starts_with("refused:image-ensure:flutter:build-failed-previously"),
+            "{reply}"
+        );
+        assert_eq!(host.spawns.get(), 0);
+
+        // NEGATIVE CONTROL: no marker builds, and a build that failed WITHOUT
+        // leaving one (the disk refusal) is reported once, then built again.
+        static SLOT_NONE: Mutex<Option<Preparing>> = Mutex::new(None);
+        let host = FakeHost::new(
+            None,
+            Err("refused:image-ensure:flutter:disk:1MiB/7168MiB".into()),
+        );
+        let first = prepare_with(&flutter(false), &host, &SLOT_NONE, NOW);
+        assert_eq!(first["state"], "preparing");
+        assert_eq!(first["retry_after_s"], PREPARING_RETRY_AFTER_S);
+        let second = prepare_with(&flutter(false), &host, &SLOT_NONE, NOW);
+        assert_eq!(second["state"], "failed");
+        assert!(
+            second["reason"].as_str().unwrap().contains(":disk:"),
+            "{second}"
+        );
+        prepare_with(&flutter(false), &host, &SLOT_NONE, NOW);
+        assert_eq!(host.spawns.get(), 2);
+    }
 
     fn req(argv: &[&str], cwd: &str, tty: bool) -> Value {
         json!({"toolchain": "flutter", "argv": argv, "cwd": cwd, "tty": tty})
@@ -842,6 +1138,58 @@ mod tests {
             }
         });
         sock
+    }
+
+    /// A lane host that answers every toolchain_prepare with `reply`.
+    fn fake_prepare_host(dir: &std::path::Path, reply: Value) -> std::path::PathBuf {
+        let sock = dir.join("mcp.sock");
+        let listener = std::os::unix::net::UnixListener::bind(&sock).unwrap();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(stream) = stream else { return };
+                let mut writer = stream.try_clone().unwrap();
+                let mut reader = std::io::BufReader::new(stream);
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                    continue;
+                }
+                let req: Value = serde_json::from_str(line.trim()).unwrap();
+                let answer = json!({"jsonrpc": "2.0", "id": req["id"], "result": tillandsias_browser_mcp::framing::tool_result_content(reply.clone())});
+                let _ = writeln!(writer, "{answer}");
+            }
+        });
+        sock
+    }
+
+    /// 1776-v1t4: a host that answers "busy, try again in 9 min" makes the
+    /// shim say so and exit EX_TEMPFAIL (75), instead of holding the agent's
+    /// command for nine minutes or reporting a failure.
+    #[test]
+    fn shim_reports_a_long_wait_as_busy_and_exits_75() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock = fake_prepare_host(
+            dir.path(),
+            json!({
+                "state": "preparing",
+                "toolchain": "flutter",
+                "retry_after_s": 540,
+                "message": "flutter is not ready yet: its toolchain image is still being prepared; try again in 9 min",
+            }),
+        );
+        let Some(mut cmd) = shim(dir.path(), &sock, &["--version"]) else {
+            eprintln!("skip: no python3");
+            return;
+        };
+        let started = Instant::now();
+        let out = cmd.output().unwrap();
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(out.status.code(), Some(75), "{stderr}");
+        assert!(stderr.contains("try again in 9 min"), "{stderr}");
+        assert!(!stderr.to_lowercase().contains("fail"), "{stderr}");
+        assert!(
+            started.elapsed() < Duration::from_secs(20),
+            "it did not wait"
+        );
     }
 
     fn shim(
@@ -1097,11 +1445,25 @@ mod tests {
         assert_eq!(dev_server_argv(&[]), None);
     }
 
+    /// 1776-pr0g: prepare reads progress through the one shared parser,
+    /// which also reads a multi-stage build's prefixed STEP line.
     #[test]
-    fn progress_parses_podman_step_lines() {
-        assert_eq!(parse_step("STEP 4/9: RUN apt-get update"), Some((4, 9)));
-        assert_eq!(parse_step("[2/3] STEP 12/14: COPY . ."), Some((12, 14)));
-        assert_eq!(parse_step("COMMIT localhost/tillandsias-flutter"), None);
-        assert_eq!(parse_step("STEP x/9"), None);
+    fn image_build_progress_is_the_toolchain_parser() {
+        let dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let src = std::fs::read_to_string(std::path::Path::new(&dir).join("src/toolchain_exec.rs"))
+            .expect("read toolchain_exec.rs");
+        assert!(src.contains(concat!(
+            "image_build_progress::",
+            "image_build_progress(toolchain)"
+        )));
+        assert!(
+            !src.contains(concat!("fn parse_", "step(")),
+            "no private parser remains"
+        );
+        let log = "[tillandsias] building image flutter (t, digest_missing); x\n[2/3] STEP 12/14: COPY . .\n";
+        assert_eq!(
+            crate::image_build_progress::progress_in_log("flutter", log),
+            Some((12, 14, "copying files".to_string()))
+        );
     }
 }

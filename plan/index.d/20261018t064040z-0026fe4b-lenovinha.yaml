@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: scoped-forge-diagnostics-collection-query-and-curated-events-research
+    field: status
+    value: in_progress
+    ts: "2026-10-18T06:40:40Z"
+    host: lenovinha
+
+events:
+  - packet_id: scoped-forge-diagnostics-collection-query-and-curated-events-research
+    event:
+      type: note
+      ts: "2026-10-18T06:40:40Z"
+      host: lenovinha
+      summary: |-
+        claimed: WIP slot freed by 1777-yhwr landing; OpenSpec change forge-diagnostics-scope plus red fixtures

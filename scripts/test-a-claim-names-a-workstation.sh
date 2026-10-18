@@ -161,6 +161,21 @@ if command -v cargo >/dev/null 2>&1; then
         ok "ARM 6: 772-4se9's writer_host_default unit test still passes, EXECUTED not grepped (rc=$_ut_rc)"
     else
         bad "ARM 6: 772-4se9's unit test did not pass (rc=$_ut_rc): $(printf '%s' "$_ut_out" | grep -E 'FAILED|panicked|error' | head -1 | cut -c1-80)"
+        # 1780-jxc3: macuahuitl evicted #539 twice on "linking with `cc`
+        # failed", and the line above is all the land log kept; the linker's
+        # own cause (ld/collect2, a signal, ENOSPC) is in its note lines. Name
+        # it, and the free space where the link writes, so the next one is
+        # diagnosable from the log alone.
+        while IFS= read -r _l; do
+            case "$_l" in  # skip the argv lines, which are not the cause
+                *'note:  "'*) continue ;;
+                *'arguments are omitted'*) continue ;;
+            esac
+            echo "  ARM 6 cause: ${_l:0:300}"
+        done < <(grep -m 24 -e 'note: ' -e 'ld: ' -e 'collect2' -e 'No space' -e 'Killed' -e 'signal' -e 'cannot ' <<<"$_ut_out")
+        while IFS= read -r _l; do
+            echo "  ARM 6 disk: $_l"
+        done < <(df -Pk "$ROOT/target" "${TMPDIR:-/tmp}" 2>&1)
     fi
 else
     echo "skip: ARM 6 — no cargo on this host; the 772-4se9 unit test is owed a run elsewhere"

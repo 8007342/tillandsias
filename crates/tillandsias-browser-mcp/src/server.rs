@@ -142,6 +142,11 @@ pub struct BrowserMcpServer {
     debounce: Arc<DebounceTable>,
 }
 
+/// Order 1776-pr0g: how long a caller waits before asking again while a
+/// window's engine image builds on first use (the usual
+/// [`LaunchError::Preparing`] `retry_after_s`).
+pub const PREPARING_RETRY_AFTER_S: u64 = 10;
+
 impl BrowserMcpServer {
     /// Create a new MCP server with the given config.
     /// @trace spec:host-browser-mcp
@@ -432,7 +437,7 @@ impl BrowserMcpServer {
         let tools = json!([
             {
                 "name": "browser.open",
-                "description": "Open a browser window for a project-local URL. The reply's headless field says whether a human can see it: headless: true means NO human can see the window, and only agents drive it (over CDP in dev mode). The window stays open after this session ends, until browser.close or the user closes it.",
+                "description": "Open a browser window for a project-local URL. The reply's headless field says whether a human can see it: headless: true means NO human can see the window, and only agents drive it (over CDP in dev mode). The window stays open after this session ends, until browser.close or the user closes it. On the first window of an engine the host builds its image (several minutes): the reply is then {state: \"preparing\", step, total, notice, retry_after_s} with no window_id; call browser.open again after retry_after_s until it opens, and that reply's notice says the engine was prepared.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -835,6 +840,27 @@ impl BrowserMcpServer {
                     id,
                     "BROWSER_UNAVAILABLE: no browser container launcher is configured for this lane",
                 );
+            }
+            // Order 1776-pr0g: a first-use image build is running; say where
+            // it is instead of holding the call for minutes. Not an error:
+            // the caller retries and the window opens when the image exists.
+            Err(LaunchError::Preparing {
+                engine,
+                notice,
+                step,
+                retry_after_s,
+            }) => {
+                let mut result = json!({
+                    "state": "preparing",
+                    "engine": engine.label(),
+                    "notice": notice,
+                    "retry_after_s": retry_after_s,
+                });
+                if let Some((n, m)) = step {
+                    result["step"] = json!(n);
+                    result["total"] = json!(m);
+                }
+                return RpcResponse::Success { id, result };
             }
             Err(err) => {
                 return Self::tool_error(id, format!("BROWSER_LAUNCH_FAILED: {err}"));
@@ -2262,6 +2288,86 @@ mod tests {
         // Even if opencode.acme.localhost is in routes, it should be blocked
         // to prevent recursive OpenCode Web launches
         assert!(!allowlist.is_allowed("http://opencode.acme.localhost:8080/"));
+    }
+
+    // ---- Order 1776-pr0g: a first-use image build reports its step ----
+
+    /// A host whose engine image builds on the first call and is ready on
+    /// the second, as `browser_open::TrayBrowserContainers` behaves.
+    #[derive(Default)]
+    struct FirstUseContainers {
+        calls: parking_lot::Mutex<u32>,
+    }
+
+    impl BrowserContainers for FirstUseContainers {
+        fn preview_tls_port(&self) -> Option<u16> {
+            Some(18443)
+        }
+        fn start(
+            &self,
+            request: &launcher::ContainerLaunchRequest<'_>,
+        ) -> Result<launcher::ContainerHandle, LaunchError> {
+            let mut calls = self.calls.lock();
+            *calls += 1;
+            if *calls == 1 {
+                return Err(LaunchError::Preparing {
+                    engine: request.engine,
+                    notice: "Preparing the Chromium engine (first use) — step 3/9: installing system packages; call browser.open again in a few seconds".into(),
+                    step: Some((3, 9)),
+                    retry_after_s: PREPARING_RETRY_AFTER_S,
+                });
+            }
+            Ok(launcher::ContainerHandle {
+                container_name: format!("tillandsias-browser-{}-1", request.project_label),
+                network_name: "tillandsias-browser-net-1".to_string(),
+                profile_dir: std::path::PathBuf::new(),
+                cdp_socket: None,
+                notice: Some("Prepared the Chromium engine on first use (95 s); later windows open without this wait.".into()),
+            })
+        }
+        fn stop(&self, _handle: &launcher::ContainerHandle) {}
+    }
+
+    #[tokio::test]
+    async fn first_use_build_progress_is_reported_then_the_window_opens_with_the_notice() {
+        let host = Arc::new(FirstUseContainers::default());
+        let server = BrowserMcpServer::with_project_label(
+            McpServerConfig::default(),
+            "acme",
+            Some(host.clone() as Arc<dyn BrowserContainers>),
+        );
+        let call = || RpcRequest {
+            id: Some(1),
+            method: "tools/call".to_string(),
+            params: json!({ "name": "browser.open", "arguments": { "url": "https://www.acme.localhost:18443/", "headless": true } }),
+        };
+        let RpcResponse::Success { result, .. } = server.handle_request(call()).await else {
+            panic!("preparing is a success frame");
+        };
+        assert!(result.get("isError").is_none(), "{result}");
+        let result = &result["structuredContent"];
+        assert_eq!(result["state"], "preparing", "{result}");
+        assert_eq!(
+            (result["step"].as_u64(), result["total"].as_u64()),
+            (Some(3), Some(9))
+        );
+        assert!(
+            result["notice"].as_str().unwrap_or("").contains("step 3/9"),
+            "{result}"
+        );
+        assert_eq!(result["retry_after_s"], PREPARING_RETRY_AFTER_S);
+        assert!(
+            result["window_id"].is_null(),
+            "no window while it builds: {result}"
+        );
+
+        let RpcResponse::Success { result, .. } = server.handle_request(call()).await else {
+            panic!("the second call opens");
+        };
+        let text = result.to_string();
+        assert!(text.contains("win-"), "a window opened: {text}");
+        assert!(text.contains("Chromium engine on first use"), "{text}");
+        assert_eq!(*host.calls.lock(), 2);
     }
 
     // ---- Order 1649-xqet: browser.open runs the container, admits the preview port ----

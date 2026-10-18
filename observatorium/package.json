@@ -8,7 +8,7 @@
     "deploy": "wrangler deploy",
     "preview": "wrangler dev --local --ip 0.0.0.0 --port 8080",
     "serve": "node scripts/serve.mjs",
-    "test": "node --test metrics/*.test.mjs",
+    "test": "node --test metrics/*.test.mjs scripts/*.test.mjs",
     "release-snapshot": "node scripts/build.mjs --release-snapshot"
   },
   "engines": {

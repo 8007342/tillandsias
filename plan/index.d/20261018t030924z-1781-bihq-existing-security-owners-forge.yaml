@@ -1,0 +1,43 @@
+events:
+  - packet_id: the-git-mirror-refuses-anonymous-git-protocol-pushes-and-the-ssh-ca-lane-is-the-only-receive-path
+    event:
+      type: note
+      ts: "2026-10-18T03:09:24Z"
+      host: forge-container
+      summary: "1781-bihq transport audit: main.rs:14370 leaves fetch on anonymous git://; entrypoint.sh:512 still enables receive-pack. Add an explicit protected-fetch decision to1688 separately from anonymous receive retirement. Reproduce main.rs:14386 unwritable known-hosts branch and prove no anonymous/unverified fallback; branch inspection alone is not a proven exploit."
+  - packet_id: forge-lanes-authenticate-to-vault-with-a-short-lived-client-cert-not-only-a-bearer-token
+    event:
+      type: note
+      ts: "2026-10-18T03:09:24Z"
+      host: forge-container
+      summary: "1781-bihq: require certA+tokenB refusal, exact expected Vault identity, renewal outage through expiry, finite stopped/revoked-lane session bound and authenticated CA rollover. vault_bootstrap.rs:2678,2721 HTTPS-loopback exec skips verification; classify/remove or narrowly justify without propagating exemption. Cert renewal is not key rotation; token revocation does not invalidate signed certs."
+  - packet_id: the-router-and-egress-proxy-authenticate-the-calling-lane-by-client-cert
+    event:
+      type: note
+      ts: "2026-10-18T03:09:24Z"
+      host: forge-container
+      summary: "1781-bihq: test service/action/resource authorization after client auth, cross-lane routes, forged forwarded identity and direct backend bypass. Include HTTP8080 vs TLS8443, readiness invalid-cert+redirect path and Chromium SPKI exception in the actual caller-path inventory. A trusted CA certificate alone must not authorize every lane resource."
+  - packet_id: per-lane-sockets-admit-only-peers-whose-kernel-attested-cgroup-is-the-owning-lane-container
+    event:
+      type: note
+      ts: "2026-10-18T03:09:24Z"
+      host: forge-container
+      summary: "1781-bihq: reconcile MCS-only authentication alternative in draft workload-identity. Check accepting path, correct namespaces and process lifetime; test same-UID foreign container, PID reuse/stale table, missing cgroup and restart. peer_table.rs:15 alone proves no accepting-path enforcement. Independently test MAC and peer controls; AF_VSOCK EPERM observed only in this forge session."
+  - packet_id: selinux-labeling-is-on-by-default-for-every-enclave-container-and-label-disable-is-a-named-exception
+    event:
+      type: note
+      ts: "2026-10-18T03:09:24Z"
+      host: forge-container
+      summary: "1781-bihq confirms policy.rs:17-22/214-219 mandatory label disabling and Vault typepermissive at vault_container.cil:41. Remove unsupported enforcement claims. Require global mode, per-domain permissiveness, actual labels and attributable denied-operation evidence. Operator unsupported-SELinux normal-launch disposition pending; no reduced mode authorized by this audit."
+  - packet_id: each-lane-socket-is-labelled-with-its-lane-mcs-pair-and-enclave-roles-get-confined-selinux-types
+    event:
+      type: note
+      ts: "2026-10-18T03:09:24Z"
+      host: forge-container
+      summary: "1781-bihq: a named or loaded policy is not confinement proof; current Vault precedent is typepermissive. Test reachable foreign-lane file/socket denial with matching AVC and same-lane allowed operation. Independently isolate MAC from DAC/network/peer refusal. Revalidate evidence after same-instance policy/mode/trust/listener changes; include generation and finite age. Do not indiscriminately relabel compositor/driver/shared system paths."
+  - packet_id: runtime-security-evidence-closes-the-gap-between-declared-and-enforced-selinux-identity-and-encrypted-service-access
+    event:
+      type: note
+      ts: "2026-10-18T03:09:24Z"
+      host: forge-container
+      summary: "Independent draft review found stale evidence could survive same-launch security changes. Added normative policy/configuration/trust generation binding, finite age and invalidation/revalidation controls to spec/design/tasks. Strict OpenSpec validation passes; no runtime hardening claim."

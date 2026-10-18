@@ -67,6 +67,25 @@ RUN chmod 0755 /usr/local/bin/chromium-framework-launch.sh
 COPY chromium-capture-policy.json /etc/chromium/policies/managed/tillandsias-capture.json
 RUN chmod 0644 /etc/chromium/policies/managed/tillandsias-capture.json
 
+# ORDER 1769-9gna: a private PulseAudio server per window, so the page lists
+# only "Speakers" (and its monitor), never a host device name. The launcher
+# starts it; browser-audio.pa is its whole configuration. pulseaudio-utils
+# (pactl, pacat) lets the fixture measure the browser's view from inside.
+# autospawn is off: a client that cannot reach its server must not start a
+# default one.
+# Chromium's dependencies bring pipewire-pulseaudio, which conflicts with the
+# pulseaudio daemon; nothing in the image runs it, so it is swapped out.
+RUN microdnf install -y --allowerasing \
+    pulseaudio \
+    pulseaudio-utils \
+    && rpm -q chromium \
+    && microdnf clean all
+COPY browser-audio.pa /etc/tillandsias/browser-audio.pa
+COPY browser-audio-start.sh /usr/local/lib/tillandsias/browser-audio-start.sh
+RUN chmod 0644 /etc/tillandsias/browser-audio.pa /usr/local/lib/tillandsias/browser-audio-start.sh \
+    && mkdir -p /etc/pulse/client.conf.d \
+    && printf 'autospawn = no\n' > /etc/pulse/client.conf.d/00-tillandsias.conf
+
 USER chromium
 
 ENTRYPOINT ["/usr/local/bin/chromium-framework-launch.sh"]

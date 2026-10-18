@@ -213,6 +213,94 @@ mod tests {
         );
     }
 
+    /// 1769-9gna: the private server inside the browser image, the only audio
+    /// server the browser talks to.
+    const BROWSER_AUDIO_PA: &str = include_str!("../../../images/chromium/browser-audio.pa");
+    const BROWSER_AUDIO_START: &str =
+        include_str!("../../../images/chromium/browser-audio-start.sh");
+    const CHROMIUM_LAUNCHER: &str =
+        include_str!("../../../images/chromium/chromium-framework-launch.sh");
+    /// 1777-yhwr: the WebKit window's copies, and its launcher.
+    const WEBKIT_AUDIO_PA: &str = include_str!("../../../images/webkit/browser-audio.pa");
+    const WEBKIT_AUDIO_START: &str = include_str!("../../../images/webkit/browser-audio-start.sh");
+    const WEBKIT_LAUNCHER: &str = include_str!("../../../images/webkit/webkit-launch.sh");
+    const WEBKIT_CONTAINERFILE: &str = include_str!("../../../images/webkit/Containerfile");
+
+    /// The modules a PulseAudio script loads, with their arguments.
+    fn loaded_modules(pa: &str) -> Vec<(&str, &str)> {
+        pa.lines()
+            .filter_map(|l| l.trim().strip_prefix("load-module "))
+            .map(|rest| rest.split_once(' ').unwrap_or((rest, "")))
+            .collect()
+    }
+
+    /// The browser's whole audio world is one socket and one "Speakers" sink
+    /// that tunnels to the output-only server: no device, network or source
+    /// module, so no host name can be listed through it. The text IS the
+    /// boundary here, as with `shipped_conf_is_output_only_and_local`; the
+    /// live fixture test-browser-audio-generic-names.lua measures the view.
+    #[test]
+    fn host_audio_browser_view_is_one_generic_speakers_sink() {
+        let modules = loaded_modules(BROWSER_AUDIO_PA);
+        let names: Vec<&str> = modules.iter().map(|(n, _)| *n).collect();
+        assert_eq!(
+            names,
+            ["module-native-protocol-unix", "module-tunnel-sink-new"],
+            "one socket and one tunnel sink, nothing else"
+        );
+        assert_eq!(
+            modules[1].1,
+            "server=unix:@UPSTREAM@ sink_name=speakers sink_properties=device.description=Speakers"
+        );
+        assert!(BROWSER_AUDIO_PA.contains("set-default-sink speakers"));
+        // NEGATIVE CONTROL: the check above rejects a config that also loads a
+        // device module, the shape that would list a host's sound card.
+        let mutant = format!("{BROWSER_AUDIO_PA}load-module module-udev-detect\n");
+        assert_ne!(loaded_modules(&mutant).len(), names.len());
+
+        // The start script keeps clients from loading modules, and a window
+        // whose private server does not start gets no server rather than the
+        // host's.
+        // source-pin-ok: the start script's flags and fallback are the contract.
+        assert!(BROWSER_AUDIO_START.contains("--disallow-module-loading=yes"));
+        assert!(BROWSER_AUDIO_START.contains("unset PULSE_SERVER"));
+
+        // 1777-yhwr: both engines run the same front. Each image builds from
+        // its own context, so the files are copies, held byte-identical here,
+        // and each launcher sources the script before it starts its browser.
+        assert_eq!(
+            WEBKIT_AUDIO_PA, BROWSER_AUDIO_PA,
+            "the WebKit copy of browser-audio.pa drifted"
+        );
+        assert_eq!(
+            WEBKIT_AUDIO_START, BROWSER_AUDIO_START,
+            "the WebKit copy of browser-audio-start.sh drifted"
+        );
+        let source = "source /usr/local/lib/tillandsias/browser-audio-start.sh";
+        for (name, launcher, starts) in [
+            ("chromium", CHROMIUM_LAUNCHER, "exec \"$CHROMIUM_BIN\""),
+            (
+                "webkit",
+                WEBKIT_LAUNCHER,
+                "exec node /opt/tillandsias/webkit-window.js",
+            ),
+        ] {
+            let sourced = launcher
+                .find(source)
+                .unwrap_or_else(|| panic!("{name} does not source it"));
+            let started = launcher
+                .find(starts)
+                .unwrap_or_else(|| panic!("{name} never starts"));
+            assert!(
+                sourced < started,
+                "{name} sources the audio front before its browser"
+            );
+        }
+        assert!(
+            WEBKIT_CONTAINERFILE.contains("ENTRYPOINT [\"/opt/tillandsias/webkit-launch.sh\"]")
+        );
+    }
+
     #[test]
     fn a_socket_path_too_long_for_sun_path_is_refused_by_name() {
         let long = PathBuf::from(format!("/{}/native", "r".repeat(110)));

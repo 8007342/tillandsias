@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha on the coordinator's request (macuahuitl-fedora,
+# 2026-10-18), from the case 1785-655p left uncovered.
+packets:
+  - packet_id: an-image-built-by-init-or-build-image-outside-the-on-demand-ensure-is-keep-id-warmed-on-a-store-that-cannot-shift
+    order: 1786-tzce
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    size: S
+    pickup_role: linux
+    capability_tags: [linux, podman, rootless, images, forge, init]
+    related: [1785-655p, 1776-ondm]
+    depends_on: []
+    title: |
+      Images built by `tillandsias --init` or scripts/build-image.sh, outside the on-demand ensure, get the same keep-id mapped-copy warm that 1785-655p gives on-demand builds, on a rootless store reporting "Supports shifting":"false", so the forge launched right after --init does not pay the copy inside its 300 s start budget
+    context: |
+      1785-655p (PR 543) warms only inside ensure_image_exists, after a successful build: a bounded `podman create --userns=keep-id` + rm under the Image budget, only when podman info reports "Supports shifting":"false". An image built by --init or build-image.sh outside that ensure is not warmed. --init builds the forge image that is launched right after, which is the cold path that bit macuahuitl (coordinator, 2026-10-18).
+      MEASURED on lenovinha 2026-10-18 (rootless, overlay on btrfs, podman 5.8.7, shifting=false): a fresh 1 GiB + 20k-file image's first keep-id run took 1.94 s against 0.11 s warm. After a create+rm warm the first run took 0.13 s, and layers.json held one more layer with the image's diff digest and a uidmap.
+    exit_criteria:
+      - "on a store reporting shifting=false, an image built by --init, and one built by scripts/build-image.sh, has its keep-id mapped copy (a layers.json layer with the image's diff digest and a uidmap) before its first start; fixture red today on a rootless Linux host"
+      - "NEGATIVE CONTROL: on a store reporting shifting=true or an unknown answer, neither path runs a warm create"
+      - "one warm implementation (warm_keep_id_mapping or its shell twin calling the same check), not drifting copies"
+    unscoreable: "unpinnable-until-the-guard-exists: the pin is a rootless-Linux fixture over the --init and build-image.sh build paths (cargo test init_and_build_image_builds_are_keep_id_warm, written red first in the same change); it cannot go red on a store with shifting=true"
+    next_action: >
+      After 1785-655p lands: find where --init and build-image.sh finish a build (build-image.sh already runs verify-image-usable.sh there), add the same shifting-gated warm, write the fixture red on lenovinha, then fix.
+    events:
+      - type: filed
+        ts: "2026-10-18T11:54:41Z"
+        host: lenovinha
+        summary: |-
+          --init and build-image.sh builds skip 1785-655p's keep-id warm; the forge launched right after --init pays the copy.

@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: affordance-slice-every-refused-host-unresolved-verdict-says-what-names-the-host
+    order: 1247-hun3
+    parent_order: 1247-amcu
+    status: in_progress
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [affordance, refusal, plan-lane, salvage, fail-loud]
+    estimated_hours: 1
+    owned_files:
+      - scripts/push-plan-fragments-to-trunk.sh
+      - scripts/salvage-dirty-worktree.sh
+      - scripts/test-host-slug-resolution.sh
+    title: |
+      1247-amcu slice — FAMILY: the three refused:host-unresolved sites (push-plan-fragments-to-trunk.sh, salvage-dirty-worktree.sh x2) carry a remedy beside their why, matched to the cause (silent resolver vs a resolver that is not executable)
+    context: |
+      Picked by lenovinha at the coordinator's request (2026-10-18) as the next family by scripts/rank-refusal-hits.sh (rank 15 after the 1247-cbg7 rerank, 2 recorded hits, 3 sites). Each site says WHY (the push would be attributed to no host) but nothing says what clears it. scripts/agent-identity.sh node-name tries hostname -s, hostname, uname -n, then /etc/hostname, so the answer is "give this host a name it can read", or, for the not-executable case, "restore the helper".
+      Overlap: draft #386 edits salvage-dirty-worktree.sh at its lines 94, 189 and 222, not these sites (162-164).
+    exit_criteria:
+      - 'each refused:host-unresolved site emits why: and remedy: lines beside its unchanged refusal line, with the remedy matched to its cause (pre-fix: FAILS on all three)'
+      - 'NEGATIVE CONTROL (1247-amcu criterion 5): test-host-slug-resolution.sh EXECUTES each remedy against the REAL subjects (a resolver that answers; the exec bit restored) and asserts they then pass the resolution gate'
+      - 'the six existing test-host-slug-resolution.sh arms stay green'
+    verifiable_closure: |
+      bash scripts/test-host-slug-resolution.sh passes with the new arm; pre-fix: the new arm FAILS.
+    provenance: |
+      Filed by lenovinha at the coordinator's request, 2026-10-18.
+    events:
+      - type: filed
+        ts: "2026-10-18T15:13:40Z"
+        host: lenovinha
+        summary: |-
+          Next 1247-amcu slice: refused:host-unresolved. Filed and claimed in one fragment by lenovinha.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: images-default-lib-common-sh-parses-again-so-every-forge-sources-it-the-1747-e9d6-landing-prepended-a-stray-fragment-whose-fi-aborts-source
+    field: status
+    value: implemented
+    ts: "2026-10-18T13:35:36Z"
+    host: macuahuitl
+
+events:
+  - packet_id: images-default-lib-common-sh-parses-again-so-every-forge-sources-it-the-1747-e9d6-landing-prepended-a-stray-fragment-whose-fi-aborts-source
+    event:
+      type: note
+      ts: "2026-10-18T13:35:36Z"
+      host: macuahuitl
+      summary: |-
+        fix 428f2d692 is an ancestor of linux-next; bash -n images/default/lib-common.sh passes on trunk

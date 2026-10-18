@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-cli-lane-for-a-project-the-running-tray-serves-fails-raw-on-the-trays-mcp-socket-instead-of-attaching-or-refusing-by-name
+    field: status
+    value: implemented
+    ts: "2026-10-18T11:32:38Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-cli-lane-for-a-project-the-running-tray-serves-fails-raw-on-the-trays-mcp-socket-instead-of-attaching-or-refusing-by-name
+    event:
+      type: note
+      ts: "2026-10-18T11:32:38Z"
+      host: lenovinha
+      summary: |-
+        landed in run 152 as 797f25c2c (PR 542): named refusal before any podman call

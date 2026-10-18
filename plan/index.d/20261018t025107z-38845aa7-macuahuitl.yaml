@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: scoped-forge-diagnostics-collection-query-and-curated-events-research
+    field: next_action
+    value: Reconcile with the specs already on trunk before any prototype. runtime-diagnostics-stream ALREADY specifies a session-scoped, never-persisted event stream with a 10K-event ring buffer and redacted podman argv. That is the operator's 2026-10-18 retention ruling ("only the current forge session") in spec form. log-aggregation requires source/timestamp/severity/trace metadata to survive aggregation, and log-schema-versioning requires a schema version on every entry. So the baseline to beat is that existing in-memory ring buffer exposed through the lane MCP's service_logs, not SQLite or Vector/VictoriaLogs. Add a store only when a named query the ring cannot answer is shown. Brokers (Kafka, Flume, NATS JetStream, Redpanda, Pulsar) are out of scope for a session-only window. Settle sibling visibility and expected concurrency with the coordinator, then author ONE OpenSpec change that extends runtime-diagnostics-stream (and reconciles external-logs-layer's all-producer RO mount model with lane-scoped query access). Do not create a parallel log spec.
+    ts: "2026-10-18T02:51:07Z"
+    host: macuahuitl
+    replaces_sha256: "55e2655b372e98d5c97bc5b4b2b51904f9c529bdac9c89176c985974c8a4dab6"
+
+events:
+  - packet_id: scoped-forge-diagnostics-collection-query-and-curated-events-research
+    event:
+      type: note
+      ts: "2026-10-18T02:51:07Z"
+      host: macuahuitl
+      summary: |-
+        coordinator review: reconcile with runtime-diagnostics-stream (session-scoped ring buffer) per the 2026-10-18 session-only retention ruling

@@ -600,6 +600,7 @@ specs:
   - litmus:host-browser-mcp-lane-socket-shape
   - litmus:browser-open-container-shape
   - litmus:host-audio-output-only
+  - litmus:browser-audio-generic-names
   coverage_ratio: 67
   last_verified: '2026-05-29'
 - spec_id: host-chromium
@@ -892,6 +893,7 @@ specs:
   - litmus:drain-vs-self-heal
   - litmus:teardown-liveness-shared-scope-agreement
   - litmus:gate-podman-mode-is-configuration-not-inference
+  - litmus:image-ensure-disk-preflight
   coverage_ratio: 100
   last_verified: '2026-08-17'
 - spec_id: podman-container-spec

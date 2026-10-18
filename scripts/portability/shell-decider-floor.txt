@@ -10,7 +10,6 @@ scripts/check-base-ledger-status-loss.sh
 scripts/check-build-cache-sweep.sh
 scripts/check-capability-row.sh
 scripts/check-carry-forward.sh
-scripts/check-cheatsheet-frontmatter.sh
 scripts/check-cheatsheet-sources.sh
 scripts/check-cheatsheet-tiers.sh
 scripts/check-claim-confirmed.sh
@@ -49,7 +48,6 @@ scripts/check-litmus-expression-pinning-added.sh
 scripts/check-litmus-line-windows.sh
 scripts/check-litmus-mutation-arms-mutate.sh
 scripts/check-litmus-pin-claims.sh
-scripts/check-litmus-steps-can-fail.sh
 scripts/check-long-running-view.sh
 scripts/check-macos-only-sources-verified.sh
 scripts/check-macos-stock-binaries.sh

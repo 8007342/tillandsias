@@ -80,6 +80,17 @@ def prepare():
             if shown:
                 sys.stderr.write("\n")
             die(state.get("reason", "preparing Flutter failed"))
+        # 1776-v1t4: the host says how long to wait. A wait past a minute
+        # means the image is not coming soon (the operator's ruling: busy,
+        # try again later, never an error): say so and exit EX_TEMPFAIL (75)
+        # rather than hold the caller for many minutes.
+        retry_after = int(state.get("retry_after_s", 3) or 3)
+        if retry_after > 60:
+            if shown:
+                sys.stderr.write("\n")
+            sys.stderr.write(state.get("message") or f"Flutter is not ready yet; try again in {-(-retry_after // 60)} min.")
+            sys.stderr.write("\n")
+            sys.exit(75)
         line = "Preparing Flutter (one time, a few minutes)"
         if "step" in state and "total" in state:
             line += f": step {state['step']}/{state['total']}"
@@ -90,7 +101,7 @@ def prepare():
             sys.stderr.write(line + "\n")
         sys.stderr.flush()
         shown = True
-        time.sleep(3)
+        time.sleep(min(max(retry_after, 1), 10))
 
 
 def project_cwd():

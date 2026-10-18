@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: scoped-forge-diagnostics-collection-query-and-curated-events-research
+    field: next_action
+    value: |-
+      Review this research and settle retention, expected concurrency and sibling visibility; then author an OpenSpec change for a bounded prototype extending service_logs, without automatically deploying a broker.
+
+      [2026-10-18T02:41:30Z forge-container] Retention ruling 2026-10-18: ONLY THE CURRENT FORGE SESSION. Prioritize bounded ephemeral SQLite baseline versus Vector/VictoriaLogs. No teardown persistence requirement; settle sibling visibility and expected concurrency before OpenSpec implementation proposal.
+
+      [2026-10-18T02:46:14Z forge-container] Verification 2026-10-18: strict fragment validation, formatting and Clippy passed. Full ./build.sh --check FAILED after 3134 tests with six new-red results: four ca_refresh_margin_tests cannot find openssl; init_build_state_persists_to_cache_directory loaded None; spec_index::the_repo_relative_rung_anchors_to_the_checkout_not_to_home rejects TMPDIR under /home/forge/.cache. No source changes in this research. Preserve via documented plan-only fragment lane; do not claim green full gate. Transcript target/test-transcript-workspace-gate.log is ephemeral; these failure details are the durable record.
+    ts: "2026-10-18T02:46:14Z"
+    host: forge-container
+
+events:
+  - packet_id: scoped-forge-diagnostics-collection-query-and-curated-events-research
+    event:
+      type: note
+      ts: "2026-10-18T02:46:14Z"
+      host: forge-container
+      summary: |-
+        Record actual full-gate limitation before publishing research via the documented plan-only lane.
