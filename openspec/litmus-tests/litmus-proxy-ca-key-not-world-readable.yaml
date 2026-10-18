@@ -60,6 +60,13 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "ok: live 0600, 0644 detected as violation"
 
+  - step: "clamp-ca-material's selftest passes: it clamps, stays idempotent, and each violation says why and what clears it (1247-cam7)"
+    # The script's --selftest was run by nothing until this step. It holds the
+    # executed-remedy cases for its refusals (1247-amcu criterion 5).
+    command: "out=$(bash scripts/clamp-ca-material.sh --selftest 2>&1); case \"$out\" in *'selftest:clamp-ca-material:'*' cases PASS'*) echo 'ok: clamp-ca-material selftest passes' ;; *) echo \"FAIL: $out\"; exit 1 ;; esac"
+    timeout_ms: 10000
+    expected_behavior: "ok: clamp-ca-material selftest passes"
+
 observability:
   traces:
     - "@trace spec:podman-secrets-integration"

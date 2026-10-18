@@ -29,6 +29,17 @@
 _mode_of() { # _mode_of <path> -> octal permission bits, or non-zero if neither form works
     stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1" 2>/dev/null
 }
+# 1247-cam7: who owns a path, for the cannot-chmod remedy (same one-line
+# GNU/BSD pair as _mode_of).
+_owner_of() { stat -c '%U' "$1" 2>/dev/null || stat -f '%Su' "$1" 2>/dev/null; }
+# 1247-cam7 (1247-amcu): why it refused and what clears it, on stderr, so the
+# one stdout verdict line stays machine-readable (cycle-preflight discards it).
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+_cannot_chmod() { # _cannot_chmod <path> <mode>
+    echo "violation:ca-material:cannot chmod $1"
+    _afford "chmod $2 $1 failed, and its owner is $(_owner_of "$1" || echo unknown) while this runs as $(id -un 2>/dev/null || echo "uid $(id -u)"); only the owner (or root) can change its mode, and until then CA private material stays readable beyond its owner" \
+        "if a container uid owns it (rootless podman maps them), run podman unshare chmod $2 $1; if another host user owns it, run chmod $2 $1 as that user; then re-run scripts/clamp-ca-material.sh"
+}
 # @trace spec:secret-rotation, spec:proxy-container
 #
 # clamp-ca-material.sh — re-clamp CA material that a PRE-FIX binary created
@@ -105,6 +116,8 @@ _run() {
         done < <(_private_names)
         if [ "$offenders" -gt 0 ]; then
             echo "violation:ca-material:$offenders path(s) not owner-only under $dir"
+            _afford "the CA directory must be 0700 and its private keys 0600, or another local uid can read a key and mint certificates the enclave trusts (755-qcxh)" \
+                "run scripts/clamp-ca-material.sh (without --check) to clamp them, then re-run with --check"
             return 1
         fi
         echo "ok:ca-material:already-clamped"
@@ -113,12 +126,12 @@ _run() {
 
     # Directory FIRST — see the header.
     _clamp_dir "$dir"; rc=$?
-    [ "$rc" -eq 1 ] && { echo "violation:ca-material:cannot chmod $dir"; return 1; }
+    [ "$rc" -eq 1 ] && { _cannot_chmod "$dir" 700; return 1; }
     [ "$rc" -eq 0 ] && changed=$((changed + 1))
 
     while IFS= read -r name; do
         _clamp_key "$dir/$name"; rc=$?
-        [ "$rc" -eq 1 ] && { echo "violation:ca-material:cannot chmod $dir/$name"; return 1; }
+        [ "$rc" -eq 1 ] && { _cannot_chmod "$dir/$name" 600; return 1; }
         [ "$rc" -eq 0 ] && changed=$((changed + 1))
     done < <(_private_names)
 
@@ -141,7 +154,7 @@ if [ "$MODE" = "--selftest" ]; then
     : > "$tmp/ca/intermediate.crt"; chmod 644 "$tmp/ca/intermediate.crt"
     chmod 755 "$tmp/ca"
 
-    out="$(_run "$tmp/ca" 1)"
+    out="$(_run "$tmp/ca" 1 2>/dev/null)"
     case "$out" in
         violation:ca-material:*) : ;;
         *) echo "SELFTEST-FAIL: --check accepted a world-readable key ($out)"; fail=1 ;;
@@ -170,8 +183,37 @@ if [ "$MODE" = "--selftest" ]; then
     [ "$out" = "ok:ca-material:absent" ] \
         || { echo "SELFTEST-FAIL: absent dir mishandled ($out)"; fail=1; }
 
+    # 1247-cam7 (1247-amcu): every violation says WHY and WHAT CLEARS IT on
+    # stderr, beside its unchanged stdout verdict, and the --check remedy is
+    # EXECUTED: run without --check, and --check then answers clean.
+    mkdir -p "$tmp/ca2"; : > "$tmp/ca2/vault.key"; chmod 644 "$tmp/ca2/vault.key"; chmod 755 "$tmp/ca2"
+    err="$(_run "$tmp/ca2" 1 2>&1 >/dev/null)"
+    case "$err" in
+        *"  why: "*"  remedy: "*"clamp-ca-material.sh"*) : ;;
+        *) echo "SELFTEST-FAIL: --check violation carries no why/remedy naming the fix run ($err)"; fail=1 ;;
+    esac
+    _run "$tmp/ca2" 0 >/dev/null 2>&1
+    out="$(_run "$tmp/ca2" 1 2>/dev/null)"
+    [ "$out" = "ok:ca-material:already-clamped" ] \
+        || { echo "SELFTEST-FAIL: the --check remedy, executed, did not clear it ($out)"; fail=1; }
+
+    # cannot chmod: a path this uid cannot change (a container's mapped uid
+    # under rootless podman owns it). chmod is shadowed to fail as EPERM does.
+    # The remedy must name the owner; restoring chmod (acting as the owner)
+    # must clear it.
+    mkdir -p "$tmp/ca3"; : > "$tmp/ca3/intermediate.key"; chmod 644 "$tmp/ca3/intermediate.key"; chmod 755 "$tmp/ca3"
+    owner="$(_owner_of "$tmp/ca3")"
+    res="$( chmod() { return 1; }; _run "$tmp/ca3" 0 2>&1 )"
+    case "$res" in
+        *"violation:ca-material:cannot chmod $tmp/ca3"*"  why: "*"$owner"*"  remedy: "*"podman unshare chmod 700"*) : ;;
+        *) echo "SELFTEST-FAIL: cannot-chmod carries no why naming the owner and no podman unshare remedy ($res)"; fail=1 ;;
+    esac
+    out="$(_run "$tmp/ca3" 0 2>/dev/null)"
+    [ "$out" = "ok:ca-material:clamped:2" ] \
+        || { echo "SELFTEST-FAIL: as the owner, the clamp did not clear it ($out)"; fail=1; }
+
     [ "$fail" -eq 0 ] || { echo "selftest:clamp-ca-material:FAIL"; exit 1; }
-    echo "selftest:clamp-ca-material:6 cases PASS"
+    echo "selftest:clamp-ca-material:10 cases PASS"
     exit 0
 fi
 
