@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # @trace spec:macos-native-tray, order:1420-umka
 #
-# Fixture for check-macos-stock-binaries.sh. Hermetic: each arm copies the
-# checked sources into a scratch root, mutates one thing, and runs the lint
-# with --root, so the checkout is never edited.
+# Fixture for scripts/lua/check-macos-stock-binaries.lua (ported from the .sh,
+# 1247-hun3). Hermetic: each arm copies the checked sources into a scratch root,
+# mutates one thing, and runs the lint with TILLANDSIAS_MACOS_STOCK_ROOT (the
+# .sh's --root), so the checkout is never edited.
 #
 #   1  the current tree passes
 #   2  MUTATION: an added Command::new("qemu-img") in vz.rs is refused, naming it
@@ -17,7 +18,10 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LINT="$ROOT/scripts/check-macos-stock-binaries.sh"
+LINT="$ROOT/scripts/lua/check-macos-stock-binaries.lua"
+. "$ROOT/scripts/plan-binary-probe.sh"
+PLAN="$(cd "$ROOT" && resolve_plan_binary)" || { echo "skip:check-macos-stock-binaries:no-runnable-plan-binary"; exit 0; }
+case "$PLAN" in /*) ;; *) PLAN="$ROOT/${PLAN#./}" ;; esac
 pass=0; fail=0
 ok()  { echo "ok:   $1"; pass=$((pass + 1)); }
 bad() { echo "FAIL: $1"; fail=$((fail + 1)); }
@@ -34,7 +38,7 @@ fresh() {
     cp "$ROOT/crates/tillandsias-vm-layer/src/materialize/macos.rs" "$W/r/crates/tillandsias-vm-layer/src/materialize/macos.rs"
     cp "$ROOT/scripts/install-macos.sh" "$W/r/scripts/install-macos.sh"
 }
-lint() { bash "$LINT" --root "$W/r" 2>&1; }
+lint() { (cd "$ROOT" && TILLANDSIAS_MACOS_STOCK_ROOT="$W/r" TILLANDSIAS_SCRIPT_RUNNER_BIN="$PLAN" "$PLAN" script run "$LINT" 2>&1); }
 VZ="$W/r/crates/tillandsias-vm-layer/src/vz.rs"
 INST="$W/r/scripts/install-macos.sh"
 
