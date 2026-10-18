@@ -11,6 +11,9 @@
 --   4 NO-MEM    a tree whose controllers lack memory: skip, exit 0, no group
 --   5 WIRED     with-wsl2-builder.sh runs it in the guest prefix, before the build
 --   6 NESTED    wsl-guest-session.sh nests its teardown cgroup inside the cap
+--   7-11        scripts/wsl2-build-target-prune.sh: under the limit untouched,
+--               incremental/ first, then debug/, never release/, never a /mnt/
+--               target (NEGATIVE CONTROL), and wired into the builder
 -- Lua from the start (the 667-kfyn change pays its shell-to-lua carry, so it
 -- adds no shell fixture).
 
@@ -95,6 +98,56 @@ arm("6 NESTED the guest session cgroup is created under the supervisor's own cgr
     has_line("scripts/wsl-guest-session.sh", [[    _gs_base="$_gs_root$(sed -n 's/^0:://p' /proc/$$/cgroup 2>/dev/null)"]])
     and has_line("scripts/wsl-guest-session.sh", [[    _gs_cg="$_gs_base/tillandsias-session-$$"]]),
     "wsl-guest-session.sh creates its cgroup outside the supervisor's own — the build escapes the memory cap")
+
+-- ── scripts/wsl2-build-target-prune.sh (the same order's disk half) ─────────
+-- Sizes in KB through TILLANDSIAS_WSL2_TARGET_PRUNE_UNIT_KB=1, so a limit of
+-- 1000 is crossed with a few MB. The target must be absolute in bash's own
+-- spelling: under MSYS `C:/x` is `/c/x` to the script's case pattern.
+local function bash_abs(p)
+    local d, rest = p:match("^(%a):(/.*)$")
+    return d and ("/" .. d:lower() .. rest) or p
+end
+local function prune(name, layout, max, target_override)
+    local base = REL .. "/prune-" .. name
+    for _, spec in ipairs(layout) do
+        local f, kb = spec[1], spec[2]
+        fs.mkdir(base .. "/" .. f:match("^(.*)/[^/]+$"))
+        fs.write(base .. "/" .. f, string.rep("x", kb * 1024))
+    end
+    local r = proc.run({ argv = { "bash", ROOT .. "/scripts/wsl2-build-target-prune.sh", max }, timeout_ms = 60000,
+        env = { TILLANDSIAS_WSL2_TARGET_PRUNE_UNIT_KB = "1", TILLANDSIAS_WSL2_TARGET_DEBUG_MAX_GB = "",
+            -- arms 7-9 may run from a checkout under /mnt/c (the in-tree gate);
+            -- only arm 10 keeps the real Windows-drive prefix
+            TILLANDSIAS_WSL2_TARGET_PRUNE_PROTECT = target_override and "" or "/nonexistent-protect/",
+            CARGO_TARGET_DIR = target_override or bash_abs(W .. "/prune-" .. name .. "/t") } })
+    local o = (r.stdout or "") .. (r.stderr or "") .. " rc=" .. tostring(r.code)
+    for _, d in ipairs({ "t/debug/incremental", "t/debug/deps", "t/debug", "t/release" }) do
+        if fs.exists(base .. "/" .. d) then o = o .. " has:" .. d end
+    end
+    return o
+end
+local function has(s, p) return s:find(p, 1, true) ~= nil end
+
+o = prune("under", { { "t/debug/deps/a", 100 }, { "t/release/p", 50 } }, "1000")
+arm("7 UNDER a debug/ under the limit is left alone",
+    has(o, "ok:wsl2-build-target-prune:debug=") and has(o, "rc=0") and has(o, "has:t/debug/deps"), o)
+
+o = prune("incr", { { "t/debug/incremental/s", 3000 }, { "t/debug/deps/a", 100 }, { "t/release/p", 50 } }, "1000")
+arm("8 INCREMENTAL over the limit drops debug/incremental first and keeps deps/ and release/",
+    has(o, "pruned:wsl2-build-target-prune:incremental:") and not has(o, "has:t/debug/incremental")
+    and has(o, "has:t/debug/deps") and has(o, "has:t/release"), o)
+
+o = prune("whole", { { "t/debug/deps/a", 3000 }, { "t/release/p", 50 } }, "1000")
+arm("9 WHOLE still over after incremental: all of debug/ goes, release/ stays",
+    has(o, "pruned:wsl2-build-target-prune:debug:") and not has(o, "has:t/debug") and has(o, "has:t/release"), o)
+
+o = prune("windows", { { "t/debug/deps/a", 3000 } }, "1000", "/mnt/c/Users/someone/checkout/target")
+arm("10 WINDOWS-DRIVE a target on /mnt/ is the operator's and is never pruned (NEGATIVE CONTROL)",
+    has(o, "skip:wsl2-build-target-prune:target-on-windows-drive") and has(o, "has:t/debug/deps"), o)
+
+arm("11 WIRED with-wsl2-builder.sh runs the prune in the guest prefix",
+    has_line("scripts/with-wsl2-builder.sh", '_ENV_PREFIX="$_ENV_PREFIX bash scripts/wsl2-build-target-prune.sh >&2 || true;"'),
+    "with-wsl2-builder.sh no longer runs scripts/wsl2-build-target-prune.sh in _ENV_PREFIX")
 
 proc.run({ argv = { "rm", "-rf", W }, timeout_ms = 30000 })
 local total = pass + #failed

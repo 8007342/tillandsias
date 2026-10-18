@@ -351,6 +351,10 @@ if [[ "${TILLANDSIAS_WSL2_TARGET_IN_TREE:-}" != "1" ]]; then
     # remedy that works on their host.
     _ENV_PREFIX="$_ENV_PREFIX export CARGO_TARGET_DIR=\"/root/.cache/tillandsias-wsl2-target/$REPO_BASENAME\";"
 fi
+# ORDER 667-kfyn — nothing pruned that target's debug/: it reached 164 GB and
+# filled C: through the distro's vhdx (2026-10-17). Over 40 GB (default) the
+# prune drops debug/incremental, then debug/; never fails the run.
+_ENV_PREFIX="$_ENV_PREFIX bash scripts/wsl2-build-target-prune.sh >&2 || true;"
 
 echo "[wsl2-builder] Re-execing inside '$BUILD_DISTRO' WSL2 distro..."
 
