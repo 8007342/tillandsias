@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: port-check-committable-branch-sh-to-lua-and-repoint-its-skills-litmus-host-tools-row-and-the-rust-text-that-names-it
+    event:
+      type: list-replace
+      ts: "2026-10-18T03:10:06Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      field: related
+      items:
+        - "1779-udga"
+        - "1776-brk3"
+        - "1443-6r3q"
+      summary: |-
+        link to the Lua bash-replacement milestone at the coordinator request (shell-to-lua is a counter backlog, no story row); this row is the blocked-by: target for shell-to-lua waivers on check-committable-branch.sh
