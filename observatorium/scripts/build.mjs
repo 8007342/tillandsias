@@ -93,7 +93,8 @@ async function fetchPinned(pin, path) {
 }
 
 async function ensureFlutter() {
-  if (process.env.FLUTTER) return process.env.FLUTTER;
+  const managed = flutterCommand(process.env);
+  if (managed) return managed;
   const dir = resolve(tools, `flutter-${PINS.flutter.version}`);
   const bin = resolve(dir, 'flutter/bin/flutter');
   if (existsSync(bin)) return bin;
@@ -103,6 +104,15 @@ async function ensureFlutter() {
   run('tar', ['-xJf', archive, '-C', dir]);
   rmSync(archive, { force: true });
   return bin;
+}
+
+// A forge already supplies a trusted sibling toolchain through its Flutter
+// command. Downloading another SDK into the ephemeral checkout bypasses that
+// path and can exhaust the checkout before the app even compiles.
+export function flutterCommand(env) {
+  if (env.FLUTTER) return env.FLUTTER;
+  if (env.TILLANDSIAS_PROJECT) return 'flutter';
+  return null; // Standalone Workers Builds uses the pinned download above.
 }
 
 /** tillandsias-plan: given, or built from this checkout with the pinned toolchain. */
@@ -178,7 +188,7 @@ async function main() {
 }
 
 const started = Date.now();
-main()
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main()
   .then(() => {
     const total = Math.round((Date.now() - started) / 1000);
     console.log(`observatorium-build: total ${total}s (${timings.map(([n, s]) => `${n}=${s}s`).join(' ')})`);

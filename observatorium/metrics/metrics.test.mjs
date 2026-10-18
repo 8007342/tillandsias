@@ -10,7 +10,7 @@ import {collect, countSpec, EPOCH, summarizePlan} from './collect.mjs';
 import {commitSeries, logarithm, project} from './precompute.mjs';
 
 function snapshot(date = '2026-10-13T12:00:00Z') {
-  return {schemaVersion: 1, epoch: EPOCH, measuredAt: date, revision: 'abcdef', gaps: [], details: {specs: [], plan: []}, current: {specs: {files: 2, requirements: 3, scenarios: 4}, plan: {total: 6, fragments: 2, states: {ready: 6}}, residual: {value: null}, commits: {total: 8}}};
+  return {schemaVersion: 1, epoch: EPOCH, measuredAt: date, revision: 'abcdef0123456789abcdef0123456789abcdef0123', dirty: false, gaps: [], details: {specs: [], plan: []}, current: {specs: {files: 2, requirements: 3, scenarios: 4}, plan: {total: 6, fragments: 2, states: {ready: 6}}, residual: {value: null}, commits: {total: 8}}};
 }
 test('Markdown code fences cannot inflate heading totals', () => {
   assert.deepEqual(countSpec('### Requirement: A\n#### Scenario: B\n```md\n### Requirement: fake\n```\n~~~\n#### Scenario: fake\n~~~'), {requirements: 1, scenarios: 1});
@@ -139,13 +139,15 @@ test('the headline grade is the latest release cut; the deploy grade is display-
   live.current.residual = {value: 1529, denominator: 1529, satisfied: 0, traced: 2, positivelyTested: 0, records: 0};
   const cut = snapshot('2026-10-13T20:00:00Z');
   cut.release = 'v56.10.13.1';
-  cut.current.residual = {value: 1527, denominator: 1529, satisfied: 2, traced: 0, positivelyTested: 2, records: 1399};
+  cut.current.residual = {source: 'centicolon-grade-observed/1', value: 1527, denominator: 1529, satisfied: 2, traced: 0, positivelyTested: 2, records: 1399};
   const unmeasuredCut = snapshot('2026-10-12T20:00:00Z');
   unmeasuredCut.release = 'v56.10.12.1';
   const result = project(live, [unmeasuredCut, cut]);
   assert.equal(result.current.residual.value, 1527, 'the headline is the release cut, not the deploy');
   assert.equal(result.current.residual.release, 'v56.10.13.1');
-  assert.match(result.current.residual.reason, /recorded litmus run/);
+  assert.match(result.current.residual.reason, /2 tested of 1529/);
+  assert.equal(result.current.residual.revision, cut.revision);
+  assert.match(result.current.residual.recordScope, /does not identify runs matching/);
   assert.equal(result.current.residualLive.displayOnly, true);
   assert.equal(result.current.residualLive.traced, 2);
   assert.match(result.current.residualLive.label, /display-only/);
@@ -172,11 +174,16 @@ test('the release cut refuses to append an unmeasured grade (1661-vckd)', () => 
     fake({schema: 'centicolon-grade-observed/1', measured: true, R: 4, denominator: 4, satisfied: 0, records: 0, histogram: {traced: 4, positively_tested: 0}});
     assert.throws(cut, /not a measurement over recorded litmus results/, 'a measured grade with no recorded results is refused too');
     fake({schema: 'centicolon-grade-observed/1', measured: true, R: 3, denominator: 4, satisfied: 1, records: 7, histogram: {traced: 3, positively_tested: 1}});
+    writeFileSync(join(repo, '.gitignore'), 'target/\nout.json\nhistory.jsonl\n');
+    execFileSync('git', ['-C', repo, 'add', 'scripts/centicolon-grade.sh', '.gitignore']);
+    execFileSync('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'record fixture grade']);
     cut();
     const line = JSON.parse(readFileSync(history, 'utf8').trim());
     assert.equal(line.release, 'v56.10.13.1');
     assert.equal(line.current.residual.value, 3);
     assert.equal(line.current.residual.positivelyTested, 1);
+    assert.throws(cut, /duplicate release snapshot/);
+    assert.equal(readFileSync(history, 'utf8').trim().split('\n').length, 1);
   } finally {
     if (old === undefined) delete process.env.TILLANDSIAS_PLAN_BIN; else process.env.TILLANDSIAS_PLAN_BIN = old;
     rmSync(repo, {recursive: true, force: true});

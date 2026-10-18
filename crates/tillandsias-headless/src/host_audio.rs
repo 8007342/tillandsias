@@ -216,8 +216,15 @@ mod tests {
     /// 1769-9gna: the private server inside the browser image, the only audio
     /// server the browser talks to.
     const BROWSER_AUDIO_PA: &str = include_str!("../../../images/chromium/browser-audio.pa");
-    const BROWSER_LAUNCHER: &str =
+    const BROWSER_AUDIO_START: &str =
+        include_str!("../../../images/chromium/browser-audio-start.sh");
+    const CHROMIUM_LAUNCHER: &str =
         include_str!("../../../images/chromium/chromium-framework-launch.sh");
+    /// 1777-yhwr: the WebKit window's copies, and its launcher.
+    const WEBKIT_AUDIO_PA: &str = include_str!("../../../images/webkit/browser-audio.pa");
+    const WEBKIT_AUDIO_START: &str = include_str!("../../../images/webkit/browser-audio-start.sh");
+    const WEBKIT_LAUNCHER: &str = include_str!("../../../images/webkit/webkit-launch.sh");
+    const WEBKIT_CONTAINERFILE: &str = include_str!("../../../images/webkit/Containerfile");
 
     /// The modules a PulseAudio script loads, with their arguments.
     fn loaded_modules(pa: &str) -> Vec<(&str, &str)> {
@@ -251,11 +258,47 @@ mod tests {
         let mutant = format!("{BROWSER_AUDIO_PA}load-module module-udev-detect\n");
         assert_ne!(loaded_modules(&mutant).len(), names.len());
 
-        // The launcher keeps clients from loading modules, and a window whose
-        // private server does not start gets no server rather than the host's.
-        // source-pin-ok: the launcher's flags and fallback are the contract.
-        assert!(BROWSER_LAUNCHER.contains("--disallow-module-loading=yes"));
-        assert!(BROWSER_LAUNCHER.contains("unset PULSE_SERVER"));
+        // The start script keeps clients from loading modules, and a window
+        // whose private server does not start gets no server rather than the
+        // host's.
+        // source-pin-ok: the start script's flags and fallback are the contract.
+        assert!(BROWSER_AUDIO_START.contains("--disallow-module-loading=yes"));
+        assert!(BROWSER_AUDIO_START.contains("unset PULSE_SERVER"));
+
+        // 1777-yhwr: both engines run the same front. Each image builds from
+        // its own context, so the files are copies, held byte-identical here,
+        // and each launcher sources the script before it starts its browser.
+        assert_eq!(
+            WEBKIT_AUDIO_PA, BROWSER_AUDIO_PA,
+            "the WebKit copy of browser-audio.pa drifted"
+        );
+        assert_eq!(
+            WEBKIT_AUDIO_START, BROWSER_AUDIO_START,
+            "the WebKit copy of browser-audio-start.sh drifted"
+        );
+        let source = "source /usr/local/lib/tillandsias/browser-audio-start.sh";
+        for (name, launcher, starts) in [
+            ("chromium", CHROMIUM_LAUNCHER, "exec \"$CHROMIUM_BIN\""),
+            (
+                "webkit",
+                WEBKIT_LAUNCHER,
+                "exec node /opt/tillandsias/webkit-window.js",
+            ),
+        ] {
+            let sourced = launcher
+                .find(source)
+                .unwrap_or_else(|| panic!("{name} does not source it"));
+            let started = launcher
+                .find(starts)
+                .unwrap_or_else(|| panic!("{name} never starts"));
+            assert!(
+                sourced < started,
+                "{name} sources the audio front before its browser"
+            );
+        }
+        assert!(
+            WEBKIT_CONTAINERFILE.contains("ENTRYPOINT [\"/opt/tillandsias/webkit-launch.sh\"]")
+        );
     }
 
     #[test]

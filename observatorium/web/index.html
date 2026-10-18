@@ -11,6 +11,13 @@
 </head>
 <body>
   <div id="loading" role="status">Opening the observatorium…</div>
+  <script>
+    // @trace spec:observatorium-dashboard — stop announcing startup once the
+    // first Flutter frame is painted, including the app's retryable error view.
+    window.addEventListener('flutter-first-frame', () => {
+      document.getElementById('loading')?.remove();
+    }, {once: true});
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

@@ -27,13 +27,18 @@ size: quick
 
 preconditions:
   - a Linux desktop session with a PipeWire daemon and pipewire-pulse; pipewire and pactl on PATH
-  - podman with the chromium-framework image (TILLANDSIAS_CHROMIUM_FRAMEWORK_IMAGE, else the v<VERSION> tag a window runs)
+  - podman with the chromium-framework image (TILLANDSIAS_CHROMIUM_FRAMEWORK_IMAGE, else the v<VERSION> tag a window runs), and for the WebKit step the webkit image (TILLANDSIAS_WEBKIT_IMAGE, else its v<VERSION> tag); a missing image SKIPS that step by name
 
 critical_path:
   - step: "the window's audio view is generic and private, and it still plays"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-browser-audio-generic-names.lua 2>&1"
     timeout_ms: 300000
     expected_behavior: "ok:browser-audio-generic-names-fixture:4"
+
+  - step: "the same four arms for the tray's WebKit window (1777-yhwr)"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-browser-audio-generic-names.lua -- --engine webkit 2>&1"
+    timeout_ms: 300000
+    expected_behavior: "ok:browser-audio-generic-names-webkit-fixture:4"
 
 observability:
   traces:
