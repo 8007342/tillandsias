@@ -10,8 +10,11 @@ const seriesColors = <String, Color>{
   'specs': Color(0xff80dbbf),
   'plan': Color(0xffffcc85),
   'residual': Color(0xffff8c9f),
+  'earned': Color(0xff80dbbf),
+  'denominator': Color(0xffb8a0ff),
 };
 Color seriesColor(String id) {
+  id = id.split('@').first;
   if (seriesColors.containsKey(id)) return seriesColors[id]!;
   // Stable across platforms and sessions, unlike String.hashCode.
   final hash = id.codeUnits.fold<int>(0, (h, c) => (h * 31 + c) & 0x7fffffff);
