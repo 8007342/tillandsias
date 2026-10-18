@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air on the coordinator's request (macuahuitl-fedora,
+# 2026-10-18), split out of 1784-skfj after the keep-id lead was measured
+# negative on the macOS guest.
+packets:
+  - packet_id: on-a-rootless-store-without-shifting-the-first-keep-id-run-of-a-freshly-built-image-copies-the-whole-image-inside-the-callers-start-budget
+    order: 1785-655p
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    size: M
+    pickup_role: linux
+    capability_tags: [linux, podman, rootless, images, forge, router]
+    related: [1776-ondm, 1784-skfj]
+    depends_on: []
+    title: |
+      On a rootless podman store without idmapped-mount shifting, the first `--userns=keep-id` run of a freshly built image copies the whole image into an ID-mapped layer, inside the caller's 300 s container start budget. A cold forge or router start can then be killed at its budget, and the immediate retry passes in under a second.
+    context: |
+      REPORTED by macuahuitl-fedora 2026-10-18 after that host's upgrade: the first `podman run --userns=keep-id` of the freshly built forge image (~3 GB, test forge_quarantine_tmpfs_options_are_accepted_by_podman) ran past its 300 s budget, and the next one took 0.2 s.
+      NOT the macOS cause (MEASURED on tlatoanis-macbook-air 2026-10-18, v56.10.17.1 guest): rootful podman, overlay on btrfs, kernel 6.19.10-300.fc44.aarch64, GraphStatus "Supports shifting":"true". A freshly built 1 GiB + 20k-file image took 0.37 s plain, 0.41 s on its first keep-id run and 0.39 s on its second, with 0 uid/gid-mapped layers in layers.json. So this row is the rootless Linux arm only; 1784-skfj keeps the macOS hang.
+      Every enclave start (forge, router, inference, git, local web preview) passes --userns=keep-id, so any fresh image on such a store pays the copy at its first start.
+    exit_criteria:
+      - "On a rootless store whose podman info reports \"Supports shifting\":\"false\", the ID-mapped copy of a freshly built image happens during the on-demand build (1776-ondm), or is counted in its budget, and never inside a 300 s container start budget. A fixture shows that the first keep-id start after a build finishes within the start budget. It is red first on a rootless Linux host against today's linux-next."
+      - "NEGATIVE CONTROL: on a store reporting shifting=true (or rootful), the fixture runs no warm step and the first start is unchanged, so the warm cannot become a per-launch cost."
+    unscoreable: "unpinnable-until-the-guard-exists: the pin is a rootless-Linux fixture (scripts/lua/test-keep-id-first-run-outside-start-budget.lua) written red first; it cannot go red on hosts with shifting=true, which includes the macOS guest"
+    next_action: >
+      On a rootless Linux host, record podman info's GraphStatus (Supports shifting) and time a first versus a second keep-id run of a freshly built image. Write the fixture red. Then warm the mapped copy at the end of the on-demand ensure (for example a bounded `podman create --userns=keep-id` plus rm under the Image budget) only when shifting is false.
+    events:
+      - type: filed
+        ts: "2026-10-18T10:17:24Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Rootless keep-id first-run image copy lands inside the 300 s start budget; split from 1784-skfj (negative on macOS, shifting=true).
