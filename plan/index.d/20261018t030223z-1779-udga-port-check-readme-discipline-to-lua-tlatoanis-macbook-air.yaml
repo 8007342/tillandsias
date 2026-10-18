@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air at the operator's request (2026-10-18): the
+# shell-to-lua item waived too-big on 1778-gct2 becomes its own packet.
+packets:
+  - packet_id: port-check-readme-discipline-sh-to-lua-and-repoint-the-forge-agent-prompts-and-cheatsheets-that-name-it
+    order: 1779-udga
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    size: M
+    pickup_role: any
+    capability_tags: [shell-to-lua, forge, cheatsheets, portability]
+    related: [1778-gct2, 1765-q7rg]
+    depends_on: []
+    title: |
+      Port scripts/check-readme-discipline.sh (99 lines) to scripts/lua/ on `tillandsias-plan script run`, and repoint every forge agent prompt and cheatsheet that tells an agent to run it
+    context: |
+      Operator request, 2026-10-18: the shell-to-lua carried obligation offered this item on work/1778-gct2. It was waived `too-big:scripts/check-readme-discipline.sh:99` because the port reaches well past that change. This packet is that port as dedicated work.
+      Why it is more than a 99-line port (read 2026-10-18):
+      - Forge agents are told to run it by bare name. See images/default/config-overlay/opencode/agent/startup.md:17 and bootstrap-readme.md:15, and agent-startup-skills.md:50,118 and readme-discipline.md:153-156 under both cheatsheets/ and images/default/cheatsheets/.
+      - The archived spec project-bootstrap-readme-applied-2026-04-27 (specs/default-image/spec.md:34-39) says the forge image ships it at /usr/local/bin/check-readme-discipline.sh. No reference to it appears in images/default/Containerfile*, so whether the forge really has it on PATH today is UNVERIFIED. Check that first.
+      - scripts/test-portability-idioms.sh:183 lists it by name.
+      - The forge image already carries policy-bin/tillandsias-plan (images/default/Containerfile:52-62), so a Lua port can run inside a forge as `tillandsias-plan script run <path>`.
+    exit_criteria:
+      - "scripts/lua/check-readme-discipline.lua checks what the .sh checks (required H1/H2 headers, the auto-regen warning, a parseable timestamp, a well-formed requires_cheatsheets: block). A fixture runs good and bad READMEs through BOTH the old .sh and the port and finds the same verdict for each (NEGATIVE CONTROL: a README missing one H2 is refused by both)."
+      - "scripts/check-readme-discipline.sh is deleted. Both shell-ratchet floors are lowered with check-shell-ratchet.lua --dump-floors, and test-portability-idioms.sh no longer lists it."
+      - "Every prompt and cheatsheet named in the context (both copies) names the command that works inside a forge. A guard refuses a remaining `check-readme-discipline.sh` mention outside openspec/changes/archive."
+      - "Inside a forge built from the change, the agent's documented command runs and exits 0 on a disciplined README. This is checked through a published release, or on Linux."
+    unscoreable: "unpinnable-until-the-guard-exists: the pin is the parity fixture scripts/lua/test-check-readme-discipline-parity.lua, written red in the same commit as the port (1136-n8sh); closure then adds ! git grep -n 'check-readme-discipline.sh' -- . ':!openspec/changes/archive' ':!plan'"
+    next_action: >
+      Verify whether the forge image puts check-readme-discipline.sh on PATH today. Write the parity fixture red, then port, delete the .sh, repoint the prompts and cheatsheets, and lower the floors.
+    events:
+      - type: filed
+        ts: "2026-10-18T03:02:23Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          The shell-to-lua item waived too-big on 1778-gct2 (check-readme-discipline.sh, 99 lines), filed as dedicated work at the operator's request.
