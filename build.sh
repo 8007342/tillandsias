@@ -6391,7 +6391,9 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Ten formerly-orphaned fixtures passed (1063-nraf)"
 
     _step "Checking litmus steps can actually fail (972-cvdg)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-steps-can-fail.sh" 2>&1; then
+    # 1247-ngc5: ported to scripts/lua (the shell-to-lua carried obligation);
+    # the verdict grammar is unchanged.
+    if ! _run_lua_decider "scripts/lua/check-litmus-steps-can-fail.lua" 2>&1; then
         _error "a litmus step prints the same token on success and failure (972-cvdg) — see the verdict line above"
         exit 1
     fi

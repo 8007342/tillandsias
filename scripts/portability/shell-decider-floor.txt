@@ -49,7 +49,6 @@ scripts/check-litmus-expression-pinning-added.sh
 scripts/check-litmus-line-windows.sh
 scripts/check-litmus-mutation-arms-mutate.sh
 scripts/check-litmus-pin-claims.sh
-scripts/check-litmus-steps-can-fail.sh
 scripts/check-long-running-view.sh
 scripts/check-macos-only-sources-verified.sh
 scripts/check-macos-stock-binaries.sh

@@ -464,11 +464,12 @@ deps_out_path() { # <flake-output>
 store_pin() {
     PIN_RESOLVED=0
     PIN_PINNED=0
+    PIN_UNRESOLVED=()
     store_present || return 0
     mkdir -p "$CHROOT_STORE/$PIN_SUBDIR" 2>/dev/null || return 1
     local out p
     for out in "${FLAKE_OUTPUTS[@]}"; do
-        p="$(deps_out_path "$out")" || continue
+        p="$(deps_out_path "$out")" || { PIN_UNRESOLVED+=("$out"); continue; }
         PIN_RESOLVED=$((PIN_RESOLVED + 1))
         _store_nix path-info "$p" >/dev/null 2>&1 || continue
         # ln -sfn, so re-pinning REPLACES the root for that output rather than
@@ -482,7 +483,13 @@ store_pin() {
 store_gc() {
     local dry="${1:-}"
     store_present || { echo "skip:nix-store:no-store"; return 0; }
-    _store_nix store ping >/dev/null 2>&1 || { echo "blocked:nix-store-gc:nix-unusable"; return 1; }
+    # 1247-ngc5: each blocked:nix-store-gc:* verdict is preceded on stderr by
+    # its why: and remedy:, so the verdict stays the last line (arm 17 pins it).
+    if ! _store_nix store ping >/dev/null 2>&1; then
+        printf '  why: neither the host nix nor an existing %s toolbox with nix can address the store at %s, so nothing can be measured or collected\n' "$TOOLBOX_NAME" "$CHROOT_STORE" >&2
+        printf '  remedy: run scripts/nix-toolbox.sh ensure (it sets up a nix lane: the chroot store with host nix, or the %s toolbox with nix installed), then re-run scripts/nix-toolbox.sh gc\n' "$TOOLBOX_NAME" >&2
+        echo "blocked:nix-store-gc:nix-unusable"; return 1
+    fi
 
     store_pin
     # THE SAFETY INTERLOCK. If evaluation could not tell us what is current, we
@@ -490,10 +497,10 @@ store_gc() {
     # closure along with the stale ones. Refuse rather than guess. A resolved
     # closure that is merely ABSENT is fine — there is nothing to lose.
     if [ "$PIN_RESOLVED" -lt "${#FLAKE_OUTPUTS[@]}" ]; then
+        echo "  resolved ${PIN_RESOLVED}/${#FLAKE_OUTPUTS[@]} deps closures by evaluation; unresolved: ${PIN_UNRESOLVED[*]}" >&2
+        echo "  why: an unresolved deps closure cannot be pinned, so collecting would delete it as garbage along with the stale ones" >&2
+        echo "  remedy: from $REPO_ROOT run nix derivation show .#${PIN_UNRESOLVED[0]} (scripts/nix-toolbox.sh run -- nix ... on a toolbox host) to see why it does not evaluate, fix flake.nix or flake.lock, then re-run scripts/nix-toolbox.sh gc" >&2
         echo "blocked:nix-store-gc:unresolved-deps"
-        echo "  resolved ${PIN_RESOLVED}/${#FLAKE_OUTPUTS[@]} deps closures by evaluation;" >&2
-        echo "  refusing to collect because the unresolved ones cannot be pinned" >&2
-        echo "  and would be deleted as garbage. Fix the flake evaluation first." >&2
         return 1
     fi
 
@@ -516,10 +523,16 @@ store_gc() {
     # Do NOT swallow the collection's exit code. A failed gc that still
     # reported `ok:...freed=0G` would read as "the cache is within policy"
     # every single day while it grew past the ceiling unchecked.
-    if ! _store_nix store gc --max "${excess_gib}G" >/dev/null 2>&1; then
-        echo "blocked:nix-store-gc:collection-failed"
+    # 1247-ngc5: nix's own error used to go to /dev/null with the rest, so the
+    # refusal named the failure and not its cause.
+    local gc_err
+    if ! gc_err="$(_store_nix store gc --max "${excess_gib}G" 2>&1 >/dev/null)"; then
         echo "  nix store gc --max ${excess_gib}G failed against $CHROOT_STORE;" >&2
         echo "  the store is ${size}G against a ${ceiling}G ceiling and was NOT pruned." >&2
+        printf 'detail:nix-store-gc:%s\n' "$(grep -m1 . <<<"$gc_err")" >&2
+        echo "  why: the store stays over its ceiling until a collection succeeds, and the detail line above is nix's own reason" >&2
+        echo "  remedy: fix what the detail line names (a store lock held by a running build clears when it finishes), then re-run scripts/nix-toolbox.sh gc" >&2
+        echo "blocked:nix-store-gc:collection-failed"
         return 1
     fi
     local after
