@@ -3421,6 +3421,8 @@ pub(crate) fn ensure_image_exists(
                 std::thread::sleep(std::time::Duration::from_millis(ms));
             }
             rt.block_on(apply_image_aliases(&client, &identity))?;
+            // 1785-655p: pay the keep-id mapped copy here, inside the build.
+            warm_keep_id_mapping(image_name, &identity.canonical_tag, debug);
             if let Some(d) = marker_dir.as_deref() {
                 let _ = image_ensure_marker::clear(d, image_name);
             }
@@ -3446,6 +3448,75 @@ pub(crate) fn ensure_image_exists(
     }
 
     Ok(())
+}
+
+/// 1785-655p: whether a fresh image needs its `--userns=keep-id` mapping
+/// made ahead of its first start. On a rootless store whose overlay cannot
+/// shift IDs (podman info `"Supports shifting":"false"`), podman copies the
+/// whole image into an ID-mapped layer at the first keep-id create, so the
+/// first enclave start of a fresh image paid that copy inside its 300 s
+/// Container budget: macuahuitl's 3 GB forge ran past it on 2026-10-18 and
+/// the retry took 0.2 s. MEASURED on lenovinha (rootless, overlay on btrfs,
+/// shifting=false): a fresh 1 GiB + 20k-file image's first keep-id run took
+/// 1.94 s against 0.11 s plain and 0.11 s second; after a create+rm warm the
+/// first run took 0.13 s and storage held one more mapped layer. A store that
+/// shifts (the macOS guest measured "true") or an unknown answer warms nothing.
+fn keep_id_warm_needed(supports_shifting: Option<&str>) -> bool {
+    supports_shifting.map(str::trim) == Some("false")
+}
+
+/// The store's `Supports shifting` answer, `None` when podman cannot say.
+fn store_supports_shifting() -> Option<String> {
+    let mut cmd = podman_command();
+    cmd.args([
+        "info",
+        "--format",
+        "{{index .Store.GraphStatus \"Supports shifting\"}}",
+    ]);
+    let out = cmd
+        .output_bounded(tillandsias_podman::OperationKind::Inspect.default_budget())
+        .ok()?;
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+/// 1785-655p: make the keep-id mapped copy of a just-built image now, under
+/// the Image budget, so no container start pays it. Every enclave start uses
+/// plain `--userns=keep-id`, so one create covers them all. Best-effort: a
+/// failed warm only means the first start pays the copy, as before.
+fn warm_keep_id_mapping(image_name: &str, tag: &str, debug: bool) {
+    if !keep_id_warm_needed(store_supports_shifting().as_deref()) {
+        return;
+    }
+    let name = format!(
+        "tillandsias-keepid-warm-{image_name}-{}",
+        std::process::id()
+    );
+    let t0 = std::time::Instant::now();
+    let mut create = podman_command();
+    create.args(["create", "--userns=keep-id", "--name", &name, tag, "true"]);
+    let created = create.output_bounded(tillandsias_podman::OperationKind::Image.default_budget());
+    let mut rm = podman_command();
+    rm.args(["rm", "-f", &name]);
+    let _ = rm.output_bounded(tillandsias_podman::OperationKind::Container.default_budget());
+    match created {
+        Ok(o) if o.status.success() => {
+            if debug {
+                eprintln!(
+                    "[tillandsias] image-ensure {image_name}: keep-id mapping warmed in {} ms (store cannot shift IDs)",
+                    t0.elapsed().as_millis()
+                );
+            }
+        }
+        Ok(o) => eprintln!(
+            "[tillandsias] image-ensure {image_name}: keep-id warm failed; the first start pays the copy: {}",
+            String::from_utf8_lossy(&o.stderr).trim()
+        ),
+        Err(e) => eprintln!(
+            "[tillandsias] image-ensure {image_name}: keep-id warm failed; the first start pays the copy: {e}"
+        ),
+    }
 }
 
 /// How many trailing lines of podman's stderr a failed build carries into its
@@ -35813,5 +35884,147 @@ mod lane_socket_owner_tests {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod keep_id_warm_tests {
+    use super::*;
+    use tillandsias_podman::{OperationKind, podman_cmd_sync};
+
+    /// NEGATIVE CONTROL (1785-655p): only a store that says it cannot shift
+    /// IDs is warmed, so a shifting store (the macOS guest measured "true") or
+    /// an unknown answer never gains a per-build create.
+    #[test]
+    fn keep_id_warm_runs_only_on_a_store_that_cannot_shift() {
+        assert!(keep_id_warm_needed(Some("false")));
+        assert!(keep_id_warm_needed(Some("false\n")));
+        assert!(!keep_id_warm_needed(Some("true")));
+        assert!(!keep_id_warm_needed(Some("")));
+        assert!(!keep_id_warm_needed(None));
+    }
+
+    /// 1785-655p: the build arm of `ensure_image_exists` warms the keep-id
+    /// mapping after a SUCCESSFUL build (after the retry loop's `break`), and
+    /// nowhere a present image is merely reused, so the warm is never a
+    /// per-launch cost.
+    #[test]
+    fn the_on_demand_build_warms_keep_id_after_it_succeeds() {
+        let src = include_str!("main.rs");
+        let body = &src[src.find("pub(crate) fn ensure_image_exists(").expect("fn")..];
+        let body = &body[..body.find("\n}\n").expect("end")];
+        // source-pin-ok: the property is where the warm sits in the build arm.
+        let warm = body
+            .find("warm_keep_id_mapping(image_name, &identity.canonical_tag, debug)")
+            .expect("ensure_image_exists never warms the keep-id mapping");
+        let build_arm = body
+            .find("ImageBuildAction::Build | ImageBuildAction::ForceRebuild =>")
+            .expect("build arm");
+        let built = body[build_arm..]
+            .find("rt.block_on(apply_image_aliases(&client, &identity))?;")
+            .map(|i| build_arm + i)
+            .expect("aliases after the build loop");
+        assert!(warm > built, "warm before the build succeeded");
+        assert_eq!(
+            body.matches("warm_keep_id_mapping(").count(),
+            1,
+            "one warm, in the build arm"
+        );
+    }
+
+    /// 1785-655p, live: on a store that cannot shift, a freshly built image
+    /// has no keep-id mapped copy, so its first start would pay one; after
+    /// `warm_keep_id_mapping` a keep-id create adds none. The mapped copy is
+    /// the layer whose diff digest is the image's own layer and that carries a
+    /// uidmap (measured in layers.json), so nothing else the host runs is
+    /// counted. Skips, with the reason, where podman cannot answer or the
+    /// store shifts. `FROM scratch` + COPY never pulls.
+    #[test]
+    fn a_built_image_is_keep_id_warm_before_its_first_start() {
+        let _lock = crate::runtime_assets::podman_seam_lock();
+        let shifting = store_supports_shifting();
+        if !keep_id_warm_needed(shifting.as_deref()) {
+            eprintln!("skip: this store shifts IDs or cannot say ({shifting:?}); no warm to test");
+            return;
+        }
+        let root = podman_cmd_sync()
+            .args(["info", "--format", "{{.Store.GraphRoot}}"])
+            .output_bounded(OperationKind::Inspect.default_budget())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default();
+        let layers_json = PathBuf::from(&root).join("overlay-layers/layers.json");
+        let scratch = PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../../target/keep-id-warm-test")
+        .join(std::process::id().to_string());
+        std::fs::create_dir_all(&scratch).unwrap();
+        // Unique content, so no other image shares the layer digest.
+        std::fs::write(
+            scratch.join("f.txt"),
+            format!("1785-655p {:?}", std::time::SystemTime::now()),
+        )
+        .unwrap();
+        std::fs::write(
+            scratch.join("Containerfile"),
+            "FROM scratch\nCOPY f.txt /\n",
+        )
+        .unwrap();
+        let tag = format!(
+            "localhost/tillandsias-keepid-warm-test:{}",
+            std::process::id()
+        );
+        let built = podman_cmd_sync()
+            .args(["build", "-q", "-t", &tag])
+            .arg(&scratch)
+            .output_bounded(OperationKind::Image.default_budget());
+        let _ = std::fs::remove_dir_all(&scratch);
+        if !built.as_ref().is_ok_and(|o| o.status.success()) {
+            eprintln!("skip: cannot build a scratch image here");
+            return;
+        }
+        let layer = podman_cmd_sync()
+            .args([
+                "image",
+                "inspect",
+                &tag,
+                "--format",
+                "{{index .RootFS.Layers 0}}",
+            ])
+            .output_bounded(OperationKind::Inspect.default_budget())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default();
+        let mapped = || -> usize {
+            let text = std::fs::read_to_string(&layers_json).unwrap_or_default();
+            let rows: Vec<serde_json::Value> = serde_json::from_str(&text).unwrap_or_default();
+            rows.iter()
+                .filter(|l| l["diff-digest"] == layer.as_str())
+                .filter(|l| l["uidmap"].as_array().is_some_and(|m| !m.is_empty()))
+                .count()
+        };
+        let after_build = mapped();
+        warm_keep_id_mapping("keepid-warm-test", &tag, false);
+        let after_warm = mapped();
+        let name = format!("tillandsias-keepid-warm-test-{}", std::process::id());
+        let _ = podman_cmd_sync()
+            .args(["create", "--userns=keep-id", "--name", &name, &tag, "true"])
+            .output_bounded(OperationKind::Container.default_budget());
+        let after_start = mapped();
+        let _ = podman_cmd_sync()
+            .args(["rm", "-f", &name])
+            .output_bounded(OperationKind::Container.default_budget());
+        let _ = podman_cmd_sync()
+            .args(["rmi", "-f", &tag])
+            .output_bounded(OperationKind::Image.default_budget());
+        assert!(!layer.is_empty(), "the image's layer digest");
+        assert_eq!(
+            after_build, 0,
+            "a fresh image starts with no mapped copy (the premise)"
+        );
+        assert_eq!(after_warm, 1, "the warm made the mapped copy");
+        assert_eq!(
+            after_start, 1,
+            "the first keep-id start made no copy of its own"
+        );
     }
 }
