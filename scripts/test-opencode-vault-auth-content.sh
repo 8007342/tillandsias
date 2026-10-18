@@ -148,7 +148,9 @@ STUB
 cat >"$WORK/stub/opencode-honours" <<'STUB'
 #!/usr/bin/env bash
 [ "$*" = "auth list" ] || exit 64
-name="$(printf '%s' "${OPENCODE_AUTH_CONTENT:-}" | jq -r 'keys[0] // empty' 2>/dev/null)"
+# The first key of {"<name>":{...}}, by expansion: no jq, so no jq callsite.
+name="${OPENCODE_AUTH_CONTENT:-}"; name="${name#\{\"}"; name="${name%%\"*}"
+case "${OPENCODE_AUTH_CONTENT:-}" in "{\"$name\":"*) ;; *) name="" ;; esac
 [ -n "$name" ] || { echo "No authenticated integrations"; exit 0; }
 printf '%s\n' "●  $name api" "└  1 credentials"
 STUB
