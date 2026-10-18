@@ -198,5 +198,53 @@ for _subj in salvage-dirty-worktree.sh push-plan-fragments-to-trunk.sh; do
     rm -rf "$_r"
 done
 
-if [ $rc -eq 0 ]; then note "ok:host-slug-resolution:6/6 arms"; else note "violation:host-slug-resolution"; fi
+# ── ARM 7 — THE REFUSAL SAYS WHAT NAMES THE HOST, AND THAT CLEARS IT ────────
+#
+# 1247-hun3 (1247-amcu). Each refused:host-unresolved said WHY (the push would
+# be attributed to no host) and nothing about what clears it. Against the REAL
+# subjects: a SILENT resolver must get a why: and a remedy naming
+# `scripts/agent-identity.sh node-name`. For salvage, a resolver that is NOT
+# EXECUTABLE must get a remedy naming chmod +x. Then each remedy is EXECUTED (the
+# resolver answers; the bit is restored), and the subject must pass the
+# resolution gate (arm 5's checkpoints). A remedy that cannot clear its refusal
+# is a lie (1247-amcu criterion 5).
+for _subj in push-plan-fragments-to-trunk.sh salvage-dirty-worktree.sh; do
+    _r="$(mktemp -d)"; mkdir -p "$_r/scripts"
+    git -C "$_r" init -q
+    git -C "$_r" config user.email t@example.invalid; git -C "$_r" config user.name t
+    printf 'x\n' > "$_r/f"; git -C "$_r" add -A; git -C "$_r" commit -qm base >/dev/null 2>&1
+    cp "$ROOT/scripts/$_subj" "$_r/scripts/"
+    [ -f "$ROOT/scripts/plan-binary-probe.sh" ] && cp "$ROOT/scripts/plan-binary-probe.sh" "$_r/scripts/"
+    printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$_r/scripts/agent-identity.sh"
+    chmod +x "$_r/scripts/agent-identity.sh" "$_r/scripts/$_subj"
+    _o="$(cd "$_r" && ./scripts/"$_subj" probe-slug 2>&1)"
+    case "$_o" in
+        *refused:host-unresolved*'  why: '*'  remedy: '*'agent-identity.sh node-name'*)
+            note "ok:host-slug:arm7-silent-affords:$_subj names what resolves the host" ;;
+        *) fail "host-slug:arm7:$_subj's silent-resolver refusal carries no why:/remedy: naming scripts/agent-identity.sh node-name — 1247-hun3" ;;
+    esac
+    if [ "$_subj" = salvage-dirty-worktree.sh ]; then
+        chmod -x "$_r/scripts/agent-identity.sh"
+        _o="$(cd "$_r" && ./scripts/"$_subj" probe-slug 2>&1)"
+        case "$_o" in
+            *refused:host-unresolved*'  why: '*'  remedy: '*'chmod +x'*)
+                note "ok:host-slug:arm7-not-executable-affords:$_subj names chmod +x" ;;
+            *) fail "host-slug:arm7:$_subj's not-executable refusal carries no why:/remedy: naming chmod +x — 1247-hun3" ;;
+        esac
+    fi
+    # EXECUTE the remedies: the bit restored, and a resolver that answers.
+    printf '%s\n' '#!/usr/bin/env bash' 'echo armsentinel' > "$_r/scripts/agent-identity.sh"
+    chmod +x "$_r/scripts/agent-identity.sh"
+    _o="$(cd "$_r" && ./scripts/"$_subj" probe-slug 2>&1)"
+    case "$_subj:$_o" in
+        *:*refused:host-unresolved*)
+            fail "host-slug:arm7:$_subj still refuses host resolution after its remedy was applied" ;;
+        salvage-dirty-worktree.sh:*armsentinel*|push-plan-fragments-to-trunk.sh:*refused:fragments-to-trunk:fetch*)
+            note "ok:host-slug:arm7-remedy-clears:$_subj passed the resolution gate once the remedy was applied" ;;
+        *) fail "host-slug:arm7:$_subj reached neither its checkpoint nor the refusal after the remedy" ;;
+    esac
+    rm -rf "$_r"
+done
+
+if [ $rc -eq 0 ]; then note "ok:host-slug-resolution:7/7 arms"; else note "violation:host-slug-resolution"; fi
 exit $rc
