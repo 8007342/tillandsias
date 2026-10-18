@@ -23,6 +23,16 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; cd "$ROOT"
 AI="scripts/agent-identity.sh"
 SUBJECTS="scripts/salvage-dirty-worktree.sh scripts/push-plan-fragments-to-trunk.sh"
+# The plan binary the copied subjects need, resolved INSIDE this checkout and
+# made absolute before any arm cds into a scratch repo, then handed to each
+# subject run as TILLANDSIAS_PLAN_BIN (1401-x76w; the 84f37ff24 remedy).
+# push-plan-fragments-to-trunk.sh resolves the plan binary BEFORE the host, so
+# from a scratch repo with no CARGO_TARGET_DIR and no installed copy it
+# refused no-validator and never reached the region arms 5-7 test. That was
+# invisible wherever the caller's environment found the binary another way.
+# An explicit TILLANDSIAS_PLAN_BIN keeps its meaning.
+. "$ROOT/scripts/plan-binary-probe.sh"
+SUBJ_PLAN="$(_p="$(resolve_plan_binary 2>/dev/null)" && case "$_p" in /*) printf '%s' "$_p" ;; *) printf '%s/%s' "$ROOT" "${_p#./}" ;; esac)" || SUBJ_PLAN=""
 
 rc=0
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/host-slug.XXXXXX")"
@@ -141,7 +151,7 @@ for _subj in push-plan-fragments-to-trunk.sh salvage-dirty-worktree.sh; do
     done
     printf '%s\n' '#!/usr/bin/env bash' 'echo armsentinel' > "$_r/scripts/agent-identity.sh"
     chmod +x "$_r/scripts/agent-identity.sh" "$_r/scripts/$_subj"
-    _o="$(cd "$_r/scripts" && ./"$_subj" probe-slug 2>&1)"; _arc=$?
+    _o="$(cd "$_r/scripts" && TILLANDSIAS_PLAN_BIN="$SUBJ_PLAN" ./"$_subj" probe-slug 2>&1)"; _arc=$?
     case "$_subj:$_o" in
         *:*refused:host-unresolved*)
             fail "host-slug:arm5:$_subj refused host resolution when invoked as ./$_subj from inside scripts/ — the resolver was never FOUND and the refusal names the wrong cause (rc=$_arc)" ;;
@@ -188,7 +198,7 @@ for _subj in salvage-dirty-worktree.sh push-plan-fragments-to-trunk.sh; do
     # and distinct from an absent resolver, which would be the wrong cause.
     printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$_r/scripts/agent-identity.sh"
     chmod +x "$_r/scripts/agent-identity.sh" "$_r/scripts/$_subj"
-    _o="$(cd "$_r" && ./scripts/"$_subj" probe-slug 2>&1)"; _arc=$?
+    _o="$(cd "$_r" && TILLANDSIAS_PLAN_BIN="$SUBJ_PLAN" ./scripts/"$_subj" probe-slug 2>&1)"; _arc=$?
     case "$_o" in
         *refused:host-unresolved*)
             note "ok:host-slug:arm6-silent-resolver:$_subj REFUSES when the resolver answers nothing (rc=$_arc)" ;;
@@ -217,7 +227,7 @@ for _subj in push-plan-fragments-to-trunk.sh salvage-dirty-worktree.sh; do
     [ -f "$ROOT/scripts/plan-binary-probe.sh" ] && cp "$ROOT/scripts/plan-binary-probe.sh" "$_r/scripts/"
     printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$_r/scripts/agent-identity.sh"
     chmod +x "$_r/scripts/agent-identity.sh" "$_r/scripts/$_subj"
-    _o="$(cd "$_r" && ./scripts/"$_subj" probe-slug 2>&1)"
+    _o="$(cd "$_r" && TILLANDSIAS_PLAN_BIN="$SUBJ_PLAN" ./scripts/"$_subj" probe-slug 2>&1)"
     case "$_o" in
         *refused:host-unresolved*'  why: '*'  remedy: '*'agent-identity.sh node-name'*)
             note "ok:host-slug:arm7-silent-affords:$_subj names what resolves the host" ;;
@@ -225,7 +235,7 @@ for _subj in push-plan-fragments-to-trunk.sh salvage-dirty-worktree.sh; do
     esac
     if [ "$_subj" = salvage-dirty-worktree.sh ]; then
         chmod -x "$_r/scripts/agent-identity.sh"
-        _o="$(cd "$_r" && ./scripts/"$_subj" probe-slug 2>&1)"
+        _o="$(cd "$_r" && TILLANDSIAS_PLAN_BIN="$SUBJ_PLAN" ./scripts/"$_subj" probe-slug 2>&1)"
         case "$_o" in
             *refused:host-unresolved*'  why: '*'  remedy: '*'chmod +x'*)
                 note "ok:host-slug:arm7-not-executable-affords:$_subj names chmod +x" ;;
@@ -235,7 +245,7 @@ for _subj in push-plan-fragments-to-trunk.sh salvage-dirty-worktree.sh; do
     # EXECUTE the remedies: the bit restored, and a resolver that answers.
     printf '%s\n' '#!/usr/bin/env bash' 'echo armsentinel' > "$_r/scripts/agent-identity.sh"
     chmod +x "$_r/scripts/agent-identity.sh"
-    _o="$(cd "$_r" && ./scripts/"$_subj" probe-slug 2>&1)"
+    _o="$(cd "$_r" && TILLANDSIAS_PLAN_BIN="$SUBJ_PLAN" ./scripts/"$_subj" probe-slug 2>&1)"
     case "$_subj:$_o" in
         *:*refused:host-unresolved*)
             fail "host-slug:arm7:$_subj still refuses host resolution after its remedy was applied" ;;
