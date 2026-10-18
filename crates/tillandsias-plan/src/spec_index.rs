@@ -384,10 +384,19 @@ mod tests {
         // itself. On Windows the scratch checkout lives under %TEMP%, which IS
         // under HOME, so a bare `starts_with(home)` fired on a correct answer
         // (measured on yolanda 2026-09-29: 394 passed, 1 failed).
+        //
+        // ORDER 1780-jxc3: and against the rung's own directory,
+        // `$HOME/.cache/tillandsias/spec-index`, not all of `$HOME/.cache`. In
+        // a forge TMPDIR is `$HOME/.cache/tillandsias-project/tmp`, so the
+        // scratch checkout itself sits under `$HOME/.cache` and a correct,
+        // checkout-anchored answer fired the old check (measured 2026-10-18).
         if let Ok(home) = std::env::var("HOME")
             && !home.is_empty()
         {
-            let home_rung = std::path::Path::new(&home).join(".cache");
+            let home_rung = std::path::Path::new(&home)
+                .join(".cache")
+                .join("tillandsias")
+                .join("spec-index");
             assert!(
                 !std::path::Path::new(&resolved).starts_with(&home_rung),
                 "the rung leaked into the HOME-derived cache path {home_rung:?}: {resolved}"

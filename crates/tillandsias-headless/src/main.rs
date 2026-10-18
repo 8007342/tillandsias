@@ -34067,7 +34067,26 @@ esac
             loaded.err().unwrap_or_default()
         );
 
-        let loaded_state = loaded.unwrap().expect("loaded state should not be None");
+        // ORDER 1780-jxc3: seen once in a forge's full gate and not reproduced
+        // in five forge runs since; if it recurs, say where load looked and
+        // what was there, so the failure names its own cause.
+        let loaded_state = loaded.unwrap().unwrap_or_else(|| {
+            let dir = init_cache_dir();
+            let listing = dir
+                .as_ref()
+                .ok()
+                .and_then(|d| fs::read_dir(d).ok())
+                .map(|it| {
+                    it.filter_map(|e| e.ok().map(|e| e.file_name().to_string_lossy().into_owned()))
+                        .collect::<Vec<_>>()
+                });
+            panic!(
+                "loaded state should not be None: init_cache_dir()={dir:?} (XDG_CACHE_HOME={:?}, \
+                 temp={:?}) holds {listing:?}",
+                std::env::var_os("XDG_CACHE_HOME"),
+                temp.path()
+            )
+        });
         assert!(
             loaded_state.was_successful("proxy"),
             "proxy should be marked successful after reload"
