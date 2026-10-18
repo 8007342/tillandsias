@@ -308,11 +308,12 @@ pub(crate) fn handle_mcp_jsonrpc(
                 // forge's `flutter` shim polls it and shows the progress.
                 serde_json::json!({
                     "name": "toolchain_prepare",
-                    "description": "Prepare an opt-in toolchain for this lane (one time: builds the shared image). Never blocks: returns state ready, preparing (with build step and elapsed seconds) or failed. The forge's `flutter` command calls this for you.",
+                    "description": "Prepare an opt-in toolchain for this lane (one time: builds the shared image). Never blocks: returns state ready, preparing (with retry_after_s, and while it builds the step and elapsed seconds) or failed. Preparing is not an error: call again after retry_after_s. force: true rebuilds an image whose last build failed now. The forge's `flutter` command calls this for you.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "toolchain": { "type": "string", "enum": ["flutter"] }
+                            "toolchain": { "type": "string", "enum": ["flutter"] },
+                            "force": { "type": "boolean", "default": false }
                         },
                         "required": ["toolchain"]
                     }

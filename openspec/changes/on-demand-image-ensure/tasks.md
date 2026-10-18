@@ -32,9 +32,9 @@ today's code first (memory: exit criteria must fail on the pre-fix code).
 
 ## 3. One seam (v0.5)
 
-- [ ] 3.1 `build_vault_image` delegates to `ensure_image_exists` (lock,
+- [x] 3.1 `build_vault_image` delegates to `ensure_image_exists` (lock,
       detach, marker, verdict) [1776-v1t4]
-- [ ] 3.2 `toolchain_exec::prepare` stops re-spawning a build after a
+- [x] 3.2 `toolchain_exec::prepare` stops re-spawning a build after a
       failure; reports the marker's refusal (or "busy" + `retry_after_s`
       while a retry is scheduled); MCP `prepare(force)` [1776-v1t4]
 
