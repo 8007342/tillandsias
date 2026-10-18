@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air at the operator's request (2026-10-18) and the
+# coordinator's (macuahuitl-fedora): the shell-to-lua item waived too-big
+# twice (#529, #533) becomes its own packet.
+packets:
+  - packet_id: port-check-committable-branch-sh-to-lua-and-repoint-its-skills-litmus-host-tools-row-and-the-rust-text-that-names-it
+    order: 1781-wves
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    size: M
+    pickup_role: any
+    capability_tags: [shell-to-lua, portability, branch-discipline, skills]
+    related: [1779-udga, 1776-brk3]
+    depends_on: []
+    title: |
+      Port scripts/check-committable-branch.sh (94 lines) to scripts/lua/ on `tillandsias-plan script run`, and repoint every caller that names it
+    context: |
+      Operator request, 2026-10-18, via the coordinator: the shell-to-lua carried obligation offered this item on work/1776-brk3 twice. It was waived `too-big:scripts/check-committable-branch.sh:94` on #529 and again on #533. This packet is that port as dedicated work.
+      Callers, listed 2026-10-18 with `git grep -c check-committable-branch -- . ':!plan' ':!openspec/changes/archive'`. That is 7 files and 22 references; the waivers' "8-21 callers" counted call sites, not files.
+      - openspec/litmus-tests/litmus-committable-branch-guard-shape.yaml (13 references: the litmus that runs it)
+      - skills/advance-work-from-plan/SKILL.md (2) and skills/meta-orchestration/SKILL.md (2): agents are told to run it
+      - crates/tillandsias-headless/src/main.rs (2): doc text at :5023 and a user-facing refusal at :29512 that names it
+      - scripts/check-host-tools.sh:99 (its host-tools row)
+      - scripts/test-cycle-preflight-cargo-resolution.sh (1)
+      - scripts/portability/shell-decider-floor.txt (1, the floor entry)
+      First step: re-run the listing on the day of pickup, since the list may have grown.
+    exit_criteria:
+      - "scripts/lua/check-committable-branch.lua decides as the .sh does. A parity fixture runs both over committable and non-committable branch states (seeded from main, detached, dirty, ahead of the integration branch) and finds the same verdict and rc for each, with a NEGATIVE CONTROL: a branch seeded from main is refused by both."
+      - "scripts/check-committable-branch.sh is deleted. The decider floor and the shell-ratchet floors are lowered with check-shell-ratchet.lua --dump-floors."
+      - "The litmus, both skills, the host-tools row, the cycle-preflight test and the Rust text all name the Lua command. The Rust refusal text change is pinned by its existing test. A guard refuses a remaining `check-committable-branch.sh` mention outside openspec/changes/archive and plan/."
+    unscoreable: "unpinnable-until-the-guard-exists: the pin is the parity fixture scripts/lua/test-check-committable-branch-parity.lua, written red in the same commit as the port (1136-n8sh); closure then adds ! git grep -n 'check-committable-branch.sh' -- . ':!openspec/changes/archive' ':!plan'"
+    next_action: >
+      Re-list the callers, write the parity fixture red, port, delete the .sh, repoint the 7 callers, and lower the floors.
+    events:
+      - type: filed
+        ts: "2026-10-18T03:09:10Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          The shell-to-lua item waived too-big twice (check-committable-branch.sh, 94 lines; 7 caller files, 22 references), filed as dedicated work.
