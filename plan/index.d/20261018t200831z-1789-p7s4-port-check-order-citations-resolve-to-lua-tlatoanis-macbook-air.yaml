@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air: the shell-to-lua carried obligation offered
+# this item on work/1788-qlwq (slice 1, flagged for the next stable). It is
+# filed as dedicated work instead of growing that slice (operator, 2026-10-18:
+# "if the work is too large then just make it a ./plan packet").
+packets:
+  - packet_id: port-check-order-citations-resolve-sh-to-lua-and-repoint-build-sh-its-fixture-and-the-floors
+    order: 1789-p7s4
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    size: M
+    pickup_role: any
+    capability_tags: [shell-to-lua, portability, plan-ledger]
+    related: [1781-wves, 1779-udga, 1788-qlwq, 1234-zade]
+    depends_on: []
+    title: |
+      Port scripts/check-order-citations-resolve.sh (102 lines, 6 pipe sites) to scripts/lua/ on `tillandsias-plan script run`, and repoint build.sh, its fixture and the floors
+    context: |
+      Offered by check-carried-obligations.lua on work/1788-qlwq (2026-10-18T20:08:07Z snapshot) as the due shell-to-lua item. It is a land-time decider: build.sh:3492 runs it, and gate step 400-1231-cbie names it as its fast-lane sibling (1234-zade).
+      Callers, listed 2026-10-18 with `git grep -c check-order-citations-resolve -- . ':!plan' ':!openspec/changes/archive'`: build.sh (1), scripts/gate-steps.d/400-1231-cbie.step (1, comment), scripts/test-order-citations-resolve.sh (3, its fixture, which copies the .sh into a scratch tree), and the floors bare-mktemp-floor.txt, pipe-site-floor.txt and shell-decider-floor.txt (1 each).
+      Its known-set read of the ledger is quote-tolerant since 1274-cbk7; the port must keep that.
+    exit_criteria:
+      - "scripts/lua/check-order-citations-resolve.lua decides as the .sh does. A parity fixture runs both over resolving and dangling @trace order citations (including a quoted order: line and an archived order) and finds the same verdict and rc for each, with a NEGATIVE CONTROL: a citation of an order that exists nowhere is refused by both."
+      - "scripts/check-order-citations-resolve.sh is deleted; build.sh and test-order-citations-resolve (ported or repointed) run the Lua decider; the three floors are lowered with check-shell-ratchet.lua --dump-floors."
+    unscoreable: "unpinnable-until-the-guard-exists: the pin is the parity fixture scripts/lua/test-check-order-citations-resolve-parity.lua, written red in the same commit as the port (1136-n8sh); closure then adds ! git grep -n 'check-order-citations-resolve.sh' -- . ':!openspec/changes/archive' ':!plan'"
+    next_action: >
+      Re-list the callers, write the parity fixture red, port, delete the .sh, repoint build.sh and the fixture, and lower the floors.
+    events:
+      - type: filed
+        ts: "2026-10-18T20:08:31Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Shell-to-lua item offered on work/1788-qlwq, filed as its own port packet so the next-stable slice stays small.
