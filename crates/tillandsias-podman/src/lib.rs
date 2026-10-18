@@ -15,6 +15,7 @@ pub mod peer_table;
 pub mod policy;
 pub mod runtime;
 pub mod terminal_handoff;
+pub mod wedge_capture;
 
 use std::env;
 use std::fs;
@@ -1077,6 +1078,8 @@ fn wait_for_exit(
             cleanup_detail
         ),
     };
+    // Order 1784-skfj: name what podman was doing, while it still is.
+    let message = wedge_capture::annotate(message);
     log_podman_failure("sync", "timeout", &message);
     Err(std::io::Error::new(std::io::ErrorKind::TimedOut, message))
 }
