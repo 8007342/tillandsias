@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air from the v56.10.17.1 stable-channel smoke
+# (coordinator GO, 2026-10-18).
+packets:
+  - packet_id: the-first-forge-launch-after-a-reset-can-wedge-guest-podman-so-the-router-run-hangs-at-conmon-for-its-whole-300s-budget-and-vault-is-declared-dead-while-it-still-runs
+    order: 1784-skfj
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    size: M
+    pickup_role: macos
+    capability_tags: [macos, podman, router, vault, forge, smoke]
+    related: [1776-ondm, 1776-brk3, 1744-xjfw]
+    depends_on: []
+    title: |
+      On v56.10.17.1's first forge launch after the installer's SOFT reset (macOS), guest podman went quiet for 3.5 min after the forge image built. The supervisor then declared a running Vault dead (state=unknown), and `podman run tillandsias-router` hung after conmon started until its 300 s budget killed it. The lane failed with exit 1. An identical relaunch 3 min later passed.
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-10-18 (macOS 27.0, guest 8 vCPU / 8 GiB). Evidence is target/smoke-e2e/05-forge-try1.log and 06-router-*.txt on the smoke host. The guest journal is from boot 19966e3b9e114481901572f924f0ee25.
+      The tray's own --opencode ~/src/tillandsias ran 07:07:35Z → 07:20:39Z (rc=1). Guest timeline:
+      - 07:10:29: the forge image was built and tagged (router, inference and forge ensures had run in detached helpers, all 100%).
+      - 07:10:29 → 07:13:55: no podman, headless or container journal lines at all.
+      - 07:13:55: `fail:managed-service-death:service=tillandsias-vault:state=unknown:exit=-1:deaths=1:action=re-ensure` (twice). tillandsias-vault[1391] was still logging lease revocations at 07:11:29, 07:12:31, 07:16:35 and 07:17:38, so Vault was NOT dead. state=unknown reads as "the state query did not answer", i.e. podman itself was not answering.
+      - 07:14:25: the Vault bootstrap re-ran (3 secret creates).
+      - 07:15:29: `container create` of tillandsias-router plus `Started libpod-conmon-<id>.scope`. Then nothing for the router: no crun scope, no container start.
+      - ~07:20:29: the client error was `podman container operation exceeded its 300s budget and was killed`. The container was left `state: created`.
+      Retry, same host, same release, warm images (07:21 → 07:24:24Z): rc=0, forge up, agent ran.
+      NOT KNOWN: what held podman during 07:10:29 → 07:13:55, and whether it was the same holder that left the router's conmon waiting. The journal holds no lock or timeout line. Persistent journal lines after 07:17:38 of that boot were lost, because the guest powered off before the flush.
+    exit_criteria:
+      - "The cause is named from evidence. A guest-side capture (podman lock holders / `ps -eo pid,etime,args` of every podman, conmon and crun process) is taken automatically when a podman container operation reaches its budget, and it is written to a file the tray's --exec-guest can read after a reboot."
+      - "managed-service-death never reports a container as dead because the state query failed. state=unknown re-queries or reports `could-not-ask`, and a fixture with a shim podman that hangs on inspect proves Vault is not re-ensured while its process lives (NEGATIVE CONTROL: a shim that reports Exited still re-ensures)."
+      - "Three consecutive cold first launches after `install-macos.sh` (SOFT reset) on a published release each reach the forge, or the lane names the wedged operation and recovers it instead of failing the launch."
+    unscoreable: "unpinnable-until-the-guard-exists: the pin is a shim-podman fixture for the managed-service-death state=unknown arm (scripts/lua/test-managed-service-death-unknown-state.lua), written red first; the live arm runs only through a published release on macOS"
+    next_action: >
+      Read where managed-service-death derives state=unknown/exit=-1 in tillandsias-headless and what timeout its podman inspect runs under. Then add the budget-exceeded capture (podman process tree to /var/log) so the next occurrence names its holder.
+    events:
+      - type: filed
+        ts: "2026-10-18T07:26:15Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          v56.10.17.1 stable smoke: first forge launch after the reset failed on a router podman run wedged for 300 s; retry passed.
