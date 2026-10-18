@@ -1514,8 +1514,13 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         archive_check_log "deslop-sweep-health" "skipped"
     fi
 
-    if [[ -f "scripts/check-cheatsheet-frontmatter.sh" ]]; then
-        if bash scripts/check-cheatsheet-frontmatter.sh 2>&1 | tee /tmp/cheatsheet-frontmatter.log; then
+    # 1572-nqx5: ported to Lua. No runnable plan binary is a missing guard, not a pass.
+    _cf_plan="$( . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null )" || _cf_plan=""
+    if [[ -f "scripts/lua/check-cheatsheet-frontmatter.lua" && -n "$_cf_plan" ]]; then
+        _rc=0
+        "$_cf_plan" script run scripts/lua/check-cheatsheet-frontmatter.lua > /tmp/cheatsheet-frontmatter.log 2>&1 || _rc=$?
+        cat /tmp/cheatsheet-frontmatter.log
+        if [ "$_rc" -eq 0 ]; then
             log_pass "Cheatsheet frontmatter valid"
             archive_check_log "cheatsheet-frontmatter" "pass" /tmp/cheatsheet-frontmatter.log
         else
@@ -1523,7 +1528,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "cheatsheet-frontmatter" "fail" /tmp/cheatsheet-frontmatter.log
         fi
     else
-        log_fail_missing_guard "cheatsheet-frontmatter" "scripts/check-cheatsheet-frontmatter.sh"
+        log_fail_missing_guard "cheatsheet-frontmatter" "scripts/lua/check-cheatsheet-frontmatter.lua (or no runnable tillandsias-plan)"
         archive_check_log "cheatsheet-frontmatter" "skipped"
     fi
 
