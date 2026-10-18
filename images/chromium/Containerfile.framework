@@ -81,7 +81,8 @@ RUN microdnf install -y --allowerasing \
     && rpm -q chromium \
     && microdnf clean all
 COPY browser-audio.pa /etc/tillandsias/browser-audio.pa
-RUN chmod 0644 /etc/tillandsias/browser-audio.pa \
+COPY browser-audio-start.sh /usr/local/lib/tillandsias/browser-audio-start.sh
+RUN chmod 0644 /etc/tillandsias/browser-audio.pa /usr/local/lib/tillandsias/browser-audio-start.sh \
     && mkdir -p /etc/pulse/client.conf.d \
     && printf 'autospawn = no\n' > /etc/pulse/client.conf.d/00-tillandsias.conf
 
