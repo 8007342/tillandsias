@@ -55,11 +55,16 @@ COPY codex-safe-state.sh /usr/local/lib/tillandsias/codex-safe-state.sh
 # dev tree without the binary still builds an image. bash-policy-hook is what
 # config-overlay/claude/settings.json names, and it refuses every command when
 # no binary can decide (fails closed).
+# 1788-qlwq: the same binary is also on PATH (/usr/local/bin is on both the
+# login and the non-login PATH), so a new project's discipline hook stubs and
+# install-hooks find it; before this every stub refused with no-plan-binary.
+# A source-built copy in ~/.local/bin still wins in login shells.
 COPY policy-bin/ /usr/local/lib/tillandsias/policy-bin/
 COPY bash-policy-hook /usr/local/lib/tillandsias/bash-policy-hook
 RUN chmod 0755 /usr/local/lib/tillandsias/bash-policy-hook \
     && { [ ! -e /usr/local/lib/tillandsias/policy-bin/tillandsias-plan ] \
-         || chmod 0755 /usr/local/lib/tillandsias/policy-bin/tillandsias-plan; }
+         || { chmod 0755 /usr/local/lib/tillandsias/policy-bin/tillandsias-plan \
+              && ln -sf /usr/local/lib/tillandsias/policy-bin/tillandsias-plan /usr/local/bin/tillandsias-plan; }; }
 COPY brew-tools-allowlist.txt /usr/local/lib/tillandsias/brew-tools-allowlist.txt
 COPY brew-shim-exec.sh /usr/local/bin/tillandsias-brew-shim-exec
 # 767-nkkq: minimal PID-1 crash supervision for non-interactive harness runs —

@@ -314,6 +314,7 @@ specs:
   - litmus:codex-safe-state-shape
   - litmus:forge-agent-result-format
   - litmus:forge-policy-binary-discoverability
+  - litmus:forge-plan-binary-on-path
   - litmus:npm-harness-install-idempotent-shape
   - litmus:harness-crash-supervision-shape
   - litmus:forge-ledger-freshness-shape
