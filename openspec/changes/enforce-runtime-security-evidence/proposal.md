@@ -13,7 +13,8 @@ Tillandsias declares strong isolation but currently mandates `label=disable`, sh
 - Require cryptographic peer authentication to include non-public independently provisioned material; a public binary digest establishes version compatibility, not workload attestation.
 - Inventory plaintext paths and bypasses; prohibit unreviewed downgrade or exposed backend routes. Local Unix sockets are assessed by kernel isolation/peer checks rather than renamed HTTPS.
 - Extend the existing implementation owners `1252-qyii`, `142`, and `1684-tx37`/`1685-kwmr` through `1694-j2sk`; do not replace them or introduce SPIRE daemons.
-- **BREAKING**: when adopted, unsupported or unverified protection cannot satisfy hardened runtime/release acceptance. This supplemental change does not choose normal-launch compatibility on hosts lacking SELinux; that decision remains with the existing enforcement change and the operator's pending clarification. No reduced-security exception is authorized here.
+- Operator ruling 2026-10-18: unavailable or incomplete SELinux MUST NOT block normal launches. Record the pending/reduced protection and reason in logs, while withholding any fully hardened claim. No new dialog or per-launch approval is required.
+- **BREAKING**: unsupported or unverified protection cannot satisfy a fully hardened acceptance claim. Reduced-security launches and accurately described reduced-security releases remain supported; this does not waive authentication, authorization or transport boundaries.
 
 ## Capabilities
 

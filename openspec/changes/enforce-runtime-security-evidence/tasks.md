@@ -1,6 +1,6 @@
 # Tasks
 
-Planning artifacts are complete; every implementation task below remains unchecked. Existing remedy packets keep ownership. The supplemental capability governs evidence and acceptance, not a new compatibility fallback or a second identity implementation.
+Planning artifacts are complete; every implementation task below remains unchecked. Existing remedy packets keep ownership. Operator ruling 2026-10-18 allows normal launches with pending/reduced SELinux and clear logs, without per-launch approval. The supplemental capability governs truthful evidence and hardened claims, not a second identity implementation.
 
 ## 1. Inventory and evidence integrity
 
@@ -12,7 +12,7 @@ Planning artifacts are complete; every implementation task below remains uncheck
 ## 2. SELinux and runtime boundaries
 
 - [ ] 2.1 Extend 1252-qyii and 1693-9qfb's inventory to global mode, loaded policy hashes, permissive domains, process/object labels, effective seccomp/caps and mount/device seams; verify host-enforcing plus typepermissive Vault fails the confinement claim and unavailable host state cannot pass.
-- [ ] 2.2 With 1693-9qfb, reconcile policy.rs and active hardening specs, including the Vault fallback, and record the operator's normal-launch disposition for unsupported SELinux in the owning change; verify each label-disable exception has narrow scope, owner, expiry and removal packet, and never counts as enforced protection.
+- [ ] 2.2 With 1693-9qfb, reconcile policy.rs and active hardening specs, including the Vault fallback; verify unavailable/pending/reduced SELinux does not block normal launches or request approval, emits clear safe logs and never counts as full hardening. Each role-specific label-disable exception has narrow scope, owner, expiry and removal packet.
 - [ ] 2.3 Under 1694-j2sk, add controlled reachable file/socket cross-lane fixtures that isolate the MAC decision from DAC/network/application refusal; verify allowed same-lane work and forbidden foreign-lane access with matching AVCs, and show disabling the intended MAC policy makes its denial control fail.
 - [ ] 2.4 Add deployed AF_VSOCK syscall refusal probes for each Linux host/guest backend without weakening the production filter; verify an isolated fixture with the intended seccomp restriction removed fails the barrier test, and retain argv-shape regression checks.
 - [ ] 2.5 Attach a bounded sanitized AVC corpus to 1252-qyii for builds, agent launch/teardown, previews, sibling launch, Chromium-framework, credential refresh and GPU inference; verify workload duration/population are recorded and each policy adjustment repeats both allowed and forbidden operations.

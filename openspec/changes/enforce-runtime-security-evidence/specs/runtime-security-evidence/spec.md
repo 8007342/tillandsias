@@ -115,6 +115,21 @@ A hardened runtime or release acceptance verdict SHALL require successful applic
 - **WHEN** a static test finds the intended flags or policy text but no runtime denial was exercised
 - **THEN** it is configuration evidence only and cannot satisfy the enforcement control
 
+### Requirement: Reduced SELinux does not block normal launches
+
+Unavailable, pending or reduced SELinux protection SHALL NOT block normal launches or require per-launch approval. The runtime SHALL log the affected role, actual enforcement state, missing protection and reason without secrets, and MUST NOT claim full hardening. Reduced-security operation SHALL preserve the other authentication, authorization, transport, seccomp and capability boundaries.
+
+#### Scenario: A supported host cannot enforce SELinux
+- **WHEN** SELinux is unavailable or a role's confinement is pending or reduced
+- **THEN** the normal launch proceeds if its other required boundaries pass
+- **AND** logs identify the reduced protection and reason without requiring a confirmation dialog
+- **AND** the result cannot satisfy a fully hardened claim
+
+#### Scenario: A reduced-security release is assessed
+- **WHEN** a release supports a platform with a documented SELinux limitation
+- **THEN** that limitation alone does not block release or launch
+- **AND** its evidence records the limitation without counting it as enforced protection
+
 ### Requirement: Productive workflows survive confinement without broad exemptions
 
 Security acceptance SHALL pair each denied forbidden operation with allowed representative workflows: agent tools and builds, sibling launch and monitoring, Chromium-framework browsing, local inference and scoped diagnostics. Restoring a workflow MUST NOT silently disable labeling, peer verification, transport protection or the runtime's seccomp/capability baseline.

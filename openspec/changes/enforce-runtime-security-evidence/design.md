@@ -26,7 +26,7 @@ Overlap review found `1684-tx37` pending with eleven unchecked tasks, `1252-qyii
 
 ## Goals / Non-Goals
 
-Create evidence that can falsify enforcement claims at the actual deployed boundary, and preserve approved development workflows under those controls. Keep Vault as the authority and the existing SPIFFE-inspired naming choice. This does not adopt SPIRE or claim full SPIFFE API/SVID conformance; those require separate compatibility evidence. Normal-launch behavior on hosts without SELinux remains a decision in the existing enforcement work; hardened acceptance always requires proof under this capability.
+Create evidence that can falsify enforcement claims at the actual deployed boundary, and preserve approved development workflows under those controls. Keep Vault as the authority and the existing SPIFFE-inspired naming choice. This does not adopt SPIRE or claim full SPIFFE API/SVID conformance; those require separate compatibility evidence. Operator ruling 2026-10-18: pending/unavailable/reduced SELinux does not block launches and needs no per-launch approval. Log actual state, affected role, missing protection and reason; full-hardening claims still require proof. Accurately described reduced-security releases remain allowed. This is not a waiver of other security boundaries.
 
 ## Decisions
 
@@ -75,14 +75,14 @@ Append audit evidence/refusal criteria to 1252, 142 and 1684's children; do not 
 - Probes may pass for the wrong reason -> control reachability and independently weaken each layer in isolated fixtures.
 - Certificate renewal can leave old sessions authorized -> measure maximum session age and revoke/stop handling as well as new handshakes.
 - More claims than executable tests -> remain draft until each requirement has a bound falsifiable test, including mutation controls and runtime evidence.
-- Policy implementation and compatibility are separate decisions -> this supplement blocks unsupported hardened claims without granting a fallback launch policy.
+- Full-hardening claims and launch availability are separate -> reduced SELinux is supported with truthful logs, while identity/authorization/transport/seccomp/capability boundaries remain required.
 
 ## Migration Plan
 
-1. Reconcile the active hardening specs with the existing workload-identity change, including permissive Vault policy and domain-specific exceptions. Record the operator's unsupported-SELinux launch decision in that owning change.
+1. Reconcile the active hardening specs with the existing workload-identity change, including permissive Vault policy and domain-specific exceptions. Apply the operator's ruling: pending/reduced/unavailable SELinux must not block normal launches; logs state the limitation and no full-hardening claim is made.
 2. Implement inventory and evidence validation with unknown/missing/stale/forged evidence controls. Bind the tests when created; no nonexistent litmus is declared delivered here.
 3. Implement existing remedy packets in dependency order, proving current failures before each fix. Migrate clients and services together; do not retire a protected path until replacement positive and negative controls pass.
-4. Exercise supported native/guest platforms and representative productive workloads. Attach sanitized runtime evidence to the ledger; release acceptance cannot substitute static tests or a different platform's result.
+4. Exercise supported native/guest platforms and representative productive workloads. Attach sanitized runtime evidence to the ledger; a fully hardened designation cannot substitute static tests or a different platform's result. A truthful reduced-security release or launch is not blocked merely by SELinux limitations.
 5. If a hardening change breaks an approved workflow, stop promotion and repair the narrow policy/seam. Do not silently roll back to anonymous traffic, label disabling or verification bypass.
 
 ## Sources and Limits
