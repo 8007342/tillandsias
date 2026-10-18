@@ -3504,17 +3504,17 @@ fn warm_keep_id_mapping(image_name: &str, tag: &str, debug: bool) {
         Ok(o) if o.status.success() => {
             if debug {
                 eprintln!(
-                    "[tillandsias] image-ensure {image_name}: keep-id mapping warmed in {} ms (store cannot shift IDs)",
+                    "[tillandsias] image {image_name}: keep-id mapping warmed in {} ms (store cannot shift IDs)",
                     t0.elapsed().as_millis()
                 );
             }
         }
         Ok(o) => eprintln!(
-            "[tillandsias] image-ensure {image_name}: keep-id warm failed; the first start pays the copy: {}",
+            "[tillandsias] image {image_name}: keep-id warm failed; the first start pays the copy: {}",
             String::from_utf8_lossy(&o.stderr).trim()
         ),
         Err(e) => eprintln!(
-            "[tillandsias] image-ensure {image_name}: keep-id warm failed; the first start pays the copy: {e}"
+            "[tillandsias] image {image_name}: keep-id warm failed; the first start pays the copy: {e}"
         ),
     }
 }
@@ -10552,6 +10552,8 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
                             state.mark_failed(image);
                             failed_images.push((image.to_string(), alias_e));
                         } else {
+                            // 1786-tzce: as the on-demand ensure does (1785-655p).
+                            warm_keep_id_mapping(image, &identity.canonical_tag, debug);
                             let image_id = rt
                                 .block_on(client.image_inspect(&identity.canonical_tag))
                                 .ok()
@@ -10627,6 +10629,9 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
                 state.mark_failed(image);
                 failed_images.push((image.to_string(), e));
             } else {
+                // 1786-tzce: --init builds the forge launched right after it,
+                // so its first keep-id start must not pay the mapped copy.
+                warm_keep_id_mapping(image, &identity.canonical_tag, debug);
                 let image_id = rt
                     .block_on(client.image_inspect(&identity.canonical_tag))
                     .ok()
@@ -36026,5 +36031,118 @@ mod keep_id_warm_tests {
             after_start, 1,
             "the first keep-id start made no copy of its own"
         );
+    }
+
+    /// The `_warm_keep_id_mapping` function from scripts/build-image.sh, run
+    /// under bash with `$PODMAN` as a shell function that answers `info` with
+    /// `shifting` and logs every other call. Returns the logged calls.
+    fn run_build_image_warm(shifting: Option<&str>) -> Vec<String> {
+        let script = include_str!("../../../scripts/build-image.sh");
+        let start = script
+            .find("_warm_keep_id_mapping() {")
+            .expect("build-image.sh has no _warm_keep_id_mapping");
+        let func = &script[start..];
+        let func = &func[..func.find("\n}\n").expect("function end") + 2];
+        let info = match shifting {
+            Some(s) => format!("printf '%s\\n' '{s}'"),
+            None => "return 125".to_string(),
+        };
+        let prog = format!(
+            "set -euo pipefail\nfake_podman() {{\n  if [[ \"$1\" == info ]]; then {info}; return; fi\n  printf '%s\\n' \"$*\" >&3\n}}\nexec 3>&1\nPODMAN=fake_podman\nIMAGE_NAME=forge\nTIMEOUT_BIN=\n{func}\n_warm_keep_id_mapping localhost/tillandsias-forge:abc\n"
+        );
+        let out = std::process::Command::new("bash")
+            .arg("-c")
+            .arg(&prog)
+            .output()
+            .expect("bash");
+        assert!(
+            out.status.success(),
+            "the warm must never fail the build: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .map(str::to_string)
+            .collect()
+    }
+
+    /// 1786-tzce: `--init` and scripts/build-image.sh build images outside
+    /// `ensure_image_exists`, so 1785-655p's warm did not cover them, and
+    /// `--init` builds the forge that is launched right after. Both now warm
+    /// after a SUCCESSFUL build: --init calls the one `warm_keep_id_mapping`
+    /// after each successful build's aliases (plain and after an overlay heal,
+    /// never on a Skip or Retag of a present image), and build-image.sh runs
+    /// its shell twin, which asks podman the same question, after the image
+    /// passes verify-image-usable.sh. NEGATIVE CONTROL: the shell twin creates
+    /// nothing on a store that shifts, or that cannot say.
+    #[test]
+    fn init_and_build_image_builds_are_keep_id_warm() {
+        let src = include_str!("main.rs");
+        let init = &src[src
+            .find("fn run_init(debug: bool, force: bool)")
+            .expect("run_init")..];
+        let init = &init[..init.find("\n}\n").expect("end")];
+        // source-pin-ok: the property is which run_init arms warm.
+        let warm = "warm_keep_id_mapping(image, &identity.canonical_tag, debug);";
+        assert_eq!(
+            init.matches("warm_keep_id_mapping(").count(),
+            2,
+            "--init warms after its plain build and after its heal retry, and nowhere else"
+        );
+        let mut from = 0;
+        for arm in ["\"success_after_heal\"", "\"success\""] {
+            let completed = init[from..]
+                .find(arm)
+                .map(|i| from + i)
+                .unwrap_or_else(|| panic!("run_init has no {arm} outcome"));
+            let aliased = init[..completed]
+                .rfind("apply_image_aliases(&client, &identity)")
+                .expect("aliases before the outcome");
+            let warmed = init[aliased..completed].contains(warm);
+            assert!(
+                warmed,
+                "the {arm} arm of --init does not warm after its aliases"
+            );
+            from = completed + arm.len();
+        }
+        let skip = &init[init.find("ImageBuildAction::Skip =>").expect("skip arm")..];
+        let skip = &skip[..skip.find("ImageBuildAction::Build =>").expect("build arm")];
+        assert!(
+            !skip.contains("warm_keep_id_mapping("),
+            "a present image is never warmed"
+        );
+
+        let script = include_str!("../../../scripts/build-image.sh");
+        let usable = script
+            .find("\"$SCRIPT_DIR/verify-image-usable.sh\" \"$IMAGE_TAG\"")
+            .expect("build-image.sh checks usability");
+        let call = script
+            .find("\n    _warm_keep_id_mapping \"$IMAGE_TAG\"")
+            .expect("build-image.sh never warms the keep-id mapping");
+        assert!(call > usable, "the warm runs after the image is usable");
+        assert!(
+            script.contains("{{index .Store.GraphStatus \"Supports shifting\"}}"),
+            "the shell twin asks podman the question store_supports_shifting asks"
+        );
+        let calls = run_build_image_warm(Some("false"));
+        let name = calls
+            .first()
+            .and_then(|c| c.strip_prefix("create --userns=keep-id --name "))
+            .and_then(|c| c.strip_suffix(" localhost/tillandsias-forge:abc true"))
+            .unwrap_or_else(|| {
+                panic!("a store that cannot shift gets a keep-id create: {calls:?}")
+            });
+        assert!(name.starts_with("tillandsias-keepid-warm-forge-"), "{name}");
+        assert_eq!(
+            calls[1..],
+            [format!("rm -f {name}")],
+            "the warm container is removed, and nothing else runs"
+        );
+        for answer in [Some("true"), Some(""), None] {
+            assert!(
+                run_build_image_warm(answer).is_empty(),
+                "NEGATIVE CONTROL: shifting answer {answer:?} must create nothing"
+            );
+        }
     }
 }
