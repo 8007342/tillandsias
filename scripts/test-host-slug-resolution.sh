@@ -32,7 +32,7 @@ SUBJECTS="scripts/salvage-dirty-worktree.sh scripts/push-plan-fragments-to-trunk
 # invisible wherever the caller's environment found the binary another way.
 # An explicit TILLANDSIAS_PLAN_BIN keeps its meaning.
 . "$ROOT/scripts/plan-binary-probe.sh"
-SUBJ_PLAN="$(_p="$(resolve_plan_binary 2>/dev/null)" && case "$_p" in /*) printf '%s' "$_p" ;; *) printf '%s/%s' "$ROOT" "${_p#./}" ;; esac)" || SUBJ_PLAN=""
+SUBJ_PLAN="$(_p="$(resolve_plan_binary 2>/dev/null)" && case "$_p" in (/*) printf '%s' "$_p" ;; (*) printf '%s/%s' "$ROOT" "${_p#./}" ;; esac)" || SUBJ_PLAN=""
 
 rc=0
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/host-slug.XXXXXX")"
