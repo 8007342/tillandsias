@@ -1,0 +1,16 @@
+events:
+  - packet_id: research-whether-the-centicolon-uncertainty-metric-must-also-count-transient-work-bug-fixes-and-regressions-that-should-produce-a-preventing-spec-requirement
+    event:
+      type: progress
+      ts: "2026-10-18T03:55:00Z"
+      host: forge-observatorium
+      summary: |
+        Observatorium repair1782-bek5 corroborates this packet's existing scorer
+        counterexamples: every scenario inherits refs[req_id]; missing/wrong spec
+        provenance and unrelated implementation revisions can retain credit; latest
+        evidence is not separated by regime; extracted invariants are outside the
+        scenario denominator. Evidence and existing mutation recipes are preserved
+        in plan/issues/observatorium-verifiable-convergence-2026-10-18.md. The app
+        now names schema/unit, population exclusions and freshness limits; scoring
+        is unchanged. Follow-up remains this packet's trustworthy-attribution and
+        population contract work, coordinated with1395-88tp. No duplicate filed.

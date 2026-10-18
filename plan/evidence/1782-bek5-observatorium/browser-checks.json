@@ -1,0 +1,19 @@
+{
+  "sourceBase": "77e34d64e765be5db588b862e4166ab486f657ab",
+  "workingTreeChanges": true,
+  "preview": "https://www.tillandsias.localhost:18443",
+  "appDir": "target/observatorium-1782-bek5/observatorium",
+  "runtime": "wrangler managed sibling",
+  "browser": "Chromium-framework, dev:true, headless:true",
+  "baseline": {"webBuild": "pass", "metricsRequested": false, "screen": "Unsupported operation: Platform._version"},
+  "repaired": {
+    "metricsRequested": true,
+    "loadingMarkerRemoved": true,
+    "consoleExceptions": 0,
+    "desktop": {"width": 1280, "height": 720, "earned": 0, "denominator": 1536, "residual": 1536, "release": "v56.10.14.1"},
+    "mobile": {"width": 390, "height": 844, "documentScrollWidth": 390, "visualViewportWidth": 390},
+    "interaction": {"method": "CDP mouse click and Input.insertText", "filter": "local-web-preview", "matchedRows": 9},
+    "visibleWindow": "Coordinator-owned; coordinator verified refreshed app. Cross-owner CDP correctly returned WINDOW_NOT_FOUND."
+  },
+  "fullGate": {"command": "./build.sh --check", "testsRun": 3134, "newRed": 5, "existingOwner": "1780-jxc3", "failures": ["ca_refresh_margin_tests::a_ca_with_more_than_sixty_days_left_is_kept", "ca_refresh_margin_tests::a_missing_key_or_an_unparsable_cert_is_reminted", "ca_refresh_margin_tests::a_reminted_ca_lives_a_year", "ca_refresh_margin_tests::a_thirty_day_ca_is_reminted_at_launch_even_with_a_fresh_mtime", "spec_index::tests::the_repo_relative_rung_anchors_to_the_checkout_not_to_home"]}
+}
