@@ -1191,10 +1191,14 @@ fn has_python_argv_reference(line: &str) -> bool {
     .any(|needle| lower.contains(needle))
 }
 
+// `scratch` is the one ignored dir where development scratch, fixtures and
+// agent worktrees live (1637-cnxq, operator direction 2026-10-12): a planted
+// .py under scratch/ reddened this scan while every other door guard skipped
+// it (measured on yoga 2026-10-12, control vs planted preflight door).
 fn should_skip_dir(name: &str, path: &Path) -> bool {
     matches!(
         name,
-        ".git" | "target" | "dist" | "node_modules" | ".cache" | ".direnv"
+        ".git" | "target" | "dist" | "node_modules" | ".cache" | ".direnv" | "scratch"
     ) || path.components().any(|component| {
         component.as_os_str() == "plan" && path.components().any(|c| c.as_os_str() == "archive")
     })
@@ -5436,6 +5440,27 @@ mod tests {
         std::path::PathBuf::from(
             std::env::var("CARGO_MANIFEST_DIR").expect("cargo test sets CARGO_MANIFEST_DIR"),
         )
+    }
+
+    // 1637-cnxq: the canonical ignored scratch dir is skipped by NAME, with no
+    // .git marker: a .py planted under scratch/ reddened this scan while every
+    // other preflight-door guard skipped it (yoga, 2026-10-12). The fixture dir
+    // is made under the checkout's own scratch/, the rule it tests.
+    #[test]
+    fn should_skip_dir_skips_the_scratch_dir_without_a_git_marker() {
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
+            .expect("cargo sets CARGO_MANIFEST_DIR per invocation");
+        let base = Path::new(&manifest_dir)
+            .join("../../scratch/fixtures")
+            .join(format!("policy-scratch-{}", std::process::id()));
+        let scratch = base.join("scratch");
+        fs::create_dir_all(&scratch).unwrap();
+        fs::write(scratch.join("probe.py"), "print(1)\n").unwrap();
+        assert!(
+            should_skip_dir("scratch", &scratch),
+            "the canonical scratch dir must be skipped without a .git marker"
+        );
+        let _ = fs::remove_dir_all(&base);
     }
 
     // land94 (2026-09-29): agent worktrees under .claude/worktrees/ carry a

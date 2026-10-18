@@ -108,35 +108,35 @@ This allows maintainers to `cat cheatsheet-sources/...` to re-verify offline.
 ### Requirement: Validator invariants
 <!-- req-id: 7ea225b5 -->
 
-`scripts/check-cheatsheet-sources.sh` SHALL enforce four checks. Check violations
+`scripts/lua/check-cheatsheet-sources.lua` SHALL enforce four checks. Check violations
 at ERROR level cause `exit 1`. WARN-level violations print but exit 0.
 
 #### Scenario: ERROR — missing INDEX.json entry for cited URL
 - **GIVEN** a cheatsheet that cites a URL in `## Provenance`
 - **AND** that URL is not in `cheatsheet-sources/INDEX.json` (not fetched)
-- **WHEN** `scripts/check-cheatsheet-sources.sh` runs
+- **WHEN** `scripts/lua/check-cheatsheet-sources.lua` runs
 - **THEN** it emits a `WARN: UNFETCHED: ...` line (non-blocking during migration)
 
 #### Scenario: ERROR — local: path points to missing file
 - **GIVEN** a cheatsheet's Provenance section contains `local: \`cheatsheet-sources/...\``
 - **AND** neither the verbatim file NOR its `.meta.yaml` sidecar exists
-- **WHEN** `scripts/check-cheatsheet-sources.sh` runs
+- **WHEN** `scripts/lua/check-cheatsheet-sources.lua` runs
 - **THEN** it emits `ERROR: MISSING: ...` and exits 1
 
 #### Scenario: WARN — orphan INDEX entry
 - **GIVEN** an entry in `cheatsheet-sources/INDEX.json` with an empty `cited_by: []`
 - **AND** no cheatsheet has a `local:` path referencing it
-- **WHEN** `scripts/check-cheatsheet-sources.sh` runs
+- **WHEN** `scripts/lua/check-cheatsheet-sources.lua` runs
 - **THEN** it emits `WARN: ORPHAN: ...` (non-blocking)
 
 #### Scenario: ERROR — SHA mismatch
 - **GIVEN** a verbatim file has been modified since it was fetched
-- **WHEN** `scripts/check-cheatsheet-sources.sh` runs (without `--no-sha`)
+- **WHEN** `scripts/lua/check-cheatsheet-sources.lua` runs (without `--no-sha`)
 - **THEN** it emits `ERROR: SHA MISMATCH: ...` and exits 1
 
 #### Scenario: pre-commit integration
 - **WHEN** the developer commits a change
-- **THEN** `scripts/hooks/pre-commit-openspec.sh` runs `check-cheatsheet-sources.sh --no-sha`
+- **THEN** `scripts/hooks/pre-commit-openspec.sh` runs `scripts/lua/check-cheatsheet-sources.lua -- --no-sha` through `tillandsias-plan script run`
 - **AND** any ERRORS are surfaced as non-blocking warnings in the hook output
 - **AND** the commit proceeds regardless (CRDT-convergence philosophy)
 
@@ -196,7 +196,7 @@ human-triaged, not auto-resolved.
 ## Litmus Chain
 
 Smallest actionable boundary:
-- `bash scripts/check-cheatsheet-sources.sh --no-sha`
+- `tillandsias-plan script run scripts/lua/check-cheatsheet-sources.lua -- --no-sha`
 
 Sibling tests:
 - `bash scripts/regenerate-source-index.sh --check`

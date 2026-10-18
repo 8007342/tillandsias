@@ -401,7 +401,11 @@ record_attest() {
         return 1
     fi
 
-    out="$(mktemp "${TMPDIR:-/tmp}/mo-full-record.XXXXXX")"
+    # 1637-cnxq: the capture lives under scratch/logs inside the checkout.
+    out="$(mktemp "$("$_ai_dir/scratch-dir.sh" logs)/mo-full-record.XXXXXX")" || {
+        echo "MO-FULL: FAIL record: no scratch directory for the record capture (scripts/scratch-dir.sh, 1637-cnxq)"
+        return 1
+    }
     # MO_FULL_RECORDING marks the ONE call that legitimately precedes the
     # stamp: record cannot require a record that record is about to write.
     MO_FULL_RECORDING=1 "$0" self "$timeout_s" >"$out" 2>&1
@@ -479,7 +483,10 @@ record_attest() {
 # synthetic log plus a fake remote probe and asserts the validator verdict.
 fixture() {
     local work branch
-    work="$(mktemp -d "${TMPDIR:-/tmp}/mo-full-attest-fixture.XXXXXX")"
+    work="$(mktemp -d "$("$_ai_dir/scratch-dir.sh" fixtures)/mo-full-attest-fixture.XXXXXX")" || {
+        echo "MO-FULL: FAIL fixture: no scratch directory (scripts/scratch-dir.sh, 1637-cnxq)"
+        return 1
+    }
     trap 'rm -rf "$work"' RETURN
     branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
     local sha_a sha_b

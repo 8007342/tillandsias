@@ -122,7 +122,7 @@ fi
 # affordance statically.
 R="$W/repo"
 mkdir -p "$R/scripts" "$R/plan/index.d"
-cp "$CHECK" "$ROOT/scripts/plan-binary-probe.sh" "$R/scripts/"
+cp "$CHECK" "$ROOT/scripts/plan-binary-probe.sh" "$ROOT/scripts/scratch-dir.sh" "$R/scripts/"
 printf 'packets: []\n' > "$R/plan/index.yaml"
 git -C "$R" init -q -b work/fixture
 git -C "$R" -c user.email=f@f -c user.name=f add -A >/dev/null
@@ -133,7 +133,7 @@ git -C "$R" update-ref refs/remotes/origin/linux-next HEAD
 # like --batch, not answer ok. A fresh scratch checkout with NO sibling ref.
 R0="$W/repo0"
 mkdir -p "$R0/scripts" "$R0/plan/index.d"
-cp "$CHECK" "$ROOT/scripts/plan-binary-probe.sh" "$R0/scripts/"
+cp "$CHECK" "$ROOT/scripts/plan-binary-probe.sh" "$ROOT/scripts/scratch-dir.sh" "$R0/scripts/"
 printf 'packets: []\n' > "$R0/plan/index.yaml"
 git -C "$R0" init -q -b work/fixture
 git -C "$R0" -c user.email=f@f -c user.name=f add -A >/dev/null

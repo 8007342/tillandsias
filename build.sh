@@ -5068,6 +5068,21 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Refusal affordance enforcement passed"
 
+    # Order 1637-cnxq (operator direction 2026-10-12). Refuse a NEWLY ADDED
+    # shell line that makes scratch OUTSIDE the checkout (a bare mktemp, a /tmp
+    # or $TMPDIR path, a worktree outside scratch/, a write to ../) unless it
+    # names a key from scripts/portability/scratch-exceptions.txt. A recursive
+    # rm outside the workspace asks the operator for consent (1443-we89), and a
+    # bypass-mode session waiting on that prompt halts the fleet. Diff-scoped
+    # like the two above: 728 of 731 standing mktemp sites are outside the
+    # checkout (2026-10-12) and migrate by their owning rows.
+    _step "Checking newly-added shell makes scratch inside the checkout (1637-cnxq)..."
+    if ! _run_lua_decider "scripts/lua/check-scratch-location-added.lua" 2>&1; then
+        _error "a newly-added shell line makes scratch outside <checkout>/scratch/ (1637-cnxq); the site and the remedy are printed above"
+        exit 1
+    fi
+    _info "Scratch location enforcement passed"
+
     # Order 1401-x76w. RUN every added scripts/test-*.sh in the regime an
     # ordinary checkout has: CARGO_TARGET_DIR and TILLANDSIAS_PLAN_BIN unset and
     # every PATH entry holding a plan binary stripped, from a cwd outside the

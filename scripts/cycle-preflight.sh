@@ -75,6 +75,16 @@ if [ -f "$ROOT/scripts/dev-host-experts.sh" ]; then
     . "$ROOT/scripts/dev-host-experts.sh"
 fi
 cd "$ROOT" || { echo "blocked:preflight:root:cannot-cd"; exit 1; }
+# ORDER 1637-cnxq — scratch lives inside the checkout: the build log and the
+# captured stderr below go under scratch/logs (scripts/scratch-dir.sh), never
+# under the host temp dir.
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+SCRATCH_DIR="$("$ROOT/scripts/scratch-dir.sh" logs 2>/dev/null)" || SCRATCH_DIR=""
+if [ -z "$SCRATCH_DIR" ]; then
+    _afford "scripts/scratch-dir.sh named no directory inside the checkout, and the preflight captures its build log and stderr there (1637-cnxq)" \
+        "run from a checkout that carries scripts/scratch-dir.sh, or set TILLANDSIAS_SCRATCH_ROOT to a writable absolute directory, then re-run"
+    echo "blocked:preflight:scratch:no-dir"; exit 1
+fi
 
 plan_verdict="skipped"
 if [ "${CYCLE_PREFLIGHT_SKIP_BUILD:-0}" != "1" ]; then
@@ -143,7 +153,7 @@ if [ "${CYCLE_PREFLIGHT_SKIP_BUILD:-0}" != "1" ]; then
     # instrument on a host with no cargo: there is nothing to build with, and
     # the binary it would verify is the one already resolved.
     if [ "$plan_verdict" != "existing" ]; then
-        build_log="$(mktemp)"
+        build_log="$(mktemp "$SCRATCH_DIR/cycle-preflight-build.XXXXXX")"
         if cargo build --release -p tillandsias-plan >"$build_log" 2>&1; then
             # `cargo build` is a no-op when nothing changed, so this is cheap on
             # the common path and correct on the uncommon one.
@@ -325,7 +335,7 @@ if [ -x "$ROOT/scripts/check-enclave-service-health.sh" ]; then
     #
     # Nothing is passed deliberately: an explicit --expect here would restore
     # exactly the caller-supplied behaviour this order removed, one layer up.
-    _svc_err="$(mktemp "${TMPDIR:-/tmp}/cycle-preflight-services.XXXXXX")"
+    _svc_err="$(mktemp "$SCRATCH_DIR/cycle-preflight-services.XXXXXX")"
     # --act (878-79b5): the unattended cycle is exactly the caller that must
     # FIX what it can prove needs fixing — four yoga cycles re-noted one
     # stopped proxy for nine hours. The acting ladder never fights an
@@ -361,7 +371,7 @@ plan_verdict="${plan_verdict}+services-${services_report}"
 # still do most of its work.
 ca_report="skip"
 if [ -x "$ROOT/scripts/check-enclave-ca-consistency.sh" ]; then
-    _ca_err="$(mktemp)"
+    _ca_err="$(mktemp "$SCRATCH_DIR/cycle-preflight-ca.XXXXXX")"
     ca_line="$(bash "$ROOT/scripts/check-enclave-ca-consistency.sh" 2>"$_ca_err" | tail -1)"
     case "$ca_line" in
         ok:enclave-ca-consistent) ca_report="ok" ;;
