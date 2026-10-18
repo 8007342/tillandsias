@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: scoped-forge-diagnostics-collection-query-and-curated-events-research
+    field: next_action
+    value: |-
+      Operator ruling 2026-10-18 on visibility. Sibling forges are NOT visible to each other. Each forge sees the aggregated logs of exactly:
+      (a) itself;
+      (b) the containers it started and whose lifecycle it controls, such as its development web preview and the other containers it launched;
+      (c) curated, broadcastable events from global (shared) containers.
+      Global events are producer-authored facts with no raw logs, for example a token refresh or a garbage-collection reap. They reach ALL concurrent forges.
+      Several forges run concurrently, each with its own set of web and other containers, so scope is per forge, never per project or per network.
+      Retention, from the earlier ruling: the current forge session only.
+      Next: author ONE OpenSpec change extending runtime-diagnostics-stream with this scope model, with a red fixture for each arm:
+      - a forge cannot read another forge's or another forge's children's logs;
+      - a forge reads its own children's logs;
+      - a global event reaches every concurrent forge, carries only allowlisted fields and no credential canaries.
+    ts: "2026-10-18T03:06:37Z"
+    host: macuahuitl
+    replaces_sha256: "96725b78d546daee7da8b4f2cf21ba1de7facf405e7191cf11c3332cc7cd0b29"
+
+events:
+  - packet_id: scoped-forge-diagnostics-collection-query-and-curated-events-research
+    event:
+      type: note
+      ts: "2026-10-18T03:06:37Z"
+      host: macuahuitl
+      summary: |-
+        operator ruling 2026-10-18: per-forge scope plus global curated broadcast events
