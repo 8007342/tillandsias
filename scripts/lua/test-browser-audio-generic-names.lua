@@ -1,5 +1,5 @@
 -- @trace order:1769-9gna
--- @env PATH XDG_RUNTIME_DIR TILLANDSIAS_CHROMIUM_FRAMEWORK_IMAGE
+-- @env PATH XDG_RUNTIME_DIR TILLANDSIAS_CHROMIUM_FRAMEWORK_IMAGE TILLANDSIAS_WEBKIT_IMAGE
 --
 -- test-browser-audio-generic-names.lua — a browser window sees only generic
 -- audio devices ("Speakers", and the monitor of that sink), never a host
@@ -30,9 +30,25 @@
 -- The image is TILLANDSIAS_CHROMIUM_FRAMEWORK_IMAGE, else the versioned tag a
 -- window runs (tillandsias-chromium-framework at v<VERSION>).
 --
+-- `-- --engine webkit` runs the same four arms against the tray's WebKit
+-- window (1777-yhwr): its image (TILLANDSIAS_WEBKIT_IMAGE, else
+-- tillandsias-webkit at v<VERSION>), its user-owned runtime tmpfs, and the
+-- probe standing in for `node`, which its launcher runs.
+--
 -- Usage: tillandsias-plan script run scripts/lua/test-browser-audio-generic-names.lua
 
-local NAME = "browser-audio-generic-names"
+local ENGINE = "chromium"
+for i = 1, #arg do
+    if arg[i] == "--engine" then ENGINE = arg[i + 1] or "" end
+end
+local E = ({
+    chromium = { name = "browser-audio-generic-names", image_env = "TILLANDSIAS_CHROMIUM_FRAMEWORK_IMAGE",
+        repo = "tillandsias-chromium-framework", probe_at = "/usr/local/bin/chromium", runtime_mode = "mode=0755" },
+    webkit = { name = "browser-audio-generic-names-webkit", image_env = "TILLANDSIAS_WEBKIT_IMAGE",
+        repo = "tillandsias-webkit", probe_at = "/usr/local/bin/node", runtime_mode = "mode=0700,U" },
+})[ENGINE]
+if not E then verdict.could_not_run("browser-audio-generic-names", "unknown --engine " .. tostring(ENGINE) .. " (chromium or webkit)") end
+local NAME = E.name
 local CONF_PATH = "crates/tillandsias-headless/src/host_audio_pulse.conf"
 local INSIDE_RUNTIME = "/run/user/browser"
 local INSIDE_SOCKET = INSIDE_RUNTIME .. "/pulse-native"
@@ -45,13 +61,13 @@ for _, tool in ipairs({ "pipewire", "pactl", "podman" }) do
     if w.status == "policy_denied" then verdict.could_not_run(NAME, "the runtime refused to run " .. tool) end
     if w.status ~= "exited" or w.code ~= 0 then verdict.skip(NAME, tool .. " is not installed") end
 end
-local IMAGE = env.get("TILLANDSIAS_CHROMIUM_FRAMEWORK_IMAGE")
+local IMAGE = env.get(E.image_env)
 if not IMAGE or IMAGE == "" then
     local ok, v = pcall(fs.read, "VERSION")
-    IMAGE = "localhost/tillandsias-chromium-framework:v" .. text.trim(ok and v or "")
+    IMAGE = "localhost/" .. E.repo .. ":v" .. text.trim(ok and v or "")
 end
 if proc.run({ argv = { "podman", "image", "exists", IMAGE }, timeout_ms = 30000 }).code ~= 0 then
-    verdict.skip(NAME, "no image " .. IMAGE .. " (build chromium-framework, or set TILLANDSIAS_CHROMIUM_FRAMEWORK_IMAGE)")
+    verdict.skip(NAME, "no image " .. IMAGE .. " (build it, or set " .. E.image_env .. ")")
 end
 
 local top = proc.run({ argv = { "git", "rev-parse", "--show-toplevel" }, timeout_ms = 30000 })
@@ -130,10 +146,10 @@ proc.run({ argv = { "chmod", "0755", ROOT .. "/" .. REL .. "/chromium" }, timeou
 local function window(mount_socket)
     local argv = { "podman", "run", "--rm", "--network=none", "--read-only", "--userns=keep-id",
         "--cap-drop=ALL", "--security-opt=no-new-privileges", "--security-opt=label=disable",
-        "--tmpfs", "/tmp:size=256m", "--tmpfs", INSIDE_RUNTIME .. ":size=1m,mode=0755",
+        "--tmpfs", "/tmp:size=256m", "--tmpfs", INSIDE_RUNTIME .. ":size=1m," .. E.runtime_mode,
         "-e", "HOME=/tmp", "-e", "XDG_RUNTIME_DIR=" .. INSIDE_RUNTIME,
         "-e", "PULSE_SERVER=unix:" .. INSIDE_SOCKET,
-        "-v", ROOT .. "/" .. REL .. "/chromium:/usr/local/bin/chromium:ro" }
+        "-v", ROOT .. "/" .. REL .. "/chromium:" .. E.probe_at .. ":ro" }
     if mount_socket then
         argv[#argv + 1] = "-v"; argv[#argv + 1] = SOCKET .. ":" .. INSIDE_SOCKET
     end

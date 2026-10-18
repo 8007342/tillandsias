@@ -54,9 +54,24 @@ RUN curl -fsSL -o /tmp/webkit.zip "${WEBKIT_URL}" \
              "/ms-playwright/webkit-${WEBKIT_REVISION}/DEPENDENCIES_VALIDATED" \
     && rm /tmp/webkit.zip
 
+# ORDER 1777-yhwr: a private PulseAudio server per window, so the page lists
+# only "Speakers" (and its monitor), never a host device name: the Chromium
+# window's front (1769-9gna), same config and start script. pulseaudio-utils
+# (pactl, pacat) lets the fixture measure the window's view from inside;
+# client autospawn is off.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends pulseaudio pulseaudio-utils \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /etc/pulse/client.conf.d \
+    && printf 'autospawn = no\n' > /etc/pulse/client.conf.d/00-tillandsias.conf
+COPY browser-audio.pa /etc/tillandsias/browser-audio.pa
+COPY browser-audio-start.sh /usr/local/lib/tillandsias/browser-audio-start.sh
 COPY webkit-window.js /opt/tillandsias/webkit-window.js
+COPY webkit-launch.sh /opt/tillandsias/webkit-launch.sh
+RUN chmod 0644 /etc/tillandsias/browser-audio.pa /usr/local/lib/tillandsias/browser-audio-start.sh \
+    && chmod 0755 /opt/tillandsias/webkit-launch.sh
 
 # No USER: under --userns=keep-id a process with no image USER runs as the
 # host user's uid, which is what the bind-mounted Wayland socket (owner-only
 # write) needs. Measured: with `USER 65534` GTK could not open the display.
-ENTRYPOINT ["node", "/opt/tillandsias/webkit-window.js"]
+ENTRYPOINT ["/opt/tillandsias/webkit-launch.sh"]
