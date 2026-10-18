@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha on the coordinator's request (macuahuitl-fedora,
+# 2026-10-18), from 1787-i2ir's findings.
+packets:
+  - packet_id: forges-install-opencode-ai-latest-so-npm-s-first-2-x-would-silently-drop-the-vault-credential-contract
+    order: 1790-8w65
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [linux, forge, opencode, vault, npm]
+    related: [1787-i2ir]
+    depends_on: []
+    title: |
+      Forges install opencode-ai@latest, and the 2.x line (Homebrew 2.0.25 today) ignores OPENCODE_AUTH_CONTENT, so the day npm publishes 2.x every forge's Vault-backed OpenCode credential stops working; pin forges to a 1.x range, or prove 2.x's credential channel with a real model call, BEFORE npm publishes 2.x
+    context: |
+      MEASURED 2026-10-18 for 1787-i2ir. npm opencode-ai: dist-tags latest=1.19.3, and none of 12253 versions is 2.x. Forges install it on demand (images/default/lib-common.sh, _require_harness opencode opencode-ai opencode); a fresh forge from trunk on lenovinha installed 1.19.3, and 1.19.3 honours order 431's OPENCODE_AUTH_CONTENT contract ("1 credentials", no auth.json).
+      Homebrew's opencode formula is already 2.0.25 (https://opencode.ai). 2.0.25 ignores OPENCODE_AUTH_CONTENT even with --standalone ("No authenticated integrations"). By default it talks to a background managed service on a localhost port, so any probe must pass --standalone. Its binary names OPENCODE_CONFIG_CONTENT and OPENCODE_API_KEY, and its auth subcommands are list/login/logout/export/import. A provider apiKey through OPENCODE_CONFIG_CONTENT does not show in auth list, so whether it authenticates is unproven.
+      If npm publishes 2.x, @latest moves and every forge's Vault Gemini credential is dropped. The launch-time contract probe would then fail (opencode AUTH CONTRACT BROKEN), while the free models still answer, so the break looks like a quiet downgrade rather than an outage.
+    exit_criteria:
+      - "either forges install opencode-ai from an explicit 1.x range with the reason in the image (so a 2.x publish cannot move them), or 2.x's credential channel is proven with a REAL model call through the forge's Vault-backed path, and the adapter is changed to use it"
+      - "the choice is made before npm publishes 2.x: a check that names npm's newest opencode-ai major (or the pinned range) exists and turns red when 2.x appears while forges are unpinned"
+      - "NEGATIVE CONTROL: the fixture still FAILS against an opencode that ignores the injected credential (test-opencode-vault-auth-content.sh's ignoring stub, 1787-i2ir)"
+    unscoreable: "unpinnable-until-the-guard-exists: the pin is the npm-major check named in criterion 2, written red first against a registry answer that names a 2.x"
+    next_action: >
+      Decide pin-vs-prove with the coordinator. A pin changes _require_harness's opencode-ai spec; proving needs a real Gemini key in Vault on a test host and a forge running 2.x.
+    events:
+      - type: filed
+        ts: "2026-10-18T22:43:43Z"
+        host: lenovinha
+        summary: |-
+          Watch for npm opencode-ai 2.x: forges install @latest, and 2.x ignores OPENCODE_AUTH_CONTENT. Filed at the coordinator's request from 1787-i2ir.

@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: affordance-slice-plan-schema-divergence-verdicts-say-why-and-what-clears-them
+    order: 1247-sv4d
+    parent_order: 1247-amcu
+    status: in_progress
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [affordance, refusal, plan, fail-loud]
+    estimated_hours: 1
+    owned_files:
+      - scripts/check-plan-schema-divergence.sh
+      - scripts/test-yaml-reader-availability.sh
+    title: |
+      1247-amcu slice — FAMILY: the blocked:index-load-failed and blocked:status-vocab-diverges verdicts of scripts/check-plan-schema-divergence.sh (4 sites) carry a why: and a remedy:, and an absent vocabulary is no longer agreement
+    context: |
+      Picked by lenovinha at the coordinator's request (2026-10-18) as the next family by scripts/rank-refusal-hits.sh that actually lacks a remedy: blocked:index-load-failed is rank 19 (2 sites) and blocked:status-vocab-diverges rank 26 (2 sites), same file. Ranks 1-18 were read: they carry prose remedies, belong to the cycle-preflight hunks #386 holds, or are earlier slices. No open PR touches the file.
+      All four sites print only the token. The reader-absent case names cycle-preflight inside the token text, but a YAML parse failure, a missing input file and a real divergence say nothing about what clears them; the divergence line also does not say WHICH statuses differ.
+      MEASURED: tillandsias-plan yaml-get answers rc=0 and empty output for an absent key, so an index without plan_index.default_status_values and a schema without statuses compare equal and the check prints ok:status-vocab-in-sync. An empty vocabulary is refused, not agreed with.
+    exit_criteria:
+      - 'each of the four sites emits why: and remedy: on stderr beside its stdout verdict, whose token is unchanged (pre-fix: FAILS on all four)'
+      - 'the divergence remedy names the statuses present on only one side'
+      - 'an absent vocabulary on either side is refused, never ok:status-vocab-in-sync (pre-fix: both absent answers ok)'
+      - 'NEGATIVE CONTROL (1247-amcu criterion 5): the fixture EXECUTES each remedy and the check then answers ok:status-vocab-in-sync'
+      - 'litmus-added-fragment-parse-gate-shape stays green'
+    verifiable_closure: |
+      bash scripts/test-yaml-reader-availability.sh passes with the new arms, which FAIL pre-fix; the litmus stays green.
+    provenance: |
+      Filed by lenovinha at the coordinator's request, 2026-10-18.
+    events:
+      - type: filed
+        ts: "2026-10-18T22:47:51Z"
+        host: lenovinha
+        summary: |-
+          Next 1247-amcu slice: check-plan-schema-divergence.sh. Filed and claimed in one fragment by lenovinha.
