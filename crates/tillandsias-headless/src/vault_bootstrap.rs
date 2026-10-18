@@ -6832,72 +6832,76 @@ mod tests {
         assert!(!body.contains("build_image_with_logging("), "{body}");
         assert!(body.contains("crate::ensure_image_exists("), "{body}");
 
-        // Lock arm. Everything the seam touches is scratch: runtime dir (the
-        // lock), cache (a failure marker must never reach the real cache),
-        // the checkout as the runtime root, and a podman that always fails.
-        let _seam = crate::runtime_assets::podman_seam_lock();
-        let _env = crate::test_support::env_lock();
-        let scratch = identity_scratch("v1t4-lock");
-        // A podman that fails every call: first on PATH, a link to /bin/false.
-        let bin = scratch.join("bin");
-        std::fs::create_dir_all(&bin).unwrap();
-        std::os::unix::fs::symlink("/bin/false", bin.join("podman")).unwrap();
-        let saved: Vec<(&str, Option<std::ffi::OsString>)> = [
-            "XDG_RUNTIME_DIR",
-            "XDG_CACHE_HOME",
-            "TILLANDSIAS_ROOT",
-            "PATH",
-            "TILLANDSIAS_PODMAN_REFUSE_REAL",
-            crate::image_ensure_marker::RETRY_BASE_ENV,
-        ]
-        .into_iter()
-        .map(|k| (k, std::env::var_os(k)))
-        .collect();
-        let checkout = PathBuf::from(
-            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
-        )
-        .join("../..");
-        // SAFETY: env_lock serialises every env-mutating test.
-        unsafe {
-            std::env::set_var("XDG_RUNTIME_DIR", scratch.join("run"));
-            std::env::set_var("XDG_CACHE_HOME", scratch.join("cache"));
-            std::env::set_var("TILLANDSIAS_ROOT", &checkout);
-            std::env::set_var("PATH", format!("{}:/usr/bin:/bin", bin.display()));
-            // The PATH podman is the fake; the tripwire would refuse it.
-            std::env::remove_var("TILLANDSIAS_PODMAN_REFUSE_REAL");
-            // 1776-brk3's background retries run in milliseconds, not minutes.
-            std::env::set_var(crate::image_ensure_marker::RETRY_BASE_ENV, "10");
-        }
-        std::fs::create_dir_all(scratch.join("run")).unwrap();
-        let held = crate::resource_lock::acquire("image-vault", Duration::from_secs(5), false)
-            .expect("take the vault image lock");
-        let (tx, rx) = std::sync::mpsc::channel();
-        let worker = std::thread::spawn(move || {
-            let _ = tx.send(build_vault_image(false));
-        });
-        std::thread::sleep(Duration::from_millis(1500));
-        let waited = rx.try_recv().is_err();
-        drop(held);
-        let after = rx.recv_timeout(Duration::from_secs(120));
-        let _ = worker.join();
-        for (k, v) in saved {
-            // SAFETY: as above.
+        // Lock arm (unix: the fake podman is a symlink to /bin/false).
+        #[cfg(unix)]
+        {
+            // Lock arm. Everything the seam touches is scratch: runtime dir (the
+            // lock), cache (a failure marker must never reach the real cache),
+            // the checkout as the runtime root, and a podman that always fails.
+            let _seam = crate::runtime_assets::podman_seam_lock();
+            let _env = crate::test_support::env_lock();
+            let scratch = identity_scratch("v1t4-lock");
+            // A podman that fails every call: first on PATH, a link to /bin/false.
+            let bin = scratch.join("bin");
+            std::fs::create_dir_all(&bin).unwrap();
+            std::os::unix::fs::symlink("/bin/false", bin.join("podman")).unwrap();
+            let saved: Vec<(&str, Option<std::ffi::OsString>)> = [
+                "XDG_RUNTIME_DIR",
+                "XDG_CACHE_HOME",
+                "TILLANDSIAS_ROOT",
+                "PATH",
+                "TILLANDSIAS_PODMAN_REFUSE_REAL",
+                crate::image_ensure_marker::RETRY_BASE_ENV,
+            ]
+            .into_iter()
+            .map(|k| (k, std::env::var_os(k)))
+            .collect();
+            let checkout = PathBuf::from(
+                std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+            )
+            .join("../..");
+            // SAFETY: env_lock serialises every env-mutating test.
             unsafe {
-                match v {
-                    Some(v) => std::env::set_var(k, v),
-                    None => std::env::remove_var(k),
+                std::env::set_var("XDG_RUNTIME_DIR", scratch.join("run"));
+                std::env::set_var("XDG_CACHE_HOME", scratch.join("cache"));
+                std::env::set_var("TILLANDSIAS_ROOT", &checkout);
+                std::env::set_var("PATH", format!("{}:/usr/bin:/bin", bin.display()));
+                // The PATH podman is the fake; the tripwire would refuse it.
+                std::env::remove_var("TILLANDSIAS_PODMAN_REFUSE_REAL");
+                // 1776-brk3's background retries run in milliseconds, not minutes.
+                std::env::set_var(crate::image_ensure_marker::RETRY_BASE_ENV, "10");
+            }
+            std::fs::create_dir_all(scratch.join("run")).unwrap();
+            let held = crate::resource_lock::acquire("image-vault", Duration::from_secs(5), false)
+                .expect("take the vault image lock");
+            let (tx, rx) = std::sync::mpsc::channel();
+            let worker = std::thread::spawn(move || {
+                let _ = tx.send(build_vault_image(false));
+            });
+            std::thread::sleep(Duration::from_millis(1500));
+            let waited = rx.try_recv().is_err();
+            drop(held);
+            let after = rx.recv_timeout(Duration::from_secs(120));
+            let _ = worker.join();
+            for (k, v) in saved {
+                // SAFETY: as above.
+                unsafe {
+                    match v {
+                        Some(v) => std::env::set_var(k, v),
+                        None => std::env::remove_var(k),
+                    }
                 }
             }
+            let _ = std::fs::remove_dir_all(&scratch);
+            assert!(
+                waited,
+                "build_vault_image must wait while another holds image-vault"
+            );
+            assert!(
+                after.is_ok(),
+                "once the lock is free it proceeds and answers"
+            );
         }
-        let _ = std::fs::remove_dir_all(&scratch);
-        assert!(
-            waited,
-            "build_vault_image must wait while another holds image-vault"
-        );
-        assert!(
-            after.is_ok(),
-            "once the lock is free it proceeds and answers"
-        );
 
         // Refusal arm: never `tillandsias --init` (1774-8j9v).
         let build_error = format!(
