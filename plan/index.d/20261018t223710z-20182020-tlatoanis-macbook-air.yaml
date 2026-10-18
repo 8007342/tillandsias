@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-first-forge-launch-after-a-reset-can-wedge-guest-podman-so-the-router-run-hangs-at-conmon-for-its-whole-300s-budget-and-vault-is-declared-dead-while-it-still-runs
+    field: unscoreable
+    value: 'pinned-by-its-fixtures: criteria 1-2 are pinned by cargo tests: crates/tillandsias-headless/src/container_deps.rs a_podman_that_does_not_answer_inspect_never_gets_vault_re_ensured (an exec''d shim podman drives the real liveness pass; red under the None->Dead mutation) with the control a_podman_that_answers_exited_still_gets_vault_re_ensured, and crates/tillandsias-podman/src/wedge_capture.rs; criterion 3 (three cold first launches) runs only through a published release on macOS'
+    ts: "2026-10-18T22:37:10Z"
+    host: tlatoanis-macbook-air
+    replaces_sha256: "3cad8aec9233dc36a1d5b3a09ebb7d30b48f0e4dc8c21d319c41d502801133e0"
+
+events:
+  - packet_id: the-first-forge-launch-after-a-reset-can-wedge-guest-podman-so-the-router-run-hangs-at-conmon-for-its-whole-300s-budget-and-vault-is-declared-dead-while-it-still-runs
+    event:
+      type: note
+      ts: "2026-10-18T22:37:10Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        The pin named scripts/lua/test-managed-service-death-unknown-state.lua; no CLI runs a single liveness pass, so the shim fixture is a cargo test over run_check_with (59143067d). Corrected so the closure names what exists.
