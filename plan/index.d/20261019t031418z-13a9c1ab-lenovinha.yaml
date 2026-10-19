@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: litmus-opencode-vault-auth-content-fails-on-trunk-because-the-installed-opencode-2-x-ignores-opencode-auth-content
+    field: status
+    value: implemented
+    ts: "2026-10-19T03:14:18Z"
+    host: lenovinha
+
+events:
+  - packet_id: litmus-opencode-vault-auth-content-fails-on-trunk-because-the-installed-opencode-2-x-ignores-opencode-auth-content
+    event:
+      type: note
+      ts: "2026-10-19T03:14:18Z"
+      host: lenovinha
+      summary: |-
+        landed as land(554) 326172376 on linux-next
