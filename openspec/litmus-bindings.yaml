@@ -1085,9 +1085,10 @@ specs:
   last_verified: '2026-05-15'
 - spec_id: tray-cli-coexistence
   status: active
-  litmus_tests: null
-  coverage_ratio: 0
-  last_verified: '2026-05-14'
+  litmus_tests:
+  - litmus:cli-lane-cold-start-not-refused-by-own-tray
+  coverage_ratio: 100
+  last_verified: '2026-10-19'
 - spec_id: tray-host-control-socket
   status: obsolete
   tombstone: "Superseded by orders 123-128 normalization."

@@ -1024,14 +1024,31 @@ pub(crate) fn await_github_login_confirmation(
 ///
 /// @trace spec:mcp-tool-socket, spec:tray-host-control-socket
 pub fn start_mcp_socket_server() -> Result<(), String> {
-    let projects = discover_projects();
-    for project in &projects {
-        let _ = start_mcp_socket_server_for_lane(&project.name, "default");
-    }
-    if projects.is_empty() {
-        let _ = start_mcp_socket_server_for_lane("default", "default");
+    let names: Vec<String> = discover_projects().into_iter().map(|p| p.name).collect();
+    let reserved_value = std::env::var(crate::mcp_socket::TRAY_RESERVED_LANE_ENV).ok();
+    let reserved = crate::mcp_socket::reserved_lane_from(reserved_value.as_deref());
+    for (project, instance) in startup_lanes(&names, reserved.as_ref()) {
+        let _ = start_mcp_socket_server_for_lane(&project, &instance);
     }
     Ok(())
+}
+
+/// The lanes a tray binds at startup: every discovered project's default
+/// lane (the `default` lane when there are none), minus the lane a CLI
+/// launch reserved when it spawned this tray as its companion (1798-nwpg).
+fn startup_lanes(
+    project_names: &[String],
+    reserved: Option<&crate::mcp_socket::LaneListenerKey>,
+) -> Vec<crate::mcp_socket::LaneListenerKey> {
+    let mut lanes: Vec<_> = project_names
+        .iter()
+        .map(|name| (name.clone(), "default".to_string()))
+        .collect();
+    if lanes.is_empty() {
+        lanes.push(("default".to_string(), "default".to_string()));
+    }
+    lanes.retain(|lane| Some(lane) != reserved);
+    lanes
 }
 
 fn handle_control_connection(
@@ -4829,6 +4846,34 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 1798-nwpg: a tray spawned as a CLI launch's companion leaves the
+    /// reserved lane unbound and still binds every other project's lane. With
+    /// nothing reserved (an operator-started tray) it binds them all, as before.
+    #[test]
+    fn companion_tray_leaves_the_reserved_lane_unbound() {
+        let names = vec!["alpha".to_string(), "rf3c-smoke".to_string()];
+        let lane = |p: &str| (p.to_string(), "default".to_string());
+
+        let reserved = crate::mcp_socket::reserved_lane_from(Some("rf3c-smoke/default"));
+        assert_eq!(
+            startup_lanes(&names, reserved.as_ref()),
+            vec![lane("alpha")]
+        );
+
+        assert_eq!(
+            startup_lanes(&names, None),
+            vec![lane("alpha"), lane("rf3c-smoke")],
+            "an operator-started tray binds every lane"
+        );
+        let other_instance = crate::mcp_socket::reserved_lane_from(Some("rf3c-smoke/w2"));
+        assert_eq!(
+            startup_lanes(&names, other_instance.as_ref()).len(),
+            2,
+            "a reservation on another instance leaves the default lanes bound"
+        );
+        assert_eq!(startup_lanes(&[], None), vec![lane("default")]);
+    }
 
     /// Order 828-r2ek NEGATIVE CONTROL, and the reason this site needed care
     /// rather than a one-line bound.
