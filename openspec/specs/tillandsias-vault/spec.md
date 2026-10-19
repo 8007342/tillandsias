@@ -124,8 +124,16 @@ installation anchor HKDF key K may optionally be used as an encryption wrapper f
 The host MUST implement secret versioning (e.g., `vault-shamir-share-v1`).
 On launch, the host SHALL sanitize and delete any stale, older-version keys or
 keys associated with non-existent container instances to maintain a minimal
-attack surface. The unseal secret SHALL be loaded into a podman secret and
-mounted at `/run/secrets/vault-unseal` on tmpfs only.
+attack surface. The unseal key SHALL NOT be a podman secret: podman's file
+driver, and every container's copy of a mounted secret, are plaintext on durable
+disk. It SHALL instead be written for each launch to a 0444 file inside a 0700
+directory on tmpfs (`$XDG_RUNTIME_DIR/tillandsias/vault-unseal/key`, refused
+when that directory is not tmpfs), bind-mounted read-only at
+`/run/secrets/tillandsias-vault-unseal`, and overwritten and removed as soon as
+the launch settles. The key SHALL be read afresh on every launch from the OS
+keyring on a host, or from the host's in-memory delivery in a guest (operator
+ruling 2026-10-19, order 1118-fqfk: "Credentials lost is a better outcome than
+unencrypted credentials").
 
 The transitional XOR envelope is FORBIDDEN. The launcher MUST capture the Vault-generated
 Shamir share once during first-boot initialization, store it securely in the host native
@@ -134,8 +142,11 @@ MUST be deleted immediately after initialization.
 
 The entrypoint SHALL inspect the HTTP status of an unseal request without
 `curl -f`. HTTP 400 SHALL be classified as a wrong key and SHALL emit the exact
-marker `FATAL: unseal request returned HTTP 400: wrong key`. Host recovery SHALL
-require that marker before replacing an existing unseal secret.
+marker `FATAL: unseal request returned HTTP 400: wrong key`. That marker on an
+initialized store means the store is unopenable: the host SHALL wipe it once,
+print the named `sign-in-again` line, and relaunch Vault afresh. It SHALL NOT
+attempt a salvage (the retired one-shot recovery seam), and no other launch
+failure SHALL wipe.
 
 @trace spec:tillandsias-vault, spec:host-shell-architecture
 

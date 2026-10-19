@@ -45,8 +45,6 @@ pub const VAULT_HOST_PORT: u16 = 8201;
 const KEYCHAIN_SERVICE: &str = "tillandsias";
 /// Keychain user for the versioned Shamir unseal share.
 const VAULT_SHAMIR_SHARE_V1: &str = "vault-shamir-share-v1";
-/// Keychain user for the installation anchor (UUID).
-const INSTALL_ANCHOR_V1: &str = "installation-uuid-v1";
 
 /// 1642-cc54 (criterion 2). Written by the macOS guest's provisioning when
 /// the VM has an identity disk: one line, the disk's mount point. The disk
@@ -1028,62 +1026,28 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
     let vault_image_tag = build_vault_image(debug)?;
     refresh_vault_tls_secrets(&certs_dir, debug)?;
 
-    // Verify-before-persist (restart self-wedge, 2026-07-17): NEVER
-    // speculatively `--replace` an existing unseal secret. A routine headless
-    // restart re-ensured here, `ensure_unseal_key()` recovered a share that
-    // did NOT match the initialized storage, and the unconditional
-    // `create_unseal_secret` overwrote the WORKING podman secret with it —
-    // the container then crash-looped on unseal, and because vault stayed
-    // down, every liveness cycle regenerated the secret again (self-
-    // sustaining wedge on real operator secrets). An existing secret is
-    // reused unchanged — sitting ABOVE both the VM-handover and native-
-    // keychain key sources — and the launch itself proves whether it still
-    // unseals; only a PROVEN key rejection may enter the one-shot recovery
-    // seam below. Creating from `ensure_unseal_key` remains correct ONLY
-    // when no secret exists at all (true first boot — nothing working can
-    // be destroyed).
-    // @trace plan/issues/vault-unseal-secret-regenerated-on-reensure-2026-07-17.md
-    // 1796-ukey: only a proven absence is first boot; a failed probe refuses.
-    let presence = if cfg!(feature = "vault") {
-        unseal_secret_presence()
-    } else {
-        SecretPresence::Absent
-    };
-    if let SecretPresence::Unknown(reason) = &presence {
-        return Err(format!(
-            "could not tell whether podman secret {VAULT_UNSEAL_SECRET} exists ({reason}); \
-             it was not replaced\n  \
-             why: replacing an existing unseal secret can leave initialized storage sealed\n  \
-             remedy: check that podman answers (podman secret ls), then relaunch tillandsias"
-        ));
-    }
-    let reusing_existing_secret = presence == SecretPresence::Present;
-    if reusing_existing_secret {
-        if debug {
-            eprintln!(
-                "[tillandsias-vault] podman secret {VAULT_UNSEAL_SECRET} already exists; \
-                 reusing it unchanged (verify-before-persist)"
-            );
-        }
-    } else {
-        let mut unseal_key = ensure_unseal_key(debug)?;
-        create_unseal_secret(&unseal_key, debug)?;
-        unseal_key.zeroize();
-    }
-    launch_vault_container(&vault_image_tag, debug)?;
-
+    // 1118-fqfk (operator ruling 2026-10-19: losing credentials beats keeping
+    // them unencrypted). The unseal key is read from the OS keyring (or the
+    // host's in-memory delivery in a guest) on EVERY launch, written to a tmpfs
+    // file for the container to read once, and scrubbed as soon as the launch
+    // settles. There is no podman secret to reuse or repair any more, and no
+    // salvage seam: a key the initialized store rejects means the store is
+    // unopenable, so it is wiped once and Vault starts afresh, and the person
+    // signs in again.
+    #[cfg(feature = "vault")]
+    remove_legacy_plaintext_credentials(debug);
     let rt = tokio_runtime()?;
     let base_url = vault_api_base_url();
-    let root_token = match wait_for_vault_ready(&rt, &base_url, debug) {
+    let root_token = match launch_with_unseal_key(&rt, &base_url, &vault_image_tag, debug) {
         Ok(token) => token,
-        // Only a launch that REUSED a pre-existing secret may enter the
-        // recovery seam. When this process just created the secret itself,
-        // the key already came from the recovery stores, so there is no
-        // second candidate to offer — the failure propagates unchanged.
-        Err(wait_err) if reusing_existing_secret => {
-            recover_rejected_unseal_secret_once(&rt, &base_url, &vault_image_tag, &wait_err, debug)?
+        Err(wait_err) => {
+            let logs = vault_container_logs_tail();
+            if !unseal_failure_is_key_rejection(&logs, container_running(VAULT_CONTAINER_NAME)) {
+                return Err(wait_err);
+            }
+            wipe_unopenable_store(debug)?;
+            launch_with_unseal_key(&rt, &base_url, &vault_image_tag, debug)?
         }
-        Err(e) => return Err(e),
     };
     let client = vault_client(&base_url, &root_token, debug)?;
 
@@ -1096,6 +1060,61 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
     );
     eprintln!("[tillandsias-vault]   policies : {:?}", Policy::all());
     eprintln!("[tillandsias-vault]   base_url : {base_url}");
+    Ok(())
+}
+
+/// One launch with the unseal key on tmpfs: write it, start the container,
+/// wait for Vault to be ready, and scrub the file whatever happened.
+fn launch_with_unseal_key(
+    rt: &crate::RuntimeOrHandle,
+    base_url: &str,
+    image_tag: &str,
+    debug: bool,
+) -> Result<String, String> {
+    let mut key = ensure_unseal_key(debug)?;
+    let written = write_unseal_key_file(&key);
+    key.zeroize();
+    written?;
+    let result = launch_vault_container(image_tag, debug)
+        .and_then(|()| wait_for_vault_ready(rt, base_url, debug));
+    scrub_unseal_key_file();
+    result
+}
+
+/// The named line printed when an initialized store rejects the stored key.
+const SIGN_IN_AGAIN_LINE: &str = "[tillandsias-vault] sign-in-again: the stored unseal share \
+     does not open the Vault store, so the store was wiped and Vault starts empty \
+     (1118-fqfk). Sign in to GitHub and your AI providers again from the tray.";
+
+/// 1118-fqfk: the store rejected the only key it can be given. Under the
+/// operator's ruling that store is unopenable: wipe it (once; the relaunch
+/// that follows initializes afresh and captures a new share) and say so by
+/// name instead of attempting a salvage.
+fn wipe_unopenable_store(debug: bool) -> Result<(), String> {
+    let _ = podman_cmd_sync()
+        .args(["rm", "-f", VAULT_CONTAINER_NAME])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget());
+    let vault_dir = vault_store_root()?.join("vault-data");
+    if debug {
+        eprintln!("[tillandsias-vault] wiping {}", vault_dir.display());
+    }
+    fs::remove_dir_all(&vault_dir)
+        .or_else(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                Ok(())
+            } else {
+                Err(e)
+            }
+        })
+        .map_err(|e| {
+            format!(
+                "could not wipe the unopenable store {}: {e}",
+                vault_dir.display()
+            )
+        })?;
+    eprintln!("{SIGN_IN_AGAIN_LINE}");
     Ok(())
 }
 
@@ -4060,71 +4079,13 @@ fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
         eprintln!("[tillandsias-vault] Shamir share not found; deriving first-boot dummy key K");
     }
 
-    let machine_id = read_machine_id()?;
-
-    // Get or generate the installation anchor (UUID) from the keychain
-    let anchor_entry = Entry::new(KEYCHAIN_SERVICE, INSTALL_ANCHOR_V1)
-        .map_err(|e| format!("keyring anchor entry: {e}"))?;
-
-    let anchor = match with_keyring_timeout(move || anchor_entry.get_password()) {
-        Ok(a) => a,
-        Err(e) => {
-            if debug {
-                eprintln!(
-                    "[tillandsias-vault] keyring anchor get failed/timed out ({e}); checking file fallback"
-                );
-            }
-            let fallback_file = read_credential_fallback("installation_anchor").unwrap_or_default();
-            let mut loaded = None;
-            if fallback_file.is_file()
-                && let Ok(a) = fs::read_to_string(&fallback_file)
-            {
-                let trimmed = a.trim().to_string();
-                if !trimmed.is_empty() {
-                    if debug {
-                        eprintln!(
-                            "[tillandsias-vault] loaded installation anchor from file fallback"
-                        );
-                    }
-                    loaded = Some(trimmed);
-                }
-            }
-            match loaded {
-                Some(a) => a,
-                None => {
-                    // Generate a new one
-                    let new_anchor = uuid::Uuid::new_v4().to_string();
-                    if let Err(write_err) = fs::write(&fallback_file, &new_anchor) {
-                        if debug {
-                            eprintln!(
-                                "[tillandsias-vault] failed to write installation anchor fallback: {write_err}"
-                            );
-                        }
-                    } else {
-                        #[cfg(unix)]
-                        {
-                            use std::os::unix::fs::PermissionsExt;
-                            let _ = fs::set_permissions(
-                                &fallback_file,
-                                fs::Permissions::from_mode(0o600),
-                            );
-                        }
-                    }
-                    // Try to set in keyring asynchronously (best effort, don't hang if it blocks)
-                    if let Ok(anchor_entry_clone) = Entry::new(KEYCHAIN_SERVICE, INSTALL_ANCHOR_V1)
-                    {
-                        let new_anchor_clone = new_anchor.clone();
-                        let _ = std::thread::spawn(move || {
-                            let _ = anchor_entry_clone.set_password(&new_anchor_clone);
-                        });
-                    }
-                    new_anchor
-                }
-            }
-        }
-    };
-
-    let dummy_key = auto_unseal::derive_unseal_key(machine_id.as_bytes(), anchor.as_bytes());
+    // 1118-fqfk: the first-boot key only satisfies the entrypoint's
+    // 32-byte read; `operator init` ignores it and generates the real share.
+    // It is random, so no installation anchor has to be kept anywhere for
+    // it, least of all in a plaintext fallback file.
+    let mut dummy_key = [0u8; 32];
+    dummy_key[..16].copy_from_slice(uuid::Uuid::new_v4().as_bytes());
+    dummy_key[16..].copy_from_slice(uuid::Uuid::new_v4().as_bytes());
     Ok(dummy_key)
 }
 
@@ -4174,85 +4135,139 @@ fn read_machine_id() -> Result<String, String> {
     Ok(trimmed)
 }
 
-fn create_unseal_secret(key: &[u8; 32], debug: bool) -> Result<(), String> {
-    // Atomic replace, NOT rm+create. A separate `secret rm` then `secret create`
-    // races when two vault bootstraps run concurrently (e.g. `--init` while a
-    // forge launch also calls ensure_vault_running): process B's rm can land
-    // between A's rm and A's create, then A's create fails "secret name in use"
-    // — a spurious bootstrap failure observed on Silverblue under concurrent
-    // forge activity. `--replace` is server-side atomic + idempotent.
-    // @trace spec:ephemeral-secret-refresh
-    // @trace plan/issues/vault-secret-refresh-concurrent-race-2026-07-04.md
-    if debug {
-        eprintln!(
-            "[tillandsias-vault] creating podman secret {VAULT_UNSEAL_SECRET} (32 bytes from HKDF)"
-        );
+/// Where the vault container reads its unseal key (images/vault/entrypoint.sh).
+const UNSEAL_KEY_MOUNT: &str = "/run/secrets/tillandsias-vault-unseal";
+
+/// 1118-fqfk: the unseal key is handed to the vault container as a file on
+/// tmpfs, never as a podman secret. The operator ruled (2026-10-19) that no
+/// unseal share is ever in plaintext on durable disk, and podman keeps
+/// file-driver secrets, and every container's copy of one, under the
+/// containers storage dir.
+fn unseal_key_file_path() -> PathBuf {
+    std::env::var_os("XDG_RUNTIME_DIR")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/run"))
+        .join("tillandsias")
+        .join("vault-unseal")
+        .join("key")
+}
+
+/// True when `path` is on tmpfs. Off Linux nothing can be asked, so the
+/// caller's runtime dir is trusted.
+fn path_is_tmpfs(path: &std::path::Path) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        const TMPFS_MAGIC: i64 = 0x0102_1994;
+        let Ok(c) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
+            return false;
+        };
+        let mut st: libc::statfs = unsafe { std::mem::zeroed() };
+        // SAFETY: a NUL-terminated path and a zeroed out-struct of the right type.
+        let rc = unsafe { libc::statfs(c.as_ptr(), &mut st) };
+        rc == 0 && st.f_type as i64 == TMPFS_MAGIC
     }
-    let out = podman_cmd_sync()
-        .args([
-            "secret",
-            "create",
-            "--replace",
-            "--driver=file",
-            VAULT_UNSEAL_SECRET,
-            "-",
-        ])
-        .output_bounded_with_stdin(
-            key,
-            tillandsias_podman::OperationKind::Secret.default_budget(),
-        )
-        .map_err(|e| format!("wait podman secret create: {e}"))?;
-    if !out.status.success() {
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = path;
+        true
+    }
+}
+
+/// Write the unseal key for one launch: a 0700 directory on tmpfs holding a
+/// 0444 file. The file is world-readable so the container's `vault` user can
+/// read it through `--userns keep-id`, as it read the 0444 podman secret; the
+/// 0700 directory keeps it from every other host user. Refuses rather than
+/// write the key to a runtime dir that is not tmpfs.
+#[cfg(unix)]
+fn write_unseal_key_file(key: &[u8; 32]) -> Result<PathBuf, String> {
+    use std::io::Write;
+    use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
+    let path = unseal_key_file_path();
+    let dir = path.parent().expect("the key file has a directory");
+    fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(dir)
+        .map_err(|e| format!("create {}: {e}", dir.display()))?;
+    fs::set_permissions(dir, fs::Permissions::from_mode(0o700))
+        .map_err(|e| format!("chmod {}: {e}", dir.display()))?;
+    if !path_is_tmpfs(dir) {
         return Err(format!(
-            "podman secret create failed: {}",
-            String::from_utf8_lossy(&out.stderr)
+            "refused:vault-unseal-key-not-tmpfs: {} is not on tmpfs, and the unseal key \
+             may not be written to durable disk (1118-fqfk)\n  \
+             why: a plaintext unseal share on disk outlives the session that needed it\n  \
+             remedy: run tillandsias in a login session whose XDG_RUNTIME_DIR is the \
+             per-user tmpfs (/run/user/<uid>)",
+            dir.display()
         ));
     }
-    Ok(())
+    scrub_unseal_key_file();
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o400)
+        .open(&path)
+        .map_err(|e| format!("create {}: {e}", path.display()))?;
+    file.write_all(key)
+        .map_err(|e| format!("write {}: {e}", path.display()))?;
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o444))
+        .map_err(|e| format!("chmod {}: {e}", path.display()))?;
+    Ok(path)
 }
 
-/// True iff the podman secret holding the vault unseal key already exists.
-///
-/// Presence — not content — gates the verify-before-persist reuse path in
-/// `ensure_vault_running`: an existing secret is NEVER speculatively
-/// replaced, because it may be the only key that unseals the existing
-/// storage (the 2026-07-17 restart self-wedge).
-/// @trace plan/issues/vault-unseal-secret-regenerated-on-reensure-2026-07-17.md
-/// 1796-ukey: a probe that fails any way but podman's "no such secret" is
-/// `Unknown`, never `Absent`, so it cannot re-enter first boot.
-#[cfg_attr(not(feature = "vault"), allow(dead_code))]
-fn unseal_secret_presence() -> SecretPresence {
-    let out = podman_cmd_sync()
-        .args(["secret", "inspect", VAULT_UNSEAL_SECRET])
-        .output_bounded(tillandsias_podman::OperationKind::Secret.default_budget());
-    match out {
-        Ok(o) => classify_secret_inspect(Ok((
-            o.status.success(),
-            &String::from_utf8_lossy(&o.stderr),
-        ))),
-        Err(e) => classify_secret_inspect(Err(&e.to_string())),
+#[cfg(not(unix))]
+fn write_unseal_key_file(_key: &[u8; 32]) -> Result<PathBuf, String> {
+    Err("the vault unseal key file needs a unix tmpfs runtime dir".to_string())
+}
+
+/// Overwrite the key file with zeros and remove it. The entrypoint read it at
+/// start, and the next launch writes it again from the keyring.
+fn scrub_unseal_key_file() {
+    let path = unseal_key_file_path();
+    if let Ok(meta) = fs::metadata(&path) {
+        let len = meta.len() as usize;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+        }
+        let _ = fs::write(&path, vec![0u8; len]);
+        let _ = fs::remove_file(&path);
     }
 }
 
-/// What `podman secret inspect tillandsias-vault-unseal` proved (1796-ukey).
-#[cfg_attr(not(feature = "vault"), allow(dead_code))]
-#[derive(Debug, PartialEq, Eq)]
-enum SecretPresence {
-    Present,
-    Absent,
-    /// The probe failed some other way; the secret may exist.
-    Unknown(String),
-}
-
-/// Pure reading of the inspect outcome: `Ok((success, stderr))` when podman
-/// ran, `Err(reason)` when it could not be run or timed out.
-#[cfg_attr(not(feature = "vault"), allow(dead_code))]
-fn classify_secret_inspect(outcome: Result<(bool, &str), &str>) -> SecretPresence {
-    match outcome {
-        Ok((true, _)) => SecretPresence::Present,
-        Ok((false, stderr)) if stderr.contains("no such secret") => SecretPresence::Absent,
-        Ok((false, stderr)) => SecretPresence::Unknown(stderr.trim().to_string()),
-        Err(reason) => SecretPresence::Unknown(reason.to_string()),
+/// 1118-fqfk: remove the plaintext credentials earlier releases left at rest
+/// on a host: the file-driver podman secret, and the cache dir's fallback and
+/// anchor files. Contents are never read. A guest keeps its fallbacks until
+/// its own slice moves them.
+#[cfg(feature = "vault")]
+fn remove_legacy_plaintext_credentials(debug: bool) {
+    let _ = podman_cmd_sync()
+        .args(["secret", "rm", VAULT_UNSEAL_SECRET])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget());
+    if is_running_in_vm() {
+        return;
+    }
+    for dir in credential_read_dirs() {
+        for name in CREDENTIAL_FALLBACKS {
+            let path = dir.join(name);
+            if path.is_file() {
+                let len = fs::metadata(&path).map(|m| m.len() as usize).unwrap_or(0);
+                let _ = fs::write(&path, vec![0u8; len]);
+                if fs::remove_file(&path).is_ok() {
+                    eprintln!(
+                        "[tillandsias-vault] removed plaintext credential file {} (1118-fqfk)",
+                        path.display()
+                    );
+                } else if debug {
+                    eprintln!("[tillandsias-vault] could not remove {}", path.display());
+                }
+            }
+        }
     }
 }
 
@@ -4815,7 +4830,16 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
         }
     }
 
-    let secret_arg = VAULT_UNSEAL_SECRET.to_string();
+    // 1118-fqfk: the unseal key is a tmpfs file written for this launch, not a
+    // podman secret (whose file driver, and every container copy, is on disk).
+    let key_file = unseal_key_file_path();
+    if !key_file.is_file() {
+        return Err(format!(
+            "the vault unseal key file {} was not written before the launch",
+            key_file.display()
+        ));
+    }
+    let key_mount_arg = format!("{}:{UNSEAL_KEY_MOUNT}:ro", key_file.display());
     let tls_cert_arg = VAULT_TLS_CERT_SECRET.to_string();
     let tls_key_arg = VAULT_TLS_KEY_SECRET.to_string();
     let tls_ca_arg = VAULT_TLS_CA_SECRET.to_string();
@@ -4869,8 +4893,8 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
         crate::ENCLAVE_NET.into(),
         "--network-alias".into(),
         VAULT_NETWORK_ALIAS.into(),
-        "--secret".into(),
-        secret_arg,
+        "--volume".into(),
+        key_mount_arg,
         "--secret".into(),
         tls_cert_arg,
         "--secret".into(),
@@ -5086,216 +5110,6 @@ fn unseal_failure_is_key_rejection(entrypoint_logs: &str, container_still_runnin
         && !entrypoint_logs.contains(UNSEAL_LOG_ALREADY)
 }
 
-/// Pure gate for the one-shot recovery WRITE. A candidate key may be offered
-/// to existing storage only when (a) the current (just-rejected) secret bytes
-/// were read back, so a failed candidate can be restored away, and (b) the
-/// candidate actually differs from those rejected bytes — a byte-identical
-/// candidate PROVABLY fails to unseal and must never be written (exit
-/// criterion: a unseal secret that fails to unseal existing storage is never
-/// written/kept).
-#[cfg_attr(not(feature = "vault"), allow(dead_code))]
-fn unseal_recovery_write_decision(
-    candidate: &[u8; 32],
-    rejected_existing: Option<&[u8]>,
-) -> Result<(), &'static str> {
-    match rejected_existing {
-        None => Err(
-            "the current unseal secret's bytes could not be read back for a safe \
-             compare-and-restore (podman secret inspect --showsecret failed)",
-        ),
-        Some(prev) if prev == &candidate[..] => {
-            Err("the only recoverable share is byte-identical to the secret vault just rejected")
-        }
-        Some(_) => Ok(()),
-    }
-}
-
-/// One-shot guard for the unseal recovery seam (the order-281 `healed`-flag
-/// pattern): set the moment an attempt is consumed, cleared only by a
-/// verified successful unseal. While set, the seam re-states a compact
-/// verdict and never writes the secret again, so a liveness re-ensure cycle
-/// cannot become the 2026-07-17 self-sustaining regeneration wedge.
-#[cfg(feature = "vault")]
-static UNSEAL_RECOVERY_ATTEMPTED: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
-
-/// Build (and loudly print, exactly once per process — every caller sits
-/// behind the one-shot guard) the attended-recovery verdict for an unseal
-/// secret that cannot be self-healed. Mirrors the order-383
-/// `heal_stale_root_token` messaging: actionable, and explicit that storage
-/// was preserved.
-#[cfg(feature = "vault")]
-fn attended_unseal_verdict(reason: &str) -> String {
-    let cache_hint = crate::init_cache_dir()
-        .map(|d| d.display().to_string())
-        .unwrap_or_else(|_| "<tillandsias cache dir>".to_string());
-    let msg = format!(
-        "OPERATOR ACTION REQUIRED: the vault unseal secret does not unseal the existing \
-         vault storage and self-recovery is not possible ({reason}). Vault storage was left \
-         untouched — it may hold real operator secrets. Recover the correct 32-byte Shamir \
-         share (OS keychain entry '{VAULT_SHAMIR_SHARE_V1}', or \
-         {cache_hint}/fallback_{VAULT_SHAMIR_SHARE_V1}; the matching share's mtime equals \
-         the vault-data init time), restore it with `base64 -d share.b64 | podman secret \
-         create --replace --driver=file {VAULT_UNSEAL_SECRET} -`, then restart tillandsias. \
-         Do NOT wipe the vault-data volume."
-    );
-    eprintln!("[tillandsias-vault] {msg}");
-    msg
-}
-
-/// One-shot recovery for a pre-existing unseal secret that failed the launch.
-///
-/// Entered from `ensure_vault_running` ONLY when the launch reused an
-/// already-existing podman secret and `wait_for_vault_ready` failed. The
-/// seam: (1) requires the positive key-rejection signal from the container's
-/// own entrypoint logs — every other failure class propagates unchanged;
-/// (2) consumes the process-wide one-shot guard; (3) sources a candidate
-/// exclusively from the fail-loud share readers (`shamir_share_candidates`, minus the rejected bytes —
-/// never the machine-id dummy derivation); (4) writes it only when the pure
-/// decision proves it differs from the rejected bytes AND those bytes were
-/// captured for restore; (5) on a second unseal failure restores the prior
-/// bytes and emits the attended verdict. Storage is never touched on any
-/// path.
-#[cfg(feature = "vault")]
-fn recover_rejected_unseal_secret_once(
-    rt: &crate::RuntimeOrHandle,
-    base_url: &str,
-    image_tag: &str,
-    wait_err: &str,
-    debug: bool,
-) -> Result<String, String> {
-    use base64::Engine;
-    use std::sync::atomic::Ordering;
-
-    // (1) Positive signal only. The order-235 bounded retry inside
-    // wait_for_vault_ready already absorbed genuine recreate-window
-    // transients before we got here; anything that is not a proven key
-    // rejection keeps its original error.
-    let logs = vault_container_logs_tail();
-    if !unseal_failure_is_key_rejection(&logs, container_running(VAULT_CONTAINER_NAME)) {
-        return Err(wait_err.to_string());
-    }
-
-    eprintln!(
-        "[tillandsias-vault] existing unseal secret was REJECTED by the initialized vault \
-         storage (the entrypoint reached the unseal step and failed it)"
-    );
-
-    // (2) One shot per process.
-    if UNSEAL_RECOVERY_ATTEMPTED.swap(true, Ordering::SeqCst) {
-        return Err(
-            "vault unseal secret still fails to unseal the existing storage; attended \
-             recovery required (the one-shot recovery attempt and its OPERATOR ACTION \
-             REQUIRED verdict were already emitted — this process will not regenerate \
-             the unseal secret again)"
-                .to_string(),
-        );
-    }
-
-    // (3) Candidate from the fail-loud share stores only, skipping the
-    // rejected secret itself (1796-ukey).
-    let rejected_b64 = read_unseal_secret_bytes()
-        .map(|bytes| base64::engine::general_purpose::STANDARD.encode(bytes));
-    let share_b64 = match pick_recovery_candidate(
-        shamir_share_candidates(),
-        rejected_b64.as_deref(),
-    ) {
-        Some((source, share)) => {
-            if debug {
-                eprintln!("[tillandsias-vault] recovery: using Shamir share from {source}");
-            }
-            share
-        }
-        None => {
-            return Err(attended_unseal_verdict(
-                "the only recoverable share is byte-identical to the secret vault just rejected \
-                 (no other source, such as the host keychain, held a different share)",
-            ));
-        }
-    };
-    let mut candidate_vec = base64::engine::general_purpose::STANDARD
-        .decode(share_b64.trim())
-        .map_err(|e| format!("recovered Shamir share is not valid base64: {e}"))?;
-    if candidate_vec.len() != 32 {
-        let n = candidate_vec.len();
-        candidate_vec.zeroize();
-        return Err(attended_unseal_verdict(&format!(
-            "recovered Shamir share decodes to {n} bytes, want 32"
-        )));
-    }
-    let mut candidate = [0u8; 32];
-    candidate.copy_from_slice(&candidate_vec);
-    candidate_vec.zeroize();
-
-    // (4) Write only what can still be undone and is not proven-failing.
-    let mut existing = read_unseal_secret_bytes();
-    if let Err(reason) = unseal_recovery_write_decision(&candidate, existing.as_deref()) {
-        candidate.zeroize();
-        if let Some(prev) = existing.as_mut() {
-            prev.zeroize();
-        }
-        return Err(attended_unseal_verdict(reason));
-    }
-
-    eprintln!(
-        "[tillandsias-vault] one-shot recovery: offering the keychain/fallback share to \
-         the existing storage (the rejected bytes are held for restore)"
-    );
-    let write_res = create_unseal_secret(&candidate, debug);
-    candidate.zeroize();
-    write_res?;
-    launch_vault_container(image_tag, debug)?;
-    match wait_for_vault_ready(rt, base_url, debug) {
-        Ok(token) => {
-            if let Some(prev) = existing.as_mut() {
-                prev.zeroize();
-            }
-            eprintln!(
-                "[tillandsias-vault] recovery succeeded: the recovered share unseals the \
-                 existing storage; podman secret {VAULT_UNSEAL_SECRET} repaired"
-            );
-            // Verified healed — re-arm so a future, distinct wedge (after
-            // this proven-working state) gets its own single attempt.
-            UNSEAL_RECOVERY_ATTEMPTED.store(false, Ordering::SeqCst);
-            Ok(token)
-        }
-        Err(second_err) => {
-            // (5) The candidate did not unseal either — it must not be KEPT.
-            // Restore the prior bytes so the secret is not left in an
-            // unknown mutated state, then fail loud exactly once.
-            if let Some(prev) = existing.as_mut() {
-                let mut prev_key = [0u8; 32];
-                prev_key.copy_from_slice(prev);
-                prev.zeroize();
-                if let Err(e) = create_unseal_secret(&prev_key, debug) {
-                    eprintln!(
-                        "[tillandsias-vault] WARN: could not restore the prior unseal \
-                         secret bytes after the failed recovery attempt: {e}"
-                    );
-                }
-                prev_key.zeroize();
-            }
-            Err(attended_unseal_verdict(&format!(
-                "the recovered share also failed to unseal ({second_err})"
-            )))
-        }
-    }
-}
-
-/// Stub for builds without the `vault` feature: those builds never reuse an
-/// existing secret (the gate is `cfg!(feature = "vault")`-qualified), so the
-/// original wait error simply propagates.
-#[cfg(not(feature = "vault"))]
-fn recover_rejected_unseal_secret_once(
-    _rt: &crate::RuntimeOrHandle,
-    _base_url: &str,
-    _image_tag: &str,
-    wait_err: &str,
-    _debug: bool,
-) -> Result<String, String> {
-    Err(wait_err.to_string())
-}
-
 /// Resolve the current vault container IP and update /etc/hosts so the
 /// process-local hostname `vault` always points to it. The headless process
 /// is not inside any podman network so aardvark-dns doesn't reach it; only
@@ -5398,6 +5212,12 @@ fn keychain_set_blocking(user: &str, value: &str) -> Result<(), String> {
     let value_clone = value.clone();
     match with_keyring_timeout(move || entry.set_password(&value_clone)) {
         Ok(()) => Ok(()),
+        Err(e) if !is_running_in_vm() => Err(format!(
+            "refused:keyring-unavailable:{user}: the OS keyring did not take {user} ({e}), \
+             and it is not written anywhere else (1118-fqfk)\n  \
+             why: a credential outside the encrypted keyring would be plaintext on disk\n  \
+             remedy: unlock the OS keyring (the login keyring), then relaunch tillandsias"
+        )),
         Err(e) => {
             eprintln!(
                 "[tillandsias-vault] note: OS keyring unavailable for {user} ({e}); \
@@ -5564,20 +5384,6 @@ fn assemble_share_candidates(
         }
     }
     candidates
-}
-
-/// The candidate the one-shot recovery offers (1796-ukey): the first one that
-/// is not the secret vault just rejected. Taking `candidates[0]` offered the
-/// guest podman secret, which leads the order and IS the rejected key, so the
-/// keychain share behind it was never tried.
-#[cfg_attr(not(feature = "vault"), allow(dead_code))]
-fn pick_recovery_candidate(
-    candidates: Vec<(&'static str, String)>,
-    rejected_b64: Option<&str>,
-) -> Option<(&'static str, String)> {
-    candidates
-        .into_iter()
-        .find(|(_, share)| Some(share.as_str()) != rejected_b64)
 }
 
 #[cfg(feature = "vault")]
@@ -5885,33 +5691,6 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
             eprintln!(
                 "[tillandsias-vault] fresh-init handover present; capturing root token + Shamir share into keychain (overwriting any stale entries)"
             );
-        }
-        // Restart self-wedge fix: at this moment the podman secret still holds
-        // the FIRST-BOOT dummy key — the entrypoint ignored it when it ran the
-        // fresh init and generated the real share itself. Re-pair the podman
-        // secret with that just-generated share NOW, while it is correct for
-        // this storage by construction, so the next restart reuses a matching
-        // secret instead of crashing into the one-shot unseal recovery seam.
-        // Best-effort-loud: on failure that seam self-heals at the next launch.
-        // @trace plan/issues/vault-unseal-secret-regenerated-on-reensure-2026-07-17.md
-        {
-            use base64::Engine;
-            if let Ok(mut key_vec) =
-                base64::engine::general_purpose::STANDARD.decode(share_b64.trim())
-                && key_vec.len() == 32
-            {
-                let mut key = [0u8; 32];
-                key.copy_from_slice(&key_vec);
-                key_vec.zeroize();
-                if let Err(e) = create_unseal_secret(&key, debug) {
-                    eprintln!(
-                        "[tillandsias-vault] WARN: could not re-pair podman secret \
-                         {VAULT_UNSEAL_SECRET} with the fresh-init share ({e}); the next \
-                         restart will go through the one-shot unseal recovery seam"
-                    );
-                }
-                key.zeroize();
-            }
         }
         if is_running_in_vm() {
             if debug {
@@ -8807,7 +8586,6 @@ mod tests {
             "/src/vault_bootstrap.rs"
         ));
         for func in [
-            "fn create_unseal_secret(",
             "fn create_token_podman_secret(",
             "fn create_file_podman_secret(",
         ] {
@@ -9058,19 +8836,85 @@ mod tests {
         );
     }
 
-    /// Restart self-wedge (2026-07-17): `ensure_vault_running` must NEVER
-    /// speculatively `--replace` an existing unseal secret. The live Windows
-    /// repro wedged a previously-healthy vault exactly there — a routine
-    /// restart re-ensured, recovered a NON-matching share, and the
-    /// unconditional `create_unseal_secret` overwrote the working podman
-    /// secret; the container then crash-looped on unseal and every liveness
-    /// cycle regenerated the secret again. The create call must be gated on
-    /// `unseal_secret_presence()` (create only when NO secret exists — true
-    /// first boot), and a reused secret's launch failure must route through
-    /// the one-shot recovery seam instead of a blind regenerate.
-    /// @trace plan/issues/vault-unseal-secret-regenerated-on-reensure-2026-07-17.md
+    /// 1118-fqfk (operator ruling 2026-10-19). The unseal key is never a podman
+    /// secret: ensure_vault_running hands it over through the tmpfs launch
+    /// helper, and the store is wiped ONLY after the container's own logs prove
+    /// the key was rejected (the positive signal; any other launch failure
+    /// propagates unchanged). The wipe runs once and is followed by exactly one
+    /// relaunch, so there is no salvage loop.
+    /// 1118-fqfk: the key file lives on tmpfs in a 0700 directory, is
+    /// readable by the container's mapped user, holds exactly the key, and is
+    /// gone after the scrub. On a runtime dir that is not tmpfs, nothing is
+    /// written and the refusal is named.
+    #[cfg(target_os = "linux")]
     #[test]
-    fn ensure_never_speculatively_replaces_existing_unseal_secret() {
+    fn the_unseal_key_file_is_tmpfs_only_and_scrubbed() {
+        use std::os::unix::fs::PermissionsExt;
+        let _env = crate::test_support::env_lock();
+        let saved = std::env::var_os("XDG_RUNTIME_DIR");
+        let real_runtime = saved.clone().map(PathBuf::from);
+        let key = [9u8; 32];
+
+        let tmpfs_arm = real_runtime.filter(|d| path_is_tmpfs(d)).map(|base| {
+            let scratch = base.join(format!("fqfk-{}", std::process::id()));
+            fs::create_dir_all(&scratch).unwrap();
+            // SAFETY: env_lock serialises every env-mutating test.
+            unsafe { std::env::set_var("XDG_RUNTIME_DIR", &scratch) };
+            let written = write_unseal_key_file(&key);
+            let dir_mode = fs::metadata(unseal_key_file_path().parent().unwrap())
+                .map(|m| m.permissions().mode() & 0o777);
+            let file_mode =
+                fs::metadata(unseal_key_file_path()).map(|m| m.permissions().mode() & 0o777);
+            let content = fs::read(unseal_key_file_path());
+            scrub_unseal_key_file();
+            let gone = !unseal_key_file_path().exists();
+            let _ = fs::remove_dir_all(&scratch);
+            (written, dir_mode, file_mode, content, gone)
+        });
+
+        let disk = std::env::current_dir()
+            .unwrap()
+            .join("target")
+            .join("fqfk-disk");
+        fs::create_dir_all(&disk).unwrap();
+        let disk_arm = (!path_is_tmpfs(&disk)).then(|| {
+            // SAFETY: as above.
+            unsafe { std::env::set_var("XDG_RUNTIME_DIR", &disk) };
+            let refused = write_unseal_key_file(&key);
+            let written = unseal_key_file_path().exists();
+            (refused, written)
+        });
+        let _ = fs::remove_dir_all(&disk);
+        // SAFETY: as above.
+        unsafe {
+            match saved {
+                Some(v) => std::env::set_var("XDG_RUNTIME_DIR", v),
+                None => std::env::remove_var("XDG_RUNTIME_DIR"),
+            }
+        }
+
+        if let Some((written, dir_mode, file_mode, content, gone)) = tmpfs_arm {
+            assert!(written.is_ok(), "{written:?}");
+            assert_eq!(dir_mode.unwrap(), 0o700);
+            assert_eq!(file_mode.unwrap(), 0o444);
+            assert_eq!(content.unwrap(), key.to_vec());
+            assert!(gone, "the scrub removes the key file");
+        } else {
+            eprintln!("note: XDG_RUNTIME_DIR is not tmpfs here; the tmpfs arm did not run");
+        }
+        if let Some((refused, written)) = disk_arm {
+            let msg = refused.expect_err("a non-tmpfs runtime dir must be refused");
+            assert!(
+                msg.starts_with("refused:vault-unseal-key-not-tmpfs:"),
+                "{msg}"
+            );
+            assert!(msg.contains("remedy:"), "{msg}");
+            assert!(!written, "nothing is written to durable disk");
+        }
+    }
+
+    #[test]
+    fn the_unseal_key_is_never_a_podman_secret_and_a_rejection_wipes_once() {
         let source = include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/src/vault_bootstrap.rs"
@@ -9080,22 +8924,41 @@ mod tests {
             .nth(1)
             .expect("ensure_vault_running source");
         let window = after.split("\nfn ").next().unwrap_or(after);
-        let exists_at = window.find("unseal_secret_presence()").expect(
-            "ensure_vault_running must gate unseal-secret creation on prior secret \
-             existence (verify-before-persist; 2026-07-17 restart self-wedge)",
+        for forbidden in [
+            "create_unseal_secret(",
+            "recover_rejected_unseal_secret_once(",
+            "unseal_secret_presence(",
+        ] {
+            assert!(!window.contains(forbidden), "found {forbidden:?}");
+        }
+        assert_eq!(
+            window.matches("launch_with_unseal_key(").count(),
+            2,
+            "{window}"
         );
-        let create_at = window
-            .find("create_unseal_secret(")
-            .expect("first-boot secret creation must still exist");
+        assert_eq!(
+            window.matches("wipe_unopenable_store(").count(),
+            1,
+            "{window}"
+        );
+        let gate = window
+            .find("unseal_failure_is_key_rejection(")
+            .expect("the wipe is gated on the positive key-rejection signal");
+        let wipe = window.find("wipe_unopenable_store(").unwrap();
+        assert!(gate < wipe, "the rejection check must precede the wipe");
+
+        let launch = source
+            .split("fn launch_vault_container(")
+            .nth(1)
+            .expect("launch_vault_container source");
+        let launch = launch.split("\nfn ").next().unwrap_or(launch);
         assert!(
-            exists_at < create_at,
-            "the existence gate must precede the create call so an existing secret \
-             is never speculatively replaced"
+            launch.contains("key_mount_arg"),
+            "the key goes in as a bind mount"
         );
         assert!(
-            window.contains("recover_rejected_unseal_secret_once("),
-            "a reused secret's launch failure must route through the one-shot \
-             unseal recovery seam, never a blind regenerate"
+            !launch.contains("VAULT_UNSEAL_SECRET.to_string()"),
+            "the unseal key must not be passed as a podman --secret"
         );
     }
 
@@ -9230,139 +9093,6 @@ mod tests {
         assert_eq!(
             unseal_key_source(locked(), None, false),
             Ok(KeySource::Derive)
-        );
-    }
-
-    /// 1796-ukey: only podman's own "no such secret" is absence. Reading a
-    /// probe failure as absent re-enters first boot and `--replace`s a secret
-    /// that may be the only key to the storage.
-    #[test]
-    fn unseal_secret_probe_error_is_not_absent() {
-        assert_eq!(
-            classify_secret_inspect(Ok((true, ""))),
-            SecretPresence::Present
-        );
-        assert_eq!(
-            classify_secret_inspect(Ok((
-                false,
-                "Error: inspecting secret: no secret with name or id \"tillandsias-vault-unseal\": no such secret"
-            ))),
-            SecretPresence::Absent
-        );
-        assert!(matches!(
-            classify_secret_inspect(Ok((false, "Error: cannot connect to Podman socket"))),
-            SecretPresence::Unknown(_)
-        ));
-        assert!(matches!(
-            classify_secret_inspect(Err("podman secret inspect timed out")),
-            SecretPresence::Unknown(_)
-        ));
-    }
-
-    /// 1796-ukey: the recovery must skip the rejected secret. The guest podman
-    /// secret leads the candidates (803-49re), so after a bad write it IS the
-    /// rejected key, and offering only `candidates[0]` never reached the
-    /// keychain share behind it.
-    #[test]
-    fn recovery_candidate_skips_the_rejected_secret() {
-        let candidates = vec![
-            ("guest podman secret", "BAD".to_string()),
-            ("host keychain", "GOOD".to_string()),
-        ];
-        assert_eq!(
-            pick_recovery_candidate(candidates.clone(), Some("BAD")),
-            Some(("host keychain", "GOOD".to_string()))
-        );
-        assert_eq!(
-            pick_recovery_candidate(vec![candidates[0].clone()], Some("BAD")),
-            None
-        );
-        assert_eq!(
-            pick_recovery_candidate(candidates, None),
-            Some(("guest podman secret", "BAD".to_string()))
-        );
-    }
-
-    /// Exit-criterion litmus: a unseal secret that fails to unseal existing
-    /// storage is never written/kept. The pure write-decision forbids the
-    /// one-shot recovery write when the candidate is byte-identical to the
-    /// just-rejected secret (it PROVABLY fails) and when the rejected bytes
-    /// could not be read back (a failed candidate could not be restored
-    /// away, leaving the secret in an unknown mutated state).
-    #[test]
-    fn unseal_recovery_write_decision_never_writes_a_proven_failing_key() {
-        let candidate = [7u8; 32];
-        // Identical to the just-rejected secret → provably fails → no write.
-        let identical = [7u8; 32];
-        assert!(unseal_recovery_write_decision(&candidate, Some(&identical[..])).is_err());
-        // Unreadable current secret → no restore possible → no write.
-        assert!(unseal_recovery_write_decision(&candidate, None).is_err());
-        // A genuinely different candidate gets the single verify attempt.
-        let different = [9u8; 32];
-        assert!(unseal_recovery_write_decision(&candidate, Some(&different[..])).is_ok());
-    }
-
-    /// The unseal recovery seam must never touch vault storage, never derive
-    /// a machine-id dummy key for real storage, and must stay a guarded
-    /// one-shot (no regeneration loop). Same window technique as
-    /// `root_token_heal_never_wipes_storage`.
-    #[test]
-    fn unseal_recovery_seam_is_one_shot_and_never_touches_storage() {
-        let source = include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/src/vault_bootstrap.rs"
-        ));
-        let after = source
-            .split("fn recover_rejected_unseal_secret_once(")
-            .nth(1)
-            .expect("recovery seam must exist");
-        let window = after.split("\nfn ").next().unwrap_or(after);
-        let window = window.split("\n///").next().unwrap_or(window);
-        for forbidden in [
-            "volume\", \"rm",
-            "volume rm",
-            "system reset",
-            "operator init",
-            "remove_dir_all",
-            "ensure_unseal_key(",
-        ] {
-            assert!(
-                !window.contains(forbidden),
-                "the recovery seam must never touch storage or derive a dummy key \
-                 (found {forbidden:?})"
-            );
-        }
-        assert!(
-            window.contains("unseal_failure_is_key_rejection("),
-            "recovery may run only on the positive key-rejection signal"
-        );
-        assert!(
-            window.contains("UNSEAL_RECOVERY_ATTEMPTED"),
-            "recovery must consume the one-shot guard (no regeneration loop)"
-        );
-        assert!(
-            window.contains("pick_recovery_candidate(")
-                && window.contains("shamir_share_candidates()"),
-            "the candidate must come from the fail-loud share readers, skipping the rejected secret"
-        );
-        assert!(
-            window.contains("unseal_recovery_write_decision("),
-            "the secret write must be gated by the pure never-write-a-failing-key decision"
-        );
-        assert!(
-            window.contains("attended_unseal_verdict("),
-            "dead ends must surface the attended-recovery verdict"
-        );
-        // The verdict itself is loud and storage-preserving.
-        assert!(
-            source.contains(
-                "OPERATOR ACTION REQUIRED: the vault unseal secret does not unseal the existing"
-            ),
-            "the attended verdict must carry the loud OPERATOR ACTION REQUIRED grammar"
-        );
-        assert!(
-            source.contains("Do NOT wipe the vault-data volume"),
-            "the attended verdict must forbid wiping storage"
         );
     }
 

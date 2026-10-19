@@ -1259,6 +1259,7 @@ specs:
 - spec_id: tillandsias-vault
   status: active
   litmus_tests:
+  - litmus:no-credentials-at-rest
   - litmus:vault-audit-persistence-shape
   - litmus:vault-auto-unseal-no-prompt
   - litmus:codex-api-key-env-var
