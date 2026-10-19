@@ -1,7 +1,9 @@
--- @trace order:797-8dzt, order:1588-bzre
+-- @env TILLANDSIAS_PLAN_BIN TILLANDSIAS_SCRIPT_RUNNER_BIN
+-- @trace order:797-8dzt, order:1588-bzre, order:1247-jq4e
 --
 -- test-source-slice-bounds.lua — PORTED from test-source-slice-bounds.sh
--- (1588-bzre). Fixture for scripts/check-source-slice-bounds.sh, through its
+-- (1588-bzre). Fixture for scripts/lua/check-source-slice-bounds.lua (ported
+-- from the .sh by 1247-jq4e), run through tillandsias-plan script run, through its
 -- TILLANDSIAS_SLICE_BOUND_ROOT seam. Scenario 2 is the one that matters: it
 -- FAILED on the guard's first draft, because a plain fixed-string search for
 -- the needle found it inside the very `.split("…")` call under test, so every
@@ -19,7 +21,14 @@
 -- (1588-bzre: the .sh printed `ok: source-slice-bounds 3/3` and `FAIL: ...`;
 -- it had no live caller, so nothing read either).
 
-local GUARD = "scripts/check-source-slice-bounds.sh"
+local GUARD = "scripts/lua/check-source-slice-bounds.lua"
+local PLAN
+for i = 1, #arg do if arg[i] == "--plan" then PLAN = arg[i + 1] end end
+if not PLAN or PLAN == "" then PLAN = env.get("TILLANDSIAS_PLAN_BIN") end
+if not PLAN or PLAN == "" then PLAN = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN") end
+if not PLAN or PLAN == "" then
+    verdict.could_not_run("source-slice-bounds-fixture", "no plan binary named (--plan, TILLANDSIAS_PLAN_BIN or TILLANDSIAS_SCRIPT_RUNNER_BIN)")
+end
 local ROOT = text.trim(proc.run({ argv = { "git", "rev-parse", "--show-toplevel" } }).stdout or "")
 local REL = "target/plan-scratch/slice-bounds-" .. tostring(math.random(100000, 999999)) .. tostring(math.random(100000, 999999))
 local SB = ROOT .. "/" .. REL
@@ -33,7 +42,7 @@ local function check(name, want, got)
     else out.line("FAIL: " .. name .. " — want rc=" .. want .. " got rc=" .. got); failed = failed + 1 end
 end
 local function guard()
-    local r = proc.run({ argv = { "bash", GUARD }, env = { TILLANDSIAS_SLICE_BOUND_ROOT = SB }, timeout_ms = 120000 })
+    local r = proc.run({ argv = { PLAN, "script", "run", GUARD }, env = { TILLANDSIAS_SLICE_BOUND_ROOT = SB }, timeout_ms = 120000 })
     return (r.status == "exited") and r.code or -1
 end
 local function replace(old, new)
