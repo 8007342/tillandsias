@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: vault-unseal-share-ephemerality-and-reset-hygiene
+    field: context
+    value: |-
+      vault_bootstrap.rs writes plaintext Shamir shares and root tokens to durable disk
+      in ~/.cache/tillandsias/, and --reset-guest fails to wipe them, allowing unseal
+      recovery across supposedly clean resets.
+
+
+      [2026-10-19T23:12:15Z lenovinha] PLAINTEXT INVENTORY (lenovinha, 2026-10-19, trunk vault_bootstrap.rs; metadata only, nothing read):
+      1. Fallback files, written by three functions: write_vm_credential_fallbacks (root token + share), keychain_set_blocking's keyring-unavailable branch (any keychain user, including the share, root token and installation anchor), and persist_healed_root_token (root token). All go to credential_write_dir() = vault_store_root(), beside the store (1642-cc54), and are read from the store root, then ~/.cache/tillandsias (credential_read_dirs; settle_fallbacks_onto_store_root copies cache -> store root). On hosts this is the keyring-unavailable path, and on guests the default path.
+      2. Host leftover: ~/.cache/tillandsias/fallback_vault-root-token-v1 (28 bytes, 2026-09-29) on lenovinha. SHREDDED UNREAD at 2026-10-19T23:11:07Z on the operator's confirmed ruling. No fallback_* files remain in that directory.
+      3. Podman file-driver secrets on durable btrfs: ~/.local/share/containers/storage/secrets/filedriver. The unseal secret (create_unseal_secret, --driver=file) is here, and so are tillandsias-vault-approle-*, tillandsias-vault-token-* (create_token_podman_secret, create_file_podman_secret), tillandsias-ca-key and tillandsias-vault-tls-key.
+      4. Per-container copies: podman copies every mounted secret into ~/.local/share/containers/storage/overlay-containers/<id>/userdata/secrets/<name> on the same btrfs, and keeps it for the container's life. Measured: tillandsias-vault-unseal, the tls key, the ca key and 3 approle secrets.
+      DRIVER COMPARISON: file = plaintext at rest. pass = gpg-encrypted at rest but needs a gpg key and agent. shell = custom store/lookup, e.g. backed by secret-tool. Any driver still yields the per-container plaintext copy in item 4, because the copy lives under graphroot, not runroot. type=env secrets resolve into the container spec under userdata. So no podman secret driver meets the ruling by itself.
+      PROPOSED SHAPE (to confirm before building): the unseal key reaches the vault container as a bind-mounted file under $XDG_RUNTIME_DIR (tmpfs, 0600). It is written at launch from the OS keyring on hosts, or from the host's in-memory delivery in guests, and removed after unseal. All fallback writers are deleted. A missing or rejected key on an initialized store leads to wipe plus the named sign-in-again state, and the one-shot salvage seam (recover_rejected_unseal_secret_once) is retired. Items 3 and 4 also cover the approle, token and TLS-key secrets; they are outside the ruling's three named credentials, so they are flagged for a separate decision.
+      1402-hfta: moot under this ruling. Its candidates are the podman secret, the keychain, delivered and fallback shares, and the ruling replaces salvage with wipe plus sign-in. The multi-candidate slice is parked unpushed (work/1402-hfta, c883f4900).
+    ts: "2026-10-19T23:12:15Z"
+    host: lenovinha
+
+events:
+  - packet_id: vault-unseal-share-ephemerality-and-reset-hygiene
+    event:
+      type: note
+      ts: "2026-10-19T23:12:15Z"
+      host: lenovinha
+      summary: |-
+        inventory and design for the re-scope

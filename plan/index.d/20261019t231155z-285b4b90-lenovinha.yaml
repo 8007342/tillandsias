@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: vault-unseal-share-ephemerality-and-reset-hygiene
+    field: title
+    value: No Vault unseal share, root token or installation anchor is ever in plaintext on durable disk, on any host or guest; an unopenable store is wiped and the tray says sign in again
+    ts: "2026-10-19T23:11:55Z"
+    host: lenovinha
+    replaces_sha256: "348f85498ad2adb0b2e3f4464c542aee14b444c49e953a02633497d6e00f39d7"
+
+events:
+  - packet_id: vault-unseal-share-ephemerality-and-reset-hygiene
+    event:
+      type: note
+      ts: "2026-10-19T23:11:55Z"
+      host: lenovinha
+      summary: |-
+        Operator ruling 2026-10-19 (relayed by the coordinator and confirmed by the operator in the lenovinha session): remove unencrypted keys from disk; losing credentials beats storing them unencrypted.
