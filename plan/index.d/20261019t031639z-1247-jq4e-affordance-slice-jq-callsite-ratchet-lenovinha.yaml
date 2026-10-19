@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: affordance-slice-jq-callsite-ratchet-refusals-say-why-and-what-clears-them
+    order: 1247-jq4e
+    parent_order: 1247-amcu
+    status: in_progress
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [affordance, refusal, jq, portability, fail-loud]
+    estimated_hours: 1
+    owned_files:
+      - scripts/check-jq-callsite-ratchet.sh
+      - scripts/test-check-jq-callsite-ratchet.sh
+    title: |
+      1247-amcu slice — FAMILY: the refusals of scripts/check-jq-callsite-ratchet.sh (blocked:jq-ratchet-empty-population, could-not-run:jq-ratchet:unknown-argument, :no-plan-binary, :join-produced-nothing, and the why of blocked:jq-callsite-added) say why and what clears them
+    context: |
+      Picked by lenovinha at the coordinator's request (2026-10-19) as the next family by scripts/rank-refusal-hits.sh that actually lacks a remedy: blocked:jq-ratchet-empty-population is rank 19, after 1247-sv4d took ranks 19/26 of the previous ranking. Ranks 1-18 were read: they carry prose remedies, belong to the cycle-preflight hunks #386 holds, or are earlier slices; rank 18 (blocked:jq-callsite-added, same file) has a remedy but no why. No open PR touches the file.
+      The empty-population and could-not-run verdicts print only the token. An empty population is almost always a --root that is not a checkout; a missing plan binary only matters because a NEW site exists and only tillandsias-plan json get --parse-only can say whether its filter is in the supported subset.
+    exit_criteria:
+      - 'each refusal of the guard emits why: and remedy: beside its unchanged verdict token (pre-fix: FAILS on all of them)'
+      - 'NEGATIVE CONTROL (1247-amcu criterion 5): the fixture EXECUTES the remedy for empty-population (re-run with --root at a checkout), unknown-argument (the usage it names), and no-plan-binary (TILLANDSIAS_PLAN_BIN at a built binary), and each then reaches its normal verdict'
+      - 'the existing five arms of test-check-jq-callsite-ratchet.sh stay green'
+    verifiable_closure: |
+      bash scripts/test-check-jq-callsite-ratchet.sh passes with the new arms, which FAIL pre-fix.
+    provenance: |
+      Filed by lenovinha at the coordinator's request, 2026-10-19.
+    events:
+      - type: filed
+        ts: "2026-10-19T03:16:39Z"
+        host: lenovinha
+        summary: |-
+          Next 1247-amcu slice: check-jq-callsite-ratchet.sh. Filed and claimed in one fragment by lenovinha.
