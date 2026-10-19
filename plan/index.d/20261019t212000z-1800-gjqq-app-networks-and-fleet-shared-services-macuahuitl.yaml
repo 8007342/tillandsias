@@ -1,0 +1,685 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl, 2026-10-19, from the operator's direction of the same
+# day: "research a second network for the router … throw-away little networks
+# just for the lifespan of the launched apps … IPv6 … through Cloudflare for
+# discoverability and coordination, but local LAN detection where possible",
+# plus the scope addition relayed by yolanda: the "fleet shared services"
+# story with macuahuitl as the compute host (inference, nix cache, build
+# server, git mirror — easiest first) on a LAN discovery/trust slice.
+# Change: openspec/changes/app-networks/ (proposal, design with the research,
+# tasks, spec deltas app-networks, network-scenarios S7, enclave-network).
+# Two epics: 1800-gjqq (app networks) and 1800-p47s (fleet shared services).
+# Priority p2: below the v0.5 p1 fixes, by the operator's own framing
+# ("research"). Code is cited by symbol, never by line.
+packets:
+  - packet_id: every-launched-app-runs-on-its-own-throw-away-internal-podman-network-with-a-declared-egress-posture-none-allowlist-or-open-enforced-by-the-proxy-and-the-router-as-its-second-leg
+    order: 1800-gjqq
+    status: ready
+    kind: epic
+    priority: p2
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [networking, podman, netavark, proxy, router, ipv6, preview, forge, epic]
+    estimated_hours: 6
+    related: [1794-rf3a, 1651-5t7n, 1506-7tq4, 1506-euvq, 1548-9n28, 1548-v453, 1548-mhyk]
+    owned_files:
+      - openspec/changes/app-networks/
+    title: |
+      EPIC — every app a forge launches (local web preview, toolchain session, later app kinds) runs on its own throw-away `--internal` podman network `tillandsias-app-<app>` (label tillandsias.app-network=<app>), created before the app's run and removed on its stop or at reap, with a declared egress posture — none (no proxy leg, no proxy env), allowlist (proxy connected, per-app Squid ACL keyed on the app subnet), open (proxy connected, no destination ACL) — and the router connected as the app network's second leg so the browser window and the host reach the app; no posture ever gives an app a NAT leg
+    context: |
+      SOURCE READ (macuahuitl, 2026-10-19, trunk 4e4fd5925): one shared
+      --internal enclave (`main.rs` `fn ensure_enclave_network`), one NAT
+      bridge (`fn ensure_egress_network`), the proxy the only dual-homed
+      member (`const ENCLAVE_EGRESS_NETS`), ONE global Squid allowlist
+      (images/proxy/allowlist.txt) for every container. "No internet for
+      this app" and "only these hosts" are not expressible. The
+      throw-away-network pattern exists for browser windows
+      (`browser_open.rs`: network create --internal --label, forwarder,
+      network connect to the router's network, network rm -f on close).
+      MEASURED here 2026-10-19 (podman 5.8.9, netavark, pasta 20261002):
+      `podman network create --internal --subnet fd7a:1800:1::/64` makes an
+      IPv6-ONLY internal network; members ping each other by name; no
+      egress; create 15 ms; rm refuses while attached unless -f.
+      DESIGN binding on every child: an app is on exactly one network and
+      it is always --internal; the proxy is the only exit in any posture;
+      the router never gains an egress leg; a guard refuses a network
+      connect of tillandsias-egress into router or app. 1794-rf3a's
+      in-guest forward is taken as given, not redesigned. Research
+      findings, per-platform feasibility and the experiment table are in
+      openspec/changes/app-networks/design.md.
+    children:
+      - 1800-b2gb
+      - 1800-cp93
+      - 1800-zk9i
+      - 1800-er9t
+      - 1800-d29n
+      - 1800-sdgk
+      - 1800-seg8
+      - 1800-pj2x
+    exit_criteria:
+      - "all eight children complete, the three research children with recorded measurements"
+      - "LIVE (Linux rootless, stable release): a forge's publish_local with posture none renders in a browser window while `curl https://example.com` inside the app fails to connect; with posture allowlist [.pypi.org] pypi returns 200 and example.com is TCP_DENIED in the proxy log; pre-fix result: FAILS (no posture exists; the app shares the forge's egress)"
+      - "LIVE (one guest, macOS or WSL): the same two arms through the ruled in-guest forward"
+    unscoreable: "an epic; its closure is the children's fixtures plus the live arms above, recorded as events on this row"
+    depends_on: []
+    next_action: >
+      Run the three research children in parallel (b2gb on a guest host,
+      cp93 on every substrate, zk9i anywhere); then er9t → d29n → sdgk →
+      seg8; pj2x only after cp93 is green on the substrate it targets.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:20:00Z"
+        host: macuahuitl
+        summary: |-
+          Epic and eight children from the operator's second-network direction; design records the research and one Linux measurement (IPv6-only internal networks work).
+
+  - packet_id: measure-on-the-rootful-macos-and-wsl-guests-whether-a-router-with-a-second-non-internal-leg-publishes-its-loopback-port-again-and-record-the-matrix-with-podman-ps-and-the-nft-ruleset
+    order: 1800-b2gb
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.6
+    release_target: every-launched-app-runs-on-its-own-throw-away-internal-podman-network-with-a-declared-egress-posture-none-allowlist-or-open-enforced-by-the-proxy-and-the-router-as-its-second-leg
+    parent: 1800-gjqq
+    pickup_role: macos
+    capability_tags: [research, measurement, podman, netavark, rootful, macos, windows, router]
+    estimated_hours: 3
+    size: S
+    related: [1794-rf3a]
+    depends_on: []
+    owned_files:
+      - plan/issues/rootful-second-leg-publish-measurement-2026-10.md
+    title: |
+      EXPERIMENT — on the rootful macOS (vz) and Windows (WSL) guests, measure whether a container on the --internal enclave PLUS a second non-internal bridge publishes `-p 127.0.0.1:PORT` again (rootful netavark installs no firewall rules for internal networks, so the publish is dead today, 1794-rf3a); record a 2x2 matrix (enclave-only vs enclave+bridge, macOS vs WSL) with curl's result, `podman ps` and `nft list ruleset`, and whether `network connect` of a second internal network to the running router changes anything
+    context: |
+      The maintainer statement found (podman list archive, 2026-10-19
+      research): internal networks get no firewall rules at all, so rootful
+      -p into them is a no-op; rootless works only through pasta's
+      user-space forwarder. The "second non-internal leg restores DNAT"
+      idea is INFERRED, not maintainer-stated. The ruled fix for 1794-rf3a
+      (forward inside the guest to the router's enclave IP) stands either
+      way; this measurement decides whether the app network design may
+      rely on router publishing on rootful hosts or must route everything
+      through that forward.
+    exit_criteria:
+      - "the findings note records the 2x2 matrix with, per cell, the exact podman run line, curl's exit code and `nft list ruleset | grep -c <port>` from the guest; every cell was produced by a command the note quotes, not described"
+      - "the note states one of: second-leg-publishes | second-leg-dead | differs-by-guest, and the app-networks design.md §3 row is updated to cite it"
+    unscoreable: "a measurement on live guests; its deliverable is the recorded matrix, not code a fixture can pin"
+    next_action: >
+      Over --exec-guest on each platform: run the router image enclave-only
+      with -p 127.0.0.1:28081:8080, curl; add --network tillandsias-enclave,tillandsias-egress, curl; record both with nft output.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:20:00Z"
+        host: macuahuitl
+        summary: |-
+          The one rootful unknown the design cannot infer around.
+
+  - packet_id: measure-ipv6-only-internal-app-networks-on-every-substrate-aardvark-aaaa-caddy-dial-to-a-v6-upstream-squid-src-acl-on-a-v6-subnet-and-gvproxy-handling-of-v6-published-ports
+    order: 1800-cp93
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.6
+    release_target: every-launched-app-runs-on-its-own-throw-away-internal-podman-network-with-a-declared-egress-posture-none-allowlist-or-open-enforced-by-the-proxy-and-the-router-as-its-second-leg
+    parent: 1800-gjqq
+    pickup_role: any
+    capability_tags: [research, measurement, ipv6, podman, netavark, pasta, router, proxy, macos, windows, linux]
+    estimated_hours: 4
+    size: M
+    related: [1548-mhyk, 1548-v453]
+    depends_on: []
+    owned_files:
+      - scripts/measure-app-network-ipv6.sh
+      - plan/issues/app-network-ipv6-measurement-2026-10.md
+    title: |
+      EXPERIMENT — a read-only script creates an IPv6-only --internal network (`--subnet fd7a:<rand>::/64`), starts a static preview on it, connects the router and the proxy, and records per substrate (Linux rootless, macOS guest, WSL guest): the member's AAAA answer from aardvark, Caddy's dial of the v6 upstream (HTTP 200 through the router), Squid's acceptance of `acl … src fd../64` (`squid -k parse`), whether gvproxy forwards a `[::1]`-published port to the host, and whether the guest has IPv6 egress at all; one line per probe with the producer's rc
+    context: |
+      Linux is already green for the first half (measured on macuahuitl
+      2026-10-19: IPv6-only internal network, name resolution, ping; a
+      busybox nslookup said "Message too large" against aardvark on v6
+      while the libc resolver worked — record whether Caddy's resolver is
+      affected). gvproxy IPv6 behaviour is UNKNOWN: no doc or issue was
+      found. The --init probe (`fn auto_detect_and_configure_ipv6_workaround`)
+      injects pasta --ipv4-only on hosts without v6 egress; app networks
+      do not need v6 egress, only v6 on the bridge, and the script must
+      show that distinction.
+    exit_criteria:
+      - "scripts/measure-app-network-ipv6.sh exits 0 on each substrate and prints exactly one line per probe in the form probe=<name> rc=<n> result=<token>; a probe it could not run prints result=unmeasured with the reason, never pass"
+      - "the findings note holds the three substrates' output verbatim and the design.md §3 IPv6 rows cite it; pre-fix result: n/a (measurement)"
+    unscoreable: "a measurement; the script's own premise-guard arm (refuse to print pass for an unrun probe) is the only scorable part"
+    next_action: >
+      Write the script from the 2026-10-19 scratch probe; run on
+      macuahuitl first, then hand the condition (script present on trunk)
+      to a macOS and a Windows host.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:20:00Z"
+        host: macuahuitl
+        summary: |-
+          Gates the IPv6-first slice; Linux half already measured green.
+
+  - packet_id: decide-the-fleet-ula-addressing-plan-one-48-per-fleet-a-56-per-host-a-64-per-app-and-floating-service-addresses-as-names-switched-by-the-rendezvous-lease-and-measure-whether-cloudflare-accepts-a-ula-route
+    order: 1800-zk9i
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.6
+    release_target: every-launched-app-runs-on-its-own-throw-away-internal-podman-network-with-a-declared-egress-posture-none-allowlist-or-open-enforced-by-the-proxy-and-the-router-as-its-second-leg
+    parent: 1800-gjqq
+    pickup_role: any
+    capability_tags: [research, ipv6, mesh, cloudflare, fleet, addressing]
+    estimated_hours: 4
+    size: M
+    related: [1548-9n28, 1505-sm2j, 1506-euvq, 1548-v453]
+    depends_on: []
+    owned_files:
+      - plan/issues/fleet-ula-addressing-decision-2026-10.md
+    title: |
+      RESEARCH — a decision note for the fleet's IPv6 addressing: one RFC 4193 ULA /48 per fleet minted at enroll, a /56 per host in plan/fleet/peers, a /64 per live app from the host's /56 released with the network, floating service addresses implemented as NAMES whose AAAA the rendezvous lease holder switches (interface-level floating is a LAN-only later optimisation); plus one measured arm: does Cloudflare Mesh/Tunnel accept a ULA fd../64 CIDR route on the FREE plan (API call and response body recorded), given Mesh routes IPv6 only under a MASQUE profile and needs 3 vCPU on the node
+    context: |
+      Verified 2026-10-19 from developers.cloudflare.com: Mesh IPv6 CIDR
+      routes need MASQUE (not WireGuard); advertising needs
+      net.ipv6.conf.all.forwarding and accept_ra; Linux client minimum
+      3 vCPU / 1 GB — so Mesh is for the lease-holding router host, not
+      floor hosts (esme, macneo). Tunnel CIDR routes "may be private or
+      public"; ULA acceptance is unmeasured. The rung order (same host →
+      LAN → Mesh → direct v6 WAN later) is already ruled in
+      fleet-wan-rendezvous; this note feeds it the segment unit and does
+      NOT re-decide the product.
+    exit_criteria:
+      - "the note states the plan with the three prefix lengths and the floating-address mechanism, names which fleet-wan-rendezvous packets consume it, and records the Cloudflare route arm as accepted | refused:<body> | unmeasured:<why>"
+      - "the operator signs the note or answers its one question (Mesh on the router host only: yes/no)"
+    unscoreable: "a decision record; its deliverable is a signed plan and one recorded API response"
+    next_action: >
+      Draft from design.md §4; run the route arm with the operator's
+      Cloudflare login (1505-kc5f) when available, else record unmeasured.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:20:00Z"
+        host: macuahuitl
+        summary: |-
+          The IPv6-between-nodes half of the direction, routed into the existing mesh milestones.
+
+  - packet_id: an-app-network-module-creates-the-labelled-internal-network-before-the-app-runs-removes-it-on-stop-reaps-orphans-by-label-at-tray-start-and-a-live-arm-proves-two-apps-cannot-reach-each-other-or-the-vault
+    order: 1800-er9t
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    release_target: every-launched-app-runs-on-its-own-throw-away-internal-podman-network-with-a-declared-egress-posture-none-allowlist-or-open-enforced-by-the-proxy-and-the-router-as-its-second-leg
+    parent: 1800-gjqq
+    pickup_role: linux
+    capability_tags: [networking, podman, netavark, preview, tray, lua]
+    estimated_hours: 6
+    size: M
+    related: [1651-5t7n]
+    depends_on: []
+    owned_files:
+      - crates/tillandsias-headless/src/app_network.rs
+      - crates/tillandsias-headless/src/local_web_preview.rs
+      - scripts/lua/test-app-network-lifecycle.lua
+    title: |
+      `app_network.rs` names, labels (tillandsias.app-network=<app>), creates (`--internal`) and removes (`network rm -f`) one network per launched app on the same paths that run and stop the app; at tray start every labelled network with no attached container is removed with one line each; `build_local_preview_run_args` attaches the app to that network only (never the enclave); a Lua fixture over a podman shim pins the order (create before run, rm after stop, reap at start) and a live arm proves app-a cannot reach app-b's address nor the vault alias while both reach the router
+    context: |
+      Model: `browser_open.rs` (create --internal --label, rm -f on
+      close). netavark's `isolate` option defaults to strict in current
+      docs (blocks traffic between bridges) but the pinned 5.x default is
+      unverified — hence the live arm. IPv4 subnets from podman's pool
+      here; the ULA allocation is 1800-pj2x.
+    exit_criteria:
+      - "lua scripts/lua/test-app-network-lifecycle.lua: the shim log shows network create (--internal, the label) before run and rm -f after stop; a pre-seeded orphan labelled network is removed at tray start and an unlabelled network is NOT (NEGATIVE CONTROL); pre-fix result: FAILS (no create is issued)"
+      - "`build_local_preview_run_args` carries --network tillandsias-app-<app> and no tillandsias-enclave (cargo test preview_runs_on_its_app_network; red today)"
+      - "LIVE (Linux): two previews up; from app-a, curl to app-b's address and to vault:8200 fail to connect, curl to the router's address succeeds; recorded on this row"
+    verifiable_closure: "lua scripts/lua/test-app-network-lifecycle.lua && cargo test -p tillandsias-headless preview_runs_on_its_app_network (both red on linux-next before the fix)"
+    unscoreable: "unpinnable-until-the-guard-exists: the future litmus is scripts/lua/test-app-network-lifecycle.lua, written in the same commit as app_network.rs"
+    next_action: >
+      Write the Lua fixture red; add the module; move the preview builder
+      onto it; run the live arm; record.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:20:00Z"
+        host: macuahuitl
+        summary: |-
+          First build slice: lifecycle only, no postures yet.
+
+  - packet_id: the-router-is-connected-to-each-live-app-network-as-its-second-leg-on-app-start-and-disconnected-on-stop-posture-s7-is-published-and-the-membership-guard-refuses-an-egress-leg-on-router-or-app
+    order: 1800-d29n
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    release_target: every-launched-app-runs-on-its-own-throw-away-internal-podman-network-with-a-declared-egress-posture-none-allowlist-or-open-enforced-by-the-proxy-and-the-router-as-its-second-leg
+    parent: 1800-gjqq
+    pickup_role: linux
+    capability_tags: [networking, router, caddy, podman, spec, lua]
+    estimated_hours: 5
+    size: M
+    related: [1794-rf3a, 1651-5t7n]
+    depends_on:
+      - an-app-network-module-creates-the-labelled-internal-network-before-the-app-runs-removes-it-on-stop-reaps-orphans-by-label-at-tray-start-and-a-live-arm-proves-two-apps-cannot-reach-each-other-or-the-vault
+    owned_files:
+      - crates/tillandsias-headless/src/app_network.rs
+      - crates/tillandsias-headless/src/main.rs
+      - openspec/specs/network-scenarios/spec.md
+      - openspec/specs/enclave-network/spec.md
+      - scripts/lua/check-enclave-membership-documented.lua
+    title: |
+      On app start the tray runs `podman network connect tillandsias-app-<app> tillandsias-router` and on stop `network disconnect`; the router's hostname route for the app targets the app's address on that network; `network-scenarios` gains posture S7 and `enclave-network` the rule that only router and proxy may be connected at runtime and only to tillandsias-app-* networks; `check-enclave-membership-documented.lua` refuses an app builder naming the enclave and any connect naming tillandsias-egress into router or app, and asserts its population
+    context: |
+      The browser forwarder already does `network connect` to the
+      router's network; this inverts it (router joins the app). Rootful
+      hosts keep reaching the router through 1794-rf3a's in-guest forward;
+      1800-b2gb says whether the second leg changes publishing.
+    exit_criteria:
+      - "lua scripts/lua/test-app-network-router-leg.lua over the shim: connect after the app's run, disconnect after its stop; NEGATIVE CONTROL: a connect naming tillandsias-egress is refused by the guard with refused:enclave-membership:egress-leg; pre-fix result: FAILS (no connect)"
+      - "the guard refuses on zero app builders found (population assert) and is wired into ./build.sh --check; the two spec files carry S7 and the connect rule"
+      - "LIVE (Linux): a preview with posture none renders in a browser window via the router; pre-fix result: FAILS (the app is unreachable from the router's network)"
+    verifiable_closure: "lua scripts/lua/test-app-network-router-leg.lua && lua scripts/lua/check-enclave-membership-documented.lua (red on linux-next before the fix)"
+    unscoreable: "unpinnable-until-the-guard-exists: the future litmus is scripts/lua/test-app-network-router-leg.lua, written in the same commit as the connect/disconnect"
+    next_action: >
+      After er9t lands: fixture red, connect/disconnect in app_network,
+      spec deltas synced, guard extended with the population assert.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:20:00Z"
+        host: macuahuitl
+        summary: |-
+          The second leg the operator asked about, as a runtime connect rather than a rebuilt router.
+
+  - packet_id: the-proxy-holds-a-generated-per-app-squid-acl-keyed-on-the-app-subnet-and-the-three-postures-none-allowlist-open-are-one-table-the-proxy-joins-the-app-network-only-for-allowlist-and-open
+    order: 1800-sdgk
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    release_target: every-launched-app-runs-on-its-own-throw-away-internal-podman-network-with-a-declared-egress-posture-none-allowlist-or-open-enforced-by-the-proxy-and-the-router-as-its-second-leg
+    parent: 1800-gjqq
+    pickup_role: linux
+    capability_tags: [networking, proxy, squid, security, lua]
+    estimated_hours: 8
+    size: L
+    related: [1794-rf3a]
+    depends_on:
+      - the-router-is-connected-to-each-live-app-network-as-its-second-leg-on-app-start-and-disconnected-on-stop-posture-s7-is-published-and-the-membership-guard-refuses-an-egress-leg-on-router-or-app
+    owned_files:
+      - crates/tillandsias-headless/src/app_network.rs
+      - images/proxy/squid.conf
+      - images/proxy/squid-supervisor.sh
+      - scripts/lua/test-app-network-postures.lua
+    title: |
+      `squid.conf` includes a host-mounted `/etc/squid/apps.d/*.conf`; on an app start with posture allowlist or open the tray writes `acl app_<id>_src src <app subnet>` plus the posture's rule (allowlist: the app's dstdomain list, open: allow the src before the global deny), connects the proxy to the app network, injects the proxy env into the app and asks Squid to reconfigure; posture none writes nothing, connects nothing and injects nothing; on stop the include is removed and Squid reconfigured; a fixture over the shim pins the table and a live arm proves one app's allowlist cannot be used from another app's subnet and that a long download survives ten reconfigures
+    context: |
+      Design §2. Squid 6 refuses duplicate subdomain entries as FATAL, so
+      the generator must dedupe against allowlist.txt; the global no-bump
+      list keeps applying. If reconfigure proves disruptive the fallback is
+      a second Squid instance, recorded as a finding, not chosen in
+      advance.
+    exit_criteria:
+      - "lua scripts/lua/test-app-network-postures.lua: for each of none/allowlist/open the shim log shows exactly the connects, env and include writes of the design table, and an undeclared posture is refused:app-network:posture-missing; `squid -k parse` accepts a generated include with 50 domains including one duplicate of allowlist.txt; pre-fix result: FAILS (no table exists)"
+      - "LIVE (Linux): app-a allowlist [.pypi.org] gets 200 from pypi and TCP_DENIED for example.com; app-b (none) cannot connect to the proxy at all; a curl of a 100 MB file through app-a survives ten `squid -k reconfigure`; recorded on this row"
+    verifiable_closure: "lua scripts/lua/test-app-network-postures.lua (red on linux-next before the fix)"
+    unscoreable: "unpinnable-until-the-guard-exists: the future litmus is scripts/lua/test-app-network-postures.lua, written in the same commit as the posture table"
+    next_action: >
+      After d29n: fixture red; the include dir and supervisor reconfigure
+      hook in images/proxy; the posture table in app_network; live arms.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:20:00Z"
+        host: macuahuitl
+        summary: |-
+          The "no internet" / "safe lists" switch the operator described, enforced at the proxy.
+
+  - packet_id: the-launch-api-takes-the-egress-posture-publish-local-and-toolchain-sessions-refuse-without-one-the-tray-shows-one-status-line-per-app-network-and-service-status-reports-network-posture-and-subnet
+    order: 1800-seg8
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    release_target: every-launched-app-runs-on-its-own-throw-away-internal-podman-network-with-a-declared-egress-posture-none-allowlist-or-open-enforced-by-the-proxy-and-the-router-as-its-second-leg
+    parent: 1800-gjqq
+    pickup_role: any
+    capability_tags: [networking, mcp, preview, toolchain, tray, forge]
+    estimated_hours: 5
+    size: M
+    related: [1637-5765]
+    depends_on:
+      - the-proxy-holds-a-generated-per-app-squid-acl-keyed-on-the-app-subnet-and-the-three-postures-none-allowlist-open-are-one-table-the-proxy-joins-the-app-network-only-for-allowlist-and-open
+    owned_files:
+      - crates/tillandsias-headless/src/local_web_preview.rs
+      - crates/tillandsias-headless/src/toolchain_exec.rs
+      - crates/tillandsias-headless/src/tray/mod.rs
+    title: |
+      `publish_local` and the toolchain session request take `network: {egress: none|allowlist|open, allow: [domains]}` (default none, so a user saying "run this app locally without internet" is the zero-config case), refuse an unknown posture or a non-empty allow under none, surface the posture in `service_status.network` with the subnet and the proxy's connected state, and the tray shows one line per live app network (`<app>: egress=<posture> net=<name>`) that disappears on stop
+    context: |
+      The agent-facing contract: a prompt-to-app user never sees a network
+      name, only the three words. `toolchain_exec.rs` `fn build_exec_args`
+      (1637-5765) is today enclave-only with proxy egress and moves onto an
+      app network with posture allowlist by default (its package registries
+      are already in allowlist.txt).
+    exit_criteria:
+      - "cargo test publish_local_network_posture_contract: default is none; allowlist with an empty list is refused; none with a list is refused; the status payload carries posture, subnet and proxy_connected; pre-fix result: FAILS (no field)"
+      - "LIVE: in a forge, publish_local with network.egress=allowlist and allow [.pypi.org] reports the posture in service_status and the tray line appears and disappears with the app; recorded on this row"
+    verifiable_closure: "cargo test -p tillandsias-headless publish_local_network_posture_contract (red on linux-next before the fix)"
+    next_action: >
+      After sdgk: extend the request types and status; tray line; live
+      arm from a forge.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:20:00Z"
+        host: macuahuitl
+        summary: |-
+          The user-facing three words, with none as the default.
+
+  - packet_id: app-network-subnets-are-allocated-as-a-64-from-the-hosts-ula-56-and-released-with-the-network-with-ipv4-fallback-only-on-a-substrate-the-ipv6-measurement-recorded-red
+    order: 1800-pj2x
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.7
+    release_target: every-launched-app-runs-on-its-own-throw-away-internal-podman-network-with-a-declared-egress-posture-none-allowlist-or-open-enforced-by-the-proxy-and-the-router-as-its-second-leg
+    parent: 1800-gjqq
+    pickup_role: any
+    capability_tags: [networking, ipv6, podman, netavark, fleet]
+    estimated_hours: 5
+    size: M
+    related: [1548-9n28, 1548-mhyk]
+    depends_on:
+      - measure-ipv6-only-internal-app-networks-on-every-substrate-aardvark-aaaa-caddy-dial-to-a-v6-upstream-squid-src-acl-on-a-v6-subnet-and-gvproxy-handling-of-v6-published-ports
+      - decide-the-fleet-ula-addressing-plan-one-48-per-fleet-a-56-per-host-a-64-per-app-and-floating-service-addresses-as-names-switched-by-the-rendezvous-lease-and-measure-whether-cloudflare-accepts-a-ula-route
+      - an-app-network-module-creates-the-labelled-internal-network-before-the-app-runs-removes-it-on-stop-reaps-orphans-by-label-at-tray-start-and-a-live-arm-proves-two-apps-cannot-reach-each-other-or-the-vault
+    owned_files:
+      - crates/tillandsias-headless/src/app_network.rs
+    title: |
+      `app_network` allocates each app network's subnet as one /64 from the host's ULA /56 (from plan/fleet/peers or, unenrolled, a locally minted RFC 4193 /48 kept in the state dir), passes it as `--subnet` so the network is IPv6-only, releases it with the network, and falls back to podman's IPv4 pool only on a substrate whose 1800-cp93 record says red — with one line naming the fallback; the squid src ACL and the router route use the v6 address
+    context: |
+      Linux measured green 2026-10-19 for the bridge half; the guests are
+      1800-cp93's job. This is the segment unit the mesh rungs route
+      (design §4); the routing itself is filed under fleet-wan-rendezvous.
+    exit_criteria:
+      - "cargo test app_network_allocates_v6_from_host_prefix: 256 allocations from one /56 are distinct /64s inside it, a released one is reused, the 257th is refused:app-network:prefix-exhausted; pre-fix result: FAILS (no allocator)"
+      - "LIVE (Linux): a preview's network inspect shows one IPv6 subnet inside the host's /56 and no IPv4 subnet, and the posture allowlist arm of 1800-sdgk passes over it"
+    verifiable_closure: "cargo test -p tillandsias-headless app_network_allocates_v6_from_host_prefix (red on linux-next before the fix)"
+    next_action: >
+      Not before cp93 and zk9i are recorded; then the allocator, the
+      --subnet plumbing and the live arm.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:20:00Z"
+        host: macuahuitl
+        summary: |-
+          IPv6-first app segments, gated on the per-substrate measurement.
+
+  # ---------------------------------------------------------------------
+  # Fleet shared services (operator scope addition 2026-10-19, via yolanda)
+  # ---------------------------------------------------------------------
+
+  - packet_id: fleet-shared-services-macuahuitl-serves-inference-nix-cache-build-server-and-last-the-git-mirror-to-the-lan-each-reached-from-the-enclave-through-the-router-alias-and-a-per-service-proxy-acl-after-lan-discovery-with-identity-proof
+    order: 1800-p47s
+    status: ready
+    kind: epic
+    priority: p2
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [fleet, lan, mdns, inference, nix-cache, build, git-mirror, networking, epic]
+    estimated_hours: 4
+    related: [1289-ggsb, 1292-mzr8, 1287-w9s4, 1506-3xu7, 1506-7tq4, 1548-9n28, 1800-gjqq]
+    owned_files:
+      - openspec/changes/app-networks/
+    title: |
+      EPIC — fleet shared services: macuahuitl (GPU, RAID0, 1GbE with lenovinha; the rest on WiFi 6/7, so LAN-direct beats Cloudflare) serves shared inference, a shared nix cache, a build server and — last, only behind authenticated push — the git mirror to every enrolled host; a host finds the service by LAN discovery (`_tillandsias._tcp`) and trusts it only after the peer proves the same Cloudflare-login identity; the enclave keeps its alias (`inference`, `nix-cache`) and the router forwards it to the one LAN peer the proxy allows; Raspberry Pis later host low-power always-on services (file caches, web servers) and never the push path (1292-mzr8)
+    context: |
+      Yolanda's survey, easiest first: (1) inference — OLLAMA_HOST is a
+      literal `http://inference:11434` at two sites in
+      `container_profile.rs` and the health probe dials 127.0.0.1:11434
+      in `accel_probe.rs`; Ollama has no auth, so the identity proof is
+      the auth. (2) nix cache — TLS and a signing key already, published
+      on 127.0.0.1 only, reached as nix-cache:5000. (3) build server — no
+      nix remote builder exists; 1287-w9s4 only measures a LAN sccache.
+      (4) git mirror — git:// push has no auth (322 archived, 451
+      pending) so it must not go on the LAN until authenticated push
+      lands. Design: openspec/changes/app-networks/design.md §8 — the
+      enclave reaches ONE LAN host per service, never the LAN; the alias
+      falls back to the local container when the peer stops announcing.
+    children:
+      - 1800-54yy
+      - 1800-67gq
+      - 1800-8geu
+      - 1800-petu
+      - 1800-6pku
+      - 1800-swte
+    exit_criteria:
+      - "all six children complete, in the order inference → nix cache → build server → git mirror (the depends_on chain)"
+      - "LIVE (lenovinha + macuahuitl on the 1GbE segment): a forge on lenovinha gets `ollama list` from macuahuitl's GPU through `http://inference:11434`, and a `nix build` on lenovinha fetches a path from macuahuitl's cache; both recorded with the discovery record's fingerprint; pre-fix result: FAILS (every host is an island)"
+    unscoreable: "an epic; closure is the children's fixtures plus the two live arms above, recorded as events on this row"
+    depends_on:
+      - the-tray-announces-and-browses-tillandsias-tcp-on-the-lan-and-trusts-a-peers-service-record-only-after-it-proves-the-same-cloudflare-login-identity-ignoring-and-counting-every-other-record
+    next_action: >
+      54yy first (67gq in parallel on Windows); then 8geu → petu → 6pku;
+      swte only after 451 lands.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:20:00Z"
+        host: macuahuitl
+        summary: |-
+          Shared-services story from the operator, ordered easiest first, on the LAN discovery/trust slice.
+
+  - packet_id: the-tray-announces-and-browses-tillandsias-tcp-on-the-lan-and-trusts-a-peers-service-record-only-after-it-proves-the-same-cloudflare-login-identity-ignoring-and-counting-every-other-record
+    order: 1800-54yy
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    release_target: fleet-shared-services-macuahuitl-serves-inference-nix-cache-build-server-and-last-the-git-mirror-to-the-lan-each-reached-from-the-enclave-through-the-router-alias-and-a-per-service-proxy-acl-after-lan-discovery-with-identity-proof
+    parent: 1800-p47s
+    pickup_role: linux
+    capability_tags: [fleet, lan, mdns, discovery, trust, cloudflare, tray, security]
+    estimated_hours: 10
+    size: L
+    related: [1506-7tq4, 1548-ciq2, 1505-kc5f]
+    depends_on: []
+    owned_files:
+      - crates/tillandsias-headless/src/lan_discovery.rs
+      - scripts/test-lan-discovery-trust.sh
+    title: |
+      The tray (host side, never a guest or container: pasta and vz NAT forward no multicast) announces `_tillandsias._tcp` with TXT {host, services, fp} and browses for peers; a record is TRUSTED — and its services become candidates for the router alias — only after the peer answers a challenge signed by the key its Cloudflare-login-gated enrollment record (plan/fleet/peers/<host>.yaml) published; every other record is ignored and `discovery_ignored` counts it; `tillandsias --fleet peers` lists trusted peers with their services and a TILLANDSIAS_LAN_DISCOVERY=off switch exists from day one
+    context: |
+      Shares the mDNS mechanism 1506-7tq4 names as "hints"; this slice is
+      the TRUST step the hints lack, so the shared services (Ollama has no
+      auth) can rely on it. Fixture: two daemons on one host with two
+      state roots and a temp peers directory; the live arm is
+      lenovinha ↔ macuahuitl on the 1GbE segment.
+    exit_criteria:
+      - "scripts/test-lan-discovery-trust.sh exits 0: a record from a peer in the temp peers directory becomes trusted after the challenge; a record with a foreign fp is ignored and discovery_ignored increments (NEGATIVE CONTROL); a record whose challenge answer is replayed from a capture is refused; the switch set to off announces nothing (pre-fix: no announcer exists)"
+      - "LIVE: `tillandsias --fleet peers` on lenovinha lists macuahuitl with fp and services; recorded on this row"
+    verifiable_closure: "bash scripts/test-lan-discovery-trust.sh (red on linux-next before the fix)"
+    next_action: >
+      Fixture red over loopback multicast; announcer + browser + challenge
+      in lan_discovery.rs; live arm on the 1GbE pair.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:20:00Z"
+        host: macuahuitl
+        summary: |-
+          The missing piece yolanda named: discovery that is also the auth.
+
+  - packet_id: on-windows-the-tray-announces-tillandsias-tcp-on-the-lan-on-behalf-of-the-nat-hidden-wsl-guest-and-forwards-the-announced-service-ports-into-the-guest-so-a-windows-host-is-a-visible-fleet-peer
+    order: 1800-67gq
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    release_target: fleet-shared-services-macuahuitl-serves-inference-nix-cache-build-server-and-last-the-git-mirror-to-the-lan-each-reached-from-the-enclave-through-the-router-alias-and-a-per-service-proxy-acl-after-lan-discovery-with-identity-proof
+    parent: 1800-p47s
+    pickup_role: windows
+    capability_tags: [windows, wsl, lan, mdns, discovery, tray]
+    estimated_hours: 6
+    size: M
+    related: [1800-54yy]
+    depends_on:
+      - the-tray-announces-and-browses-tillandsias-tcp-on-the-lan-and-trusts-a-peers-service-record-only-after-it-proves-the-same-cloudflare-login-identity-ignoring-and-counting-every-other-record
+    owned_files:
+      - crates/tillandsias-windows-tray/src/lan_discovery.rs
+    title: |
+      Under WSL2's default NAT the guest is invisible on the LAN, so the Windows tray runs the `_tillandsias._tcp` announcer and browser itself with the guest's services and fp, forwards each announced service port from the host's LAN address into the guest, and reports `networkingMode=mirrored` (Win11 22H2+) as the alternative it detects but does not require; a fixture over a fake guest pins the TXT contents and the forward table
+    context: |
+      Verified 2026-10-19 (learn.microsoft.com/windows/wsl/networking):
+      NAT mode gives the distro its own virtual adapter unreachable from
+      the LAN; mirrored mode supports multicast, mDNS and IPv6 but needs a
+      Hyper-V firewall rule for inbound. Yolanda takes this slice.
+    exit_criteria:
+      - "cargo test -p tillandsias-windows-tray lan_announce_for_guest: the announced TXT equals the guest's record and each service port has one forward entry; with mirrored mode detected the forward table is empty and the TXT carries the guest's own address; pre-fix result: FAILS (no announcer)"
+      - "LIVE (Windows on the operator's LAN): macuahuitl's `tillandsias --fleet peers` lists the Windows host; recorded on this row"
+    verifiable_closure: "cargo test -p tillandsias-windows-tray lan_announce_for_guest (red on windows-next before the fix)"
+    next_action: >
+      After 54yy's record format lands: the announcer in the Windows tray,
+      the forward table, the fixture; live arm.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:20:00Z"
+        host: macuahuitl
+        summary: |-
+          Windows discovery slice; pickup windows (yolanda).
+
+  - packet_id: shared-inference-ollama-host-and-the-accel-probe-endpoint-resolve-to-a-discovered-trusted-lan-peer-through-the-router-alias-inference-with-a-proxy-acl-for-that-one-host-and-fall-back-to-the-local-container
+    order: 1800-8geu
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    release_target: fleet-shared-services-macuahuitl-serves-inference-nix-cache-build-server-and-last-the-git-mirror-to-the-lan-each-reached-from-the-enclave-through-the-router-alias-and-a-per-service-proxy-acl-after-lan-discovery-with-identity-proof
+    parent: 1800-p47s
+    pickup_role: linux
+    capability_tags: [fleet, inference, ollama, router, proxy, lan]
+    estimated_hours: 6
+    size: M
+    related: [1289-ggsb, 830-xsk2]
+    depends_on:
+      - the-tray-announces-and-browses-tillandsias-tcp-on-the-lan-and-trusts-a-peers-service-record-only-after-it-proves-the-same-cloudflare-login-identity-ignoring-and-counting-every-other-record
+    owned_files:
+      - crates/tillandsias-core/src/container_profile.rs
+      - crates/tillandsias-headless/src/accel_probe.rs
+      - crates/tillandsias-headless/src/lan_discovery.rs
+    title: |
+      The two `http://inference:11434` literals in `container_profile.rs` and the `127.0.0.1:11434` probe in `accel_probe.rs` become one resolved inference endpoint; when a trusted peer announces `inference`, the router's `inference` alias forwards to the peer's address and the proxy allows that one address:port; when it stops announcing, the alias returns to the local container within one announce interval and one status line says `inference: local (peer <host> gone)`; the forge's view never changes
+    context: |
+      Easiest service (yolanda). Ollama has no auth: the trust from 54yy
+      is the auth, and the proxy ACL is per peer address, never a LAN
+      range. 830-xsk2's vsock forwarder takes the alias INSTEAD of the
+      container when host-native inference is configured — the LAN peer
+      is a third taker and must never coexist with either on the alias.
+    exit_criteria:
+      - "cargo test inference_endpoint_resolution: no peer → local container; trusted peer → peer address with a proxy ACL for exactly that address:port; untrusted peer → local (NEGATIVE CONTROL); peer gone → local within one interval; pre-fix result: FAILS (the literal)"
+      - "LIVE: a forge on lenovinha gets macuahuitl's model list through http://inference:11434 and `curl http://<other LAN ip>:11434` from the forge is TCP_DENIED; recorded on this row"
+    verifiable_closure: "cargo test -p tillandsias-headless inference_endpoint_resolution (red on linux-next before the fix)"
+    next_action: >
+      After 54yy: the resolver, the alias forward in the router config,
+      the ACL; live arm on the 1GbE pair.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:20:00Z"
+        host: macuahuitl
+        summary: |-
+          First shared service.
+
+  - packet_id: the-shared-nix-cache-binds-to-the-lan-address-publishes-its-certificate-and-signing-public-key-in-the-discovery-record-and-every-trusted-host-adds-it-as-a-substituter-ahead-of-the-local-cache
+    order: 1800-petu
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    release_target: fleet-shared-services-macuahuitl-serves-inference-nix-cache-build-server-and-last-the-git-mirror-to-the-lan-each-reached-from-the-enclave-through-the-router-alias-and-a-per-service-proxy-acl-after-lan-discovery-with-identity-proof
+    parent: 1800-p47s
+    pickup_role: linux
+    capability_tags: [fleet, nix-cache, tls, lan, proxy, router]
+    estimated_hours: 6
+    size: M
+    related: [801-vm4p]
+    depends_on:
+      - shared-inference-ollama-host-and-the-accel-probe-endpoint-resolve-to-a-discovered-trusted-lan-peer-through-the-router-alias-inference-with-a-proxy-acl-for-that-one-host-and-fall-back-to-the-local-container
+    owned_files:
+      - crates/tillandsias-headless/src/lan_discovery.rs
+      - scripts/nix-cache-service.sh
+    title: |
+      The nix cache (TLS, signing key, today 127.0.0.1 only, reached as nix-cache:5000) binds to the host's LAN address when the host is enrolled, its certificate fingerprint and signing public key ride in the `_tillandsias._tcp` TXT, and a trusted consumer adds `https://<peer>:5000` as a substituter with that public key ahead of its local cache through the same router-alias + per-peer proxy ACL seam as inference; the local cache stays the failsafe
+    exit_criteria:
+      - "cargo test nix_cache_substituter_from_peer: a trusted record yields one substituter line with the announced key and a proxy ACL for that address:5000; an untrusted record yields none (NEGATIVE CONTROL); pre-fix result: FAILS"
+      - "LIVE: `nix build` of a path present only on macuahuitl's cache succeeds on lenovinha and the cache log shows the fetch; recorded on this row"
+    verifiable_closure: "cargo test -p tillandsias-headless nix_cache_substituter_from_peer (red on linux-next before the fix)"
+    next_action: >
+      After 8geu: reuse its seam for nix-cache; the bind change behind
+      enrollment; live arm.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:20:00Z"
+        host: macuahuitl
+        summary: |-
+          Second shared service, on the seam the first built.
+
+  - packet_id: a-nix-remote-builder-entry-over-the-fleet-sshd-points-at-the-discovered-build-host-and-is-measured-against-a-local-build-before-any-host-depends-on-it
+    order: 1800-6pku
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.6
+    release_target: fleet-shared-services-macuahuitl-serves-inference-nix-cache-build-server-and-last-the-git-mirror-to-the-lan-each-reached-from-the-enclave-through-the-router-alias-and-a-per-service-proxy-acl-after-lan-discovery-with-identity-proof
+    parent: 1800-p47s
+    pickup_role: linux
+    capability_tags: [fleet, build, nix, ssh, lan, measurement]
+    estimated_hours: 8
+    size: L
+    related: [1287-w9s4, 1548-u5wv]
+    depends_on:
+      - the-shared-nix-cache-binds-to-the-lan-address-publishes-its-certificate-and-signing-public-key-in-the-discovery-record-and-every-trusted-host-adds-it-as-a-substituter-ahead-of-the-local-cache
+    owned_files:
+      - crates/tillandsias-headless/src/lan_discovery.rs
+      - scripts/measure-remote-builder.sh
+    title: |
+      When a trusted peer announces `build`, the consumer renders a nix `builders` entry for it over the rootless fleet sshd (1548-u5wv) with the peer's pinned host key, and a measurement script times the same derivation locally and remotely on the 1GbE pair and on WiFi before the entry is enabled by default; 1287-w9s4's sccache question is answered by the same script's second arm
+    exit_criteria:
+      - "cargo test remote_builder_entry_from_peer: one entry with the pinned key for a trusted record, none for an untrusted one (NEGATIVE CONTROL); pre-fix result: FAILS"
+      - "scripts/measure-remote-builder.sh prints local=<s> remote=<s> link=<1GbE|wifi> for one derivation and the row records both pairs; the default stays off unless remote beats local on the 1GbE pair"
+    verifiable_closure: "cargo test -p tillandsias-headless remote_builder_entry_from_peer (red on linux-next before the fix)"
+    next_action: >
+      After petu and 1548-u5wv: the entry renderer; the measurement on
+      both links; decide the default from the numbers.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:20:00Z"
+        host: macuahuitl
+        summary: |-
+          Third shared service; measured before it is depended on.
+
+  - packet_id: the-git-mirror-is-announced-and-consumed-on-the-lan-only-behind-the-authenticated-push-transport-and-the-pi-is-never-on-the-push-path
+    order: 1800-swte
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.7
+    release_target: fleet-shared-services-macuahuitl-serves-inference-nix-cache-build-server-and-last-the-git-mirror-to-the-lan-each-reached-from-the-enclave-through-the-router-alias-and-a-per-service-proxy-acl-after-lan-discovery-with-identity-proof
+    parent: 1800-p47s
+    pickup_role: linux
+    capability_tags: [fleet, git-mirror, lan, security, auth]
+    estimated_hours: 6
+    size: M
+    related: [1292-mzr8, 1548-7onc, 606-9wqd]
+    depends_on:
+      - a-nix-remote-builder-entry-over-the-fleet-sshd-points-at-the-discovered-build-host-and-is-measured-against-a-local-build-before-any-host-depends-on-it
+      - authenticated-forge-write-transport-impl
+    owned_files:
+      - crates/tillandsias-headless/src/lan_discovery.rs
+    title: |
+      The git mirror joins the announced services LAST: the announcer refuses to list `git-mirror` while the mirror's push transport is the unauthenticated git:// one (451 pending), a consumer with a trusted record adds the peer mirror as a read-through ahead of its local mirror (1548-7onc's pass-through with the loud local fallback), and a record from a host whose peer record says class pi is never used for push
+    exit_criteria:
+      - "cargo test git_mirror_announce_requires_auth_push: with the unauthenticated transport the announced services omit git-mirror (NEGATIVE CONTROL), with the authenticated one they include it; a pi-class record is read-only; pre-fix result: FAILS"
+      - "LIVE: a clone on lenovinha is served by macuahuitl's mirror and a push lands on GitHub through the authenticated path; recorded on this row"
+    verifiable_closure: "cargo test -p tillandsias-headless git_mirror_announce_requires_auth_push (red on linux-next before the fix)"
+    next_action: >
+      Not before 451 lands; then the announce guard, the read-through,
+      the live arm.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:20:00Z"
+        host: macuahuitl
+        summary: |-
+          Last by the operator's order: no LAN mirror without authenticated push.
