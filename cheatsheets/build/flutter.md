@@ -118,6 +118,7 @@ flutter test --coverage
 - Web + Linux desktop targets only. Mobile (Android/iOS) and other-OS desktop (macOS/Windows) need a different forge image.
 - Pub registry pulls go through `tillandsias-proxy`. A "Could not resolve host: pub.dev" error means the proxy allowlist is missing pub.dev / storage.googleapis.com.
 - `build/` and `.dart_tool/` live on the ephemeral overlay — lost on container stop. Commit early or rebuild on next attach.
+- **CanvasKit and fonts are served from the SDK, not gstatic.** A browser.open window and the managed preview reach only the project's own hosts, so a stock web build that loads CanvasKit from the CDN never starts. The forge's `flutter` adds `--no-web-resources-cdn` to `flutter run -d web-server` (always) and to `flutter build web` (unless you pass `--web-resources-cdn` yourself, e.g. for a bundle deployed to the open web). Bundle the UI font in `pubspec.yaml` too: a default font is fetched the same way (1788-qlwq).
 
 ## Pull on Demand
 

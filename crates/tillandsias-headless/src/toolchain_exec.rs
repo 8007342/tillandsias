@@ -442,6 +442,31 @@ pub(crate) fn dev_server_argv(argv: &[String]) -> Option<Vec<String>> {
     Some(out)
 }
 
+/// `flutter build web` bakes the CanvasKit/font source into the bundle, and a
+/// stock build loads them from gstatic, which the project-only network of a
+/// browser.open window and the managed preview refuse, so the app never starts
+/// (1788-qlwq slice 12, kumbia-kombat FORGE_DIAGNOSTICS.md 2026-10-18). The
+/// default becomes `--no-web-resources-cdn`; unlike the dev server, a CDN flag
+/// the caller chose is kept, because a built bundle may be deployed where the
+/// CDN is reachable. Returns the rewritten argv, or None to leave it alone.
+pub(crate) fn web_build_argv(argv: &[String]) -> Option<Vec<String>> {
+    let mut words = argv.iter().filter(|a| !a.starts_with('-'));
+    if words.next().map(String::as_str) != Some("build")
+        || words.next().map(String::as_str) != Some("web")
+    {
+        return None;
+    }
+    if argv
+        .iter()
+        .any(|a| a == "--web-resources-cdn" || a == "--no-web-resources-cdn")
+    {
+        return None;
+    }
+    let mut out = argv.to_vec();
+    out.push("--no-web-resources-cdn".into());
+    Some(out)
+}
+
 /// The forge's tool-cache volume, read from the LIVE forge's mounts.
 fn forge_cache_volume(forge_id: &str) -> Result<String, String> {
     let out = crate::podman_command()
@@ -589,6 +614,8 @@ pub(crate) fn serve_exec(
     let dev_server = dev_server_argv(&req.argv);
     if let Some(argv) = &dev_server {
         req.argv = argv.clone();
+    } else if let Some(argv) = web_build_argv(&req.argv) {
+        req.argv = argv;
     }
     match image_present(&image_tag(req.toolchain)) {
         Ok(true) => {}
@@ -1443,6 +1470,33 @@ mod tests {
         assert_eq!(dev_server_argv(&v(&["build", "web"])), None);
         assert_eq!(dev_server_argv(&v(&["pub", "add", "flame"])), None);
         assert_eq!(dev_server_argv(&[]), None);
+    }
+
+    #[test]
+    fn a_web_build_defaults_to_the_sdk_served_canvaskit_and_keeps_a_chosen_cdn_flag() {
+        let v = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            web_build_argv(&v(&["build", "web", "--release"])),
+            Some(v(&["build", "web", "--release", "--no-web-resources-cdn"]))
+        );
+        assert_eq!(
+            web_build_argv(&v(&["--verbose", "build", "web"])),
+            Some(v(&["--verbose", "build", "web", "--no-web-resources-cdn"]))
+        );
+        // NEGATIVE CONTROL: a CDN choice the caller made is passed through.
+        assert_eq!(
+            web_build_argv(&v(&["build", "web", "--web-resources-cdn"])),
+            None
+        );
+        assert_eq!(
+            web_build_argv(&v(&["build", "web", "--no-web-resources-cdn"])),
+            None
+        );
+        // Other builds and commands are left alone.
+        assert_eq!(web_build_argv(&v(&["build", "apk"])), None);
+        assert_eq!(web_build_argv(&v(&["run", "-d", "web-server"])), None);
+        assert_eq!(web_build_argv(&v(&["pub", "get"])), None);
+        assert_eq!(web_build_argv(&[]), None);
     }
 
     /// 1776-pr0g: prepare reads progress through the one shared parser,
