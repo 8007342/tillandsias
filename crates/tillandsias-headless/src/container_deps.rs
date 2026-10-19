@@ -527,6 +527,16 @@ impl LivenessProbe {
     /// re-ensured services, which is empty when all are healthy.
     pub fn run_check(&mut self) -> Result<LivenessResult, String> {
         let mut satisfier = RealSatisfier { debug: self.debug };
+        self.run_check_with(&mut satisfier)
+    }
+
+    /// [`run_check`](Self::run_check) with the re-ensure behind `satisfier`,
+    /// so a fixture can drive the real state queries (podman inspect) while
+    /// recording, not performing, the re-ensure (order 1784-skfj).
+    pub fn run_check_with(
+        &mut self,
+        satisfier: &mut impl Satisfier,
+    ) -> Result<LivenessResult, String> {
         let mut result = LivenessResult {
             re_ensured: Vec::new(),
             running: Vec::new(),
@@ -1186,5 +1196,92 @@ mod tests {
             body.contains("ca_bundle_trustable(&certs_dir)"),
             "satisfy_ca_bundle must gate on ca_bundle_trustable"
         );
+    }
+
+    /// Order 1784-skfj — the real state queries of `run_check_with` against an
+    /// exec'd shim podman (TILLANDSIAS_PODMAN_BIN, under the crate env lock),
+    /// with the re-ensure recorded, never performed: a real re-ensure reaches
+    /// image ensure and writes a failure marker into the host cache. `mode` is
+    /// `unanswered` (every inspect fails with a non-"no such" error, as a
+    /// wedged or budget-killed podman does) or `exited` (vault and proxy report
+    /// Exited(139)). nix-cache is absent in both. Returns the result, the
+    /// services re-ensured, and every argv the shim saw.
+    #[cfg(unix)]
+    fn run_check_against_shim(
+        mode: &str,
+    ) -> (Result<LivenessResult, String>, Vec<Service>, Vec<String>) {
+        let _guard = crate::test_support::env_lock();
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join("argv.log");
+        let shim = dir.path().join("podman");
+        std::fs::write(
+            &shim,
+            format!(
+                "#!/bin/sh\n\
+                 printf '%s\\n' \"$*\" >> '{log}'\n\
+                 mode='{mode}'\n\
+                 last=''; for a in \"$@\"; do last=\"$a\"; done\n\
+                 if [ \"$1\" = inspect ]; then\n\
+                 \x20 if [ \"$last\" = tillandsias-nix-cache ]; then echo 'Error: no such object: tillandsias-nix-cache' >&2; exit 125; fi\n\
+                 \x20 if [ \"$mode\" = unanswered ]; then echo 'Error: database is locked' >&2; exit 125; fi\n\
+                 \x20 case \"$*\" in *State.Running*) echo false ;; *State.Status*) echo 'exited 139' ;; esac\n\
+                 \x20 exit 0\n\
+                 fi\n\
+                 echo 'shim: refused' >&2\n\
+                 exit 1\n",
+                log = log.display()
+            ),
+        )
+        .unwrap();
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&shim, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let original = std::env::var_os("TILLANDSIAS_PODMAN_BIN");
+        unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", &shim) };
+        let mut satisfier = RecordingSatisfier::new();
+        let result = LivenessProbe::new(false).run_check_with(&mut satisfier);
+        match original {
+            Some(bin) => unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", bin) },
+            None => unsafe { std::env::remove_var("TILLANDSIAS_PODMAN_BIN") },
+        }
+        let argv = std::fs::read_to_string(&log)
+            .unwrap_or_default()
+            .lines()
+            .map(str::to_string)
+            .collect();
+        (result, satisfier.calls, argv)
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn a_podman_that_does_not_answer_inspect_never_gets_vault_re_ensured() {
+        let (result, re_ensured, argv) = run_check_against_shim("unanswered");
+        let result = result.expect("an unanswered pass is not an error");
+        assert!(re_ensured.is_empty(), "re-ensured {re_ensured:?}");
+        assert!(result.re_ensured.is_empty() && result.deaths.is_empty());
+        assert!(!argv.is_empty(), "the shim was never called");
+        // Never asks for the exit state either: an unanswered running query
+        // is final for this pass.
+        let asked_exit_state = |name: &str| {
+            argv.iter()
+                .any(|a| a.contains("State.Status") && a.ends_with(name))
+        };
+        assert!(!asked_exit_state("tillandsias-vault"), "{argv:?}");
+        assert!(!asked_exit_state("tillandsias-proxy"), "{argv:?}");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn a_podman_that_answers_exited_still_gets_vault_re_ensured() {
+        // NEGATIVE CONTROL: a real death answer still re-ensures.
+        let (result, re_ensured, argv) = run_check_against_shim("exited");
+        let result = result.expect("the recorded re-ensures succeed");
+        assert_eq!(re_ensured, vec![Service::Vault, Service::Proxy]);
+        assert_eq!(
+            result.deaths,
+            vec![(Service::Vault, 1), (Service::Proxy, 1)]
+        );
+        assert!(argv.iter().any(|a| a.contains("State.Status")), "{argv:?}");
     }
 }
