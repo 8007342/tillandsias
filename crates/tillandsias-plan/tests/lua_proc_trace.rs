@@ -62,6 +62,27 @@ impl Fixture {
             .output()
             .unwrap()
     }
+
+    /// ORDER 1799-5kvy: an outer-timeout budget derived from a MEASURED lower
+    /// bound instead of a wall-clock guess. `work` is the script up to (not
+    /// including) the point where it waits to be timed out. It runs here, to
+    /// completion and under whatever contention this test meets, and the
+    /// budget is twice its measured wall time plus one second, never below
+    /// `floor_ms`. The v56.10.19.1 release gate failed the fixed 1500 ms
+    /// budget under load while it passed alone.
+    fn timeout_from_measured_work(&self, work: &str, floor_ms: u128) -> String {
+        let t0 = std::time::Instant::now();
+        let out = self.run_with_timeout(work, false, "120s");
+        let measured = t0.elapsed().as_millis();
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "the calibration run failed: {out:?}"
+        );
+        let budget = (measured * 2 + 1000).max(floor_ms);
+        eprintln!("1799-5kvy: pre-timeout work measured {measured} ms; outer timeout {budget} ms");
+        format!("{budget}ms")
+    }
 }
 
 fn lines_with_prefix(bytes: &[u8], prefix: &str) -> Vec<Value> {
@@ -435,15 +456,17 @@ fn trace_outer_timeout_renders_collected_outstanding_async_terminals() {
     let f = Fixture::new();
     // Neither handle is ever waited on, so the dispatcher never pumps their
     // Finished receipts: only the post-cleanup host collector can see them.
-    let script = r#"
+    let work = r#"
         local a = proc.spawn{argv={"printf", "collected\n"}}
         local b = proc.spawn{argv={"false"}}
         local c = proc.spawn{argv={"sleep", "30"}}
         assert(proc.run{argv={"sleep", "0.3"}}.ok)
-        while true do end
     "#;
-    let off = f.run_with_timeout(script, false, "1500ms");
-    let on = f.run_with_timeout(script, true, "1500ms");
+    let script = format!("{work}\n        while true do end\n");
+    // 1799-5kvy: each budget comes from the work measured right before it,
+    // under the same load, instead of a fixed 1500 ms.
+    let off = f.run_with_timeout(&script, false, &f.timeout_from_measured_work(work, 1500));
+    let on = f.run_with_timeout(&script, true, &f.timeout_from_measured_work(work, 1500));
     assert_eq!(off.stdout, on.stdout, "{off:?}\n{on:?}");
     assert_eq!(off.stdout, b"status=timed_out\nrefused:timed-out:probe\n");
     assert_eq!(off.status.code(), Some(124));
