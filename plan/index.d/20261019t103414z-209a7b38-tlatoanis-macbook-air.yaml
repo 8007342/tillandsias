@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: an-image-ensure-failure-marker-survives-the-macos-installer-soft-reset-and-macos-has-no-retry-so-one-transient-build-failure-refuses-every-forge-launch-until-the-next-release
+    event:
+      type: progress
+      ts: "2026-10-19T10:34:14Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        Implemented on work/1793-wggq, PR #566 (71ac65af1, merged with trunk as 704d7e634):
+        - A declared failure expires one more backoff step after its last attempt.
+        - Markers are keyed on the Tillandsias version, and pre-1793 markers read as absent.
+        - --cache-clear, the macOS guest soft reset, the Linux --reset-state and the Windows soft wipe clear every marker.
+        - The marker names the helper's real log.
+        Gate green on darwin: headless 1124 passed, clippy, Windows clippy for headless and windows-tray, fmt, preflight refused=0. Each new test was mutation-checked red.
+        Live arm: the next published release's macOS smoke (a soft reset after a failure no longer refuses).
