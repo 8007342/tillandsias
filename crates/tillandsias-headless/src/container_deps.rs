@@ -1206,6 +1206,7 @@ mod tests {
     /// wedged or budget-killed podman does) or `exited` (vault and proxy report
     /// Exited(139)). nix-cache is absent in both. Returns the result, the
     /// services re-ensured, and every argv the shim saw.
+    #[cfg(unix)]
     fn run_check_against_shim(
         mode: &str,
     ) -> (Result<LivenessResult, String>, Vec<Service>, Vec<String>) {
