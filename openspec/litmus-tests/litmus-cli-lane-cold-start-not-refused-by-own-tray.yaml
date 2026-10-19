@@ -1,0 +1,41 @@
+# @trace spec:tray-cli-coexistence, spec:mcp-tool-socket
+name: litmus:cli-lane-cold-start-not-refused-by-own-tray
+spec: tray-cli-coexistence
+phase: pre-build
+description: A cold CLI lane launch reserves its lane for the tray companion it spawns, so the companion never owns it; a genuinely foreign owner is still refused, and quitting it clears the refusal (1798-nwpg)
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains crates/tillandsias-headless
+  - cargo is available in PATH
+
+critical_path:
+  - step: "the companion command carries the lane its launch will serve"
+    command: "cargo test -p tillandsias-headless --features tray lane_socket_owner_tests::a_cli_companion_carries_the_lane_its_launch_will_serve -- --exact"
+    timeout_ms: 600000
+
+  - step: "a companion tray leaves the reserved lane unbound and binds every other lane"
+    command: "cargo test -p tillandsias-headless --features tray tray::tests::companion_tray_leaves_the_reserved_lane_unbound -- --exact"
+    timeout_ms: 600000
+
+  - step: "only an exact project/instance reserves a lane"
+    command: "cargo test -p tillandsias-headless --features tray mcp_socket::lane_window_tests::reserved_lane_parses_only_a_project_and_an_instance -- --exact"
+    timeout_ms: 600000
+
+  - step: "NEGATIVE CONTROL: a foreign owner is refused, and dropping it (quitting the tray) clears the refusal"
+    command: "cargo test -p tillandsias-headless --features tray lane_socket_owner_tests::a_cli_lane_refuses_by_name_when_another_process_owns_its_socket -- --exact"
+    timeout_ms: 600000
+
+observability:
+  traces:
+    - "@trace spec:tray-cli-coexistence"
+    - "@trace spec:mcp-tool-socket"
+  expected_log: "a cold CLI lane is not refused by its own companion; a foreign owner still is"
+  log_fields:
+    spec: "tray-cli-coexistence"
+    test: "cli-lane-cold-start-not-refused-by-own-tray"
+
+rollback:
+  on_failure: "inspect tray_companion_command and cli_reserved_lane in main.rs, startup_lanes in tray/mod.rs"
+  command: "grep -n 'TRAY_RESERVED_LANE_ENV' crates/tillandsias-headless/src/main.rs crates/tillandsias-headless/src/tray/mod.rs crates/tillandsias-headless/src/mcp_socket.rs"

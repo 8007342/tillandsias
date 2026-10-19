@@ -848,6 +848,22 @@ pub(crate) fn lane_listener_registry() -> &'static Mutex<HashSet<LaneListenerKey
     ACTIVE_LANE_LISTENERS.get_or_init(|| Mutex::new(HashSet::new()))
 }
 
+/// 1798-nwpg: the lane a CLI launch is about to serve, handed to the tray
+/// companion it spawns as `<project>/<instance>`. The companion leaves that
+/// lane unbound at startup, so the launch is not refused by its own
+/// companion as a foreign owner.
+pub(crate) const TRAY_RESERVED_LANE_ENV: &str = "TILLANDSIAS_TRAY_RESERVED_LANE";
+
+/// Parse a [`TRAY_RESERVED_LANE_ENV`] value. Anything but exactly one
+/// non-empty project and one non-empty instance reserves nothing.
+pub(crate) fn reserved_lane_from(value: Option<&str>) -> Option<LaneListenerKey> {
+    let (project, instance) = value?.trim().split_once('/')?;
+    if project.is_empty() || instance.is_empty() || instance.contains('/') {
+        return None;
+    }
+    Some((project.to_owned(), instance.to_owned()))
+}
+
 /// 1783-k5hm: the lane's socket path when ANOTHER live process serves it,
 /// the exact case in which [`start_mcp_socket_server_for_lane`] refuses
 /// ("already has a live owner"). Asked before a launch touches podman, so
@@ -970,6 +986,19 @@ pub fn start_mcp_socket_server_for_lane(project: &str, instance: &str) -> Result
 #[cfg(test)]
 mod lane_window_tests {
     use super::*;
+
+    /// 1798-nwpg: only an exact `<project>/<instance>` reserves a lane.
+    #[test]
+    fn reserved_lane_parses_only_a_project_and_an_instance() {
+        assert_eq!(
+            reserved_lane_from(Some("rf3c-smoke/default")),
+            Some(("rf3c-smoke".to_string(), "default".to_string()))
+        );
+        for bad in ["", "rf3c-smoke", "/default", "rf3c-smoke/", "a/b/c"] {
+            assert_eq!(reserved_lane_from(Some(bad)), None, "{bad:?}");
+        }
+        assert_eq!(reserved_lane_from(None), None);
+    }
     use tillandsias_browser_mcp::framing::{RpcRequest, RpcResponse};
 
     fn call(name: &str, arguments: serde_json::Value) -> RpcRequest {

@@ -1371,7 +1371,8 @@ fn main() {
     };
 
     if opencode {
-        maybe_spawn_detached_tray_for_cli(tray, debug);
+        let reserved_lane = cli_reserved_lane(config_path.as_deref(), is_cloud);
+        maybe_spawn_detached_tray_for_cli(tray, reserved_lane.as_deref(), debug);
         if let Some(project_path) = config_path {
             if let Err(e) = run_cli_with_vault_credential_cleanup(debug, || {
                 run_opencode_mode(&project_path, is_cloud, prompt.as_deref(), debug)
@@ -1387,7 +1388,8 @@ fn main() {
     }
 
     if codex || claude || bash || antigravity {
-        maybe_spawn_detached_tray_for_cli(tray, debug);
+        let reserved_lane = cli_reserved_lane(config_path.as_deref(), is_cloud);
+        maybe_spawn_detached_tray_for_cli(tray, reserved_lane.as_deref(), debug);
         let (mode, flag) = if codex {
             (ForgeAgentMode::Codex, "--codex")
         } else if claude {
@@ -1419,7 +1421,8 @@ fn main() {
     }
 
     if opencode_web {
-        maybe_spawn_detached_tray_for_cli(tray, debug);
+        let reserved_lane = cli_reserved_lane(config_path.as_deref(), is_cloud);
+        maybe_spawn_detached_tray_for_cli(tray, reserved_lane.as_deref(), debug);
         if let Some(project_path) = config_path {
             if let Err(e) = run_opencode_web_mode(
                 &project_path,
@@ -1439,7 +1442,8 @@ fn main() {
     }
 
     if observatorium {
-        maybe_spawn_detached_tray_for_cli(tray, debug);
+        let reserved_lane = cli_reserved_lane(config_path.as_deref(), is_cloud);
+        maybe_spawn_detached_tray_for_cli(tray, reserved_lane.as_deref(), debug);
         if let Some(project_path) = config_path {
             if let Err(e) = run_observatorium_mode(&project_path, is_cloud, port_override, debug) {
                 eprintln!("Error: {}", e);
@@ -15087,7 +15091,11 @@ fn has_graphical_session() -> bool {
 /// singleton guard collapse duplicate launches.
 ///
 /// @trace spec:tray-cli-coexistence, spec:tray-host-control-socket
-fn maybe_spawn_detached_tray_for_cli(explicit_tray: bool, debug: bool) {
+fn maybe_spawn_detached_tray_for_cli(
+    explicit_tray: bool,
+    reserved_lane: Option<&str>,
+    debug: bool,
+) {
     if !cfg!(feature = "tray") || (!explicit_tray && !has_graphical_session()) {
         return;
     }
@@ -15112,12 +15120,7 @@ fn maybe_spawn_detached_tray_for_cli(explicit_tray: bool, debug: bool) {
         return;
     };
 
-    let mut command = Command::new(exe);
-    command
-        .arg("--tray")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
+    let mut command = tray_companion_command(&exe, reserved_lane);
 
     #[cfg(unix)]
     unsafe {
@@ -15161,6 +15164,49 @@ fn maybe_spawn_detached_tray_for_cli(explicit_tray: bool, debug: bool) {
         }
         Err(_) => {}
     }
+}
+
+/// The detached `--tray` companion command. 1798-nwpg: it carries the lane
+/// the launching CLI is about to serve, so the companion leaves that lane's
+/// socket unbound instead of owning it and getting the launch refused as a
+/// foreign owner (refused:lane-socket-owned).
+fn tray_companion_command(exe: &Path, reserved_lane: Option<&str>) -> Command {
+    let mut command = Command::new(exe);
+    command
+        .arg("--tray")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    #[cfg(feature = "host-services")]
+    if let Some(lane) = reserved_lane {
+        command.env(mcp_socket::TRAY_RESERVED_LANE_ENV, lane);
+    }
+    #[cfg(not(feature = "host-services"))]
+    let _ = reserved_lane;
+    command
+}
+
+/// 1798-nwpg: the `<project>/<instance>` lane a CLI launch of `project_path`
+/// will serve, named the way [`resolve_launch_project_identity`] names it
+/// (the canonical basename of a local checkout, the bare label in cloud
+/// mode) but with no side effects. `None` when there is no project yet.
+fn cli_reserved_lane(project_path: Option<&str>, is_cloud: bool) -> Option<String> {
+    let project_path = project_path?;
+    let name = if is_cloud {
+        project_path.to_string()
+    } else {
+        Path::new(project_path)
+            .canonicalize()
+            .ok()?
+            .file_name()?
+            .to_str()?
+            .to_string()
+    };
+    let instance = std::env::var("TILLANDSIAS_FORGE_INSTANCE")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "default".into());
+    Some(format!("{name}/{}", instance.trim()))
 }
 
 /// Test whether the tray's control socket is accepting connections. Used by
@@ -35915,6 +35961,64 @@ mod mirror_seed_failure_tests {
 #[cfg(all(test, feature = "host-services"))]
 mod lane_socket_owner_tests {
     use super::*;
+
+    /// 1798-nwpg: the companion a cold CLI launch spawns carries that launch's
+    /// lane, named as resolve_launch_project_identity names it, so the
+    /// companion leaves it unbound. With no project, nothing is reserved.
+    #[test]
+    fn a_cli_companion_carries_the_lane_its_launch_will_serve() {
+        let _env = crate::test_support::env_lock();
+        let saved_instance = std::env::var_os("TILLANDSIAS_FORGE_INSTANCE");
+        // SAFETY: env_lock serialises every env-mutating test.
+        unsafe { std::env::remove_var("TILLANDSIAS_FORGE_INSTANCE") };
+        let dir = std::env::temp_dir().join(format!("nwpg-{}", std::process::id()));
+        let checkout = dir.join("rf3c-smoke");
+        std::fs::create_dir_all(&checkout).unwrap();
+        // A relative-looking path with a `..` still names the canonical basename.
+        let indirect = checkout.join("..").join("rf3c-smoke");
+
+        let local = cli_reserved_lane(indirect.to_str(), false);
+        let cloud = cli_reserved_lane(Some("forge"), true);
+        let missing = cli_reserved_lane(dir.join("absent").to_str(), false);
+        let none = cli_reserved_lane(None, false);
+        // SAFETY: as above.
+        unsafe {
+            std::env::set_var("TILLANDSIAS_FORGE_INSTANCE", "w2");
+        }
+        let instance = cli_reserved_lane(checkout.to_str(), false);
+        // SAFETY: as above.
+        unsafe {
+            match saved_instance {
+                Some(v) => std::env::set_var("TILLANDSIAS_FORGE_INSTANCE", v),
+                None => std::env::remove_var("TILLANDSIAS_FORGE_INSTANCE"),
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert_eq!(local.as_deref(), Some("rf3c-smoke/default"));
+        assert_eq!(cloud.as_deref(), Some("forge/default"));
+        assert_eq!(instance.as_deref(), Some("rf3c-smoke/w2"));
+        assert_eq!(missing, None);
+        assert_eq!(none, None);
+        let parsed = mcp_socket::reserved_lane_from(local.as_deref());
+        assert_eq!(
+            parsed,
+            Some(("rf3c-smoke".to_string(), "default".to_string())),
+            "the tray parses exactly what the CLI hands it"
+        );
+
+        let env_of = |cmd: &Command| -> Option<String> {
+            cmd.get_envs()
+                .find(|(k, _)| *k == mcp_socket::TRAY_RESERVED_LANE_ENV)
+                .and_then(|(_, v)| v.map(|v| v.to_string_lossy().into_owned()))
+        };
+        let exe = Path::new("/usr/bin/true");
+        assert_eq!(
+            env_of(&tray_companion_command(exe, Some("rf3c-smoke/default"))).as_deref(),
+            Some("rf3c-smoke/default")
+        );
+        assert_eq!(env_of(&tray_companion_command(exe, None)), None);
+    }
 
     /// 1783-k5hm: a CLI lane whose MCP socket another live process serves is
     /// refused by name, BEFORE any podman call, so nothing is left running.
