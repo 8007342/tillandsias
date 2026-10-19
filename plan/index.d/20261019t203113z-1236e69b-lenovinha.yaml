@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-cli-lane-launch-with-no-tray-running-is-refused-by-the-tray-companion-it-just-spawned
+    field: status
+    value: in_progress
+    ts: "2026-10-19T20:31:13Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-cli-lane-launch-with-no-tray-running-is-refused-by-the-tray-companion-it-just-spawned
+    event:
+      type: note
+      ts: "2026-10-19T20:31:13Z"
+      host: lenovinha
+      summary: |-
+        lenovinha took it at the coordinator's redirect; PR on work/1798-nwpg

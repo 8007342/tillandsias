@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-cli-lane-launch-with-no-tray-running-is-refused-by-the-tray-companion-it-just-spawned
+    order: 1798-nwpg
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [cli, tray, lane, mcp, affordance, linux]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      With no tray running, tillandsias --bash <project> spawns a detached tray companion that binds the project's lane mcp.sock, and the same launch then refuses itself with refused:lane-socket-owned (whose remedy, "quit the tray and run this command again", reproduces the refusal)
+    context: |
+      Measured on lenovinha with v56.10.18.1, 2026-10-19, while running the 1794-rf3a / 1795-rtfy Linux controls on ~/src/rf3b-smoke.
+      With no tillandsias process running, sleep infinity | tillandsias --bash /var/home/lenovinha/src/rf3b-smoke --debug logged:
+        [tillandsias] spawned detached tray companion
+        [tillandsias] tray control socket is ready
+        Error: refused:lane-socket-owned:rf3b-smoke-default: the running Tillandsias tray already serves this project's lane (/run/user/1000/tillandsias/mcp/rf3b-smoke-default/mcp.sock). Launch it from the tray menu instead, or quit the tray and run this command again. Nothing was started.
+      ss -xlp showed the new tray (parent: systemd --user via setsid) listening on that socket. It reproduced three times. Each run, killing the tray by PID left no tillandsias process, and the next launch spawned a new one.
+      On origin/linux-next: main.rs calls maybe_spawn_detached_tray_for_cli at lines 1374/1390/1422/1442 before the lane launch, and refuse_lane_socket_owned_elsewhere (1783-k5hm, at 16072/17570/19853) then finds the companion as the foreign owner. 1783-k5hm's refusal is right when an operator's tray already holds the lane. It is wrong when the owner is the companion this very command spawned. The CLI lane path cannot be reached from a cold start at all, and the remedy is the step that failed.
+    exit_criteria:
+      - 'RED FIRST: a fixture that starts from no tray, runs a CLI lane launch, and is refused:lane-socket-owned (FAILS on the pre-fix code)'
+      - 'a CLI lane launch from a cold start (no tray running) gets its lane: either the companion leaves the launching CLI''s lane socket unbound, or the launch is handed to the companion through the tray control socket, but it is never refused by its own companion'
+      - 'NEGATIVE CONTROL (1247-amcu criterion 5): with an operator tray already serving the lane, the refusal still fires, and its remedy (quit the tray, run the command again) is EXECUTED by the fixture and then clears it'
+    verifiable_closure: |
+      litmus:cli-lane-cold-start-not-refused-by-own-tray runs the cold-start fixture (red on the pre-fix code) and the executed-remedy negative control.
+    provenance: |
+      Filed by lenovinha, 2026-10-19, from the rf3a/rtfy Linux control run the coordinator requested.
+    events:
+      - type: filed
+        ts: "2026-10-19T20:08:53Z"
+        host: lenovinha
+        summary: |-
+          A cold-start CLI lane is refused by the tray companion it just spawned; the refusal's own remedy reproduces it.

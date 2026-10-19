@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: an-antigravity-forge-lane-spills-raw-escape-sequences-into-the-terminal-instead-of-taking-keystrokes
+    order: 1799-a6xi
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [antigravity, tty, pty, terminal, forge, linux]
+    estimated_hours: 6
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - images/default/entrypoint-forge-antigravity.sh
+    title: |
+      An Antigravity forge lane reaches its login screen, then prints raw escape sequences to the terminal instead of taking keystrokes; the operator has to kill the terminal, which leaves the lane's containers running
+    context: |
+      Reported by the operator through the coordinator, 2026-10-19. It happens on several forge versions, including the latest stable. The Antigravity session gets as far as its login screen. From then on, raw escape sequences appear on screen and keystrokes do not reach the app. Killing the terminal was the only way out, and that left the lane's containers running.
+      Suspects to check against the claude and opencode lanes, which take keystrokes normally: the host terminal not put in raw mode for this lane; a different TERM or PTY attach path; terminal replies (DA/DSR, bracketed paste, the kitty keyboard protocol) echoed back instead of consumed.
+      Taken by lenovinha. Next step: launch an Antigravity lane and capture what the terminal receives, with script(1) inside a container if needed, then compare the TTY setup with the claude and opencode lanes.
+    exit_criteria:
+      - 'RED FIRST on v56.10.17.1: an Antigravity lane shows raw escape sequences and does not take keystrokes'
+      - 'in an Antigravity lane, keystrokes reach the app and no escape sequence appears on screen'
+      - 'leaving the lane by closing the terminal stops its containers instead of leaving them running'
+    verifiable_closure: |
+      litmus:antigravity-lane-tty-takes-keystrokes drives an Antigravity lane through a PTY: red on v56.10.17.1, green on the fix, with no escape sequence in the captured screen and a keystroke reaching the app.
+    provenance: |
+      Filed by lenovinha at the coordinator's request, 2026-10-19, from an operator report.
+    events:
+      - type: filed
+        ts: "2026-10-19T20:57:23Z"
+        host: lenovinha
+        summary: |-
+          p1: an Antigravity lane spills raw escape sequences after its login screen and takes no keystrokes; killing the terminal leaves containers running.
