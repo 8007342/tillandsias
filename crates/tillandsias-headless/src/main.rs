@@ -2876,6 +2876,11 @@ const IMAGE_BUILD_DETACH_ENV: &str = "TILLANDSIAS_IMAGE_BUILD_DETACH";
 /// Set on the helper process so its own `ensure_image_exists` (including
 /// base-image recursion) stays in-process — one helper, never nested ones.
 const IMAGE_BUILD_HELPER_ENV: &str = "TILLANDSIAS_IMAGE_BUILD_HELPER";
+/// The log the detached helper's stdout and stderr go to (1793-wggq). A base
+/// image built inside a dependent's helper (forge-base inside forge's) writes
+/// to the DEPENDENT's log, so the failure marker names this, not a per-image
+/// path that was never created.
+const IMAGE_BUILD_LOG_ENV: &str = "TILLANDSIAS_IMAGE_BUILD_LOG";
 /// ORDER 1744-xjfw: where the helper's panic hook writes the panic text. The
 /// helper's stdout AND stderr are its build log, so one failed write to that
 /// file (a full disk mid-build, say) both panics the helper (`println!` panics
@@ -3001,6 +3006,24 @@ fn image_build_helper_log_path(image_name: &str) -> PathBuf {
     dir.join(format!("image-build-{image_name}.log"))
 }
 
+/// The log a failed build's marker names (1793-wggq): the helper's own log
+/// when this process is one, else the per-image log when it exists, else
+/// what is true — the build's output went to the command that ran it.
+fn image_build_marker_log(image_name: &str) -> String {
+    if let Some(p) = std::env::var(IMAGE_BUILD_LOG_ENV)
+        .ok()
+        .filter(|p| !p.trim().is_empty())
+    {
+        return p;
+    }
+    let own = image_build_helper_log_path(image_name);
+    if own.exists() {
+        own.display().to_string()
+    } else {
+        "the output of the command that ran the build (no build log file was written)".to_string()
+    }
+}
+
 /// What the detached spawn would do — recorded by the test mock, executed by
 /// [`SetsidImageEnsure`]. Mirrors the OverlayHeal seam (order 281) so the
 /// detach path is unit-testable without creating processes.
@@ -3045,6 +3068,7 @@ impl DetachedImageEnsure for SetsidImageEnsure {
             .arg(&request.image_name)
             .arg(&request.image_tag)
             .env(IMAGE_BUILD_HELPER_ENV, "1")
+            .env(IMAGE_BUILD_LOG_ENV, &request.log_path)
             .env(IMAGE_ENSURE_PANIC_FILE_ENV, &request.panic_path)
             .stdin(Stdio::null())
             .stdout(log)
@@ -3395,9 +3419,7 @@ pub(crate) fn ensure_image_exists(
                         image_name,
                         &identity.source_digest,
                         &e,
-                        &image_build_helper_log_path(image_name)
-                            .display()
-                            .to_string(),
+                        &image_build_marker_log(image_name),
                         failed_at,
                         retry.map(|ms| failed_at.saturating_add(ms.div_ceil(1000))),
                     )
@@ -11247,6 +11269,14 @@ fn run_cache_clear(debug: bool) -> Result<(), String> {
         cleared.push(".init-build-state.json.tmp (temp)");
     }
 
+    // 1793-wggq: a reset is the operator starting over, so it is the retry.
+    // Every caller of this (--cache-clear and the macOS guest soft reset)
+    // clears the failed-build markers with the build state.
+    let markers = image_ensure_marker::clear_all(&cache_dir.join(image_ensure_marker::MARKER_DIR))?;
+    if markers > 0 {
+        cleared.push("image-ensure-failures (failed-build markers)");
+    }
+
     if debug || !cleared.is_empty() {
         println!("Cache cleared. Removed:");
         for item in cleared {
@@ -11256,6 +11286,81 @@ fn run_cache_clear(debug: bool) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod failed_build_marker_reset_tests {
+    use super::*;
+
+    /// 1793-wggq: on v56.10.18.1 the macOS soft reset (whose guest half runs
+    /// this) kept forge-base's declared-failed marker, so every later launch
+    /// refused. A cache clear now removes the markers with the build state.
+    #[test]
+    fn a_cache_clear_removes_the_failed_build_markers() {
+        let _g = crate::test_support::env_lock();
+        let scratch = tempfile::tempdir().unwrap();
+        let prev = std::env::var_os("XDG_CACHE_HOME");
+        // SAFETY: serialised by env_lock.
+        unsafe { std::env::set_var("XDG_CACHE_HOME", scratch.path()) };
+        let dir = image_ensure_marker_dir().unwrap();
+        image_ensure_marker::record(
+            &dir,
+            "forge-base",
+            "sha256:aa",
+            "c",
+            "/l",
+            unix_now_secs(),
+            None,
+        )
+        .unwrap();
+        assert!(image_ensure_marker::load(&dir, "forge-base").is_some());
+        let cleared = run_cache_clear(false);
+        let after = image_ensure_marker::load(&dir, "forge-base");
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var("XDG_CACHE_HOME", v),
+                None => std::env::remove_var("XDG_CACHE_HOME"),
+            }
+        }
+        cleared.unwrap();
+        assert!(after.is_none(), "the marker survived the cache clear");
+        assert!(!dir.exists());
+    }
+
+    /// 1793-wggq: the marker names the log the build actually wrote. The
+    /// helper's log is passed in by its parent; outside a helper the per-image
+    /// log is named only when it exists (v56.10.18.1 named
+    /// image-build-forge-base.log, which never existed: forge-base was built
+    /// inside forge's helper and wrote to image-build-forge.log).
+    #[test]
+    fn a_failed_build_marker_names_a_log_that_exists() {
+        let _g = crate::test_support::env_lock();
+        let scratch = tempfile::tempdir().unwrap();
+        let prev_cache = std::env::var_os("XDG_CACHE_HOME");
+        let prev_log = std::env::var_os(IMAGE_BUILD_LOG_ENV);
+        unsafe {
+            std::env::set_var("XDG_CACHE_HOME", scratch.path());
+            std::env::set_var(IMAGE_BUILD_LOG_ENV, "/cache/image-build-forge.log");
+        }
+        let in_helper = image_build_marker_log("forge-base");
+        unsafe { std::env::remove_var(IMAGE_BUILD_LOG_ENV) };
+        let no_file = image_build_marker_log("forge-base");
+        let own = image_build_helper_log_path("forge-base");
+        fs::write(&own, "x").unwrap();
+        let with_file = image_build_marker_log("forge-base");
+        unsafe {
+            match prev_cache {
+                Some(v) => std::env::set_var("XDG_CACHE_HOME", v),
+                None => std::env::remove_var("XDG_CACHE_HOME"),
+            }
+            if let Some(v) = prev_log {
+                std::env::set_var(IMAGE_BUILD_LOG_ENV, v);
+            }
+        }
+        assert_eq!(in_helper, "/cache/image-build-forge.log");
+        assert!(!no_file.ends_with(".log"), "{no_file}");
+        assert_eq!(with_file, own.display().to_string());
+    }
 }
 
 // ────────────────── intentional EPHEMERAL RESET (windows-260717-4) ──────────
@@ -11449,6 +11554,8 @@ fn run_reset_state(debug: bool) -> Result<(), String> {
     reset_cmd.args(["system", "reset", "--force"]);
     run_podman_command(reset_cmd, debug)
         .map_err(|e| format!("podman system reset --force failed: {e}"))?;
+    // 1793-wggq: the images are gone, so a failure recorded against them is too.
+    run_cache_clear(debug)?;
 
     // No credential clearer and no store deletion: the store is a host
     // directory the podman reset cannot reach.

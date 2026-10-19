@@ -969,6 +969,7 @@ mod tests {
             next_retry_at,
             cause: "Build exited with status 1: STEP 4/9 failed".into(),
             log: "/cache/image-build-flutter.log".into(),
+            tillandsias_version: crate::image_ensure_marker::current_version().into(),
         }
     }
 
