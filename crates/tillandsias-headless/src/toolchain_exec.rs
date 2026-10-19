@@ -1499,6 +1499,149 @@ mod tests {
         assert_eq!(web_build_argv(&[]), None);
     }
 
+    /// 1788-qlwq slice 13: the forge's standalone `dart` is the Dart its
+    /// Flutter bundles. kumbia-kombat measured 3.12.1 against Flutter
+    /// 3.47.7's 3.13.5, so `dart run` refused the project's SDK constraint.
+    /// A Flutter bump fails here until its bundled Dart is added to the table
+    /// and lib-common.sh's DART_SDK_VERSION follows.
+    #[test]
+    fn the_forge_dart_pin_is_the_dart_the_flutter_image_bundles() {
+        let root = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../..");
+        let read = |p: &str| std::fs::read_to_string(root.join(p)).unwrap();
+        let containerfile = read("images/flutter/Containerfile");
+        let flutter = containerfile
+            .lines()
+            .find_map(|l| l.strip_prefix("ARG FLUTTER_VERSION="))
+            .expect("images/flutter/Containerfile pins FLUTTER_VERSION")
+            .trim();
+        // From the Flutter release notes (releases_linux.json dart_sdk_version).
+        let bundled = match flutter {
+            "3.47.7" => "3.13.5",
+            other => panic!("add the Dart that Flutter {other} bundles to this table"),
+        };
+        let lib = read("images/default/lib-common.sh");
+        let pinned = lib
+            .lines()
+            .find_map(|l| l.strip_prefix("DART_SDK_VERSION=\""))
+            .and_then(|v| v.strip_suffix('"'))
+            .expect("lib-common.sh pins DART_SDK_VERSION=\"…\"");
+        assert_eq!(
+            pinned, bundled,
+            "standalone dart must match Flutter {flutter}"
+        );
+        assert!(
+            lib.contains("/release/${DART_SDK_VERSION}/sdk/"),
+            "ensure_dart_sdk fetches the pinned version"
+        );
+    }
+
+    /// 1788-qlwq slice 13: a bump reaches an EXISTING forge. The SDK lives in
+    /// the persistent project cache, and ensure_dart_sdk used to skip whenever
+    /// any dart was there, so a pin bump never upgraded it. The real function
+    /// runs here with stub curl/unzip.
+    #[test]
+    #[cfg(unix)]
+    fn ensure_dart_sdk_replaces_a_stale_cached_sdk_and_keeps_it_when_the_fetch_fails() {
+        let root = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../..");
+        let lib = root.join("images/default/lib-common.sh");
+        let t = tempfile::tempdir().unwrap();
+        let bin = t.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let w = |name: &str, body: &str| {
+            use std::os::unix::fs::PermissionsExt;
+            let p = bin.join(name);
+            std::fs::write(&p, body).unwrap();
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+        };
+        // curl: log the URL; fail when CURL_FAIL is set; else write the archive.
+        w(
+            "curl",
+            "#!/bin/sh\nfor a; do case \"$a\" in https://*) echo \"$a\" >> \"$LOG\";; esac; done\n\
+             [ -z \"$CURL_FAIL\" ] || exit 22\n\
+             while [ $# -gt 0 ]; do [ \"$1\" = -o ] && { echo zip > \"$2\"; }; shift; done\n",
+        );
+        // unzip -qo <archive> -d <dir>: lay down an SDK carrying the new version.
+        w(
+            "unzip",
+            "#!/bin/sh\nd=\"$4\"\nmkdir -p \"$d/dart-sdk/bin\"\n\
+             printf '#!/bin/sh\\n' > \"$d/dart-sdk/bin/dart\"; chmod +x \"$d/dart-sdk/bin/dart\"\n\
+             echo NEW > \"$d/dart-sdk/version\"\n",
+        );
+        let run = |cache_version: Option<&str>, fail: bool| -> (String, String) {
+            let cache = t.path().join("cache");
+            let _ = std::fs::remove_dir_all(&cache);
+            if let Some(v) = cache_version {
+                let sdk = cache.join("dart/dart-sdk");
+                std::fs::create_dir_all(sdk.join("bin")).unwrap();
+                std::fs::write(sdk.join("bin/dart"), "#!/bin/sh\n").unwrap();
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(
+                    sdk.join("bin/dart"),
+                    std::fs::Permissions::from_mode(0o755),
+                )
+                .unwrap();
+                std::fs::write(sdk.join("version"), format!("{v}\n")).unwrap();
+            }
+            let log = t.path().join("curl.log");
+            let _ = std::fs::remove_file(&log);
+            let script = format!(
+                "trace_lifecycle() {{ :; }}\n_forge_uname_arch() {{ echo aarch64; }}\n\
+                 eval \"$(sed -n '/^DART_SDK_VERSION=/p;/^ensure_dart_sdk()/,/^}}/p' '{}')\"\n\
+                 ensure_dart_sdk\n",
+                lib.display()
+            );
+            let out = std::process::Command::new("bash")
+                .arg("-c")
+                .arg(&script)
+                .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+                .env("PROJECT_CACHE", &cache)
+                .env("LOG", &log)
+                .env("CURL_FAIL", if fail { "1" } else { "" })
+                .output()
+                .unwrap();
+            assert!(
+                out.status.success(),
+                "{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            (
+                std::fs::read_to_string(&log).unwrap_or_default(),
+                std::fs::read_to_string(cache.join("dart/dart-sdk/version"))
+                    .unwrap_or_default()
+                    .trim()
+                    .to_string(),
+            )
+        };
+        let lib_text = std::fs::read_to_string(&lib).unwrap();
+        let pin = lib_text
+            .lines()
+            .find_map(|l| l.strip_prefix("DART_SDK_VERSION=\""))
+            .and_then(|v| v.strip_suffix('"'))
+            .expect("DART_SDK_VERSION pin");
+        // A stale cached SDK is replaced with the pinned one.
+        let (fetched, version) = run(Some("3.12.1"), false);
+        assert!(
+            fetched.contains(&format!(
+                "/release/{pin}/sdk/dartsdk-linux-arm64-release.zip"
+            )),
+            "{fetched}"
+        );
+        assert_eq!(version, "NEW");
+        // NEGATIVE CONTROL: the pinned SDK already there is not fetched again.
+        let (fetched, version) = run(Some(pin), false);
+        assert_eq!(fetched, "", "a current SDK is never refetched");
+        assert_eq!(version, pin);
+        // A failed fetch keeps the old SDK working rather than deleting it.
+        let (_, version) = run(Some("3.12.1"), true);
+        assert_eq!(version, "3.12.1");
+    }
+
     /// 1776-pr0g: prepare reads progress through the one shared parser,
     /// which also reads a multi-stage build's prefixed STEP line.
     #[test]
