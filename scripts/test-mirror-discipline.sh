@@ -136,6 +136,18 @@ if [ "$rc" -ne 0 ] && [ ! -e "$d/relayed" ] \
     ok "ARM1 enforced default branch: push to main rejected before the relay, with the seed's message"
 else bad "ARM1 rc=$rc relayed=$([ -e "$d/relayed" ] && echo yes || echo no) out='$(tr '\n' '|' <<<"$out")'"; fi
 
+# ── ARM 1b (1788-qlwq) ───────────────────────────────────────────────────
+# A seed with no messages: the mirror's own default wording, whole. Inside
+# ${DISC_MESSAGE:-…{default}…} the first `}` closed the expansion, so this line
+# ended in a stray "for work}".
+d="$(new_mirror_seeded a1b "$(seed enforced warn | sed '/^messages:/,$d')")"
+commit "$d" c1b; push "$d" main
+if [ "$rc" -ne 0 ] && [ ! -e "$d/relayed" ] \
+   && grep -q 'push to main denied: use linux-next for integration and work/<order> for work *$' <<<"$out" \
+   && ! grep -q 'for work}' <<<"$out"; then
+    ok "ARM1b no seed message: the default denial is whole (no stray brace)"
+else bad "ARM1b rc=$rc out='$(tr '\n' '|' <<<"$out")'"; fi
+
 # ── ARM 2 ────────────────────────────────────────────────────────────────
 d="$(new_mirror_seeded a2 "")"
 commit "$d" c2; push "$d" main
