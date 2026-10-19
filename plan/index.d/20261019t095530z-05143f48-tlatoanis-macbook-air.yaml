@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-new-project-forge-installs-branch-discipline-hooks-and-runs-them-without-hand-repair
+    event:
+      type: progress
+      ts: "2026-10-19T09:55:30Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        Live arms on published v56.10.18.1 (macOS, 2026-10-19), run in a fresh --opencode forge on a NEW local project (~/src/kumbia-smoke), with the image's own /usr/local/sbin/tillandsias-plan.
+        PASS: slice 1 HOOKS-PATH (rc 0, local hooksPath set and named, global hooks dir unchanged), slice 2 PLAN-ON-PATH (login and non-login shells; the pre-push stub found the binary), slices 3, 4, 5, 6, 7 and 8, and slice 12 FLUTTER-NO-CDN (useLocalCanvasKit:true, canvaskit/ bundled).
+        Slice 10 FLUTTER-ROUTE-ALLOWED: the allowlist half PASSES. The routed https://flutter.kumbia-smoke.localhost:18443/ was admitted, and the unrouted host was refused with URL_NOT_ALLOWED. The window itself then failed with BROWSER_LAUNCH_FAILED, a missing CDP socket (filed 1795-rtfy).
+        Slice 11 PREVIEW-SUBDIRS: BLOCKED live. publish_local refused with router_not_ready, "exact-hostname CA-verified HTTPS probe failed" (filed 1794-rf3a).
+        Slice 13 DART-MATCHES-FLUTTER: standalone dart is 3.13.5, the packet's bundled Flutter Dart. flutter --version printed no Dart line to cross-check.
+        Slice 9 was not exercised: a live level-2 main promotion through the mirror relays to a GitHub origin, which is outward.
+        Caveat: in a forge on the tillandsias project itself, ~/.local/bin/tillandsias-plan (built from the mounted checkout; ~/src/tillandsias here is an old 0.4 checkout) shadows the image binary, so the discipline arms failed there. That is expected for a stale checkout, not a new-project defect.

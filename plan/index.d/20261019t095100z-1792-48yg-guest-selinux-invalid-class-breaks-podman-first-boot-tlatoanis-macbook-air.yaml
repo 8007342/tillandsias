@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air from the v56.10.18.1 macOS smoke
+# (coordinator GO, 2026-10-19).
+packets:
+  - packet_id: on-a-fresh-macos-guest-the-kernel-logs-selinux-invalid-class-0-mid-first-boot-and-from-then-on-every-podman-exec-fails-to-load-libsemanage-so-the-forge-base-build-fails-three-times
+    order: 1792-48yg
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: M
+    pickup_role: macos
+    capability_tags: [macos, guest, selinux, podman, image-ensure, smoke]
+    related: [1784-skfj, 1793-wggq, 1776-ondm]
+    depends_on: []
+    title: |
+      On a wiped and reprovisioned v56.10.18.1 macOS guest, the first forge launch failed. At 08:50:15 the guest kernel logged `SELinux: Invalid class 0` with a slow_avc_audit WARNING on podman processes. From then until reboot, every /usr/bin/podman exec failed with `error while loading shared libraries: libsemanage.so.2: cannot open shared object file: Invalid argument`. That included the router/proxy health checks (status=127). forge-base failed all 3 build attempts.
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-10-19 (macOS 27.0; guest 8 vCPU / 8 GiB; kernel 6.19.10-300.fc44.aarch64; selinux-policy-targeted 43.3-1.fc44; container-selinux 2.247.0-1.fc44; podman 5.8.1-1.fc44).
+      Sequence: scripts/e2e-step2-macos.sh destroyed the VM; then `tillandsias-tray --provision`; then `--opencode ~/src/tillandsias` at 08:46:32Z (boot b44080f02dcc411ca421a60af9412737).
+      - 08:46:36: the policy loaded at boot. 08:47:07: a second MAC_POLICY_LOAD, which is the vault_container CIL module (vault_bootstrap.rs semodule -i).
+      - 08:47 to 08:48: router, git, proxy, vault and inference built fine. forge-base attempt 1 failed with exit 125, right after dnf printed Complete! (577 packages).
+      - 08:50:15: the kernel logged `SELinux:  Invalid class 0` (x7 through 08:51:41) and `WARNING: security/selinux/avc.c:761 at slow_avc_audit` for podman/17124 and podman/17125. The health-check units began exiting 127.
+      - 08:50:24 and 08:52:14: `/usr/bin/podman: error while loading shared libraries: libsemanage.so.2: cannot open shared object file: Invalid argument`. Attempts 2 and 3 failed with exit 127. The forge-base failure marker was written at 08:52:50.
+      After a reboot (the next --exec-guest), the current boot showed 0 "Invalid class" lines and podman worked. A later launch rebuilt forge-base successfully once the marker was cleared (1793-wggq).
+      No policy load is logged between 08:47:07 and 08:50:15. Evidence is on the smoke host: target/smoke-e2e/05-forge-cold1.log, 05-cold1-journal*.txt, 05-cold1-selinux.txt, 05-cold1-policyload.txt.
+      NOT KNOWN: what produced an AVC with tclass 0. Candidates (unmeasured): the forge-base build's dnf scriptlets touching selinuxfs inside the build container; the kernel's memfd_class or other new classes against a 43.3 policy (boot logs "Class memfd_file not defined in policy"); or the vault CIL module.
+    exit_criteria:
+      - "The cause is named from evidence: the guest captures the first `SELinux: Invalid class` occurrence with the process, the syscall/path and the loaded module list (semodule -l), and the capture survives a power-off."
+      - "Three consecutive wipe-and-reprovision first forge launches on a published release on macOS show no `Invalid class` line and no libsemanage load failure, or the lane detects the broken-podman state (exit 127 with a loader error) and recovers it, for example with a guest reboot, instead of burning all three build attempts."
+      - "NEGATIVE CONTROL: a forge-base build failure with a real cause (for example a bad package name) still fails and marks."
+    unscoreable: "live-only: the defect appeared on a real Virtualization.framework guest after a full wipe; a fixture can pin the recovery arm (a shim podman that exits 127 with a loader error), not the kernel cause"
+    next_action: >
+      Reproduce: wipe the VM with scripts/e2e-step2-macos.sh, run --provision, then --opencode. Watch `journalctl -kf | grep -i selinux` over --exec-guest in parallel. If it reproduces, bisect by skipping the vault CIL load, then by running the forge-base build alone.
+    events:
+      - type: filed
+        ts: "2026-10-19T09:51:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          v56.10.18.1 macOS smoke: on the first forge launch after a full wipe, guest SELinux logged "Invalid class 0"; then every podman exec failed to load libsemanage and forge-base failed 3x.

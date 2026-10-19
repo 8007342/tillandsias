@@ -19,7 +19,7 @@ preconditions:
   - workspace contains scripts/test-check-opsx-generated-dirt.sh
   - workspace contains scripts/test-meta-orchestration-opsx-sync-merge.sh
   - workspace contains scripts/meta-orchestration-worktree-guard.sh
-  - workspace contains scripts/test-meta-orchestration-dirty-tree-safety.sh
+  - workspace contains scripts/lua/test-meta-orchestration-dirty-tree-safety.lua
 
 critical_path:
   - step: "opsx detector and its fixtures are executable"
@@ -49,7 +49,7 @@ critical_path:
   - step: "ordinary dirty-start fixture stays byte-identical fail-closed"
     # 90s: same fixture as dirty-tree-safety's step above, same 9.4s windows
     # measurement (2026-08-16) sitting AT the old 10s boundary.
-    command: "scripts/test-meta-orchestration-dirty-tree-safety.sh"
+    command: ". scripts/plan-binary-probe.sh; \"$(resolve_plan_binary)\" script run scripts/lua/test-meta-orchestration-dirty-tree-safety.lua"
     timeout_ms: 90000
     expected_behavior: "PASS: blocked cycle preserved startup tracked and untracked bytes"
     assert_output_contains: "PASS: blocked cycle preserved startup tracked and untracked bytes"
@@ -67,4 +67,4 @@ rollback:
   on_failure: >
     Refuse the cycle on any startup dirt (launch-dirt or non-opsx) and
     preserve its bytes; never commit launch-generated opsx files.
-  command: "scripts/test-meta-orchestration-dirty-tree-safety.sh"
+  command: ". scripts/plan-binary-probe.sh; \"$(resolve_plan_binary)\" script run scripts/lua/test-meta-orchestration-dirty-tree-safety.lua"

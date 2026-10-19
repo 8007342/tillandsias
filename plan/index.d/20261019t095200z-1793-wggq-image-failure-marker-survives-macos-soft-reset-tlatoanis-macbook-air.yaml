@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air from the v56.10.18.1 macOS smoke
+# (coordinator GO, 2026-10-19).
+packets:
+  - packet_id: an-image-ensure-failure-marker-survives-the-macos-installer-soft-reset-and-macos-has-no-retry-so-one-transient-build-failure-refuses-every-forge-launch-until-the-next-release
+    order: 1793-wggq
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: S
+    pickup_role: any
+    capability_tags: [macos, image-ensure, reset, forge, onboarding, smoke]
+    related: [1776-brk3, 1792-48yg, 1437-8c6p, 1744-xjfw]
+    depends_on: []
+    title: |
+      After forge-base failed 3x on a transient guest fault (1792-48yg), re-running install-macos.sh did not clear the guest's /root/.cache/tillandsias/image-ensure-failures/forge-base.json. The installer re-runs its SOFT reset, which documents "the guest rebuilds its containers at its next boot". The next forge launch refused in 1m42s with refused:image-ensure:forge-base:build-failed-previously. The remedy text offers macOS users only "update Tillandsias"; the tray has no --retry-image, and --reset-guest also clears sign-ins. The refusal also names a log, image-build-forge-base.log, that does not exist in the guest.
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-10-19, v56.10.18.1. Cycle 2 ran `curl …/install-macos.sh | bash` (exit 0, "[reset-state] derived state cleared (SOFT)"), then `--opencode ~/src/tillandsias` from 08:56:57Z to 08:58:39Z, rc=1:
+        Error: refused:image-ensure:forge-base:build-failed-previously
+          why: inputs sha256:03706664e431… failed 3× (last 2026-10-19T08:52Z) …
+          log: /root/.cache/tillandsias/image-build-forge-base.log
+          remedy: no automatic retry is left; a change to any image input (a Tillandsias update) retries at once; on Linux `tillandsias --retry-image forge-base` retries now.
+      An `ls` in the guest showed image-build-{forge,git,inference,proxy,router,vault}.log and no image-build-forge-base.log. The forge-base output is in image-build-forge.log.
+      The smoke recovered only by deleting the marker over --exec-guest (a saved copy is at /root/forge-base.failure.json.saved in the guest). The next soft-reset cycle then built forge-base and reached the forge (cycle 3, rc=0).
+      The 1776-brk3 rule ("these same inputs now refuse fast instead of rebuilding on every launch") is right for a deterministic failure. A reset is the operator saying "start over", so it should be the retry.
+    exit_criteria:
+      - "`tillandsias-tray --reset-state` (and so every install-macos.sh run) clears the guest's image-ensure-failures markers at the next boot, with the reset's own line naming it; the Windows and Linux soft resets do the same. Fixture: a marker present before the reset is absent after it."
+      - "The refusal names a log file that exists: the per-image log the failed build actually wrote."
+      - "The macOS and Windows remedy line names an action the user can take on that platform, not only a Linux command."
+      - "NEGATIVE CONTROL: without a reset, a marked image still refuses fast (1776-brk3 holds)."
+    unscoreable: "unpinnable-until-the-guard-exists: the fixture (marker cleared by the soft reset) is written red first in the same change"
+    next_action: >
+      Find where --reset-state queues the guest podman reset for next boot, and add removal of /root/.cache/tillandsias/image-ensure-failures there. Then fix the log path in the refusal: it uses image-build-<image>.log while the helper logs under the leaf image's name.
+    events:
+      - type: filed
+        ts: "2026-10-19T09:52:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          v56.10.18.1 macOS smoke: a forge-base failure marker survived the installer's soft reset, so the next forge launch refused, and macOS has no retry short of a hard reset.

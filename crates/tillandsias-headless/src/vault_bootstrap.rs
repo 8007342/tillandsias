@@ -1043,7 +1043,21 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
     // when no secret exists at all (true first boot — nothing working can
     // be destroyed).
     // @trace plan/issues/vault-unseal-secret-regenerated-on-reensure-2026-07-17.md
-    let reusing_existing_secret = cfg!(feature = "vault") && unseal_secret_exists();
+    // 1796-ukey: only a proven absence is first boot; a failed probe refuses.
+    let presence = if cfg!(feature = "vault") {
+        unseal_secret_presence()
+    } else {
+        SecretPresence::Absent
+    };
+    if let SecretPresence::Unknown(reason) = &presence {
+        return Err(format!(
+            "could not tell whether podman secret {VAULT_UNSEAL_SECRET} exists ({reason}); \
+             it was not replaced\n  \
+             why: replacing an existing unseal secret can leave initialized storage sealed\n  \
+             remedy: check that podman answers (podman secret ls), then relaunch tillandsias"
+        ));
+    }
+    let reusing_existing_secret = presence == SecretPresence::Present;
     if reusing_existing_secret {
         if debug {
             eprintln!(
@@ -3876,6 +3890,76 @@ where
     }
 }
 
+/// What the host keychain answered for `vault-shamir-share-v1` (1796-ukey).
+/// `NoEntry` and `Unreachable` must stay apart: a locked or timed-out keyring
+/// says nothing about whether a share exists, so it is not a first boot.
+#[cfg_attr(not(feature = "vault"), allow(dead_code))]
+#[derive(Debug)]
+enum KeyringAnswer {
+    Share(String),
+    NoEntry,
+    Unreachable(String),
+}
+
+/// Where the host-side unseal key comes from.
+#[cfg_attr(not(feature = "vault"), allow(dead_code))]
+#[derive(Debug, PartialEq, Eq)]
+enum KeySource {
+    Share([u8; 32]),
+    /// True first boot: the machine-id dummy, replaced after `operator init`.
+    Derive,
+}
+
+/// Pure choice of the host-side unseal key source (1796-ukey).
+///
+/// The machine-id dummy only unseals nothing: it is right before the vault is
+/// initialized and wrong after. On 2026-10-19 lenovinha's install wiped the
+/// podman secrets, a launch found the keyring locked, derived the dummy and
+/// wrote it over an initialized vault-data, which then stayed sealed.
+#[cfg_attr(not(feature = "vault"), allow(dead_code))]
+fn unseal_key_source(
+    keyring: KeyringAnswer,
+    fallback_file: Option<String>,
+    vault_data_initialized: bool,
+) -> Result<KeySource, String> {
+    use base64::Engine;
+    let decode = |encoded: &str| -> Option<[u8; 32]> {
+        let v = base64::engine::general_purpose::STANDARD
+            .decode(encoded.trim())
+            .ok()?;
+        <[u8; 32]>::try_from(v.as_slice()).ok()
+    };
+    if let KeyringAnswer::Share(encoded) = &keyring
+        && let Some(key) = decode(encoded)
+    {
+        return Ok(KeySource::Share(key));
+    }
+    if let Some(key) = fallback_file.as_deref().and_then(decode) {
+        return Ok(KeySource::Share(key));
+    }
+    match keyring {
+        KeyringAnswer::Unreachable(reason) if vault_data_initialized => Err(format!(
+            "keyring locked: the OS keyring did not answer for {VAULT_SHAMIR_SHARE_V1} ({reason}), \
+             and the vault store is already initialized; nothing was written\n  \
+             why: only the stored Shamir share unseals initialized storage; a derived key \
+             would be saved as {VAULT_UNSEAL_SECRET} and leave the vault sealed\n  \
+             remedy: unlock the OS keyring (the login keyring), then relaunch tillandsias"
+        )),
+        _ => Ok(KeySource::Derive),
+    }
+}
+
+/// True when the vault store holds anything. A store that exists but cannot be
+/// listed counts as initialized: refusing is recoverable, a wrong key is not.
+#[cfg(feature = "vault")]
+fn vault_data_initialized() -> bool {
+    let Ok(root) = vault_store_root() else {
+        return false;
+    };
+    let dir = root.join("vault-data");
+    dir.exists() && fs::read_dir(&dir).map_or(true, |mut it| it.next().is_some())
+}
+
 /// Retrieve the versioned unseal key from the host OS keychain, or derive
 /// and store it if missing.
 ///
@@ -3939,39 +4023,34 @@ fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
     let entry = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1)
         .map_err(|e| format!("keyring entry for shamir share: {e}"))?;
 
-    let encoded_res = with_keyring_timeout(move || entry.get_password());
-    let encoded = match encoded_res {
-        Ok(encoded) => encoded,
+    let keyring = match with_keyring_timeout(move || match entry.get_password() {
+        Ok(p) => Ok(Some(p)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(e),
+    }) {
+        Ok(Some(p)) => KeyringAnswer::Share(p),
+        Ok(None) => KeyringAnswer::NoEntry,
         Err(e) => {
             if debug {
                 eprintln!(
                     "[tillandsias-vault] keyring Shamir share get failed/timed out ({e}); checking file fallback"
                 );
             }
-            let fallback_file =
-                read_credential_fallback(&format!("fallback_{}", VAULT_SHAMIR_SHARE_V1))
-                    .unwrap_or_default();
-            if fallback_file.is_file() {
-                fs::read_to_string(&fallback_file)
-                    .map(|s| s.trim().to_string())
-                    .unwrap_or_default()
-            } else {
-                String::new()
-            }
+            KeyringAnswer::Unreachable(e)
         }
     };
+    let fallback_file = read_credential_fallback(&format!("fallback_{VAULT_SHAMIR_SHARE_V1}"))
+        .filter(|f| f.is_file())
+        .and_then(|f| fs::read_to_string(f).ok());
 
-    if !encoded.is_empty()
-        && let Ok(key_vec) = base64::engine::general_purpose::STANDARD.decode(&encoded)
-        && key_vec.len() == 32
+    if let KeySource::Share(key) =
+        unseal_key_source(keyring, fallback_file, vault_data_initialized())?
     {
         if debug {
             eprintln!(
                 "[tillandsias-vault] recovered Shamir unseal share from host keychain or fallback (v1, base64)"
             );
         }
-        let mut key = [0u8; 32];
-        key.copy_from_slice(&key_vec);
         return Ok(key);
     }
 
@@ -4139,14 +4218,42 @@ fn create_unseal_secret(key: &[u8; 32], debug: bool) -> Result<(), String> {
 /// replaced, because it may be the only key that unseals the existing
 /// storage (the 2026-07-17 restart self-wedge).
 /// @trace plan/issues/vault-unseal-secret-regenerated-on-reensure-2026-07-17.md
-fn unseal_secret_exists() -> bool {
-    podman_cmd_sync()
+/// 1796-ukey: a probe that fails any way but podman's "no such secret" is
+/// `Unknown`, never `Absent`, so it cannot re-enter first boot.
+#[cfg_attr(not(feature = "vault"), allow(dead_code))]
+fn unseal_secret_presence() -> SecretPresence {
+    let out = podman_cmd_sync()
         .args(["secret", "inspect", VAULT_UNSEAL_SECRET])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status_bounded(tillandsias_podman::OperationKind::Secret.default_budget())
-        .map(|s| s.success())
-        .unwrap_or(false)
+        .output_bounded(tillandsias_podman::OperationKind::Secret.default_budget());
+    match out {
+        Ok(o) => classify_secret_inspect(Ok((
+            o.status.success(),
+            &String::from_utf8_lossy(&o.stderr),
+        ))),
+        Err(e) => classify_secret_inspect(Err(&e.to_string())),
+    }
+}
+
+/// What `podman secret inspect tillandsias-vault-unseal` proved (1796-ukey).
+#[cfg_attr(not(feature = "vault"), allow(dead_code))]
+#[derive(Debug, PartialEq, Eq)]
+enum SecretPresence {
+    Present,
+    Absent,
+    /// The probe failed some other way; the secret may exist.
+    Unknown(String),
+}
+
+/// Pure reading of the inspect outcome: `Ok((success, stderr))` when podman
+/// ran, `Err(reason)` when it could not be run or timed out.
+#[cfg_attr(not(feature = "vault"), allow(dead_code))]
+fn classify_secret_inspect(outcome: Result<(bool, &str), &str>) -> SecretPresence {
+    match outcome {
+        Ok((true, _)) => SecretPresence::Present,
+        Ok((false, stderr)) if stderr.contains("no such secret") => SecretPresence::Absent,
+        Ok((false, stderr)) => SecretPresence::Unknown(stderr.trim().to_string()),
+        Err(reason) => SecretPresence::Unknown(reason.to_string()),
+    }
 }
 
 /// Read the raw bytes of the existing unseal podman secret (file driver).
@@ -5043,7 +5150,7 @@ fn attended_unseal_verdict(reason: &str) -> String {
 /// seam: (1) requires the positive key-rejection signal from the container's
 /// own entrypoint logs — every other failure class propagates unchanged;
 /// (2) consumes the process-wide one-shot guard; (3) sources a candidate
-/// exclusively from the fail-loud share readers (`read_shamir_share_b64` —
+/// exclusively from the fail-loud share readers (`shamir_share_candidates`, minus the rejected bytes —
 /// never the machine-id dummy derivation); (4) writes it only when the pure
 /// decision proves it differs from the rejected bytes AND those bytes were
 /// captured for restore; (5) on a second unseal failure restores the prior
@@ -5085,13 +5192,25 @@ fn recover_rejected_unseal_secret_once(
         );
     }
 
-    // (3) Candidate from the fail-loud share stores only.
-    let share_b64 = match read_shamir_share_b64(debug) {
-        Ok(s) => s,
-        Err(e) => {
-            return Err(attended_unseal_verdict(&format!(
-                "no recoverable Shamir share is available ({e})"
-            )));
+    // (3) Candidate from the fail-loud share stores only, skipping the
+    // rejected secret itself (1796-ukey).
+    let rejected_b64 = read_unseal_secret_bytes()
+        .map(|bytes| base64::engine::general_purpose::STANDARD.encode(bytes));
+    let share_b64 = match pick_recovery_candidate(
+        shamir_share_candidates(),
+        rejected_b64.as_deref(),
+    ) {
+        Some((source, share)) => {
+            if debug {
+                eprintln!("[tillandsias-vault] recovery: using Shamir share from {source}");
+            }
+            share
+        }
+        None => {
+            return Err(attended_unseal_verdict(
+                "the only recoverable share is byte-identical to the secret vault just rejected \
+                 (no other source, such as the host keychain, held a different share)",
+            ));
         }
     };
     let mut candidate_vec = base64::engine::general_purpose::STANDARD
@@ -5374,27 +5493,6 @@ fn handover_pair_is_persistable(token: &str, share_b64: &str) -> bool {
     token_ok && share_ok
 }
 
-/// Read the stored Shamir unseal share (base64, 32 bytes decoded) from
-/// host-delivered VM credentials, the OS keychain, or the fallback file —
-/// the same precedence `ensure_unseal_key` uses, but failing loud instead
-/// of deriving a machine-id dummy: the heal path must never feed a
-/// fabricated share into `generate-root`.
-#[cfg(feature = "vault")]
-fn read_shamir_share_b64(debug: bool) -> Result<String, String> {
-    let mut candidates = shamir_share_candidates();
-    if candidates.is_empty() {
-        return Err(
-            "no valid 32-byte base64 Shamir share in VM credentials, host keychain, or fallback file"
-                .to_string(),
-        );
-    }
-    let (source, share) = candidates.remove(0);
-    if debug {
-        eprintln!("[tillandsias-vault] heal: using Shamir share from {source}");
-    }
-    Ok(share)
-}
-
 /// Append `encoded` to `list` iff it is a valid 32-byte base64 share not
 /// already present under another source label.
 #[cfg(feature = "vault")]
@@ -5466,6 +5564,20 @@ fn assemble_share_candidates(
         }
     }
     candidates
+}
+
+/// The candidate the one-shot recovery offers (1796-ukey): the first one that
+/// is not the secret vault just rejected. Taking `candidates[0]` offered the
+/// guest podman secret, which leads the order and IS the rejected key, so the
+/// keychain share behind it was never tried.
+#[cfg_attr(not(feature = "vault"), allow(dead_code))]
+fn pick_recovery_candidate(
+    candidates: Vec<(&'static str, String)>,
+    rejected_b64: Option<&str>,
+) -> Option<(&'static str, String)> {
+    candidates
+        .into_iter()
+        .find(|(_, share)| Some(share.as_str()) != rejected_b64)
 }
 
 #[cfg(feature = "vault")]
@@ -6946,6 +7058,7 @@ mod tests {
             next_retry_at: Some(700),
             cause: "Build exited with status 1".into(),
             log: "/l".into(),
+            tillandsias_version: crate::image_ensure_marker::current_version().into(),
         };
         let named = vault_image_refusal(&build_error, Some(&m), 200);
         assert!(
@@ -8952,7 +9065,7 @@ mod tests {
     /// unconditional `create_unseal_secret` overwrote the working podman
     /// secret; the container then crash-looped on unseal and every liveness
     /// cycle regenerated the secret again. The create call must be gated on
-    /// `unseal_secret_exists()` (create only when NO secret exists — true
+    /// `unseal_secret_presence()` (create only when NO secret exists — true
     /// first boot), and a reused secret's launch failure must route through
     /// the one-shot recovery seam instead of a blind regenerate.
     /// @trace plan/issues/vault-unseal-secret-regenerated-on-reensure-2026-07-17.md
@@ -8967,7 +9080,7 @@ mod tests {
             .nth(1)
             .expect("ensure_vault_running source");
         let window = after.split("\nfn ").next().unwrap_or(after);
-        let exists_at = window.find("unseal_secret_exists()").expect(
+        let exists_at = window.find("unseal_secret_presence()").expect(
             "ensure_vault_running must gate unseal-secret creation on prior secret \
              existence (verify-before-persist; 2026-07-17 restart self-wedge)",
         );
@@ -9073,6 +9186,103 @@ mod tests {
         );
     }
 
+    /// 1796-ukey (lenovinha 2026-10-19): install wiped the podman secrets, the
+    /// keyring was locked, and the launch wrote the machine-id dummy over an
+    /// initialized vault-data. An unreachable keyring on initialized storage
+    /// must refuse by name, and the refusal's remedy (unlock, relaunch) must
+    /// clear it.
+    #[test]
+    fn unreachable_keyring_on_initialized_vault_refuses_and_unlock_clears_it() {
+        use base64::Engine;
+        let share = base64::engine::general_purpose::STANDARD.encode([7u8; 32]);
+        let locked = || KeyringAnswer::Unreachable("keyring operation timed out after 2s".into());
+
+        let refusal = unseal_key_source(locked(), None, true)
+            .expect_err("a locked keyring on initialized storage must not derive a key");
+        assert!(
+            refusal.contains("keyring locked"),
+            "names the cause: {refusal}"
+        );
+        assert!(
+            refusal.contains("why:") && refusal.contains("remedy:"),
+            "{refusal}"
+        );
+        assert!(
+            refusal.contains("unlock"),
+            "the remedy says to unlock: {refusal}"
+        );
+
+        // The remedy, executed: the unlocked keyring hands over the share.
+        assert_eq!(
+            unseal_key_source(KeyringAnswer::Share(share.clone()), None, true),
+            Ok(KeySource::Share([7u8; 32]))
+        );
+        // A fallback file holding the share is just as good as the keyring.
+        assert_eq!(
+            unseal_key_source(locked(), Some(share), true),
+            Ok(KeySource::Share([7u8; 32]))
+        );
+        // True first boot keeps working, locked keyring or not.
+        assert_eq!(
+            unseal_key_source(KeyringAnswer::NoEntry, None, false),
+            Ok(KeySource::Derive)
+        );
+        assert_eq!(
+            unseal_key_source(locked(), None, false),
+            Ok(KeySource::Derive)
+        );
+    }
+
+    /// 1796-ukey: only podman's own "no such secret" is absence. Reading a
+    /// probe failure as absent re-enters first boot and `--replace`s a secret
+    /// that may be the only key to the storage.
+    #[test]
+    fn unseal_secret_probe_error_is_not_absent() {
+        assert_eq!(
+            classify_secret_inspect(Ok((true, ""))),
+            SecretPresence::Present
+        );
+        assert_eq!(
+            classify_secret_inspect(Ok((
+                false,
+                "Error: inspecting secret: no secret with name or id \"tillandsias-vault-unseal\": no such secret"
+            ))),
+            SecretPresence::Absent
+        );
+        assert!(matches!(
+            classify_secret_inspect(Ok((false, "Error: cannot connect to Podman socket"))),
+            SecretPresence::Unknown(_)
+        ));
+        assert!(matches!(
+            classify_secret_inspect(Err("podman secret inspect timed out")),
+            SecretPresence::Unknown(_)
+        ));
+    }
+
+    /// 1796-ukey: the recovery must skip the rejected secret. The guest podman
+    /// secret leads the candidates (803-49re), so after a bad write it IS the
+    /// rejected key, and offering only `candidates[0]` never reached the
+    /// keychain share behind it.
+    #[test]
+    fn recovery_candidate_skips_the_rejected_secret() {
+        let candidates = vec![
+            ("guest podman secret", "BAD".to_string()),
+            ("host keychain", "GOOD".to_string()),
+        ];
+        assert_eq!(
+            pick_recovery_candidate(candidates.clone(), Some("BAD")),
+            Some(("host keychain", "GOOD".to_string()))
+        );
+        assert_eq!(
+            pick_recovery_candidate(vec![candidates[0].clone()], Some("BAD")),
+            None
+        );
+        assert_eq!(
+            pick_recovery_candidate(candidates, None),
+            Some(("guest podman secret", "BAD".to_string()))
+        );
+    }
+
     /// Exit-criterion litmus: a unseal secret that fails to unseal existing
     /// storage is never written/kept. The pure write-decision forbids the
     /// one-shot recovery write when the candidate is byte-identical to the
@@ -9131,8 +9341,9 @@ mod tests {
             "recovery must consume the one-shot guard (no regeneration loop)"
         );
         assert!(
-            window.contains("read_shamir_share_b64("),
-            "the candidate must come from the fail-loud share readers"
+            window.contains("pick_recovery_candidate(")
+                && window.contains("shamir_share_candidates()"),
+            "the candidate must come from the fail-loud share readers, skipping the rejected secret"
         );
         assert!(
             window.contains("unseal_recovery_write_decision("),
