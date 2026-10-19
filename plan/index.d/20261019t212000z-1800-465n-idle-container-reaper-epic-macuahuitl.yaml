@@ -73,8 +73,9 @@ packets:
     next_action: >
       Children in order haat → qgu5 → xdcx; mvmc in parallel with xdcx;
       dav6 after 1779-sq9g's GlobalEvent; 6yyp last. Do not add a persistent
-      user service; do not reap previews with the lane; keep core containers
-      out of idle reaping while any owner lives.
+      user service; do not reap previews with the lane; core containers
+      join idle reaping only after 1801-6ci7 measures them fast and idempotent;
+      browser windows are reaped with their lane's clock, with no separate 24 h cap.
     provenance: |
       Filed by macuahuitl (Claude design lead session), 2026-10-19, from the
       operator's requirement of the same day.
@@ -326,3 +327,87 @@ packets:
         host: macuahuitl
         summary: |-
           Live acceptance litmus for the operator's exact scenario (killed terminal → reaped → relaunched).
+
+  - packet_id: an-selinux-policy-confines-the-transient-systemd-user-reaper-timer-and-the-reap-sweep-it-runs-on-hardened-linux-hosts-and-an-avc-denial-is-counted-not-silent
+    order: 1801-5tin
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    size: M
+    implementer_tier: sonnet
+    capability_tags: [selinux, policy, systemd, reaper, security, linux]
+    estimated_hours: 6
+    parent: 1800-465n
+    depends_on:
+      - the-reap-sweep-runs-from-a-watchdog-that-outlives-the-launcher-tray-liveness-supervisor-transient-systemd-user-timer-for-tray-less-cli-lanes-guest-headless-on-macos-and-windows
+    owned_files:
+      - packaging/selinux/
+      - scripts/
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      Operator ruling 2 of 1800-465n — the transient `systemd --user` reaper timer and the `--internal-reap-sweep` it runs are confined by an SELinux policy module, not only a unit file, on enforcing hardened hosts; a denial of the sweep is counted and reported, never silent
+    context: |
+      The target is properly hardened Linux hosts (operator, 2026-10-19). An unconfined or
+      mislabelled sweep either escapes policy or is denied silently and the idle
+      containers stay up. Design: openspec/changes/idle-container-reaper/design.md
+      "Operator rulings (2026-10-19)" item 2.
+    exit_criteria:
+      - "on an enforcing SELinux host the transient timer's sweep runs in its confined domain (ps -Z shows it) and reaps a test container; pre-fix result: FAILS (no policy exists, the sweep runs unconfined or is denied)"
+      - "a sweep that hits an AVC denial increments a counted denial total printed in the sweep output and the status line, and is never silent; NEGATIVE CONTROL: a policy-less run reports the denial count above zero; pre-fix result: FAILS (denial invisible)"
+    unscoreable: "unpinnable-until-the-guard-exists: future litmus filename: reap-sweep-selinux-confined (needs an enforcing host)"
+    next_action: >
+      After xdcx: policy module, file contexts for the unit and sweep, the AVC
+      counter, then the live arm on an enforcing host.
+    provenance: |
+      Filed by macuahuitl, 2026-10-19, from the operator rulings of the same day.
+    events:
+      - type: filed
+        ts: "2026-10-19T23:30:00Z"
+        host: macuahuitl
+        summary: |-
+          SELinux confinement for the reaper timer and sweep, with counted denials.
+
+
+  - packet_id: measure-the-cold-start-up-time-of-the-vault-proxy-router-and-inference-containers-and-prove-each-start-up-sequence-is-idempotent-as-the-precondition-before-they-join-idle-reaping
+    order: 1801-6ci7
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    size: M
+    implementer_tier: sonnet
+    capability_tags: [containers, lifecycle, measurement, idempotency, reaper, linux]
+    estimated_hours: 6
+    parent: 1800-465n
+    depends_on:
+      - every-container-launch-labels-its-class-owner-pid-and-lane-and-the-host-keeps-a-persisted-per-lane-activity-clock-and-the-router-answers-last-request-per-route
+    owned_files:
+      - scripts/
+      - crates/tillandsias-headless/src/main.rs
+      - openspec/changes/idle-container-reaper/
+    title: |
+      Operator ruling 3 of 1800-465n — record each infra container's cold start-up time and prove its start-up sequence idempotent; only then does the class table move a service from never-while-owned to reapable
+    context: |
+      Until the measurement and the idempotency are both shown, vault, proxy, router
+      and inference stay running while owned. Design: openspec/changes/idle-container-reaper/design.md
+      "Operator rulings (2026-10-19)" item 3. Threshold proposed here: 10 s cold start.
+    exit_criteria:
+      - "a script prints one line per service (vault, proxy, router, inference) with cold start ms over N=5; pre-fix result: FAILS (no measurement exists)"
+      - "running each start-up sequence twice back to back leaves the same state: no duplicate secret, network or route; pre-fix result: FAILS (no idempotency arm exists)"
+      - "the class table moves a service from never-while-owned to reapable only if its measured start is under 10 s and its idempotency arm is green; a service failing either stays never-while-owned; pre-fix result: FAILS (table has no such rule)"
+    unscoreable: "unpinnable-until-the-guard-exists: future litmus filename: infra-startup-idempotent-and-measured"
+    next_action: >
+      After haat: the measurement script, the idempotency arm per service, then the
+      table rule gated on both.
+    provenance: |
+      Filed by macuahuitl, 2026-10-19, from the operator rulings of the same day.
+    events:
+      - type: filed
+        ts: "2026-10-19T23:30:00Z"
+        host: macuahuitl
+        summary: |-
+          Measure infra cold start and prove idempotent start-up before infra joins idle reaping.
+
