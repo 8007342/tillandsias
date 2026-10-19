@@ -393,8 +393,18 @@ pub(crate) fn window_dir_mode(rootful: bool) -> tillandsias_podman::MountMode {
 /// Give a window's dir to the window user when podman is rootful; a no-op
 /// rootless, where the dir is already the mapped user's.
 pub(crate) fn own_window_dir(dir: &Path, rootful: bool) -> std::io::Result<()> {
-    if rootful {
-        std::os::unix::fs::chown(dir, Some(WINDOW_UID), Some(WINDOW_UID))?;
+    give_dir_to(dir, window_dir_owner(rootful))
+}
+
+/// Who a window's dirs must belong to: the window user under rootful podman,
+/// nobody new rootless.
+pub(crate) fn window_dir_owner(rootful: bool) -> Option<u32> {
+    rootful.then_some(WINDOW_UID)
+}
+
+fn give_dir_to(dir: &Path, owner: Option<u32>) -> std::io::Result<()> {
+    if let Some(uid) = owner {
+        std::os::unix::fs::chown(dir, Some(uid), Some(uid))?;
     }
     Ok(())
 }
@@ -998,22 +1008,31 @@ mod tests {
     /// 1795-rtfy: DAC refused chromium (uid 1000) a root-owned 0700 dir even
     /// with SELinux out of the way (measured), so a rootful window's dirs go to
     /// the window user. Rootless is a no-op: the dir is already the mapped
-    /// user's. (Run as a non-root user here, the rootful chown is refused,
-    /// which proves it is attempted.)
+    /// user's.
+    ///
+    /// The runner's own uid is not assumed: a gate user that IS uid 1000
+    /// (macuahuitl, land run 175) chowns its own dir to 1000 and succeeds. So
+    /// the owner decision is asserted directly, and the chown is exercised
+    /// against a uid that is never the runner's: refused for a non-root
+    /// runner (which proves it is attempted), applied for root.
     #[test]
     fn a_rootful_window_dir_is_given_to_the_window_user() {
+        use std::os::unix::fs::MetadataExt;
+        assert_eq!(window_dir_owner(true), Some(WINDOW_UID));
+        assert_eq!(window_dir_owner(false), None);
         let d = tempfile::tempdir().unwrap();
         let before = std::fs::metadata(d.path()).unwrap();
         own_window_dir(d.path(), false).unwrap();
-        use std::os::unix::fs::MetadataExt;
         assert_eq!(std::fs::metadata(d.path()).unwrap().uid(), before.uid());
-        let rootful = own_window_dir(d.path(), true);
-        if crate::running_as_root() {
-            rootful.unwrap();
-            assert_eq!(std::fs::metadata(d.path()).unwrap().uid(), WINDOW_UID);
+        let me = unsafe { libc::geteuid() };
+        let other = if me == 0 { WINDOW_UID } else { me + 1 };
+        let given = give_dir_to(d.path(), Some(other));
+        if me == 0 {
+            given.unwrap();
+            assert_eq!(std::fs::metadata(d.path()).unwrap().uid(), other);
         } else {
             assert_eq!(
-                rootful.unwrap_err().kind(),
+                given.unwrap_err().kind(),
                 std::io::ErrorKind::PermissionDenied
             );
         }
