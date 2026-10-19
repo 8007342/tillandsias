@@ -282,6 +282,9 @@ pub fn raise(root: &Path, to: u8, integration: Option<&str>) -> Result<String, S
                     out.push(format!("  {p}: {integ}"));
                 }
             }
+            if to >= 2 && current.work_ref.is_none() {
+                out.push(format!("work_ref: \"{}\"", bd::DEFAULT_WORK_REF));
+            }
             out.join("\n") + "\n"
         }
         Err(_) => {
@@ -300,6 +303,14 @@ pub fn raise(root: &Path, to: u8, integration: Option<&str>) -> Result<String, S
                 for p in bd::PLATFORMS {
                     s.push_str(&format!("  {p}: {integ}\n"));
                 }
+            }
+            // 1788-qlwq slice 3: level 2 names work refs, so the seed carries
+            // the grammar as a regex (a template like work/<id> refuses all).
+            if to >= 2 {
+                s.push_str(&format!(
+                    "# work_ref is a regex, not a template.\nwork_ref: \"{}\"\n",
+                    bd::DEFAULT_WORK_REF
+                ));
             }
             s
         }

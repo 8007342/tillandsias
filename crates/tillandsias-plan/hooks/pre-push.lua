@@ -96,6 +96,9 @@ for line in io.lines() do
       err("warn: " .. remote_ref .. " — " .. soft)
       local remedy = out:match("\nremedy: ([^\n]*)")
       if remedy then err("  " .. remedy) end
+      -- 1788-qlwq slice 6: a warn is easy to miss in a noisy push, and a probe
+      -- commit landed on a real default branch that way. Say what happens.
+      err("  THIS PUSH WILL BE ACCEPTED: " .. remote_ref .. " is only warned about, not refused, so it goes to the remote now.")
     end
   end
 end
@@ -105,7 +108,21 @@ if not refused then return "ok:hook:pre-push" end
 local branch = refused.ref:gsub("^refs/heads/", "")
 local _, target_out = run{ plan, "discipline", "target", "--platform", platform() }
 local integration = first_line(target_out):match("^(%S+)") or "?"
+-- 1788-qlwq slice 4: the seed's own wording wins (messages.default_branch_denied,
+-- with {default}, {integration} and {work_ref} filled in), as check-ref and the
+-- mirror already print it.
+local function seed_denied_message()
+  local m = type(d.messages) == "table" and d.messages.default_branch_denied
+  if type(m) ~= "string" or m == "" then return nil end
+  local work_ref = type(d.work_ref) == "string" and d.work_ref or "work/<id>"
+  local function lit(v) return (tostring(v):gsub("%%", "%%%%")) end
+  return (m:gsub("{default}", lit(d.default_branch or branch))
+           :gsub("{integration}", lit(integration))
+           :gsub("{work_ref}", lit(work_ref)))
+end
 if refused.token == "default-branch-protected" then
+  local own = seed_denied_message()
+  if own then err(own) end
   err(branch .. " is this project's protected default branch.")
   err("this project at level " .. level .. " (default_branch enforced) needs pushes on "
     .. integration .. "; use /" .. skill_for("level", "project-discipline") .. " for instructions")

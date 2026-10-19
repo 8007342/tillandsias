@@ -258,7 +258,11 @@ discipline_load() {
 }
 
 discipline_message() {
-    local msg="${DISC_MESSAGE:-push to {default} denied: use {integration} for integration and {work_ref} for work}"
+    # 1788-qlwq: the default is assigned on its own line. Inside ${VAR:-word}
+    # the first `}` (after {default) closed the expansion, so the unset-seed
+    # message ended in a stray "for work}".
+    local msg="$DISC_MESSAGE"
+    [ -n "$msg" ] || msg='push to {default} denied: use {integration} for integration and {work_ref} for work'
     msg="$(printf '%s' "$msg" | sed -e "s|{default}|$DISC_DEFAULT|g" -e "s|{integration}|$DISC_INTEGRATION|g" -e "s|{work_ref}|work/<order>|g")"
     printf '%s' "$msg"
 }
