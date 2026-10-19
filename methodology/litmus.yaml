@@ -469,7 +469,7 @@ litmus_command_authoring:
     - "Do not EXTEND one: editing an existing piped command converts it to a decider in the same change, or leaves a dated burn-down note on its litmus file."
     - "Prefer the shared deciders (one per decision family: file pattern, cargo-test judge, git query, podman probe, field check, plan query) over a one-off script."
   why: >
-    Measured 2026-10-19: 1477 of 3204 litmus commands pipe and 630 pipe three
+    Measured 2026-10-19 (census-litmus-pipes.lua, quote-aware): 950 of 3204 litmus commands pipe and 155 pipe three
     or more times. A pipeline that hides a failing producer, an empty match or
     a silent exit has produced false greens and empty-output reds (1799-5kvy).
     The shell ratchet (check-shell-ratchet.lua, 1624-bv73) only stops the count
