@@ -223,3 +223,9 @@ sweep row's `owned_files` owes it one event or a waiver).
 1. DIRECTION order: accept the seven outcomes above as listed? (yes / reorder)
 2. The `stale-rows` backlog: start at advisory, or straight to gentle? (advisory / gentle)
 3. Orphan drafts older than 14 days with a ready row: default disposition land-if-green or close? (land / close)
+
+## 10. Operator rulings (2026-10-19)
+
+1. DIRECTION: approved as listed in section 5, in that order. `1800-jybu` writes it into `plan/loop_status.md` unchanged.
+2. `stale-rows` backlog: starts **advisory, warnings only**. Nothing is refused or carried until a later ruling moves it to gentle.
+3. Orphan drafts older than 14 days with a ready row: default disposition is **close**. A closed row or spec is a tombstone; if the work is needed again it is revived as a new spec or row per the methodology's tombstone rules, not by reopening the draft.
