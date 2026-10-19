@@ -89,7 +89,6 @@ scripts/check-spec-script-paths.sh
 scripts/check-stale-ready-rows.sh
 scripts/check-stranded-in-progress.sh
 scripts/check-stranded-plan-writes.sh
-scripts/check-terminology.sh
 scripts/check-test-baseline.sh
 scripts/check-tracked-files-unwritten.sh
 scripts/check-tray-string-corpus-drift.sh
