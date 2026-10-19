@@ -16959,6 +16959,7 @@ fn build_project_browser_spec(
         app_url,
         version,
         profile_dir,
+        MountMode::ReadWrite,
         certs_dir,
         BrowserSurface::Window(display),
         container_name,
@@ -16982,6 +16983,7 @@ fn build_project_browser_spec_on(
     app_url: &str,
     version: &str,
     profile_dir: &Path,
+    profile_mode: MountMode,
     certs_dir: &Path,
     surface: BrowserSurface<'_>,
     container_name: &str,
@@ -16997,7 +16999,7 @@ fn build_project_browser_spec_on(
         .volume(
             profile_dir.display().to_string(),
             profile_dir.display().to_string(),
-            MountMode::ReadWrite,
+            profile_mode,
         )
         .bind_mount(
             certs_dir.join("intermediate.crt").display().to_string(),

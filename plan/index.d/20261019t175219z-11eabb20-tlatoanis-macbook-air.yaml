@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-macos-v56-10-18-1-browser-open-of-an-allowed-routed-url-fails-with-browser-launch-failed-because-the-window-cdp-socket-never-appears
+    event:
+      type: claimed
+      ts: "2026-10-19T17:52:19Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        Claimed (coordinator assignment, 2026-10-19). CAUSE MEASURED on the published v56.10.18.1 macOS guest (rootful podman 5.8.1). Evidence: target/smoke-e2e/diag-1795/.
+
+        1. Reproduced. A forge browser.open of the routed https://flutter.kumbia-smoke.localhost:18443/ first answered state=preparing (the Chromium image's first use), then BROWSER_LAUNCH_FAILED (cdp.sock did not accept within 30 s). The allowlist half of 1788 slice 10 held: the URL was admitted.
+
+        2. The window container's own output (guest journal, boot 0193282bcb3a419c843209a16b150663, 17:49:07):
+           node relay: "Error: listen EACCES: permission denied /run/tillandsias-cdp/cdp.sock"
+           The container died 0.06 s after starting. The tray then waited 30 s for a socket that could never appear.
+
+        3. Two independent denials, measured with the release's chromium-framework image under the window's own options (read-only, cap-drop ALL, no-new-privileges, --userns=keep-id):
+           - Under rootful keep-id the uid_map is the identity, and the container runs as the image USER chromium (uid 1000).
+           - SELinux: the per-window dir under /run/user/0/tillandsias is user_tmp_t, and container_t cannot create a socket in it. A 1000-owned 0700 dir: EACCES. Same dir with label=disable: LISTEN-OK. Same dir mounted with :Z (relabelled container_file_t with a private MCS pair): LISTEN-OK.
+           - DAC: the tray creates the dir root-owned 0700. Even with label=disable, a root-owned 0700 dir: EACCES for chromium(1000).
+           - Only "owned by the window user" AND "relabelled (or label=disable)" lets the relay listen.
+
+        4. The window's profile dir (--user-data-dir, the same root, created root-owned and mounted rw) has the same two denials. Chromium would hit them right after the relay.
+
+        5. Not 1794's cause. The window reaches the router through its own forwarder on the enclave network (router_upstream), not through the loopback publish.
+
+        Rootless Linux works today plausibly because there the dirs are owned by the user that keep-id maps the container user to. Its SELinux side is not measured here.
