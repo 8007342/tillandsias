@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-launch-with-the-keyring-locked-after-install-replaces-tillandsias-vault-unseal-with-a-machine-derived-key-and-seals-an-initialized-vault
+    field: status
+    value: implemented
+    ts: "2026-10-19T17:15:27Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-launch-with-the-keyring-locked-after-install-replaces-tillandsias-vault-unseal-with-a-machine-derived-key-and-seals-an-initialized-vault
+    event:
+      type: note
+      ts: "2026-10-19T17:15:27Z"
+      host: lenovinha
+      summary: |-
+        landed via PR 569 at cebb00de8
