@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: vault-unseal-share-ephemerality-and-reset-hygiene
+    event:
+      type: list-replace
+      ts: "2026-10-19T23:12:29Z"
+      agent_id: linux-lenovinha-claude-20261019t231229z
+      host: lenovinha
+      field: exit_criteria
+      items:
+        - "RED FIRST: a scan for credential files at rest (fallback_* under the store root and the cache dir, podman file-driver secretsdata, overlay-containers/*/userdata/secrets) finds the unseal share, root token or anchor after a full launch on the pre-fix code, and finds none after the fix"
+        - "a restart with the share unavailable or rejected on an initialized store ends in a wipe plus the named sign-in-again tray state, never a salvage loop and never an error line"
+        - "hosts keep the share only in the OS-encrypted keyring; guests keep it only in memory/tmpfs from the host's delivery; the vault container gets it from a tmpfs file removed after unseal"
+      summary: |-
+        re-scope per operator ruling 2026-10-19
