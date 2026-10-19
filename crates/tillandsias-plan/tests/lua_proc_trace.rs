@@ -71,8 +71,11 @@ impl Fixture {
     /// `floor_ms`. The v56.10.19.1 release gate failed the fixed 1500 ms
     /// budget under load while it passed alone.
     fn timeout_from_measured_work(&self, work: &str, floor_ms: u128) -> String {
+        // A script must end in a verdict or `script run` refuses it
+        // (refused:no-verdict, 1384-bqhy): the calibration run ends in one.
+        let calibration = format!("{work}\n        verdict.ok('calibration')\n");
         let t0 = std::time::Instant::now();
-        let out = self.run_with_timeout(work, false, "120s");
+        let out = self.run_with_timeout(&calibration, false, "120s");
         let measured = t0.elapsed().as_millis();
         assert_eq!(
             out.status.code(),
