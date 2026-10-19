@@ -226,3 +226,9 @@ status line may show the latest reap verdict ("reaped 1 idle preview
 - `--rm` on forges: rejected, exit-code and log retention for the agent's
   own diagnostics (`forge_logs`) need the container row until the reaper
   removes it.
+
+## Operator rulings (2026-10-19)
+
+1. **Browser windows are reaped with their lane.** A window has no idle clock of its own: an active browser app keeps its server busy, so a window whose server is idle is a forgotten window and is reaped with it. A development browser window is one of the most expensive things to leave running. `window_registry.rs` `is_idle_timeout` (24 h) is retired in favour of the lane's clock.
+2. **The watchdog for tray-less CLI lanes is a transient `systemd --user` timer**, not a detached process. It must run confined under the project's SELinux policy: the target is properly hardened Linux hosts, so the unit and the sweep it runs need policy, not just a unit file.
+3. **Infra containers (vault, proxy, router, inference) are measured first, then reaped if cheap.** Record each one's cold start-up time. Those that restart quickly on demand are reaped on the same idle rules, on the condition that every start-up sequence is idempotent. Until both the measurement and the idempotency are shown, they are left running.
