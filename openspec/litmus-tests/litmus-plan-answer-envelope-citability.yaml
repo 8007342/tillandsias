@@ -214,7 +214,11 @@ critical_path:
     # adds test N+1, and a bare `0 failed` passes on an empty run. This
     # requires the envelope suite to be present AND the span pin — the
     # substrate every citation's resolvability rests on — to be green.
-    command: "out=$(cargo test -p tillandsias-plan 2>&1); printf '%s' \"$out\" | grep -q 'FAILED' && exit 1; n=$(printf '%s' \"$out\" | grep -c '^test answer::tests::.* ok$'); test \"$n\" -ge 8 || exit 1; printf '%s' \"$out\" | grep -q 'every_live_packet_has_a_span_that_contains_its_own_id ... ok' && echo \"ok: envelope-unit-pins-green n=$n\""
+    # ORDER 1799-5kvy: every failing branch says what failed. This step went
+    # red on the v56.10.19.1 release gate with EMPTY output, because a FAILED
+    # run exited 1 without printing a line, so nobody could tell which test it
+    # was.
+    command: "out=$(cargo test -p tillandsias-plan 2>&1); printf '%s' \"$out\" | grep -q 'FAILED' && { echo 'FAIL: tillandsias-plan tests failed:'; printf '%s\\n' \"$out\" | grep -E '^test .* FAILED$|panicked at|^---- ' | head -40; exit 1; }; n=$(printf '%s' \"$out\" | grep -c '^test answer::tests::.* ok$'); test \"$n\" -ge 8 || { echo \"FAIL: only $n answer::tests passed (need 8); last lines:\"; printf '%s\\n' \"$out\" | tail -15; exit 1; }; printf '%s' \"$out\" | grep -q 'every_live_packet_has_a_span_that_contains_its_own_id ... ok' && echo \"ok: envelope-unit-pins-green n=$n\""
     timeout_ms: 300000
     expected_behavior: "ok: envelope-unit-pins-green"
 

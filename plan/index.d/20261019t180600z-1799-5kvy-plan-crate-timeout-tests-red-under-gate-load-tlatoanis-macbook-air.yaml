@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air on the coordinator's request (macuahuitl-fedora,
+# 2026-10-19), from the v56.10.19.1 release gate.
+packets:
+  - packet_id: plan-crate-tests-with-a-wall-clock-outer-timeout-go-red-only-under-release-gate-load-so-the-budget-must-come-from-a-measured-lower-bound
+    order: 1799-5kvy
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: S
+    pickup_role: any
+    capability_tags: [plan, lua, tests, flake, release-gate]
+    related: [1791-q4iv]
+    depends_on: []
+    title: |
+      The v56.10.19.1 release gate went red twice on tillandsias-plan tests that pass alone. tests/lua_proc_trace.rs trace_outer_timeout_renders_collected_outstanding_async_terminals races a fixed 1500 ms outer timeout against work that only takes that long uncontended, and a second crate-wide run failed with no output at all.
+    context: |
+      MEASURED by the coordinator (macuahuitl-fedora) on the v56.10.19.1 release gate, 2026-10-19:
+      (1) Run b: litmus:plan-engine-invariants-shape step 1 (rc=101) failed in trace_outer_timeout_renders_collected_outstanding_async_terminals. Alone it passes 3/3 in 3.01 s.
+      (2) Run a: litmus:plan-answer-envelope-citability step 20 (`cargo test -p tillandsias-plan`, which greps for FAILED) failed with EMPTY output. The whole crate passes alone.
+      READ, not measured (crates/tillandsias-plan/tests/lua_proc_trace.rs:434): the script spawns printf, false and `sleep 30`, then blocks on `proc.run sleep 0.3`, then busy-loops. The fixture kills it at a fixed "1500ms", twice (trace off, then on). The assertions need the blocking `sleep 0.3` receipt and the two collected terminals, all inside that window. Under a gate-parallel load the spawns plus the 0.3 s run plus scheduling can exceed 1500 ms. The receipt is then absent, and the test reads that as a defect rather than as "the budget never covered the work".
+      Run a's empty output means the failure line was lost or never printed, so which test failed is not known. That is a second defect in how the step reports.
+    exit_criteria:
+      - "Red first under load: the test fails 1+/10 under `stress-ng --cpu $(nproc)` (or a gate-parallel run) on today's code, measured and recorded."
+      - "The timeout test's budget is derived from a measured lower bound, not a wall-clock guess. Either the outer timeout starts only after the script signals that the awaited work completed (an event, not a duration), or the budget is computed from the measured uncontended cost of the pre-timeout work with a stated multiplier. It then passes 10/10 under the same load."
+      - "Step 20's `cargo test -p tillandsias-plan` failure names the failing test in the step output (no empty-output red)."
+      - "NEGATIVE CONTROL: a script whose awaited work genuinely never completes still renders status=timed_out with no fabricated clean exit for the sleeper."
+    unscoreable: "unpinnable-until-the-guard-exists: the load harness (stress-ng or a parallel gate run, 10 iterations) is written in the same change, red first"
+    next_action: >
+      Make the outer timeout event-driven. Have the script print a marker after `proc.run sleep 0.3` returns, and let the fixture start its timeout clock on that marker. Then measure 10/10 under stress-ng. Separately, find why step 20 can fail with no output: the grep for FAILED over output that was never captured.
+    events:
+      - type: filed
+        ts: "2026-10-19T18:06:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Release gate v56.10.19.1 red twice on load-sensitive plan-crate tests that pass alone (lua_proc_trace outer timeout; an empty-output crate run).
