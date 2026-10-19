@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: affordance-slice-nix-cache-service-blocked-verdicts-say-why-and-what-clears-them
+    order: 1247-nx5c
+    parent_order: 1247-amcu
+    status: in_progress
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [affordance, refusal, nix, cache, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - scripts/nix-cache-service.sh
+      - scripts/lua/test-nix-cache-service-affordance.lua
+      - openspec/litmus-tests/litmus-nix-container-lane-shape.yaml
+    title: |
+      1247-amcu slice — FAMILY: every blocked:nix-cache:* verdict of scripts/nix-cache-service.sh (no-enclave, no-ca at five sites with three different causes, no-harmonia, start-failed, unhealthy) says why and what clears it, tokens unchanged for main.rs
+    context: |
+      Picked by lenovinha at the coordinator's request (2026-10-19) as the next family by scripts/rank-refusal-hits.sh that actually lacks a remedy: blocked:nix-cache:no-ca is rank 20 (5 sites), after 1247-jq4e took rank 19. No open PR touches the file.
+      All of them print only the token. no-ca is the worst: it is printed when the signing KEYPAIR cannot be minted (nix-store on the rung, or an unwritable state dir), when the stack CA has no intermediate, when openssl cannot mint the leaf, and when the bundle cannot be written — the script's own comment at ensure_keypair records that this "named the wrong thing entirely" and leaves fixing the message to the caller. The why now names which of these it was. main.rs reads only the last stdout line, so the affordance goes to stderr and the tokens do not change.
+      The existing fixture (test-nix-cache-service.sh) needs real nix, podman and a CA, so the new arms are hermetic: a Lua fixture over a scratch copy of the script with a stub nix-toolbox.sh and a stub podman first on PATH, run by a step of litmus-nix-container-lane-shape (a new gate step would need a second-regime record lenovinha cannot produce).
+    exit_criteria:
+      - 'each blocked:nix-cache:* site emits why: and remedy: on stderr beside its unchanged stdout token, and no-ca names which precondition failed (pre-fix: FAILS on all of them)'
+      - 'NEGATIVE CONTROL (1247-amcu criterion 5): the fixture EXECUTES the remedy for pubkey-before-keygen (keygen), no-enclave (the network now exists), the missing stack CA (a CA minted into the CA dir) and the unwritable state dir (a writable TILLANDSIAS_NIX_CACHE_STATE), and each then moves past that verdict'
+      - 'the fixture touches no real podman, nix store, CA dir or ~/.local/share/tillandsias: every path is under its scratch dir and podman is a stub'
+      - 'litmus-nix-container-lane-shape runs the fixture and its existing steps stay green'
+    verifiable_closure: |
+      litmus:nix-container-lane-shape runs tillandsias-plan script run scripts/lua/test-nix-cache-service-affordance.lua, which passes, and FAILS against the pre-fix script.
+    provenance: |
+      Filed by lenovinha at the coordinator's request, 2026-10-19.
+    events:
+      - type: filed
+        ts: "2026-10-19T03:32:25Z"
+        host: lenovinha
+        summary: |-
+          Next 1247-amcu slice: nix-cache-service.sh. Filed and claimed in one fragment by lenovinha.
