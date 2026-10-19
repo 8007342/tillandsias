@@ -308,11 +308,12 @@ pub(crate) fn handle_mcp_jsonrpc(
                 // forge's `flutter` shim polls it and shows the progress.
                 serde_json::json!({
                     "name": "toolchain_prepare",
-                    "description": "Prepare an opt-in toolchain for this lane (one time: builds the shared image). Never blocks: returns state ready, preparing (with build step and elapsed seconds) or failed. The forge's `flutter` command calls this for you.",
+                    "description": "Prepare an opt-in toolchain for this lane (one time: builds the shared image). Never blocks: returns state ready, preparing (with retry_after_s, and while it builds the step and elapsed seconds) or failed. Preparing is not an error: call again after retry_after_s. force: true rebuilds an image whose last build failed now. The forge's `flutter` command calls this for you.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "toolchain": { "type": "string", "enum": ["flutter"] }
+                            "toolchain": { "type": "string", "enum": ["flutter"] },
+                            "force": { "type": "boolean", "default": false }
                         },
                         "required": ["toolchain"]
                     }
@@ -656,16 +657,14 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
     };
     // Order 1649-xqet: browser.open runs the chromium-framework container on
     // a per-launch internal network, never host Chromium.
-    let browser = tillandsias_browser_mcp::BrowserMcpServer::with_project_label(
-        tillandsias_browser_mcp::McpServerConfig::default(),
+    let browser = lane_browser_server(
         &project_label,
+        &lane_instance,
         Some(std::sync::Arc::new(
             crate::browser_open::TrayBrowserContainers::new(false),
         )),
-    )
-    // Order 1656-iktu: windows record the lane that opened them; another
-    // lane's window answers WINDOW_NOT_FOUND.
-    .with_lane(lane_instance);
+        false,
+    );
     // Order 1655-urz9: a window emulates the project's `[browser] device`
     // when browser.open names none, else desktop. The label is the
     // listener's (validated, order 505), so the path is the project's own.
@@ -789,6 +788,54 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
     }
 }
 
+/// Order 1754-bu07: the browser windows of each lane, for the life of this
+/// process. A connection's server shares its lane's registry instead of
+/// owning one, so a window outlives the connection that opened it (the
+/// host-browser-mcp requirement "Window survives MCP connection drop"): a
+/// one-shot `opencode run` that opened a window used to drop the registry on
+/// exit, and dropping it SIGKILLed the window's containers 20 s later. Tray
+/// Quit still ends every window: graceful_shutdown_async stops each
+/// `tillandsias-browser-*` container.
+type LaneWindows = (
+    std::sync::Arc<tillandsias_browser_mcp::window_registry::WindowRegistry>,
+    std::sync::Arc<tillandsias_browser_mcp::window_registry::DebounceTable>,
+);
+
+static LANE_WINDOWS: OnceLock<Mutex<std::collections::HashMap<LaneListenerKey, LaneWindows>>> =
+    OnceLock::new();
+
+/// The window registry of lane `(project, instance)`, created on first use.
+pub(crate) fn lane_windows(project: &str, instance: &str) -> LaneWindows {
+    let mut map = LANE_WINDOWS
+        .get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    map.entry((project.to_owned(), instance.to_owned()))
+        .or_insert_with(|| (Default::default(), Default::default()))
+        .clone()
+}
+
+/// The browser server for one connection of lane `(project, instance)`: its
+/// windows record that lane (order 1656-iktu: another lane's window answers
+/// WINDOW_NOT_FOUND) and live in the lane's registry (order 1754-bu07).
+/// `fake_launch` registers windows without starting containers (tests).
+pub(crate) fn lane_browser_server(
+    project: &str,
+    instance: &str,
+    containers: Option<std::sync::Arc<dyn tillandsias_browser_mcp::launcher::BrowserContainers>>,
+    fake_launch: bool,
+) -> tillandsias_browser_mcp::BrowserMcpServer {
+    let (windows, debounce) = lane_windows(project, instance);
+    tillandsias_browser_mcp::BrowserMcpServer::with_project_label_and_mode(
+        tillandsias_browser_mcp::McpServerConfig::default(),
+        project,
+        containers,
+        fake_launch,
+    )
+    .with_lane(instance)
+    .with_windows(windows, debounce)
+}
+
 /// Global registry tracking active per-lane MCP listeners.
 /// This is a tuple rather than a hyphen-concatenated string: `(a-b, c)` and
 /// `(a, b-c)` are distinct lanes even though their display form is identical.
@@ -799,6 +846,29 @@ pub(crate) static ACTIVE_LANE_LISTENERS: OnceLock<Mutex<HashSet<LaneListenerKey>
 
 pub(crate) fn lane_listener_registry() -> &'static Mutex<HashSet<LaneListenerKey>> {
     ACTIVE_LANE_LISTENERS.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+/// 1783-k5hm: the lane's socket path when ANOTHER live process serves it,
+/// the exact case in which [`start_mcp_socket_server_for_lane`] refuses
+/// ("already has a live owner"). Asked before a launch touches podman, so
+/// the refusal comes before any container starts, not after the git mirror.
+/// `None` when this process owns the lane or nothing answers.
+pub(crate) fn lane_socket_foreign_owner(project: &str, instance: &str) -> Option<PathBuf> {
+    let instance = if instance.trim().is_empty() {
+        "default"
+    } else {
+        instance.trim()
+    };
+    let key = (project.to_owned(), instance.to_owned());
+    if lane_listener_registry()
+        .lock()
+        .expect("lane registry lock")
+        .contains(&key)
+    {
+        return None;
+    }
+    let path = mcp_socket_path_for_lane(project, instance);
+    UnixStream::connect(&path).ok().map(|_| path)
 }
 
 /// Bind the NDJSON MCP tool socket for lane `(project, instance)` and serve
@@ -895,4 +965,262 @@ pub fn start_mcp_socket_server_for_lane(project: &str, instance: &str) -> Result
     });
 
     Ok(())
+}
+
+#[cfg(test)]
+mod lane_window_tests {
+    use super::*;
+    use tillandsias_browser_mcp::framing::{RpcRequest, RpcResponse};
+
+    fn call(name: &str, arguments: serde_json::Value) -> RpcRequest {
+        RpcRequest {
+            id: Some(1),
+            method: "tools/call".to_string(),
+            params: serde_json::json!({ "name": name, "arguments": arguments }),
+        }
+    }
+
+    // Order 1754-bu07, exit criterion 1: a window opened through one lane
+    // connection is still there after that connection's server is gone, and
+    // the next connection of the same lane lists it. RED before: each
+    // connection built its own registry, so the second listed nothing.
+    #[test]
+    fn a_window_outlives_the_connection_that_opened_it() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let project = "bu07-outlive";
+        {
+            let opener = lane_browser_server(project, "default", None, true);
+            let opened = rt.block_on(opener.handle_request(call(
+                "browser.open",
+                serde_json::json!({ "url": format!("http://web.{project}.localhost:8080/") }),
+            )));
+            assert!(matches!(opened, RpcResponse::Success { .. }), "{opened:?}");
+        }
+        let next = lane_browser_server(project, "default", None, true);
+        let listed = rt
+            .block_on(next.handle_request(call("browser.list_windows", serde_json::json!({}))))
+            .to_line()
+            .unwrap();
+        assert!(
+            listed.contains(&format!("web.{project}.localhost")),
+            "{listed}"
+        );
+    }
+
+    #[test]
+    fn each_lane_has_its_own_registry() {
+        let (a, _) = lane_windows("bu07-lanes", "default");
+        let (again, _) = lane_windows("bu07-lanes", "default");
+        let (other, _) = lane_windows("bu07-lanes", "second");
+        assert!(std::sync::Arc::ptr_eq(&a, &again));
+        assert!(!std::sync::Arc::ptr_eq(&a, &other));
+    }
+}
+
+/// Order 1779-sq9g: the red fixtures of openspec/changes/forge-diagnostics-scope.
+///
+/// Operator rulings, 2026-10-18: a forge sees exactly (a) itself, (b) the
+/// containers the host started for its lane, and (c) curated global events,
+/// which reach every concurrent forge; sibling forges and their children are
+/// never visible; retention is the current session. Each test drives the real
+/// lane dispatch (`handle_mcp_jsonrpc`) as two lanes, `a` and `b`, of ONE
+/// project, so project membership cannot be what isolates them. A fake podman
+/// lists both lanes' forge and preview containers, each with its host-set
+/// `tillandsias.lane` label, and answers `logs <name>` with `LOG-OF-<name>`.
+///
+/// RED until 1779-sq9g is implemented: the tools do not exist yet. Run with
+/// `cargo test -p tillandsias-headless --bin tillandsias --features tray --
+/// --ignored forge_diagnostics_scope_fixtures`. The implementation removes
+/// the ignores.
+#[cfg(test)]
+mod forge_diagnostics_scope_fixtures {
+    use super::*;
+
+    const PROJECT: &str = "sq9g-scope";
+    const A_FORGE: &str = "tillandsias-sq9g-scope-forge-a";
+    const A_WEB: &str = "tillandsias-web-sq9g-scope-a";
+    const B_FORGE: &str = "tillandsias-sq9g-scope-forge-b";
+    const B_WEB: &str = "tillandsias-web-sq9g-scope-b";
+
+    /// The fake podman: every container of both lanes, labelled by the host.
+    const FAKE_PODMAN: &str = r#"#!/bin/sh
+for last; do :; done
+row() { printf '{"Names":["%s"],"Id":"%s","State":"running","Labels":{"tillandsias.lane":"%s","tillandsias.role":"%s"}}' "$1" "$1" "$2" "$3"; }
+case "$1" in
+  ps|container)
+    printf '['
+    row tillandsias-sq9g-scope-forge-a sq9g-scope/a forge; printf ','
+    row tillandsias-web-sq9g-scope-a sq9g-scope/a web; printf ','
+    row tillandsias-sq9g-scope-forge-b sq9g-scope/b forge; printf ','
+    row tillandsias-web-sq9g-scope-b sq9g-scope/b web
+    printf ']\n' ;;
+  inspect)
+    case "$last" in
+      *-a) printf '[{"Name":"%s","Config":{"Labels":{"tillandsias.lane":"sq9g-scope/a"}}}]\n' "$last" ;;
+      *-b) printf '[{"Name":"%s","Config":{"Labels":{"tillandsias.lane":"sq9g-scope/b"}}}]\n' "$last" ;;
+      *) echo "Error: no such object: $last" >&2; exit 125 ;;
+    esac ;;
+  logs) echo "LOG-OF-$last" ;;
+esac
+"#;
+
+    /// Holds the podman seam and the env lock, and restores what it changed.
+    struct Seams {
+        _podman: std::sync::MutexGuard<'static, ()>,
+        _env: std::sync::MutexGuard<'static, ()>,
+        _dir: tempfile::TempDir,
+        saved: Vec<(&'static str, Option<std::ffi::OsString>)>,
+    }
+
+    impl Seams {
+        fn new(extra: &[(&'static str, String)]) -> Self {
+            let podman = crate::runtime_assets::podman_seam_lock();
+            let env = crate::test_support::env_lock();
+            let dir = tempfile::tempdir().unwrap();
+            let bin = dir.path().join("podman");
+            std::fs::write(&bin, FAKE_PODMAN).unwrap();
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+            }
+            let mut vars: Vec<(&'static str, String)> =
+                vec![("TILLANDSIAS_PODMAN_BIN", bin.display().to_string())];
+            vars.extend(extra.iter().cloned());
+            let saved = vars
+                .iter()
+                .map(|(k, _)| (*k, std::env::var_os(k)))
+                .collect();
+            for (k, v) in &vars {
+                // SAFETY: env_lock and the podman seam lock are held.
+                unsafe { std::env::set_var(k, v) };
+            }
+            Self {
+                _podman: podman,
+                _env: env,
+                _dir: dir,
+                saved,
+            }
+        }
+    }
+
+    impl Drop for Seams {
+        fn drop(&mut self) {
+            for (k, v) in self.saved.drain(..) {
+                // SAFETY: the locks are still held; they drop after this.
+                unsafe {
+                    match v {
+                        Some(v) => std::env::set_var(k, v),
+                        None => std::env::remove_var(k),
+                    }
+                }
+            }
+        }
+    }
+
+    /// One tools/call through the lane dispatch, as lane `instance`.
+    fn ask(instance: &str, tool: &str, arguments: serde_json::Value) -> serde_json::Value {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let browser = lane_browser_server(PROJECT, instance, None, true);
+        let req = serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": { "name": tool, "arguments": arguments },
+        });
+        handle_mcp_jsonrpc(PROJECT, instance, &req, &browser, &rt).expect("a reply")
+    }
+
+    fn refusal(reply: &serde_json::Value) -> &str {
+        reply["error"]["message"].as_str().unwrap_or("")
+    }
+
+    /// Arm 1: a forge cannot read a sibling forge's logs, nor its children's,
+    /// and cannot tell a sibling's container from one that does not exist.
+    #[test]
+    #[ignore = "red until 1779-sq9g is implemented (openspec/changes/forge-diagnostics-scope)"]
+    fn a_forge_cannot_read_a_siblings_or_its_childrens_logs() {
+        let _seams = Seams::new(&[]);
+        for source in [B_WEB, B_FORGE, "tillandsias-does-not-exist"] {
+            let reply = ask("a", "forge_logs", serde_json::json!({ "source": source }));
+            assert_eq!(
+                refusal(&reply),
+                format!("refused:diagnostics-scope:not-in-scope:{source}"),
+                "{reply}"
+            );
+            assert!(!reply.to_string().contains("LOG-OF-"), "{reply}");
+        }
+        let listed = ask("a", "forge_logs", serde_json::json!({}));
+        assert!(
+            listed.get("result").is_some(),
+            "the source list answers: {listed}"
+        );
+        let text = listed.to_string();
+        assert!(!text.contains(B_FORGE) && !text.contains(B_WEB), "{listed}");
+    }
+
+    /// Arm 2: a forge lists itself and the containers its lane started, and
+    /// reads its children's logs.
+    #[test]
+    #[ignore = "red until 1779-sq9g is implemented (openspec/changes/forge-diagnostics-scope)"]
+    fn a_forge_reads_its_own_childrens_logs() {
+        let _seams = Seams::new(&[]);
+        let listed = ask("a", "forge_logs", serde_json::json!({}));
+        let text = listed["result"]["structuredContent"].to_string();
+        assert!(text.contains(A_FORGE) && text.contains(A_WEB), "{listed}");
+        let read = ask("a", "forge_logs", serde_json::json!({ "source": A_WEB }));
+        assert!(
+            read["result"]["structuredContent"]
+                .to_string()
+                .contains(&format!("LOG-OF-{A_WEB}")),
+            "{read}"
+        );
+    }
+
+    /// Arm 3: a producer-authored global event (a GitHub token refresh)
+    /// reaches every concurrent forge, carries only the envelope and its
+    /// kind's allowlisted fields, and no credential present in the producing
+    /// process reaches either reply.
+    #[cfg(feature = "vault")]
+    #[test]
+    #[ignore = "red until 1779-sq9g is implemented (openspec/changes/forge-diagnostics-scope)"]
+    fn a_global_event_reaches_every_forge_with_only_allowlisted_fields() {
+        let canary = format!("CANARY-sq9g-{}", std::process::id());
+        let _seams = Seams::new(&[
+            ("GH_TOKEN", canary.clone()),
+            ("GITHUB_TOKEN", canary.clone()),
+            ("VAULT_TOKEN", canary.clone()),
+        ]);
+        // Both lanes are live (their rings exist) before the event.
+        let _ = ask("a", "forge_events", serde_json::json!({}));
+        let _ = ask("b", "forge_events", serde_json::json!({}));
+        crate::vault_bootstrap::github_token_check_before_use(
+            || {
+                Ok(crate::vault_bootstrap::DueCheck::Rotated {
+                    expires_at: 1_800_000_000,
+                    refresh_expires_at: None,
+                })
+            },
+            false,
+        );
+        const ENVELOPE: [&str; 5] = ["schema_version", "seq", "at", "scope", "kind"];
+        const ALLOWED: [&str; 2] = ["service", "outcome"];
+        for lane in ["a", "b"] {
+            let reply = ask(lane, "forge_events", serde_json::json!({}));
+            assert!(!reply.to_string().contains(&canary), "lane {lane}: {reply}");
+            let events = reply["result"]["structuredContent"]["events"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            let refresh: Vec<_> = events
+                .iter()
+                .filter(|e| e["kind"] == "credential.refresh")
+                .collect();
+            assert_eq!(refresh.len(), 1, "lane {lane}: {reply}");
+            let keys: Vec<&String> = refresh[0].as_object().unwrap().keys().collect();
+            assert!(
+                keys.iter()
+                    .all(|k| ENVELOPE.contains(&k.as_str()) || ALLOWED.contains(&k.as_str())),
+                "lane {lane}: only the envelope and the allowlist, got {keys:?}"
+            );
+            assert_eq!(refresh[0]["scope"], "global");
+        }
+    }
 }

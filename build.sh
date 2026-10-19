@@ -2222,7 +2222,17 @@ _check_trace_coverage() {
 _stage_router_sidecar() {
     [[ -f "$SCRIPT_DIR/scripts/build-sidecar.sh" ]] || return 0
     _step "Staging router sidecar (build artifact — not committed)..."
-    bash "$SCRIPT_DIR/scripts/build-sidecar.sh"
+    # 1750-a4re: the forge's Bash policy decider is staged here too. A lane
+    # that produces an installable binary or an image (--install, --release,
+    # --ci-full) needs it, and a failure to build it stops the lane; a
+    # compile-only lane gets a named skip (skip:forge-plan-bin:…) instead, so a
+    # `--check` in a fresh tree without a musl toolchain still compiles.
+    local optional=1
+    if [[ "${FLAG_INSTALL:-false}" == true || "${FLAG_RELEASE:-false}" == true \
+          || "${FLAG_CI_FULL:-false}" == true ]]; then
+        optional=0
+    fi
+    TILLANDSIAS_FORGE_PLAN_OPTIONAL="$optional" bash "$SCRIPT_DIR/scripts/build-sidecar.sh"
 }
 
 # Stage before every dispatch that compiles Rust. Pure teardown flags
@@ -3557,6 +3567,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Host trust-store check passed"
+    # 1776-ch4m: a module that runs a versioned image also ensures it (through
+    # launch_images.rs or an ensure call), so a host that never ran --init
+    # builds on first use instead of failing "image missing".
+    _step "Checking every image a module runs is ensured (1776-ch4m)..."
+    if ! _run_lua_decider "scripts/lua/check-launch-images-table.lua" 2>&1; then
+        _error "a module runs an image it never ensures (1776-ch4m) — see the site lines above"
+        exit 1
+    fi
+    _info "Launch-images check passed"
     # 1713-3v3f: Tillandsias never launches or drives a host browser. Every
     # launcher-shaped call site in crates/ must be on the guard's allowlist at
     # its exact count (only file/app opens, never a URL).
@@ -5300,6 +5319,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Forge Bash policy hook fixture passed"
 
+    # 1750-a4re: staging the decider is loud where an image is built, a named
+    # skip on compile-only lanes, and never blocks the router sidecar.
+    _step "Checking forge decider staging (1750-a4re)..."
+    if ! _run_lua_decider "scripts/lua/test-forge-plan-bin-staging.lua" 2>&1; then
+        _error "the forge decider staging fixture failed — see the FAIL lines above (1750-a4re)"
+        exit 1
+    fi
+    _info "Forge decider staging fixture passed"
+
     # 1762-bano: the host trust-store guard's fixture (live tree, an NSS add
     # refused, a Rust update-ca-trust refused, a marked preview CA allowed, a
     # comment ignored).
@@ -5309,6 +5337,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Host trust-store fixture passed"
+
+    # 1776-ch4m: the launch-images guard's fixture (live tree, the operator's
+    # chromium-framework hole refused, a site / ensure line / dependency /
+    # marker covering it, test code ignored, zero literals refused).
+    _step "Checking the launch-images guard's fixture (1776-ch4m)..."
+    if ! _run_lua_decider "scripts/lua/test-launch-images-table.lua" 2>&1; then
+        _error "the launch-images guard's fixture failed — see the FAIL lines above (1776-ch4m)"
+        exit 1
+    fi
+    _info "Launch-images fixture passed"
 
     # 1756-z3kz: the embedded-ELF arch check release.yml runs on every binary:
     # matching images pass, a foreign one is refused by offset, a decoy magic is
@@ -5665,7 +5703,9 @@ if [[ "$FLAG_CHECK" == true ]]; then
         _info "$_term_memo — dictionary, locales and checker unchanged since the last pass; check not re-run"
         timing_emit terminology-check-hit check "$_term_t0" 0 || true
     else
-        if ! _run bash "$SCRIPT_DIR/scripts/check-terminology.sh" 2>&1; then
+        # 1247-nx5c: ported to scripts/lua (the shell-to-lua carried
+        # obligation); the verdict grammar is unchanged.
+        if ! _run_lua_decider "scripts/lua/check-terminology.lua" 2>&1; then
             timing_emit terminology-check-miss check "$_term_t0" 1 || true
             # The script names the file, the variant and the offending string, and
             # says the two remedies (fix the string, or add the variant to the
@@ -6353,14 +6393,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Ten formerly-orphaned fixtures passed (1063-nraf)"
 
     _step "Checking litmus steps can actually fail (972-cvdg)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-steps-can-fail.sh" 2>&1; then
+    # 1247-ngc5: ported to scripts/lua (the shell-to-lua carried obligation);
+    # the verdict grammar is unchanged.
+    if ! _run_lua_decider "scripts/lua/check-litmus-steps-can-fail.lua" 2>&1; then
         _error "a litmus step prints the same token on success and failure (972-cvdg) — see the verdict line above"
         exit 1
     fi
     _info "Litmus steps-can-fail check passed"
 
     _step "Checking plan fragments use keys the fold reads (944-vim8)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-keys-are-read.sh" 2>&1; then
+    # 1247-sv4d: ported to scripts/lua (the shell-to-lua carried obligation);
+    # the verdict grammar is unchanged.
+    if ! _run_lua_decider "scripts/lua/check-fragment-keys-are-read.lua" 2>&1; then
         _error "a plan/index.d/ fragment uses a top-level key the fold discards (944-vim8) — see the verdict line above"
         exit 1
     fi
@@ -6400,7 +6444,9 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # pin-claim gate (721-77yu, moved to the fast-refusal phase by 1009-gccx):
     # both ask whether an assertion can still fail.
     _step "Checking source-slice bounds still resolve (797-8dzt)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-source-slice-bounds.sh" 2>&1; then
+    # 1247-jq4e: ported to scripts/lua (the shell-to-lua carried obligation);
+    # the verdict grammar is unchanged.
+    if ! _run_lua_decider "scripts/lua/check-source-slice-bounds.lua" 2>&1; then
         _error "a source-slicing test is bounded by a symbol that no longer exists (797-8dzt) — see the verdict line above"
         exit 1
     fi

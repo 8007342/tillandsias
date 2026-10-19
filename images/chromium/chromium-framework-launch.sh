@@ -25,6 +25,12 @@ accepts_no_sandbox() {
     fi
 }
 
+# Order 1769-9gna: the browser plays to a private audio server whose only
+# device is "Speakers", never to the output-only server the window was given
+# (whose clients can list every host device). Shared with the WebKit window.
+# shellcheck source=browser-audio-start.sh
+source "${TILLANDSIAS_BROWSER_AUDIO_START:-/usr/local/lib/tillandsias/browser-audio-start.sh}"
+
 CHROMIUM_BIN="$(find_chromium || true)"
 if [[ -z "$CHROMIUM_BIN" ]]; then
     echo "chromium framework launcher: no chromium binary found" >&2

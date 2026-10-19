@@ -1,0 +1,14 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: litmus-opencode-vault-auth-content-fails-on-trunk-because-the-installed-opencode-2-x-ignores-opencode-auth-content
+    event:
+      type: progress
+      ts: "2026-10-18T15:49:03Z"
+      host: lenovinha
+      summary: |-
+        STEP 1 (coordinator's order): THE FORGE IS UNAFFECTED. The break is the host-gated fixture arm only.
+        Fresh forge from trunk on lenovinha, installed v56.10.17.1: tillandsias --opencode <scratch clone of octocat/Hello-World named i2ir-probe> --prompt "Reply with exactly the word: pong" --debug. The forge printed "harness | opencode missing — install latest" then "install | opencode: available (1.19.3)", so npm opencode-ai@latest is 1.19.3. The agent answered "pong" on model big-pickle, exit 0.
+        This host's Vault holds no OpenCode Gemini key (the credential-free lane ran, with no credentials trace line), so that launch did not exercise the injected credential. That is checked directly instead: in a throwaway localhost/tillandsias-forge:v56.10.17.1 container, npm install opencode-ai@1.19.3, then the contract probe with a dummy sentinel (not a credential): OPENCODE_AUTH_CONTENT='{"tillandsias-contract-probe":{"type":"api",...}}' opencode auth list gives rc 0 and "tillandsias-contract-probe api / 1 credentials", and no auth.json. So 1.19.3 honours order 431's contract.
+        npm registry (registry.npmjs.org/opencode-ai): dist-tags latest=1.19.3, and NO 2.x version exists among 12253. The 2.0.25 that reds the fixture is Homebrew's opencode formula ("opencode: stable 2.0.25", https://opencode.ai), a different distribution channel that forges never install.
+        2.x, measured: it ignores OPENCODE_AUTH_CONTENT even with --standalone (a private server): "No authenticated integrations". It runs a background managed service on a localhost port by default, and one was already running on this host, so a probe WITHOUT --standalone may talk to the operator's own service; any 2.x probe must pass --standalone. Its binary names OPENCODE_CONFIG_CONTENT and OPENCODE_API_KEY, but no OPENCODE_AUTH_CONTENT. Its auth subcommands are list/login/logout/export/import. A provider apiKey through OPENCODE_CONFIG_CONTENT does not show in auth list, and proving it authenticates needs a real model call, so the 2.x channel is NOT yet known.
+        So no containment pin is needed: forges get 1.19.3, which works. What remains for this row: the fixture's installed-binary arm judges whatever opencode is on the host PATH, so any host with Homebrew opencode 2.x reds the release-tier litmus while the forge is fine. That arm should judge the opencode the forge installs (opencode-ai from npm), or name the PATH binary's channel and skip a non-npm one with that reason. That is the coordinator's call.

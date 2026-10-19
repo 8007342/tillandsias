@@ -645,11 +645,13 @@ fn result(
     ready: bool,
     diagnostic: &str,
 ) -> Value {
+    // Order 1761-bvyn: read back from the user-scope stores, never inferred
+    // from the CA-verified probe, which is transport evidence only.
+    let host_trust = crate::host_trust::state(&crate::preview_ca::dir());
     let mut value = json!({
         "state": state, "runtime": profile.unwrap_or("unknown"),
         "watch": profile == Some("wrangler"), "route_ready": ready, "serving": ready,
-        "tls": {"enabled": true, "host_trust": "unknown",
-            "diagnostic": "Local CA transport verification is separate from host-browser trust; no host trust store was changed."},
+        "tls": {"enabled": true, "host_trust": host_trust.0, "diagnostic": host_trust.1},
         "diagnostic": diagnostic
     });
     if let Some(url) = url {
@@ -794,7 +796,13 @@ fn subset_mount(live: &LiveSource, path: &str, destination: &str) -> Result<Stri
 
 fn verify_subset(live: &LiveSource, path: &str) -> Result<(), String> {
     let relative = safe_relative(path)?;
-    let expected = format!("/home/forge/src/{}/{relative}", live.root);
+    verify_tree(live, &format!("/home/forge/src/{}/{relative}", live.root))
+}
+
+/// `expected` resolves to itself (no symlink escape) and holds no symlink,
+/// .git, .env*, node_modules, .cache or credentials anywhere below it.
+fn verify_tree(live: &LiveSource, expected: &str) -> Result<(), String> {
+    let expected = expected.to_string();
     let actual = podman_at(
         Step::Source,
         &["exec", &live.forge_id, "realpath", "-e", "--", &expected],
@@ -1039,6 +1047,17 @@ fn source_mounts(live: &LiveSource, profile: &Profile) -> Result<Vec<String>, St
                 return Err(NO_SERVABLE_ROOT.into());
             }
             verify_subset(live, "index.html")?;
+            // 1788-qlwq slice 11: an app the caller NAMED (app_dir, e.g. a
+            // Flutter build/web) is a build output, so it is served whole, as
+            // public/ and dist/ are, under the same private-path scan. The
+            // project root keeps the narrow list below: source sits beside it.
+            if live.app_dir.is_some() {
+                verify_tree(live, &format!("/home/forge/src/{}", live.root))?;
+                return Ok(vec![format!(
+                    "type=volume,source={},target=/var/www,volume-subpath={},readonly=true",
+                    live.volume, live.root
+                )]);
+            }
             let mut mounts = vec![subset_mount(live, "index.html", "/var/www/index.html")?];
             let root = format!("/home/forge/src/{}", live.root);
             let files = podman_at(
@@ -1249,9 +1268,9 @@ fn certificate_args(
             "-in".into(),
             csr.display().to_string(),
             "-CA".into(),
-            ca.join("intermediate.crt").display().to_string(),
+            ca.join(crate::preview_ca::CRT).display().to_string(),
             "-CAkey".into(),
-            ca.join("intermediate.key").display().to_string(),
+            ca.join(crate::preview_ca::KEY).display().to_string(),
             "-set_serial".into(),
             format!(
                 "{}",
@@ -1314,7 +1333,8 @@ fn prepare_tls(project: &str, ca: &Path) -> Result<(), String> {
         host_command(&args)?;
     }
     // Order 1649-xqet: the router serves the leaf as a FULL CHAIN (leaf, then
-    // the enclave CA). A browser.open window trusts the CA through an SPKI pin,
+    // its CA, the preview CA since 1761-bvyn). A browser.open window trusts the
+    // CA through an SPKI pin,
     // and Chromium honours the pin only for a key in the chain the server
     // sends: a leaf-only chain fails with ERR_CERT_AUTHORITY_INVALID (measured
     // 2026-10-12). Pinning the CA rather than the leaf survives leaf rotation.
@@ -1324,7 +1344,7 @@ fn prepare_tls(project: &str, ca: &Path) -> Result<(), String> {
         chain.push(b'\n');
     }
     chain.extend(
-        std::fs::read(ca.join("intermediate.crt"))
+        std::fs::read(ca.join(crate::preview_ca::CRT))
             .map_err(|_| "router_not_ready: CA certificate unavailable")?,
     );
     std::fs::write(&crt, chain).map_err(|_| "router_not_ready: leaf chain unwritable")?;
@@ -1361,8 +1381,18 @@ fn ensure_router(project: &str, debug: bool) -> Result<PathBuf, String> {
     if !ca.join("intermediate.crt").is_file() || !ca.join("intermediate.key").is_file() {
         return Err("router_not_ready: initialize the existing local CA before publication".into());
     }
-    prepare_tls(project, &ca)?;
+    // Order 1761-bvyn: preview leaves are signed by the localhost-only preview
+    // CA, the one a host browser trusts. A publish mints it only when missing
+    // or expired; launch renews it inside the 60-day margin.
+    let preview = crate::preview_ca::ensure(0)?;
+    prepare_tls(project, &preview)?;
+    // Not verified yet (a fresh machine: launch ran before the router image
+    // that carries certutil existed): retry the user-scope install off this
+    // path, which never waits for it.
+    crate::host_trust::retry_in_background(debug);
     let mut http_port = None;
+    // launch-images-ok: publish_local refuses router_not_ready rather than build;
+    // the forge launch serving this call ensured the router (EnclaveForProject).
     let mut router_image = crate::versioned_image_tag("router", crate::VERSION.trim());
     let mut running = false;
     if let Some(row) = inspect("tillandsias-router")? {
@@ -1401,7 +1431,7 @@ fn ensure_router(project: &str, debug: bool) -> Result<PathBuf, String> {
         command.extend(args.iter().map(String::as_str));
         podman_at(Step::Router, &command)?;
     }
-    Ok(ca)
+    Ok(preview)
 }
 
 /// ORDER 1762-bano: the projects whose preview leaf in `tls_dir` stays valid for
@@ -1409,7 +1439,7 @@ fn ensure_router(project: &str, debug: bool) -> Result<PathBuf, String> {
 /// 7 days and is re-issued on every publish; a preview left running longer
 /// than that without a republish would otherwise serve an expired leaf.
 #[cfg(feature = "tray")]
-pub(crate) fn preview_leaves_due(tls_dir: &Path, margin_secs: u64) -> Vec<String> {
+pub(crate) fn preview_leaves_due(tls_dir: &Path, ca_dir: &Path, margin_secs: u64) -> Vec<String> {
     let mut due = Vec::new();
     let Ok(entries) = std::fs::read_dir(tls_dir) else {
         return due;
@@ -1422,7 +1452,11 @@ pub(crate) fn preview_leaves_due(tls_dir: &Path, margin_secs: u64) -> Vec<String
         let Some(project) = path.file_stem().and_then(|s| s.to_str()) else {
             continue;
         };
-        if !crate::cert_valid_for(&path, margin_secs) {
+        // 1761-bvyn: a leaf signed by an older preview CA, or by the enclave
+        // CA before this order, is due too, so a rotation re-issues it.
+        if !crate::cert_valid_for(&path, margin_secs)
+            || !crate::preview_ca::issued_leaf(ca_dir, &path)
+        {
             due.push(project.to_string());
         }
     }
@@ -1436,11 +1470,11 @@ pub(crate) fn preview_leaves_due(tls_dir: &Path, margin_secs: u64) -> Vec<String
 /// so nothing that is running loses trust. Returns the renewed projects.
 #[cfg(feature = "tray")]
 pub(crate) fn renew_expiring_preview_leaves(margin_secs: u64) -> Result<Vec<String>, String> {
-    let due = preview_leaves_due(&router_dir().join("preview-tls"), margin_secs);
+    let ca = crate::preview_ca::ensure(0)?;
+    let due = preview_leaves_due(&router_dir().join("preview-tls"), &ca, margin_secs);
     if due.is_empty() {
         return Ok(due);
     }
-    let ca = PathBuf::from(crate::ca_dir());
     for project in &due {
         prepare_tls(project, &ca)?;
     }
@@ -1495,6 +1529,22 @@ pub(crate) fn add_dev_route(
     dev_url(service, project)
 }
 
+/// 1788-qlwq slice 10: every route a browser window can load, as
+/// `<service>.<project>.localhost:<preview TLS port>`, read from the router's
+/// route table (the tray state the browser-routing-allowlist spec names).
+/// Empty when the table or the TLS listener is unavailable.
+pub(crate) fn browser_routed_hosts() -> Vec<String> {
+    let Ok(port) = tls_port() else {
+        return Vec::new();
+    };
+    read_routes(false)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|r| r.preview_tls)
+        .map(|r| format!("{}.localhost:{port}", r.subdomain))
+        .collect()
+}
+
 /// The URL a dev server is opened at: https on the preview listener, the
 /// only scheme a browser.open window loads (order 1637-5765).
 fn dev_url(service: &str, project: &str) -> Result<String, String> {
@@ -1546,7 +1596,7 @@ async fn probe_route(project: &str, ca: &Path) -> Result<(), String> {
         .into_iter()
         .find(|r| r.subdomain == subdomain("www", project) && r.public && r.preview_tls)
         .ok_or("router_not_ready: preview route is absent")?;
-    let cert = std::fs::read(ca.join("intermediate.crt"))
+    let cert = std::fs::read(ca.join(crate::preview_ca::CRT))
         .map_err(|_| "router_not_ready: CA certificate unavailable")?;
     let cert = reqwest::Certificate::from_pem(&cert)
         .map_err(|_| "router_not_ready: invalid CA certificate")?;
@@ -2032,7 +2082,7 @@ async fn status_inner(project: &str, instance: &str) -> Result<Value, String> {
         Some("stopped") => "stopped",
         _ => "unknown",
     };
-    let ca = PathBuf::from(crate::ca_dir());
+    let ca = crate::preview_ca::dir();
     let ready = state == "running" && probe_route(project, &ca).await.is_ok();
     let preview_url = url(project).ok();
     // 1723-2fiq: `serving` (in every result) is the one readiness signal an
@@ -2856,6 +2906,55 @@ mod tests {
         }
     }
 
+    /// 1788-qlwq slice 11: a root-index app named by app_dir (a Flutter
+    /// build/web) is served WHOLE, so canvaskit/, music/, version.json and
+    /// .wasm resolve; kumbia-kombat measured 404s on every subdirectory but
+    /// assets/. NEGATIVE CONTROL: the project root keeps the narrow mounts, so
+    /// source beside a root index.html is never published.
+    #[test]
+    fn an_app_dir_root_index_is_served_whole_and_the_project_root_stays_narrow() {
+        let (_fake, mut live) = fake_forge(
+            &[
+                "build/web/index.html",
+                "build/web/flutter_bootstrap.js",
+                "build/web/version.json",
+                "build/web/canvaskit/canvaskit.wasm",
+                "build/web/music/theme.ogg",
+                "build/web/assets/AssetManifest.bin",
+            ],
+            r#"{"remote":false,"assets":null,"main":null,"build":null,"raw":"{}"}"#,
+        );
+        live.root = "proj/build/web".into();
+        live.app_dir = Some("build/web".into());
+        assert_eq!(
+            source_mounts(&live, &Profile::Static).unwrap(),
+            vec![
+                "type=volume,source=vol,target=/var/www,volume-subpath=proj/build/web,readonly=true"
+            ]
+        );
+
+        let (_fake, live) = fake_forge(
+            &[
+                "index.html",
+                "src/main.dart",
+                "canvaskit/canvaskit.wasm",
+                "assets/a.png",
+            ],
+            r#"{"remote":false,"assets":null,"main":null,"build":null,"raw":"{}"}"#,
+        );
+        let mounts = source_mounts(&live, &Profile::Static).unwrap();
+        assert!(
+            mounts.iter().all(|m| !m.contains("canvaskit")
+                && !m.contains("src")
+                && !m.ends_with("volume-subpath=proj,readonly=true")),
+            "the project root must stay narrow: {mounts:?}"
+        );
+        assert!(
+            mounts.iter().any(|m| m.contains("target=/var/www/assets,")),
+            "{mounts:?}"
+        );
+    }
+
     /// Order 1667-6rtp: with app_dir, the config, its assets and the static
     /// fallback all resolve INSIDE the app directory. Tillandsias's own
     /// observatorium (observatorium/wrangler.jsonc, assets ./build/web) is the
@@ -3597,27 +3696,85 @@ mod tests {
     #[test]
     fn a_preview_leaf_inside_the_margin_is_due_and_one_outside_is_not() {
         let tmp = tempfile::tempdir().unwrap();
-        for (project, days) in [("soon", "1"), ("later", "7")] {
+        let ca = tempfile::tempdir().unwrap();
+        crate::preview_ca::ensure_in(ca.path(), 0).unwrap();
+        let run = |args: &[&str]| {
             let status = std::process::Command::new("openssl")
-                .args([
-                    "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=leaf",
-                ])
-                .args(["-days", days, "-keyout"])
-                .arg(tmp.path().join(format!("{project}.key")))
-                .arg("-out")
-                .arg(tmp.path().join(format!("{project}.crt")))
+                .args(args)
+                .current_dir(tmp.path())
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
                 .status()
                 .unwrap();
-            assert!(status.success());
+            assert!(status.success(), "{args:?}");
+        };
+        let ca_crt = ca.path().join(crate::preview_ca::CRT).display().to_string();
+        let ca_key = ca.path().join(crate::preview_ca::KEY).display().to_string();
+        std::fs::write(
+            tmp.path().join("leaf.ext"),
+            "subjectAltName=DNS:www.p.localhost\n",
+        )
+        .unwrap();
+        for (project, days) in [("soon", "1"), ("later", "7")] {
+            run(&[
+                "req",
+                "-new",
+                "-newkey",
+                "rsa:2048",
+                "-nodes",
+                "-subj",
+                "/CN=www.p.localhost",
+                "-keyout",
+                &format!("{project}.key"),
+                "-out",
+                "leaf.csr",
+            ]);
+            run(&[
+                "x509",
+                "-req",
+                "-in",
+                "leaf.csr",
+                "-CA",
+                &ca_crt,
+                "-CAkey",
+                &ca_key,
+                "-set_serial",
+                "9",
+                "-days",
+                days,
+                "-extfile",
+                "leaf.ext",
+                "-out",
+                &format!("{project}.crt"),
+            ]);
         }
+        // 1761-bvyn: a 7-day leaf from ANOTHER issuer (the enclave CA, or a
+        // rotated preview CA) is due as well.
+        run(&[
+            "req",
+            "-x509",
+            "-newkey",
+            "rsa:2048",
+            "-nodes",
+            "-subj",
+            "/CN=leaf",
+            "-days",
+            "7",
+            "-keyout",
+            "foreign.key",
+            "-out",
+            "foreign.crt",
+        ]);
         std::fs::write(tmp.path().join("broken.crt"), "not a certificate\n").unwrap();
-        // 48 h margin: the 1-day leaf and the unreadable one are due; the 7-day
-        // leaf and the .key files are not.
+        // 48 h margin: the 1-day leaf, the foreign one and the unreadable one
+        // are due; the 7-day leaf and the .key files are not.
         assert_eq!(
-            preview_leaves_due(tmp.path(), 48 * 60 * 60),
-            vec!["broken".to_string(), "soon".to_string()]
+            preview_leaves_due(tmp.path(), ca.path(), 48 * 60 * 60),
+            vec![
+                "broken".to_string(),
+                "foreign".to_string(),
+                "soon".to_string()
+            ]
         );
     }
 
@@ -3631,7 +3788,15 @@ mod tests {
             "runtime_unavailable: inspection failed",
         );
         assert_eq!(value["state"], "unknown");
-        assert_eq!(value["tls"]["host_trust"], "unknown");
+        let trust = value["tls"]["host_trust"].as_str().unwrap();
+        assert!(
+            ["unknown", "verified", "untrusted"].contains(&trust),
+            "{trust}"
+        );
+        // 1761-bvyn: the field is the stores' read-back, not a constant.
+        let (want, why) = crate::host_trust::state(&crate::preview_ca::dir());
+        assert_eq!(trust, want);
+        assert_eq!(value["tls"]["diagnostic"], why);
         assert_eq!(value["route_ready"], false);
     }
 }

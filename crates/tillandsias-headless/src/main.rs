@@ -77,6 +77,7 @@ mod bringup_progress;
 mod device_poll_view;
 mod flow_sink;
 mod image_build_progress;
+mod image_build_scope;
 mod progress_sink;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
 // macOS and WSL2 VMs carry their own per-boot swap, design §9.2/§9.3).
@@ -89,6 +90,7 @@ mod control_dispatch;
 #[cfg(target_os = "linux")]
 mod forge_swap;
 // RAM-only source-volume identity is needed by default CLI launchers too.
+mod launch_images;
 mod local_projects;
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
 pub mod remote_projects;
@@ -123,6 +125,9 @@ compile_error!(
 mod vault_bootstrap;
 // Advisory per-resource flocks for container check+act sections (order 232, R4).
 mod resource_lock;
+// @trace order:1776-brk3 — the on-demand image build breaker: a failed build
+// is remembered by (image, inputs digest) and later ensures refuse fast.
+mod image_ensure_marker;
 // The crate-wide env_lock() every env-mutating test serializes on (1437-5czv).
 #[cfg(test)]
 mod test_support;
@@ -418,6 +423,51 @@ fn main() {
                 std::process::exit(1);
             }
         }
+    }
+
+    // Order 1776-brk3: `--retry-image <name>` — clear a failed build's
+    // marker and rebuild that image in the foreground.
+    if let Some(i) = user_args.iter().position(|a| a == "--retry-image") {
+        let debug = user_args.iter().any(|a| a == "--debug");
+        let Some(image_name) = user_args.get(i + 1).filter(|a| !a.starts_with('-')) else {
+            let failed: Vec<String> = image_ensure_marker_dir()
+                .map(|d| image_ensure_marker::list(&d))
+                .unwrap_or_default()
+                .into_iter()
+                .map(|m| m.image)
+                .collect();
+            eprintln!(
+                "Error: --retry-image requires <image-name>; images whose last build failed: {}",
+                if failed.is_empty() {
+                    "none".to_string()
+                } else {
+                    failed.join(", ")
+                }
+            );
+            std::process::exit(2);
+        };
+        match run_retry_image(image_name, debug) {
+            Ok(()) => {
+                eprintln!("[tillandsias] retry-image {image_name}: built");
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("[tillandsias] retry-image {image_name} failed: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    // Order 1761-bvyn: hidden uninstall helper. scripts/uninstall.sh runs it
+    // before it removes this binary, to take the localhost-only preview CA out
+    // of every user-scope browser trust store. Not operator surface; absent
+    // from --help like --internal-ensure-image.
+    #[cfg(feature = "host-services")]
+    if user_args
+        .iter()
+        .any(|a| a == "--internal-remove-preview-trust")
+    {
+        std::process::exit(host_trust::remove_cli());
     }
 
     // Order 482c: hidden harness mode for the engine-parity smoke. `ensure`
@@ -2232,6 +2282,10 @@ impl InitBuildState {
 
     fn mark_success(&mut self, image: &str) {
         self.images.insert(image.to_string(), "success".to_string());
+        // 1776-brk3: a successful --init build clears the launch breaker.
+        if let Some(d) = image_ensure_marker_dir() {
+            let _ = image_ensure_marker::clear(&d, image);
+        }
     }
 
     fn mark_failed(&mut self, image: &str) {
@@ -2781,7 +2835,7 @@ fn image_dependency(image_name: &str) -> Option<&'static str> {
 /// `image_build_inputs` does under `run_init` — otherwise the two paths would
 /// derive different digests for identical content and each would rebuild what
 /// the other just built.
-fn ensure_image_identity(
+pub(crate) fn ensure_image_identity(
     root: &Path,
     image_name: &str,
     version: &str,
@@ -2897,6 +2951,24 @@ fn describe_image_ensure_failure(
     }
     msg.push_str(&format!("\nlog tail ({}):\n{log_tail}", log_path.display()));
     msg
+}
+
+/// The last `refused:image-ensure:` the helper logged (its own error line),
+/// from the refusal on, with its indented `why:` / `log:` / `remedy:` lines
+/// (1776-brk3's refusal names the log; a first-line-only copy dropped it).
+fn helper_refusal(log_tail: &str) -> Option<String> {
+    let lines: Vec<&str> = log_tail.lines().collect();
+    let (i, at) = lines
+        .iter()
+        .enumerate()
+        .rev()
+        .find_map(|(i, l)| l.find("refused:image-ensure:").map(|at| (i, at)))?;
+    let mut out = lines[i][at..].to_string();
+    for l in lines[i + 1..].iter().take_while(|l| l.starts_with("  ")) {
+        out.push('\n');
+        out.push_str(l);
+    }
+    Some(out)
 }
 
 /// Order 270: pure decision — should this ensure detach into a
@@ -3062,6 +3134,11 @@ fn run_image_ensure_detached<D: DetachedImageEnsure>(
             lines[start..].join("\n")
         })
         .unwrap_or_default();
+    // Order 1776-d5k2: a named refusal the helper raised (the disk preflight)
+    // reaches the caller as itself, not as "helper exited 1" plus a log tail.
+    if let Some(refusal) = helper_refusal(&tail) {
+        return Err(refusal);
+    }
     let panic_text = fs::read_to_string(&panic_path).ok();
     Err(describe_image_ensure_failure(
         image_name,
@@ -3194,9 +3271,22 @@ pub(crate) fn ensure_image_exists(
 
     // Resolve the base image first. Its own content check runs inside this same
     // function, so a stale base is rebuilt rather than accepted on tag presence.
+    // 1776-brk3: a base that refuses (its own marker) or fails records ITS
+    // marker; the dependent records none, so a fixed base retries it at once.
     if let Some(dependency) = image_dependency(image_name) {
         let dependency_tag = versioned_image_tag(dependency, version);
         ensure_image_exists(root, dependency, &dependency_tag, debug).map_err(|e| {
+            eprintln!(
+                "{}",
+                image_ensure_marker::verdict_line(
+                    image_name,
+                    "refuse",
+                    None,
+                    None,
+                    &format!("base-{dependency}-failed"),
+                    None,
+                )
+            );
             format!(
                 "Required base image '{}' is absent or stale and failed to build on demand: {}.\n\
                  {IMAGE_BUILD_REMEDY}",
@@ -3210,8 +3300,53 @@ pub(crate) fn ensure_image_exists(
     // change — the old explicit managed-layer-policy tag probe is subsumed
     // rather than dropped.
     let (identity, build_args) = ensure_image_identity(root, image_name, version)?;
-    let (observation, _) = rt.block_on(observe_image_build(&client, &identity, false));
+
+    // 1776-brk3: the breaker, checked here under the image lock so a waiter
+    // sees the winner's marker instead of rebuilding.
+    let marker_dir = image_ensure_marker_dir();
+    let now = unix_now_secs();
+    let forced = image_ensure_forced(image_name);
+    let mut marker = marker_dir
+        .as_deref()
+        .and_then(|d| image_ensure_marker::load(d, image_name));
+    match image_ensure_marker::decide(marker.as_ref(), &identity.source_digest) {
+        image_ensure_marker::Breaker::Refuse if !forced => {
+            let m = marker.as_ref().expect("Refuse implies a marker");
+            eprintln!(
+                "{}",
+                image_ensure_marker::verdict_line(
+                    image_name,
+                    "refuse",
+                    Some(&identity.source_digest),
+                    None,
+                    "build-failed-previously",
+                    Some(m.attempts),
+                )
+            );
+            return Err(image_ensure_marker::refusal(m, now));
+        }
+        image_ensure_marker::Breaker::InputsChanged => {
+            if let Some(d) = marker_dir.as_deref() {
+                let _ = image_ensure_marker::clear(d, image_name);
+            }
+            marker = None;
+        }
+        _ => {}
+    }
+
+    let (observation, _) = rt.block_on(observe_image_build(&client, &identity, forced));
     let decision = ensure_image_decision(&identity, &observation);
+    eprintln!(
+        "{}",
+        image_ensure_marker::verdict_line(
+            image_name,
+            image_build_action_label(decision.action),
+            Some(&identity.source_digest),
+            observation.canonical_source_digest.as_deref(),
+            image_build_reason_label(decision.reason),
+            marker.as_ref().map(|m| m.attempts),
+        )
+    );
 
     match decision.action {
         ImageBuildAction::Skip => {}
@@ -3222,13 +3357,75 @@ pub(crate) fn ensure_image_exists(
             rt.block_on(apply_image_aliases(&client, &identity))?;
         }
         ImageBuildAction::Build | ImageBuildAction::ForceRebuild => {
-            eprintln!(
-                "[tillandsias] building image {image_name} ({image_tag}, {}); this may take several minutes",
-                image_build_reason_label(decision.reason)
-            );
-            build_image_with_logging(root, image_name, &identity, &build_args, &None, debug)
-                .map_err(|e| format_on_demand_image_build_error(image_tag, &e))?;
+            // Order 1776-d5k2: refuse a build the store cannot hold, before it
+            // starts, rather than find the full disk mid-build (1744-xjfw).
+            // Decided here, under the image lock, where a build is certain.
+            image_build_scope::disk_preflight(image_name, debug)?;
+            // 1776-brk3, operator ruling 2026-10-17: a failed build is retried
+            // here, in the background helper, RETRY_BUDGET times on
+            // exponential backoff before the image is declared failed. The
+            // tray only ever shows the build status; an agent asking
+            // meanwhile is told "busy, try again in N" from the marker.
+            let base_ms = image_ensure_marker::retry_base_ms();
+            let mut attempts = marker.as_ref().map_or(0, |m| m.attempts);
+            loop {
+                eprintln!(
+                    "[tillandsias] building image {image_name} ({image_tag}, {}); this may take several minutes",
+                    image_build_reason_label(decision.reason)
+                );
+                let Err(e) = build_image_with_logging(
+                    root,
+                    image_name,
+                    &identity,
+                    &build_args,
+                    &None,
+                    debug,
+                ) else {
+                    break;
+                };
+                attempts = attempts.saturating_add(1);
+                let retry = (attempts <= image_ensure_marker::RETRY_BUDGET)
+                    .then(|| image_ensure_marker::retry_delay_ms(attempts, base_ms));
+                let failed_at = unix_now_secs();
+                // Remember these inputs failed, so a later ensure resumes the
+                // budget or refuses in seconds instead of building again.
+                let recorded = marker_dir.as_deref().map(|d| {
+                    image_ensure_marker::record(
+                        d,
+                        image_name,
+                        &identity.source_digest,
+                        &e,
+                        &image_build_helper_log_path(image_name)
+                            .display()
+                            .to_string(),
+                        failed_at,
+                        retry.map(|ms| failed_at.saturating_add(ms.div_ceil(1000))),
+                    )
+                });
+                if let Some(Err(w)) = &recorded {
+                    eprintln!(
+                        "[tillandsias] WARNING: could not record the failed build of {image_name}: {w}"
+                    );
+                }
+                let Some(ms) = retry else {
+                    eprintln!(
+                        "[tillandsias] image-ensure {image_name}: build failed {attempts}×; declared failed until an input changes — `tillandsias --retry-image {image_name}` retries now"
+                    );
+                    return Err(format_on_demand_image_build_error(image_tag, &e));
+                };
+                eprintln!(
+                    "[tillandsias] image-ensure {image_name}: build failed (attempt {attempts}); automatic retry {attempts}/{} in {} s",
+                    image_ensure_marker::RETRY_BUDGET,
+                    ms.div_ceil(1000)
+                );
+                std::thread::sleep(std::time::Duration::from_millis(ms));
+            }
             rt.block_on(apply_image_aliases(&client, &identity))?;
+            // 1785-655p: pay the keep-id mapped copy here, inside the build.
+            warm_keep_id_mapping(image_name, &identity.canonical_tag, debug);
+            if let Some(d) = marker_dir.as_deref() {
+                let _ = image_ensure_marker::clear(d, image_name);
+            }
             if debug {
                 eprintln!(
                     "[tillandsias] built image {image_name}: {}",
@@ -3253,6 +3450,75 @@ pub(crate) fn ensure_image_exists(
     Ok(())
 }
 
+/// 1785-655p: whether a fresh image needs its `--userns=keep-id` mapping
+/// made ahead of its first start. On a rootless store whose overlay cannot
+/// shift IDs (podman info `"Supports shifting":"false"`), podman copies the
+/// whole image into an ID-mapped layer at the first keep-id create, so the
+/// first enclave start of a fresh image paid that copy inside its 300 s
+/// Container budget: macuahuitl's 3 GB forge ran past it on 2026-10-18 and
+/// the retry took 0.2 s. MEASURED on lenovinha (rootless, overlay on btrfs,
+/// shifting=false): a fresh 1 GiB + 20k-file image's first keep-id run took
+/// 1.94 s against 0.11 s plain and 0.11 s second; after a create+rm warm the
+/// first run took 0.13 s and storage held one more mapped layer. A store that
+/// shifts (the macOS guest measured "true") or an unknown answer warms nothing.
+fn keep_id_warm_needed(supports_shifting: Option<&str>) -> bool {
+    supports_shifting.map(str::trim) == Some("false")
+}
+
+/// The store's `Supports shifting` answer, `None` when podman cannot say.
+fn store_supports_shifting() -> Option<String> {
+    let mut cmd = podman_command();
+    cmd.args([
+        "info",
+        "--format",
+        "{{index .Store.GraphStatus \"Supports shifting\"}}",
+    ]);
+    let out = cmd
+        .output_bounded(tillandsias_podman::OperationKind::Inspect.default_budget())
+        .ok()?;
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+/// 1785-655p: make the keep-id mapped copy of a just-built image now, under
+/// the Image budget, so no container start pays it. Every enclave start uses
+/// plain `--userns=keep-id`, so one create covers them all. Best-effort: a
+/// failed warm only means the first start pays the copy, as before.
+fn warm_keep_id_mapping(image_name: &str, tag: &str, debug: bool) {
+    if !keep_id_warm_needed(store_supports_shifting().as_deref()) {
+        return;
+    }
+    let name = format!(
+        "tillandsias-keepid-warm-{image_name}-{}",
+        std::process::id()
+    );
+    let t0 = std::time::Instant::now();
+    let mut create = podman_command();
+    create.args(["create", "--userns=keep-id", "--name", &name, tag, "true"]);
+    let created = create.output_bounded(tillandsias_podman::OperationKind::Image.default_budget());
+    let mut rm = podman_command();
+    rm.args(["rm", "-f", &name]);
+    let _ = rm.output_bounded(tillandsias_podman::OperationKind::Container.default_budget());
+    match created {
+        Ok(o) if o.status.success() => {
+            if debug {
+                eprintln!(
+                    "[tillandsias] image {image_name}: keep-id mapping warmed in {} ms (store cannot shift IDs)",
+                    t0.elapsed().as_millis()
+                );
+            }
+        }
+        Ok(o) => eprintln!(
+            "[tillandsias] image {image_name}: keep-id warm failed; the first start pays the copy: {}",
+            String::from_utf8_lossy(&o.stderr).trim()
+        ),
+        Err(e) => eprintln!(
+            "[tillandsias] image {image_name}: keep-id warm failed; the first start pays the copy: {e}"
+        ),
+    }
+}
+
 /// How many trailing lines of podman's stderr a failed build carries into its
 /// error (order 1502-utcy).
 const BUILD_STDERR_TAIL_LINES: usize = 20;
@@ -3275,9 +3541,66 @@ fn build_failure_message<'a>(status: &str, stderr_tail: impl Iterator<Item = &'a
 /// The remedy line for an image that failed to build (order 1502-utcy). The
 /// guest cannot tell which host it runs under, so it names the action for each:
 /// "tillandsias --init" alone is Linux-only and unrunnable for a tray user.
-const IMAGE_BUILD_REMEDY: &str = "To retry: on Linux run `tillandsias --init`; from the macOS or \
-     Windows tray, launch the forge again (the build is retried on each launch). The lines above \
-     name the step that failed.";
+/// 1776-brk3: a failed build is retried in the background and then remembered
+/// by its inputs digest, so the remedy names the explicit retry (and that a
+/// fix to an input retries automatically) instead of promising a rebuild on
+/// every launch.
+pub(crate) const IMAGE_BUILD_REMEDY: &str = "The lines above name the step that failed. The build was already \
+     retried automatically; these same inputs now refuse fast instead of rebuilding on every launch. \
+     To retry: on Linux run `tillandsias --retry-image <image>` (or `tillandsias --init`); from the \
+     macOS or Windows tray, update Tillandsias and launch the forge again. A change to any image \
+     input retries at the next launch.";
+
+/// 1776-brk3: where the build breaker keeps its markers.
+pub(crate) fn image_ensure_marker_dir() -> Option<PathBuf> {
+    init_cache_dir()
+        .ok()
+        .map(|d| d.join(image_ensure_marker::MARKER_DIR))
+}
+
+pub(crate) fn unix_now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// 1776-brk3: `tillandsias --retry-image <name>` sets this (inherited by
+/// the detached helper) to force one rebuild of exactly that image.
+const IMAGE_ENSURE_FORCE_ENV: &str = "TILLANDSIAS_IMAGE_ENSURE_FORCE";
+
+fn image_ensure_forced(image_name: &str) -> bool {
+    std::env::var(IMAGE_ENSURE_FORCE_ENV).is_ok_and(|v| v == image_name)
+}
+
+/// 1776-brk3: `tillandsias --retry-image <name>`: clear the marker and
+/// rebuild in the foreground.
+fn run_retry_image(image_name: &str, debug: bool) -> Result<(), String> {
+    let version = VERSION.trim();
+    let root = resolve_runtime_asset_root(version, debug)?;
+    if image_specs(&root, image_name).is_err() {
+        return Err(format!(
+            "refused:retry-image:unknown-image:{image_name}\n  why: no image of that name is built by Tillandsias\n  remedy: name one shown in a build-failed-previously refusal"
+        ));
+    }
+    if let Some(d) = image_ensure_marker_dir()
+        && image_ensure_marker::clear(&d, image_name)?
+    {
+        eprintln!("[tillandsias] retry-image {image_name}: cleared its failed-build marker");
+    }
+    // SAFETY: set before any thread is spawned by this command; the detached
+    // helper inherits it.
+    unsafe { std::env::set_var(IMAGE_ENSURE_FORCE_ENV, image_name) };
+    eprintln!(
+        "[tillandsias] retry-image {image_name}: rebuilding now (this may take several minutes)"
+    );
+    ensure_image_exists(
+        &root,
+        image_name,
+        &versioned_image_tag(image_name, version),
+        debug,
+    )
+}
 
 fn format_on_demand_image_build_error(image_tag: &str, error: &str) -> String {
     format!(
@@ -3622,6 +3945,11 @@ pub(crate) fn spawn_cert_expiry_scheduler(
     let _ = std::thread::Builder::new()
         .name("cert-expiry".into())
         .spawn(move || {
+            // 1761-bvyn: the launch step for the preview CA. Re-mint it inside
+            // the margin and install it at user scope, before the first leaf
+            // pass below re-issues every leaf an older preview CA signed.
+            #[cfg(feature = "host-services")]
+            host_trust::install_at_launch(debug);
             let mut last_warned_day: Option<u64> = None;
             loop {
                 #[cfg(feature = "host-services")]
@@ -10224,6 +10552,8 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
                             state.mark_failed(image);
                             failed_images.push((image.to_string(), alias_e));
                         } else {
+                            // 1786-tzce: as the on-demand ensure does (1785-655p).
+                            warm_keep_id_mapping(image, &identity.canonical_tag, debug);
                             let image_id = rt
                                 .block_on(client.image_inspect(&identity.canonical_tag))
                                 .ok()
@@ -10299,6 +10629,9 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
                 state.mark_failed(image);
                 failed_images.push((image.to_string(), e));
             } else {
+                // 1786-tzce: --init builds the forge launched right after it,
+                // so its first keep-id start must not pay the mapped copy.
+                warm_keep_id_mapping(image, &identity.canonical_tag, debug);
                 let image_id = rt
                     .block_on(client.image_inspect(&identity.canonical_tag))
                     .ok()
@@ -10542,7 +10875,13 @@ pub(crate) fn build_image_with_logging(
     // @trace gap:ON-005 — show progress % during image pull
     let (containerfile, context_dir) = image_specs(root, image_name)?;
 
-    let mut command = podman_command();
+    // Order 1776-d5k2: under a CPU/IO/memory scope (or nice), so a floor-tier
+    // host stays usable while it builds. Still the one caller-owned spawn.
+    let scope = image_build_scope::current();
+    if _debug {
+        eprintln!("[tillandsias] build-{image_name}: scope {scope:?}");
+    }
+    let mut command = tillandsias_podman::podman_cmd_sync_under(&image_build_scope::prefix(scope));
     let argv = podman_build_argv(&containerfile, &context_dir, identity, build_args)?;
     command.args(&argv);
 
@@ -11690,20 +12029,12 @@ fn run_status_check(debug: bool) -> Result<(), String> {
     let certs_dir = ensure_ca_bundle(debug)?;
     ensure_enclave_network(debug)?;
 
-    let images = [
-        "proxy",
-        "git",
-        "inference",
-        "chromium-core",
-        "chromium-framework",
-        "forge",
-        // router-web-images-ondemand-ensure-gap (2026-07-16): both were
-        // missing from every ensure list; the publish path then hit a
-        // phantom registry pull (125) on any version handover.
-        "router",
-        "web",
-    ];
-    ensure_versioned_images(&root, &images, version, debug)?;
+    ensure_versioned_images(
+        &root,
+        launch_images::launch_images(launch_images::LaunchSite::Status),
+        version,
+        debug,
+    )?;
 
     let probe_image = versioned_image_tag("forge", version);
     podman_runtime_health_probe(debug, &probe_image)?;
@@ -14903,8 +15234,12 @@ fn run_observatorium_mode(
     let certs_dir = ensure_ca_bundle(debug)?;
     ensure_enclave_network(debug)?;
 
-    let images = ["web", "router", "chromium-core", "chromium-framework"];
-    ensure_versioned_images(&root, &images, version, debug)?;
+    ensure_versioned_images(
+        &root,
+        launch_images::launch_images(launch_images::LaunchSite::Observatorium),
+        version,
+        debug,
+    )?;
 
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
@@ -15596,6 +15931,11 @@ fn run_opencode_mode(
             "cannot use TILLANDSIAS_FORGE_HOST_MOUNT for ephemeral cloud project".to_string(),
         );
     }
+    // 1783-k5hm: before any podman call, so a refused launch starts nothing.
+    refuse_lane_socket_owned_elsewhere(
+        project_name,
+        forge_host_mount_granted(forge_uses_host_mount(), canonical_path.as_deref()),
+    )?;
 
     if debug {
         if let Some(ref c) = canonical_path {
@@ -15637,9 +15977,13 @@ fn run_opencode_mode(
     // dies pulling localhost/tillandsias-router from a nonexistent registry
     // (order-327 class; the OpenCode CLI lane was the one lane the 293/327
     // fixes missed — reproduced live on macOS cold-forge 2026-07-15).
-    let images = ["proxy", "router", "git", "inference", "forge"];
     progress.step();
-    ensure_versioned_images(&root, &images, version, debug)?;
+    ensure_versioned_images(
+        &root,
+        launch_images::launch_images(launch_images::LaunchSite::Opencode),
+        version,
+        debug,
+    )?;
     progress.step();
     ensure_provider_auth(ForgeAgentMode::OpenCode, debug)?;
     // Fifth and last announced stage: everything after this is the workspace
@@ -17085,6 +17429,11 @@ pub(crate) fn run_opencode_web_mode(
             "cannot use TILLANDSIAS_FORGE_HOST_MOUNT for ephemeral cloud project".to_string(),
         );
     }
+    // 1783-k5hm: before any podman call, so a refused launch starts nothing.
+    refuse_lane_socket_owned_elsewhere(
+        project_name,
+        forge_host_mount_granted(forge_uses_host_mount(), canonical_path.as_deref()),
+    )?;
 
     if debug {
         if let Some(ref c) = canonical_path {
@@ -17104,16 +17453,12 @@ pub(crate) fn run_opencode_web_mode(
     let certs_dir = ensure_ca_bundle(debug)?;
     ensure_enclave_network(debug)?;
 
-    let images = [
-        "proxy",
-        "git",
-        "inference",
-        "chromium-core",
-        "chromium-framework",
-        "forge",
-        "router",
-    ];
-    ensure_versioned_images(&root, &images, version, debug)?;
+    ensure_versioned_images(
+        &root,
+        launch_images::launch_images(launch_images::LaunchSite::OpencodeWeb),
+        version,
+        debug,
+    )?;
 
     if debug {
         eprintln!("[tillandsias] [OpenCode Web] Repo root: {}", root.display());
@@ -17822,8 +18167,12 @@ pub(crate) fn ensure_enclave_for_project(
     // launch died trying to pull localhost/tillandsias-router:v<new> from a
     // nonexistent registry (same bump-window class as the order-267
     // run-observatorium finding).
-    let images = ["router", "git", "inference", "forge"];
-    ensure_versioned_images(&root, &images, version, debug)?;
+    ensure_versioned_images(
+        &root,
+        launch_images::launch_images(launch_images::LaunchSite::EnclaveForProject),
+        version,
+        debug,
+    )?;
 
     let project_remote_url = project_path
         .and_then(read_host_project_origin_url)
@@ -18325,6 +18674,40 @@ fn forge_ram_workspace_volume(project: &str) -> String {
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| "default".into());
     crate::local_projects::ram_workspace_volume(project, instance.trim())
+}
+
+/// 1783-k5hm: refuse a CLI lane whose MCP socket another live process (the
+/// running tray) already serves, BEFORE the launch touches podman. Measured on
+/// lenovinha 2026-10-18: `tillandsias --bash ~/src/hello-world` with the tray
+/// running started the project's git mirror and only then died in
+/// [`prepare_forge_ram_workspace`] on the raw "mcp socket already has a live
+/// owner", leaving the mirror running. Same condition, same lanes, asked first.
+/// A host-mount lane never binds there (its listener start is best-effort), so
+/// it is not refused here either.
+fn refuse_lane_socket_owned_elsewhere(project: &str, host_mount: bool) -> Result<(), String> {
+    #[cfg(feature = "host-services")]
+    if !host_mount {
+        let instance = std::env::var("TILLANDSIAS_FORGE_INSTANCE")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| "default".into());
+        if let Some(path) = mcp_socket::lane_socket_foreign_owner(project, &instance) {
+            return Err(lane_socket_owned_refusal(project, instance.trim(), &path));
+        }
+    }
+    let _ = (project, host_mount);
+    Ok(())
+}
+
+/// The named refusal for [`refuse_lane_socket_owned_elsewhere`].
+#[cfg(feature = "host-services")]
+fn lane_socket_owned_refusal(project: &str, instance: &str, socket: &Path) -> String {
+    format!(
+        "refused:lane-socket-owned:{project}-{instance}: the running Tillandsias tray already \
+         serves this project's lane ({}). Launch it from the tray menu instead, or quit the \
+         tray and run this command again. Nothing was started.",
+        socket.display()
+    )
 }
 
 fn prepare_forge_ram_workspace(
@@ -19329,6 +19712,11 @@ fn run_forge_agent_cli_mode(
             "cannot use TILLANDSIAS_FORGE_HOST_MOUNT for ephemeral cloud project".to_string(),
         );
     }
+    // 1783-k5hm: before any podman call, so a refused launch starts nothing.
+    refuse_lane_socket_owned_elsewhere(
+        project_name,
+        forge_host_mount_granted(forge_uses_host_mount(), canonical_path.as_deref()),
+    )?;
 
     if debug {
         if let Some(ref c) = canonical_path {
@@ -19625,6 +20013,13 @@ mod cloudflare_mcp;
 // @trace spec:local-web-preview
 #[cfg(feature = "host-services")]
 mod local_web_preview;
+
+// @trace spec:local-web-preview (order 1761-bvyn): the localhost-only preview
+// CA, and its install into the operator's user-scope browser trust stores.
+#[cfg(feature = "host-services")]
+mod host_trust;
+#[cfg(feature = "host-services")]
+mod preview_ca;
 
 // @trace spec:host-browser-mcp (order 1649-xqet)
 #[cfg(feature = "host-services")]
@@ -32237,8 +32632,9 @@ esac
             "observatorium mode must use PodmanClient"
         );
         assert!(
-            observatorium_window
-                .contains("ensure_versioned_images(&root, &images, version, debug)?;"),
+            // source-pin-ok: the call site reading the table is the contract
+            // (1776-ch4m); the list's value is asserted in launch_images.rs.
+            observatorium_window.contains("launch_images::LaunchSite::Observatorium"),
             "observatorium mode must preflight required images"
         );
 
@@ -32301,14 +32697,14 @@ esac
     fn observatorium_mode_preflights_web_image() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
         let window = source_window(source, "fn run_observatorium_mode(");
-        assert!(
-            window.contains(
-                "let images = [\"web\", \"router\", \"chromium-core\", \"chromium-framework\"];"
-            ),
+        assert_eq!(
+            launch_images::launch_images(launch_images::LaunchSite::Observatorium),
+            &["web", "router", "chromium-core", "chromium-framework"],
             "observatorium mode must preflight the web image"
         );
         assert!(
-            window.contains("ensure_versioned_images(&root, &images, version, debug)?;"),
+            window
+                .contains("launch_images::launch_images(launch_images::LaunchSite::Observatorium)"),
             "observatorium mode must ensure the web image exists before launch"
         );
     }
@@ -32817,9 +33213,10 @@ esac
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
         let window = source_window(source, "fn run_opencode_mode(");
         assert!(
-            window.contains(
-                "let images = [\"proxy\", \"router\", \"git\", \"inference\", \"forge\"];"
-            ) && window.contains("ensure_versioned_images(&root, &images, version, debug)?;"),
+            launch_images::launch_images(launch_images::LaunchSite::Opencode)
+                == ["proxy", "router", "git", "inference", "forge"]
+                && window
+                    .contains("launch_images::launch_images(launch_images::LaunchSite::Opencode)"),
             "OpenCode CLI lane must build the router image before ensure_router_running \
              (order-327 class; macOS cold-forge live repro 2026-07-15)"
         );
@@ -32831,8 +33228,13 @@ esac
         let window = source_window(source, "pub(crate) fn ensure_enclave_for_project(");
 
         assert!(
-            window.contains("let images = [\"router\", \"git\", \"inference\", \"forge\"];")
-                && window.contains("ensure_versioned_images(&root, &images, version, debug)?;"),
+            launch_images::launch_images(launch_images::LaunchSite::EnclaveForProject)
+                == ["router", "git", "inference", "forge"]
+                // source-pin-ok: the call site reading the table is the
+                // contract (1776-ch4m); the list's value is asserted above.
+                && window.contains(
+                    "launch_images::launch_images(launch_images::LaunchSite::EnclaveForProject)"
+                ),
             "cold forge launch must build the router image before starting its container"
         );
     }
@@ -32932,6 +33334,96 @@ esac
     /// `ensure_image_exists` CALLS the guard: delete the call and all eleven
     /// stay green while every launch silently rolls the enclave back.
     ///
+    /// 1776-brk3: a failed build is remembered, so the remedy must not
+    /// promise a rebuild on every launch, and it names the explicit retry.
+    #[test]
+    fn image_build_remedy_never_says_retried_on_each_launch() {
+        assert!(
+            !IMAGE_BUILD_REMEDY.contains(concat!("retried on each ", "launch")),
+            "{IMAGE_BUILD_REMEDY}"
+        );
+        assert!(IMAGE_BUILD_REMEDY.contains("tillandsias --retry-image"));
+        // 1502-utcy still holds: each platform gets a step it can run.
+        assert!(IMAGE_BUILD_REMEDY.contains("tillandsias --init"));
+        assert!(IMAGE_BUILD_REMEDY.contains("launch the forge again"));
+        let e = format_on_demand_image_build_error("localhost/tillandsias-proxy:v1", "boom");
+        assert!(e.contains("--retry-image"), "{e}");
+    }
+
+    /// 1776-brk3: the helper's refusal reaches the caller whole: its
+    /// `why:` / `log:` / `remedy:` lines, not only the first (d5k2's copy
+    /// dropped the log path the breaker fixture asserts).
+    #[test]
+    fn helper_refusal_keeps_the_refusals_indented_lines() {
+        let log = "Building proxy [##] 100%\n\
+                   [tillandsias] --internal-ensure-image proxy failed: refused:image-ensure:proxy:build-failed-previously\n  \
+                   why: inputs sha256:aa… failed 3×\n  \
+                   log: /c/image-build-proxy.log\n  \
+                   remedy: no automatic retry is left\n\
+                   [tillandsias] something after\n";
+        let r = helper_refusal(log).expect("refusal");
+        assert!(
+            r.starts_with("refused:image-ensure:proxy:build-failed-previously\n  why:"),
+            "{r}"
+        );
+        assert!(r.contains("\n  log: /c/image-build-proxy.log"), "{r}");
+        assert!(r.ends_with("remedy: no automatic retry is left"), "{r}");
+        // A one-line refusal (the disk preflight) stays one line.
+        assert_eq!(
+            helper_refusal("x\nrefused:image-ensure:proxy:disk:1/2\n").as_deref(),
+            Some("refused:image-ensure:proxy:disk:1/2")
+        );
+        assert_eq!(helper_refusal("no refusal here"), None);
+    }
+
+    /// 1776-brk3: every ensure prints exactly ONE verdict line. The locked
+    /// path has three exits that decide (a failed base, the breaker's
+    /// refusal, the build decision), each prints the line once, and the two
+    /// refusals return right after printing it. The Lua fixture
+    /// (scripts/lua/test-image-ensure-breaker.lua) counts the lines in the
+    /// helper log of a real run.
+    #[test]
+    fn ensure_prints_one_verdict_line() {
+        let dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let source = std::fs::read_to_string(std::path::Path::new(&dir).join("src/main.rs"))
+            .expect("read main.rs");
+        let body = source_window(&source, concat!("pub(crate) fn ensure_", "image_exists("));
+        let call = concat!("image_ensure_marker::", "verdict_line(");
+        assert_eq!(
+            body.matches(call).count(),
+            3,
+            "three deciding exits, one line each"
+        );
+        let refuse = body
+            .find(concat!("Breaker::Refuse ", "if !forced"))
+            .expect("the breaker refusal arm");
+        let after = &body[refuse..];
+        let line = after.find(call).expect("the refusal prints its verdict");
+        let ret = after
+            .find(concat!("return Err(image_ensure_marker::", "refusal("))
+            .expect("the refusal returns");
+        assert!(
+            line < ret,
+            "the verdict is printed before the refusal returns"
+        );
+        assert!(
+            body.find(call).unwrap()
+                < body
+                    .find(concat!("let (identity, ", "build_args)"))
+                    .unwrap(),
+            "the failed-base verdict comes before identity"
+        );
+        let shape = image_ensure_marker::verdict_line(
+            "git",
+            "skip",
+            Some("sha256:a"),
+            Some("sha256:a"),
+            "digest_present",
+            None,
+        );
+        assert!(shape.starts_with("[tillandsias] image-ensure git decided=skip digest=sha256:a"));
+    }
+
     /// THE ORDERING IS THE LOAD-BEARING HALF AND IT HAS A STATED REASON. The
     /// refusal must be raised BEFORE the detach, because the helper runs in its
     /// own session with no controlling tty — a refusal raised in there reaches
@@ -33651,7 +34143,26 @@ esac
             loaded.err().unwrap_or_default()
         );
 
-        let loaded_state = loaded.unwrap().expect("loaded state should not be None");
+        // ORDER 1780-jxc3: seen once in a forge's full gate and not reproduced
+        // in five forge runs since; if it recurs, say where load looked and
+        // what was there, so the failure names its own cause.
+        let loaded_state = loaded.unwrap().unwrap_or_else(|| {
+            let dir = init_cache_dir();
+            let listing = dir
+                .as_ref()
+                .ok()
+                .and_then(|d| fs::read_dir(d).ok())
+                .map(|it| {
+                    it.filter_map(|e| e.ok().map(|e| e.file_name().to_string_lossy().into_owned()))
+                        .collect::<Vec<_>>()
+                });
+            panic!(
+                "loaded state should not be None: init_cache_dir()={dir:?} (XDG_CACHE_HOME={:?}, \
+                 temp={:?}) holds {listing:?}",
+                std::env::var_os("XDG_CACHE_HOME"),
+                temp.path()
+            )
+        });
         assert!(
             loaded_state.was_successful("proxy"),
             "proxy should be marked successful after reload"
@@ -35261,5 +35772,377 @@ mod mirror_seed_failure_tests {
             entry.contains(&format!("retry_msg \"{GIT_MIRROR_SEED_FAILURE_MARKER}")),
             "images/git/entrypoint.sh no longer prints {GIT_MIRROR_SEED_FAILURE_MARKER:?}; the launcher would never surface a seed failure"
         );
+    }
+}
+
+#[cfg(all(test, feature = "host-services"))]
+mod lane_socket_owner_tests {
+    use super::*;
+
+    /// 1783-k5hm: a CLI lane whose MCP socket another live process serves is
+    /// refused by name, BEFORE any podman call, so nothing is left running.
+    /// The held listener stands in for the tray: a raw bind this process's
+    /// lane registry does not know, exactly what a tray in another process is.
+    #[test]
+    fn a_cli_lane_refuses_by_name_when_another_process_owns_its_socket() {
+        let _env = crate::test_support::env_lock();
+        // The kernel caps a socket path near 108 bytes, so the scratch runtime
+        // dir is short and under the real runtime dir, not the checkout.
+        let base = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir);
+        let scratch = base.join(format!("k5hm-{}", std::process::id()));
+        let saved = std::env::var_os("XDG_RUNTIME_DIR");
+        let saved_instance = std::env::var_os("TILLANDSIAS_FORGE_INSTANCE");
+        // SAFETY: env_lock serialises every env-mutating test.
+        unsafe {
+            std::env::set_var("XDG_RUNTIME_DIR", &scratch);
+            std::env::remove_var("TILLANDSIAS_FORGE_INSTANCE");
+        }
+        let project = "k5hm-held";
+        let socket = mcp_socket::mcp_socket_path_for_lane(project, "default");
+        std::fs::create_dir_all(socket.parent().unwrap()).unwrap();
+
+        // Negative control: no owner, the launch proceeds as today.
+        let free = refuse_lane_socket_owned_elsewhere(project, false);
+
+        let held = std::os::unix::net::UnixListener::bind(&socket).expect("hold the lane socket");
+        let refused = refuse_lane_socket_owned_elsewhere(project, false);
+        // A host-mount lane never binds the socket, so it is not refused.
+        let host_mount = refuse_lane_socket_owned_elsewhere(project, true);
+        // A lane THIS process serves (the tray's own launches) is not refused.
+        let key = (project.to_string(), "default".to_string());
+        mcp_socket::lane_listener_registry()
+            .lock()
+            .unwrap()
+            .insert(key.clone());
+        let own = refuse_lane_socket_owned_elsewhere(project, false);
+        mcp_socket::lane_listener_registry()
+            .lock()
+            .unwrap()
+            .remove(&key);
+        drop(held);
+        // A departed owner (connection refused) is not refused either: the
+        // listener reclaims that socket.
+        let stale = refuse_lane_socket_owned_elsewhere(project, false);
+
+        // SAFETY: as above.
+        unsafe {
+            match saved {
+                Some(v) => std::env::set_var("XDG_RUNTIME_DIR", v),
+                None => std::env::remove_var("XDG_RUNTIME_DIR"),
+            }
+            if let Some(v) = saved_instance {
+                std::env::set_var("TILLANDSIAS_FORGE_INSTANCE", v);
+            }
+        }
+        let _ = std::fs::remove_dir_all(&scratch);
+
+        assert_eq!(free, Ok(()), "no owner: launch as today");
+        let msg = refused.expect_err("a live foreign owner must be refused");
+        assert!(
+            msg.starts_with("refused:lane-socket-owned:k5hm-held-default:"),
+            "{msg}"
+        );
+        assert!(msg.contains("from the tray menu"), "{msg}");
+        assert!(msg.contains("Nothing was started"), "{msg}");
+        assert!(
+            !msg.contains("refusing to unlink"),
+            "the raw error leaked: {msg}"
+        );
+        assert_eq!(host_mount, Ok(()), "host-mount lane");
+        assert_eq!(own, Ok(()), "a lane this process serves");
+        assert_eq!(stale, Ok(()), "a departed owner's socket");
+    }
+
+    /// 1783-k5hm: each CLI launch path asks BEFORE its first step that can
+    /// start a container, so a refused launch leaves nothing running. The
+    /// measured failure started the git mirror first.
+    #[test]
+    fn every_cli_lane_asks_before_it_touches_podman() {
+        let src = include_str!("main.rs");
+        for fn_head in [
+            "\nfn run_opencode_mode(",
+            "\npub(crate) fn run_opencode_web_mode(",
+            "\nfn run_forge_agent_cli_mode(",
+        ] {
+            let start = src.find(fn_head).expect(fn_head);
+            let body = &src[start + 1..];
+            let body = &body[..body.find("\n}\n").expect("end of fn")];
+            // source-pin-ok: the property is call ORDER inside the launch fn.
+            let ask = body
+                .find("refuse_lane_socket_owned_elsewhere(")
+                .unwrap_or_else(|| panic!("{fn_head}: never asks who owns the lane socket"));
+            for first_container_step in [
+                "ensure_ca_bundle(",
+                "ensure_enclave_network(",
+                "ensure_enclave_for_project(",
+                "acquire_launch_in_flight_marker(",
+                "podman_runtime(",
+                "prepare_forge_ram_workspace(",
+            ] {
+                if let Some(at) = body.find(first_container_step) {
+                    assert!(
+                        ask < at,
+                        "{fn_head}: asks after {first_container_step}, so a refused launch may leave a container running"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod keep_id_warm_tests {
+    use super::*;
+    use tillandsias_podman::{OperationKind, podman_cmd_sync};
+
+    /// NEGATIVE CONTROL (1785-655p): only a store that says it cannot shift
+    /// IDs is warmed, so a shifting store (the macOS guest measured "true") or
+    /// an unknown answer never gains a per-build create.
+    #[test]
+    fn keep_id_warm_runs_only_on_a_store_that_cannot_shift() {
+        assert!(keep_id_warm_needed(Some("false")));
+        assert!(keep_id_warm_needed(Some("false\n")));
+        assert!(!keep_id_warm_needed(Some("true")));
+        assert!(!keep_id_warm_needed(Some("")));
+        assert!(!keep_id_warm_needed(None));
+    }
+
+    /// 1785-655p: the build arm of `ensure_image_exists` warms the keep-id
+    /// mapping after a SUCCESSFUL build (after the retry loop's `break`), and
+    /// nowhere a present image is merely reused, so the warm is never a
+    /// per-launch cost.
+    #[test]
+    fn the_on_demand_build_warms_keep_id_after_it_succeeds() {
+        let src = include_str!("main.rs");
+        let body = &src[src.find("pub(crate) fn ensure_image_exists(").expect("fn")..];
+        let body = &body[..body.find("\n}\n").expect("end")];
+        // source-pin-ok: the property is where the warm sits in the build arm.
+        let warm = body
+            .find("warm_keep_id_mapping(image_name, &identity.canonical_tag, debug)")
+            .expect("ensure_image_exists never warms the keep-id mapping");
+        let build_arm = body
+            .find("ImageBuildAction::Build | ImageBuildAction::ForceRebuild =>")
+            .expect("build arm");
+        let built = body[build_arm..]
+            .find("rt.block_on(apply_image_aliases(&client, &identity))?;")
+            .map(|i| build_arm + i)
+            .expect("aliases after the build loop");
+        assert!(warm > built, "warm before the build succeeded");
+        assert_eq!(
+            body.matches("warm_keep_id_mapping(").count(),
+            1,
+            "one warm, in the build arm"
+        );
+    }
+
+    /// 1785-655p, live: on a store that cannot shift, a freshly built image
+    /// has no keep-id mapped copy, so its first start would pay one; after
+    /// `warm_keep_id_mapping` a keep-id create adds none. The mapped copy is
+    /// the layer whose diff digest is the image's own layer and that carries a
+    /// uidmap (measured in layers.json), so nothing else the host runs is
+    /// counted. Skips, with the reason, where podman cannot answer or the
+    /// store shifts. `FROM scratch` + COPY never pulls.
+    #[test]
+    fn a_built_image_is_keep_id_warm_before_its_first_start() {
+        let _lock = crate::runtime_assets::podman_seam_lock();
+        let shifting = store_supports_shifting();
+        if !keep_id_warm_needed(shifting.as_deref()) {
+            eprintln!("skip: this store shifts IDs or cannot say ({shifting:?}); no warm to test");
+            return;
+        }
+        let root = podman_cmd_sync()
+            .args(["info", "--format", "{{.Store.GraphRoot}}"])
+            .output_bounded(OperationKind::Inspect.default_budget())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default();
+        let layers_json = PathBuf::from(&root).join("overlay-layers/layers.json");
+        let scratch = PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../../target/keep-id-warm-test")
+        .join(std::process::id().to_string());
+        std::fs::create_dir_all(&scratch).unwrap();
+        // Unique content, so no other image shares the layer digest.
+        std::fs::write(
+            scratch.join("f.txt"),
+            format!("1785-655p {:?}", std::time::SystemTime::now()),
+        )
+        .unwrap();
+        std::fs::write(
+            scratch.join("Containerfile"),
+            "FROM scratch\nCOPY f.txt /\n",
+        )
+        .unwrap();
+        let tag = format!(
+            "localhost/tillandsias-keepid-warm-test:{}",
+            std::process::id()
+        );
+        let built = podman_cmd_sync()
+            .args(["build", "-q", "-t", &tag])
+            .arg(&scratch)
+            .output_bounded(OperationKind::Image.default_budget());
+        let _ = std::fs::remove_dir_all(&scratch);
+        if !built.as_ref().is_ok_and(|o| o.status.success()) {
+            eprintln!("skip: cannot build a scratch image here");
+            return;
+        }
+        let layer = podman_cmd_sync()
+            .args([
+                "image",
+                "inspect",
+                &tag,
+                "--format",
+                "{{index .RootFS.Layers 0}}",
+            ])
+            .output_bounded(OperationKind::Inspect.default_budget())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default();
+        let mapped = || -> usize {
+            let text = std::fs::read_to_string(&layers_json).unwrap_or_default();
+            let rows: Vec<serde_json::Value> = serde_json::from_str(&text).unwrap_or_default();
+            rows.iter()
+                .filter(|l| l["diff-digest"] == layer.as_str())
+                .filter(|l| l["uidmap"].as_array().is_some_and(|m| !m.is_empty()))
+                .count()
+        };
+        let after_build = mapped();
+        warm_keep_id_mapping("keepid-warm-test", &tag, false);
+        let after_warm = mapped();
+        let name = format!("tillandsias-keepid-warm-test-{}", std::process::id());
+        let _ = podman_cmd_sync()
+            .args(["create", "--userns=keep-id", "--name", &name, &tag, "true"])
+            .output_bounded(OperationKind::Container.default_budget());
+        let after_start = mapped();
+        let _ = podman_cmd_sync()
+            .args(["rm", "-f", &name])
+            .output_bounded(OperationKind::Container.default_budget());
+        let _ = podman_cmd_sync()
+            .args(["rmi", "-f", &tag])
+            .output_bounded(OperationKind::Image.default_budget());
+        assert!(!layer.is_empty(), "the image's layer digest");
+        assert_eq!(
+            after_build, 0,
+            "a fresh image starts with no mapped copy (the premise)"
+        );
+        assert_eq!(after_warm, 1, "the warm made the mapped copy");
+        assert_eq!(
+            after_start, 1,
+            "the first keep-id start made no copy of its own"
+        );
+    }
+
+    /// The `_warm_keep_id_mapping` function from scripts/build-image.sh, run
+    /// under bash with `$PODMAN` as a shell function that answers `info` with
+    /// `shifting` and logs every other call. Returns the logged calls.
+    fn run_build_image_warm(shifting: Option<&str>) -> Vec<String> {
+        let script = include_str!("../../../scripts/build-image.sh");
+        let start = script
+            .find("_warm_keep_id_mapping() {")
+            .expect("build-image.sh has no _warm_keep_id_mapping");
+        let func = &script[start..];
+        let func = &func[..func.find("\n}\n").expect("function end") + 2];
+        let info = match shifting {
+            Some(s) => format!("printf '%s\\n' '{s}'"),
+            None => "return 125".to_string(),
+        };
+        let prog = format!(
+            "set -euo pipefail\nfake_podman() {{\n  if [[ \"$1\" == info ]]; then {info}; return; fi\n  printf '%s\\n' \"$*\" >&3\n}}\nexec 3>&1\nPODMAN=fake_podman\nIMAGE_NAME=forge\nTIMEOUT_BIN=\n{func}\n_warm_keep_id_mapping localhost/tillandsias-forge:abc\n"
+        );
+        let out = std::process::Command::new("bash")
+            .arg("-c")
+            .arg(&prog)
+            .output()
+            .expect("bash");
+        assert!(
+            out.status.success(),
+            "the warm must never fail the build: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .map(str::to_string)
+            .collect()
+    }
+
+    /// 1786-tzce: `--init` and scripts/build-image.sh build images outside
+    /// `ensure_image_exists`, so 1785-655p's warm did not cover them, and
+    /// `--init` builds the forge that is launched right after. Both now warm
+    /// after a SUCCESSFUL build: --init calls the one `warm_keep_id_mapping`
+    /// after each successful build's aliases (plain and after an overlay heal,
+    /// never on a Skip or Retag of a present image), and build-image.sh runs
+    /// its shell twin, which asks podman the same question, after the image
+    /// passes verify-image-usable.sh. NEGATIVE CONTROL: the shell twin creates
+    /// nothing on a store that shifts, or that cannot say.
+    #[test]
+    fn init_and_build_image_builds_are_keep_id_warm() {
+        let src = include_str!("main.rs");
+        let init = &src[src
+            .find("fn run_init(debug: bool, force: bool)")
+            .expect("run_init")..];
+        let init = &init[..init.find("\n}\n").expect("end")];
+        // source-pin-ok: the property is which run_init arms warm.
+        let warm = "warm_keep_id_mapping(image, &identity.canonical_tag, debug);";
+        assert_eq!(
+            init.matches("warm_keep_id_mapping(").count(),
+            2,
+            "--init warms after its plain build and after its heal retry, and nowhere else"
+        );
+        let mut from = 0;
+        for arm in ["\"success_after_heal\"", "\"success\""] {
+            let completed = init[from..]
+                .find(arm)
+                .map(|i| from + i)
+                .unwrap_or_else(|| panic!("run_init has no {arm} outcome"));
+            let aliased = init[..completed]
+                .rfind("apply_image_aliases(&client, &identity)")
+                .expect("aliases before the outcome");
+            let warmed = init[aliased..completed].contains(warm);
+            assert!(
+                warmed,
+                "the {arm} arm of --init does not warm after its aliases"
+            );
+            from = completed + arm.len();
+        }
+        let skip = &init[init.find("ImageBuildAction::Skip =>").expect("skip arm")..];
+        let skip = &skip[..skip.find("ImageBuildAction::Build =>").expect("build arm")];
+        assert!(
+            !skip.contains("warm_keep_id_mapping("),
+            "a present image is never warmed"
+        );
+
+        let script = include_str!("../../../scripts/build-image.sh");
+        let usable = script
+            .find("\"$SCRIPT_DIR/verify-image-usable.sh\" \"$IMAGE_TAG\"")
+            .expect("build-image.sh checks usability");
+        let call = script
+            .find("\n    _warm_keep_id_mapping \"$IMAGE_TAG\"")
+            .expect("build-image.sh never warms the keep-id mapping");
+        assert!(call > usable, "the warm runs after the image is usable");
+        assert!(
+            script.contains("{{index .Store.GraphStatus \"Supports shifting\"}}"),
+            "the shell twin asks podman the question store_supports_shifting asks"
+        );
+        let calls = run_build_image_warm(Some("false"));
+        let name = calls
+            .first()
+            .and_then(|c| c.strip_prefix("create --userns=keep-id --name "))
+            .and_then(|c| c.strip_suffix(" localhost/tillandsias-forge:abc true"))
+            .unwrap_or_else(|| {
+                panic!("a store that cannot shift gets a keep-id create: {calls:?}")
+            });
+        assert!(name.starts_with("tillandsias-keepid-warm-forge-"), "{name}");
+        assert_eq!(
+            calls[1..],
+            [format!("rm -f {name}")],
+            "the warm container is removed, and nothing else runs"
+        );
+        for answer in [Some("true"), Some(""), None] {
+            assert!(
+                run_build_image_warm(answer).is_empty(),
+                "NEGATIVE CONTROL: shifting answer {answer:?} must create nothing"
+            );
+        }
     }
 }

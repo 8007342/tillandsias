@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-tray-browser-window-path-ensures-the-chromium-framework-image-on-first-use-and-one-launch-images-table-replaces-the-four-drifted-ensure-arrays
+    field: status
+    value: implemented
+    ts: "2026-10-18T02:05:26Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-tray-browser-window-path-ensures-the-chromium-framework-image-on-first-use-and-one-launch-images-table-replaces-the-four-drifted-ensure-arrays
+    event:
+      type: note
+      ts: "2026-10-18T02:05:26Z"
+      host: lenovinha
+      summary: |-
+        PR #528 landed on linux-next; live arm open: with the chromium images removed, a forge browser.open builds once and opens, a second call needs no build

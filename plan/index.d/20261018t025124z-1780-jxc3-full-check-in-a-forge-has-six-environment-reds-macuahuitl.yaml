@@ -1,0 +1,34 @@
+packets:
+  - packet_id: a-full-build-check-inside-a-forge-fails-six-tests-that-assume-the-host-environment-so-no-forge-agent-can-claim-a-green-full-gate
+    order: 1780-jxc3
+    status: pending
+    kind: fix
+    priority: p2
+    desired_release: v0.5
+    size: S
+    pickup_role: linux
+    capability_tags: [forge, gate, tests, environment]
+    depends_on: []
+    related: [1779-sq9g, 1505-78sn]
+    title: "A full ./build.sh --check inside a forge fails six tests that assume the host environment"
+    context: |
+      Reported by a Codex forge session on 2026-10-18 while it recorded the 1779-sq9g research. A full ./build.sh --check in the forge
+      failed 6 tests out of 3134. None of them touch the code the session changed:
+      - the four ca_refresh_margin_tests (tillandsias-headless main.rs) cannot find openssl, which the forge image does not ship;
+      - init_build_state_persists_to_cache_directory loaded None;
+      - spec_index::the_repo_relative_rung_anchors_to_the_checkout_not_to_home rejects a TMPDIR under /home/forge/.cache.
+      1505-78sn is the same rung-anchor assertion tripping on a Windows home layout, so the fix there may cover it.
+      For each test, decide whether the forge image lacks a tool it should carry or the test assumes a host-only layout. Fix whichever
+      it is. Do not skip a test only because it runs inside a forge.
+    exit_criteria:
+      - "A full ./build.sh --check inside a forge built from trunk passes all six named tests, or each one declares a named, reasoned skip"
+    verifiable_closure: |
+      Inside a forge: cargo test -p tillandsias-headless ca_refresh_margin_tests init_build_state_persists_to_cache_directory and
+      cargo test -p tillandsias-plan the_repo_relative_rung_anchors_to_the_checkout_not_to_home, all red before the fix and green after.
+      unscoreable: forge-regime-only — the named cargo tests already pass on hosts, and only a run inside a forge scores this; no litmus runs the gate inside a forge today.
+    next_action: "Reproduce in a forge from trunk; for each test, decide whether the image is missing a tool or the test assumes a host layout; fix that cause."
+    events:
+      - type: filed
+        ts: "2026-10-18T02:51:24Z"
+        host: macuahuitl
+        summary: "Filed by the coordinator from the gate note in the 1779-sq9g research, so the note has a row of its own."

@@ -17,7 +17,7 @@ RUN microdnf install -y --nogpgcheck --setopt=install_weak_deps=0 \
         which \
         procps-ng shadow-utils ca-certificates ncurses ncurses-term \
         fish zsh \
-        git gh curl wget jq ripgrep fd-find bat fzf eza htop mc tree nano vim-minimal zoxide git-delta git-lfs httpie yq \
+        git gh curl wget openssl jq ripgrep fd-find bat fzf eza htop mc tree nano vim-minimal zoxide git-delta git-lfs httpie yq \
         nodejs npm \
         java-25-openjdk-headless maven \
         golang gopls \
@@ -41,6 +41,11 @@ RUN microdnf install -y --nogpgcheck --setopt=install_weak_deps=0 \
            exit 1; \
        fi \
     && test -d "$(rustc --print sysroot)/lib/rustlib/wasm32-unknown-unknown/lib"
+# ↑ openssl (order 1780-jxc3): the openssl CLI. Tillandsias's own CA and preview
+# CA code shells out to it, so its tests (ca_refresh_margin_tests, preview_ca,
+# local_web_preview's leaf margin) need it to run in a forge, and a forge agent
+# inspecting a certificate needs it too. Measured 2026-10-18: absent from the
+# image, 10 headless tests failed `openssl: NotFound` in a forge from trunk.
 # ↑ rust-std-static-wasm32-unknown-unknown (order 1625-grk8). The forge's Rust is
 # Fedora's system rustc (no rustup), so `rustup target add` does not exist here and
 # wasm-pack (FIRST_RUN, lib-common) could not build a wasm web project: `cargo build

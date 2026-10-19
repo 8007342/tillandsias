@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-failed-on-demand-image-build-is-remembered-by-image-and-inputs-digest-and-every-later-launch-refuses-within-seconds-with-the-cause-and-remedy-until-the-inputs-change-or-the-operator-retries
+    field: status
+    value: implemented
+    ts: "2026-10-18T20:29:07Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: a-failed-on-demand-image-build-is-remembered-by-image-and-inputs-digest-and-every-later-launch-refuses-within-seconds-with-the-cause-and-remedy-until-the-inputs-change-or-the-operator-retries
+    event:
+      type: note
+      ts: "2026-10-18T20:29:07Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        PR #533 landed (80d7fc823, adopted 4059e10a4): a failed on-demand image build retries twice in the background with backoff, then is declared failed and remembered by image+inputs digest; agents get retry_after; no Retry tray item (operator ruling 2026-10-17). Live arm runs through the next published release.

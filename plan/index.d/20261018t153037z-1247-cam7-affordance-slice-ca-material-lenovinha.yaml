@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: affordance-slice-every-violation-ca-material-verdict-says-why-and-what-clears-it
+    order: 1247-cam7
+    parent_order: 1247-amcu
+    status: in_progress
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [affordance, refusal, ca, security, fail-loud]
+    estimated_hours: 1
+    owned_files:
+      - scripts/clamp-ca-material.sh
+      - openspec/litmus-tests/litmus-proxy-ca-key-not-world-readable.yaml
+    title: |
+      1247-amcu slice — FAMILY: the three violation:ca-material:* verdicts of scripts/clamp-ca-material.sh (cannot chmod <dir>, cannot chmod <key>, N path(s) not owner-only) carry a why: and a remedy:, and its --selftest is run by a gate
+    context: |
+      Picked by lenovinha at the coordinator's request (2026-10-18) as the next family by scripts/rank-refusal-hits.sh (rank 16, 2 recorded hits). All three print only the token. A cannot-chmod case is almost always a path owned by another uid (a container's mapped uid under rootless podman), so its remedy names the owner and the command that can change it. The --check verdict's remedy is to run the script without --check.
+      The script's --selftest was run by nothing; litmus-proxy-ca-key-not-world-readable gains a step that runs it, so the new cases are gated.
+    exit_criteria:
+      - 'each violation:ca-material:* site emits why: and remedy: on stderr beside its unchanged stdout verdict (pre-fix: FAILS on all three)'
+      - 'NEGATIVE CONTROL (1247-amcu criterion 5): the --selftest EXECUTES the --check remedy (fix mode, then --check answers ok:ca-material:already-clamped), and for cannot-chmod the remedy names the path owner'
+      - 'litmus-proxy-ca-key-not-world-readable runs scripts/clamp-ca-material.sh --selftest and its existing steps stay green'
+    verifiable_closure: |
+      bash scripts/clamp-ca-material.sh --selftest passes with the new cases, and the litmus step that runs it passes; pre-fix: the new cases FAIL.
+    provenance: |
+      Filed by lenovinha at the coordinator's request, 2026-10-18.
+    events:
+      - type: filed
+        ts: "2026-10-18T15:30:37Z"
+        host: lenovinha
+        summary: |-
+          Next 1247-amcu slice: violation:ca-material:*. Filed and claimed in one fragment by lenovinha.

@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha on the coordinator's request (macuahuitl-fedora,
+# 2026-10-18); found while gating 1247-cam7. Not fixed here.
+packets:
+  - packet_id: litmus-opencode-vault-auth-content-fails-on-trunk-because-the-installed-opencode-2-x-ignores-opencode-auth-content
+    order: 1787-i2ir
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [linux, litmus, opencode, vault, release-gate]
+    related: [1247-cam7]
+    depends_on: []
+    title: |
+      litmus:opencode-vault-auth-content step 1 fails on trunk on lenovinha because the installed OpenCode (v2.0.25, linuxbrew) ignores OPENCODE_AUTH_CONTENT, so the pre-build release-tier litmus would red the next daily cut's gate
+    context: |
+      MEASURED on lenovinha 2026-10-18 at trunk b36158a3b (and identically on work/1247-cam7). Spec podman-secrets-integration (the test's own spec field is default-image), phase pre-build, severity critical. The runner reports:
+        [STEP 1/3] exercise free, Vault-derived, installed-binary, and no-file paths ... [FAIL] rc=1
+        [FAIL] spec=podman-secrets-integration test=litmus:opencode-vault-auth-content
+        Test Verdicts: passed=5 ... failed=1
+      The step's command: scripts/test-opencode-vault-auth-content.sh. Run directly, its output:
+        FAIL: installed OpenCode rejected the isolated sentinel contract
+        rc=1
+      The hermetic arms pass. The failing arm is the one the fixture runs only when a real opencode is on PATH ("The real locally installed OpenCode is evidence for the undocumented upstream contract"). lenovinha has /home/linuxbrew/.linuxbrew/bin/opencode -> ../Cellar/opencode/2.0.25/bin/opencode, and opencode --version prints v2.0.25.
+      CAUSE, measured: opencode_auth_contract_ok (images/default/lib-common.sh) runs auth list with OPENCODE_AUTH_CONTENT set to a sentinel credential. Reproduced by hand with a dummy sentinel (not a credential) and fresh XDG_DATA_HOME/XDG_STATE_HOME:
+        XDG_DATA_HOME=<tmp>/data XDG_STATE_HOME=<tmp>/state OPENCODE_DB=:memory: OPENCODE_AUTH_CONTENT='{"tillandsias-contract-probe":{"type":"api","key":"dummy-sentinel-not-a-secret"}}' opencode auth list
+        -> rc=0, "No authenticated integrations", no auth.json written
+      So v2.0.25 does not read OPENCODE_AUTH_CONTENT at all, and order 431's undocumented contract is gone in this release.
+      RISK, NOT VERIFIED: the forge installs opencode-ai@latest on demand (lib-common.sh _require_harness opencode opencode-ai). If @latest is 2.x, the forge's Vault-to-OpenCode credential path (prepare_opencode_vault_auth) is broken in real forges too, not only in this host-gated arm. The runtime contract probe should then say "opencode AUTH CONTRACT BROKEN" at launch. Check a fresh forge before deciding whether this is a test-host problem or a product break.
+      WHY p1: pre-build litmus runs only at the release tier, so this goes red on the next daily cut's gate on any host with an opencode 2.x on PATH (coordinator, 2026-10-18).
+    exit_criteria:
+      - "on a host whose PATH opencode is v2.0.25, litmus:opencode-vault-auth-content passes at the release tier, by the adapter supporting 2.x's credential channel or by a decided and recorded compatibility answer (pin, last-good, or a named skip with its reason), never by deleting the installed-binary arm"
+      - "it is determined, with a fresh forge, whether opencode-ai@latest has the same break; if it does, the forge's Vault-backed OpenCode credential path works again or refuses loudly at launch"
+      - "NEGATIVE CONTROL: the arm still FAILS against an opencode that ignores the injected credential, so the fix cannot pass by not asking"
+    unscoreable: "unpinnable-until-the-guard-exists: the pin is litmus:opencode-vault-auth-content step 1 run on a host with opencode v2.0.25 on PATH; it is red today on lenovinha, and the fix decides which assertion becomes the pin"
+    next_action: >
+      Find how opencode 2.x accepts an injected credential (the 2.0 changelog or source for auth list and the env it reads). Then check a fresh forge's opencode-ai@latest version and its launch-time contract probe line. Decide adapter-vs-pin with the coordinator.
+    events:
+      - type: filed
+        ts: "2026-10-18T15:38:10Z"
+        host: lenovinha
+        summary: |-
+          litmus:opencode-vault-auth-content red on trunk on lenovinha: the installed opencode v2.0.25 ignores OPENCODE_AUTH_CONTENT (auth list says "No authenticated integrations"). Filed at the coordinator's request; not fixed here.

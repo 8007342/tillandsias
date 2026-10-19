@@ -1,0 +1,54 @@
+# @trace spec:observatorium-dashboard
+packets:
+  - packet_id: observatorium-verifiable-convergence-repair
+    order: 1782-bek5
+    status: in_progress
+    kind: bug
+    priority: p1
+    pickup_role: linux
+    capability_tags: [web, flutter, metrics]
+    estimated_hours: 4
+    depends_on: []
+    owned_files: [observatorium/, openspec/specs/observatorium-dashboard/]
+    title: Repair Observatorium and expose verifiable implementation obligations
+    context: |
+      Operator authorization relayed by session coordinator, 2026-10-18:
+      inspect methodology, CENTICOLON metrics and Lua runtime simplification;
+      the intended metric is verifiable elements of implementation. Inspect
+      Observatorium, load it in a sibling service and drive Chromium-framework.
+      The operator says the app is broken and explicitly authorizes whatever
+      changes to that app. This authorizes Observatorium UX changes only.
+      Astra owns the task with up to two minions; root retains integration and
+      release ownership. Work is isolated under target/observatorium-1782-bek5
+      on work/1782-bek5; root's security worktree is not modified.
+    exit_criteria:
+      - Named implementation obligations, denominator and evidence limits are legible in the dashboard
+      - Build and metrics regressions have focused tests and a Flutter web artifact
+      - Sibling preview and Chromium interaction are exercised or a concrete obstruction is recorded
+      - Implementation and findings are committed and pushed with a PR into linux-next
+    next_action: Audit grade provenance, reproduce the app failure, repair the app and exercise the managed preview
+    verifiable_closure: 'litmus:observatorium-metrics-history exercises collector/projection evidence; Flutter tests, web build and recorded host-browser interaction verify the presentation and runtime'
+    provenance: Operator request in this forge session on 2026-10-18 relayed by root
+    events:
+      - type: claimed
+        ts: "2026-10-18T03:26:00Z"
+        host: forge-observatorium
+        summary: |
+          Bootstrap receipt: selected_intent=code_implementation; active_roles=
+          Astra lead and metric-contract minion. Read AGENTS.md, methodology.yaml,
+          bootstrap/router.yaml, spec-system.yaml, ci.yaml, litmus.yaml,
+          multi-host-development.yaml, math-foundations.yaml,
+          litmus-centicolon-wiring.yaml, observatorium-dashboard spec/deployment
+          and forge startup context through project-info. Applied forge-quick-intro
+          and project-discipline; derived=2 seed=2 effective=2.
+          MCP fallback reason=unavailable: spec_answer reported absent RAG index;
+          used canonical file reads. Worktree-specific reads use filesystem
+          verification because project-info addresses the root lane checkout.
+          Scope=Observatorium app and governing spec/plan only. Verification=
+          Node metric tests, Flutter analysis/widget tests/web build, managed
+          sibling preview, Chromium CDP, ./build.sh --check before every push,
+          findings persistence gate. Host=forge-observatorium; platform=Linux.
+          Observed sibling heads: main=bf21de9673c93ac299844ef9afff30a8e5dae4b6;
+          linux-next=77e34d64e765be5db588b862e4166ab486f657ab;
+          windows-next=b38f7105262afdd2805e947e50d126ea58a4cbfa;
+          osx-next=49731c152273395cf95fd9f63249844cac707a57.

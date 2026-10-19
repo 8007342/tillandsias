@@ -136,6 +136,18 @@ if [ "$rc" -ne 0 ] && [ ! -e "$d/relayed" ] \
     ok "ARM1 enforced default branch: push to main rejected before the relay, with the seed's message"
 else bad "ARM1 rc=$rc relayed=$([ -e "$d/relayed" ] && echo yes || echo no) out='$(tr '\n' '|' <<<"$out")'"; fi
 
+# ── ARM 1b (1788-qlwq) ───────────────────────────────────────────────────
+# A seed with no messages: the mirror's own default wording, whole. Inside
+# ${DISC_MESSAGE:-…{default}…} the first `}` closed the expansion, so this line
+# ended in a stray "for work}".
+d="$(new_mirror_seeded a1b "$(seed enforced warn | sed '/^messages:/,$d')")"
+commit "$d" c1b; push "$d" main
+if [ "$rc" -ne 0 ] && [ ! -e "$d/relayed" ] \
+   && grep -q 'push to main denied: use linux-next for integration and work/<order> for work *$' <<<"$out" \
+   && ! grep -q 'for work}' <<<"$out"; then
+    ok "ARM1b no seed message: the default denial is whole (no stray brace)"
+else bad "ARM1b rc=$rc out='$(tr '\n' '|' <<<"$out")'"; fi
+
 # ── ARM 2 ────────────────────────────────────────────────────────────────
 d="$(new_mirror_seeded a2 "")"
 commit "$d" c2; push "$d" main
@@ -314,6 +326,21 @@ if ! git -C "$d/mirror.git" rev-parse --verify --quiet refs/heads/linux-next >/d
    && grep -q 'seed from HEAD' <<<"$pub_out" && [ "$rc" -ne 0 ]; then
     ok "ARM14 a project without linux-next falls through to HEAD: its seed is published and enforced"
 else bad "ARM14 refs='$(tr '\n' ' ' <<<"$refs")' pub='$pub_out' push-rc=$rc"; fi
+
+# ── ARM 15 ───────────────────────────────────────────────────────────────
+# 1788-qlwq slice 9: a forge has no pull-request path, so the only way main
+# moves is promotion — a fast-forward of main to the integration tip. ARM 1
+# stays the control: a commit that is not the integration tip is refused.
+d="$(new_mirror_seeded a15 "$(seed enforced warn)")"
+commit "$d" c15; push "$d" HEAD:refs/heads/linux-next
+push "$d" main
+if [ "$rc" -eq 0 ] && [ -e "$d/relayed" ] && grep -q 'ok:branch-discipline:default-branch:main:promoted-from:linux-next' <<<"$out"; then
+    ok "ARM15 enforced default branch: promoting the integration tip to main is accepted and relayed"
+else bad "ARM15 rc=$rc relayed=$([ -e "$d/relayed" ] && echo yes || echo no) out='$(tr '\n' '|' <<<"$out")'"; fi
+commit "$d" c15b; push "$d" main
+if [ "$rc" -ne 0 ] && [ ! -e "$d/relayed" ] && grep -q 'blocked:branch-discipline:default-branch:main' <<<"$out"; then
+    ok "ARM15 control: a main commit ahead of the integration tip is still refused"
+else bad "ARM15 control rc=$rc out='$(tr '\n' '|' <<<"$out")'"; fi
 
 [ "$FAIL" -eq 0 ] && { echo "PASS: mirror-discipline (1443-uit6)"; exit 0; }
 echo "FAILED: mirror-discipline (1443-uit6)"; exit 1

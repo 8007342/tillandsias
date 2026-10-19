@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha on the coordinator's request (macuahuitl-fedora,
+# 2026-10-18), the WebKit residual named in 1769-9gna's PR #531.
+packets:
+  - packet_id: a-tray-webkit-window-lists-the-hosts-audio-device-names-because-it-is-still-a-client-of-the-output-only-server
+    order: 1777-yhwr
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    size: S
+    pickup_role: linux
+    capability_tags: [browser, webkit, security, audio]
+    related: [1769-9gna, 1656-tjv4, 1722-2haw]
+    depends_on: []
+    title: |
+      A tray WebKit window still connects straight to the output-only Pulse server, whose clients can list every host audio device name; give its image the same private-PulseAudio front as the Chromium window, so it sees only "Speakers"
+    context: |
+      1769-9gna (PR #531, landed e5594ac39) fixed the Chromium window: a private PulseAudio server inside the window's container, whose only device is a "Speakers" tunnel to the output-only socket (images/chromium/browser-audio.pa, started by chromium-framework-launch.sh). The WebKit window (1656-tjv4, images/webkit, Ubuntu 24.04, started by start_webkit in browser_open.rs with PULSE_SERVER at the output-only socket) was left out. browser.open never opens WebKit, so this is the tray's WebKit path only.
+      MEASURED for the Chromium path on lenovinha 2026-10-17: a client of the output-only server lists the HDMI TV's name, the Ryzen controller, and a LAN AirPlay peer with its IP. The WebKit window is that kind of client today.
+      Operator ruling 2026-10-17 (via macuahuitl-fedora): browser windows see only generic device names; no host WirePlumber change, no renaming of host devices.
+    exit_criteria:
+      - "a fixture modelled on scripts/lua/test-browser-audio-generic-names.lua runs the real webkit image as a window runs and finds a private PULSE_SERVER, only generic devices listed and no host name, the stream arriving on the output-only server (NEGATIVE CONTROL), and no pulse server when the socket is absent; red against today's image"
+      - "the WebKit image carries the same private-server config text as the Chromium image (one socket, one Speakers tunnel), pinned by a cargo test under host_audio"
+    verifiable_closure: "cargo test -p tillandsias-headless host_audio && tillandsias-plan script run <the webkit fixture> (red on linux-next before the fix)"
+    next_action: >
+      After 1776-v1t4: write the fixture red first against tillandsias-webkit:v<VERSION>; add pulseaudio to images/webkit and start the private server in front of the WebKit window's launcher, reusing browser-audio.pa's text.
+    events:
+      - type: filed
+        ts: "2026-10-18T02:06:16Z"
+        host: lenovinha
+        summary: |-
+          The WebKit half of 1769-9gna: tray WebKit windows still list host audio device names.

@@ -1836,15 +1836,22 @@ pub fn consent_source(d: &Decision) -> Option<&'static str> {
 pub const AUDIT_BASENAME: &str = "command-policy-audit.jsonl";
 
 /// TILLANDSIAS_POLICY_AUDIT_LOG, else <checkout>/.cache/metrics/ when
-/// `workspace` is a checkout (a `.git` directory), else
-/// $HOME/.cache/tillandsias/metrics/.
+/// `workspace` is a TILLANDSIAS checkout (a `.git` directory and the metrics
+/// rule, scripts/metrics-log-path.sh, whose .gitignore covers .cache/), else
+/// $HOME/.cache/tillandsias/metrics/. 1788-qlwq slice 7: any other project in a
+/// forge got an untracked .cache/ in its root from the Bash-policy hook.
 pub fn audit_log_path(workspace: &Path) -> PathBuf {
     if let Ok(p) = std::env::var("TILLANDSIAS_POLICY_AUDIT_LOG")
         && !p.is_empty()
     {
         return PathBuf::from(p);
     }
-    if workspace.join(".git").is_dir() {
+    if workspace.join(".git").is_dir()
+        && workspace
+            .join("scripts")
+            .join("metrics-log-path.sh")
+            .is_file()
+    {
         return workspace
             .join(".cache")
             .join("metrics")

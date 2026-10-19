@@ -1681,6 +1681,40 @@ pub fn github_token_due_check_live(debug: bool) -> Result<DueCheck, String> {
     )
 }
 
+/// The due-check a GitHub caller runs before it reads the token (1776-74hj).
+///
+/// The scheduler's first check runs at tray start, before Vault is up, so it
+/// fails, and until its 60 s retry an expired token sat in Vault for anything
+/// that read it (HTTP 401 from the username probe and the cloud refresh in the
+/// v56.10.17.1 smoke). A caller that has just ensured Vault asks here first,
+/// under the same rotation lock, so it reads a rotated token.
+///
+/// It never blocks the call: a failed check is logged, and gh then fails with
+/// its own named error. Returns the line it logged, for the tests.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn github_token_check_before_use(
+    check: impl FnOnce() -> Result<DueCheck, String>,
+    debug: bool,
+) -> Option<String> {
+    let line = match check() {
+        Ok(DueCheck::RefusedInForge) => None,
+        Ok(v @ DueCheck::Rotated { .. }) => {
+            audit_github_token_auto_rotation("rotated");
+            Some(v.verdict())
+        }
+        Ok(v) if debug => Some(v.verdict()),
+        Ok(_) => None,
+        Err(e) => {
+            audit_github_token_auto_rotation("failed");
+            Some(format!("warn:{e}"))
+        }
+    };
+    if let Some(line) = &line {
+        eprintln!("[tillandsias] {line}");
+    }
+    line
+}
+
 /// The delay before the next check: the regular interval after a verdict, and
 /// a backoff after a failure (1 min doubling, capped at the interval), so a
 /// transient failure is retried well before the token dies.
@@ -3632,45 +3666,48 @@ pub async fn revoke_pending_container_tokens(debug: bool) {
 fn build_vault_image(debug: bool) -> Result<String, String> {
     let version = crate::VERSION.trim();
     let root = crate::resolve_runtime_asset_root(version, debug)?;
-    let build_args = std::collections::BTreeMap::new();
-    let dependency_digests = std::collections::BTreeMap::new();
+    // Order 1776-v1t4: through the one seam, so a Vault build has the per-image
+    // lock (a --cloudflare-login racing the tray no longer builds twice), the
+    // detached helper, the failure marker and the verdict line. Order 253
+    // holds: vault has no image_dependency, so the seam builds only vault; and
+    // an image --init already built is a Skip there, not a rebuild.
+    let tag = crate::versioned_image_tag("vault", version);
+    crate::ensure_image_exists(&root, "vault", &tag, debug).map_err(|e| {
+        let marker = crate::image_ensure_marker_dir()
+            .and_then(|d| crate::image_ensure_marker::load(&d, "vault"));
+        vault_image_refusal(&e, marker.as_ref(), crate::unix_now_secs())
+    })?;
     let identity = crate::runtime_assets::image_identity(
         &root,
         "vault",
         version,
-        build_args.clone(),
-        dependency_digests,
+        std::collections::BTreeMap::new(),
+        std::collections::BTreeMap::new(),
     )?;
-
-    // Order 253: --init pre-builds vault into this same identity tag, so the
-    // login path is zero-build on an initialized runtime. Skipping here also
-    // stops every login from re-invoking `podman build` (the repeated-login
-    // rebuild observed in the order-245 audit). The build below stays as the
-    // fail-soft fallback for runtimes that skipped --init.
-    if tillandsias_podman::image_exists_sync(&identity.canonical_tag) {
-        if debug {
-            eprintln!(
-                "[tillandsias-vault] image {} already built; skipping build",
-                identity.canonical_tag
-            );
-        }
-        return Ok(identity.canonical_tag);
-    }
-    eprintln!(
-        "[tillandsias-vault] vault image missing — building the Vault image alone, on demand (order 253; no other image is built)"
-    );
-
-    let cache_dir = crate::init_cache_dir()?;
-    let log_file = if debug {
-        Some(cache_dir.join("tillandsias-init-vault.log"))
-    } else {
-        None
-    };
-
-    crate::build_image_with_logging(&root, "vault", &identity, &build_args, &log_file, debug)?;
-
     Ok(identity.canonical_tag)
 }
+
+/// What a sign-in path says when the Vault image cannot be built
+/// (1776-v1t4): the seam's named refusal, never a bare build error, and never
+/// `tillandsias --init`, which a macOS or Windows tray user cannot run
+/// (1774-8j9v). A failed build has just left its marker, whose refusal names
+/// the cause, the log and the retry.
+fn vault_image_refusal(
+    error: &str,
+    marker: Option<&crate::image_ensure_marker::FailureMarker>,
+    now: u64,
+) -> String {
+    if error.starts_with("refused:") {
+        return error.to_string();
+    }
+    if let Some(m) = marker {
+        return crate::image_ensure_marker::refusal(m, now);
+    }
+    error.replace(crate::IMAGE_BUILD_REMEDY, VAULT_IMAGE_REMEDY)
+}
+
+/// The Vault image's remedy, for an error the marker does not cover.
+const VAULT_IMAGE_REMEDY: &str = "The lines above name the step that failed. On Linux retry with      `tillandsias --retry-image vault`; from the macOS or Windows tray, sign in again in a few      minutes.";
 
 #[cfg(feature = "vault")]
 /// ORDER 1286-4437. Clear the HOST-HELD vault credentials, preserving the
@@ -5964,6 +6001,28 @@ pub(crate) fn container_exit_state(name: &str) -> Option<(String, i64)> {
     Some((status, code))
 }
 
+/// Order 1784-skfj: whether `name` is running, or `None` when podman did not
+/// answer (a budget kill, a spawn error, any failure that is not "no such
+/// container"). [`container_running`] folds that `None` into `false`, which is
+/// right for "should I start it?" and wrong for "did it die?": on the
+/// v56.10.17.1 smoke a wedged podman made a live Vault read as dead and the
+/// supervisor re-ensured it.
+pub(crate) fn container_running_answer(name: &str) -> Option<bool> {
+    let out = podman_cmd_sync()
+        .args(["inspect", "--format", "{{.State.Running}}", name])
+        .output_bounded(tillandsias_podman::OperationKind::Inspect.default_budget())
+        .ok()?;
+    if out.status.success() {
+        return Some(String::from_utf8_lossy(&out.stdout).trim() == "true");
+    }
+    inspect_says_absent(&String::from_utf8_lossy(&out.stderr)).then_some(false)
+}
+
+/// podman's refusal for a name it has no object for.
+pub(crate) fn inspect_says_absent(stderr: &str) -> bool {
+    stderr.to_ascii_lowercase().contains("no such")
+}
+
 pub(crate) fn container_running(name: &str) -> bool {
     let out = podman_cmd_sync()
         .args(["inspect", "--format", "{{.State.Running}}", name])
@@ -6780,6 +6839,124 @@ pub async fn ensure_mirror_identity_provisioned(
 mod tests {
     use super::*;
 
+    // ---- 1776-v1t4: the Vault image goes through the one seam -----------------
+
+    /// `build_vault_image` builds through `ensure_image_exists`, so it waits
+    /// on the per-image lock another process holds instead of building
+    /// alongside it, and its refusal never names `tillandsias --init`.
+    #[test]
+    fn vault_image_goes_through_ensure_image_exists() {
+        // Source arm: no build of its own.
+        let src = include_str!("vault_bootstrap.rs");
+        let body = &src[src.find("fn build_vault_image(").expect("fn")..];
+        let body = &body[..body.find("\n}\n").expect("end")];
+        // source-pin-ok: "no second build path" is a property of the text.
+        assert!(!body.contains("build_image_with_logging("), "{body}");
+        assert!(body.contains("crate::ensure_image_exists("), "{body}");
+
+        // Lock arm (unix: the fake podman is a symlink to /bin/false).
+        #[cfg(unix)]
+        {
+            // Lock arm. Everything the seam touches is scratch: runtime dir (the
+            // lock), cache (a failure marker must never reach the real cache),
+            // the checkout as the runtime root, and a podman that always fails.
+            let _seam = crate::runtime_assets::podman_seam_lock();
+            let _env = crate::test_support::env_lock();
+            let scratch = identity_scratch("v1t4-lock");
+            // A podman that fails every call: first on PATH, a link to /bin/false.
+            let bin = scratch.join("bin");
+            std::fs::create_dir_all(&bin).unwrap();
+            std::os::unix::fs::symlink("/bin/false", bin.join("podman")).unwrap();
+            let saved: Vec<(&str, Option<std::ffi::OsString>)> = [
+                "XDG_RUNTIME_DIR",
+                "XDG_CACHE_HOME",
+                "TILLANDSIAS_ROOT",
+                "PATH",
+                "TILLANDSIAS_PODMAN_REFUSE_REAL",
+                crate::image_ensure_marker::RETRY_BASE_ENV,
+            ]
+            .into_iter()
+            .map(|k| (k, std::env::var_os(k)))
+            .collect();
+            let checkout = PathBuf::from(
+                std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+            )
+            .join("../..");
+            // SAFETY: env_lock serialises every env-mutating test.
+            unsafe {
+                std::env::set_var("XDG_RUNTIME_DIR", scratch.join("run"));
+                std::env::set_var("XDG_CACHE_HOME", scratch.join("cache"));
+                std::env::set_var("TILLANDSIAS_ROOT", &checkout);
+                std::env::set_var("PATH", format!("{}:/usr/bin:/bin", bin.display()));
+                // The PATH podman is the fake; the tripwire would refuse it.
+                std::env::remove_var("TILLANDSIAS_PODMAN_REFUSE_REAL");
+                // 1776-brk3's background retries run in milliseconds, not minutes.
+                std::env::set_var(crate::image_ensure_marker::RETRY_BASE_ENV, "10");
+            }
+            std::fs::create_dir_all(scratch.join("run")).unwrap();
+            let held = crate::resource_lock::acquire("image-vault", Duration::from_secs(5), false)
+                .expect("take the vault image lock");
+            let (tx, rx) = std::sync::mpsc::channel();
+            let worker = std::thread::spawn(move || {
+                let _ = tx.send(build_vault_image(false));
+            });
+            std::thread::sleep(Duration::from_millis(1500));
+            let waited = rx.try_recv().is_err();
+            drop(held);
+            let after = rx.recv_timeout(Duration::from_secs(120));
+            let _ = worker.join();
+            for (k, v) in saved {
+                // SAFETY: as above.
+                unsafe {
+                    match v {
+                        Some(v) => std::env::set_var(k, v),
+                        None => std::env::remove_var(k),
+                    }
+                }
+            }
+            let _ = std::fs::remove_dir_all(&scratch);
+            assert!(
+                waited,
+                "build_vault_image must wait while another holds image-vault"
+            );
+            assert!(
+                after.is_ok(),
+                "once the lock is free it proceeds and answers"
+            );
+        }
+
+        // Refusal arm: never `tillandsias --init` (1774-8j9v).
+        let build_error = format!(
+            "Required image 'x' failed: boom.\n{}",
+            crate::IMAGE_BUILD_REMEDY
+        );
+        assert!(
+            crate::IMAGE_BUILD_REMEDY.contains("tillandsias --init"),
+            "precondition"
+        );
+        let plain = vault_image_refusal(&build_error, None, 0);
+        assert!(!plain.contains("--init"), "{plain}");
+        assert!(plain.contains("tillandsias --retry-image vault"), "{plain}");
+        let m = crate::image_ensure_marker::FailureMarker {
+            image: "vault".into(),
+            source_digest: "sha256:aa".into(),
+            attempts: 1,
+            first_failed_at: 100,
+            last_failed_at: 100,
+            next_retry_at: Some(700),
+            cause: "Build exited with status 1".into(),
+            log: "/l".into(),
+        };
+        let named = vault_image_refusal(&build_error, Some(&m), 200);
+        assert!(
+            named.starts_with("refused:image-ensure:vault:build-failed-previously"),
+            "{named}"
+        );
+        assert!(!named.contains("--init"), "{named}");
+        let disk = "refused:image-ensure:vault:disk:1MiB/2048MiB — …";
+        assert_eq!(vault_image_refusal(disk, None, 0), disk);
+    }
+
     // ---- 1642-cc54: the Vault store lives on the identity disk ---------------
 
     /// A scratch dir inside the checkout (operator rule: development work
@@ -7553,6 +7730,52 @@ mod tests {
             matches!(check(), Ok(DueCheck::Rotated { .. })),
             "once Vault is up the expired token rotates on the next check"
         );
+    }
+
+    /// 1776-74hj, the launch: the scheduler's first check fails because Vault
+    /// is not up, and a gh caller that runs once Vault is up must read a
+    /// rotated token, not the expired one. A failed check returns a line and
+    /// lets the call go on; it never panics or blocks.
+    #[test]
+    fn a_gh_caller_after_vault_is_up_reads_a_rotated_token() {
+        let store = SharedStore::with(&bundle_expiring_at(NOW - 60));
+        let lock = test_lock("74hj");
+        let check = |up: bool| {
+            github_store_reachable(up)?;
+            rotate_github_token_if_due(
+                &store,
+                &fresh_pair,
+                NOW,
+                false,
+                &lock,
+                std::time::Duration::from_secs(5),
+                false,
+            )
+        };
+
+        let launch = github_token_check_before_use(|| check(false), false);
+        assert!(
+            launch
+                .as_deref()
+                .is_some_and(|l| l.contains("vault-unavailable")),
+            "{launch:?}"
+        );
+        let stale = store.read_bundle().unwrap().unwrap();
+        assert_eq!(stale.expires_at, Some(NOW - 60), "nothing rotated yet");
+
+        let before_gh = github_token_check_before_use(|| check(true), false);
+        assert!(
+            before_gh
+                .as_deref()
+                .is_some_and(|l| l.starts_with("ok:github-token-rotation:rotated")),
+            "{before_gh:?}"
+        );
+        let read = store.read_bundle().unwrap().unwrap();
+        assert_eq!(read.token, "ghu_NEWACCESS", "gh reads the new token");
+        assert_eq!(read.expires_at, Some(NOW + 28_800));
+
+        // Quiet when there is nothing to say, outside debug.
+        assert_eq!(github_token_check_before_use(|| check(true), false), None);
     }
 
     /// Criterion 7, the other half: the token record the git-mirror service can

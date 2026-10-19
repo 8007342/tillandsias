@@ -9,7 +9,7 @@
 # printed what the harness was looking for, so the greps decided nothing and a
 # `severity: critical` test of the container hardening envelope reported PASS on
 # every run it ever made — and would have reported PASS with the flags removed
-# entirely. `scripts/check-litmus-steps-can-fail.sh` now refuses that shape
+# entirely. `scripts/lua/check-litmus-steps-can-fail.lua` now refuses that shape
 # across the whole corpus.
 #
 # THE SECOND DEFECT WAS DEEPER AND SURVIVED THE FIRST FIX. This test LAUNCHES

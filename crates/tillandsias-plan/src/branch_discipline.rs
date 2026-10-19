@@ -478,6 +478,15 @@ pub fn parse_seed(
     {
         return Err("work-ref-regex".into());
     }
+    // 1788-qlwq slice 3: `work_ref` is a REGEX. A template such as `work/<id>`
+    // compiles (`<` and `>` are literals) and then refuses every real work ref.
+    if let Some(w) = &work_ref
+        && Regex::new(r"<[A-Za-z_][A-Za-z0-9_-]*>")
+            .map(|t| t.is_match(w))
+            .unwrap_or(false)
+    {
+        return Err("work-ref-template".into());
+    }
     let plan_only_paths = v
         .get("plan_only_lane")
         .and_then(|p| p.get("paths"))
@@ -599,7 +608,9 @@ pub fn trailer_host(trailer_values: &str) -> Option<String> {
 
 /// How many commits the committer qualifier looks back over.
 pub const COMMIT_WINDOW: usize = 50;
-const DEFAULT_WORK_REF: &str = "work/[0-9]{3,4}-[a-z0-9]{4}";
+/// The work-ref grammar `raise --to 2` writes and an absent `work_ref` reads
+/// as (1788-qlwq slice 3).
+pub const DEFAULT_WORK_REF: &str = "work/[0-9]{3,4}-[a-z0-9]{4}";
 
 /// The level whose qualifier a rule needs before it may refuse.
 fn rule_level(rule: &str) -> u8 {
@@ -797,7 +808,19 @@ pub fn derive(root: &Path, d: &Discipline) -> Option<Derived> {
         command: format!("git log --merges -n {COMMIT_WINDOW} --format=%s {default_ref}"),
     });
 
-    let hooks_dir = common_git_dir(root).map(|g| g.join("hooks"));
+    // 1788-qlwq slice 5: git runs the hooks in core.hooksPath when it is set,
+    // so that is where installed hooks are; <git-common-dir>/hooks otherwise.
+    let hooks_path = git(root, &["config", "--get", "core.hooksPath"])
+        .map(|p| p.trim().to_string())
+        .filter(|p| !p.is_empty());
+    let hooks_dir = match &hooks_path {
+        Some(p) => Some(if Path::new(p).is_absolute() {
+            PathBuf::from(p)
+        } else {
+            root.join(p)
+        }),
+        None => common_git_dir(root).map(|g| g.join("hooks")),
+    };
     let hooks: Vec<String> = ["pre-push", "pre-commit", "pre-receive"]
         .iter()
         .filter(|h| hooks_dir.as_ref().is_some_and(|dir| dir.join(h).is_file()))
@@ -806,7 +829,11 @@ pub fn derive(root: &Path, d: &Discipline) -> Option<Derived> {
     obs.push(Observation {
         name: "installed_hooks",
         value: json!(hooks),
-        command: "ls <git-common-dir>/hooks".into(),
+        command: if hooks_path.is_some() {
+            "ls $(git config --get core.hooksPath)".into()
+        } else {
+            "ls <git-common-dir>/hooks".into()
+        },
     });
 
     let l1 = !integration.is_empty() || pr_merges > 0;

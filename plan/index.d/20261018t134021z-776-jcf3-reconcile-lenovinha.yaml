@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Reconciliation of 776-jcf3 by lenovinha on the coordinator's request
+# (macuahuitl-fedora, 2026-10-18). The row is NOT claimed.
+events:
+  - packet_id: retire-host-src-checkout-behind-proven-transparent-push
+    event:
+      type: progress
+      ts: "2026-10-18T13:40:21Z"
+      host: lenovinha
+      summary: |-
+        RECONCILED (lenovinha, coordinator's request). The next_action was the 2026-09-11 text and listed work already done; it now lists only what is left, all of it the operator's (3d's yes, the no-~/src gap, criterion 4).
+        RE-PROOF AT CURRENT RELEASE ATTEMPTED, NOT BANKED. The coordinator asked for the 349-pattern push again at current HEAD with ~/src present. Installed v56.10.17.1 (equals trunk VERSION). The launch was tillandsias --cloud 8007342/tillandsias --bash --debug under a pty. Stderr printed "cloud: ephemeral project resolved: name=tillandsias, remote=https://github.com/8007342/tillandsias.git (host disk untouched)" and "Ephemeral cloud project: tillandsias". The mirror seeded on attempt 12/1200. Then the launch died before any forge started: "runtime_unavailable: per-lane MCP listener failed: mcp socket already has a live owner; refusing to unlink: /run/user/1000/tillandsias/mcp/tillandsias-default/mcp.sock". ss -xlp names the owner as the operator's running tray (tillandsias --tray --debug, started 2026-10-17 13:39). No forge ran and nothing was pushed, so no scratch ref exists to delete.
+        To bank the re-proof, the lane must come from the tray menu or run with the tray quit; both are the operator's. Two side notes: (1) this binary predates 1783-k5hm, which refuses before starting anything, so it brought the mirror container up first; I stopped it by hand. (2) The 2026-09-25 linux proof (778849e29) stands, and the row's criterion 1 does not depend on this re-run.

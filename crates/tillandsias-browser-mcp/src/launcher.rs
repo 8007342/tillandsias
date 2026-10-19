@@ -32,6 +32,19 @@ pub enum LaunchError {
     Cdp(String),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+    /// Order 1776-pr0g: the window's engine image is being built on first
+    /// use, in the background. Nothing was started; call browser.open again.
+    /// `step` is `(n, m)` while the build reports one. `retry_after_s` is
+    /// when to ask again: [`crate::server::PREPARING_RETRY_AFTER_S`] while it
+    /// builds, longer while a failed build waits for its automatic retry
+    /// (1776-brk3: "busy, try again in N").
+    #[error("{notice}")]
+    Preparing {
+        engine: Engine,
+        notice: String,
+        step: Option<(u64, u64)>,
+        retry_after_s: u64,
+    },
 }
 
 /// The engine a window runs (order 1656-tjv4). Its user-facing name is
@@ -115,6 +128,15 @@ pub trait BrowserContainers: Send + Sync {
     /// The router's local-preview TLS port (`preview-tls-port`), when the
     /// preview listener exists. `browser.open` admits this port for https.
     fn preview_tls_port(&self) -> Option<u16>;
+    /// The `<host>:<port>` pairs the tray has ROUTED for a browser (the
+    /// router's route table: a published www preview, a toolchain dev server
+    /// such as `flutter run -d web-server`). browser.open admits these beside
+    /// the hosts of windows already open (1788-qlwq slice 10): before, opening
+    /// one window locked every other routed service of the project out.
+    /// Defaults to none: a launcher that cannot tell keeps the old behaviour.
+    fn routed_hosts(&self) -> Vec<String> {
+        Vec::new()
+    }
     /// Whether this host can show a window (order 1712-3fsw). Without one,
     /// `browser.open` starts headless unless the caller insists otherwise.
     /// Defaults to true: a launcher that cannot tell keeps the old behaviour.
@@ -126,8 +148,10 @@ pub trait BrowserContainers: Send + Sync {
 }
 
 /// A running window's container. Dropping it stops the container, so a
-/// window cannot outlive the server (and the lane connection) that opened
-/// it: a leaked one would also leave its network attached to the router.
+/// window cannot outlive the registry that holds it: a leaked one would also
+/// leave its network attached to the router. The tray keeps one registry per
+/// lane for the life of the process (order 1754-bu07), so a window outlives
+/// the MCP connection that opened it and ends at browser.close or tray Quit.
 pub struct RunningContainer {
     handle: ContainerHandle,
     host: Arc<dyn BrowserContainers>,

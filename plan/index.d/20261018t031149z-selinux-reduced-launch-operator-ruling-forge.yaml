@@ -1,0 +1,21 @@
+events:
+  - packet_id: selinux-from-audit-to-enforcement-starting-with-the-forge-container-because-the-policy-sources-already-exist-unloaded-while-one-spec-mandates-label-disable-as-a-security-default-and-another-spec-asserts-guarantees-that-cannot-hold-under-it
+    event:
+      type: note
+      ts: "2026-10-18T03:11:49Z"
+      host: forge-container
+      summary: |
+        OPERATOR RULING 2026-10-18 (clarification during1781-bihq): "Allow launches on reduced security, our tillandsias.org website already publishes our shortcomings, we can display in the logs where SELinux is pending or reduced, but should not block launches".
+        The unsupported-SELinux launch question is RESOLVED. Normal launches proceed with clear safe logs identifying actual state/reason; no per-launch consent/dialog required and no full-hardening claim. This approval covers SELinux limitation log reporting, not broad access, plaintext fallback or disabled authentication. The website statement is operator context, not independently verified by this audit.
+  - packet_id: selinux-labeling-is-on-by-default-for-every-enclave-container-and-label-disable-is-a-named-exception
+    event:
+      type: note
+      ts: "2026-10-18T03:11:49Z"
+      host: forge-container
+      summary: "OPERATOR RULING during1781-bihq: SELinux unavailable/pending/reduced does NOT block normal launches. Log actual state, affected role, missing protection and reason without secrets or confirmation dialogs. Continue hardening toward enforcement, but never label reduced operation fully hardened. No waiver of other security boundaries. See same-timestamp1252 event for exact operator quote."
+  - packet_id: workload-identity-plane-spiffe-model-enclave-mtls-and-selinux-lane-confinement
+    event:
+      type: note
+      ts: "2026-10-18T03:11:49Z"
+      host: forge-container
+      summary: "OPERATOR RULING during1781-bihq resolves unsupported SELinux: normal launches remain allowed in pending/reduced mode with clear logs and no full-hardening claim. Draft enforce-runtime-security-evidence now includes this behavior. Existing mTLS/authz/credential boundaries remain required; do not infer authorization to downgrade other controls."

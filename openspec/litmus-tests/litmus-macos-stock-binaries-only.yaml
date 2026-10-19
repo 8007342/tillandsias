@@ -16,14 +16,14 @@ description: >
   PATH; a user's clean MacBook failed its first provision the same day.
 
 preconditions:
-  - workspace contains scripts/check-macos-stock-binaries.sh
+  - workspace contains scripts/lua/check-macos-stock-binaries.lua
   - workspace contains scripts/test-check-macos-stock-binaries.sh
   - workspace contains scripts/install-macos.sh
   - workspace contains crates/tillandsias-vm-layer/src/vz.rs
 
 critical_path:
   - step: "the tree spawns only absolute stock-macOS binaries and the installer pins PATH"
-    command: "bash scripts/check-macos-stock-binaries.sh 2>&1 | tail -1"
+    command: "out=$(\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-macos-stock-binaries.lua 2>&1); printf '%s\\n' \"${out##*$'\\n'}\""
     timeout_ms: 30000
     expected_behavior: "ok:macos-stock-binaries:"
   - step: "the lint refuses an added qemu-img, a bare hdiutil, a bare spawn_bounded name, a removed or Homebrew-widened PATH pin, and passes an absolute stock spawn"

@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: scoped-forge-diagnostics-collection-query-and-curated-events-research
+    event:
+      type: list-replace
+      ts: "2026-10-18T02:51:08Z"
+      agent_id: linux-macuahuitl-claude-20261018t025107z
+      host: macuahuitl
+      field: exit_criteria
+      items:
+        - "Disposition recorded: the change extends runtime-diagnostics-stream / log-aggregation / log-schema-versioning and reconciles external-logs-layer; no parallel log spec"
+        - "The session ring buffer behind service_logs answers own-lane launch/build/readiness/exit/OOM queries, including failures before the container exists; a store is added only for a named query the ring cannot answer, with the measured gap recorded"
+        - "Lane authorization and fail-closed curation are proven with negative controls: cross-lane IDs and forged tenants are denied, credential canaries are absent, a transform failure exposes no raw data, and instructions inside logs stay evidence"
+        - "Session semantics are proven: the history is empty in a new session, nothing survives forge teardown, a backend outage neither blocks launch nor reports healthy, and loss or truncation is reported, never silent"
+      summary: |-
+        teardown-retention and broker benchmarks dropped by the session-only ruling; baseline is the existing ring buffer

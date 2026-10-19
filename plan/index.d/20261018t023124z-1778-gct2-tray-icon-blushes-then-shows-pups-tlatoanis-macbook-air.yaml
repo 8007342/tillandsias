@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air on the coordinator's request (macuahuitl-fedora,
+# 2026-10-17), operator ruling 3 on 1776.
+packets:
+  - packet_id: the-tray-icon-blushes-progressively-while-containers-are-created-shows-pups-when-the-work-completes-and-returns-to-plain-on-the-next-menu-open-with-a-per-platform-icon-set
+    order: 1778-gct2
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    size: L
+    pickup_role: macos
+    capability_tags: [tray, ux, icons, macos, windows, linux]
+    related: [1776-pr0g, 1776-ondm, 1443-bgbs, 1420-v3zt]
+    depends_on: []
+    title: |
+      The tray icon blushes progressively while containers are being created, like a tillandsia before it has pups; when the work completes it shows pups; the first menu open after that returns it to the plain icon. Each platform has its own icon set
+    context: |
+      Operator ruling 2026-10-17 (ruling 3 on 1776, relayed by macuahuitl-fedora): the icon is the user-facing "something is happening" surface beside the one status line (ruling 2). This ruling is the tray-ux approval for the STATE MACHINE (openspec/specs/tray-ux/spec.md:13-48 covers icons too). The artwork of each platform's set is shown to the operator before it lands.
+      What exists today (surveyed 2026-10-18):
+      - TrayIconState lives in crates/tillandsias-core/src/genus.rs:239. It has six variants (Pup, Mature, Building, Blooming, Dried, Stopping), while tray-icon-lifecycle spec.md:129 still says "exactly five".
+      - core build.rs renders the ionantha SVGs to 32x32 PNGs (TRAY_ICONS :50-57). There is no platform dimension and no progress frames.
+      - Linux (headless tray/mod.rs): set_status(text, icon) at :1710; SNI activate/context_menu at :3888/:3906 already revert Blooming to Mature on open; dbusmenu about_to_show at :4053 (its reply MUST stay a single bool, see :4046). Container work is visible at try_build_forge_image_on_demand :2314, cloud launch :2579, clone :2767, handle_launch_project :2377, and as podman events into set_last_event.
+      - macOS (status_item.rs:205): the icon is fixed to Mature and is a TEMPLATE image, so macOS repaints it in one colour and a blush would be lost. Blush exists only as menu-bar text (provision_progress.rs:54). There is no NSMenuDelegate, so a menuWillOpen: hook is new.
+      - Windows (tray_phase_icon.rs): apply_progress_icon :333 / paint_progress_strip :69-92 draw a strip with a blush tip, used only during first provisioning. Building and Blooming are unreachable (:31-34). The menu opens via show_context_menu (notify_icon.rs:4435) and there is no WM_INITMENUPOPUP handler.
+      - macOS and Windows get only the VmStatusReply.last_event string for container work. No typed container create start/finish event reaches the host trays.
+      - Original wording: 2026-04-26-tray-progress-and-icon-states proposal.md:38 deferred "pup/green/blushing/bloom/withered + 10s revert + withered-on-quit" to a tray-icon-state-machine follow-up that was never written. 2026-03-22 bootstrap design.md:236-241 has Rebuilding → "Pup (offset) | Small plant growing from parent".
+      Design tension to settle in the change: the spec's Pup means "initializing" (tray-icon-lifecycle spec.md:116). Pups-as-"work done" needs either a new state (e.g. Pups) or a re-meaning of Pup, decided in the openspec change and not silently.
+      Blush colours are shared from tillandsias-progress-tty (TIP_BLUSH #E8637A, BLUSH_MID, LEAF_RAMP). No user-facing text may say "container".
+    exit_criteria:
+      - "an openspec change (tray-icon-state-machine) defines states plain → blushing(k of N frames, driven by created/total containers or step n/m) → pups → plain-on-first-menu-open, as a pure core reducer with a cargo test written red first: progress events advance the blush monotonically, completion yields pups, a menu-open event while pups yields plain, a menu-open while blushing changes nothing, and a failure never shows pups"
+      - "build.rs renders a per-platform icon set (Linux SNI pixmaps, macOS non-template menu-bar images at 18pt @1x/@2x, Windows .ico 16/20/24/32), pinned by a test that every state × platform has an asset and that the macOS set is not a template image"
+      - "each platform wires its menu-open hook (Linux SNI activate/context_menu + dbusmenu about_to_show root, macOS NSMenuDelegate menuWillOpen:, Windows show_context_menu / WM_INITMENUPOPUP) to the reducer's menu-open event, each with a unit test on the seam"
+      - "macOS and Windows receive a typed container-work progress (created/total) over the status reply instead of parsing last_event, with a wire test"
+      - "the operator has seen and approved each platform's icon set (recorded as an event on this row) before the change lands"
+      - "live: the next published release, on the operator's Mac, shows the blush during a forge launch, pups after, plain after opening the menu (checked via the published release, never a dev build)"
+    verifiable_closure: "cargo test -p tillandsias-core tray_icon_state_machine && cargo test -p tillandsias-headless --features tray,listen-vsock --bin tillandsias tray_icon && cargo test -p tillandsias-macos-tray menu_will_open && cargo test -p tillandsias-windows-tray tray_icon (each red on linux-next before the change)"
+    next_action: >
+      Write the openspec change (states, events, per-platform assets, resolving the Pup meaning), then the core reducer red-first; mock up the per-platform icon frames for the operator's approval before wiring the trays.
+    events:
+      - type: filed
+        ts: "2026-10-18T02:31:24Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Operator ruling 3 on 1776: blushing tray icon while containers are created, pups on completion, plain on the next menu open; a per-platform icon set.

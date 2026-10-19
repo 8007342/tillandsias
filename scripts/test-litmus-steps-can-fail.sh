@@ -2,7 +2,7 @@
 # @trace spec:litmus-framework, spec:methodology-accountability
 # @trace order:972-cvdg
 #
-# Fixture for scripts/check-litmus-steps-can-fail.sh.
+# Fixture for scripts/lua/check-litmus-steps-can-fail.lua (ported from the .sh, 1247-ngc5).
 #
 # A GUARD AGAINST TESTS THAT CANNOT FAIL MUST ITSELF BE ABLE TO FAIL, and that
 # is not a joke — the five steps this guard was written for passed for their
@@ -13,7 +13,11 @@
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GUARD="$REPO_ROOT/scripts/check-litmus-steps-can-fail.sh"
+# 1247-ngc5: the guard is ported to scripts/lua and runs on the plan binary.
+GUARD="$REPO_ROOT/scripts/lua/check-litmus-steps-can-fail.lua"
+. "$REPO_ROOT/scripts/plan-binary-probe.sh"
+PLAN="$(cd "$REPO_ROOT" && resolve_plan_binary)" || { echo "skip:litmus-steps-can-fail-fixture:no-runnable-plan-binary"; exit 0; }
+case "$PLAN" in /*) ;; *) PLAN="$REPO_ROOT/${PLAN#./}" ;; esac
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 failures=0
@@ -21,7 +25,7 @@ failures=0
 expect() {
     local name="$1" want_rc="$2" want_grep="$3"
     local out rc
-    out="$(TILLANDSIAS_LITMUS_DIR="$TMP" bash "$GUARD" 2>&1)"
+    out="$(cd "$REPO_ROOT" && TILLANDSIAS_LITMUS_DIR="$TMP" TILLANDSIAS_SCRIPT_RUNNER_BIN="$PLAN" "$PLAN" script run "$GUARD" 2>&1)"
     rc=$?
     if [ "$rc" != "$want_rc" ]; then
         echo "FAIL: $name — exit $rc, wanted $want_rc"
