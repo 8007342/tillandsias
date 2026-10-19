@@ -1210,6 +1210,7 @@ mod tests {
     fn run_check_against_shim(
         mode: &str,
     ) -> (Result<LivenessResult, String>, Vec<Service>, Vec<String>) {
+        let _seam = crate::runtime_assets::podman_seam_lock();
         let _guard = crate::test_support::env_lock();
         let dir = tempfile::tempdir().unwrap();
         let log = dir.path().join("argv.log");

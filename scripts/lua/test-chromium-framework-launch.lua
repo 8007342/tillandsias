@@ -55,6 +55,9 @@ local function install(name, body)
 end
 local BIN_ACCEPT = install("accepting", ACCEPTING)
 local BIN_REJECT = install("rejecting", REJECTING)
+-- 1769-9gna made the launcher source the image's audio-start helper, which
+-- does not exist outside the image; the fixture judges argv, not audio.
+fs.write(REL .. "/audio-start.sh", "# fixture stub: no audio server\n")
 
 -- Run `launcher --custom-flag` against one wrapper; return the exec'd argv
 -- as a set, or nil when the wrapper was never exec'd.
@@ -65,7 +68,8 @@ local function exec_argv(launcher, bin)
     proc.run({
         argv = { "bash", launcher, "--custom-flag" },
         cwd = ROOT,
-        env = { PATH = bin .. ":" .. (env.get("PATH") or "/usr/bin:/bin"), TILLANDSIAS_LAUNCH_REC = rec },
+        env = { PATH = bin .. ":" .. (env.get("PATH") or "/usr/bin:/bin"), TILLANDSIAS_LAUNCH_REC = rec,
+                TILLANDSIAS_BROWSER_AUDIO_START = DIR .. "/audio-start.sh" },
         timeout_ms = 30000,
     })
     local ok, body = pcall(fs.read, REL .. "/rec-" .. runs)

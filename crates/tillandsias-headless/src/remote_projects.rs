@@ -1124,6 +1124,7 @@ mod tests {
         // access to shared env vars across tests in this module, so one
         // test's unrelated panic must not cascade-fail every test that
         // acquires the lock afterward.
+        let _seam = crate::runtime_assets::podman_seam_lock();
         let _guard = crate::runtime_assets::env_lock();
         let podman_dir = install_podman_mock();
         let original_path = std::env::var_os("PATH");
@@ -1165,6 +1166,7 @@ mod tests {
         // access to shared env vars across tests in this module, so one
         // test's unrelated panic must not cascade-fail every test that
         // acquires the lock afterward.
+        let _seam = crate::runtime_assets::podman_seam_lock();
         let _guard = crate::runtime_assets::env_lock();
         let podman_dir = install_podman_mock();
         let original_path = std::env::var_os("PATH");
@@ -1255,6 +1257,7 @@ mod tests {
         // access to shared env vars across tests in this module, so one
         // test's unrelated panic must not cascade-fail every test that
         // acquires the lock afterward.
+        let _seam = crate::runtime_assets::podman_seam_lock();
         let _guard = crate::runtime_assets::env_lock();
         let podman_dir = install_podman_mock();
         let state_dir = tempdir().expect("state tempdir");
@@ -1318,6 +1321,7 @@ mod tests {
         // access to shared env vars across tests in this module, so one
         // test's unrelated panic must not cascade-fail every test that
         // acquires the lock afterward.
+        let _seam = crate::runtime_assets::podman_seam_lock();
         let _guard = crate::runtime_assets::env_lock();
         let podman_dir = install_podman_mock();
         let state_dir = tempdir().expect("state tempdir");

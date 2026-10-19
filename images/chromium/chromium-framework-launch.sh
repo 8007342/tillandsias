@@ -29,7 +29,7 @@ accepts_no_sandbox() {
 # device is "Speakers", never to the output-only server the window was given
 # (whose clients can list every host device). Shared with the WebKit window.
 # shellcheck source=browser-audio-start.sh
-source /usr/local/lib/tillandsias/browser-audio-start.sh
+source "${TILLANDSIAS_BROWSER_AUDIO_START:-/usr/local/lib/tillandsias/browser-audio-start.sh}"
 
 CHROMIUM_BIN="$(find_chromium || true)"
 if [[ -z "$CHROMIUM_BIN" ]]; then
