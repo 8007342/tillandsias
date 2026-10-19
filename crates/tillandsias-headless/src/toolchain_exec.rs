@@ -1506,7 +1506,10 @@ mod tests {
     /// and lib-common.sh's DART_SDK_VERSION follows.
     #[test]
     fn the_forge_dart_pin_is_the_dart_the_flutter_image_bundles() {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let root = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../..");
         let read = |p: &str| std::fs::read_to_string(root.join(p)).unwrap();
         let containerfile = read("images/flutter/Containerfile");
         let flutter = containerfile
@@ -1542,7 +1545,10 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn ensure_dart_sdk_replaces_a_stale_cached_sdk_and_keeps_it_when_the_fetch_fails() {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let root = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../..");
         let lib = root.join("images/default/lib-common.sh");
         let t = tempfile::tempdir().unwrap();
         let bin = t.path().join("bin");
