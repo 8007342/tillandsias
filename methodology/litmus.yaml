@@ -451,3 +451,27 @@ litmus_binding:
   mapping:
     requirement_to_test: required
     invariant_to_signal: required
+
+# ── Litmus commands are parameterized Lua deciders, not piped shell (2026-10-19) ──
+litmus_command_authoring:
+  decided_by: "The Tlatoāni, 2026-10-19 (standing rule for every agent and host)"
+  rule: >
+    A litmus step's `command:` names a parameterized Lua decider
+    (`tillandsias-plan script run scripts/lua/<decider>.lua -- <params>`).
+    It is never a nested shell one-liner of pipes, captures and greps. The
+    decider does all of the parsing and error capture inside itself. It gives
+    why/remedy affordances, bounded retries for flaky probes, and caching
+    where safe. It emits the verdict grammar (ok:/refused:/blocked:/
+    could_not_run/skip). It never passes on an empty population and never
+    fails with empty output.
+  obligations:
+    - "Do not ADD a piped litmus command."
+    - "Do not EXTEND one: editing an existing piped command converts it to a decider in the same change, or leaves a dated burn-down note on its litmus file."
+    - "Prefer the shared deciders (one per decision family: file pattern, cargo-test judge, git query, podman probe, field check, plan query) over a one-off script."
+  why: >
+    Measured 2026-10-19: 1477 of 3204 litmus commands pipe and 630 pipe three
+    or more times. A pipeline that hides a failing producer, an empty match or
+    a silent exit has produced false greens and empty-output reds (1799-5kvy).
+    The shell ratchet (check-shell-ratchet.lua, 1624-bv73) only stops the count
+    growing; this rule plus the burn-down backlog brings it down.
+  enforced_by: "scripts/lua/check-shell-ratchet.lua (new piped commands); the piped-litmus burn-down backlog in methodology/convergence.yaml (advisory, warnings only, until a later ruling)"
