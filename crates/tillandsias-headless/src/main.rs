@@ -12595,148 +12595,6 @@ impl CodexDeviceQrScanner {
     }
 }
 
-const ANTIGRAVITY_DEVICE_VERIFICATION_URIS: &[&str] =
-    &["https://www.google.com/device", "https://google.com/device"];
-
-struct AntigravityDeviceQrScanner {
-    buffer: Vec<u8>,
-    detected_uri: Option<String>,
-    bytes_since_uri: usize,
-    displayed: bool,
-}
-
-impl AntigravityDeviceQrScanner {
-    fn new() -> Self {
-        Self {
-            buffer: Vec::with_capacity(1024),
-            detected_uri: None,
-            bytes_since_uri: 0,
-            displayed: false,
-        }
-    }
-
-    fn feed(&mut self, chunk: &[u8], tier: tillandsias_progress_tty::Tier) -> Option<String> {
-        if self.displayed {
-            return None;
-        }
-
-        self.buffer.extend_from_slice(chunk);
-        if self.buffer.len() > 2048 {
-            let drain = self.buffer.len() - 2048;
-            self.buffer.drain(..drain);
-        }
-
-        if self.detected_uri.is_none() {
-            if let Some(uri) = Self::scan_for_uri(&self.buffer) {
-                self.detected_uri = Some(uri);
-                self.bytes_since_uri = 0;
-            }
-        } else {
-            self.bytes_since_uri += chunk.len();
-        }
-
-        if let Some(ref uri) = self.detected_uri {
-            let code = Self::scan_for_code(&self.buffer);
-            if code.is_some() || self.bytes_since_uri >= 128 {
-                self.displayed = true;
-                return Self::render_presentation(uri, code.as_deref(), tier);
-            }
-        }
-
-        None
-    }
-
-    fn scan_for_uri(buf: &[u8]) -> Option<String> {
-        let text = String::from_utf8_lossy(buf);
-        for &expected in ANTIGRAVITY_DEVICE_VERIFICATION_URIS {
-            if let Some(idx) = text.find(expected) {
-                let before = if idx == 0 {
-                    ' '
-                } else {
-                    text[..idx].chars().next_back().unwrap_or(' ')
-                };
-                let end_idx = idx + expected.len();
-                let after = if end_idx >= text.len() {
-                    ' '
-                } else {
-                    text[end_idx..].chars().next().unwrap_or(' ')
-                };
-
-                let valid_boundary_before = before.is_ascii_whitespace()
-                    || before == '('
-                    || before == '['
-                    || before == '<'
-                    || before == '"'
-                    || before == '\'';
-                let valid_boundary_after = after.is_ascii_whitespace()
-                    || after == ')'
-                    || after == ']'
-                    || after == '>'
-                    || after == '"'
-                    || after == '\''
-                    || after == '.'
-                    || after == ','
-                    || after == ';'
-                    || after == '\r'
-                    || after == '\n';
-
-                if valid_boundary_before && valid_boundary_after {
-                    return Some(expected.to_string());
-                }
-            }
-        }
-        None
-    }
-
-    fn scan_for_code(buf: &[u8]) -> Option<String> {
-        let text = String::from_utf8_lossy(buf);
-        for token in
-            text.split(|c: char| c.is_ascii_whitespace() || c == ':' || c == '"' || c == '\'')
-        {
-            let trimmed = token.trim();
-            if trimmed.len() == 9 {
-                let chars: Vec<char> = trimmed.chars().collect();
-                if chars.len() == 9
-                    && chars[..4].iter().all(|c| c.is_ascii_alphanumeric())
-                    && chars[4] == '-'
-                    && chars[5..].iter().all(|c| c.is_ascii_alphanumeric())
-                {
-                    return Some(trimmed.to_ascii_uppercase());
-                }
-            }
-        }
-        None
-    }
-
-    fn render_presentation(
-        uri: &str,
-        code: Option<&str>,
-        tier: tillandsias_progress_tty::Tier,
-    ) -> Option<String> {
-        let mobile_url = if let Some(c) = code {
-            format!("{uri}?user_code={c}")
-        } else {
-            uri.to_string()
-        };
-        let qr = render_terminal_qr_in(&mobile_url, tier).ok()?;
-        let mut out = format!(
-            "\nScan this QR code with your mobile phone to complete Antigravity login:\n\n{qr}\n"
-        );
-        out.push_str(&format!("  Or in any browser, visit: {uri}\n"));
-        if let Some(c) = code {
-            out.push_str("  Enter this one-time code:\n\n");
-            out.push_str(&big_user_code(c, tier));
-            out.push_str(&format!(
-                "\n  Enter one-time code:      {}\n\n",
-                styled_user_code(c, tier)
-            ));
-        } else {
-            out.push('\n');
-        }
-        Some(out)
-    }
-}
-
 /// Rows in one [`big_glyph`].
 const BIG_GLYPH_ROWS: usize = 5;
 
@@ -13351,6 +13209,29 @@ fn provider_login_exec_args(
     args
 }
 
+/// How a provider's sign-in step meets the person at the terminal.
+#[derive(Debug, PartialEq, Eq)]
+enum SignInStep {
+    /// Output streamed through a QR scanner; NO stdin reaches the container.
+    /// Only for a sign-in that never reads a key (Codex `login --device-auth`).
+    CodexDeviceStream,
+    /// The container's TTY is the person's terminal: keys and terminal replies
+    /// go to the app, which owns raw mode.
+    InheritTerminal,
+}
+
+/// 1799-a6xi: Antigravity's sign-in is an interactive full-screen menu. It
+/// was routed through the output-only stream with an empty stdin, so the
+/// host terminal stayed in cooked mode: its replies to the app's DA/DSR and
+/// kitty-keyboard queries, and every key the person typed, were echoed onto
+/// the screen as raw escape sequences, and none reached the menu.
+fn sign_in_step(provider: &ProviderId, input_mode: LoginInputMode) -> SignInStep {
+    match (provider, input_mode) {
+        (ProviderId::Codex, LoginInputMode::Terminal) => SignInStep::CodexDeviceStream,
+        _ => SignInStep::InheritTerminal,
+    }
+}
+
 pub struct ProviderLoginConfig {
     pub provider: ProviderId,
     pub auth_model: AuthModel,
@@ -13402,42 +13283,6 @@ fn run_codex_device_login_with_qr(
         Ok(())
     } else {
         Err(format!("Codex device login exited with status {status}"))
-    }
-}
-
-/// Stream Antigravity's device instructions, add a QR code, and render the one-time
-/// code in large 5x5 block letters (matching GitHub device login presentation).
-fn run_antigravity_device_login_with_qr(
-    mut login: tillandsias_podman::SyncPodmanCommand,
-    debug: bool,
-) -> Result<(), String> {
-    use std::io::Write;
-
-    if debug {
-        eprintln!("[tillandsias] running: {:?}", login.as_std());
-    }
-    let tier = qr_tier();
-    let mut scanner = AntigravityDeviceQrScanner::new();
-    let status = login
-        .status_bounded_with_stdin_streaming(
-            &[],
-            tillandsias_podman::OperationKind::Container.default_budget(),
-            move |chunk| {
-                let mut out = std::io::stdout().lock();
-                let _ = out.write_all(chunk);
-                if let Some(rendered) = scanner.feed(chunk, tier) {
-                    let _ = out.write_all(rendered.as_bytes());
-                }
-                let _ = out.flush();
-            },
-        )
-        .map_err(|e| format!("Failed to run Antigravity device login: {e}"))?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!(
-            "Antigravity device login exited with status {status}"
-        ))
     }
 }
 
@@ -13542,10 +13387,7 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
         std::process::id()
     );
     step("· starting the login helper container");
-    let cleanup = LoginContainerCleanup {
-        name: container.clone(),
-        debug,
-    };
+    let cleanup = LoginContainerCleanup::new(container.clone(), debug);
     // Provider login homes stay container-ephemeral because they hold
     // credentials. Only Codex's provider-auth-excluding package/tool cache is
     // a named volume, so a later Codex login reuses its npm prefix without
@@ -13662,16 +13504,9 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             &config.token_script,
             config.input_mode,
         ));
-        let interactive = if matches!(config.provider, ProviderId::Codex)
-            && matches!(config.input_mode, LoginInputMode::Terminal)
-        {
-            run_codex_device_login_with_qr(login, debug)
-        } else if matches!(config.provider, ProviderId::Antigravity)
-            && matches!(config.input_mode, LoginInputMode::Terminal)
-        {
-            run_antigravity_device_login_with_qr(login, debug)
-        } else {
-            run_podman_command(login, debug)
+        let interactive = match sign_in_step(&config.provider, config.input_mode) {
+            SignInStep::CodexDeviceStream => run_codex_device_login_with_qr(login, debug),
+            SignInStep::InheritTerminal => run_podman_command(login, debug),
         };
         // ORDER 1571-lgex. This step waits on the PERSON: the provider CLI
         // holds its sign-in window open (Claude's closes at 300 s) and exits
@@ -15045,10 +14880,59 @@ fn append_forge_repo_gitdir_mount_args(
 struct LoginContainerCleanup {
     name: String,
     debug: bool,
+    #[cfg(unix)]
+    signals: Option<signal_hook::iterator::Handle>,
+}
+
+impl LoginContainerCleanup {
+    /// 1799-a6xi: Drop does not run when the person closes the terminal (SIGHUP)
+    /// or the process is killed, and the sign-in container was left running.
+    /// While this guard lives, a watcher thread removes it on SIGHUP, SIGTERM
+    /// or SIGINT, then exits with the shell's 128+signal status.
+    fn new(name: String, debug: bool) -> Self {
+        #[cfg(unix)]
+        let signals = {
+            use signal_hook::consts::signal::{SIGHUP, SIGINT, SIGTERM};
+            match signal_hook::iterator::Signals::new([SIGHUP, SIGTERM, SIGINT]) {
+                Ok(mut signals) => {
+                    let handle = signals.handle();
+                    let watched = name.clone();
+                    std::thread::spawn(move || {
+                        if let Some(signal) = signals.forever().next() {
+                            let mut command = podman_command();
+                            command.args(["rm", "-f", &watched]);
+                            let _ = run_podman_command_silent(command, debug);
+                            std::process::exit(128 + signal);
+                        }
+                    });
+                    Some(handle)
+                }
+                Err(e) => {
+                    if debug {
+                        eprintln!(
+                            "[tillandsias] could not watch signals for {name}: {e}; \
+                             a closed terminal may leave it running"
+                        );
+                    }
+                    None
+                }
+            }
+        };
+        Self {
+            name,
+            debug,
+            #[cfg(unix)]
+            signals,
+        }
+    }
 }
 
 impl Drop for LoginContainerCleanup {
     fn drop(&mut self) {
+        #[cfg(unix)]
+        if let Some(handle) = self.signals.take() {
+            handle.close();
+        }
         let mut command = podman_command();
         command.args(["rm", "-f", &self.name]);
         let _ = run_podman_command_silent(command, self.debug);
@@ -26832,6 +26716,36 @@ mod tests {
         );
     }
 
+    /// 1799-a6xi: Antigravity's interactive sign-in menu gets the person's
+    /// terminal, like Claude's and OpenCode's. Only Codex's key-free device
+    /// login keeps the output-only stream. Pre-fix, Antigravity took that
+    /// stream with an empty stdin, and every key and terminal reply was echoed
+    /// raw onto the screen (measured on lenovinha, v56.10.18.1).
+    #[test]
+    fn an_interactive_sign_in_gets_the_terminal_not_the_output_only_stream() {
+        assert_eq!(
+            sign_in_step(&ProviderId::Antigravity, LoginInputMode::Terminal),
+            SignInStep::InheritTerminal
+        );
+        assert_eq!(
+            sign_in_step(&ProviderId::Claude, LoginInputMode::Terminal),
+            SignInStep::InheritTerminal
+        );
+        assert_eq!(
+            sign_in_step(&ProviderId::Codex, LoginInputMode::Terminal),
+            SignInStep::CodexDeviceStream,
+            "Codex's device login reads no key and keeps its QR stream"
+        );
+        assert_eq!(
+            sign_in_step(&ProviderId::Codex, LoginInputMode::StdinToken),
+            SignInStep::InheritTerminal
+        );
+        // The step that inherits the terminal asks podman for a TTY.
+        let args = provider_login_exec_args("c", "true", LoginInputMode::Terminal);
+        assert!(args.iter().any(|a| a == "--tty"), "{args:?}");
+        assert!(args.iter().any(|a| a == "--interactive"), "{args:?}");
+    }
+
     /// ORDER 1571-lgex. The interactive sign-in step waits on the person and
     /// its window expires (Claude: 300 s). Pre-fix its error propagated raw
     /// with `?` — a podman exec line on the user's terminal and no status
@@ -26847,7 +26761,6 @@ mod tests {
         for raw in [
             "run_podman_command(login, debug)?",
             "run_codex_device_login_with_qr(login, debug)?",
-            "run_antigravity_device_login_with_qr(login, debug)?",
         ] {
             assert!(
                 !login_window.contains(raw),
@@ -27690,101 +27603,6 @@ mod tests {
         assert!(
             !qr.contains('\u{2580}') && !qr.contains('\u{2584}'),
             "no half-block glyphs"
-        );
-    }
-
-    #[test]
-    fn antigravity_device_qr_recognizes_stream_split_and_user_code() {
-        use tillandsias_progress_tty::{EnvView, Tier};
-
-        let non_tty = Tier::detect(&EnvView {
-            is_tty: false,
-            term: Some("xterm-256color".into()),
-            ..EnvView::default()
-        });
-        let no_color = Tier::detect(&EnvView {
-            is_tty: true,
-            term: Some("xterm-256color".into()),
-            no_color: Some(String::new()),
-            ..EnvView::default()
-        });
-        assert_eq!(non_tty, Tier::Plain);
-        assert_eq!(no_color, Tier::Plain);
-
-        for expected_uri in ANTIGRAVITY_DEVICE_VERIFICATION_URIS {
-            let uri = expected_uri.as_bytes();
-            for tier in [non_tty, no_color] {
-                for split in 0..=uri.len() {
-                    let mut scanner = AntigravityDeviceQrScanner::new();
-                    let mut first = b"Please visit: \r\n  ".to_vec();
-                    first.extend_from_slice(&uri[..split]);
-                    assert!(scanner.feed(&first, tier).is_none(), "split={split}");
-                    let mut second = uri[split..].to_vec();
-                    second.extend_from_slice(b" \r\nand enter code: ABCD-EFGH\r\n");
-                    let qr = scanner
-                        .feed(&second, tier)
-                        .expect("complete URI and code must render");
-                    assert!(qr.lines().count() >= 10, "split={split}");
-                    assert!(!qr.contains('\x1b'), "plain QR must have no escapes");
-                    assert!(
-                        qr.contains(expected_uri),
-                        "QR presentation must contain URI"
-                    );
-                    assert!(
-                        qr.contains("ABCD-EFGH"),
-                        "QR presentation must contain user code"
-                    );
-                    assert!(
-                        scanner
-                            .feed(b"\nhttps://www.google.com/device \n", tier)
-                            .is_none(),
-                        "a login renders at most one QR"
-                    );
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn antigravity_device_qr_rejects_spoofed_urls() {
-        use tillandsias_progress_tty::Tier;
-
-        for output in [
-            "device code: ABCD-EFGH\n",
-            "\nhttp://www.google.com/device \n",
-            "\nhttps://www.google.com.evil.invalid/device \n",
-            "\nhttps://google.com.evil.invalid/device \n",
-            "\nhttps://evil.invalid/?next=https://www.google.com/device \n",
-            "\nhttps://notgoogle.com/device \n",
-        ] {
-            let mut scanner = AntigravityDeviceQrScanner::new();
-            assert!(
-                scanner.feed(output.as_bytes(), Tier::Plain).is_none(),
-                "{output:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn antigravity_device_qr_uses_the_existing_terminal_palette() {
-        use tillandsias_progress_tty::Tier;
-
-        let mut scanner = AntigravityDeviceQrScanner::new();
-        let output = "Visit https://www.google.com/device and enter code ABCD-EFGH\n";
-        let presentation = scanner
-            .feed(output.as_bytes(), Tier::TrueColor)
-            .expect("verified URL must render");
-        assert!(
-            presentation.contains("\x1b[48;2;30;74;50m"),
-            "leaf-deepest modules"
-        );
-        assert!(
-            presentation.contains("\x1b[48;2;157;187;165m"),
-            "leaf-light ground"
-        );
-        assert!(
-            presentation.contains("ABCD-EFGH"),
-            "styled user code present"
         );
     }
 
