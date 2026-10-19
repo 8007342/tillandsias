@@ -1,0 +1,52 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-macos-v56-10-18-1-publish-local-refuses-every-static-preview-with-router-not-ready-because-the-exact-hostname-ca-verified-https-probe-fails
+    event:
+      type: progress
+      ts: "2026-10-19T17:16:10Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        CAUSE MEASURED on the published v56.10.18.1 macOS guest (2026-10-19, tlatoanis-macbook-air): the preview probe's hop from the guest loopback into the router does not exist. Evidence: target/smoke-e2e/diag-1794/.
+
+        1. Reproduced 3/3 with a one-file static site: publish_local refuses with router_not_ready: exact-hostname CA-verified HTTPS probe failed.
+
+        2. NOT the certificates. Under rustls (reqwest 0.11 rustls-tls, the probe's own stack), a leaf of the exact production shape verifies against a freshly minted preview CA:
+           - host www.<project>.localhost, SAN with www and flutter;
+           - keyUsage digitalSignature,keyEncipherment; EKU serverAuth;
+           - nanosecond serial; critical nameConstraints.
+           Result: 200 OK through openssl s_server.
+
+        3. NOT the Caddy config. Caddy 2.11.7 run with images/router/base.Caddyfile plus a block rendered as generate_dynamic_caddyfile renders it binds :8443 and answers the CA-verified probe with 200.
+
+        4. NOT the router image or its reload. In the guest, the release's localhost/tillandsias-router:v56.10.18.1 was run with the router's own security options (keep-id, read-only, cap-drop ALL, label=disable, tmpfs /run/router, file bind of dynamic.Caddyfile):
+           - the bind is visible, and an in-place host rewrite is seen;
+           - before router-reload.sh, Host t.p.localhost gets the base "no route"; after it, the route answers.
+
+        5. The router DID load the TLS site at publish time. Guest journal, boot 359a8c101f4748f185ec417642a95559:
+           - 11:11:42: ensure_router removed and recreated tillandsias-router;
+           - 11:11:43: Caddy logged "enabling HTTP/3 listener :8443", load complete;
+           - the probe failed;
+           - 11:11:45: the failure path reloaded without the route.
+
+        6. THE CAUSE, measured. The router's only network, tillandsias-enclave, is created --internal. The guest runs rootful podman with network backend netavark (rootless=false, podman 5.8.1). Netavark does not forward a host port publish into an --internal network:
+           - the release's router image on a fresh --internal network with -p 127.0.0.1:28081:8080: curl 127.0.0.1:28081 from the guest TIMES OUT (exit 28);
+           - the same image on a plain bridge with -p 127.0.0.1:28082:8080: answers 404 (Caddy's base page, exit 0);
+           - inside the internal container's own netns: 127.0.0.1:8080 answers 404, so the listener is up;
+           - `podman ps` lists BOTH mappings, so the dead one is silent.
+           The probe dials 127.0.0.1:<preview-tls-port> in the guest, i.e. the dead publish. The same holds for the router's 8080 host publish on the macOS guest.
+
+        NOT MEASURED HERE: the Linux rootless half. On a Linux host, rootless podman forwards -p through rootlessport/pasta, which plausibly still reaches an internal network's container, and that would be why previews work there. That is a hypothesis until a Linux host runs the same two-network check. The Windows WSL guest is rootful too and plausibly fails the same way; also unmeasured.
+
+        Implications for the fix (to choose from this, not from a guess):
+        (a) The readiness probe should not depend on the loopback publish. It can dial the router's enclave address with SNI and --resolve, which works on every platform.
+        (b) The host browser path (1795-rtfy, the WebKit/Chromium windows, and the macOS host reaching previews at all) needs a reachable hop. Either the router gets a second, non-internal network used ONLY for the loopback publish (a network-boundary change: the router would then have an egress-capable interface unless that network is locked down), or the guest forwards loopback to the router's enclave IP itself.
+        1795's CDP failure is a different hop (a window's CDP socket) and is not explained by this. It stays separate until measured.
