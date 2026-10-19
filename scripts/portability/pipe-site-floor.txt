@@ -400,7 +400,6 @@ scripts scripts/check-no-competing-gate.sh 6
 scripts scripts/check-no-fixture-writes-live-ledger.sh 16
 scripts scripts/check-no-tracked-binaries.sh 7
 scripts scripts/check-opsx-generated-dirt.sh 1
-scripts scripts/check-order-citations-resolve.sh 6
 scripts scripts/check-packet-tier-declared.sh 4
 scripts scripts/check-pickup-role-grammar.sh 3
 scripts scripts/check-plan-binary-current.sh 5
