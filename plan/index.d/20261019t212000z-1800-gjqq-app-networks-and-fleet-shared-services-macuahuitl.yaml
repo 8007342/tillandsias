@@ -683,3 +683,47 @@ packets:
         host: macuahuitl
         summary: |-
           Last by the operator's order: no LAN mirror without authenticated push.
+
+  - packet_id: an-agent-can-raise-or-lower-an-existing-apps-egress-posture-none-allowlist-open-live-without-restarting-it-the-proxy-acl-is-swapped-in-place-and-each-change-is-an-event-in-the-owning-forge-stream
+    order: 1801-gbiw
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    size: M
+    implementer_tier: sonnet
+    capability_tags: [networking, proxy, squid, posture, events, linux]
+    estimated_hours: 8
+    parent: 1800-gjqq
+    depends_on:
+      - the-proxy-holds-a-generated-per-app-squid-acl-keyed-on-the-app-subnet-and-the-three-postures-none-allowlist-open-are-one-table-the-proxy-joins-the-app-network-only-for-allowlist-and-open
+      - the-launch-api-takes-the-egress-posture-publish-local-and-toolchain-sessions-refuse-without-one-the-tray-shows-one-status-line-per-app-network-and-service-status-reports-network-posture-and-subnet
+    owned_files:
+      - crates/tillandsias-headless/src/app_network.rs
+      - crates/tillandsias-headless/src/mcp_socket.rs
+      - images/proxy/squid-supervisor.sh
+      - scripts/lua/test-app-network-live-posture.lua
+    title: |
+      Operator ruling 2 of 1800-gjqq — live posture change in both directions: the proxy ACL for the app's subnet is swapped in place and the app's process and router connections are untouched; each change emits an event in the owning forge's stream
+    context: |
+      Design: openspec/changes/app-networks/design.md "Operator rulings (2026-10-19)"
+      item 2. Default posture stays none (rows 1800-seg8 and tasks already say so).
+    exit_criteria:
+      - "with an app running at none, a posture call raises it to allowlist and an allowlisted URL then returns 200 without the app's PID changing; pre-fix result: FAILS (no live change exists)"
+      - "lowering it back to none makes the same URL fail within 2 s; pre-fix result: FAILS (no live change exists)"
+      - "an open TCP connection from the app to the router survives both changes; pre-fix result: FAILS (no live change exists)"
+      - "10 alternating changes all hold; pre-fix result: FAILS (no live change exists)"
+    unscoreable: "unpinnable-until-the-guard-exists: future litmus is scripts/lua/test-app-network-live-posture.lua, written in the same commit as the live-change call"
+    next_action: >
+      After sdgk and seg8: the in-place ACL swap and reconfigure, the posture-change
+      call, the owning-forge event, then the live arms.
+    provenance: |
+      Filed by macuahuitl, 2026-10-19, from the operator rulings of the same day.
+    events:
+      - type: filed
+        ts: "2026-10-19T23:30:00Z"
+        host: macuahuitl
+        summary: |-
+          Live posture change both directions without restarting the app.
+
