@@ -15,9 +15,24 @@ set -uo pipefail
 #
 # Everything here runs inside a throwaway git repo under TMPDIR. Nothing touches
 # the real checkout, the real stamps, or any remote.
+#
+# Scenarios 12-19 (order 1247-b46r) pin that every refusal says WHY and what
+# CLEARS it on stderr, beside its unchanged token, and then EXECUTE that remedy
+# and require the refusal to clear (1247-amcu criterion 5).
+#
+#   scripts/test-worktree-boundary-guard.sh [--subject <guard>]
+#
+# --subject judges another copy of the guard: the pre-fix one, for the
+# negative control.
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GUARD="$ROOT/scripts/meta-orchestration-worktree-guard.sh"
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --subject) GUARD="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"; shift 2 ;;
+        *) echo "usage: $0 [--subject <guard>]" >&2; exit 2 ;;
+    esac
+done
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/worktree-boundary-guard-fixture.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
@@ -156,9 +171,111 @@ state_super_new="$work/state-super-new"
 run "boundary-superseded" 3 "blocked:boundary-superseded" -- verify "$state_super_old"
 run "boundary-superseded-names-both" 3 "requested: $state_super_old" -- verify "$state_super_old"
 
+# 12-19. EVERY REFUSAL SAYS WHY AND WHAT CLEARS IT, AND THE REMEDY CLEARS IT
+#        (order 1247-b46r, 1247-amcu criterion 5). A repo of their own, so the
+#        stamps above cannot satisfy or spoil them.
+arepo="$work/arepo"
+mkdir -p "$arepo"
+git -C "$arepo" init -q -b work
+git -C "$arepo" config user.email fixture@example.invalid
+git -C "$arepo" config user.name fixture
+printf 'tracked\n' >"$arepo/tracked.txt"
+git -C "$arepo" add tracked.txt
+git -C "$arepo" commit -qm "seed"
+
+# afford <name> <want-exit> <token> <why-substring> <remedy-substring> -- <guard args...>
+afford() {
+    local name="$1" want_rc="$2" token="$3" why="$4" remedy="$5"; shift 6
+    local rc=0 out
+    out="$(cd "$arepo" && "$GUARD" "$@" 2>&1)" || rc=$?
+    if [ "$rc" -ne "$want_rc" ]; then
+        failures+=("$name: exit=$rc expected=$want_rc (out: $out)")
+    elif ! grep -Fq -- "$token" <<<"$out"; then
+        failures+=("$name: token '$token' changed, got: $out")
+    elif ! grep -q '^  why: ' <<<"$out" || ! grep -q '^  remedy: ' <<<"$out"; then
+        failures+=("$name: no why:/remedy: lines, got: $out")
+    elif ! grep -Fq -- "$why" <<<"$out"; then
+        failures+=("$name: why does not say '$why', got: $out")
+    elif ! grep -Fq -- "$remedy" <<<"$out"; then
+        failures+=("$name: remedy does not say '$remedy', got: $out")
+    fi
+}
+# clears <name> <want-ok-line> -- <guard args...>: the remedy, executed.
+clears() {
+    local name="$1" want="$2"; shift 3
+    local rc=0 out
+    out="$(cd "$arepo" && "$GUARD" "$@" 2>&1)" || rc=$?
+    if [ "$rc" -ne 0 ] || ! grep -Fq -- "$want" <<<"$out"; then
+        failures+=("$name: the remedy did not clear the refusal (exit=$rc out: $out)")
+    fi
+}
+canon() { (cd "$1" && pwd -P); }
+
+# 12. no-snapshot-taken -> snapshot, then verify against it.
+afford "afford-no-snapshot-taken" 3 "blocked:no-snapshot-taken" \
+    "no snapshot was taken in this checkout" "meta-orchestration-worktree-guard.sh snapshot <a new directory outside this worktree>" -- \
+    verify "$work/a-previous-cycle"
+clears "afford-no-snapshot-taken-cleared" "" -- snapshot "$work/a1"
+clears "afford-no-snapshot-taken-cleared" "ok: startup worktree boundary preserved" -- verify "$work/a1"
+
+# 13. boundary-state-missing names the boundary this cycle DID record -> verify it.
+a1="$(canon "$work/a1")"
+afford "afford-boundary-state-missing" 3 "blocked:boundary-state-missing:$a1" \
+    "is not a boundary this worktree recorded" "meta-orchestration-worktree-guard.sh verify $a1" -- \
+    verify "$work/never-a-boundary"
+clears "afford-boundary-state-missing-cleared" "ok: startup worktree boundary preserved" -- verify "$a1"
+
+# 14. ...and when that boundary is gone too (removed outside the guard), says so
+#     and does not send the reader to it -> a new snapshot.
+rm -rf "$work/a1"
+afford "afford-boundary-gone" 3 "blocked:boundary-state-missing:$a1" \
+    "$a1 is gone too" "snapshot into a new directory" -- \
+    verify "$work/never-a-boundary"
+clears "afford-boundary-gone-cleared" "" -- snapshot "$work/a2"
+clears "afford-boundary-gone-cleared" "ok: startup worktree boundary preserved" -- verify "$work/a2"
+
+# 15. A state dir inside the worktree -> one outside it.
+afford "afford-inside-worktree" 2 "error: boundary state must live outside the worktree" \
+    "is inside the worktree" "outside this worktree" -- \
+    snapshot "$arepo/inside-state"
+rmdir "$arepo/inside-state" 2>/dev/null || true
+clears "afford-inside-worktree-cleared" "" -- snapshot "$work/a3"
+
+# 16. An already-initialized state dir -> a new, empty one.
+afford "afford-already-initialized" 2 "error: boundary state already initialized" \
+    "already holds a boundary" "a new, empty directory" -- \
+    snapshot "$work/a3"
+clears "afford-already-initialized-cleared" "" -- snapshot "$work/a4"
+
+# 17. A directory snapshot never wrote -> the boundary the stamp names.
+a4="$(canon "$work/a4")"
+mkdir -p "$work/not-written-by-snapshot"
+afford "afford-invalid-state" 2 "error: invalid boundary state" \
+    "snapshot did not write it" "meta-orchestration-worktree-guard.sh verify $a4" -- \
+    verify "$work/not-written-by-snapshot"
+clears "afford-invalid-state-cleared" "ok: startup worktree boundary preserved" -- verify "$a4"
+
+# 18. A differing worktree names the path -> commit the cycle's own edit.
+printf 'the cycle edited this\n' >>"$arepo/tracked.txt"
+afford "afford-worktree-differs" 1 "error: worktree differs from startup boundary" \
+    "tracked.txt" "commit them" -- \
+    verify "$a4"
+git -C "$arepo" commit -qam "the cycle's own edit"
+clears "afford-worktree-differs-cleared" "ok: startup worktree boundary preserved" -- verify "$a4"
+
+# 19. An untracked nested repository the guard cannot hash -> move it out.
+git -C "$arepo" init -q nested
+git -C "$arepo/nested" -c user.email=fixture@example.invalid -c user.name=fixture \
+    commit -q --allow-empty -m nested
+afford "afford-dirty-directory" 2 "is unsupported: nested/" \
+    "cannot capture" "move it out of the worktree" -- \
+    snapshot "$work/a5"
+mv "$arepo/nested" "$work/nested-moved-out"
+clears "afford-dirty-directory-cleared" "" -- snapshot "$work/a6"
+
 if [ "${#failures[@]}" -gt 0 ]; then
     printf 'FAIL: %s\n' "${failures[@]}" >&2
     echo "boundary-guard: FAIL ${#failures[@]} scenario(s) did not match expected verdicts"
     exit 1
 fi
-echo "PASS: worktree-boundary-guard fixture 12/12 scenarios green (no-snapshot-taken, boundary-state-missing, clean-verify, verified-stamp, dirty-exit, extended-cycle-reverifies, stamp-cleared, previous-boundary-retired, bystander-untouched, cross-worktree-isolated, cross-worktree-main-still-verifies, boundary-superseded)"
+echo "PASS: worktree-boundary-guard fixture 20/20 scenarios green (no-snapshot-taken, boundary-state-missing, clean-verify, verified-stamp, dirty-exit, extended-cycle-reverifies, stamp-cleared, previous-boundary-retired, bystander-untouched, cross-worktree-isolated, cross-worktree-main-still-verifies, boundary-superseded, and 8 refusals that say why and whose remedy clears them)"

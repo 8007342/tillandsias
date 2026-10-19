@@ -6,6 +6,12 @@ usage() {
     exit 2
 }
 
+# EVERY REFUSAL SAYS WHY AND WHAT CLEARS IT (order 1247-b46r, 1247-amcu). The
+# token or error: line before it is unchanged — finalize-cycle.sh and the
+# fixtures match those — and this goes to stderr beside it.
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+GUARD_CMD="scripts/meta-orchestration-worktree-guard.sh"
+
 # Cycle-scoped stamps, kept in the git dir so they are per-checkout, never
 # committed, and reachable by a later step that was not told the state dir
 # (order 717-3bvv). `boundary-state` records WHICH state dir this cycle
@@ -28,11 +34,15 @@ hash_path() {
         git hash-object --no-filters -- "$path"
     elif [[ -d "$path" ]]; then
         echo "error: dirty directory/submodule is unsupported: $path" >&2
+        _afford "the guard records file bytes, and $path is a nested repository or submodule whose state it cannot capture" \
+            "commit it, or move it out of the worktree, then snapshot into a new directory"
         return 2
     elif [[ ! -e "$path" && ! -L "$path" ]]; then
         printf 'missing\n'
     else
         echo "error: dirty special file is unsupported: $path" >&2
+        _afford "$path is a socket, fifo or device, and the guard can only record file bytes" \
+            "remove it or move it out of the worktree, then snapshot into a new directory"
         return 2
     fi
 }
@@ -53,6 +63,33 @@ capture() {
     done <"$destination/paths.z"
 }
 
+# differing_paths STARTUP CURRENT SCRATCH -> the paths whose status entry or
+# recorded bytes differ between two captures, space-separated on one line, so
+# "worktree differs" can say WHERE (order 1247-b46r). A diagnostic only: it
+# never decides the verdict, the cmp chain in verify does.
+differing_paths() {
+    local startup="$1" current="$2" scratch="$3" side
+    mkdir -p "$scratch" || return 0
+    for side in startup current; do
+        local d="$startup"
+        [[ "$side" = current ]] && d="$current"
+        # A status line is "XY path"; a hash line is "path<TAB>hash".
+        tr '\0' '\n' <"$d/status.z" >"$scratch/$side.status" || return 0
+        tr '\0' '\n' <"$d/paths.z" >"$scratch/$side.paths" || return 0
+        paste "$scratch/$side.paths" "$d/hashes" >"$scratch/$side.hashes" || return 0
+        sort -u "$scratch/$side.status" "$scratch/$side.hashes" >"$scratch/$side.listing" || return 0
+    done
+    comm -3 "$scratch/startup.listing" "$scratch/current.listing" >"$scratch/differ" || return 0
+    awk '{
+            sub(/^\t/, "")
+            t = index($0, "\t")
+            if (t > 0) p = substr($0, 1, t - 1)
+            else if ($0 ~ /^[ MADRCUT?!][ MADRCUT?!] /) p = substr($0, 4)
+            else p = $0
+            if (p != "" && !(p in seen)) { seen[p] = 1; printf "%s%s", (n++ ? " " : ""), p }
+         }' "$scratch/differ" || return 0
+}
+
 load_state() {
     [[ $# -eq 1 ]] || usage
     state_dir="$(cd "$1" 2>/dev/null && pwd -P)" || {
@@ -69,6 +106,16 @@ load_state() {
         stamp="$(stamp_path boundary-state 2>/dev/null || true)"
         if [[ -z "$stamp" || ! -f "$stamp" ]]; then
             echo "blocked:no-snapshot-taken"
+            if [[ -z "$stamp" ]]; then
+                _afford "$PWD is not inside a git checkout, so no boundary can have been recorded here" \
+                    "run the guard from the worktree it guards"
+            else
+                # The remedy is only honest BEFORE the cycle's work: a snapshot
+                # taken after it would baseline the cycle's own edits, which is
+                # the move 717-3bvv exists to forbid. Say so in the remedy.
+                _afford "no snapshot was taken in this checkout ($stamp does not exist), so $1 is not a boundary this cycle recorded and there is nothing to compare the tree against" \
+                    "before the cycle changes anything, run $GUARD_CMD snapshot <a new directory outside this worktree>, then verify against that directory. If the cycle has already done work, report the skipped snapshot instead: a snapshot now would baseline the cycle's own edits"
+            fi
             exit 3
         fi
         local current requested
@@ -112,10 +159,26 @@ load_state() {
             exit 3
         fi
         echo "blocked:boundary-state-missing:$current"
+        if [[ -f "$current/repo-root" && -f "$current/startup/status.z" ]]; then
+            _afford "$1 is not a boundary this worktree recorded or retired; this cycle's boundary is $current" \
+                "verify against it: $GUARD_CMD verify $current"
+        else
+            _afford "$1 is not a boundary this worktree recorded, and this cycle's boundary $current is gone too: something outside this guard removed it" \
+                "this cycle has nothing left to verify against, so report it as unverified, and snapshot into a new directory at the start of the next cycle"
+        fi
         exit 3
     }
     [[ -f "$state_dir/repo-root" && -f "$state_dir/startup/status.z" ]] || {
         echo "error: invalid boundary state: $state_dir" >&2
+        local named
+        named="$(cat "$(stamp_path boundary-state 2>/dev/null)" 2>/dev/null || true)"
+        if [[ -n "$named" && "$named" != "$state_dir" ]]; then
+            _afford "$state_dir has no repo-root or startup/status.z, so snapshot did not write it" \
+                "verify against the boundary this cycle recorded: $GUARD_CMD verify $named"
+        else
+            _afford "$state_dir has no repo-root or startup/status.z, so snapshot did not write it, or did not finish (a refused capture leaves it half-written)" \
+                "pass the directory this cycle's snapshot was given; if the snapshot was refused, clear its cause and snapshot into a new directory"
+        fi
         exit 2
     }
     repo_root="$(cat "$state_dir/repo-root")"
@@ -134,11 +197,15 @@ case "$mode" in
         case "$state_dir/" in
             "$repo_root/"*)
                 echo "error: boundary state must live outside the worktree" >&2
+                _afford "$state_dir is inside the worktree $repo_root, so the snapshot would capture its own files as the cycle's dirt" \
+                    "snapshot into a new directory outside this worktree, e.g. \${TMPDIR:-/tmp}/meta-orchestration-boundary.<cycle>"
                 exit 2
                 ;;
         esac
         [[ ! -e "$state_dir/startup" && ! -e "$state_dir/repo-root" ]] || {
             echo "error: boundary state already initialized: $state_dir" >&2
+            _afford "$state_dir already holds a boundary, and writing over it would erase the startup state it recorded" \
+                "snapshot into a new, empty directory. To re-anchor this one after landing startup dirt you were licensed to land, use $GUARD_CMD re-snapshot $state_dir"
             exit 2
         }
         mkdir -p "$state_dir/startup" "$state_dir/tmp"
@@ -244,6 +311,12 @@ case "$mode" in
             cmp "$state_dir/startup/worktree.diff" "$current/worktree.diff" >/dev/null &&
             cmp "$state_dir/startup/index.diff" "$current/index.diff" >/dev/null || {
                 echo "error: worktree differs from startup boundary" >&2
+                differing="$(differing_paths "$state_dir/startup" "$current" "$state_dir/tmp")"
+                # Never prescribe a restore: the meta-orchestration skill forbids
+                # a cycle to delete or restore worktree paths, and re-snapshotting
+                # would baseline the change this exists to catch.
+                _afford "these paths differ from the startup boundary in $state_dir: ${differing:-<none by path; the staged or unstaged diff differs>}" \
+                    "if they are this cycle's own edits, commit them and verify again. If they were startup dirt, the cycle changed bytes it was not licensed to touch: put the startup bytes back (the boundary's startup/worktree.diff and index.diff hold them) or report it. Do not re-snapshot to clear this; that would baseline the change"
                 exit 1
             }
         # Record WHICH head this verification observed. mo-full-attest.sh reads
