@@ -5703,7 +5703,9 @@ if [[ "$FLAG_CHECK" == true ]]; then
         _info "$_term_memo — dictionary, locales and checker unchanged since the last pass; check not re-run"
         timing_emit terminology-check-hit check "$_term_t0" 0 || true
     else
-        if ! _run bash "$SCRIPT_DIR/scripts/check-terminology.sh" 2>&1; then
+        # 1247-nx5c: ported to scripts/lua (the shell-to-lua carried
+        # obligation); the verdict grammar is unchanged.
+        if ! _run_lua_decider "scripts/lua/check-terminology.lua" 2>&1; then
             timing_emit terminology-check-miss check "$_term_t0" 1 || true
             # The script names the file, the variant and the offending string, and
             # says the two remedies (fix the string, or add the variant to the

@@ -69,6 +69,11 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: per-host-cache-wired"
 
+  - step: "every blocked:nix-cache:* verdict of the per-host cache says why and what clears it, and each remedy moves the script past it (1247-nx5c; hermetic: stub podman and nix-toolbox, nothing real touched)"
+    command: "PB=$(. scripts/plan-binary-probe.sh && resolve_plan_binary) || { echo 'FAIL: no tillandsias-plan resolves'; exit 1; }; out=$(\"$PB\" script run scripts/lua/test-nix-cache-service-affordance.lua 2>&1); case \"$out\" in *ok:nix-cache-affordance:*) echo 'ok: nix-cache-refusals-say-why' ;; *) echo \"FAIL: $out\" ;; esac"
+    timeout_ms: 90000
+    expected_behavior: "ok: nix-cache-refusals-say-why"
+
 observability:
   traces:
     - "@trace spec:dev-build"
