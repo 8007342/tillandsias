@@ -111,9 +111,9 @@ if [ "$bad" -gt 0 ]; then
     echo "violation:gate-step-single-regime:$bad"
     {
         echo "  $bad of $((bad + ok)) gate steps carry no usable second-regime record."
-        echo "  A step green only on its author's regime is the failure this refuses:"
+        echo "  why: a step green only on its author's regime is the failure this refuses:"
         echo "  two such steps reddened both macOS gates within hours on 2026-09-20."
-        echo "  Add to the .step file:"
+        echo "  remedy: run the step on a second regime, then add to the .step file:"
         echo '    STEP_SECOND_REGIME="<host> <YYYY-MM-DD> <darwin|msys> <verdict>"'
         echo "  A step that genuinely cannot run off Linux records skip:<reason> as"
         echo "  its verdict, and that COUNTS — the record is an observation from the"

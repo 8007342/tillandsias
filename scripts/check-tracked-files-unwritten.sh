@@ -96,9 +96,11 @@ case "$mode" in
         if [ "${n:-0}" -gt 0 ]; then
             echo "violation:gate-wrote-tracked-files:$n"
             {
-                echo "  The gate modified files in the checkout it was measuring."
+                echo "  why: the gate modified files in the checkout it was measuring."
                 echo "  Every verdict taken after the write measured different bytes"
                 echo "  than the tree under test (1063-363b)."
+                echo "  remedy: find the writer from the file list below ((a) or (b)),"
+                echo "  stop it, restore the files, and run the gate again."
                 printf '%s\n' "$changed" | head -20 | sed 's/^/    /'
                 echo "  Restore with: git checkout --"
                 echo ""

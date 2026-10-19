@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-github-token-in-vault-rotates-itself-before-its-8-hour-expiry-through-a-resident-due-check-so-no-host-needs-an-operator-reseed
+    field: status
+    value: implemented
+    ts: "2026-10-19T21:45:21Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-github-token-in-vault-rotates-itself-before-its-8-hour-expiry-through-a-resident-due-check-so-no-host-needs-an-operator-reseed
+    event:
+      type: note
+      ts: "2026-10-19T21:45:21Z"
+      host: lenovinha
+      summary: |-
+        Stale status: built 2026-09-28 in 752b77170 (self-rotation), d8fc528cd (lane launches start the scheduler), 2b738a013 (14-day refresh warning); scripts/test-github-token-auto-rotation.sh passes 8/8 on trunk 2026-10-19. Verification step remaining: the 8 h live arm on lenovinha after the operator next signs in to GitHub.

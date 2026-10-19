@@ -368,6 +368,47 @@ fn cdp_dir(window_id: &str) -> PathBuf {
     crate::browser_profile_root().join(format!("{window_id}.cdp"))
 }
 
+/// The chromium-framework image's USER (chromium). Under ROOTFUL keep-id the
+/// uid map is the identity, so the window process is this uid on the host too.
+pub(crate) const WINDOW_UID: u32 = 1000;
+
+/// How a window's own host dirs (its CDP socket dir and its profile) are
+/// mounted (order 1795-rtfy). Measured on the v56.10.18.1 macOS guest
+/// (rootful podman): the tray made them root-owned 0700 under
+/// /run/user/0/tillandsias, which is user_tmp_t, and the relay died with
+/// `listen EACCES` on cdp.sock. SELinux denies container_t a socket in
+/// user_tmp_t, and DAC denies chromium (1000) a root-owned 0700 dir; each
+/// alone refused the listen. Rootful mounts relabel privately (`Z`) and the
+/// dirs are given to the window user ([`own_window_dir`]). Rootless keeps a
+/// plain rw mount: the dirs are the user's own, which keep-id maps the window
+/// to, and that path works today.
+pub(crate) fn window_dir_mode(rootful: bool) -> tillandsias_podman::MountMode {
+    if rootful {
+        tillandsias_podman::MountMode::Custom("rw,Z".into())
+    } else {
+        tillandsias_podman::MountMode::ReadWrite
+    }
+}
+
+/// Give a window's dir to the window user when podman is rootful; a no-op
+/// rootless, where the dir is already the mapped user's.
+pub(crate) fn own_window_dir(dir: &Path, rootful: bool) -> std::io::Result<()> {
+    give_dir_to(dir, window_dir_owner(rootful))
+}
+
+/// Who a window's dirs must belong to: the window user under rootful podman,
+/// nobody new rootless.
+pub(crate) fn window_dir_owner(rootful: bool) -> Option<u32> {
+    rootful.then_some(WINDOW_UID)
+}
+
+fn give_dir_to(dir: &Path, owner: Option<u32>) -> std::io::Result<()> {
+    if let Some(uid) = owner {
+        std::os::unix::fs::chown(dir, Some(uid), Some(uid))?;
+    }
+    Ok(())
+}
+
 /// The window's container spec: `build_project_browser_spec` plus the
 /// window's network, the resolver rules, the pin, the device's window size,
 /// and the CDP pipe relay as entrypoint. Nothing is published.
@@ -375,6 +416,8 @@ fn cdp_dir(window_id: &str) -> PathBuf {
 /// It opens about:blank: the tray emulates the device over CDP before it
 /// navigates (order 1655-urz9). `surface` is a visible window or, for order
 /// 1712-3fsw, headless; everything else (network, pin, CDP relay) is the same.
+/// `rootful` picks the window dirs' mount mode (1795-rtfy, [`window_dir_mode`]).
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn browser_window_spec(
     project: &str,
     handle: &ContainerHandle,
@@ -383,12 +426,14 @@ pub(crate) fn browser_window_spec(
     ca_spki: &str,
     window_size: (u32, u32),
     cdp_dir: &Path,
+    rootful: bool,
 ) -> Result<tillandsias_podman::ContainerSpec, String> {
     let entrypoint = serde_json::json!(["node", "-e", CDP_RELAY_JS, "--"]).to_string();
     Ok(crate::build_project_browser_spec_on(
         "about:blank",
         crate::VERSION.trim(),
         &handle.profile_dir,
+        window_dir_mode(rootful),
         certs_dir,
         surface,
         &handle.container_name,
@@ -397,7 +442,7 @@ pub(crate) fn browser_window_spec(
     .volume(
         cdp_dir.display().to_string(),
         CDP_DIR_IN_CONTAINER,
-        tillandsias_podman::MountMode::ReadWrite,
+        window_dir_mode(rootful),
     )
     .env(
         "TILLANDSIAS_CDP_SOCKET",
@@ -815,6 +860,10 @@ impl BrowserContainers for TrayBrowserContainers {
             use std::os::unix::fs::DirBuilderExt;
             std::fs::DirBuilder::new().mode(0o700).create(&cdp_dir)?;
         }
+        // 1795-rtfy: under rootful podman the window user must own both.
+        let rootful = crate::running_as_root();
+        own_window_dir(&profile_dir, rootful)?;
+        own_window_dir(&cdp_dir, rootful)?;
 
         let handle = ContainerHandle {
             container_name: format!("tillandsias-browser-{}-{suffix}", request.project_label),
@@ -860,6 +909,7 @@ impl BrowserContainers for TrayBrowserContainers {
                 &ca_spki,
                 request.window_size,
                 &cdp_dir,
+                rootful,
             )?
             .build_run_argv()
             .map_err(|e| format!("browser container argv refused: {e}"))?;
@@ -899,6 +949,95 @@ impl BrowserContainers for TrayBrowserContainers {
 
 #[cfg(test)]
 mod tests {
+    /// 1795-rtfy, red first: on the rootful macOS guest the relay died with
+    /// `listen EACCES` on cdp.sock, because the window's dirs were mounted
+    /// plain rw from user_tmp_t and owned by root. A rootful window mounts its
+    /// CDP dir and its profile relabelled (`Z`), so its own private label
+    /// lets container_t create the socket (measured: LISTEN-OK).
+    #[test]
+    fn a_rootful_window_mounts_its_own_dirs_relabelled() {
+        let handle = ContainerHandle {
+            container_name: "tillandsias-browser-acme-0123456789ab".into(),
+            network_name: "tillandsias-browser-net-0123456789ab".into(),
+            profile_dir: PathBuf::from("/run/user/0/tillandsias/browser/win-1"),
+            cdp_socket: Some(PathBuf::from(
+                "/run/user/0/tillandsias/browser/win-1.cdp/cdp.sock",
+            )),
+            notice: None,
+        };
+        let argv = |rootful| {
+            browser_window_spec(
+                "acme",
+                &handle,
+                Path::new("/tmp/ca"),
+                crate::BrowserSurface::Headless,
+                "PIN=",
+                (428, 926),
+                Path::new("/run/user/0/tillandsias/browser/win-1.cdp"),
+                rootful,
+            )
+            .unwrap()
+            .build_run_argv()
+            .unwrap()
+            .join(" ")
+        };
+        let rootful = argv(true);
+        assert!(
+            rootful.contains(&format!(
+                "/run/user/0/tillandsias/browser/win-1.cdp:{CDP_DIR_IN_CONTAINER}:rw,Z"
+            )),
+            "{rootful}"
+        );
+        assert!(
+            rootful.contains(
+                "/run/user/0/tillandsias/browser/win-1:/run/user/0/tillandsias/browser/win-1:rw,Z"
+            ),
+            "{rootful}"
+        );
+        // NEGATIVE CONTROL: rootless keeps the plain rw mounts that work there.
+        let rootless = argv(false);
+        assert!(!rootless.contains(",Z"), "{rootless}");
+        assert!(
+            rootless.contains(&format!(
+                "/run/user/0/tillandsias/browser/win-1.cdp:{CDP_DIR_IN_CONTAINER}:rw"
+            )),
+            "{rootless}"
+        );
+    }
+
+    /// 1795-rtfy: DAC refused chromium (uid 1000) a root-owned 0700 dir even
+    /// with SELinux out of the way (measured), so a rootful window's dirs go to
+    /// the window user. Rootless is a no-op: the dir is already the mapped
+    /// user's.
+    ///
+    /// The runner's own uid is not assumed: a gate user that IS uid 1000
+    /// (macuahuitl, land run 175) chowns its own dir to 1000 and succeeds. So
+    /// the owner decision is asserted directly, and the chown is exercised
+    /// against a uid that is never the runner's: refused for a non-root
+    /// runner (which proves it is attempted), applied for root.
+    #[test]
+    fn a_rootful_window_dir_is_given_to_the_window_user() {
+        use std::os::unix::fs::MetadataExt;
+        assert_eq!(window_dir_owner(true), Some(WINDOW_UID));
+        assert_eq!(window_dir_owner(false), None);
+        let d = tempfile::tempdir().unwrap();
+        let before = std::fs::metadata(d.path()).unwrap();
+        own_window_dir(d.path(), false).unwrap();
+        assert_eq!(std::fs::metadata(d.path()).unwrap().uid(), before.uid());
+        let me = unsafe { libc::geteuid() };
+        let other = if me == 0 { WINDOW_UID } else { me + 1 };
+        let given = give_dir_to(d.path(), Some(other));
+        if me == 0 {
+            given.unwrap();
+            assert_eq!(std::fs::metadata(d.path()).unwrap().uid(), other);
+        } else {
+            assert_eq!(
+                given.unwrap_err().kind(),
+                std::io::ErrorKind::PermissionDenied
+            );
+        }
+    }
+
     use super::*;
 
     /// 1776-pr0g: browser.open is never held through a first-use build: the
@@ -1235,6 +1374,7 @@ mod tests {
             "PIN=",
             (428, 926),
             Path::new("/run/user/1000/tillandsias/browser/win-1.cdp"),
+            false,
         )
         .unwrap()
         .build_run_argv()
@@ -1329,6 +1469,7 @@ mod tests {
             "PIN=",
             (428, 926),
             Path::new("/run/user/1000/tillandsias/browser/win-1.cdp"),
+            false,
         )
         .expect("a headless window needs no display context")
         .build_run_argv()

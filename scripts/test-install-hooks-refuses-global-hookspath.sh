@@ -49,6 +49,22 @@ case "$out" in *"config core.hooksPath"*) ;; *) fail "branch1: no affordance: $o
 [ "$(snapshot)" = "$before" ] || fail "branch1: global hooks dir changed: '$before' -> '$(snapshot)'"
 echo "ok: branch1 global hooksPath refused, global dir untouched ($before)"
 
+# ── 1b: THE PRINTED REMEDY CLEARS THE REFUSAL (1247-amcu criterion 5) ───────
+# The refusal must say why and what clears it, and the command it prints is
+# EXECUTED here, verbatim, in a fresh clone: a confidently wrong remedy is worse
+# than a bare token, so naming one is not enough.
+case "$out" in *"why:"*"remedy:"*) ;; *) fail "branch1b: refusal carries no why:/remedy: lines: $out" ;; esac
+C1="$W/remedy-clone"; make_clone "$C1"
+out="$(bash "$C1/scripts/install-hooks.sh" 2>&1)"; rc=$?
+[ "$rc" -eq 3 ] || fail "branch1b: expected the refusal first, got $rc: $out"
+remedy="$(printf '%s\n' "$out" | grep -m1 'config core.hooksPath' | sed 's/^ *//')"
+[ -n "$remedy" ] || fail "branch1b: no remedy command in: $out"
+bash -c "$remedy" || fail "branch1b: the printed remedy itself failed: $remedy"
+out="$(bash "$C1/scripts/install-hooks.sh" 2>&1)" || fail "branch1b: still refused after the printed remedy: $out"
+[ -x "$C1/.git/hooks/pre-push" ] || fail "branch1b: remedy ran but the guards did not install locally"
+[ "$(snapshot)" = "$before" ] || fail "branch1b: global hooks dir changed"
+echo "ok: branch1b the printed remedy, executed, clears the refusal"
+
 # ── 2: local hooksPath → installs locally, global untouched ─────────────────
 git -C "$C" config core.hooksPath "$C/.git/hooks"
 out="$(bash "$C/scripts/install-hooks.sh" 2>&1)" || fail "branch2: installer failed: $out"
