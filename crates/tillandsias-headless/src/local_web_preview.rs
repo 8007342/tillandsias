@@ -1529,6 +1529,22 @@ pub(crate) fn add_dev_route(
     dev_url(service, project)
 }
 
+/// 1788-qlwq slice 10: every route a browser window can load, as
+/// `<service>.<project>.localhost:<preview TLS port>`, read from the router's
+/// route table (the tray state the browser-routing-allowlist spec names).
+/// Empty when the table or the TLS listener is unavailable.
+pub(crate) fn browser_routed_hosts() -> Vec<String> {
+    let Ok(port) = tls_port() else {
+        return Vec::new();
+    };
+    read_routes(false)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|r| r.preview_tls)
+        .map(|r| format!("{}.localhost:{port}", r.subdomain))
+        .collect()
+}
+
 /// The URL a dev server is opened at: https on the preview listener, the
 /// only scheme a browser.open window loads (order 1637-5765).
 fn dev_url(service: &str, project: &str) -> Result<String, String> {

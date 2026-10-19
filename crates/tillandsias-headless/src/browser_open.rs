@@ -743,6 +743,10 @@ impl BrowserContainers for TrayBrowserContainers {
         crate::local_web_preview::tls_port().ok()
     }
 
+    fn routed_hosts(&self) -> Vec<String> {
+        crate::local_web_preview::browser_routed_hosts()
+    }
+
     /// Order 1712-3fsw: a window can be shown only through a Wayland socket
     /// that exists. The macOS and Windows VM guests have none today, and
     /// neither does a Linux session without Wayland.

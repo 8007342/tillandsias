@@ -128,6 +128,15 @@ pub trait BrowserContainers: Send + Sync {
     /// The router's local-preview TLS port (`preview-tls-port`), when the
     /// preview listener exists. `browser.open` admits this port for https.
     fn preview_tls_port(&self) -> Option<u16>;
+    /// The `<host>:<port>` pairs the tray has ROUTED for a browser (the
+    /// router's route table: a published www preview, a toolchain dev server
+    /// such as `flutter run -d web-server`). browser.open admits these beside
+    /// the hosts of windows already open (1788-qlwq slice 10): before, opening
+    /// one window locked every other routed service of the project out.
+    /// Defaults to none: a launcher that cannot tell keeps the old behaviour.
+    fn routed_hosts(&self) -> Vec<String> {
+        Vec::new()
+    }
     /// Whether this host can show a window (order 1712-3fsw). Without one,
     /// `browser.open` starts headless unless the caller insists otherwise.
     /// Defaults to true: a launcher that cannot tell keeps the old behaviour.
