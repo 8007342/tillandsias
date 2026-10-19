@@ -397,7 +397,6 @@ scripts/test-mcp-run-command-tool.sh
 scripts/test-mcp-server-resilience.sh
 scripts/test-mcp-transport-death-trace.sh
 scripts/test-memo-hit-observability.sh
-scripts/test-meta-orchestration-dirty-tree-safety.sh
 scripts/test-meta-orchestration-opsx-sync-merge.sh
 scripts/test-metrics-log-fallback-is-loud.sh
 scripts/test-metrics-log-path-agreement.sh
