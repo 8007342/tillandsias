@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air on the coordinator's request (macuahuitl-fedora,
+# 2026-10-19), from flakes seen while gating 1788-qlwq slices 10/11/13.
+packets:
+  - packet_id: a-cli-lane-refuses-by-name-when-another-process-owns-its-socket-flakes-in-a-full-headless-run-and-passes-alone
+    order: 1791-q4iv
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    size: S
+    pickup_role: any
+    capability_tags: [tests, flake, env-race, headless, lane-socket]
+    related: [1783-k5hm, 880-tdwn, 1242-4x53]
+    depends_on: []
+    title: |
+      lane_socket_owner_tests::a_cli_lane_refuses_by_name_when_another_process_owns_its_socket fails in about 1 of 2-3 full headless test runs and passes every time alone; find the parallel test that races it and make the race reproducible before fixing it
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-10-18/19, `cargo test -p tillandsias-headless --features tray,listen-vsock --bin tillandsias --no-fail-fast`, the gate's set:
+      - full runs: FAILED in 2 of 4 (1114/1 and 1116/1), passed in the other 2, on branches whose diffs do not touch it (1788-qlwq slices 10 and 13, toolchain_exec/browser-mcp/lib-common only);
+      - alone (`-- lane_socket_owner_tests`): 3 of 3 pass, 0.02 s.
+      The panic is the first assertion block at main.rs:~35840-35855 (the refused/free/host-mount/own/stale verdicts) of the test at main.rs:35787.
+      The test takes crate::test_support::env_lock() and sets XDG_RUNTIME_DIR (and TILLANDSIAS_FORGE_INSTANCE) to a scratch dir. XDG_RUNTIME_DIR is read at runtime by resource_lock.rs, mcp_socket.rs, msg_serve.rs, forge_swap.rs, tray/mod.rs and main.rs; 17 test sites set or remove it.
+      HYPOTHESIS TO FALSIFY (not yet measured): a test that reads XDG_RUNTIME_DIR WITHOUT holding env_lock (directly, or through one of those modules) runs in parallel, and either observes the scratch value or, by setting it itself outside the lock, changes what this test's socket-owner probe resolves. Equally possible: two tests both under the lock but sharing a socket path in a real runtime dir. Name which before changing code.
+    exit_criteria:
+      - "The race is reproduced deterministically and red before the fix: a test (e.g. a reader thread that resolves the lane socket path outside env_lock while this test holds a scratch XDG_RUNTIME_DIR, or the named racing test forced to interleave with a barrier) fails every run on today's code. The racing reader or writer is named in the row's evidence."
+      - "After the fix the reproduction is green, and the full headless run with the gate's feature set passes 10 consecutive times on one host with this test included. NEGATIVE CONTROL: the test still fails when the owning process is live and foreign (its own refused arm is unchanged)."
+    unscoreable: "unpinnable-until-measured: the pin is the deterministic reproduction named in exit criterion 1, which does not exist yet; the hypothesis may be wrong"
+    next_action: >
+      List every test that reads or writes XDG_RUNTIME_DIR (or calls the lane-socket path resolver) and whether it holds env_lock. Write the barrier/reader-thread reproduction for the first candidate and show it red; fix by moving the read under the lock or by injecting the runtime dir instead of reading process env.
+    events:
+      - type: filed
+        ts: "2026-10-19T01:11:16Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Full-run-only flake in the 1783-k5hm lane-socket-owner test (2 of 4 full runs red, 3 of 3 alone green); XDG_RUNTIME_DIR read outside env_lock is the hypothesis to falsify.
