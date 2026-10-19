@@ -64,6 +64,9 @@ methodology_catalog:
     unknown_event_register:
       file: methodology/event/index.yaml
       provides: "Unknown intake and semantic distillation closure."
+    work_selection:
+      file: methodology/work-selection.yaml
+      provides: "MinMax work selection: direction, score, randomization, due-diligence follow-up."
 
   constraints:
     methodology_complexity_ratio:
