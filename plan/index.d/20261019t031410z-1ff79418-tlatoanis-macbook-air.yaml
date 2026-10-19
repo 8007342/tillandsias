@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-new-project-forge-installs-branch-discipline-hooks-and-runs-them-without-hand-repair
+    field: status
+    value: implemented
+    ts: "2026-10-19T03:14:10Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: a-new-project-forge-installs-branch-discipline-hooks-and-runs-them-without-hand-repair
+    event:
+      type: note
+      ts: "2026-10-19T03:14:10Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        All 13 slices landed: 1 #551, 2 #552, 9 #553 (macuahuitl-fedora), 12 #557, 11/10/13 #558, 3-8 #559 (eee6536fd). Live arms (forge-image litmus for 2, a real kumbia-shaped Flutter build/preview/route/dart for 10-13, the discipline flow in a fresh forge project) run against v56.10.18.1 once published.
