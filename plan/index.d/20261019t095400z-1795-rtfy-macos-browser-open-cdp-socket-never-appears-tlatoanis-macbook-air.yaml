@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air from the v56.10.18.1 macOS smoke
+# (coordinator GO, 2026-10-19).
+packets:
+  - packet_id: on-macos-v56-10-18-1-browser-open-of-an-allowed-routed-url-fails-with-browser-launch-failed-because-the-window-cdp-socket-never-appears
+    order: 1795-rtfy
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    size: M
+    pickup_role: macos
+    capability_tags: [macos, browser, cdp, forge, prompt-to-app, smoke]
+    related: [1754-bu07, 1788-qlwq, 1712-3fsw]
+    depends_on: []
+    title: |
+      On v56.10.18.1 macOS, a forge's browser_open of https://flutter.kumbia-smoke.localhost:18443/ passed the allowlist (1788-qlwq slice 10) but failed: `BROWSER_LAUNCH_FAILED: the window's CDP session failed: CDP connection failed: /run/user/0/tillandsias/browser/win-<uuid>.cdp/cdp.sock did not accept within 30s: No such file or directory (os error 2)`. The window never got a CDP socket, so the user and the agent saw no page.
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-10-19, forge arms5 on ~/src/kumbia-smoke (09:39 to 09:45Z). The flutter wrapper printed "Dev server routed: open https://flutter.kumbia-smoke.localhost:18443/ in a browser (browser.open)". The open of that URL returned the error above. An open of https://not-routed-smoke.kumbia-smoke.localhost:18443/ returned URL_NOT_ALLOWED: not in active routes for project 'kumbia-smoke', which is the negative control for slice 10.
+      In arms4 (~/src/tillandsias) the agent called browser_open 6 times on the routed URL. Results were not printed, and the session ended with status 143.
+      NOT KNOWN: whether the browser container started at all (podman ps and its log were not captured), or whether this is the macOS headless-first path (1712-3fsw) lacking a window launcher.
+    exit_criteria:
+      - "On a published macOS release, browser_open of a routed dev URL from a fresh forge returns a window id and a page title, or a typed refusal that names the missing launcher. It never waits 30 s for a socket path that is never created."
+      - "The failure names the browser container's state and the last lines of its log."
+    unscoreable: "live-only until the cause is named"
+    next_action: >
+      Reproduce in a macOS forge. During the 30 s wait, use --exec-guest to capture `podman ps -a --filter name=browser`, the browser container's log, and `ls /run/user/0/tillandsias/browser/`.
+    events:
+      - type: filed
+        ts: "2026-10-19T09:54:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          v56.10.18.1 macOS smoke: browser_open of an allowed routed URL failed with BROWSER_LAUNCH_FAILED (CDP socket never appeared).
