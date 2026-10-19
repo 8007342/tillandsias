@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: affordance-slice-competing-gate-caller-contract-refusals-say-why-and-what-clears-them
+    order: 1797-vsks
+    parent_order: 1247-amcu
+    status: in_progress
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [affordance, refusal, ci, fail-loud]
+    estimated_hours: 1
+    owned_files:
+      - scripts/check-no-competing-gate.sh
+      - scripts/test-no-competing-gate.sh
+      - scripts/test-forge-findings-persisted.sh
+      - scripts/lua/test-forge-findings-persisted.lua
+      - build.sh
+      - scripts/portability/shell-decider-floor.txt
+      - openspec/litmus-tests/litmus-ensure-toolbox-include-shape.yaml
+    title: |
+      1247-amcu slice — FAMILY: the three refused:competing-gate:caller-contract verdicts of scripts/check-no-competing-gate.sh (an unknown --caller-context, --host-side together with --caller-context, and --host-side with no TILLANDSIAS_WRAPPER_TOKEN exported) say why and what clears them
+    context: |
+      Picked by lenovinha at the coordinator's request (2026-10-19). By scripts/rank-refusal-hits.sh it is the highest-ranked family (rank 7, 4 hits, 3 sites) whose sites print no remedy. Ranks 1-6 carry one already, have their own slice (check-committable-branch.sh), or are 1247-b46r. The only open row on the script, 1149-3v3n, adds a WSL caller and does not change these messages.
+      Each verdict said "FIX THE CALL SITE" and stopped there. The verdict line on stdout is unchanged, because with-tillandsias-builder.sh and test-competing-gate-consumer.sh match it. The why and remedy go to stderr.
+      The fixture, scripts/test-no-competing-gate.sh, is already gate step 255-1141-vf9w-competing. It is now also a step of the instant litmus ensure-toolbox-include-shape, which covers with-tillandsias-builder.sh, the wrapper that relays this verdict.
+      Carry: scripts/test-forge-findings-persisted.sh (22 lines, unowned, listed free in the 2026-10-11 yoga carry survey) is ported to scripts/lua, and build.sh runs the port through _run_lua_decider.
+    exit_criteria:
+      - 'each caller-contract refusal emits why: and remedy: on stderr beside its unchanged verdict line (pre-fix: the three new affordance arms FAIL)'
+      - 'NEGATIVE CONTROL (1247-amcu criterion 5): the fixture EXECUTES each remedy (a known --caller-context, dropping --caller-context, exporting the token into the caller environ) and each then clears that refusal'
+    verifiable_closure: |
+      litmus:ensure-toolbox-include-shape runs scripts/test-no-competing-gate.sh (also gate step 255-1141-vf9w-competing), which passes 24/24, and FAILS 3 arms against the pre-fix detector.
+    provenance: |
+      Filed by lenovinha at the coordinator's request, 2026-10-19.
+    events:
+      - type: filed
+        ts: "2026-10-19T17:22:55Z"
+        host: lenovinha
+        summary: |-
+          1247-amcu slice: the competing-gate caller-contract refusals say why and what clears them; carry paid by porting test-forge-findings-persisted.sh.
