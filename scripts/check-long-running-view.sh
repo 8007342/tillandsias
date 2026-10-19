@@ -141,7 +141,8 @@ apply_fragment_status_overlay() {
     # into the order<TAB>status rows `@tsv` gave.
     if plan_binary_has "$plan_bin" query && plan_binary_has "$plan_bin" json; then
         status_map="$("$plan_bin" query --json --limit 0 2>/dev/null \
-            | "$plan_bin" json get -r '.[] | select((.packet_id // "") != "" or (.order // "") != "") | ((.order // .packet_id) | tostring), (.status // "")' 2>/dev/null | paste - - | tr -d '')"
+            | "$plan_bin" json get -r '.[] | select((.packet_id // "") != "" or (.order // "") != "") | ((.order // .packet_id) | tostring), (.status // "")' 2>/dev/null | paste - - | tr -d '
+')"
     fi
 
     if [ -n "$status_map" ]; then
@@ -235,6 +236,12 @@ n_stale=$(printf '%s' "$stale" | grep -c . || true)
 n_live=$(printf '%s\n' "$live" | grep -c . || true)
 
 if [ "$n_missing" -ne 0 ] || [ "$n_stale" -ne 0 ]; then
+    echo "violation:long-running-view:missing=${n_missing}:stale=${n_stale}"
+    echo "  why: $VIEW is declared a filtered view of ACTIVE multi_cycle packets" >&2
+    echo "  (methodology/distributed-work.yaml -> long_running_packets.sub_queue_view)." >&2
+    echo "  remedy: add a row for each missing order and remove each stale one, in the same" >&2
+    echo "  commit as the change that moved it. The prose columns are editorial and" >&2
+    echo "  cannot be generated — that is why this checks membership, not rendering." >&2
     [ "$n_missing" -ne 0 ] && {
         echo "  LIVE multi_cycle packets absent from $VIEW:" >&2
         printf '%s\n' "$missing" | sed 's/^/    missing: /' >&2
@@ -243,12 +250,6 @@ if [ "$n_missing" -ne 0 ] || [ "$n_stale" -ne 0 ]; then
         echo "  Rows in $VIEW naming no live multi_cycle packet (terminal or gone):" >&2
         printf '%s\n' "$stale" | sed 's/^/    stale:   /' >&2
     }
-    echo "  $VIEW is declared a filtered view of ACTIVE multi_cycle packets" >&2
-    echo "  (methodology/distributed-work.yaml -> long_running_packets.sub_queue_view)." >&2
-    echo "  Add a row for each missing order and remove each stale one, in the same" >&2
-    echo "  commit as the change that moved it. The prose columns are editorial and" >&2
-    echo "  cannot be generated — that is why this checks membership, not rendering." >&2
-    echo "violation:long-running-view:missing=${n_missing}:stale=${n_stale}"
     exit 1
 fi
 
