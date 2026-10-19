@@ -325,4 +325,45 @@ if grep -q 'local gate: tag-on-main' <<<"$out"; then fail "case 13: a mixed push
 [ "$(tag_head "$D" stable)" != "$target" ] || fail "case 13: refused but the tag moved"
 echo "ok: case 13 — a tag beside a branch push gets no exemption, even with both on main"
 
-echo "PASS: gate-stamp-scope (14/14)"
+# ── ORDER 1798-khw6: the observatorium deploy ref rides the same exemption ──
+# promote-stable.sh moves refs/heads/deploy/observatorium right after the
+# stable tag; Cloudflare builds only that branch. Its tip is the release commit
+# (on main) or a restore commit whose tree equals its first parent's.
+branch_head() { git -C "$1/work" ls-remote origin "refs/heads/$2" 2>/dev/null | cut -f1; }
+
+# case 14: a deploy ref moved to a commit on main is exempt under a scoped stamp.
+D="$WORK/c14"; make_repo "$D"
+target="$(seed_main_with_code "$D")"
+out="$(cd "$D/work" && issue_pass_token && bash scripts/gate-stamp.sh write --scope plan-ledger --dispatch check >/dev/null && git push origin "$target:refs/heads/deploy/observatorium" 2>&1)"
+rc=$?
+[ "$rc" = 0 ] || fail "case 14: a deploy ref on a main commit was refused under a scoped stamp: $out"
+[ "$(branch_head "$D" deploy/observatorium)" = "$target" ] || fail "case 14: accepted but the deploy ref did not move"
+grep -q 'local gate: tag-on-main' <<<"$out" || fail "case 14: the exemption did not announce itself: $out"
+echo "ok: case 14 — a deploy ref on a commit already on main skips the stamp (1798-khw6)"
+
+# case 15: a RESTORE commit (tree == first parent's, first parent on main) is
+# exempt. This is the demotion shape advance-deploy-ref.sh writes.
+D="$WORK/c15"; make_repo "$D"
+target="$(seed_main_with_code "$D")"
+base="$(git -C "$D/work" rev-parse "$target^")"
+git --git-dir="$D/origin.git" update-ref refs/heads/deploy/observatorium "$target"
+restore="$(git -C "$D/work" commit-tree "$(git -C "$D/work" rev-parse "$base^{tree}")" -p "$base" -p "$target" -m restore)"
+out="$(cd "$D/work" && issue_pass_token && bash scripts/gate-stamp.sh write --scope plan-ledger --dispatch check >/dev/null && git push origin "$restore:refs/heads/deploy/observatorium" 2>&1)"
+rc=$?
+[ "$rc" = 0 ] || fail "case 15: a tree-identical restore commit was refused: $out"
+[ "$(branch_head "$D" deploy/observatorium)" = "$restore" ] || fail "case 15: accepted but the deploy ref did not move"
+echo "ok: case 15 — a restore commit carrying a main commit's exact tree skips the stamp"
+
+# case 16 (NEGATIVE CONTROL): a deploy-ref commit with a NEW tree, whose first
+# parent IS on main, keeps the full gate. Without this the restore rule would
+# wave any child of main through.
+D="$WORK/c16"; make_repo "$D"
+target="$(seed_main_with_code "$D")"
+out="$(cd "$D/work" && git reset -q --hard "$target" && printf 'pub fn smuggled() {}\n' >> crates/demo/lib.rs && git add -A && git commit -qm smuggled >/dev/null 2>&1 && git push origin "HEAD:refs/heads/deploy/observatorium" 2>&1)"
+rc=$?
+[ "$rc" != 0 ] || fail "case 16: a new tree on a deploy ref was accepted with no stamp: $out"
+[ -z "$(branch_head "$D" deploy/observatorium)" ] || fail "case 16: refused but the deploy ref reached the remote"
+grep -q 'tag-on-main:not-on-main:refs/heads/deploy/observatorium' <<<"$out" || fail "case 16: the refusal did not say why the exemption was declined: $out"
+echo "ok: case 16 — a deploy-ref commit with a new tree keeps the full gate"
+
+echo "PASS: gate-stamp-scope (17/17)"
