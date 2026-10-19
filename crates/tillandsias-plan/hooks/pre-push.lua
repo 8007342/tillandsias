@@ -59,9 +59,21 @@ if not sok or type(d) ~= "table" then
 end
 local level = tonumber(d.level) or 0
 
+-- 1788-qlwq: promotion is the one admitted push to the default branch — the
+-- pushed sha is exactly the integration branch's tip on the remote (the
+-- mirror's pre-receive admits the same move and nothing else).
+local function integration_tip()
+  local _, t = run{ plan, "discipline", "target", "--platform", platform() }
+  local ib = first_line(t):match("^(%S+)")
+  if not ib then return nil end
+  local code, sha = run{ "git", "rev-parse", "--verify", "--quiet", "refs/remotes/origin/" .. ib }
+  if code ~= 0 then return nil end
+  return first_line(sha)
+end
+
 local refused = nil
 for line in io.lines() do
-  local remote_ref = line:match("^%S+%s+%S+%s+(%S+)")
+  local local_sha, remote_ref = line:match("^%S+%s+(%S+)%s+(%S+)")
   if remote_ref then
     local code, out = run{ plan, "discipline", "check-ref", remote_ref }
     local verdict = first_line(out)
@@ -70,6 +82,10 @@ for line in io.lines() do
       return "blocked:hook:pre-push:discipline-unanswered"
     end
     local token = verdict:match("^refused:discipline:([%w%-]+):enforced")
+    if token == "default-branch-protected" and local_sha == integration_tip() then
+      err("ok: " .. remote_ref .. " promoted from the integration branch tip")
+      token = nil
+    end
     if token and not refused then
       refused = { ref = remote_ref, token = token }
     end

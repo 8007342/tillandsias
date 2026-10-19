@@ -390,7 +390,6 @@ scripts scripts/check-litmus-line-windows.sh 8
 scripts scripts/check-litmus-mutation-arms-mutate.sh 3
 scripts scripts/check-litmus-pin-claims.sh 5
 scripts scripts/check-long-running-view.sh 21
-scripts scripts/check-macos-stock-binaries.sh 7
 scripts scripts/check-mcp-expert-health.sh 46
 scripts scripts/check-mcp-live-build.sh 4
 scripts scripts/check-mcp-surface.sh 4

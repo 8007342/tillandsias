@@ -315,5 +315,20 @@ if ! git -C "$d/mirror.git" rev-parse --verify --quiet refs/heads/linux-next >/d
     ok "ARM14 a project without linux-next falls through to HEAD: its seed is published and enforced"
 else bad "ARM14 refs='$(tr '\n' ' ' <<<"$refs")' pub='$pub_out' push-rc=$rc"; fi
 
+# ── ARM 15 ───────────────────────────────────────────────────────────────
+# 1788-qlwq slice 9: a forge has no pull-request path, so the only way main
+# moves is promotion — a fast-forward of main to the integration tip. ARM 1
+# stays the control: a commit that is not the integration tip is refused.
+d="$(new_mirror_seeded a15 "$(seed enforced warn)")"
+commit "$d" c15; push "$d" HEAD:refs/heads/linux-next
+push "$d" main
+if [ "$rc" -eq 0 ] && [ -e "$d/relayed" ] && grep -q 'ok:branch-discipline:default-branch:main:promoted-from:linux-next' <<<"$out"; then
+    ok "ARM15 enforced default branch: promoting the integration tip to main is accepted and relayed"
+else bad "ARM15 rc=$rc relayed=$([ -e "$d/relayed" ] && echo yes || echo no) out='$(tr '\n' '|' <<<"$out")'"; fi
+commit "$d" c15b; push "$d" main
+if [ "$rc" -ne 0 ] && [ ! -e "$d/relayed" ] && grep -q 'blocked:branch-discipline:default-branch:main' <<<"$out"; then
+    ok "ARM15 control: a main commit ahead of the integration tip is still refused"
+else bad "ARM15 control rc=$rc out='$(tr '\n' '|' <<<"$out")'"; fi
+
 [ "$FAIL" -eq 0 ] && { echo "PASS: mirror-discipline (1443-uit6)"; exit 0; }
 echo "FAILED: mirror-discipline (1443-uit6)"; exit 1
