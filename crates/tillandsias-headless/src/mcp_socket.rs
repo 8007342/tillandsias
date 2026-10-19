@@ -856,6 +856,7 @@ pub(crate) const TRAY_RESERVED_LANE_ENV: &str = "TILLANDSIAS_TRAY_RESERVED_LANE"
 
 /// Parse a [`TRAY_RESERVED_LANE_ENV`] value. Anything but exactly one
 /// non-empty project and one non-empty instance reserves nothing.
+#[cfg(any(feature = "tray", test))]
 pub(crate) fn reserved_lane_from(value: Option<&str>) -> Option<LaneListenerKey> {
     let (project, instance) = value?.trim().split_once('/')?;
     if project.is_empty() || instance.is_empty() || instance.contains('/') {
