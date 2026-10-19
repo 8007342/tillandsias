@@ -59,8 +59,19 @@ impl Box_ {
     fn project(&self, name: &str) -> PathBuf {
         let p = self.dir.path().join(name);
         let remote = self.dir.path().join(format!("{name}-remote.git"));
-        assert!(Command::new("git").args(["init", "-q", "--bare"]).arg(&remote).status().unwrap().success());
-        assert!(self.git(self.dir.path(), &["init", "-q", name]).status.success());
+        assert!(
+            Command::new("git")
+                .args(["init", "-q", "--bare"])
+                .arg(&remote)
+                .status()
+                .unwrap()
+                .success()
+        );
+        assert!(
+            self.git(self.dir.path(), &["init", "-q", name])
+                .status
+                .success()
+        );
         std::fs::write(p.join("README"), "one\n").unwrap();
         self.git(&p, &["add", "README"]);
         assert!(self.git(&p, &["commit", "-qm", "one"]).status.success());
@@ -92,25 +103,49 @@ fn text(o: &Output) -> String {
 fn raise_to_two_writes_a_work_ref_regex_and_a_template_value_is_refused() {
     let b = Box_::new();
     let p = b.project("raise2");
-    let out = b.plan(&p, &["discipline", "raise", "--to", "2", "--integration", "game"]);
+    let out = b.plan(
+        &p,
+        &["discipline", "raise", "--to", "2", "--integration", "game"],
+    );
     assert!(out.status.success(), "{}", text(&out));
     let seed = std::fs::read_to_string(p.join(".tillandsias/branch-discipline.yaml")).unwrap();
-    assert!(seed.contains("work_ref: \"work/[0-9]{3,4}-[a-z0-9]{4}\""), "{seed}");
-    let ok = b.plan(&p, &["discipline", "check-ref", "refs/heads/work/1234-abcd"]);
+    assert!(
+        seed.contains("work_ref: \"work/[0-9]{3,4}-[a-z0-9]{4}\""),
+        "{seed}"
+    );
+    let ok = b.plan(
+        &p,
+        &["discipline", "check-ref", "refs/heads/work/1234-abcd"],
+    );
     assert!(text(&ok).starts_with("ok:discipline:"), "{}", text(&ok));
     // An existing level-1 seed raised to 2 gets one too.
     let q = b.project("raise12");
-    assert!(b.plan(&q, &["discipline", "raise", "--to", "1"]).status.success());
-    assert!(b.plan(&q, &["discipline", "raise", "--to", "2"]).status.success());
+    assert!(
+        b.plan(&q, &["discipline", "raise", "--to", "1"])
+            .status
+            .success()
+    );
+    assert!(
+        b.plan(&q, &["discipline", "raise", "--to", "2"])
+            .status
+            .success()
+    );
     let seed = std::fs::read_to_string(q.join(".tillandsias/branch-discipline.yaml")).unwrap();
     assert_eq!(seed.matches("work_ref:").count(), 1, "{seed}");
     // NEGATIVE CONTROL: `work/<id>` is a template, refused as such.
     let t = std::fs::read_to_string(p.join(".tillandsias/branch-discipline.yaml"))
         .unwrap()
-        .replace("work_ref: \"work/[0-9]{3,4}-[a-z0-9]{4}\"", "work_ref: \"work/<id>\"");
+        .replace(
+            "work_ref: \"work/[0-9]{3,4}-[a-z0-9]{4}\"",
+            "work_ref: \"work/<id>\"",
+        );
     std::fs::write(p.join(".tillandsias/branch-discipline.yaml"), t).unwrap();
     let show = b.plan(&p, &["discipline", "show"]);
-    assert!(text(&show).contains("refused:discipline-seed:work-ref-template"), "{}", text(&show));
+    assert!(
+        text(&show).contains("refused:discipline-seed:work-ref-template"),
+        "{}",
+        text(&show)
+    );
 }
 
 /// Slices 4 and 6, through a real `git push`: the seed's own denied message is
@@ -120,8 +155,19 @@ fn raise_to_two_writes_a_work_ref_regex_and_a_template_value_is_refused() {
 fn the_pre_push_hook_prints_the_seeds_message_and_says_a_warned_push_is_accepted() {
     let b = Box_::new();
     let p = b.project("prepush");
-    assert!(b.plan(&p, &["discipline", "install-hooks"]).status.success());
-    assert!(b.plan(&p, &["discipline", "raise", "--to", "1", "--integration", "game"]).status.success());
+    assert!(
+        b.plan(&p, &["discipline", "install-hooks"])
+            .status
+            .success()
+    );
+    assert!(
+        b.plan(
+            &p,
+            &["discipline", "raise", "--to", "1", "--integration", "game"]
+        )
+        .status
+        .success()
+    );
     let seed_path = p.join(".tillandsias/branch-discipline.yaml");
     let mut seed = std::fs::read_to_string(&seed_path).unwrap();
     seed.push_str("messages:\n  default_branch_denied: \"KUMBIA-1788: {default} is release-only; land on {integration}\"\n");
@@ -133,17 +179,30 @@ fn the_pre_push_hook_prints_the_seeds_message_and_says_a_warned_push_is_accepted
     let warned = b.git(&p, &["push", "origin", "main"]);
     let w = text(&warned);
     assert!(warned.status.success(), "{w}");
-    assert!(w.contains("default-branch-protected:seed-ahead-of-reality"), "{w}");
-    assert!(w.contains("THIS PUSH WILL BE ACCEPTED: refs/heads/main"), "{w}");
+    assert!(
+        w.contains("default-branch-protected:seed-ahead-of-reality"),
+        "{w}"
+    );
+    assert!(
+        w.contains("THIS PUSH WILL BE ACCEPTED: refs/heads/main"),
+        "{w}"
+    );
 
     // Once game exists on origin the rule refuses, in the seed's own words.
-    assert!(b.git(&p, &["push", "-q", "origin", "HEAD:game"]).status.success());
+    assert!(
+        b.git(&p, &["push", "-q", "origin", "HEAD:game"])
+            .status
+            .success()
+    );
     b.git(&p, &["fetch", "-q", "origin"]);
     b.commit(&p, "two");
     let refused = b.git(&p, &["push", "origin", "main"]);
     let r = text(&refused);
     assert!(!refused.status.success(), "{r}");
-    assert!(r.contains("KUMBIA-1788: main is release-only; land on game"), "{r}");
+    assert!(
+        r.contains("KUMBIA-1788: main is release-only; land on game"),
+        "{r}"
+    );
     // NEGATIVE CONTROL: a refused push never claims it will be accepted.
     assert!(!r.contains("WILL BE ACCEPTED"), "{r}");
 }
@@ -202,11 +261,22 @@ fn the_policy_audit_never_writes_into_a_projects_root() {
             "tool_input": { "command": "ls" },
             "cwd": p.to_str().unwrap(),
         });
-        child.stdin.take().unwrap().write_all(input.to_string().as_bytes()).unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(input.to_string().as_bytes())
+            .unwrap();
     }
     let out = child.wait_with_output().unwrap();
-    assert!(!p.join(".cache").exists(), "a .cache/ appeared in the project: {}", text(&out));
-    let home_log = b.home().join(".cache/tillandsias/metrics/command-policy-audit.jsonl");
+    assert!(
+        !p.join(".cache").exists(),
+        "a .cache/ appeared in the project: {}",
+        text(&out)
+    );
+    let home_log = b
+        .home()
+        .join(".cache/tillandsias/metrics/command-policy-audit.jsonl");
     assert!(home_log.is_file(), "the audit went nowhere: {}", text(&out));
 }
 
@@ -229,7 +299,10 @@ fn no_discipline_wording_renders_the_integration_branch_with_a_slash() {
         all.push_str(&text(&b.plan(&p, args)));
     }
     all.push_str(&text(&b.git(&p, &["push", "origin", "main"])));
-    assert!(all.contains("game"), "the fixture rendered no integration wording: {all}");
+    assert!(
+        all.contains("game"),
+        "the fixture rendered no integration wording: {all}"
+    );
     let slash = regex::Regex::new(r"\bgame/(\s|$|[^\w<\[])").unwrap();
     assert!(!slash.is_match(&all), "{all}");
 }
