@@ -6946,6 +6946,7 @@ mod tests {
             next_retry_at: Some(700),
             cause: "Build exited with status 1".into(),
             log: "/l".into(),
+            tillandsias_version: crate::image_ensure_marker::current_version().into(),
         };
         let named = vault_image_refusal(&build_error, Some(&m), 200);
         assert!(
