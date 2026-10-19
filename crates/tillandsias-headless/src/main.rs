@@ -128,6 +128,7 @@ mod resource_lock;
 // @trace order:1776-brk3 — the on-demand image build breaker: a failed build
 // is remembered by (image, inputs digest) and later ensures refuse fast.
 mod image_ensure_marker;
+mod podman_health;
 // The crate-wide env_lock() every env-mutating test serializes on (1437-5czv).
 #[cfg(test)]
 mod test_support;
@@ -3392,6 +3393,7 @@ pub(crate) fn ensure_image_exists(
             // meanwhile is told "busy, try again in N" from the marker.
             let base_ms = image_ensure_marker::retry_base_ms();
             let mut attempts = marker.as_ref().map_or(0, |m| m.attempts);
+            let mut free_retries = 0u32;
             loop {
                 eprintln!(
                     "[tillandsias] building image {image_name} ({image_tag}, {}); this may take several minutes",
@@ -3407,6 +3409,34 @@ pub(crate) fn ensure_image_exists(
                 ) else {
                     break;
                 };
+                // 1792-48yg: a podman that could not even start is not a failed
+                // build. It spends no budget and records no marker; it gets one
+                // free retry if podman answers again, and otherwise a typed
+                // refusal naming this boot's capture.
+                if podman_health::podman_could_not_start(&e) {
+                    let capture = init_cache_dir()
+                        .ok()
+                        .and_then(|d| podman_health::capture_once(&d, image_name, &e));
+                    match podman_health::after_failure(&e, free_retries, || {
+                        podman_health::podman_starts(podman_command())
+                    }) {
+                        podman_health::AfterFailure::FreeRetry => {
+                            free_retries += 1;
+                            eprintln!(
+                                "[tillandsias] image-ensure {image_name}: podman could not start; it answers now, so building again (not counted){}",
+                                capture.as_deref().map_or_else(String::new, |p| format!(
+                                    "; capture: {}",
+                                    p.display()
+                                ))
+                            );
+                            continue;
+                        }
+                        podman_health::AfterFailure::Refuse => {
+                            return Err(podman_health::refusal(image_name, &e, capture.as_deref()));
+                        }
+                        podman_health::AfterFailure::Count => {}
+                    }
+                }
                 attempts = attempts.saturating_add(1);
                 let retry = (attempts <= image_ensure_marker::RETRY_BUDGET)
                     .then(|| image_ensure_marker::retry_delay_ms(attempts, base_ms));
