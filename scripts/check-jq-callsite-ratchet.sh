@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # check-jq-callsite-ratchet.sh — order 1375-tsfu.
+# @trace order:1375-tsfu, order:1247-jq4e
 #
 # WHY: an equivalent that is merely AVAILABLE does not become ADOPTION
 # (`rust_queries:` had one adopter in 454 litmus files, 902-5bf9). This guard
@@ -47,13 +48,20 @@
 #   --root DIR  scan DIR instead of the repository (fixtures)
 set -uo pipefail
 
+# ORDER 1247-jq4e (1247-amcu slice): every refusal says WHY on stderr and what
+# CLEARS it, beside its unchanged stdout token.
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ratchet=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --ratchet) ratchet=1; shift ;;
         --root) ROOT="$2"; shift 2 ;;
-        *) echo "could-not-run:jq-ratchet:unknown-argument:$1"; exit 3 ;;
+        *) echo "could-not-run:jq-ratchet:unknown-argument:$1"
+           _afford "the guard takes only --ratchet and --root DIR, so '$1' was not understood and nothing was counted" \
+               "scripts/check-jq-callsite-ratchet.sh [--ratchet] [--root DIR]"
+           exit 3 ;;
     esac
 done
 FLOOR="$ROOT/scripts/portability/jq-callsite-floor.txt"
@@ -87,6 +95,8 @@ printf '%s\n' "$files" | awk '
 ' "$_jq_allowlist" - >&2
 if [ -z "$files" ]; then
     echo "blocked:jq-ratchet-empty-population"
+    _afford "$ROOT holds none of scripts/*.sh, build.sh, launch.sh or openspec/litmus-tests/*.yaml, so there is nothing to count; a count of 0 here would read as a tree with no jq, which it is not" \
+        "run it from a checkout, or point --root at one: scripts/check-jq-callsite-ratchet.sh --root <checkout>"
     exit 1
 fi
 
@@ -112,6 +122,8 @@ EOF
 # were counted, so the join must carry them. Refuse rather than read as ok:0.
 if [ -n "$counts" ] && [ -z "$joined" ]; then
     echo "could-not-run:jq-ratchet:join-produced-nothing (counted sites vanished in the floor join)"
+    _afford "jq sites were counted but the awk join with $FLOOR returned nothing, so this is a fault in the instrument (this host's awk), not a clean tree" \
+        "re-run with bash -x scripts/check-jq-callsite-ratchet.sh and report the awk in use (awk --version) against order 1375-tsfu"
     exit 3
 fi
 total=0; floor_sum=0
@@ -167,12 +179,15 @@ while read -r path n f; do
     [ "$new" -gt 0 ] || continue
     if ! resolve_plan; then
         echo "could-not-run:jq-ratchet:no-plan-binary (new site in $path cannot be classified)"
+        _afford "$path has more jq sites than its floor, and only tillandsias-plan json get --parse-only can say whether the new filter is one it already answers" \
+            "cargo build --release -p tillandsias-plan, or set TILLANDSIAS_PLAN_BIN to a built tillandsias-plan"
         exit 3
     fi
     grep -E -e "$P1" -e "$P2" -e "$P3" "$ROOT/$path" | tail -n "$new" | while IFS= read -r line; do
         flt="$(filter_of "$line")"
         if [ -n "$flt" ] && "$PLAN" json get --parse-only "$flt" >/dev/null 2>&1; then
             echo "blocked:jq-callsite-added:$path:$flt"
+            echo "  why: tillandsias-plan json get already answers '$flt', so a new jq call adds a dependency the repo is retiring (1375-rn9b)"
             echo "  remedy: tillandsias-plan json get '$flt' (same flags, same argument order as jq)"
         else
             echo "warn:jq-callsite-added-unsupported:$path:${flt:-<no literal filter>}"

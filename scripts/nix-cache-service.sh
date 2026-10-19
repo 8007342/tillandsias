@@ -2,7 +2,7 @@
 # ORDER 998-qrwu: the CA directory comes from the ONE declaration
 # (images/default/ca-path.txt), never a literal — see scripts/lib-ca-path.sh.
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-ca-path.sh"
-# @trace order:801-kqme, spec:nix-cache-service
+# @trace order:801-kqme, spec:nix-cache-service, order:1247-nx5c
 #
 # nix-cache-service.sh — serve the persistent host nix store (order 795-h8er)
 # to the enclave as a real nix BINARY CACHE, so a disposable forge lands on a
@@ -80,7 +80,9 @@
 #   skip:nix-cache:<no-nix|no-store>
 #   blocked:nix-cache:<no-harmonia|no-ca|no-enclave|start-failed|unhealthy>
 #
-# Exit 0 on ok/skip, 1 on blocked.
+# Exit 0 on ok/skip, 1 on blocked. Every blocked verdict is followed on STDERR
+# by `  why:` and `  remedy:` lines (1247-nx5c, 1247-amcu); main.rs reads only
+# the last stdout line, so the tokens above are unchanged.
 #
 # USAGE
 #   scripts/nix-cache-service.sh keygen             # create the signing keypair
@@ -91,6 +93,13 @@
 #   scripts/nix-cache-service.sh substituter-args   # nix flags, only if reachable
 
 set -uo pipefail
+
+# ORDER 1247-nx5c (1247-amcu slice): every blocked verdict says WHY on stderr
+# and what CLEARS it. blocked:nix-cache:no-ca is printed for four different
+# preconditions (the signing keypair, the stack CA, the TLS leaf, the bundle),
+# so its why names which one failed: ensure_keypair's own comment records that
+# the bare token "named the wrong thing entirely".
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
 
 CONTAINER_NAME="${TILLANDSIAS_NIX_CACHE_CONTAINER:-tillandsias-nix-cache}"
 CHROOT_STORE="${TILLANDSIAS_NIX_CHROOT_STORE:-$HOME/.local/share/tillandsias/nix-store}"
@@ -302,6 +311,43 @@ enclave_exists() {
     _podman network exists "$ENCLAVE_NET" >/dev/null 2>&1
 }
 
+# ORDER 1247-nx5c — the affordance for each precondition, named by what failed.
+# They read metadata only (does a file exist, is a directory writable); no key
+# material is read.
+_rung_prefix() {
+    if [ "$NIX_RUNG" = "toolbox" ]; then printf 'bash %s/nix-toolbox.sh run -- ' "$_NCS_DIR"; fi
+}
+_afford_state_dir() {
+    _afford "$STATE_DIR is not a directory $(id -un) can write, so the cache's keys, leaf and bundle have nowhere to go; the stack CA is not the cause" \
+        "make $STATE_DIR writable by $(id -un), or set TILLANDSIAS_NIX_CACHE_STATE to a directory that is"
+}
+_afford_keypair() {
+    if ! { [ -d "$STATE_DIR" ] && [ -w "$STATE_DIR" ]; }; then _afford_state_dir; return; fi
+    local store_arg=""
+    [ "$NIX_RUNG" = "toolbox" ] && store_arg="--store $CHROOT_STORE "
+    _afford "nix-store --generate-binary-cache-key failed on the ${NIX_RUNG:-unresolved} rung, so no signing keypair exists in $STATE_DIR; the stack CA is not the cause" \
+        "run it by hand to see its error: $(_rung_prefix)nix-store ${store_arg}--generate-binary-cache-key $KEY_NAME $SECRET_KEY $PUBLIC_KEY"
+}
+_afford_stack_ca() {
+    _afford "the stack CA in $CA_DIR has no intermediate.crt and intermediate.key, so nix-cache cannot get a TLS leaf the forges trust" \
+        "launch the tray once; it mints the stack CA into $CA_DIR (TILLANDSIAS_CA_DIR names another), then re-run: scripts/nix-cache-service.sh prepare"
+}
+_afford_leaf() {
+    if ! { [ -s "$CA_DIR/intermediate.crt" ] && [ -s "$CA_DIR/intermediate.key" ]; }; then _afford_stack_ca; return; fi
+    if ! { [ -d "$STATE_DIR" ] && [ -w "$STATE_DIR" ]; }; then _afford_state_dir; return; fi
+    _afford "openssl could not mint or sign the nix-cache leaf in $STATE_DIR off $CA_DIR/intermediate.crt" \
+        "check that openssl runs ($(command -v openssl 2>/dev/null || echo 'openssl: not on PATH')), then re-run: scripts/nix-cache-service.sh prepare"
+}
+_afford_bundle() {
+    if [ ! -s "$CA_DIR/intermediate.crt" ]; then _afford_stack_ca; return; fi
+    _afford "$CA_BUNDLE could not be written, so host nix has no bundle to verify the leaf with" \
+        "make $STATE_DIR writable by $(id -un), or set TILLANDSIAS_NIX_CACHE_STATE to a directory that is"
+}
+_harmonia_build_cmd() {
+    printf "%snix --extra-experimental-features 'nix-command flakes' build --store %s --no-link --print-out-paths nixpkgs#harmonia" \
+        "$(_rung_prefix)" "$CHROOT_STORE"
+}
+
 endpoint_host() { printf 'https://127.0.0.1:%s\n' "$HOST_PORT"; }
 endpoint_enclave() { printf 'https://%s:%s\n' "$SERVICE_ALIAS" "$IN_PORT"; }
 
@@ -326,17 +372,33 @@ do_prepare() {
     PREPARED_ENTRYPOINT=""
     have_nix || { echo "skip:nix-cache:no-nix"; return 0; }
     store_present || { echo "skip:nix-cache:no-store"; return 0; }
-    enclave_exists || { echo "blocked:nix-cache:no-enclave"; return 1; }
-    ensure_keypair || { echo "blocked:nix-cache:no-ca"; return 1; }
-    ensure_tls_leaf || { echo "blocked:nix-cache:no-ca"; return 1; }
-    ensure_ca_bundle || { echo "blocked:nix-cache:no-ca"; return 1; }
+    enclave_exists || {
+        echo "blocked:nix-cache:no-enclave"
+        _afford "the podman network $ENCLAVE_NET does not exist, and the cache is reached only inside it, by DNS name, with no host mount" \
+            "launch the tray once (it creates $ENCLAVE_NET; TILLANDSIAS_ENCLAVE_NET names another), then re-run: scripts/nix-cache-service.sh prepare"
+        return 1; }
+    ensure_keypair || { echo "blocked:nix-cache:no-ca"; _afford_keypair; return 1; }
+    ensure_tls_leaf || { echo "blocked:nix-cache:no-ca"; _afford_leaf; return 1; }
+    ensure_ca_bundle || { echo "blocked:nix-cache:no-ca"; _afford_bundle; return 1; }
 
     local harmonia logical
     harmonia="$(resolve_harmonia)"
-    [ -n "$harmonia" ] || { echo "blocked:nix-cache:no-harmonia"; return 1; }
+    [ -n "$harmonia" ] || {
+        echo "blocked:nix-cache:no-harmonia"
+        _afford "nix build of nixpkgs#harmonia into $CHROOT_STORE answered no store path on the ${NIX_RUNG:-unresolved} rung, so there is no server binary to run" \
+            "run it to see why: $(_harmonia_build_cmd)"
+        return 1; }
     logical="$(_logical "$harmonia")"
-    pin_harmonia "$logical" || { echo "blocked:nix-cache:no-harmonia"; return 1; }
-    [ -x "$CHROOT_STORE${logical}/bin/harmonia-cache" ] || { echo "blocked:nix-cache:no-harmonia"; return 1; }
+    pin_harmonia "$logical" || {
+        echo "blocked:nix-cache:no-harmonia"
+        _afford "the GC root under $CHROOT_STORE/$PIN_SUBDIR could not be written, so harmonia could be collected while it serves" \
+            "make $CHROOT_STORE/$PIN_SUBDIR writable by $(id -un), then re-run: scripts/nix-cache-service.sh prepare"
+        return 1; }
+    [ -x "$CHROOT_STORE${logical}/bin/harmonia-cache" ] || {
+        echo "blocked:nix-cache:no-harmonia"
+        _afford "$CHROOT_STORE${logical}/bin/harmonia-cache is not executable, so the path nix answered is incomplete or is not harmonia" \
+            "rebuild it to see why: $(_harmonia_build_cmd)"
+        return 1; }
 
     write_harmonia_conf
     PREPARED_ENTRYPOINT="${logical}/bin/harmonia-cache"
@@ -383,8 +445,14 @@ do_ensure() {
         -v "$HARMONIA_CONF:/run/nix-cache/harmonia.toml:ro" \
         -e CONFIG_FILE=/run/nix-cache/harmonia.toml \
         --entrypoint "${logical}/bin/harmonia-cache" \
-        "$BASE_IMAGE" >/dev/null 2>&1 \
-        || { echo "blocked:nix-cache:start-failed"; return 1; }
+        "$BASE_IMAGE" >/dev/null 2>"$STATE_DIR/podman-run.err" \
+        || {
+            echo "blocked:nix-cache:start-failed"
+            local _run_err=""
+            [ -s "$STATE_DIR/podman-run.err" ] && IFS= read -r _run_err < "$STATE_DIR/podman-run.err"
+            _afford "podman run of $CONTAINER_NAME from $BASE_IMAGE failed before the server started: ${_run_err:-no error text} (all of it: $STATE_DIR/podman-run.err)" \
+                "clear what that error names (podman pull $BASE_IMAGE when the image is absent; podman rm -f $CONTAINER_NAME when the name is taken), then re-run: scripts/nix-cache-service.sh ensure"
+            return 1; }
 
     local i=0
     while [ "$i" -lt 40 ]; do
@@ -393,6 +461,8 @@ do_ensure() {
         sleep 0.25
     done
     echo "blocked:nix-cache:unhealthy"
+    _afford "$CONTAINER_NAME started but $(endpoint_host)/nix-cache-info did not answer StoreDir: /nix/store within 10s over the stack CA bundle" \
+        "read why the server is not answering: podman logs $CONTAINER_NAME"
     return 1
 }
 
@@ -406,11 +476,15 @@ case "$cmd" in
             echo "ok:nix-cache-key:present:pubkey=$(cat "$PUBLIC_KEY")"
             exit 0
         fi
-        ensure_keypair || { echo "blocked:nix-cache:no-ca"; exit 1; }
+        ensure_keypair || { echo "blocked:nix-cache:no-ca"; _afford_keypair; exit 1; }
         echo "ok:nix-cache-key:generated:pubkey=$(cat "$PUBLIC_KEY")"
         ;;
     pubkey)
-        [ -s "$PUBLIC_KEY" ] || { echo "blocked:nix-cache:no-ca"; exit 1; }
+        [ -s "$PUBLIC_KEY" ] || {
+            echo "blocked:nix-cache:no-ca"
+            _afford "there is no public key at $PUBLIC_KEY yet, so there is no trusted-public-keys value to print" \
+                "scripts/nix-cache-service.sh keygen"
+            exit 1; }
         cat "$PUBLIC_KEY"
         ;;
     ensure)
