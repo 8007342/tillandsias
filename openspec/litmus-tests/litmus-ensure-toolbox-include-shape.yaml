@@ -28,6 +28,8 @@ inputs:
   - scripts/ensure_toolbox.sh
   - scripts/with-tillandsias-builder.sh
   - scripts/test-ensure-toolbox-properties.sh
+  - scripts/check-no-competing-gate.sh
+  - scripts/test-no-competing-gate.sh
 
 preconditions:
   - workspace contains scripts/ensure_toolbox.sh
@@ -88,3 +90,13 @@ critical_path:
     command: "c=$(${CARGO_TARGET_DIR:-target}/release/tillandsias-plan methodology-ask --root . 'may I file an issue about a toolbox?' 2>/dev/null | jq -r '.confidence'); test \"$c\" = 'unsupported' && echo 'ok: ambiguity-still-refused' || { echo \"FAIL: ambiguous question answered $c\"; exit 1; }"
     timeout_ms: 30000
     expected_behavior: "ok: ambiguity-still-refused"
+
+  - step: "the competing-gate detector the builder wrapper calls says why and what clears each caller-contract refusal, and each remedy clears it"
+    # 1797-vsks (1247-amcu): with-tillandsias-builder.sh relays the detector's
+    # caller-contract verdict. The hermetic fixture asserts the why/remedy lines
+    # and then EXECUTES each remedy. It spawns nothing and reads a procfs-shaped
+    # tree of plain files, so it is honest on every host.
+    command: "scripts/test-no-competing-gate.sh"
+    timeout_ms: 60000
+    success_pattern: "PASS: competing-gate detector"
+    failure_pattern: "FAIL:"
