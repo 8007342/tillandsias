@@ -36,8 +36,9 @@ case "$HOOKS_PATH_SCOPE" in
     ''|local|worktree) ;;
     *)
         echo "refused:install-hooks:${HOOKS_PATH_SCOPE}-hooks-path:$GIT_HOOKS_DIR" >&2
-        echo "  core.hooksPath comes from $HOOKS_PATH_SCOPE config, so installing here would arm these" >&2
-        echo "  guards in EVERY repository on this machine. Give this clone its own hooks dir:" >&2
+        echo "  why: core.hooksPath comes from $HOOKS_PATH_SCOPE config, so installing here would arm" >&2
+        echo "  these guards in EVERY repository on this machine." >&2
+        echo "  remedy: give this clone its own hooks dir:" >&2
         echo "    git -C \"$REPO_ROOT\" config core.hooksPath \"\$(git -C \"$REPO_ROOT\" rev-parse --path-format=absolute --git-common-dir)/hooks\"" >&2
         echo "  (in a forge, also copy $GIT_HOOKS_DIR/prepare-commit-msg there to keep the agent trailer)," >&2
         echo "  then re-run scripts/install-hooks.sh." >&2

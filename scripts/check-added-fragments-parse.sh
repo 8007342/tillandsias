@@ -91,7 +91,8 @@ if [ -z "$_validator" ]; then
     # no validator, but this early exit skipped it too. A gate that cannot
     # look must say so in its verdict.
     echo "blocked:added-fragments-parse:no-validator"
-    echo "  no YAML validator resolves (tillandsias-policy, tillandsias-plan validate-yaml, yq)." >&2
+    echo "  why: no YAML validator resolves (tillandsias-policy, tillandsias-plan validate-yaml, yq)," >&2
+    echo "  so an unparseable fragment would pass unread." >&2
     echo "  remedy: cargo build --release -p tillandsias-plan" >&2
     exit 1
 fi
