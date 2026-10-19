@@ -83,7 +83,6 @@ scripts/check-script-exec-bits.sh
 scripts/check-sigpipe-verdict-pipelines-added.sh
 scripts/check-skill-canonicalization.sh
 scripts/check-skills-single-source.sh
-scripts/check-source-slice-bounds.sh
 scripts/check-spec-index-resolution-agreement.sh
 scripts/check-spec-script-paths.sh
 scripts/check-stale-ready-rows.sh
