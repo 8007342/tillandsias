@@ -215,3 +215,11 @@ The networking core these share with the app networks:
 | Squid `-k reconfigure` is non-disruptive at app start/stop | 1800-sdgk | a long-lived download through the proxy survives ten reconfigures |
 | netavark isolates app-a from app-b on the pinned version | 1800-er9t | `ping`/`curl` between two app nets fails; to the router succeeds |
 | Cloudflare Tunnel/Mesh accepts a ULA `/64` route | 1800-zk9i | API call recorded with its response body |
+
+## Operator rulings (2026-10-19)
+
+1. **Default posture is `none`.** An app the agent launches without naming a posture gets no internet.
+2. **Posture changes live, in both directions, without restarting the app.** An agent can elevate an existing app's network (`none` → `allowlist` → `open`) and downgrade it again, for example to test that one link works and then drop egress straight away. The proxy ACL for the app's subnet is swapped in place, and the app's process and connections to the router are untouched. Each change is logged as an event in the owning forge's stream.
+3. **Cloudflare Mesh only on hosts that meet its floor.** Low-end (floor-tier) hosts are excluded for now and are revisited later.
+4. **Raspberry Pis are deferred.** They join discovery once they are assembled and the aarch64 build exists.
+5. **Trust model: discover anywhere, trust through the shared account.** Devices find each other over whatever network they share (LAN first). Two devices signed into the same Cloudflare account exchange trusted certificates over the Cloudflare mesh, and those certificates then secure their direct device-to-device traffic. That private channel should be IPv6-only.
