@@ -198,6 +198,8 @@ HOST="$([ -x "$_ai" ] && "$_ai" node-name 2>/dev/null || true)"
 HOST="$(printf '%s' "$HOST" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9-')"
 if [ -z "$HOST" ]; then
     echo "refused:host-unresolved: scripts/agent-identity.sh node-name returned nothing, so this push would be attributed to no host (1337-3tk6). Nothing pushed." >&2
+    echo "  why: the host label is read from scripts/agent-identity.sh node-name (hostname -s, hostname, uname -n, then /etc/hostname), and every source answered empty" >&2
+    echo "  remedy: give this host a name those sources can read (hostnamectl set-hostname <name>, or a one-line /etc/hostname), check that scripts/agent-identity.sh node-name now prints it, then re-run" >&2
     exit 2
 fi
 BRANCH="$(git symbolic-ref --short -q HEAD 2>/dev/null || echo detached)"

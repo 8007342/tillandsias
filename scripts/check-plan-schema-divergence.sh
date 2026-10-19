@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# @trace order:744-agyy (order 440, order 720-24u6)
+# @trace order:744-agyy (order 440, order 720-24u6), order:1247-sv4d
 # Plan/schema status vocabulary divergence check (order 440, 744-agyy).
 # Exits 0 if plan/index.yaml default_status_values and plan/schema.yaml statuses
 # are identical. Emits a one-line verdict:
 #   ok:status-vocab-in-sync
 #   blocked:status-vocab-diverges: <details>
 #   blocked:index-load-failed: <file>: <parser message>
-# and exits 0 or 1 accordingly.
+#   blocked:status-vocab-absent: <file>: <dotted.path>   (1247-sv4d)
+# and exits 0 or 1 accordingly. Each blocked verdict is followed on stderr by
+# `  why:` and `  remedy:` lines (1247-amcu).
 #
 # WHY THE THIRD VERDICT EXISTS (order 720-24u6, 2026-08-13)
 # --------------------------------------------------------
@@ -68,8 +70,19 @@ else
 fi
 READER="$(resolve_plan_binary 2>/dev/null || true)"
 
+# ORDER 1247-sv4d (1247-amcu slice). Every refusal below says WHY on stderr and
+# what CLEARS it, beside its unchanged stdout verdict. The verdict prints FIRST,
+# so a caller reading line 1 of a merged stream still reads the verdict.
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+SELF="scripts/check-plan-schema-divergence.sh"
+
 if [ ! -f "$INDEX" ] || [ ! -f "$SCHEMA" ]; then
+  _missing=""
+  [ -f "$INDEX" ] || _missing="$INDEX"
+  [ -f "$SCHEMA" ] || _missing="${_missing:+$_missing and }$SCHEMA"
   echo "blocked:status-vocab-diverges: could not read $INDEX or $SCHEMA"
+  _afford "$_missing is not a file from $(pwd), so there is nothing to compare; the default paths are relative to the repository root" \
+    "run it from the repository root, or name both files: $SELF <index.yaml> <schema.yaml>"
   exit 1
 fi
 
@@ -96,7 +109,8 @@ fi
 # read_seq <file> <dotted.path> -> space-joined sequence on stdout.
 # Non-zero with the reader's verdict on stdout when the file will not load, so
 # the caller reports it verbatim and index-load-failed stays distinct from
-# status-vocab-diverges (the 720-24u6 negative control).
+# status-vocab-diverges (the 720-24u6 negative control). 2 = no reader at all,
+# 1 = the reader ran and the file would not load; each has its own remedy.
 read_seq() {
   _rs_file="$1"; _rs_path="$2"
   if [ -z "$READER" ] || [ ! -x "$READER" ]; then
@@ -110,22 +124,58 @@ read_seq() {
   "$READER" yaml-get "$_rs_file" "$_rs_path" 2>&1
 }
 
-# Load index
-if ! idx_raw=$(read_seq "$INDEX" plan_index.default_status_values); then
-  first_err=$(printf '%s\n' "$idx_raw" | head -n 1)
-  echo "blocked:index-load-failed: $INDEX: $first_err"
-  exit 1
-fi
+# load_seq <file> <dotted.path> <varname>: a refusal with its affordance when
+# the file will not load or the vocabulary is absent; the sequence otherwise.
+load_seq() {
+  _ls_out="" _ls_rc=0
+  _ls_out=$(read_seq "$1" "$2") || _ls_rc=$?
+  if [ "$_ls_rc" -ne 0 ]; then
+    first_err=$(printf '%s\n' "$_ls_out" | head -n 1)
+    echo "blocked:index-load-failed: $1: $first_err"
+    if [ "$_ls_rc" -eq 2 ]; then
+      _afford "no tillandsias-plan binary resolves (TILLANDSIAS_PLAN_BIN, CARGO_TARGET_DIR, ./target), and it is the only YAML reader this gate trusts; the ledger itself was not read, so nothing says it is corrupt" \
+        "cargo build --release -p tillandsias-plan, or set TILLANDSIAS_PLAN_BIN to a built tillandsias-plan"
+    else
+      _afford "$1 does not parse as YAML, so its vocabulary was never read; this is a syntax error, not a vocabulary divergence" \
+        "fix the YAML at the position above, then confirm with: ${READER:-tillandsias-plan} validate-yaml $1"
+    fi
+    exit 1
+  fi
+  if [ -z "$_ls_out" ]; then
+    # MEASURED (1247-sv4d): yaml-get answers rc=0 and nothing for an absent
+    # key, so two absent vocabularies used to compare equal and print
+    # ok:status-vocab-in-sync. An empty vocabulary is not agreement.
+    echo "blocked:status-vocab-absent: $1: $2"
+    _afford "$1 loads but has no $2, so there is no vocabulary to compare; two absent vocabularies are not in sync" \
+      "add $2 to $1, listing the same statuses as the other file, in the same order"
+    exit 1
+  fi
+  printf -v "$3" '%s' "$_ls_out"
+}
 
-# Load schema
-if ! sch_raw=$(read_seq "$SCHEMA" statuses); then
-  first_err=$(printf '%s\n' "$sch_raw" | head -n 1)
-  echo "blocked:index-load-failed: $SCHEMA: $first_err"
-  exit 1
-fi
+# _only_in "<a words>" "<b words>" -> the words of a that b lacks, space-joined.
+_only_in() {
+  _oi=""
+  for _w in $1; do
+    case " $2 " in (*" $_w "*) ;; (*) _oi="${_oi:+$_oi }$_w" ;; esac
+  done
+  printf '%s' "$_oi"
+}
+
+idx_raw="" sch_raw=""
+load_seq "$INDEX" plan_index.default_status_values idx_raw
+load_seq "$SCHEMA" statuses sch_raw
 
 if [ "$idx_raw" != "$sch_raw" ]; then
   echo "blocked:status-vocab-diverges: $INDEX=($idx_raw) vs $SCHEMA=($sch_raw)"
+  _a="$(_only_in "$idx_raw" "$sch_raw")" _b="$(_only_in "$sch_raw" "$idx_raw")"
+  if [ -z "$_a" ] && [ -z "$_b" ]; then
+    _diff="both list the same statuses, in a different order"
+  else
+    _diff="only in $INDEX: (${_a:-none}); only in $SCHEMA: (${_b:-none})"
+  fi
+  _afford "the plan tools validate a row's status against one vocabulary and the ledger defaults against the other, so a status valid in one is refused by the other; $_diff" \
+    "make $INDEX plan_index.default_status_values and $SCHEMA statuses list the same statuses in the same order, in one commit"
   exit 1
 fi
 

@@ -6400,7 +6400,9 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Litmus steps-can-fail check passed"
 
     _step "Checking plan fragments use keys the fold reads (944-vim8)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-keys-are-read.sh" 2>&1; then
+    # 1247-sv4d: ported to scripts/lua (the shell-to-lua carried obligation);
+    # the verdict grammar is unchanged.
+    if ! _run_lua_decider "scripts/lua/check-fragment-keys-are-read.lua" 2>&1; then
         _error "a plan/index.d/ fragment uses a top-level key the fold discards (944-vim8) — see the verdict line above"
         exit 1
     fi
