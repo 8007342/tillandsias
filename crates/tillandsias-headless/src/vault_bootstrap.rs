@@ -3891,10 +3891,6 @@ pub fn clear_vault_store_and_fallbacks() -> (Vec<String>, Vec<String>) {
     (cleared, failed)
 }
 
-/// A missing entry is CLEARED, not failed — the post-condition is absence, and
-/// an already-absent item satisfies it. `Ok(true)` = deleted, `Ok(false)` =
-/// already absent; any other error is a real failure and passes through.
-#[cfg(target_os = "linux")]
 /// The ONE place a keyring entry is made (1118-fqfk). Under `cargo test` the
 /// process uses the keyring crate's in-memory mock, so no test can read,
 /// write or delete the operator's real credential store: a first run of slice
@@ -3912,6 +3908,10 @@ fn keyring_entry(user: &str) -> keyring::Result<Entry> {
     Entry::new(KEYCHAIN_SERVICE, user)
 }
 
+/// A missing entry is CLEARED, not failed — the post-condition is absence, and
+/// an already-absent item satisfies it. `Ok(true)` = deleted, `Ok(false)` =
+/// already absent; any other error is a real failure and passes through.
+#[cfg(target_os = "linux")]
 fn classify_keyring_delete(res: Result<(), keyring::Error>) -> Result<bool, keyring::Error> {
     match res {
         Ok(()) => Ok(true),
