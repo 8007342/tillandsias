@@ -1295,6 +1295,11 @@ fn certificate_args(
 /// router actually serves for this project.
 pub(crate) const DEV_SERVICES: &[&str] = &["flutter"];
 
+/// The auth-gated services a project's preview leaf also names (order
+/// 1802-9xix): OpenCode Web, so its app window reaches it over the router's
+/// TLS listener from the confined window network, as a preview is reached.
+pub(crate) const AUTH_SERVICES: &[&str] = &["opencode"];
+
 /// Every host the router serves over TLS for `project`: `www` and each dev
 /// service. The ONE list: the leaf's subjectAltName and the WebKit window's
 /// host map both read it (order 1725-wkfl), so a new dev service cannot be
@@ -1302,6 +1307,7 @@ pub(crate) const DEV_SERVICES: &[&str] = &["flutter"];
 pub(crate) fn preview_hosts(project: &str) -> Vec<String> {
     std::iter::once("www")
         .chain(DEV_SERVICES.iter().copied())
+        .chain(AUTH_SERVICES.iter().copied())
         .map(|service| format!("{}.localhost", subdomain(service, project)))
         .collect()
 }
@@ -1367,6 +1373,15 @@ fn prepare_tls(project: &str, ca: &Path) -> Result<(), String> {
             .map_err(|_| "router_not_ready: TLS port publication failed")?;
     }
     Ok(())
+}
+
+/// 1802-9xix: make sure `project`'s preview leaf exists and is in date, so the
+/// router can serve its TLS sites (the OpenCode Web route among them) before
+/// any preview was published. Signed by the preview CA, which the app window
+/// pins.
+pub(crate) fn ensure_preview_leaf(project: &str) -> Result<(), String> {
+    let preview = crate::preview_ca::ensure(0)?;
+    prepare_tls(project, &preview)
 }
 
 fn ensure_router(project: &str, debug: bool) -> Result<PathBuf, String> {
@@ -3734,7 +3749,9 @@ mod tests {
         );
         assert_eq!(
             preview_san("macron.dev"),
-            "DNS:www.macron.dev.localhost,DNS:flutter.macron.dev.localhost"
+            // 1802-9xix: plus the auth-gated OpenCode Web site.
+            "DNS:www.macron.dev.localhost,DNS:flutter.macron.dev.localhost,\
+             DNS:opencode.macron.dev.localhost"
         );
         assert!(
             !preview_san("proj").contains('*'),
@@ -3762,12 +3779,16 @@ mod tests {
             != [
                 "www.devxsd-gamejam.localhost",
                 "flutter.devxsd-gamejam.localhost",
+                "opencode.devxsd-gamejam.localhost",
             ]
         {
             misses.push(format!("preview_hosts: {hosts:?}"));
         }
         let san = preview_san(project);
-        if san != "DNS:www.devxsd-gamejam.localhost,DNS:flutter.devxsd-gamejam.localhost" {
+        if san
+            != "DNS:www.devxsd-gamejam.localhost,DNS:flutter.devxsd-gamejam.localhost,\
+                DNS:opencode.devxsd-gamejam.localhost"
+        {
             misses.push(format!("leaf SAN: {san}"));
         }
         let rules = crate::browser_open::host_resolver_rules(project);
