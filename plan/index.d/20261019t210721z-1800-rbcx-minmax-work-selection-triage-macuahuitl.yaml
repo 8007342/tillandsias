@@ -1,0 +1,226 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl 2026-10-19 (linux-macuahuitl-claude-20261019t210017z) from the
+# operator's plan-triage direction; the triage is plan/issues/plan-triage-minmax-2026-10-19.md
+# and the rule is methodology/work-selection.yaml (both land with this fragment, work/1800-rbcx).
+packets:
+  - packet_id: minmax-work-selection-direction-score-randomization-and-due-diligence-follow-up-umbrella
+    order: 1800-rbcx
+    status: ready
+    kind: milestone
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [methodology, plan-tool, selection, triage]
+    estimated_hours: 1
+    title: |
+      MinMax work selection: direction, a value/effort score the plan tool computes, a seeded explore slot, and due-diligence follow-ups so unpopular work is dispositioned, never abandoned
+    context: |
+      Operator direction 2026-10-19: triage the order of ./plan, regroup by overlapping requirements, add the missing MinMax step to work selection with randomization and due-diligence follow-ups. The triage (plan/issues/plan-triage-minmax-2026-10-19.md) measured: plan_next ranks priority-first while select-work-batch.sh ranks epics by minimax and the two share no row; 390 of 899 open rows carry no release_target; forgotten returns 829 of 853 ready rows; 11 draft PRs and 38 unmerged work refs carry unlanded code. The rule is methodology/work-selection.yaml; the children deliver the tooling and the one-time cleanup.
+    exit_criteria:
+      - 'methodology/work-selection.yaml is registered in methodology/catalog.yaml and methodology.yaml entrypoints and parses'
+      - 'every child row (1800-kbfe, 1800-jybu, 1800-qkst, 1800-xagc, 1800-4yat) is closed with evidence'
+    unscoreable: "a milestone row: closes when its children close"
+    depends_on: [plan-tool-score-computes-the-minmax-packet-score-and-next-select-rows-and-the-batch-selector-rank-by-it, direction-block-in-loop-status-folded-like-active-release-and-direction-weight-on-the-projection, forgotten-diligence-prints-the-six-follow-up-triggers-and-the-stale-rows-carried-backlog-counter, execute-the-2026-10-19-regroup-merge-and-outgrown-dispositions-as-events, disposition-the-2026-10-19-orphans-draft-prs-unmerged-work-refs-stale-blocks-and-lease-less-in-progress-rows]
+    related: [718-jqt5, 606-xu52, 625-jd5f, 1570-k5yt]
+    next_action: >
+      Operator answers the three questions at the end of the triage note (DIRECTION order, stale-rows stage, orphan-draft default); then the children drain in order kbfe, jybu, qkst, with xagc and 4yat claimable by any host now.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    provenance: |
+      Filed by macuahuitl on 2026-10-19 while writing the triage; the measurements are from the folded ledger at linux-next 4e4fd5925.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:07:21Z"
+        host: macuahuitl
+        summary: |-
+          Umbrella for the MinMax selection rule and its tooling; methodology and triage note land on work/1800-rbcx.
+
+  - packet_id: plan-tool-score-computes-the-minmax-packet-score-and-next-select-rows-and-the-batch-selector-rank-by-it
+    order: 1800-kbfe
+    status: ready
+    kind: implementation
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [rust, plan-tool, selection, lua]
+    estimated_hours: 8
+    owned_files:
+      - crates/tillandsias-plan/src/answer.rs
+      - crates/tillandsias-plan/src/main.rs
+      - scripts/select-work-batch.sh
+    title: |
+      tillandsias-plan score computes the MinMax packet score with its inputs printed, and next, select-rows and select-work-batch.sh rank by it, so the two selection surfaces agree and a batch carries one seeded explore slot
+    context: |
+      methodology/work-selection.yaml -> minmax_score and randomization. Today next_ranking_key in answer.rs ranks (priority, release-targeted, order) and select-work-batch.sh scores epics by 2*urgency + 1.5*blocking + neglect in awk; neither reads size, estimated_hours, risk tags or a direction weight, and the same ledger yields disjoint top-fives from the two (measured 2026-10-19, triage note section 1). One definition in the library, two callers — the forgotten.rs lesson.
+    exit_criteria:
+      - 'tillandsias-plan score <order> prints one line score=<f> value=<v> effort=<e> direction=<d> urgency=<u> risk=<r> blocking=<b> size=<S|M|L|est|unknown> for any open row, and score with no argument prints every claimable row in descending score as a total order'
+      - 'tillandsias-plan next and select-work-batch.sh linux, run on the same folded ledger, name the same top row inside the chosen epic, with the epic score equal to the MAX packet score; a fixture holds a ledger where priority-first and minmax disagree and asserts next follows minmax'
+      - 'a batch of budget >= 3 prints explore=<packet_id> drawn score-weighted from below the top budget rows of the chosen epic from the printed seed; the same seed and ledger reproduce the same explore pick, and a budget of 2 prints no explore'
+      - 'rows missing size and estimated_hours score effort 5 and the triage line counts them as effort_unscored=<n>'
+    depends_on: []
+    unscoreable: "unpinnable-until-the-guard-exists: the fixture is scripts/test-minmax-score-agreement.sh, written in the same commit as score"
+    related: [606-xu52, 630-6hyc, 1437-vdz5]
+    next_action: >
+      Read next_ranking_key and the awk epic scorer in select-work-batch.sh; add minmax_score to the library beside priority_rank, reading direction_weight from the DIRECTION fold when 1800-jybu has landed and 0 until then; expose `score`; make next sort by it; have the selector call `select-rows`/`score` instead of recomputing in awk.
+    notes: |
+      size: L
+      implementer_tier: opus
+    provenance: |
+      Filed by macuahuitl on 2026-10-19 from the triage note section 7.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:07:21Z"
+        host: macuahuitl
+        summary: |-
+          The score has one definition in the plan tool; next and the batch selector are projections of it.
+
+  - packet_id: direction-block-in-loop-status-folded-like-active-release-and-direction-weight-on-the-projection
+    order: 1800-jybu
+    status: ready
+    kind: implementation
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [rust, plan-tool, methodology, direction]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-plan/src/answer.rs
+      - plan/loop_status.md
+    title: |
+      A DIRECTION block in plan/loop_status.md, folded like ACTIVE RELEASE, maps every milestone to an ordered user-visible outcome, and the JSON projection carries direction_weight per packet
+    context: |
+      methodology/work-selection.yaml -> direction. The operator's words: "we've been focusing on development velocity and forgot about development direction". No surface today orders milestones by the outcome they serve; priority is a filing-day histogram (437 p2, 187 p1). The triage note section 5 proposes seven outcomes; the operator confirms or reorders them, and the first block is filed from the answer. Milestones under no outcome score 0 and are the regroup sweep's first target.
+    exit_criteria:
+      - 'plan/loop_status.md carries exactly one ## DIRECTION heading with ordered bullets, each naming the milestones it covers; the fold refuses two headings or a milestone under two outcomes with a typed refusal, the way the ACTIVE RELEASE guard does'
+      - 'tillandsias-plan query --json carries direction_weight on every packet (N for the first outcome down to 1, 0 when unmapped) and plan_answer "what is the current Direction?" answers from the block with a citation'
+      - 'tillandsias-plan score prints direction=<d> from the block for a mapped milestone and direction=0 unmapped=<milestone> otherwise'
+    depends_on: []
+    unscoreable: "unpinnable-until-the-guard-exists: the fixture is scripts/test-direction-block-fold.sh, written in the same commit as the fold"
+    related: [625-jd5f]
+    next_action: >
+      Get the operator's answer to triage question 1; write the block; extend the ACTIVE RELEASE reader to parse the sibling heading; add direction_weight to the projection; wire the plan_answer alias.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+    provenance: |
+      Filed by macuahuitl on 2026-10-19 from the triage note section 5.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:07:21Z"
+        host: macuahuitl
+        summary: |-
+          Direction is an ordered list of outcomes the operator edits once; the fold turns it into a weight.
+
+  - packet_id: forgotten-diligence-prints-the-six-follow-up-triggers-and-the-stale-rows-carried-backlog-counter
+    order: 1800-qkst
+    status: ready
+    kind: implementation
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [rust, plan-tool, lua, coordination, due-diligence]
+    estimated_hours: 6
+    owned_files:
+      - crates/tillandsias-plan/src/forgotten.rs
+      - crates/tillandsias-plan/src/main.rs
+      - skills/coordinate-multihost-work/SKILL.md
+    title: |
+      tillandsias-plan forgotten --diligence prints the due-diligence sweep set with one of six triggers per row, a stale-rows carried backlog counter prints on --check, and the coordinator dispositions the top five weekly
+    context: |
+      methodology/work-selection.yaml -> due_diligence_followup. forgotten (718-jqt5) returns 829 of 853 ready rows and nothing is obliged to read it. The triage found 11 stale draft PRs, 38 unmerged work refs (31 with code), 17 lease-less in_progress rows, 2 blocks whose blocker is already closed — none surfaced by any tool. Triggers: stale-in-progress (14d no event), stale-block (every blocker closed), orphan-ref (unmerged origin/work ref with non-plan commits, 14d, row not in_progress), orphan-draft (draft PR 14d open, 7d no commit), forgotten-leaf (ready, eventless, zero dependents, 60d), explore-twice. The counter follows convergence.yaml -> carried_obligations at the advisory stage.
+    exit_criteria:
+      - 'tillandsias-plan forgotten --diligence prints one line per row: diligence:<trigger>:<order>:<packet_id>:<detail> in a total order, or diligence:clean when empty, and a fixture ledger with one row per trigger prints exactly six lines'
+      - 'the stale-block trigger fires on a fixture where the blocker is completed and the row is still blocked, and on the live ledger names 1384-aixy and 689-zwzm until they are dispositioned'
+      - './build.sh --check prints carried:stale-rows:<n> with a floor that only descends, following the carried_obligations table, at the advisory stage'
+      - 'skills/coordinate-multihost-work/SKILL.md has a weekly step that runs the sweep and records five dispositions or the plain asks it handed to peers, and the first run is in a loop-status entry'
+    depends_on: []
+    unscoreable: "unpinnable-until-the-guard-exists: the fixture is scripts/test-forgotten-diligence-triggers.sh, written in the same commit as the sweep"
+    related: [718-jqt5, 1570-k5yt, 1367-emjg]
+    next_action: >
+      Extend forgotten_sort's row type with a trigger; read drafts and refs through gh and git the way scripts/check-landed-but-open.sh does; register the counter in the carried backlog table; add the coordinator step.
+    notes: |
+      size: L
+      implementer_tier: opus
+    provenance: |
+      Filed by macuahuitl on 2026-10-19 from the triage note sections 4 and 7.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:07:21Z"
+        host: macuahuitl
+        summary: |-
+          A projection nobody must read is not a follow-up; the sweep names triggers and the coordinator owes five dispositions a week.
+
+  - packet_id: execute-the-2026-10-19-regroup-merge-and-outgrown-dispositions-as-events
+    order: 1800-xagc
+    status: ready
+    kind: task
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [plan, ledger, triage]
+    estimated_hours: 4
+    title: |
+      Execute the 2026-10-19 regroup, merge and outgrown lists as one event per row, mint a milestone for the 47 ungrouped web-preview rows and the 1490 hot-upgrade family, and split fail-loud-diagnosis-milestone by sub-requirement
+    context: |
+      plan/issues/plan-triage-minmax-2026-10-19.md sections 2 and 3 list ~20 merge candidates and ~30 outgrown rows, and section 2 names five ungrouped hot spots. Nothing was closed by the triage itself; each disposition is one event by the executing host after reading both rows, per methodology/work-selection.yaml -> regrouping.duplicates and due_diligence_followup.rule. Never bulk-close; a merge carries any exit criterion the survivor lacked as a correction fragment.
+    exit_criteria:
+      - 'every pair in the triage note section 3 merge list has either a merge-into:<order> event on the later row or a one-line note in the loop-status entry saying why the pair is not a duplicate'
+      - 'every row in the outgrown list has a close:superseded-by:<order> event or the same one-line keep note'
+      - 'the web-preview/browser rows (1552-*, 1656-*, 1657-*, 1662-*, 1697-*, 1699-*, 1700-*, 1726-*, 1766-*, 1767-*) and the 1490-* rows each carry a release_target, and tillandsias-plan query --status ready --json counts fewer than 300 rows with release_target null'
+    unscoreable: "a ledger task: the evidence is the events it writes and the null-release_target count before and after"
+    depends_on: []
+    related: [625-jd5f]
+    next_action: >
+      Start with the merges whose survivor is in the top 15 (1118-fqfk, 1490-pguh, 1002-kav4, 1233-jqp4); then mint the two milestones; then the outgrown list; then the fail-loud split.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+    provenance: |
+      Filed by macuahuitl on 2026-10-19 from the triage note sections 2 and 3.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:07:21Z"
+        host: macuahuitl
+        summary: |-
+          The triage lists; this row executes them one event at a time.
+
+  - packet_id: disposition-the-2026-10-19-orphans-draft-prs-unmerged-work-refs-stale-blocks-and-lease-less-in-progress-rows
+    order: 1800-4yat
+    status: ready
+    kind: task
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [plan, git, github, triage, due-diligence]
+    estimated_hours: 6
+    title: |
+      Disposition the 2026-10-19 orphans: 11 stale draft PRs, 38 unmerged work refs, the two stale blocks and the 17 lease-less in_progress rows, each with a stated reason
+    context: |
+      plan/issues/plan-triage-minmax-2026-10-19.md section 4. Code already written and rotting is the cheapest value in the ledger: PR #215 (+3201 lines, 1548-cii8/1506-32k5), #386 (16 commits, 1637-cnxq), #367 (+1452, 472), #196 (1375-amye), #364 (539), the 1553-* trio with no ledger packet, and refs with no packet at all (437-forge-src-tmpfs-topology, 1367-lua-predicate-shims, retire-ruby-lua). Ten refs have a closed row but never landed: each is a closure claimed without its code or a ref to delete, and which one must be read, not assumed ("integrated is proven by ancestry"). 1384-aixy and 689-zwzm are blocked on closed blockers. Dispositions per methodology/work-selection.yaml -> due_diligence_followup.rule: advance (rebase and open non-draft), merge-into, regroup, or close:<reason>; a branch is deleted only after its row says why.
+    exit_criteria:
+      - 'each of the 12 draft PRs is either non-draft and in the land queue, or closed with a comment naming the ledger event that dispositions its row'
+      - 'each of the 38 unmerged origin/work refs is either landed, or deleted with a close/merge event on its row (or a filed row where none existed), and the ten closed-row refs each have a verdict line: code-landed-elsewhere:<sha> or closure-without-code:<order> reopened'
+      - '1384-aixy and 689-zwzm are unblocked (status ready) or their block names a live blocker; every in_progress row carries a lease or is returned to ready with a progress event'
+    unscoreable: "a disposition task: the evidence is the PR states, the ref list, and the events, counted before and after"
+    depends_on: []
+    related: [1367-emjg, 1034-whsp]
+    next_action: >
+      Run gh pr list --draft and the ancestry loop from the triage note; take the largest unlanded diffs first (#215, #386, #367): ./build.sh --preflight on each rebased onto origin/linux-next, open it non-draft if green, else write the close/merge event with what is left.
+    notes: |
+      size: L
+      implementer_tier: sonnet
+    provenance: |
+      Filed by macuahuitl on 2026-10-19 from the triage note section 4; the ancestry loop and gh list were run on linux-next 4e4fd5925.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:07:21Z"
+        host: macuahuitl
+        summary: |-
+          Unpopular is not wrong: every orphan gets one of four dispositions with a reason, none gets silence.
