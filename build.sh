@@ -151,7 +151,8 @@ if [[ -z "${TILLANDSIAS_NO_SCCACHE:-}" && -z "${RUSTC_WRAPPER:-}" ]]; then
     _sccache_bin="$(command -v sccache 2>/dev/null || true)"
 fi
 if [[ -n "$_sccache_bin" ]]; then
-    export RUSTC_WRAPPER="$_sccache_bin"
+    export TILLANDSIAS_SCCACHE_BIN="$_sccache_bin"
+    export RUSTC_WRAPPER="$SCRIPT_DIR/scripts/sccache-wrapper.sh"
     export SCCACHE_DIR="${SCCACHE_DIR:-$HOME/.cache/tillandsias/sccache}"
     export SCCACHE_CACHE_SIZE="${SCCACHE_CACHE_SIZE:-20G}"
     echo "sccache: on wrapper=$_sccache_bin dir=$SCCACHE_DIR size=$SCCACHE_CACHE_SIZE" >&2
