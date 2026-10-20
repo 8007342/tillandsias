@@ -71,7 +71,10 @@ local function run(argv, stdin, extra)
     local e = { PATH = "/usr/bin:/bin", HOME = HOME, TMPDIR = W, TILLANDSIAS_HOST_KIND = "forge",
         TILLANDSIAS_POLICY_AUDIT_LOG = W .. "/audit.jsonl",
         -- the runner passes its declared @env through; none may name a binary here
-        TILLANDSIAS_PLAN_BIN = "", TILLANDSIAS_SCRIPT_RUNNER_BIN = "" }
+        TILLANDSIAS_PLAN_BIN = "", TILLANDSIAS_SCRIPT_RUNNER_BIN = "",
+        -- shared-target (1807-shtg) exports CARGO_TARGET_DIR at the main
+        -- checkout's built target; the probe honours it, so it must be blank
+        CARGO_TARGET_DIR = "" }
     for k, v in pairs(extra or {}) do e[k] = v end
     local r = proc.run({ argv = argv, stdin = stdin, env = e, cwd = HOME, timeout_ms = 60000 })
     return r.code or -1, r.stdout or "", r.stderr or ""
