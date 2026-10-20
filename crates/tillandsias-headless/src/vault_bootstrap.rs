@@ -1100,22 +1100,47 @@ fn wipe_unopenable_store(debug: bool) -> Result<(), String> {
     if debug {
         eprintln!("[tillandsias-vault] wiping {}", vault_dir.display());
     }
-    fs::remove_dir_all(&vault_dir)
-        .or_else(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                Ok(())
-            } else {
-                Err(e)
-            }
-        })
-        .map_err(|e| {
-            format!(
-                "could not wipe the unopenable store {}: {e}",
-                vault_dir.display()
-            )
-        })?;
+    remove_store_dir(&vault_dir).map_err(|e| {
+        format!(
+            "could not wipe the unopenable store {}: {e}",
+            vault_dir.display()
+        )
+    })?;
     eprintln!("{SIGN_IN_AGAIN_LINE}");
     Ok(())
+}
+
+/// Remove a Vault store directory. On a rootless host its files belong to the
+/// container's mapped uid (`:U` on the volume), so the host user's own
+/// `remove_dir_all` is refused with EACCES; the removal then runs inside
+/// podman's user namespace, where that uid is the caller's. Measured on
+/// lenovinha 2026-10-20 (1118-fqfk live wipe arm): "Permission denied (os
+/// error 13)" on the store's `audit` and `core` directories.
+fn remove_store_dir(dir: &std::path::Path) -> Result<(), String> {
+    match fs::remove_dir_all(dir) {
+        Ok(()) => return Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) if e.kind() != std::io::ErrorKind::PermissionDenied => return Err(e.to_string()),
+        Err(_) => {}
+    }
+    let out = podman_cmd_sync()
+        .arg("unshare")
+        .arg("rm")
+        .arg("-rf")
+        .arg(dir)
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
+        .map_err(|e| format!("podman unshare rm: {e}"))?;
+    if out.status.success() && !dir.exists() {
+        Ok(())
+    } else {
+        Err(format!(
+            "podman unshare rm -rf exited {}: {}",
+            out.status,
+            String::from_utf8_lossy(&out.stderr).trim()
+        ))
+    }
 }
 
 fn wait_for_vault_api_ready(
@@ -4796,7 +4821,14 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
                 partial_init_wipe_reason(last, *waited)
             );
         }
-        let _ = std::fs::remove_dir_all(vault_dir);
+        // 1118-fqfk: the store's files belong to the container's mapped uid on
+        // a rootless host; a plain remove_dir_all was refused and ignored here.
+        if let Err(e) = remove_store_dir(&vault_dir) {
+            eprintln!(
+                "[tillandsias-vault] could not wipe {}: {e}",
+                vault_dir.display()
+            );
+        }
     } else if debug && vault_data_volume_exists() {
         eprintln!(
             "[tillandsias-vault] preserving existing data volume (Shamir share present in keychain)"
@@ -9993,11 +10025,13 @@ mod tests {
             "/src/vault_bootstrap.rs"
         ));
         let start = src.find("if is_partial_init {").expect("guard");
-        let guard = &src[start..start + 900];
+        let guard = &src[start..start + 1500];
         let print = guard
             .find("partial_init_wipe_line(&vault_dir)")
             .expect("the guard prints the line");
-        let wipe = guard.find("remove_dir_all(vault_dir)").expect("the wipe");
+        let wipe = guard
+            .find("remove_store_dir(&vault_dir)")
+            .expect("the wipe");
         assert!(print < wipe, "announce before wiping");
         assert!(
             !guard[..print].contains("if debug"),
