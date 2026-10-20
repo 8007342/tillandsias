@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl, 2026-10-20. On 2026-10-19 the operator installed two
+# NVMe drives: mdadm RAID0 (md127), XFS, mounted /srv/fastbuild (931 GB,
+# nofail); the checkout's ./target is bind-mounted from
+# /srv/fastbuild/tillandsias/target so every target/ path is unchanged. This
+# row covers that build root, the placement report in build.sh (delivered by
+# this ref) and the slices that follow. Code is cited by symbol, never by line.
+packets:
+  - packet_id: macuahuitls-build-root-lives-on-the-nvme-raid0-and-build-sh-reports-whether-target-is-on-the-fast-build-root-then-the-cargo-caches-move-there-and-it-is-offered-as-the-fleet-build-servers-work-dir
+    order: 1802-fbld
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    parent: 1800-p47s
+    pickup_role: any
+    capability_tags: [build, storage, fleet, lua, macuahuitl]
+    estimated_hours: 4
+    size: M
+    related: [1800-6pku, 1287-w9s4, 1800-p47s]
+    owned_files:
+      - build.sh
+      - scripts/lua/build-root-placement.lua
+      - scripts/lua/test-build-root-placement.lua
+      - scripts/gate-steps.d/901-1802-fbld.step
+    title: |
+      macuahuitl's build root is an NVMe RAID0 (xfs, /srv/fastbuild) with target/ bind-mounted onto it; `build.sh` prints one `build-root: target=<path> (<fs>, <raid>, <free> free) fast=yes|no` line decided by scripts/lua/build-root-placement.lua from TILLANDSIAS_FAST_BUILD_ROOT, and warns with the bind-mount fstab remedy when the root is mounted but target/ is on another device; it never refuses and never changes a path
+    context: |
+      The main btrfs disk sits at 96%. The RAID gives the fleet build
+      server (1800-6pku, 1800-p47s) a fast work dir. Slice 1 (this ref):
+      placement awareness. "Fast" is the root being a mountpoint AND
+      target/ resolving to the same device (stat device comparison, with
+      findmnt for fs/raid detail). Hosts with no fast root print fast=no
+      and nothing else. Measured on macuahuitl for the real checkout:
+      `build-root: target=/home/tlatoani/claudia/tillandsias/target (xfs,
+      raid0 md127, 833G free) fast=yes`. A worktree under target/work
+      whose own target/ is not the bind mount correctly reports fast=no
+      with the warning.
+    exit_criteria:
+      - "tillandsias-plan script run scripts/lua/test-build-root-placement.lua: a fake layout with target/ on another device than the fast root prints fast=no and the bind-mount warning, a matching one prints fast=yes, no fast root prints fast=no silently; pre-fix result: FAILS (violation:build-root-placement-fixture:no-subject, no placement decider exists)"
+      - "./build.sh on macuahuitl prints exactly one build-root: line; pre-fix result: FAILS (no placement line exists)"
+    verifiable_closure: "tillandsias-plan script run scripts/lua/test-build-root-placement.lua (red before the decider exists)"
+    unscoreable: "the later slices in next_action need the operator's host and measured timings; closure of this row is the placement slice plus the cache move recorded as events"
+    next_action: >
+      Placement slice delivered by work/1802-fbld. LEFT: (1) move the
+      CARGO_HOME registry and git caches and the toolbox's cargo cache
+      onto /srv/fastbuild, with the placement line extended to name them;
+      (2) offer /srv/fastbuild as the fleet build server's work dir for
+      the remote builder 1800-6pku and the LAN sccache 1287-w9s4.
+    events:
+      - type: filed
+        ts: "2026-10-20T02:05:00Z"
+        host: macuahuitl
+        summary: |-
+          RAID0 build root, placement report in build.sh (Lua decider and fixture), next slices named.
