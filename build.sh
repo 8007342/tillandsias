@@ -1399,6 +1399,29 @@ if [[ "$FLAG_CHECK$FLAG_TEST$FLAG_CI$FLAG_CI_FULL$FLAG_RELEASE$FLAG_INSTALL" == 
 fi
 # END-GATE-TOUCH
 
+# ORDER 1802-fbld — BUILD PLACEMENT REPORT. One line saying whether target/ is
+# on the host's fast build root (TILLANDSIAS_FAST_BUILD_ROOT, default
+# /srv/fastbuild), warning with the bind-mount remedy when the root is mounted
+# and target/ is not. Informational only: no path changes, never refuses. The
+# logic is scripts/lua/build-root-placement.lua; a host with no plan binary
+# that runs `script run` prints nothing rather than guess.
+# BEGIN-BUILD-ROOT-PLACEMENT
+_report_build_root() {
+    local _br_bin=""
+    _br_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _br_bin=""
+    case "$_br_bin" in ./*) _br_bin="$SCRIPT_DIR/${_br_bin#./}" ;; esac
+    [ -n "$_br_bin" ] || return 0
+    grep -qx script <<<"$("$_br_bin" capabilities 2>/dev/null)" || return 0
+    local _br_out _br_line
+    _br_out="$(cd "$SCRIPT_DIR" && TILLANDSIAS_TIMING_LOG=/dev/null "$_br_bin" script run scripts/lua/build-root-placement.lua -- 2>&1)" || true
+    while IFS= read -r _br_line; do
+        # the runner requires an ok: prefix on the verdict line; the report does not carry it
+        echo "${_br_line#ok:}"
+    done <<<"$_br_out"
+}
+if [[ "$FLAG_PREFLIGHT" != true ]]; then _report_build_root; fi
+# END-BUILD-ROOT-PLACEMENT
+
 # ORDER 1305-udgs — `./build.sh --preflight`: every guard that can refuse a push,
 # before the SHA, in seconds.
 #
