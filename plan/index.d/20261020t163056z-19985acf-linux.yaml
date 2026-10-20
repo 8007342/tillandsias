@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: opencode-web-launched-from-the-tray-loads-in-the-confined-app-window-on-every-platform
+    event:
+      type: list-replace
+      ts: "2026-10-20T16:30:56Z"
+      agent_id: linux-lenovinha-claude-20261020t163056z
+      host: linux
+      field: exit_criteria
+      items:
+        - "RED FIRST: from a cold start, the tray-path launch (--opencode-web on a local and a cloud project) opens a window whose page is the OpenCode app, not a Chromium error page (fails today with the proxy-settings page)"
+        - "the OpenCode Web window runs on the same confined per-window network as browser.open (--internal, forwarder aliased router, host-resolver-rules mapping only *.<label>.localhost), never --network host or pasta"
+        - "the router serves the OpenCode route over TLS on its preview listener (https://opencode.<label>.localhost, leaf cert for the label), and the OTP session flow (spec:opencode-web-session-otp) runs over it"
+        - "the window lands on the checked-out project's session view (/<base64url of /home/forge/src/<project>>/session), never on OpenCode's add-project page; the router follows the login form's next field only when it is a plain same-origin path, else lands on /"
+        - "the router sidecar's unix-only unit tests run in local CI (cargo test -p tillandsias-router-sidecar --features unix-only on unix hosts), and that line fails on the pre-fix SameSite=Strict assertion"
+        - "DONE means the window loads the project session on Linux, macOS (vz) and Windows (WSL); each platform host records its run on this row. A Mac or Windows follow-up row is filed only where that platform's router or forwarder path differs, with a capability-named pickup (not a host name)"
+      summary: |
+        Coordinator 2026-10-20: cross-platform done-definition written into the exit criteria; project landing and the sidecar gate line added as criteria.
