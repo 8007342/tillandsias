@@ -4155,6 +4155,7 @@ fn unseal_key_file_path() -> PathBuf {
 
 /// True when `path` is on tmpfs. Off Linux nothing can be asked, so the
 /// caller's runtime dir is trusted.
+#[cfg(unix)]
 fn path_is_tmpfs(path: &std::path::Path) -> bool {
     #[cfg(target_os = "linux")]
     {
