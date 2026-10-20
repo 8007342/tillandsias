@@ -1413,7 +1413,7 @@ _report_build_root() {
     [ -n "$_br_bin" ] || return 0
     grep -qx script <<<"$("$_br_bin" capabilities 2>/dev/null)" || return 0
     local _br_out _br_line
-    _br_out="$(cd "$SCRIPT_DIR" && "$_br_bin" script run scripts/lua/build-root-placement.lua -- 2>&1)" || true
+    _br_out="$(cd "$SCRIPT_DIR" && TILLANDSIAS_TIMING_LOG=/dev/null "$_br_bin" script run scripts/lua/build-root-placement.lua -- 2>&1)" || true
     while IFS= read -r _br_line; do
         # the runner requires an ok: prefix on the verdict line; the report does not carry it
         echo "${_br_line#ok:}"

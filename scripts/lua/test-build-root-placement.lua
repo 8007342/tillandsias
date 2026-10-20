@@ -22,10 +22,19 @@ local function arm(name, cond, got)
         failed[#failed + 1] = name
     end
 end
+-- 1204-3s2s / 1096-p3tn: a hermetic fixture must not reach the host's metrics.
+-- Every TILLANDSIAS_*_LOG the subject could write points into this scratch dir.
+local SCRATCH = "target/plan-scratch/build-root-placement-" .. time.iso_utc() .. "-" .. tostring(math.random(100000, 999999))
+fs.mkdir(SCRATCH)
+local LOGENV = {
+    TILLANDSIAS_TIMING_LOG = SCRATCH .. "/timing.jsonl",
+    TILLANDSIAS_METRICS_LOG = SCRATCH .. "/metrics.jsonl",
+    TILLANDSIAS_HEALTH_LOG = SCRATCH .. "/health.jsonl",
+}
 local function placement(args)
     local argv = { PLAN, "script", "run", SUBJECT, "--" }
     for _, a in ipairs(args) do argv[#argv + 1] = a end
-    local r = proc.run({ argv = argv, timeout_ms = 60000 })
+    local r = proc.run({ argv = argv, timeout_ms = 60000, env = LOGENV })
     return (r.stdout or "") .. (r.stderr or ""), r.code
 end
 local o = placement({ "--seam-mounted", "yes", "--seam-root-dev", "64775", "--seam-target-dev", "64775", "--seam-info", "xfs, raid0 md127, 913G free" })
@@ -40,6 +49,7 @@ arm("3 ABSENT no fast root is fast=no and silent",
 o = placement({})
 local _, n = o:gsub("build%-root: target=", "")
 arm("4 LIVE this host prints exactly one placement line", n == 1, o)
+proc.run({ argv = { "rm", "-rf", SCRATCH }, timeout_ms = 30000 })
 if #failed > 0 then
     verdict.emit("violation:build-root-placement-fixture:" .. #failed .. "-failed", 1)
 end
