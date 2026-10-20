@@ -1,0 +1,203 @@
+trace: spec:methodology-accountability, plan/issues/plan-triage-minmax-2026-10-19.md
+
+work_selection:
+  version: v0.1
+  authority: >
+    The Tlatoāni, 2026-10-19: "Triage the order of ./plan. We've been winging
+    a bunch of requirements and might be due some regrouping by overlapping
+    requirements. As per our MinMax approach to picking problems, we might be
+    missing the MinMax step of our work selection in our ./methodology. We've
+    been focusing on development velocity and forgot about development
+    direction. Our methodology might need some thinking about MinMaxing work,
+    with some randomization and Due-Diligence Follow-Ups (no leftover code
+    left behind because it's unpopular)." Umbrella order 1800-rbcx; the
+    triage that measured the gap is plan/issues/plan-triage-minmax-2026-10-19.md.
+  purpose: >
+    The ONE rule for which open packet a host takes next. It sits above the
+    cycle batch (distributed-work.yaml -> cycle_batch_triage) and the flat
+    ranking (`tillandsias-plan next`, 606-xu52) and makes them agree: both
+    are projections of the score defined here, never of priority alone.
+
+  what_already_exists:
+    # Check for the capability before designing its replacement. Three of the
+    # four parts the direction asks for were already written; what was missing
+    # is the glue, the direction term, and anything that OBLIGES a consumer.
+    minimax: >
+      convergence.yaml -> minimax_convergence_strategy: "pick the open
+      obligation with the maximum residual, never chase easy score gains".
+      cycle_batch_triage applies it at EPIC level only (score = 2*urgency +
+      1.5*blocking + neglect) and then orders packets inside the chosen epic
+      by priority. There is no value term, no effort term and no direction
+      term; `tillandsias-plan next` (what peers call "next by rank") does not
+      apply it at all — it ranks (priority, release-targeted, order), which is
+      the exact anti-pattern minimax_convergence_strategy names.
+    randomization: >
+      cycle_batch_triage.entropy: a score-weighted, epsilon-mixed choice
+      among the top-K epics from a printed seed. It spreads hosts across
+      EPICS. Nothing spreads picks across PACKETS inside an epic, so a
+      packet that is never the best in its epic is never taken.
+    forgotten: >
+      `tillandsias-plan forgotten` (718-jqt5): a total order over ready
+      packets by eventlessness, age and dependents. Measured 2026-10-19: 829
+      of 853 ready rows qualify. A projection that returns 97% of the queue
+      is not a filter, and no cadence, skill or gate is obliged to read it.
+    coverage: >
+      cycle_batch_triage says coverage, not a new abstraction, is the fix.
+      Measured 2026-08-09: 116 of 176 ready v0.5 rows ungrouped. Measured
+      2026-10-19: 390 of 899 open rows (43%) carry no release_target, and
+      209 of the grouped rows sit under one milestone
+      (fail-loud-diagnosis-milestone), which the epic selector then treats
+      as one residual.
+
+  direction:
+    rule: >
+      Direction is a SHORT ordered list of user-visible outcomes, declared
+      once by the operator, that every milestone (`release_target`) maps to.
+      It lives in plan/loop_status.md under a `## DIRECTION` heading beside
+      `## ACTIVE RELEASE`, one bullet per outcome, most important first,
+      each bullet naming the milestones that serve it. The fold reads it the
+      way it reads ACTIVE RELEASE; the operator edits it the same way.
+    weight: >
+      direction_weight(packet) = position of its outcome from the bottom,
+      so the first outcome scores N and the last scores 1. A packet whose
+      milestone appears under no outcome, or that has no milestone, scores
+      0 — it still ranks on the other terms, and the coverage sweep below
+      is what assigns it a milestone. Direction is a weight, not a filter:
+      it never hides work, it orders it.
+    why_a_separate_term: >
+      Priority says how URGENT the filer thought a row was on the day; the
+      ledger carries 437 p2 rows and 187 p1 rows, which is a histogram, not
+      an ordering. Direction says WHICH OUTCOME the row moves. The two are
+      independent: a p1 under an outcome the operator has deprioritised
+      should lose to a p2 under the first outcome, and today it cannot.
+
+  minmax_score:
+    rule: >
+      Every claimable packet gets ONE score, computed by the plan tool from
+      ledger fields only, printed with its inputs wherever it is used:
+
+        value   = direction_weight
+                + urgency            (p0=3 p1=2 p2=1 p3=0; unscored=0, counted)
+                + risk               (+2 security|credential|vault|gate-integrity
+                                      tag or implementer_tier opus; +1
+                                      user-visible-contract: tray|installer|
+                                      onboarding|release tag)
+                + min(blocking, 10)  (downstream dependents, as the selector)
+        effort  = size S=1 | M=3 | L=8; untagged: estimated_hours/2 clamped
+                  to [1,8], else 5 (unknown effort is mid, never free)
+        score   = value / effort
+
+      MinMax: MAXIMUM value per MINIMUM effort, and the epic score is the
+      MAX of its packets' scores, never their mean, so an epic is ranked by
+      its strongest remaining item (the minimax residual) and a swarm of
+      small p2 rows cannot outscore one unresolved p0.
+    inputs_are_fields: >
+      Nothing here is inferred from prose. direction_weight comes from the
+      DIRECTION block; urgency from `priority`; risk from `capability_tags`
+      and `implementer_tier`; blocking from `depends_on` over the fold;
+      effort from `size` or `estimated_hours`. A row missing an input scores
+      conservatively and is REPORTED (`unscored=<n>` on the triage line, as
+      630-6hyc already does for urgency) so the filer fixes the row, never the
+      formula.
+    one_definition: >
+      The score is computed in crates/tillandsias-plan (one function,
+      `minmax_score`, exported as `tillandsias-plan score [<order>]`) and
+      read by `next`, by `select-rows`, and by scripts/select-work-batch.sh.
+      Two copies would drift the way forgotten.rs documents. Until the
+      tooling lands (1800-kbfe), the selector's epic score stands and this
+      section is the rationale a human applies when hand-ranking.
+
+  randomization:
+    rule: >
+      Keep the epic-level entropy of cycle_batch_triage unchanged. Add ONE
+      packet-level exploration slot: in every batch of budget >= 3, the LAST
+      slot is drawn score-weighted from the packets ranked BELOW the top
+      `budget` of the chosen epic, from the same printed seed, and the batch
+      line names it `explore=<packet_id>`. With a budget below 3 there is no
+      slot. A packet that has been the explore pick twice without a
+      disposition event (progress, blocked, closed, regrouped) is excluded
+      from the draw and surfaced by the due-diligence sweep instead.
+    why: >
+      Deterministic top-N ranking starves everything below N forever; the
+      ledger has 853 ready rows and the fleet drains about ten a day. One
+      weighted slot keeps the long tail reachable at a bounded cost (one
+      packet in three or more), stays replayable from the printed seed, and
+      — because the draw is weighted — spends the slot on the next-best
+      work far more often than on noise. The slot is where the operator's
+      "some randomization" lives; it does not get a vote on the top of the
+      batch.
+
+  due_diligence_followup:
+    rule: >
+      Unpopular is not wrong. Work that was started and left — a draft PR,
+      an unmerged work ref with code, a row in_progress with no event, a row
+      blocked on a closed blocker, a forgotten leaf — is DISPOSITIONED on a
+      cadence, never deleted silently and never left to rot. A disposition
+      is one of exactly four events, each with a stated reason:
+        advance      — claimed and worked (the normal path)
+        merge-into:<order>    — the requirement survives in another row
+        regroup:<milestone>   — the row was ungrouped; it now serves an outcome
+        close:<reason>        — superseded-by:<order> | obsolete:<what changed>
+                                | wont-do:<operator ruling>
+      "Nobody wants it" is not one of the reasons.
+    sweep: >
+      `tillandsias-plan forgotten --diligence` (1800-qkst) prints the sweep
+      set in one deterministic order, each line with its trigger:
+        stale-in-progress   in_progress, no event for 14 days
+        stale-block         blocked, every blocker completed or closed
+        orphan-ref          origin/work/<order> unmerged with non-plan commits,
+                            row not in_progress, ref older than 14 days
+        orphan-draft        draft PR open 14 days with no commit in 7
+        forgotten-leaf      ready, eventless, zero dependents, age >= 60 days
+        explore-twice       the randomization exclusion above
+      It runs in the coordinator's hourly pass (coordinate-multihost-work)
+      on a WEEKLY cadence and the pass dispositions the top FIVE, or hands
+      them to a peer as plain asks. A sweep that finds nothing prints
+      `diligence:clean` — silence is never the verdict.
+    tailgate: >
+      Following convergence.yaml -> carried_obligations, the sweep set is a
+      carried backlog named `stale-rows` at the ADVISORY stage: the counter
+      prints on --check and may only descend. A change whose diff touches a
+      sweep row's `owned_files` is DUE at the gentle stage, and pays by
+      dispositioning that row (one event) or carrying
+      `Carried-Waiver: stale-rows <reason>`. Promotion to gentle follows the
+      backlog's own rule (counter measured for a week first). This is the
+      mechanism that stops "leftover code left behind": the next person in
+      that code owes the old row one sentence.
+    what_a_closure_must_prove: >
+      closure_preconditions (distributed-work.yaml) still apply: a close
+      event cites the row that supersedes it or the change that made it
+      obsolete, by order or by SHA, and a close with neither is refused by
+      the same guard that refuses an evidence-free completion (686-7qcm).
+
+  regrouping:
+    rule: >
+      Rows are grouped by the REQUIREMENT they share, and the group is the
+      milestone (`release_target`) — never a new object, per
+      cycle_batch_triage.the_tier_already_exists. A milestone with more
+      than ~60 open rows is not a group (fail-loud-diagnosis-milestone holds
+      209): it is split by the sub-requirement its rows cluster on, and each
+      child milestone maps to a DIRECTION outcome. A milestone under no
+      outcome is the regroup sweep's first target.
+    duplicates: >
+      Two rows are the same requirement when closing one would make the
+      other's exit criteria vacuous. The later-filed row is merged into the
+      earlier one (`merge-into`), carrying any exit criterion the earlier
+      lacked as a correction fragment on the survivor. Never bulk-close:
+      each merge is one event by one host, citing both orders.
+
+  tooling_needed:
+    # Named so the rows that deliver them are checkable against this list.
+    - "1800-kbfe: `tillandsias-plan score` computing minmax_score with printed inputs; `next` and `select-rows` rank by it; select-work-batch.sh reads it for the epic frontier (epic = max packet score) and the explore slot"
+    - "1800-jybu: the DIRECTION block in plan/loop_status.md, folded like ACTIVE RELEASE, with direction_weight exposed on the JSON projection; the first block is filed by the operator from the triage's proposed outcomes"
+    - "1800-qkst: `forgotten --diligence` with the six triggers, the `stale-rows` carried backlog counter, and the weekly coordinator step"
+    - "1800-xagc: the 2026-10-19 regroup/merge actions executed as events (the triage's duplicate and ungrouped lists)"
+    - "1800-4yat: the 2026-10-19 orphan dispositions (draft PRs and unmerged work refs with code)"
+
+  invariants:
+    - priority_is_never_the_whole_rank
+    - every_score_prints_its_inputs
+    - direction_orders_never_hides
+    - randomization_is_seeded_and_printed
+    - no_row_is_closed_without_a_stated_reason
+    - one_score_definition_in_the_plan_tool

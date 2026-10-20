@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yolanda-windows on the coordinator's request (macuahuitl-fedora,
+# 2026-10-20), from 667-kfyn gates 14 and 15.
+packets:
+  - packet_id: land-queue-fixture-arm-9-owns-its-stdin-so-a-gate-started-with-an-open-stdin-does-not-hang-it
+    order: 1809-iexe
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    size: S
+    pickup_role: bash-fixture
+    capability_tags: [bash, fixtures, land-queue, gate]
+    related: [667-kfyn]
+    depends_on: []
+    title: |
+      scripts/test-land-queue.sh ARM 9 gives the queue run its own stdin, so a gate started with an open, never-closing stdin (a detached process, a CI wrapper) does not hang the arm into its 120 s timeout
+    context: |
+      ARM 9's stdin-hungry fake gh reads the stdin the queue run INHERITS from whoever started the gate. With a terminal or a closed stdin that read ends at once; with an open pipe it blocks forever and the arm reports "the queue BLOCKED (timeout 120s)", naming the 2026-09-21 field defect although the queue is correct.
+      MEASURED on yolanda-windows 2026-10-20, in the tillandsias-build distro: `sleep 200 | bash scripts/test-land-queue.sh` gives FAIL ARM 9 / blocked:land-queue:1-failed-of-33; the same run with `</dev/null` gives ok:land-queue:33/33. It redded 667-kfyn gates 14 and 15 (both launched detached, stdin an open pipe) at the same line.
+    exit_criteria:
+      - "`sleep 200 | bash scripts/test-land-queue.sh` reports ok:land-queue:33/33; red today (ARM 9 times out)"
+      - "NEGATIVE CONTROL: with the queue's fd-3 list read reverted to stdin, ARM 9 still goes red under both an open and a closed caller stdin (the arm keeps discriminating the field defect)"
+    verifiable_closure: |
+      litmus:test-land-queue — `sleep 200 | bash scripts/test-land-queue.sh` reports ok:land-queue:33/33 (red today: ARM 9 times out at 120 s).
+    next_action: >
+      Add `</dev/null` to the ARM 9 queue invocation (the out9 timeout block), prove red-first with the sleep-200 repro, run the fd-3 sabotage under both stdins, and land it on its own small work ref.
+    events:
+      - type: filed
+        ts: "2026-10-20T22:23:19Z"
+        host: yolanda-windows
+        summary: |-
+          land-queue ARM 9 hangs when the caller's stdin is an open pipe; reproduced red with sleep 200 | and green with </dev/null.

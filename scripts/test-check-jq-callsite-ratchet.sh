@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # test-check-jq-callsite-ratchet.sh — order 1375-tsfu, the packet's five arms.
+# @trace order:1375-tsfu, order:1247-jq4e (arms 6-8)
 #
 #   1  live tree: `ok:jq-callsites:<n>:floor:<f>`, n equal to `git grep -c`
 #      of the guard's own published pattern, and n <= f
@@ -118,6 +119,63 @@ if grep -qx '1 scripts/two.sh' "$t5/scripts/portability/jq-callsite-floor.txt"; 
     ok "ARM 5: --ratchet never raises a floor"
 else
     bad "ARM 5: --ratchet raised the floor"
+fi
+
+# Arms 6-8 — ORDER 1247-jq4e (1247-amcu slice). Each refusal carries why: and
+# remedy: on stderr beside its unchanged stdout token, and the arm then
+# EXECUTES the remedy and requires the guard's normal verdict (criterion 5).
+has_afford() { grep -q '^  why: ' "$1" && grep -q '^  remedy: ' "$1"; }
+
+# Arm 6 — an unknown argument names the usage; the usage it names runs.
+t6="$(mk_tree arm6)"
+out6="$(bash "$GUARD" --bogus 2>"$scratch/arm6.err")"; rc6=$?
+if [ "$rc6" -eq 3 ] && [ "$out6" = "could-not-run:jq-ratchet:unknown-argument:--bogus" ] &&
+    has_afford "$scratch/arm6.err" && grep -qF -- '[--ratchet] [--root DIR]' "$scratch/arm6.err"; then
+    ok "ARM 6: unknown-argument says why and names the usage"
+else
+    bad "ARM 6: rc=$rc6: $out6 / $(cat "$scratch/arm6.err")"
+fi
+out6b="$(bash "$GUARD" --root "$t6" 2>/dev/null)"; rc6b=$?
+if [ "$rc6b" -eq 0 ] && grep -qx 'ok:jq-callsites:1:floor:1' <<<"$out6b"; then
+    ok "ARM 6: the named usage clears it (ok:jq-callsites:1:floor:1)"
+else
+    bad "ARM 6: after remedy rc=$rc6b: $out6b"
+fi
+
+# Arm 7 — an empty population (arm 4's tree) says why; --root at a checkout clears it.
+bash "$GUARD" --root "$t4" >/dev/null 2>"$scratch/arm7.err"
+if has_afford "$scratch/arm7.err" && grep -qF -- '--root <checkout>' "$scratch/arm7.err"; then
+    ok "ARM 7: empty-population says why and what clears it"
+else
+    bad "ARM 7: stderr: $(cat "$scratch/arm7.err")"
+fi
+t7="$(mk_tree arm7)"
+out7="$(bash "$GUARD" --root "$t7" 2>/dev/null)"; rc7=$?
+if [ "$rc7" -eq 0 ] && grep -qx 'ok:jq-callsites:1:floor:1' <<<"$out7"; then
+    ok "ARM 7: --root at a checkout clears it"
+else
+    bad "ARM 7: after remedy rc=$rc7: $out7"
+fi
+
+# Arm 8 — a new site with no plan binary to classify it says why; pointing
+# TILLANDSIAS_PLAN_BIN at a built binary reaches the classification, which
+# itself now carries a why: beside its remedy.
+t8="$(mk_tree arm8)"
+printf '#!/bin/bash\nx=$(jq -r .a f.json)\n' > "$t8/scripts/new.sh"
+out8="$(TILLANDSIAS_PLAN_BIN="$scratch/no-such-plan" bash "$GUARD" --root "$t8" 2>"$scratch/arm8.err")"; rc8=$?
+if [ "$rc8" -eq 3 ] && grep -q '^could-not-run:jq-ratchet:no-plan-binary ' <<<"$out8" &&
+    has_afford "$scratch/arm8.err" && grep -qF 'TILLANDSIAS_PLAN_BIN' "$scratch/arm8.err"; then
+    ok "ARM 8: no-plan-binary says why and what clears it"
+else
+    bad "ARM 8: rc=$rc8: $out8 / $(cat "$scratch/arm8.err")"
+fi
+out8b="$(TILLANDSIAS_PLAN_BIN="$PLAN" bash "$GUARD" --root "$t8" 2>/dev/null)"; rc8b=$?
+if [ "$rc8b" -eq 1 ] && grep -qx 'blocked:jq-callsite-added:scripts/new.sh:.a' <<<"$out8b" &&
+    grep -q "^  why: tillandsias-plan json get already answers '.a'" <<<"$out8b" &&
+    grep -q "^  remedy: tillandsias-plan json get '.a'" <<<"$out8b"; then
+    ok "ARM 8: a built binary clears it and the classification says why"
+else
+    bad "ARM 8: after remedy rc=$rc8b: $out8b"
 fi
 
 total=$((pass + fail))

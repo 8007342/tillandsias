@@ -17,7 +17,6 @@ scripts/check-mcp-live-build.sh 1
 scripts/check-mcp-surface.sh 1
 scripts/check-mo-full-attestations.sh 1
 scripts/check-no-tracked-binaries.sh 1
-scripts/check-order-citations-resolve.sh 2
 scripts/check-packet-tier-declared.sh 1
 scripts/check-plan-binary-current.sh 1
 scripts/check-release-asset-integrity.sh 1
@@ -228,7 +227,6 @@ scripts/test-windows-host-lane-refusal.sh 1
 scripts/test-windows-only-sources-verified.sh 1
 scripts/test-windows-tray-clippy.sh 1
 scripts/test-wsl-builder-kill-reaches-guest.sh 1
-scripts/test-yaml-reader-availability.sh 1
 scripts/update-convergence-dashboard.sh 2
 scripts/validate-traces.sh 1
 scripts/with-tillandsias-process-cleanup.sh 4

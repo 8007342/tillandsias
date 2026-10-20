@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air from the v56.10.18.1 macOS smoke
+# (coordinator GO, 2026-10-19).
+packets:
+  - packet_id: on-macos-v56-10-18-1-publish-local-refuses-every-static-preview-with-router-not-ready-because-the-exact-hostname-ca-verified-https-probe-fails
+    order: 1794-rf3a
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: M
+    pickup_role: macos
+    capability_tags: [macos, preview, router, tls, forge, prompt-to-app, smoke]
+    related: [1761-bvyn, 1788-qlwq, 1723-2fiq]
+    depends_on: []
+    title: |
+      On v56.10.18.1 macOS, the forge's publish_local {category WEB, runtime static, app_dir <a flutter build/web>} failed in two separate forges, a tillandsias project and a new local project, with `router_not_ready: exact-hostname CA-verified HTTPS probe failed`. service_status reported tls.host_trust=untrusted ("No user-scope browser trust store was found (Chrome, Chromium-family Flatpaks, Firefox profiles)") and last_failure.remedy=operator. So 1788-qlwq slice 11 (PREVIEW-SUBDIRS) could not be exercised live, and a prompt-to-app user cannot preview a built site.
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-10-19:
+      - forge arms4: ~/src/tillandsias at 09:31:07Z.
+      - forge arms5: ~/src/kumbia-smoke, a new local repo with one commit, at 09:43:19Z.
+      Both after a full wipe and then soft-reset cycles. service_status verbatim:
+        {"state":"stopped","runtime":"unknown","watch":false,"route_ready":false,"serving":false,"tls":{"enabled":true,"host_trust":"untrusted","diagnostic":"No user-scope browser trust store was found (Chrome, Chromium-family Flatpaks, Firefox profiles)."},"diagnostic":"","last_failure":{"step":"router","class":"exit","reason":"router_not_ready: exact-hostname CA-verified HTTPS probe failed","at":"2026-10-19T09:43:19Z","remedy":"operator","previous_preview_serving":false}}
+      In the same forge the flutter wrapper's dev route WAS announced as routed (https://flutter.kumbia-smoke.localhost:18443/), so the router serves routes. What fails is the static preview's own probe.
+      The release carries 1761-bvyn ("a localhost-only preview CA, trusted at user scope", #520). The trust-store diagnostic lists only Linux browser stores, so on macOS it may be probing for the wrong thing. That is unmeasured.
+      NOT KNOWN: whether v56.10.17.1 published on macOS; this lane did not try publish_local on that release.
+    exit_criteria:
+      - "On a published macOS release, publish_local of a static app_dir in a fresh forge reaches route_ready=true and serving=true, and curl through the reported URL returns 200 for index.html, canvaskit/canvaskit.wasm and version.json (closes 1788-qlwq slice 11 live)."
+      - "When the probe fails, the refusal names the hostname probed, the CA it verified against and the probe's own error, not only `remedy: operator`."
+      - "The host_trust diagnostic on macOS names macOS trust stores (login keychain), or says it does not apply."
+    unscoreable: "live-only until the cause is named; a fixture follows the cause"
+    next_action: >
+      In a macOS forge, call publish_local and capture service_logs. Over --exec-guest, curl the probe's hostname with --cacert <the preview CA> to see which half fails, the CA or the route. Then diff the probe against v56.10.17.1 (before 1761-bvyn).
+    events:
+      - type: filed
+        ts: "2026-10-19T09:53:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          v56.10.18.1 macOS smoke: publish_local refused with router_not_ready (CA-verified HTTPS probe failed) in two forges; 1788 slice 11 was blocked live.

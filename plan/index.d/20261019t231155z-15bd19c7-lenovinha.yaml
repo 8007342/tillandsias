@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: vault-unseal-share-ephemerality-and-reset-hygiene
+    field: deliverable
+    value: 'Allowed stores: OS-encrypted (Secret Service keyring, Windows Credential Manager, macOS Keychain) and memory/tmpfs only. Remove every plaintext site in the inventory (context). An unopenable store is wiped and the tray shows a named sign-in-again state, never an error and never a salvage loop. Supersedes the durable plaintext fallback of 1642-cc54 and the keep-the-fallback reasoning of 1437-qza3.'
+    ts: "2026-10-19T23:11:55Z"
+    host: lenovinha
+    replaces_sha256: "7596e359d0e795c581e64d0ac6772ec30fd51a26db385df5a7d271cf522feed6"
+
+events:
+  - packet_id: vault-unseal-share-ephemerality-and-reset-hygiene
+    event:
+      type: note
+      ts: "2026-10-19T23:11:55Z"
+      host: lenovinha
+      summary: |-
+        re-scope per operator ruling 2026-10-19

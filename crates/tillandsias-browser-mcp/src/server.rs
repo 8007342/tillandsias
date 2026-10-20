@@ -363,7 +363,7 @@ impl BrowserMcpServer {
     /// @trace spec:host-browser-mcp
     fn build_active_routes_allowlist(&self) -> BrowserAllowlist {
         let windows = self.windows.list_for_lane(&self.owner());
-        let active_hosts: Vec<String> = windows
+        let mut active_hosts: Vec<String> = windows
             .iter()
             .filter_map(|window| {
                 // Parse the URL to extract host and port
@@ -377,6 +377,12 @@ impl BrowserMcpServer {
             })
             .collect();
 
+        // 1788-qlwq slice 10: what the tray has routed counts as active too,
+        // so an open window no longer locks the project's other routed
+        // services (a flutter dev server) out.
+        if let LaunchMode::Container(host) = &self.launch_mode {
+            active_hosts.extend(host.routed_hosts());
+        }
         BrowserAllowlist::new(&active_hosts).with_preview_tls_port(self.preview_tls_port())
     }
 
@@ -2382,11 +2388,16 @@ mod tests {
         /// Wayland), and what each start was asked for.
         no_display: bool,
         launches: parking_lot::Mutex<Vec<(bool, Engine)>>,
+        /// 1788-qlwq slice 10: what the router has routed.
+        routed: Vec<String>,
     }
 
     impl BrowserContainers for RecordingContainers {
         fn preview_tls_port(&self) -> Option<u16> {
             self.preview_tls_port
+        }
+        fn routed_hosts(&self) -> Vec<String> {
+            self.routed.clone()
         }
         fn has_display(&self) -> bool {
             !self.no_display
@@ -2435,6 +2446,39 @@ mod tests {
             .as_str()
             .unwrap_or("")
             .to_string())
+    }
+
+    /// 1788-qlwq slice 10 (kumbia-kombat): with the www preview window open,
+    /// the flutter dev route the wrapper announced was refused as "not in
+    /// active routes", because the routes were only the open windows' hosts.
+    /// A ROUTED host is admitted. NEGATIVE CONTROL: a service the router has
+    /// not routed is still refused (browser-routing-allowlist: unknown
+    /// project/service pairs are rejected).
+    #[tokio::test]
+    async fn a_routed_dev_server_opens_beside_an_open_window_and_an_unrouted_service_does_not() {
+        let host = Arc::new(RecordingContainers {
+            preview_tls_port: Some(18443),
+            routed: vec![
+                "www.acme.localhost:18443".to_string(),
+                "flutter.acme.localhost:18443".to_string(),
+            ],
+            ..Default::default()
+        });
+        let server = BrowserMcpServer::with_project_label(
+            McpServerConfig::default(),
+            "acme",
+            Some(host.clone() as Arc<dyn BrowserContainers>),
+        );
+        open(&server, "https://www.acme.localhost:18443/")
+            .await
+            .expect("the preview opens");
+        open(&server, "https://flutter.acme.localhost:18443/")
+            .await
+            .expect("the routed flutter dev server opens beside it");
+        let refused = open(&server, "https://api.acme.localhost:18443/")
+            .await
+            .expect_err("an unrouted service stays refused");
+        assert!(refused.contains("URL_NOT_ALLOWED"), "{refused}");
     }
 
     /// Criterion (a), unit half: with a host launcher wired, browser.open

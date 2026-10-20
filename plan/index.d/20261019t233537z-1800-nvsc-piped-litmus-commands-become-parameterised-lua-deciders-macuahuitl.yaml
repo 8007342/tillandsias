@@ -1,0 +1,413 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl, 2026-10-19, on the operator's direction pointing at
+# envelope-citability step 20: "This is what we want to convert to Lua.
+# Notice the amount of piping it had to do. These nested weird commands with
+# lots of pipes should be parameterized Lua scripts instead … Thousands of
+# tests still remain as funky piped bash commands."
+# Epic 1800-nvsc and its eight slices. Direction for every row: green work
+# lands without the coordinator.
+# Change: openspec/changes/litmus-parameterised-lua-deciders/ (proposal,
+# design, tasks, spec deltas litmus-framework and ci-release).
+# Counter: scripts/lua/census-litmus-pipes.lua on this branch:
+#   piped=950 three-plus=155 file-grep=421 script-output=205
+#   structured-field=88 podman-probe=66 text-transform=49 cargo-other=37
+#   plan-query=36 cargo-test=28 process=12 git-query=8
+# Code is cited by symbol, never by line.
+packets:
+  - packet_id: every-piped-litmus-command-becomes-a-parameterised-lua-decider-call-that-names-its-inputs-never-passes-on-an-empty-population-and-names-what-failed
+    order: 1800-nvsc
+    status: in_progress
+    kind: epic
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, lua, ci, fail-loud, convergence, epic]
+    estimated_hours: 3
+    related: [1799-5kvy, 1624-bv73, 1384-bxhk, 1577-57u3, 902-5bf9]
+    owned_files:
+      - openspec/changes/litmus-parameterised-lua-deciders/
+      - methodology/convergence.yaml
+    title: |
+      EPIC — every piped litmus `command:` (950 on 2026-10-19, 155 with three or more pipes) becomes a call to a parameterised Lua decider (scripts/lua/litmus-decide.lua <family> --options) that captures its producer's error states, never passes on an empty population, names what failed, retries only transient failures, and caches one producer run per tree state for every step that judges it
+    context: |
+      OPERATOR DIRECTION (2026-10-19), verbatim intent: piped bash in
+      `command:` lines should be parameterised Lua scripts that parse and
+      capture error states gracefully and provide affordances for recovery,
+      retries and caches. Direction: green work lands without the
+      coordinator.
+      MEASURED on linux-next the same day: 3204 command: lines, 950 with a
+      pipe outside quotes (1477 by raw `|`, which counts `||` and regex
+      alternation), 155 with three or more. By decision family (upper bounds
+      for the minority families; census-litmus-pipes.lua): file-grep 421,
+      script-output 205, structured-field 88, podman-probe 66,
+      text-transform 49, cargo-other 37, plan-query 36, cargo-test 28,
+      process 12, git-query 8.
+      WHY EACH PIPE IS A DEFECT WAITING: `grep -q` under pipefail inverts on
+      SIGPIPE; `head` truncates the line a reader needed; `|| true` swallows
+      the producer; a `$(...)` capture with no echo on the failing branch
+      goes red with EMPTY output — incident 1799-5kvy, step 20 on the
+      v56.10.19.1 release gate, nobody could tell which test failed.
+      WHAT EXISTS: check-shell-ratchet.lua (1384-bxhk, 1577-57u3,
+      1624-bv73) refuses a NEW piped litmus command beyond each file's floor;
+      standing debt was never driven down. methodology/convergence.yaml
+      carries counter-based carried-obligation backlogs (shell-to-lua).
+      DESIGN (binding on every slice; design.md of the change): ONE script,
+      the family is the first argument (the runtime nils `require`, so the
+      shared library is a section of the file); an empty population is
+      could-not-run, never ok; a tool that cannot spawn is could-not-run
+      naming it; every non-ok verdict prints why: and remedy: and names the
+      thing; retries are bounded and transient-only; a cached producer run is
+      keyed on tree state (HEAD + sha256 of `git diff HEAD` + untracked
+      contents) and says cache=hit|miss|off; a conversion keeps or TIGHTENS
+      the expectation, and a step that turns red on conversion is a finding,
+      never a reason to loosen the decider.
+      BURN-DOWN: the litmus-piped-commands backlog in
+      methodology/convergence.yaml, advisory under the operator's latest
+      ruling (warnings only); counter = census-litmus-pipes.lua's `piped=`
+      line printed on every --check; item = one converted command: with its
+      floor line lowered; editing an existing piped command converts it
+      (1800-f56m's ratchet arm, a warning at this stage).
+      PICKUP: Linux-first (cargo and podman producers); file-grep and
+      text-transform slices run on any host with the plan binary.
+    exit_criteria:
+      - 'scripts/lua/census-litmus-pipes.lua prints ok:litmus-pipe-census:piped=0 on linux-next (2026-10-19: piped=950)'
+      - 'the `litmus` lines of scripts/portability/pipe-site-floor.txt sum to 0 (2026-10-19: 958)'
+      - 'every slice below is done and the litmus-piped-commands backlog is retired from methodology/convergence.yaml under its retire trigger'
+    verifiable_closure: |
+      ./build.sh --check prints ok:litmus-pipe-census:piped=0 (the census runs in --check); `awk '$1=="litmus"{s+=$3} END{print s}' scripts/portability/pipe-site-floor.txt` prints 0.
+    provenance: |
+      Filed by macuahuitl on the operator's direction, 2026-10-19; the census and the first slice are on work/1800-nvsc.
+    events:
+      - type: filed
+        ts: "2026-10-19T23:35:37Z"
+        host: macuahuitl
+        summary: |-
+          Epic filed with the census (piped=950) and the change openspec/changes/litmus-parameterised-lua-deciders/. Slice 1800-rutz is built on the same branch.
+
+  - packet_id: slice-a-the-shared-litmus-decider-library-with-the-cargo-test-and-file-grep-families-and-envelope-citability-step-20-as-the-first-adopter-with-a-red-first-fixture
+    order: 1800-rutz
+    parent_order: 1800-nvsc
+    status: in_progress
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, lua, ci, fail-loud]
+    estimated_hours: 2
+    depends_on: []
+    related: [1799-5kvy, 1624-bv73]
+    owned_files:
+      - scripts/lua/litmus-decide.lua
+      - scripts/lua/test-litmus-decide.lua
+      - scripts/lua/census-litmus-pipes.lua
+      - openspec/litmus-tests/litmus-plan-answer-envelope-citability.yaml
+      - scripts/portability/pipe-site-floor.txt
+      - build.sh
+    title: |
+      1800-nvsc slice (a) — scripts/lua/litmus-decide.lua: the shared library (argument parsing, why/remedy affordances, transient-only retries, tree-state cache, tool-missing and empty-population verdicts) plus the cargo-test and file-grep families; envelope-citability step 20 is the first adopter; scripts/lua/test-litmus-decide.lua pins ten arms against a fake cargo, arm 1 being the 1799-5kvy empty-output red
+    context: |
+      Built by macuahuitl on work/1800-nvsc, 2026-10-19. The cargo-test
+      family judges by NAME: --require-ok <test> (absent is missing-test,
+      distinct from failed), --min-ok <re> <n>; a FAILED run lists every
+      FAILED test and panicked-at line with the --nocapture remedy; a
+      compile error is refused:compile-error; a producer that died before
+      any test (a build-directory lock) is could-not-run:producer-exit.
+      Measured: step 20's crate is 1m51 cold and 16 ms on a cache hit, so
+      every step in one gate that judges tillandsias-plan shares one run.
+      The file-grep family: --path (file or dir, repeatable) --suffix
+      --pattern --fixed --mode present|absent|count --min --max; absent
+      names the first file:line; an empty path list is could-not-run.
+      The fixture runs in ./build.sh --check after the shell-ratchet
+      fixture; the census prints after it (advisory).
+    exit_criteria:
+      - 'scripts/lua/test-litmus-decide.lua reports ok:litmus-decide-fixture:arms=10 under ./build.sh --check (pre-fix: refused:litmus-decide-fixture:no-decider; arm 1 requires a FAILED run to exit 1 with a non-empty verdict naming the test and the panic line — the 1799-5kvy shape)'
+      - 'openspec/litmus-tests/litmus-plan-answer-envelope-citability.yaml step "the crate''s own unit pins for the envelope are GREEN" names scripts/lua/litmus-decide.lua -- cargo-test and contains no pipe; its litmus line in scripts/portability/pipe-site-floor.txt reads 15 (pre-fix: 16)'
+      - 'scripts/lua/census-litmus-pipes.lua prints one ok:litmus-pipe-census:piped=<n> line on every ./build.sh --check (pre-fix: no such script)'
+    verifiable_closure: |
+      ./build.sh --check prints "Litmus decider fixture passed" and an ok:litmus-pipe-census line; `scripts/run-litmus-test.sh plan-answer-envelope-citability --phase pre-build` passes step 20 through the decider with ok:envelope-unit-pins-green.
+    provenance: |
+      Filed and built by macuahuitl, 2026-10-19, on work/1800-nvsc.
+    events:
+      - type: filed
+        ts: "2026-10-19T23:35:37Z"
+        host: macuahuitl
+        summary: |-
+          Slice (a) built on work/1800-nvsc: litmus-decide.lua (cargo-test, file-grep), fixture 10/10 arms, step 20 converted, floor 16→15, census wired into --check.
+
+  - packet_id: slice-b-file-grep-the-421-piped-grep-over-files-litmus-commands-become-litmus-decide-file-grep-calls-in-batches-with-their-floor-lines-lowered
+    order: 1800-93qs
+    parent_order: 1800-nvsc
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, lua, ci, convergence, low-end]
+    estimated_hours: 6
+    depends_on: [slice-a-the-shared-litmus-decider-library-with-the-cargo-test-and-file-grep-families-and-envelope-citability-step-20-as-the-first-adopter-with-a-red-first-fixture]
+    owned_files:
+      - openspec/litmus-tests/
+      - scripts/portability/pipe-site-floor.txt
+    title: |
+      1800-nvsc slice (b) — the file-grep family: every piped `command:` whose decision is a grep over files (present, absent, count; 421 on 2026-10-19, the largest family) becomes a `litmus-decide.lua file-grep` call with the same or a tighter expectation, in batches of about 40 per PR, each batch lowering its files' floor lines in the same commit
+    context: |
+      `census-litmus-pipes.lua -- --list file-grep` prints the batch as
+      file:line. The `sed -n '/a/,/b/p' | grep` idiom needs the
+      text-transform family's --between (1800-vq33); leave those for it.
+      A step whose old expectation accepted a bare count or an empty file
+      is TIGHTENED (design D6); a step that turns red on conversion is
+      recorded as a finding on this row, never loosened. Partial closures
+      record the census count at each batch. Runs on any host with the plan
+      binary: no producer beyond the file read.
+    exit_criteria:
+      - 'scripts/lua/census-litmus-pipes.lua prints file-grep=0 (2026-10-19: 421)'
+      - 'each batch commit lowers the touched files'' litmus lines in scripts/portability/pipe-site-floor.txt by the number of commands converted (check-shell-ratchet.lua --dump-floors)'
+    verifiable_closure: |
+      ./build.sh --check prints ok:litmus-pipe-census with file-grep=0 and ok:shell-ratchet with no stale-floor violation.
+    provenance: |
+      Filed by macuahuitl, 2026-10-19.
+    events:
+      - type: filed
+        ts: "2026-10-19T23:35:37Z"
+        host: macuahuitl
+        summary: |-
+          Filed as the first family slice after (a); 421 commands by the census.
+
+  - packet_id: slice-c-script-output-the-205-litmus-commands-that-run-a-repo-script-and-re-parse-its-verdict-become-litmus-decide-script-output-calls-that-relay-the-script-s-own-verdict
+    order: 1800-juv4
+    parent_order: 1800-nvsc
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, lua, ci, convergence]
+    estimated_hours: 5
+    depends_on: [slice-a-the-shared-litmus-decider-library-with-the-cargo-test-and-file-grep-families-and-envelope-citability-step-20-as-the-first-adopter-with-a-red-first-fixture]
+    owned_files:
+      - scripts/lua/litmus-decide.lua
+      - openspec/litmus-tests/
+      - scripts/portability/pipe-site-floor.txt
+    title: |
+      1800-nvsc slice (c) — the script-output family (205 on 2026-10-19): a `litmus-decide.lua script-output -- <argv>` decider with --expect-exit, --expect-line <re>, --forbid-line <re>, --count-lines <re> <min> [<max>], the script's stderr relayed verbatim; then every piped `command:` that runs a scripts/*.sh or scripts/lua/*.lua and re-parses it (`bash scripts/x.sh | tail -1`, `out=$(...); printf | grep -c`) converted
+    context: |
+      The script already decides; the step's pipe re-parses it, and `| tail
+      -1` hides the exit code (test-shell-ratchet.lua's record of
+      litmus-reset-state-contract.yaml). The decider runs the argv through
+      proc.run (argv-only, no shell string), judges exit and lines, and
+      prints the script's stderr so the affordances the script already
+      prints reach the reader. A script that cannot spawn is could-not-run.
+      Fixture arms in test-litmus-decide.lua: exit mismatch names the
+      actual exit and the last lines; a count under min names the count;
+      empty output with --expect-line is could-not-run.
+    exit_criteria:
+      - 'test-litmus-decide.lua has script-output arms (exit, expect-line, forbid-line, count-lines, empty output) and reports them in arms= (pre-fix: FAMILIES["script-output"] is nil, could-not-run:litmus-decide:unknown-family:script-output)'
+      - 'scripts/lua/census-litmus-pipes.lua prints script-output=0 (2026-10-19: 205)'
+    verifiable_closure: |
+      ./build.sh --check prints ok:litmus-decide-fixture with the script-output arms counted in arms= and ok:litmus-pipe-census with script-output=0.
+    provenance: |
+      Filed by macuahuitl, 2026-10-19.
+    events:
+      - type: filed
+        ts: "2026-10-19T23:35:37Z"
+        host: macuahuitl
+        summary: |-
+          Filed; the family decider is part of this slice, the library is (a)'s.
+
+  - packet_id: slice-d-structured-field-the-88-jq-yq-and-plan-yaml-json-field-checks-become-litmus-decide-structured-field-calls-over-json-query
+    order: 1800-8uzh
+    parent_order: 1800-nvsc
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, lua, ci, convergence, no-jq]
+    estimated_hours: 5
+    depends_on: [slice-a-the-shared-litmus-decider-library-with-the-cargo-test-and-file-grep-families-and-envelope-citability-step-20-as-the-first-adopter-with-a-red-first-fixture]
+    owned_files:
+      - scripts/lua/litmus-decide.lua
+      - openspec/litmus-tests/
+      - scripts/portability/pipe-site-floor.txt
+    title: |
+      1800-nvsc slice (d) — the structured-field family (88 on 2026-10-19): `litmus-decide.lua structured-field --file <json|yaml> | --from <argv…>` with `--path <dotted>` over json.query / yaml, and --equals, --matches <re>, --nonempty, --length-min; then every piped jq/yq/`tillandsias-plan yaml-get|json` `command:` converted, which also retires jq sites the new-scripts-carry-no-jq ratchet counts
+    context: |
+      Many members build a fixture with mktemp and printf first, then pipe
+      several jq stages; the decider takes the producer as argv (`--from`)
+      and the fixture stays a plain setup step with no pipe. Field access is
+      the runtime's json.query / yaml tables, not a jq spawn, so the
+      decision holds on a host without jq. A missing file or a parse
+      failure is could-not-run naming the path and the parse error.
+    exit_criteria:
+      - 'test-litmus-decide.lua has structured-field arms (equals, matches, nonempty, length-min, missing path, parse failure) and reports them in arms= (pre-fix: unknown-family:structured-field)'
+      - 'scripts/lua/census-litmus-pipes.lua prints structured-field=0 (2026-10-19: 88)'
+    verifiable_closure: |
+      ./build.sh --check prints ok:litmus-decide-fixture with the structured-field arms counted in arms= and ok:litmus-pipe-census with structured-field=0, ok:shell-ratchet with no stale-floor.
+    provenance: |
+      Filed by macuahuitl, 2026-10-19.
+    events:
+      - type: filed
+        ts: "2026-10-19T23:35:37Z"
+        host: macuahuitl
+        summary: |-
+          Filed.
+
+  - packet_id: slice-e-podman-probe-the-66-podman-images-inspect-ps-and-run-probes-become-litmus-decide-podman-probe-calls-that-retry-a-locked-store-and-are-could-not-run-without-a-usable-podman
+    order: 1800-s44f
+    parent_order: 1800-nvsc
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [litmus, lua, ci, convergence, podman]
+    estimated_hours: 5
+    depends_on: [slice-a-the-shared-litmus-decider-library-with-the-cargo-test-and-file-grep-families-and-envelope-citability-step-20-as-the-first-adopter-with-a-red-first-fixture]
+    owned_files:
+      - scripts/lua/litmus-decide.lua
+      - openspec/litmus-tests/
+      - scripts/portability/pipe-site-floor.txt
+    title: |
+      1800-nvsc slice (e) — the podman-probe family (66 on 2026-10-19): `litmus-decide.lua podman-probe --images --filter <re> | --inspect <name> --format-path <path> | --ps --filter <re>` with --expect-nonempty, --expect-value, --expect-absent; bounded retries on `database is locked` and a busy store; a missing podman, a stopped machine or no permission is could-not-run naming it; then every piped `podman … | grep | head -1` `command:` converted
+    context: |
+      The common member is `podman images --format … | grep X | head -1`
+      feeding a variable (`[ -n "$IMG" ]`), which passes on an empty grep
+      when the test is `||`-chained wrongly and hides which image was
+      missing. The decider's verdict names the image it found or the
+      filter that matched nothing. Linux-first: the producer is podman.
+    exit_criteria:
+      - 'test-litmus-decide.lua has podman-probe arms against a fake podman (found, absent, locked-then-found with retries, podman missing) and reports them in arms= (pre-fix: unknown-family:podman-probe)'
+      - 'scripts/lua/census-litmus-pipes.lua prints podman-probe=0 (2026-10-19: 66, an upper bound: members that merely mention podman in an argument move to their real family)'
+    verifiable_closure: |
+      ./build.sh --check prints ok:litmus-decide-fixture with the podman-probe arms counted in arms= and ok:litmus-pipe-census with podman-probe=0.
+    provenance: |
+      Filed by macuahuitl, 2026-10-19.
+    events:
+      - type: filed
+        ts: "2026-10-19T23:35:37Z"
+        host: macuahuitl
+        summary: |-
+          Filed.
+
+  - packet_id: slice-f-cargo-the-remaining-27-cargo-test-and-37-cargo-other-litmus-commands-share-the-tree-state-cache-so-one-crate-is-tested-or-built-once-per-gate
+    order: 1800-h7rt
+    parent_order: 1800-nvsc
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [litmus, lua, ci, convergence, cargo, gate-time]
+    estimated_hours: 4
+    depends_on: [slice-a-the-shared-litmus-decider-library-with-the-cargo-test-and-file-grep-families-and-envelope-citability-step-20-as-the-first-adopter-with-a-red-first-fixture]
+    owned_files:
+      - scripts/lua/litmus-decide.lua
+      - openspec/litmus-tests/
+      - scripts/portability/pipe-site-floor.txt
+    title: |
+      1800-nvsc slice (f) — the cargo families: the remaining 27 piped `cargo test` steps become `cargo-test` calls pinning tests by NAME (a bare `N passed` or `| tail -4` is replaced by --require-ok / --min-ok), and a `cargo-other` family (build, check, clippy, run with --expect-exit and --expect-line, cached like cargo-test) takes the 37 piped cargo build/run steps; a gate that judges one crate from several steps runs cargo on it once
+    context: |
+      Measured on (a): tillandsias-plan is 1m51 cold and 16 ms on a hit.
+      Six steps in litmus-guest-container-metrics-wire-shape.yaml alone run
+      `cargo test -q -p … | tail -4`; after conversion they share one run
+      per crate. Record on this row the gate time before and after for the
+      files converted (the cheatsheet-free measurement: run-litmus-test.sh
+      --compact wall time on the same host and tree).
+    exit_criteria:
+      - 'scripts/lua/census-litmus-pipes.lua prints cargo-test=0 and cargo-other=0 (2026-10-19: 28 and 37)'
+      - 'no converted step pins a bare pass count: every cargo-test call carries --require-ok or --min-ok with a module prefix (grep -c "litmus-decide.lua -- cargo-test" equals the count of those calls carrying --require-ok or --min-ok)'
+    verifiable_closure: |
+      ./build.sh --check prints ok:litmus-pipe-census with cargo-test=0 and cargo-other=0; litmus:guest-container-metrics-wire-shape runs its six cargo steps with cache=hit on all but the first per crate.
+    provenance: |
+      Filed by macuahuitl, 2026-10-19.
+    events:
+      - type: filed
+        ts: "2026-10-19T23:35:37Z"
+        host: macuahuitl
+        summary: |-
+          Filed.
+
+  - packet_id: slice-g-the-long-tail-process-plan-query-git-query-and-text-transform-families-take-the-remaining-105-piped-litmus-commands
+    order: 1800-vq33
+    parent_order: 1800-nvsc
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, lua, ci, convergence]
+    estimated_hours: 6
+    depends_on: [slice-a-the-shared-litmus-decider-library-with-the-cargo-test-and-file-grep-families-and-envelope-citability-step-20-as-the-first-adopter-with-a-red-first-fixture]
+    owned_files:
+      - scripts/lua/litmus-decide.lua
+      - openspec/litmus-tests/
+      - scripts/portability/pipe-site-floor.txt
+    title: |
+      1800-nvsc slice (g) — the long tail: `process` (argv probe with --expect-line, --expect-exit, --retries and --retry-delay-ms for curl/systemctl/ss; 12), `plan-query` (answer/status/query/check on the resolved plan binary with --confidence, --min-citations, --field; 36), `git-query` (--ancestor, --ref-exists, --log-grep, --file-at <ref>:<path>; 8) and `text-transform` (--between <start-re> <end-re> for the `sed -n '/a/,/b/p' | grep` idiom; 49); their 105 piped commands converted
+    context: |
+      The census marks plan-query and process as upper bounds: a member that
+      greps crates/tillandsias-plan/src is file-grep and moves there.
+      text-transform's --between is what the file-grep slice (1800-93qs)
+      leaves behind. Each family lands with its arms in
+      test-litmus-decide.lua before any step is converted.
+    exit_criteria:
+      - 'scripts/lua/census-litmus-pipes.lua prints process=0 plan-query=0 git-query=0 text-transform=0 (2026-10-19: 12, 36, 8, 49)'
+      - 'test-litmus-decide.lua reports arms for the four families (pre-fix: unknown-family for each)'
+    verifiable_closure: |
+      ./build.sh --check prints ok:litmus-decide-fixture with arms for the four families and ok:litmus-pipe-census with process=0 plan-query=0 git-query=0 text-transform=0.
+    provenance: |
+      Filed by macuahuitl, 2026-10-19.
+    events:
+      - type: filed
+        ts: "2026-10-19T23:35:37Z"
+        host: macuahuitl
+        summary: |-
+          Filed.
+
+  - packet_id: slice-h-the-burn-down-check-carried-obligations-reads-the-litmus-pipe-census-as-the-litmus-piped-commands-counter-and-the-shell-ratchet-warns-by-name-when-an-edit-to-a-piped-command-keeps-its-pipe
+    order: 1800-f56m
+    parent_order: 1800-nvsc
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, lua, ci, convergence, ratchet]
+    estimated_hours: 3
+    depends_on: [slice-a-the-shared-litmus-decider-library-with-the-cargo-test-and-file-grep-families-and-envelope-citability-step-20-as-the-first-adopter-with-a-red-first-fixture]
+    related: [1577-g96z, 1577-57u3, 1624-bv73]
+    owned_files:
+      - scripts/lua/check-carried-obligations.lua
+      - scripts/lua/test-carried-obligations.lua
+      - scripts/lua/check-shell-ratchet.lua
+      - scripts/lua/test-shell-ratchet.lua
+      - methodology/convergence.yaml
+    title: |
+      1800-nvsc slice (h) — the burn-down mechanism: check-carried-obligations.lua gains a counter for the litmus-piped-commands backlog (census-litmus-pipes.lua's piped= at the merge base and at HEAD, so a due change reads paid / waived / silent instead of unsupported-counter), and check-shell-ratchet.lua gains the edit-converts arm: a diff hunk that changes an existing piped `command:` line and leaves a pipe in it is named `warn:shell-ratchet:edited-pipe-kept:<file>:<line>` — a warning while the backlog is advisory (the operator's ruling), the same token becoming a violation only on an approved bar raise
+    context: |
+      The backlog entry is in methodology/convergence.yaml from (a), stage
+      advisory, with the honest `unsupported-counter` reading until this
+      slice. The counter at a ref reads the litmus files at that ref (git
+      show <ref>:<path>) with the same quote-aware pipe count the census and
+      the ratchet share; the population is the piped command: lines, the
+      item one line. The edit arm reads `git diff BASE...HEAD -U0 --
+      openspec/litmus-tests/` and pairs each removed piped command: line
+      with the added line at the same hunk; a pair whose added side still
+      pipes is named. A removed line with no added pair is a conversion or
+      a deletion, both paid. Fixture arms in test-shell-ratchet.lua: an edit
+      that keeps the pipe is warned by file:line; an edit that removes it is
+      not; an untouched piped line is not (standing debt is never reddened,
+      1130-i6xj).
+    exit_criteria:
+      - 'check-carried-obligations.lua prints carried:litmus-piped-commands:paid|waived|silent for a change touching openspec/litmus-tests/ (pre-fix: carried:litmus-piped-commands:unsupported-counter)'
+      - 'check-shell-ratchet.lua prints warn:shell-ratchet:edited-pipe-kept:<file>:<line> for a scratch commit that edits a piped command: and keeps the pipe, and stays ok (exit 0) while the backlog stage is advisory; test-shell-ratchet.lua has the arm (pre-fix: no such token anywhere in scripts/lua)'
+    verifiable_closure: |
+      ./build.sh --check runs test-carried-obligations.lua and test-shell-ratchet.lua with the new arms and passes; `grep -c edited-pipe-kept scripts/lua/check-shell-ratchet.lua` is at least 1.
+    provenance: |
+      Filed by macuahuitl, 2026-10-19.
+    events:
+      - type: filed
+        ts: "2026-10-19T23:35:37Z"
+        host: macuahuitl
+        summary: |-
+          Filed; the backlog starts advisory with warnings only (operator ruling).

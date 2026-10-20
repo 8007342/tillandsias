@@ -237,6 +237,8 @@ done
 if [ -n "$violations" ]; then
     echo "violation:harness-exclusive-skill:$(printf '%s' "$violations" | grep -c .) offender(s)"
     printf '%s' "$violations" | sed 's/^/  /'
+    echo "  why: a hand-written skill reached by only one harness drifts from the"
+    echo "  canonical copy every other harness loads."
     # THE REMEDY IS GUARDED, because the unguarded one was destructive and
     # SILENT. `git mv <path> skills/<name>` when skills/<name> already exists as
     # a directory does not collide — git moves the source INSIDE it, exit 0, no

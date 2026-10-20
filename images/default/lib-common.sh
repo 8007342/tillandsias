@@ -2442,6 +2442,10 @@ install_prebuilt() {
 # where the baked x86_64 SDK was also non-executable). Dart's arch token differs from
 # the cargo triple: x86_64 -> x64, aarch64 -> arm64.
 # @trace plan/issues/forge-firstrun-tool-migration-2026-07-04.md (order 180 dart sub-slice)
+# 1788-qlwq slice 13: the Dart the forge's Flutter bundles (Flutter 3.47.7 ->
+# Dart 3.13.5). A Flutter bump moves this too; pinned by the cargo test
+# the_forge_dart_pin_is_the_dart_the_flutter_image_bundles.
+DART_SDK_VERSION="3.13.5"
 ensure_dart_sdk() {
     local arch zarch
     arch="$(_forge_uname_arch)"
@@ -2454,18 +2458,25 @@ ensure_dart_sdk() {
             ;;
     esac
     local sdk_bin="$PROJECT_CACHE/dart/dart-sdk/bin/dart"
-    [ -x "$sdk_bin" ] && return 0
+    # The SDK persists in the project cache, so a pin bump must REPLACE an older
+    # one; the SDK's own version file says which it is (1788-qlwq slice 13).
+    if [ -x "$sdk_bin" ] &&
+        [ "$(cat "$PROJECT_CACHE/dart/dart-sdk/version" 2>/dev/null)" = "$DART_SDK_VERSION" ]; then
+        return 0
+    fi
     mkdir -p "$PROJECT_CACHE/dart" 2>/dev/null || true
     local tmp archive url
     tmp="$(mktemp -d 2>/dev/null)" || return 0
     archive="$tmp/dart-sdk.zip"
-    url="https://storage.googleapis.com/dart-archive/channels/stable/release/3.12.1/sdk/dartsdk-linux-${zarch}-release.zip"
+    url="https://storage.googleapis.com/dart-archive/channels/stable/release/${DART_SDK_VERSION}/sdk/dartsdk-linux-${zarch}-release.zip"
     if ! curl -fsSL --max-time 300 "$url" -o "$archive" 2>/dev/null; then
         trace_lifecycle "tools" "dart SDK fetch failed (non-fatal, retry next launch): ${zarch}"
         rm -rf "$tmp"
         return 0
     fi
-    # The zip carries a top-level dart-sdk/ dir; unzip -o overwrites a partial prior try.
+    # The zip carries a top-level dart-sdk/ dir. Only now, with the new archive
+    # in hand, is the old SDK removed: a failed fetch above keeps it working.
+    rm -rf "${PROJECT_CACHE:?}/dart/dart-sdk"
     unzip -qo "$archive" -d "$PROJECT_CACHE/dart" 2>/dev/null || true
     if [ -x "$sdk_bin" ]; then
         trace_lifecycle "tools" "installed dart SDK ($(uname -m))"

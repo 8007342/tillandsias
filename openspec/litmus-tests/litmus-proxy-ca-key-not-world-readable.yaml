@@ -24,10 +24,15 @@ preconditions:
   - workspace contains images/proxy/entrypoint.sh
 
 critical_path:
-  - step: "Req: the proxy arg builder mounts the key as a secret, never a bind mount"
-    command: "grep -q '{PROXY_CA_KEY_SECRET},{PROXY_CA_KEY_SECRET_OPTS}' crates/tillandsias-headless/src/main.rs && ! grep -q 'intermediate.key:ro' crates/tillandsias-headless/src/main.rs && echo 'ok: secret delivery, no key bind mount'"
+  - step: "Req: the proxy arg builder delivers the key as a tmpfs runtime secret file, never from durable disk"
+    # 1118-fqfk slice 2a: the key is a 0444 file in the 0700 tmpfs dir
+    # $XDG_RUNTIME_DIR/tillandsias/secrets (no other host user can traverse
+    # it), bound read-only at /run/secrets/tillandsias-ca-key. A bind of
+    # intermediate.key from the CA dir, or a podman --secret (plaintext under
+    # the containers storage dir), fails.
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/check-runtime-secret-mounts.lua -- proxy 2>&1"
     timeout_ms: 10000
-    expected_behavior: "ok: secret delivery, no key bind mount"
+    expected_behavior: "ok: tmpfs-file delivery from the 0700 secrets dir, no durable key bind"
 
   - step: "Req: secret mount options keep the key least-privilege for the proxy uid"
     command: "grep -q 'PROXY_CA_KEY_SECRET_OPTS: &str = \"uid=1000,gid=1000,mode=0400\"' crates/tillandsias-headless/src/main.rs && echo 'ok: uid/gid 1000 mode 0400'"

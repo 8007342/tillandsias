@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-first-forge-launch-after-a-reset-can-wedge-guest-podman-so-the-router-run-hangs-at-conmon-for-its-whole-300s-budget-and-vault-is-declared-dead-while-it-still-runs
+    event:
+      type: progress
+      ts: "2026-10-19T09:55:00Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        Live arm on published v56.10.18.1 (macOS, tlatoanis-macbook-air, 2026-10-19). Criterion 3 NOT MET: 1 of 3 cold first launches reached the forge.
+        Cycle 1 (after a full VM wipe and --provision) failed: guest SELinux "Invalid class 0", then every podman exec failed to load libsemanage, then forge-base failed 3x (filed 1792-48yg).
+        Cycle 2 (install-macos.sh SOFT reset) failed in 1m42s: the forge-base failure marker survived the reset (filed 1793-wggq).
+        Cycle 3 (marker cleared by hand, then a soft reset) reached the forge with rc=0 in 5m26s, including the forge-base build. The router did not wedge in any cycle, so the 1784 router/conmon hang did not reproduce.
+        Evidence: target/smoke-e2e/05-forge-cold{1,2,3}.log and plan/issues/e2e-smoke-v56.10.18.1-macos-2026-10-19.md.

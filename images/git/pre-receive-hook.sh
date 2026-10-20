@@ -258,18 +258,31 @@ discipline_load() {
 }
 
 discipline_message() {
-    local msg="${DISC_MESSAGE:-push to {default} denied: use {integration} for integration and {work_ref} for work}"
+    # 1788-qlwq: the default is assigned on its own line. Inside ${VAR:-word}
+    # the first `}` (after {default) closed the expansion, so the unset-seed
+    # message ended in a stray "for work}".
+    local msg="$DISC_MESSAGE"
+    [ -n "$msg" ] || msg='push to {default} denied: use {integration} for integration and {work_ref} for work'
     msg="$(printf '%s' "$msg" | sed -e "s|{default}|$DISC_DEFAULT|g" -e "s|{integration}|$DISC_INTEGRATION|g" -e "s|{work_ref}|work/<order>|g")"
     printf '%s' "$msg"
 }
 
 # rc 1 = refuse this update; warnings are printed and return 0.
-discipline_check_update() {   # <oldsha> <refname>
-    local old="$1" ref="$2"
+discipline_check_update() {   # <oldsha> <refname> <newsha>
+    local old="$1" ref="$2" new="${3:-}" tip
     [ "$DISC_PRESENT" -eq 1 ] || return 0
     if [ -n "$DISC_DEFAULT" ] && [ "$ref" = "refs/heads/$DISC_DEFAULT" ]; then
         case "$DISC_ENF_DEFAULT" in
             enforced)
+                # 1788-qlwq: a forge has no pull-request path, so promotion
+                # is the one admitted move: a fast-forward of the default
+                # branch to exactly the integration branch's current tip.
+                tip="$(git rev-parse --verify --quiet "refs/heads/$DISC_INTEGRATION" 2>/dev/null || true)"
+                if [ -n "$DISC_INTEGRATION" ] && [ -n "$tip" ] && [ "$new" = "$tip" ] \
+                   && { [ "$old" = "$ZERO_SHA" ] || git merge-base --is-ancestor "$old" "$new" 2>/dev/null; }; then
+                    log_msg "ok:branch-discipline:default-branch:$DISC_DEFAULT:promoted-from:$DISC_INTEGRATION"
+                    return 0
+                fi
                 log_msg "REJECT: $(discipline_message)"
                 log_msg "blocked:branch-discipline:default-branch:$DISC_DEFAULT:level=$DISC_LEVEL"
                 return 1 ;;
@@ -656,7 +669,7 @@ while read -r OLDSHA NEWSHA REFNAME EXTRA; do
 
     # Seeded branch discipline (1443-uit6): pre-relay, so an enforced refusal
     # never reaches upstream.
-    if ! discipline_check_update "$OLDSHA" "$REFNAME"; then
+    if ! discipline_check_update "$OLDSHA" "$REFNAME" "$NEWSHA"; then
         RECEIVE_POLICY_REJECTED=1
     fi
 done < "$UPDATES_FILE"

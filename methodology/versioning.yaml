@@ -519,8 +519,16 @@ stable_channel:
       and must be recorded as a cycle entry via `tillandsias-plan
       loop-status-append` (never an in-place rewrite of plan/loop_status.md).
       On success it flips
-      prerelease=false, marks the release "latest", and moves the annotated
-      `stable` git tag to the release commit.
+      prerelease=false, marks the release "latest", moves the annotated
+      `stable` git tag to the release commit, and advances
+      refs/heads/deploy/observatorium to that commit's tree (1798-khw6).
+    deploy_refs: >
+      refs/heads/deploy/observatorium is the observatorium Worker's only
+      Workers Builds trigger, so a stable promotion (or demotion) is the only
+      automatic observatorium build and deploy. Only promote-stable.sh writes
+      it, through scripts/advance-deploy-ref.sh. The branch only moves forward:
+      when following the channel would mean a rewind, a restore commit carries
+      the release's exact tree. Spec: observatorium-dashboard deployment.md.
     demotion: "scripts/promote-stable.sh demote <mistaken-tag> --to <intended-tag> [--dry-run]"
     demotion_is_not_the_inverse_of_promotion: >
       MEASURED 2026-08-23, order 864-mk2p. This field used to read

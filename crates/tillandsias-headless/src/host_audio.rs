@@ -276,7 +276,9 @@ mod tests {
             WEBKIT_AUDIO_START, BROWSER_AUDIO_START,
             "the WebKit copy of browser-audio-start.sh drifted"
         );
-        let source = "source /usr/local/lib/tillandsias/browser-audio-start.sh";
+        // The chromium launcher takes the path from TILLANDSIAS_BROWSER_AUDIO_START
+        // (its fixture stubs it) with this as the default, so match the path.
+        let source = "/usr/local/lib/tillandsias/browser-audio-start.sh";
         for (name, launcher, starts) in [
             ("chromium", CHROMIUM_LAUNCHER, "exec \"$CHROMIUM_BIN\""),
             (

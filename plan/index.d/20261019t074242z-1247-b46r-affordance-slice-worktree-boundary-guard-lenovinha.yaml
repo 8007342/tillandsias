@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: affordance-slice-worktree-boundary-guard-refusals-say-why-and-what-clears-them
+    order: 1247-b46r
+    parent_order: 1247-amcu
+    status: in_progress
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [affordance, refusal, meta-orchestration, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - scripts/meta-orchestration-worktree-guard.sh
+      - scripts/test-worktree-boundary-guard.sh
+      - openspec/litmus-tests/litmus-meta-orchestration-dirty-tree-safety.yaml
+      - openspec/litmus-tests/litmus-meta-orchestration-opsx-sync-merge.yaml
+      - scripts/test-meta-orchestration-dirty-tree-safety.sh
+      - scripts/lua/test-meta-orchestration-dirty-tree-safety.lua
+    title: |
+      1247-amcu slice — FAMILY: the startup-boundary guard's refusals (blocked:no-snapshot-taken, blocked:boundary-state-missing, and its error: exits for a state dir inside the worktree, an already-initialized or invalid state dir, and a worktree that differs from the boundary) say why and what clears them
+    context: |
+      Picked by lenovinha at the coordinator's request (2026-10-19) as the highest-ranked family by scripts/rank-refusal-hits.sh that still prints no remedy: blocked:no-snapshot-taken is rank 18 (scripts/meta-orchestration-worktree-guard.sh:71). Ranks 1-17 already carry why and remedy prose or are cycle-preflight (#386). No open PR touches the file.
+      blocked:no-snapshot-taken and blocked:boundary-state-missing print only the token, though the second knows which boundary this cycle did record. The error: exits name the fault and no way out, and "worktree differs from startup boundary" does not say which paths differ. The tokens and error: first lines stay as they are, because finalize-cycle.sh and the fixtures match them. The why and remedy go to stderr.
+      The existing fixture, scripts/test-worktree-boundary-guard.sh, runs only in the e2e litmus opencode-prompt-e2e-shape. A step in the instant litmus meta-orchestration-dirty-tree-safety now runs it too. A new gate step would need a second-regime record lenovinha cannot produce.
+      Carry: scripts/test-meta-orchestration-dirty-tree-safety.sh is ported to scripts/lua (unowned, on the shell-decider floor, and the same litmus's main fixture).
+    exit_criteria:
+      - 'each refusal of the guard emits why: and remedy: on stderr beside its unchanged token or error: line, boundary-state-missing names the boundary this cycle did record, and "worktree differs" names the paths that differ (pre-fix: FAILS on all of them)'
+      - 'NEGATIVE CONTROL (1247-amcu criterion 5): the fixture EXECUTES each remedy (snapshot then verify after no-snapshot-taken, verify the named boundary after boundary-state-missing, a state dir outside the worktree, a fresh state dir, restoring the named path) and each then clears that refusal'
+      - 'litmus-meta-orchestration-dirty-tree-safety runs scripts/test-worktree-boundary-guard.sh and its existing steps stay green'
+      - 'carry: test-meta-orchestration-dirty-tree-safety runs as scripts/lua/test-meta-orchestration-dirty-tree-safety.lua with the same checks, both litmus specs repointed, and the .sh dropped from the shell-decider and pipe-site floors'
+    verifiable_closure: |
+      litmus:meta-orchestration-dirty-tree-safety runs scripts/test-worktree-boundary-guard.sh, which passes, and FAILS against the pre-fix guard.
+    provenance: |
+      Filed by lenovinha at the coordinator's request, 2026-10-19.
+    events:
+      - type: filed
+        ts: "2026-10-19T07:42:42Z"
+        host: lenovinha
+        summary: |-
+          Next 1247-amcu slice: meta-orchestration-worktree-guard.sh. Filed and claimed in one fragment by lenovinha.

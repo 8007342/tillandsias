@@ -788,6 +788,58 @@ carried_obligations:
         sites. The other two, tillandsias-headless src/main.rs (75) and
         src/vault_bootstrap.rs (23), are packets of their own.
       guard: 1590-j20f
+    - name: litmus-piped-commands
+      stage: advisory
+      since: "2026-10-19"
+      proposed_by: >
+        1800-nvsc, on the operator's direction of 2026-10-19 ("these nested
+        weird commands with lots of pipes should be parameterized Lua
+        scripts"); advisory is where every backlog starts and the operator's
+        latest ruling keeps it there with warnings only, so no bar raise is
+        asked.
+      area:
+        - openspec/litmus-tests/**
+        - scripts/lua/litmus-decide.lua
+        - scripts/lua/census-litmus-pipes.lua
+      population: >
+        `command:` lines under openspec/litmus-tests/ with a pipe outside
+        quotes (`||` and quoted spans excluded), the same count the litmus arm
+        of check-shell-ratchet.lua floors per file.
+      counter: >
+        `piped=<n>` on the ok: line of scripts/lua/census-litmus-pipes.lua,
+        printed on every --check beside the per-family counts
+        (`cargo-test=`, `file-grep=`, `script-output=`, ...). At 2026-10-19 on
+        the 1800-nvsc branch: piped=950, three-plus=155; file-grep=421,
+        script-output=205, structured-field=88, podman-probe=66,
+        text-transform=49, cargo-other=37, plan-query=36, cargo-test=28,
+        process=12, git-query=8. check-carried-obligations.lua has no counter
+        for this backlog yet (1800-f56m adds it), so it prints
+        `carried:litmus-piped-commands:unsupported-counter` for a change in
+        the area and judges nothing; that is the honest advisory reading.
+      why: >
+        A piped litmus command re-parses its producer in-line and fails its own
+        way: `grep -q` under pipefail inverts on SIGPIPE, `head` truncates the
+        line a reader needed, `|| true` swallows the producer, and a `$(...)`
+        capture with no echo on the failing branch goes red with EMPTY output,
+        which is what envelope-citability step 20 did on the v56.10.19.1
+        release gate (1799-5kvy). The ratchet (1624-bv73) refuses growth; this
+        backlog is the burn-down.
+      item: >
+        One piped `command:` rewritten as a `litmus-decide.lua <family>` call
+        (or another scripts/lua decider on `script run`) with the same or a
+        stricter expectation, and the file's `litmus` line in
+        scripts/portability/pipe-site-floor.txt lowered in the same commit
+        (`check-shell-ratchet.lua --dump-floors` prints it). EDITING an
+        existing piped command is converting it: a change that touches a piped
+        `command:` line and leaves the pipe in place is warned by name
+        (1800-f56m's ratchet arm; advisory, so a warning, never a refusal).
+      item_ceiling_lines: 1
+      item_ceiling_measured: >
+        2026-10-19: an item is one `command:` line; a step whose decision no
+        family covers yet is a packet under 1800-nvsc, not an item.
+      spec: openspec/specs/litmus-framework/spec.md
+      guard: 1800-f56m
+      epic: 1800-nvsc
 
 approved_bar_raises:
   - id: ci-full-all-features-clippy

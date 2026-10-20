@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: vault-unseal-share-ephemerality-and-reset-hygiene
+    event:
+      type: note
+      ts: "2026-10-20T16:29:33Z"
+      agent_id: linux-lenovinha-claude-20261020t162932z
+      host: linux
+      summary: |
+        Slice 2a implemented: PR 588 landed in run 181 as 708d1d9d8. Every podman file-driver secret is now a tmpfs runtime file under XDG_RUNTIME_DIR/tillandsias/secrets, bind-mounted read-only; legacy podman secrets are removed. Remaining: slice 2b (CA and vault key files into the OS keyring, written to tmpfs at launch) and slice 3 (guests). Row stays in_progress.

@@ -1,0 +1,32 @@
+# @trace spec:tillandsias-vault
+name: litmus:antigravity-lane-tty-takes-keystrokes
+spec: tillandsias-vault
+phase: pre-build
+description: An interactive provider sign-in (Antigravity's login menu) gets the person's terminal with a TTY, so keys and terminal replies reach the app instead of being echoed raw; only Codex's key-free device login keeps the output-only stream (1799-a6xi)
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains crates/tillandsias-headless
+  - cargo is available in PATH
+
+critical_path:
+  - step: "an interactive sign-in gets the terminal, not the output-only stream"
+    command: "cargo test -p tillandsias-headless --features tray tests::an_interactive_sign_in_gets_the_terminal_not_the_output_only_stream -- --exact"
+    timeout_ms: 600000
+
+  - step: "an unfinished sign-in step is still named and pushed (1571-lgex)"
+    command: "cargo test -p tillandsias-headless --features tray tests::an_unfinished_sign_in_step_is_named_and_pushed_not_propagated_raw -- --exact"
+    timeout_ms: 600000
+
+observability:
+  traces:
+    - "@trace spec:tillandsias-vault"
+  expected_log: "Antigravity sign-in takes keystrokes; no terminal reply is echoed"
+  log_fields:
+    spec: "tillandsias-vault"
+    test: "antigravity-lane-tty-takes-keystrokes"
+
+rollback:
+  on_failure: "inspect sign_in_step and LoginContainerCleanup in crates/tillandsias-headless/src/main.rs"
+  command: "grep -n 'fn sign_in_step\\|SignInStep::' crates/tillandsias-headless/src/main.rs"

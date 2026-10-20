@@ -1,0 +1,413 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl, 2026-10-19, from the operator's live finding: a
+# terminal was killed uncleanly and left its containers hanging; nothing in
+# the tree would ever stop them. Operator direction (verbatim in essence):
+# watchdogs that gracefully shut down leftover containers when idle; agents
+# told "idle containers get terminated"; local serving idempotent (a reaped
+# preview is relaunched on demand); grace >= 30 min, ~3 h for baby web
+# containers; shared logs aware of the reap afterwards.
+# Epic 1800-465n and its six slices. Change:
+# openspec/changes/idle-container-reaper/ (proposal, design with the survey
+# of existing mechanisms, tasks, deltas on container-idle-reaper,
+# local-web-preview, runtime-diagnostics-stream, tray-progress-and-icon-states).
+# Code is cited by symbol, never by line.
+packets:
+  - packet_id: idle-containers-are-reaped-by-a-watchdog-that-outlives-the-launcher-with-per-class-grace-and-local-serving-relaunches-on-demand
+    order: 1800-465n
+    status: ready
+    kind: epic
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    size: L
+    implementer_tier: sonnet
+    capability_tags: [containers, lifecycle, reaper, watchdog, forge, web-preview, router, logging, tray, linux, macos, windows, epic]
+    estimated_hours: 4
+    related: [1776-ondm, 1779-sq9g, 1784-skfj, 1792-48yg, 1793-wggq, 1723-2fiq, 1560-73zh]
+    owned_files:
+      - openspec/changes/idle-container-reaper/
+    title: |
+      EPIC — every container Tillandsias creates belongs to a class with an idle budget (lane/forge 30 min, web preview 3 h, project infra 30 min after its last lane, core never while owned); a watchdog that outlives any one launcher (tray liveness supervisor, a transient systemd --user timer for tray-less CLI lanes, the guest headless on macOS/Windows) detects orphans (owner pid gone) and stops idle containers gracefully; a reaped preview is a defined `state: reaped` that publish_local/service_reload relaunch on the current source; agents are told idle containers get terminated; the reap is a gc.reap curated global event; today a killed terminal leaves forge, git mirror and preview running forever
+    context: |
+      LIVE (operator, 2026-10-19): a terminal was killed uncleanly and its
+      containers stayed up with nothing scheduled to stop them.
+      SOURCE READ (macuahuitl, 2026-10-19, origin/linux-next 4e4fd5925):
+      every cleanup runs from the launcher's own exit path or the tray's
+      shutdown — `cleanup_shared_stack_if_no_running_forge`,
+      `cleanup_stack_containers`, `local_web_preview::cleanup_departed_lane`,
+      the tray-ux startup sweep. A killed launcher reaches none of them.
+      The only idle clock (`WindowRegistry::is_idle_timeout`, 24 h) has no
+      caller outside tests. `SHARED_STACK_SCOPES` knows Core/LaneScoped
+      only; no container carries a class, owner pid or budget. The
+      `[liveness]` supervisor re-ensures Core containers and never removes.
+      `reload_inner` (1723-2fiq) already recreates an exited preview from
+      its labels — the relaunch primitive — but a REMOVED preview answers
+      `not_running: ...`, which agents read as an error.
+      `forge-diagnostics-scope` names `gc.reap` as a GlobalEvent kind;
+      nothing in crates/ produces it (1779-sq9g). Full survey with gaps:
+      openspec/changes/idle-container-reaper/design.md "What exists".
+      DESIGN (binding on every child): ONE class table `CONTAINER_CLASSES`
+      next to `SHARED_STACK_SCOPES`; labels tillandsias.class/.owner-pid/
+      .launched-at/.lane on every launch; idle per class measured from
+      real activity (lane: PTY/control-wire/MCP/exec/window; preview:
+      router last request); orphan = owner pid dead and lane unadopted,
+      budget still applies; one idempotent lock-protected sweep with one
+      verdict line per container; graceful stop per class; a reap record
+      for previews so status explains and relaunch rebuilds; budgets
+      env-overridable for fixtures only; no persistent service or cron.
+      LOG ALIGNMENT FOLLOWS 1779-sq9g: slice 1799-dav6 produces gc.reap
+      through forge_diagnostics::GlobalEvent once it lands; until then the
+      verdict goes through tillandsias-logging as a container stop event.
+    children:
+      - 1799-haat
+      - 1799-qgu5
+      - 1799-xdcx
+      - 1799-mvmc
+      - 1799-dav6
+      - 1799-6yyp
+    exit_criteria:
+      - "all six children complete"
+      - "LIVE (Linux, no tray): launch a CLI lane, publish a static preview, kill the terminal with SIGKILL; with TILLANDSIAS_IDLE_BUDGET_LANE_SECS=60 and TILLANDSIAS_IDLE_BUDGET_PREVIEW_SECS=180 the forge is gone within 2 min and the preview within 4 min, each with a verdict line; pre-fix result: FAILS (all three containers still running an hour later)"
+      - "LIVE: from a new lane of the same project, publish_local returns running on the same URL and serves a file edited after the reap; pre-fix result: FAILS (not_running error path, or the stale container)"
+    unscoreable: "an epic; its closure is the children's fixtures plus the two live arms above, recorded as events on this row"
+    next_action: >
+      Children in order haat → qgu5 → xdcx; mvmc in parallel with xdcx;
+      dav6 after 1779-sq9g's GlobalEvent; 6yyp last. Do not add a persistent
+      user service; do not reap previews with the lane; core containers
+      join idle reaping only after 1801-6ci7 measures them fast and idempotent;
+      browser windows are reaped with their lane's clock, with no separate 24 h cap.
+    provenance: |
+      Filed by macuahuitl (Claude design lead session), 2026-10-19, from the
+      operator's requirement of the same day.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:20:00Z"
+        host: macuahuitl
+        summary: |-
+          Epic: idle container reaper with per-class grace, orphan detection, idempotent relaunch of local serving, gc.reap announcement.
+
+  - packet_id: every-container-launch-labels-its-class-owner-pid-and-lane-and-the-host-keeps-a-persisted-per-lane-activity-clock-and-the-router-answers-last-request-per-route
+    order: 1799-haat
+    status: ready
+    kind: implementation
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    size: M
+    implementer_tier: sonnet
+    capability_tags: [containers, lifecycle, labels, router, mcp, linux]
+    estimated_hours: 4
+    parent: 1800-465n
+    depends_on: []
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-headless/src/mcp_socket.rs
+      - crates/tillandsias-headless/src/local_web_preview.rs
+      - crates/tillandsias-router-sidecar/src/main.rs
+    title: |
+      Slice 1 of 1800-465n — the class table `CONTAINER_CLASSES` (lane 30 min, preview 3 h, project-infra 30 min after last lane, core never-while-owned, foreign untouched) next to `SHARED_STACK_SCOPES`; every launch labels tillandsias.class, .owner-pid, .launched-at, .lane; a per-lane activity clock touched by PTY/control-wire/MCP/exec/window activity and persisted under the runtime dir; the router exposes last-request-per-route on its control socket
+    context: |
+      Today no container carries a class, owner or budget; the only labels
+      are tillandsias.preview.*, tillandsias.lane/.role (mcp_socket.rs),
+      tillandsias.browser-window, tillandsias.toolchain. The router keeps
+      no per-route activity. See the epic's design.md tables "Container
+      classes and idle budgets" and "How idle is measured".
+    exit_criteria:
+      - 'RED FIRST: a fixture over the podman shim asserts every launch spec minted by the forge, browser-window, toolchain, sidecar, git, inference and preview builders carries tillandsias.class and tillandsias.owner-pid (FAILS on the pre-fix code: no such labels)'
+      - 'the activity clock for a lane, read after a simulated process restart, equals the last persisted touch and never "now"; with no persisted file it equals tillandsias.launched-at'
+      - 'the router control socket answers route_activity with a unix timestamp per route, and a route never requested answers absent'
+    unscoreable: "unpinnable-until-the-guard-exists: the labels fixture is written with the table in the same commit (1136-n8sh); future litmus filename: container-class-labels-on-every-launch"
+    provenance: |
+      Filed by macuahuitl, 2026-10-19, slice of 1800-465n.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:20:00Z"
+        host: macuahuitl
+        summary: |-
+          Class table, launch labels, persisted lane activity clock, router route_activity.
+
+  - packet_id: reap-sweep-classifies-every-owned-container-decides-idle-or-orphan-per-class-budget-stops-gracefully-writes-a-preview-reap-record-and-prints-one-verdict-line-per-container
+    order: 1799-qgu5
+    status: ready
+    kind: implementation
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    size: M
+    implementer_tier: sonnet
+    capability_tags: [containers, lifecycle, reaper, podman, linux]
+    estimated_hours: 5
+    parent: 1800-465n
+    depends_on:
+      - every-container-launch-labels-its-class-owner-pid-and-lane-and-the-host-keeps-a-persisted-per-lane-activity-clock-and-the-router-answers-last-request-per-route
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-headless/src/local_web_preview.rs
+    title: |
+      Slice 2 of 1800-465n — `reap_sweep()` and `tillandsias --internal-reap-sweep [--dry-run]`: list owned containers, classify from the label, decide keep/stop/skip from idle clock, orphan state (owner pid dead and lane unadopted) and class budget, honour the reaper resource lock (skip when held), runtime_phase mutation refusal and launch-in-flight markers, re-read the clock under the lane lock before stopping, stop gracefully per class (forge stop -t 10 then rm, children rm -f -t 0, preview remove_now + remove_route + reap record), print `reap: <class> <name> idle= budget= owner= -> verdict`
+    context: |
+      Reuses cleanup_stack_containers for project-infra/core, remove_now and
+      remove_route for previews, resource_lock::acquire, runtime_phase::
+      container_mutations_allowed, foreign_launches_in_flight. Budgets are
+      env-overridable (TILLANDSIAS_IDLE_BUDGET_<CLASS>_SECS) for fixtures.
+    exit_criteria:
+      - 'RED FIRST: a shim fixture with a forge whose owner pid is dead and whose clock is older than the lane budget: the sweep stops it, and a sweep with the clock younger than the budget keeps it (FAILS on the pre-fix code: no sweep exists)'
+      - 'a sweep while the reaper lock is held prints skip:locked for every container and stops nothing; a sweep during drain prints skip:draining; a foreign container prints skip:foreign'
+      - 'NEGATIVE CONTROL: a preview with a router last-request inside the budget is kept; a preview whose router cannot answer is kept'
+      - 'after a preview stop the lane reap record carries reaped_at, reason, runtime, app_dir, config, and the route is gone'
+      - '--dry-run prints identical verdicts and the container list is unchanged'
+    unscoreable: "unpinnable-until-the-guard-exists: the sweep fixture is written with the sweep (1136-n8sh); future litmus filename: reap-sweep-verdicts-per-class"
+    provenance: |
+      Filed by macuahuitl, 2026-10-19, slice of 1800-465n.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:20:00Z"
+        host: macuahuitl
+        summary: |-
+          The one idempotent, lock-protected sweep with graceful per-class stop and a preview reap record.
+
+  - packet_id: the-reap-sweep-runs-from-a-watchdog-that-outlives-the-launcher-tray-liveness-supervisor-transient-systemd-user-timer-for-tray-less-cli-lanes-guest-headless-on-macos-and-windows
+    order: 1799-xdcx
+    status: ready
+    kind: implementation
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    size: M
+    implementer_tier: sonnet
+    capability_tags: [containers, lifecycle, watchdog, systemd, liveness, linux, macos, windows]
+    estimated_hours: 4
+    parent: 1800-465n
+    depends_on:
+      - reap-sweep-classifies-every-owned-container-decides-idle-or-orphan-per-class-budget-stops-gracefully-writes-a-preview-reap-record-and-prints-one-verdict-line-per-container
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-headless/src/container_deps.rs
+    title: |
+      Slice 3 of 1800-465n — the sweep is driven by something that survives a killed terminal: the `[liveness]` supervisor calls reap_sweep at most every TILLANDSIAS_REAP_SWEEP_SECS (300); a CLI lane launch with no tray arms one idempotent transient `systemd --user` timer unit `tillandsias-reap` running `tillandsias --internal-reap-sweep` (fallback without systemd: a detached `--internal-reap-sweep --loop` that exits when nothing of ours is left); the timer ends when the last product container is gone; the guest headless runs it on macOS/Windows; no persistent unit or cron is ever installed
+    context: |
+      The tray adopts every lane it can see on start (owner becomes the
+      tray). Operator ruling respected: a peer cannot commit operator spend
+      — the unit is transient, product-armed, self-ending.
+    exit_criteria:
+      - 'RED FIRST: a fixture that launches a CLI lane under a fake systemd-run shim and kills the launcher asserts a sweep invocation is recorded within one cadence (FAILS on the pre-fix code: nothing is armed)'
+      - 'arming twice records one unit; after the sweep reports no product container, the unit stops itself and systemctl --user list-timers (or the shim ledger) shows no tillandsias-reap'
+      - 'with no systemd-run on PATH the fallback detached loop is spawned and its ledger shows it exiting on an empty container list'
+      - 'the liveness supervisor calls the sweep in the Ready phase and never in any other phase (fixture over run_check_with)'
+    unscoreable: "unpinnable-until-the-guard-exists: the arming fixture is written with the arming (1136-n8sh); future litmus filename: reap-watchdog-outlives-launcher"
+    provenance: |
+      Filed by macuahuitl, 2026-10-19, slice of 1800-465n.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:20:00Z"
+        host: macuahuitl
+        summary: |-
+          The watchdog: liveness supervisor + transient systemd --user timer + guest headless.
+
+  - packet_id: a-reaped-web-preview-is-state-reaped-in-service-status-and-service-logs-and-publish-local-and-service-reload-relaunch-it-from-the-reap-record-on-the-current-source-and-the-forge-instructions-say-idle-containers-get-terminated
+    order: 1799-mvmc
+    status: ready
+    kind: implementation
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    size: M
+    implementer_tier: sonnet
+    capability_tags: [web-preview, mcp, forge, affordance, linux]
+    estimated_hours: 4
+    parent: 1800-465n
+    depends_on:
+      - reap-sweep-classifies-every-owned-container-decides-idle-or-orphan-per-class-budget-stops-gracefully-writes-a-preview-reap-record-and-prints-one-verdict-line-per-container
+    owned_files:
+      - crates/tillandsias-headless/src/local_web_preview.rs
+      - images/default/
+      - .claude/skills/forge-quick-intro/
+    title: |
+      Slice 4 of 1800-465n — local serving is idempotent: `service_status` on a reaped preview returns state reaped with reaped_at, reason idle:<budget>, relaunch publish_local, url, serving false, route_ready false (a success frame, no -32000); `service_logs` returns state reaped with the retained tail; `publish_local` with no runtime and `service_reload` relaunch from the reap record on the live source and serve a file edited after the reap; `service_stop` on reaped is success; a relaunch needing an image inherits preparing/retry_after_s; the forge instructions and forge-quick-intro carry one sentence: idle containers get terminated (preview 3 h, forge 30 min) and publish_local relaunches the preview
+    context: |
+      Today a removed preview answers `not_running: no preview container;
+      publish_local first` and `not_running: no preview to reload`.
+      reload_inner (1723-2fiq) is the relaunch primitive but reads labels
+      from a container that no longer exists; the reap record replaces them.
+    exit_criteria:
+      - 'RED FIRST: a fixture that writes a reap record and removes the preview container, then calls status, asserts state reaped and no error envelope (FAILS on the pre-fix code: not_running)'
+      - 'publish_local with no runtime after a reap relaunches the recorded runtime on the same URL; the readiness probe returns a file edited after the reap'
+      - 'service_reload after a reap recreates the preview; service_stop after a reap returns success'
+      - 'NEGATIVE CONTROL: with no reap record and no container, status still reports stopped/absent as today and reload still answers not_running'
+      - 'grep of the built forge instructions and the forge-quick-intro skill finds the idle-termination sentence once each'
+    unscoreable: "unpinnable-until-the-guard-exists: the reaped-status fixture is written with the status change (1136-n8sh); future litmus filename: web-preview-reaped-is-a-status-and-relaunches"
+    provenance: |
+      Filed by macuahuitl, 2026-10-19, slice of 1800-465n.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:20:00Z"
+        host: macuahuitl
+        summary: |-
+          state: reaped, relaunch-from-record, and the agents-are-told sentence.
+
+  - packet_id: every-reap-publishes-one-gc-reap-global-event-per-class-to-all-live-lanes-and-a-scoped-container-reaped-event-to-the-owning-lane-and-the-tray-status-line-shows-the-verdict-without-an-icon-change
+    order: 1799-dav6
+    status: ready
+    kind: implementation
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    size: S
+    implementer_tier: sonnet
+    capability_tags: [logging, diagnostics, forge, tray, linux]
+    estimated_hours: 3
+    parent: 1800-465n
+    depends_on:
+      - reap-sweep-classifies-every-owned-container-decides-idle-or-orphan-per-class-budget-stops-gracefully-writes-a-preview-reap-record-and-prints-one-verdict-line-per-container
+      - scoped-forge-diagnostics-collection-query-and-curated-events-research
+    owned_files:
+      - crates/tillandsias-headless/src/mcp_socket.rs
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-core/src/tray_icon_state_machine.rs
+    title: |
+      Slice 5 of 1800-465n — log-awareness alignment, AFTER the shared-logs work (1779-sq9g / forge-diagnostics-scope): each sweep that stopped something publishes one `gc.reap` GlobalEvent per class (resource, count, reason; allowlisted fields only) to every live lane ring and a scoped `container.reaped` (name, class, idle_secs, budget_secs, relaunch) to the owning lane only; a sibling never learns the name; until GlobalEvent exists the verdict is a tillandsias-logging container stop event with reason=idle; the tray's single status line shows the latest reap verdict and the icon phase does not change
+    context: |
+      Operator ruling: a GC reap is one of the curated global events every
+      concurrent forge sees; no sibling visibility; session-only retention.
+      Tray ruling: one non-interactive status line; blush only during
+      creation, pups when done. The depends_on packet_id for 1779-sq9g is
+      the one declared in plan/index.d/20261018t023815z-1779-sq9g-*.yaml;
+      if that row is split, re-point with set-field.
+    exit_criteria:
+      - 'RED FIRST: the forge_diagnostics_scope_fixtures gain an arm: reap A''s preview with A and B live; both rings hold one gc.reap{resource: preview, count: 1}; only A''s ring holds container.reaped (FAILS on the pre-fix code: no producer)'
+      - 'the gc.reap event carries no key outside the envelope and the allowlist, and no container name'
+      - 'the tray state machine receives a reap and stays in its current phase; the status line text equals the verdict'
+    unscoreable: "unpinnable-until-the-guard-exists: the ring arm is written with the producer and lands only after 1779-sq9g's GlobalEvent (1136-n8sh); future litmus filename: gc-reap-reaches-every-forge-names-none"
+    provenance: |
+      Filed by macuahuitl, 2026-10-19, slice of 1800-465n.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:20:00Z"
+        host: macuahuitl
+        summary: |-
+          gc.reap global event + scoped container.reaped + tray status line; follows 1779-sq9g.
+
+  - packet_id: live-acceptance-a-cli-lane-terminal-killed-with-sigkill-has-its-forge-git-mirror-and-preview-reaped-in-class-order-under-shortened-budgets-and-a-new-lane-publish-local-relaunches-and-serves-an-edited-file
+    order: 1799-6yyp
+    status: ready
+    kind: verification
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    size: M
+    implementer_tier: sonnet
+    capability_tags: [containers, lifecycle, reaper, litmus, e2e, linux, podman]
+    estimated_hours: 4
+    parent: 1800-465n
+    depends_on:
+      - the-reap-sweep-runs-from-a-watchdog-that-outlives-the-launcher-tray-liveness-supervisor-transient-systemd-user-timer-for-tray-less-cli-lanes-guest-headless-on-macos-and-windows
+      - a-reaped-web-preview-is-state-reaped-in-service-status-and-service-logs-and-publish-local-and-service-reload-relaunch-it-from-the-reap-record-on-the-current-source-and-the-forge-instructions-say-idle-containers-get-terminated
+    owned_files:
+      - openspec/litmus-tests/
+      - openspec/litmus-bindings.yaml
+      - scripts/
+    title: |
+      Slice 6 of 1800-465n — live acceptance on a scratch substrate (Linux podman, then one guest platform): launch a CLI lane with no tray, publish a static preview, SIGKILL the terminal; with TILLANDSIAS_IDLE_BUDGET_LANE_SECS=60, TILLANDSIAS_IDLE_BUDGET_PREVIEW_SECS=180, TILLANDSIAS_REAP_SWEEP_SECS=20 the forge is gone within 2 min, its git mirror within 3 min, the preview within 4 min, each with a verdict line and no straggler per container-teardown-straggler-probe.sh; a new lane's publish_local returns running on the same URL and serves a file edited after the reap; bound as a litmus the release tier runs
+    context: |
+      This is the arm that fails on today's code for the operator's exact
+      scenario. The three-time budgets are fixture-only overrides; the
+      product defaults stay 30 min / 3 h.
+    exit_criteria:
+      - 'RED FIRST: the litmus run against the pre-fix binary FAILS with all three containers still running after 5 min'
+      - 'post-fix: forge, git mirror and preview removed in that order within the stated bounds; one reap: verdict line per container in the sweep output'
+      - 'post-fix: publish_local from a new lane of the same project serves the post-reap edit on the same URL'
+      - 'NEGATIVE CONTROL: with a PTY session kept attached to the forge, the same wait reaps the preview and NOT the forge'
+      - 'the litmus is bound in openspec/litmus-bindings.yaml to container-idle-reaper and runs in the release tier'
+    unscoreable: "unpinnable-until-the-guard-exists: the litmus IS this packet's deliverable, written in the same commit as its binding (1136-n8sh); future litmus filename: idle-reaper-kill-terminal-relaunch-preview — the four arms above on a scratch substrate, RED on the pre-fix binary, green after 1799-haat..1799-mvmc"
+    provenance: |
+      Filed by macuahuitl, 2026-10-19, slice of 1800-465n.
+    events:
+      - type: filed
+        ts: "2026-10-19T21:20:00Z"
+        host: macuahuitl
+        summary: |-
+          Live acceptance litmus for the operator's exact scenario (killed terminal → reaped → relaunched).
+
+  - packet_id: an-selinux-policy-confines-the-transient-systemd-user-reaper-timer-and-the-reap-sweep-it-runs-on-hardened-linux-hosts-and-an-avc-denial-is-counted-not-silent
+    order: 1801-5tin
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    size: M
+    implementer_tier: sonnet
+    capability_tags: [selinux, policy, systemd, reaper, security, linux]
+    estimated_hours: 6
+    parent: 1800-465n
+    depends_on:
+      - the-reap-sweep-runs-from-a-watchdog-that-outlives-the-launcher-tray-liveness-supervisor-transient-systemd-user-timer-for-tray-less-cli-lanes-guest-headless-on-macos-and-windows
+    owned_files:
+      - packaging/selinux/
+      - scripts/
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      Operator ruling 2 of 1800-465n — the transient `systemd --user` reaper timer and the `--internal-reap-sweep` it runs are confined by an SELinux policy module, not only a unit file, on enforcing hardened hosts; a denial of the sweep is counted and reported, never silent
+    context: |
+      The target is properly hardened Linux hosts (operator, 2026-10-19). An unconfined or
+      mislabelled sweep either escapes policy or is denied silently and the idle
+      containers stay up. Design: openspec/changes/idle-container-reaper/design.md
+      "Operator rulings (2026-10-19)" item 2.
+    exit_criteria:
+      - "on an enforcing SELinux host the transient timer's sweep runs in its confined domain (ps -Z shows it) and reaps a test container; pre-fix result: FAILS (no policy exists, the sweep runs unconfined or is denied)"
+      - "a sweep that hits an AVC denial increments a counted denial total printed in the sweep output and the status line, and is never silent; NEGATIVE CONTROL: a policy-less run reports the denial count above zero; pre-fix result: FAILS (denial invisible)"
+    unscoreable: "unpinnable-until-the-guard-exists: future litmus filename: reap-sweep-selinux-confined (needs an enforcing host)"
+    next_action: >
+      After xdcx: policy module, file contexts for the unit and sweep, the AVC
+      counter, then the live arm on an enforcing host.
+    provenance: |
+      Filed by macuahuitl, 2026-10-19, from the operator rulings of the same day.
+    events:
+      - type: filed
+        ts: "2026-10-19T23:30:00Z"
+        host: macuahuitl
+        summary: |-
+          SELinux confinement for the reaper timer and sweep, with counted denials.
+
+
+  - packet_id: measure-the-cold-start-up-time-of-the-vault-proxy-router-and-inference-containers-and-prove-each-start-up-sequence-is-idempotent-as-the-precondition-before-they-join-idle-reaping
+    order: 1801-6ci7
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    size: M
+    implementer_tier: sonnet
+    capability_tags: [containers, lifecycle, measurement, idempotency, reaper, linux]
+    estimated_hours: 6
+    parent: 1800-465n
+    depends_on:
+      - every-container-launch-labels-its-class-owner-pid-and-lane-and-the-host-keeps-a-persisted-per-lane-activity-clock-and-the-router-answers-last-request-per-route
+    owned_files:
+      - scripts/
+      - crates/tillandsias-headless/src/main.rs
+      - openspec/changes/idle-container-reaper/
+    title: |
+      Operator ruling 3 of 1800-465n — record each infra container's cold start-up time and prove its start-up sequence idempotent; only then does the class table move a service from never-while-owned to reapable
+    context: |
+      Until the measurement and the idempotency are both shown, vault, proxy, router
+      and inference stay running while owned. Design: openspec/changes/idle-container-reaper/design.md
+      "Operator rulings (2026-10-19)" item 3. Threshold proposed here: 10 s cold start.
+    exit_criteria:
+      - "a script prints one line per service (vault, proxy, router, inference) with cold start ms over N=5; pre-fix result: FAILS (no measurement exists)"
+      - "running each start-up sequence twice back to back leaves the same state: no duplicate secret, network or route; pre-fix result: FAILS (no idempotency arm exists)"
+      - "the class table moves a service from never-while-owned to reapable only if its measured start is under 10 s and its idempotency arm is green; a service failing either stays never-while-owned; pre-fix result: FAILS (table has no such rule)"
+    unscoreable: "unpinnable-until-the-guard-exists: future litmus filename: infra-startup-idempotent-and-measured"
+    next_action: >
+      After haat: the measurement script, the idempotency arm per service, then the
+      table rule gated on both.
+    provenance: |
+      Filed by macuahuitl, 2026-10-19, from the operator rulings of the same day.
+    events:
+      - type: filed
+        ts: "2026-10-19T23:30:00Z"
+        host: macuahuitl
+        summary: |-
+          Measure infra cold start and prove idempotent start-up before infra joins idle reaping.
+

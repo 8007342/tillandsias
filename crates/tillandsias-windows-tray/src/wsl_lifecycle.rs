@@ -369,6 +369,9 @@ exit "$rc"
 /// `enable --now` fails against a unit systemd has given up on (measured on
 /// yolanda 2026-10-08: "Start request repeated too quickly", then exit 1).
 ///
+/// The failed-build markers go too (1793-wggq): a reset is the operator
+/// starting over, so it is the retry of an image declared failed.
+///
 /// The enclave resolver drop-in goes too, because it is derived state of the
 /// network the podman reset destroys. It sets `DNS=10.0.42.1`, the enclave
 /// network's own DNS, as systemd-resolved's only global upstream. After the
@@ -381,6 +384,7 @@ pub const SOFT_GUEST_WIPE: &str = "systemctl stop tillandsias-headless-ready.ser
      podman system reset --force && \
      rm -f /root/.cache/tillandsias/init-build-state.json /root/.cache/tillandsias/cache_version \
            /etc/systemd/resolved.conf.d/tillandsias-enclave.conf && \
+     rm -rf /root/.cache/tillandsias/image-ensure-failures && \
      { systemctl try-restart systemd-resolved 2>/dev/null; true; }";
 
 /// Attempts for the control-wire connect loop (see `connect_with_backoff`).
@@ -2506,6 +2510,17 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp);
     }
     use super::*;
+
+    /// 1793-wggq: the soft reset clears the failed-build markers after the
+    /// podman reset succeeded, so a reset retries an image declared failed.
+    #[test]
+    fn the_soft_guest_wipe_clears_the_failed_build_markers() {
+        let reset = SOFT_GUEST_WIPE.find("podman system reset --force").unwrap();
+        let markers = SOFT_GUEST_WIPE
+            .find("rm -rf /root/.cache/tillandsias/image-ensure-failures &&")
+            .expect("the wipe removes the marker directory");
+        assert!(reset < markers, "{SOFT_GUEST_WIPE}");
+    }
 
     /// ORDER 997-e4v2, slice 2. The host `~/src` drvfs mount is GONE from
     /// provisioning, and this asserts it about the CODE rather than the file.

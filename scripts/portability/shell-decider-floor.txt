@@ -33,7 +33,6 @@ scripts/check-exact-version-literal-added.sh
 scripts/check-fleet-membership.sh
 scripts/check-forge-findings-persisted.sh
 scripts/check-fragment-closure-evidence-added.sh
-scripts/check-fragment-keys-are-read.sh
 scripts/check-fragment-ts-skew.sh
 scripts/check-gate-memory-floor.sh
 scripts/check-gate-step-regimes.sh
@@ -50,7 +49,6 @@ scripts/check-litmus-mutation-arms-mutate.sh
 scripts/check-litmus-pin-claims.sh
 scripts/check-long-running-view.sh
 scripts/check-macos-only-sources-verified.sh
-scripts/check-macos-stock-binaries.sh
 scripts/check-mcp-expert-health.sh
 scripts/check-mcp-live-build.sh
 scripts/check-mcp-surface.sh
@@ -63,7 +61,6 @@ scripts/check-no-competing-gate.sh
 scripts/check-no-fixture-writes-live-ledger.sh
 scripts/check-no-tracked-binaries.sh
 scripts/check-opsx-generated-dirt.sh
-scripts/check-order-citations-resolve.sh
 scripts/check-packet-tier-declared.sh
 scripts/check-pickup-role-grammar.sh
 scripts/check-plan-binary-current.sh
@@ -84,13 +81,11 @@ scripts/check-script-exec-bits.sh
 scripts/check-sigpipe-verdict-pipelines-added.sh
 scripts/check-skill-canonicalization.sh
 scripts/check-skills-single-source.sh
-scripts/check-source-slice-bounds.sh
 scripts/check-spec-index-resolution-agreement.sh
 scripts/check-spec-script-paths.sh
 scripts/check-stale-ready-rows.sh
 scripts/check-stranded-in-progress.sh
 scripts/check-stranded-plan-writes.sh
-scripts/check-terminology.sh
 scripts/check-test-baseline.sh
 scripts/check-tracked-files-unwritten.sh
 scripts/check-tray-string-corpus-drift.sh
@@ -400,7 +395,6 @@ scripts/test-mcp-run-command-tool.sh
 scripts/test-mcp-server-resilience.sh
 scripts/test-mcp-transport-death-trace.sh
 scripts/test-memo-hit-observability.sh
-scripts/test-meta-orchestration-dirty-tree-safety.sh
 scripts/test-meta-orchestration-opsx-sync-merge.sh
 scripts/test-metrics-log-fallback-is-loud.sh
 scripts/test-metrics-log-path-agreement.sh

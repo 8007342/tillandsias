@@ -231,7 +231,7 @@ litmus openspec/litmus-tests/litmus-openspec-cli-pin-shape.yaml 1
 litmus openspec/litmus-tests/litmus-order-id-collision-free.yaml 2
 litmus openspec/litmus-tests/litmus-parked-blocks-visibility-shape.yaml 4
 litmus openspec/litmus-tests/litmus-pickup-role-grammar-shape.yaml 8
-litmus openspec/litmus-tests/litmus-plan-answer-envelope-citability.yaml 16
+litmus openspec/litmus-tests/litmus-plan-answer-envelope-citability.yaml 15
 litmus openspec/litmus-tests/litmus-plan-compaction-format-preservation.yaml 2
 litmus openspec/litmus-tests/litmus-plan-engine-invariants-shape.yaml 2
 litmus openspec/litmus-tests/litmus-plan-fragments-lane-refusals-carry-affordance.yaml 1
@@ -338,7 +338,6 @@ scripts scripts/bump-version.sh 1
 scripts scripts/capture.sh 3
 scripts scripts/census-admitted-missing-evidence.sh 9
 scripts scripts/census-litmus-layer-classification.sh 5
-scripts scripts/census-litmus-reachability.sh 1
 scripts scripts/census-litmus-step-enforcement.sh 4
 scripts scripts/census-sigpipe-verdict-pipelines.sh 6
 scripts scripts/centicolon-backfill.sh 10
@@ -373,7 +372,6 @@ scripts scripts/check-exact-version-literal-added.sh 5
 scripts scripts/check-fleet-membership.sh 8
 scripts scripts/check-forge-findings-persisted.sh 3
 scripts scripts/check-fragment-closure-evidence-added.sh 5
-scripts scripts/check-fragment-keys-are-read.sh 1
 scripts scripts/check-fragment-ts-skew.sh 4
 scripts scripts/check-gate-memory-floor.sh 3
 scripts scripts/check-gate-step-regimes.sh 1
@@ -389,7 +387,6 @@ scripts scripts/check-litmus-line-windows.sh 8
 scripts scripts/check-litmus-mutation-arms-mutate.sh 3
 scripts scripts/check-litmus-pin-claims.sh 5
 scripts scripts/check-long-running-view.sh 21
-scripts scripts/check-macos-stock-binaries.sh 7
 scripts scripts/check-mcp-expert-health.sh 46
 scripts scripts/check-mcp-live-build.sh 4
 scripts scripts/check-mcp-surface.sh 4
@@ -401,7 +398,6 @@ scripts scripts/check-no-competing-gate.sh 6
 scripts scripts/check-no-fixture-writes-live-ledger.sh 16
 scripts scripts/check-no-tracked-binaries.sh 7
 scripts scripts/check-opsx-generated-dirt.sh 1
-scripts scripts/check-order-citations-resolve.sh 6
 scripts scripts/check-packet-tier-declared.sh 4
 scripts scripts/check-pickup-role-grammar.sh 3
 scripts scripts/check-plan-binary-current.sh 5
@@ -421,13 +417,11 @@ scripts scripts/check-script-exec-bits.sh 6
 scripts scripts/check-sigpipe-verdict-pipelines-added.sh 15
 scripts scripts/check-skill-canonicalization.sh 4
 scripts scripts/check-skills-single-source.sh 8
-scripts scripts/check-source-slice-bounds.sh 2
 scripts scripts/check-spec-index-resolution-agreement.sh 4
 scripts scripts/check-spec-script-paths.sh 7
 scripts scripts/check-stale-ready-rows.sh 3
 scripts scripts/check-stranded-in-progress.sh 5
 scripts scripts/check-stranded-plan-writes.sh 3
-scripts scripts/check-terminology.sh 4
 scripts scripts/check-test-baseline.sh 8
 scripts scripts/check-tracked-files-unwritten.sh 4
 scripts scripts/check-tray-string-corpus-drift.sh 2
@@ -495,7 +489,6 @@ scripts scripts/litmus-covering-specs.sh 9
 scripts scripts/litmus-git-delta-wait.sh 4
 scripts scripts/litmus-helper-browser-isolation.sh 3
 scripts scripts/litmus-helper-event-driven.sh 6
-scripts scripts/litmus-helper-nix-cache-size.sh 1
 scripts scripts/litmus-helper-storage-isolation.sh 13
 scripts scripts/litmus-helper-tray-network-bootstrap.sh 3
 scripts scripts/litmus-run-one.sh 4

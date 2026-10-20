@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: vault-unseal-secret-first-boot-dummy-overwrites-real-share-race
+    field: status
+    value: obsoleted
+    ts: "2026-10-19T20:00:19Z"
+    host: lenovinha
+
+events:
+  - packet_id: vault-unseal-secret-first-boot-dummy-overwrites-real-share-race
+    event:
+      type: note
+      ts: "2026-10-19T20:00:19Z"
+      host: lenovinha
+      summary: |-
+        Retracted by the filer: no race. The 19:16:37 wrong-key failure came from a manual podman restart, which reuses the secret copy the container took when it was created (the first-boot dummy). The store held the real share from 19:15:29, and launch_vault_container always does rm -f then run, so the product never reuses that copy: the tray-recreated container at 19:30:30 unsealed with it. The 19:12:12 failure was also a manual restart.

@@ -314,6 +314,7 @@ specs:
   - litmus:codex-safe-state-shape
   - litmus:forge-agent-result-format
   - litmus:forge-policy-binary-discoverability
+  - litmus:forge-plan-binary-on-path
   - litmus:npm-harness-install-idempotent-shape
   - litmus:harness-crash-supervision-shape
   - litmus:forge-ledger-freshness-shape
@@ -1084,9 +1085,10 @@ specs:
   last_verified: '2026-05-15'
 - spec_id: tray-cli-coexistence
   status: active
-  litmus_tests: null
-  coverage_ratio: 0
-  last_verified: '2026-05-14'
+  litmus_tests:
+  - litmus:cli-lane-cold-start-not-refused-by-own-tray
+  coverage_ratio: 100
+  last_verified: '2026-10-19'
 - spec_id: tray-host-control-socket
   status: obsolete
   tombstone: "Superseded by orders 123-128 normalization."
@@ -1258,6 +1260,8 @@ specs:
 - spec_id: tillandsias-vault
   status: active
   litmus_tests:
+  - litmus:no-credentials-at-rest
+  - litmus:antigravity-lane-tty-takes-keystrokes
   - litmus:vault-audit-persistence-shape
   - litmus:vault-auto-unseal-no-prompt
   - litmus:codex-api-key-env-var

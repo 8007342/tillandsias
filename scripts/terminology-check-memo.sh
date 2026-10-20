@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ORDER 1054-zvq4. The user-visible terminology check (629-t6bx,
-# scripts/check-terminology.sh) is LOCALE-BOUND: it parses
+# scripts/lua/check-terminology.lua, ported from the .sh by 1247-nx5c) is LOCALE-BOUND: it parses
 # locales/terminology.toml and then scans the VALUES of every other
 # locales/*.toml against every dictionary variant — a nested loop over terms x
 # strings x files, on EVERY gate. It has never failed on any host.
@@ -32,7 +32,7 @@
 # the condition a narrow memo needs. Same argument the archiver memo (911-m7js)
 # makes for the ledger; this file follows its shape deliberately.
 #
-# THE ENV OVERRIDES ARE PART OF THE KEY, not decoration. check-terminology.sh
+# THE ENV OVERRIDES ARE PART OF THE KEY, not decoration. check-terminology.lua
 # honours TILLANDSIAS_TERMINOLOGY_DICT and TILLANDSIAS_LOCALE_DIR, so a memo
 # that ignored them would return a hit earned by a DIFFERENT dictionary or a
 # different locale tree. The digest therefore resolves the same two paths the
@@ -50,7 +50,7 @@ MEMO="${TILLANDSIAS_TERMINOLOGY_MEMO:-$GIT_DIR/tillandsias-terminology-check.mem
 cd "$ROOT" || exit 1
 if command -v sha256sum >/dev/null 2>&1; then SHA=(sha256sum); else SHA=(shasum -a 256); fi
 
-# Resolved EXACTLY as scripts/check-terminology.sh resolves them.
+# Resolved EXACTLY as scripts/lua/check-terminology.lua resolves them.
 DICT="${TILLANDSIAS_TERMINOLOGY_DICT:-$ROOT/locales/terminology.toml}"
 LOCALE_DIR="${TILLANDSIAS_LOCALE_DIR:-$ROOT/locales}"
 
@@ -68,7 +68,7 @@ _digest() {
             printf 'scan:%s\n' "$f"; "${SHA[@]}" < "$f"
         done
         # The instrument: a changed checker must re-run even on unchanged input.
-        for f in scripts/check-terminology.sh; do
+        for f in scripts/lua/check-terminology.lua; do
             [ -f "$f" ] && { printf 'tool:%s\n' "$f"; "${SHA[@]}" < "$f"; }
         done
     } | LC_ALL=C sort | "${SHA[@]}" | cut -d' ' -f1

@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air on the coordinator's request (macuahuitl-fedora,
+# 2026-10-19), from the 1794-rf3a diagnosis runs.
+packets:
+  - packet_id: tray-exec-guest-never-exits-when-its-command-leaves-a-backgrounded-child-holding-the-session-and-the-vm-stays-held-for-hours
+    order: 1798-zuhv
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    size: S
+    pickup_role: macos
+    capability_tags: [macos, tray, exec-guest, pty, diagnostics]
+    related: [1794-rf3a, 1072-qk43]
+    depends_on: []
+    title: |
+      `tillandsias-tray --exec-guest '<cmd>'` printed all of the command's output and then never exited. The tray CLI, and through it the Virtualization.framework VM, stayed held for hours until the caller was killed, and every later tray CLI mode refused with "a live VM already running on this image". Both hangs came from commands that created and then removed a podman network.
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-10-19, v56.10.18.1 (evidence target/smoke-e2e/diag-1794/11-internal-publish.txt and 12-enclave-ip-direct.txt):
+      - Run 1 (~12:25Z): `podman network create --internal t1794-int; podman network create t1794-br`, then one router-image container on each, the curls, `podman rm -f`, `podman network rm t1794-int t1794-br`, and `podman info`. All output, including the final `podman info` line, was written. The tray process (pid 62327) and the VM XPC helper (pid 62333) were still alive 4 h 51 min later. They released only when the calling shell was stopped.
+      - Run 2 (~17:20Z): `podman network create --internal --subnet 10.89.77.0/24 t1794-int`, one container, a curl, `podman rm -f -t 0`, `podman network rm t1794-int`, and `echo done`. "done" was written, then the same hang, until stopped.
+      - The shared tail: both commands ended with `podman network rm` after containers ran on a NEW custom network. Other --exec-guest runs the same day (journalctl, podman run --network=none, podman exec, ls, cat) exited normally with "[tillandsias-vz] stop: guest reported a clean power-off".
+      HYPOTHESIS (coordinator and filer, unmeasured): a child that outlives the command holds an inherited stdout/stderr fd, or the PTY slave. The likeliest is netavark's aardvark-dns, which starts for a custom network with DNS enabled and can outlive the network. The guest PTY pump (pty_handler.rs) reads the master until EOF, so a surviving holder of the slave means no EOF, no final PtyClose, and the host CLI waits forever.
+      NOT KNOWN: whether the guest side ever emits the terminal PtyClose in this state, and whether the host side has any overall deadline.
+    exit_criteria:
+      - "Red first: an exec-guest whose command leaves a backgrounded child holding stdout/stderr (fixture: `sh -c 'sleep 300 & echo done'`) exits when the command exits. The host CLI prints the output and returns the command's own exit code within a bounded grace, and the VM is released. Today the fixture hangs."
+      - "The surviving child is named in one line (pid and argv) when the grace is used, so the next occurrence says what held the session."
+      - "NEGATIVE CONTROL: a command that is still running (fixture: `sleep 5; echo late`) is waited for, and its late output is not cut off."
+    unscoreable: "unpinnable-until-the-guard-exists: the fixture (a backgrounded child holding stdout) is written red first in the same change, at the PTY pump's waitpid/EOF seam"
+    next_action: >
+      Read the pty_handler.rs pump: what ends a session, EOF on the master or waitpid of the direct child. Make waitpid of the command end the session after a short drain grace, instead of waiting for EOF that a surviving child can withhold forever.
+    events:
+      - type: filed
+        ts: "2026-10-19T18:00:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          --exec-guest hung after its command finished, twice, both after `podman network rm`; the VM stayed held for hours.

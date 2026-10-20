@@ -440,6 +440,37 @@ pub enum NixCacheSupervision {
     Dead(String, i64),
 }
 
+/// Order 1784-skfj: what one liveness check concluded about a managed service.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ManagedSupervision {
+    Running,
+    /// podman did not answer the running query. Not a death: re-ensuring a
+    /// service nobody could look at replaces a live one.
+    Unanswered,
+    Dead(String, i64),
+}
+
+/// Pure classification for vault/proxy. `exit_state` is asked only when the
+/// running query answered "not running".
+pub fn classify_managed(
+    running: Option<bool>,
+    exit_state: impl FnOnce() -> Option<(String, i64)>,
+) -> ManagedSupervision {
+    match running {
+        None => ManagedSupervision::Unanswered,
+        Some(true) => ManagedSupervision::Running,
+        Some(false) => {
+            let (state, code) = exit_state().unwrap_or_else(|| ("unknown".to_string(), -1));
+            ManagedSupervision::Dead(state, code)
+        }
+    }
+}
+
+/// The line a check that could not ask writes instead of a death verdict.
+pub fn unanswered_verdict(service_name: &str) -> String {
+    format!("wait:managed-service-unanswered:service={service_name}:action=none")
+}
+
 /// Pure classification for the nix-cache supervision entry, split from the
 /// podman probes so the absent/dead distinction is unit-testable.
 pub fn classify_nix_cache(exit_state: Option<(String, i64)>, running: bool) -> NixCacheSupervision {
@@ -496,6 +527,16 @@ impl LivenessProbe {
     /// re-ensured services, which is empty when all are healthy.
     pub fn run_check(&mut self) -> Result<LivenessResult, String> {
         let mut satisfier = RealSatisfier { debug: self.debug };
+        self.run_check_with(&mut satisfier)
+    }
+
+    /// [`run_check`](Self::run_check) with the re-ensure behind `satisfier`,
+    /// so a fixture can drive the real state queries (podman inspect) while
+    /// recording, not performing, the re-ensure (order 1784-skfj).
+    pub fn run_check_with(
+        &mut self,
+        satisfier: &mut impl Satisfier,
+    ) -> Result<LivenessResult, String> {
         let mut result = LivenessResult {
             re_ensured: Vec::new(),
             running: Vec::new(),
@@ -508,16 +549,21 @@ impl LivenessProbe {
         let services = [Service::Vault, Service::Proxy];
 
         for &service in &services {
-            if crate::vault_bootstrap::container_running(service.name()) {
+            let supervision = classify_managed(
+                crate::vault_bootstrap::container_running_answer(service.name()),
+                || crate::vault_bootstrap::container_exit_state(service.name()),
+            );
+            if supervision == ManagedSupervision::Running {
                 result.running.push(service);
-            } else {
+            } else if supervision == ManagedSupervision::Unanswered {
+                let line = unanswered_verdict(service.name());
+                println!("{line}");
+                eprintln!("{line}");
+            } else if let ManagedSupervision::Dead(state, exit_code) = supervision {
                 // Order 767-es4w: a dead managed service is now LOUD and
                 // COUNTED, with the exit code that says how it died. The
                 // silent re-ensure this replaces is exactly how the proxy's
                 // two-day Exited(139) outage went unnoticed.
-                let (state, exit_code) =
-                    crate::vault_bootstrap::container_exit_state(service.name())
-                        .unwrap_or_else(|| ("unknown".to_string(), -1));
                 let deaths = self.bump_death(service);
                 let verdict = death_verdict(service.name(), &state, exit_code, deaths);
                 // BOTH streams: launchers capture different ones (767-nkkq).
@@ -537,13 +583,22 @@ impl LivenessProbe {
         // drain gate and resource lock inside ensure_nix_cache_running still
         // apply.
         let cache = Service::NixCache;
-        match classify_nix_cache(
-            crate::vault_bootstrap::container_exit_state(cache.name()),
-            crate::vault_bootstrap::container_running(cache.name()),
-        ) {
-            NixCacheSupervision::Absent => {}
-            NixCacheSupervision::Running => result.running.push(cache),
-            NixCacheSupervision::Dead(state, exit_code) => {
+        // Order 1784-skfj: an unanswered running query is not a death here either.
+        let cache_running = crate::vault_bootstrap::container_running_answer(cache.name());
+        match cache_running.map(|running| {
+            classify_nix_cache(
+                crate::vault_bootstrap::container_exit_state(cache.name()),
+                running,
+            )
+        }) {
+            None => {
+                let line = unanswered_verdict(cache.name());
+                println!("{line}");
+                eprintln!("{line}");
+            }
+            Some(NixCacheSupervision::Absent) => {}
+            Some(NixCacheSupervision::Running) => result.running.push(cache),
+            Some(NixCacheSupervision::Dead(state, exit_code)) => {
                 let deaths = self.bump_death(cache);
                 let verdict = death_verdict(cache.name(), &state, exit_code, deaths);
                 println!("{verdict}");
@@ -920,6 +975,56 @@ mod tests {
         assert!(v.contains(":state=unknown:exit=-1:"));
     }
 
+    /// ORDER 1784-skfj. A running query podman did not answer is not a death.
+    /// On the v56.10.17.1 macOS smoke a wedged podman timed out an inspect of
+    /// a Vault that was still logging, the probe printed
+    /// `fail:managed-service-death:service=tillandsias-vault:state=unknown`
+    /// and re-ensured it over the live one.
+    #[test]
+    fn an_unanswered_running_query_is_not_a_death_and_asks_nothing_more() {
+        let mut asked = false;
+        let got = classify_managed(None, || {
+            asked = true;
+            Some(("exited".into(), 1))
+        });
+        assert_eq!(got, ManagedSupervision::Unanswered);
+        assert!(
+            !asked,
+            "a check that could not ask must not go on to read an exit state"
+        );
+        assert_eq!(
+            unanswered_verdict("tillandsias-vault"),
+            "wait:managed-service-unanswered:service=tillandsias-vault:action=none"
+        );
+        // NEGATIVE CONTROLS: an answered "not running" is still a death with
+        // its exit state, and with none readable it keeps the unknown/-1 shape.
+        assert_eq!(
+            classify_managed(Some(false), || Some(("exited".into(), 139))),
+            ManagedSupervision::Dead("exited".into(), 139)
+        );
+        assert_eq!(
+            classify_managed(Some(false), || None),
+            ManagedSupervision::Dead("unknown".into(), -1)
+        );
+        assert_eq!(
+            classify_managed(Some(true), || None),
+            ManagedSupervision::Running
+        );
+    }
+
+    /// The running query's "no such container" is an answer (not running);
+    /// anything else podman says on failure is not.
+    #[test]
+    fn only_no_such_object_counts_as_an_answer_from_a_failed_inspect() {
+        assert!(crate::vault_bootstrap::inspect_says_absent(
+            "Error: no such object: \"tillandsias-vault\"\n"
+        ));
+        assert!(!crate::vault_bootstrap::inspect_says_absent(
+            "Error: acquiring lock 3 for container: resource temporarily unavailable"
+        ));
+        assert!(!crate::vault_bootstrap::inspect_says_absent(""));
+    }
+
     /// Counts are per-service and cumulative, so a flapping service shows a
     /// rising number instead of an indistinguishable stream of identical lines.
     #[test]
@@ -1091,5 +1196,93 @@ mod tests {
             body.contains("ca_bundle_trustable(&certs_dir)"),
             "satisfy_ca_bundle must gate on ca_bundle_trustable"
         );
+    }
+
+    /// Order 1784-skfj — the real state queries of `run_check_with` against an
+    /// exec'd shim podman (TILLANDSIAS_PODMAN_BIN, under the crate env lock),
+    /// with the re-ensure recorded, never performed: a real re-ensure reaches
+    /// image ensure and writes a failure marker into the host cache. `mode` is
+    /// `unanswered` (every inspect fails with a non-"no such" error, as a
+    /// wedged or budget-killed podman does) or `exited` (vault and proxy report
+    /// Exited(139)). nix-cache is absent in both. Returns the result, the
+    /// services re-ensured, and every argv the shim saw.
+    #[cfg(unix)]
+    fn run_check_against_shim(
+        mode: &str,
+    ) -> (Result<LivenessResult, String>, Vec<Service>, Vec<String>) {
+        let _seam = crate::runtime_assets::podman_seam_lock();
+        let _guard = crate::test_support::env_lock();
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join("argv.log");
+        let shim = dir.path().join("podman");
+        std::fs::write(
+            &shim,
+            format!(
+                "#!/bin/sh\n\
+                 printf '%s\\n' \"$*\" >> '{log}'\n\
+                 mode='{mode}'\n\
+                 last=''; for a in \"$@\"; do last=\"$a\"; done\n\
+                 if [ \"$1\" = inspect ]; then\n\
+                 \x20 if [ \"$last\" = tillandsias-nix-cache ]; then echo 'Error: no such object: tillandsias-nix-cache' >&2; exit 125; fi\n\
+                 \x20 if [ \"$mode\" = unanswered ]; then echo 'Error: database is locked' >&2; exit 125; fi\n\
+                 \x20 case \"$*\" in *State.Running*) echo false ;; *State.Status*) echo 'exited 139' ;; esac\n\
+                 \x20 exit 0\n\
+                 fi\n\
+                 echo 'shim: refused' >&2\n\
+                 exit 1\n",
+                log = log.display()
+            ),
+        )
+        .unwrap();
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&shim, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let original = std::env::var_os("TILLANDSIAS_PODMAN_BIN");
+        unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", &shim) };
+        let mut satisfier = RecordingSatisfier::new();
+        let result = LivenessProbe::new(false).run_check_with(&mut satisfier);
+        match original {
+            Some(bin) => unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", bin) },
+            None => unsafe { std::env::remove_var("TILLANDSIAS_PODMAN_BIN") },
+        }
+        let argv = std::fs::read_to_string(&log)
+            .unwrap_or_default()
+            .lines()
+            .map(str::to_string)
+            .collect();
+        (result, satisfier.calls, argv)
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn a_podman_that_does_not_answer_inspect_never_gets_vault_re_ensured() {
+        let (result, re_ensured, argv) = run_check_against_shim("unanswered");
+        let result = result.expect("an unanswered pass is not an error");
+        assert!(re_ensured.is_empty(), "re-ensured {re_ensured:?}");
+        assert!(result.re_ensured.is_empty() && result.deaths.is_empty());
+        assert!(!argv.is_empty(), "the shim was never called");
+        // Never asks for the exit state either: an unanswered running query
+        // is final for this pass.
+        let asked_exit_state = |name: &str| {
+            argv.iter()
+                .any(|a| a.contains("State.Status") && a.ends_with(name))
+        };
+        assert!(!asked_exit_state("tillandsias-vault"), "{argv:?}");
+        assert!(!asked_exit_state("tillandsias-proxy"), "{argv:?}");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn a_podman_that_answers_exited_still_gets_vault_re_ensured() {
+        // NEGATIVE CONTROL: a real death answer still re-ensures.
+        let (result, re_ensured, argv) = run_check_against_shim("exited");
+        let result = result.expect("the recorded re-ensures succeed");
+        assert_eq!(re_ensured, vec![Service::Vault, Service::Proxy]);
+        assert_eq!(
+            result.deaths,
+            vec![(Service::Vault, 1), (Service::Proxy, 1)]
+        );
+        assert!(argv.iter().any(|a| a.contains("State.Status")), "{argv:?}");
     }
 }

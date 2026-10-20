@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: enclave-ca-bundle-lives-in-tmp-so-containers-cannot-restart
+    field: status
+    value: implemented
+    ts: "2026-10-19T22:36:50Z"
+    host: lenovinha
+
+events:
+  - packet_id: enclave-ca-bundle-lives-in-tmp-so-containers-cannot-restart
+    event:
+      type: note
+      ts: "2026-10-19T22:36:50Z"
+      host: lenovinha
+      summary: |-
+        Stale status: its only blockers were its split children, both closed: 998-qrwu (CA path single-sourced, implemented) and 998-3z6g (bundle moved to a durable directory, completed). Criterion 3 met: scripts/lua/check-ca-path-literals.lua pins the /tmp/tillandsias-ca literal against regrowth. Criterion 2 met on lenovinha 2026-10-19: the live proxy mounts ~/.local/state/tillandsias/ca/intermediate.crt and came up healthy after a reboot and after the v56.10.19.1 install reset. Criterion 1 UNMEASURED: the only override seam is HOME (core ca_path::ca_dir), and a scratch HOME is not hermetic, because ensure-enclave would recreate the real, globally named proxy and vault containers; the live CA dir holds key material and was not moved aside.

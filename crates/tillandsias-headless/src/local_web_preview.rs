@@ -796,7 +796,13 @@ fn subset_mount(live: &LiveSource, path: &str, destination: &str) -> Result<Stri
 
 fn verify_subset(live: &LiveSource, path: &str) -> Result<(), String> {
     let relative = safe_relative(path)?;
-    let expected = format!("/home/forge/src/{}/{relative}", live.root);
+    verify_tree(live, &format!("/home/forge/src/{}/{relative}", live.root))
+}
+
+/// `expected` resolves to itself (no symlink escape) and holds no symlink,
+/// .git, .env*, node_modules, .cache or credentials anywhere below it.
+fn verify_tree(live: &LiveSource, expected: &str) -> Result<(), String> {
+    let expected = expected.to_string();
     let actual = podman_at(
         Step::Source,
         &["exec", &live.forge_id, "realpath", "-e", "--", &expected],
@@ -1041,6 +1047,17 @@ fn source_mounts(live: &LiveSource, profile: &Profile) -> Result<Vec<String>, St
                 return Err(NO_SERVABLE_ROOT.into());
             }
             verify_subset(live, "index.html")?;
+            // 1788-qlwq slice 11: an app the caller NAMED (app_dir, e.g. a
+            // Flutter build/web) is a build output, so it is served whole, as
+            // public/ and dist/ are, under the same private-path scan. The
+            // project root keeps the narrow list below: source sits beside it.
+            if live.app_dir.is_some() {
+                verify_tree(live, &format!("/home/forge/src/{}", live.root))?;
+                return Ok(vec![format!(
+                    "type=volume,source={},target=/var/www,volume-subpath={},readonly=true",
+                    live.volume, live.root
+                )]);
+            }
             let mut mounts = vec![subset_mount(live, "index.html", "/var/www/index.html")?];
             let root = format!("/home/forge/src/{}", live.root);
             let files = podman_at(
@@ -1512,6 +1529,22 @@ pub(crate) fn add_dev_route(
     dev_url(service, project)
 }
 
+/// 1788-qlwq slice 10: every route a browser window can load, as
+/// `<service>.<project>.localhost:<preview TLS port>`, read from the router's
+/// route table (the tray state the browser-routing-allowlist spec names).
+/// Empty when the table or the TLS listener is unavailable.
+pub(crate) fn browser_routed_hosts() -> Vec<String> {
+    let Ok(port) = tls_port() else {
+        return Vec::new();
+    };
+    read_routes(false)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|r| r.preview_tls)
+        .map(|r| format!("{}.localhost:{port}", r.subdomain))
+        .collect()
+}
+
 /// The URL a dev server is opened at: https on the preview listener, the
 /// only scheme a browser.open window loads (order 1637-5765).
 fn dev_url(service: &str, project: &str) -> Result<String, String> {
@@ -1558,6 +1591,54 @@ fn read_routes(debug: bool) -> Result<Vec<crate::RouterRoute>, String> {
     crate::read_router_routes(debug)
 }
 
+/// The router's TLS listener inside the container (the `:8443` site address).
+const ROUTER_TLS_CONTAINER_PORT: u16 = 8443;
+
+/// Where the readiness probe dials the router (order 1794-rf3a).
+///
+/// The tillandsias-enclave network is `--internal`. Under ROOTFUL podman
+/// (netavark: the macOS and Windows guests, where headless runs as root) a
+/// host-port publish into an internal network is silently dead: measured on
+/// the v56.10.18.1 macOS guest, `-p 127.0.0.1:28081:8080` on an internal
+/// network timed out while the same image on a bridge answered, and `podman
+/// ps` listed both. The guest itself sits on the enclave bridge, so a rootful
+/// probe dials the router's enclave address at its container port. ROOTLESS
+/// podman (a Linux host; netavark + pasta) does forward that publish (measured
+/// on macuahuitl), and there the enclave address is inside podman's own
+/// network namespace, out of reach, so the loopback publish stays.
+pub(crate) fn probe_endpoint(
+    rootful: bool,
+    router_enclave_ip: Option<std::net::IpAddr>,
+    tls_port: u16,
+) -> Result<std::net::SocketAddr, String> {
+    if rootful {
+        let ip = router_enclave_ip
+            .ok_or("router_not_ready: the router has no address on the enclave network")?;
+        return Ok(std::net::SocketAddr::new(ip, ROUTER_TLS_CONTAINER_PORT));
+    }
+    Ok(std::net::SocketAddr::from(([127, 0, 0, 1], tls_port)))
+}
+
+/// The router's address on the enclave network, from its `podman inspect` row.
+pub(crate) fn router_enclave_ip(row: &Value) -> Option<std::net::IpAddr> {
+    row["NetworkSettings"]["Networks"][crate::ENCLAVE_NET]["IPAddress"]
+        .as_str()
+        .and_then(|ip| ip.parse().ok())
+}
+
+/// Why a probe request failed, in words a refusal can carry.
+fn probe_error_class(e: &reqwest::Error) -> &'static str {
+    if e.is_timeout() {
+        "timed out"
+    } else if e.is_connect() {
+        "could not connect"
+    } else if e.is_request() {
+        "TLS or request error"
+    } else {
+        "failed"
+    }
+}
+
 async fn probe_route(project: &str, ca: &Path) -> Result<(), String> {
     let route = read_routes(false)?
         .into_iter()
@@ -1568,20 +1649,36 @@ async fn probe_route(project: &str, ca: &Path) -> Result<(), String> {
     let cert = reqwest::Certificate::from_pem(&cert)
         .map_err(|_| "router_not_ready: invalid CA certificate")?;
     let host = format!("{}.localhost", subdomain("www", project));
-    let port = tls_port()?;
+    let rootful = crate::running_as_root();
+    let enclave_ip = if rootful {
+        inspect("tillandsias-router")?
+            .as_ref()
+            .and_then(router_enclave_ip)
+    } else {
+        None
+    };
+    let dial = probe_endpoint(rootful, enclave_ip, tls_port()?)?;
+    // reqwest ignores the port of a `resolve` override and dials the URL's
+    // port, so the URL carries the dialed port. The exact hostname still
+    // drives SNI and verification against the preview CA.
     let client = reqwest::Client::builder()
         .no_proxy()
         .add_root_certificate(cert)
-        .resolve(&host, std::net::SocketAddr::from(([127, 0, 0, 1], port)))
+        .resolve(&host, dial)
         .redirect(reqwest::redirect::Policy::none())
         .timeout(command_budget(Duration::from_secs(2))?)
         .build()
         .map_err(|_| "router_not_ready: TLS verifier unavailable")?;
     let response = client
-        .get(url(project)?)
+        .get(format!("https://{host}:{}/", dial.port()))
         .send()
         .await
-        .map_err(|_| "router_not_ready: exact-hostname CA-verified HTTPS probe failed")?;
+        .map_err(|e| {
+            format!(
+                "router_not_ready: exact-hostname CA-verified HTTPS probe failed ({} dialing {dial})",
+                probe_error_class(&e)
+            )
+        })?;
     if response.status().is_server_error() {
         return Err("router_not_ready: HTTPS upstream unhealthy".into());
     }
@@ -2302,6 +2399,127 @@ mod tests {
     use super::*;
     use std::os::unix::process::ExitStatusExt;
 
+    /// 1794-rf3a, red first: every publish on the v56.10.18.1 macOS guest was
+    /// refused because the probe dialed the router's loopback publish, which
+    /// rootful netavark never forwards into the --internal enclave. A rootful
+    /// probe dials the router's enclave address at its container TLS port.
+    #[test]
+    fn a_rootful_guest_probes_the_router_on_its_enclave_address() {
+        let ip: std::net::IpAddr = "10.0.42.9".parse().unwrap();
+        assert_eq!(
+            probe_endpoint(true, Some(ip), 18443).unwrap(),
+            "10.0.42.9:8443".parse().unwrap()
+        );
+        // No enclave address: a named refusal, never a silent loopback dial.
+        let e = probe_endpoint(true, None, 18443).unwrap_err();
+        assert!(e.contains("no address on the enclave network"), "{e}");
+        // NEGATIVE CONTROL: rootless podman forwards the loopback publish
+        // (measured on macuahuitl) and cannot reach the enclave address.
+        assert_eq!(
+            probe_endpoint(false, Some(ip), 18443).unwrap(),
+            "127.0.0.1:18443".parse().unwrap()
+        );
+    }
+
+    #[test]
+    fn the_router_enclave_address_is_read_from_its_inspect_row() {
+        let row = json!({"NetworkSettings": {"Networks": {
+            "podman": {"IPAddress": "10.88.0.4"},
+            "tillandsias-enclave": {"IPAddress": "10.0.42.9"}
+        }}});
+        assert_eq!(router_enclave_ip(&row), Some("10.0.42.9".parse().unwrap()));
+        let elsewhere =
+            json!({"NetworkSettings": {"Networks": {"podman": {"IPAddress": "10.88.0.4"}}}});
+        assert_eq!(router_enclave_ip(&elsewhere), None);
+    }
+
+    /// The probe as production builds it, end to end against a real TLS
+    /// listener on a non-loopback-publish address: a leaf from the preview CA,
+    /// served on the dialed address, verified for the exact hostname.
+    #[tokio::test]
+    async fn the_probe_client_verifies_the_preview_leaf_at_the_dialed_address() {
+        let ca = tempfile::tempdir().unwrap();
+        crate::preview_ca::ensure_in(ca.path(), 0).unwrap();
+        let work = tempfile::tempdir().unwrap();
+        let (crt, key, csr, ext) = (
+            work.path().join("leaf.crt"),
+            work.path().join("leaf.key"),
+            work.path().join("leaf.csr"),
+            work.path().join("leaf.ext"),
+        );
+        std::fs::write(&ext, format!("subjectAltName={}\nbasicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n", preview_san("kumbia-smoke"))).unwrap();
+        let host = format!("{}.localhost", subdomain("www", "kumbia-smoke"));
+        for args in certificate_args(&host, &crt, &csr, &key, ca.path(), &ext) {
+            assert!(
+                std::process::Command::new("openssl")
+                    .args(&args)
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status()
+                    .unwrap()
+                    .success(),
+                "{args:?}"
+            );
+        }
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let mut server = std::process::Command::new("openssl")
+            .args(["s_server", "-www", "-accept"])
+            .arg(format!("127.0.0.1:{port}"))
+            .arg("-cert")
+            .arg(&crt)
+            .arg("-key")
+            .arg(&key)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let dial = probe_endpoint(false, None, port).unwrap();
+        let cert = reqwest::Certificate::from_pem(
+            &std::fs::read(ca.path().join(crate::preview_ca::CRT)).unwrap(),
+        )
+        .unwrap();
+        let client = reqwest::Client::builder()
+            .no_proxy()
+            .add_root_certificate(cert)
+            .resolve(&host, dial)
+            .timeout(Duration::from_secs(3))
+            .build()
+            .unwrap();
+        // Wait for s_server to accept (it starts slowly under a parallel test
+        // load), then probe; the last error is kept for the assertion.
+        let deadline = Instant::now() + Duration::from_secs(15);
+        while std::net::TcpStream::connect(dial).is_err() && Instant::now() < deadline {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        let mut ok = false;
+        let mut last = String::from("never sent");
+        for _ in 0..5 {
+            match client
+                .get(format!("https://{host}:{}/", dial.port()))
+                .send()
+                .await
+            {
+                Ok(r) => {
+                    ok = r.status().is_success();
+                    last = format!("HTTP {}", r.status());
+                    break;
+                }
+                Err(e) => last = format!("{e:?}"),
+            }
+            tokio::time::sleep(Duration::from_millis(300)).await;
+        }
+        let _ = server.kill();
+        let _ = server.wait();
+        assert!(
+            ok,
+            "the production-shaped preview leaf did not verify at {dial}: {last}"
+        );
+    }
+
     /// The ignored live fixture below drives real podman directly.
     fn podman(args: &[&str]) -> Result<String, String> {
         podman_at(Step::Run, args)
@@ -2871,6 +3089,55 @@ mod tests {
                 format!("invalid_app_dir: {dir:?} is not a directory in the project")
             );
         }
+    }
+
+    /// 1788-qlwq slice 11: a root-index app named by app_dir (a Flutter
+    /// build/web) is served WHOLE, so canvaskit/, music/, version.json and
+    /// .wasm resolve; kumbia-kombat measured 404s on every subdirectory but
+    /// assets/. NEGATIVE CONTROL: the project root keeps the narrow mounts, so
+    /// source beside a root index.html is never published.
+    #[test]
+    fn an_app_dir_root_index_is_served_whole_and_the_project_root_stays_narrow() {
+        let (_fake, mut live) = fake_forge(
+            &[
+                "build/web/index.html",
+                "build/web/flutter_bootstrap.js",
+                "build/web/version.json",
+                "build/web/canvaskit/canvaskit.wasm",
+                "build/web/music/theme.ogg",
+                "build/web/assets/AssetManifest.bin",
+            ],
+            r#"{"remote":false,"assets":null,"main":null,"build":null,"raw":"{}"}"#,
+        );
+        live.root = "proj/build/web".into();
+        live.app_dir = Some("build/web".into());
+        assert_eq!(
+            source_mounts(&live, &Profile::Static).unwrap(),
+            vec![
+                "type=volume,source=vol,target=/var/www,volume-subpath=proj/build/web,readonly=true"
+            ]
+        );
+
+        let (_fake, live) = fake_forge(
+            &[
+                "index.html",
+                "src/main.dart",
+                "canvaskit/canvaskit.wasm",
+                "assets/a.png",
+            ],
+            r#"{"remote":false,"assets":null,"main":null,"build":null,"raw":"{}"}"#,
+        );
+        let mounts = source_mounts(&live, &Profile::Static).unwrap();
+        assert!(
+            mounts.iter().all(|m| !m.contains("canvaskit")
+                && !m.contains("src")
+                && !m.ends_with("volume-subpath=proj,readonly=true")),
+            "the project root must stay narrow: {mounts:?}"
+        );
+        assert!(
+            mounts.iter().any(|m| m.contains("target=/var/www/assets,")),
+            "{mounts:?}"
+        );
     }
 
     /// Order 1667-6rtp: with app_dir, the config, its assets and the static

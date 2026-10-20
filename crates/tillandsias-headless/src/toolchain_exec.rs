@@ -442,6 +442,31 @@ pub(crate) fn dev_server_argv(argv: &[String]) -> Option<Vec<String>> {
     Some(out)
 }
 
+/// `flutter build web` bakes the CanvasKit/font source into the bundle, and a
+/// stock build loads them from gstatic, which the project-only network of a
+/// browser.open window and the managed preview refuse, so the app never starts
+/// (1788-qlwq slice 12, kumbia-kombat FORGE_DIAGNOSTICS.md 2026-10-18). The
+/// default becomes `--no-web-resources-cdn`; unlike the dev server, a CDN flag
+/// the caller chose is kept, because a built bundle may be deployed where the
+/// CDN is reachable. Returns the rewritten argv, or None to leave it alone.
+pub(crate) fn web_build_argv(argv: &[String]) -> Option<Vec<String>> {
+    let mut words = argv.iter().filter(|a| !a.starts_with('-'));
+    if words.next().map(String::as_str) != Some("build")
+        || words.next().map(String::as_str) != Some("web")
+    {
+        return None;
+    }
+    if argv
+        .iter()
+        .any(|a| a == "--web-resources-cdn" || a == "--no-web-resources-cdn")
+    {
+        return None;
+    }
+    let mut out = argv.to_vec();
+    out.push("--no-web-resources-cdn".into());
+    Some(out)
+}
+
 /// The forge's tool-cache volume, read from the LIVE forge's mounts.
 fn forge_cache_volume(forge_id: &str) -> Result<String, String> {
     let out = crate::podman_command()
@@ -589,6 +614,8 @@ pub(crate) fn serve_exec(
     let dev_server = dev_server_argv(&req.argv);
     if let Some(argv) = &dev_server {
         req.argv = argv.clone();
+    } else if let Some(argv) = web_build_argv(&req.argv) {
+        req.argv = argv;
     }
     match image_present(&image_tag(req.toolchain)) {
         Ok(true) => {}
@@ -942,6 +969,7 @@ mod tests {
             next_retry_at,
             cause: "Build exited with status 1: STEP 4/9 failed".into(),
             log: "/cache/image-build-flutter.log".into(),
+            tillandsias_version: crate::image_ensure_marker::current_version().into(),
         }
     }
 
@@ -1443,6 +1471,176 @@ mod tests {
         assert_eq!(dev_server_argv(&v(&["build", "web"])), None);
         assert_eq!(dev_server_argv(&v(&["pub", "add", "flame"])), None);
         assert_eq!(dev_server_argv(&[]), None);
+    }
+
+    #[test]
+    fn a_web_build_defaults_to_the_sdk_served_canvaskit_and_keeps_a_chosen_cdn_flag() {
+        let v = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            web_build_argv(&v(&["build", "web", "--release"])),
+            Some(v(&["build", "web", "--release", "--no-web-resources-cdn"]))
+        );
+        assert_eq!(
+            web_build_argv(&v(&["--verbose", "build", "web"])),
+            Some(v(&["--verbose", "build", "web", "--no-web-resources-cdn"]))
+        );
+        // NEGATIVE CONTROL: a CDN choice the caller made is passed through.
+        assert_eq!(
+            web_build_argv(&v(&["build", "web", "--web-resources-cdn"])),
+            None
+        );
+        assert_eq!(
+            web_build_argv(&v(&["build", "web", "--no-web-resources-cdn"])),
+            None
+        );
+        // Other builds and commands are left alone.
+        assert_eq!(web_build_argv(&v(&["build", "apk"])), None);
+        assert_eq!(web_build_argv(&v(&["run", "-d", "web-server"])), None);
+        assert_eq!(web_build_argv(&v(&["pub", "get"])), None);
+        assert_eq!(web_build_argv(&[]), None);
+    }
+
+    /// 1788-qlwq slice 13: the forge's standalone `dart` is the Dart its
+    /// Flutter bundles. kumbia-kombat measured 3.12.1 against Flutter
+    /// 3.47.7's 3.13.5, so `dart run` refused the project's SDK constraint.
+    /// A Flutter bump fails here until its bundled Dart is added to the table
+    /// and lib-common.sh's DART_SDK_VERSION follows.
+    #[test]
+    fn the_forge_dart_pin_is_the_dart_the_flutter_image_bundles() {
+        let root = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../..");
+        let read = |p: &str| std::fs::read_to_string(root.join(p)).unwrap();
+        let containerfile = read("images/flutter/Containerfile");
+        let flutter = containerfile
+            .lines()
+            .find_map(|l| l.strip_prefix("ARG FLUTTER_VERSION="))
+            .expect("images/flutter/Containerfile pins FLUTTER_VERSION")
+            .trim();
+        // From the Flutter release notes (releases_linux.json dart_sdk_version).
+        let bundled = match flutter {
+            "3.47.7" => "3.13.5",
+            other => panic!("add the Dart that Flutter {other} bundles to this table"),
+        };
+        let lib = read("images/default/lib-common.sh");
+        let pinned = lib
+            .lines()
+            .find_map(|l| l.strip_prefix("DART_SDK_VERSION=\""))
+            .and_then(|v| v.strip_suffix('"'))
+            .expect("lib-common.sh pins DART_SDK_VERSION=\"…\"");
+        assert_eq!(
+            pinned, bundled,
+            "standalone dart must match Flutter {flutter}"
+        );
+        assert!(
+            lib.contains("/release/${DART_SDK_VERSION}/sdk/"),
+            "ensure_dart_sdk fetches the pinned version"
+        );
+    }
+
+    /// 1788-qlwq slice 13: a bump reaches an EXISTING forge. The SDK lives in
+    /// the persistent project cache, and ensure_dart_sdk used to skip whenever
+    /// any dart was there, so a pin bump never upgraded it. The real function
+    /// runs here with stub curl/unzip.
+    #[test]
+    #[cfg(unix)]
+    fn ensure_dart_sdk_replaces_a_stale_cached_sdk_and_keeps_it_when_the_fetch_fails() {
+        let root = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../..");
+        let lib = root.join("images/default/lib-common.sh");
+        let t = tempfile::tempdir().unwrap();
+        let bin = t.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let w = |name: &str, body: &str| {
+            use std::os::unix::fs::PermissionsExt;
+            let p = bin.join(name);
+            std::fs::write(&p, body).unwrap();
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+        };
+        // curl: log the URL; fail when CURL_FAIL is set; else write the archive.
+        w(
+            "curl",
+            "#!/bin/sh\nfor a; do case \"$a\" in https://*) echo \"$a\" >> \"$LOG\";; esac; done\n\
+             [ -z \"$CURL_FAIL\" ] || exit 22\n\
+             while [ $# -gt 0 ]; do [ \"$1\" = -o ] && { echo zip > \"$2\"; }; shift; done\n",
+        );
+        // unzip -qo <archive> -d <dir>: lay down an SDK carrying the new version.
+        w(
+            "unzip",
+            "#!/bin/sh\nd=\"$4\"\nmkdir -p \"$d/dart-sdk/bin\"\n\
+             printf '#!/bin/sh\\n' > \"$d/dart-sdk/bin/dart\"; chmod +x \"$d/dart-sdk/bin/dart\"\n\
+             echo NEW > \"$d/dart-sdk/version\"\n",
+        );
+        let run = |cache_version: Option<&str>, fail: bool| -> (String, String) {
+            let cache = t.path().join("cache");
+            let _ = std::fs::remove_dir_all(&cache);
+            if let Some(v) = cache_version {
+                let sdk = cache.join("dart/dart-sdk");
+                std::fs::create_dir_all(sdk.join("bin")).unwrap();
+                std::fs::write(sdk.join("bin/dart"), "#!/bin/sh\n").unwrap();
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(
+                    sdk.join("bin/dart"),
+                    std::fs::Permissions::from_mode(0o755),
+                )
+                .unwrap();
+                std::fs::write(sdk.join("version"), format!("{v}\n")).unwrap();
+            }
+            let log = t.path().join("curl.log");
+            let _ = std::fs::remove_file(&log);
+            let script = format!(
+                "trace_lifecycle() {{ :; }}\n_forge_uname_arch() {{ echo aarch64; }}\n\
+                 eval \"$(sed -n '/^DART_SDK_VERSION=/p;/^ensure_dart_sdk()/,/^}}/p' '{}')\"\n\
+                 ensure_dart_sdk\n",
+                lib.display()
+            );
+            let out = std::process::Command::new("bash")
+                .arg("-c")
+                .arg(&script)
+                .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+                .env("PROJECT_CACHE", &cache)
+                .env("LOG", &log)
+                .env("CURL_FAIL", if fail { "1" } else { "" })
+                .output()
+                .unwrap();
+            assert!(
+                out.status.success(),
+                "{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            (
+                std::fs::read_to_string(&log).unwrap_or_default(),
+                std::fs::read_to_string(cache.join("dart/dart-sdk/version"))
+                    .unwrap_or_default()
+                    .trim()
+                    .to_string(),
+            )
+        };
+        let lib_text = std::fs::read_to_string(&lib).unwrap();
+        let pin = lib_text
+            .lines()
+            .find_map(|l| l.strip_prefix("DART_SDK_VERSION=\""))
+            .and_then(|v| v.strip_suffix('"'))
+            .expect("DART_SDK_VERSION pin");
+        // A stale cached SDK is replaced with the pinned one.
+        let (fetched, version) = run(Some("3.12.1"), false);
+        assert!(
+            fetched.contains(&format!(
+                "/release/{pin}/sdk/dartsdk-linux-arm64-release.zip"
+            )),
+            "{fetched}"
+        );
+        assert_eq!(version, "NEW");
+        // NEGATIVE CONTROL: the pinned SDK already there is not fetched again.
+        let (fetched, version) = run(Some(pin), false);
+        assert_eq!(fetched, "", "a current SDK is never refetched");
+        assert_eq!(version, pin);
+        // A failed fetch keeps the old SDK working rather than deleting it.
+        let (_, version) = run(Some("3.12.1"), true);
+        assert_eq!(version, "3.12.1");
     }
 
     /// 1776-pr0g: prepare reads progress through the one shared parser,

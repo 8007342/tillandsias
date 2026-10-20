@@ -52,7 +52,7 @@ commit="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 # suite executes is, in 1333-jpq5's words, "correct and inert": it can never
 # go red, so counting it as ENFORCED overstates enforcement. Measured at
 # 3048e72dc, 53 of 244 enforced steps were inert — 21.7%. REACHABLE here is
-# the same definition census-litmus-reachability.sh uses: BOUND in
+# the same definition lua/census-litmus-reachability.lua uses: BOUND in
 # litmus-bindings.yaml AND not `phase: retired`. Grandfathered-unbound is
 # NOT reachable — the grandfather list exempts a file from the binding
 # violation, it does not cause anything to run it.

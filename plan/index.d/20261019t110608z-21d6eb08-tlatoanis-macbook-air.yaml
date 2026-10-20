@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-a-fresh-macos-guest-the-kernel-logs-selinux-invalid-class-0-mid-first-boot-and-from-then-on-every-podman-exec-fails-to-load-libsemanage-so-the-forge-base-build-fails-three-times
+    event:
+      type: progress
+      ts: "2026-10-19T11:06:08Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        (a)+(b) implemented on work/1792-48yg, PR #567 (6474b2efc; pushed as 4be8ca686).
+        (a) A podman that cannot start is classified apart from a failed build (podman_health.rs). It gets one uncounted retry if 'podman --version' answers, and otherwise refused:image-ensure:<image>:podman-could-not-start, with no marker and no budget spent. Pinned red first; mutation-checked.
+        (b) Once per boot: <init cache dir>/podman-broken-captures/<boot_id>-<UTC>-<image>.txt, fsynced and named in the refusal. It records the build error, the kernel log around the first 'SELinux: Invalid class', the policy loads, semodule -l, sestatus, ls -lZ of the named library, package versions and ps.
+        Gate green on darwin (headless 1129 passed). Exit criterion 1's 'cause named' and criterion 2's three-wipe live arm wait on the next occurrence and on a published release.

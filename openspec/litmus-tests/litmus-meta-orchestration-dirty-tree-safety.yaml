@@ -17,17 +17,18 @@ preconditions:
   - workspace contains scripts/build-image.sh
   - workspace contains scripts/hash-image-sources.sh
   - workspace contains scripts/meta-orchestration-worktree-guard.sh
-  - workspace contains scripts/test-meta-orchestration-dirty-tree-safety.sh
+  - workspace contains scripts/lua/test-meta-orchestration-dirty-tree-safety.lua
+  - workspace contains scripts/test-worktree-boundary-guard.sh
   - workspace contains scripts/test-build-sh-ci-full-install-prep.sh
 
 critical_path:
   - step: "worktree boundary guard and fixture are executable"
-    command: "test -x scripts/meta-orchestration-worktree-guard.sh && test -x scripts/test-meta-orchestration-dirty-tree-safety.sh && echo 'ok: executable'"
+    command: "test -x scripts/meta-orchestration-worktree-guard.sh && test -f scripts/lua/test-meta-orchestration-dirty-tree-safety.lua && echo 'ok: executable'"
     timeout_ms: 1000
     expected_behavior: "ok: executable"
 
   - step: "guard scripts parse under bash"
-    command: "bash -n scripts/meta-orchestration-worktree-guard.sh scripts/test-meta-orchestration-dirty-tree-safety.sh && echo 'ok: syntax'"
+    command: "bash -n scripts/meta-orchestration-worktree-guard.sh scripts/test-worktree-boundary-guard.sh && echo 'ok: syntax'"
     timeout_ms: 1000
     expected_behavior: "ok: syntax"
 
@@ -36,10 +37,19 @@ critical_path:
     # windows (2026-08-16) — the old 10s budget was the boundary itself, and
     # harness spawn tax flipped it red on load jitter. Same treatment as
     # 770-f6u4; see plan/issues/windows-red-meta-orchestration-litmus-2026-08-16.md.
-    command: "scripts/test-meta-orchestration-dirty-tree-safety.sh"
+    command: ". scripts/plan-binary-probe.sh; \"$(resolve_plan_binary)\" script run scripts/lua/test-meta-orchestration-dirty-tree-safety.lua"
     timeout_ms: 90000
     expected_behavior: "PASS: blocked cycle preserved startup tracked and untracked bytes"
     assert_output_contains: "PASS: blocked cycle preserved startup tracked and untracked bytes"
+
+  - step: "every boundary-guard refusal says why and what clears it, and each remedy clears it (1247-b46r; also pins 717-3bvv no-snapshot-taken and 771-wwzi superseded)"
+    # 60s on the same slow-host sizing as the fixture above; 0.9s standalone on
+    # lenovinha (2026-10-19). Until 1247-b46r this fixture ran only in the e2e
+    # litmus opencode-prompt-e2e-shape, which the instant suite never reaches.
+    command: "scripts/test-worktree-boundary-guard.sh"
+    timeout_ms: 60000
+    expected_behavior: "PASS: worktree-boundary-guard fixture"
+    assert_output_contains: "PASS: worktree-boundary-guard fixture"
 
   - step: "local full-install preparation preserves tracked release and dashboard state"
     # 60s: 5.2s standalone on windows (measured 2026-08-16); the old 10s left
@@ -72,4 +82,4 @@ rollback:
   on_failure: >
     Restore the startup status and content-hash boundary, keep disposable
     artifacts outside the worktree, and prohibit automated worktree cleanup.
-  command: "scripts/test-meta-orchestration-dirty-tree-safety.sh"
+  command: ". scripts/plan-binary-probe.sh; \"$(resolve_plan_binary)\" script run scripts/lua/test-meta-orchestration-dirty-tree-safety.lua"

@@ -182,10 +182,7 @@ fi
 # THE PROVENANCE CLASSIFIER COUNTS A SCAFFOLD HISTORY CORRECTLY. The flip to
 # enforcement is meant to rest on this number, so the number has to be right
 # before anyone is asked to act on it.
-# Ported to Lua (667-kfyn carry); it runs through the one runner.
 PROV="$ROOT/scripts/lua/check-landing-provenance.lua"
-PLAN_BIN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || PLAN_BIN=""
-case "$PLAN_BIN" in ./*) PLAN_BIN="$ROOT/${PLAN_BIN#./}" ;; esac
 S="$TMP/scaffold"; mkdir -p "$S"
 (
   cd "$S" && git init -q . && git config user.email t@t && git config user.name t
@@ -197,10 +194,9 @@ S="$TMP/scaffold"; mkdir -p "$S"
 ) >/dev/null 2>&1
 if [ ! -f "$PROV" ]; then
     bad "ARM 5: the provenance classifier is absent, so the enforcement trigger has no number behind it"
-elif [ -z "$PLAN_BIN" ]; then
-    bad "ARM 5: no tillandsias-plan resolves to run the provenance classifier; rebuild it (cargo build --release -p tillandsias-plan)"
 else
-    line="$(TILLANDSIAS_PROVENANCE_REPO="$S" TILLANDSIAS_PROVENANCE_REF=HEAD "$PLAN_BIN" script run "$PROV" -- 50.years 2>/dev/null | head -1)"
+    PLAN_BIN="${TILLANDSIAS_PLAN_BIN:-$(. "$ROOT/scripts/plan-binary-probe.sh" && resolve_plan_binary)}"
+    line="$(cd "$ROOT" && TILLANDSIAS_PROVENANCE_REPO="$S" TILLANDSIAS_PROVENANCE_REF=HEAD "$PLAN_BIN" script run "$PROV" -- 50.years 2>/dev/null | head -1)"
     if printf '%s' "$line" | grep -q 'queue=1' \
        && printf '%s' "$line" | grep -q 'plan=1' \
        && printf '%s' "$line" | grep -q 'relay=1' \
