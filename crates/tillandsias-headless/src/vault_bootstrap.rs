@@ -3242,7 +3242,7 @@ pub fn probe_keyring_share() -> KeyringShare {
     use base64::Engine;
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let answer = match Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1) {
+        let answer = match keyring_entry(VAULT_SHAMIR_SHARE_V1) {
             Err(_) => KeyringShare::Unreachable,
             Ok(entry) => match entry.get_password() {
                 Ok(encoded) => {
@@ -3801,9 +3801,7 @@ pub fn clear_host_vault_credentials(debug: bool) -> (Vec<String>, Vec<String>) {
         // stringifies the error, and keyring::Error::NoEntry displays as "No
         // matching entry found in secure storage", which a text match missed.
         let res = with_keyring_timeout(move || {
-            classify_keyring_delete(
-                Entry::new(KEYCHAIN_SERVICE, &a).and_then(|e| e.delete_credential()),
-            )
+            classify_keyring_delete(keyring_entry(&a).and_then(|e| e.delete_credential()))
         });
         match res {
             Ok(true) => cleared.push(format!("keychain:{attr}")),
@@ -3897,6 +3895,23 @@ pub fn clear_vault_store_and_fallbacks() -> (Vec<String>, Vec<String>) {
 /// an already-absent item satisfies it. `Ok(true)` = deleted, `Ok(false)` =
 /// already absent; any other error is a real failure and passes through.
 #[cfg(target_os = "linux")]
+/// The ONE place a keyring entry is made (1118-fqfk). Under `cargo test` the
+/// process uses the keyring crate's in-memory mock, so no test can read,
+/// write or delete the operator's real credential store: a first run of slice
+/// 2b sealed a test CA into the real keyring through a production path. The
+/// source scan `no_keyring_entry_is_made_outside_keyring_entry` keeps every
+/// other call site out.
+fn keyring_entry(user: &str) -> keyring::Result<Entry> {
+    #[cfg(test)]
+    {
+        static MOCK: std::sync::Once = std::sync::Once::new();
+        MOCK.call_once(|| {
+            keyring::set_default_credential_builder(keyring::mock::default_credential_builder())
+        });
+    }
+    Entry::new(KEYCHAIN_SERVICE, user)
+}
+
 fn classify_keyring_delete(res: Result<(), keyring::Error>) -> Result<bool, keyring::Error> {
     match res {
         Ok(()) => Ok(true),
@@ -4052,7 +4067,7 @@ fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
     }
 
     // 1. Try to get the Shamir share from the keychain
-    let entry = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1)
+    let entry = keyring_entry(VAULT_SHAMIR_SHARE_V1)
         .map_err(|e| format!("keyring entry for shamir share: {e}"))?;
 
     let keyring = match with_keyring_timeout(move || match entry.get_password() {
@@ -4113,7 +4128,7 @@ fn ensure_unseal_key(_debug: bool) -> Result<[u8; 32], String> {
 #[cfg(feature = "vault")]
 fn sanitize_keychain(debug: bool) {
     // Delete the legacy unseal key v1 (which held the derived HKDF key rather than the Shamir share)
-    if let Ok(entry) = Entry::new(KEYCHAIN_SERVICE, "vault-unseal-v1") {
+    if let Ok(entry) = keyring_entry("vault-unseal-v1") {
         let delete_res = with_keyring_timeout(move || entry.delete_credential());
         match delete_res {
             Err(e) => {
@@ -4814,7 +4829,7 @@ fn share_check_now() -> ShareCheck {
                 .map(|v| v.len() == 32)
                 .unwrap_or(false)
     };
-    let keychain = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1)
+    let keychain = keyring_entry(VAULT_SHAMIR_SHARE_V1)
         .ok()
         .and_then(|entry| with_keyring_timeout(move || entry.get_password()).ok())
         .is_some_and(|s| valid(&s));
@@ -5351,8 +5366,7 @@ fn read_handover_file(name: &str) -> Option<String> {
 #[cfg(feature = "vault")]
 #[cfg_attr(test, allow(dead_code))]
 pub(crate) fn keyring_get_blocking(user: &str) -> Result<Option<String>, String> {
-    let entry =
-        Entry::new(KEYCHAIN_SERVICE, user).map_err(|e| format!("keyring entry {user}: {e}"))?;
+    let entry = keyring_entry(user).map_err(|e| format!("keyring entry {user}: {e}"))?;
     with_keyring_timeout(move || match entry.get_password() {
         Ok(value) => Ok(Some(value)),
         Err(keyring::Error::NoEntry) => Ok(None),
@@ -5364,8 +5378,7 @@ pub(crate) fn keyring_get_blocking(user: &str) -> Result<Option<String>, String>
 /// blocking, runtime-using) secret-service call on its own thread.
 #[cfg(feature = "vault")]
 pub(crate) fn keychain_set_blocking(user: &str, value: &str) -> Result<(), String> {
-    let entry =
-        Entry::new(KEYCHAIN_SERVICE, user).map_err(|e| format!("keyring entry {user}: {e}"))?;
+    let entry = keyring_entry(user).map_err(|e| format!("keyring entry {user}: {e}"))?;
     let value = value.to_string();
     let value_clone = value.clone();
     match with_keyring_timeout(move || entry.set_password(&value_clone)) {
@@ -5566,7 +5579,7 @@ fn shamir_share_candidates() -> Vec<(&'static str, String)> {
         None
     };
 
-    let host_keychain = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1)
+    let host_keychain = keyring_entry(VAULT_SHAMIR_SHARE_V1)
         .ok()
         .and_then(|entry| with_keyring_timeout(move || entry.get_password()).ok());
 
@@ -5987,7 +6000,7 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
         return Err("running in VM but no root token delivered from host".to_string());
     }
 
-    let entry_token = Entry::new(KEYCHAIN_SERVICE, "vault-root-token-v1")
+    let entry_token = keyring_entry("vault-root-token-v1")
         .map_err(|e| format!("keyring entry for root token: {e}"))?;
     let token_res = with_keyring_timeout(move || entry_token.get_password());
     let token = match token_res {
@@ -6886,6 +6899,51 @@ pub async fn ensure_mirror_identity_provisioned(
 
 #[cfg(test)]
 mod tests {
+
+    /// 1118-fqfk: a test must never reach the operator's real keyring.
+    #[test]
+    fn a_keyring_entry_under_test_is_the_in_memory_mock() {
+        let entry = keyring_entry("test-probe-never-real").expect("mock entry");
+        assert!(
+            entry
+                .get_credential()
+                .downcast_ref::<keyring::mock::MockCredential>()
+                .is_some(),
+            "under cfg(test) keyring_entry must build a mock credential"
+        );
+        entry.set_password("x").expect("the mock takes a write");
+    }
+
+    /// 1118-fqfk: every keyring entry goes through keyring_entry, so the mock
+    /// above covers every read, write and delete. Any other entry constructor
+    /// anywhere in this crate's sources would bypass it.
+    #[test]
+    fn no_keyring_entry_is_made_outside_keyring_entry() {
+        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut offenders = Vec::new();
+        let mut stack = vec![src];
+        while let Some(dir) = stack.pop() {
+            for e in std::fs::read_dir(&dir).unwrap().flatten() {
+                let path = e.path();
+                if path.is_dir() {
+                    stack.push(path);
+                } else if path.extension().is_some_and(|x| x == "rs") {
+                    let text = std::fs::read_to_string(&path).unwrap();
+                    let needle = ["Entry", "::new("].concat();
+                    let n = text.matches(needle.as_str()).count();
+                    let allowed = usize::from(path.ends_with("vault_bootstrap.rs"));
+                    if n > allowed {
+                        offenders.push(format!("{}: {n}", path.display()));
+                    }
+                }
+            }
+        }
+        assert!(
+            offenders.is_empty(),
+            "keyring entries made outside keyring_entry: {offenders:?}"
+        );
+    }
+
     use super::*;
 
     // ---- 1776-v1t4: the Vault image goes through the one seam -----------------
