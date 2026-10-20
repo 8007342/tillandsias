@@ -28,6 +28,8 @@ mod installation_uuid;
 #[cfg(target_os = "macos")]
 mod main_thread;
 #[cfg(target_os = "macos")]
+mod preview_relay;
+#[cfg(target_os = "macos")]
 mod pty_vsock_bridge;
 // THE ATTRIBUTE IS LOAD-BEARING and every sibling above carries it. Without it
 // this module compiles on EVERY target while diagnose/installation_uuid do not,

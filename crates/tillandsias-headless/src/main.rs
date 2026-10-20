@@ -7165,6 +7165,28 @@ fn mcp_socket_host_dir(project_name: &str, instance: Option<&str>) -> PathBuf {
         .join(format!("{project_name}-{instance}"))
 }
 
+/// Where the router reads the preview leaves (bind-mounted read-only).
+pub(crate) const PREVIEW_LEAF_MOUNT: &str = "/etc/tillandsias/preview";
+
+/// The router's preview-listener arguments (order 1794-rf3a (b)). The leaf
+/// mount always; the loopback publish only under rootless podman. A rootful
+/// guest's host browser arrives through the tray's loopback listener and the
+/// vsock relay instead.
+pub(crate) fn preview_listener_args(rootful: bool, port: u16, leaf_dir: &Path) -> Vec<String> {
+    let mut args = Vec::new();
+    if !rootful {
+        args.extend(["-p".into(), format!("127.0.0.1:{port}:8443")]);
+    }
+    args.extend([
+        "--mount".into(),
+        format!(
+            "type=bind,source={},target={PREVIEW_LEAF_MOUNT},readonly=true",
+            leaf_dir.display()
+        ),
+    ]);
+    args
+}
+
 /// Build `podman run` args for the Caddy reverse-proxy router container.
 ///
 /// The router runs on the enclave network with DNS alias `router` so Squid's
@@ -7260,15 +7282,11 @@ fn build_router_run_args(certs_dir: &Path, image: &str, host_port: u16) -> Vec<S
         && let Ok(port) = text.trim().parse::<u16>()
         && port >= 1024
     {
-        args.extend([
-            "-p".into(),
-            format!("127.0.0.1:{port}:8443"),
-            "--mount".into(),
-            format!(
-                "type=bind,source={},target=/etc/tillandsias/preview,readonly=true",
-                dyn_dir.join("preview-tls").display()
-            ),
-        ]);
+        args.extend(preview_listener_args(
+            running_as_root(),
+            port,
+            &dyn_dir.join("preview-tls"),
+        ));
     }
     args.push(image.into());
     args
@@ -20687,6 +20705,17 @@ fn maybe_spawn_vsock_listener(
                         udp_state.set_last_event(msg.to_string());
                     }
                 }
+            }
+        });
+
+        // Order 1794-rf3a (b): the host browser's way to a preview.
+        let relay_shutdown = shutdown.clone();
+        let _preview_relay = tokio::spawn(async move {
+            let relay_port = tillandsias_control_wire::transport::PREVIEW_RELAY_VSOCK_PORT;
+            if let Err(err) =
+                vsock_server::run_preview_relay_listener(relay_port, relay_shutdown).await
+            {
+                eprintln!("[tillandsias] preview relay on port {relay_port} failed: {err}");
             }
         });
 
