@@ -131,6 +131,17 @@ if [[ -d "$HOME/.cargo/bin" ]]; then
     export PATH="$HOME/.cargo/bin:$PATH"
 fi
 
+# ORDER 1803-pcap — THE GATE'S PLAN-CACHE SNAPSHOTS LIVE UNDER target/. The
+# plan binary keys its folded-ledger snapshot by the index's absolute path,
+# and every fixture builds a scratch repo at a fresh path, so a gate's worth
+# of fixtures wrote dozens of 2-23 MB snapshots into ~/.cache/tillandsias/
+# plan-cache that nothing evicted: 328 GB there on macuahuitl, 2026-10-19.
+# The binary now bounds that directory; the gate additionally keeps its
+# scratch snapshots inside target/, which is disposable, on the fast build
+# root where one exists, and never shared with the operator's own cache.
+# An explicit TILLANDSIAS_PLAN_CACHE_DIR wins.
+export TILLANDSIAS_PLAN_CACHE_DIR="${TILLANDSIAS_PLAN_CACHE_DIR:-$SCRIPT_DIR/target/plan-cache}"
+
 # PODMAN MODE IS THE CALLER'S TO DECLARE — the gate does not guess it.
 #
 # Order 797-r6tc. What used to be here inferred remote podman mode from a FILE
@@ -1409,6 +1420,29 @@ if [[ "$FLAG_CHECK$FLAG_TEST$FLAG_CI$FLAG_CI_FULL$FLAG_RELEASE$FLAG_INSTALL" == 
     (cd "$SCRIPT_DIR" && _touch_gating_checkout)
 fi
 # END-GATE-TOUCH
+
+# ORDER 1802-fbld — BUILD PLACEMENT REPORT. One line saying whether target/ is
+# on the host's fast build root (TILLANDSIAS_FAST_BUILD_ROOT, default
+# /srv/fastbuild), warning with the bind-mount remedy when the root is mounted
+# and target/ is not. Informational only: no path changes, never refuses. The
+# logic is scripts/lua/build-root-placement.lua; a host with no plan binary
+# that runs `script run` prints nothing rather than guess.
+# BEGIN-BUILD-ROOT-PLACEMENT
+_report_build_root() {
+    local _br_bin=""
+    _br_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _br_bin=""
+    case "$_br_bin" in ./*) _br_bin="$SCRIPT_DIR/${_br_bin#./}" ;; esac
+    [ -n "$_br_bin" ] || return 0
+    grep -qx script <<<"$("$_br_bin" capabilities 2>/dev/null)" || return 0
+    local _br_out _br_line
+    _br_out="$(cd "$SCRIPT_DIR" && TILLANDSIAS_TIMING_LOG=/dev/null "$_br_bin" script run scripts/lua/build-root-placement.lua -- 2>&1)" || true
+    while IFS= read -r _br_line; do
+        # the runner requires an ok: prefix on the verdict line; the report does not carry it
+        echo "${_br_line#ok:}"
+    done <<<"$_br_out"
+}
+if [[ "$FLAG_PREFLIGHT" != true ]]; then _report_build_root; fi
+# END-BUILD-ROOT-PLACEMENT
 
 # ORDER 1305-udgs — `./build.sh --preflight`: every guard that can refuse a push,
 # before the SHA, in seconds.

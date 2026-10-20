@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: opencode-web-launched-from-the-tray-loads-in-the-confined-app-window-on-every-platform
+    event:
+      type: note
+      ts: "2026-10-20T16:42:30Z"
+      agent_id: linux-lenovinha-claude-20261020t164229z
+      host: linux
+      summary: |
+        Parked 2026-10-20 at the operator's direction. WIP is on work/1802-9xix at 2549d910e (not for landing yet). Done: the confined TLS app window loads the OpenCode app (operator saw it); the router sidecar honours a safe next= landing; and a local-ci router-sidecar gate line was added. Open: the operator saw a src/ folder view instead of the devxsd session, so the landing is unconfirmed. To resume: get the window's final URL (Chromium history is not flushed; use CDP or a screenshot), then check the OpenCode slug and directory handling.

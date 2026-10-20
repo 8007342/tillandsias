@@ -1,0 +1,10 @@
+# Gate step 1802-fbld — build.sh reports where target/ lives against the host's
+# fast build root (TILLANDSIAS_FAST_BUILD_ROOT): match -> fast=yes, a mounted
+# root with target/ elsewhere -> fast=no plus a bind-mount warning.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking build placement reporting (1802-fbld)"
+STEP_LUA="scripts/lua/test-build-root-placement.lua"
+STEP_ERROR="build-root placement no longer reports fast=yes/no and the mismatch warning (1802-fbld) — see the FAIL lines above"
+STEP_OK="Build placement fixture passed"
+STEP_SECOND_REGIME="macuahuitl 2026-10-20 darwin skip:linux-only — the decider reads findmnt, GNU stat -c and /sys/block/mdN, none of which darwin has; not run on a second regime (1802-fbld)"
