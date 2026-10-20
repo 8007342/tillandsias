@@ -165,6 +165,17 @@ fi
 unset _sccache_bin
 # END-SCCACHE
 
+# ORDER 1803-pcap — THE GATE'S PLAN-CACHE SNAPSHOTS LIVE UNDER target/. The
+# plan binary keys its folded-ledger snapshot by the index's absolute path,
+# and every fixture builds a scratch repo at a fresh path, so a gate's worth
+# of fixtures wrote dozens of 2-23 MB snapshots into ~/.cache/tillandsias/
+# plan-cache that nothing evicted: 328 GB there on macuahuitl, 2026-10-19.
+# The binary now bounds that directory; the gate additionally keeps its
+# scratch snapshots inside target/, which is disposable, on the fast build
+# root where one exists, and never shared with the operator's own cache.
+# An explicit TILLANDSIAS_PLAN_CACHE_DIR wins.
+export TILLANDSIAS_PLAN_CACHE_DIR="${TILLANDSIAS_PLAN_CACHE_DIR:-$SCRIPT_DIR/target/plan-cache}"
+
 # PODMAN MODE IS THE CALLER'S TO DECLARE — the gate does not guess it.
 #
 # Order 797-r6tc. What used to be here inferred remote podman mode from a FILE
