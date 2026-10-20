@@ -253,10 +253,9 @@ impl RemoteVaultLease {
         // uid/gid ownership is load-bearing — see GIT_VAULT_TOKEN_SECRET_OPTS:
         // without it the git user can't read the root-owned 0400 secret and the
         // containerized `gh` fetch gets no GitHub token. @trace spec:remote-projects
-        format!(
-            "{},{}",
-            self.secret_name,
-            crate::GIT_VAULT_TOKEN_SECRET_OPTS
+        crate::vault_bootstrap::runtime_secret_volume(
+            &self.secret_name,
+            crate::GIT_VAULT_TOKEN_SECRET_OPTS,
         )
     }
 }
@@ -304,7 +303,7 @@ fn run_git_image_shell(script: &str, extra_args: &[&str], debug: bool) -> Result
     command.args([
         "run",
         "--rm",
-        "--secret",
+        "--volume",
         &vault_mount,
         "--network",
         // Order 606-9wqd: enclave-only. This was dual-homed for "the direct
@@ -777,7 +776,7 @@ exec gh repo clone "$1" "$2"
     command.args([
         "run",
         "--rm",
-        "--secret",
+        "--volume",
         &vault_mount,
         "--network",
         // Order 606-9wqd: enclave-only, proxy-routed — see run_git_image_shell.

@@ -52,9 +52,10 @@ plant(".cache/tillandsias/fallback_vault-shamir-share-v1", "planted")
 plant(".cache/tillandsias/fallback_vault-root-token-v1", "planted")
 plant(".cache/tillandsias/installation_anchor", "planted")
 plant(".local/share/containers/storage/overlay-containers/abc/userdata/secrets/tillandsias-vault-unseal", "planted")
+plant(".local/share/containers/storage/overlay-containers/def/userdata/secrets/tillandsias-ca-key", "planted")
 code, out = scan()
-expect(code == 1 and out:find("violation:credentials-at-rest:4", 1, true), "four planted credential files are a violation of 4", out)
-for _, name in ipairs({ "fallback_vault-shamir-share-v1", "fallback_vault-root-token-v1", "installation_anchor", "userdata/secrets/tillandsias-vault-unseal" }) do
+expect(code == 1 and out:find("violation:credentials-at-rest:5", 1, true), "five planted credential files are a violation of 5", out)
+for _, name in ipairs({ "fallback_vault-shamir-share-v1", "fallback_vault-root-token-v1", "installation_anchor", "userdata/secrets/tillandsias-vault-unseal", "userdata/secrets/tillandsias-ca-key" }) do
     expect(out:find(name, 1, true), "the violation names " .. name, out)
 end
 expect(not out:find("planted", 1, true), "the check never prints a credential's contents", out)
@@ -63,4 +64,4 @@ proc.run{ argv = { "rm", "-rf", root } }
 if fails > 0 then
     verdict.emit("violation:credentials-at-rest-fixture:" .. fails, 1)
 end
-verdict.emit("ok:credentials-at-rest-fixture:7", 0)
+verdict.emit("ok:credentials-at-rest-fixture:8", 0)
