@@ -3489,7 +3489,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # cannot degrade into the no-op that hoisting 885-92iu produced on a cold
     # tree. It refuses with `blocked:` if the ledger read yields nothing, which
     # is the difference between a clean tree and a broken instrument.
-    if ! _run bash "$SCRIPT_DIR/scripts/check-order-citations-resolve.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-order-citations-resolve.lua" 2>&1; then
         _error "an @trace cites an order that names no packet (1234-zade) — an invented suffix on a real order reads as legitimate and resolves to nothing; see the verdict line above"
         exit 1
     fi
