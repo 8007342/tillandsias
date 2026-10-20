@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl, 2026-10-20. Code is cited by symbol, never by line.
+packets:
+  - packet_id: the-plan-binarys-snapshot-cache-is-bounded-by-entry-count-and-bytes-evicting-oldest-first-on-every-write-and-the-gate-keeps-its-fixtures-scratch-snapshots-under-target-so-scratch-indexes-can-no-longer-fill-the-main-disk
+    order: 1803-pcap
+    status: implemented
+    kind: bug
+    priority: p1
+    desired_release: v0.6
+    parent: 964-tzmp
+    pickup_role: any
+    capability_tags: [plan, storage, rust, build]
+    estimated_hours: 2
+    size: S
+    related: [964-tzmp, 1802-fbld]
+    owned_files:
+      - crates/tillandsias-plan/src/ledger_cache.rs
+      - build.sh
+    title: |
+      the plan binary's snapshot cache (ledger_cache.rs) is bounded — enforce_cap evicts oldest-first by mtime after every save_ledger/rebuild until at most DEFAULT_MAX_ENTRIES (64) files and DEFAULT_MAX_BYTES (256 MiB) remain — and build.sh points TILLANDSIAS_PLAN_CACHE_DIR at target/plan-cache so the gate's fixtures write their scratch snapshots to a disposable dir
+    context: |
+      INCIDENT, macuahuitl 2026-10-19: ~/.cache/tillandsias/plan-cache held
+      328 GB in 122k `*.snap` files, 35% of the 952 GB btrfs main disk,
+      which was at 96% before the RAID build root arrived (1802-fbld). The
+      directory was deleted by hand and regrew to 270 MB within two hours of
+      land-queue gates. CAUSE: cache_path keys the snapshot by a hash of the
+      index's ABSOLUTE path (deliberately, so a scratch `--index` cannot
+      collide with the real ledger), and every fixture builds its scratch
+      repo at a fresh mktemp path, so every fixture invocation in every gate
+      left a new 2-23 MB snapshot and nothing ever evicted one.
+      FIX, two levers: (1) the binary bounds its own directory on every
+      write — a leftover `.tmp` from a crashed writer counts as an entry;
+      (2) the gate sets TILLANDSIAS_PLAN_CACHE_DIR to target/plan-cache
+      (which cache_path already honours) so the fixtures' churn lands on the
+      disposable, fast build root rather than beside the operator's cache.
+      Red first: the new test's pre-fix run printed `192 distinct scratch
+      indexes left 192 cache entries; cap is 64`.
+    exit_criteria:
+      - "cargo test -p tillandsias-plan --lib ledger_cache::tests::n_scratch_indexes_stay_under_the_snapshot_cap: 192 save_ledger calls for 192 distinct scratch indexes leave at most 64 entries and 256 MiB in TILLANDSIAS_PLAN_CACHE_DIR and the newest is still served; pre-fix result: FAILS (192 distinct scratch indexes left 192 cache entries; cap is 64)"
+      - "cargo test -p tillandsias-plan --lib ledger_cache::tests::the_byte_cap_evicts_oldest_first: five 1000-byte entries under a 2500-byte cap leave exactly the two newest; pre-fix result: FAILS (no enforce_cap exists)"
+      - "grep -c 'TILLANDSIAS_PLAN_CACHE_DIR=' build.sh prints 1; pre-fix result: FAILS (0)"
+    verifiable_closure: "cargo test -p tillandsias-plan --lib ledger_cache (red on linux-next before the fix: n_scratch_indexes_stay_under_the_snapshot_cap)"
+    next_action: >
+      Delivered by work/1803-pcap. LEFT: nothing on this row. The relocation
+      row 1805-relo moves the remaining big caches onto the fast root.
+    events:
+      - type: filed
+        ts: "2026-10-20T04:14:05Z"
+        host: macuahuitl
+        summary: |-
+          328 GB plan-cache incident; cache bounded (64 entries / 256 MiB, oldest-first) and the gate's scratch snapshots moved under target/.
+      - type: note
+        ts: "2026-10-20T04:14:05Z"
+        host: macuahuitl
+        summary: |-
+          red first: pre-fix run of n_scratch_indexes_stay_under_the_snapshot_cap failed with "192 distinct scratch indexes left 192 cache entries; cap is 64"; green after enforce_cap was wired into save_ledger and rebuild.
