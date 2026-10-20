@@ -490,7 +490,6 @@ scripts scripts/litmus-covering-specs.sh 9
 scripts scripts/litmus-git-delta-wait.sh 4
 scripts scripts/litmus-helper-browser-isolation.sh 3
 scripts scripts/litmus-helper-event-driven.sh 6
-scripts scripts/litmus-helper-nix-cache-size.sh 1
 scripts scripts/litmus-helper-storage-isolation.sh 13
 scripts scripts/litmus-helper-tray-network-bootstrap.sh 3
 scripts scripts/litmus-run-one.sh 4

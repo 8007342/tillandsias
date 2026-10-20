@@ -816,6 +816,9 @@ fn ensure_vault_tls_leaf(certs_dir: &std::path::Path, debug: bool) -> Result<(),
     let ca_key = certs_dir.join("intermediate.key");
     let cert = vault_tls_cert(certs_dir);
     let key = vault_tls_key(certs_dir);
+    // 1118-fqfk slice 2b: the leaf key lives on tmpfs only, with no keyring
+    // copy; after a reboot (or over a legacy plaintext key) it is minted again.
+    crate::ca_key_store::materialize(&key, &cert, false);
     if !vault_tls_leaf_needs_refresh(&ca_cert, &cert, &key) {
         return Ok(());
     }
@@ -855,7 +858,7 @@ fn ensure_vault_tls_leaf(certs_dir: &std::path::Path, debug: bool) -> Result<(),
     );
     let csr = certs_dir.join(format!("vault.csr.{unique}.tmp"));
     let tmp_cert = certs_dir.join(format!("vault.crt.{unique}.tmp"));
-    let tmp_key = certs_dir.join(format!("vault.key.{unique}.tmp"));
+    let tmp_key = crate::ca_key_store::staging_path(&key, &unique);
     let vault_san = "subjectAltName=DNS:vault,DNS:localhost,IP:127.0.0.1";
     if debug {
         eprintln!(
@@ -924,7 +927,8 @@ fn ensure_vault_tls_leaf(certs_dir: &std::path::Path, debug: bool) -> Result<(),
         fs::set_permissions(&tmp_key, fs::Permissions::from_mode(0o600))
             .map_err(|e| format!("set Vault TLS key permissions: {e}"))?;
     }
-    fs::rename(&tmp_key, &key).map_err(|e| format!("publish Vault TLS key: {e}"))?;
+    crate::ca_key_store::seal(&tmp_key, &key, &[], false)
+        .map_err(|e| format!("publish Vault TLS key: {e}"))?;
     fs::rename(&tmp_cert, &cert).map_err(|e| format!("publish Vault TLS cert: {e}"))?;
     Ok(())
 }
@@ -4165,7 +4169,7 @@ fn unseal_key_file_path() -> PathBuf {
 /// True when `path` is on tmpfs. Off Linux nothing can be asked, so the
 /// caller's runtime dir is trusted.
 #[cfg(unix)]
-fn path_is_tmpfs(path: &std::path::Path) -> bool {
+pub(crate) fn path_is_tmpfs(path: &std::path::Path) -> bool {
     #[cfg(target_os = "linux")]
     {
         use std::os::unix::ffi::OsStrExt;
@@ -4246,6 +4250,18 @@ fn scrub_unseal_key_file() {
         let _ = fs::write(&path, vec![0u8; len]);
         let _ = fs::remove_file(&path);
     }
+}
+
+/// `$XDG_RUNTIME_DIR/tillandsias`: the per-session tmpfs root that holds the
+/// unseal key, the runtime secrets and (slice 2b) the CA key bytes. Unused
+/// under test, where the CA key store stays off its real home.
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) fn runtime_dir_tillandsias() -> PathBuf {
+    unseal_key_file_path()
+        .parent()
+        .and_then(|d| d.parent())
+        .expect("the runtime dir has a tillandsias directory")
+        .to_path_buf()
 }
 
 /// 1118-fqfk slice 2a: where per-container credentials live for a container's
@@ -5329,10 +5345,25 @@ fn read_handover_file(name: &str) -> Option<String> {
     if value.is_empty() { None } else { Some(value) }
 }
 
+/// Read a host keychain entry on its own thread, bounded like every keyring
+/// call. `Ok(None)` is an answered "no entry"; `Err` is a keyring that could
+/// not be asked (locked, absent, timed out).
+#[cfg(feature = "vault")]
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) fn keyring_get_blocking(user: &str) -> Result<Option<String>, String> {
+    let entry =
+        Entry::new(KEYCHAIN_SERVICE, user).map_err(|e| format!("keyring entry {user}: {e}"))?;
+    with_keyring_timeout(move || match entry.get_password() {
+        Ok(value) => Ok(Some(value)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(e),
+    })
+}
+
 /// Write (or overwrite) a host keychain entry, isolating the (potentially
 /// blocking, runtime-using) secret-service call on its own thread.
 #[cfg(feature = "vault")]
-fn keychain_set_blocking(user: &str, value: &str) -> Result<(), String> {
+pub(crate) fn keychain_set_blocking(user: &str, value: &str) -> Result<(), String> {
     let entry =
         Entry::new(KEYCHAIN_SERVICE, user).map_err(|e| format!("keyring entry {user}: {e}"))?;
     let value = value.to_string();

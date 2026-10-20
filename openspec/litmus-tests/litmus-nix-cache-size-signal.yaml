@@ -41,7 +41,7 @@ critical_path:
     failure_pattern: "grep: no match"
 
   - step: "live nix cache size check (skips without GH_TOKEN)"
-    command: "scripts/litmus-helper-nix-cache-size.sh check-live-cache"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-nix-cache-size.lua -- check-live-cache 2>&1"
     timeout_ms: 30000
     success_pattern: "nix cache size ok|SKIP:"
     failure_pattern: "WARN: nix cache exceeds"
