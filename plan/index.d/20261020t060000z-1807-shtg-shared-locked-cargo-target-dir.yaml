@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl, 2026-10-20. Code is cited by symbol, never by line.
+packets:
+  - packet_id: every-worktree-builds-into-one-canonical-flock-serialized-cargo-target-dir-whose-owner-change-forces-a-re-fingerprint-so-sccache-hits-across-worktrees-and-no-gate-runs-another-checkouts-binaries
+    order: 1807-shtg
+    status: in_progress
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    parent: 1800-p47s
+    pickup_role: linux
+    capability_tags: [build, sccache, cargo, worktrees, measurement]
+    estimated_hours: 3
+    size: S
+    related: [1804-sccl, 1806-lanc, 1802-fbld, 1590-j20f, 1599-egzz]
+    owned_files:
+      - build.sh
+      - scripts/shared-target.sh
+      - scripts/test-shared-target.sh
+    title: |
+      build.sh points every worktree at the main checkout's target/ (the RAID bind mount) under an flock, and re-touches the tree when another checkout built last, so sccache's absolute-target-dir key is identical across worktrees without a gate running another checkout's binaries
+    context: |
+      Operator ruling 2026-10-20. 1804-sccl measured 0 of 244 cross-worktree
+      sccache hits with per-worktree targets and 276 of 276 at one path.
+      The known hazard of a shared target (mtime-only freshness; baked
+      env!(CARGO_MANIFEST_DIR)) is guarded by scripts/shared-target.sh:
+      flock on the dir for the life of build.sh, an owner record of
+      checkout plus index digest, and a touch of every tracked file when the
+      owner differs.
+    exit_criteria:
+      - "scripts/test-shared-target.sh: arm 2 shows a naive shared dir running A's code in B, arm 3 shows the guarded entry building B's; pre-fix result: FAILS (arm 3 prints A, the lock arm admits a second builder)"
+      - "measured sccache Cache hits (Rust) for a second worktree built at the same commit into the canonical dir is > 0, against 0 with per-worktree targets"
+    verifiable_closure: "scripts/test-shared-target.sh"
+    next_action: >
+      Preflight and push work/1807-shtg (no PR); the coordinator lands it
+      after 1804-sccl. Then 1806-lanc takes the same canonical path on the
+      peer host.
+    events:
+      - type: filed
+        ts: "2026-10-20T06:00:00Z"
+        host: macuahuitl
+        summary: |-
+          filed from the operator ruling of 2026-10-20 (one canonical shared CARGO_TARGET_DIR).
+events:
+  - packet_id: lenovinha-consumes-macuahuitls-sccache-over-the-1gbe-segment-through-an-authenticated-tls-endpoint-whose-credential-comes-from-the-vault-at-build-time-and-the-hit-rate-on-lenovinha-is-read-from-sccache-itself-with-an-unenrolled-host-refused-as-the-negative-control
+    event:
+      type: note
+      ts: "2026-10-20T06:00:00Z"
+      host: macuahuitl
+      summary: |-
+        Unblocked by operator ruling 2026-10-20 (builds in worktrees share ONE canonical CARGO_TARGET_DIR on the RAID so the sccache key matches): the same-absolute-target-path precondition this row names is now supplied by 1807-shtg; the remaining dependency is discovery (1800-54yy).
