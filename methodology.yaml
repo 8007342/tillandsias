@@ -24,6 +24,7 @@ methodology:
     forge_diagnostics: methodology/forge-diagnostics.yaml
     multi_host_development: methodology/multi-host-development.yaml
     distributed_work: methodology/distributed-work.yaml
+    work_selection: methodology/work-selection.yaml
     versioning: methodology/versioning.yaml
     release_runbook: docs/RELEASING.md
     markdown_distillation: methodology/markdown-distillation.yaml
