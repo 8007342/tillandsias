@@ -143,7 +143,7 @@ end
 
 -- 5: the population of live-ref diff bases, and each one's fallback.
 -- check-landing-provenance reads trunk's own history (REF), not a diff base.
-local EXEMPT = { ["scripts/check-landing-provenance.sh"] = true }
+local EXEMPT = { ["scripts/lua/check-landing-provenance.lua"] = true }
 local sites, unfrozen, searched = {}, {}, 0
 local function scan(dir, suffix)
     for _, f in ipairs(fs.walk(dir)) do

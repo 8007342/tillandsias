@@ -4566,9 +4566,10 @@ fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
             "{}:/etc/squid/certs/intermediate.crt:ro",
             certs_dir.join("intermediate.crt").display()
         ),
-        // 755-qcxh: the CA PRIVATE key travels as a podman secret, never a
-        // host bind mount — secret delivery is what lets the host file stay
-        // 0600. The public cert above stays a bind mount on purpose.
+        // 755-qcxh, 1118-fqfk: the CA PRIVATE key travels as a runtime secret
+        // file on tmpfs (0700 dir), never a bind from the durable CA dir and
+        // never a podman secret (plaintext on disk). The public cert above
+        // stays a bind mount on purpose.
         "--volume".into(),
         crate::vault_bootstrap::runtime_secret_volume(
             PROXY_CA_KEY_SECRET,
