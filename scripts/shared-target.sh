@@ -53,12 +53,27 @@ shared_target_enter() { # ROOT ; exports CARGO_TARGET_DIR, takes the lock, touch
     fi
     command -v flock >/dev/null 2>&1 || { echo "shared-target: REFUSED, no flock on PATH to serialize the shared dir" >&2; return 1; }
     owner="$canon/.shared-target-owner"
+    # NESTED ENTER (re-exec inside the toolbox, fixtures calling build.sh):
+    # the holder exports TILLANDSIAS_SHARED_TARGET_HELD="<canon>|<root>|<pid>".
+    # A child for the same canon and checkout whose holder is alive inherits
+    # the lock instead of self-deadlocking on a fresh open of the lockfile.
+    local held="${TILLANDSIAS_SHARED_TARGET_HELD:-}"
+    if [ -n "$held" ]; then
+        local h_canon h_root h_pid
+        IFS='|' read -r h_canon h_root h_pid <<<"$held"
+        if [ "$h_canon" = "$canon" ] && [ "$h_root" = "$root" ] && [ -n "$h_pid" ] && kill -0 "$h_pid" 2>/dev/null; then
+            export CARGO_TARGET_DIR="$canon"
+            echo "shared-target: on CARGO_TARGET_DIR=$canon (lock inherited from pid $h_pid, owner $root)" >&2
+            return 0
+        fi
+    fi
     wait="${TILLANDSIAS_SHARED_TARGET_WAIT:-1800}"
     exec 9>>"$canon/.shared-target.lock"
     if ! flock -w "$wait" 9; then
-        echo "shared-target: REFUSED, $canon is locked by another build for ${wait}s; last owner: $(cat "$owner" 2>/dev/null || echo unknown)" >&2
+        echo "shared-target: REFUSED, $canon is locked by another build for ${wait}s; last owner: $(cat "$owner" 2>/dev/null || echo unknown); lock holder: $(cat "$canon/.shared-target-holder" 2>/dev/null || echo unknown) (a long-lived shell that sourced shared_target_enter keeps the lock; see ps -p <pid>)" >&2
         return 1
     fi
+    printf 'pid %s %s\n' "$$" "$(ps -o args= -p $$ 2>/dev/null | cut -c1-80)" > "$canon/.shared-target-holder" 2>/dev/null || true
     digest="$(shared_target_digest "$root")"
     prev="$(cat "$owner" 2>/dev/null || true)"
     if [ "$prev" != "$root $digest" ]; then
@@ -69,5 +84,6 @@ shared_target_enter() { # ROOT ; exports CARGO_TARGET_DIR, takes the lock, touch
         echo "shared-target: owner changed (was: ${prev:-none}); tracked files of $root touched so cargo re-fingerprints from this checkout" >&2
     fi
     export CARGO_TARGET_DIR="$canon"
+    export TILLANDSIAS_SHARED_TARGET_HELD="$canon|$root|$$"
     echo "shared-target: on CARGO_TARGET_DIR=$canon (locked, owner $root)" >&2
 }

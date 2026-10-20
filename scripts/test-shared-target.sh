@@ -13,6 +13,9 @@
 #               PRE-FIX: FAILS (identical to arm 2).
 # ARM 4 SAME    re-entering from the same checkout and index does NOT touch
 #               (no needless rebuilds). NEGATIVE CONTROL for arm 3.
+# ARM 6 NESTED a child process (build.sh re-exec in the toolbox, fixtures) entering
+#               the same checkout while the parent holds the lock is admitted;
+#               a different checkout is still refused. PRE-FIX: child REFUSED.
 # ARM 5 PATH    the canonical dir of a worktree and of its main checkout are
 #               the same absolute path (what sccache keys on).
 set -uo pipefail
@@ -66,4 +69,21 @@ case "$guard" in code-from-B*"$B"*) ok "arm3 guarded run built B's code and bake
 touch "$W/marker"; sleep 1; touch -d "1 hour ago" "$B/src/main.rs"
 ( shared_target_enter "$B" >/dev/null 2>&1 )
 [ ! "$B/src/main.rs" -nt "$W/marker" ] && ok "arm4 same checkout re-entered without touching" || bad "arm4 touched on an unchanged owner"
+
+# ARM 6 nested enter: parent holds the lock, child (separate process, fresh open) enters.
+# Script files, not bash -c strings: a trailing bash -c is exec-optimised and would drop the parent's fd.
+cat > "$W/child.sh" <<EOF
+. '$ROOT/scripts/shared-target.sh'
+shared_target_enter "\$1"
+EOF
+cat > "$W/parent.sh" <<EOF
+. '$ROOT/scripts/shared-target.sh'
+shared_target_enter '$A' >/dev/null 2>&1 || exit 7
+bash '$W/child.sh' "\$1"; rc=\$?
+: done; exit \$rc
+EOF
+nested="$(TILLANDSIAS_SHARED_TARGET_WAIT=2 bash "$W/parent.sh" "$A" 2>&1)"; nrc=$?
+[ $nrc -eq 0 ] && ok "arm6 nested enter inherited the held lock" || bad "arm6 nested enter refused/deadlocked (rc=$nrc): $nested"
+other="$(TILLANDSIAS_SHARED_TARGET_WAIT=1 bash "$W/parent.sh" "$B" 2>&1)"; orc=$?
+[ $orc -ne 0 ] && ok "arm6 nested enter from a different checkout still refused" || bad "arm6 different checkout admitted under a held lock"
 exit $fail
