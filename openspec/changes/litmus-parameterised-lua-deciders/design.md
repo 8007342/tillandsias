@@ -104,3 +104,9 @@ paying for itself, not a reason to loosen the decider.
   tree); on a very dirty worktree it is larger. `--no-cache` is the escape.
 - The census is a keyword classifier; minority families are upper bounds.
   The burn-down reads `piped=`, which is exact.
+
+## Operator rulings (2026-10-19)
+
+1. **Editing a piped command without converting it warns now and refuses later.** It is a warning for now. Once the census shows the piped count falling over one window (W ≈ 1 week), it becomes a refusal. Slice 1800-f56m carries both stages.
+2. **One file.** Every decider family lives in `scripts/lua/litmus-decide.lua` for now, so it also works on lagging forge binaries. A library loader in script_run.rs may come later, but nothing waits on it.
+3. The rest of the migration is worked out as it goes, family by family.
