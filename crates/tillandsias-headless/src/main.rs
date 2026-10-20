@@ -26447,13 +26447,16 @@ mod tests {
         assert!(!has_arg(&args, "10.0.42.2"));
         assert!(has_arg(&args, "DEBUG_PROXY=1"));
         assert!(has_arg(&args, "tillandsias-proxy:v1"));
-        // 755-qcxh: the CA private key is delivered as a podman secret owned
-        // by the proxy uid; the world-readable key bind mount must never
-        // come back.
-        assert!(has_arg(&args, "--secret"));
+        // 755-qcxh: the CA private key never travels as a bind mount of the
+        // host key file. 1118-fqfk 2a: it is a tmpfs runtime secret mounted at
+        // /run/secrets/tillandsias-ca-key, not a podman file-driver secret.
+        assert!(!has_arg(&args, "--secret"));
         assert!(has_arg(
             &args,
-            "tillandsias-ca-key,uid=1000,gid=1000,mode=0400"
+            &crate::vault_bootstrap::runtime_secret_volume(
+                "tillandsias-ca-key",
+                "uid=1000,gid=1000,mode=0400"
+            )
         ));
         assert!(
             !args.iter().any(|a| a.contains("intermediate.key")),
@@ -29094,22 +29097,23 @@ mod tests {
         );
 
         // Vault Agent's reusable AppRole document must be mounted at the
-        // stable path /run/secrets/vault-approle and owned by the git user.
-        let secret_arg = format!("{secret},{GIT_VAULT_APPROLE_SECRET_OPTS}");
+        // stable path /run/secrets/vault-approle, from its tmpfs runtime
+        // secret (1118-fqfk 2a), never a podman file-driver secret.
+        let secret_arg =
+            crate::vault_bootstrap::runtime_secret_volume(secret, GIT_VAULT_APPROLE_SECRET_OPTS);
+        assert!(
+            secret_arg.ends_with(":/run/secrets/vault-approle:ro,z"),
+            "{secret_arg}"
+        );
         assert!(
             args.iter().any(|a| a == &secret_arg),
             "expected Vault Agent AppRole secret arg `{secret_arg}` in args: {args:?}"
         );
 
-        let mounted = args
-            .iter()
-            .find(|a| a.contains("target=vault-approle"))
-            .expect("vault-approle secret must be mounted");
-        assert!(
-            mounted.contains("uid=1000") && mounted.contains("gid=1000"),
-            "vault-approle secret must be owned by the git user (uid/gid 1000) \
-             so it is readable under keep-id; got `{mounted}`"
-        );
+        // 1118-fqfk 2a: readable under keep-id because the tmpfs file is 0444
+        // inside a 0700 directory (write_runtime_secret), not by podman's
+        // uid/gid secret options.
+        assert!(!has_arg(&args, "--secret"), "{args:?}");
 
         assert!(
             has_arg(&args, "VAULT_ADDR=https://vault:8200"),
@@ -30589,10 +30593,13 @@ esac
             false,
             false,
         );
-        assert!(has_arg(&args, "--secret"));
+        assert!(!has_arg(&args, "--secret"));
         assert!(has_arg(
             &args,
-            &format!("opencode-forge-lease,{GIT_VAULT_TOKEN_SECRET_OPTS}")
+            &crate::vault_bootstrap::runtime_secret_volume(
+                "opencode-forge-lease",
+                GIT_VAULT_TOKEN_SECRET_OPTS
+            )
         ));
         assert!(has_arg(&args, "TILLANDSIAS_OPENCODE_AUTH_EXPECTED=1"));
         assert!(has_arg(&args, "VAULT_ROLE=opencode-forge"));
@@ -30775,14 +30782,16 @@ esac
                 false,
                 &test_cache_root(),
             );
-            assert!(
-                has_arg(&args, "--secret"),
-                "{mode:?} must mount the vault lease"
+            let (source, target) = crate::vault_bootstrap::runtime_secret_bind(
+                "provider-forge-lease",
+                GIT_VAULT_TOKEN_SECRET_OPTS,
             );
-            assert!(has_arg(
-                &args,
-                &format!("provider-forge-lease,{GIT_VAULT_TOKEN_SECRET_OPTS}")
-            ));
+            assert!(
+                args.iter()
+                    .any(|a| a.contains(&format!("source={source},target={target}"))),
+                "{mode:?} must mount the vault lease from its tmpfs runtime secret: {args:?}"
+            );
+            assert!(!has_arg(&args, "--secret"));
         }
 
         // Credential-free lanes never mount a provider lease.
@@ -31435,12 +31444,12 @@ esac
         assert!(
             args_with
                 .iter()
-                .any(|a| a == "signer-sec,target=vault-approle-signer,uid=1000,gid=1000,mode=0400"),
+                .any(|a| a.ends_with("/signer-sec:/run/secrets/vault-approle-signer:ro,z")),
             "the signer document must mount at its OWN target, not the relay path; \
              got:\n{args_with:?}"
         );
         assert!(
-            args_with.iter().any(|a| a.starts_with("signer-sec,")),
+            args_with.iter().any(|a| a.contains("/signer-sec:")),
             "the mirror must receive the SIGNER AppRole material when the lane is on; \
              got:\n{args_with:?}"
         );

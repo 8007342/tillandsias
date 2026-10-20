@@ -4357,17 +4357,44 @@ pub(crate) fn runtime_secret_volume(name: &str, opts: &str) -> String {
     )
 }
 
+/// The `tillandsias-*` file-driver secrets in a `podman secret ls --format
+/// "{{.Name}} {{.Driver}}"` listing.
+fn legacy_secret_names(listing: &str) -> Vec<String> {
+    listing
+        .lines()
+        .filter_map(|l| l.split_once(' '))
+        .filter(|(name, driver)| name.starts_with("tillandsias-") && driver.trim() == "file")
+        .map(|(name, _)| name.to_string())
+        .collect()
+}
+
 /// 1118-fqfk: remove the plaintext credentials earlier releases left at rest
 /// on a host: the file-driver podman secret, and the cache dir's fallback and
 /// anchor files. Contents are never read. A guest keeps its fallbacks until
 /// its own slice moves them.
 #[cfg(feature = "vault")]
 fn remove_legacy_plaintext_credentials(debug: bool) {
-    let _ = podman_cmd_sync()
-        .args(["secret", "rm", VAULT_UNSEAL_SECRET])
-        .stdout(Stdio::null())
+    // 1118-fqfk 2a: no tillandsias credential is a podman secret any more, so
+    // every file-driver `tillandsias-*` secret left by an earlier release is
+    // plaintext at rest and goes. A running container keeps its own copy until
+    // it is recreated.
+    let listed = podman_cmd_sync()
+        .args(["secret", "ls", "--format", "{{.Name}} {{.Driver}}"])
+        .stdout(Stdio::piped())
         .stderr(Stdio::null())
-        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget());
+        .output_bounded(tillandsias_podman::OperationKind::Secret.default_budget());
+    if let Ok(out) = listed {
+        for name in legacy_secret_names(&String::from_utf8_lossy(&out.stdout)) {
+            let _ = podman_cmd_sync()
+                .args(["secret", "rm", &name])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .output_bounded(tillandsias_podman::OperationKind::Secret.default_budget());
+            if debug {
+                eprintln!("[tillandsias-vault] removed legacy podman secret {name} (1118-fqfk)");
+            }
+        }
+    }
     if is_running_in_vm() {
         return;
     }
@@ -8694,13 +8721,16 @@ mod tests {
             });
             // Window = this function body up to the next top-level `fn `.
             let window = after.split("\nfn ").next().unwrap_or(after);
+            // 1118-fqfk 2a: a runtime secret is a tmpfs file, replaced
+            // atomically by write_runtime_secret (sibling write, then rename),
+            // never a podman file-driver secret.
             assert!(
-                window.contains("\"--replace\""),
-                "{func} must create its podman secret with --replace (atomic idempotent)"
+                window.contains("write_runtime_secret("),
+                "{func} must write through write_runtime_secret"
             );
             assert!(
-                !window.contains("[\"secret\", \"rm\""),
-                "{func} must NOT do a racy `secret rm` before `secret create` — use --replace"
+                !window.contains("\"secret\", \"create\""),
+                "{func} must not create a podman secret"
             );
         }
     }
@@ -9011,6 +9041,100 @@ mod tests {
             assert!(msg.contains("remedy:"), "{msg}");
             assert!(!written, "nothing is written to durable disk");
         }
+    }
+
+    /// 1118-fqfk 2a: a runtime secret mounts where its podman `--secret` used
+    /// to (`target=` from the opts, else its name), read-only and relabelled.
+    #[test]
+    fn a_runtime_secret_mounts_at_its_old_secret_target() {
+        let vol = runtime_secret_volume(
+            "tillandsias-vault-approle-x",
+            "target=vault-approle,uid=1000,gid=1000,mode=0400",
+        );
+        assert!(vol.ends_with(":/run/secrets/vault-approle:ro,z"), "{vol}");
+        assert!(
+            vol.contains("/tillandsias/secrets/tillandsias-vault-approle-x:"),
+            "{vol}"
+        );
+        let plain = runtime_secret_volume("tillandsias-ca-key", "uid=1000,gid=1000,mode=0400");
+        assert!(
+            plain.ends_with(":/run/secrets/tillandsias-ca-key:ro,z"),
+            "{plain}"
+        );
+        let (source, target) = runtime_secret_bind("lease", "target=vault-token");
+        assert!(source.ends_with("/tillandsias/secrets/lease"), "{source}");
+        assert_eq!(target, "/run/secrets/vault-token");
+    }
+
+    /// 1118-fqfk 2a: only `tillandsias-*` FILE-driver secrets are legacy
+    /// plaintext to remove; another tool's secret, or another driver, is left.
+    #[test]
+    fn legacy_secret_names_are_tillandsias_file_driver_secrets_only() {
+        let listing = "tillandsias-ca-key file\ntillandsias-vault-unseal file\n\
+                       someone-elses file\ntillandsias-gpg pass\n";
+        assert_eq!(
+            legacy_secret_names(listing),
+            vec![
+                "tillandsias-ca-key".to_string(),
+                "tillandsias-vault-unseal".to_string()
+            ]
+        );
+        assert!(legacy_secret_names("").is_empty());
+    }
+
+    /// 1118-fqfk 2a: a runtime secret is a 0444 file in the 0700 tmpfs
+    /// directory, replaced in place (no leftover sibling), refused for a name
+    /// that could escape the directory, and gone after removal.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_runtime_secret_is_written_replaced_and_removed_on_tmpfs() {
+        use std::os::unix::fs::PermissionsExt;
+        let _env = crate::test_support::env_lock();
+        let saved = std::env::var_os("XDG_RUNTIME_DIR");
+        let Some(base) = saved
+            .clone()
+            .map(PathBuf::from)
+            .filter(|d| path_is_tmpfs(d))
+        else {
+            eprintln!("note: XDG_RUNTIME_DIR is not tmpfs here; the arm did not run");
+            return;
+        };
+        let scratch = base.join(format!("fqf2-{}", std::process::id()));
+        fs::create_dir_all(&scratch).unwrap();
+        // SAFETY: env_lock serialises every env-mutating test.
+        unsafe { std::env::set_var("XDG_RUNTIME_DIR", &scratch) };
+        let first = write_runtime_secret("lease-a", b"one");
+        let second = write_runtime_secret("lease-a", b"two");
+        let path = runtime_secret_path("lease-a");
+        let content = fs::read(&path);
+        let mode = fs::metadata(&path).map(|m| m.permissions().mode() & 0o777);
+        let dir_mode = fs::metadata(path.parent().unwrap()).map(|m| m.permissions().mode() & 0o777);
+        let siblings: Vec<_> = fs::read_dir(path.parent().unwrap())
+            .unwrap()
+            .filter_map(|e| e.ok().map(|e| e.file_name().to_string_lossy().into_owned()))
+            .collect();
+        let escape = write_runtime_secret("../escape", b"x");
+        remove_runtime_secret("lease-a");
+        let gone = !path.exists();
+        // SAFETY: as above.
+        unsafe {
+            match saved {
+                Some(v) => std::env::set_var("XDG_RUNTIME_DIR", v),
+                None => std::env::remove_var("XDG_RUNTIME_DIR"),
+            }
+        }
+        let _ = fs::remove_dir_all(&scratch);
+        assert!(first.is_ok() && second.is_ok(), "{first:?} {second:?}");
+        assert_eq!(content.unwrap(), b"two".to_vec());
+        assert_eq!(mode.unwrap(), 0o444);
+        assert_eq!(dir_mode.unwrap(), 0o700);
+        assert_eq!(
+            siblings,
+            vec!["lease-a".to_string()],
+            "no half-written sibling is left"
+        );
+        assert!(escape.is_err(), "a name with a slash is refused");
+        assert!(gone);
     }
 
     #[test]
