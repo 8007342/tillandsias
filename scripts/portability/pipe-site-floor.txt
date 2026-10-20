@@ -338,7 +338,6 @@ scripts scripts/bump-version.sh 1
 scripts scripts/capture.sh 3
 scripts scripts/census-admitted-missing-evidence.sh 9
 scripts scripts/census-litmus-layer-classification.sh 5
-scripts scripts/census-litmus-reachability.sh 1
 scripts scripts/census-litmus-step-enforcement.sh 4
 scripts scripts/census-sigpipe-verdict-pipelines.sh 6
 scripts scripts/centicolon-backfill.sh 10
