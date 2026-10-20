@@ -231,7 +231,7 @@ litmus openspec/litmus-tests/litmus-openspec-cli-pin-shape.yaml 1
 litmus openspec/litmus-tests/litmus-order-id-collision-free.yaml 2
 litmus openspec/litmus-tests/litmus-parked-blocks-visibility-shape.yaml 4
 litmus openspec/litmus-tests/litmus-pickup-role-grammar-shape.yaml 8
-litmus openspec/litmus-tests/litmus-plan-answer-envelope-citability.yaml 16
+litmus openspec/litmus-tests/litmus-plan-answer-envelope-citability.yaml 15
 litmus openspec/litmus-tests/litmus-plan-compaction-format-preservation.yaml 2
 litmus openspec/litmus-tests/litmus-plan-engine-invariants-shape.yaml 2
 litmus openspec/litmus-tests/litmus-plan-fragments-lane-refusals-carry-affordance.yaml 1
@@ -400,7 +400,6 @@ scripts scripts/check-no-competing-gate.sh 6
 scripts scripts/check-no-fixture-writes-live-ledger.sh 16
 scripts scripts/check-no-tracked-binaries.sh 7
 scripts scripts/check-opsx-generated-dirt.sh 1
-scripts scripts/check-order-citations-resolve.sh 6
 scripts scripts/check-packet-tier-declared.sh 4
 scripts scripts/check-pickup-role-grammar.sh 3
 scripts scripts/check-plan-binary-current.sh 5

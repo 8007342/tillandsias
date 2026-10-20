@@ -3512,7 +3512,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # cannot degrade into the no-op that hoisting 885-92iu produced on a cold
     # tree. It refuses with `blocked:` if the ledger read yields nothing, which
     # is the difference between a clean tree and a broken instrument.
-    if ! _run bash "$SCRIPT_DIR/scripts/check-order-citations-resolve.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-order-citations-resolve.lua" 2>&1; then
         _error "an @trace cites an order that names no packet (1234-zade) — an invented suffix on a real order reads as legitimate and resolves to nothing; see the verdict line above"
         exit 1
     fi
@@ -5402,6 +5402,25 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Shell-ratchet fixture passed"
+
+    # ORDER 1800-nvsc — the parameterised litmus deciders (scripts/lua/
+    # litmus-decide.lua) replace piped `command:` strings family by family.
+    # Their fixture constructs every outcome against a fake cargo: a FAILED
+    # run names its tests (the 1799-5kvy empty-output red), zero tests is
+    # could-not-run, a missing tool is could-not-run, one cached producer run
+    # serves two judgements, transient-only retries, file-grep's three modes.
+    _step "Checking the litmus decider fixture (1800-nvsc)..."
+    if ! _run_lua_decider "scripts/lua/test-litmus-decide.lua" 2>&1; then
+        _error "litmus-decide.lua no longer keeps its contract — see the FAIL lines above (1800-nvsc)"
+        exit 1
+    fi
+    _info "Litmus decider fixture passed"
+
+    # The litmus-piped-commands backlog counter (methodology/convergence.yaml,
+    # advisory): piped command: lines by decision family. Printed, never
+    # refused; the ratchet above is what refuses growth.
+    _step "Counting piped litmus commands by family (1800-nvsc, advisory)..."
+    _run_lua_decider "scripts/lua/census-litmus-pipes.lua" 2>&1 || _warn "the litmus pipe census could not run (advisory; 1800-nvsc)"
 
     # ORDER 1590-j20f — a test that builds a path from compile-time
     # env!("CARGO_MANIFEST_DIR") reads the checkout that COMPILED it, and with
