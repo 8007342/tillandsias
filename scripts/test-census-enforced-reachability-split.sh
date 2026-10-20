@@ -17,7 +17,7 @@
 # claim is only that the census should say which of the two it is.
 #
 # REACHABLE means bound in litmus-bindings.yaml AND not `phase: retired`, the
-# same definition census-litmus-reachability.sh uses. Everything else is INERT.
+# same definition lua/census-litmus-reachability.lua uses. Everything else is INERT.
 #
 # HERMETIC: every arm builds its own tree under a temp dir and copies the census
 # in, so REPO_ROOT resolves to the throwaway and the real corpus is never read.
