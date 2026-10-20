@@ -20,19 +20,19 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 [ -f "$ROOT/scripts/shared-target.sh" ] || { echo "FAIL: scripts/shared-target.sh absent"; exit 1; }
 # shellcheck source=shared-target.sh
 . "$ROOT/scripts/shared-target.sh"
-W="$(mktemp -d "$ROOT/target/test-shared-target.XXXXXX" 2>/dev/null || mktemp -d)"
+mkdir -p "$ROOT/target"; W="$(mktemp -d "$ROOT/target/test-shared-target.XXXXXX")"
 trap 'rm -rf "$W"' EXIT
 fail=0; ok() { echo "ok: $*"; }; bad() { echo "FAIL: $*"; fail=1; }
 A="$W/a"; B="$W/b"
 mkdir -p "$A/src" "$A/target"
 git -C "$A" init -q -b main
 git -C "$A" config user.email t@t; git -C "$A" config user.name t
-printf '[package]\nname="probe"\nversion="0.0.0"\nedition="2021"\n' > "$A/Cargo.toml"
+printf '[package]\nname="probe"\nversion="0.0.0"\nedition="2021"\n[workspace]\n' > "$A/Cargo.toml"
 printf 'fn main(){println!("code-from-A {}", env!("CARGO_MANIFEST_DIR"));}\n' > "$A/src/main.rs"
 printf '/target/\n' > "$A/.gitignore"
 git -C "$A" add -A; git -C "$A" commit -qm a
 git -C "$A" worktree add -q -b wb "$B"
-sed -i 's/code-from-A/code-from-B/' "$B/src/main.rs"
+sed 's/code-from-A/code-from-B/' "$B/src/main.rs" > "$B/src/main.rs.new" && mv "$B/src/main.rs.new" "$B/src/main.rs"
 CANON="$A/target"
 run() { (cd "$1" && env -u RUSTC_WRAPPER CARGO_TARGET_DIR="$CANON" cargo run -q --offline 2>&1); }
 
@@ -46,7 +46,7 @@ run() { (cd "$1" && env -u RUSTC_WRAPPER CARGO_TARGET_DIR="$CANON" cargo run -q 
 holder=$!; sleep 1
 if out="$(TILLANDSIAS_SHARED_TARGET_WAIT=1 bash -c ". '$ROOT/scripts/shared-target.sh'; shared_target_enter '$B'" 2>&1)"; then
   bad "arm1 second enter was admitted while the dir was held"
-else echo "$out" | grep -q "REFUSED.*locked.*last owner" && ok "arm1 lock refuses and names the owner" || bad "arm1 refusal unnamed: $out"; fi
+else case "$out" in *REFUSED*locked*"last owner"*) ok "arm1 lock refuses and names the owner";; *) bad "arm1 refusal unnamed: $out";; esac; fi
 wait "$holder" 2>/dev/null
 
 # ARM 2 naive: A builds, then B's file is made OLDER than A's build
@@ -63,8 +63,7 @@ case "$guard" in code-from-B*"$B"*) ok "arm3 guarded run built B's code and bake
   *) bad "arm3 guarded run did not show B: $guard";; esac
 
 # ARM 4 same owner: no touch
-m1="$(stat -c %Y "$B/src/main.rs")"; sleep 1
+touch "$W/marker"; sleep 1; touch -d "1 hour ago" "$B/src/main.rs"
 ( shared_target_enter "$B" >/dev/null 2>&1 )
-m2="$(stat -c %Y "$B/src/main.rs")"
-[ "$m1" = "$m2" ] && ok "arm4 same checkout re-entered without touching" || bad "arm4 touched on an unchanged owner"
+[ ! "$B/src/main.rs" -nt "$W/marker" ] && ok "arm4 same checkout re-entered without touching" || bad "arm4 touched on an unchanged owner"
 exit $fail

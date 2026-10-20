@@ -41,11 +41,8 @@ packets:
         host: macuahuitl
         summary: |-
           filed from the operator ruling of 2026-10-20 (one canonical shared CARGO_TARGET_DIR).
-events:
-  - packet_id: lenovinha-consumes-macuahuitls-sccache-over-the-1gbe-segment-through-an-authenticated-tls-endpoint-whose-credential-comes-from-the-vault-at-build-time-and-the-hit-rate-on-lenovinha-is-read-from-sccache-itself-with-an-unenrolled-host-refused-as-the-negative-control
-    event:
-      type: note
-      ts: "2026-10-20T06:00:00Z"
-      host: macuahuitl
-      summary: |-
-        Unblocked by operator ruling 2026-10-20 (builds in worktrees share ONE canonical CARGO_TARGET_DIR on the RAID so the sccache key matches): the same-absolute-target-path precondition this row names is now supplied by 1807-shtg; the remaining dependency is discovery (1800-54yy).
+      - type: note
+        ts: "2026-10-20T06:00:01Z"
+        host: macuahuitl
+        summary: |-
+          1806-lanc is unblocked-by-ruling on its same-absolute-target-path precondition (operator ruling 2026-10-20; supplied by this row). Its fragment lives only on work/1804-sccl (PR 590), so the event on 1806-lanc itself must be filed once 1804-sccl lands; its remaining dependency is discovery (1800-54yy).
