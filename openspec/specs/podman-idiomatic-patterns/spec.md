@@ -87,7 +87,15 @@ Each Tillandsias-managed project SHALL operate with its own isolated Podman grap
 - **Measurable**: true
 - **Invariants**: [podman-idiomatic-patterns.invariant.secrets-not-in-env, podman-idiomatic-patterns.invariant.secrets-cleaned-on-exit, podman-idiomatic-patterns.invariant.forge-capability-only]
 
-Credentials passed to containers SHALL use `podman secret create` at startup and `--secret <name>` at launch time. Embedding credentials in image layers (`ENV`, `RUN echo`) or passing them as `-e` environment variables is PROHIBITED.
+Credentials passed to containers SHALL use a **runtime secret file**: a 0444
+file in the 0700 tmpfs directory `$XDG_RUNTIME_DIR/tillandsias/secrets`, bound
+read-only at `/run/secrets/<target>` (1118-fqfk slice 2a). Podman's own secret
+store is not used, because its file driver and each container's copy are
+plaintext on durable disk; wherever this requirement says `--secret` or
+"podman secret", read that runtime secret file and its read-only bind. A
+credential bind from a durable path, embedding credentials in image layers
+(`ENV`, `RUN echo`), and passing them as `-e` environment variables are
+PROHIBITED.
 
 This spec distinguishes a **credential** (a value that authenticates to a
 third party — a provider API key, an OAuth document, a GitHub token) from a
@@ -134,15 +142,17 @@ which roles, policies, paths, TTLs, and mount options are allowed.
 
 #### Scenario: A credentialed forge lane mounts one short-lived Vault capability
 - **WHEN** a forge lane is launched whose provider material is present in Vault
-- **THEN** the ONLY `--secret` that forge container MAY receive is a
-  per-launch, per-container Vault AppRole CLIENT TOKEN registered as
-  `tillandsias-vault-token-<role>-<container>` and mounted read-only at
-  `/run/secrets/vault-token` with `target=vault-token,uid=1000,gid=1000,mode=0400`
+- **THEN** the ONLY credential mount that forge container MAY receive is a
+  per-launch, per-container Vault AppRole CLIENT TOKEN written as the runtime
+  secret file `tillandsias-vault-token-<role>-<container>` (tmpfs) and bound
+  read-only at `/run/secrets/vault-token` with the scoped vault-token options
+  (`GIT_VAULT_TOKEN_SECRET_OPTS`); a second token, or a token bound from a
+  durable path, is a violation
 - **AND** that AppRole MUST be bound to a policy that names the exact Vault path
   the lane reads (`opencode-forge-policy`, `claude-forge-policy`,
   `codex-forge-policy`, `antigravity-forge-policy`) — never a broad token
 - **AND** the token MUST expire (`APPROLE_TOKEN_TTL_SECS`) and MUST be revoked
-  with its podman secret removed when the session ends
+  with its runtime secret file removed when the session ends
 - **AND** the credential itself MUST be read from Vault INSIDE the container;
   the launcher MUST NOT read it and hand it to Podman
 - **NOTE**: this scenario states only that such a mount is PERMITTED and
@@ -153,7 +163,8 @@ which roles, policies, paths, TTLs, and mount options are allowed.
 #### Scenario: Credential-free forge lanes receive no `--secret` at all
 - **WHEN** a maintenance forge is launched, or a lane whose provider material is
   absent from Vault
-- **THEN** the `podman run` argv MUST contain zero `--secret` flags
+- **THEN** the `podman run` argv MUST contain zero credential mounts: no
+  runtime secret file bind and no `--secret` flag
 - **AND** that lane MUST remain fully credential-free
 
 ### Requirement: Categorized error handling with retry discrimination
