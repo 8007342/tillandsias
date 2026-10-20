@@ -4270,7 +4270,7 @@ fn scrub_unseal_key_file() {
 /// `$XDG_RUNTIME_DIR/tillandsias`: the per-session tmpfs root that holds the
 /// unseal key, the runtime secrets and (slice 2b) the CA key bytes. Unused
 /// under test, where the CA key store stays off its real home.
-#[cfg_attr(test, allow(dead_code))]
+#[cfg_attr(any(test, not(unix)), allow(dead_code))]
 pub(crate) fn runtime_dir_tillandsias() -> PathBuf {
     unseal_key_file_path()
         .parent()
@@ -5364,7 +5364,7 @@ fn read_handover_file(name: &str) -> Option<String> {
 /// call. `Ok(None)` is an answered "no entry"; `Err` is a keyring that could
 /// not be asked (locked, absent, timed out).
 #[cfg(feature = "vault")]
-#[cfg_attr(test, allow(dead_code))]
+#[cfg_attr(any(test, not(unix)), allow(dead_code))]
 pub(crate) fn keyring_get_blocking(user: &str) -> Result<Option<String>, String> {
     let entry = keyring_entry(user).map_err(|e| format!("keyring entry {user}: {e}"))?;
     with_keyring_timeout(move || match entry.get_password() {
@@ -6919,7 +6919,13 @@ mod tests {
     /// anywhere in this crate's sources would bypass it.
     #[test]
     fn no_keyring_entry_is_made_outside_keyring_entry() {
-        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        // cargo test runs from the package root; a runtime path, not the
+        // compile-time manifest dir (the shared-target hazard).
+        let src = std::path::PathBuf::from("src");
+        assert!(
+            src.join("vault_bootstrap.rs").is_file(),
+            "run from the package root"
+        );
         let mut offenders = Vec::new();
         let mut stack = vec![src];
         while let Some(dir) = stack.pop() {

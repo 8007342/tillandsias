@@ -23,6 +23,10 @@
 //! call leaves the key where the mint put it; guests are 1118 slice 3.
 //!
 //! @trace spec:tillandsias-vault, plan 1118-fqfk
+// Where the store can never be active (Windows, or a build without the vault
+// feature) session() is always None, so the store's machinery is unreachable
+// there by design, not dead.
+#![cfg_attr(not(all(unix, feature = "vault")), allow(dead_code))]
 
 use std::path::{Path, PathBuf};
 
