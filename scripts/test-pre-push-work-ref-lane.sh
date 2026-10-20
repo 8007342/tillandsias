@@ -182,7 +182,7 @@ fi
 # THE PROVENANCE CLASSIFIER COUNTS A SCAFFOLD HISTORY CORRECTLY. The flip to
 # enforcement is meant to rest on this number, so the number has to be right
 # before anyone is asked to act on it.
-PROV="$ROOT/scripts/check-landing-provenance.sh"
+PROV="$ROOT/scripts/lua/check-landing-provenance.lua"
 S="$TMP/scaffold"; mkdir -p "$S"
 (
   cd "$S" && git init -q . && git config user.email t@t && git config user.name t
@@ -195,7 +195,8 @@ S="$TMP/scaffold"; mkdir -p "$S"
 if [ ! -f "$PROV" ]; then
     bad "ARM 5: the provenance classifier is absent, so the enforcement trigger has no number behind it"
 else
-    line="$(TILLANDSIAS_PROVENANCE_REPO="$S" TILLANDSIAS_PROVENANCE_REF=HEAD bash "$PROV" 50.years 2>/dev/null | head -1)"
+    PLAN_BIN="${TILLANDSIAS_PLAN_BIN:-$(. "$ROOT/scripts/plan-binary-probe.sh" && resolve_plan_binary)}"
+    line="$(cd "$ROOT" && TILLANDSIAS_PROVENANCE_REPO="$S" TILLANDSIAS_PROVENANCE_REF=HEAD "$PLAN_BIN" script run "$PROV" -- 50.years 2>/dev/null | head -1)"
     if printf '%s' "$line" | grep -q 'queue=1' \
        && printf '%s' "$line" | grep -q 'plan=1' \
        && printf '%s' "$line" | grep -q 'relay=1' \
