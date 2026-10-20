@@ -31,8 +31,16 @@ When a user clicks the "🌐 OpenCode Web" action button in a project submenu:
 2. Once the auth-gated route is healthy, a GUI browser window is launched in
    `tillandsias-chromium-framework` through the compiled Podman launch path
    in `tillandsias-headless`
-3. The browser reaches OpenCode Web through the published project-local host
-   route `http://opencode.<project>.localhost[:port]/`
+3. The browser reaches OpenCode Web through the router's TLS preview listener
+   at `https://opencode.<label>.localhost/` (a leaf certificate for the
+   project's host label), from the same confined per-window network that
+   `browser.open` uses: an `--internal` network, a forwarder container aliased
+   `router`, and `--host-resolver-rules` that map only `*.<label>.localhost`
+   to it. The window SHALL NOT use `--network host` or podman's default
+   (pasta) network, where `*.localhost` is the container's own loopback
+   (order 1802-9xix: 63784ddb8 removed `--network host` and nothing replaced
+   the route, so the window showed an error page). This holds on every
+   platform the tray runs on (Linux, macOS vz, Windows WSL).
 4. No host system browser is used for tray-driven OpenCode Web; the browser
    container consumes the runtime CA bundle for the secure session and is
    launched only through the compiled typed Podman path
@@ -93,7 +101,8 @@ The browser window launched for OpenCode Web SHALL use safe window type:
 
 #### Scenario: Safe browser launch
 - **WHEN** 🌐 OpenCode Web is clicked
-- **THEN** the browser launches with `--app=http://opencode.<project>.localhost/`
+- **THEN** the browser launches in app mode (`--app=`, no URL bar) on
+  `https://opencode.<label>.localhost/`
 - **AND** no remote debugging port is exposed
 - **AND** all OWASP Top 10 security flags are applied
 
@@ -104,6 +113,17 @@ The browser window launched for OpenCode Web SHALL use safe window type:
   support for that switch
 - **AND** wrapper-level "unknown flag" warnings SHALL NOT be emitted for
   Chromium builds that reject the switch
+- **AND** no window SHALL show Chromium's "unsupported command-line flag:
+  --no-sandbox" infobar; the chosen direction (a sandbox that works inside
+  the container, or a recorded suppression because the container is the
+  sandbox) SHALL be stated here with its security reasoning (order 1802-w7qu)
+
+#### Scenario: Cold-start OpenCode Web waits for its forge
+- **WHEN** a launch must clone the project before `opencode serve` listens
+- **THEN** the readiness wait SHALL continue while the forge container is
+  running, show the elapsed wait in the tray status, and refuse by name when
+  the forge exits or an upper bound passes, instead of giving up after a
+  fixed 30 s (order 1802-axsp)
 
 ### Requirement: Browser launcher uses the secure OpenCode Web session
 <!-- req-id: 081bbd83 -->
