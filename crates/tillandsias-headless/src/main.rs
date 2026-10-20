@@ -4569,8 +4569,11 @@ fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
         // 755-qcxh: the CA PRIVATE key travels as a podman secret, never a
         // host bind mount — secret delivery is what lets the host file stay
         // 0600. The public cert above stays a bind mount on purpose.
-        "--secret".into(),
-        format!("{PROXY_CA_KEY_SECRET},{PROXY_CA_KEY_SECRET_OPTS}"),
+        "--volume".into(),
+        crate::vault_bootstrap::runtime_secret_volume(
+            PROXY_CA_KEY_SECRET,
+            PROXY_CA_KEY_SECRET_OPTS,
+        ),
     ];
     // Order 472: record WHICH CA this proxy was started with, so a running
     // proxy can be compared against the certificate on disk after a rotation.
@@ -4667,7 +4670,7 @@ fn running_proxy_ca_generation() -> Result<Option<String>, ()> {
 /// the bundle publishes keys by inode rename, which a live bind mount never
 /// observed either.
 fn ensure_proxy_ca_key_secret(certs_dir: &Path, debug: bool) -> Result<(), String> {
-    crate::vault_bootstrap::create_file_podman_secret(
+    crate::vault_bootstrap::create_file_runtime_secret(
         PROXY_CA_KEY_SECRET,
         &certs_dir.join("intermediate.key"),
         debug,
@@ -5795,8 +5798,11 @@ fn build_git_run_args(
         // certificate request is made with the per-mirror signer token and the
         // relay keeps git-mirror-agent. One token never carries both authorities.
         if let Some(signer_secret) = host_signer_secret {
-            args.push("--secret".into());
-            args.push(format!("{signer_secret},{GIT_VAULT_SIGNER_SECRET_OPTS}"));
+            args.push("--volume".into());
+            args.push(crate::vault_bootstrap::runtime_secret_volume(
+                signer_secret,
+                GIT_VAULT_SIGNER_SECRET_OPTS,
+            ));
             args.push("--env".into());
             args.push(format!(
                 "TILLANDSIAS_VAULT_TOKEN_FILE={MIRROR_SIGNER_TOKEN_SINK}"
@@ -5808,8 +5814,11 @@ fn build_git_run_args(
         // AppRole material and maintains the tmpfs client-token sink used by
         // vault-cli. The reusable login credential is what lets the Agent
         // re-authenticate after a client token reaches max_ttl.
-        args.push("--secret".into());
-        args.push(format!("{secret_name},{GIT_VAULT_APPROLE_SECRET_OPTS}"));
+        args.push("--volume".into());
+        args.push(crate::vault_bootstrap::runtime_secret_volume(
+            secret_name,
+            GIT_VAULT_APPROLE_SECRET_OPTS,
+        ));
         args.push("--env".into());
         args.push("VAULT_ADDR=https://vault:8200".into());
         args.push("--env".into());
@@ -9567,8 +9576,8 @@ fn build_opencode_forge_args(
     // installed harness parsed it without creating auth.json.
     if let Some(secret_name) = opencode_vault_secret {
         args.extend([
-            "--secret".into(),
-            format!("{secret_name},{GIT_VAULT_TOKEN_SECRET_OPTS}"),
+            "--volume".into(),
+            crate::vault_bootstrap::runtime_secret_volume(secret_name, GIT_VAULT_TOKEN_SECRET_OPTS),
             "--env".into(),
             "TILLANDSIAS_OPENCODE_AUTH_EXPECTED=1".into(),
             "--env".into(),
@@ -13436,10 +13445,10 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             &container,
             "--network",
             ENCLAVE_ONLY_NET,
-            "--secret",
-            &format!(
-                "{},{GIT_VAULT_TOKEN_SECRET_OPTS}",
-                vault_lease.secret_name()
+            "--volume",
+            &crate::vault_bootstrap::runtime_secret_volume(
+                vault_lease.secret_name(),
+                GIT_VAULT_TOKEN_SECRET_OPTS,
             ),
             "--cap-drop=ALL",
             "--security-opt=no-new-privileges",
@@ -14094,8 +14103,11 @@ fn build_ssh_lane_sidecar_run_args(
         "/tmp:rw,noexec,nosuid,nodev,size=8m,mode=1777".into(),
         "--volume".into(),
         format!("{}:/ssh-agent", ssh_lane_agent_volume(project_name)),
-        "--secret".into(),
-        format!("{vault_approle_secret},{GIT_VAULT_APPROLE_SECRET_OPTS}"),
+        "--volume".into(),
+        crate::vault_bootstrap::runtime_secret_volume(
+            vault_approle_secret,
+            GIT_VAULT_APPROLE_SECRET_OPTS,
+        ),
         "--env".into(),
         format!("TILLANDSIAS_MIRROR_ID={mirror_id}"),
         "--env".into(),
@@ -19335,7 +19347,9 @@ fn build_forge_agent_run_args_with_vault(
     if mode_provider_pair(mode).is_some()
         && let Some(secret_name) = vault_secret
     {
-        spec = spec.secret(format!("{secret_name},{GIT_VAULT_TOKEN_SECRET_OPTS}"));
+        let (source, target) =
+            crate::vault_bootstrap::runtime_secret_bind(secret_name, GIT_VAULT_TOKEN_SECRET_OPTS);
+        spec = spec.bind_mount(source, target, true);
     }
     if debug {
         spec = spec.env("TILLANDSIAS_DEBUG", "1");

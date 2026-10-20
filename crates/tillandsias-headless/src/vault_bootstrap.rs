@@ -3402,7 +3402,7 @@ pub async fn mint_approle_token_for_container(
         .map_err(|e| format!("vault issue_approle_token failed: {e}"))?;
 
     let secret_name = format!("tillandsias-vault-token-{role}-{container_instance}");
-    create_token_podman_secret(&secret_name, &token, debug)?;
+    create_token_runtime_secret(&secret_name, &token, debug)?;
     if let Ok(mut reg) = revocation_registry().lock() {
         reg.insert(secret_name.clone(), token.clone());
     }
@@ -3448,7 +3448,7 @@ pub async fn mint_approle_auto_auth_for_container(
     })
     .map_err(|e| format!("serialize AppRole auto-auth material: {e}"))?;
 
-    let create_result = create_token_podman_secret(&secret_name, &payload, debug);
+    let create_result = create_token_runtime_secret(&secret_name, &payload, debug);
     payload.zeroize();
     if let Err(error) = create_result {
         let _ = client
@@ -3473,11 +3473,7 @@ pub async fn mint_approle_auto_auth_for_container(
                     &registration.secret_id_accessor,
                 )
                 .await;
-            let _ = podman_cmd_sync()
-                .args(["secret", "rm", &secret_name])
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status_bounded(tillandsias_podman::OperationKind::Secret.default_budget());
+            remove_runtime_secret(&secret_name);
             return Err("AppRole auto-auth revocation registry is poisoned".into());
         }
     }
@@ -3577,11 +3573,7 @@ impl AppRoleSecretLease {
 
 impl Drop for AppRoleSecretLease {
     fn drop(&mut self) {
-        let _ = podman_cmd_sync()
-            .args(["secret", "rm", &self.secret_name])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status_bounded(tillandsias_podman::OperationKind::Secret.default_budget());
+        remove_runtime_secret(&self.secret_name);
     }
 }
 
@@ -3659,11 +3651,7 @@ pub async fn revoke_pending_container_tokens(debug: bool) {
         {
             eprintln!("[tillandsias-vault] revoke token for {secret_name} failed: {e}");
         }
-        let _ = podman_cmd_sync()
-            .args(["secret", "rm", &secret_name])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status_bounded(tillandsias_podman::OperationKind::Secret.default_budget());
+        remove_runtime_secret(&secret_name);
     }
 
     // Order 828-k3mq: REFCOUNT THE CREDENTIAL THE WAY THE CONTAINER IS ALREADY
@@ -3713,11 +3701,7 @@ pub async fn revoke_pending_container_tokens(debug: bool) {
         {
             eprintln!("[tillandsias-vault] destroy AppRole accessor for {secret_name} failed: {e}");
         }
-        let _ = podman_cmd_sync()
-            .args(["secret", "rm", &secret_name])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status_bounded(tillandsias_podman::OperationKind::Secret.default_budget());
+        remove_runtime_secret(&secret_name);
     }
 }
 
@@ -4264,6 +4248,115 @@ fn scrub_unseal_key_file() {
     }
 }
 
+/// 1118-fqfk slice 2a: where per-container credentials live for a container's
+/// life. Podman file-driver secrets, and the copy podman keeps under every
+/// container's userdata, are plaintext on durable disk; this directory is on
+/// tmpfs and goes away with the session.
+pub(crate) fn runtime_secret_path(name: &str) -> PathBuf {
+    unseal_key_file_path()
+        .parent()
+        .and_then(|d| d.parent())
+        .expect("the runtime dir has a tillandsias directory")
+        .join("secrets")
+        .join(name)
+}
+
+/// Write one runtime secret: a 0444 file in a 0700 tmpfs directory, replaced
+/// atomically (write a sibling, then rename) so a concurrent reader never sees
+/// half a credential. 0444 because the reader is whatever uid the container
+/// maps, as podman's own secret mounts were readable; the 0700 directory keeps
+/// every other host user out. Refuses off tmpfs.
+#[cfg(unix)]
+pub(crate) fn write_runtime_secret(name: &str, bytes: &[u8]) -> Result<PathBuf, String> {
+    use std::io::Write;
+    use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
+    if name.is_empty() || name.contains('/') || name.starts_with('.') {
+        return Err(format!("invalid runtime secret name {name:?}"));
+    }
+    let path = runtime_secret_path(name);
+    let dir = path.parent().expect("a runtime secret has a directory");
+    fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(dir)
+        .map_err(|e| format!("create {}: {e}", dir.display()))?;
+    fs::set_permissions(dir, fs::Permissions::from_mode(0o700))
+        .map_err(|e| format!("chmod {}: {e}", dir.display()))?;
+    if !path_is_tmpfs(dir) {
+        return Err(format!(
+            "refused:runtime-secret-not-tmpfs: {} is not on tmpfs, and {name} may not be \
+             written to durable disk (1118-fqfk)\n  \
+             why: a plaintext credential on disk outlives the container that needed it\n  \
+             remedy: run tillandsias in a login session whose XDG_RUNTIME_DIR is the \
+             per-user tmpfs (/run/user/<uid>)",
+            dir.display()
+        ));
+    }
+    let tmp = dir.join(format!(".{name}.{}", std::process::id()));
+    let _ = fs::remove_file(&tmp);
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o400)
+        .open(&tmp)
+        .map_err(|e| format!("create {}: {e}", tmp.display()))?;
+    file.write_all(bytes)
+        .map_err(|e| format!("write {}: {e}", tmp.display()))?;
+    fs::set_permissions(&tmp, fs::Permissions::from_mode(0o444))
+        .map_err(|e| format!("chmod {}: {e}", tmp.display()))?;
+    fs::rename(&tmp, &path).map_err(|e| format!("rename to {}: {e}", path.display()))?;
+    Ok(path)
+}
+
+#[cfg(not(unix))]
+pub(crate) fn write_runtime_secret(name: &str, _bytes: &[u8]) -> Result<PathBuf, String> {
+    Err(format!(
+        "runtime secret {name} needs a unix tmpfs runtime dir"
+    ))
+}
+
+/// Overwrite a runtime secret with zeros and remove it.
+pub(crate) fn remove_runtime_secret(name: &str) {
+    let path = runtime_secret_path(name);
+    if let Ok(meta) = fs::metadata(&path) {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+        }
+        let _ = fs::write(&path, vec![0u8; meta.len() as usize]);
+        let _ = fs::remove_file(&path);
+    }
+}
+
+/// The bind-mount source and target for runtime secret `name`, for the
+/// `ContainerSpec::bind_mount` builder (which relabels shared, like `z`).
+pub(crate) fn runtime_secret_bind(name: &str, opts: &str) -> (String, String) {
+    let target = opts
+        .split(',')
+        .find_map(|kv| kv.strip_prefix("target="))
+        .unwrap_or(name);
+    (
+        runtime_secret_path(name).display().to_string(),
+        format!("/run/secrets/{target}"),
+    )
+}
+
+/// The `--volume` value that hands runtime secret `name` to a container where
+/// a podman `--secret name,<opts>` used to put it: `/run/secrets/<target>`,
+/// with `target=` taken from `opts` (else the name). `z` relabels the tmpfs
+/// file for SELinux-confined containers, as podman did for its secret mounts.
+pub(crate) fn runtime_secret_volume(name: &str, opts: &str) -> String {
+    let target = opts
+        .split(',')
+        .find_map(|kv| kv.strip_prefix("target="))
+        .unwrap_or(name);
+    format!(
+        "{}:/run/secrets/{target}:ro,z",
+        runtime_secret_path(name).display()
+    )
+}
+
 /// 1118-fqfk: remove the plaintext credentials earlier releases left at rest
 /// on a host: the file-driver podman secret, and the cache dir's fallback and
 /// anchor files. Contents are never read. A guest keeps its fallbacks until
@@ -4329,69 +4422,43 @@ fn read_unseal_secret_bytes() -> Option<Vec<u8>> {
     if data.len() == 32 { Some(data) } else { None }
 }
 
-/// Create (or replace) a podman secret holding the supplied token bytes.
-/// Mode `0400`, file driver. Used for per-container AppRole tokens.
-fn create_token_podman_secret(name: &str, token: &str, debug: bool) -> Result<(), String> {
-    // Atomic replace, not the racy rm+create (see create_unseal_secret).
+/// Write (or replace) a runtime secret holding the supplied token bytes, for
+/// a per-container AppRole token or auto-auth document (1118-fqfk 2a: a tmpfs
+/// file, never a podman file-driver secret).
+fn create_token_runtime_secret(name: &str, token: &str, debug: bool) -> Result<(), String> {
     // @trace spec:ephemeral-secret-refresh
-    // @trace plan/issues/vault-secret-refresh-concurrent-race-2026-07-04.md
     if debug {
         eprintln!(
-            "[tillandsias-vault] creating podman secret {name} ({} chars)",
+            "[tillandsias-vault] writing runtime secret {name} ({} chars)",
             token.len()
         );
     }
-    let out = podman_cmd_sync()
-        .args(["secret", "create", "--replace", "--driver=file", name, "-"])
-        .output_bounded_with_stdin(
-            token.as_bytes(),
-            tillandsias_podman::OperationKind::Secret.default_budget(),
-        )
-        .map_err(|e| format!("wait podman secret create: {e}"))?;
-    if !out.status.success() {
-        return Err(format!(
-            "podman secret create {name} failed: {}",
-            String::from_utf8_lossy(&out.stderr)
-        ));
-    }
-    Ok(())
+    write_runtime_secret(name, token.as_bytes()).map(|_| ())
 }
 
-pub(crate) fn create_file_podman_secret(
+/// Write (or replace) a runtime secret from a file's contents.
+pub(crate) fn create_file_runtime_secret(
     name: &str,
     path: &std::path::Path,
     debug: bool,
 ) -> Result<(), String> {
-    let contents =
-        fs::read(path).map_err(|e| format!("read podman secret source {}: {e}", path.display()))?;
-    // Atomic replace, not the racy rm+create (see create_unseal_secret).
-    // @trace plan/issues/vault-secret-refresh-concurrent-race-2026-07-04.md
+    let mut contents =
+        fs::read(path).map_err(|e| format!("read secret source {}: {e}", path.display()))?;
     if debug {
         eprintln!(
-            "[tillandsias-vault] refreshing podman secret {name} from {}",
+            "[tillandsias-vault] writing runtime secret {name} from {}",
             path.display()
         );
     }
-    let out = podman_cmd_sync()
-        .args(["secret", "create", "--replace", "--driver=file", name, "-"])
-        .output_bounded_with_stdin(
-            &contents,
-            tillandsias_podman::OperationKind::Secret.default_budget(),
-        )
-        .map_err(|e| format!("wait podman secret create {name}: {e}"))?;
-    if !out.status.success() {
-        return Err(format!(
-            "podman secret create {name} failed: {}",
-            String::from_utf8_lossy(&out.stderr)
-        ));
-    }
-    Ok(())
+    let written = write_runtime_secret(name, &contents);
+    contents.zeroize();
+    written.map(|_| ())
 }
 
 fn refresh_vault_tls_secrets(certs_dir: &std::path::Path, debug: bool) -> Result<(), String> {
-    create_file_podman_secret(VAULT_TLS_CERT_SECRET, &vault_tls_cert(certs_dir), debug)?;
-    create_file_podman_secret(VAULT_TLS_KEY_SECRET, &vault_tls_key(certs_dir), debug)?;
-    create_file_podman_secret(
+    create_file_runtime_secret(VAULT_TLS_CERT_SECRET, &vault_tls_cert(certs_dir), debug)?;
+    create_file_runtime_secret(VAULT_TLS_KEY_SECRET, &vault_tls_key(certs_dir), debug)?;
+    create_file_runtime_secret(
         VAULT_TLS_CA_SECRET,
         &certs_dir.join("intermediate.crt"),
         debug,
@@ -4873,9 +4940,9 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
         ));
     }
     let key_mount_arg = format!("{}:{UNSEAL_KEY_MOUNT}:ro", key_file.display());
-    let tls_cert_arg = VAULT_TLS_CERT_SECRET.to_string();
-    let tls_key_arg = VAULT_TLS_KEY_SECRET.to_string();
-    let tls_ca_arg = VAULT_TLS_CA_SECRET.to_string();
+    let tls_cert_arg = runtime_secret_volume(VAULT_TLS_CERT_SECRET, "");
+    let tls_key_arg = runtime_secret_volume(VAULT_TLS_KEY_SECRET, "");
+    let tls_ca_arg = runtime_secret_volume(VAULT_TLS_CA_SECRET, "");
     // `:U` makes podman recursively chown the named volume to the container
     // process's mapped uid/gid (the image's `vault` user) on every launch.
     // Without it, a userns mapping shift between launches — which Fedora
@@ -4928,11 +4995,11 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
         VAULT_NETWORK_ALIAS.into(),
         "--volume".into(),
         key_mount_arg,
-        "--secret".into(),
+        "--volume".into(),
         tls_cert_arg,
-        "--secret".into(),
+        "--volume".into(),
         tls_key_arg,
-        "--secret".into(),
+        "--volume".into(),
         tls_ca_arg,
         "--volume".into(),
         volume_arg,
@@ -8619,8 +8686,8 @@ mod tests {
             "/src/vault_bootstrap.rs"
         ));
         for func in [
-            "fn create_token_podman_secret(",
-            "fn create_file_podman_secret(",
+            "fn create_token_runtime_secret(",
+            "fn create_file_runtime_secret(",
         ] {
             let after = source.split(func).nth(1).unwrap_or_else(|| {
                 panic!("{func} must exist");
