@@ -349,5 +349,22 @@ got="$(env -i PATH="$NOCARGO" HOME="$W/empty-home" bash -c '
     && ok "MUTATION: without the probe the same host blocks — arm 6 has teeth" \
     || bad "mutation control did not reproduce the pre-fix behaviour (got $got)"
 
+# ── 13. THE SHIPPED SCRIPT SAYS WHY AND WHAT CLEARS IT (1247-amcu). Not a
+#      paraphrase: the real cycle-preflight.sh, no cargo, and an override that
+#      names no file, so it stops at cargo-absent before anything that is not
+#      hermetic. The remedy is not executed here: past this point the script
+#      enters the builder toolbox and probes podman.
+got="$(env -i PATH="$NOCARGO" HOME="$W/empty-home" \
+    TILLANDSIAS_PLAN_BIN="$W/nonexistent-plan-binary" bash "$PREFLIGHT" 2>"$W/afford.err")"
+case "$got" in
+    *blocked:preflight:plan:cargo-absent*)
+        if grep -q '^  why: ' "$W/afford.err" && grep -q '^  remedy: .*TILLANDSIAS_PLAN_BIN' "$W/afford.err"; then
+            ok "the shipped cargo-absent refusal prints why: and a remedy naming TILLANDSIAS_PLAN_BIN"
+        else
+            bad "cargo-absent carries no why:/remedy: on stderr: $(head -3 "$W/afford.err")"
+        fi ;;
+    *) bad "the shipped preflight did not refuse cargo-absent here, got: ${got:0:120}" ;;
+esac
+
 echo "test-cycle-preflight-cargo-resolution: $pass passed, $fail failed"
 [ "$fail" = 0 ] || exit 1

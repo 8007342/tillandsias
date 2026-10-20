@@ -131,6 +131,17 @@ if [[ -d "$HOME/.cargo/bin" ]]; then
     export PATH="$HOME/.cargo/bin:$PATH"
 fi
 
+# ORDER 1803-pcap — THE GATE'S PLAN-CACHE SNAPSHOTS LIVE UNDER target/. The
+# plan binary keys its folded-ledger snapshot by the index's absolute path,
+# and every fixture builds a scratch repo at a fresh path, so a gate's worth
+# of fixtures wrote dozens of 2-23 MB snapshots into ~/.cache/tillandsias/
+# plan-cache that nothing evicted: 328 GB there on macuahuitl, 2026-10-19.
+# The binary now bounds that directory; the gate additionally keeps its
+# scratch snapshots inside target/, which is disposable, on the fast build
+# root where one exists, and never shared with the operator's own cache.
+# An explicit TILLANDSIAS_PLAN_CACHE_DIR wins.
+export TILLANDSIAS_PLAN_CACHE_DIR="${TILLANDSIAS_PLAN_CACHE_DIR:-$SCRIPT_DIR/target/plan-cache}"
+
 # PODMAN MODE IS THE CALLER'S TO DECLARE — the gate does not guess it.
 #
 # Order 797-r6tc. What used to be here inferred remote podman mode from a FILE
@@ -1398,6 +1409,29 @@ if [[ "$FLAG_CHECK$FLAG_TEST$FLAG_CI$FLAG_CI_FULL$FLAG_RELEASE$FLAG_INSTALL" == 
     (cd "$SCRIPT_DIR" && _touch_gating_checkout)
 fi
 # END-GATE-TOUCH
+
+# ORDER 1802-fbld — BUILD PLACEMENT REPORT. One line saying whether target/ is
+# on the host's fast build root (TILLANDSIAS_FAST_BUILD_ROOT, default
+# /srv/fastbuild), warning with the bind-mount remedy when the root is mounted
+# and target/ is not. Informational only: no path changes, never refuses. The
+# logic is scripts/lua/build-root-placement.lua; a host with no plan binary
+# that runs `script run` prints nothing rather than guess.
+# BEGIN-BUILD-ROOT-PLACEMENT
+_report_build_root() {
+    local _br_bin=""
+    _br_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _br_bin=""
+    case "$_br_bin" in ./*) _br_bin="$SCRIPT_DIR/${_br_bin#./}" ;; esac
+    [ -n "$_br_bin" ] || return 0
+    grep -qx script <<<"$("$_br_bin" capabilities 2>/dev/null)" || return 0
+    local _br_out _br_line
+    _br_out="$(cd "$SCRIPT_DIR" && TILLANDSIAS_TIMING_LOG=/dev/null "$_br_bin" script run scripts/lua/build-root-placement.lua -- 2>&1)" || true
+    while IFS= read -r _br_line; do
+        # the runner requires an ok: prefix on the verdict line; the report does not carry it
+        echo "${_br_line#ok:}"
+    done <<<"$_br_out"
+}
+if [[ "$FLAG_PREFLIGHT" != true ]]; then _report_build_root; fi
+# END-BUILD-ROOT-PLACEMENT
 
 # ORDER 1305-udgs — `./build.sh --preflight`: every guard that can refuse a push,
 # before the SHA, in seconds.
@@ -3489,7 +3523,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # cannot degrade into the no-op that hoisting 885-92iu produced on a cold
     # tree. It refuses with `blocked:` if the ledger read yields nothing, which
     # is the difference between a clean tree and a broken instrument.
-    if ! _run bash "$SCRIPT_DIR/scripts/check-order-citations-resolve.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-order-citations-resolve.lua" 2>&1; then
         _error "an @trace cites an order that names no packet (1234-zade) — an invented suffix on a real order reads as legitimate and resolves to nothing; see the verdict line above"
         exit 1
     fi
@@ -5379,6 +5413,25 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Shell-ratchet fixture passed"
+
+    # ORDER 1800-nvsc — the parameterised litmus deciders (scripts/lua/
+    # litmus-decide.lua) replace piped `command:` strings family by family.
+    # Their fixture constructs every outcome against a fake cargo: a FAILED
+    # run names its tests (the 1799-5kvy empty-output red), zero tests is
+    # could-not-run, a missing tool is could-not-run, one cached producer run
+    # serves two judgements, transient-only retries, file-grep's three modes.
+    _step "Checking the litmus decider fixture (1800-nvsc)..."
+    if ! _run_lua_decider "scripts/lua/test-litmus-decide.lua" 2>&1; then
+        _error "litmus-decide.lua no longer keeps its contract — see the FAIL lines above (1800-nvsc)"
+        exit 1
+    fi
+    _info "Litmus decider fixture passed"
+
+    # The litmus-piped-commands backlog counter (methodology/convergence.yaml,
+    # advisory): piped command: lines by decision family. Printed, never
+    # refused; the ratchet above is what refuses growth.
+    _step "Counting piped litmus commands by family (1800-nvsc, advisory)..."
+    _run_lua_decider "scripts/lua/census-litmus-pipes.lua" 2>&1 || _warn "the litmus pipe census could not run (advisory; 1800-nvsc)"
 
     # ORDER 1590-j20f — a test that builds a path from compile-time
     # env!("CARGO_MANIFEST_DIR") reads the checkout that COMPILED it, and with

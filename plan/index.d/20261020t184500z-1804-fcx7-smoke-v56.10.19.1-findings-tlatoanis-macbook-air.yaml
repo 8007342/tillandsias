@@ -1,0 +1,94 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Findings from plan/issues/e2e-smoke-v56.10.19.1-macos-2026-10-19.md.
+packets:
+  - packet_id: flutter-create-through-the-forge-toolchain-shim-never-returns
+    order: 1804-fcx7
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [toolchain-exec, flutter, forge, mcp-socket]
+    estimated_hours: 4
+    owned_files:
+      - images/default/cli/flutter
+      - crates/tillandsias-headless/src/toolchain_exec.rs
+    title: |
+      flutter create run through the forge's toolchain shim (tillandsias/exec) never returns, so no Flutter project can be created in a forge
+    context: |
+      Measured on tlatoanis-macbook-air, published v56.10.19.1, 2026-10-19 21:43Z, in a fresh forge on a new project (~/src/kumbia-smoke). A non-interactive bash script (stdin not a tty) ran `flutter create --platforms=web --project-name kumbia kumbia 2>&1 | tail -3` via /usr/local/sbin/flutter (the shim that sends tillandsias/exec over the MCP socket). The output file holds only the line before it; the command never completed and no kumbia/ directory appeared. 1788-qlwq slices 10-12 were therefore untested on this release. Not yet split between "the exec never starts", "it runs but the frame stream never ends" and "the shim never reads the exit frame".
+    exit_criteria:
+      - 'RED FIRST: in a forge, a non-tty `flutter create --platforms=web x` through the shim returns with exit 0 and creates x/ within a bounded time (hangs today on v56.10.19.1)'
+      - 'the shim exits non-zero with a named refusal when the exec stream ends without an exit frame or exceeds its bound, never waits forever'
+    verifiable_closure: |
+      unscoreable: unpinnable-until-the-guard-exists; the future litmus is litmus-flutter-shim-returns-or-refuses.yaml, written in the same commit as the fix.
+      A test that drives the shim against a scripted tillandsias/exec server that sends output and an exit frame (returns with that code) and one that closes without an exit frame (returns a named refusal).
+    provenance: |
+      Filed by macbookair-macos from the v56.10.19.1 macOS smoke, at the coordinator's direction, 2026-10-20.
+    events:
+      - type: filed
+        ts: "2026-10-20T18:45:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          p1: flutter create through the forge toolchain shim never returns (v56.10.19.1 macOS smoke).
+  - packet_id: an-opencode-run-in-a-forge-has-no-exit-or-time-bound
+    order: 1805-oxb3
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [opencode, forge-lifecycle, harness-supervisor, idle-reaper]
+    estimated_hours: 3
+    owned_files:
+      - images/default/harness-supervisor.sh
+      - images/default/entrypoint-forge-opencode.sh
+    title: |
+      A non-interactive `opencode run` in a forge has no exit or time bound; on the v56.10.19.1 smoke it sat for about 21 hours after its tool call hung
+    context: |
+      Measured on tlatoanis-macbook-air, v56.10.19.1, 2026-10-19 21:36Z → stopped by hand 2026-10-20 18:35Z. The tray's --opencode <project> --prompt run had printed its final ARM lines, but a tool call (1804-fcx7) never returned and the run never exited, so the tray CLI, the forge and the guest VM stayed up. Backstop: the idle container reaper, 1800-465n, should catch a forge like this one; this row asks for the run's own bound.
+    exit_criteria:
+      - 'RED FIRST: a prompt run whose tool call never returns ends within a configured bound with a named non-zero exit (today it waits indefinitely)'
+      - 'the bound and its verdict are visible to the tray CLI caller (exit code and one named line)'
+      - 'cross-reference 1800-465n: the idle reaper reclaims such a forge when the bound is absent or disabled'
+    verifiable_closure: |
+      unscoreable: unpinnable-until-the-guard-exists; the future litmus is litmus-opencode-run-is-bounded.yaml, written in the same commit as the fix.
+      A fixture that runs the supervisor with a stub agent whose tool call sleeps forever and asserts the bounded exit and its named line.
+    provenance: |
+      Filed by macbookair-macos from the v56.10.19.1 macOS smoke, at the coordinator's direction, 2026-10-20.
+    events:
+      - type: filed
+        ts: "2026-10-20T18:45:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          p2: an opencode run in a forge has no exit/time bound (hung ~21 h); backstop is 1800-465n.
+  - packet_id: the-readme-release-ledger-has-no-row-for-v56-10-19-1
+    order: 1806-rlg8
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [release, readme-ledger, merge-to-main-and-release]
+    estimated_hours: 1
+    owned_files:
+      - README.md
+      - .claude/skills/merge-to-main-and-release/SKILL.md
+    title: |
+      The README release ledger has no row for v56.10.19.1 (nor v56.10.17.1 or v56.10.18.1), so smokes cannot read what a release claims to fix
+    context: |
+      The smoke's §2b ledger-row read printed "NO LEDGER ROW for v56.10.19.1" against README.md at the tag. The v56.10.18.1 smoke found the same for v56.10.17.1 and v56.10.18.1. The release skill's append step is not running, or not landing on main before the tag.
+    exit_criteria:
+      - 'README.md carries rows for v56.10.17.1, v56.10.18.1 and v56.10.19.1'
+      - 'RED FIRST: the release path refuses to tag when README.md at the release commit has no row for the tag being cut'
+    verifiable_closure: |
+      unscoreable: unpinnable-until-the-guard-exists; the future litmus is litmus-release-refuses-without-ledger-row.yaml, written in the same commit as the fix.
+      A release-preflight check, run on a fixture README without the row, that refuses with a named verdict.
+    provenance: |
+      Filed by macbookair-macos from the v56.10.19.1 macOS smoke, at the coordinator's direction, 2026-10-20.
+    events:
+      - type: filed
+        ts: "2026-10-20T18:45:00Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          p2: README release ledger missing the v56.10.19.1 row (third release in a row).

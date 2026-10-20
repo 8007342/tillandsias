@@ -1,6 +1,6 @@
 # Observatorium deployment
 
-@trace spec:observatorium-dashboard, order:1661-vckd
+@trace spec:observatorium-dashboard, order:1661-vckd, order:1798-khw6
 
 Provenance: operator direction 2026-10-13 ("the absolute easiest
 Flutter-to-Cloudflare path"). Cloudflare Workers Builds deploys straight from
@@ -15,12 +15,41 @@ Workers & Pages → Create → Import a repository → `8007342/tillandsias`, th
 
 | Setting | Value |
 |---|---|
-| Production branch | `main` |
+| Production branch | `deploy/observatorium` |
+| Builds for non-production branches | **Off**: delete the "Deploy non-production branches" trigger the import wizard creates |
 | Root directory | `observatorium` |
 | Build command | `npm run build` |
 | Deploy command | `npx wrangler deploy` (the default; leave it) |
+| Build watch paths | include `*`, exclude nothing |
 | Build variables | none needed |
 | Build cache | Enable (see "Caching" for what it does and does not keep) |
+
+### Only a stable promotion deploys (order 1798-khw6)
+
+Provenance: operator direction 2026-10-19. The first Worker used the import
+wizard's defaults: production on `main` plus a preview trigger on every other
+branch, all paths. Every push to `linux-next`, the platform branches and
+`work/*` started a ~5-minute build, and the operator deleted the Worker to stop
+the burn. Cloudflare's builds list for `tillandsias-org`, the sibling site,
+shows the same two default triggers.
+
+The production branch is `deploy/observatorium`, and nothing writes it except
+`scripts/promote-stable.sh` (step 4, through `scripts/advance-deploy-ref.sh`).
+Workers Builds cannot watch the `stable` tag, so this branch follows it:
+
+- **promote:** the branch fast-forwards to the release commit;
+- **demote, or an older release:** the git mirror refuses branch rewinds, so
+  a restore commit is pushed instead (tree = the release's, first parent =
+  the release, second parent = the old tip);
+- **same tree already deployed:** nothing is pushed.
+
+Watch paths stay at `*` because every promotion should deploy. The build reads
+`openspec/specs`, `plan/` and git history as well as `observatorium/`, so a
+narrower filter would skip real changes. A promotion jump of 20 or more
+commits always builds anyway (Cloudflare's watch-path bypass).
+
+Redeploying by hand, for example after a failed build: "Retry build" on the
+Worker, or `scripts/advance-deploy-ref.sh <release-tag> --label <release-tag>`.
 
 The **Build command must be set.** Workers Builds does NOT run
 `wrangler.jsonc`'s `build.command`. Cloudflare's configuration page says:
@@ -116,6 +145,7 @@ The portable `Containerfile` consumes an already-built `build/web`;
 - [Workers Builds: build image](https://developers.cloudflare.com/workers/ci-cd/builds/build-image/)
 - [Workers Builds: limits and pricing](https://developers.cloudflare.com/workers/ci-cd/builds/limits-and-pricing/)
 - [Workers Builds: build caching](https://developers.cloudflare.com/workers/ci-cd/builds/build-caching/)
+- [Workers Builds: build watch paths](https://developers.cloudflare.com/workers/ci-cd/builds/build-watch-paths/) (checked 2026-10-19: include/exclude, `*` wildcard, the 20-commit / 3000-file / zero-change bypass)
 - [Workers Custom Domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/)
 - [Workers static asset configuration](https://developers.cloudflare.com/workers/static-assets/binding/)
 - [Flutter release manifest (Linux)](https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json)

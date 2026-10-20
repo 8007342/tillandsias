@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: observatorium-deploys-only-on-stable-promotion
+    order: 1798-khw6
+    status: in_progress
+    kind: enhancement
+    priority: p1
+    pickup_role: linux
+    size: M
+    implementer_tier: opus
+    capability_tags: [observatorium, cloudflare, release, ci]
+    owned_files:
+      - scripts/advance-deploy-ref.sh
+      - scripts/lua/test-advance-deploy-ref.lua
+      - scripts/promote-stable.sh
+      - scripts/test-promote-stable-evidence-gate.sh
+      - scripts/hooks/pre-push-local-gate.sh
+      - scripts/test-gate-stamp-scope.sh
+      - openspec/changes/observatorium-deploy-on-stable/
+      - openspec/specs/observatorium-dashboard/deployment.md
+      - openspec/litmus-tests/litmus-stable-channel-shape.yaml
+      - methodology/versioning.yaml
+    title: |
+      The observatorium is built and deployed ONLY when a release is promoted (or demoted) on the stable channel: Workers Builds watches refs/heads/deploy/observatorium, and only promote-stable.sh moves it
+    context: |
+      Operator direction 2026-10-19. The first Worker (tillandsias-observatorium) was created with the import wizard's defaults: production on main plus "Deploy non-production branches" on every other branch, paths *. Every push to linux-next, the platform branches and work/* started a ~5-minute Rust+Flutter build (1661-vckd measured 295 s), against the free plan's 3,000 build minutes a month. The operator deleted the Worker. Read from Cloudflare (read-only host-browser tools, 2026-10-19): no Worker is connected to 8007342/tillandsias; the sibling tillandsias-org Worker carries the same two default triggers.
+      Workers Builds cannot watch a tag. promote-stable.sh step 4 advances the deploy branch through scripts/advance-deploy-ref.sh: fast-forward, or a restore commit carrying the release's exact tree when that would rewind (the mirror refuses branch rewinds). pre-push-local-gate.sh's tag-on-main exemption (1768-2k56) covers refs/heads/deploy/*, with restore commits judged by tree. OpenSpec change: observatorium-deploy-on-stable.
+      Open for the operator: create the Worker with the settings in deployment.md (production branch deploy/observatorium, non-production builds off). The forge's Cloudflare scopes are read-only.
+    exit_criteria:
+      - 'scripts/lua/test-advance-deploy-ref.lua: ok:advance-deploy-ref:10 arms, with arm 0 proving the fixture remote refuses a rewind'
+      - 'scripts/test-promote-stable-evidence-gate.sh 30/30: a promotion advances the deploy ref; a refused advance prints HALF-PROMOTED and no promoted: line'
+      - 'scripts/test-gate-stamp-scope.sh 17/17; case 14 FAILS against the pre-change hook'
+      - 'origin carries refs/heads/deploy/observatorium at the stable commit'
+    verifiable_closure: |
+      litmus:stable-channel-shape passes, including its step "promotion is the only writer of the observatorium deploy ref (1798-khw6)". The three fixtures above pass. `git ls-remote origin refs/heads/deploy/observatorium 'refs/tags/stable^{}'` names the same commit. After the operator creates the Worker, its builds list shows builds only for branch deploy/observatorium.
+    provenance: |
+      Filed by yoga (forge, Claude) at the operator's request, 2026-10-19.
+    events:
+      - type: filed
+        ts: "2026-10-19T19:50:00Z"
+        host: yoga
+        summary: |-
+          Observatorium deploys only on stable promotion via refs/heads/deploy/observatorium; promote-stable.sh step 4, advance-deploy-ref.sh, pre-push exemption for deploy refs.
+
+  - packet_id: advance-deploy-ref-fixture-second-regime-and-gate-step
+    order: 1798-v8hk
+    parent_order: 1798-khw6
+    status: ready
+    kind: enhancement
+    priority: p2
+    pickup_role: any
+    size: S
+    implementer_tier: sonnet
+    capability_tags: [ci, gate, lua, darwin, msys]
+    owned_files:
+      - scripts/gate-steps.d/
+    title: |
+      Run scripts/lua/test-advance-deploy-ref.lua on darwin or msys and wire it as a scripts/gate-steps.d step with that STEP_SECOND_REGIME record
+    context: |
+      1798-khw6 added the fixture on Linux only. check-gate-step-regimes.sh refuses a gate step without a darwin|msys record, so it is not yet in ./build.sh --check. Until it is, nothing that runs on its own can fail because of it (check-added-test-is-referenced warns). It uses git commit-tree, a bare remote with a pre-receive pinned by core.hooksPath, and bash for the helper. Watch for the hooksPath pin and the chmod after fs.write on msys.
+    exit_criteria:
+      - 'a darwin or msys host records ok:advance-deploy-ref:10 arms (or a named skip)'
+      - 'scripts/gate-steps.d/<nnn>-1798-v8hk.step runs it with STEP_LUA and STEP_SECOND_REGIME'
+    verifiable_closure: |
+      check-gate-step-regimes.sh ok, and ./build.sh --check prints the step's STEP_OK line.
+    unscoreable: |
+      The deliverable is gate wiring of an existing fixture; its observable is the --check step line, not a litmus test.
+    provenance: |
+      Filed by yoga with 1798-khw6, 2026-10-19.
+    events:
+      - type: filed
+        ts: "2026-10-19T19:50:00Z"
+        host: yoga
+        summary: |-
+          Follow-up: second-regime run and gate-step wiring for test-advance-deploy-ref.lua.

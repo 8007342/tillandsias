@@ -118,6 +118,15 @@ fresh_root() {
     rm -rf "$WORK/root"
     mkdir -p "$WORK/root/scripts" "$WORK/root/plan/issues"
     cp "$REAL_ROOT/scripts/promote-stable.sh" "$WORK/root/scripts/"
+    # Step 4's helper (1798-khw6) is STUBBED here: its own fixture,
+    # scripts/test-advance-deploy-ref.sh, drives it against a real bare remote.
+    # DEPLOY_STUB_RC=1 makes it refuse, the way a refused push would.
+    cat > "$WORK/root/scripts/advance-deploy-ref.sh" <<'STUB'
+#!/usr/bin/env bash
+echo "DEPLOY-REF $*" >> "${DEPLOY_LOG:-/dev/null}"
+if [ "${DEPLOY_STUB_RC:-0}" -ne 0 ]; then echo "refused:deploy-ref-push-refused:$1"; exit 1; fi
+echo "verified:deploy-ref:$1:tree=0000000000000000000000000000000000000000"
+STUB
 }
 
 # ── 888-p3kt: the gate is now PER-PLATFORM ───────────────────────────────────
@@ -616,6 +625,34 @@ if [ "$rc3" -eq 0 ] \
     pass=$((pass + 1))
 else
     printf 'FAIL %-52s -> rc=%s out=%s\n' "a landed tag still reports a promotion" "$rc3" "$(tail -2 "$WORK/promote.out" | tr '\n' ' ')"
+    fail=$((fail + 1))
+fi
+
+# ── ORDER 1798-khw6: STEP 4 MOVES THE OBSERVATORIUM DEPLOY REF ──────────────
+# A promotion that reaches origin must advance deploy/observatorium to the
+# release commit, and a refused advance must not be reported as a promotion.
+export DEPLOY_LOG="$WORK/deploy.log"
+: > "$DEPLOY_LOG"
+_run_promote 0 "1111111111111111111111111111111111111111"; rc4=$?
+if [ "$rc4" -eq 0 ] \
+   && grep -q '^DEPLOY-REF 1111111111111111111111111111111111111111 --label '"$VER"' --ref refs/heads/deploy/observatorium' "$DEPLOY_LOG" \
+   && grep -q '^verified:deploy-ref:1111111111111111111111111111111111111111' "$WORK/promote.out" \
+   && grep -q "^promoted:$VER" "$WORK/promote.out"; then
+    printf 'ok   %-52s -> deploy ref advanced to the release commit\n' "a promotion advances deploy/observatorium"
+    pass=$((pass + 1))
+else
+    printf 'FAIL %-52s -> rc=%s log=%s out=%s\n' "a promotion advances deploy/observatorium" "$rc4" "$(tr '\n' ';' < "$DEPLOY_LOG")" "$(tail -2 "$WORK/promote.out" | tr '\n' ' ')"
+    fail=$((fail + 1))
+fi
+
+DEPLOY_STUB_RC=1 _run_promote 0 "1111111111111111111111111111111111111111"; rc5=$?
+if [ "$rc5" -ne 0 ] && ! grep -q '^promoted:' "$WORK/promote.out" \
+   && grep -q '^refused:deploy-ref-push-refused:' "$WORK/promote.out" \
+   && grep -q 'HALF-PROMOTED' "$WORK/promote.out"; then
+    printf 'ok   %-52s -> rc=%s, refused by name, no promoted:\n' "a refused deploy-ref advance is not a promotion" "$rc5"
+    pass=$((pass + 1))
+else
+    printf 'FAIL %-52s -> rc=%s out=%s\n' "a refused deploy-ref advance is not a promotion" "$rc5" "$(tail -2 "$WORK/promote.out" | tr '\n' ' ')"
     fail=$((fail + 1))
 fi
 

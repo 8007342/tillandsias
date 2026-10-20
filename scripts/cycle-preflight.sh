@@ -66,6 +66,10 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# 1247-amcu: every refusal says why and what clears it, on stderr, so the
+# verdict line on stdout stays what callers match.
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+
 # Resolve the DEVELOPMENT ENVIRONMENT declaration before anything reads an
 # expert. The resolver exports TILLANDSIAS_HOST_EXPERTS only on a host that has
 # declared itself, refuses inside a forge (the enclave's END USER RUNTIME owns
@@ -136,6 +140,8 @@ if [ "${CYCLE_PREFLIGHT_SKIP_BUILD:-0}" != "1" ]; then
             # Name the fault. A cycle that can neither rebuild its instrument
             # nor find one should say so rather than proceed on nothing.
             echo "blocked:preflight:plan:cargo-absent"
+            _afford "no cargo to build tillandsias-plan with, and no plan binary to use instead (TILLANDSIAS_PLAN_BIN when it is set, which then must exist; otherwise CARGO_TARGET_DIR and ./target/release)" \
+                "install a Rust toolchain and re-run, or point TILLANDSIAS_PLAN_BIN at a current tillandsias-plan built on another host of this platform"
             exit 1
         fi
     fi
@@ -152,6 +158,8 @@ if [ "${CYCLE_PREFLIGHT_SKIP_BUILD:-0}" != "1" ]; then
             reason="$(grep -m1 '^error' "$build_log" | cut -c1-120)"
             rm -f "$build_log"
             echo "blocked:preflight:plan:${reason:-build-failed}"
+            _afford "cargo build --release -p tillandsias-plan failed, so the cycle has no instrument it built from this tree" \
+                "run cargo build --release -p tillandsias-plan here and fix the first error it prints (the verdict carries it), then re-run"
             exit 1
         fi
         rm -f "$build_log"
@@ -171,6 +179,8 @@ if [ "${CYCLE_PREFLIGHT_SKIP_BUILD:-0}" != "1" ]; then
     . "$ROOT/scripts/plan-binary-probe.sh"
     if ! plan_bin="$(resolve_plan_binary)"; then
         echo "blocked:preflight:plan:capabilities-refused"
+        _afford "the build succeeded but no tillandsias-plan the shared probe can find answers 'capabilities' (scripts/plan-binary-probe.sh)" \
+            "run \"\${CARGO_TARGET_DIR:-target}/release/tillandsias-plan\" capabilities to see why it fails; if the binary is elsewhere, set TILLANDSIAS_PLAN_BIN to it"
         exit 1
     fi
 

@@ -1371,7 +1371,8 @@ fn main() {
     };
 
     if opencode {
-        maybe_spawn_detached_tray_for_cli(tray, debug);
+        let reserved_lane = cli_reserved_lane(config_path.as_deref(), is_cloud);
+        maybe_spawn_detached_tray_for_cli(tray, reserved_lane.as_deref(), debug);
         if let Some(project_path) = config_path {
             if let Err(e) = run_cli_with_vault_credential_cleanup(debug, || {
                 run_opencode_mode(&project_path, is_cloud, prompt.as_deref(), debug)
@@ -1387,7 +1388,8 @@ fn main() {
     }
 
     if codex || claude || bash || antigravity {
-        maybe_spawn_detached_tray_for_cli(tray, debug);
+        let reserved_lane = cli_reserved_lane(config_path.as_deref(), is_cloud);
+        maybe_spawn_detached_tray_for_cli(tray, reserved_lane.as_deref(), debug);
         let (mode, flag) = if codex {
             (ForgeAgentMode::Codex, "--codex")
         } else if claude {
@@ -1419,7 +1421,8 @@ fn main() {
     }
 
     if opencode_web {
-        maybe_spawn_detached_tray_for_cli(tray, debug);
+        let reserved_lane = cli_reserved_lane(config_path.as_deref(), is_cloud);
+        maybe_spawn_detached_tray_for_cli(tray, reserved_lane.as_deref(), debug);
         if let Some(project_path) = config_path {
             if let Err(e) = run_opencode_web_mode(
                 &project_path,
@@ -1439,7 +1442,8 @@ fn main() {
     }
 
     if observatorium {
-        maybe_spawn_detached_tray_for_cli(tray, debug);
+        let reserved_lane = cli_reserved_lane(config_path.as_deref(), is_cloud);
+        maybe_spawn_detached_tray_for_cli(tray, reserved_lane.as_deref(), debug);
         if let Some(project_path) = config_path {
             if let Err(e) = run_observatorium_mode(&project_path, is_cloud, port_override, debug) {
                 eprintln!("Error: {}", e);
@@ -4562,11 +4566,15 @@ fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
             "{}:/etc/squid/certs/intermediate.crt:ro",
             certs_dir.join("intermediate.crt").display()
         ),
-        // 755-qcxh: the CA PRIVATE key travels as a podman secret, never a
-        // host bind mount — secret delivery is what lets the host file stay
-        // 0600. The public cert above stays a bind mount on purpose.
-        "--secret".into(),
-        format!("{PROXY_CA_KEY_SECRET},{PROXY_CA_KEY_SECRET_OPTS}"),
+        // 755-qcxh, 1118-fqfk: the CA PRIVATE key travels as a runtime secret
+        // file on tmpfs (0700 dir), never a bind from the durable CA dir and
+        // never a podman secret (plaintext on disk). The public cert above
+        // stays a bind mount on purpose.
+        "--volume".into(),
+        crate::vault_bootstrap::runtime_secret_volume(
+            PROXY_CA_KEY_SECRET,
+            PROXY_CA_KEY_SECRET_OPTS,
+        ),
     ];
     // Order 472: record WHICH CA this proxy was started with, so a running
     // proxy can be compared against the certificate on disk after a rotation.
@@ -4663,7 +4671,7 @@ fn running_proxy_ca_generation() -> Result<Option<String>, ()> {
 /// the bundle publishes keys by inode rename, which a live bind mount never
 /// observed either.
 fn ensure_proxy_ca_key_secret(certs_dir: &Path, debug: bool) -> Result<(), String> {
-    crate::vault_bootstrap::create_file_podman_secret(
+    crate::vault_bootstrap::create_file_runtime_secret(
         PROXY_CA_KEY_SECRET,
         &certs_dir.join("intermediate.key"),
         debug,
@@ -5791,8 +5799,11 @@ fn build_git_run_args(
         // certificate request is made with the per-mirror signer token and the
         // relay keeps git-mirror-agent. One token never carries both authorities.
         if let Some(signer_secret) = host_signer_secret {
-            args.push("--secret".into());
-            args.push(format!("{signer_secret},{GIT_VAULT_SIGNER_SECRET_OPTS}"));
+            args.push("--volume".into());
+            args.push(crate::vault_bootstrap::runtime_secret_volume(
+                signer_secret,
+                GIT_VAULT_SIGNER_SECRET_OPTS,
+            ));
             args.push("--env".into());
             args.push(format!(
                 "TILLANDSIAS_VAULT_TOKEN_FILE={MIRROR_SIGNER_TOKEN_SINK}"
@@ -5804,8 +5815,11 @@ fn build_git_run_args(
         // AppRole material and maintains the tmpfs client-token sink used by
         // vault-cli. The reusable login credential is what lets the Agent
         // re-authenticate after a client token reaches max_ttl.
-        args.push("--secret".into());
-        args.push(format!("{secret_name},{GIT_VAULT_APPROLE_SECRET_OPTS}"));
+        args.push("--volume".into());
+        args.push(crate::vault_bootstrap::runtime_secret_volume(
+            secret_name,
+            GIT_VAULT_APPROLE_SECRET_OPTS,
+        ));
         args.push("--env".into());
         args.push("VAULT_ADDR=https://vault:8200".into());
         args.push("--env".into());
@@ -9563,8 +9577,8 @@ fn build_opencode_forge_args(
     // installed harness parsed it without creating auth.json.
     if let Some(secret_name) = opencode_vault_secret {
         args.extend([
-            "--secret".into(),
-            format!("{secret_name},{GIT_VAULT_TOKEN_SECRET_OPTS}"),
+            "--volume".into(),
+            crate::vault_bootstrap::runtime_secret_volume(secret_name, GIT_VAULT_TOKEN_SECRET_OPTS),
             "--env".into(),
             "TILLANDSIAS_OPENCODE_AUTH_EXPECTED=1".into(),
             "--env".into(),
@@ -12595,148 +12609,6 @@ impl CodexDeviceQrScanner {
     }
 }
 
-const ANTIGRAVITY_DEVICE_VERIFICATION_URIS: &[&str] =
-    &["https://www.google.com/device", "https://google.com/device"];
-
-struct AntigravityDeviceQrScanner {
-    buffer: Vec<u8>,
-    detected_uri: Option<String>,
-    bytes_since_uri: usize,
-    displayed: bool,
-}
-
-impl AntigravityDeviceQrScanner {
-    fn new() -> Self {
-        Self {
-            buffer: Vec::with_capacity(1024),
-            detected_uri: None,
-            bytes_since_uri: 0,
-            displayed: false,
-        }
-    }
-
-    fn feed(&mut self, chunk: &[u8], tier: tillandsias_progress_tty::Tier) -> Option<String> {
-        if self.displayed {
-            return None;
-        }
-
-        self.buffer.extend_from_slice(chunk);
-        if self.buffer.len() > 2048 {
-            let drain = self.buffer.len() - 2048;
-            self.buffer.drain(..drain);
-        }
-
-        if self.detected_uri.is_none() {
-            if let Some(uri) = Self::scan_for_uri(&self.buffer) {
-                self.detected_uri = Some(uri);
-                self.bytes_since_uri = 0;
-            }
-        } else {
-            self.bytes_since_uri += chunk.len();
-        }
-
-        if let Some(ref uri) = self.detected_uri {
-            let code = Self::scan_for_code(&self.buffer);
-            if code.is_some() || self.bytes_since_uri >= 128 {
-                self.displayed = true;
-                return Self::render_presentation(uri, code.as_deref(), tier);
-            }
-        }
-
-        None
-    }
-
-    fn scan_for_uri(buf: &[u8]) -> Option<String> {
-        let text = String::from_utf8_lossy(buf);
-        for &expected in ANTIGRAVITY_DEVICE_VERIFICATION_URIS {
-            if let Some(idx) = text.find(expected) {
-                let before = if idx == 0 {
-                    ' '
-                } else {
-                    text[..idx].chars().next_back().unwrap_or(' ')
-                };
-                let end_idx = idx + expected.len();
-                let after = if end_idx >= text.len() {
-                    ' '
-                } else {
-                    text[end_idx..].chars().next().unwrap_or(' ')
-                };
-
-                let valid_boundary_before = before.is_ascii_whitespace()
-                    || before == '('
-                    || before == '['
-                    || before == '<'
-                    || before == '"'
-                    || before == '\'';
-                let valid_boundary_after = after.is_ascii_whitespace()
-                    || after == ')'
-                    || after == ']'
-                    || after == '>'
-                    || after == '"'
-                    || after == '\''
-                    || after == '.'
-                    || after == ','
-                    || after == ';'
-                    || after == '\r'
-                    || after == '\n';
-
-                if valid_boundary_before && valid_boundary_after {
-                    return Some(expected.to_string());
-                }
-            }
-        }
-        None
-    }
-
-    fn scan_for_code(buf: &[u8]) -> Option<String> {
-        let text = String::from_utf8_lossy(buf);
-        for token in
-            text.split(|c: char| c.is_ascii_whitespace() || c == ':' || c == '"' || c == '\'')
-        {
-            let trimmed = token.trim();
-            if trimmed.len() == 9 {
-                let chars: Vec<char> = trimmed.chars().collect();
-                if chars.len() == 9
-                    && chars[..4].iter().all(|c| c.is_ascii_alphanumeric())
-                    && chars[4] == '-'
-                    && chars[5..].iter().all(|c| c.is_ascii_alphanumeric())
-                {
-                    return Some(trimmed.to_ascii_uppercase());
-                }
-            }
-        }
-        None
-    }
-
-    fn render_presentation(
-        uri: &str,
-        code: Option<&str>,
-        tier: tillandsias_progress_tty::Tier,
-    ) -> Option<String> {
-        let mobile_url = if let Some(c) = code {
-            format!("{uri}?user_code={c}")
-        } else {
-            uri.to_string()
-        };
-        let qr = render_terminal_qr_in(&mobile_url, tier).ok()?;
-        let mut out = format!(
-            "\nScan this QR code with your mobile phone to complete Antigravity login:\n\n{qr}\n"
-        );
-        out.push_str(&format!("  Or in any browser, visit: {uri}\n"));
-        if let Some(c) = code {
-            out.push_str("  Enter this one-time code:\n\n");
-            out.push_str(&big_user_code(c, tier));
-            out.push_str(&format!(
-                "\n  Enter one-time code:      {}\n\n",
-                styled_user_code(c, tier)
-            ));
-        } else {
-            out.push('\n');
-        }
-        Some(out)
-    }
-}
-
 /// Rows in one [`big_glyph`].
 const BIG_GLYPH_ROWS: usize = 5;
 
@@ -13351,6 +13223,29 @@ fn provider_login_exec_args(
     args
 }
 
+/// How a provider's sign-in step meets the person at the terminal.
+#[derive(Debug, PartialEq, Eq)]
+enum SignInStep {
+    /// Output streamed through a QR scanner; NO stdin reaches the container.
+    /// Only for a sign-in that never reads a key (Codex `login --device-auth`).
+    CodexDeviceStream,
+    /// The container's TTY is the person's terminal: keys and terminal replies
+    /// go to the app, which owns raw mode.
+    InheritTerminal,
+}
+
+/// 1799-a6xi: Antigravity's sign-in is an interactive full-screen menu. It
+/// was routed through the output-only stream with an empty stdin, so the
+/// host terminal stayed in cooked mode: its replies to the app's DA/DSR and
+/// kitty-keyboard queries, and every key the person typed, were echoed onto
+/// the screen as raw escape sequences, and none reached the menu.
+fn sign_in_step(provider: &ProviderId, input_mode: LoginInputMode) -> SignInStep {
+    match (provider, input_mode) {
+        (ProviderId::Codex, LoginInputMode::Terminal) => SignInStep::CodexDeviceStream,
+        _ => SignInStep::InheritTerminal,
+    }
+}
+
 pub struct ProviderLoginConfig {
     pub provider: ProviderId,
     pub auth_model: AuthModel,
@@ -13402,42 +13297,6 @@ fn run_codex_device_login_with_qr(
         Ok(())
     } else {
         Err(format!("Codex device login exited with status {status}"))
-    }
-}
-
-/// Stream Antigravity's device instructions, add a QR code, and render the one-time
-/// code in large 5x5 block letters (matching GitHub device login presentation).
-fn run_antigravity_device_login_with_qr(
-    mut login: tillandsias_podman::SyncPodmanCommand,
-    debug: bool,
-) -> Result<(), String> {
-    use std::io::Write;
-
-    if debug {
-        eprintln!("[tillandsias] running: {:?}", login.as_std());
-    }
-    let tier = qr_tier();
-    let mut scanner = AntigravityDeviceQrScanner::new();
-    let status = login
-        .status_bounded_with_stdin_streaming(
-            &[],
-            tillandsias_podman::OperationKind::Container.default_budget(),
-            move |chunk| {
-                let mut out = std::io::stdout().lock();
-                let _ = out.write_all(chunk);
-                if let Some(rendered) = scanner.feed(chunk, tier) {
-                    let _ = out.write_all(rendered.as_bytes());
-                }
-                let _ = out.flush();
-            },
-        )
-        .map_err(|e| format!("Failed to run Antigravity device login: {e}"))?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!(
-            "Antigravity device login exited with status {status}"
-        ))
     }
 }
 
@@ -13542,10 +13401,7 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
         std::process::id()
     );
     step("· starting the login helper container");
-    let cleanup = LoginContainerCleanup {
-        name: container.clone(),
-        debug,
-    };
+    let cleanup = LoginContainerCleanup::new(container.clone(), debug);
     // Provider login homes stay container-ephemeral because they hold
     // credentials. Only Codex's provider-auth-excluding package/tool cache is
     // a named volume, so a later Codex login reuses its npm prefix without
@@ -13590,10 +13446,10 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             &container,
             "--network",
             ENCLAVE_ONLY_NET,
-            "--secret",
-            &format!(
-                "{},{GIT_VAULT_TOKEN_SECRET_OPTS}",
-                vault_lease.secret_name()
+            "--volume",
+            &crate::vault_bootstrap::runtime_secret_volume(
+                vault_lease.secret_name(),
+                GIT_VAULT_TOKEN_SECRET_OPTS,
             ),
             "--cap-drop=ALL",
             "--security-opt=no-new-privileges",
@@ -13662,16 +13518,9 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             &config.token_script,
             config.input_mode,
         ));
-        let interactive = if matches!(config.provider, ProviderId::Codex)
-            && matches!(config.input_mode, LoginInputMode::Terminal)
-        {
-            run_codex_device_login_with_qr(login, debug)
-        } else if matches!(config.provider, ProviderId::Antigravity)
-            && matches!(config.input_mode, LoginInputMode::Terminal)
-        {
-            run_antigravity_device_login_with_qr(login, debug)
-        } else {
-            run_podman_command(login, debug)
+        let interactive = match sign_in_step(&config.provider, config.input_mode) {
+            SignInStep::CodexDeviceStream => run_codex_device_login_with_qr(login, debug),
+            SignInStep::InheritTerminal => run_podman_command(login, debug),
         };
         // ORDER 1571-lgex. This step waits on the PERSON: the provider CLI
         // holds its sign-in window open (Claude's closes at 300 s) and exits
@@ -14255,8 +14104,11 @@ fn build_ssh_lane_sidecar_run_args(
         "/tmp:rw,noexec,nosuid,nodev,size=8m,mode=1777".into(),
         "--volume".into(),
         format!("{}:/ssh-agent", ssh_lane_agent_volume(project_name)),
-        "--secret".into(),
-        format!("{vault_approle_secret},{GIT_VAULT_APPROLE_SECRET_OPTS}"),
+        "--volume".into(),
+        crate::vault_bootstrap::runtime_secret_volume(
+            vault_approle_secret,
+            GIT_VAULT_APPROLE_SECRET_OPTS,
+        ),
         "--env".into(),
         format!("TILLANDSIAS_MIRROR_ID={mirror_id}"),
         "--env".into(),
@@ -15045,10 +14897,59 @@ fn append_forge_repo_gitdir_mount_args(
 struct LoginContainerCleanup {
     name: String,
     debug: bool,
+    #[cfg(unix)]
+    signals: Option<signal_hook::iterator::Handle>,
+}
+
+impl LoginContainerCleanup {
+    /// 1799-a6xi: Drop does not run when the person closes the terminal (SIGHUP)
+    /// or the process is killed, and the sign-in container was left running.
+    /// While this guard lives, a watcher thread removes it on SIGHUP, SIGTERM
+    /// or SIGINT, then exits with the shell's 128+signal status.
+    fn new(name: String, debug: bool) -> Self {
+        #[cfg(unix)]
+        let signals = {
+            use signal_hook::consts::signal::{SIGHUP, SIGINT, SIGTERM};
+            match signal_hook::iterator::Signals::new([SIGHUP, SIGTERM, SIGINT]) {
+                Ok(mut signals) => {
+                    let handle = signals.handle();
+                    let watched = name.clone();
+                    std::thread::spawn(move || {
+                        if let Some(signal) = signals.forever().next() {
+                            let mut command = podman_command();
+                            command.args(["rm", "-f", &watched]);
+                            let _ = run_podman_command_silent(command, debug);
+                            std::process::exit(128 + signal);
+                        }
+                    });
+                    Some(handle)
+                }
+                Err(e) => {
+                    if debug {
+                        eprintln!(
+                            "[tillandsias] could not watch signals for {name}: {e}; \
+                             a closed terminal may leave it running"
+                        );
+                    }
+                    None
+                }
+            }
+        };
+        Self {
+            name,
+            debug,
+            #[cfg(unix)]
+            signals,
+        }
+    }
 }
 
 impl Drop for LoginContainerCleanup {
     fn drop(&mut self) {
+        #[cfg(unix)]
+        if let Some(handle) = self.signals.take() {
+            handle.close();
+        }
         let mut command = podman_command();
         command.args(["rm", "-f", &self.name]);
         let _ = run_podman_command_silent(command, self.debug);
@@ -15087,7 +14988,11 @@ fn has_graphical_session() -> bool {
 /// singleton guard collapse duplicate launches.
 ///
 /// @trace spec:tray-cli-coexistence, spec:tray-host-control-socket
-fn maybe_spawn_detached_tray_for_cli(explicit_tray: bool, debug: bool) {
+fn maybe_spawn_detached_tray_for_cli(
+    explicit_tray: bool,
+    reserved_lane: Option<&str>,
+    debug: bool,
+) {
     if !cfg!(feature = "tray") || (!explicit_tray && !has_graphical_session()) {
         return;
     }
@@ -15112,12 +15017,7 @@ fn maybe_spawn_detached_tray_for_cli(explicit_tray: bool, debug: bool) {
         return;
     };
 
-    let mut command = Command::new(exe);
-    command
-        .arg("--tray")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
+    let mut command = tray_companion_command(&exe, reserved_lane);
 
     #[cfg(unix)]
     unsafe {
@@ -15161,6 +15061,49 @@ fn maybe_spawn_detached_tray_for_cli(explicit_tray: bool, debug: bool) {
         }
         Err(_) => {}
     }
+}
+
+/// The detached `--tray` companion command. 1798-nwpg: it carries the lane
+/// the launching CLI is about to serve, so the companion leaves that lane's
+/// socket unbound instead of owning it and getting the launch refused as a
+/// foreign owner (refused:lane-socket-owned).
+fn tray_companion_command(exe: &Path, reserved_lane: Option<&str>) -> Command {
+    let mut command = Command::new(exe);
+    command
+        .arg("--tray")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    #[cfg(feature = "host-services")]
+    if let Some(lane) = reserved_lane {
+        command.env(mcp_socket::TRAY_RESERVED_LANE_ENV, lane);
+    }
+    #[cfg(not(feature = "host-services"))]
+    let _ = reserved_lane;
+    command
+}
+
+/// 1798-nwpg: the `<project>/<instance>` lane a CLI launch of `project_path`
+/// will serve, named the way [`resolve_launch_project_identity`] names it
+/// (the canonical basename of a local checkout, the bare label in cloud
+/// mode) but with no side effects. `None` when there is no project yet.
+fn cli_reserved_lane(project_path: Option<&str>, is_cloud: bool) -> Option<String> {
+    let project_path = project_path?;
+    let name = if is_cloud {
+        project_path.to_string()
+    } else {
+        Path::new(project_path)
+            .canonicalize()
+            .ok()?
+            .file_name()?
+            .to_str()?
+            .to_string()
+    };
+    let instance = std::env::var("TILLANDSIAS_FORGE_INSTANCE")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "default".into());
+    Some(format!("{name}/{}", instance.trim()))
 }
 
 /// Test whether the tray's control socket is accepting connections. Used by
@@ -16959,6 +16902,7 @@ fn build_project_browser_spec(
         app_url,
         version,
         profile_dir,
+        MountMode::ReadWrite,
         certs_dir,
         BrowserSurface::Window(display),
         container_name,
@@ -16982,6 +16926,7 @@ fn build_project_browser_spec_on(
     app_url: &str,
     version: &str,
     profile_dir: &Path,
+    profile_mode: MountMode,
     certs_dir: &Path,
     surface: BrowserSurface<'_>,
     container_name: &str,
@@ -16997,7 +16942,7 @@ fn build_project_browser_spec_on(
         .volume(
             profile_dir.display().to_string(),
             profile_dir.display().to_string(),
-            MountMode::ReadWrite,
+            profile_mode,
         )
         .bind_mount(
             certs_dir.join("intermediate.crt").display().to_string(),
@@ -19403,7 +19348,9 @@ fn build_forge_agent_run_args_with_vault(
     if mode_provider_pair(mode).is_some()
         && let Some(secret_name) = vault_secret
     {
-        spec = spec.secret(format!("{secret_name},{GIT_VAULT_TOKEN_SECRET_OPTS}"));
+        let (source, target) =
+            crate::vault_bootstrap::runtime_secret_bind(secret_name, GIT_VAULT_TOKEN_SECRET_OPTS);
+        spec = spec.bind_mount(source, target, true);
     }
     if debug {
         spec = spec.env("TILLANDSIAS_DEBUG", "1");
@@ -26501,13 +26448,16 @@ mod tests {
         assert!(!has_arg(&args, "10.0.42.2"));
         assert!(has_arg(&args, "DEBUG_PROXY=1"));
         assert!(has_arg(&args, "tillandsias-proxy:v1"));
-        // 755-qcxh: the CA private key is delivered as a podman secret owned
-        // by the proxy uid; the world-readable key bind mount must never
-        // come back.
-        assert!(has_arg(&args, "--secret"));
+        // 755-qcxh: the CA private key never travels as a bind mount of the
+        // host key file. 1118-fqfk 2a: it is a tmpfs runtime secret mounted at
+        // /run/secrets/tillandsias-ca-key, not a podman file-driver secret.
+        assert!(!has_arg(&args, "--secret"));
         assert!(has_arg(
             &args,
-            "tillandsias-ca-key,uid=1000,gid=1000,mode=0400"
+            &crate::vault_bootstrap::runtime_secret_volume(
+                "tillandsias-ca-key",
+                "uid=1000,gid=1000,mode=0400"
+            )
         ));
         assert!(
             !args.iter().any(|a| a.contains("intermediate.key")),
@@ -26832,6 +26782,36 @@ mod tests {
         );
     }
 
+    /// 1799-a6xi: Antigravity's interactive sign-in menu gets the person's
+    /// terminal, like Claude's and OpenCode's. Only Codex's key-free device
+    /// login keeps the output-only stream. Pre-fix, Antigravity took that
+    /// stream with an empty stdin, and every key and terminal reply was echoed
+    /// raw onto the screen (measured on lenovinha, v56.10.18.1).
+    #[test]
+    fn an_interactive_sign_in_gets_the_terminal_not_the_output_only_stream() {
+        assert_eq!(
+            sign_in_step(&ProviderId::Antigravity, LoginInputMode::Terminal),
+            SignInStep::InheritTerminal
+        );
+        assert_eq!(
+            sign_in_step(&ProviderId::Claude, LoginInputMode::Terminal),
+            SignInStep::InheritTerminal
+        );
+        assert_eq!(
+            sign_in_step(&ProviderId::Codex, LoginInputMode::Terminal),
+            SignInStep::CodexDeviceStream,
+            "Codex's device login reads no key and keeps its QR stream"
+        );
+        assert_eq!(
+            sign_in_step(&ProviderId::Codex, LoginInputMode::StdinToken),
+            SignInStep::InheritTerminal
+        );
+        // The step that inherits the terminal asks podman for a TTY.
+        let args = provider_login_exec_args("c", "true", LoginInputMode::Terminal);
+        assert!(args.iter().any(|a| a == "--tty"), "{args:?}");
+        assert!(args.iter().any(|a| a == "--interactive"), "{args:?}");
+    }
+
     /// ORDER 1571-lgex. The interactive sign-in step waits on the person and
     /// its window expires (Claude: 300 s). Pre-fix its error propagated raw
     /// with `?` — a podman exec line on the user's terminal and no status
@@ -26847,7 +26827,6 @@ mod tests {
         for raw in [
             "run_podman_command(login, debug)?",
             "run_codex_device_login_with_qr(login, debug)?",
-            "run_antigravity_device_login_with_qr(login, debug)?",
         ] {
             assert!(
                 !login_window.contains(raw),
@@ -27690,101 +27669,6 @@ mod tests {
         assert!(
             !qr.contains('\u{2580}') && !qr.contains('\u{2584}'),
             "no half-block glyphs"
-        );
-    }
-
-    #[test]
-    fn antigravity_device_qr_recognizes_stream_split_and_user_code() {
-        use tillandsias_progress_tty::{EnvView, Tier};
-
-        let non_tty = Tier::detect(&EnvView {
-            is_tty: false,
-            term: Some("xterm-256color".into()),
-            ..EnvView::default()
-        });
-        let no_color = Tier::detect(&EnvView {
-            is_tty: true,
-            term: Some("xterm-256color".into()),
-            no_color: Some(String::new()),
-            ..EnvView::default()
-        });
-        assert_eq!(non_tty, Tier::Plain);
-        assert_eq!(no_color, Tier::Plain);
-
-        for expected_uri in ANTIGRAVITY_DEVICE_VERIFICATION_URIS {
-            let uri = expected_uri.as_bytes();
-            for tier in [non_tty, no_color] {
-                for split in 0..=uri.len() {
-                    let mut scanner = AntigravityDeviceQrScanner::new();
-                    let mut first = b"Please visit: \r\n  ".to_vec();
-                    first.extend_from_slice(&uri[..split]);
-                    assert!(scanner.feed(&first, tier).is_none(), "split={split}");
-                    let mut second = uri[split..].to_vec();
-                    second.extend_from_slice(b" \r\nand enter code: ABCD-EFGH\r\n");
-                    let qr = scanner
-                        .feed(&second, tier)
-                        .expect("complete URI and code must render");
-                    assert!(qr.lines().count() >= 10, "split={split}");
-                    assert!(!qr.contains('\x1b'), "plain QR must have no escapes");
-                    assert!(
-                        qr.contains(expected_uri),
-                        "QR presentation must contain URI"
-                    );
-                    assert!(
-                        qr.contains("ABCD-EFGH"),
-                        "QR presentation must contain user code"
-                    );
-                    assert!(
-                        scanner
-                            .feed(b"\nhttps://www.google.com/device \n", tier)
-                            .is_none(),
-                        "a login renders at most one QR"
-                    );
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn antigravity_device_qr_rejects_spoofed_urls() {
-        use tillandsias_progress_tty::Tier;
-
-        for output in [
-            "device code: ABCD-EFGH\n",
-            "\nhttp://www.google.com/device \n",
-            "\nhttps://www.google.com.evil.invalid/device \n",
-            "\nhttps://google.com.evil.invalid/device \n",
-            "\nhttps://evil.invalid/?next=https://www.google.com/device \n",
-            "\nhttps://notgoogle.com/device \n",
-        ] {
-            let mut scanner = AntigravityDeviceQrScanner::new();
-            assert!(
-                scanner.feed(output.as_bytes(), Tier::Plain).is_none(),
-                "{output:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn antigravity_device_qr_uses_the_existing_terminal_palette() {
-        use tillandsias_progress_tty::Tier;
-
-        let mut scanner = AntigravityDeviceQrScanner::new();
-        let output = "Visit https://www.google.com/device and enter code ABCD-EFGH\n";
-        let presentation = scanner
-            .feed(output.as_bytes(), Tier::TrueColor)
-            .expect("verified URL must render");
-        assert!(
-            presentation.contains("\x1b[48;2;30;74;50m"),
-            "leaf-deepest modules"
-        );
-        assert!(
-            presentation.contains("\x1b[48;2;157;187;165m"),
-            "leaf-light ground"
-        );
-        assert!(
-            presentation.contains("ABCD-EFGH"),
-            "styled user code present"
         );
     }
 
@@ -29214,22 +29098,23 @@ mod tests {
         );
 
         // Vault Agent's reusable AppRole document must be mounted at the
-        // stable path /run/secrets/vault-approle and owned by the git user.
-        let secret_arg = format!("{secret},{GIT_VAULT_APPROLE_SECRET_OPTS}");
+        // stable path /run/secrets/vault-approle, from its tmpfs runtime
+        // secret (1118-fqfk 2a), never a podman file-driver secret.
+        let secret_arg =
+            crate::vault_bootstrap::runtime_secret_volume(secret, GIT_VAULT_APPROLE_SECRET_OPTS);
+        assert!(
+            secret_arg.ends_with(":/run/secrets/vault-approle:ro,z"),
+            "{secret_arg}"
+        );
         assert!(
             args.iter().any(|a| a == &secret_arg),
             "expected Vault Agent AppRole secret arg `{secret_arg}` in args: {args:?}"
         );
 
-        let mounted = args
-            .iter()
-            .find(|a| a.contains("target=vault-approle"))
-            .expect("vault-approle secret must be mounted");
-        assert!(
-            mounted.contains("uid=1000") && mounted.contains("gid=1000"),
-            "vault-approle secret must be owned by the git user (uid/gid 1000) \
-             so it is readable under keep-id; got `{mounted}`"
-        );
+        // 1118-fqfk 2a: readable under keep-id because the tmpfs file is 0444
+        // inside a 0700 directory (write_runtime_secret), not by podman's
+        // uid/gid secret options.
+        assert!(!has_arg(&args, "--secret"), "{args:?}");
 
         assert!(
             has_arg(&args, "VAULT_ADDR=https://vault:8200"),
@@ -30709,10 +30594,13 @@ esac
             false,
             false,
         );
-        assert!(has_arg(&args, "--secret"));
+        assert!(!has_arg(&args, "--secret"));
         assert!(has_arg(
             &args,
-            &format!("opencode-forge-lease,{GIT_VAULT_TOKEN_SECRET_OPTS}")
+            &crate::vault_bootstrap::runtime_secret_volume(
+                "opencode-forge-lease",
+                GIT_VAULT_TOKEN_SECRET_OPTS
+            )
         ));
         assert!(has_arg(&args, "TILLANDSIAS_OPENCODE_AUTH_EXPECTED=1"));
         assert!(has_arg(&args, "VAULT_ROLE=opencode-forge"));
@@ -30895,14 +30783,16 @@ esac
                 false,
                 &test_cache_root(),
             );
-            assert!(
-                has_arg(&args, "--secret"),
-                "{mode:?} must mount the vault lease"
+            let (source, target) = crate::vault_bootstrap::runtime_secret_bind(
+                "provider-forge-lease",
+                GIT_VAULT_TOKEN_SECRET_OPTS,
             );
-            assert!(has_arg(
-                &args,
-                &format!("provider-forge-lease,{GIT_VAULT_TOKEN_SECRET_OPTS}")
-            ));
+            assert!(
+                args.iter()
+                    .any(|a| a.contains(&format!("source={source},target={target}"))),
+                "{mode:?} must mount the vault lease from its tmpfs runtime secret: {args:?}"
+            );
+            assert!(!has_arg(&args, "--secret"));
         }
 
         // Credential-free lanes never mount a provider lease.
@@ -31555,12 +31445,12 @@ esac
         assert!(
             args_with
                 .iter()
-                .any(|a| a == "signer-sec,target=vault-approle-signer,uid=1000,gid=1000,mode=0400"),
+                .any(|a| a.ends_with("/signer-sec:/run/secrets/vault-approle-signer:ro,z")),
             "the signer document must mount at its OWN target, not the relay path; \
              got:\n{args_with:?}"
         );
         assert!(
-            args_with.iter().any(|a| a.starts_with("signer-sec,")),
+            args_with.iter().any(|a| a.contains("/signer-sec:")),
             "the mirror must receive the SIGNER AppRole material when the lane is on; \
              got:\n{args_with:?}"
         );
@@ -35915,6 +35805,64 @@ mod mirror_seed_failure_tests {
 #[cfg(all(test, feature = "host-services"))]
 mod lane_socket_owner_tests {
     use super::*;
+
+    /// 1798-nwpg: the companion a cold CLI launch spawns carries that launch's
+    /// lane, named as resolve_launch_project_identity names it, so the
+    /// companion leaves it unbound. With no project, nothing is reserved.
+    #[test]
+    fn a_cli_companion_carries_the_lane_its_launch_will_serve() {
+        let _env = crate::test_support::env_lock();
+        let saved_instance = std::env::var_os("TILLANDSIAS_FORGE_INSTANCE");
+        // SAFETY: env_lock serialises every env-mutating test.
+        unsafe { std::env::remove_var("TILLANDSIAS_FORGE_INSTANCE") };
+        let dir = std::env::temp_dir().join(format!("nwpg-{}", std::process::id()));
+        let checkout = dir.join("rf3c-smoke");
+        std::fs::create_dir_all(&checkout).unwrap();
+        // A relative-looking path with a `..` still names the canonical basename.
+        let indirect = checkout.join("..").join("rf3c-smoke");
+
+        let local = cli_reserved_lane(indirect.to_str(), false);
+        let cloud = cli_reserved_lane(Some("forge"), true);
+        let missing = cli_reserved_lane(dir.join("absent").to_str(), false);
+        let none = cli_reserved_lane(None, false);
+        // SAFETY: as above.
+        unsafe {
+            std::env::set_var("TILLANDSIAS_FORGE_INSTANCE", "w2");
+        }
+        let instance = cli_reserved_lane(checkout.to_str(), false);
+        // SAFETY: as above.
+        unsafe {
+            match saved_instance {
+                Some(v) => std::env::set_var("TILLANDSIAS_FORGE_INSTANCE", v),
+                None => std::env::remove_var("TILLANDSIAS_FORGE_INSTANCE"),
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert_eq!(local.as_deref(), Some("rf3c-smoke/default"));
+        assert_eq!(cloud.as_deref(), Some("forge/default"));
+        assert_eq!(instance.as_deref(), Some("rf3c-smoke/w2"));
+        assert_eq!(missing, None);
+        assert_eq!(none, None);
+        let parsed = mcp_socket::reserved_lane_from(local.as_deref());
+        assert_eq!(
+            parsed,
+            Some(("rf3c-smoke".to_string(), "default".to_string())),
+            "the tray parses exactly what the CLI hands it"
+        );
+
+        let env_of = |cmd: &Command| -> Option<String> {
+            cmd.get_envs()
+                .find(|(k, _)| *k == mcp_socket::TRAY_RESERVED_LANE_ENV)
+                .and_then(|(_, v)| v.map(|v| v.to_string_lossy().into_owned()))
+        };
+        let exe = Path::new("/usr/bin/true");
+        assert_eq!(
+            env_of(&tray_companion_command(exe, Some("rf3c-smoke/default"))).as_deref(),
+            Some("rf3c-smoke/default")
+        );
+        assert_eq!(env_of(&tray_companion_command(exe, None)), None);
+    }
 
     /// 1783-k5hm: a CLI lane whose MCP socket another live process serves is
     /// refused by name, BEFORE any podman call, so nothing is left running.

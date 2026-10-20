@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-macos-v56-10-18-1-publish-local-refuses-every-static-preview-with-router-not-ready-because-the-exact-hostname-ca-verified-https-probe-fails
+    event:
+      type: progress
+      ts: "2026-10-19T17:26:05Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        Linux half measured (2026-10-19, relayed by the coordinator from macuahuitl; rootless podman, netavark + pasta; router image v56.10.16.2; the same two networks):
+        - the --internal publish on 127.0.0.1:28081 answers 404;
+        - the bridge publish on 28082 answers 404.
+        So rootless podman reaches an internal network through the loopback publish, and the dead publish is specific to rootful netavark (the macOS guest; the Windows WSL guest is also rootful, unmeasured).
+
+        Also measured on the macOS guest: the rootful guest's own netns holds the internal bridge's gateway address (10.89.77.1/24 on podman3 for a scratch --internal network), and dialing the container address 10.89.77.2:8080 directly answers 404. So a rootful probe can dial the router's enclave address; that is the hop fix (a) uses.
+
+        Side finding: on two of these diagnostic runs, tillandsias-tray --exec-guest wrote its whole output and then never exited, holding the VM until it was stopped. Both runs ended with 'podman network rm'. Not filed yet.

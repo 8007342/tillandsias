@@ -27,6 +27,11 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: promote script shape"
 
+  - step: "promotion is the only writer of the observatorium deploy ref (1798-khw6)"
+    command: "grep -q 'scripts/advance-deploy-ref.sh' scripts/promote-stable.sh && grep -q 'DEPLOY_REF=\"refs/heads/deploy/observatorium\"' scripts/promote-stable.sh && ! grep -q 'deploy/observatorium' .github/workflows/release.yml && echo 'ok: deploy ref owned by promotion'"
+    timeout_ms: 3000
+    expected_behavior: "ok: deploy ref owned by promotion"
+
   - step: "README install URLs resolve the stable channel (releases/latest)"
     command: "grep -c 'releases/latest/download' README.md | awk '{ if ($1 >= 3) print \"ok: readme stable urls\"; else exit 1 }'"
     timeout_ms: 3000

@@ -1,0 +1,97 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: opencode-web-launched-from-the-tray-loads-in-the-confined-app-window-on-every-platform
+    order: 1802-9xix
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [opencode-web, browser, router, tls, tray, cross-platform]
+    estimated_hours: 8
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-headless/src/browser_open.rs
+      - openspec/specs/browser-isolation-tray-integration/spec.md
+    title: |
+      OpenCode Web launched from the tray opens an empty app window ("check your proxy settings"): since the 2026-08-08 hardening (63784ddb8) removed --network host from the project browser, the window is on podman's default pasta network, where opencode.<project>.localhost is the container's own loopback, and nothing replaced the route to the router
+    context: |
+      Operator report and measurement on lenovinha, v56.10.19.1, 2026-10-20. Tray "OpenCode Web" on cloud project 8007342/devxsd ran tillandsias --cloud 8007342/devxsd --opencode-web. The forge came up, and its opencode server listened on :4097 behind the sse proxy on :4096. The router route http://opencode.devxsd.localhost:8080 is the auth-gated reverse proxy. The window opened in app mode (no URL bar), titled opencode.devxsd.localhost, but showed only Chromium's proxy-settings error page.
+      Measured cause: tillandsias-browser-devxsd has NetworkMode pasta, and getent in it maps *.localhost to its own ::1/127.0.0.1. The router publishes 127.0.0.1:8080 and 127.0.0.1:18443 on the HOST loopback, so nothing in the browser container answers. git show 63784ddb8 (615-x3b8, "harden browser ContainerSpec") removed .network("host") from the project browser and asserts its absence; no route to the router replaced it, so host-launched OpenCode Web has been unreachable since then.
+      The confined windows that browser.open opens work (verified 2026-10-19 on rf3c-smoke), because browser_open.rs puts each window on its own --internal network with a forwarder container aliased router, and passes --host-resolver-rules "MAP *.<label>.localhost router:8443, MAP * ~NOTFOUND". That mapping is TLS-only on purpose: a plaintext Host header cannot be bound to a project (1651-5t7n). The opencode route exists only as plaintext http on :8080.
+      Operator direction (2026-10-20): launching OpenCode Web from the tray is fully supported on every platform, now that the browser workarounds exist (the confined window network on Linux, WSLg and vz on the guests).
+    exit_criteria:
+      - 'RED FIRST: from a cold start, the tray-path launch (--opencode-web on a local and a cloud project) opens a window whose page is the OpenCode app, not a Chromium error page (fails today with the proxy-settings page)'
+      - 'the OpenCode Web window runs on the same confined per-window network as browser.open (--internal, forwarder aliased router, host-resolver-rules mapping only *.<label>.localhost), never --network host or pasta'
+      - 'the router serves the OpenCode route over TLS on its preview listener (https://opencode.<label>.localhost, leaf cert for the label), and the OTP session flow (spec:opencode-web-session-otp) runs over it'
+      - 'the same launch works on macOS (vz) and Windows (WSL) through each platform window path; the Mac and Windows hosts record their runs on this row'
+    verifiable_closure: |
+      litmus:opencode-web-window-reaches-the-app pins the window spec (confined network, resolver rules, the TLS app URL) and the router's TLS route for opencode.<label>; the live arm records the window's page title and a screenshot that show the OpenCode app on each platform.
+    provenance: |
+      Filed by lenovinha at the operator's direction, 2026-10-20.
+    events:
+      - type: filed
+        ts: "2026-10-20T05:06:12Z"
+        host: lenovinha
+        summary: |-
+          p1: tray OpenCode Web opens an empty window (since 63784ddb8 the window has no route to the router); fix it on the confined browser.open network over TLS, on every platform.
+  - packet_id: an-opencode-web-cold-start-waits-for-the-app-while-its-forge-is-alive-instead-of-giving-up-after-30-seconds
+    order: 1802-axsp
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [opencode-web, readiness, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      A cold OpenCode Web launch gives up after a fixed 30 s wait for the authenticated app route, before a freshly cloned forge's opencode server is listening, so the tray launch fails with no window
+    context: |
+      Measured on lenovinha, v56.10.19.1, 2026-10-20. The operator's first tray launch of devxsd cloned at 04:53:29Z, and opencode server listening appeared at 04:54:11Z, about 40 s after the forge start. The readiness wait (Duration::from_secs(30) in the authenticated OpenCode Web app probe) ran out, and no browser container was created. A warm re-run answered after 6 probes (about 5 s) and opened the window.
+    exit_criteria:
+      - 'RED FIRST: a fixture whose route answers 502 for 40 s, then 200, with the forge still running, reaches the window (fails today at 30 s)'
+      - 'the wait continues while the forge container is running and stops at once, with a named verdict, when it exits; the tray status shows the wait with elapsed time'
+      - 'an upper bound remains (for example 5 min) and its refusal says why and what to do'
+    verifiable_closure: |
+      litmus:opencode-web-cold-start-waits-for-the-app runs the readiness fixture with a scripted route and forge-alive probe.
+    provenance: |
+      Filed by lenovinha at the operator's direction, 2026-10-20.
+    events:
+      - type: filed
+        ts: "2026-10-20T05:06:12Z"
+        host: lenovinha
+        summary: |-
+          OpenCode Web cold start: wait while the forge is alive, not a fixed 30 s.
+  - packet_id: the-chromium-app-window-shows-no-unsupported-no-sandbox-warning-bar
+    order: 1802-w7qu
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [browser, chromium, ux]
+    estimated_hours: 2
+    owned_files:
+      - images/chromium/chromium-framework-launch.sh
+      - openspec/specs/browser-isolation-tray-integration/spec.md
+    related: [1656-6c97]
+    title: |
+      Every Tillandsias Chromium window shows the infobar "You're using an unsupported command-line flag: --no-sandbox. Stability and security will suffer.", because images/chromium/chromium-framework-launch.sh adds --no-sandbox (Chromium's setuid sandbox cannot start under cap-drop ALL and no-new-privileges)
+    context: |
+      Operator report, lenovinha, 2026-10-20: the OpenCode Web app window opened with that warning across its top. The flag is load-bearing today: without it the container exits 21 ("no usable sandbox"). The spec scenario "Chromium sandbox flag is probed" covers only wrapper-level unknown-flag warnings, not Chromium's own infobar.
+      Two directions to decide between: (a) make Chromium's namespace sandbox work inside the container (a user namespace for the sandbox, or a seccomp profile that allows clone with CLONE_NEWUSER), which removes --no-sandbox; (b) keep --no-sandbox, because the container is the sandbox, and suppress the bar (for example --test-type), recording why.
+    exit_criteria:
+      - 'RED FIRST: a screenshot of a fresh app window shows the --no-sandbox infobar (today)'
+      - 'no Tillandsias Chromium window shows the infobar, and the chosen direction is recorded in the spec with its security reasoning'
+    verifiable_closure: |
+      litmus:chromium-window-shows-no-sandbox-infobar asserts the launch flags for the chosen direction and records the live screenshot.
+    provenance: |
+      Filed by lenovinha at the operator's direction, 2026-10-20.
+    events:
+      - type: filed
+        ts: "2026-10-20T05:06:12Z"
+        host: lenovinha
+        summary: |-
+          Chromium app windows show the --no-sandbox warning bar; remove it, by a working sandbox or a recorded suppression.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: vault-unseal-share-ephemerality-and-reset-hygiene
+    field: status
+    value: in_progress
+    ts: "2026-10-19T23:16:45Z"
+    host: lenovinha
+
+events:
+  - packet_id: vault-unseal-share-ephemerality-and-reset-hygiene
+    event:
+      type: note
+      ts: "2026-10-19T23:16:45Z"
+      host: lenovinha
+      summary: |-
+        lenovinha claims it at the coordinator's decisions (a)-(c), 2026-10-19; slice 1 = unseal share + root token + installation anchor and the fallback writers; slice 2 = approle, token, CA and TLS keys

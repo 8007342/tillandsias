@@ -214,9 +214,19 @@ critical_path:
     # adds test N+1, and a bare `0 failed` passes on an empty run. This
     # requires the envelope suite to be present AND the span pin — the
     # substrate every citation's resolvability rests on — to be green.
-    command: "out=$(cargo test -p tillandsias-plan 2>&1); printf '%s' \"$out\" | grep -q 'FAILED' && exit 1; n=$(printf '%s' \"$out\" | grep -c '^test answer::tests::.* ok$'); test \"$n\" -ge 8 || exit 1; printf '%s' \"$out\" | grep -q 'every_live_packet_has_a_span_that_contains_its_own_id ... ok' && echo \"ok: envelope-unit-pins-green n=$n\""
+    # ORDER 1799-5kvy: every failing branch says what failed. This step went
+    # red on the v56.10.19.1 release gate with EMPTY output, because a FAILED
+    # run exited 1 without printing a line, so nobody could tell which test it
+    # was.
+    # ORDER 1800-nvsc: the first adopter of the parameterised decider. The
+    # piped bash above became `litmus-decide.lua cargo-test`: a FAILED run is
+    # refused:envelope-unit-pins-green:failed=<k> with every failing test and
+    # panic named on stderr; zero tests is could-not-run, never ok; the cargo
+    # run is cached per tree state so every step judging this crate in one
+    # gate shares it (cache=hit|miss|off on the ok line).
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/litmus-decide.lua -- cargo-test --package tillandsias-plan --min-ok 'answer::tests::' 8 --require-ok every_live_packet_has_a_span_that_contains_its_own_id --name envelope-unit-pins-green"
     timeout_ms: 300000
-    expected_behavior: "ok: envelope-unit-pins-green"
+    expected_behavior: "ok:envelope-unit-pins-green"
 
   - step: "NO-PYTHON: the envelope path never INVOKES python"
     # Matches an interpreter at a command position — start of line, or after

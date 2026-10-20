@@ -134,10 +134,16 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+# 1247-amcu: every caller-contract refusal says why and what clears it, on
+# stderr, so the verdict line on stdout stays what consumers match.
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+
 case "$CALLER_CONTEXT" in
     ""|dispatched|undispatched) ;;
     *)
         echo "refused:competing-gate:caller-contract (--caller-context '$CALLER_CONTEXT' is not one of dispatched|undispatched; FIX THE CALL SITE, this is not a substrate limit)"
+        _afford "the detector only knows two caller contexts, so it cannot say what '$CALLER_CONTEXT' asserts about competing gates" \
+            "pass --caller-context dispatched or --caller-context undispatched, or drop the flag"
         exit 2 ;;
 esac
 
@@ -145,6 +151,8 @@ esac
 # alongside --host-side and must not silently outrank it.
 if [ -n "$HOST_SIDE_PID" ] && [ -n "$CALLER_CONTEXT" ]; then
     echo "refused:competing-gate:caller-contract (a caller asserting --host-side must not also assert --caller-context; FIX THE CALL SITE, this is not a substrate limit)"
+    _afford "--host-side already says where the caller stands, so a second assertion could only contradict it" \
+        "drop --caller-context from the call that passes --host-side $HOST_SIDE_PID"
     exit 2
 fi
 
@@ -200,6 +208,8 @@ if ! { while IFS= read -r -d '' e; do
 fi
 if [ -z "$_hs_tok" ]; then
     echo "refused:competing-gate:caller-contract (caller asserted --host-side $HOST_SIDE_PID but did not export TILLANDSIAS_WRAPPER_TOKEN into this process; FIX THE CALL SITE, this is not a substrate limit)"
+    _afford "the detector recognises the live host-side wrapper by the token in its own environment; with none, every gate would look headless" \
+        "export TILLANDSIAS_WRAPPER_TOKEN (the wrapper's token) in the caller before it runs scripts/check-no-competing-gate.sh --host-side $HOST_SIDE_PID"
     exit 2
 fi
 

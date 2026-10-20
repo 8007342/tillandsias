@@ -394,6 +394,14 @@ fi
 # tag off main falls through to the full gate. release-preflight (section 1,
 # above) and pre-push-version-guard.sh (run before this hook) are NOT skipped:
 # 898-zhf3's tag-before-back-merge check lives there.
+#
+# ORDER 1798-khw6: refs/heads/deploy/* rides the same exemption. Cloudflare
+# builds the observatorium from refs/heads/deploy/observatorium, and only
+# scripts/promote-stable.sh moves it, right after the stable tag. Its tip is
+# either the release commit itself (on main), or a RESTORE commit
+# (scripts/advance-deploy-ref.sh) whose tree is byte-identical to its first
+# parent and whose first parent is on main. Both upload no tree the gate has
+# not passed. Any other deploy-ref commit keeps the full gate.
 _tag_remote="origin"
 if [[ -n "${1:-}" ]] && git remote 2>/dev/null | grep -qxF -- "$1"; then
     _tag_remote="$1"
@@ -405,7 +413,7 @@ if [[ "$_any_ref" -eq 1 ]]; then
     while read -r _l _ls _remote_ref _rs; do
         [[ -z "${_remote_ref:-}" ]] && continue
         case "$_remote_ref" in
-            refs/tags/*) ;;
+            refs/tags/*|refs/heads/deploy/?*) ;;
             *) _all_tag_on_main=0; break ;;
         esac
         if [[ "$_ls" =~ ^0+$ ]]; then _all_tag_on_main=0; break; fi
@@ -422,6 +430,15 @@ if [[ "$_all_tag_on_main" -eq 1 ]]; then
         while read -r _l _ls _remote_ref _rs; do
             [[ -z "${_remote_ref:-}" ]] && continue
             _tag_commit="$(git rev-parse -q --verify "$_ls^{commit}" 2>/dev/null)" || _tag_commit=""
+            # A deploy ref's restore commit is judged by its first parent, and
+            # only when the trees are identical (1798-khw6).
+            if [[ "$_remote_ref" == refs/heads/deploy/* && -n "$_tag_commit" ]] \
+                && ! git merge-base --is-ancestor "$_tag_commit" "$_tag_main" 2>/dev/null; then
+                _tag_p1="$(git rev-parse -q --verify "$_tag_commit^1^{commit}" 2>/dev/null)" || _tag_p1=""
+                if [[ -n "$_tag_p1" && "$(git rev-parse "$_tag_commit^{tree}")" == "$(git rev-parse "$_tag_p1^{tree}")" ]]; then
+                    _tag_commit="$_tag_p1"
+                fi
+            fi
             _tag_anc_rc=1
             [[ -n "$_tag_commit" ]] && { git merge-base --is-ancestor "$_tag_commit" "$_tag_main" 2>/dev/null; _tag_anc_rc=$?; }
             if [[ "$_tag_anc_rc" -ne 0 ]]; then
@@ -433,7 +450,7 @@ if [[ "$_all_tag_on_main" -eq 1 ]]; then
     fi
 fi
 if [[ "$_all_tag_on_main" -eq 1 ]]; then
-    echo "${GRN}✓ local gate: tag-on-main — every tag in this push names a commit already on $_tag_remote/main (fetched now), which passed the gate that landed it; the stamp does not apply (1768-2k56). release-preflight and the version guard still ran.${RST}" >&2
+    echo "${GRN}✓ local gate: tag-on-main — every tag (or deploy ref, 1798-khw6) in this push names a commit already on $_tag_remote/main (fetched now), which passed the gate that landed it; the stamp does not apply (1768-2k56). release-preflight and the version guard still ran.${RST}" >&2
     exit 0
 fi
 if [[ -n "$_tag_off_main" ]]; then

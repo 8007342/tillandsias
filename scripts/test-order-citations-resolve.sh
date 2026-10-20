@@ -11,11 +11,17 @@ pass=0; fail=0
 ok()  { echo "ok:   $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1"; fail=$((fail+1)); }
 
-G="$ROOT/scripts/check-order-citations-resolve.sh"
-[ -x "$G" ] || { echo "skip:order-citations:no-guard"; echo "order-citations-resolve: 0 passed, 0 failed (skipped)"; exit 0; }
+# 1118-fqfk carry: the guard is the Lua port. It reads the tree named by
+# TILLANDSIAS_ORDER_CITATIONS_ROOT (else the repository root), which replaces
+# the shell guard's "resolve ROOT from its own path" for the scratch trees.
+G="$ROOT/scripts/lua/check-order-citations-resolve.lua"
+RUNNER="$(cd "$ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || RUNNER=""
+case "$RUNNER" in ./*) RUNNER="$ROOT/${RUNNER#./}" ;; esac
+{ [ -f "$G" ] && [ -n "$RUNNER" ]; } || { echo "skip:order-citations:no-guard-or-runner"; echo "order-citations-resolve: 0 passed, 0 failed (skipped)"; exit 0; }
+guard() { TILLANDSIAS_ORDER_CITATIONS_ROOT="$1" "$RUNNER" script run "$G"; }
 
 # ── ARM 1: the live tree passes, and the verdict names both counts ──────────
-out="$(cd "$ROOT" && bash "$G" 2>/dev/null)"; rc=$?
+out="$(guard "" 2>/dev/null)"; rc=$?
 case "$out" in
     ok:order-citations-resolve:*checked,*declared)
         [ "$rc" -eq 0 ] && ok "ARM 1: the live tree resolves, verdict carries checked and declared counts ($out)" \
@@ -28,11 +34,10 @@ esac
 W="$(mktemp -d "${TMPDIR:-/tmp}/order-citations.XXXXXX")"; trap 'rm -rf "$W"' EXIT INT TERM
 # 1611-imnj: the probes go in a SCRATCH tree, never in this checkout's scripts/,
 # where a probe outlived the preflight door's KILL and diff-scoped guards read
-# it as added code. The tree holds a byte-identical copy of the guard (it
-# resolves ROOT from its own path) and reads the REAL ledger through a link,
-# because these arms need real orders: 1234 below and an archived one in arm 4.
-R="$W/live"; mkdir -p "$R/scripts"; cp "$G" "$R/scripts/"; ln -s "$ROOT/plan" "$R/plan"
-GR="$R/scripts/$(basename "$G")"
+# it as added code. The guard reads that tree through its root seam and the
+# REAL ledger through a link, because these arms need real orders: 1234 below
+# and an archived one in arm 4.
+R="$W/live"; mkdir -p "$R/scripts"; ln -s "$ROOT/plan" "$R/plan"
 probe="$R/scripts/order-citation-probe.sh"
 # SPLIT SO THIS FILE DOES NOT CONTAIN THE LITERAL IT TESTS FOR. Written whole,
 # the guard matches the FIXTURE and arm 1 fails against a clean tree — which is
@@ -40,8 +45,8 @@ probe="$R/scripts/order-citation-probe.sh"
 # shape this guard exists to catch one level down.
 _at="@tr""ace"; _bad="1234-""zzzz"
 printf '#!/usr/bin/env bash\n# %s order:%s, spec:spec-traceability\ntrue\n' "$_at" "$_bad" > "$probe"
-out2="$(bash "$GR" 2>/dev/null)"; rc2=$?
-err2="$(bash "$GR" 2>&1 >/dev/null)"
+out2="$(guard "$R" 2>/dev/null)"; rc2=$?
+err2="$(guard "$R" 2>&1 >/dev/null)"
 rm -f "$probe"
 case "$out2" in
     violation:order-citations-unresolvable:*)
@@ -54,7 +59,7 @@ case "$out2" in
 esac
 
 # ── ARM 3: the tree is clean again once the probe is gone ──────────────────
-out3="$(bash "$GR" 2>/dev/null)"
+out3="$(guard "$R" 2>/dev/null)"
 case "$out3" in
     ok:order-citations-resolve:*) ok "ARM 3: removing the probe restores the clean verdict — arm 2 measured the probe, not a coincidence" ;;
     *) bad "ARM 3: tree not clean after probe removal: '$out3'" ;;
@@ -68,7 +73,7 @@ if [ -z "$arch" ]; then
 else
     probe2="$R/scripts/order-citation-probe2.sh"
     printf '#!/usr/bin/env bash\n# %s order:%s, spec:spec-traceability\ntrue\n' "$_at" "$arch" > "$probe2"
-    out4="$(bash "$GR" 2>/dev/null)"
+    out4="$(guard "$R" 2>/dev/null)"
     rm -f "$probe2"
     case "$out4" in
         ok:order-citations-resolve:*) ok "ARM 4: an ARCHIVED order ($arch) resolves — archiving a row does not un-exist its order" ;;
@@ -79,7 +84,7 @@ fi
 # ── ARM 5: a broken ledger read is BLOCKED, not reported clean ────────────
 # The instrument's own absent-versus-negative arm: if the ledger yields nothing,
 # every citation would look unresolvable. That must not print a violation count.
-out5="$(cd "$W" && bash "$G" 2>/dev/null)"; rc5=$?
+out5="$(cd "$W" && guard "" 2>/dev/null)"; rc5=$?
 case "$out5" in
     blocked:*|ok:*|violation:*) ok "ARM 5: run from outside the repo the guard still anchors on its own ROOT and does not report a phantom sweep ($out5)" ;;
     *) bad "ARM 5: unexpected '$out5' rc=$rc5" ;;
@@ -89,9 +94,8 @@ esac
 # `order: "X"` and `order: X` are one YAML value. Before 1274-cbk7 the guard
 # keyed on the unquoted spelling, and this fixture built only unquoted ledgers,
 # so it could not express the defect that hid nine packets. Hermetic: a scratch
-# tree with the guard copied in, one order declared each way, both cited.
+# tree, one order declared each way, both cited.
 T="$W/tree"; mkdir -p "$T/scripts" "$T/plan/index.d" "$T/plan/archive"
-cp "$G" "$T/scripts/"
 printf 'plan_index:\n  steps:\n    - packet_id: u\n      order: 1998-uuuu\n' > "$T/plan/index.yaml"
 # The copied guard carries its own @trace citations; declare them so the only
 # orders under test are the two below.
@@ -101,7 +105,7 @@ done
 _q='"1999-qqqq"'
 printf 'packets:\n  - packet_id: q\n    order: %s\n' "$_q" > "$T/plan/index.d/q.yaml"
 printf '# %s order:%s\n# %s order:%s\n' "$_at" "1998-""uuuu" "$_at" "1999-""qqqq" > "$T/scripts/cite.sh"
-out6="$(bash "$T/scripts/check-order-citations-resolve.sh" 2>/dev/null)"; rc6=$?
+out6="$(guard "$T" 2>/dev/null)"; rc6=$?
 case "$out6" in
     ok:order-citations-resolve:*) [ "$rc6" -eq 0 ] \
         && ok "ARM 6: a QUOTED order declaration resolves beside an unquoted one ($out6)" \
@@ -111,7 +115,7 @@ esac
 # NEGATIVE CONTROL: drop the quoted declaration and the same citation must fail,
 # so arm 6 passed because the quoted line was READ, not because nothing is checked.
 rm "$T/plan/index.d/q.yaml"
-err7="$(bash "$T/scripts/check-order-citations-resolve.sh" 2>&1 >/dev/null)"; rc7=$?
+err7="$(guard "$T" 2>&1 >/dev/null)"; rc7=$?
 if [ "$rc7" -ne 0 ] && grep -q '1999-qqqq' <<<"$err7"; then
     ok "ARM 7: without the quoted declaration the citation is unresolvable, by name"
 else bad "ARM 7: rc=$rc7, the removed order was not named"; fi

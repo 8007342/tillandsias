@@ -126,7 +126,7 @@ Four specimens, all on this fleet, three of them on 2026-09-21 alone:
 | the reset-flag litmus arm, order 1286-4437 | 12 **mentions** of `--reset-state` in the tree | 7/7 green — on a tree whose binary refused the flag, so the release shipped uninstallable |
 | the step-enforcement census, order 1329-m8dk | `assert_exit` as a **substring** anywhere in a step block | two steps ENFORCED whose only match was a COMMENT discussing enforcement |
 | a fixture's throwaway names, order 1325-ygq5 | five synthetic `litmus:…` names written as literals | `check-litmus-pin-claims.sh` read them as that file's own broken claims — five refusals in a ci-release suite |
-| `census-litmus-reachability.sh`, order 1333-jpq5 | two grandfathered-unbound tests named in its header | the same scanner refused the file — whose entire purpose is to REPORT unbound tests |
+| `lua/census-litmus-reachability.lua`, order 1333-jpq5 | two grandfathered-unbound tests named in its header | the same scanner refused the file — whose entire purpose is to REPORT unbound tests |
 
 The last one is the shape at its purest: the file was refused for doing its
 job, by a guard that was right to refuse it. Its author had already dodged this
@@ -424,7 +424,7 @@ specimens: the reset-flag arm that counted mentions and let an uninstallable
 release ship (1286-4437); the substring-versus-key census reading that was the
 entire disagreement between two hosts' counts (1329-m8dk, on yoga's rule); a
 fixture whose five throwaway names were read as its own claims (1325-ygq5); and
-`census-litmus-reachability.sh`, refused by that same scanner for naming the
+`lua/census-litmus-reachability.lua`, refused by that same scanner for naming the
 unbound tests it exists to report (1333-jpq5). The last three happened on one
 day, to one host, who had already dodged the trap once — which is the argument
 for the page rather than a row.

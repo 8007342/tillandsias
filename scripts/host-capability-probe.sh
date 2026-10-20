@@ -156,10 +156,11 @@ resolve_probe() {
             return 0
         fi
         printf 'refused:probe:stale-candidate:%s\n' "$candidate" >&2
-        printf '  it RUNS but its --capabilities omits accel_side, so it predates the\n' >&2
+        printf '  why: it RUNS but its --capabilities omits accel_side, so it predates the\n' >&2
         printf '  current envelope contract and would publish a row in an older\n' >&2
-        printf '  vocabulary. Rebuild it, or set TILLANDSIAS_HEADLESS_BIN to a current\n' >&2
-        printf '  binary. Refusing rather than publishing what it reports (1172-dyvd).\n' >&2
+        printf '  vocabulary. Refusing rather than publishing what it reports (1172-dyvd).\n' >&2
+        printf '  remedy: rebuild it (cargo build --release -p tillandsias-headless), or set\n' >&2
+        printf '  TILLANDSIAS_HEADLESS_BIN to a current binary.\n' >&2
     done
     return 1
 }

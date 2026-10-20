@@ -277,6 +277,49 @@ else
     check "a wrapper-shaped ZOMBIE does not suspend the accusation" 0 "competing-gate:" "$rc" "$out"
 fi
 
+# 12. 1247-amcu: EVERY CALLER-CONTRACT REFUSAL SAYS WHY AND WHAT CLEARS IT, and
+#     its remedy, executed, clears it (criterion 5). The verdict line itself is
+#     unchanged, since with-tillandsias-builder.sh and the consumer match it.
+run_args() { local r="$1"; shift; TILLANDSIAS_PROC_ROOT="$r" bash "$CHECK" "$@" 2>&1; }
+afford() { # <label> <out> <remedy-substring>
+    if grep -q '^  why: ' <<<"$2" && grep -qF "  remedy: $3" <<<"$2"; then
+        pass=$((pass+1))
+    else
+        fail=$((fail+1)); echo "FAIL: $1 — wanted a why: line and a remedy naming '$3'"
+        printf '%s\n' "$2" | sed 's/^/    /'
+    fi
+}
+clears() { # <label> <out>
+    if grep -q 'caller-contract' <<<"$2"; then
+        fail=$((fail+1)); echo "FAIL: $1 — the remedy did not clear the refusal"
+        printf '%s\n' "$2" | sed 's/^/    /'
+    else
+        pass=$((pass+1))
+    fi
+}
+
+r="$(newroot contract)"
+out="$(run_args "$r" --caller-context sideways)"; rc=$?
+check "an unknown caller context is a caller bug (2)" 2 "refused:competing-gate:caller-contract" "$rc" "$out"
+afford "unknown caller context" "$out" "pass --caller-context dispatched or --caller-context undispatched"
+out="$(run_args "$r" --caller-context undispatched)"
+clears "a known caller context clears the refusal" "$out"
+
+out="$(run_args "$r" --host-side 999 --caller-context dispatched)"; rc=$?
+check "--host-side with --caller-context is a caller bug (2)" 2 "refused:competing-gate:caller-contract" "$rc" "$out"
+afford "both assertions" "$out" "drop --caller-context"
+out="$(run_args "$r" --host-side 999)"
+clears "dropping --caller-context clears the refusal" "$out"
+
+r="$(newroot tokenless-remedy)"
+printf 'PATH=/x\0' > "$r/self/environ"
+out="$(run_args "$r" --host-side 999)"; rc=$?
+check "a tokenless host-side caller is refused (2)" 2 "refused:competing-gate:caller-contract" "$rc" "$out"
+afford "no token exported" "$out" "export TILLANDSIAS_WRAPPER_TOKEN"
+printf 'PATH=/x\0TILLANDSIAS_WRAPPER_TOKEN=self-tok\0' > "$r/self/environ"   # the export, done
+out="$(run_args "$r" --host-side 999)"
+clears "exporting the token clears the refusal" "$out"
+
 total=$((pass+fail))
 if [ "$fail" -eq 0 ]; then echo "PASS: competing-gate detector $pass/$total (1141-vf9w)"; exit 0; fi
 echo "FAIL: competing-gate detector $pass/$total (1141-vf9w)"; exit 1

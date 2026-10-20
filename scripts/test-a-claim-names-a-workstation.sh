@@ -157,6 +157,19 @@ if command -v cargo >/dev/null 2>&1; then
     # warm link.
     _ut_out="$(cd "$ROOT" && cargo test -p tillandsias-plan writer_host_default_is_the_compiled_platform 2>&1)"
     _ut_rc=$?
+    # 1803-pcap: a LINK failure here is not the assertion failing. Land run 181
+    # (#589) and #539 twice before it died on "rust-lld: undefined hidden symbol
+    # ...llvm.<hash>" from a stale incremental cache of tillandsias-plan under
+    # [profile.test.package.tillandsias-plan] opt-level=2 in the shared
+    # target/debug. Measured 2026-10-20 on linux-next 907b11230, no branch
+    # applied: the arm fails deterministically on plain `cargo test` and passes
+    # with CARGO_INCREMENTAL=0. Retry once without incremental so the test still
+    # decides, and say so; target/debug is left alone.
+    if [ "$_ut_rc" -ne 0 ] && grep -q 'linking with `cc` failed' <<<"$_ut_out"; then
+        echo "note: ARM 6 — link failure on the incremental cache; retrying once with CARGO_INCREMENTAL=0 (1803-pcap)"
+        _ut_out="$(cd "$ROOT" && CARGO_INCREMENTAL=0 cargo test -p tillandsias-plan writer_host_default_is_the_compiled_platform 2>&1)"
+        _ut_rc=$?
+    fi
     if [ "$_ut_rc" -eq 0 ] && grep -q '1 passed' <<<"$_ut_out"; then
         ok "ARM 6: 772-4se9's writer_host_default unit test still passes, EXECUTED not grepped (rc=$_ut_rc)"
     else

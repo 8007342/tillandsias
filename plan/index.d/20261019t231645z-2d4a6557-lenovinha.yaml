@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-one-shot-unseal-recovery-retries-only-the-first-share-candidate-which-is-the-rejected-own-secret-so-automatic-recovery-is-dead
+    field: status
+    value: obsoleted
+    ts: "2026-10-19T23:16:45Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-one-shot-unseal-recovery-retries-only-the-first-share-candidate-which-is-the-rejected-own-secret-so-automatic-recovery-is-dead
+    event:
+      type: note
+      ts: "2026-10-19T23:16:45Z"
+      host: lenovinha
+      summary: |-
+        Moot under the operator ruling of 2026-10-19 on 1118-fqfk ('credentials lost beats unencrypted credentials'): the rejected-unseal salvage seam it improves (recover_rejected_unseal_secret_once) is retired, and an unopenable store is wiped and the tray asks for sign-in. The multi-candidate slice was built red-first but never pushed (local c883f4900, discarded).

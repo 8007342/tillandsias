@@ -861,7 +861,7 @@ Hard rules:
     MIGRATION, NOT ENFORCEMENT (operator, 2026-09-20): a gated push straight to
     `<active-branch>` still lands today, and the hook's refusals carry the same
     affordance join-the-fleet §3 teaches; it will be refused later, once
-    `scripts/check-landing-provenance.sh` measures that most landings arrive
+    `scripts/lua/check-landing-provenance.lua` measures that most landings arrive
     through the queue, and that flip is the operator's decision on a number.
 
 ### Integration Verification Gate (run ONCE per unit of work, BEFORE the PR leaves draft)
