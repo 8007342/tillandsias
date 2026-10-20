@@ -435,3 +435,25 @@ identity_plane_aspiration:
     build-vs-adopt axis as the OpenTelemetry decision (682-x8df), under the
     same enclave-egress / no-python / CRDT-fit constraints. The v0.6 operator
     talk decides the direction; v0.7+ packets implement it.
+
+# ── No plaintext credentials at rest (2026-10-19) ─────────────────────────────
+credentials_at_rest:
+  decided_by: "The Tlatoāni, 2026-10-19 (standing rule for every agent and host)"
+  rule: >
+    Lost credentials are a better outcome than unencrypted credentials. No
+    credential or key material (vault unseal share, root token, anchor,
+    approle/token secrets, CA or TLS private keys) is ever written in plaintext
+    to durable disk, on any host or guest. Allowed stores: OS-encrypted stores
+    (Secret Service keyring, Windows Credential Manager, macOS Keychain),
+    memory, and tmpfs files (0600, written at launch, removed after use).
+  consequence: >
+    A vault that cannot be opened after a restart is wiped, and the user signs
+    in again. That is why sign-in must be frictionless. A store is wiped only
+    on positive evidence: a connected host answered "no share", or a delivered
+    share failed to unseal. A missing deliverer (no tray, a CLI-mode guest boot,
+    a tray restart) leaves the store sealed and waiting, never wiped.
+  never:
+    - "Salvage a vault from a plaintext fallback."
+    - "Use a podman secret on the file driver for credentials (it is plaintext on disk, and so is every container's copy)."
+    - "Weaken a fail-closed credential gate to make a test pass."
+  tracked_by: "1118-fqfk"

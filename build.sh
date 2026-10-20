@@ -5380,6 +5380,25 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Shell-ratchet fixture passed"
 
+    # ORDER 1800-nvsc — the parameterised litmus deciders (scripts/lua/
+    # litmus-decide.lua) replace piped `command:` strings family by family.
+    # Their fixture constructs every outcome against a fake cargo: a FAILED
+    # run names its tests (the 1799-5kvy empty-output red), zero tests is
+    # could-not-run, a missing tool is could-not-run, one cached producer run
+    # serves two judgements, transient-only retries, file-grep's three modes.
+    _step "Checking the litmus decider fixture (1800-nvsc)..."
+    if ! _run_lua_decider "scripts/lua/test-litmus-decide.lua" 2>&1; then
+        _error "litmus-decide.lua no longer keeps its contract — see the FAIL lines above (1800-nvsc)"
+        exit 1
+    fi
+    _info "Litmus decider fixture passed"
+
+    # The litmus-piped-commands backlog counter (methodology/convergence.yaml,
+    # advisory): piped command: lines by decision family. Printed, never
+    # refused; the ratchet above is what refuses growth.
+    _step "Counting piped litmus commands by family (1800-nvsc, advisory)..."
+    _run_lua_decider "scripts/lua/census-litmus-pipes.lua" 2>&1 || _warn "the litmus pipe census could not run (advisory; 1800-nvsc)"
+
     # ORDER 1590-j20f — a test that builds a path from compile-time
     # env!("CARGO_MANIFEST_DIR") reads the checkout that COMPILED it, and with
     # a shared CARGO_TARGET_DIR cargo reuses that binary from another worktree

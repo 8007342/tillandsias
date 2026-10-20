@@ -231,7 +231,7 @@ litmus openspec/litmus-tests/litmus-openspec-cli-pin-shape.yaml 1
 litmus openspec/litmus-tests/litmus-order-id-collision-free.yaml 2
 litmus openspec/litmus-tests/litmus-parked-blocks-visibility-shape.yaml 4
 litmus openspec/litmus-tests/litmus-pickup-role-grammar-shape.yaml 8
-litmus openspec/litmus-tests/litmus-plan-answer-envelope-citability.yaml 16
+litmus openspec/litmus-tests/litmus-plan-answer-envelope-citability.yaml 15
 litmus openspec/litmus-tests/litmus-plan-compaction-format-preservation.yaml 2
 litmus openspec/litmus-tests/litmus-plan-engine-invariants-shape.yaml 2
 litmus openspec/litmus-tests/litmus-plan-fragments-lane-refusals-carry-affordance.yaml 1
