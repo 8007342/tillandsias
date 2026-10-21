@@ -131,6 +131,41 @@ if [[ -d "$HOME/.cargo/bin" ]]; then
     export PATH="$HOME/.cargo/bin:$PATH"
 fi
 
+# ORDER 1804-sccl — EVERY rustc UNIT THE GATE COMPILES GOES THROUGH sccache
+# WHEN ONE RESOLVES. Each worktree under target/work/<name> has its own
+# target/, so every new worktree recompiles the ~280 registry units from
+# nothing. sccache keys a unit by its inputs, flags and compiler, so the
+# second worktree at the same toolchain gets them from the local cache.
+# Measured on macuahuitl 2026-10-20 (20 cores, cache on the NVMe RAID0):
+# cargo build --release -p tillandsias-plan in a fresh target dir, no
+# wrapper 68 s; with the cache warm the numbers are in row 1804-sccl.
+# Workspace crates in the dev/test profile are incremental and sccache
+# passes them straight through (not cacheable), so a gate's own crates are
+# untouched: this buys back the dependency build, nothing else.
+# Opt out with TILLANDSIAS_NO_SCCACHE=1; an explicit RUSTC_WRAPPER wins.
+# The cache dir is a fixed, bind-mountable path so the operator can put it
+# on the fast build root without any env change (1805-relo).
+# BEGIN-SCCACHE
+_sccache_bin=""
+if [[ -z "${TILLANDSIAS_NO_SCCACHE:-}" && -z "${RUSTC_WRAPPER:-}" ]]; then
+    _sccache_bin="$(command -v sccache 2>/dev/null || true)"
+fi
+if [[ -n "$_sccache_bin" ]]; then
+    export TILLANDSIAS_SCCACHE_BIN="$_sccache_bin"
+    export RUSTC_WRAPPER="$SCRIPT_DIR/scripts/sccache-wrapper.sh"
+    export SCCACHE_DIR="${SCCACHE_DIR:-$HOME/.cache/tillandsias/sccache}"
+    export SCCACHE_CACHE_SIZE="${SCCACHE_CACHE_SIZE:-20G}"
+    echo "sccache: on wrapper=$_sccache_bin dir=$SCCACHE_DIR size=$SCCACHE_CACHE_SIZE" >&2
+else
+    _sccache_why="no sccache on PATH; install one into ~/.cargo/bin"
+    [[ -n "${TILLANDSIAS_NO_SCCACHE:-}" ]] && _sccache_why="TILLANDSIAS_NO_SCCACHE set"
+    [[ -n "${RUSTC_WRAPPER:-}" ]] && _sccache_why="RUSTC_WRAPPER already set to $RUSTC_WRAPPER"
+    echo "sccache: off ($_sccache_why)" >&2
+    unset _sccache_why
+fi
+unset _sccache_bin
+# END-SCCACHE
+
 # ORDER 1803-pcap — THE GATE'S PLAN-CACHE SNAPSHOTS LIVE UNDER target/. The
 # plan binary keys its folded-ledger snapshot by the index's absolute path,
 # and every fixture builds a scratch repo at a fresh path, so a gate's worth

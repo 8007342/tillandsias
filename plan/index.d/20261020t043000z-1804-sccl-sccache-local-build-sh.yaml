@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl, 2026-10-20. Code is cited by symbol, never by line.
+packets:
+  - packet_id: build-sh-routes-every-rustc-unit-through-sccache-when-one-resolves-on-path-with-the-cache-at-a-fixed-bind-mountable-dir-under-the-users-cache-and-the-cold-warm-numbers-on-macuahuitl-show-the-key-includes-the-target-path
+    order: 1804-sccl
+    status: implemented
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    parent: 1800-p47s
+    pickup_role: any
+    capability_tags: [build, performance, sccache, macuahuitl, measurement]
+    estimated_hours: 3
+    size: S
+    related: [1287-w9s4, 1802-fbld, 1805-relo, 1806-lanc]
+    owned_files:
+      - build.sh
+    title: |
+      build.sh exports RUSTC_WRAPPER=sccache when `sccache` resolves on PATH (opt out TILLANDSIAS_NO_SCCACHE=1; an explicit RUSTC_WRAPPER wins), with SCCACHE_DIR defaulting to ~/.cache/tillandsias/sccache so the operator's bind mount (1805-relo) puts it on the fast root without any env change, and prints one `sccache: on|off …` line; macuahuitl measured cold vs warm and found the cache key includes the absolute target directory
+    context: |
+      MEASURED on macuahuitl 2026-10-20 (20 cores, 62 GB, cache and target
+      dirs on the NVMe RAID0, sccache 0.18.0 installed into ~/.cargo/bin,
+      which the builder toolbox shares). cargo build --release -p
+      tillandsias-plan (the gate's plan binary; lto=true, codegen-units=1):
+        fresh target, no wrapper                       68 s
+        fresh target, sccache populating (clean run)   80 s   (0 hits, 244 Rust misses)
+        fresh target at the SAME path, warm            34 s   (276 hits, 100% Rust)
+        fresh target at a DIFFERENT path, warm         96 s   (0 Rust hits, 32 C hits)
+      The gate's own regime (1599-egzz touches every tracked file, so
+      workspace units rebuild from the same bytes): touched rebuild of the
+      release plan binary 48 s without, 32 s with sccache (6 hits of 10
+      requests; the remainder is the LTO link, uncacheable).
+      cargo test -p tillandsias-plan --no-run: 26 s cold without, 33 s
+      populating, 23 s warm at the same path (275 hits) — the dev/test
+      profile is incremental for workspace crates, which sccache passes
+      through, so the test build gains little.
+      FINDING: the Rust key includes the absolute target directory. The
+      same commit into another CARGO_TARGET_DIR is a 0% miss. On this host
+      every worktree under target/work/<name> has its own target/, so
+      sccache does NOT make a new worktree's first build warm; it repays a
+      clean of the same target, a toolchain bump, and the touched release
+      units of every gate. Cross-worktree or cross-host hits need one
+      canonical target path on both sides (1806-lanc).
+      One run of plan-cold-sccache taken while a preflight ran beside it
+      measured 109 s and is discarded as contaminated; the 80 s is the
+      clean repeat.
+    exit_criteria:
+      - "./build.sh --preflight 2>&1 | grep -c '^sccache: ' prints 1 on a host with sccache on PATH and the line says on; with TILLANDSIAS_NO_SCCACHE=1 the line says off; pre-fix result: FAILS (0 lines, build.sh never sets RUSTC_WRAPPER)"
+      - "with the cache warm, cargo build --release -p tillandsias-plan into a fresh target dir at the same path reports Cache hits rate (Rust) 100% in sccache --show-stats and finishes in half the no-wrapper time (34 s vs 68 s on macuahuitl); pre-fix result: FAILS (no wrapper, no stats)"
+    unscoreable: "the timings are host measurements; the scoreable part is the build.sh line and the sccache stats, both read on the host"
+    verifiable_closure: "./build.sh --preflight 2>&1 | grep '^sccache: on' on macuahuitl, then sccache --show-stats after a warm same-path build"
+    next_action: >
+      Delivered by work/1804-sccl. LEFT: (1) 1805-relo bind-mounts
+      ~/.cache/tillandsias/sccache onto the RAID (operator); (2) decide
+      whether gates in target/work/<name> worktrees should share ONE
+      canonical CARGO_TARGET_DIR so a new worktree's dependency build is
+      a hit — that is the real cross-worktree win and the precondition
+      for 1806-lanc, and it reopens the 1599-egzz shared-target regime,
+      so it needs its own row and measurement, not a quiet default.
+    events:
+      - type: filed
+        ts: "2026-10-20T04:30:00Z"
+        host: macuahuitl
+        summary: |-
+          sccache wired into build.sh by presence; cold 68 s, populate 80 s, warm same path 34 s (100% Rust hits), warm other path 96 s (0%); touched gate rebuild 48 s -> 32 s.
+
+events:
+  - packet_id: measure-whether-a-shared-sccache-on-the-lan-repays-its-complexity-before-any-host-is-asked-to-depend-on-one
+    event:
+      type: note
+      ts: "2026-10-20T04:30:00Z"
+      host: macuahuitl
+      summary: |-
+        step 1 (local baseline) taken on macuahuitl, not lenovinha, by 1804-sccl: release plan binary cold 68 s, warm same target path 34 s with 276/276 Rust hits read from sccache --show-stats; a different target path at the same commit is 0/244, so step 3's partitioning check must compare the absolute target path before the toolchain. Step 2 (cross-host) is filed as 1806-lanc behind the trust slice.
