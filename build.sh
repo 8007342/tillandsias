@@ -1412,6 +1412,17 @@ _freeze_gate_diff_base() {
 # --preflight fetches first, so it freezes after its own fetch.
 if [[ "$FLAG_PREFLIGHT" != true ]]; then _freeze_gate_diff_base || exit 1; fi
 
+# ORDER 1807-shtg — ONE SHARED, LOCKED CARGO_TARGET_DIR FOR ALL WORKTREES, so
+# sccache (key includes the absolute target dir) hits across them. Takes the
+# flock and touches the tree when another checkout built last; see
+# scripts/shared-target.sh for the hazard it guards (1590-j20f, 1599-egzz).
+# BEGIN-SHARED-TARGET
+if [[ "$FLAG_PREFLIGHT" != true ]]; then
+    # shellcheck source=scripts/shared-target.sh
+    source "$SCRIPT_DIR/scripts/shared-target.sh" && shared_target_enter "$SCRIPT_DIR" || exit 1
+fi
+# END-SHARED-TARGET
+
 # ORDER 1599-egzz — EVERY GATE TOUCHES THE GATING CHECKOUT'S TRACKED FILES.
 #
 # With one CARGO_TARGET_DIR shared by several worktrees, cargo judges a path
