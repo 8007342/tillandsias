@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: land-queue-fixture-arm-9-owns-its-stdin-so-a-gate-started-with-an-open-stdin-does-not-hang-it
+    event:
+      type: claimed
+      ts: "2026-10-21T10:16:59Z"
+      agent_id: windows-yolanda-opus5-20261021t101659z
+      host: yolanda-windows
+      summary: |
+        yolanda-windows claims 1809-iexe: add </dev/null to ARM 9's queue invocation, red-first with the sleep-200 repro, fd-3 sabotage under both stdins.
