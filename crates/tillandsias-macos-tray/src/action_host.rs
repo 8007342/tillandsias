@@ -3893,6 +3893,20 @@ fn spawn_vm_status_poller(
     // CloudRefreshRequest); see the comment at the wait site.
     let poll_request = tokio::sync::Notify::new();
     spawn_host_clock_sync_on_wake(vz.clone());
+    // Order 1794-rf3a (b): this Mac's browser reaches a guest preview through
+    // the loopback listener and the guest's vsock relay.
+    let relay_vz = vz.clone();
+    crate::preview_relay::spawn(move || {
+        let vz = relay_vz.clone();
+        async move {
+            open_control_wire_stream(
+                &vz,
+                crate::preview_relay::PREVIEW_RELAY_VSOCK_PORT,
+                Duration::from_secs(10),
+            )
+            .await
+        }
+    });
     tokio::spawn(run_push_listener(
         vz.clone(),
         status_text.clone(),

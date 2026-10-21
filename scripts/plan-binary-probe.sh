@@ -268,6 +268,20 @@ plan_binary_is_stale() {   # $1 = binary path; true when any source FILE is newe
     [ -n "$(find crates/tillandsias-plan Cargo.lock -type f -newer "$1" -print -quit 2>/dev/null)" ]
 }
 
+# 1804-sccl: build the plan binary; a failing ambient compiler wrapper (sccache)
+# must never become "no fresh tillandsias-plan". Retry once without the wrapper.
+_pbp_cargo_build() {
+    local _pbp_log
+    _pbp_log="$(mktemp "${TMPDIR:-/tmp}/pbp-build.XXXXXX" 2>/dev/null || echo /dev/null)"
+    if cargo build --release -p tillandsias-plan >"$_pbp_log" 2>&1; then rm -f "$_pbp_log"; return 0; fi
+    # Name WHY the first build failed (a wrapper failure used to vanish into /dev/null).
+    [ "$_pbp_log" = /dev/null ] || { tail -n 15 "$_pbp_log" | sed 's/^/plan-binary-probe: first build: /' >&2; rm -f "$_pbp_log"; }
+    [ -n "${RUSTC_WRAPPER:-}${RUSTC_WORKSPACE_WRAPPER:-}${CARGO_BUILD_RUSTC_WRAPPER:-}" ] || return 1
+    echo "plan-binary-probe: build failed under a compiler wrapper; retrying without it" >&2
+    env -u RUSTC_WRAPPER -u RUSTC_WORKSPACE_WRAPPER -u CARGO_BUILD_RUSTC_WRAPPER \
+        cargo build --release -p tillandsias-plan >/dev/null 2>&1
+}
+
 ensure_fresh_plan_binary() {
     local bin
     if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ]; then
@@ -277,7 +291,7 @@ ensure_fresh_plan_binary() {
     if ! bin="$(resolve_plan_binary)"; then
         # Nothing runnable anywhere: try to create one, then re-resolve.
         command -v cargo >/dev/null 2>&1 || return 1
-        cargo build --release -p tillandsias-plan >/dev/null 2>&1 || return 1
+        _pbp_cargo_build || return 1
         bin="$(resolve_plan_binary)" || return 1
     fi
     if ! plan_binary_is_stale "$bin"; then
@@ -285,7 +299,7 @@ ensure_fresh_plan_binary() {
         return 0
     fi
     if command -v cargo >/dev/null 2>&1 \
-        && cargo build --release -p tillandsias-plan >/dev/null 2>&1; then
+        && _pbp_cargo_build; then
         # A zero-exit build means the release artifact matches the tree by
         # cargo's own HASH-BASED fingerprints — but a no-op build never
         # touches the binary, so the mtime vintage test above can still call

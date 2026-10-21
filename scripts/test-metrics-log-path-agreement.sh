@@ -344,8 +344,12 @@ fi
 # Pinned because the failure is near-undetectable: a routine GC silently resets
 # every rolling series, and the reset looks exactly like the documented one-time
 # migration. This arm is what stops someone moving it back into target/.
-case "$probe_path" in
-    */target/*) bad "metrics log is under target/ — cargo clean will delete it (see macuahuitl 2026-08-26)" ;;
+# 1807-shtg: judge the path RELATIVE to the checkout. A worktree that itself
+# lives under <main>/target/work/<name> (the fleet's layout) has "/target/" in
+# its absolute path, so the bare */target/* match failed every gate run there.
+probe_rel="${probe_path#"$ROOT"/}"
+case "$probe_rel" in
+    target/*|*/target/*) bad "metrics log is under target/ — cargo clean will delete it (see macuahuitl 2026-08-26)" ;;
     *) ok "metrics log is outside target/, so daily-maintenance cargo clean cannot eat it" ;;
 esac
 

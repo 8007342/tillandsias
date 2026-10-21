@@ -131,6 +131,52 @@ if [[ -d "$HOME/.cargo/bin" ]]; then
     export PATH="$HOME/.cargo/bin:$PATH"
 fi
 
+# ORDER 1804-sccl — EVERY rustc UNIT THE GATE COMPILES GOES THROUGH sccache
+# WHEN ONE RESOLVES. Each worktree under target/work/<name> has its own
+# target/, so every new worktree recompiles the ~280 registry units from
+# nothing. sccache keys a unit by its inputs, flags and compiler, so the
+# second worktree at the same toolchain gets them from the local cache.
+# Measured on macuahuitl 2026-10-20 (20 cores, cache on the NVMe RAID0):
+# cargo build --release -p tillandsias-plan in a fresh target dir, no
+# wrapper 68 s; with the cache warm the numbers are in row 1804-sccl.
+# Workspace crates in the dev/test profile are incremental and sccache
+# passes them straight through (not cacheable), so a gate's own crates are
+# untouched: this buys back the dependency build, nothing else.
+# Opt out with TILLANDSIAS_NO_SCCACHE=1; an explicit RUSTC_WRAPPER wins.
+# The cache dir is a fixed, bind-mountable path so the operator can put it
+# on the fast build root without any env change (1805-relo).
+# BEGIN-SCCACHE
+_sccache_bin=""
+if [[ -z "${TILLANDSIAS_NO_SCCACHE:-}" && -z "${RUSTC_WRAPPER:-}" ]]; then
+    _sccache_bin="$(command -v sccache 2>/dev/null || true)"
+fi
+if [[ -n "$_sccache_bin" ]]; then
+    export TILLANDSIAS_SCCACHE_BIN="$_sccache_bin"
+    export RUSTC_WRAPPER="$SCRIPT_DIR/scripts/sccache-wrapper.sh"
+    export SCCACHE_DIR="${SCCACHE_DIR:-$HOME/.cache/tillandsias/sccache}"
+    export SCCACHE_CACHE_SIZE="${SCCACHE_CACHE_SIZE:-20G}"
+    echo "sccache: on wrapper=$_sccache_bin dir=$SCCACHE_DIR size=$SCCACHE_CACHE_SIZE" >&2
+else
+    _sccache_why="no sccache on PATH; install one into ~/.cargo/bin"
+    [[ -n "${TILLANDSIAS_NO_SCCACHE:-}" ]] && _sccache_why="TILLANDSIAS_NO_SCCACHE set"
+    [[ -n "${RUSTC_WRAPPER:-}" ]] && _sccache_why="RUSTC_WRAPPER already set to $RUSTC_WRAPPER"
+    echo "sccache: off ($_sccache_why)" >&2
+    unset _sccache_why
+fi
+unset _sccache_bin
+# END-SCCACHE
+
+# ORDER 1803-pcap — THE GATE'S PLAN-CACHE SNAPSHOTS LIVE UNDER target/. The
+# plan binary keys its folded-ledger snapshot by the index's absolute path,
+# and every fixture builds a scratch repo at a fresh path, so a gate's worth
+# of fixtures wrote dozens of 2-23 MB snapshots into ~/.cache/tillandsias/
+# plan-cache that nothing evicted: 328 GB there on macuahuitl, 2026-10-19.
+# The binary now bounds that directory; the gate additionally keeps its
+# scratch snapshots inside target/, which is disposable, on the fast build
+# root where one exists, and never shared with the operator's own cache.
+# An explicit TILLANDSIAS_PLAN_CACHE_DIR wins.
+export TILLANDSIAS_PLAN_CACHE_DIR="${TILLANDSIAS_PLAN_CACHE_DIR:-$SCRIPT_DIR/target/plan-cache}"
+
 # PODMAN MODE IS THE CALLER'S TO DECLARE — the gate does not guess it.
 #
 # Order 797-r6tc. What used to be here inferred remote podman mode from a FILE
@@ -1366,6 +1412,17 @@ _freeze_gate_diff_base() {
 # --preflight fetches first, so it freezes after its own fetch.
 if [[ "$FLAG_PREFLIGHT" != true ]]; then _freeze_gate_diff_base || exit 1; fi
 
+# ORDER 1807-shtg — ONE SHARED, LOCKED CARGO_TARGET_DIR FOR ALL WORKTREES, so
+# sccache (key includes the absolute target dir) hits across them. Takes the
+# flock and touches the tree when another checkout built last; see
+# scripts/shared-target.sh for the hazard it guards (1590-j20f, 1599-egzz).
+# BEGIN-SHARED-TARGET
+if [[ "$FLAG_PREFLIGHT" != true ]]; then
+    # shellcheck source=scripts/shared-target.sh
+    source "$SCRIPT_DIR/scripts/shared-target.sh" && shared_target_enter "$SCRIPT_DIR" || exit 1
+fi
+# END-SHARED-TARGET
+
 # ORDER 1599-egzz — EVERY GATE TOUCHES THE GATING CHECKOUT'S TRACKED FILES.
 #
 # With one CARGO_TARGET_DIR shared by several worktrees, cargo judges a path
@@ -1398,6 +1455,29 @@ if [[ "$FLAG_CHECK$FLAG_TEST$FLAG_CI$FLAG_CI_FULL$FLAG_RELEASE$FLAG_INSTALL" == 
     (cd "$SCRIPT_DIR" && _touch_gating_checkout)
 fi
 # END-GATE-TOUCH
+
+# ORDER 1802-fbld — BUILD PLACEMENT REPORT. One line saying whether target/ is
+# on the host's fast build root (TILLANDSIAS_FAST_BUILD_ROOT, default
+# /srv/fastbuild), warning with the bind-mount remedy when the root is mounted
+# and target/ is not. Informational only: no path changes, never refuses. The
+# logic is scripts/lua/build-root-placement.lua; a host with no plan binary
+# that runs `script run` prints nothing rather than guess.
+# BEGIN-BUILD-ROOT-PLACEMENT
+_report_build_root() {
+    local _br_bin=""
+    _br_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _br_bin=""
+    case "$_br_bin" in ./*) _br_bin="$SCRIPT_DIR/${_br_bin#./}" ;; esac
+    [ -n "$_br_bin" ] || return 0
+    grep -qx script <<<"$("$_br_bin" capabilities 2>/dev/null)" || return 0
+    local _br_out _br_line
+    _br_out="$(cd "$SCRIPT_DIR" && TILLANDSIAS_TIMING_LOG=/dev/null "$_br_bin" script run scripts/lua/build-root-placement.lua -- 2>&1)" || true
+    while IFS= read -r _br_line; do
+        # the runner requires an ok: prefix on the verdict line; the report does not carry it
+        echo "${_br_line#ok:}"
+    done <<<"$_br_out"
+}
+if [[ "$FLAG_PREFLIGHT" != true ]]; then _report_build_root; fi
+# END-BUILD-ROOT-PLACEMENT
 
 # ORDER 1305-udgs — `./build.sh --preflight`: every guard that can refuse a push,
 # before the SHA, in seconds.
@@ -6328,8 +6408,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # human grepping for the fixture name. A binding nobody can find is the
     # defect this packet is about, so the compact form was the wrong form.
     _step "Checking test-build-sh-forge-check-only (1063-nraf; 18ms)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-build-sh-forge-check-only.sh" 2>&1; then
-        _error "scripts/test-build-sh-forge-check-only.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+    if ! _run_lua_decider "scripts/lua/test-build-sh-forge-check-only.lua" 2>&1; then
+        _error "scripts/lua/test-build-sh-forge-check-only.lua failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
         exit 1
     fi
     _step "Checking test-check-engine-cpu-dispatch (1063-nraf; 206ms)..."

@@ -158,6 +158,65 @@ fn snapshot_path(index: &Path) -> Option<PathBuf> {
     cache_path(index).map(|p| p.with_extension("snap"))
 }
 
+/// ORDER 1803-pcap — THE CACHE IS BOUNDED. The key is the index's absolute
+/// path, and every fixture in the gate builds a scratch repo at a fresh path,
+/// so each gate left dozens of 2-23 MB snapshots that nothing evicted. On
+/// macuahuitl, 2026-10-19: 328 GB in 122k `*.snap` files, 35% of the main
+/// disk. The real ledger has one key per checkout; sixty-four entries is a
+/// generous working set for a host with several worktrees, and 256 MiB is
+/// about ten real-ledger snapshots.
+const DEFAULT_MAX_ENTRIES: usize = 64;
+const DEFAULT_MAX_BYTES: u64 = 256 * 1024 * 1024;
+
+fn is_cache_entry(name: &str) -> bool {
+    name.ends_with(".snap") || name.ends_with(".redb") || name.contains(".tmp")
+}
+
+/// (entries, bytes) currently held in `dir`.
+#[cfg(test)]
+fn cache_usage(dir: &Path) -> (usize, u64) {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return (0, 0);
+    };
+    rd.filter_map(|e| e.ok())
+        .filter(|e| is_cache_entry(&e.file_name().to_string_lossy()))
+        .filter_map(|e| e.metadata().ok().map(|m| m.len()))
+        .fold((0, 0), |(n, b), len| (n + 1, b + len))
+}
+
+/// Evict oldest-first (by mtime) until `dir` holds at most `max_entries`
+/// cache files totalling at most `max_bytes`. A leftover `.tmp` from a
+/// crashed writer is an entry like any other. Best-effort: a removal that
+/// fails is skipped, never reported — the caller is a cache write.
+fn enforce_cap(dir: &Path, max_entries: usize, max_bytes: u64) {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let mut entries: Vec<(std::time::SystemTime, u64, PathBuf)> = rd
+        .filter_map(|e| e.ok())
+        .filter(|e| is_cache_entry(&e.file_name().to_string_lossy()))
+        .filter_map(|e| {
+            let m = e.metadata().ok()?;
+            Some((m.modified().ok()?, m.len(), e.path()))
+        })
+        .collect();
+    let mut count = entries.len();
+    let mut bytes: u64 = entries.iter().map(|e| e.1).sum();
+    if count <= max_entries && bytes <= max_bytes {
+        return;
+    }
+    entries.sort_by_key(|e| e.0);
+    for (_, len, path) in entries {
+        if count <= max_entries && bytes <= max_bytes {
+            break;
+        }
+        if std::fs::remove_file(&path).is_ok() {
+            count -= 1;
+            bytes = bytes.saturating_sub(len);
+        }
+    }
+}
+
 /// Retrieve the cached folded Ledger, or `None` if absent, corrupt, or fingerprint mismatches.
 pub fn get_ledger(index: &Path) -> Option<crate::Ledger> {
     if std::env::var_os("TILLANDSIAS_NO_PLAN_CACHE").is_some() {
@@ -205,6 +264,9 @@ pub fn save_ledger(index: &Path, ledger: &crate::Ledger) {
     data.extend_from_slice(&payload);
     if std::fs::write(&tmp, data).is_ok() {
         let _ = std::fs::rename(&tmp, &path);
+    }
+    if let Some(dir) = path.parent() {
+        enforce_cap(dir, DEFAULT_MAX_ENTRIES, DEFAULT_MAX_BYTES);
     }
 }
 
@@ -300,11 +362,104 @@ pub fn rebuild(index: &Path, folded: &Value) {
     }
     drop(db);
     let _ = std::fs::rename(&tmp, &path);
+    if let Some(dir) = path.parent() {
+        enforce_cap(dir, DEFAULT_MAX_ENTRIES, DEFAULT_MAX_BYTES);
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every test here reads `cache_path`, which consults the process
+    /// environment; the cap test redirects it. One lock, so no test observes
+    /// another's directory mid-flight (tests in one binary share a process).
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn env_guard() -> std::sync::MutexGuard<'static, ()> {
+        ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// ORDER 1803-pcap. The cache is keyed by the index's ABSOLUTE path, and
+    /// every fixture's scratch index is a new path, so before this row each
+    /// scratch index left a 2-23 MB snapshot that nothing ever evicted. On
+    /// macuahuitl 2026-10-19 that was 328 GB in 122k `*.snap` files, 35% of
+    /// the main disk. N writes for N distinct scratch indexes must stay under
+    /// the cap, and the newest write must still be served.
+    #[test]
+    fn n_scratch_indexes_stay_under_the_snapshot_cap() {
+        let _g = env_guard();
+        let cache_dir =
+            std::env::temp_dir().join(format!("tilland-cache-cap-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&cache_dir);
+        std::fs::create_dir_all(&cache_dir).expect("mk cache dir");
+        // SAFETY: single-threaded with respect to this variable — every test in
+        // this module holds ENV_LOCK while it reads or writes it.
+        unsafe { std::env::set_var("TILLANDSIAS_PLAN_CACHE_DIR", &cache_dir) };
+
+        let n = DEFAULT_MAX_ENTRIES * 3;
+        let mut last_index = None;
+        for i in 0..n {
+            let index = tmp_ledger(&format!("cap{i}"));
+            let ledger = crate::Ledger::load_with_fragments(&index).expect("load");
+            save_ledger(&index, &ledger);
+            if let Some(prev) = last_index.replace(index) {
+                let _ = std::fs::remove_dir_all(prev.parent().unwrap().parent().unwrap());
+            }
+        }
+        let last_index = last_index.expect("at least one index");
+        let (count, bytes) = cache_usage(&cache_dir);
+        assert!(
+            get_ledger(&last_index).is_some(),
+            "the newest snapshot must survive eviction"
+        );
+        unsafe { std::env::remove_var("TILLANDSIAS_PLAN_CACHE_DIR") };
+        let _ = std::fs::remove_dir_all(last_index.parent().unwrap().parent().unwrap());
+        let _ = std::fs::remove_dir_all(&cache_dir);
+        assert!(
+            count <= DEFAULT_MAX_ENTRIES,
+            "{n} distinct scratch indexes left {count} cache entries; cap is {DEFAULT_MAX_ENTRIES}"
+        );
+        assert!(
+            bytes <= DEFAULT_MAX_BYTES,
+            "cache holds {bytes} bytes; cap is {DEFAULT_MAX_BYTES}"
+        );
+    }
+
+    /// The byte cap evicts OLDEST first and keeps the newest even when the
+    /// survivors are fewer than the entry cap allows.
+    #[test]
+    fn the_byte_cap_evicts_oldest_first() {
+        let _g = env_guard();
+        let dir = std::env::temp_dir().join(format!("tilland-cache-bytes-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("mk");
+        let base =
+            std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+        for i in 0..5u64 {
+            let p = dir.join(format!("{i:016x}.snap"));
+            std::fs::write(&p, vec![b'x'; 1000]).expect("write");
+            let f = std::fs::File::options().write(true).open(&p).expect("open");
+            f.set_modified(base + std::time::Duration::from_secs(i * 10))
+                .expect("mtime");
+        }
+        enforce_cap(&dir, 100, 2500);
+        let mut left: Vec<String> = std::fs::read_dir(&dir)
+            .expect("ls")
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        left.sort();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(
+            left,
+            vec![
+                "0000000000000003.snap".to_string(),
+                "0000000000000004.snap".to_string()
+            ],
+            "2500 bytes holds two 1000-byte entries, and they must be the two newest"
+        );
+    }
 
     fn tmp_ledger(tag: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("tilland-cache-{tag}-{}", std::process::id()));
@@ -329,6 +484,7 @@ mod tests {
     /// may not be served the old binary's fold (964-tzmp review).
     #[test]
     fn a_snapshot_from_another_binary_fails_closed() {
+        let _g = env_guard();
         let index = tmp_ledger("binary");
         let old = fingerprint_for(&index, "old-binary").expect("old key");
         assert_ne!(
@@ -358,6 +514,7 @@ mod tests {
     /// A cache answers only for the corpus it was built from.
     #[test]
     fn a_changed_corpus_is_a_miss_not_a_stale_answer() {
+        let _g = env_guard();
         let index = tmp_ledger("stale");
         rebuild(&index, &fold_of(&index));
         assert!(
@@ -391,6 +548,7 @@ mod tests {
     /// empty answer that a caller could mistake for "no such packet".
     #[test]
     fn an_absent_cache_is_a_miss_not_a_failure() {
+        let _g = env_guard();
         let index = tmp_ledger("absent");
         assert!(get_packet(&index, "alpha").is_none());
         assert!(
@@ -404,6 +562,7 @@ mod tests {
     /// cache would quietly serve pre-fragment state.
     #[test]
     fn the_cache_serves_the_folded_value_not_the_base() {
+        let _g = env_guard();
         let index = tmp_ledger("folded");
         std::fs::write(
             index.parent().unwrap().join("index.d/aa.yaml"),
@@ -425,6 +584,7 @@ mod tests {
     /// ORDER 964-tzmp: snapshot cache round-trips the full Ledger and invalidates on fragment change.
     #[test]
     fn snapshot_round_trips_folded_ledger() {
+        let _g = env_guard();
         let index = tmp_ledger("roundtrip");
         let l1 = crate::Ledger::load_with_fragments(&index).expect("load l1");
         assert_eq!(l1.packets.len(), 1);

@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: an-opencode-web-relaunch-while-the-projects-forge-runs-attaches-to-it-instead-of-failing-with-podman-125
+    order: 1803-mnuz
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [opencode-web, idempotent, forge-lifecycle, tray]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      Relaunching OpenCode Web for a project whose forge is already running fails with podman 125 (container name in use) and opens no window, instead of reusing the running forge and opening a new window on it
+    context: |
+      Measured on lenovinha, branch work/1802-9xix build of v56.10.19.1, 2026-10-20 15:31Z. With tillandsias-devxsd-forge running from an earlier --cloud 8007342/devxsd --opencode-web launch, a second identical launch ran podman run --rm --name tillandsias-devxsd-forge ... and failed: "cannot remove container ... as it is running" then "creating container storage: the container name tillandsias-devxsd-forge is already in use" (status 125, retry Permanent). The stage opencode-web-forge failed and no window opened.
+      Operator ruling (relayed by the coordinator, 2026-10-20): relaunch on demand, idempotent serving. A second launch must serve the project, not refuse it. This is a separate defect from the cold-start 30 s wait (1802-axsp).
+    exit_criteria:
+      - 'RED FIRST: with the project forge running (opencode-web entrypoint), a second --opencode-web launch for the same project opens a window on the running forge and exits 0 (fails today with podman 125)'
+      - 'a running forge whose agent or image does not match the request is replaced deliberately with a named verdict, never by a podman name collision'
+      - 'no launch path relies on podman run failing on a name in use; the decision is made from the container state before run'
+    verifiable_closure: |
+      litmus:opencode-web-relaunch-is-idempotent launches twice against a scripted podman that reports the forge running and asserts the second launch reuses it.
+    provenance: |
+      Filed by lenovinha at the coordinator's direction (operator ruling: idempotent serving), 2026-10-20.
+    events:
+      - type: filed
+        ts: "2026-10-20T16:31:04Z"
+        host: lenovinha
+        summary: |-
+          p2: an OpenCode Web relaunch while the project's forge runs fails with podman 125; it must reuse the running forge.

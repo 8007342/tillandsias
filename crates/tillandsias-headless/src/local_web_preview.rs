@@ -1364,7 +1364,15 @@ fn prepare_tls(project: &str, ca: &Path) -> Result<(), String> {
         .map_err(|_| "router_not_ready: leaf key publication failed")?;
     std::fs::rename(&crt, tls.join(format!("{}.crt", host_label(project))))
         .map_err(|_| "router_not_ready: leaf certificate publication failed")?;
-    if tls_port().is_err() {
+    if crate::running_as_root() {
+        // 1794-rf3a (b): a rootful guest binds nothing for this port; it is
+        // the host tray's loopback listener, a fixed number both ends know.
+        let port = tillandsias_control_wire::transport::VM_HOST_PREVIEW_TLS_PORT;
+        if tls_port().ok() != Some(port) {
+            std::fs::write(root.join("preview-tls-port"), port.to_string())
+                .map_err(|_| "router_not_ready: TLS port publication failed")?;
+        }
+    } else if tls_port().is_err() {
         let port = [18443, 28443, 38443, 48443, 58443]
             .into_iter()
             .find(|p| crate::port_is_available(*p))
@@ -1421,14 +1429,7 @@ fn ensure_router(project: &str, debug: bool) -> Result<PathBuf, String> {
             .and_then(|p| p.first())
             .and_then(|p| p["HostPort"].as_str())
             .and_then(|p| p.parse::<u16>().ok());
-        let bindings = &row["HostConfig"]["PortBindings"]["8443/tcp"];
-        let expected = tls_port()?.to_string();
-        let correct = bindings.as_array().is_some_and(|ports| {
-            ports
-                .iter()
-                .any(|p| p["HostIp"] == "127.0.0.1" && p["HostPort"] == expected)
-        });
-        if !correct {
+        if !router_serves_preview(crate::running_as_root(), &row, tls_port()?) {
             podman_at(Step::Router, &["rm", "--force", "tillandsias-router"])?;
         } else {
             running = row["State"]["Status"] == "running";
@@ -1632,6 +1633,49 @@ pub(crate) fn probe_endpoint(
         return Ok(std::net::SocketAddr::new(ip, ROUTER_TLS_CONTAINER_PORT));
     }
     Ok(std::net::SocketAddr::from(([127, 0, 0, 1], tls_port)))
+}
+
+/// Where the guest's preview relay (order 1794-rf3a (b)) carries a host
+/// browser's connection: the same address the readiness probe dials.
+#[cfg(feature = "listen-vsock")]
+pub(crate) fn preview_relay_target() -> Result<std::net::SocketAddr, String> {
+    let rootful = crate::running_as_root();
+    if rootful {
+        // The resident guest service need not share the forge launch's
+        // runtime dir, so a rootful relay does not read the port file: it
+        // dials the router's enclave address, and the loopback port is unused.
+        let enclave_ip = inspect("tillandsias-router")?
+            .as_ref()
+            .and_then(router_enclave_ip);
+        let unused = tillandsias_control_wire::transport::VM_HOST_PREVIEW_TLS_PORT;
+        return probe_endpoint(true, enclave_ip, unused);
+    }
+    probe_endpoint(false, None, tls_port()?)
+}
+
+/// Whether a running router serves this guest's preview listener (order
+/// 1794-rf3a (b)). Rootless: the loopback publish at the preview port, which
+/// is only ever added together with the leaf mount. Rootful: that publish is
+/// dead (see [`probe_endpoint`]) and is no longer made, so the router must
+/// carry the leaf mount and no 8443 publish; a router started before the
+/// first publish has neither and is replaced.
+pub(crate) fn router_serves_preview(rootful: bool, row: &Value, tls_port: u16) -> bool {
+    let bindings = &row["HostConfig"]["PortBindings"]["8443/tcp"];
+    if !rootful {
+        let expected = tls_port.to_string();
+        return bindings.as_array().is_some_and(|ports| {
+            ports
+                .iter()
+                .any(|p| p["HostIp"] == "127.0.0.1" && p["HostPort"] == expected)
+        });
+    }
+    let published = bindings.as_array().is_some_and(|ports| !ports.is_empty());
+    let mounted = row["Mounts"].as_array().is_some_and(|mounts| {
+        mounts
+            .iter()
+            .any(|m| m["Destination"] == crate::PREVIEW_LEAF_MOUNT)
+    });
+    mounted && !published
 }
 
 /// The router's address on the enclave network, from its `podman inspect` row.
@@ -2434,6 +2478,55 @@ mod tests {
             probe_endpoint(false, Some(ip), 18443).unwrap(),
             "127.0.0.1:18443".parse().unwrap()
         );
+    }
+
+    /// Order 1794-rf3a (b): a rootful guest's router publishes nothing for
+    /// the preview (the publish is dead under rootful netavark, and a host
+    /// browser arrives through the vsock relay); rootless keeps the loopback
+    /// publish. Both mount the leaves.
+    #[test]
+    fn only_a_rootless_router_publishes_the_preview_port() {
+        let leaves = Path::new("/run/r/preview-tls");
+        let rootful = crate::preview_listener_args(true, 18443, leaves);
+        assert!(
+            !rootful.iter().any(|a| a == "-p" || a.contains(":8443")),
+            "{rootful:?}"
+        );
+        assert!(
+            rootful
+                .iter()
+                .any(|a| a.contains("target=/etc/tillandsias/preview"))
+        );
+        let rootless = crate::preview_listener_args(false, 18443, leaves);
+        assert!(
+            rootless.contains(&"127.0.0.1:18443:8443".into()),
+            "{rootless:?}"
+        );
+        assert!(
+            rootless
+                .iter()
+                .any(|a| a.contains("target=/etc/tillandsias/preview"))
+        );
+    }
+
+    /// Order 1794-rf3a (b): which running router `ensure_router` keeps. A
+    /// rootful router started before the first publish has no leaf mount and
+    /// must be replaced; one carrying the old dead publish is replaced too.
+    #[test]
+    fn a_rootful_router_is_kept_only_with_the_leaf_mount_and_no_publish() {
+        let mount = serde_json::json!([{"Destination": "/etc/tillandsias/preview"}]);
+        let publish =
+            serde_json::json!({"8443/tcp": [{"HostIp": "127.0.0.1", "HostPort": "18443"}]});
+        let ready = serde_json::json!({"Mounts": mount, "HostConfig": {"PortBindings": {}}});
+        let unmounted = serde_json::json!({"Mounts": [], "HostConfig": {"PortBindings": {}}});
+        let old = serde_json::json!({"Mounts": mount, "HostConfig": {"PortBindings": publish}});
+        assert!(router_serves_preview(true, &ready, 18443));
+        assert!(!router_serves_preview(true, &unmounted, 18443));
+        assert!(!router_serves_preview(true, &old, 18443));
+        // Rootless: the loopback publish at the preview port, as before.
+        assert!(router_serves_preview(false, &old, 18443));
+        assert!(!router_serves_preview(false, &old, 28443));
+        assert!(!router_serves_preview(false, &ready, 18443));
     }
 
     #[test]

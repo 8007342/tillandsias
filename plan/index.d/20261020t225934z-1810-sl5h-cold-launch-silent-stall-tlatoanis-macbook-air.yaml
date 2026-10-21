@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-cold-first-forge-launch-after-a-full-macos-wipe-went-silent-for-300s-and-was-killed-by-the-vsock-exec-idle-timeout
+    order: 1810-sl5h
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [macos, vsock, image-ensure, forge-launch]
+    related: [1792-48yg, 1784-skfj, 1805-oxb3]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-vm-layer/src/vsock_exec.rs
+    title: |
+      One cold first forge launch in five on v56.10.20.1 (macOS, right after a full wipe) printed each detached image ensure's first notice, then nothing for 300 s, and the Mac side killed it: "vsock_exec: no data from guest for 300s — connection stale"
+    context: |
+      Smoke v56.10.20.1, tlatoanis-macbook-air, cycle 1 of 5 (plan/issues/e2e-smoke-v56.10.20.1-macos-2026-10-20.md). The detached-helper wait loop in main.rs prints a heartbeat every 60 s while a build runs, and on v56.10.19.1 that heartbeat appeared. Here no heartbeat appeared for 300 s, so the guest process or the guest itself went quiet; a slow build alone would still have beaten. The next wipe destroyed the guest's logs. Cycles 2-5 ran under a capture driver (image-build logs, failure markers, previous boot's kernel log) and passed. Cycle 1's only visible difference: it followed the installer's own tray launch and provisioned in 11 s, against 43-72 s for the others.
+    exit_criteria:
+      - 'the stall is reproduced with the guest evidence kept (the previous boot journal and image-build logs from the stalled boot), or ten consecutive post-install cold cycles pass under the capture driver'
+      - 'if reproduced: the cause is named from that evidence, and a cold launch that is still building never goes 300 s without output'
+    verifiable_closure: |
+      unscoreable: unpinnable-until-reproduced; the future litmus is a Lua decider over the smoke capture driver's per-cycle evidence (rc, heartbeat gaps), written once the cause is known.
+    provenance: |
+      Filed by macbookair-macos from the v56.10.20.1 macOS smoke, 2026-10-20.
+    events:
+      - type: filed
+        ts: "2026-10-20T22:59:34Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          p2: 1 in 5 cold first launches after a wipe went silent 300 s and hit the vsock_exec idle timeout; cause not captured.

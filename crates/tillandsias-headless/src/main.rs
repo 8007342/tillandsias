@@ -120,6 +120,7 @@ compile_error!(
      ships with no Vault bootstrap (701-iu9b)."
 );
 
+mod ca_key_store;
 #[cfg(feature = "vault")]
 // @trace spec:tillandsias-vault — Phase 6 default bootstrap (was Phase 3 opt-in).
 mod vault_bootstrap;
@@ -4211,6 +4212,10 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     std::fs::create_dir_all(&certs_dir)
         .map_err(|e| format!("Failed to create CA directory: {e}"))?;
 
+    // 1118-fqfk slice 2b: the key path is a link into tmpfs. Plaintext is
+    // deleted and a dangling link is refilled from the keyring, before the
+    // usable check below decides whether to mint.
+    ca_key_store::materialize(&key, &crt, true);
     let should_refresh = ca_bundle_needs_refresh(&crt, &key);
 
     if should_refresh {
@@ -4260,7 +4265,7 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
             chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
         );
         let tmp_crt = certs_dir.join(format!("intermediate.crt.{unique}.tmp"));
-        let tmp_key = certs_dir.join(format!("intermediate.key.{unique}.tmp"));
+        let tmp_key = ca_key_store::staging_path(&key, &unique);
         let mut command = Command::new("openssl");
         command.args([
             "req",
@@ -4330,7 +4335,9 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
             })?;
         }
 
-        std::fs::rename(&tmp_key, &key)
+        let crt_bytes = std::fs::read(&tmp_crt)
+            .map_err(|e| format!("Failed to read the minted CA cert: {e}"))?;
+        ca_key_store::seal(&tmp_key, &key, &crt_bytes, true)
             .map_err(|e| format!("Failed to atomically publish CA key: {e}"))?;
         std::fs::rename(&tmp_crt, &crt)
             .map_err(|e| format!("Failed to atomically publish CA cert: {e}"))?;
@@ -4566,11 +4573,15 @@ fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
             "{}:/etc/squid/certs/intermediate.crt:ro",
             certs_dir.join("intermediate.crt").display()
         ),
-        // 755-qcxh: the CA PRIVATE key travels as a podman secret, never a
-        // host bind mount — secret delivery is what lets the host file stay
-        // 0600. The public cert above stays a bind mount on purpose.
-        "--secret".into(),
-        format!("{PROXY_CA_KEY_SECRET},{PROXY_CA_KEY_SECRET_OPTS}"),
+        // 755-qcxh, 1118-fqfk: the CA PRIVATE key travels as a runtime secret
+        // file on tmpfs (0700 dir), never a bind from the durable CA dir and
+        // never a podman secret (plaintext on disk). The public cert above
+        // stays a bind mount on purpose.
+        "--volume".into(),
+        crate::vault_bootstrap::runtime_secret_volume(
+            PROXY_CA_KEY_SECRET,
+            PROXY_CA_KEY_SECRET_OPTS,
+        ),
     ];
     // Order 472: record WHICH CA this proxy was started with, so a running
     // proxy can be compared against the certificate on disk after a rotation.
@@ -4667,7 +4678,7 @@ fn running_proxy_ca_generation() -> Result<Option<String>, ()> {
 /// the bundle publishes keys by inode rename, which a live bind mount never
 /// observed either.
 fn ensure_proxy_ca_key_secret(certs_dir: &Path, debug: bool) -> Result<(), String> {
-    crate::vault_bootstrap::create_file_podman_secret(
+    crate::vault_bootstrap::create_file_runtime_secret(
         PROXY_CA_KEY_SECRET,
         &certs_dir.join("intermediate.key"),
         debug,
@@ -5795,8 +5806,11 @@ fn build_git_run_args(
         // certificate request is made with the per-mirror signer token and the
         // relay keeps git-mirror-agent. One token never carries both authorities.
         if let Some(signer_secret) = host_signer_secret {
-            args.push("--secret".into());
-            args.push(format!("{signer_secret},{GIT_VAULT_SIGNER_SECRET_OPTS}"));
+            args.push("--volume".into());
+            args.push(crate::vault_bootstrap::runtime_secret_volume(
+                signer_secret,
+                GIT_VAULT_SIGNER_SECRET_OPTS,
+            ));
             args.push("--env".into());
             args.push(format!(
                 "TILLANDSIAS_VAULT_TOKEN_FILE={MIRROR_SIGNER_TOKEN_SINK}"
@@ -5808,8 +5822,11 @@ fn build_git_run_args(
         // AppRole material and maintains the tmpfs client-token sink used by
         // vault-cli. The reusable login credential is what lets the Agent
         // re-authenticate after a client token reaches max_ttl.
-        args.push("--secret".into());
-        args.push(format!("{secret_name},{GIT_VAULT_APPROLE_SECRET_OPTS}"));
+        args.push("--volume".into());
+        args.push(crate::vault_bootstrap::runtime_secret_volume(
+            secret_name,
+            GIT_VAULT_APPROLE_SECRET_OPTS,
+        ));
         args.push("--env".into());
         args.push("VAULT_ADDR=https://vault:8200".into());
         args.push("--env".into());
@@ -7156,6 +7173,28 @@ fn mcp_socket_host_dir(project_name: &str, instance: Option<&str>) -> PathBuf {
         .join(format!("{project_name}-{instance}"))
 }
 
+/// Where the router reads the preview leaves (bind-mounted read-only).
+pub(crate) const PREVIEW_LEAF_MOUNT: &str = "/etc/tillandsias/preview";
+
+/// The router's preview-listener arguments (order 1794-rf3a (b)). The leaf
+/// mount always; the loopback publish only under rootless podman. A rootful
+/// guest's host browser arrives through the tray's loopback listener and the
+/// vsock relay instead.
+pub(crate) fn preview_listener_args(rootful: bool, port: u16, leaf_dir: &Path) -> Vec<String> {
+    let mut args = Vec::new();
+    if !rootful {
+        args.extend(["-p".into(), format!("127.0.0.1:{port}:8443")]);
+    }
+    args.extend([
+        "--mount".into(),
+        format!(
+            "type=bind,source={},target={PREVIEW_LEAF_MOUNT},readonly=true",
+            leaf_dir.display()
+        ),
+    ]);
+    args
+}
+
 /// Build `podman run` args for the Caddy reverse-proxy router container.
 ///
 /// The router runs on the enclave network with DNS alias `router` so Squid's
@@ -7251,15 +7290,11 @@ fn build_router_run_args(certs_dir: &Path, image: &str, host_port: u16) -> Vec<S
         && let Ok(port) = text.trim().parse::<u16>()
         && port >= 1024
     {
-        args.extend([
-            "-p".into(),
-            format!("127.0.0.1:{port}:8443"),
-            "--mount".into(),
-            format!(
-                "type=bind,source={},target=/etc/tillandsias/preview,readonly=true",
-                dyn_dir.join("preview-tls").display()
-            ),
-        ]);
+        args.extend(preview_listener_args(
+            running_as_root(),
+            port,
+            &dyn_dir.join("preview-tls"),
+        ));
     }
     args.push(image.into());
     args
@@ -9591,8 +9626,8 @@ fn build_opencode_forge_args(
     // installed harness parsed it without creating auth.json.
     if let Some(secret_name) = opencode_vault_secret {
         args.extend([
-            "--secret".into(),
-            format!("{secret_name},{GIT_VAULT_TOKEN_SECRET_OPTS}"),
+            "--volume".into(),
+            crate::vault_bootstrap::runtime_secret_volume(secret_name, GIT_VAULT_TOKEN_SECRET_OPTS),
             "--env".into(),
             "TILLANDSIAS_OPENCODE_AUTH_EXPECTED=1".into(),
             "--env".into(),
@@ -13460,10 +13495,10 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             &container,
             "--network",
             ENCLAVE_ONLY_NET,
-            "--secret",
-            &format!(
-                "{},{GIT_VAULT_TOKEN_SECRET_OPTS}",
-                vault_lease.secret_name()
+            "--volume",
+            &crate::vault_bootstrap::runtime_secret_volume(
+                vault_lease.secret_name(),
+                GIT_VAULT_TOKEN_SECRET_OPTS,
             ),
             "--cap-drop=ALL",
             "--security-opt=no-new-privileges",
@@ -14118,8 +14153,11 @@ fn build_ssh_lane_sidecar_run_args(
         "/tmp:rw,noexec,nosuid,nodev,size=8m,mode=1777".into(),
         "--volume".into(),
         format!("{}:/ssh-agent", ssh_lane_agent_volume(project_name)),
-        "--secret".into(),
-        format!("{vault_approle_secret},{GIT_VAULT_APPROLE_SECRET_OPTS}"),
+        "--volume".into(),
+        crate::vault_bootstrap::runtime_secret_volume(
+            vault_approle_secret,
+            GIT_VAULT_APPROLE_SECRET_OPTS,
+        ),
         "--env".into(),
         format!("TILLANDSIAS_MIRROR_ID={mirror_id}"),
         "--env".into(),
@@ -19400,7 +19438,9 @@ fn build_forge_agent_run_args_with_vault(
     if mode_provider_pair(mode).is_some()
         && let Some(secret_name) = vault_secret
     {
-        spec = spec.secret(format!("{secret_name},{GIT_VAULT_TOKEN_SECRET_OPTS}"));
+        let (source, target) =
+            crate::vault_bootstrap::runtime_secret_bind(secret_name, GIT_VAULT_TOKEN_SECRET_OPTS);
+        spec = spec.bind_mount(source, target, true);
     }
     if debug {
         spec = spec.env("TILLANDSIAS_DEBUG", "1");
@@ -20738,6 +20778,17 @@ fn maybe_spawn_vsock_listener(
                         udp_state.set_last_event(msg.to_string());
                     }
                 }
+            }
+        });
+
+        // Order 1794-rf3a (b): the host browser's way to a preview.
+        let relay_shutdown = shutdown.clone();
+        let _preview_relay = tokio::spawn(async move {
+            let relay_port = tillandsias_control_wire::transport::PREVIEW_RELAY_VSOCK_PORT;
+            if let Err(err) =
+                vsock_server::run_preview_relay_listener(relay_port, relay_shutdown).await
+            {
+                eprintln!("[tillandsias] preview relay on port {relay_port} failed: {err}");
             }
         });
 
@@ -26498,13 +26549,16 @@ mod tests {
         assert!(!has_arg(&args, "10.0.42.2"));
         assert!(has_arg(&args, "DEBUG_PROXY=1"));
         assert!(has_arg(&args, "tillandsias-proxy:v1"));
-        // 755-qcxh: the CA private key is delivered as a podman secret owned
-        // by the proxy uid; the world-readable key bind mount must never
-        // come back.
-        assert!(has_arg(&args, "--secret"));
+        // 755-qcxh: the CA private key never travels as a bind mount of the
+        // host key file. 1118-fqfk 2a: it is a tmpfs runtime secret mounted at
+        // /run/secrets/tillandsias-ca-key, not a podman file-driver secret.
+        assert!(!has_arg(&args, "--secret"));
         assert!(has_arg(
             &args,
-            "tillandsias-ca-key,uid=1000,gid=1000,mode=0400"
+            &crate::vault_bootstrap::runtime_secret_volume(
+                "tillandsias-ca-key",
+                "uid=1000,gid=1000,mode=0400"
+            )
         ));
         assert!(
             !args.iter().any(|a| a.contains("intermediate.key")),
@@ -29145,22 +29199,23 @@ mod tests {
         );
 
         // Vault Agent's reusable AppRole document must be mounted at the
-        // stable path /run/secrets/vault-approle and owned by the git user.
-        let secret_arg = format!("{secret},{GIT_VAULT_APPROLE_SECRET_OPTS}");
+        // stable path /run/secrets/vault-approle, from its tmpfs runtime
+        // secret (1118-fqfk 2a), never a podman file-driver secret.
+        let secret_arg =
+            crate::vault_bootstrap::runtime_secret_volume(secret, GIT_VAULT_APPROLE_SECRET_OPTS);
+        assert!(
+            secret_arg.ends_with(":/run/secrets/vault-approle:ro,z"),
+            "{secret_arg}"
+        );
         assert!(
             args.iter().any(|a| a == &secret_arg),
             "expected Vault Agent AppRole secret arg `{secret_arg}` in args: {args:?}"
         );
 
-        let mounted = args
-            .iter()
-            .find(|a| a.contains("target=vault-approle"))
-            .expect("vault-approle secret must be mounted");
-        assert!(
-            mounted.contains("uid=1000") && mounted.contains("gid=1000"),
-            "vault-approle secret must be owned by the git user (uid/gid 1000) \
-             so it is readable under keep-id; got `{mounted}`"
-        );
+        // 1118-fqfk 2a: readable under keep-id because the tmpfs file is 0444
+        // inside a 0700 directory (write_runtime_secret), not by podman's
+        // uid/gid secret options.
+        assert!(!has_arg(&args, "--secret"), "{args:?}");
 
         assert!(
             has_arg(&args, "VAULT_ADDR=https://vault:8200"),
@@ -30640,10 +30695,13 @@ esac
             false,
             false,
         );
-        assert!(has_arg(&args, "--secret"));
+        assert!(!has_arg(&args, "--secret"));
         assert!(has_arg(
             &args,
-            &format!("opencode-forge-lease,{GIT_VAULT_TOKEN_SECRET_OPTS}")
+            &crate::vault_bootstrap::runtime_secret_volume(
+                "opencode-forge-lease",
+                GIT_VAULT_TOKEN_SECRET_OPTS
+            )
         ));
         assert!(has_arg(&args, "TILLANDSIAS_OPENCODE_AUTH_EXPECTED=1"));
         assert!(has_arg(&args, "VAULT_ROLE=opencode-forge"));
@@ -30826,14 +30884,16 @@ esac
                 false,
                 &test_cache_root(),
             );
-            assert!(
-                has_arg(&args, "--secret"),
-                "{mode:?} must mount the vault lease"
+            let (source, target) = crate::vault_bootstrap::runtime_secret_bind(
+                "provider-forge-lease",
+                GIT_VAULT_TOKEN_SECRET_OPTS,
             );
-            assert!(has_arg(
-                &args,
-                &format!("provider-forge-lease,{GIT_VAULT_TOKEN_SECRET_OPTS}")
-            ));
+            assert!(
+                args.iter()
+                    .any(|a| a.contains(&format!("source={source},target={target}"))),
+                "{mode:?} must mount the vault lease from its tmpfs runtime secret: {args:?}"
+            );
+            assert!(!has_arg(&args, "--secret"));
         }
 
         // Credential-free lanes never mount a provider lease.
@@ -31486,12 +31546,12 @@ esac
         assert!(
             args_with
                 .iter()
-                .any(|a| a == "signer-sec,target=vault-approle-signer,uid=1000,gid=1000,mode=0400"),
+                .any(|a| a.ends_with("/signer-sec:/run/secrets/vault-approle-signer:ro,z")),
             "the signer document must mount at its OWN target, not the relay path; \
              got:\n{args_with:?}"
         );
         assert!(
-            args_with.iter().any(|a| a.starts_with("signer-sec,")),
+            args_with.iter().any(|a| a.contains("/signer-sec:")),
             "the mirror must receive the SIGNER AppRole material when the lane is on; \
              got:\n{args_with:?}"
         );
