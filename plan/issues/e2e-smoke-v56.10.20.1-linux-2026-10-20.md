@@ -5,7 +5,7 @@
 - forge_lane_outcome: cold-host guard stop (EXPECTED PASS). The lane brought the enclave up and stopped at `blocked:upstream-no-credential`. Nothing was claimed or pushed, the host tree is clean, and no `MO-FULL:` marker was emitted. See the finding below about the local commit the agent made.
 - signature_verification: cosign:could-not-run:cosign-absent
 
-**Verdict: PASS (signatures unverified: cosign-absent).** Init clean. The forge lane stopped at the credential guard, as expected.
+**Verdict: PASS v56.10.20.1 (signatures unverified: cosign-absent).** Init clean. The forge lane stopped at the credential guard, as expected.
 
 Host: lenovinha, Fedora 44 (kernel 7.2.11), 13 GiB RAM, wired 1GbE. Operator authorised the destructive run on 2026-10-20. Trunk at run: linux-next 52e44509a, main f0e61287e, windows-next b38f71052, osx-next 49731c152.
 
