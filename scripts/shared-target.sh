@@ -69,6 +69,22 @@ shared_target_enter() { # ROOT ; exports CARGO_TARGET_DIR, takes the lock, touch
     fi
     wait="${TILLANDSIAS_SHARED_TARGET_WAIT:-1800}"
     exec 9>>"$canon/.shared-target.lock"
+    # ORPHAN-HELD LOCK. A flock lives as long as ANY process holds the fd, and
+    # fd 9 is inherited by everything the builder spawns: a pty shell a gate
+    # test leaves behind outlived the gate and held the lock for hours (profile
+    # run 2, 1800 s REFUSED, recorded holder pid long dead). When the lock is
+    # busy and the recorded holder is gone, only orphans hold it: retire that
+    # inode (they keep the old one, harmlessly) and lock a fresh file.
+    if ! flock -n 9; then
+        local _hp
+        _hp="$(sed -n 's/^pid \([0-9][0-9]*\) .*/\1/p' "$canon/.shared-target-holder" 2>/dev/null | head -n 1)"
+        if [ -n "$_hp" ] && ! kill -0 "$_hp" 2>/dev/null; then
+            echo "shared-target: lock holder pid $_hp is gone; the lock is held only by orphaned children; replacing the lock file" >&2
+            exec 9>&-
+            rm -f "$canon/.shared-target.lock"
+            exec 9>>"$canon/.shared-target.lock"
+        fi
+    fi
     if ! flock -w "$wait" 9; then
         echo "shared-target: REFUSED, $canon is locked by another build for ${wait}s; last owner: $(cat "$owner" 2>/dev/null || echo unknown); lock holder: $(cat "$canon/.shared-target-holder" 2>/dev/null || echo unknown) (a long-lived shell that sourced shared_target_enter keeps the lock; see ps -p <pid>)" >&2
         return 1

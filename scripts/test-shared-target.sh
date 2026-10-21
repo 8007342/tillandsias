@@ -86,4 +86,22 @@ nested="$(TILLANDSIAS_SHARED_TARGET_WAIT=2 bash "$W/parent.sh" "$A" 2>&1)"; nrc=
 [ $nrc -eq 0 ] && ok "arm6 nested enter inherited the held lock" || bad "arm6 nested enter refused/deadlocked (rc=$nrc): $nested"
 other="$(TILLANDSIAS_SHARED_TARGET_WAIT=1 bash "$W/parent.sh" "$B" 2>&1)"; orc=$?
 [ $orc -ne 0 ] && ok "arm6 nested enter from a different checkout still refused" || bad "arm6 different checkout admitted under a held lock"
+
+# ARM 7 orphan-held lock: the builder died, but a stray child (a pty shell a test left
+# behind) inherited fd 9 and still holds the flock. Profile run 2 waited 1800 s on such a
+# lock whose recorded holder pid was long dead. A dead holder must not block entry.
+# PRE-FIX: FAILS (enter waits out TILLANDSIAS_SHARED_TARGET_WAIT, then REFUSED).
+cat > "$W/orphan.sh" <<EOF
+exec 9>>"$CANON/.shared-target.lock"
+flock -n 9 || exit 9
+printf 'pid 999999 bash dead-builder\n' > "$CANON/.shared-target-holder"
+echo \$\$ > "$W/orphan.pid"
+sleep 30
+EOF
+( bash "$W/orphan.sh" ) >/dev/null 2>&1 &
+sleep 1
+o7="$(TILLANDSIAS_SHARED_TARGET_WAIT=3 bash -c ". '$ROOT/scripts/shared-target.sh'; shared_target_enter '$A'" 2>&1)"; rc7=$?
+[ $rc7 -eq 0 ] && ok "arm7 a lock held only by orphans of a dead builder does not block entry" \
+  || bad "arm7 dead-holder lock blocked entry (rc=$rc7): $o7"
+[ -f "$W/orphan.pid" ] && kill "$(cat "$W/orphan.pid")" 2>/dev/null
 exit $fail
