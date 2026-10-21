@@ -3,8 +3,8 @@
 -- @trace order:1118-fqfk, spec:tillandsias-vault
 --
 -- check-credentials-at-rest.lua — 1118-fqfk. Operator ruling 2026-10-19: no
--- Vault unseal share, root token or installation anchor is ever in plaintext on
--- durable disk. Allowed stores are the OS-encrypted keyring and memory/tmpfs.
+-- Vault unseal share, root token, installation anchor or CA private key is ever
+-- in plaintext on durable disk. Allowed stores are the OS-encrypted keyring and memory/tmpfs.
 --
 -- It judges NAMES and PATHS only and never reads a credential's contents.
 -- Sites it scans:
@@ -14,7 +14,11 @@
 --      in plaintext under the containers storage dir (slice 1: the unseal key;
 --      slice 2a: approle, token, CA and TLS keys);
 --   3. per-container copies of those secrets under
---      containers/storage/overlay-containers/<id>/userdata/secrets/.
+--      containers/storage/overlay-containers/<id>/userdata/secrets/;
+--   4. (slice 2b) a CA or Vault TLS private key (intermediate.key,
+--      preview-ca.key, vault.key) that is a regular file under the state dir.
+--      The key path must be a symlink into tmpfs; `find -type f` does not
+--      match a symlink, so a link passes.
 --
 -- Seams for the fixture: TILLANDSIAS_CRED_SCAN_HOME replaces HOME, and
 -- TILLANDSIAS_CRED_SCAN_PODMAN=none skips the podman query.
@@ -31,6 +35,7 @@ local FALLBACK_NAMES = {
     "installation_anchor",
 }
 local SECRET_GLOB = "tillandsias-*"
+local KEY_NAMES = { "intermediate.key", "preview-ca.key", "vault.key" }
 
 local found = {}
 
@@ -52,6 +57,7 @@ for _, d in ipairs({ "/.cache/tillandsias", "/.local/state/tillandsias", "/.loca
     find_names(home .. d, 3, FALLBACK_NAMES)
 end
 find_names(home .. "/.local/share/containers/storage/overlay-containers", 4, { SECRET_GLOB })
+find_names(home .. "/.local/state/tillandsias", 2, KEY_NAMES)
 
 if podman ~= "none" then
     local r = proc.run{ argv = { podman, "secret", "ls", "--format", "{{.Name}} {{.Driver}}" } }
@@ -72,7 +78,7 @@ if #found > 0 then
     log.raw("[check-credentials-at-rest] plaintext credentials at rest (names only, contents not read):")
     for _, f in ipairs(found) do log.raw("  " .. f) end
     log.raw("  why: the operator ruled (2026-10-19, 1118-fqfk) that losing credentials beats keeping them unencrypted")
-    log.raw("  remedy: keep the share and root token only in the OS keyring or tmpfs; delete these after confirming the ruling applies")
+    log.raw("  remedy: keep the share and root token only in the OS keyring or tmpfs; delete these after confirming the ruling applies; a CA key file is replaced by a tmpfs link at the next tillandsias launch")
     verdict.emit("violation:credentials-at-rest:" .. #found, 1)
 end
 verdict.emit("ok:credentials-at-rest:none", 0)

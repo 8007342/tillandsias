@@ -2558,7 +2558,7 @@ pub fn opencode_main(path: String, prompt: Option<String>) -> i32 {
         eprintln!("{{\"error\":\"stage guest binary: {err}\"}}");
         return 1;
     }
-    let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
+    let vz = std::sync::Arc::new(tillandsias_vm_layer::vz::VzRuntime::new(3, image_root()));
     vz.set_serial_to_log(true);
     if !vz.is_provisioned() {
         eprintln!(
@@ -2582,6 +2582,21 @@ pub fn opencode_main(path: String, prompt: Option<String>) -> i32 {
         use std::time::Duration;
         use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
         use tillandsias_vm_layer::vsock_exec::exec_over_stream_with_input_streaming;
+
+        // Order 1794-rf3a (b): a preview the forge publishes is reachable from
+        // this Mac's browser for as long as this run holds the VM.
+        let relay_vz = vz.clone();
+        crate::preview_relay::spawn(move || {
+            let vz = relay_vz.clone();
+            async move {
+                open_control_wire_stream(
+                    &vz,
+                    crate::preview_relay::PREVIEW_RELAY_VSOCK_PORT,
+                    Duration::from_secs(10),
+                )
+                .await
+            }
+        });
 
         eprintln!("[opencode] starting VM…");
         if let Err(e) = vz.start().await {

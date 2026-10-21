@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-macos-v56-10-18-1-publish-local-refuses-every-static-preview-with-router-not-ready-because-the-exact-hostname-ca-verified-https-probe-fails
+    event:
+      type: claimed
+      ts: "2026-10-20T19:07:17Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |-
+        Claimed 1794 (b), option 1 (the vsock hop), on work/1794-fwd2, as assigned by the coordinator (macuahuitl-fedora). The tray listens on 127.0.0.1:18443 only (VM_HOST_PREVIEW_TLS_PORT) and opens one stream per connection to a new guest vsock port, 42430 (PREVIEW_RELAY_VSOCK_PORT). The guest runs the control wire's own handshake and key, then forwards the bytes to the router's enclave address at 8443. Browser TLS is end to end with the router. The rootful router no longer publishes -p 127.0.0.1:<tls>:8443, which was dead under rootful netavark; rootless keeps it. ensure_router now keeps a rootful router only when it has the preview leaf mount and no 8443 publish, so a router started before the first publish is still replaced. A rootful guest's preview-tls-port is fixed at 18443, because the port belongs to the Mac listener. The router still joins only tillandsias-enclave. The listener runs in the GUI tray and in --opencode CLI runs. WINDOWS (WSL rootful) has the same shape and is NOT built here: it needs the same tray listener over hvsock to the same relay port. NOT DONE: the rootful 8080 publish (-p 127.0.0.1:<port>:8080) is also dead under rootful netavark; it was left as it is because it is out of this slice. Live red-first (curl from the Mac with --cacert set to the preview CA gets a 200) waits for a published release. The PR is marked do-not-land until the operator or user confirms the new host loopback listener, because it is a security boundary.

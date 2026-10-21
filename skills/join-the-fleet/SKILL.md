@@ -311,7 +311,7 @@ there.
 
   MIGRATION, NOT ENFORCEMENT (operator, 2026-09-20): a direct gated push to
   `linux-next` still lands today; it will be refused later, once
-  `scripts/check-landing-provenance.sh` measures that most landings arrive
+  `scripts/lua/check-landing-provenance.lua` measures that most landings arrive
   through the queue, and that flip is the operator's decision on a number.
   Until a host's token can open PRs (the fleet's fine-grained token lacks
   "Pull requests: write" as of 2026-09-20), push the work ref and tell the

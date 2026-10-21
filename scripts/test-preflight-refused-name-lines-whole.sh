@@ -131,8 +131,8 @@ echo hello | STUB_MODE=stdin bash "$W/wrapper.sh" > "$W/log6" 2>&1
 B="$ROOT/scripts/with-wsl2-builder.sh"
 bypass="$(grep -nE '^[[:space:]]*(exec[[:space:]]+)?wsl\.exe[[:space:]]+-d "\$BUILD_DISTRO" -u root --cd' "$B")"
 uses="$(grep -cE '^[[:space:]]*(tillandsias_wsl_exec|tillandsias_wsl_run) -d "\$BUILD_DISTRO" -u root --cd' "$B")"
-if [ -z "$bypass" ] && [ "$uses" -eq 3 ] && grep -q 'lib-wsl-capture.sh' "$B"; then
-    ok "arm 7: with-wsl2-builder.sh reaches wsl.exe for the build only through the lib (3 sites)"
+if [ -z "$bypass" ] && [ "$uses" -eq 6 ] && grep -q 'lib-wsl-capture.sh' "$B"; then
+    ok "arm 7: with-wsl2-builder.sh reaches wsl.exe for the build only through the lib (6 sites: 3 in-tree, 3 for the source mirror, 667-kfyn)"
 else
     bad "arm 7: uses=$uses bypass=[$bypass]"
 fi
