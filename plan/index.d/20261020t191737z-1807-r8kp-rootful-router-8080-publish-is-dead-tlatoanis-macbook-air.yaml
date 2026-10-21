@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: on-a-rootful-guest-the-routers-8080-loopback-publish-is-dead-because-netavark-does-not-forward-into-the-internal-enclave
+    order: 1807-r8kp
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [router, rootful-podman, enclave-network, macos, windows]
+    related: [1794-rf3a, 1800-gjqq]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      On a rootful guest (macOS vz, Windows WSL), the router's `-p 127.0.0.1:<port>:8080` publish is dead, because netavark does not forward a publish into the --internal tillandsias-enclave; nothing reaches the router's HTTP listener through it
+    context: |
+      Same cause as 1794-rf3a, measured on the v56.10.18.1 macOS guest: `-p 127.0.0.1:28081:8080` on an internal network timed out while the same image on a bridge answered. 1794 (b) (PR #594) dropped the equally dead rootful 8443 publish and left this one alone because it was out of that slice. Still to establish: which in-guest caller, if any, dials the 8080 host port on a rootful guest (select_router_host_port, the http_port carried by ensure_router), and whether those callers should dial the router's enclave address instead, as the 1794 probe does.
+    exit_criteria:
+      - 'RED FIRST: build_router_run_args for a rootful guest carries no -p for 8080 (fails today), and rootless keeps it'
+      - 'every rootful caller that relied on the 8080 host port dials the router enclave address instead, or is shown by a named measurement to need nothing'
+    verifiable_closure: |
+      unscoreable: unpinnable-until-the-guard-exists; the future pin is a unit test beside only_a_rootless_router_publishes_the_preview_port, written in the same commit as the fix.
+    provenance: |
+      Filed by macbookair-macos at the coordinator's direction, 2026-10-20, from the 1794 (b) work.
+    events:
+      - type: filed
+        ts: "2026-10-20T19:17:37Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          p3: the rootful router's 8080 loopback publish is dead (same netavark cause as 1794-rf3a).

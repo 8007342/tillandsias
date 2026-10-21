@@ -6373,8 +6373,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # human grepping for the fixture name. A binding nobody can find is the
     # defect this packet is about, so the compact form was the wrong form.
     _step "Checking test-build-sh-forge-check-only (1063-nraf; 18ms)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-build-sh-forge-check-only.sh" 2>&1; then
-        _error "scripts/test-build-sh-forge-check-only.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+    if ! _run_lua_decider "scripts/lua/test-build-sh-forge-check-only.lua" 2>&1; then
+        _error "scripts/lua/test-build-sh-forge-check-only.lua failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
         exit 1
     fi
     _step "Checking test-check-engine-cpu-dispatch (1063-nraf; 206ms)..."

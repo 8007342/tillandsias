@@ -42,7 +42,6 @@ scripts/check-host-tools.sh
 scripts/check-issue-citation-convention.sh
 scripts/check-jq-callsite-ratchet.sh
 scripts/check-landed-but-open.sh
-scripts/check-landing-provenance.sh
 scripts/check-ledger-distillation.sh
 scripts/check-litmus-expression-pinning-added.sh
 scripts/check-litmus-line-windows.sh
@@ -121,7 +120,6 @@ scripts/test-build-image-installed-version-alias.sh
 scripts/test-build-sh-ci-full-install-prep.sh
 scripts/test-build-sh-darwin-install-refusal.sh
 scripts/test-build-sh-darwin-tool-remediation.sh
-scripts/test-build-sh-forge-check-only.sh
 scripts/test-build-step-timing-attribution.sh
 scripts/test-build-version-label.sh
 scripts/test-cache-semantics.sh
