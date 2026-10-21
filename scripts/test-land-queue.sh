@@ -522,12 +522,18 @@ fi
 # produces no verdict to read, and whoever meets it goes looking for an
 # infrastructure problem instead of the assertion that fired. So the subject is
 # bounded HERE and a timeout is reported as this arm's own named failure.
+# The run gets its OWN stdin (1809-iexe). Inherited, the hungry gh read the
+# caller's: a gate started with an open, never-closing stdin (a detached
+# process) hung this arm into its timeout although the queue was correct —
+# measured on yolanda-windows 2026-10-20, red under `sleep 200 |`, green under
+# </dev/null. The list's fd is decided inside the queue, so this does not blunt
+# the arm: with the fd-3 read reverted, gh still eats the list.
 out9="$(timeout 120 env \
     TILLANDSIAS_LAND_QUEUE_GH="$GH_BIN" \
     TILLANDSIAS_LAND_QUEUE_GATE="bash $GATE_BIN" \
     TILLANDSIAS_LAND_QUEUE_REMOTE=origin \
     TILLANDSIAS_TRUNK_BRANCH=linux-next \
-    bash -c 'cd "$1" && bash "$2"' _ "$WORK_DIR" "$QUEUE" 2>&1)"
+    bash -c 'cd "$1" && bash "$2"' _ "$WORK_DIR" "$QUEUE" </dev/null 2>&1)"
 _rc9=$?
 if [ "$_rc9" -eq 124 ]; then
     bad "ARM 9: the queue BLOCKED (timeout 120s) with a stdin-consuming gate and gh — the candidate list is being read on stdin and a reader in the loop is waiting on it. This is the field defect of 2026-09-21, and its shape is a hang rather than a wrong answer."
