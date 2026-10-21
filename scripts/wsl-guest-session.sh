@@ -16,8 +16,9 @@
 # itself alive and attached, so the guest is never told anything at all.
 #
 # HOW.
-#   - The command runs in a cgroup of its own (cgroup v2, under
-#     /sys/fs/cgroup/tillandsias-session-<pid>), which every descendant
+#   - The command runs in a cgroup of its own (cgroup v2, created as
+#     tillandsias-session-<pid>, nested under the cgroup the supervisor starts in
+#     so an ancestor's memory cap still applies; 667-kfyn), which every descendant
 #     inherits whatever session or process group it moves to. Without a
 #     writable cgroup2 root it falls back to the parent-pid tree, plus the
 #     watchdog's once-a-second snapshot of it (pid and start time), because a
@@ -59,11 +60,21 @@ _gs_root=/sys/fs/cgroup
 _gs_cg=""
 # TILLANDSIAS_WSL_SESSION_NO_CGROUP=1 forces the fallback (the fixture's seam).
 if [ "${TILLANDSIAS_WSL_SESSION_NO_CGROUP:-}" != 1 ] && [ -f "$_gs_root/cgroup.controllers" ] && [ -w "$_gs_root/cgroup.procs" ]; then
+    # ORDER 667-kfyn: the session cgroup NESTS under the one this supervisor
+    # was started in, so a cap an ancestor carries (wsl2-build-memory-cap.sh's
+    # memory.high on tillandsias-build) still bounds the run. Created at the
+    # root, the session left that cap behind: measured 2026-10-17, the build's
+    # page cache grew outside it and Windows fell to 1.2 GB free. Children are
+    # charged to the nearest ancestor with the controller, and no controller is
+    # enabled here, so the parent may keep its own processes.
+    _gs_base="$_gs_root$(sed -n 's/^0:://p' /proc/$$/cgroup 2>/dev/null)"
+    _gs_base="${_gs_base%/}"
+    [ -d "$_gs_base" ] && [ -w "$_gs_base/cgroup.procs" ] || _gs_base="$_gs_root"
     # Sweep EMPTY leftovers of earlier runs; rmdir refuses a populated cgroup.
-    for _gs_d in "$_gs_root"/tillandsias-session-*; do
+    for _gs_d in "$_gs_root"/tillandsias-session-* "$_gs_base"/tillandsias-session-*; do
         [ -d "$_gs_d" ] && rmdir "$_gs_d" 2>/dev/null
     done
-    _gs_cg="$_gs_root/tillandsias-session-$$"
+    _gs_cg="$_gs_base/tillandsias-session-$$"
     mkdir "$_gs_cg" 2>/dev/null || _gs_cg=""
 fi
 _gs_wd=""
