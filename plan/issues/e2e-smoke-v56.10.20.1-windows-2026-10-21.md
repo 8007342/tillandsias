@@ -13,6 +13,6 @@
 Caveats:
 - cosign could-not-run (cosign-absent); the signature was NOT checked.
 - Deviation from the clean-room runbook (804-ckst): the Credential Manager entries vault-shamir-share-v1 and vault-root-token-v1 were NOT cleared, under the operator's standing rule never to touch real credentials.
-- The vault/proxy check ran about 3 minutes after the smoke, on a guest boot my own `wsl -d tillandsias` probe caused with NO tray running. The vault unsealed with no host delivery, so the per-container tmpfs key survives a no-tray reboot here. The vault entrypoint still logs "using unseal key from secret" although no podman secret exists: stale wording, worth a look under 1118.
+- The vault/proxy check ran about 3 minutes after the smoke, on a guest boot my own `wsl -d tillandsias` probe caused with NO tray running. The vault unsealed with no tray running; the source of its unseal key on that boot was not determined (corrected by yolanda, 2026-10-21). The vault entrypoint still logs "using unseal key from secret" although no podman secret exists: stale wording, worth a look under 1118.
 
 Evidence: target/smoke-e2e on yolanda.
