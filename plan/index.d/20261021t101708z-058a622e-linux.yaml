@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: vault-unseal-share-ephemerality-and-reset-hygiene
+    event:
+      type: list-replace
+      ts: "2026-10-21T10:17:08Z"
+      agent_id: linux-lenovinha-claude-20261021t101708z
+      host: linux
+      field: exit_criteria
+      items:
+        - "- 'RED FIRST: a scan for credential files at rest (fallback_* under the store root and the cache dir, podman file-driver secretsdata, overlay-containers/*/userdata/secrets) finds the unseal share, root token or anchor after a full launch on the pre-fix code, and finds none after the fix'"
+        - "- a restart with the share unavailable or rejected on an initialized store ends in a wipe plus the named sign-in-again tray state, never a salvage loop and never an error line"
+        - "- hosts keep the share only in the OS-encrypted keyring; guests keep it only in memory/tmpfs from the host's delivery; the vault container gets it from a tmpfs file removed after unseal"
+        - "- 'slice 2b: intermediate.key, preview-ca.key and vault.key are symlinks into $XDG_RUNTIME_DIR/tillandsias/keys (tmpfs); the CA keys'' only durable copy is an OS keyring entry sealed to the paired certificate''s SHA-256; a legacy plaintext key is deleted, never imported, and its CA re-minted; check-credentials-at-rest flags a key that is a regular file'"
+        - "- 'no test can read, write or delete the operator''s real keyring: every keyring entry is made by one constructor that uses the in-memory mock under cfg(test), and a source scan fails on any other entry constructor'"
+        - "- 'LIVE (on the published release, never from a branch): after v56.10.20.x installs on a Linux host, the first launch after the upgrade deletes the plaintext CA keys, re-mints both CAs, and re-trusts the preview CA in the host browser with no prompt and no operator action; check-credentials-at-rest then reports ok:credentials-at-rest:none; recorded per host on this row'"
+        - "- 'slice 3 (guests), ESTABLISHED not assumed: yolanda''s v56.10.20.1 smoke booted the WSL guest with `wsl -d tillandsias` and no tray running, and the vault came up unsealed (''vault is unsealed and serving'') with `podman secret ls` empty. Determine the unseal key''s source on that boot: either the guest did not really reboot (prove it with boot id or uptime), or a durable copy of the key exists in the guest (find it and remove it). A cold guest boot with no tray must leave the vault sealed'"
+        - "- 'slice 3: the vault entrypoint''s log names the real transport (a tmpfs runtime secret file), not ''using unseal key from secret'''"
+      summary: |
+        Coordinator 2026-10-21: two slice-3 (guest) scope items from yolanda's v56.10.20.1 smoke: the unseal-key source on a tray-less WSL guest boot must be established, and the vault entrypoint's stale 'from secret' log wording.
