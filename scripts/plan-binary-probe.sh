@@ -271,7 +271,11 @@ plan_binary_is_stale() {   # $1 = binary path; true when any source FILE is newe
 # 1804-sccl: build the plan binary; a failing ambient compiler wrapper (sccache)
 # must never become "no fresh tillandsias-plan". Retry once without the wrapper.
 _pbp_cargo_build() {
-    cargo build --release -p tillandsias-plan >/dev/null 2>&1 && return 0
+    local _pbp_log
+    _pbp_log="$(mktemp "${TMPDIR:-/tmp}/pbp-build.XXXXXX" 2>/dev/null || echo /dev/null)"
+    if cargo build --release -p tillandsias-plan >"$_pbp_log" 2>&1; then rm -f "$_pbp_log"; return 0; fi
+    # Name WHY the first build failed (a wrapper failure used to vanish into /dev/null).
+    [ "$_pbp_log" = /dev/null ] || { tail -n 15 "$_pbp_log" | sed 's/^/plan-binary-probe: first build: /' >&2; rm -f "$_pbp_log"; }
     [ -n "${RUSTC_WRAPPER:-}${RUSTC_WORKSPACE_WRAPPER:-}${CARGO_BUILD_RUSTC_WRAPPER:-}" ] || return 1
     echo "plan-binary-probe: build failed under a compiler wrapper; retrying without it" >&2
     env -u RUSTC_WRAPPER -u RUSTC_WORKSPACE_WRAPPER -u CARGO_BUILD_RUSTC_WRAPPER \
