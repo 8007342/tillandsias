@@ -117,6 +117,9 @@ pub(crate) fn seal(
 impl Store {
     /// A store at `home`, when `home` can be made a 0700 directory on tmpfs.
     #[cfg(unix)]
+    // Its callers are the non-test vault build and the Linux-only tests, so a
+    // test build anywhere else has none.
+    #[cfg_attr(all(test, not(target_os = "linux")), allow(dead_code))]
     fn at(
         home: PathBuf,
         read: fn(&str) -> Option<String>,
@@ -224,12 +227,14 @@ impl Store {
 }
 
 #[cfg(all(unix, feature = "vault"))]
+#[cfg_attr(all(test, not(target_os = "linux")), allow(dead_code))]
 fn is_tmpfs(path: &Path) -> bool {
     crate::vault_bootstrap::path_is_tmpfs(path)
 }
 
 /// Without the vault module there is no store, so nothing is ever tmpfs to it.
 #[cfg(all(unix, not(feature = "vault")))]
+#[cfg_attr(all(test, not(target_os = "linux")), allow(dead_code))]
 fn is_tmpfs(_path: &Path) -> bool {
     false
 }
