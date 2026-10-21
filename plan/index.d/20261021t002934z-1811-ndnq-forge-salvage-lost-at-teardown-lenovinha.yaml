@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-forge-commit-made-after-a-credential-guard-block-survives-teardown-or-the-lane-refuses-to-tear-down
+    order: 1811-ndnq
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [forge, git-mirror, runtime]
+    estimated_hours: 4
+    title: |
+      A forge agent's commit made after a credential guard block is lost at teardown: the salvage ref lives only in the forge's tmpfs clone, and the mirror refuses it without an upstream credential
+    context: |
+      Found by the v56.10.20.1 Linux smoke on lenovinha (PR 599, plan/issues/e2e-smoke-v56.10.20.1-linux-2026-10-20.md, 04-opencode.log:328-420). The guard returned blocked:upstream-no-credential. The in-forge agent then appended an event to a blocker file and committed it. Its push and its salvage push (refs/heads/salvage/forge-wt-smoke20/..., 39b7c0b7) were both refused by the mirror's pre-receive hook ("HTTPS upstream credential is unavailable"). The lane then exited 0 and tore the forge down, deleting the commit. salvage-dirty-worktree.sh said "It survives a re-clone ONLY if someone pushes it" and nobody could.
+    exit_criteria:
+      - 'a commit made in a forge whose upstream credential is blocked reaches the host: the mirror keeps salvage refs locally without relaying upstream, or the host copies them out before teardown'
+      - 'or, failing that, the lane refuses to tear down a forge that holds commits unreachable from any mirror ref, and names them'
+      - 'a fixture reproduces the blocked-credential commit and proves it survives teardown (or that the teardown is refused)'
+    verifiable_closure: |
+      unscoreable: unpinnable-until-the-guard-exists — the deliverable is litmus-forge-salvage-survives-teardown.yaml, written in the same commit as the fix (1136-n8sh); a post-reset smoke §4 must also leave the salvage ref readable on the host mirror.
+    provenance: |
+      Filed by lenovinha at the coordinator's direction, 2026-10-21, from the v56.10.20.1 smoke.
+    events:
+      - type: filed
+        ts: "2026-10-21T00:29:34Z"
+        host: lenovinha
+        summary: |-
+          p2: a forge commit after a credential guard block is lost at teardown; salvage must reach the host mirror or the lane must refuse to tear down.
