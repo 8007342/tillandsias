@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl, 2026-10-20. Code is cited by symbol, never by line.
+packets:
+  - packet_id: macuahuitls-local-build-work-and-caches-move-onto-the-nvme-raid0-by-fstab-bind-mounts-at-their-original-paths-through-one-operator-script-that-refuses-each-target-not-in-its-expected-state-and-refuses-the-podman-graphroot-while-any-container-runs
+    order: 1805-relo
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.6
+    parent: 1800-p47s
+    pickup_role: operator
+    capability_tags: [storage, build, podman, macuahuitl, operator]
+    estimated_hours: 2
+    size: S
+    related: [1802-fbld, 1803-pcap, 1804-sccl]
+    owned_files: []
+    title: |
+      macuahuitl's local build work and caches (cargo registry/git, rustup, the sccache dir, the codex agent's cargo target, gate metrics, inference models, and the rootless podman graphroot) move onto /srv/fastbuild and are bind-mounted back at their original paths by one operator script, /home/tlatoani/claudia/agent-target/fastbuild-relocate.sh, which inspects every target first and refuses any not in its expected state
+    context: |
+      Operator direction 2026-10-19: move more work to the fast drive, but
+      only the local work and the shared build and cache. After the 328 GB
+      plan-cache leak (1803-pcap) was deleted the btrfs main disk is at 82%;
+      the RAID0 has 828 GB free. The script moves, measured on 2026-10-20:
+      ~/.cargo/registry 1.2G, ~/.rustup 3.4G, the sccache dir (new),
+      ~/.cache/tillandsias/target-codex-1469-vhuk 23G, metrics 4.4G, models
+      21G, ~/.local/share/containers 19G — about 72 GB off the main disk.
+      BIND MOUNTS, NOT SYMLINKS: containers resolve real paths, the plan
+      guards compare device numbers, and the builder toolbox's /home is a
+      slave mount so a bind under /home propagates into it while /srv does
+      not exist there at all (the host root is at /run/host). Each target:
+      rsync -aAXHS --numeric-ids, a second itemising rsync that must move
+      nothing, rename the original, one fstab bind line (nofail,
+      x-systemd.requires-mounts-for=/srv/fastbuild, the same shape as the
+      target/ line 1802-fbld documents), mount, findmnt must show
+      /dev/md127, then the original is removed (--keep-originals keeps it).
+      REFUSALS: not root; /srv/fastbuild not md127/xfs/ftype=1; a target
+      that is a symlink, has a half-finished sibling, or is already named in
+      fstab but not mounted; cargo/rustc/rustup/sccache alive for the build
+      dirs; a container that mounts the dir for metrics/models; and for the
+      podman graphroot ANY running container or podman/conmon/pasta process
+      — the operator stops them when they choose. Never touched: ca,
+      vault-data, vault-audit, secrets, the checkout, the org clones.
+    exit_criteria:
+      - "sudo bash /home/tlatoani/claudia/agent-target/fastbuild-relocate.sh --dry-run on macuahuitl prints state ok or a named refusal for each of the eight targets and exits without writing; pre-fix result: FAILS (no script exists)"
+      - "after the operator runs it: findmnt -n -o SOURCE -M /home/tlatoani/.cargo/registry prints /dev/md127 and df on /home shows at least 40 GB more free than the 172 GB of 2026-10-20; pre-fix result: FAILS (btrfs, 172 GB free)"
+    unscoreable: "the move needs root and the operator's choice of when to stop the containers; closure is the operator's run recorded as an event with the freed figure"
+    verifiable_closure: "bash -n /home/tlatoani/claudia/agent-target/fastbuild-relocate.sh && sudo bash /home/tlatoani/claudia/agent-target/fastbuild-relocate.sh --dry-run (operator)"
+    next_action: >
+      OPERATOR: run `sudo bash /home/tlatoani/claudia/agent-target/fastbuild-relocate.sh --dry-run`,
+      then without --dry-run; the podman-storage phase will refuse until
+      `podman stop -a` (your choice of moment: the builder toolbox and the
+      tray's services rebuild from the enclave images). Then record the
+      freed GB here. AGENTS: after the sccache dir is on md127, re-measure
+      1804-sccl's warm number once; nothing else.
+    events:
+      - type: filed
+        ts: "2026-10-20T04:30:00Z"
+        host: macuahuitl
+        summary: |-
+          relocation script written and syntax-checked, never run by an agent; eight targets, ~72 GB expected off the main disk.

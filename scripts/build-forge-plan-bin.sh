@@ -22,6 +22,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TARGET="$(bash "$SCRIPT_DIR/build-sidecar.sh" --print-target)"
+# 1804-sccl: these are release + LTO musl cross builds whose bytes are
+# stamp-digested and staged into images. Land run 181 died here with
+# "sccache ... (exit status: 254)" on `-C linker-plugin-lto --target
+# x86_64-unknown-linux-musl`, refusing build-sidecar. A cache wrapper buys little
+# (two small crates, one target dir) and a wrapper failure is not a compile
+# failure, so the ambient wrapper is scoped out. TILLANDSIAS_SIDECAR_SCCACHE=1 opts in.
+[ "${TILLANDSIAS_SIDECAR_SCCACHE:-0}" = 1 ] || unset RUSTC_WRAPPER RUSTC_WORKSPACE_WRAPPER CARGO_BUILD_RUSTC_WRAPPER
 DEST="$ROOT/images/default/policy-bin/tillandsias-plan"
 STAMP="$ROOT/images/default/policy-bin/.stamp"
 if [ -n "${TILLANDSIAS_SIDECAR_TARGET_DIR:-}" ]; then
