@@ -120,6 +120,7 @@ compile_error!(
      ships with no Vault bootstrap (701-iu9b)."
 );
 
+mod ca_key_store;
 #[cfg(feature = "vault")]
 // @trace spec:tillandsias-vault — Phase 6 default bootstrap (was Phase 3 opt-in).
 mod vault_bootstrap;
@@ -4211,6 +4212,10 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     std::fs::create_dir_all(&certs_dir)
         .map_err(|e| format!("Failed to create CA directory: {e}"))?;
 
+    // 1118-fqfk slice 2b: the key path is a link into tmpfs. Plaintext is
+    // deleted and a dangling link is refilled from the keyring, before the
+    // usable check below decides whether to mint.
+    ca_key_store::materialize(&key, &crt, true);
     let should_refresh = ca_bundle_needs_refresh(&crt, &key);
 
     if should_refresh {
@@ -4260,7 +4265,7 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
             chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
         );
         let tmp_crt = certs_dir.join(format!("intermediate.crt.{unique}.tmp"));
-        let tmp_key = certs_dir.join(format!("intermediate.key.{unique}.tmp"));
+        let tmp_key = ca_key_store::staging_path(&key, &unique);
         let mut command = Command::new("openssl");
         command.args([
             "req",
@@ -4330,7 +4335,9 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
             })?;
         }
 
-        std::fs::rename(&tmp_key, &key)
+        let crt_bytes = std::fs::read(&tmp_crt)
+            .map_err(|e| format!("Failed to read the minted CA cert: {e}"))?;
+        ca_key_store::seal(&tmp_key, &key, &crt_bytes, true)
             .map_err(|e| format!("Failed to atomically publish CA key: {e}"))?;
         std::fs::rename(&tmp_crt, &crt)
             .map_err(|e| format!("Failed to atomically publish CA cert: {e}"))?;
@@ -4566,9 +4573,10 @@ fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
             "{}:/etc/squid/certs/intermediate.crt:ro",
             certs_dir.join("intermediate.crt").display()
         ),
-        // 755-qcxh: the CA PRIVATE key travels as a podman secret, never a
-        // host bind mount — secret delivery is what lets the host file stay
-        // 0600. The public cert above stays a bind mount on purpose.
+        // 755-qcxh, 1118-fqfk: the CA PRIVATE key travels as a runtime secret
+        // file on tmpfs (0700 dir), never a bind from the durable CA dir and
+        // never a podman secret (plaintext on disk). The public cert above
+        // stays a bind mount on purpose.
         "--volume".into(),
         crate::vault_bootstrap::runtime_secret_volume(
             PROXY_CA_KEY_SECRET,

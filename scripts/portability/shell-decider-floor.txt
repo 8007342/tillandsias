@@ -42,7 +42,6 @@ scripts/check-host-tools.sh
 scripts/check-issue-citation-convention.sh
 scripts/check-jq-callsite-ratchet.sh
 scripts/check-landed-but-open.sh
-scripts/check-landing-provenance.sh
 scripts/check-ledger-distillation.sh
 scripts/check-litmus-expression-pinning-added.sh
 scripts/check-litmus-line-windows.sh

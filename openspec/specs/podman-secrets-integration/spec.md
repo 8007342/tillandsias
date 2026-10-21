@@ -21,6 +21,19 @@ secret contains only the short-lived Vault token.
 
 @trace spec:podman-secrets-integration
 
+**Transport (1118-fqfk slice 2a, operator ruling 2026-10-19).** Podman's
+secret store is no longer the transport: its file driver, and the copy podman
+keeps under every container's `userdata/secrets`, are plaintext on durable disk.
+Each secret named below is instead a **runtime secret file**: a 0444 file in the
+0700 directory `$XDG_RUNTIME_DIR/tillandsias/secrets/<name>` on tmpfs (written
+atomically, refused when that directory is not tmpfs), bind-mounted read-only at
+the same in-container path (`/run/secrets/<target>`) with `runtime_secret_volume`
+or `runtime_secret_bind`, and overwritten and removed when its container stops.
+Wherever this spec says `podman secret create`, `--secret` or "podman secret",
+read "runtime secret file" and that bind; a credential bind from any durable
+path (the CA directory, the state or cache dirs) remains forbidden, and the
+in-container path, target names and mount options are unchanged.
+
 ## Secret Names Registry
 
 All ephemeral podman secrets use the following names. These names are hardcoded
@@ -103,11 +116,15 @@ MUST_NOT be used.
 
 #### Scenario: Proxy container receives CA secrets
 - **WHEN** the proxy container is launched
-- **THEN** the tray MUST add `--secret=tillandsias-ca-cert` and
-  `--secret=tillandsias-ca-key` to the `podman run` command
-- **AND** the container's entrypoint MUST read from `/run/secrets/tillandsias-ca-cert`
-  and `/run/secrets/tillandsias-ca-key`
-- **AND** MUST NOT receive bind-mounted files (no `-v /host/path:/container/path` for certs)
+- **THEN** the CA private key MUST reach it as the runtime secret file
+  `tillandsias-ca-key` (`$XDG_RUNTIME_DIR/tillandsias/secrets/tillandsias-ca-key`,
+  tmpfs, inside the 0700 secrets directory) bound read-only at
+  `/run/secrets/tillandsias-ca-key`, never as a podman secret
+- **AND** the container's entrypoint MUST read the key from
+  `/run/secrets/tillandsias-ca-key`
+- **AND** the key MUST NOT be bound from a durable path: no `intermediate.key`
+  bind from the CA directory, the state dir or the cache dir; only the PUBLIC
+  certificate MAY be bound from the CA directory
 
 #### Scenario: Vault container receives unseal key
 - **WHEN** the vault container is launched
@@ -131,8 +148,11 @@ MUST_NOT be used.
 #### Scenario: Configured OpenCode receives a provider-scoped AppRole token
 - **WHEN** a Gemini API key exists in Vault and an OpenCode or OpenCode Web
   forge is launched
-- **THEN** the tray MUST add
-  `--secret=tillandsias-vault-token-opencode-forge-<id>,target=vault-token,uid=1000,gid=1000,mode=0400`
+- **THEN** the tray MUST bind exactly one runtime secret file,
+  `tillandsias-vault-token-opencode-forge-<id>`, read-only at
+  `/run/secrets/vault-token` with the scoped vault-token options
+  (`GIT_VAULT_TOKEN_SECRET_OPTS`), gated on a configured provider, and no
+  second token
 - **AND** the container MUST receive `VAULT_ROLE=opencode-forge`
 - **AND** the Gemini key and derived `OPENCODE_AUTH_CONTENT` document MUST NOT
   appear in Podman argv or launcher logs
@@ -142,7 +162,8 @@ MUST_NOT be used.
 #### Scenario: Provider-free forge containers receive no credential mount
 - **WHEN** a maintenance forge or an OpenCode forge without a configured
   Gemini key is launched
-- **THEN** the tray MUST NOT add any provider `--secret` flag
+- **THEN** the tray MUST NOT add any provider token mount (runtime secret
+  file or `--secret`)
 - **AND** the forge container MUST have zero provider credential mounts
 - **AND** an accountability log entry MUST record
   `credential-free (no token mounts)`, `spec="podman-secrets-integration"`

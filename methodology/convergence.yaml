@@ -579,7 +579,7 @@ carried_obligations:
     (1384-bxhk), the stated reason that a gate accepts in place of silence
     (`unscoreable:`, 977-448j), the commit trailer read over BASE..HEAD
     (`Native-Lint:`, 1235-rfub), and the trigger that is a number rather than a
-    preference (work_ref_lane, check-landing-provenance.sh).
+    preference (work_ref_lane, check-landing-provenance.lua).
   stages:
     advisory: >
       The counter prints on every --check and the ratchet refuses growth.
@@ -671,7 +671,7 @@ carried_obligations:
   triggers:
     window: >
       W = the last 10 DUE integrations of the backlog, counted by first parent
-      on linux-next as check-landing-provenance.sh counts landings. Measured
+      on linux-next as check-landing-provenance.lua counts landings. Measured
       2026-10-02..10-10: 23 integrations, 11 due for shell-to-lua, so W is
       about one week of fleet work.
     advisory_to_gentle: >
