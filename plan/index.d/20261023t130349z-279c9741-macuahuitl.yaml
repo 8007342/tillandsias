@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: shared-target-without-flock-turns-the-shared-dir-off-instead-of-refusing-so-a-stock-macos-preflight-is-not-red
+    field: status
+    value: completed
+    ts: "2026-10-23T13:03:49Z"
+    host: macuahuitl
+
+events:
+  - packet_id: shared-target-without-flock-turns-the-shared-dir-off-instead-of-refusing-so-a-stock-macos-preflight-is-not-red
+    event:
+      type: completed
+      ts: "2026-10-23T13:03:49Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 96fcbe0a6 land(619) + scripts/test-shared-target.sh ARM 8 (pre-fix FAIL, post 9/9 Linux); darwin macbookair: preflight refused=0 at d7bd27147, fixture rc=0 with the no-flock named skip at b083c751e
+  - packet_id: shared-target-without-flock-turns-the-shared-dir-off-instead-of-refusing-so-a-stock-macos-preflight-is-not-red
+    event:
+      type: note
+      ts: "2026-10-23T13:03:49Z"
+      host: macuahuitl
+      summary: |-
+        closed: no flock turns the shared target dir off instead of refusing; Mac preflight no longer red
