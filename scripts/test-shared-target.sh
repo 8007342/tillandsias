@@ -45,6 +45,17 @@ run() { (cd "$1" && env -u RUSTC_WRAPPER CARGO_TARGET_DIR="$CANON" cargo run -q 
 [ "$(shared_target_canon "$B")" = "$CANON" ] && [ "$(shared_target_canon "$A")" = "$CANON" ] \
   && ok "arm5 worktree and main share one canonical dir" || bad "arm5 canonical dirs differ: $(shared_target_canon "$B")"
 
+# hour_ago FILE — GNU touch -d is unavailable on BSD/macOS (touch: out of range
+# or illegal time specification); compute the stamp with either date and use the
+# POSIX touch -t form (1840-2p9v, macbookair darwin run).
+hour_ago() {
+    local t
+    t="$(date -d '1 hour ago' +%Y%m%d%H%M.%S 2>/dev/null || date -v-1H +%Y%m%d%H%M.%S)"
+    touch -t "$t" "$1"
+}
+# ARMS 1-4, 6, 7 exercise the LOCK. Without flock(1) (stock macOS) sharing is
+# off by design (ARM 8), so there is no lock to test: a named skip, not a red.
+if command -v flock >/dev/null 2>&1; then
 # ARM 1
 ( TILLANDSIAS_SHARED_TARGET_WAIT=1 shared_target_enter "$A" ) >/dev/null 2>&1
 ( shared_target_enter "$A" >/dev/null 2>&1; sleep 4 ) &
@@ -55,20 +66,20 @@ else case "$out" in *REFUSED*locked*"last owner"*) ok "arm1 lock refuses and nam
 wait "$holder" 2>/dev/null
 
 # ARM 2 naive: A builds, then B's file is made OLDER than A's build
-run "$A" >/dev/null; touch -d '1 hour ago' "$B/src/main.rs"
+run "$A" >/dev/null; hour_ago "$B/src/main.rs"
 naive="$(run "$B")"
 case "$naive" in code-from-A*) ok "arm2 naive shared dir ran A's code in B (the defect reproduces)";;
   *) bad "arm2 naive run did not show A: $naive";; esac
 
 # ARM 3 guard: same sequence, through enter
-touch -d '1 hour ago' "$B/src/main.rs"
+hour_ago "$B/src/main.rs"
 ( shared_target_enter "$B" >/dev/null 2>&1; run "$B" ) > "$W/g.out" 2>&1
 guard="$(cat "$W/g.out")"
 case "$guard" in code-from-B*"$B"*) ok "arm3 guarded run built B's code and baked B's manifest dir";;
   *) bad "arm3 guarded run did not show B: $guard";; esac
 
 # ARM 4 same owner: no touch
-touch "$W/marker"; sleep 1; touch -d "1 hour ago" "$B/src/main.rs"
+touch "$W/marker"; sleep 1; hour_ago "$B/src/main.rs"
 ( shared_target_enter "$B" >/dev/null 2>&1 )
 [ ! "$B/src/main.rs" -nt "$W/marker" ] && ok "arm4 same checkout re-entered without touching" || bad "arm4 touched on an unchanged owner"
 
@@ -106,6 +117,10 @@ o7="$(TILLANDSIAS_SHARED_TARGET_WAIT=3 bash -c ". '$ROOT/scripts/shared-target.s
 [ $rc7 -eq 0 ] && ok "arm7 a lock held only by orphans of a dead builder does not block entry" \
   || bad "arm7 dead-holder lock blocked entry (rc=$rc7): $o7"
 [ -f "$W/orphan.pid" ] && kill "$(cat "$W/orphan.pid")" 2>/dev/null
+
+else
+    echo "skip:test-shared-target:arms-1-4,6,7:no-flock — sharing is off on this regime by design; ARM 8 covers it (1840-2p9v)"
+fi
 
 # ARM 8 (1840-2p9v) NO FLOCK: a PATH without flock(1) — stock macOS — turns the
 # shared dir OFF (rc 0, CARGO_TARGET_DIR untouched); it must not refuse, or every
