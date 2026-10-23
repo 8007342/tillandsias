@@ -24,6 +24,15 @@
 
 set -euo pipefail
 export TILLANDSIAS_NO_SINGLETON=1
+# ORDER 1844-92bz — cargo's CARGO_INCREMENTAL does not cross into the builder
+# toolbox (only TILLANDSIAS_* and a few others are forwarded), so a caller that
+# needs non-incremental builds says so through this name. The land queue sets
+# 0: its gates on macuahuitl (2026-10-23) left tillandsias-plan's incremental
+# cache holding codegen units from two sessions, and four candidates failed to
+# link ("undefined hidden symbol … .llvm.<hash>") on trees that link cleanly.
+if [ -n "${TILLANDSIAS_CARGO_INCREMENTAL:-}" ]; then
+    export CARGO_INCREMENTAL="$TILLANDSIAS_CARGO_INCREMENTAL"
+fi
 
 # ORDER 936-kdev. A SIGTERM used to kill this script SILENTLY: two ci-full
 # runs died rc=143 with every check green, and even naming the phase that was
