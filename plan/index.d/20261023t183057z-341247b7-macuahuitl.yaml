@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-sccache-wrapper-waits-forever-on-a-hung-sccache-server-so-a-gate-blocks-for-an-hour-with-no-output
+    field: status
+    value: completed
+    ts: "2026-10-23T18:30:57Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-sccache-wrapper-waits-forever-on-a-hung-sccache-server-so-a-gate-blocks-for-an-hour-with-no-output
+    event:
+      type: completed
+      ts: "2026-10-23T18:30:57Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 6d720201b land(633): sccache-wrapper.sh health-probes the server (timeout 10 s sccache --show-stats) and execs the bare compiler on a hung server; the real compile stays unbounded. scripts/test-sccache-long-tmpdir.sh ARM 5 (stub sccache sleeping forever): pre-fix FAIL, post-fix 5/5
+  - packet_id: the-sccache-wrapper-waits-forever-on-a-hung-sccache-server-so-a-gate-blocks-for-an-hour-with-no-output
+    event:
+      type: note
+      ts: "2026-10-23T18:30:57Z"
+      host: macuahuitl
+      summary: |-
+        closed: a hung sccache server can no longer block a gate
