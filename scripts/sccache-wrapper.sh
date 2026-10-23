@@ -14,10 +14,17 @@
 # depends on whether some earlier guard left a server up, hence intermittent.
 # Fix: start/talk to sccache with a short TMPDIR. A cache must never red a gate,
 # so if sccache itself still fails to run, fall back to the bare compiler.
+#
+# @trace order:1812-bztj — and never a TMPDIR the caller will delete. The
+# server is a long-lived SHARED daemon that inherits TMPDIR from whichever call
+# starts it; the door's pf-guard.XXXXXX dir is short enough to have been kept
+# here, so a guard started the server, the door removed the dir, and every
+# later compile on the host failed "Failed to create temp dir" until someone
+# stopped the server by hand (macuahuitl 2026-10-22, two preflight guards red).
+# /tmp outlives every caller, so the daemon always gets /tmp.
 sc="${TILLANDSIAS_SCCACHE_BIN:-$(command -v sccache 2>/dev/null)}"
 if [ -z "$sc" ]; then exec "$@"; fi
-case "${TMPDIR:-}" in ''|/tmp|/tmp/) ;; *) [ "${#TMPDIR}" -le 40 ] || TMPDIR=/tmp ;; esac
-export TMPDIR="${TMPDIR:-/tmp}"
+export TMPDIR=/tmp
 "$sc" "$@"; rc=$?
 # rc 2 / 254 with no compiler involved = sccache's own startup failure (an
 # unsupported-compiler call still runs the compiler and returns its rc).
