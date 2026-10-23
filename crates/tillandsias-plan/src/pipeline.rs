@@ -637,14 +637,19 @@ pub async fn run_grounded(
     let prose_deadline = std::time::Instant::now() + budget;
     let remaining = move || prose_deadline.saturating_duration_since(std::time::Instant::now());
 
-    // ── decompose (skipped on the immediate tier: its budget is the
-    //    deterministic floor, and a decompose round-trip would blow it
-    //    before dispatch even starts) ───────────────────────────────────────
+    // ── decompose (skipped on the immediate AND quick tiers; Fine keeps
+    //    it). Immediate: its budget is the deterministic floor, and a
+    //    decompose round-trip would blow it before dispatch even starts.
+    //    Quick: since 939-jxgz decomposition runs INSIDE the prose deadline,
+    //    and warm 7b/14b Quick queries measured 3960–4051 ms against the
+    //    3000 ms budget on macuahuitl — operator ruling 2026-10-23 (965-hz3f
+    //    criterion 1): skip it, do not re-base the budget.
+    //    @trace order:1817-wq7y ─────────────────────────────────────────────
     let original_only = vec![AdversarialPrompt {
         prompt: query.to_string(),
         kind: "original".to_string(),
     }];
-    let all_prompts = if tier == LatencyTier::Immediate {
+    let all_prompts = if matches!(tier, LatencyTier::Immediate | LatencyTier::Quick) {
         original_only.clone()
     } else {
         let mut inference = cfg.inference.clone();
@@ -1481,6 +1486,108 @@ mod tests {
         // Degradation stays the cited floor, never a raw failure.
         assert!(!env.answer().is_empty());
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// A prose+embedding stub: answers POST /embeddings with `vector`, 404s
+    /// every /chat/completions, and counts the chat requests whose body is
+    /// the DECOMPOSITION prompt (identified by its fixed preamble). Reads the
+    /// whole request (headers + Content-Length body) so the marker cannot be
+    /// split across reads.
+    fn decompose_counting_stub(
+        vector: &'static str,
+    ) -> (String, Arc<std::sync::atomic::AtomicUsize>) {
+        use std::io::{Read, Write};
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().unwrap().port();
+        let count = Arc::new(AtomicUsize::new(0));
+        let count2 = count.clone();
+        std::thread::spawn(move || {
+            let body = format!("{{\"data\":[{{\"embedding\":{vector}}}]}}");
+            for stream in listener.incoming() {
+                let Ok(mut s) = stream else { continue };
+                let mut req = Vec::new();
+                let mut buf = [0u8; 8192];
+                loop {
+                    let n = s.read(&mut buf).unwrap_or(0);
+                    if n == 0 {
+                        break;
+                    }
+                    req.extend_from_slice(&buf[..n]);
+                    let text = String::from_utf8_lossy(&req);
+                    if let Some(h) = text.find("\r\n\r\n") {
+                        let len = text[..h]
+                            .lines()
+                            .find_map(|l| {
+                                let (k, v) = l.split_once(':')?;
+                                k.eq_ignore_ascii_case("content-length")
+                                    .then(|| v.trim().parse::<usize>().ok())?
+                            })
+                            .unwrap_or(0);
+                        if req.len() >= h + 4 + len {
+                            break;
+                        }
+                    }
+                }
+                let text = String::from_utf8_lossy(&req);
+                let resp = if text.contains("/embeddings") {
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    )
+                } else {
+                    if text.contains("query decomposition engine") {
+                        count2.fetch_add(1, Ordering::SeqCst);
+                    }
+                    "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                        .to_string()
+                };
+                let _ = s.write_all(resp.as_bytes());
+            }
+        });
+        (format!("http://127.0.0.1:{port}/v1"), count)
+    }
+
+    /// ORDER 1817-wq7y (operator ruling 2026-10-23 on 965-hz3f criterion 1).
+    /// Quick skips the decomposition round-trip exactly as Immediate does —
+    /// warm 7b/14b Quick queries measured 3960–4051 ms against the 3000 ms
+    /// budget with decomposition inside the deadline (939-jxgz). Fine keeps
+    /// it. Each arm first asserts the Lua classifier puts its query in the
+    /// tier under test, so a classifier change cannot make the arm vacuous.
+    /// Pre-fix: the Quick arm FAILS (one decompose request).
+    #[test]
+    fn quick_tier_skips_decompose_fine_keeps_it() {
+        let quick_q = "how does the k spec define its retrieval floors?";
+        let fine_q = "compare the k spec's retrieval floors with its refusal grammar and explain how the two interact across tiers";
+        for (tag, query, want_tier, want_decomposes) in [
+            ("quick", quick_q, "quick", 0usize),
+            ("fine", fine_q, "fine", 1),
+        ] {
+            let root = fixture_root(&format!("decomp-{tag}"));
+            let entry = entry_with(
+                &root.join("entry"),
+                vec![chunk(0, "k", "spec", "openspec/specs/x/spec.md")],
+                None,
+            );
+            let (base, count) = decompose_counting_stub("[0.999,0.01]");
+            let cfg = cfg_with(Some(base.clone()), base, root.clone());
+            let runtime = shared_runtime(&root);
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let tier = rt.block_on(async { runtime.lock().await.classify_tier(query).unwrap() });
+            assert_eq!(
+                tier, want_tier,
+                "fixture query no longer classifies {want_tier}"
+            );
+            let env = rt.block_on(run_grounded(&runtime, &entry, &cfg, query));
+            assert!(!env.answer().is_empty());
+            assert_eq!(
+                count.load(std::sync::atomic::Ordering::SeqCst),
+                want_decomposes,
+                "{tag} tier: decomposition request count"
+            );
+            let _ = std::fs::remove_dir_all(&root);
+        }
     }
 
     #[test]
