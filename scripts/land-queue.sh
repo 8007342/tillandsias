@@ -539,7 +539,7 @@ The queue continued with the next candidate.$(evict_marker "$num" "$head_sha" "$
     # `Native-Lint-Unattested: <reason>` trailer on the work ref, and the debt
     # is repeated on the land commit so a first-parent log tallies it.
     if [ -f "$_SELF_DIR/check-native-lint-attested.sh" ]; then
-        _nlout="$(mktemp)"; _nlerr="$(mktemp)"
+        _nlout="$(mktemp "${TMPDIR:-/tmp}/land-queue-native-lint.XXXXXX")"; _nlerr="$(mktemp "${TMPDIR:-/tmp}/land-queue-native-lint.XXXXXX")"
         env -u TILLANDSIAS_NATIVE_LINT_UNATTESTED -u TILLANDSIAS_NATIVE_LINT_BASE \
             bash "$_SELF_DIR/check-native-lint-attested.sh" --base "$base_sha" \
             < /dev/null > "$_nlout" 2> "$_nlerr"
