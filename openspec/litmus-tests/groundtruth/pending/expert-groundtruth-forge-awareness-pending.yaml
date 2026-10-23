@@ -20,6 +20,14 @@
 # (nix-flake-caching, container-health-checks) for the image-build and dockerd
 # questions. Before 1816 (no sheet at all) the first case is red too.
 #
+# ORDER 1822-dmwz moved the docker case (forge-run-container-here-no-docker)
+# into the gated file: the forge-constraints title card now folds into its
+# Summary chunk and cheatsheet.ask fuses its heuristic with BM25 by RRF, so the
+# rule text is cited. The two left here are NOT lexical misses: the image-build
+# question is a strong legitimate match for cheatsheets/build/ (only the forge
+# context says otherwise — the context-pack fix), and "dockerd" shares no word
+# with "nested container daemon" (a semantic match, not a lexical one).
+#
 # The negatives are recommendation-only phrasings: the sheet itself quotes
 # `docker run` in order to forbid it, so excluding the bare command would red
 # the CORRECT answer (a guard cannot tell mention from use).
@@ -32,33 +40,6 @@ description: >
   nested container. Known red until the retrieval/pipeline fixes land.
 
 cases:
-
-  - id: forge-run-container-here-no-docker
-    engine: cheatsheet.ask
-    query: "how do I run a container or docker here in the forge?"
-    why: >
-      The field failure. The answer must be the forge-constraints rule (no
-      docker, no nested container daemon) cited to the right lines, and must
-      not carry a recommending phrasing.
-    expect:
-      confidence: exact
-      citation_kind: cheatsheet
-      min_citations: 1
-      max_citations: 1
-      citations_include:
-        - path: cheatsheets/runtime/forge-constraints.md
-          kind: cheatsheet
-          span_contains:
-            - "NO docker"
-            - "nested container daemon"
-      answer_contains:
-        - "NO docker"
-      answer_excludes:
-        - "docker pull"
-        - "docker-compose up"
-        - "apt install docker"
-        - "dnf install docker"
-        - "systemctl start docker"
 
   - id: forge-build-image-in-forge-no-nested-podman
     engine: cheatsheet.ask
