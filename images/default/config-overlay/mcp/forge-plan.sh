@@ -962,6 +962,24 @@ spec_answer_envelope() {
         unsupported_envelope "the spec expert needs the tillandsias-plan binary (spec-retrieve/spec-envelope) — experts state: $(experts_state_line)"
         return 0
     fi
+    # ORDER 1823-4kwh. ONE expert client: a binary that reports `ask` answers
+    # through the same run_grounded as expert-serve, so the context pack, the
+    # num_ctx budget on /api/chat, the margin + lexical refusal and the model
+    # choice are decided once. The shell chain below is the fallback for a
+    # staged binary that predates `ask`; it is not where fixes go.
+    if [ -z "$(capability_gap "ask")" ]; then
+        # The spec expert's own model override wins; unset leaves the
+        # pipeline's TILLANDSIAS_INFERENCE_MODEL default in charge.
+        if [ -n "${TILLANDSIAS_SPEC_EXPERT_MODEL:-}" ]; then
+            TILLANDSIAS_INFERENCE_MODEL="$TILLANDSIAS_SPEC_EXPERT_MODEL" \
+                "$PLAN_BIN" ask --root "${TILLANDSIAS_REPO_ROOT:-.}" -- "$question" 2>/dev/null \
+                || unsupported_envelope "tillandsias-plan ask exited non-zero — experts state: $(experts_state_line)"
+        else
+            "$PLAN_BIN" ask --root "${TILLANDSIAS_REPO_ROOT:-.}" -- "$question" 2>/dev/null \
+                || unsupported_envelope "tillandsias-plan ask exited non-zero — experts state: $(experts_state_line)"
+        fi
+        return 0
+    fi
     # ORDER 569. spec-retrieve/spec-envelope arrived with order 547; anything
     # older cannot serve them. Refuse before spending an embedding round-trip on
     # a binary that will answer with usage.
@@ -1059,7 +1077,10 @@ spec_answer_envelope() {
     if [ -z "$(capability_gap "spec-floor")" ]; then
         local floored floor_verdict
         floored="$work/floored.json"
-        if "$PLAN_BIN" spec-floor --chunks-json "$top" > "$floored" 2>/dev/null && [ -s "$floored" ]; then
+        # --query arms the lexical-overlap rule (1820-m2kq); a binary from
+        # before that flag gets the score-only floor rather than none.
+        if { "$PLAN_BIN" spec-floor --chunks-json "$top" --query "$question" > "$floored" 2>/dev/null \
+             || "$PLAN_BIN" spec-floor --chunks-json "$top" > "$floored" 2>/dev/null; } && [ -s "$floored" ]; then
             floor_verdict="$(jq -r 'if type == "object" then .refused // empty else "kept" end' "$floored" 2>/dev/null)"
             if [ "$floor_verdict" = "out-of-coverage" ]; then
                 local floor_reason

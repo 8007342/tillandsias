@@ -119,6 +119,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "validator-surface-hash",
     "parked-blocks",
     "pipeline",
+    "ask",
     "predicate",
     "query",
     "ready",
@@ -391,6 +392,13 @@ const USAGE: &str = concat!(
     "                                     answer envelope: cited, or the typed unsupported:\n",
     "                                     refusal — never raw model prose. Same function as\n",
     "                                     expert-serve (one pipeline, two front-ends).\n",
+    "           ask [--root D] [--domain D] [--] <query...>\n",
+    "                                     ORDER 1823-4kwh. THE expert client entry for shell\n",
+    "                                     front-ends (forge-plan.sh spec_answer, tellme): the\n",
+    "                                     same run_grounded as `pipeline` and expert-serve, so\n",
+    "                                     pack, budget, refusal and model choice live in one\n",
+    "                                     place. --root names the checkout citations are\n",
+    "                                     validated against (default: the --index checkout).\n",
     "           expert-context-pack [--root D] [--out F | --print]\n",
     "                                     ORDER 1815-tei4. Write the deterministic expert\n",
     "                                     context pack (<= 4800 bytes; default\n",
@@ -8906,7 +8914,7 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 }
             }
         }
-        "pipeline" => {
+        "pipeline" | "ask" => {
             // ORDER 920-pxg6. The grounded pipeline's CLI front-end — the
             // SAME `run_grounded` expert-serve calls (one pipeline, two
             // front-ends). Emits the ratified envelope: cited, or the typed
@@ -8916,12 +8924,22 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
             // as the frame of an index it never read — is deleted; freshness
             // now comes from the resolved index entry itself (801-g9nn).
             // --domain <name> filters retrieval to one corpus domain.
+            // ORDER 1823-4kwh: `ask` is the same arm under the name the shell
+            // front-ends call, plus --root (their checkout) and `--` (a
+            // question that starts with a dash stays a question).
             let mut domain: Option<String> = None;
+            let mut root_override: Option<PathBuf> = None;
             let mut query_parts = Vec::new();
             let mut i = 1;
             while i < args.len() {
-                if args[i] == "--domain" && i + 1 < args.len() {
+                if args[i] == "--" {
+                    query_parts.extend(args[i + 1..].iter().cloned());
+                    break;
+                } else if args[i] == "--domain" && i + 1 < args.len() {
                     domain = Some(args[i + 1].clone());
+                    i += 2;
+                } else if args[i] == "--root" && i + 1 < args.len() {
+                    root_override = Some(PathBuf::from(&args[i + 1]));
                     i += 2;
                 } else {
                     query_parts.push(args[i].clone());
@@ -8932,7 +8950,10 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
             if query.trim().is_empty() {
                 usage();
             }
-            let root = root_for(&index);
+            let root = match root_override {
+                Some(r) => r.canonicalize().unwrap_or(r),
+                None => root_for(&index),
+            };
             // EXIT 0 EVEN WHEN UNSUPPORTED, like `answer`: the MCP wrapper
             // runs under `set -e` and the envelope IS the signal. Only the
             // runtime substrate failing to come up is a hard error.
