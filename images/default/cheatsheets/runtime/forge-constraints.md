@@ -17,7 +17,7 @@ committed_for_project: false
 
 # Forge hard constraints (can I run docker / a container here?)
 
-@trace spec:forge-container, spec:knowledge-source-of-truth
+@trace spec:forge-environment-discoverability, spec:knowledge-source-of-truth
 
 **Use when**: you are an agent inside a Tillandsias forge and wonder whether you can run docker, podman, a nested container or daemon, install packages, reach the internet, call a local model, or push code.
 
