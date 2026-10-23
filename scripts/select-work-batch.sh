@@ -42,7 +42,7 @@
 #
 # GRAMMAR — a batch header, then one line per packet, then a triage line:
 #   ^batch: epic=<id|UNGROUPED> role=<r> release=<v> size=<n> budget=<n>
-#            score=<f> seed=<s> pick=<i>/<k>[ urgent=<packet_id>][ harness=<packet_id>]$
+#            score=<f> seed=<s> pick=<i>/<k>[ urgent=<packet_id>][ harness=<packet_id>][ tier=<t> tier_fallback=<n>[ tier_demoted=local]]$
 #          `urgent=` appears ONLY when the order-645 override displaced a slot
 #          with a strictly-higher-priority packet from outside the chosen epic.
 #          `harness=` appears ONLY when the order-555 forge harness-affinity
@@ -165,6 +165,10 @@ RELEASE=""
 SEED=""
 SEED_EXPLICIT=0
 TOPK="3"
+# ORDER 1832-5a9z. The caller's STATED model tier (methodology
+# cycle_batch_triage.model_tier_routing); nothing is inferred from a model name.
+MODEL_TIER="${TILLANDSIAS_MODEL_TIER:-}"
+TIER_ANY=0
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -176,6 +180,9 @@ while [ "$#" -gt 0 ]; do
         --seed=*)  SEED="${1#--seed=}"; SEED_EXPLICIT=1; shift ;;
         --topk)    TOPK="${2:-}"; shift 2 ;;
         --topk=*)  TOPK="${1#--topk=}"; shift ;;
+        --tier)    MODEL_TIER="${2:-}"; shift 2 ;;
+        --tier=*)  MODEL_TIER="${1#--tier=}"; shift ;;
+        --tier-any) TIER_ANY=1; shift ;;
         *) echo "refused:bad-role:unknown argument $1"; exit 1 ;;
     esac
 done
@@ -527,6 +534,72 @@ fi
 if [ -z "$rows" ]; then
     echo "refused:no-eligible-work:every ready packet claimable by role ${ROLE} is tier-reserved for the low-end floor (tier_filtered=${TIER_FILTERED})"
     exit 1
+fi
+
+# ── THE MODEL-TIER GATE (1437-vdz5 shape; order 1832-5a9z adds the local floor) ──
+# A caller that STATES its model tier (--tier T / TILLANDSIAS_MODEL_TIER) takes
+# rows whose implementer_tier is T, then cheaper tiers, AT-tier first, so a
+# bigger model drains smaller work only when its own tier is empty. Ladder,
+# cheapest first: local < haiku < sonnet < opus; an UNTAGGED row is opus (the
+# 2026-09-27 ruling). `local` is the floor: a local caller's pool is exactly
+# the local rows, but only while TILLANDSIAS_INFERENCE_ENDPOINT answers; when
+# it does not, the caller is demoted to haiku (tier_demoted=local), whose pool
+# is haiku rows then local rows. An empty pool REFUSES
+# `refused:no-tier-work:model-tier=<t>`, never the general queue.
+# --tier-any (the orchestrator's view) and no stated tier leave the pool alone.
+TIER_NOTE=""
+if [ "$TIER_ANY" -eq 0 ] && [ -n "$MODEL_TIER" ]; then
+    case "$MODEL_TIER" in
+        local|haiku|sonnet|opus) ;;
+        # affordance-ok: the refusal text names the cure inline (want local|haiku|sonnet|opus).
+        *) echo "refused:bad-role:unknown model tier ${MODEL_TIER} (want local|haiku|sonnet|opus)"; exit 1 ;;
+    esac
+    EFFECTIVE_TIER="$MODEL_TIER"
+    TIER_DEMOTED=""
+    if [ "$MODEL_TIER" = "local" ]; then
+        _ep="${TILLANDSIAS_INFERENCE_ENDPOINT:-}"
+        if [ -z "$_ep" ] || ! curl -fsS -m 3 "$_ep/api/version" >/dev/null 2>&1; then
+            EFFECTIVE_TIER="haiku"
+            TIER_DEMOTED="local"
+        fi
+    fi
+    case "$EFFECTIVE_TIER" in
+        local)  _ladder="local" ;;
+        haiku)  _ladder="haiku local" ;;
+        sonnet) _ladder="sonnet haiku local" ;;
+        opus)   _ladder="opus sonnet haiku local" ;;
+    esac
+    _fallback=0
+    _picked=""
+    for _t in $_ladder; do
+        _terr="$(mktemp "${TMPDIR:-/tmp}/select-tier.XXXXXX")"
+        _trows="$("$PLAN" select-rows --status ready --claimable-by "$ROLE" \
+            "${REL_ARG[@]+"${REL_ARG[@]}"}" --implementer-tier "$_t" --limit 400 2>"$_terr")"
+        _trc=$?
+        if [ "$_trc" -ne 0 ]; then
+            _reason="$(tr -d '\r' < "$_terr" | grep -m1 . || true)"
+            rm -f "$_terr"
+            # affordance-ok: same query-failed shape as the main query; the stderr reason is quoted.
+            echo "refused:query-failed:${PLAN} select-rows --implementer-tier ${_t} exited ${_trc}: ${_reason:-<no stderr>}"
+            exit 1
+        fi
+        rm -f "$_terr"
+        _kept="$(printf '%s\n' "$rows" | TIER_POOL_ROWS="$_trows" awk -F'\t' '
+            BEGIN { n = split(ENVIRON["TIER_POOL_ROWS"], a, "\n"); for (i = 1; i <= n; i++) { split(a[i], f, "\t"); if (f[3] != "") ok[f[3]] = 1 } }
+            NF >= 4 && ($3 in ok)')"
+        if [ -n "$_kept" ]; then
+            rows="$_kept"
+            _picked="$_t"
+            break
+        fi
+        _fallback=$((_fallback + 1))
+    done
+    if [ -z "$_picked" ]; then
+        # affordance-ok: the refusal text names why (empty tier pool); the cure is filing or freeing tier work, or a higher --tier.
+        echo "refused:no-tier-work:model-tier=${MODEL_TIER} — no ready packet at or below that tier is claimable by role ${ROLE}; never the general queue"
+        exit 1
+    fi
+    TIER_NOTE=" tier=${EFFECTIVE_TIER} tier_fallback=${_fallback}${TIER_DEMOTED:+ tier_demoted=${TIER_DEMOTED}}"
 fi
 
 # HOST TOOL CAPABILITIES (failed-forge handoff 2026-08-15, P3; sibling of the
@@ -1186,11 +1259,12 @@ fi
 
 size="$(printf '%s\n' "$batch" | grep -c .)"
 
-printf 'batch: epic=%s role=%s release=%s size=%s budget=%s score=%s seed=%s pick=%s/%s%s%s%s\n' \
+printf 'batch: epic=%s role=%s release=%s size=%s budget=%s score=%s seed=%s pick=%s/%s%s%s%s%s\n' \
     "$chosen" "$ROLE" "$release" "$size" "$BUDGET" "$chosen_score" "$SEED" "$pick" "$k" \
     "$( if [ "$HOST_TIER" = "low-end" ]; then printf ' route=tier:low-end'; elif [ "$ROUTE" != "seed" ]; then printf ' route=%s' "$ROUTE"; fi )" \
     "$( [ -n "${URGENT_NOTE:-}" ] && printf ' urgent=%s' "$URGENT_NOTE" )" \
-    "$( [ -n "${HARNESS_NOTE:-}" ] && printf ' harness=%s' "$HARNESS_NOTE" )"
+    "$( [ -n "${HARNESS_NOTE:-}" ] && printf ' harness=%s' "$HARNESS_NOTE" )" \
+    "${TIER_NOTE:-}"
 printf '%s\n' "$batch" | while IFS=$'\t' read -r rank epic order pid prio rel; do
     [ -n "$pid" ] || continue
     printf 'packet\t%s\t%s\t%s\n' "$order" "$pid" "$prio"
