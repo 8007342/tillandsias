@@ -180,6 +180,19 @@ pub struct Case {
     /// one behaviour it could not exercise.
     #[serde(default)]
     pub answer: Option<String>,
+    /// ORDER 1821-xcwc. Repo-relative directory of a FOREIGN PROJECT fixture
+    /// the case is asked about, instead of this checkout. Honoured by
+    /// `cheatsheet.ask` only; any other engine given one is an error, never a
+    /// silent grade against the wrong corpus.
+    ///
+    /// WITHOUT IT THE SUITE CANNOT EXPRESS "answer as if this were someone
+    /// else's project": every engine reads the Tillandsias checkout, so a
+    /// case about a non-Tillandsias project could only ever be answered from
+    /// Tillandsias rules (linux-next, the plan ledger, `@trace`). Citation
+    /// paths come back prefixed with this directory so they still resolve
+    /// against the checkout root the grader verifies from.
+    #[serde(default)]
+    pub project: Option<String>,
     pub expect: Expect,
 }
 
@@ -695,6 +708,8 @@ pub struct Harness {
     ledger: Option<Ledger>,
     corpus: Option<methodology::Corpus>,
     cheatsheets: Option<Vec<crate::spec::Chunk>>,
+    /// ORDER 1821-xcwc: per-`project` cheatsheet chunks, paths pre-prefixed.
+    project_cheatsheets: BTreeMap<String, Vec<crate::spec::Chunk>>,
     spec_vectors: Option<Vec<Vec<f32>>>,
     spec_chunks: Option<Vec<crate::spec::Chunk>>,
     /// ORDER 1229-2862 — the FRAME the loaded entry serves answers from.
@@ -843,6 +858,7 @@ impl Harness {
             ledger: None,
             corpus: None,
             cheatsheets: None,
+            project_cheatsheets: BTreeMap::new(),
             spec_vectors: None,
             spec_chunks: None,
             spec_freshness: None,
@@ -937,6 +953,38 @@ impl Harness {
     /// never a graded result, because a harness that reports "the corpus is
     /// missing" as a failed expectation teaches agents to ignore red.
     pub fn run(&mut self, case: &Case) -> Result<Envelope, String> {
+        if let Some(project) = case.project.as_deref() {
+            if case.engine != "cheatsheet.ask" {
+                return Err(format!(
+                    "case {:?} sets project {project:?} but engine {:?} cannot be scoped to a \
+                     foreign project (only cheatsheet.ask can) — refusing to grade it against \
+                     this checkout's corpus",
+                    case.id, case.engine
+                ));
+            }
+            if !self.project_cheatsheets.contains_key(project) {
+                let dir = self.root.join(project);
+                if !dir.is_dir() {
+                    return Err(format!(
+                        "case {:?}: project fixture {} is not a directory",
+                        case.id,
+                        dir.display()
+                    ));
+                }
+                let mut chunks = crate::spec::chunk_corpus(&dir);
+                for c in &mut chunks {
+                    c.path = format!("{}/{}", project.trim_end_matches('/'), c.path);
+                }
+                self.project_cheatsheets.insert(project.to_string(), chunks);
+            }
+            let root = self.root.clone();
+            let chunks = &self.project_cheatsheets[project];
+            return Ok(crate::spec::answer_cheatsheet_query(
+                &root,
+                chunks,
+                &case.query,
+            ));
+        }
         match case.engine.as_str() {
             "plan.answer" => {
                 let rel = self.index_rel.clone();
@@ -1316,6 +1364,67 @@ expect:
             !failures.is_empty(),
             "a fabricated cheatsheet span was graded GREEN — the harness cannot fail"
         );
+    }
+
+    /// ORDER 1821-xcwc. A `project:` case is answered from the FOREIGN fixture
+    /// only: its citation is inside the fixture and the answer carries none of
+    /// this checkout's rules. Pre-fix the key does not exist, so the case does
+    /// not even PARSE (deny_unknown_fields) — and were it ignored, the same
+    /// question would be answered from this checkout's own cheatsheets.
+    #[test]
+    fn a_project_scoped_case_is_answered_from_the_foreign_fixture_only() {
+        let fixture = "openspec/litmus-tests/groundtruth/fixtures/foreign-project";
+        let case: Case = serde_yaml::from_str(&format!(
+            r#"
+id: foreign-scope-probe
+engine: cheatsheet.ask
+project: {fixture}
+query: "how should I push my change?"
+expect:
+  confidence: exact
+  citation_kind: cheatsheet
+  citations_include:
+    - path: {fixture}/docs/cheatsheets/pushing-changes.md
+      span_contains: ["git push origin main"]
+  answer_excludes: ["linux-next", "work/", "@trace"]
+"#
+        ))
+        .expect("a project-scoped case parses");
+        let mut h = harness();
+        let env = h.run(&case).expect("engine registered");
+        let failures = grade_envelope(&env, &case.expect, &repo_root());
+        assert!(failures.is_empty(), "{failures:?}");
+
+        // The control: the SAME question and expectations, unscoped, is
+        // answered from this checkout and must NOT satisfy the foreign pin —
+        // otherwise the scoping proves nothing.
+        let unscoped = Case {
+            project: None,
+            ..case
+        };
+        let env = h.run(&unscoped).expect("engine registered");
+        assert!(
+            !grade_envelope(&env, &unscoped.expect, &repo_root()).is_empty(),
+            "an unscoped run satisfied the foreign-project pin: the fixture scoping is not load-bearing"
+        );
+    }
+
+    /// ORDER 1821-xcwc. Scoping an engine that cannot be scoped is an error,
+    /// never a silent grade against this checkout.
+    #[test]
+    fn project_on_an_unscopable_engine_is_a_harness_error() {
+        let case: Case = serde_yaml::from_str(
+            r#"
+id: bad-scope
+engine: plan.answer
+project: openspec/litmus-tests/groundtruth/fixtures/foreign-project
+query: "what's next?"
+expect: {confidence: unsupported}
+"#,
+        )
+        .expect("parses");
+        let err = harness().run(&case).expect_err("must refuse");
+        assert!(err.contains("cannot be scoped"), "{err}");
     }
 
     /// BOTH corpora are actually exercised. A query set that quietly lost all
