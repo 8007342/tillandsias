@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: the-relay-gate-landed-a-tray-tree-that-does-not-compile-on-macos-because-a-linux-gate-lints-stubs
+    event:
+      type: progress
+      ts: "2026-10-23T04:56:02Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |-
+        Native darwin lint of trunk 5b8ee4d0b, which carries land(594)'s crates/tillandsias-macos-tray/src/preview_relay.rs: scripts/attest-native-lint.sh reports ok:attest-native-lint:tillandsias-macos-tray=fad73cf25385ae6973a2eb78e76832b9390f8acc (clippy --all-targets -D warnings, Apple M5). The attestation commit is PR #618 (work/1235-nl22). The same preflight refused two darwin guards that trunk introduced, not this tree: test-gate-step-host-state-retry and test-script-run-verb ARM 5, both on "shared-target: REFUSED, no flock on PATH". flock is not part of stock macOS, and 7a48541e8 (1807-shtg) made it mandatory.
+  - packet_id: bench-local-coding-models-qwen3-coder-30b-a3b-and-devstral-small-2-with-a-tool-call-round-trip-arm-and-a-20-packet-replay-set
+    event:
+      type: results
+      ts: "2026-10-23T04:56:02Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |-
+        Mac half NOT RUN, because the model does not fit. Regime: tlatoanis-macbook-air, Apple M5, 16 GiB unified memory, ollama 0.40.8. Devstral Small 2 (24B dense) at Q4_K_M is about 14 GB of weights before KV cache, while macOS lets Metal wire about 2/3 of RAM (about 10.7 GB) by default. The model would spill to CPU and swap, and the Tillandsias VM takes 8 GiB besides, so any tok/s figure would measure swap, not the model. The model was not pulled and no trials were run. A 16 GiB Mac is not a Devstral host; a 32 GiB-or-larger Mac or the Linux half (PR #613) is.
