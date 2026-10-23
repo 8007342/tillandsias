@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-capability-manifest-guard-fixture-cold-builds-tillandsias-plan-twice-with-release-lto-in-a-private-target-to-check-a-compile-time-warning-that-the-dev-profile-reproduces-101-107-s-measured
+    field: implementer_tier
+    value: local
+    ts: "2026-10-23T12:24:02Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-capability-manifest-guard-fixture-cold-builds-tillandsias-plan-twice-with-release-lto-in-a-private-target-to-check-a-compile-time-warning-that-the-dev-profile-reproduces-101-107-s-measured
+    event:
+      type: note
+      ts: "2026-10-23T12:24:02Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        1836-pfh4: qualifies for the local floor (1832-5a9z): size S, implementer_tier haiku, owned_files declared, verifiable_closure names a script/cargo test/litmus, no vault/credentials/security/release tag
