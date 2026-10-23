@@ -1384,6 +1384,8 @@ struct QueryOptions {
     claimable_by: Option<String>,
     release: Option<String>,
     tags: Vec<String>,
+    // ORDER 1832-5a9z: select-rows only — exact implementer_tier (untagged = opus).
+    implementer_tier: Option<String>,
     limit: usize,
     json: bool,
 }
@@ -1396,6 +1398,7 @@ impl Default for QueryOptions {
             claimable_by: None,
             release: None,
             tags: Vec::new(),
+            implementer_tier: None,
             limit: 20,
             json: false,
         }
@@ -1460,6 +1463,16 @@ fn parse_query_options(args: &[String]) -> Result<QueryOptions, String> {
             }
             "--tag" => {
                 options.tags.push(value_after(i)?);
+                i += 2;
+            }
+            "--implementer-tier" => {
+                let v = value_after(i)?;
+                if !["local", "haiku", "sonnet", "opus"].contains(&v.as_str()) {
+                    return Err(format!(
+                        "--implementer-tier: unknown tier {v:?} (want local|haiku|sonnet|opus)"
+                    ));
+                }
+                options.implementer_tier = Some(v);
                 i += 2;
             }
             "--limit" => {
@@ -8358,10 +8371,26 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 options.claimable_by.as_deref(),
                 options.release.as_deref(),
                 &options.tags,
-                options.limit,
+                if options.implementer_tier.is_some() {
+                    usize::MAX
+                } else {
+                    options.limit
+                },
             );
 
+            let mut emitted_rows = 0usize;
             for p in matched {
+                // ORDER 1832-5a9z: exact-tier pool (untagged = opus, the 1437 ruling).
+                if let Some(want) = options.implementer_tier.as_deref() {
+                    let have = tillandsias_plan::tier_field(p, "implementer_tier")
+                        .unwrap_or_else(|| "opus".to_string());
+                    if have != want {
+                        continue;
+                    }
+                    if emitted_rows >= options.limit {
+                        break;
+                    }
+                }
                 let id = ledger.id_of(p).to_string();
                 let deps: Vec<String> = p
                     .get("depends_on")
@@ -8419,6 +8448,7 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 emit(&format!(
                     "{rank}\t{epic}\t{order}\t{id}\t{display}\t{release}"
                 ));
+                emitted_rows += 1;
             }
         }
         "query" => {
