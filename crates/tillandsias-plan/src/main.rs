@@ -91,6 +91,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "decompose",
     "discipline",
     "policy",
+    "expert-context-pack",
     "expert-serve",
     "expire-claims",
     "plan-events",
@@ -389,6 +390,13 @@ const USAGE: &str = concat!(
     "                                     answer envelope: cited, or the typed unsupported:\n",
     "                                     refusal — never raw model prose. Same function as\n",
     "                                     expert-serve (one pipeline, two front-ends).\n",
+    "           expert-context-pack [--root D] [--out F | --print]\n",
+    "                                     ORDER 1815-tei4. Write the deterministic expert\n",
+    "                                     context pack (<= 4800 bytes; default\n",
+    "                                     <root>/.forge-expert-context.md): forge constraints,\n",
+    "                                     the project's own identity, discipline and\n",
+    "                                     CLAUDE.md/AGENTS.md excerpts. Leads every synthesis\n",
+    "                                     prompt byte-identically (prefix-cache reuse).\n",
     "           expert-serve [--port N] [--root D]\n",
     "                                     ORDER 920-pxg6. OpenAI-compatible loopback front-end\n",
     "                                     over the SAME grounded pipeline: 127.0.0.1:11436 by\n",
@@ -5670,6 +5678,60 @@ fn main() {
     // corpus must still run in a checkout whose plan ledger is broken.
     if args[0] == "grade" {
         std::process::exit(run_grade(&args[1..], &index));
+    }
+
+    // ORDER 1815-tei4. `expert-context-pack [--root D] [--out F | --print]`
+    // runs BEFORE the ledger load: it describes ANY project in a forge, most of
+    // which have no plan ledger at all.
+    if args[0] == "expert-context-pack" {
+        use tillandsias_plan::context_pack as cp;
+        let mut root: Option<PathBuf> = None;
+        let mut out: Option<PathBuf> = None;
+        let mut print = false;
+        let mut i = 1;
+        while i < args.len() {
+            match (args[i].as_str(), args.get(i + 1)) {
+                ("--root", Some(v)) => {
+                    root = Some(PathBuf::from(v));
+                    i += 2;
+                }
+                ("--out", Some(v)) => {
+                    out = Some(PathBuf::from(v));
+                    i += 2;
+                }
+                ("--print", _) => {
+                    print = true;
+                    i += 1;
+                }
+                (other, _) => {
+                    eprintln!(
+                        "usage: tillandsias-plan expert-context-pack [--root <dir>] [--out <file> | --print] (got {other:?})"
+                    );
+                    std::process::exit(2);
+                }
+            }
+        }
+        let root = root
+            .or_else(|| std::env::current_dir().ok())
+            .unwrap_or_else(|| PathBuf::from("."));
+        if print {
+            print!("{}", cp::build_pack(&root));
+            std::process::exit(0);
+        }
+        let out = out.unwrap_or_else(|| root.join(cp::PACK_FILE));
+        match cp::write_pack(&root, &out) {
+            Ok(n) => {
+                println!("expert-context-pack: wrote {} ({n} bytes)", out.display());
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!(
+                    "expert-context-pack: could not write {}: {e}",
+                    out.display()
+                );
+                std::process::exit(1);
+            }
+        }
     }
 
     // ORDER 920-pxg6. `expert-serve` runs BEFORE the ledger load for the same

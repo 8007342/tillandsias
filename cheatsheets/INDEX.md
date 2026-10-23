@@ -154,6 +154,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - external-logs.md                          — - `podman cp(1)`: <https://docs.podman.io/en/stable/markdown/podman-cp.1.html> [bundled, partial-verify]
 - fedora-minimal-wsl2.md                    — building the single `tillandsias` WSL2 distro that hosts podman and runs every … [pull-on-demand: project-committed]
 - forge-cache-semantics.md [DRAFT]          — Understanding how Tillandsias manages build artifacts, debugging cache stalenes… [bundled, partial-verify]
+- forge-constraints.md                      — you are an agent inside a Tillandsias forge and wonder whether you can run dock… [bundled, partial-verify]
 - forge-container.md                        — Understanding what the forge container can do, where files live, how to avoid c… [bundled, partial-verify]
 - forge-hot-cold-split.md                   — You need to understand which forge paths are RAM-backed, what the size caps are… [bundled, partial-verify]
 - forge-localization.md [DRAFT]             — Understanding how Tillandsias Forge handles multiple language locales, configur… [bundled, partial-verify]
