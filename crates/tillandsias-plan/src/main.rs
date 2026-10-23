@@ -131,6 +131,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "score-checks",
     "spec-floor",
     "spec-index",
+    "spec-refusal-calibrate",
     "spec-retrieve",
     "status",
     "time",
@@ -522,7 +523,17 @@ const USAGE: &str = concat!(
     "                                     because a bare number cannot say which side it is on.\n",
     "                                     A malformed line REFUSES rather than scoring a partial\n",
     "                                     denominator, which would raise the percentage.\n",
-    "           spec-floor --chunks-json <f>\n",
+    "           spec-refusal-calibrate --index-dir D --questions F [--k N]\n",
+    "                                     ORDER 1820-m2kq. Embed a labelled question set\n",
+    "                                     (JSONL {band,corpus,q} or a measure-bands TSV) against\n",
+    "                                     the index and print the refusal signals (best, median,\n",
+    "                                     margin, lexical overlap) with the floor-only and the\n",
+    "                                     current rule's verdicts, one TSV row per question\n",
+    "           spec-floor --chunks-json <f> [--query TEXT]\n",
+    "                                     ORDER 1820-m2kq: also refuses a flat top-k\n",
+    "                                     (TILLANDSIAS_RETRIEVE_MARGIN_FLOOR on best - median) and,\n",
+    "                                     with --query, a zero-overlap best chunk\n",
+    "                                     (TILLANDSIAS_RETRIEVE_LEXICAL_FLOOR).\n",
     "                                     ORDER 821-73es. Apply the grounded pipeline's retrieval\n",
     "                                     floors (TILLANDSIAS_RETRIEVE_REFUSAL_FLOOR on the best\n",
     "                                     score, TILLANDSIAS_RETRIEVE_MIN_SCORE per chunk) to a\n",
@@ -6009,6 +6020,10 @@ fn main() {
         let mut query_vec: Option<PathBuf> = None;
         let mut chunks_json: Option<PathBuf> = None;
         let mut answer_file: Option<PathBuf> = None;
+        // @trace order:1820-m2kq — the query text (lexical-overlap signal) and
+        // a labelled question set (spec-refusal-calibrate).
+        let mut query_text: Option<String> = None;
+        let mut questions: Option<PathBuf> = None;
         // ORDER 801-g9nn — the commit the INDEX was built at, which for a
         // retrieved answer is the frame the spans were read in and is NOT this
         // process's HEAD. A shared, mirror-backed index (801-a2by) is routinely
@@ -6045,6 +6060,14 @@ fn main() {
                 "--answer-file" => {
                     i += 1;
                     answer_file = args.get(i).map(PathBuf::from);
+                }
+                "--query" => {
+                    i += 1;
+                    query_text = args.get(i).cloned();
+                }
+                "--questions" => {
+                    i += 1;
+                    questions = args.get(i).map(PathBuf::from);
                 }
                 "--corpus-commit" => {
                     i += 1;
@@ -6159,9 +6182,11 @@ fn main() {
                     std::process::exit(2);
                 };
                 let scored = read_scored_chunks_array(&cj);
-                let min_score = spec::retrieve_min_score();
-                let refusal = spec::refusal_floor();
-                match spec::apply_retrieval_floors(scored, min_score, refusal) {
+                // @trace order:1820-m2kq — all four thresholds; --query
+                // (optional) arms the lexical-overlap check.
+                let t = spec::RefusalThresholds::from_env();
+                let (min_score, refusal) = (t.min_score, t.refusal);
+                match spec::apply_refusal_rule(scored, query_text.as_deref(), &t) {
                     spec::FloorDecision::Keep(kept) => match serde_json::to_string_pretty(&kept) {
                         Ok(s) => println!("{s}"),
                         Err(e) => {
@@ -6169,17 +6194,167 @@ fn main() {
                             std::process::exit(1);
                         }
                     },
-                    spec::FloorDecision::OutOfCoverage { best } => {
+                    spec::FloorDecision::OutOfCoverage { best, rule } => {
                         let refused = serde_json::json!({
                             "refused": "out-of-coverage",
+                            "rule": rule.as_str(),
                             "best": best,
                             "refusal_floor": refusal,
                             "min_score": min_score,
-                            "reason": spec::out_of_coverage_reason("full", best, refusal),
+                            "margin_floor": t.margin,
+                            "lexical_floor": t.lexical,
+                            "reason": spec::refusal_reason("full", best, rule, &t),
                         });
                         println!("{refused}");
                     }
                 }
+                return;
+            }
+            "spec-refusal-calibrate" => {
+                // ORDER 1820-m2kq. Calibration instrument for the refusal
+                // rule: embed every labelled question against the live
+                // index (ONE index load, not one per question), and emit the
+                // signals plus the verdict of the floor-only rule and the
+                // current (env/default) rule, one TSV row per question.
+                // scripts/refusal-calibration/measure-margin-bands.sh drives
+                // it and reduces the rows to confusion counts.
+                let (Some(dir), Some(qf)) = (index_dir, questions) else {
+                    eprintln!(
+                        "error: spec-refusal-calibrate requires --index-dir <dir> --questions <file.jsonl|file.tsv>"
+                    );
+                    std::process::exit(2);
+                };
+                let chunks = read_chunks(&dir.join("chunks.jsonl"));
+                let vectors = read_vectors(&dir.join("vectors.jsonl"));
+                if chunks.len() != vectors.len() || chunks.is_empty() {
+                    eprintln!(
+                        "error: index is inconsistent — {} chunks but {} vectors",
+                        chunks.len(),
+                        vectors.len()
+                    );
+                    std::process::exit(1);
+                }
+                let marker = |name: &str| {
+                    std::fs::read_to_string(dir.join(name))
+                        .ok()
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                };
+                let model = std::env::var("TILLANDSIAS_EMBED_MODEL")
+                    .ok()
+                    .filter(|s| !s.is_empty())
+                    .or_else(|| marker(".model"))
+                    .unwrap_or_else(|| "nomic-embed-text".to_string());
+                let query_prefix = if marker(".prefix").is_some() {
+                    "search_query: "
+                } else {
+                    ""
+                };
+                let base = std::env::var("TILLANDSIAS_EMBED_ENDPOINT")
+                    .ok()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| "http://127.0.0.1:11434/v1".to_string());
+                let text = std::fs::read_to_string(&qf).unwrap_or_else(|e| {
+                    eprintln!("error: read {}: {e}", qf.display());
+                    std::process::exit(1);
+                });
+                // (band, corpus, question). A .tsv is a measure-bands result
+                // (band first, question last — the relabelled-561 ground
+                // truth); anything else is the {band,corpus,q} JSONL.
+                let is_tsv = qf.extension().is_some_and(|e| e == "tsv");
+                let mut rows: Vec<(String, String, String)> = Vec::new();
+                for (n, line) in text.lines().enumerate() {
+                    if line.trim().is_empty() {
+                        continue;
+                    }
+                    if is_tsv {
+                        if n == 0 && line.starts_with("band\t") {
+                            continue;
+                        }
+                        let cols: Vec<&str> = line.split('\t').collect();
+                        if cols.len() < 3 {
+                            continue;
+                        }
+                        rows.push((
+                            cols[0].to_string(),
+                            cols[1].to_string(),
+                            cols[cols.len() - 1].to_string(),
+                        ));
+                    } else {
+                        match serde_json::from_str::<serde_json::Value>(line) {
+                            Ok(v) => {
+                                let s = |key: &str| {
+                                    v.get(key)
+                                        .and_then(|x| x.as_str())
+                                        .unwrap_or("")
+                                        .to_string()
+                                };
+                                rows.push((s("band"), s("corpus"), s("q")));
+                            }
+                            Err(e) => {
+                                eprintln!("error: {}:{}: {e}", qf.display(), n + 1);
+                                std::process::exit(1);
+                            }
+                        }
+                    }
+                }
+                let rule_t = spec::RefusalThresholds::from_env();
+                let floor_only = rule_t.floor_only();
+                let verdict = |d: spec::FloorDecision| match d {
+                    spec::FloorDecision::Keep(_) => "answer".to_string(),
+                    spec::FloorDecision::OutOfCoverage { rule, .. } => {
+                        format!("refuse:{}", rule.as_str())
+                    }
+                };
+                let fmt = |o: Option<f32>| o.map(|x| format!("{x:.4}")).unwrap_or_default();
+                println!(
+                    "band\tcorpus\tbest\tmedian\tmargin\tlexical\tterms\ttop1_kind\ttop1_path\tfloor_rule\tnew_rule\tquestion"
+                );
+                let mut measured = 0usize;
+                for (band, corpus, q) in &rows {
+                    let input = format!("{query_prefix}{q}");
+                    let Some(qv) = tillandsias_plan::pipeline::embed_query(
+                        &base,
+                        &model,
+                        &input,
+                        std::time::Duration::from_secs(60),
+                    ) else {
+                        eprintln!("EMBED-FAIL\t{corpus}\t{q}");
+                        continue;
+                    };
+                    let scored: Vec<spec::ScoredChunk> = spec::top_k(&qv, &vectors, k)
+                        .iter()
+                        .map(|(idx, score)| spec::ScoredChunk {
+                            chunk: chunks[*idx].clone(),
+                            score: *score,
+                        })
+                        .collect();
+                    let sig = spec::refusal_signals(&scored, Some(q));
+                    let (kind, path) = scored
+                        .first()
+                        .map(|sc| (sc.chunk.kind.clone(), sc.chunk.path.clone()))
+                        .unwrap_or_default();
+                    let old = verdict(spec::apply_refusal_rule(
+                        scored.clone(),
+                        Some(q),
+                        &floor_only,
+                    ));
+                    let new = verdict(spec::apply_refusal_rule(scored, Some(q), &rule_t));
+                    println!(
+                        "{band}\t{corpus}\t{:.4}\t{}\t{}\t{}\t{}\t{kind}\t{path}\t{old}\t{new}\t{q}",
+                        sig.best,
+                        fmt(sig.median),
+                        fmt(sig.margin),
+                        fmt(sig.lexical),
+                        sig.query_terms
+                    );
+                    measured += 1;
+                }
+                eprintln!(
+                    "spec-refusal-calibrate: measured {measured}/{} questions with {model} (k={k}, prefix={query_prefix:?}) over {} chunks via {base}",
+                    rows.len(),
+                    chunks.len()
+                );
                 return;
             }
             "spec-envelope" => {

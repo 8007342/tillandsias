@@ -912,9 +912,9 @@ pub async fn run_grounded(
     //    REAL: tokio::time::timeout around each synthesis dispatch) ─────────
     let mut synth_tasks = tokio::task::JoinSet::new();
     let mut retrieved: Vec<Option<Vec<ScoredChunk>>> = (0..trimmed.len()).map(|_| None).collect();
-    let floor = spec::retrieve_min_score();
-    let refusal = spec::refusal_floor();
+    let thresholds = spec::RefusalThresholds::from_env();
     let mut best_floored: f32 = 0.0;
+    let mut floored_rule = spec::RefusalRule::BelowFloor;
     // ORDER 1815-tei4: the forge's context pack, read once per request (the
     // file is written at launch, possibly after this server started); absent
     // or unreadable leaves every prompt unchanged.
@@ -934,10 +934,15 @@ pub async fn run_grounded(
                 score: *score,
             })
             .collect();
-        let scored = match spec::apply_retrieval_floors(all_scored, floor, refusal) {
+        // 1820-m2kq: the margin and lexical signals ride inside the
+        // absolute floor; the variant's own prompt is the lexical query.
+        let scored = match spec::apply_refusal_rule(all_scored, Some(&p.prompt), &thresholds) {
             spec::FloorDecision::Keep(kept) => kept,
-            spec::FloorDecision::OutOfCoverage { best } => {
-                best_floored = best_floored.max(best);
+            spec::FloorDecision::OutOfCoverage { best, rule } => {
+                if best >= best_floored {
+                    best_floored = best;
+                    floored_rule = rule;
+                }
                 continue;
             }
         };
@@ -1063,10 +1068,11 @@ pub async fn run_grounded(
         // the local-experts contract promises, previously unreachable.
         if withheld.is_empty() && best_floored > 0.0 {
             return Envelope::unsupported(
-                spec::out_of_coverage_reason(
+                spec::refusal_reason(
                     domain.as_deref().unwrap_or("full"),
                     best_floored,
-                    refusal,
+                    floored_rule,
+                    &thresholds,
                 ),
                 freshness,
             );

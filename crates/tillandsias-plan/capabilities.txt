@@ -102,6 +102,7 @@ source-revision
 spec-envelope
 spec-floor
 spec-index
+spec-refusal-calibrate
 spec-retrieve
 split-parents
 status
