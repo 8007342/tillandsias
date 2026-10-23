@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-lua-source-agreements-gate-step-evicts-candidates-on-an-incremental-cache-link-failure-that-a-clean-rebuild-does-not-reproduce
+    order: 1843-idfv
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build, gate, instrument, land-queue]
+    estimated_hours: 1
+    owned_files:
+      - build.sh
+    title: |
+      The 1484-uf29 lua_source_agreements step fails at link (rust-lld undefined hidden symbol .llvm.<hash>) from a mixed incremental cache, evicting land-queue candidates whose trees link cleanly from scratch
+    context: |
+      MEASURED macuahuitl 2026-10-23, land-queue runs 3-4: #608, #612, #613 and
+      #614 evicted with "collect2: error: ld returned 1" in this step. Reproduced
+      on trunk 63d323ae1 through the builder in the shared target: rust-lld
+      "undefined hidden symbol: anon.<hash>.llvm.<n>" across tillandsias_plan
+      codegen units. cargo clean -p tillandsias-plan made the same build link
+      (rc 0, 12.7 s); the failure returned within one candidate. The same tree
+      linked in an isolated target (rc 0). 1803-pcap's fixture already retries
+      on this signature with CARGO_INCREMENTAL=0.
+    exit_criteria:
+      - 'a lua_source_agreements build that fails with the incremental-link signature is retried once with CARGO_INCREMENTAL=0 and the step passes when that retry passes; any other failure stays red with no retry'
+      - 'the root cause of the mixed incremental cache on the gate host is identified or ruled out as a rustc incremental defect (follow-up; not required to close the retry)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the retry lives inline in build.sh and
+      depends on a corrupted incremental cache, which no hermetic fixture can
+      produce cheaply. Evidence for criterion 1 is the next land-queue run on
+      macuahuitl printing retry:lua_source_agreements:incremental-link and
+      landing the candidate.
+    provenance: |
+      Filed by macuahuitl (claude, coordinator) 2026-10-23 from land-queue runs 3-4.
+    events:
+      - type: filed
+        ts: "2026-10-23T07:55:52Z"
+        host: macuahuitl
+        summary: |-
+          p1: retry the lua_source_agreements step once without incremental on the mixed-cache link signature; four candidates evicted by it.

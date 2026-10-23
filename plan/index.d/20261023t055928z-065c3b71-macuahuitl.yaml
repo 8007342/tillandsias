@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: implementer-tier-local-is-a-routing-floor-below-haiku-in-model-tier-routing-and-the-batch-selector
+    field: status
+    value: completed
+    ts: "2026-10-23T05:59:28Z"
+    host: macuahuitl
+
+events:
+  - packet_id: implementer-tier-local-is-a-routing-floor-below-haiku-in-model-tier-routing-and-the-batch-selector
+    event:
+      type: completed
+      ts: "2026-10-23T05:59:28Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 0c4ca92bc land(609) + scripts/test-packet-tier-fields.sh 10/10 (pre-fix 4/10)
+  - packet_id: implementer-tier-local-is-a-routing-floor-below-haiku-in-model-tier-routing-and-the-batch-selector
+    event:
+      type: note
+      ts: "2026-10-23T05:59:28Z"
+      host: macuahuitl
+      summary: |-
+        closed: implementer_tier local is a routing floor below haiku; selector tier gate landed

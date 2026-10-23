@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: local-delegate-outcome-ledger-tokens-and-an-aggregator-computing-rung-promotion
+    field: next_action
+    value: 'PR #617 (work/1834-ujsf, 705a7651a; contains #611 #609) implements this: do not reimplement. Fixture 29/29. Its gate step 902-1834-ujsf.step carries a PLACEHOLDER STEP_SECOND_REGIME; macbookair ran the fixture on darwin 29/29 and will replace it in a follow-up PR after landing. Not exercised: the real append-event path of local-record.'
+    ts: "2026-10-23T05:59:29Z"
+    host: macuahuitl
+    replaces_sha256: "89ae3c397a398b7c2e2517fc0fa898da04e9c075e6cb2ed5f40f330af07ad7e5"
+
+events:
+  - packet_id: local-delegate-outcome-ledger-tokens-and-an-aggregator-computing-rung-promotion
+    event:
+      type: note
+      ts: "2026-10-23T05:59:29Z"
+      host: macuahuitl
+      summary: |-
+        handoff

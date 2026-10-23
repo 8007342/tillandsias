@@ -40,6 +40,8 @@ dependencies-of
 # discipline: order 1443-w79y — branch-discipline seed (show|target|check-ref);
 #   order 1446-xqi6 adds install-hooks|raise|hook (per-project hook templates).
 discipline
+# expert-context-pack: order 1815-tei4 — writes .forge-expert-context.md at forge launch.
+expert-context-pack
 expert-serve
 experts-probe
 expire-claims
@@ -100,6 +102,7 @@ source-revision
 spec-envelope
 spec-floor
 spec-index
+spec-refusal-calibrate
 spec-retrieve
 split-parents
 status

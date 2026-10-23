@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-builder-reads-a-transient-toolbox-list-failure-as-an-absent-container-and-dies-recreating-it
+    field: status
+    value: completed
+    ts: "2026-10-23T08:47:39Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-builder-reads-a-transient-toolbox-list-failure-as-an-absent-container-and-dies-recreating-it
+    event:
+      type: completed
+      ts: "2026-10-23T08:47:39Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 5c5736e42 land(624) + scripts/test-builder-toolbox-exists.sh 3/3 (pre-fix arm 1 FAIL), bound by gate step 292-1843-dex5
+  - packet_id: the-builder-reads-a-transient-toolbox-list-failure-as-an-absent-container-and-dies-recreating-it
+    event:
+      type: note
+      ts: "2026-10-23T08:47:39Z"
+      host: macuahuitl
+      summary: |-
+        closed: _toolbox_exists asks podman first; a failed toolbox list no longer triggers a recreate

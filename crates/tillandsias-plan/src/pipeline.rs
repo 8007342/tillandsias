@@ -387,6 +387,180 @@ pub fn chat_completion(
         .filter(|s| !s.is_empty())
 }
 
+/// The native-ollama body for a synthesis request with an EXPLICIT context
+/// window. @trace order:1818-uiar
+///
+/// ollama's OpenAI-compatible `/v1/chat/completions` IGNORES
+/// `options.num_ctx` (measured on ollama 0.33.1: a 16.9k-token prompt sent
+/// with `options.num_ctx=16384` reported all 16926 prompt tokens, i.e. no
+/// window was applied), while the native `/api/chat` honours it (same prompt,
+/// same num_ctx: `prompt_eval_count` 8194, the window visibly applied). So a
+/// synthesis request that must carry a window goes to `/api/chat`.
+pub fn native_chat_body(
+    model: &str,
+    system: Option<&str>,
+    user: &str,
+    max_tokens: Option<u32>,
+    num_ctx: u32,
+) -> serde_json::Value {
+    let mut messages: Vec<serde_json::Value> = Vec::new();
+    if let Some(s) = system {
+        messages.push(serde_json::json!({"role": "system", "content": s}));
+    }
+    messages.push(serde_json::json!({"role": "user", "content": user}));
+    let mut options = serde_json::json!({"temperature": 0.2, "num_ctx": num_ctx});
+    if let Some(mt) = max_tokens {
+        options["num_predict"] = serde_json::json!(mt);
+    }
+    let mut payload =
+        serde_json::json!({"messages": messages, "stream": false, "options": options});
+    if !model.is_empty() {
+        payload["model"] = serde_json::json!(model);
+    }
+    payload
+}
+
+/// One synthesis completion that carries `num_ctx`. The base is the
+/// OpenAI-compatible `…/v1` root every config holds; the native route is the
+/// same host at `/api/chat`. A server without that route (not ollama, or the
+/// expert-serve facade) answers non-2xx / unparsable, and the request falls
+/// back to the OpenAI route — without a window, which is all that route can
+/// express — rather than losing the synthesis. @trace order:1818-uiar
+pub fn chat_completion_ctx(
+    base: &str,
+    model: &str,
+    system: Option<&str>,
+    user: &str,
+    max_tokens: Option<u32>,
+    num_ctx: u32,
+    timeout: Duration,
+) -> Option<String> {
+    if let Some(root) = base.trim_end_matches('/').strip_suffix("/v1") {
+        let payload = native_chat_body(model, system, user, max_tokens, num_ctx);
+        if let Some(resp) = http_post_json(root, "/api/chat", &payload, timeout)
+            && let Some(a) = resp
+                .pointer("/message/content")
+                .and_then(|c| c.as_str())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        {
+            return Some(a);
+        }
+    }
+    chat_completion(base, model, system, user, max_tokens, timeout)
+}
+
+// ── ORDER 1818-uiar: context window and token budget per model size ────────
+
+/// Completion tokens every synthesis request asks for (`max_tokens`).
+pub const SYNTH_MAX_TOKENS: u32 = 320;
+
+/// The context window and retrieval cap for one model size class.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SynthBudget {
+    /// `num_ctx` the request carries.
+    pub num_ctx: u32,
+    /// Most retrieved chunks that follow the pack.
+    pub max_chunks: usize,
+}
+
+/// Parameter count in billions read from a model id (`qwen2.5:0.5b` → 0.5,
+/// `qwen3-coder:30b` → 30). None when the id names no size.
+fn model_billions(model: &str) -> Option<f32> {
+    let m = model.to_ascii_lowercase();
+    let b = m.as_bytes();
+    for i in 0..b.len() {
+        if b[i] != b'b' || i == 0 || !b[i - 1].is_ascii_digit() {
+            continue;
+        }
+        // `b` must end the number token (not start a word like `4bit`).
+        if b.get(i + 1).is_some_and(|c| c.is_ascii_alphabetic()) {
+            continue;
+        }
+        let mut s = i;
+        while s > 0 && (b[s - 1].is_ascii_digit() || b[s - 1] == b'.') {
+            s -= 1;
+        }
+        if s > 0 && b[s - 1].is_ascii_alphabetic() {
+            continue;
+        }
+        if let Ok(v) = m[s..i].parse::<f32>() {
+            return Some(v);
+        }
+    }
+    None
+}
+
+/// The budget for a model id: under 7b (0.5b, 1.5b, 3b — and an id that names
+/// no size, the conservative reading) a 4096 window and the pack plus at most
+/// 4 chunks; 7b and up (7b/14b/30b) an 8192 window and the pack plus at most 8.
+pub fn synth_budget(model: &str) -> SynthBudget {
+    match model_billions(model) {
+        Some(b) if b >= 7.0 => SynthBudget {
+            num_ctx: 8192,
+            max_chunks: 8,
+        },
+        _ => SynthBudget {
+            num_ctx: 4096,
+            max_chunks: 4,
+        },
+    }
+}
+
+/// A token estimate: one token per 3 characters. Deliberately pessimistic
+/// (English prose runs near 4 chars/token, code and YAML below 3.5), because
+/// an over-estimate costs a dropped chunk and an under-estimate costs the
+/// window silently truncating the head of the prompt — the pack.
+pub fn est_tokens(s: &str) -> usize {
+    s.chars().count().div_ceil(3)
+}
+
+/// Render the retrieved chunks that fit the window. `fixed_tokens` is
+/// everything already committed (pack, separator, instructions, the question).
+/// Chunks are taken in rank order while they fit under
+/// `num_ctx - SYNTH_MAX_TOKENS - fixed_tokens` and `max_chunks`; a first chunk
+/// that alone overflows is cut to the remaining budget (never dropped to
+/// nothing). Returns the context text and the keys that made it in.
+pub fn budgeted_context(
+    scored: &[ScoredChunk],
+    fixed_tokens: usize,
+    budget: SynthBudget,
+) -> (String, Vec<String>) {
+    let avail = (budget.num_ctx as usize)
+        .saturating_sub(SYNTH_MAX_TOKENS as usize)
+        .saturating_sub(fixed_tokens);
+    let mut used = 0usize;
+    let mut ctx = String::new();
+    let mut keys: Vec<String> = Vec::new();
+    for sc in scored.iter().take(budget.max_chunks) {
+        let block = format!(
+            "=== {} ({}) ===\n{}\n",
+            sc.chunk.key, sc.chunk.path, sc.chunk.text
+        );
+        // the key is echoed again in the `Sources:` instruction
+        let cost = est_tokens(&block) + est_tokens(&sc.chunk.key) + 2;
+        if used + cost <= avail {
+            used += cost;
+            ctx.push_str(&block);
+            keys.push(sc.chunk.key.clone());
+            continue;
+        }
+        if keys.is_empty() {
+            let room_chars = avail.saturating_sub(est_tokens(&sc.chunk.key) + 2) * 3;
+            let head = format!("=== {} ({}) ===\n", sc.chunk.key, sc.chunk.path);
+            let body_chars = room_chars.saturating_sub(head.chars().count());
+            if body_chars > 0 {
+                ctx.push_str(&head);
+                ctx.push_str(&truncate_chars(&sc.chunk.text, body_chars));
+                ctx.push('\n');
+                keys.push(sc.chunk.key.clone());
+            }
+        }
+        break;
+    }
+    (ctx, keys)
+}
+
 /// One query embedding over `{base}/embeddings` — the in-process twin of
 /// forge-plan.sh's spec_answer curl (same payload shape: `{model, input}`).
 pub fn embed_query(base: &str, model: &str, input: &str, timeout: Duration) -> Option<Vec<f32>> {
@@ -620,14 +794,19 @@ pub async fn run_grounded(
     let prose_deadline = std::time::Instant::now() + budget;
     let remaining = move || prose_deadline.saturating_duration_since(std::time::Instant::now());
 
-    // ── decompose (skipped on the immediate tier: its budget is the
-    //    deterministic floor, and a decompose round-trip would blow it
-    //    before dispatch even starts) ───────────────────────────────────────
+    // ── decompose (skipped on the immediate AND quick tiers; Fine keeps
+    //    it). Immediate: its budget is the deterministic floor, and a
+    //    decompose round-trip would blow it before dispatch even starts.
+    //    Quick: since 939-jxgz decomposition runs INSIDE the prose deadline,
+    //    and warm 7b/14b Quick queries measured 3960–4051 ms against the
+    //    3000 ms budget on macuahuitl — operator ruling 2026-10-23 (965-hz3f
+    //    criterion 1): skip it, do not re-base the budget.
+    //    @trace order:1817-wq7y ─────────────────────────────────────────────
     let original_only = vec![AdversarialPrompt {
         prompt: query.to_string(),
         kind: "original".to_string(),
     }];
-    let all_prompts = if tier == LatencyTier::Immediate {
+    let all_prompts = if matches!(tier, LatencyTier::Immediate | LatencyTier::Quick) {
         original_only.clone()
     } else {
         let mut inference = cfg.inference.clone();
@@ -716,9 +895,13 @@ pub async fn run_grounded(
     //    REAL: tokio::time::timeout around each synthesis dispatch) ─────────
     let mut synth_tasks = tokio::task::JoinSet::new();
     let mut retrieved: Vec<Option<Vec<ScoredChunk>>> = (0..trimmed.len()).map(|_| None).collect();
-    let floor = spec::retrieve_min_score();
-    let refusal = spec::refusal_floor();
+    let thresholds = spec::RefusalThresholds::from_env();
     let mut best_floored: f32 = 0.0;
+    let mut floored_rule = spec::RefusalRule::BelowFloor;
+    // ORDER 1815-tei4: the forge's context pack, read once per request (the
+    // file is written at launch, possibly after this server started); absent
+    // or unreadable leaves every prompt unchanged.
+    let pack = crate::context_pack::load_pack(&cfg.root);
     for (i, p) in trimmed.iter().enumerate() {
         let Some(qv) = &qvecs[i] else { continue };
         // ORDER 1822-dmwz: dense cosine fused with BM25 over the variant's
@@ -744,28 +927,38 @@ pub async fn run_grounded(
                 score: *score,
             })
             .collect();
-        let scored = match spec::apply_retrieval_floors(all_scored, floor, refusal) {
+        // 1820-m2kq: the margin and lexical signals ride inside the
+        // absolute floor; the variant's own prompt is the lexical query.
+        let scored = match spec::apply_refusal_rule(all_scored, Some(&p.prompt), &thresholds) {
             spec::FloorDecision::Keep(kept) => kept,
-            spec::FloorDecision::OutOfCoverage { best } => {
-                best_floored = best_floored.max(best);
+            spec::FloorDecision::OutOfCoverage { best, rule } => {
+                if best >= best_floored {
+                    best_floored = best;
+                    floored_rule = rule;
+                }
                 continue;
             }
         };
-        let ctx: String = scored
-            .iter()
-            .map(|sc| {
-                format!(
-                    "=== {} ({}) ===\n{}\n",
-                    sc.chunk.key, sc.chunk.path, sc.chunk.text
-                )
-            })
-            .collect();
-        let keys: String = scored
-            .iter()
-            .map(|sc| sc.chunk.key.as_str())
-            .collect::<Vec<_>>()
-            .join("; ");
-        let system = domain_synthesis_prompt(domain.as_deref().unwrap_or(""), &ctx, &keys);
+        // ORDER 1818-uiar: the window is explicit and the prompt is built to
+        // fit it. Retrieval ranks K=8 (the measured floor) but synthesis sees
+        // only the chunks that fit the model's token budget, after the pack.
+        let budget = synth_budget(&cfg.inference.model);
+        let fixed_tokens = pack.as_deref().map_or(0, est_tokens)
+            + est_tokens(crate::context_pack::PACK_SEPARATOR)
+            + est_tokens(&domain_synthesis_body(
+                domain.as_deref().unwrap_or(""),
+                "",
+                "",
+            ))
+            + est_tokens(&p.prompt);
+        let (ctx, used_keys) = budgeted_context(&scored, fixed_tokens, budget);
+        let keys: String = used_keys.join("; ");
+        let system = domain_synthesis_prompt(
+            pack.as_deref(),
+            domain.as_deref().unwrap_or(""),
+            &ctx,
+            &keys,
+        );
         retrieved[i] = Some(scored);
 
         let base = cfg.inference.synth_base.clone();
@@ -779,7 +972,15 @@ pub async fn run_grounded(
         let timeout = cfg.inference.timeout.min(synth_remaining);
         synth_tasks.spawn(async move {
             let dispatched = tokio::task::spawn_blocking(move || {
-                chat_completion(&base, &model, Some(&system), &user, Some(320), timeout)
+                chat_completion_ctx(
+                    &base,
+                    &model,
+                    Some(&system),
+                    &user,
+                    Some(SYNTH_MAX_TOKENS),
+                    budget.num_ctx,
+                    timeout,
+                )
             });
             // The tier budget is enforced HERE — an overrun degrades to
             // the cited retrieval-only digest below, NAMED as a timeout.
@@ -860,10 +1061,11 @@ pub async fn run_grounded(
         // the local-experts contract promises, previously unreachable.
         if withheld.is_empty() && best_floored > 0.0 {
             return Envelope::unsupported(
-                spec::out_of_coverage_reason(
+                spec::refusal_reason(
                     domain.as_deref().unwrap_or("full"),
                     best_floored,
-                    refusal,
+                    floored_rule,
+                    &thresholds,
                 ),
                 freshness,
             );
@@ -958,7 +1160,29 @@ pub async fn run_grounded(
 /// Domain-specific synthesis system prompts. Each domain gets a distinct
 /// prompt that constrains the LLM to cite only domain-appropriate sources;
 /// the echoed keys are what lets the only-if-used filter keep citations.
-pub fn domain_synthesis_prompt(domain: &str, retrieved_ctx: &str, source_keys: &str) -> String {
+///
+/// ORDER 1815-tei4: when the forge's context pack is present (`pack`, from
+/// [`crate::context_pack::load_pack`]) the prompt begins with its exact bytes
+/// and [`crate::context_pack::PACK_SEPARATOR`], identical for every domain and
+/// question, so the inference server's prompt-prefix cache is reused; the
+/// domain text and the retrieved chunks follow. `None` leaves the prompt
+/// exactly as before (fail-soft).
+pub fn domain_synthesis_prompt(
+    pack: Option<&str>,
+    domain: &str,
+    retrieved_ctx: &str,
+    source_keys: &str,
+) -> String {
+    let body = domain_synthesis_body(domain, retrieved_ctx, source_keys);
+    match pack {
+        Some(p) if !p.trim().is_empty() => {
+            format!("{p}{}{body}", crate::context_pack::PACK_SEPARATOR)
+        }
+        _ => body,
+    }
+}
+
+fn domain_synthesis_body(domain: &str, retrieved_ctx: &str, source_keys: &str) -> String {
     match domain {
         "cheatsheet" => format!(
             "You are the cheatsheet expert. Answer using ONLY the retrieved cheatsheet sections below. \
@@ -1083,6 +1307,208 @@ mod tests {
     use crate::lua_runtime::LuaRuntime;
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
+
+    /// ORDER 1815-tei4: with a pack, every synthesis system prompt — any
+    /// domain, any retrieved context — starts with the pack's exact bytes and
+    /// the fixed separator; without one, the prompt is byte-for-byte the old
+    /// domain prompt (fail-soft).
+    #[test]
+    fn synthesis_prompt_leads_with_the_context_pack_byte_identically() {
+        let pack = "# Forge context (generated at forge launch)\n\nPACK-BODY ünïcode\n";
+        let a = domain_synthesis_prompt(Some(pack), "cheatsheet", "=== a ===\nalpha\n", "a");
+        let b = domain_synthesis_prompt(Some(pack), "code", "=== b ===\nbeta\n", "b");
+        let c = domain_synthesis_prompt(Some(pack), "", "=== c ===\n", "c");
+        for p in [&a, &b, &c] {
+            assert_eq!(&p.as_bytes()[..pack.len()], pack.as_bytes());
+            assert!(p[pack.len()..].starts_with(crate::context_pack::PACK_SEPARATOR));
+        }
+        let lead = pack.len() + crate::context_pack::PACK_SEPARATOR.len();
+        assert_eq!(&a.as_bytes()[..lead], &b.as_bytes()[..lead]);
+        // The retrieved chunks come AFTER the pack.
+        assert!(a.find("alpha").unwrap() > lead);
+
+        let bare = domain_synthesis_prompt(None, "cheatsheet", "=== a ===\nalpha\n", "a");
+        assert_eq!(
+            bare,
+            domain_synthesis_body("cheatsheet", "=== a ===\nalpha\n", "a")
+        );
+        assert!(bare.starts_with("You are the cheatsheet expert."));
+        assert_eq!(
+            domain_synthesis_prompt(Some("  \n"), "cheatsheet", "x", "a"),
+            domain_synthesis_body("cheatsheet", "x", "a"),
+            "a blank pack must not change the prompt"
+        );
+    }
+
+    fn big_chunks(n: usize, chars: usize) -> Vec<ScoredChunk> {
+        (0..n)
+            .map(|i| ScoredChunk {
+                chunk: Chunk {
+                    text: "x".repeat(chars),
+                    ..chunk(i, &format!("k{i}"), "spec", "openspec/specs/x/spec.md")
+                },
+                score: 0.9,
+            })
+            .collect()
+    }
+
+    /// ORDER 1818-uiar: the window and chunk cap are a function of the model
+    /// size class, and an over-long chunk set is cut at the token budget with
+    /// the pack kept first and intact. @trace order:1818-uiar
+    #[test]
+    fn synth_context_budget_by_model_size() {
+        for small in ["qwen2.5:0.5b", "qwen2.5:3b", "llama3.2:1.5b", "", "mystery"] {
+            let b = synth_budget(small);
+            assert_eq!((b.num_ctx, b.max_chunks), (4096, 4), "{small}");
+        }
+        for big in ["qwen2.5:7b", "qwen2.5:14b", "qwen3-coder:30b", "llama3:8B"] {
+            let b = synth_budget(big);
+            assert_eq!((b.num_ctx, b.max_chunks), (8192, 8), "{big}");
+            assert!(b.num_ctx >= 8192);
+        }
+
+        // Short chunks: the CHUNK cap binds (4 on 0.5b, 8 on 7b).
+        let short = big_chunks(8, 200);
+        assert_eq!(
+            budgeted_context(&short, 1500, synth_budget("qwen2.5:0.5b"))
+                .1
+                .len(),
+            4
+        );
+        assert_eq!(
+            budgeted_context(&short, 1500, synth_budget("qwen2.5:7b"))
+                .1
+                .len(),
+            8
+        );
+
+        // Long chunks: the TOKEN budget binds, below the chunk cap, and the
+        // rendered context never exceeds window - max_tokens - fixed.
+        let long = big_chunks(8, 3000);
+        for model in ["qwen2.5:0.5b", "qwen2.5:14b"] {
+            let b = synth_budget(model);
+            let fixed = 1500usize;
+            let (ctx, keys) = budgeted_context(&long, fixed, b);
+            assert!(keys.len() < b.max_chunks, "{model}: token budget must bind");
+            assert!(!keys.is_empty());
+            assert!(
+                est_tokens(&ctx) + fixed + SYNTH_MAX_TOKENS as usize <= b.num_ctx as usize,
+                "{model}: {} tokens overflow the window",
+                est_tokens(&ctx)
+            );
+            // highest-ranked chunks are the ones kept
+            assert_eq!(keys[0], "k0");
+        }
+
+        // One chunk bigger than the whole budget is cut, not dropped.
+        let huge = big_chunks(1, 60_000);
+        let (ctx, keys) = budgeted_context(&huge, 1500, synth_budget("qwen2.5:0.5b"));
+        assert_eq!(keys, vec!["k0".to_string()]);
+        assert!(est_tokens(&ctx) + 1500 + SYNTH_MAX_TOKENS as usize <= 4096);
+
+        // The pack stays first and byte-intact in the final prompt.
+        let pack = "# Forge context\n\nPACK-BODY\n";
+        let (ctx, keys) = budgeted_context(&long, 1500, synth_budget("qwen2.5:0.5b"));
+        let prompt = domain_synthesis_prompt(Some(pack), "", &ctx, &keys.join("; "));
+        assert_eq!(&prompt.as_bytes()[..pack.len()], pack.as_bytes());
+    }
+
+    /// The request body carries the model-appropriate `num_ctx`, on the
+    /// native route (the OpenAI route cannot carry it). @trace order:1818-uiar
+    #[test]
+    fn synthesis_request_body_carries_num_ctx() {
+        let b7 = synth_budget("qwen2.5:7b");
+        let body = native_chat_body(
+            "qwen2.5:7b",
+            Some("sys"),
+            "q",
+            Some(SYNTH_MAX_TOKENS),
+            b7.num_ctx,
+        );
+        assert_eq!(body["options"]["num_ctx"], 8192);
+        assert_eq!(body["options"]["num_predict"], 320);
+        assert_eq!(body["stream"], false);
+        let b05 = synth_budget("qwen2.5:0.5b");
+        let body = native_chat_body("qwen2.5:0.5b", None, "q", None, b05.num_ctx);
+        assert_eq!(body["options"]["num_ctx"], 4096);
+    }
+
+    /// chat_completion_ctx posts to the host's native `/api/chat` with the
+    /// window, and falls back to `/v1/chat/completions` when that route is
+    /// absent. @trace order:1818-uiar
+    #[test]
+    fn chat_completion_ctx_uses_native_route_then_falls_back() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().unwrap().port();
+        let seen = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let seen2 = seen.clone();
+        std::thread::spawn(move || {
+            for s in listener.incoming() {
+                let mut s = s.unwrap();
+                let mut buf = vec![0u8; 65536];
+                let n = s.read(&mut buf).unwrap_or(0);
+                let head = String::from_utf8_lossy(&buf[..n]).to_string();
+                seen2.lock().unwrap().push(head.clone());
+                let (status, body) = if head.starts_with("POST /api/chat") {
+                    ("404 Not Found", String::new())
+                } else {
+                    (
+                        "200 OK",
+                        r#"{"choices":[{"message":{"content":"fell back"}}]}"#.to_string(),
+                    )
+                };
+                let _ = s.write_all(
+                    format!(
+                        "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    )
+                    .as_bytes(),
+                );
+            }
+        });
+        let base = format!("http://127.0.0.1:{port}/v1");
+        let out = chat_completion_ctx(
+            &base,
+            "qwen2.5:7b",
+            Some("s"),
+            "q",
+            Some(5),
+            8192,
+            Duration::from_secs(5),
+        );
+        assert_eq!(out.as_deref(), Some("fell back"));
+        let seen = seen.lock().unwrap();
+        assert!(seen[0].starts_with("POST /api/chat"));
+        assert!(seen[0].contains("\"num_ctx\":8192"));
+        assert!(seen[1].starts_with("POST /v1/chat/completions"));
+    }
+
+    /// The generated pack, loaded the way run_grounded loads it, leads the prompt.
+    #[test]
+    fn a_written_pack_loaded_from_the_root_leads_the_prompt() {
+        let t = tempfile::tempdir().unwrap();
+        let out = t.path().join(crate::context_pack::PACK_FILE);
+        crate::context_pack::write_pack(t.path(), &out).unwrap();
+        let pack = crate::context_pack::load_pack_from(&out).expect("pack loads");
+        let p = domain_synthesis_prompt(Some(&pack), "spec", "ctx", "k");
+        assert!(p.as_bytes().starts_with(&std::fs::read(&out).unwrap()));
+        assert_eq!(
+            crate::context_pack::load_pack_from(&t.path().join("absent.md")),
+            None
+        );
+    }
+
+    /// tellme's fallback seam prints the same separator literal.
+    #[test]
+    fn tellme_prints_the_same_pack_separator() {
+        let tellme = include_str!("../../../images/default/cli/tellme");
+        let sep = crate::context_pack::PACK_SEPARATOR.replace('\n', "\\n");
+        assert!(
+            tellme.contains(&format!("printf '{sep}'")),
+            "tellme_context_pack must print the separator {sep:?}"
+        );
+    }
 
     fn chunk(id: usize, key: &str, kind: &str, path: &str) -> Chunk {
         Chunk {
@@ -1385,6 +1811,108 @@ mod tests {
         // Degradation stays the cited floor, never a raw failure.
         assert!(!env.answer().is_empty());
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// A prose+embedding stub: answers POST /embeddings with `vector`, 404s
+    /// every /chat/completions, and counts the chat requests whose body is
+    /// the DECOMPOSITION prompt (identified by its fixed preamble). Reads the
+    /// whole request (headers + Content-Length body) so the marker cannot be
+    /// split across reads.
+    fn decompose_counting_stub(
+        vector: &'static str,
+    ) -> (String, Arc<std::sync::atomic::AtomicUsize>) {
+        use std::io::{Read, Write};
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().unwrap().port();
+        let count = Arc::new(AtomicUsize::new(0));
+        let count2 = count.clone();
+        std::thread::spawn(move || {
+            let body = format!("{{\"data\":[{{\"embedding\":{vector}}}]}}");
+            for stream in listener.incoming() {
+                let Ok(mut s) = stream else { continue };
+                let mut req = Vec::new();
+                let mut buf = [0u8; 8192];
+                loop {
+                    let n = s.read(&mut buf).unwrap_or(0);
+                    if n == 0 {
+                        break;
+                    }
+                    req.extend_from_slice(&buf[..n]);
+                    let text = String::from_utf8_lossy(&req);
+                    if let Some(h) = text.find("\r\n\r\n") {
+                        let len = text[..h]
+                            .lines()
+                            .find_map(|l| {
+                                let (k, v) = l.split_once(':')?;
+                                k.eq_ignore_ascii_case("content-length")
+                                    .then(|| v.trim().parse::<usize>().ok())?
+                            })
+                            .unwrap_or(0);
+                        if req.len() >= h + 4 + len {
+                            break;
+                        }
+                    }
+                }
+                let text = String::from_utf8_lossy(&req);
+                let resp = if text.contains("/embeddings") {
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    )
+                } else {
+                    if text.contains("query decomposition engine") {
+                        count2.fetch_add(1, Ordering::SeqCst);
+                    }
+                    "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                        .to_string()
+                };
+                let _ = s.write_all(resp.as_bytes());
+            }
+        });
+        (format!("http://127.0.0.1:{port}/v1"), count)
+    }
+
+    /// ORDER 1817-wq7y (operator ruling 2026-10-23 on 965-hz3f criterion 1).
+    /// Quick skips the decomposition round-trip exactly as Immediate does —
+    /// warm 7b/14b Quick queries measured 3960–4051 ms against the 3000 ms
+    /// budget with decomposition inside the deadline (939-jxgz). Fine keeps
+    /// it. Each arm first asserts the Lua classifier puts its query in the
+    /// tier under test, so a classifier change cannot make the arm vacuous.
+    /// Pre-fix: the Quick arm FAILS (one decompose request).
+    #[test]
+    fn quick_tier_skips_decompose_fine_keeps_it() {
+        let quick_q = "how does the k spec define its retrieval floors?";
+        let fine_q = "compare the k spec's retrieval floors with its refusal grammar and explain how the two interact across tiers";
+        for (tag, query, want_tier, want_decomposes) in [
+            ("quick", quick_q, "quick", 0usize),
+            ("fine", fine_q, "fine", 1),
+        ] {
+            let root = fixture_root(&format!("decomp-{tag}"));
+            let entry = entry_with(
+                &root.join("entry"),
+                vec![chunk(0, "k", "spec", "openspec/specs/x/spec.md")],
+                None,
+            );
+            let (base, count) = decompose_counting_stub("[0.999,0.01]");
+            let cfg = cfg_with(Some(base.clone()), base, root.clone());
+            let runtime = shared_runtime(&root);
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let tier = rt.block_on(async { runtime.lock().await.classify_tier(query).unwrap() });
+            assert_eq!(
+                tier, want_tier,
+                "fixture query no longer classifies {want_tier}"
+            );
+            let env = rt.block_on(run_grounded(&runtime, &entry, &cfg, query));
+            assert!(!env.answer().is_empty());
+            assert_eq!(
+                count.load(std::sync::atomic::Ordering::SeqCst),
+                want_decomposes,
+                "{tag} tier: decomposition request count"
+            );
+            let _ = std::fs::remove_dir_all(&root);
+        }
     }
 
     #[test]

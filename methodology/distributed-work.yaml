@@ -1781,7 +1781,7 @@ distributed_work:
         1437-vdz5, 1437-m5yx, 1437-yjf6 and 1437-cr8u are the mechanism.
       fields: >
         Two SCALAR packet fields, `size: S|M|L` and `implementer_tier:
-        haiku|sonnet|opus`, assigned by the FILER. Scalars because set-field
+        local|haiku|sonnet|opus`, assigned by the FILER. Scalars because set-field
         refuses list-valued fields (1184-tj2q) and a field the projection
         does not carry is writable but unreadable (1218-25z3). Until the
         projection lands, both are written as two lines inside `notes:` in
@@ -1813,6 +1813,25 @@ distributed_work:
         `next` honours the same filter so plan_next and the selector agree.
         (The first design said "sonnet takes untagged"; withdrawn by the
         ruling.)
+      local_floor: >
+        ORDER 1832-5a9z (operator-approved redesign 2026-10-23, umbrella
+        1831-74sf; OpenSpec change local-coding-experts-delegation-ladder).
+        `local` is a FOURTH tier and the cheapest: local < haiku < sonnet <
+        opus. It is a routing FLOOR, same semantics as the other three: a
+        `local` caller (`--tier local`) takes exactly the local rows and an
+        empty pool refuses `refused:no-tier-work:model-tier=local`; a haiku
+        caller takes haiku rows, then local rows; sonnet then haiku then
+        local; opus then sonnet, haiku, local — never the general queue. The
+        fallback rule: a `local` caller is served only while
+        TILLANDSIAS_INFERENCE_ENDPOINT answers (probe `<endpoint>/api/version`);
+        when it does not, the caller is DEMOTED to haiku and the batch line
+        says `tier=haiku tier_demoted=local`; a delegate result the frontier
+        session rejects likewise falls back to haiku. A local implementer never
+        lands: the frontier session verifies the closure and commits. The
+        promotion ladder (R0..R4, outcome ledger, replay set) is the OpenSpec
+        change local-coding-experts-delegation-ladder, design.md sections 3-4;
+        the delegate itself is scripts/local-delegate.sh (1831-74sf child 3b).
+        The batch: line prints `tier=<t> tier_fallback=<n>[ tier_demoted=local]`.
       orchestrator_session: >
         OPERATOR RULING 2026-09-27: "We can try hosts running Haiku
         sessions all day and then have them delegate work to larger

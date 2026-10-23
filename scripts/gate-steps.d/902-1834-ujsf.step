@@ -1,0 +1,11 @@
+# Gate step 1834-ujsf — data, not code (order 1072-b7eq).
+#
+# The local-delegate outcome token grammar and the rung aggregator: promotion
+# is computed from the ledger at exact thresholds, never asserted.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the local-delegate outcome token and rung aggregator (1834-ujsf)"
+STEP_SCRIPT="scripts/test-local-delegate-ladder.sh"
+STEP_ERROR="the local-delegate token grammar or the rung arithmetic (R1-R4 thresholds, 20-outcome sample floor, demotion, supersession) drifted (1834-ujsf) — see the verdict line above"
+STEP_OK="Local-delegate ladder passed"
+STEP_SECOND_REGIME="macuahuitl 2026-10-23 msys skip:no-darwin-or-windows-run-yet-author-is-linux-second-regime-unobserved"
