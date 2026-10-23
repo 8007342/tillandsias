@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: spec-expert-refusal-threshold-fleet-decision
+    event:
+      type: progress
+      ts: "2026-10-23T05:59:31Z"
+      agent_id: linux-macuahuitl-claude-20261023t055927z
+      host: macuahuitl
+      summary: |
+        Evidence for this decision from 1820-m2kq (PR #616), macuahuitl 2026-10-23, nomic-embed-text, live index copy at 2c19c076 (32,251 chunks), k=8, relabelled-561 set (458 in-corpus, 33 near-miss, 70 far). A score-margin rule (best - median top-k) is WORSE than the scalar floor at every threshold (in-corpus lists are flat too, from near-duplicate chunks); lexical overlap alone is no better. Only margin<0.015 AND lexical overlap<0.05 matches the floor on false refusals and gains one near-miss (4->5/33). Conclusion: no single cosine threshold separates near misses; the lever is retrieval quality — 1822-dmwz (PR #620) raised in-corpus recall@5 50.0% -> 67.5% with BM25+RRF. Recommend deciding the threshold AFTER #620 lands and re-measuring on it.
