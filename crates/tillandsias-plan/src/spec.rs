@@ -87,14 +87,288 @@ pub fn refusal_floor() -> f32 {
         .unwrap_or(0.62)
 }
 
+// ── ORDER 1820-m2kq: margin + lexical-overlap refusal, calibrated ───────────
+//
+// CALIBRATION (scripts/refusal-calibration/measure-margin-bands.sh, macuahuitl
+// 2026-10-23, nomic-embed-text no prefix, live index generation at commit
+// 2c19c076 — 32,251 chunks, k=8, relabelled-561 ground truth in=458 near=33
+// far=70). Band means: margin (best − median of top-8) in 0.042 / near 0.030 /
+// far 0.024; lexical overlap in 0.50 / near 0.34 / far 0.09.
+//
+//   floor-only (0.62)               in answered 450/458  near refused 4/33  far 59/70
+//   + flat AND lexically silent     in answered 450/458  near refused 5/33  far 59/70
+//
+// THE MARGIN ALONE IS DOMINATED and stays off by default: every solo margin
+// floor > 0 costs in-corpus answers before it refuses one more near miss
+// (0.005: 447 in / 5 near; 0.010: 430 / 8), and at matched false-refusal a
+// raised absolute floor refuses MORE out-of-corpus questions (margin 0.020 →
+// 359 in / 26 out-of-corpus answered; floor 0.685 → 356 / 19). In-corpus top-k
+// are often flat too — near-duplicate chunks — so flatness alone is not a
+// near-miss signature. Lexical overlap alone is no better (zero-overlap:
+// 444 in / 35 out vs floor 0.625: 445 / 36). Their CONJUNCTION is the one
+// operating point that is no worse than the floor at equal false refusal: a
+// flat top-k (margin < 0.015) whose best chunk shares none of the query's
+// content words (overlap < 0.05). The gain is ONE near miss on n=33 — thin,
+// recorded as such; the rule's value is that it moves no in-corpus answer.
+
+/// Solo margin floor on best − median(top-k): 0 = off (measured dominated,
+/// see the calibration block above). TILLANDSIAS_RETRIEVE_MARGIN_FLOOR.
+pub const DEFAULT_MARGIN_FLOOR: f32 = 0.0;
+
+/// The margin under which a lexically silent best chunk refuses
+/// (TILLANDSIAS_RETRIEVE_LEXICAL_MARGIN). Calibrated: 0.015 is the widest
+/// value that keeps in-corpus answered at the floor rule's 450/458.
+pub const DEFAULT_LEXICAL_MARGIN: f32 = 0.015;
+
+/// The lexical-overlap floor (TILLANDSIAS_RETRIEVE_LEXICAL_FLOOR): fraction of
+/// query content terms found in the best chunk. 0.05 means "none matched" for
+/// any query of up to 20 content terms.
+pub const DEFAULT_LEXICAL_FLOOR: f32 = 0.05;
+
+/// The margin is undefined on a top-k too short to have a field: with fewer
+/// scores than this the margin rule abstains (the absolute floor still holds).
+pub const MARGIN_MIN_K: usize = 4;
+
+/// @trace order:1820-m2kq. The margin floor on best − median(top-k). Tune
+/// per-host with TILLANDSIAS_RETRIEVE_MARGIN_FLOOR (0 disables; an
+/// unparseable value falls back, like the sibling floors).
+pub fn retrieve_margin_floor() -> f32 {
+    std::env::var("TILLANDSIAS_RETRIEVE_MARGIN_FLOOR")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(DEFAULT_MARGIN_FLOOR)
+}
+
+/// @trace order:1820-m2kq. The lexical-overlap floor: the fraction of the
+/// query's content terms that occur in the best chunk. Tune per-host with
+/// TILLANDSIAS_RETRIEVE_LEXICAL_FLOOR (0 disables).
+pub fn retrieve_lexical_floor() -> f32 {
+    std::env::var("TILLANDSIAS_RETRIEVE_LEXICAL_FLOOR")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(DEFAULT_LEXICAL_FLOOR)
+}
+
+/// @trace order:1820-m2kq. The margin under which a lexically silent best
+/// chunk refuses. Tune per-host with TILLANDSIAS_RETRIEVE_LEXICAL_MARGIN
+/// (0 disables the conjunctive rule).
+pub fn retrieve_lexical_margin() -> f32 {
+    std::env::var("TILLANDSIAS_RETRIEVE_LEXICAL_MARGIN")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(DEFAULT_LEXICAL_MARGIN)
+}
+
+/// The refusal thresholds, read together so the pipeline and the
+/// `spec-floor` arm cannot disagree about which knobs are live.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RefusalThresholds {
+    /// Per-chunk citation floor (TILLANDSIAS_RETRIEVE_MIN_SCORE).
+    pub min_score: f32,
+    /// Absolute floor on the best score — the OUTER bound
+    /// (TILLANDSIAS_RETRIEVE_REFUSAL_FLOOR).
+    pub refusal: f32,
+    /// Solo floor on best − median(top-k) (TILLANDSIAS_RETRIEVE_MARGIN_FLOOR).
+    pub margin: f32,
+    /// Floor on query-term overlap with the best chunk
+    /// (TILLANDSIAS_RETRIEVE_LEXICAL_FLOOR) — applies only under
+    /// `lexical_margin`.
+    pub lexical: f32,
+    /// The margin under which the lexical floor applies
+    /// (TILLANDSIAS_RETRIEVE_LEXICAL_MARGIN).
+    pub lexical_margin: f32,
+}
+
+impl RefusalThresholds {
+    pub fn from_env() -> Self {
+        RefusalThresholds {
+            min_score: retrieve_min_score(),
+            refusal: refusal_floor(),
+            margin: retrieve_margin_floor(),
+            lexical: retrieve_lexical_floor(),
+            lexical_margin: retrieve_lexical_margin(),
+        }
+    }
+
+    /// The two absolute floors with the calibrated margin/lexical defaults.
+    pub fn with_floors(min_score: f32, refusal: f32) -> Self {
+        RefusalThresholds {
+            min_score,
+            refusal,
+            margin: DEFAULT_MARGIN_FLOOR,
+            lexical: DEFAULT_LEXICAL_FLOOR,
+            lexical_margin: DEFAULT_LEXICAL_MARGIN,
+        }
+    }
+
+    /// Only the absolute floors — the pre-1820 rule, the calibration baseline.
+    pub fn floor_only(self) -> Self {
+        RefusalThresholds {
+            margin: 0.0,
+            lexical: 0.0,
+            lexical_margin: 0.0,
+            ..self
+        }
+    }
+}
+
+/// Which rule refused a retrieval — named in the refusal reason so an operator
+/// knows which knob to turn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RefusalRule {
+    /// The best score is under the absolute refusal floor (or nothing came back).
+    BelowFloor,
+    /// The best score does not stand out of its own top-k: a flat neighbourhood.
+    FlatMargin,
+    /// The top-k is flat (margin under `lexical_margin`) AND the best chunk
+    /// shares (almost) none of the query's content words.
+    NoLexicalOverlap,
+    /// The per-chunk floor left nothing citation-worthy.
+    Starved,
+}
+
+impl RefusalRule {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            RefusalRule::BelowFloor => "below-floor",
+            RefusalRule::FlatMargin => "flat-margin",
+            RefusalRule::NoLexicalOverlap => "no-lexical-overlap",
+            RefusalRule::Starved => "starved",
+        }
+    }
+}
+
 /// The typed outcome of applying the retrieval floors to ONE retrieval.
 #[derive(Debug, Clone)]
 pub enum FloorDecision {
     /// Covered: the citation-worthy chunks that survive the per-chunk floor.
     Keep(Vec<ScoredChunk>),
     /// Out of coverage: `best` is the highest score seen (0.0 when the
-    /// retrieval was empty), for the refusal message.
-    OutOfCoverage { best: f32 },
+    /// retrieval was empty), for the refusal message; `rule` names which
+    /// signal refused.
+    OutOfCoverage { best: f32, rule: RefusalRule },
+}
+
+/// The signals the refusal rule reads off one retrieval (order 1820-m2kq).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RefusalSignals {
+    pub best: f32,
+    /// Median of the top-k scores (None below [`MARGIN_MIN_K`]).
+    pub median: Option<f32>,
+    /// best − median (None below [`MARGIN_MIN_K`]).
+    pub margin: Option<f32>,
+    /// Fraction of the query's content terms found in the best chunk (None
+    /// when there is no query, or it has no content terms).
+    pub lexical: Option<f32>,
+    /// How many content terms the query has.
+    pub query_terms: usize,
+}
+
+/// Query words that carry no topic, skipped by [`query_content_terms`] (one
+/// whitespace-separated string so rustfmt keeps the list compact).
+const STOPWORDS: &str = "\
+    a about after all also am an and any are as at be been before being between both but \
+    by can could did do does doing each else for from get gets got had has have having \
+    here how i if in into is it its just like may me might more most must my need no not \
+    of on one only or other our out over should so some something such than that the their \
+    them then there these they this those to under up us use used uses using via want was \
+    way we were what when where whether which while who why will with without would you \
+    your tillandsias project actually anything there's what's it's don't doesn't";
+
+fn word_tokens(s: &str) -> impl Iterator<Item = String> + '_ {
+    s.split(|c: char| !(c.is_alphanumeric() || c == '\''))
+        .map(|w| w.trim_matches('\'').to_lowercase())
+        .filter(|w| !w.is_empty())
+}
+
+/// A crude, deterministic stem: enough to make "rollbacks"/"rollback" and
+/// "caching"/"cache" meet, not a linguistic claim.
+fn stem(w: &str) -> &str {
+    for suf in ["ing", "ies", "es", "ed", "s"] {
+        if w.len() > suf.len() + 3
+            && let Some(base) = w.strip_suffix(suf)
+        {
+            return base;
+        }
+    }
+    w
+}
+
+/// The query's content terms: lowercased words of 3+ characters that are not
+/// stopwords, stemmed, deduplicated in first-seen order.
+pub fn query_content_terms(query: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for w in word_tokens(query) {
+        if w.chars().count() < 3 || STOPWORDS.split_whitespace().any(|s| s == w) {
+            continue;
+        }
+        let s = stem(&w).to_string();
+        if !out.contains(&s) {
+            out.push(s);
+        }
+    }
+    out
+}
+
+/// Fraction of `query`'s content terms that occur in `chunk` (text, key and
+/// path). A term matches a chunk word that starts with its stem. None when the
+/// query has no content terms — an empty set cannot be "zero overlap".
+pub fn lexical_overlap(query: &str, chunk: &Chunk) -> Option<f32> {
+    let terms = query_content_terms(query);
+    if terms.is_empty() {
+        return None;
+    }
+    let hay: std::collections::BTreeSet<String> = word_tokens(&chunk.text)
+        .chain(word_tokens(&chunk.key))
+        .chain(word_tokens(&chunk.path))
+        .collect();
+    let matched = terms
+        .iter()
+        .filter(|t| hay.iter().any(|w| w.starts_with(t.as_str())))
+        .count();
+    Some(matched as f32 / terms.len() as f32)
+}
+
+/// Median of a score slice (mean of the two middle values for even n).
+fn median(scores: &[f32]) -> f32 {
+    let mut v: Vec<f32> = scores.to_vec();
+    v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let n = v.len();
+    if n % 2 == 1 {
+        v[n / 2]
+    } else {
+        (v[n / 2 - 1] + v[n / 2]) / 2.0
+    }
+}
+
+/// Read the refusal signals off one retrieval. `scored` is the raw top-k
+/// (before the per-chunk floor), in any order.
+pub fn refusal_signals(scored: &[ScoredChunk], query: Option<&str>) -> RefusalSignals {
+    let top = scored.iter().max_by(|a, b| {
+        a.score
+            .partial_cmp(&b.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let best = top.map(|sc| sc.score).unwrap_or(0.0);
+    let (median, margin) = if scored.len() >= MARGIN_MIN_K {
+        let scores: Vec<f32> = scored.iter().map(|sc| sc.score).collect();
+        let m = median(&scores);
+        (Some(m), Some(best - m))
+    } else {
+        (None, None)
+    };
+    let query_terms = query.map(|q| query_content_terms(q).len()).unwrap_or(0);
+    let lexical = match (query, top) {
+        (Some(q), Some(sc)) => lexical_overlap(q, &sc.chunk),
+        _ => None,
+    };
+    RefusalSignals {
+        best,
+        median,
+        margin,
+        lexical,
+        query_terms,
+    }
 }
 
 /// ORDER 821-73es — the ONE coverage decision, shared by the grounded
@@ -114,20 +388,59 @@ pub fn apply_retrieval_floors(
     min_score: f32,
     refusal: f32,
 ) -> FloorDecision {
-    let best = scored
-        .iter()
-        .map(|sc| sc.score)
-        .reduce(f32::max)
-        .unwrap_or(0.0);
-    if best < refusal {
-        return FloorDecision::OutOfCoverage { best };
+    apply_refusal_rule(
+        scored,
+        None,
+        &RefusalThresholds::with_floors(min_score, refusal),
+    )
+}
+
+/// ORDER 1820-m2kq — the coverage decision with the margin and lexical
+/// signals. The absolute floor stays the OUTER bound (checked first, so a far
+/// question is refused exactly as before); the margin and lexical checks only
+/// ever ADD refusals inside it. `query` is optional: without it the lexical
+/// check abstains (the `spec-floor` arm called with no `--query`).
+pub fn apply_refusal_rule(
+    scored: Vec<ScoredChunk>,
+    query: Option<&str>,
+    t: &RefusalThresholds,
+) -> FloorDecision {
+    let sig = refusal_signals(&scored, query);
+    let best = sig.best;
+    if scored.is_empty() || best < t.refusal {
+        return FloorDecision::OutOfCoverage {
+            best,
+            rule: RefusalRule::BelowFloor,
+        };
+    }
+    if let Some(m) = sig.margin
+        && m < t.margin
+    {
+        return FloorDecision::OutOfCoverage {
+            best,
+            rule: RefusalRule::FlatMargin,
+        };
+    }
+    // Flat AND lexically silent: both weak signals together (calibrated; see
+    // the block above DEFAULT_MARGIN_FLOOR). Either alone abstains.
+    if let (Some(m), Some(l)) = (sig.margin, sig.lexical)
+        && m < t.lexical_margin
+        && l < t.lexical
+    {
+        return FloorDecision::OutOfCoverage {
+            best,
+            rule: RefusalRule::NoLexicalOverlap,
+        };
     }
     let kept: Vec<ScoredChunk> = scored
         .into_iter()
-        .filter(|sc| sc.score >= min_score)
+        .filter(|sc| sc.score >= t.min_score)
         .collect();
     if kept.is_empty() {
-        return FloorDecision::OutOfCoverage { best };
+        return FloorDecision::OutOfCoverage {
+            best,
+            rule: RefusalRule::Starved,
+        };
     }
     FloorDecision::Keep(kept)
 }
@@ -139,6 +452,25 @@ pub fn out_of_coverage_reason(domain: &str, best: f32, refusal: f32) -> String {
     format!(
         "nothing in the {domain} corpus is similar enough to this question (best score {best:.2} < refusal floor {refusal:.2}) — likely out of coverage; TILLANDSIAS_RETRIEVE_REFUSAL_FLOOR (coverage) and TILLANDSIAS_RETRIEVE_MIN_SCORE (per-chunk) tune the floors"
     )
+}
+
+/// ORDER 1820-m2kq — the refusal reason for whichever rule fired. The
+/// absolute-floor and starved cases keep [`out_of_coverage_reason`]'s exact
+/// string; the margin and lexical cases name their own knob.
+pub fn refusal_reason(domain: &str, best: f32, rule: RefusalRule, t: &RefusalThresholds) -> String {
+    match rule {
+        RefusalRule::BelowFloor | RefusalRule::Starved => {
+            out_of_coverage_reason(domain, best, t.refusal)
+        }
+        RefusalRule::FlatMargin => format!(
+            "the best {domain}-corpus match (score {best:.2}) does not stand out of its own top-k (margin over the median < {:.2}) — a flat neighbourhood, likely a near miss out of coverage; TILLANDSIAS_RETRIEVE_MARGIN_FLOOR tunes it (0 disables)",
+            t.margin
+        ),
+        RefusalRule::NoLexicalOverlap => format!(
+            "the best {domain}-corpus match (score {best:.2}) shares none of the question's content words (overlap < {:.2}) inside a flat top-k (margin < {:.2}) — topically close, specifically silent, likely a near miss out of coverage; TILLANDSIAS_RETRIEVE_LEXICAL_FLOOR and TILLANDSIAS_RETRIEVE_LEXICAL_MARGIN tune it (0 disables)",
+            t.lexical, t.lexical_margin
+        ),
+    }
 }
 
 /// A dependency-free, non-cryptographic content hash for change detection.
@@ -1504,7 +1836,7 @@ mod tests {
                 assert_eq!(kept.len(), 2, "the 0.30 chunk must be dropped");
                 assert!(kept.iter().all(|sc| sc.score >= 0.45));
             }
-            FloorDecision::OutOfCoverage { best } => {
+            FloorDecision::OutOfCoverage { best, .. } => {
                 panic!("a 0.80 best is covered, got OutOfCoverage {{ best: {best} }}")
             }
         }
@@ -1517,7 +1849,7 @@ mod tests {
     fn floors_refuse_when_best_is_under_the_refusal_floor() {
         let scored = vec![floor_chunk(0, 0.57), floor_chunk(1, 0.55)];
         match apply_retrieval_floors(scored, 0.45, 0.62) {
-            FloorDecision::OutOfCoverage { best } => {
+            FloorDecision::OutOfCoverage { best, .. } => {
                 assert!(
                     (best - 0.57).abs() < 1e-6,
                     "best must be reported, got {best}"
@@ -1534,7 +1866,7 @@ mod tests {
     #[test]
     fn floors_refuse_empty_retrieval_with_best_zero() {
         match apply_retrieval_floors(Vec::new(), 0.45, 0.62) {
-            FloorDecision::OutOfCoverage { best } => assert_eq!(best, 0.0),
+            FloorDecision::OutOfCoverage { best, .. } => assert_eq!(best, 0.0),
             FloorDecision::Keep(_) => panic!("an empty retrieval must refuse"),
         }
     }
@@ -1546,9 +1878,148 @@ mod tests {
     fn floors_refuse_when_min_score_starves_a_covered_retrieval() {
         let scored = vec![floor_chunk(0, 0.70)];
         match apply_retrieval_floors(scored, 0.90, 0.62) {
-            FloorDecision::OutOfCoverage { best } => assert!((best - 0.70).abs() < 1e-6),
+            FloorDecision::OutOfCoverage { best, .. } => assert!((best - 0.70).abs() < 1e-6),
             FloorDecision::Keep(_) => panic!("a starved retrieval must refuse"),
         }
+    }
+
+    fn topk(scores: &[f32]) -> Vec<ScoredChunk> {
+        scores
+            .iter()
+            .enumerate()
+            .map(|(i, s)| floor_chunk(i, *s))
+            .collect()
+    }
+
+    const FLAT: [f32; 8] = [0.700, 0.698, 0.697, 0.695, 0.694, 0.692, 0.690, 0.689];
+    const PEAKED: [f32; 8] = [0.800, 0.720, 0.690, 0.670, 0.660, 0.650, 0.640, 0.630];
+    /// A measured near miss (relabelled-561): none of its content words occur
+    /// in a `floor_chunk`.
+    const SILENT_Q: &str = "When is v1.0 scheduled to ship?";
+    /// Shares "spec", "requirement" and "body" with every `floor_chunk`.
+    const OVERLAP_Q: &str = "What does the spec requirement body say?";
+
+    fn defaults() -> RefusalThresholds {
+        RefusalThresholds::with_floors(0.45, 0.62)
+    }
+
+    /// @trace order:1820-m2kq. A FLAT top-k — best well above the absolute
+    /// floor (0.700 ≥ 0.62) but no higher than its own field (median 0.6945)
+    /// — whose best chunk shares none of the question's words is the
+    /// near-miss shape: topically close to a neighbourhood, specifically
+    /// answered by none of it. Refused; the absolute floor alone answered it.
+    #[test]
+    fn margin_refusal_flat_topk_refuses() {
+        let d = apply_refusal_rule(topk(&FLAT), Some(SILENT_Q), &defaults());
+        assert!(
+            matches!(
+                d,
+                FloorDecision::OutOfCoverage {
+                    rule: RefusalRule::NoLexicalOverlap,
+                    ..
+                }
+            ),
+            "flat top-k + lexically silent best chunk must refuse, got {d:?}"
+        );
+        // ... and the floor-only rule (the pre-1820 behaviour) answered it.
+        let old = apply_refusal_rule(topk(&FLAT), Some(SILENT_Q), &defaults().floor_only());
+        assert!(matches!(old, FloorDecision::Keep(_)), "{old:?}");
+    }
+
+    /// @trace order:1820-m2kq. A PEAKED top-k — one chunk clearly ahead of the
+    /// field (margin 0.135) — is the in-corpus shape and answers even when the
+    /// wording shares nothing: dense retrieval legitimately matches synonyms.
+    #[test]
+    fn margin_refusal_peaked_topk_answers() {
+        match apply_refusal_rule(topk(&PEAKED), Some(SILENT_Q), &defaults()) {
+            FloorDecision::Keep(kept) => assert_eq!(kept.len(), 8),
+            other => panic!("a peaked top-k must answer, got {other:?}"),
+        }
+    }
+
+    /// @trace order:1820-m2kq. Flatness ALONE does not refuse by default —
+    /// calibration measured a solo margin floor dominated (in-corpus top-k
+    /// are often flat over near-duplicate chunks). A flat top-k whose best
+    /// chunk carries the question's words answers.
+    #[test]
+    fn margin_refusal_flat_topk_with_lexical_overlap_answers() {
+        let d = apply_refusal_rule(topk(&FLAT), Some(OVERLAP_Q), &defaults());
+        assert!(matches!(d, FloorDecision::Keep(_)), "{d:?}");
+        // No query (the spec-floor arm without --query): lexical abstains.
+        let d = apply_retrieval_floors(topk(&FLAT), 0.45, 0.62);
+        assert!(matches!(d, FloorDecision::Keep(_)), "{d:?}");
+    }
+
+    /// @trace order:1820-m2kq. The solo margin knob, when an operator sets
+    /// it, refuses a flat top-k with no query at all.
+    #[test]
+    fn margin_refusal_solo_margin_knob_refuses_flat() {
+        let t = RefusalThresholds {
+            margin: 0.02,
+            ..defaults()
+        };
+        let d = apply_refusal_rule(topk(&FLAT), None, &t);
+        assert!(
+            matches!(
+                d,
+                FloorDecision::OutOfCoverage {
+                    rule: RefusalRule::FlatMargin,
+                    ..
+                }
+            ),
+            "{d:?}"
+        );
+    }
+
+    /// @trace order:1820-m2kq. The absolute floor stays the OUTER bound and is
+    /// checked first: a far question refuses as below-floor whatever its
+    /// margin or overlap.
+    #[test]
+    fn margin_refusal_keeps_the_absolute_floor_outermost() {
+        let far = topk(&[0.60, 0.40, 0.39, 0.38, 0.37]);
+        match apply_refusal_rule(far, Some(OVERLAP_Q), &defaults()) {
+            FloorDecision::OutOfCoverage { best, rule } => {
+                assert_eq!(rule, RefusalRule::BelowFloor);
+                assert!((best - 0.60).abs() < 1e-6);
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    /// @trace order:1820-m2kq. Zero lexical overlap is FLAGGED as Some(0.0) —
+    /// distinct from None (a query with no content terms cannot be "zero
+    /// overlap"), and the signals carry the margin over the median.
+    #[test]
+    fn lexical_overlap_zero_is_flagged_and_signals_carry_the_margin() {
+        let c = floor_chunk(0, 0.7).chunk;
+        assert_eq!(lexical_overlap(SILENT_Q, &c), Some(0.0));
+        assert_eq!(lexical_overlap(OVERLAP_Q, &c), Some(0.75));
+        assert_eq!(lexical_overlap("what is it?", &c), None);
+        assert_eq!(
+            query_content_terms("Rollbacks of the rollback"),
+            vec!["rollback"]
+        );
+        let sig = refusal_signals(&topk(&FLAT), Some(SILENT_Q));
+        assert_eq!(sig.lexical, Some(0.0));
+        assert_eq!(sig.query_terms, 2);
+        let m = sig.margin.expect("k=8 has a margin");
+        assert!((m - (0.700 - 0.6945)).abs() < 1e-4, "{m}");
+        // Below MARGIN_MIN_K the margin abstains.
+        let short = refusal_signals(&topk(&[0.7, 0.7, 0.7]), Some(SILENT_Q));
+        assert_eq!(short.margin, None);
+    }
+
+    /// @trace order:1820-m2kq. Each rule names its own knob in the reason.
+    #[test]
+    fn refusal_reason_names_the_rule_that_fired() {
+        let t = defaults();
+        let r = refusal_reason("full", 0.70, RefusalRule::NoLexicalOverlap, &t);
+        assert!(r.contains("TILLANDSIAS_RETRIEVE_LEXICAL_FLOOR"), "{r}");
+        assert!(r.contains("TILLANDSIAS_RETRIEVE_LEXICAL_MARGIN"), "{r}");
+        let r = refusal_reason("full", 0.70, RefusalRule::FlatMargin, &t);
+        assert!(r.contains("TILLANDSIAS_RETRIEVE_MARGIN_FLOOR"), "{r}");
+        let r = refusal_reason("full", 0.57, RefusalRule::BelowFloor, &t);
+        assert_eq!(r, out_of_coverage_reason("full", 0.57, 0.62));
     }
 
     /// The refusal reason names both tuning knobs and the two scores — it is
