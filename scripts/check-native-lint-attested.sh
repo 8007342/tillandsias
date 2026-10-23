@@ -45,7 +45,14 @@
 # a NAMED DEBT and never silently: the verdict carries the reason, and
 # land-on-platform-branch.sh records it as a `Native-Lint-Unattested:` trailer
 # on the landed history, so the next attestation on that platform pays it. An
-# empty value is not an override. Without it, the land waits.
+# empty value is not an override. Without it, the land waits. On the work-ref
+# lane the same debt is a `Native-Lint-Unattested: <reason>` trailer on a
+# commit of the candidate, read from base..HEAD (see the refusal block below).
+#
+# CALLERS: land-on-platform-branch.sh (the relay) and land-queue.sh (the
+# work/<order> lane, 1315/1316). The queue was added when the 2026-10-21 land
+# of work/1794-fwd2 put a new macOS-tray source on trunk with no attestation:
+# the check existed but the lane every landing now takes never asked it.
 #
 # Usage: check-native-lint-attested.sh [--base REF]    (default origin/linux-next)
 #        check-native-lint-attested.sh --list          print the gated crates
@@ -102,7 +109,8 @@ EOF
             echo "  landed: the crate changed after the attestation ($path=$head_tree now)."
             echo "  remedy: on a $platform host, re-run scripts/attest-native-lint.sh on this ref."
             echo "  no $platform host available? the land WAITS, or set"
-            echo "  TILLANDSIAS_NATIVE_LINT_UNATTESTED=\"<reason>\" to land it as recorded debt."
+            echo "  TILLANDSIAS_NATIVE_LINT_UNATTESTED=\"<reason>\" (relay) or add a trailer"
+            echo '  "Native-Lint-Unattested: <reason>" to a commit of the change (work ref) to land it as recorded debt.'
         } >&2
     else
         refused=1
@@ -113,13 +121,23 @@ EOF
             echo "  accountable: the AUTHORING $platform host. remedy: on that host run"
             echo "  scripts/attest-native-lint.sh, which lints natively and records the result."
             echo "  no $platform host available? the land WAITS, or set"
-            echo "  TILLANDSIAS_NATIVE_LINT_UNATTESTED=\"<reason>\" to land it as recorded debt."
+            echo "  TILLANDSIAS_NATIVE_LINT_UNATTESTED=\"<reason>\" (relay) or add a trailer"
+            echo '  "Native-Lint-Unattested: <reason>" to a commit of the change (work ref) to land it as recorded debt.'
         } >&2
     fi
 done
 
 if [ "$refused" -ne 0 ]; then
     reason="${TILLANDSIAS_NATIVE_LINT_UNATTESTED:-}"
+    # THE SAME NAMED DEBT, CARRIED BY THE CHANGE ITSELF. scripts/land-queue.sh
+    # lands many candidates per run, so an env override there would excuse
+    # every candidate in the run, not the one it was meant for. A
+    # `Native-Lint-Unattested: <reason>` trailer in base..HEAD is per-candidate,
+    # names its reason, and is already on the history that lands.
+    if [ -z "$reason" ]; then
+        reason="$(git log --format='%(trailers:key=Native-Lint-Unattested,valueonly)' "$base..HEAD" 2>/dev/null \
+                  | sed '/^[[:space:]]*$/d' | head -n 1)"
+    fi
     if [ -n "$reason" ]; then
         for entry in $GATED_CRATES; do
             rest="${entry#*:}"

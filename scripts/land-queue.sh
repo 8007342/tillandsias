@@ -374,7 +374,7 @@ while IFS=$'\t' read -r num head <&3; do
     _last_reason="$(marker_field "$_last" reason)"
     if [ -n "$_last" ] && [ "$_last_head" = "$head_sha" ]; then
         case "$_last_reason" in
-            gate-failed|preflight-failed|carried-*)
+            gate-failed|preflight-failed|carried-*|native-lint-*)
                 # An allow-list: a conflict, a flaky or aborted gate, or any reason a
                 # later change adds is re-gated, never skipped.
                 _sdelta=""; _sclasses=""; _stale=0
@@ -524,6 +524,63 @@ The queue continued with the next candidate.$(evict_marker "$num" "$head_sha" "$
         merge_sha="$(git rev-parse HEAD)"
     else
         say "advisory:land-queue:$num:carried-unjudged:rc=$_crc:${_cverdict:-no-verdict} — no Carried trailer on this landing"
+    fi
+
+    # ── A CFG-GATED PLATFORM CRATE NEEDS A NATIVE LINT (1235-rfub) ───────────
+    # The gate below compiles crates/tillandsias-macos-tray as STUBS on this
+    # host and cannot lint it, so a macOS-only clippy hard error passes it
+    # (d44909353 reddened trunk for every Mac that way). The relay tool has
+    # refused such a change since 2026-09-28, but every landing now comes
+    # through THIS queue, which never asked: on 2026-10-21 land(594) put a new
+    # tray source on trunk with no Native-Lint attestation in its range.
+    # Asked of the merge against the gated base, so the range is exactly the
+    # candidate's commits. The env override is STRIPPED: one exported reason
+    # would excuse every candidate in the run. The per-candidate override is a
+    # `Native-Lint-Unattested: <reason>` trailer on the work ref, and the debt
+    # is repeated on the land commit so a first-parent log tallies it.
+    if [ -f "$_SELF_DIR/check-native-lint-attested.sh" ]; then
+        _nlout="$(mktemp)"; _nlerr="$(mktemp)"
+        env -u TILLANDSIAS_NATIVE_LINT_UNATTESTED -u TILLANDSIAS_NATIVE_LINT_BASE \
+            bash "$_SELF_DIR/check-native-lint-attested.sh" --base "$base_sha" \
+            < /dev/null > "$_nlout" 2> "$_nlerr"
+        _nlrc=$?
+        _nlverdict="$(head -n 1 "$_nlout")"
+        _nlwhy="$(cat "$_nlerr")"
+        _nldebt="$(sed -n 's/^override:native-lint:unattested://p' "$_nlout")"
+        rm -f "$_nlout" "$_nlerr"
+        if [ "$_nlrc" -ne 0 ]; then
+            # refused:native-lint:<unattested|stale>:<pkg>
+            _nlkind="$(printf '%s' "$_nlverdict" | cut -d: -f3)"
+            _nlpkg="$(printf '%s' "$_nlverdict" | cut -d: -f4)"
+            say "evict:land-queue:$num:native-lint-${_nlkind:-unjudged}:${_nlpkg:-rc=$_nlrc}"
+            say "  accountable: the AUTHORING darwin host — run scripts/attest-native-lint.sh on $head there and push it"
+            pr_comment "$num" "Evicted from the landing queue: \`$head\` changes a cfg-gated platform crate that this gate compiles as stubs and cannot lint, and no host attested a native lint of exactly this content (\`${_nlverdict:-no verdict, rc=$_nlrc}\`, order 1235-rfub).
+
+**Accountable: the authoring host of the crate's platform (darwin for \`tillandsias-macos-tray\`).** On that host, check out \`$head\`, run \`scripts/attest-native-lint.sh\` (it runs \`cargo clippy -p <crate> --all-targets -- -D warnings\` and commits a \`Native-Lint:\` trailer only if it passes), and push. The queue picks the new head up.
+
+With no such host available the land waits, or add this line to the LAST paragraph of a commit message on \`$head\` to land it as recorded, unlinted debt:
+
+\`\`\`
+Native-Lint-Unattested: <reason>
+\`\`\`
+
+\`\`\`
+$_nlwhy
+\`\`\`$(evict_marker "$num" "$head_sha" "$base_sha" "native-lint-${_nlkind:-unjudged}:${_nlpkg:-rc=$_nlrc}")"
+            evicted=$((evicted + 1))
+            continue
+        fi
+        if [ -n "$_nldebt" ]; then
+            _nltr=()
+            while IFS= read -r _d; do
+                [ -n "$_d" ] && _nltr+=(--trailer "Native-Lint-Unattested: $_d")
+            done <<< "$_nldebt"
+            git -c user.name=land-queue -c user.email=land-queue@localhost \
+                commit -q --amend --no-edit "${_nltr[@]}" >/dev/null 2>&1 \
+                || say "advisory:land-queue:$num:native-lint-debt-trailer-not-written — the candidate's own trailer still records it"
+            merge_sha="$(git rev-parse HEAD)"
+            say "debt:land-queue:$num:native-lint-unattested:$(printf '%s' "$_nldebt" | head -n 1) — lands UNLINTED on the candidate's named reason"
+        fi
     fi
 
     # ── GATE THE MERGE RESULT ────────────────────────────────────────────────

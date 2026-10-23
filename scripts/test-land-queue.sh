@@ -998,6 +998,81 @@ $o18a
 $o18b
 comments: $(grep -o 'land-queue:evicted[^>]*' "$GH_COMMENTS")"
 fi
+
+# ── ARM 19 — A CFG-GATED macOS CRATE LANDS ONLY WITH A NATIVE LINT (1235-rfub).
+#            The gate compiles the tray as stubs and cannot lint it; the queue
+#            must ask check-native-lint-attested.sh before spending a gate.
+#            Measured: land(594) at 32a9f83ef put a new tray source on trunk with
+#            no Native-Lint attestation. PRE-FIX: #1 lands — this arm FAILS.
+#   #1 the incident's useless_format in the tray, unattested -> EVICTED, the
+#      accountable host named, no gate; an EXPORTED override must not excuse it
+#   #2 a change outside the gated crate -> lands (NEGATIVE CONTROL)
+#   #3 the same tray change with a Native-Lint trailer bound to its tree -> lands
+#   #4 a tray change carrying `Native-Lint-Unattested: <reason>` -> lands, and
+#      the land commit repeats the debt
+scaffold nlint
+tray_candidate() {  # <order> <file under src/> <content> [extra commit args...]
+    local order="$1" file="$2" content="$3"; shift 3
+    git -C "$WORK_DIR" checkout -q -B "work/$order" origin/linux-next
+    mkdir -p "$WORK_DIR/crates/tillandsias-macos-tray/src"
+    printf '%s\n' "$content" > "$WORK_DIR/crates/tillandsias-macos-tray/src/$file"
+    git -C "$WORK_DIR" add -A
+    git -C "$WORK_DIR" commit -q -m "work($order): tray" "$@"
+}
+tray_candidate 1901-aaaa action_host.rs 'fn f() -> Result<(), String> { std::fs::read("x").map_err(|e| format!("{e}"))?; Ok(()) }'
+git -C "$WORK_DIR" push -q origin work/1901-aaaa
+candidate nlint 1902-bbbb b.txt B
+tray_candidate 1903-cccc g.rs 'fn g() {}'
+t19="$(git -C "$WORK_DIR" rev-parse HEAD:crates/tillandsias-macos-tray)"
+git -C "$WORK_DIR" commit -q --allow-empty -m "native-lint: darwin ok (mac)" \
+    --trailer "Native-Lint: mac darwin crates/tillandsias-macos-tray=$t19 clippy-all-targets-D-warnings"
+git -C "$WORK_DIR" push -q origin work/1903-cccc
+tray_candidate 1904-dddd h.rs 'fn h() {}' -m "Native-Lint-Unattested: no mac awake for the fixture"
+git -C "$WORK_DIR" push -q origin work/1904-dddd
+git -C "$WORK_DIR" checkout -q linux-next
+cat > "$GH_PRS" <<'JSON'
+[{"number":1,"headRefName":"work/1901-aaaa","isDraft":false},
+ {"number":2,"headRefName":"work/1902-bbbb","isDraft":false}]
+JSON
+sed "s|@LOG@|$GATE_LOG|" > "$GATE_BIN" <<'GATE'
+#!/usr/bin/env bash
+echo "gated $(git rev-parse HEAD)" >> "@LOG@"
+exit 0
+GATE
+o19a="$(TILLANDSIAS_NATIVE_LINT_UNATTESTED="leaked from the caller" run_queue)"; g19a="$(gates)"
+if grep -q '^evict:land-queue:1:native-lint-unattested:tillandsias-macos-tray$' <<<"$o19a" \
+   && grep -q '^land:2 ' <<<"$o19a" && ! grep -q '^land:1 ' <<<"$o19a" && [ "$g19a" -eq 1 ] \
+   && grep -q 'Accountable: the authoring host' "$GH_COMMENTS" \
+   && grep -q 'reason=native-lint-unattested:tillandsias-macos-tray' "$GH_COMMENTS"; then
+    ok "ARM 19a: an unattested macOS-tray change is EVICTED before its gate, naming the accountable host; an exported override does not excuse it; a non-tray candidate lands"
+else
+    bad "ARM 19a: wanted evict native-lint-unattested for #1, land #2, 1 gate; gates=$g19a
+$o19a
+comments: $(cat "$GH_COMMENTS")"
+fi
+cat > "$GH_PRS" <<'JSON'
+[{"number":3,"headRefName":"work/1903-cccc","isDraft":false}]
+JSON
+o19b="$(run_queue)"
+if grep -q '^land:3 ' <<<"$o19b"; then
+    ok "ARM 19b: the tray change with a Native-Lint attestation bound to its tree lands (NEGATIVE CONTROL)"
+else
+    bad "ARM 19b: wanted the attested tray candidate to land
+$o19b"
+fi
+cat > "$GH_PRS" <<'JSON'
+[{"number":4,"headRefName":"work/1904-dddd","isDraft":false}]
+JSON
+o19c="$(run_queue)"
+git -C "$WORK_DIR" fetch -q origin linux-next
+d19="$(git -C "$WORK_DIR" log --first-parent --format='%s|%(trailers:key=Native-Lint-Unattested,valueonly)' origin/linux-next | grep '^land(4)')"
+if grep -q '^land:4 ' <<<"$o19c" && grep -q '^debt:land-queue:4:native-lint-unattested:' <<<"$o19c" \
+   && grep -q 'no mac awake for the fixture' <<<"$d19"; then
+    ok "ARM 19c: a candidate carrying Native-Lint-Unattested lands as named debt, repeated on the land commit"
+else
+    bad "ARM 19c: wanted land #4 with the debt on the land commit; land commit: [$d19]
+$o19c"
+fi
 printf '\n'
 if [ "$fail" -eq 0 ]; then
     if [ "$skipped" -gt 0 ]; then
