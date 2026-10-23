@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: groundtruth-forge-awareness-cases-pin-no-docker-recommendations-and-no-tillandsias-rules-on-a-foreign-project
+    field: status
+    value: in_progress
+    ts: "2026-10-23T01:40:24Z"
+    host: macuahuitl
+
+events:
+  - packet_id: groundtruth-forge-awareness-cases-pin-no-docker-recommendations-and-no-tillandsias-rules-on-a-foreign-project
+    event:
+      type: note
+      ts: "2026-10-23T01:40:24Z"
+      host: macuahuitl
+      summary: |-
+        claimed for cycle 2026-10-23T01:40:19Z by linux-macuahuitl-claude-20261023t014019z

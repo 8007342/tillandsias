@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: cheatsheet-runtime-forge-constraints-states-rootless-podman-no-docker-tmpfs-workspace-proxy-egress-inference-host-and-mirror-push-and-is-retrievable
+    field: next_action
+    value: 'PR #607 (work/1816-iyyc, a92f7910c) implements this: do not reimplement. Land it, then close with the landed SHA; still unrun: the spec-retrieve top-3 criterion for ''how do I run docker in the forge'' against a rebuilt index.'
+    ts: "2026-10-23T01:40:45Z"
+    host: macuahuitl
+    replaces_sha256: "f97f6e0c265d2bafd777d2229883c0d47afb3c04b9aa72e46e892d808eb56b68"
+
+events:
+  - packet_id: cheatsheet-runtime-forge-constraints-states-rootless-podman-no-docker-tmpfs-workspace-proxy-egress-inference-host-and-mirror-push-and-is-retrievable
+    event:
+      type: note
+      ts: "2026-10-23T01:40:45Z"
+      host: macuahuitl
+      summary: |-
+        cycle handoff
