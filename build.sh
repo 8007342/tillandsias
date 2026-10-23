@@ -3583,6 +3583,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
+    # Order 1842-2q4g: the ghost-trace ratchet, asked in the fast lane so the
+    # preflight door (source 5 of _preflight_roster) refuses a @trace naming an
+    # absent spec in seconds. It used to run only at the end of the full gate:
+    # #607 lost ~64 minutes to `spec:forge-container`. Measured 0.3 s.
+    if ! _run_lua_decider "scripts/lua/check-ghost-traces.lua" 2>&1; then
+        _error "a @trace names a spec that does not exist, or the ghost baseline is stale (1842-2q4g) — see the spec named above"
+        exit 1
+    fi
+
     # NOT HERE: check-declared-closures-added.sh (885-92iu). It was hoisted in
     # the first cut of 1009-gccx and that was WRONG — caught by yoga, confirmed
     # by measurement here. It resolves a built `tillandsias-plan` and, when the
