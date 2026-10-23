@@ -8,4 +8,4 @@ STEP_DESC="Checking the local-delegate outcome token and rung aggregator (1834-u
 STEP_SCRIPT="scripts/test-local-delegate-ladder.sh"
 STEP_ERROR="the local-delegate token grammar or the rung arithmetic (R1-R4 thresholds, 20-outcome sample floor, demotion, supersession) drifted (1834-ujsf) — see the verdict line above"
 STEP_OK="Local-delegate ladder passed"
-STEP_SECOND_REGIME="macuahuitl 2026-10-23 msys skip:no-darwin-or-windows-run-yet-author-is-linux-second-regime-unobserved"
+STEP_SECOND_REGIME="macbookair 2026-10-23 darwin ok:local-delegate-ladder:29/29"
