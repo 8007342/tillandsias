@@ -231,7 +231,7 @@ pub fn str_field<'a>(packet: &'a Value, key: &str) -> Option<&'a str> {
 /// (1437-vdz5), never by a refusal.
 pub const TIER_FIELDS: [(&str, &[&str]); 2] = [
     ("size", &["S", "M", "L"]),
-    ("implementer_tier", &["haiku", "sonnet", "opus"]),
+    ("implementer_tier", &["local", "haiku", "sonnet", "opus"]),
 ];
 
 /// ORDER 1437-khnx — a tier field's value: the top-level scalar when present,
