@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tray-launched-forge-seeded-from-main-not-the-checkout-branch
+    field: next_action
+    value: 'Code is done (d4b764392 reader+test, 898982791 SEED resolved line, cc928bc1f not-a-platform-branch warning; test seed_branch_reads_checkout_head_not_the_remotes_default 1 passed on f0e61287e). Remaining = criterion 1 host observation: tray-launch a forge from a linux-next checkout on a stable release, podman inspect its TILLANDSIAS_FORGE_SEED_BRANCH, and quote the [forge-launch] SEED stderr line naming the checkout path.'
+    ts: "2026-10-23T00:13:54Z"
+    host: macuahuitl
+    replaces_sha256: "a57f977352f0cc9c3f1141749b384af64b2941ea4d4792b4583b0e701338a0e9"
+
+events:
+  - packet_id: tray-launched-forge-seeded-from-main-not-the-checkout-branch
+    event:
+      type: note
+      ts: "2026-10-23T00:13:54Z"
+      host: macuahuitl
+      summary: |-
+        cycle end

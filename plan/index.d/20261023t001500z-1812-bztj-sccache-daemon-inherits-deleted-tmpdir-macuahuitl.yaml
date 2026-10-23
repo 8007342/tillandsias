@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-shared-sccache-daemon-inherits-a-preflight-guards-tmpdir-and-reds-every-later-compile-once-it-is-deleted
+    order: 1812-bztj
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [build, instrument, gate, fleet]
+    estimated_hours: 1
+    owned_files:
+      - scripts/sccache-wrapper.sh
+      - scripts/test-sccache-long-tmpdir.sh
+    title: |
+      The shared sccache daemon is started by whichever cargo call finds it dead and inherits that call's TMPDIR; the preflight door's pf-guard.XXXXXX dir is short enough for the wrapper to keep, so once the door deletes it every later cached compile on the host fails "Failed to create temp dir"
+    context: |
+      MEASURED on macuahuitl 2026-10-22. A subagent working 1235-rfub (a
+      shell-only change) saw ./build.sh --preflight exit 1 on
+      test-a-claim-names-a-workstation and test-litmus-self-match: their cargo
+      builds died "Failed to create temp dir" under /tmp/pf-guard.*. The live
+      daemon's environ held TMPDIR=/tmp/pf-guard.tLsRWs, a directory that no
+      longer existed. Stopping the server cleared it; a later preflight on the
+      same host started a fresh daemon under TMPDIR=/tmp/pf-guard.Kz5oUS and
+      re-armed the same failure.
+      CAUSE: scripts/sccache-wrapper.sh (1804-sccl) shortened only a TMPDIR
+      longer than 40 bytes, to dodge SUN_LEN; /tmp/pf-guard.XXXXXX is 21 and
+      was passed through. The land queue runs preflight on this host, so any
+      candidate whose guards compile Rust could be evicted for a cache's dead
+      temp dir. The fixture test-sccache-long-tmpdir.sh was bound by no gate.
+    exit_criteria:
+      - 'a cargo build through scripts/sccache-wrapper.sh succeeds after the TMPDIR of the call that started the sccache server has been deleted (pre-fix result: FAILS, exit 254 "Failed to create temp dir" — ARM 4 of scripts/test-sccache-long-tmpdir.sh)'
+      - 'the fixture is bound to the gate by a literal path in a gate step whose STEP_SECOND_REGIME records a darwin or msys run (the step is unwritten: check-gate-step-regimes refuses a Linux-only record, and no Mac was reachable from this cycle)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the pin is ARM 4 of
+      scripts/test-sccache-long-tmpdir.sh (pre-fix result: FAILS, exit 254
+      "Failed to create temp dir"; post-fix ok, macuahuitl 2026-10-22), but no
+      gate runs that fixture yet. The claimer of the binding writes gate step
+      scripts/gate-steps.d/<NNN>-1812-bztj.step with STEP_SCRIPT naming it,
+      after running it on darwin or msys for STEP_SECOND_REGIME.
+    provenance: |
+      Filed by macuahuitl (claude, operator-prompted drain) 2026-10-22, from a 1235-rfub subagent's preflight report.
+    events:
+      - type: filed
+        ts: "2026-10-23T00:15:00Z"
+        host: macuahuitl
+        summary: |-
+          p1: sccache daemon inherits a preflight guard's deleted TMPDIR; wrapper now always runs sccache with TMPDIR=/tmp; fixture ARM 4 reproduces; gate binding waits on a darwin/msys run.

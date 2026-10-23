@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-shared-sccache-daemon-inherits-a-preflight-guards-tmpdir-and-reds-every-later-compile-once-it-is-deleted
+    field: status
+    value: ready
+    ts: "2026-10-23T00:13:55Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-shared-sccache-daemon-inherits-a-preflight-guards-tmpdir-and-reds-every-later-compile-once-it-is-deleted
+    event:
+      type: note
+      ts: "2026-10-23T00:13:55Z"
+      host: macuahuitl
+      summary: |-
+        filed and fixed this cycle in PR #604; binding needs a second-regime run
