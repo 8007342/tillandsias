@@ -51,7 +51,15 @@ shared_target_enter() { # ROOT ; exports CARGO_TARGET_DIR, takes the lock, touch
     if [ -n "${CARGO_TARGET_DIR:-}" ] && [ "$CARGO_TARGET_DIR" != "$canon" ]; then
         echo "shared-target: off (CARGO_TARGET_DIR already set to $CARGO_TARGET_DIR)" >&2; return 0
     fi
-    command -v flock >/dev/null 2>&1 || { echo "shared-target: REFUSED, no flock on PATH to serialize the shared dir" >&2; return 1; }
+    # @trace order:1840-2p9v — NO FLOCK IS "OFF", NOT A REFUSAL. Stock macOS
+    # ships no flock(1), and refusing here redded every Mac preflight
+    # (macbookair 2026-10-23: test-gate-step-host-state-retry 0/4,
+    # test-script-run-verb ARM 5). The shared dir is a cache; without a lock
+    # it cannot be shared safely, so the checkout keeps its own target/ —
+    # exactly the other off paths above.
+    if ! command -v flock >/dev/null 2>&1; then
+        echo "shared-target: off (no flock on PATH to serialize the shared dir; this checkout keeps its own target/)" >&2; return 0
+    fi
     owner="$canon/.shared-target-owner"
     # NESTED ENTER (re-exec inside the toolbox, fixtures calling build.sh):
     # the holder exports TILLANDSIAS_SHARED_TARGET_HELD="<canon>|<root>|<pid>".
