@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: synthesis-requests-set-num-ctx-per-model-size-and-cap-retrieved-context-by-tokens-not-chunk-count
+    field: next_action
+    value: 'PR #615 (work/1818-uiar, 2c19c076c; contains #610) implements this: do not reimplement. Measured on macuahuitl ollama 0.33.1: /v1/chat/completions IGNORES options.num_ctx; synthesis now posts to native /api/chat with num_ctx 4096 (<7b) / 8192 (>=7b) and falls back to /v1. Land it, then close with the landed SHA. Not done: the forge-plan.sh spec_answer twin (1823-4kwh).'
+    ts: "2026-10-23T04:04:51Z"
+    host: macuahuitl
+    replaces_sha256: "6206e82f9336877ee2a38186887de61b7e364a323823d9ff3a08c3e5a477aa3e"
+
+events:
+  - packet_id: synthesis-requests-set-num-ctx-per-model-size-and-cap-retrieved-context-by-tokens-not-chunk-count
+    event:
+      type: note
+      ts: "2026-10-23T04:04:51Z"
+      host: macuahuitl
+      summary: |-
+        handoff
