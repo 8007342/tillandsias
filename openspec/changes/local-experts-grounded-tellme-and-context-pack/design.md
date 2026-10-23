@@ -11,7 +11,7 @@ tellme howto|about  ──probe 127.0.0.1:11436──► expert-serve (OpenAI-sh
   grep INDEX.md fallback                run_grounded(tier, domain, query)
   (pack-first prompt,                     ├─ answer cache hit? → return
    no general-knowledge text,             ├─ decompose only on Fine
-   model = TILLANDSIAS_INFERENCE_MODEL)   ├─ retrieve (dense; later BM25+RRF)
+   model = TILLANDSIAS_INFERENCE_MODEL)   ├─ retrieve (dense + BM25 fused by RRF, 1822-dmwz)
                                           ├─ refuse by margin + overlap
                                           └─ synthesise: [PACK][chunks ≤ budget][question]
 ```

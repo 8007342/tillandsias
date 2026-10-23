@@ -510,7 +510,7 @@ const USAGE: &str = concat!(
     "                                     exit 2 = the harness could not run at all.\n",
     "           spec-index --out <dir> [--root D]\n",
     "                                     ORDER 547. Chunk the whole-spec corpus into <dir>/chunks.jsonl\n",
-    "           spec-retrieve --index-dir <dir> --query-vec <f> [--k N]\n",
+    "           spec-retrieve --index-dir <dir> --query-vec <f> [--query-text Q] [--k N]\n",
     "                                     network-free cosine top-k over caller-supplied embeddings\n",
     "           score-checks\n",
     "                                     ORDER 977-j6qu. THE centicolon scorer. Reads\n",
@@ -6018,11 +6018,14 @@ fn main() {
         let mut out: Option<PathBuf> = None;
         let mut index_dir: Option<PathBuf> = None;
         let mut query_vec: Option<PathBuf> = None;
+        // The question's words, one value for two readers: ORDER 1822-dmwz
+        // feeds it to spec-retrieve's BM25 channel (--query-text; absent =
+        // dense-only, byte-identical to before), and @trace order:1820-m2kq
+        // feeds it to spec-floor's lexical-overlap signal (--query).
+        let mut query_text: Option<String> = None;
         let mut chunks_json: Option<PathBuf> = None;
         let mut answer_file: Option<PathBuf> = None;
-        // @trace order:1820-m2kq — the query text (lexical-overlap signal) and
-        // a labelled question set (spec-refusal-calibrate).
-        let mut query_text: Option<String> = None;
+        // @trace order:1820-m2kq — a labelled question set (spec-refusal-calibrate).
         let mut questions: Option<PathBuf> = None;
         // ORDER 801-g9nn — the commit the INDEX was built at, which for a
         // retrieved answer is the frame the spans were read in and is NOT this
@@ -6052,6 +6055,10 @@ fn main() {
                 "--query-vec" => {
                     i += 1;
                     query_vec = args.get(i).map(PathBuf::from);
+                }
+                "--query-text" => {
+                    i += 1;
+                    query_text = args.get(i).cloned();
                 }
                 "--chunks-json" => {
                     i += 1;
@@ -6143,7 +6150,16 @@ fn main() {
                     std::process::exit(1);
                 }
                 let query = read_query_vec(&qv);
-                let top = spec::top_k(&query, &vectors, k);
+                // ORDER 1822-dmwz: with --query-text, the pipeline's hybrid
+                // ranking (dense + BM25 fused by RRF; scores stay cosine).
+                let top = match query_text.as_deref() {
+                    Some(text) => {
+                        let lexical = spec::Bm25::from_chunks(&chunks);
+                        let all: Vec<usize> = (0..vectors.len()).collect();
+                        spec::hybrid_top_k(text, &query, &vectors, &lexical, &all, k)
+                    }
+                    None => spec::top_k(&query, &vectors, k),
+                };
                 // ORDER 821-73es. The score used to be dropped here, which is
                 // why nothing downstream could tell "the corpus covers this"
                 // from "the corpus was searched": cosine top-k always returns

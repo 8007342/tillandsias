@@ -685,23 +685,6 @@ enum SynthOutcome {
     TimedOut,
 }
 
-/// Domain-filtered cosine top-k: [`spec::top_k`]'s ranking over a subset of
-/// the entry's vectors, without cloning the index. Returns entry indices.
-fn top_k_filtered(
-    query: &[f32],
-    vectors: &[Vec<f32>],
-    selected: &[usize],
-    k: usize,
-) -> Vec<(usize, f32)> {
-    let mut scored: Vec<(usize, f32)> = selected
-        .iter()
-        .map(|&i| (i, spec::cosine(query, &vectors[i])))
-        .collect();
-    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-    scored.truncate(k);
-    scored
-}
-
 /// D3 — validation is Rust. Re-verifies a candidate envelope's citations
 /// against the checkout root (the same `answer::verify` the CLI's emit path
 /// runs) and downgrades failures to the typed refusal. Deterministic and
@@ -921,7 +904,17 @@ pub async fn run_grounded(
     let pack = crate::context_pack::load_pack(&cfg.root);
     for (i, p) in trimmed.iter().enumerate() {
         let Some(qv) = &qvecs[i] else { continue };
-        let top = top_k_filtered(qv, &entry.vectors, &selected, RETRIEVE_K);
+        // ORDER 1822-dmwz: dense cosine fused with BM25 over the variant's
+        // own words by RRF; the carried score is still the cosine, so the
+        // floors below keep their calibrated meaning. RETRIEVE_K unchanged.
+        let top = spec::hybrid_top_k(
+            &p.prompt,
+            qv,
+            &entry.vectors,
+            entry.lexical(),
+            &selected,
+            RETRIEVE_K,
+        );
         // Coverage is decided by the BEST score; citation-worthiness per
         // chunk. A variant whose best hit is under the refusal floor is
         // out of coverage and never reaches synthesis. ONE implementation

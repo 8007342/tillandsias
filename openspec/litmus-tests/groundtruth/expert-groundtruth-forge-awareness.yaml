@@ -10,10 +10,11 @@
 #     openspec/litmus-tests/groundtruth/expert-groundtruth-forge-awareness.yaml
 #
 # THE FIELD FAILURE (container questions asked in a forge answered with
-# `docker run`) is pinned by three cases that are RED TODAY and therefore live
+# `docker run`) was pinned by three cases that were RED and therefore live
 # in pending/expert-groundtruth-forge-awareness-pending.yaml, outside the glob
 # every gate requires fail=0 over. They are graded by a ratchet step in the
-# litmus; when they pass they MOVE INTO THIS FILE. See that file's header.
+# litmus; when they pass they MOVE INTO THIS FILE. See that file's header. 1822-dmwz moved the
+# docker case here; two remain pending.
 #
 # `answer_excludes` already expressed negatives; no harness change was needed
 # for them. The harness change of this order is `project:` below.
@@ -60,3 +61,33 @@ cases:
         - "plan ledger"
         - "@trace"
         - "OpenSpec"
+
+  # ORDER 1822-dmwz: moved from pending/ when it went green (title-card fold +
+  # BM25/RRF in cheatsheet.ask). It started RED there; the ratchet required this move.
+  - id: forge-run-container-here-no-docker
+    engine: cheatsheet.ask
+    query: "how do I run a container or docker here in the forge?"
+    why: >
+      The field failure. The answer must be the forge-constraints rule (no
+      docker, no nested container daemon) cited to the right lines, and must
+      not carry a recommending phrasing.
+    expect:
+      confidence: exact
+      citation_kind: cheatsheet
+      min_citations: 1
+      max_citations: 1
+      citations_include:
+        - path: cheatsheets/runtime/forge-constraints.md
+          kind: cheatsheet
+          span_contains:
+            - "NO docker"
+            - "nested container daemon"
+      answer_contains:
+        - "NO docker"
+      answer_excludes:
+        - "docker pull"
+        - "docker-compose up"
+        - "apt install docker"
+        - "dnf install docker"
+        - "systemctl start docker"
+

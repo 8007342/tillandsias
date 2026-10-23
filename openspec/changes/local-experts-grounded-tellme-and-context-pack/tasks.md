@@ -27,6 +27,7 @@ How to read this list:
 ## 4. Retrieval quality and one client (p3)
 
 - [ ] 4.1 Hybrid BM25 + dense retrieval with RRF, a reranker on Fine only, YAML chunks prefixed with breadcrumbs [1822-dmwz]
+  - 1822-dmwz slice 1 (landed with this change): BM25 + RRF with a protected dense head (`spec::hybrid_top_k`); on an index chunked before this order the lexical channel is limited to identifier-bearing questions (`spec::query_has_identifier`, `Bm25::legacy_chunks`); breadcrumbed YAML chunks ≤ 1200 chars (`spec::MAX_YAML_CHUNK_CHARS_BREADCRUMBED`); markdown fence/front-matter-aware headings and title-card folding; cheatsheet.ask fuses its heuristic with BM25. NOT done: the Fine-only reranker (and its counting-mock test). Markdown breadcrumbs were measured to regress a gated dense case and are not emitted (see `spec::BREADCRUMB_MARK`).
 - [ ] 4.2 One expert client for every front-end, plus a guard that refuses direct inference HTTP calls [1823-4kwh]
 
 ## 5. Close

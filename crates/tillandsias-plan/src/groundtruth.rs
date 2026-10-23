@@ -697,6 +697,14 @@ fn truncate(s: &str, n: usize) -> String {
 
 // ── the harness ─────────────────────────────────────────────────────────────
 
+/// The loaded spec index: chunks, their vectors, and the BM25 index over the
+/// chunks (order 1822-dmwz), all index-aligned.
+type SpecIndexView<'a> = (
+    &'a [crate::spec::Chunk],
+    &'a [Vec<f32>],
+    &'a crate::spec::Bm25,
+);
+
 /// Loads each corpus AT MOST ONCE and answers every case from it. Loading the
 /// 22k-line ledger or the 57-file methodology corpus per case is the
 /// difference between a harness that fits the 60s in-forge budget and one that
@@ -711,6 +719,8 @@ pub struct Harness {
     /// ORDER 1821-xcwc: per-`project` cheatsheet chunks, paths pre-prefixed.
     project_cheatsheets: BTreeMap<String, Vec<crate::spec::Chunk>>,
     spec_vectors: Option<Vec<Vec<f32>>>,
+    /// ORDER 1822-dmwz: BM25 over `spec_chunks`, built with them.
+    spec_lexical: Option<crate::spec::Bm25>,
     spec_chunks: Option<Vec<crate::spec::Chunk>>,
     /// ORDER 1229-2862 — the FRAME the loaded entry serves answers from.
     ///
@@ -860,6 +870,7 @@ impl Harness {
             cheatsheets: None,
             project_cheatsheets: BTreeMap::new(),
             spec_vectors: None,
+            spec_lexical: None,
             spec_chunks: None,
             spec_freshness: None,
             spec_index_dir: None,
@@ -914,7 +925,7 @@ impl Harness {
     /// them is what the index's fingerprint guarantees, so a count mismatch is
     /// refused rather than graded — a shifted pairing answers plausibly and
     /// wrongly, which is the one failure mode a grader must never certify.
-    fn spec_index(&mut self) -> Result<(&[crate::spec::Chunk], &[Vec<f32>]), String> {
+    fn spec_index(&mut self) -> Result<SpecIndexView<'_>, String> {
         if self.spec_vectors.is_none() {
             // 920-pxg6: the loader (read errors, and the arity refusal that
             // keeps a shifted pairing from grading as plausible-and-wrong)
@@ -931,12 +942,14 @@ impl Harness {
             // `Freshness::for_source` mistake this order removes.
             self.spec_freshness = Some(entry.freshness());
             self.spec_model = entry.model.clone();
+            self.spec_lexical = Some(crate::spec::Bm25::from_chunks(&entry.chunks));
             self.spec_vectors = Some(entry.vectors);
             self.spec_chunks = Some(entry.chunks);
         }
         Ok((
             self.spec_chunks.as_ref().expect("just loaded"),
             self.spec_vectors.as_ref().expect("just loaded"),
+            self.spec_lexical.as_ref().expect("just loaded"),
         ))
     }
 
@@ -1032,7 +1045,7 @@ impl Harness {
                     return Err(refusal);
                 }
                 let qvec = q.vector;
-                let (chunks, vectors) = self.spec_index()?;
+                let (chunks, vectors, lexical) = self.spec_index()?;
                 // ORDER 917-6iwv: the SAME width the pipeline serves, not a
                 // second literal beside it. This line read `6` while
                 // pipeline::RETRIEVE_K was independently `6`; nothing compared
@@ -1040,7 +1053,20 @@ impl Harness {
                 // A grader measuring a configuration the product does not serve
                 // is worse than no grader, because its number looks like
                 // evidence.
-                let top = crate::spec::top_k(&qvec, vectors, crate::pipeline::RETRIEVE_K);
+                //
+                // ORDER 1822-dmwz: and the SAME ranking — the pipeline's hybrid
+                // (dense + BM25 over the question text, fused by RRF), so the
+                // grader certifies what run_grounded serves.
+
+                let all: Vec<usize> = (0..vectors.len()).collect();
+                let top = crate::spec::hybrid_top_k(
+                    &case.query,
+                    &qvec,
+                    vectors,
+                    lexical,
+                    &all,
+                    crate::pipeline::RETRIEVE_K,
+                );
                 let picked: Vec<crate::spec::ScoredChunk> = top
                     .iter()
                     .map(|(i, sc)| crate::spec::ScoredChunk {
