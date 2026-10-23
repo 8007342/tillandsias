@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: bench-local-coding-models-qwen3-coder-30b-a3b-and-devstral-small-2-with-a-tool-call-round-trip-arm-and-a-20-packet-replay-set
+    field: next_action
+    value: 'LANDED in 966b4db43 (land(613)): tool-call arm, 17-row replay set, A5000 measurements. macbookair recorded Devstral Small 2 does not fit 16 GiB with the 8 GiB VM. Left: 3 more replay rows (20 wanted); Devstral on a >=24 GiB Mac; replay-acceptance once 1834-ujsf lands.'
+    ts: "2026-10-23T10:47:22Z"
+    host: macuahuitl
+    replaces_sha256: "33600081c150c2bc7bbcb14ac58066f76a4bde157458330d52ab97dce640d4e3"
+
+events:
+  - packet_id: bench-local-coding-models-qwen3-coder-30b-a3b-and-devstral-small-2-with-a-tool-call-round-trip-arm-and-a-20-packet-replay-set
+    event:
+      type: note
+      ts: "2026-10-23T10:47:22Z"
+      host: macuahuitl
+      summary: |-
+        landed
