@@ -36,6 +36,10 @@ pub struct ResourceLockGuard {
 /// Pure resolution of the lock directory from an `XDG_RUNTIME_DIR` value.
 /// Kept env-free so the fallback rules are testable without touching the
 /// process environment.
+// A non-unix TEST build has no caller: production lock_dir() is cfg(not(test))
+// and this function's own test is cfg(all(test, unix)) — so the windows-gnu
+// cross-target clippy (-D warnings) saw dead code and evicted #629.
+#[cfg_attr(all(test, not(unix)), allow(dead_code))]
 fn lock_dir_from(xdg_runtime_dir: Option<&str>) -> PathBuf {
     if let Some(dir) = xdg_runtime_dir {
         let trimmed = dir.trim();
