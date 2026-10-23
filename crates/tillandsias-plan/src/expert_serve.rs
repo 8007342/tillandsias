@@ -97,6 +97,28 @@ pub fn normalize_query(q: &str) -> String {
         .to_string()
 }
 
+/// Whether an envelope is a deterministic outcome worth caching: any answer
+/// (grounded or a cited retrieval-only digest), or a refusal that is a
+/// property of the corpus/query. Refusals carry only a pinned
+/// `unsupported: <reason>` rendering (no typed code), so classification is an
+/// ALLOWLIST of the two corpus-bound reasons (`spec::out_of_coverage_reason`
+/// and the empty-domain refusal in `pipeline::run_grounded`); every other
+/// refusal (embed endpoint unreachable, synthesis/decompose timeout, model
+/// not loaded, Lua or producer error) is treated as transient and never
+/// cached, so a failure cannot outlive the condition that caused it.
+///
+/// @trace order:1819-njan
+fn is_deterministic(env: &Envelope) -> bool {
+    if env.confidence() != crate::answer::Confidence::Unsupported {
+        return true;
+    }
+    let a = env.answer();
+    (a.starts_with("unsupported: nothing in the ")
+        && a.contains(" corpus is similar enough to this question"))
+        || (a.contains(" holds no chunks in domain ")
+            && a.contains("retrieval cannot ground an answer"))
+}
+
 /// Digest of `<root>/.forge-expert-context.md` (the context pack), 0 when absent.
 fn pack_digest(root: &std::path::Path) -> u64 {
     use std::hash::{Hash, Hasher};
@@ -243,7 +265,9 @@ impl ServerState {
             return hit;
         }
         let env = compute().await;
-        self.answers.lock().await.put(rev, key, env.clone());
+        if is_deterministic(&env) {
+            self.answers.lock().await.put(rev, key, env.clone());
+        }
         env
     }
 }
@@ -827,6 +851,45 @@ mod tests {
             ask(&st, &r, "all", "b", &calls).await; // evicted -> recompute
             assert_eq!(calls.load(Ordering::SeqCst), 4);
             assert!(st.answers.lock().await.map.len() <= 2);
+        });
+    }
+
+    #[test]
+    fn expert_serve_answer_cache_never_pins_a_transient_refusal() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let st = cache_state(8);
+            let r = rev("aaaa");
+            let fresh = || Freshness::new("abcdef".to_string(), "t".to_string());
+            let calls = std::sync::atomic::AtomicUsize::new(0);
+            // Transient: embed endpoint down, then healthy.
+            for transient in [
+                "the embedding endpoint http://x/v1 did not answer for model m — the grounded pipeline cannot retrieve",
+                "the grounded pipeline produced no cited answer: synthesis timed out",
+            ] {
+                let q = transient;
+                let first = st
+                    .cached_answer(&r, "spec", q, || async {
+                        calls.fetch_add(1, Ordering::SeqCst);
+                        Envelope::unsupported(transient, fresh())
+                    })
+                    .await;
+                assert!(first.answer().starts_with("unsupported: "));
+                let second = ask(&st, &r, "spec", q, &calls).await;
+                assert_eq!(second.answer(), "the-key answer", "healthy call must answer");
+            }
+            assert_eq!(calls.load(Ordering::SeqCst), 4, "each pair computes twice");
+            // Corpus-bound refusals ARE cached.
+            let cov = crate::spec::out_of_coverage_reason("spec", 0.1, 0.3);
+            let n = std::sync::atomic::AtomicUsize::new(0);
+            for _ in 0..2 {
+                st.cached_answer(&r, "spec", "far afield", || async {
+                    n.fetch_add(1, Ordering::SeqCst);
+                    Envelope::unsupported(&cov, fresh())
+                })
+                .await;
+            }
+            assert_eq!(n.load(Ordering::SeqCst), 1, "out-of-coverage is deterministic");
         });
     }
 
