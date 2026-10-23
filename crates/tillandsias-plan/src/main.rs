@@ -6018,14 +6018,14 @@ fn main() {
         let mut out: Option<PathBuf> = None;
         let mut index_dir: Option<PathBuf> = None;
         let mut query_vec: Option<PathBuf> = None;
-        // ORDER 1822-dmwz: the question's words, for the BM25 channel of
-        // spec-retrieve. Absent = dense-only, byte-identical to before.
+        // The question's words, one value for two readers: ORDER 1822-dmwz
+        // feeds it to spec-retrieve's BM25 channel (--query-text; absent =
+        // dense-only, byte-identical to before), and @trace order:1820-m2kq
+        // feeds it to spec-floor's lexical-overlap signal (--query).
         let mut query_text: Option<String> = None;
         let mut chunks_json: Option<PathBuf> = None;
         let mut answer_file: Option<PathBuf> = None;
-        // @trace order:1820-m2kq — the query text (lexical-overlap signal) and
-        // a labelled question set (spec-refusal-calibrate).
-        let mut query_text: Option<String> = None;
+        // @trace order:1820-m2kq — a labelled question set (spec-refusal-calibrate).
         let mut questions: Option<PathBuf> = None;
         // ORDER 801-g9nn — the commit the INDEX was built at, which for a
         // retrieved answer is the frame the spans were read in and is NOT this
