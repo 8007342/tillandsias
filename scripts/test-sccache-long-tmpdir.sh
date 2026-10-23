@@ -37,4 +37,14 @@ printf 'pub fn a() -> u8 { 1 }\n' > "$P/src/lib.rs"
 rm -rf "$EPH"
 printf 'pub fn b() -> u8 { 2 }\n' > "$P/src/lib.rs"
 if ( cd "$P" && TMPDIR=/tmp CARGO_INCREMENTAL=0 RUSTC_WRAPPER="$ROOT/scripts/sccache-wrapper.sh" TILLANDSIAS_SCCACHE_BIN="$SC" CARGO_TARGET_DIR="$W/t" cargo build -q --offline ) >/dev/null 2>"$W/arm4.err"; then ok "arm4 server survives its starter's deleted TMPDIR"; else bad "arm4 compile failed after the starter's TMPDIR was deleted: $(head -c 300 "$W/arm4.err")"; fi
+# ARM 5 (1841-7pvs): a HUNG sccache (never exits, never answers) must not hang the
+# build. The arm is itself bounded by timeout, so pre-fix it FAILS instead of hanging.
+if command -v timeout >/dev/null 2>&1; then
+    printf '#!/bin/sh\nexec sleep 3600\n' > "$W/hungsc"; chmod +x "$W/hungsc"
+    o5="$(TILLANDSIAS_SCCACHE_PROBE_SECS=2 TILLANDSIAS_SCCACHE_BIN="$W/hungsc" timeout 60 "$ROOT/scripts/sccache-wrapper.sh" rustc -vV 2>/dev/null)"
+    if grep -q '^rustc ' <<<"$o5"; then ok "arm5 hung sccache falls back to the bare compiler within a bound"; else bad "arm5 hung sccache hung or redded the build"; fi
+else
+    echo "skip:arm5:no-timeout"
+fi
+# @trace order:1841-7pvs
 exit $fail
