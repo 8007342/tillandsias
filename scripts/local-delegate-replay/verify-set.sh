@@ -52,6 +52,11 @@ done
 total=0; checked=0; badn=0
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/replay-verify.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
+# The closures run litmus in trees under $WORK, which are not checkouts, so the
+# runner's timing log would fall back to the shared /tmp/tillandsias-timing.jsonl
+# and a concurrent gate step on this host is refused for "writing" it (1204-3s2s;
+# evicted #606 on macuahuitl 2026-10-23). Keep every record in our own scratch.
+export TILLANDSIAS_TIMING_LOG="$WORK/timing.jsonl"
 
 run_closure() { # run_closure <dir> <command> -> exit status of the command
     ( cd "$1" && timeout "$TIMEOUT_S" bash -c "$2" >"$WORK/out.log" 2>&1 </dev/null )
