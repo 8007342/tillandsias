@@ -4561,8 +4561,27 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # production `script run` CLI for every retained case. Keep it unfiltered:
     # a selected count of zero would otherwise certify no production decision.
     _step "Running Lua source-agreement production integration (1484-uf29)..."
-    if ! _run cargo test -p tillandsias-plan --test lua_source_agreements \
-        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 2>&1; then
+    # ORDER 1843-idfv — ONE RETRY, ONLY ON THE INCREMENTAL-LINK SIGNATURE. This
+    # target relinks the tillandsias-plan bin in the shared incremental cache,
+    # and that cache can hold codegen units from two compilations: rust-lld then
+    # fails "undefined hidden symbol … .llvm.<hash>" on a tree that links
+    # cleanly from scratch. Land-queue run 4 (macuahuitl 2026-10-23) evicted
+    # #608, #612, #613 and #614 this way; the same tree linked once the crate's
+    # cache was cleared. 1803-pcap met the same signature and retries without
+    # incremental; that is the remedy here. Any OTHER failure stays red.
+    _lsa_log="$(mktemp "${TMPDIR:-/tmp}/lua-source-agreements.XXXXXX")"
+    _lsa_rc=0
+    _run cargo test -p tillandsias-plan --test lua_source_agreements \
+        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 >"$_lsa_log" 2>&1 || _lsa_rc=$?
+    cat "$_lsa_log"
+    if [ "$_lsa_rc" -ne 0 ] && grep -qE 'undefined hidden symbol|collect2: error: ld returned' "$_lsa_log"; then
+        _info "retry:lua_source_agreements:incremental-link — the shared incremental cache produced a link failure; rebuilding this target once with CARGO_INCREMENTAL=0 (1843-idfv)"
+        _lsa_rc=0
+        CARGO_INCREMENTAL=0 _run cargo test -p tillandsias-plan --test lua_source_agreements \
+            --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 2>&1 || _lsa_rc=$?
+    fi
+    rm -f "$_lsa_log"
+    if [ "$_lsa_rc" -ne 0 ]; then
         _error "the Lua source-agreement production integration target failed (1484-uf29)"
         exit 1
     fi
