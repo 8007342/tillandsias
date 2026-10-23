@@ -28,7 +28,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DATA="${REPLAY_SET_DATA:-$HERE/replay-set.tsv}"
-BASE_REF="${REPLAY_SET_BASE_REF:-origin/linux-next}"
+BASE_REF="${REPLAY_SET_BASE_REF:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}"
 TIMEOUT_S="${REPLAY_SET_TIMEOUT_S:-300}"
 
 [ -r "$DATA" ] || { echo "could-not-run:replay-set:no-data-file:$DATA"; exit 3; }
