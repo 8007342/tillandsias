@@ -16,6 +16,8 @@
 # ARM 6 NESTED a child process (build.sh re-exec in the toolbox, fixtures) entering
 #               the same checkout while the parent holds the lock is admitted;
 #               a different checkout is still refused. PRE-FIX: child REFUSED.
+# ARM 8 NOFLOCK no flock(1) on PATH (stock macOS) turns the shared dir off, rc 0.
+#               PRE-FIX: REFUSED rc 1 (1840-2p9v).
 # ARM 5 PATH    the canonical dir of a worktree and of its main checkout are
 #               the same absolute path (what sccache keys on).
 set -uo pipefail
@@ -104,4 +106,17 @@ o7="$(TILLANDSIAS_SHARED_TARGET_WAIT=3 bash -c ". '$ROOT/scripts/shared-target.s
 [ $rc7 -eq 0 ] && ok "arm7 a lock held only by orphans of a dead builder does not block entry" \
   || bad "arm7 dead-holder lock blocked entry (rc=$rc7): $o7"
 [ -f "$W/orphan.pid" ] && kill "$(cat "$W/orphan.pid")" 2>/dev/null
+
+# ARM 8 (1840-2p9v) NO FLOCK: a PATH without flock(1) — stock macOS — turns the
+# shared dir OFF (rc 0, CARGO_TARGET_DIR untouched); it must not refuse, or every
+# preflight on such a host is red. PRE-FIX: FAILS (rc 1, "REFUSED, no flock").
+NB="$W/noflock-bin"; mkdir -p "$NB"
+for t in bash git dirname cat sed head printf; do
+    tp="$(command -v "$t" 2>/dev/null)" && [ "${tp#/}" != "$tp" ] && ln -sf "$tp" "$NB/$t"
+done
+o8="$(env -u CARGO_TARGET_DIR -u TILLANDSIAS_SHARED_TARGET_HELD PATH="$NB" "$NB/bash" -c ". '$ROOT/scripts/shared-target.sh'; shared_target_enter '$A'; echo rc=\$? ctd=\${CARGO_TARGET_DIR:-unset}" 2>&1)"
+case "$o8" in
+    *"shared-target: off (no flock"*"rc=0 ctd=unset"*) ok "arm8 no flock on PATH turns the shared dir off without refusing" ;;
+    *) bad "arm8 no-flock host refused or exported a shared dir: $o8" ;;
+esac
 exit $fail
