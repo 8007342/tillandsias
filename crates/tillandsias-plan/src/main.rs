@@ -4635,6 +4635,8 @@ fn run_run_verb(args: &[String]) -> ! {
              \x20 WITHOUT --json the verb mirrors the child's exit code, so a refusal (1) and a child's own exit 1\n\
              \x20 cannot be told apart by the code: a caller that must tell them apart uses --json.\n\
              \x20 --timeout-ms defaults to 300000 (300 s); a long run (a full gate) MUST pass its own, or 0 for none.\n\
+             \x20 The child env is scrubbed: passed (when set) PATH HOME TMPDIR CARGO_TARGET_DIR XDG_RUNTIME_DIR\n\
+             \x20 DBUS_SESSION_BUS_ADDRESS TILLANDSIAS_*; fixed LC_ALL=C LANG=C TZ=UTC; all else dropped (use --env K=V).\n\
              \x20 --caller names the door in the audit log: run (default) or mcp (project-info run_command).\n\
              \x20 A child the verb kills (the deadline) is timed_out on every locus. {}: on Windows a child\n\
              \x20 killed from OUTSIDE (MSYS kill) reads as exited with the MSYS code (2304 for SIGKILL), undecoded.",
