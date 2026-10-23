@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: land-queue-gates-build-without-incremental-compilation-so-a-mixed-incremental-cache-cannot-evict-a-clean-candidate
+    order: 1844-92bz
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build, gate, land-queue, instrument]
+    estimated_hours: 1
+    owned_files:
+      - build.sh
+      - scripts/land-queue.sh
+    title: |
+      Land-queue gates corrupt tillandsias-plan's shared incremental cache mid-run and evict clean candidates at link; queue gates now build with CARGO_INCREMENTAL=0 via a TILLANDSIAS_CARGO_INCREMENTAL knob the builder forwards
+    context: |
+      MEASURED macuahuitl 2026-10-23, land-queue runs 3-6: #608, #612, #613,
+      #614, then #612 again evicted at link (rust-lld undefined hidden symbol
+      .llvm.<hash>) in two different cargo steps (1484-uf29 integration target
+      and its fixture matrix). cargo clean -p tillandsias-plan fixed trunk, and
+      the next gate corrupted the cache again from clean, so the gate itself
+      produces the mixed incremental state. The per-step retry 1843-idfv cannot
+      cover every cargo step. CARGO_INCREMENTAL does not cross into the
+      builder; TILLANDSIAS_* does (probe: inside:TILLANDSIAS_CARGO_INCREMENTAL=0).
+    exit_criteria:
+      - 'build.sh exports CARGO_INCREMENTAL from TILLANDSIAS_CARGO_INCREMENTAL, and the value reaches cargo inside the builder (probe through with-tillandsias-builder.sh)'
+      - 'scripts/land-queue.sh defaults TILLANDSIAS_CARGO_INCREMENTAL=0 for its gates; scripts/test-land-queue.sh still passes'
+      - 'a land-queue run after this lands gates 3+ consecutive candidates that rebuild tillandsias-plan with no link eviction (evidence, recorded on the row)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: criterion 3 is an observation of the
+      next queue run on macuahuitl; the mixed incremental cache cannot be
+      produced hermetically.
+    provenance: |
+      Filed by macuahuitl (claude, coordinator) 2026-10-23 from land-queue runs 3-6.
+    events:
+      - type: filed
+        ts: "2026-10-23T08:59:53Z"
+        host: macuahuitl
+        summary: |-
+          p1: queue gates build non-incremental; the gate itself corrupts the shared incremental cache and evicts clean candidates at link.

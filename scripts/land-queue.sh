@@ -128,6 +128,13 @@ cd "$ROOT" || exit 1
 # can drive the script; every default is the production value.
 GH="${TILLANDSIAS_LAND_QUEUE_GH:-gh}"
 GATE="${TILLANDSIAS_LAND_QUEUE_GATE:-./build.sh --check}"
+# ORDER 1844-92bz: queue gates build WITHOUT incremental compilation. A
+# candidate's verdict must not depend on what an earlier gate left in the
+# shared incremental cache; four candidates in one night were evicted at link
+# by a mixed cache (see build.sh). Non-incremental units are also cacheable by
+# sccache, so consecutive candidates share compiled dependencies. A caller can
+# still set it to 1.
+export TILLANDSIAS_CARGO_INCREMENTAL="${TILLANDSIAS_CARGO_INCREMENTAL:-0}"
 # ORDER 1765-q7rg: the ~1-min decider door run on the merge result BEFORE the
 # ~21-min gate. Set to the empty string to disable (the fixture's default).
 PREFLIGHT="${TILLANDSIAS_LAND_QUEUE_PREFLIGHT-./build.sh --preflight}"
