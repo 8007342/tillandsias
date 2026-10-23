@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Phase 3 umbrella; operator-approved redesign (The Tlatoāni, 2026-10-23).
+# Change: openspec/changes/local-coding-experts-delegation-ladder/.
+packets:
+  - packet_id: local-coding-experts-phase-3-a-local-implementer-tier-below-haiku-a-bounded-local-delegate-an-outcome-ledger-and-a-promotion-ladder-story
+    order: 1831-74sf
+    status: ready
+    kind: story
+    priority: p2
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: any
+    capability_tags: [experts, inference, delegation, selection, story]
+    estimated_hours: 1
+    owned_files:
+      - openspec/changes/local-coding-experts-delegation-ladder/
+    title: |
+      STORY — local coding experts: an `implementer_tier: local` floor below haiku, scripts/local-delegate.sh that implements a size:S packet against the local inference endpoint bounded to owned_files while the frontier session verifies and commits, an outcome ledger with rung promotion thresholds, and a bench of local coding models
+    context: |
+      Operator-approved 2026-10-23. Small mechanical packets currently route
+      to Haiku (methodology/distributed-work.yaml
+      cycle_batch_triage.model_tier_routing). A local model on the fleet's
+      own GPUs can take some of them at zero frontier tokens IF a frontier
+      session verifies and commits every result and the ledger proves the
+      acceptance and revert rates before the tier is trusted with more.
+      LADDER (promotion by measured outcomes, scripts/delegate-outcome.sh
+      token + aggregator): R1 acceptance ≥ 70% and revert ≤ 5%; R2 ≥ 80% and
+      ≤ 3%; R3 ≥ 80% with frontier tokens saved positive; R4 revert ≤ 2% over
+      100 outcomes. The local delegate never commits.
+      CHILDREN (by packet_id, filed in this pass):
+        implementer-tier-local-is-a-routing-floor-below-haiku-in-model-tier-routing-and-the-batch-selector
+        scripts-local-delegate-implements-a-packet-against-the-local-inference-endpoint-bounded-to-owned-files-and-runs-its-closure-without-committing
+        local-delegate-outcome-ledger-tokens-and-an-aggregator-computing-rung-promotion
+        bench-local-coding-models-qwen3-coder-30b-a3b-and-devstral-small-2-with-a-tool-call-round-trip-arm-and-a-20-packet-replay-set
+        tag-qualifying-haiku-tier-ready-rows-implementer-tier-local-once-the-local-floor-lands
+        ledger-to-sft-extractor-and-qlora-for-local-coding-experts-only-if-rung-3-stalls-below-80-percent (deferred, p3)
+    exit_criteria:
+      - 'every non-deferred child closed with evidence (pre-fix result: none exist)'
+      - 'the aggregator reports rung ≥ R1 for at least one local model over ≥ 20 outcomes on the replay set (pre-fix result: no outcomes)'
+    unscoreable: "a story row: closes when its non-deferred children close and the R1 report is recorded as an event"
+    depends_on: []
+    next_action: >
+      3a (tier vocabulary + routing) and 3d (bench) are independent and can
+      start now; 3b follows 3a; 3c follows 3b; 3e follows 3a.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    provenance: |
+      Filed by macuahuitl (claude subagent, operator-approved redesign 2026-10-23).
+    events:
+      - type: filed
+        ts: "2026-10-23T01:14:14Z"
+        host: macuahuitl
+        summary: |-
+          Phase 3 story: local coding experts delegation ladder; six children filed in the same pass.

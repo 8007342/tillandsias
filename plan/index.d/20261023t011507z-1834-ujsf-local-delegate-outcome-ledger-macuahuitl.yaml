@@ -1,0 +1,54 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Phase 3 child (3c) of 1831-74sf; operator-approved redesign 2026-10-23.
+packets:
+  - packet_id: local-delegate-outcome-ledger-tokens-and-an-aggregator-computing-rung-promotion
+    order: 1834-ujsf
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: any
+    capability_tags: [delegation, ledger, bash, metrics]
+    estimated_hours: 5
+    owned_files:
+      - scripts/delegate-outcome.sh
+      - scripts/local-delegate-ladder.sh
+      - scripts/test-local-delegate-ladder.sh
+    title: |
+      The frontier session records each local-delegate result as a ledger token `local-delegate:<model>:<quant>:<order>:<accepted|rejected|reverted>:<frontier_tokens_avoided>:<retries>` through scripts/delegate-outcome.sh, and scripts/local-delegate-ladder.sh aggregates the tokens per model+quant into the current rung
+    context: |
+      scripts/delegate-outcome.sh (690-2kwd) already defines a host-greppable
+      ledger token `delegate-outcome:<id>:<disposition>` riding an event
+      summary; this adds a second token grammar for local delegates without
+      changing the first (a verdict string is an interface). Rungs (operator-
+      approved): R1 acceptance ≥ 70% and revert ≤ 5%; R2 acceptance ≥ 80% and
+      revert ≤ 3%; R3 acceptance ≥ 80% and frontier tokens saved positive
+      (tokens avoided minus verification tokens, summed); R4 revert ≤ 2% over
+      ≥ 100 outcomes. A rung needs a minimum sample (≥ 20 for R1–R3) and is
+      reported per (model, quant). `reverted` means accepted then reverted
+      later; it counts against both acceptance and revert rate.
+    exit_criteria:
+      - '`delegate-outcome.sh local-record ...` appends an event whose summary carries exactly the token grammar, and an invalid disposition is refused (pre-fix result: FAILS — no local-record subcommand)'
+      - 'local-delegate-ladder.sh over a fixture ledger with 20 outcomes at 15 accepted / 1 reverted prints rung=R1 for that model+quant; at 17/0 prints R2; with 19 outcomes prints rung=none:sample (pre-fix result: FAILS — script absent)'
+      - 'the existing delegate-outcome token and its litmus are unchanged'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: scripts/test-local-delegate-ladder.sh
+      (new) asserts the token grammar, the refusal, and the rung arithmetic on
+      fixture ledgers including the boundary cases.
+    depends_on: [scripts-local-delegate-implements-a-packet-against-the-local-inference-endpoint-bounded-to-owned-files-and-runs-its-closure-without-committing]
+    related: [1831-74sf, 690-2kwd]
+    next_action: >
+      Fixture ledgers and the ladder arithmetic first (pure, no endpoint);
+      then the local-record subcommand.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+    provenance: |
+      Filed by macuahuitl (claude subagent, operator-approved redesign 2026-10-23).
+    events:
+      - type: filed
+        ts: "2026-10-23T01:15:07Z"
+        host: macuahuitl
+        summary: |-
+          Phase 3 3c: local-delegate outcome token + rung aggregator.

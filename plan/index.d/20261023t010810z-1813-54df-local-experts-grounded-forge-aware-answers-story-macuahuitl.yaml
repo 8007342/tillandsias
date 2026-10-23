@@ -1,0 +1,64 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl 2026-10-23 from the operator-approved (The Tlatoāni,
+# 2026-10-23) local-experts / coordinator / local-coding-experts redesign.
+# Phase 1 umbrella. Change: openspec/changes/local-experts-grounded-tellme-and-context-pack/.
+packets:
+  - packet_id: local-experts-phase-1-grounded-forge-aware-answers-tellme-through-expert-serve-context-pack-and-retrieval-quality-story
+    order: 1813-54df
+    status: ready
+    kind: story
+    priority: p1
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: any
+    capability_tags: [experts, inference, ollama, forge, cheatsheets, story]
+    estimated_hours: 1
+    owned_files:
+      - openspec/changes/local-experts-grounded-tellme-and-context-pack/
+    title: |
+      STORY — local experts give grounded, forge-aware answers: tellme goes through expert-serve, every synthesis prompt leads with a project-derived context pack, forge constraints are retrievable, Quick skips decomposition, and retrieval/refusal quality is raised
+    context: |
+      FIELD FINDING (operator-approved redesign, 2026-10-23): `tellme howto`
+      (images/default/cli/tellme) is an ungrounded bash RAG — it keyword-greps
+      /opt/cheatsheets/INDEX.md, posts raw ollama /api/generate to
+      qwen2.5:0.5b, and its prompt tells the model to "use your general
+      knowledge of Linux, Docker/Podman…". Inside a forge it recommended
+      docker. The grounded pipeline (crates/tillandsias-plan/src/pipeline.rs
+      `run_grounded`, served by expert_serve.rs on 127.0.0.1:11436) is not
+      what tellme uses, and no prompt anywhere carries forge context.
+      OPERATOR CONSTRAINT: forges run NON-Tillandsias projects with different
+      rules and branch-discipline levels; the context pack is built from the
+      project's OWN declarations, universal forge constraints always, and
+      Tillandsias rules only when the project is Tillandsias.
+      CHILDREN (by packet_id, filed in this pass):
+        p1: tellme-howto-and-freeform-about-route-to-expert-serve-grounded-pipeline-and-the-keyword-grep-path-becomes-a-fallback-without-the-general-knowledge-prompt
+        p1: a-generated-size-bounded-expert-context-pack-built-at-forge-launch-from-the-projects-own-declarations-leads-every-synthesis-prompt-byte-identical
+        p1: cheatsheet-runtime-forge-constraints-states-rootless-podman-no-docker-tmpfs-workspace-proxy-egress-inference-host-and-mirror-push-and-is-retrievable
+        p1: quick-tier-grounded-answers-skip-query-decomposition-like-immediate-while-fine-keeps-it
+        p1: groundtruth-forge-awareness-cases-pin-no-docker-recommendations-and-no-tillandsias-rules-on-a-foreign-project
+        p2: synthesis-requests-set-num-ctx-per-model-size-and-cap-retrieved-context-by-tokens-not-chunk-count
+        p2: expert-serve-caches-answers-keyed-by-index-revision-domain-and-normalized-query
+        p2: expert-refusal-decides-by-score-margin-over-the-top-k-median-plus-lexical-overlap-calibrated-on-the-refusal-corpus
+        p3: expert-retrieval-goes-hybrid-bm25-plus-dense-with-reciprocal-rank-fusion-optional-fine-tier-reranker-and-breadcrumbed-yaml-chunks
+        p3: one-expert-client-library-replaces-the-drifted-front-ends-tellme-forge-plan-spec-answer-mcp-pipeline-cli-and-expert-serve
+    exit_criteria:
+      - 'every p1 child is closed with evidence (pre-fix result: none closed; tellme answers a container question by recommending docker)'
+      - 'in a forge on a NON-Tillandsias project, `tellme howto "run a database container"` cites a retrieved forge-constraints chunk, does not recommend docker, and does not apply Tillandsias branch rules (pre-fix result: FAILS — ungrounded answer recommends docker)'
+    unscoreable: "a story row: closes when its p1 children close; the live arm is the groundtruth forge-awareness case its child adds"
+    depends_on: []
+    next_action: >
+      Drain the p1 children first: forge-constraints cheatsheet and the
+      Quick-skips-decomposition fix are independent and small; then the
+      context pack, then tellme routing, then the groundtruth cases that pin
+      both. p2/p3 children follow in any order.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    provenance: |
+      Filed by macuahuitl (claude subagent, operator-approved redesign 2026-10-23).
+    events:
+      - type: filed
+        ts: "2026-10-23T01:08:10Z"
+        host: macuahuitl
+        summary: |-
+          Phase 1 story: local experts grounded and forge-aware; ten children filed in the same pass.
