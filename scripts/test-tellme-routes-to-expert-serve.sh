@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace order:1814-x78v, spec:expert-serve-grounded-pipeline
+# @trace order:1814-x78v, order:1815-tei4, spec:expert-serve-grounded-pipeline
 #
 # Fixture for order 1814-x78v: `tellme howto` and free-form `tellme about`
 # answer through expert-serve (OpenAI-shaped /v1/chat/completions, model id
@@ -185,6 +185,27 @@ if [ "$m4" = llama3.2:3b ] && [ "$md" = qwen2.5:0.5b ]; then
     ok "arm 4: fallback request named TILLANDSIAS_INFERENCE_MODEL=llama3.2:3b; unset it named qwen2.5:0.5b"
 else
     bad "arm 4: with env model='$m4' (want llama3.2:3b), without env model='$md' (want qwen2.5:0.5b)"
+fi
+
+# 5 — order 1815-tei4: the fallback prompt starts with the context pack's
+# exact bytes and the separator (pipeline.rs context_pack::PACK_SEPARATOR);
+# with the pack absent it starts with the fixed system text (control).
+# PRE-FIX RESULT: FAILS — the tellme_context_pack seam printed nothing.
+total=$((total+1))
+P="$W/pack.md"
+printf '# Forge context (generated at forge launch)\n\nPACK-LINE-2\n' > "$P"
+want="$(cat "$P"; printf '\n---\n\nSystem: .')"; want="${want%.}"
+C="$W/c5"; mkdir -p "$C"; : > "$C/expert.down"
+TILLANDSIAS_EXPERT_CONTEXT_PACK="$P" run_tellme "$C" howto "run a database container"
+N="$W/c5-absent"; mkdir -p "$N"; : > "$N/expert.down"
+TILLANDSIAS_EXPERT_CONTEXT_PACK="$W/no-such-pack.md" run_tellme "$N" howto "run a database container"
+p5=""; pn=""
+[ "$(count "$C" '/api/generate')" != 1 ] || p5="$(jget -r '.prompt' "$C/body.$(calls "$C" '/api/generate')" 2>/dev/null)"
+[ "$(count "$N" '/api/generate')" != 1 ] || pn="$(jget -r '.prompt' "$N/body.$(calls "$N" '/api/generate')" 2>/dev/null)"
+if [ -n "$p5" ] && [ "${p5:0:${#want}}" = "$want" ] && [ "${pn:0:8}" = "System: " ]; then
+    ok "arm 5: fallback prompt starts with the pack bytes + separator; absent pack leaves it starting 'System: '"
+else
+    bad "arm 5: prompt head='$(printf '%s' "${p5:0:80}" | tr '\n' '|')' absent-head='$(printf '%s' "${pn:0:20}" | tr '\n' '|')'"
 fi
 
 echo "tellme-routes-to-expert-serve: $pass/$total"

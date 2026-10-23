@@ -64,12 +64,32 @@ tellme_plan_bin() {
     return 1
 }
 
-# SEAM for order 1815-tei4: the project-derived context pack
-# (.forge-expert-context.md) goes FIRST, byte-identical, in every synthesis
-# prompt tellme builds. Until that order lands this prints nothing, so the
-# fallback prompt starts with its fixed system text.
+# Order 1815-tei4: the project-derived context pack (.forge-expert-context.md,
+# written at forge launch by lib-common.sh write_expert_context_pack) goes
+# FIRST, byte-identical, in every synthesis prompt tellme builds: the pack's
+# bytes, then the separator pipeline.rs uses (context_pack::PACK_SEPARATOR,
+# pinned by the cargo test tellme_prints_the_same_pack_separator). Path:
+# $TILLANDSIAS_EXPERT_CONTEXT_PACK, else beside the startup context, else in
+# $PROJECT_DIR. FAIL-SOFT: absent, not a regular file, empty or oversized
+# prints nothing and the prompt is unchanged. Callers capture it with a
+# trailing sentinel so command substitution keeps its trailing newlines.
 tellme_context_pack() {
-    :
+    local pack="${TILLANDSIAS_EXPERT_CONTEXT_PACK:-}" size
+    if [ -z "$pack" ]; then
+        if [ -n "${FORGE_STARTUP_CONTEXT_FILE:-}" ]; then
+            pack="$(dirname "$FORGE_STARTUP_CONTEXT_FILE")/.forge-expert-context.md"
+        elif [ -n "${PROJECT_DIR:-}" ]; then
+            pack="$PROJECT_DIR/.forge-expert-context.md"
+        else
+            return 0
+        fi
+    fi
+    [ -f "$pack" ] && [ -r "$pack" ] || return 0
+    size="$(wc -c < "$pack" 2>/dev/null | tr -d ' ')" || return 0
+    # Same bounds as context_pack::load_pack_from: non-empty, <= 2 x 4800 bytes.
+    [ -n "$size" ] && [ "$size" -gt 0 ] && [ "$size" -le 9600 ] || return 0
+    head -c 9600 "$pack" || return 0
+    printf '\n---\n\n'
 }
 
 # expert_serve_ask <model> <question> — 0 when expert-serve answered (answer
@@ -241,9 +261,12 @@ case "${1:-}" in
         fi
         echo ""
 
-        # Format the system prompt and context. The context pack (1815-tei4
-        # seam, empty today) leads it byte-identically.
-        prompt="$(tellme_context_pack)System: You are an expert developer assistant for the Tillandsias Forge.
+        # Format the system prompt and context. The context pack (1815-tei4)
+        # leads it byte-identically; the `.` sentinel keeps the separator's
+        # trailing newlines through the command substitution.
+        pack_prefix="$(tellme_context_pack; printf .)"
+        pack_prefix="${pack_prefix%.}"
+        prompt="${pack_prefix}System: You are an expert developer assistant for the Tillandsias Forge.
 Using only the following cheatsheet context, answer the user's question concisely. If the context does not contain the answer, say that the cheatsheets do not cover it and suggest 'tellme about --list'; do not guess. Keep your response brief, action-oriented, and focused on command/code snippets.
 
 Context:
