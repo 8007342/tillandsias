@@ -1867,9 +1867,19 @@ _tillandsias_select_warm_model() {
     # a fleet rule here — it is a preference order over what is present, so a
     # host with only 7b still warms 7b. yoga's ROCm replication (824-6qxh) is
     # what would make it a rule.
+    #
+    # CPU FLOOR IS 0.5b FIRST, AND NEVER 7b. The selected model is now also the
+    # model expert-serve SYNTHESISES with (see the export in
+    # warm_tier_model_fail_soft), so this order is a serving decision, not just
+    # a warm-up one. 0.5b is the inference image's baked default (always
+    # present), the pipeline's own default, lib-dev-env.sh's CPU tier, and the
+    # model 927-2q4w measured inside the Quick budget on the CPU floor
+    # (927-2885ms, lenovinha). The earlier order (3b, 7b, 0.5b) picked 7b on a
+    # 16GB-RAM CPU host whose inference container background-pulls T2 — a
+    # multi-GB model the floor cannot serve inside any tier budget.
     case "$_wm_class" in
         workstation-gpu|hybrid-gpu-npu) _wm_order="qwen2.5:14b qwen2.5:7b qwen2.5:3b" ;;
-        *)                              _wm_order="qwen2.5:3b qwen2.5:7b qwen2.5:0.5b" ;;
+        *)                              _wm_order="qwen2.5:0.5b qwen2.5:3b" ;;
     esac
     for _wm_cand in $_wm_order; do
         case ",${_wm_available}," in
@@ -1941,6 +1951,15 @@ warm_tier_model_fail_soft() {
         echo "[warm] no tier-model candidate among: $available (non-fatal)"
         return 0
     fi
+
+    # HAND THE SELECTION TO THE SERVER THAT USES IT. expert-serve, started next
+    # in this same lane, synthesises with TILLANDSIAS_INFERENCE_MODEL and falls
+    # back to qwen2.5:0.5b when it is unset — and nothing in the lane set it.
+    # So a GPU forge warmed 14b and then answered every query with a cold 0.5b:
+    # the warm never reached the consumer. Exported (not a subshell) so
+    # start_expert_serve_fail_soft inherits it; an operator value was already
+    # taken as `model` above, so this never overrides one.
+    export TILLANDSIAS_INFERENCE_MODEL="$model"
 
     # ONE minimal completion. The point is the VRAM load, not the answer, so
     # ask for as few tokens as the server will emit.
