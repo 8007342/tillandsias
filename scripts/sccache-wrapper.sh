@@ -25,6 +25,21 @@
 sc="${TILLANDSIAS_SCCACHE_BIN:-$(command -v sccache 2>/dev/null)}"
 if [ -z "$sc" ]; then exec "$@"; fi
 export TMPDIR=/tmp
+# @trace order:1841-7pvs — a HUNG server never exits, so the rc test below never
+# fires (2026-10-23: a gate sat 46 min, three rustc clients in wait_woken).
+# sccache 0.18 has no client-side request-timeout knob (only SCCACHE_IDLE_TIMEOUT
+# and SCCACHE_STARTUP_NOTIFY), and bounding the compile itself would kill a slow
+# but healthy rustc mid-write, which corrupted the incremental cache. So: probe
+# the server with a short bound; only a probe TIMEOUT (rc 124) means hung, and
+# then run the bare compiler. A healthy server gets the real compile, unbounded.
+# Without coreutils timeout (stock darwin) the probe is skipped (old behaviour).
+if command -v timeout >/dev/null 2>&1; then
+    timeout "${TILLANDSIAS_SCCACHE_PROBE_SECS:-10}" "$sc" --show-stats >/dev/null 2>&1; prc=$?
+    if [ "$prc" -eq 124 ]; then
+        echo "sccache-wrapper: sccache server unresponsive; running the compiler directly" >&2
+        exec "$@"
+    fi
+fi
 "$sc" "$@"; rc=$?
 # rc 2 / 254 with no compiler involved = sccache's own startup failure (an
 # unsupported-compiler call still runs the compiler and returns its rc).
