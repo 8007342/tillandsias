@@ -105,6 +105,7 @@ run_queue() {
         TILLANDSIAS_LAND_QUEUE_GATE="bash $GATE_BIN" \
         TILLANDSIAS_LAND_QUEUE_PREFLIGHT="${PREFLIGHT_CMD:-}" \
         TILLANDSIAS_LAND_QUEUE_REMOTE=origin \
+        TILLANDSIAS_LAND_QUEUE_LOGDIR="${LOGDIR_OVERRIDE:-$TMP/logs-$$}" \
         TILLANDSIAS_TRUNK_BRANCH=linux-next \
         bash "$QUEUE" "$@" 2>&1 )
 }
@@ -1073,6 +1074,91 @@ else
     bad "ARM 19c: wanted land #4 with the debt on the land commit; land commit: [$d19]
 $o19c"
 fi
+# ──────────────────────────────────────────────────── ARMS 20a-c (order 1839-fuvg)
+# @trace order:1839-fuvg
+# 20a: a refused push says WHY. The remote's pre-receive refuses with a named
+# line; the queue output and the PR comment must carry it (pre-fix: the push's
+# output went to /dev/null and only push-did-not-land:rc=1 was printed).
+scaffold push20a
+candidate push20a 2001-aaaa a.txt A
+cat > "$GH_PRS" <<'JSON'
+[{"number":1,"headRefName":"work/2001-aaaa","isDraft":false}]
+JSON
+printf '#!/bin/sh\necho "refused:fixture-hook:named-refusal-line" >&2\nexit 1\n' > "$REMOTE_DIR/hooks/pre-receive"
+chmod +x "$REMOTE_DIR/hooks/pre-receive"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$GATE_BIN"
+o20a="$(run_queue)"
+if grep -q 'requeue:land-queue:1:push-did-not-land' <<<"$o20a" \
+   && grep -q 'refused:fixture-hook:named-refusal-line' <<<"$o20a" \
+   && grep -q 'refused:fixture-hook:named-refusal-line' "$GH_COMMENTS"; then
+    ok "ARM 20a: a refused push prints the push's own refusal line beside push-did-not-land and carries it in the PR comment"
+else
+    bad "ARM 20a: the refusal line is missing from the output or the PR comment
+$o20a
+comments: $(cat "$GH_COMMENTS")"
+fi
+
+# 20b: the target gains a ledger fragment AFTER the queue's re-read and BEFORE
+# the push (a client pre-push hook plays the concurrent plan-lane push, once).
+# The push is rejected non-fast-forward; the queue must re-adopt and land, not
+# re-queue for a full re-gate.
+scaffold push20b
+candidate push20b 2002-bbbb b.txt B
+cat > "$GH_PRS" <<'JSON'
+[{"number":2,"headRefName":"work/2002-bbbb","isDraft":false}]
+JSON
+printf '#!/usr/bin/env bash\nexit 0\n' > "$GATE_BIN"
+OTHER20="$TMP/push20b/other"; git clone -q "$REMOTE_DIR" "$OTHER20"
+git -C "$OTHER20" config user.email o@o; git -C "$OTHER20" config user.name o
+git -C "$OTHER20" config commit.gpgsign false
+mkdir -p "$WORK_DIR/.git/hooks"
+cat > "$WORK_DIR/.git/hooks/pre-push" <<HOOK
+#!/usr/bin/env bash
+[ -e "$TMP/push20b/raced" ] && exit 0
+: > "$TMP/push20b/raced"
+mkdir -p "$OTHER20/plan/index.d"
+printf 'packets: []\n' > "$OTHER20/plan/index.d/20261023t000000z-race-fuvg.yaml"
+git -C "$OTHER20" add -A
+git -C "$OTHER20" commit -q -m "plan(race): a fragment lands between gate and push"
+git -C "$OTHER20" push -q origin HEAD:linux-next
+exit 0
+HOOK
+chmod +x "$WORK_DIR/.git/hooks/pre-push"
+o20b="$(run_queue)"
+if grep -q 'plan-only-move-at-push' <<<"$o20b" && grep -q '^land:2 ' <<<"$o20b"; then
+    ok "ARM 20b: a push refused because a ledger fragment landed between gate and push is re-adopted and lands, with no re-gate"
+else
+    bad "ARM 20b: wanted adopt-at-push then land:2
+$o20b"
+fi
+
+# 20c: an evicted candidate's gate log is KEPT at the path the evict line and
+# the PR comment name, holds the gate's output, and retention is bounded.
+scaffold log20c
+candidate log20c 2003-cccc c.txt C
+cat > "$GH_PRS" <<'JSON'
+[{"number":3,"headRefName":"work/2003-cccc","isDraft":false}]
+JSON
+printf '#!/usr/bin/env bash\necho "FAIL: marker-gate-output-xyz"\nexit 1\n' > "$GATE_BIN"
+LOGDIR_OVERRIDE="$TMP/log20c/logs"
+o20c="$(run_queue)"
+p20c="$(sed -n 's/^evict:land-queue:3:.*kept at \(.*\)$/\1/p' <<<"$o20c" | head -n 1)"
+if [ -n "$p20c" ] && [ -f "$p20c" ] && grep -q 'marker-gate-output-xyz' "$p20c" \
+   && grep -qF "$p20c" "$GH_COMMENTS"; then
+    ok "ARM 20c: the evicted candidate's full gate log exists at the path named in the evict line and the PR comment"
+else
+    bad "ARM 20c: no kept gate log (path=[$p20c])
+$o20c"
+fi
+for _i in 1 2 3 4; do sleep 1; TILLANDSIAS_LAND_QUEUE_LOG_KEEP=2 run_queue >/dev/null 2>&1; done
+n20c="$(ls -1d "$LOGDIR_OVERRIDE"/*/ 2>/dev/null | wc -l)"
+if [ "$n20c" -le 2 ] && [ "$n20c" -ge 1 ]; then
+    ok "ARM 20c2: log retention is bounded to the newest N run directories ($n20c kept of 5 runs)"
+else
+    bad "ARM 20c2: expected 1-2 run dirs after 5 runs with KEEP=2, found $n20c"
+fi
+unset LOGDIR_OVERRIDE
+
 printf '\n'
 if [ "$fail" -eq 0 ]; then
     if [ "$skipped" -gt 0 ]; then
