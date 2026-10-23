@@ -4821,6 +4821,43 @@ export_ssh_env() {
     return 1
 }
 
+# ── Expert context pack (order 1815-tei4) ───────────────────
+# @trace order:1815-tei4, spec:expert-serve-grounded-pipeline
+# Writes <project>/.forge-expert-context.md: a deterministic pack of at most
+# 4800 bytes (universal forge constraints, then the project's OWN identity,
+# branch-discipline level and CLAUDE.md/AGENTS.md excerpts, then Tillandsias
+# rules only for a Tillandsias checkout). Every synthesis prompt — pipeline.rs
+# domain_synthesis_prompt via expert-serve, and tellme's tellme_context_pack —
+# starts with its exact bytes so the inference server reuses the prompt-prefix
+# cache. The generator is `tillandsias-plan expert-context-pack`
+# (crates/tillandsias-plan/src/context_pack.rs build_pack), where it is
+# unit-tested for a Tillandsias and a non-Tillandsias project.
+# FAIL-SOFT: no binary, a pre-1815 binary or a failed write leaves no pack,
+# and every prompt is then exactly what it was before. Never blocks startup:
+# the generator reads only the checkout and runs under a 10 s timeout.
+write_expert_context_pack() {
+    local project_dir="${1:-$PROJECT_DIR}" bin out
+    [[ -n "$project_dir" && -d "$project_dir" ]] || return 0
+    out="$project_dir/.forge-expert-context.md"
+    bin="$(command -v tillandsias-plan 2>/dev/null || true)"
+    [[ -n "$bin" ]] || bin="${FORGE_EXPERTS_BIN_DIR:-$HOME/.local/bin}/tillandsias-plan"
+    if [[ ! -x "$bin" ]]; then
+        trace_lifecycle "expert-context-pack" "skipped (no-binary): prompts carry no pack" || true
+        return 0
+    fi
+    if timeout 10 "$bin" expert-context-pack --root "$project_dir" --out "$out" >/dev/null 2>&1; then
+        export TILLANDSIAS_EXPERT_CONTEXT_PACK="$out"
+        local gitignore="$project_dir/.gitignore"
+        if [[ -f "$gitignore" ]] && ! grep -qxF '.forge-expert-context.md' "$gitignore"; then
+            echo '.forge-expert-context.md' >> "$gitignore"
+        fi
+        trace_lifecycle "expert-context-pack" "written to $out ($(wc -c < "$out" 2>/dev/null | tr -d ' ') bytes)" || true
+    else
+        trace_lifecycle "expert-context-pack" "skipped (generator-failed or pre-1815 binary): prompts carry no pack" || true
+    fi
+    return 0
+}
+
 # ── Forge startup context injection ─────────────────────────
 # @trace spec:project-bootstrap-readme, spec:forge-environment-discoverability
 # Writes .forge-startup-context.md into the project workspace so agents know
@@ -5377,6 +5414,9 @@ CONTEXT_EOF
     if [[ -f "$gitignore" ]] && ! grep -qxF '.forge-startup-context.md' "$gitignore"; then
         echo '.forge-startup-context.md' >> "$gitignore"
     fi
+
+    # Order 1815-tei4: the expert context pack beside this file. Fail-soft.
+    write_expert_context_pack "$project_dir" || true
 
     export FORGE_STARTUP_CONTEXT_FILE="$ctx_file"
     trace_lifecycle "startup-context" "written to $ctx_file (branch=${branch}, version=${version})"

@@ -2,10 +2,13 @@
 # tellme — search and lookup cheatsheets and dependency references in the forge.
 #
 # Usage: tellme about <topic> [--full]
+#        tellme about "<free-form question>"
 #        tellme about --list
+#        tellme howto "<query>"
 #        tellme --help
 #
-# @trace spec:forge-environment-discoverability
+# @trace spec:forge-environment-discoverability, spec:expert-serve-grounded-pipeline
+# @trace order:1814-x78v
 # @cheatsheet runtime/cheatsheet-architecture-v2.md, runtime/cheatsheet-frontmatter-spec.md
 
 set -euo pipefail
@@ -34,8 +37,103 @@ fi
 
 INDEX_PATH="$cheatsheets_dir/INDEX.md"
 
+# ── grounded answers through expert-serve (order 1814-x78v) ────────────────
+# `howto` and free-form `about` ask expert-serve first: the OpenAI-shaped
+# loopback front-end over the grounded pipeline (expert_serve.rs `route`,
+# pipeline.rs `run_grounded`), started at forge launch by lib-common.sh
+# `start_expert_serve_fail_soft`. It cites the chunks it retrieved and refuses
+# typed below its threshold. The model id IS the retrieval domain:
+# `cheatsheet` for howto, `all` for free-form about. Only when the port does
+# not answer does tellme drop to the keyword-grep fallback, and it labels that
+# answer UNGROUNDED.
+EXPERT_URL="${TELLME_EXPERT_URL:-http://127.0.0.1:${TILLANDSIAS_EXPERT_SERVE_PORT:-11436}}"
+EXPERT_URL="${EXPERT_URL%/}"
+
+# The plan binary reads the reply (`json get`, a jq subset — no new jq call
+# site, 1375-tsfu). It is the binary that serves expert-serve, so a forge with
+# the port up has it; without it the grounded path reports itself unavailable.
+tellme_plan_bin() {
+    local c
+    for c in "${TELLME_PLAN_BIN:-}" "$(command -v tillandsias-plan 2>/dev/null || true)" \
+             "${FORGE_EXPERTS_BIN_DIR:-$HOME/.local/bin}/tillandsias-plan"; do
+        if [ -n "$c" ] && [ -x "$c" ]; then
+            printf '%s\n' "$c"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Order 1815-tei4: the project-derived context pack (.forge-expert-context.md,
+# written at forge launch by lib-common.sh write_expert_context_pack) goes
+# FIRST, byte-identical, in every synthesis prompt tellme builds: the pack's
+# bytes, then the separator pipeline.rs uses (context_pack::PACK_SEPARATOR,
+# pinned by the cargo test tellme_prints_the_same_pack_separator). Path:
+# $TILLANDSIAS_EXPERT_CONTEXT_PACK, else beside the startup context, else in
+# $PROJECT_DIR. FAIL-SOFT: absent, not a regular file, empty or oversized
+# prints nothing and the prompt is unchanged. Callers capture it with a
+# trailing sentinel so command substitution keeps its trailing newlines.
+tellme_context_pack() {
+    local pack="${TILLANDSIAS_EXPERT_CONTEXT_PACK:-}" size
+    if [ -z "$pack" ]; then
+        if [ -n "${FORGE_STARTUP_CONTEXT_FILE:-}" ]; then
+            pack="$(dirname "$FORGE_STARTUP_CONTEXT_FILE")/.forge-expert-context.md"
+        elif [ -n "${PROJECT_DIR:-}" ]; then
+            pack="$PROJECT_DIR/.forge-expert-context.md"
+        else
+            return 0
+        fi
+    fi
+    [ -f "$pack" ] && [ -r "$pack" ] || return 0
+    size="$(wc -c < "$pack" 2>/dev/null | tr -d ' ')" || return 0
+    # Same bounds as context_pack::load_pack_from: non-empty, <= 2 x 4800 bytes.
+    [ -n "$size" ] && [ "$size" -gt 0 ] && [ "$size" -le 9600 ] || return 0
+    head -c 9600 "$pack" || return 0
+    printf '\n---\n\n'
+}
+
+# expert_serve_ask <model> <question> — 0 when expert-serve answered (answer
+# and citations printed on stdout), 1 when the port did not answer or the
+# reply was unusable (nothing on stdout; the caller falls back).
+expert_serve_ask() {
+    local model="$1" question="$2" plan q_json payload reply answer cites c_path c_start c_end
+    curl -fsS --max-time "${TELLME_EXPERT_PROBE_TIMEOUT:-1}" "$EXPERT_URL/v1/models" >/dev/null 2>&1 || return 1
+    if ! plan="$(tellme_plan_bin)"; then
+        echo "tellme: expert-serve answers at $EXPERT_URL but no tillandsias-plan binary is installed to read its reply" >&2
+        return 1
+    fi
+    # The question is JSON-escaped by the plan binary; the object around it is
+    # assembled in shell (`json get` constructs no objects).
+    q_json="$("$plan" json get -n -c --arg q "$question" '$q')" || return 1
+    payload='{"model":"'"$model"'","stream":false,"messages":[{"role":"user","content":'"$q_json"'}]}'
+    if ! reply="$(curl -fsS --max-time "${TELLME_EXPERT_TIMEOUT:-120}" -X POST "$EXPERT_URL/v1/chat/completions" \
+        -H "Content-Type: application/json" -d "$payload" 2>/dev/null)"; then
+        echo "tellme: expert-serve at $EXPERT_URL did not complete the request" >&2
+        return 1
+    fi
+    answer="$(printf '%s' "$reply" | "$plan" json get -r '.choices[0].message.content // empty' 2>/dev/null)" || answer=""
+    if [ -z "$answer" ]; then
+        echo "tellme: expert-serve at $EXPERT_URL returned no answer content" >&2
+        return 1
+    fi
+    cites="$(printf '%s' "$reply" | "$plan" json get -r '.tillandsias_envelope.citations[]? | .path, .line_start, .line_end' 2>/dev/null | paste - - -)" || cites=""
+    printf '\033[1;30m[expert-serve: grounded answer, model %s, %s]\033[0m\n\n' "$model" "$EXPERT_URL"
+    printf '%s\n\n' "$answer"
+    if [ -n "$cites" ]; then
+        echo "Sources:"
+        while IFS=$'\t' read -r c_path c_start c_end; do
+            [ -n "$c_path" ] || continue
+            printf '  - %s:%s-%s\n' "$c_path" "$c_start" "$c_end"
+        done <<< "$cites"
+    else
+        echo "Sources: none cited (a typed refusal cites nothing)"
+    fi
+    return 0
+}
+
 show_help() {
     echo "Usage: tellme about <topic> [--full]"
+    echo "       tellme about \"<free-form question>\""
     echo "       tellme about --list"
     echo "       tellme howto \"<query>\""
     echo "       tellme --help"
@@ -50,6 +148,11 @@ show_help() {
     echo "  tellme about python"
     echo "  tellme about git-workflows --full"
     echo "  tellme howto \"how do I run python unit tests\""
+    echo "  tellme about \"how do I push from the forge\""
+    echo ""
+    echo "howto and free-form about answer through expert-serve ($EXPERT_URL), with"
+    echo "citations. When it does not answer, howto falls back to a keyword search of"
+    echo "the cheatsheet index and labels that answer UNGROUNDED."
 }
 
 if [ $# -eq 0 ]; then
@@ -69,7 +172,15 @@ case "${1:-}" in
             exit 2
         fi
         query="$2"
-        
+
+        # Grounded first (1814-x78v): expert-serve's cheatsheet domain.
+        if expert_serve_ask cheatsheet "$query"; then
+            exit 0
+        fi
+
+        # FALLBACK — expert-serve did not answer. The keyword-grep context
+        # below is not retrieval with a refusal threshold, so the answer is
+        # labelled UNGROUNDED and the prompt forbids guessing past the context.
         INFERENCE_URL="${TILLANDSIAS_INFERENCE_URL:-http://inference:11434}"
         
         # Verify inference service is reachable and get models
@@ -85,9 +196,12 @@ case "${1:-}" in
             exit 1
         fi
         
-        # Select model: check for qwen2.5:0.5b first, then llama3.2:3b, then first model
-        chosen_model=""
+        # Select model: TILLANDSIAS_INFERENCE_MODEL when set (the variable
+        # pipeline.rs and lib-common.sh already honour), else qwen2.5:0.5b,
+        # then llama3.2:3b, then the first loaded model.
+        chosen_model="${TILLANDSIAS_INFERENCE_MODEL:-}"
         for m in qwen2.5:0.5b llama3.2:3b; do
+            [ -z "$chosen_model" ] || break
             if echo "$models_list" | grep -q "^$m$"; then
                 chosen_model="$m"
                 break
@@ -138,17 +252,22 @@ case "${1:-}" in
         done
         
         # Print info about model and cheatsheets used
+        echo -e "\033[1;30m[UNGROUNDED: expert-serve not answering at $EXPERT_URL; keyword-search fallback, no citations]\033[0m"
         echo -e "\033[1;30m[Using model: $chosen_model]\033[0m"
         if [ $count -gt 0 ]; then
-            echo -e "\033[1;30m[RAG Context: using top $count matching cheatsheet(s)]\033[0m"
+            echo -e "\033[1;30m[Context: top $count keyword-matched cheatsheet(s)]\033[0m"
         else
-            echo -e "\033[1;30m[RAG Context: no matching cheatsheets, using general knowledge]\033[0m"
+            echo -e "\033[1;30m[Context: no matching cheatsheets]\033[0m"
         fi
         echo ""
-        
-        # Format the system prompt and context
-        prompt="System: You are an expert developer assistant for the Tillandsias Forge.
-Using the following cheatsheet context, answer the user's question concisely. If the context does not contain the answer, use your general knowledge of Linux, Docker/Podman, containers, and programming in the Tillandsias Forge. Keep your response brief, action-oriented, and focused on command/code snippets.
+
+        # Format the system prompt and context. The context pack (1815-tei4)
+        # leads it byte-identically; the `.` sentinel keeps the separator's
+        # trailing newlines through the command substitution.
+        pack_prefix="$(tellme_context_pack; printf .)"
+        pack_prefix="${pack_prefix%.}"
+        prompt="${pack_prefix}System: You are an expert developer assistant for the Tillandsias Forge.
+Using only the following cheatsheet context, answer the user's question concisely. If the context does not contain the answer, say that the cheatsheets do not cover it and suggest 'tellme about --list'; do not guess. Keep your response brief, action-oriented, and focused on command/code snippets.
 
 Context:
 $context
@@ -191,7 +310,25 @@ Assistant:"
         if [ "${3:-}" = "--full" ] || [ "${3:-}" = "-f" ]; then
             full=1
         fi
-        
+
+        # Free-form about (1814-x78v): a question rather than a topic slug —
+        # whitespace in the topic, or several words — goes to expert-serve's
+        # `all` domain. A slug keeps the index lookup below.
+        if [ $full -eq 0 ]; then
+            question="$topic"
+            [ $# -le 2 ] || question="${*:2}"
+            case "$question" in
+                *[[:space:]]*)
+                    if expert_serve_ask all "$question"; then
+                        exit 0
+                    fi
+                    # Port closed: the howto fallback, which labels itself
+                    # UNGROUNDED. An index slug search cannot answer a sentence.
+                    exec bash "${BASH_SOURCE[0]:-$0}" howto "$question"
+                    ;;
+            esac
+        fi
+
         # 1. Handle dependencies special topic
         is_dep_query=0
         if [[ "$topic" =~ ^(dependency|dependencies|package|packages)$ ]]; then

@@ -736,6 +736,10 @@ pub async fn run_grounded(
     let thresholds = spec::RefusalThresholds::from_env();
     let mut best_floored: f32 = 0.0;
     let mut floored_rule = spec::RefusalRule::BelowFloor;
+    // ORDER 1815-tei4: the forge's context pack, read once per request (the
+    // file is written at launch, possibly after this server started); absent
+    // or unreadable leaves every prompt unchanged.
+    let pack = crate::context_pack::load_pack(&cfg.root);
     for (i, p) in trimmed.iter().enumerate() {
         let Some(qv) = &qvecs[i] else { continue };
         let top = top_k_filtered(qv, &entry.vectors, &selected, RETRIEVE_K);
@@ -777,7 +781,12 @@ pub async fn run_grounded(
             .map(|sc| sc.chunk.key.as_str())
             .collect::<Vec<_>>()
             .join("; ");
-        let system = domain_synthesis_prompt(domain.as_deref().unwrap_or(""), &ctx, &keys);
+        let system = domain_synthesis_prompt(
+            pack.as_deref(),
+            domain.as_deref().unwrap_or(""),
+            &ctx,
+            &keys,
+        );
         retrieved[i] = Some(scored);
 
         let base = cfg.inference.synth_base.clone();
@@ -971,7 +980,29 @@ pub async fn run_grounded(
 /// Domain-specific synthesis system prompts. Each domain gets a distinct
 /// prompt that constrains the LLM to cite only domain-appropriate sources;
 /// the echoed keys are what lets the only-if-used filter keep citations.
-pub fn domain_synthesis_prompt(domain: &str, retrieved_ctx: &str, source_keys: &str) -> String {
+///
+/// ORDER 1815-tei4: when the forge's context pack is present (`pack`, from
+/// [`crate::context_pack::load_pack`]) the prompt begins with its exact bytes
+/// and [`crate::context_pack::PACK_SEPARATOR`], identical for every domain and
+/// question, so the inference server's prompt-prefix cache is reused; the
+/// domain text and the retrieved chunks follow. `None` leaves the prompt
+/// exactly as before (fail-soft).
+pub fn domain_synthesis_prompt(
+    pack: Option<&str>,
+    domain: &str,
+    retrieved_ctx: &str,
+    source_keys: &str,
+) -> String {
+    let body = domain_synthesis_body(domain, retrieved_ctx, source_keys);
+    match pack {
+        Some(p) if !p.trim().is_empty() => {
+            format!("{p}{}{body}", crate::context_pack::PACK_SEPARATOR)
+        }
+        _ => body,
+    }
+}
+
+fn domain_synthesis_body(domain: &str, retrieved_ctx: &str, source_keys: &str) -> String {
     match domain {
         "cheatsheet" => format!(
             "You are the cheatsheet expert. Answer using ONLY the retrieved cheatsheet sections below. \
@@ -1096,6 +1127,64 @@ mod tests {
     use crate::lua_runtime::LuaRuntime;
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
+
+    /// ORDER 1815-tei4: with a pack, every synthesis system prompt — any
+    /// domain, any retrieved context — starts with the pack's exact bytes and
+    /// the fixed separator; without one, the prompt is byte-for-byte the old
+    /// domain prompt (fail-soft).
+    #[test]
+    fn synthesis_prompt_leads_with_the_context_pack_byte_identically() {
+        let pack = "# Forge context (generated at forge launch)\n\nPACK-BODY ünïcode\n";
+        let a = domain_synthesis_prompt(Some(pack), "cheatsheet", "=== a ===\nalpha\n", "a");
+        let b = domain_synthesis_prompt(Some(pack), "code", "=== b ===\nbeta\n", "b");
+        let c = domain_synthesis_prompt(Some(pack), "", "=== c ===\n", "c");
+        for p in [&a, &b, &c] {
+            assert_eq!(&p.as_bytes()[..pack.len()], pack.as_bytes());
+            assert!(p[pack.len()..].starts_with(crate::context_pack::PACK_SEPARATOR));
+        }
+        let lead = pack.len() + crate::context_pack::PACK_SEPARATOR.len();
+        assert_eq!(&a.as_bytes()[..lead], &b.as_bytes()[..lead]);
+        // The retrieved chunks come AFTER the pack.
+        assert!(a.find("alpha").unwrap() > lead);
+
+        let bare = domain_synthesis_prompt(None, "cheatsheet", "=== a ===\nalpha\n", "a");
+        assert_eq!(
+            bare,
+            domain_synthesis_body("cheatsheet", "=== a ===\nalpha\n", "a")
+        );
+        assert!(bare.starts_with("You are the cheatsheet expert."));
+        assert_eq!(
+            domain_synthesis_prompt(Some("  \n"), "cheatsheet", "x", "a"),
+            domain_synthesis_body("cheatsheet", "x", "a"),
+            "a blank pack must not change the prompt"
+        );
+    }
+
+    /// The generated pack, loaded the way run_grounded loads it, leads the prompt.
+    #[test]
+    fn a_written_pack_loaded_from_the_root_leads_the_prompt() {
+        let t = tempfile::tempdir().unwrap();
+        let out = t.path().join(crate::context_pack::PACK_FILE);
+        crate::context_pack::write_pack(t.path(), &out).unwrap();
+        let pack = crate::context_pack::load_pack_from(&out).expect("pack loads");
+        let p = domain_synthesis_prompt(Some(&pack), "spec", "ctx", "k");
+        assert!(p.as_bytes().starts_with(&std::fs::read(&out).unwrap()));
+        assert_eq!(
+            crate::context_pack::load_pack_from(&t.path().join("absent.md")),
+            None
+        );
+    }
+
+    /// tellme's fallback seam prints the same separator literal.
+    #[test]
+    fn tellme_prints_the_same_pack_separator() {
+        let tellme = include_str!("../../../images/default/cli/tellme");
+        let sep = crate::context_pack::PACK_SEPARATOR.replace('\n', "\\n");
+        assert!(
+            tellme.contains(&format!("printf '{sep}'")),
+            "tellme_context_pack must print the separator {sep:?}"
+        );
+    }
 
     fn chunk(id: usize, key: &str, kind: &str, path: &str) -> Chunk {
         Chunk {

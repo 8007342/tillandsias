@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-generated-size-bounded-expert-context-pack-built-at-forge-launch-from-the-projects-own-declarations-leads-every-synthesis-prompt-byte-identical
+    field: next_action
+    value: 'LANDED in 7b2a057b2 (land(610)): generator (context_pack.rs, expert-context-pack verb), byte-identical prefix in domain_synthesis_prompt and tellme. Remaining for criterion 1: one real forge launch from a stable carrying 7b2a057b2 showing .forge-expert-context.md written by write_expert_context_pack (only bash -n so far); then close.'
+    ts: "2026-10-23T06:24:11Z"
+    host: macuahuitl
+    replaces_sha256: "887291653fff088884041e48f34e9a192be5ae57a028b195258149bbd1528495"
+
+events:
+  - packet_id: a-generated-size-bounded-expert-context-pack-built-at-forge-launch-from-the-projects-own-declarations-leads-every-synthesis-prompt-byte-identical
+    event:
+      type: note
+      ts: "2026-10-23T06:24:11Z"
+      host: macuahuitl
+      summary: |-
+        landed

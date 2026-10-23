@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: expert-refusal-decides-by-score-margin-over-the-top-k-median-plus-lexical-overlap-calibrated-on-the-refusal-corpus
+    field: next_action
+    value: 'PR #616 (work/1820-m2kq, 3fc222c86) implements this: do not reimplement. Calibrated on the relabelled-561 set (macuahuitl, nomic, 32,251 chunks): margin alone is WORSE than the floor; the adopted rule refuses only when margin < 0.015 AND lexical overlap < 0.05 (in-corpus 450/458 unchanged, near-miss refused 4->5/33). Land it, then close. Left: forge-plan.sh spec_answer does not pass --query to spec-floor.'
+    ts: "2026-10-23T05:59:28Z"
+    host: macuahuitl
+    replaces_sha256: "ef41ad1034123f88666ad22b121cafacf56d70c5dda8cb78803eb00a3e792e8e"
+
+events:
+  - packet_id: expert-refusal-decides-by-score-margin-over-the-top-k-median-plus-lexical-overlap-calibrated-on-the-refusal-corpus
+    event:
+      type: note
+      ts: "2026-10-23T05:59:28Z"
+      host: macuahuitl
+      summary: |-
+        handoff

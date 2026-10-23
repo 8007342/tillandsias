@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: expert-retrieval-goes-hybrid-bm25-plus-dense-with-reciprocal-rank-fusion-optional-fine-tier-reranker-and-breadcrumbed-yaml-chunks
+    field: status
+    value: ready
+    ts: "2026-10-23T05:59:30Z"
+    host: macuahuitl
+
+events:
+  - packet_id: expert-retrieval-goes-hybrid-bm25-plus-dense-with-reciprocal-rank-fusion-optional-fine-tier-reranker-and-breadcrumbed-yaml-chunks
+    event:
+      type: note
+      ts: "2026-10-23T05:59:30Z"
+      host: macuahuitl
+      summary: |-
+        released: implemented in PR #620 awaiting the land queue
