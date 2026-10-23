@@ -1,0 +1,8 @@
+# Gate step 1812-bztj — the shared sccache daemon must not inherit a
+# preflight guard's TMPDIR: a long, later-deleted TMPDIR reds every later
+# compile once the guard cleans up.
+STEP_DESC="Checking sccache survives a deleted long TMPDIR (1812-bztj)"
+STEP_SCRIPT="scripts/test-sccache-long-tmpdir.sh"
+STEP_ERROR="the sccache daemon inherited a deleted TMPDIR and later compiles fail (1812-bztj) — see the FAIL lines above"
+STEP_OK="sccache long-TMPDIR fixture passed"
+STEP_SECOND_REGIME="macbookair 2026-10-23 darwin skip:no-sccache — sccache is not on this regime's build path; scripts/sccache-wrapper.sh execs the bare compiler when sccache is absent, so the defect's subject does not exist here (1812-bztj)"
