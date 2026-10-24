@@ -1920,6 +1920,15 @@ warm_tier_model_fail_soft() {
     state_dir="${FORGE_EXPERTS_STATE_DIR:-/dev/shm/tillandsias-experts}"
     mkdir -p "$state_dir" 2>/dev/null || true
     _warm_state() { printf '%s\n' "$1" >"$state_dir/model-warm" 2>/dev/null || true; }
+    # Milliseconds since the epoch. GNU date has %N; BSD date prints a literal
+    # N, which made the arithmetic below abort under set -e (darwin gate). Fall
+    # back to whole seconds rather than a non-number.
+    _warm_ms() {
+        local t
+        t="$(date +%s%3N 2>/dev/null)" || t=""
+        case "$t" in '' | *[!0-9]*) t="$(( $(date +%s) * 1000 ))" ;; esac
+        printf '%s' "$t"
+    }
 
     ep="${TILLANDSIAS_INFERENCE_ENDPOINT:-http://inference:11434}"
     ep="${ep%/}"
@@ -1963,16 +1972,16 @@ warm_tier_model_fail_soft() {
 
     # ONE minimal completion. The point is the VRAM load, not the answer, so
     # ask for as few tokens as the server will emit.
-    started="$(date +%s%3N 2>/dev/null || echo 0)"
+    started="$(_warm_ms)"
     if curl -fsS -m 300 -o /dev/null \
         -H 'Content-Type: application/json' \
         -d "{\"model\":\"$model\",\"max_tokens\":1,\"messages\":[{\"role\":\"user\",\"content\":\"warm\"}]}" \
         "$ep/v1/chat/completions" 2>/dev/null; then
-        elapsed="$(( $(date +%s%3N 2>/dev/null || echo 0) - started ))"
+        elapsed="$(( $(_warm_ms) - started ))"
         _warm_state "model_warm=$model warm_state=warm warm_reason=- load_ms=$elapsed"
         echo "[warm] $model loaded in ${elapsed}ms — tier budgets now measure inference, not model load (965-hz3f)"
     else
-        elapsed="$(( $(date +%s%3N 2>/dev/null || echo 0) - started ))"
+        elapsed="$(( $(_warm_ms) - started ))"
         _warm_state "model_warm=$model warm_state=failed warm_reason=request-failed load_ms=$elapsed"
         echo "[warm] warming $model failed after ${elapsed}ms (non-fatal; first real query pays the load)" >&2
     fi
