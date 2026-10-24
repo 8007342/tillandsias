@@ -531,7 +531,7 @@ Run this before ending the loop whenever `origin/windows-next` or `origin/osx-ne
 4.  **Heavy Runtime Litmus**: Run the full runtime check on the merged code:
     -   `./build.sh --ci-full --install`
     -   `tillandsias --debug --init`
-    -   `tillandsias . --opencode --diagnostics --prompt "$LITMUS_PROMPT"`
+    -   `tillandsias --cloud 8007342/tillandsias --opencode --diagnostics --prompt "$LITMUS_PROMPT"`
 5.  **Resolve & Push**: Commit and push successful merges to `origin/linux-next`. On push rejection, fetch, rebase coordination files, and retry up to 3 times.
 
 ---

@@ -276,7 +276,6 @@ mod tests {
         let mut state = TrayUiState::new(
             std::path::PathBuf::from("/tmp/tillandsias-cloud-test"),
             "0.0.0".to_string(),
-            Vec::new(),
         );
         state.cloud_projects = cloud;
         state.last_fetched = last_fetched;
