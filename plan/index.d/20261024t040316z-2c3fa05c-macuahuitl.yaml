@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: the-local-launch-retirement-release-is-the-first-website-update-marked-release-and-its-tillandsias-org-rewording-is-done-end-to-end-by-a-non-claude-forge-agent-from-the-coordinator-queue
+    event:
+      type: list-replace
+      ts: "2026-10-24T04:03:16Z"
+      agent_id: linux-macuahuitl-claude-20261024t040257z
+      host: macuahuitl
+      field: exit_criteria
+      items:
+        - "the 8007342/tillandsias.org queue holds an \"update the website to <tag>\" message for the release that ships 776-jcf3, carrying the tag and a local-launch-retirement reason (sent by promote-stable step 5 from the Website-Update trailer, or by hand) (pre-fix result: FAILS — no namespace, no message)"
+        - "the orchestrator log shows `tillandsias --cloud 8007342/tillandsias.org --opencode` run headless one-shot for that message (pre-fix result: FAILS — no such run)"
+        - "a tillandsias.org change authored by that run (opencode lane) rewords or removes the local-launch feature claim and passes the site checked-build (pre-fix result: FAILS — site still lists local launches)"
+        - "the queue holds that run's completion report (done + evidence: PR URL or merge SHA) (pre-fix result: FAILS)"
+        - "after the agent exits, podman ps shows no forge container for that run and nothing killed it by hand (pre-fix result: n/a — no run)"
+      summary: |-
+        revised: operator flow correction 2026-10-24 (in-session, macuahuitl via coordinator) — plain queue message, orchestrator-launched headless one-shot non-Claude forge, agent self-selects the skill, forge lifetime = agent lifetime, timeout backstop

@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-release-carries-a-website-update-trailer-and-stable-promotion-enqueues-a-website-update-task-on-the-tillandsias-org-coordinator-namespace
+    field: title
+    value: The interface is an ordinary coordinator queue message to 8007342/tillandsias.org ("update the website to <tag>" + tag + Website-Update reasons) that a human or coordinator may also send by hand; one producer of it is a Website-Update commit trailer in previous-stable..tag read by promote-stable.sh step 5, which sends that message once per tag and never blocks promotion
+    ts: "2026-10-24T04:02:57Z"
+    host: macuahuitl
+    replaces_sha256: "d6c0850e0bbb5b0fce62c29e2ecfcdccd3211a914d73927af63775ee842a797b"
+
+events:
+  - packet_id: a-release-carries-a-website-update-trailer-and-stable-promotion-enqueues-a-website-update-task-on-the-tillandsias-org-coordinator-namespace
+    event:
+      type: note
+      ts: "2026-10-24T04:02:57Z"
+      host: macuahuitl
+      summary: |-
+        revised: operator flow correction 2026-10-24 (in-session, macuahuitl via coordinator) — plain queue message, orchestrator-launched headless one-shot non-Claude forge, agent self-selects the skill, forge lifetime = agent lifetime, timeout backstop

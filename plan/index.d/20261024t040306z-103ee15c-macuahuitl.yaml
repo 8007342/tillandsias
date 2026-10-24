@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tillandsias-org-update-website-skill-runs-unattended-inside-a-forge-with-no-host-paths-and-delivers-through-the-mirror-as-a-pushed-branch
+    field: next_action
+    value: 'REVISED 2026-10-24 per operator flow: the agent receives only a plain "update the website to <tag>" message and must find the skill itself, so discoverability is now in scope. Nothing is built. Work in the tillandsias.org repo; read its AGENTS.md and skills/README.md first. Add --unattended to release-refresh.sh, an "Unattended run" section to SKILL.md, the message phrasing to its description, and an AGENTS.md routing line. OPEN QUESTION FOR THE OPERATOR (do not decide it in code): does the forge''s website/update-<tag> PR auto-merge (push to main deploys) or wait for review? Default until answered: PR, no auto-merge.'
+    ts: "2026-10-24T04:03:06Z"
+    host: macuahuitl
+    replaces_sha256: "df03888c4a9e1d287e260f62d27d0420eb5715cceb4ccca75f281eff25096ecb"
+
+events:
+  - packet_id: tillandsias-org-update-website-skill-runs-unattended-inside-a-forge-with-no-host-paths-and-delivers-through-the-mirror-as-a-pushed-branch
+    event:
+      type: note
+      ts: "2026-10-24T04:03:06Z"
+      host: macuahuitl
+      summary: |-
+        revised: operator flow correction 2026-10-24 (in-session, macuahuitl via coordinator) — plain queue message, orchestrator-launched headless one-shot non-Claude forge, agent self-selects the skill, forge lifetime = agent lifetime, timeout backstop

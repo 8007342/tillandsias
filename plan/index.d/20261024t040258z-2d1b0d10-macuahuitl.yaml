@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-release-carries-a-website-update-trailer-and-stable-promotion-enqueues-a-website-update-task-on-the-tillandsias-org-coordinator-namespace
+    field: next_action
+    value: 'REVISED 2026-10-24 per operator flow: there is NO special task type; the enqueue is a plain coordinator message whose body is "update the website to <tag>" followed by the tag and the trailer reasons, sent with the 1826 client''s ordinary send-message verb (check the real verb name; if 1826 has not landed this is blocked — do not invent a curl). Steps left: write scripts/release-website-marker.sh <prev> <tag> (one reason per line from the Website-Update trailer), add step 5 after verified:deploy-ref in promote-stable.sh, idempotency key = tag, failure prints website-update:deferred:<tag>:<why>. Exit criteria read "enqueue" as "send that message". Launching the forge is NOT this packet: the orchestrator does it (1847).'
+    ts: "2026-10-24T04:02:58Z"
+    host: macuahuitl
+    replaces_sha256: "5bfa6395d5fe9a524dacf1cfde7445aa0cd642fd5c3ec12647c180abe56153f6"
+
+events:
+  - packet_id: a-release-carries-a-website-update-trailer-and-stable-promotion-enqueues-a-website-update-task-on-the-tillandsias-org-coordinator-namespace
+    event:
+      type: note
+      ts: "2026-10-24T04:02:58Z"
+      host: macuahuitl
+      summary: |-
+        revised: operator flow correction 2026-10-24 (in-session, macuahuitl via coordinator) — plain queue message, orchestrator-launched headless one-shot non-Claude forge, agent self-selects the skill, forge lifetime = agent lifetime, timeout backstop
