@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: affordance-slice-windows-installer-fatal-messages-say-what-the-user-can-do-next
+    order: 1247-ert9
+    parent_order: 1247-amcu
+    status: in_progress
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [affordance, refusal, windows, installer, onboarding, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - scripts/install-windows.ps1
+      - scripts/lua/test-installer-fatal-messages-carry-a-next-step.lua
+    title: |
+      1247-amcu slice — FAMILY: every fatal Die message of scripts/install-windows.ps1 says why it stopped AND what the user can do next; four of the ten say only what happened (release incomplete, does not start, failed its self-check, could not finish setting up)
+    context: |
+      Picked by yolanda-windows at the coordinator's request (2026-10-24) as the Windows-scoped 1247-amcu slice. Census of the Windows surface: scripts/*.ps1 carries 5 distinct verdict tokens (build-windows-tray.ps1, sign-windows-artifact.ps1, already with partial reasons) and 37 throw/Die/exit sites; crates/tillandsias-windows-tray carries 3 refusals, each already naming what to pass. The installer is ranked first because END USERS hit it before anything else (prompt-to-app onboarding), not agents reading a gate log.
+      Its ten Die sites (install-windows.ps1:236-1061): six already say what to do (update PowerShell, 64-bit Windows, check the connection and retry, the download was damaged so retry). Four do not: :790 "This Tillandsias release is incomplete", :913 "The downloaded Tillandsias does not start (exit N)", :959 "failed its self-check (exit N)", :1061 "could not finish setting up (exit N)" — each names a log and no next step.
+      The messages are END-USER text (check-installer-end-user-output.lua and 1639-8gfw keep detail in the log), so the affordance is plain words and never an internal token, a branch name or a developer command.
+    exit_criteria:
+      - "every Die call in scripts/install-windows.ps1 carries a next step a user can take (retry, a previous release, the diagnose command, where to report with the log); a Lua fixture over the source fails on today's four bare sites (pre-fix: FAILS at :790, :913, :959, :1061)"
+      - "check-installer-end-user-output.lua stays green: no internal tokens, branch names or developer commands enter the user-facing text"
+      - "NEGATIVE CONTROL (1247-amcu criterion 5): each named next step is real — a named command or flag exists in the shipped tray (--diagnose) or installer (the TILLANDSIAS_VERSION pin), checked by the fixture against the source, not asserted in prose"
+    verifiable_closure: |
+      litmus:installer-reprovisions-on-install runs tillandsias-plan script run scripts/lua/test-installer-fatal-messages-carry-a-next-step.lua, which passes, and FAILS against the pre-fix installer.
+    provenance: |
+      Filed by yolanda-windows at the coordinator's request, 2026-10-24.
+    events:
+      - type: filed
+        ts: "2026-10-24T05:10:31Z"
+        host: yolanda-windows
+        summary: |-
+          Windows 1247-amcu slice: the installer's four bare fatal messages say what the user can do next. Filed and claimed in one fragment by yolanda-windows.
