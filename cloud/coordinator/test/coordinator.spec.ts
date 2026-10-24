@@ -1,7 +1,7 @@
 // @trace order:1825-v37w, spec:fleet-coordinator
 //
 // The exit criteria of 1825-v37w, one test each, plus the batch and
-// freshness rules from CONTRACT.md.
+// freshness rules from the change's contract.md.
 
 import { env, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import wranglerToml from "../wrangler.toml?raw";

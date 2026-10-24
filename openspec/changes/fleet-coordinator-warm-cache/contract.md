@@ -5,7 +5,7 @@
 This is the wire contract that the client (1826-gi8e) and the mirror hook
 (1827-3rj4) code against. The binding design is
 `openspec/changes/fleet-coordinator-warm-cache/design.md`. If the two disagree,
-the design wins and this file is the bug.
+the design wins and this file is the bug. The code is in `cloud/coordinator/`.
 
 ## Transport
 

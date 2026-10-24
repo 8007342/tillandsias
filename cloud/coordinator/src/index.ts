@@ -1,7 +1,7 @@
 // @trace order:1825-v37w, spec:fleet-coordinator
 //
 // The Worker: authenticate, rate-limit, then route ops to one Durable Object
-// per namespace. The contract is CONTRACT.md.
+// per namespace. The contract is openspec/changes/fleet-coordinator-warm-cache/contract.md.
 
 import { verifyAccess } from "./access";
 import type { Coordinator, Op, OpResult } from "./coordinator";
