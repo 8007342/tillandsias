@@ -2736,7 +2736,14 @@ events:
             .and_then(|l| l.split('\t').next())
             .expect("a first row")
             .to_string();
-        let none = answer_next_excluding(&ledger, None, None, None, "plan/index.yaml", &BTreeSet::new());
+        let none = answer_next_excluding(
+            &ledger,
+            None,
+            None,
+            None,
+            "plan/index.yaml",
+            &BTreeSet::new(),
+        );
         assert_eq!(plain.answer(), none.answer());
         let hidden = answer_next_excluding(
             &ledger,
@@ -2751,7 +2758,11 @@ events:
             "overlaid {top} still listed: {}",
             hidden.answer()
         );
-        assert!(hidden.answer().contains("(top 5 of 5 eligible)"), "{}", hidden.answer());
+        assert!(
+            hidden.answer().contains("(top 5 of 5 eligible)"),
+            "{}",
+            hidden.answer()
+        );
     }
 
     /// THE LOAD-BEARING RULE. Zero citations renders as `unsupported`, and no

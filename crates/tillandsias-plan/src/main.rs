@@ -785,7 +785,7 @@ fn unknown_subcommand(name: &str) -> ! {
 /// from a git-ledger one. An unreachable coordinator is not an error: `next`
 /// answers from the ledger, and the other verbs say why they could not ask.
 fn cmd_coord(args: &[String], index: &Path, ledger: &Ledger) {
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
     use tillandsias_plan::coordinator_client as cc;
 
     let root = root_for(index);
@@ -808,11 +808,17 @@ fn cmd_coord(args: &[String], index: &Path, ledger: &Ledger) {
                     eprintln!("error: {flag} takes a non-negative integer");
                     std::process::exit(2);
                 };
-                if flag == "--since" { since = Some(n) } else { ttl = Some(n) }
+                if flag == "--since" {
+                    since = Some(n)
+                } else {
+                    ttl = Some(n)
+                }
             }
             "--once" => once = true,
             other if other.starts_with("--") => {
-                eprintln!("error: unknown option {other:?} for `coord` (known: --ns, --since, --ttl, --once)");
+                eprintln!(
+                    "error: unknown option {other:?} for `coord` (known: --ns, --since, --ttl, --once)"
+                );
                 std::process::exit(2);
             }
             other => pos.push(other.to_string()),
@@ -830,10 +836,17 @@ fn cmd_coord(args: &[String], index: &Path, ledger: &Ledger) {
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
     };
     let ns = ns.unwrap_or_else(|| {
-        let dir = root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-        cc::namespace_for(git(&["config", "--get", "remote.origin.url"]).as_deref(), &dir)
+        let dir = root
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        cc::namespace_for(
+            git(&["config", "--get", "remote.origin.url"]).as_deref(),
+            &dir,
+        )
     });
-    let mut client = cc::Config::from_env().map(|c| cc::Client::new(cc::HttpTransport::new(c), cc::DEFAULT_BUDGET_PER_MIN));
+    let mut client = cc::Config::from_env()
+        .map(|c| cc::Client::new(cc::HttpTransport::new(c), cc::DEFAULT_BUDGET_PER_MIN));
     let mut ask = |op: Value| match client.as_mut() {
         Some(c) => c.op(op),
         None => Err(cc::Offline::Unconfigured),
@@ -851,13 +864,18 @@ fn cmd_coord(args: &[String], index: &Path, ledger: &Ledger) {
         "join" | "claims" => json!({ "op": sub, "ns": ns }),
         "send" => {
             need(1, "send <body> [--ttl S] [--ns NS]");
-            let mut o = json!({ "op": "send", "ns": ns, "body": pos[0], "provider": "tillandsias-plan" });
-            if let Some(t) = ttl { o["ttl_s"] = json!(t) }
+            let mut o =
+                json!({ "op": "send", "ns": ns, "body": pos[0], "provider": "tillandsias-plan" });
+            if let Some(t) = ttl {
+                o["ttl_s"] = json!(t)
+            }
             o
         }
         "recv" => json!({ "op": "recv", "ns": ns, "since": since.unwrap_or(0) }),
         "overview" => match pos.first().map(String::as_str) {
-            Some("get") => json!({ "op": "overview.get", "ns": ns, "client_head": git(&["rev-parse", "HEAD"]) }),
+            Some("get") => {
+                json!({ "op": "overview.get", "ns": ns, "client_head": git(&["rev-parse", "HEAD"]) })
+            }
             Some("put") => {
                 need(2, "overview put <json-file> [--ns NS]");
                 let text = std::fs::read_to_string(&pos[1]).unwrap_or_else(|e| {
@@ -878,7 +896,9 @@ fn cmd_coord(args: &[String], index: &Path, ledger: &Ledger) {
         "claim-overlay" => {
             need(1, "claim-overlay <order> [--ttl S] [--ns NS]");
             let mut o = json!({ "op": "claim", "ns": ns, "order": pos[0] });
-            if let Some(t) = ttl { o["ttl_s"] = json!(t) }
+            if let Some(t) = ttl {
+                o["ttl_s"] = json!(t)
+            }
             o
         }
         "release" => {
@@ -892,7 +912,11 @@ fn cmd_coord(args: &[String], index: &Path, ledger: &Ledger) {
                 Ok(r) => {
                     let set: std::collections::BTreeSet<String> = r["claims"]
                         .as_array()
-                        .map(|cs| cs.iter().filter_map(|c| c["order"].as_str().map(str::to_string)).collect())
+                        .map(|cs| {
+                            cs.iter()
+                                .filter_map(|c| c["order"].as_str().map(str::to_string))
+                                .collect()
+                        })
                         .unwrap_or_default();
                     (set, "coordinator+git-ledger", None)
                 }
@@ -906,12 +930,19 @@ fn cmd_coord(args: &[String], index: &Path, ledger: &Ledger) {
                 &citation_path(index, &root),
                 &overlaid,
             );
-            let verified = stamp_frame(self_verified(envelope, &root), &root)
-                .with_skipped_sources(ledger.skipped_fragments().iter().map(|p| citation_path(p, &root)).collect());
+            let verified = stamp_frame(self_verified(envelope, &root), &root).with_skipped_sources(
+                ledger
+                    .skipped_fragments()
+                    .iter()
+                    .map(|p| citation_path(p, &root))
+                    .collect(),
+            );
             let mut v = serde_json::to_value(&verified).unwrap_or(Value::Null);
             v["source"] = json!(source);
             v["overlaid"] = json!(overlaid);
-            if let Some(r) = reason { v["coordinator"] = json!(r) }
+            if let Some(r) = reason {
+                v["coordinator"] = json!(r)
+            }
             print(v);
             return;
         }
@@ -926,9 +957,15 @@ fn cmd_coord(args: &[String], index: &Path, ledger: &Ledger) {
                 let tick = if held {
                     json!({ "source": "local", "tick": "skipped", "reason": "lane-marker-held" })
                 } else {
-                    match ask(json!({ "op": "bump", "ns": ns, "head_sha": git(&["rev-parse", "HEAD"]) })) {
-                        Ok(r) => json!({ "source": "coordinator", "tick": "sent", "freshness": r["freshness"] }),
-                        Err(e) => json!({ "source": "local", "tick": "failed", "reason": e.reason() }),
+                    match ask(
+                        json!({ "op": "bump", "ns": ns, "head_sha": git(&["rev-parse", "HEAD"]) }),
+                    ) {
+                        Ok(r) => {
+                            json!({ "source": "coordinator", "tick": "sent", "freshness": r["freshness"] })
+                        }
+                        Err(e) => {
+                            json!({ "source": "local", "tick": "failed", "reason": e.reason() })
+                        }
                     }
                 };
                 let next = hb.next(started.elapsed(), cc::host_busy(), held);

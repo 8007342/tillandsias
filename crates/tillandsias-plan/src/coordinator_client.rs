@@ -22,7 +22,7 @@
 //! Credentials come from the environment only (the vault child of 1824-58bm
 //! is what puts them there); nothing here writes them to disk or prints them.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
 
@@ -50,7 +50,12 @@ pub struct Limiter {
 impl Limiter {
     pub fn new(per_min: u32, now: Instant) -> Self {
         let cap = f64::from(per_min.max(1));
-        Self { capacity: cap, tokens: cap, per_sec: cap / 60.0, last: now }
+        Self {
+            capacity: cap,
+            tokens: cap,
+            per_sec: cap / 60.0,
+            last: now,
+        }
     }
 
     /// Take `cost` tokens, or refuse without spending any.
@@ -77,7 +82,9 @@ pub struct Heartbeat {
 
 impl Default for Heartbeat {
     fn default() -> Self {
-        Self { current: HEARTBEAT_MIN }
+        Self {
+            current: HEARTBEAT_MIN,
+        }
     }
 }
 
@@ -155,7 +162,9 @@ impl Offline {
         match self {
             Offline::Unconfigured => "coordinator-unconfigured".into(),
             Offline::LocalBudget => "client-budget-spent".into(),
-            Offline::RateLimited { retry_after_s } => format!("rate-limited:retry-after-{retry_after_s}s"),
+            Offline::RateLimited { retry_after_s } => {
+                format!("rate-limited:retry-after-{retry_after_s}s")
+            }
             Offline::Unreachable(e) => format!("unreachable:{e}"),
             Offline::Refused { status, error } => format!("refused:{status}:{error}"),
         }
@@ -184,7 +193,10 @@ impl std::fmt::Debug for Config {
         f.debug_struct("Config")
             .field("url", &self.url)
             .field("client_id", &self.client_id.as_ref().map(|_| "<set>"))
-            .field("client_secret", &self.client_secret.as_ref().map(|_| "<set>"))
+            .field(
+                "client_secret",
+                &self.client_secret.as_ref().map(|_| "<set>"),
+            )
             .field("jwt", &self.jwt.as_ref().map(|_| "<set>"))
             .finish()
     }
@@ -212,7 +224,10 @@ pub struct HttpTransport {
 
 impl HttpTransport {
     pub fn new(cfg: Config) -> Self {
-        Self { cfg, timeout: Duration::from_secs(5) }
+        Self {
+            cfg,
+            timeout: Duration::from_secs(5),
+        }
     }
 }
 
@@ -229,7 +244,9 @@ impl Transport for HttpTransport {
                 .map_err(|e| format!("client: {e}"))?;
             let mut req = client.post(format!("{}{path}", self.cfg.url)).json(body);
             if let (Some(id), Some(secret)) = (&self.cfg.client_id, &self.cfg.client_secret) {
-                req = req.header("CF-Access-Client-Id", id).header("CF-Access-Client-Secret", secret);
+                req = req
+                    .header("CF-Access-Client-Id", id)
+                    .header("CF-Access-Client-Secret", secret);
             }
             if let Some(jwt) = &self.cfg.jwt {
                 req = req.header("Cf-Access-Jwt-Assertion", jwt);
@@ -252,7 +269,10 @@ pub struct Client<T: Transport> {
 
 impl<T: Transport> Client<T> {
     pub fn new(transport: T, budget_per_min: u32) -> Self {
-        Self { transport, limiter: Limiter::new(budget_per_min, Instant::now()) }
+        Self {
+            transport,
+            limiter: Limiter::new(budget_per_min, Instant::now()),
+        }
     }
 
     /// One op. A non-2xx status becomes [`Offline`]; 409 on `claim` is a real
@@ -261,7 +281,10 @@ impl<T: Transport> Client<T> {
         if !self.limiter.take(1, Instant::now()) {
             return Err(Offline::LocalBudget);
         }
-        let (status, body) = self.transport.post("/v1/op", &op).map_err(Offline::Unreachable)?;
+        let (status, body) = self
+            .transport
+            .post("/v1/op", &op)
+            .map_err(Offline::Unreachable)?;
         classify(status, body)
     }
 
@@ -287,7 +310,10 @@ impl<T: Transport> Client<T> {
     }
 
     /// The orders other identities hold live overlays on.
-    pub fn claimed_orders(&mut self, ns: &str) -> Result<std::collections::BTreeSet<String>, Offline> {
+    pub fn claimed_orders(
+        &mut self,
+        ns: &str,
+    ) -> Result<std::collections::BTreeSet<String>, Offline> {
         let r = self.op(json!({ "op": "claims", "ns": ns }))?;
         Ok(r.get("claims")
             .and_then(Value::as_array)
@@ -304,11 +330,20 @@ fn classify(status: u16, body: Value) -> Result<Value, Offline> {
     match status {
         200..=299 | 409 => Ok(body),
         429 => Err(Offline::RateLimited {
-            retry_after_s: body.get("retry_after_s").and_then(Value::as_u64).unwrap_or(60),
+            retry_after_s: body
+                .get("retry_after_s")
+                .and_then(Value::as_u64)
+                .unwrap_or(60),
         }),
         s => Err(Offline::Refused {
             status: s,
-            error: body.get("error").and_then(Value::as_str).unwrap_or("").chars().take(120).collect(),
+            error: body
+                .get("error")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .chars()
+                .take(120)
+                .collect(),
         }),
     }
 }
@@ -324,9 +359,17 @@ pub fn namespace_for(origin_url: Option<&str>, dir_name: &str) -> String {
         let owner = parts.next()?;
         Some(format!("{owner}/{repo}"))
     });
-    let raw = from_origin.unwrap_or_else(|| dir_name.to_string()).to_ascii_lowercase();
+    let raw = from_origin
+        .unwrap_or_else(|| dir_name.to_string())
+        .to_ascii_lowercase();
     raw.chars()
-        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '/') { c } else { '-' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '/') {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect()
 }
 
@@ -339,8 +382,13 @@ mod tests {
     fn heartbeat_never_exceeds_two_minutes() {
         let mut hb = Heartbeat::default();
         for rtt_ms in [1u64, 50, 900, 6_000, 60_000, 3_600_000] {
-            let d = hb.next(Duration::from_millis(rtt_ms), false, false).unwrap();
-            assert!(d <= HEARTBEAT_MAX && d >= HEARTBEAT_MIN, "rtt {rtt_ms}ms -> {d:?}");
+            let d = hb
+                .next(Duration::from_millis(rtt_ms), false, false)
+                .unwrap();
+            assert!(
+                d <= HEARTBEAT_MAX && d >= HEARTBEAT_MIN,
+                "rtt {rtt_ms}ms -> {d:?}"
+            );
         }
         for _ in 0..20 {
             let d = hb.next(Duration::from_millis(100), true, false).unwrap();
@@ -353,10 +401,22 @@ mod tests {
         let mut hb = Heartbeat::default();
         let idle = hb.next(Duration::from_millis(1_000), false, false).unwrap();
         assert_eq!(idle, Duration::from_secs(20));
-        assert_eq!(hb.next(Duration::from_millis(1_000), true, false), Some(Duration::from_secs(40)));
-        assert_eq!(hb.next(Duration::from_millis(1_000), true, false), Some(Duration::from_secs(80)));
-        assert_eq!(hb.next(Duration::from_millis(1_000), true, false), Some(HEARTBEAT_MAX));
-        assert_eq!(hb.next(Duration::from_millis(1_000), false, false), Some(Duration::from_secs(20)));
+        assert_eq!(
+            hb.next(Duration::from_millis(1_000), true, false),
+            Some(Duration::from_secs(40))
+        );
+        assert_eq!(
+            hb.next(Duration::from_millis(1_000), true, false),
+            Some(Duration::from_secs(80))
+        );
+        assert_eq!(
+            hb.next(Duration::from_millis(1_000), true, false),
+            Some(HEARTBEAT_MAX)
+        );
+        assert_eq!(
+            hb.next(Duration::from_millis(1_000), false, false),
+            Some(Duration::from_secs(20))
+        );
     }
 
     #[test]
@@ -374,7 +434,10 @@ mod tests {
         assert!(!lane_marker_held(dir.path(), now));
         std::fs::write(dir.path().join("gate"), "").unwrap();
         assert!(lane_marker_held(dir.path(), now));
-        assert!(!lane_marker_held(dir.path(), now + MARKER_STALE_AFTER + Duration::from_secs(1)));
+        assert!(!lane_marker_held(
+            dir.path(),
+            now + MARKER_STALE_AFTER + Duration::from_secs(1)
+        ));
     }
 
     #[test]
@@ -387,10 +450,12 @@ mod tests {
         assert!(!l.take(5, t0 + Duration::from_secs(10)));
     }
 
+    type Script = Box<dyn Fn(&str, &Value) -> Result<(u16, Value), String>>;
+
     /// Counts calls; answers from a fixed script.
     struct Fake {
         calls: RefCell<Vec<(String, Value)>>,
-        answer: Box<dyn Fn(&str, &Value) -> Result<(u16, Value), String>>,
+        answer: Script,
     }
 
     impl Transport for &Fake {
@@ -401,7 +466,10 @@ mod tests {
     }
 
     fn fake(answer: impl Fn(&str, &Value) -> Result<(u16, Value), String> + 'static) -> Fake {
-        Fake { calls: RefCell::new(Vec::new()), answer: Box::new(answer) }
+        Fake {
+            calls: RefCell::new(Vec::new()),
+            answer: Box::new(answer),
+        }
     }
 
     #[test]
@@ -411,23 +479,42 @@ mod tests {
         for _ in 0..3 {
             c.op(json!({"op": "recv", "ns": "a/b"})).unwrap();
         }
-        assert_eq!(c.op(json!({"op": "recv", "ns": "a/b"})), Err(Offline::LocalBudget));
-        assert_eq!(f.calls.borrow().len(), 3, "the refused call must not reach the transport");
+        assert_eq!(
+            c.op(json!({"op": "recv", "ns": "a/b"})),
+            Err(Offline::LocalBudget)
+        );
+        assert_eq!(
+            f.calls.borrow().len(),
+            3,
+            "the refused call must not reach the transport"
+        );
     }
 
     #[test]
     fn batch_splits_at_the_server_cap_and_keeps_order() {
         let f = fake(|_, body| {
             let n = body["ops"].as_array().unwrap().len();
-            let results: Vec<Value> = body["ops"].as_array().unwrap().iter().map(|o| json!({"ok": true, "seq": o["i"]})).collect();
+            let results: Vec<Value> = body["ops"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|o| json!({"ok": true, "seq": o["i"]}))
+                .collect();
             assert!(n <= BATCH_MAX);
             Ok((200, json!({ "results": results })))
         });
         let mut c = Client::new(&f, 1000);
-        let ops: Vec<Value> = (0..45).map(|i| json!({"op": "recv", "ns": "a/b", "i": i})).collect();
+        let ops: Vec<Value> = (0..45)
+            .map(|i| json!({"op": "recv", "ns": "a/b", "i": i}))
+            .collect();
         let r = c.batch(ops).unwrap();
         assert_eq!(f.calls.borrow().len(), 3);
-        assert_eq!(r.iter().map(|v| v["seq"].as_u64().unwrap()).collect::<Vec<_>>(), (0..45).collect::<Vec<_>>());
+        assert_eq!(
+            r.iter()
+                .map(|v| v["seq"].as_u64().unwrap())
+                .collect::<Vec<_>>(),
+            (0..45).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -439,15 +526,29 @@ mod tests {
             _ => Ok((409, json!({"holder": "h", "until": 1}))),
         });
         let mut c = Client::new(&f, 100);
-        assert_eq!(c.op(json!({"op": "a"})), Err(Offline::RateLimited { retry_after_s: 7 }));
-        assert!(matches!(c.op(json!({"op": "b"})), Err(Offline::Refused { status: 401, .. })));
-        assert!(matches!(c.op(json!({"op": "c"})), Err(Offline::Unreachable(_))));
+        assert_eq!(
+            c.op(json!({"op": "a"})),
+            Err(Offline::RateLimited { retry_after_s: 7 })
+        );
+        assert!(matches!(
+            c.op(json!({"op": "b"})),
+            Err(Offline::Refused { status: 401, .. })
+        ));
+        assert!(matches!(
+            c.op(json!({"op": "c"})),
+            Err(Offline::Unreachable(_))
+        ));
         assert_eq!(c.op(json!({"op": "claim"})).unwrap()["holder"], "h");
     }
 
     #[test]
     fn claimed_orders_reads_the_overlay_list() {
-        let f = fake(|_, _| Ok((200, json!({"claims": [{"order": "1826-gi8e", "holder": "x", "until": 9}]}))));
+        let f = fake(|_, _| {
+            Ok((
+                200,
+                json!({"claims": [{"order": "1826-gi8e", "holder": "x", "until": 9}]}),
+            ))
+        });
         let mut c = Client::new(&f, 10);
         let got = c.claimed_orders("a/b").unwrap();
         assert!(got.contains("1826-gi8e") && got.len() == 1);
@@ -462,13 +563,22 @@ mod tests {
             jwt: Some("JWT-VALUE".into()),
         };
         let s = format!("{cfg:?}");
-        assert!(!s.contains("ID-VALUE") && !s.contains("SECRET-VALUE") && !s.contains("JWT-VALUE"), "{s}");
+        assert!(
+            !s.contains("ID-VALUE") && !s.contains("SECRET-VALUE") && !s.contains("JWT-VALUE"),
+            "{s}"
+        );
     }
 
     #[test]
     fn namespace_matches_the_server_normaliser() {
-        assert_eq!(namespace_for(Some("https://github.com/8007342/Tillandsias.git"), "x"), "8007342/tillandsias");
-        assert_eq!(namespace_for(Some("git@github.com:Owner/Repo.git"), "x"), "owner/repo");
+        assert_eq!(
+            namespace_for(Some("https://github.com/8007342/Tillandsias.git"), "x"),
+            "8007342/tillandsias"
+        );
+        assert_eq!(
+            namespace_for(Some("git@github.com:Owner/Repo.git"), "x"),
+            "owner/repo"
+        );
         assert_eq!(namespace_for(None, "My Project"), "my-project");
     }
 }
