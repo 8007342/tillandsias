@@ -1,25 +1,17 @@
 // @trace spec:host-shell-architecture
 // @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q4)
-//! Shared filesystem scanner backing local-project enumeration on the Linux
-//! native (unix-socket) transport.
+//! Project-label validation (order 505) and per-lane workspace naming.
 //!
-//! Order 997-e4v2 removed `EnumerateLocalProjects` from the vsock (in-VM)
-//! transport, so only one resolver remains live: `host_project_root` below,
-//! via `TILLANDSIAS_HOST_PROJECT_ROOT` env var (default `$HOME/src`). The
-//! in-VM counterpart this doc used to describe (`TILLANDSIAS_IN_VM_PROJECT_ROOT`,
-//! default `/home/forge/src`) had no caller left after that removal and was
-//! deleted as dead code rather than kept `#[allow(dead_code)]`.
-//!
-//! `scan_project_root` here does the actual walk (dirs only, no dot-files,
-//! sorted by label, mtime as `last_seen_unix`).
+//! 776-jcf3 (operator yes, 2026-10-23): the host `~/src` checkout is retired.
+//! Nothing here scans `~/src` (or `TILLANDSIAS_HOST_PROJECT_ROOT`) any more;
+//! the known set is the confirmed cloud labels plus the lanes this process
+//! launched. 776-jcf3 (operator, 2026-10-24): positional host-checkout
+//! launches are retired too, so the only launched lanes are cloud lanes.
 
 #[cfg(feature = "host-services")]
 use std::env;
-use std::path::Path;
 #[cfg(feature = "host-services")]
 use std::path::PathBuf;
-
-use tillandsias_control_wire::LocalProjectEntry;
 
 /// A per-lane bounded tmpfs volume, never a disk-backed source volume. Hash the
 /// tuple (not a concatenated label) so project/instance hyphens cannot alias.
@@ -28,75 +20,6 @@ pub(crate) fn ram_workspace_volume(project: &str, instance: &str) -> String {
     use sha2::Digest;
     let digest = sha2::Sha256::digest(format!("{project}\0{instance}"));
     format!("tillandsias-source-{:x}", digest)
-}
-
-#[cfg(feature = "host-services")]
-pub const HOST_PROJECT_ROOT_ENV: &str = "TILLANDSIAS_HOST_PROJECT_ROOT";
-
-#[cfg(feature = "host-services")]
-pub fn host_project_root() -> PathBuf {
-    if let Ok(v) = env::var(HOST_PROJECT_ROOT_ENV) {
-        return PathBuf::from(v);
-    }
-    if let Some(mut d) = dirs::home_dir() {
-        d.push("src");
-        d
-    } else {
-        PathBuf::from("/nonexistent")
-    }
-}
-
-/// Walk `root` and return one entry per visible directory child.
-/// Hidden entries (leading dot) and non-directories are skipped.
-/// `last_seen_unix` is the directory's mtime (seconds since epoch).
-///
-/// Cheap by design: a single `read_dir` + per-entry `metadata`. The
-/// host tray re-issues this on user-visible events, not on a tight
-/// loop. An unreadable `root` (missing dir, permission denied, ...)
-/// returns an empty vec — the dispatchers downstream report a
-/// well-formed empty `LocalProjectsReply` rather than an error,
-/// matching the prior stub behaviour.
-///
-/// @trace spec:host-shell-architecture
-// 997-e4v2 step 3 / 1031-q4pb: the wire enumerator that used to call this from
-// a non-tray build is gone, and the remaining callers (order 505 label
-// validation in main.rs and the MCP tool-socket guard in mcp_socket.rs) are ALL
-// behind `feature = "host-services"`, which tray and listen-vsock both enable
-// (1713-1dnx). So this is dead in a default build and load-bearing in a
-// host-services one. Scoped rather than blanket-allowed so such a build still
-// reports it if 1031-q4pb removes the last real caller.
-#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
-pub fn scan_project_root(root: &Path) -> Vec<LocalProjectEntry> {
-    let Ok(entries) = std::fs::read_dir(root) else {
-        return Vec::new();
-    };
-    let mut out = Vec::new();
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let Ok(meta) = entry.metadata() else { continue };
-        if !meta.is_dir() {
-            continue;
-        }
-        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
-            continue;
-        };
-        if name.starts_with('.') {
-            continue;
-        }
-        let last_seen_unix = meta
-            .modified()
-            .ok()
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        out.push(LocalProjectEntry {
-            label: name.to_string(),
-            guest_path: path.to_string_lossy().into_owned(),
-            last_seen_unix,
-        });
-    }
-    out.sort_by(|a, b| a.label.cmp(&b.label));
-    out
 }
 
 // ===========================================================================
@@ -125,7 +48,7 @@ pub fn scan_project_root(root: &Path) -> Vec<LocalProjectEntry> {
 // the scan somewhere else. The answer is the set of project names this host
 // actually knows:
 //
-//     local enumeration (while a project root still exists, transitional)
+//     the lanes this process launched (bind_launched_*; ~/src scan removed, 776-jcf3)
 //   ∪ the cloud project labels last CONFIRMED by a successful fetch
 //
 // and the label must appear in it. An EMPTY set denies — that is the whole
@@ -204,72 +127,16 @@ pub fn read_cloud_labels() -> Vec<String> {
 /// The set order 505 validates a label against.
 #[cfg(feature = "host-services")]
 pub fn known_project_labels() -> std::collections::BTreeSet<String> {
-    let mut set: std::collections::BTreeSet<String> = scan_project_root(&host_project_root())
-        .into_iter()
-        .map(|p| p.label)
-        .collect();
-    set.extend(read_cloud_labels());
-    set
-}
-
-/// 1626-r4xm: the local projects THIS process launched a lane for, each bound
-/// to the canonical path it was launched from. The lane listener runs in the
-/// launching process, so the binding lives exactly as long as the lane.
-#[cfg(feature = "host-services")]
-fn launched_bindings() -> std::sync::MutexGuard<'static, std::collections::BTreeMap<String, PathBuf>>
-{
-    static BINDINGS: std::sync::OnceLock<
-        std::sync::Mutex<std::collections::BTreeMap<String, PathBuf>>,
-    > = std::sync::OnceLock::new();
-    BINDINGS
-        .get_or_init(Default::default)
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-}
-
-/// A binding holds while its path is still a directory that canonicalizes to
-/// itself. A project moved, deleted or swapped for a symlink stops admitting.
-#[cfg(feature = "host-services")]
-fn binding_holds(path: &Path) -> bool {
-    path.is_dir() && path.canonicalize().ok().as_deref() == Some(path)
-}
-
-/// 1626-r4xm: admit the one project a lane was launched for, wherever it lives
-/// (e.g. `~/claudia/<x>`, outside the host project root), with nothing for the
-/// operator to set. `canonical` must already be canonical and `label` must be
-/// its last component, so the label names exactly the launched directory.
-///
-/// Refuses to rebind a label that still holds a DIFFERENT path: two projects
-/// with one label would make the lane's identity ambiguous.
-#[cfg(feature = "host-services")]
-pub fn bind_launched_project(label: &str, canonical: &Path) -> Result<(), String> {
-    if canonical.file_name().and_then(|n| n.to_str()) != Some(label) || !binding_holds(canonical) {
-        return Err(format!(
-            "cannot bind lane '{label}' to {}: the label must be the last component \
-             of the project's canonical directory",
-            canonical.display()
-        ));
-    }
-    let mut bindings = launched_bindings();
-    if let Some(bound) = bindings.get(label)
-        && bound != canonical
-        && binding_holds(bound)
-    {
-        return Err(format!(
-            "lane '{label}' is already bound to {}; refusing to bind it to {} as well",
-            bound.display(),
-            canonical.display()
-        ));
-    }
-    bindings.insert(label.to_string(), canonical.to_path_buf());
-    Ok(())
+    // 776-jcf3: cloud labels only. A directory under ~/src is NOT a known
+    // project; a local checkout is admitted only by the lane launched for it.
+    read_cloud_labels().into_iter().collect()
 }
 
 /// 1713-1dnx: the cloud projects THIS process launched a lane for. In the
 /// macOS/Windows VM a forge is launched by a per-attach child that never runs
 /// the tray's cloud refresh, so the label cache that order 505 reads is empty
 /// there and every MCP call would be refused. The child admits the one cloud
-/// label it launched, the cloud counterpart of [`bind_launched_project`].
+/// label it launched.
 #[cfg(feature = "host-services")]
 fn launched_cloud_labels() -> std::sync::MutexGuard<'static, std::collections::BTreeSet<String>> {
     static LABELS: std::sync::OnceLock<std::sync::Mutex<std::collections::BTreeSet<String>>> =
@@ -299,18 +166,10 @@ pub fn bind_launched_cloud_label(label: &str) -> Result<(), String> {
 /// FAILS CLOSED. An empty set denies, which is the defect this replaces.
 /// Never sanitizes: the label is either known verbatim or refused.
 ///
-/// 1626-r4xm: the known set also holds the projects this process launched a
-/// lane for ([`bind_launched_project`]), while their bound path holds, and
-/// (1713-1dnx) the cloud labels it launched ([`bind_launched_cloud_label`]).
-/// Every other label outside the root is still refused.
+/// 1713-1dnx: the known set also holds the cloud labels this process launched
+/// a lane for ([`bind_launched_cloud_label`]). Every other label is refused.
 #[cfg(feature = "host-services")]
 pub fn validate_project_label(label: &str) -> Result<(), String> {
-    if launched_bindings()
-        .get(label)
-        .is_some_and(|bound| binding_holds(bound))
-    {
-        return Ok(());
-    }
     if launched_cloud_labels().contains(label) {
         return Ok(());
     }
@@ -325,9 +184,8 @@ pub fn validate_project_label(label: &str) -> Result<(), String> {
     if known.is_empty() {
         Err(format!(
             "Project '{label}' cannot be validated: this host knows of no projects \
-             (no local enumeration under {} and no confirmed cloud project list at {}). \
+             (no lane launched for it and no confirmed cloud project list at {}). \
              Refusing rather than accepting an unvalidated label.",
-            host_project_root().display(),
             cloud_label_cache_path().display()
         ))
     } else {
@@ -335,12 +193,9 @@ pub fn validate_project_label(label: &str) -> Result<(), String> {
         // A forge agent that hits this cannot see the host; this sentence is
         // what it can relay to the operator.
         Err(format!(
-            "Project '{label}' is not a known project on this host: local projects \
-             are the directories directly under {} (set {HOST_PROJECT_ROOT_ENV} to \
-             the directory that holds it, or move the project there) plus the one \
-             project a lane was launched for, and cloud projects come from the \
-             confirmed list at {}",
-            host_project_root().display(),
+            "Project '{label}' is not a known project on this host: projects are \
+             admitted only from the confirmed cloud list at {} or by the cloud lane \
+             launched for them (`tillandsias --cloud <owner>/<repo>`)",
             cloud_label_cache_path().display()
         ))
     }
@@ -348,49 +203,6 @@ pub fn validate_project_label(label: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::fs;
-
-    /// `scan_project_root` returns one entry per visible directory,
-    /// sorted by label.
-    #[test]
-    fn returns_dirs_only_sorted() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        fs::create_dir(tmp.path().join("alpha")).unwrap();
-        fs::create_dir(tmp.path().join("beta")).unwrap();
-        fs::write(tmp.path().join("regular-file"), b"").unwrap();
-        fs::create_dir(tmp.path().join(".hidden")).unwrap();
-
-        let entries = scan_project_root(tmp.path());
-
-        let labels: Vec<&str> = entries.iter().map(|e| e.label.as_str()).collect();
-        assert_eq!(labels, vec!["alpha", "beta"]);
-        assert!(
-            entries.iter().all(|e| !e.guest_path.is_empty()),
-            "guest_path must be populated"
-        );
-    }
-
-    /// Missing or unreadable root returns an empty vec — well-formed
-    /// reply, never panics.
-    #[test]
-    fn returns_empty_when_root_missing() {
-        let entries = scan_project_root(Path::new("/this/path/does/not/exist"));
-        assert!(entries.is_empty());
-    }
-
-    /// `last_seen_unix` is populated from mtime when readable.
-    #[test]
-    fn last_seen_unix_is_populated() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        fs::create_dir(tmp.path().join("recent")).unwrap();
-        let entries = scan_project_root(tmp.path());
-        assert_eq!(entries.len(), 1);
-        assert!(
-            entries[0].last_seen_unix > 0,
-            "mtime should be a positive unix timestamp"
-        );
-    }
 
     // === ORDER 505 FAIL-CLOSED VALIDATION (1031-q4pb) ==========================
     //
@@ -408,7 +220,6 @@ mod tests {
     impl Drop for EnvScope {
         fn drop(&mut self) {
             unsafe {
-                std::env::remove_var(super::HOST_PROJECT_ROOT_ENV);
                 std::env::remove_var(super::CLOUD_LABEL_CACHE_ENV);
             }
             let _ = std::fs::remove_dir_all(&self._tmp);
@@ -434,7 +245,6 @@ mod tests {
         }
         let cache = tmp.join("known-cloud-projects");
         unsafe {
-            std::env::set_var(super::HOST_PROJECT_ROOT_ENV, &root);
             std::env::set_var(super::CLOUD_LABEL_CACHE_ENV, &cache);
         }
         if let Some(c) = cloud {
@@ -493,97 +303,24 @@ mod tests {
         );
     }
 
-    /// 1626-r4xm, criterion 2: the wrong-label refusal names the root it scanned
-    /// and the variable that moves it, so a forge agent that hits it on a lane
-    /// socket can tell the operator what to change. It still refuses.
+    /// 776-jcf3: a directory under the host project root (~/src) is NOT a
+    /// known project. Pre-fix, `known_project_labels` scanned the root and this
+    /// label was admitted; the refusal must also stop advertising the root.
     #[cfg(feature = "host-services")]
     #[test]
-    fn unknown_label_refusal_names_the_scanned_root_and_its_variable() {
-        let _s = scoped(&["known-project"], None);
-        let err = super::validate_project_label("scratch-6iwd").unwrap_err();
+    fn directory_under_host_project_root_is_not_admitted() {
+        let _s = scoped(&["src-checkout-776"], Some(&["cloud-only"]));
+        assert!(
+            !super::known_project_labels().contains("src-checkout-776"),
+            "the known set must not be read from ~/src"
+        );
+        let err = super::validate_project_label("src-checkout-776").unwrap_err();
         assert!(err.contains("is not a known project"), "{err}");
         assert!(
-            err.contains(&super::host_project_root().display().to_string()),
-            "names the scanned root: {err}"
+            !err.contains("tillandsias <path>"),
+            "the refusal must not advertise the retired positional launch: {err}"
         );
-        assert!(
-            err.contains(super::HOST_PROJECT_ROOT_ENV),
-            "names the variable: {err}"
-        );
-    }
-
-    /// 1626-r4xm: a project outside the root is refused until a lane is
-    /// launched for it (red), then admitted bound to its canonical path
-    /// (green). Another outside label is still refused, and the binding stops
-    /// admitting once its directory is gone.
-    #[cfg(feature = "host-services")]
-    #[test]
-    fn launched_project_outside_the_root_is_admitted_and_no_other() {
-        let _s = scoped(&["known-project"], None);
-        let elsewhere = tempfile::tempdir().expect("tempdir");
-        std::fs::create_dir_all(elsewhere.path().join("r4xm-launched")).unwrap();
-        std::fs::create_dir_all(elsewhere.path().join("r4xm-other")).unwrap();
-        let launched = elsewhere
-            .path()
-            .join("r4xm-launched")
-            .canonicalize()
-            .unwrap();
-
-        let before = super::validate_project_label("r4xm-launched");
-        assert!(
-            before.is_err(),
-            "RED: refused before its lane is launched: {before:?}"
-        );
-
-        super::bind_launched_project("r4xm-launched", &launched).expect("bind");
-        assert!(
-            super::validate_project_label("r4xm-launched").is_ok(),
-            "GREEN: the launched project is admitted outside the root"
-        );
-        let other = super::validate_project_label("r4xm-other").unwrap_err();
-        assert!(
-            other.contains("is not a known project"),
-            "NEGATIVE: {other}"
-        );
-        assert!(super::validate_project_label("known-project").is_ok());
-
-        std::fs::remove_dir(&launched).unwrap();
-        assert!(
-            super::validate_project_label("r4xm-launched").is_err(),
-            "a binding follows its directory: gone means refused"
-        );
-    }
-
-    /// 1626-r4xm: a binding names exactly the launched directory. A label that
-    /// is not the path's last component is refused, and a label that still
-    /// holds one path cannot be rebound to another.
-    #[cfg(feature = "host-services")]
-    #[test]
-    fn launched_binding_refuses_a_mismatched_label_and_a_second_path() {
-        let elsewhere = tempfile::tempdir().expect("tempdir");
-        let first = elsewhere.path().join("a").join("r4xm-twin");
-        let second = elsewhere.path().join("b").join("r4xm-twin");
-        std::fs::create_dir_all(&first).unwrap();
-        std::fs::create_dir_all(&second).unwrap();
-        let first = first.canonicalize().unwrap();
-        let second = second.canonicalize().unwrap();
-
-        assert!(super::bind_launched_project("not-the-name", &first).is_err());
-        super::bind_launched_project("r4xm-twin", &first).expect("first bind");
-        super::bind_launched_project("r4xm-twin", &first).expect("same path rebinds");
-        let err = super::bind_launched_project("r4xm-twin", &second).unwrap_err();
-        assert!(err.contains("already bound"), "{err}");
-    }
-
-    /// The local half still works, and the two halves union rather than one
-    /// shadowing the other.
-    #[cfg(feature = "host-services")]
-    #[test]
-    fn local_and_cloud_labels_union() {
-        let _s = scoped(&["local-only"], Some(&["cloud-only"]));
-        assert!(super::validate_project_label("local-only").is_ok());
         assert!(super::validate_project_label("cloud-only").is_ok());
-        assert!(super::validate_project_label("neither").is_err());
     }
 
     /// 731-eupn's constraint, expressed as data: a cache written from a
