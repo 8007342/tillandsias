@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-24. Code is cited by symbol, never by line.
+packets:
+  - packet_id: durable-object-local-state-persists-across-forge-restarts-with-explicit-reset-and-snapshot
+    order: 1857-fmf7
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, cloudflare, wrangler, state]
+    estimated_hours: 4
+    title: "Local Durable Object data in a forge preview survives restarts, with reset and snapshot commands"
+    context: |
+      Field report: authenticated Durable Object persistence could not be verified. Provide project, environment and lane scoped Durable Object persistence outside disposable runtimes with stable identity across reloads and rebuilds, explicit reset, and snapshot/restore. Never attach production storage as a workaround. Source: forge field report FORGE_DIAGNOSTICS.md in 8007342/arabiya.
+    exit_criteria:
+      - "A fixture writes a Durable Object value in a forge preview, restarts the forge, reads it back, then resets and asserts it is gone, then restores a snapshot and asserts it is back. Pre-fix result: FAILS, state lives in the disposable wrangler runtime and is lost."
+    verifiable_closure: "A fixture writes a Durable Object value in a forge preview, restarts the forge, reads it back, then resets and asserts it is gone, then restores a snapshot and asserts it is back. Pre-fix result: FAILS, state lives in the disposable wrangler runtime and is lost."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the fixture named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-24.
+    events:
+      - type: filed
+        ts: "2026-10-24T15:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator request of 2026-10-24"

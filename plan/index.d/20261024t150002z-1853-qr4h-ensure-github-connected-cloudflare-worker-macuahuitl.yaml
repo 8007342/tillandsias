@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-24. Code is cited by symbol, never by line.
+packets:
+  - packet_id: host-side-ensure-github-connected-cloudflare-worker-service-tool-so-agents-never-hold-cloudflare-credentials
+    order: 1853-qr4h
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, cloudflare, mcp, deploy, security]
+    estimated_hours: 4
+    title: "A host-side tool that sets up a GitHub-connected Cloudflare Worker once, with no build on push, and deploys a named revision only on explicit request, so agents never hold Cloudflare credentials"
+    context: |
+      Forge field report (arabiya): the desired flow is Create Worker, select GitHub repo, configure build, through the forge. Today an agent has no tool to create a Worker, connect the repo or request a deployment; npm run deploy builds then exits 1 for want of a credential. OPERATOR RULING: Cloudflare credentials never enter the forge; agents must not run wrangler deploy or npm deploy with credentials. OPERATOR CORRECTION 2026-10-24: cloud build minutes are expensive, metered and finite, so NO automatic build on push. Shape: a host-side service tool (ensure_github_cloudflare_worker) that uses the host Cloudflare session or vault internally and creates or finds the Worker and connects the repo ONCE, with auto-build on push disabled. A redeploy is an explicit, intentional request for a named revision, deployed from a dedicated deploy/builder branch that only moves on purpose (like deploy/observatorium), never from main or work branches. The tool exposes build status and logs. Idempotent: a second ensure call changes nothing and triggers nothing. Source: forge field report FORGE_DIAGNOSTICS.md in 8007342/arabiya.
+    exit_criteria:
+      - "A fixture drives the tool against a fake Cloudflare API and asserts: the Worker is created or found and the repo connected once with auto-build on push disabled; a push to main or to any work branch triggers ZERO cloud builds; a build happens only on an explicit request for a named revision from the deploy branch; status and logs are returned; and no credential appears in any forge-visible output or env. Pre-fix result: FAILS, no such tool exists; the forge scope probe exposes read-only Workers and Builds tools only."
+    verifiable_closure: "A fixture drives the tool against a fake Cloudflare API and asserts: the Worker is created or found and the repo connected once with auto-build on push disabled; a push to main or to any work branch triggers ZERO cloud builds; a build happens only on an explicit request for a named revision from the deploy branch; status and logs are returned; and no credential appears in any forge-visible output or env. Pre-fix result: FAILS, no such tool exists; the forge scope probe exposes read-only Workers and Builds tools only."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the fixture named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-24.
+    events:
+      - type: filed
+        ts: "2026-10-24T15:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator request of 2026-10-24"
