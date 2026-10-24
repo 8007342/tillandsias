@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: retire-host-src-checkout-behind-proven-transparent-push
+    event:
+      type: progress
+      ts: "2026-10-24T04:40:12Z"
+      host: macuahuitl
+      summary: |-
+        POSITIONAL LAUNCHES RETIRED on work/776-jcf3-positional, PR #636 (https://github.com/8007342/tillandsias/pull/636). The PR is a draft stacked on #635.
+        A lane flag with a positional path and no --cloud now refuses with exit 2 and prints the cloud form. No host path is bound, no host remote.origin.url is read, there is no Observatorium host mount, and the MCP config.toml read is gone.
+        Preflight passed with refused=0. --check passed with rc=0.
+        LEFT: land #635, then mark #636 ready. A follow-up should delete the now-unreachable host-checkout plumbing: facade staging, TILLANDSIAS_FORGE_HOST_MOUNT, and the canonical_path threading.
