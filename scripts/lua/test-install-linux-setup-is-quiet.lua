@@ -89,7 +89,8 @@ end
 fs.write(REL .. "/tillandsias", table.concat({
     "#!/usr/bin/env bash",
     'printf "%s\\n" "$*" > "$STUB_ARGV"',
-    'readlink /proc/self/fd/0 > "$STUB_STDIN"',
+    -- `-ef` compares device and inode, so it works where /proc does not (darwin).
+    'if [ /dev/stdin -ef /dev/null ]; then echo /dev/null; else readlink /proc/self/fd/0 2>/dev/null || echo not-dev-null; fi > "$STUB_STDIN"',
     'echo "[tillandsias] reset: SOFT" >&2',
     'echo "[tillandsias]   WILL BE PRESERVED:" >&2',
     'echo "[tillandsias]   Skip the reset with TILLANDSIAS_DESTRUCTIVE_RESET_OK=0." >&2',
