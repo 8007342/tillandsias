@@ -92,6 +92,8 @@ mod forge_swap;
 // RAM-only source-volume identity is needed by default CLI launchers too.
 mod launch_images;
 mod local_projects;
+// 1847-5xv3: headless one-shot of a non-Claude lane on a --cloud project.
+mod one_shot;
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
 pub mod remote_projects;
 mod runtime_assets;
@@ -1391,13 +1393,25 @@ fn main() {
         std::process::exit(2);
     }
 
+    // 1847-5xv3: a --cloud non-Claude lane with no terminal is a one-shot. It
+    // runs the queue prompt when none was given, under a wall-clock backstop.
+    let one_shot = one_shot::is_one_shot(is_cloud, opencode || codex, io::stdin().is_terminal());
+    let prompt = one_shot::effective_prompt(prompt, one_shot);
+    if one_shot && let Some(project_path) = config_path.as_deref() {
+        arm_one_shot_backstop(project_path, codex);
+    }
+
     if opencode {
         let reserved_lane = cli_reserved_lane(config_path.as_deref(), is_cloud);
         maybe_spawn_detached_tray_for_cli(tray, reserved_lane.as_deref(), debug);
         if let Some(project_path) = config_path {
-            if let Err(e) = run_cli_with_vault_credential_cleanup(debug, || {
+            let result = run_cli_with_vault_credential_cleanup(debug, || {
                 run_opencode_mode(&project_path, is_cloud, prompt.as_deref(), debug)
-            }) {
+            });
+            if one_shot::timed_out() {
+                std::process::exit(one_shot::TIMEOUT_EXIT);
+            }
+            if let Err(e) = result {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
@@ -1421,7 +1435,7 @@ fn main() {
             (ForgeAgentMode::Maintenance, "--bash")
         };
         if let Some(project_path) = config_path {
-            if let Err(e) = run_cli_with_vault_credential_cleanup(debug, || {
+            let result = run_cli_with_vault_credential_cleanup(debug, || {
                 run_forge_agent_cli_mode(
                     &project_path,
                     is_cloud,
@@ -1430,7 +1444,11 @@ fn main() {
                     prompt.as_deref(),
                     debug,
                 )
-            }) {
+            });
+            if one_shot::timed_out() {
+                std::process::exit(one_shot::TIMEOUT_EXIT);
+            }
+            if let Err(e) = result {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
@@ -15116,6 +15134,43 @@ fn tray_companion_command(exe: &Path, reserved_lane: Option<&str>) -> Command {
 /// will serve, named the way [`resolve_launch_project_identity`] names it
 /// (the canonical basename of a local checkout, the bare label in cloud
 /// mode) but with no side effects. `None` when there is no project yet.
+/// Arm 1847-5xv3's wall-clock backstop for a one-shot's forge. The queue
+/// report is a no-op until 1826's coordinator client lands.
+fn arm_one_shot_backstop(project_path: &str, codex: bool) {
+    let Ok((name, _)) = resolve_launch_project_identity(project_path, true, "opencode-project")
+    else {
+        return;
+    };
+    let container = if codex {
+        forge_container_name_for_mode(&name, ForgeAgentMode::Codex)
+    } else {
+        forge_container_name(&name)
+    };
+    let budget = one_shot::budget(std::env::var(one_shot::MAX_MINUTES_ENV).ok().as_deref());
+    one_shot::arm_timeout(
+        budget,
+        one_shot::GRACE,
+        container,
+        Box::new(one_shot::NoQueue),
+        Box::new(PodmanTeardown),
+    );
+}
+
+struct PodmanTeardown;
+
+impl one_shot::Teardown for PodmanTeardown {
+    fn remove_forge(&self, container: &str) {
+        let mut rm = podman_command();
+        rm.args(["rm", "--force", "--time", "10", container]);
+        if let Err(e) = podman_command_output(rm, false) {
+            eprintln!("[tillandsias] one-shot: removing {container} failed: {e}");
+        }
+    }
+    fn exit(&self, code: i32) {
+        std::process::exit(code);
+    }
+}
+
 fn cli_reserved_lane(project_path: Option<&str>, is_cloud: bool) -> Option<String> {
     let project_path = project_path?;
     let name = if is_cloud {

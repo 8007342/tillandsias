@@ -1,0 +1,38 @@
+name: litmus:headless-cloud-one-shot-backstop
+spec: cli-mode
+phase: pre-build
+description: >
+  Pin the headless one-shot (order 1847-5xv3). A --cloud --opencode or --codex
+  launch with no terminal on stdin runs the queue default prompt when none is
+  given, and runs under a wall-clock backstop: past
+  TILLANDSIAS_ONE_SHOT_MAX_MINUTES (default 90) the forge is removed,
+  failed:timeout is printed and reported through the QueueClient seam (a no-op
+  until the coordinator client lands), and the launcher exits 124 through its
+  own return path so the Vault credential cleanup still runs. An interactive
+  start, a host checkout and a Claude lane are unchanged.
+severity: medium
+size: small
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/one_shot.rs
+
+critical_path:
+  - step: "Req: queue default prompt, backstop order (remove, report, print, exit 124) and the dispatch wiring"
+    command: "bash scripts/test-headless-cloud-one-shot.sh 2>&1"
+    timeout_ms: 600000
+    success_pattern: "ok:headless-cloud-one-shot:5"
+
+observability:
+  traces:
+    - "@trace spec:cli-mode"
+  expected_log: "a headless cloud one-shot reads its queue and cannot outlive its budget"
+  log_fields:
+    spec: "cli-mode"
+    test: "headless-cloud-one-shot-backstop"
+    artifact: "scripts/test-headless-cloud-one-shot.sh"
+
+rollback:
+  on_failure: >
+    Restore crates/tillandsias-headless/src/one_shot.rs and the two
+    timed_out() checks after run_cli_with_vault_credential_cleanup in main.rs.
+  command: "bash scripts/test-headless-cloud-one-shot.sh 2>&1"
