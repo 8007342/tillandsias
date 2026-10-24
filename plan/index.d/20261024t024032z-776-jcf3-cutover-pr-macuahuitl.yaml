@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: retire-host-src-checkout-behind-proven-transparent-push
+    event:
+      type: progress
+      ts: "2026-10-24T02:40:32Z"
+      host: macuahuitl
+      summary: |-
+        CUTOVER IMPLEMENTED on work/776-jcf3-cutover, PR #635 (https://github.com/8007342/tillandsias/pull/635), draft. This is the operator-approved 3d plan from 2026-10-23.
+        Removed: the tray's ~/src scan (discover_projects, refresh_local_projects), the startup MCP sockets built from it (only the default lane is bound now), the ~/src half of the order-505 known set (scan_project_root deleted), and the #[allow(dead_code)] local-launch handlers plus main.rs launch_forge_agent.
+        Tests that fail on the pre-fix code: directory_under_host_project_root_is_not_admitted, tray_does_not_scan_the_host_src_checkout.
+        LEFT: --check is red only at tool-materialize-litmus ARM 0 (host regime, outside this diff); once that is green, mark the PR ready. The row stays open until the PR lands.
