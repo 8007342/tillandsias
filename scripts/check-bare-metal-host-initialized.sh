@@ -40,7 +40,19 @@ ENSURE_CMD="tillandsias --ensure-enclave"
 # spends the cycle it was written to save. Both values are derived from this
 # checkout rather than hardcoded to $HOME/claudia, so the printed command is
 # the one THIS host should run.
-LANE_CMD="TILLANDSIAS_HOST_PROJECT_ROOT=$(dirname "$ROOT") tillandsias --bash ${ROOT}"
+#
+# 776-jcf3 (operator, 2026-10-24): positional host-checkout launches are
+# retired, so the lane command is the cloud form. The owner/repo comes from
+# this checkout's GitHub origin (a script-side read only, to print the
+# command); a non-GitHub origin prints a placeholder owner.
+_origin="$(git -C "$ROOT" remote get-url origin 2>/dev/null || true)"
+_nwo="${_origin%.git}"
+case "$_nwo" in
+    https://github.com/*/*) _nwo="${_nwo#https://github.com/}" ;;
+    git@github.com:*/*) _nwo="${_nwo#git@github.com:}" ;;
+    *) _nwo="<owner>/${PROJECT}" ;;
+esac
+LANE_CMD="tillandsias --cloud ${_nwo} --bash"
 
 command -v podman >/dev/null 2>&1 || { echo "skip:bare-metal-host:no-podman"; exit 0; }
 

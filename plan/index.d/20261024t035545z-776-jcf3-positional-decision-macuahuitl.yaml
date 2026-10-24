@@ -1,0 +1,11 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: retire-host-src-checkout-behind-proven-transparent-push
+    event:
+      type: decision
+      ts: "2026-10-24T03:55:45Z"
+      host: macuahuitl
+      summary: |-
+        OPERATOR DECISION (in-session 2026-10-24, macuahuitl): "Yes, remove the local launches as well."
+        Scope: positional host-path launches (`tillandsias <path> <lane>`) are retired. No resolving or binding a host path into the lane socket's known set, no reading the checkout's remote.origin.url to seed the mirror, no Observatorium read-only mount of a host path at /var/www/source. `--cloud owner/repo` (ephemeral mirror + ephemeral forge) is the only launch.
+        A positional path with a lane flag refuses with the cloud launch form; mapping the path to its origin remote was rejected as ambiguous (ssh-aliased or non-GitHub origins, unpushed commits, dirty trees).
