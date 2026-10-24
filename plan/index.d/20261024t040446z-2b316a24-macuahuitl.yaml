@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-forge-started-for-a-project-with-a-pending-coordinator-task-runs-it-with-a-non-claude-headless-agent-and-that-projects-named-skill-to-completion-reports-back-and-exits
+    field: unscoreable
+    value: |-
+      unpinnable-until-the-guard-exists: scripts/test-headless-cloud-one-shot.sh
+      (new) runs the headless --cloud + non-Claude lane path with a stub agent and
+      a stub coordinator client on PATH recording argv, and asserts the default
+      generic prompt, exit-on-agent-exit with no container left, the
+      failed:timeout backstop report, and the agent's completion report. The
+      real-forge proof belongs to the story milestone 1849-i36i.
+    ts: "2026-10-24T04:04:46Z"
+    host: macuahuitl
+    replaces_sha256: "e71f6d1f863c6ed347955db172f75935c4b4bfc29f840ed148d26dfa2661ef4f"
+
+events:
+  - packet_id: a-forge-started-for-a-project-with-a-pending-coordinator-task-runs-it-with-a-non-claude-headless-agent-and-that-projects-named-skill-to-completion-reports-back-and-exits
+    event:
+      type: note
+      ts: "2026-10-24T04:04:46Z"
+      host: macuahuitl
+      summary: |-
+        revised: operator flow correction 2026-10-24 — stale task/enqueue wording replaced by message wording; 1847 unscoreable names the new fixture
