@@ -792,6 +792,18 @@ fn cmd_coord(args: &[String], index: &Path, ledger: &Ledger) {
     use serde_json::{Value, json};
     use tillandsias_plan::coordinator_client as cc;
 
+    // The forge-plan MCP tool hands its arguments object over verbatim, so
+    // the shell side needs no jq: the closed schema is checked here, and a
+    // violation exits 2 with the reason, which the wrapper maps to -32602.
+    if args.get(1).map(String::as_str) == Some("--mcp-args") {
+        match coord_argv_from_mcp(args.get(2).map(String::as_str).unwrap_or("")) {
+            Ok(argv) => return cmd_coord(&argv, index, ledger),
+            Err(why) => {
+                eprintln!("invalid coord arguments: {why}");
+                std::process::exit(2);
+            }
+        }
+    }
     let root = root_for(index);
     let mut ns: Option<String> = None;
     let mut since: Option<u64> = None;
@@ -997,6 +1009,77 @@ fn cmd_coord(args: &[String], index: &Path, ledger: &Ledger) {
             std::process::exit(3);
         }
     }
+}
+
+/// The forge-plan `coord` tool's closed schema, mapped onto `coord` argv.
+/// Heartbeat is not offered (an MCP call is one request, never a loop), and
+/// `overview put` is not offered (it reads a file the caller names).
+fn coord_argv_from_mcp(raw: &str) -> Result<Vec<String>, String> {
+    use serde_json::Value;
+    let v: Value = serde_json::from_str(raw).map_err(|e| format!("not a JSON object: {e}"))?;
+    let obj = v.as_object().ok_or("not a JSON object")?;
+    const KEYS: &[&str] = &[
+        "action",
+        "ns",
+        "body",
+        "order",
+        "token",
+        "since",
+        "ttl_s",
+        "pickup_role",
+    ];
+    if let Some(k) = obj.keys().find(|k| !KEYS.contains(&k.as_str())) {
+        return Err(format!("unknown field {k:?} (known: {})", KEYS.join(", ")));
+    }
+    let s = |k: &str| -> Result<Option<String>, String> {
+        match obj.get(k) {
+            None => Ok(None),
+            Some(Value::String(s)) if !s.is_empty() => Ok(Some(s.clone())),
+            Some(_) => Err(format!("{k} must be a non-empty string")),
+        }
+    };
+    let n = |k: &str| -> Result<Option<u64>, String> {
+        match obj.get(k) {
+            None => Ok(None),
+            Some(v) => v
+                .as_u64()
+                .map(Some)
+                .ok_or(format!("{k} must be a non-negative integer")),
+        }
+    };
+    let req = |k: &str, action: &str| s(k)?.ok_or(format!("{action} needs {k}"));
+    let action = s("action")?.ok_or("action is required")?;
+    let mut argv = vec!["coord".to_string()];
+    match action.as_str() {
+        "join" | "claims" | "recv" => argv.push(action.clone()),
+        "overview_get" => argv.extend(["overview".into(), "get".into()]),
+        "send" => argv.extend(["send".into(), req("body", "send")?]),
+        "claim_overlay" => argv.extend(["claim-overlay".into(), req("order", "claim_overlay")?]),
+        "release" => argv.extend([
+            "release".into(),
+            req("order", "release")?,
+            req("token", "release")?,
+        ]),
+        "next" => {
+            argv.push("next".into());
+            argv.extend(s("pickup_role")?);
+        }
+        other => {
+            return Err(format!(
+                "unknown action {other:?} (known: join, send, recv, overview_get, claim_overlay, release, claims, next)"
+            ));
+        }
+    }
+    if let Some(ns) = s("ns")? {
+        argv.extend(["--ns".into(), ns]);
+    }
+    if let Some(x) = n("since")? {
+        argv.extend(["--since".into(), x.to_string()]);
+    }
+    if let Some(x) = n("ttl_s")? {
+        argv.extend(["--ttl".into(), x.to_string()]);
+    }
+    Ok(argv)
 }
 
 fn emit_verified_envelope(envelope: answer::Envelope, root: &Path, skipped: &[PathBuf]) {
@@ -12630,6 +12713,46 @@ mod tests {
     /// ORDER 583-dv9n. Every DISPATCH arm must be documented in usage too, so
     /// the `main` dispatch, the manifest, and the help text cannot each carry a
     /// different story. This is the arm-side half of the same pin above.
+    /// ORDER 1826-gi8e — the forge-plan `coord` tool's closed schema: every
+    /// action maps onto the CLI argv, and anything outside it is refused
+    /// before any request is made.
+    #[test]
+    fn coord_mcp_args_map_to_argv_and_refuse_outside_the_schema() {
+        let ok = |j: &str| coord_argv_from_mcp(j).unwrap().join(" ");
+        assert_eq!(ok(r#"{"action":"join","ns":"a/b"}"#), "coord join --ns a/b");
+        assert_eq!(
+            ok(r#"{"action":"send","body":"hi","ttl_s":60}"#),
+            "coord send hi --ttl 60"
+        );
+        assert_eq!(ok(r#"{"action":"recv","since":4}"#), "coord recv --since 4");
+        assert_eq!(ok(r#"{"action":"overview_get"}"#), "coord overview get");
+        assert_eq!(
+            ok(r#"{"action":"claim_overlay","order":"1826-gi8e"}"#),
+            "coord claim-overlay 1826-gi8e"
+        );
+        assert_eq!(
+            ok(r#"{"action":"release","order":"o","token":"t"}"#),
+            "coord release o t"
+        );
+        assert_eq!(
+            ok(r#"{"action":"next","pickup_role":"linux"}"#),
+            "coord next linux"
+        );
+        for bad in [
+            "",
+            "[]",
+            r#"{}"#,
+            r#"{"action":"heartbeat"}"#,
+            r#"{"action":"send"}"#,
+            r#"{"action":"release","order":"o"}"#,
+            r#"{"action":"join","extra":1}"#,
+            r#"{"action":"recv","since":-1}"#,
+            r#"{"action":"join","ns":""}"#,
+        ] {
+            assert!(coord_argv_from_mcp(bad).is_err(), "accepted {bad:?}");
+        }
+    }
+
     #[test]
     fn every_dispatch_arm_is_documented_in_usage() {
         for arm in DISPATCH_ARMS {
