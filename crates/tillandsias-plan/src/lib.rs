@@ -40,6 +40,9 @@ pub mod command_policy;
 /// ORDER 1815-tei4 — the project-derived expert context pack that leads every
 /// synthesis prompt byte-identically.
 pub mod context_pack;
+/// ORDER 1826-gi8e — the fleet coordinator client: budgeted, batched, with an
+/// adaptive heartbeat and a git-ledger fallback.
+pub mod coordinator_client;
 pub mod discipline_hooks;
 /// ORDER 920-pxg6 — the OpenAI-compatible loopback front-end over
 /// `pipeline::run_grounded`. One grounded pipeline, two front-ends.

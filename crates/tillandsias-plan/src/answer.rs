@@ -1927,6 +1927,21 @@ pub fn answer_next(
     limit: Option<usize>,
     source_rel: &str,
 ) -> Envelope {
+    answer_next_excluding(ledger, role, release, limit, source_rel, &BTreeSet::new())
+}
+
+/// [`answer_next`] minus the orders in `overlaid`: the live coordinator claim
+/// overlays another host holds (1826-gi8e). An overlay is never authoritative
+/// (the git claim event still flips status), so it only hides a row from this
+/// answer; it never changes the ledger.
+pub fn answer_next_excluding(
+    ledger: &Ledger,
+    role: Option<&str>,
+    release: Option<&str>,
+    limit: Option<usize>,
+    source_rel: &str,
+    overlaid: &BTreeSet<String>,
+) -> Envelope {
     let freshness = ledger
         .source_path()
         .map(|p| Freshness::for_corpus(p, ledger.corpus_files()))
@@ -1972,6 +1987,13 @@ pub fn answer_next(
                 None => release_is_active,
             };
             release_ok
+                && !overlaid.contains(&id)
+                // An order may be a YAML number (`order: 903`), as rendered below.
+                && !p.get("order").is_some_and(|v| match v {
+                    serde_yaml::Value::Number(n) => overlaid.contains(&n.to_string()),
+                    serde_yaml::Value::String(s) => overlaid.contains(s),
+                    _ => false,
+                })
                 && crate::str_field(p, "kind") != Some("milestone")
                 && !criteria_holders.contains(&id)
                 && ledger.dependencies_of(&id).is_some_and(|d| d.is_empty())
@@ -2696,6 +2718,40 @@ events:
             a.answer()
         );
         assert!(a.answer().len() <= NEXT_ANSWER_BYTE_BUDGET);
+    }
+
+    /// ORDER 1826-gi8e — a live coordinator overlay on the top-ranked row
+    /// hides it from `next`, and nothing else changes. An empty overlay is
+    /// byte-identical to plain `answer_next`.
+    #[test]
+    fn plan_next_omits_an_overlaid_order() {
+        let fix = repo_root()
+            .join("openspec/litmus-tests/groundtruth/fixtures/plan-next/plan/index.yaml");
+        let ledger = Ledger::load_with_fragments(&fix).expect("fixture loads");
+        let plain = answer_next(&ledger, None, None, None, "plan/index.yaml");
+        let top = plain
+            .answer()
+            .lines()
+            .find_map(|l| l.strip_prefix("1. "))
+            .and_then(|l| l.split('\t').next())
+            .expect("a first row")
+            .to_string();
+        let none = answer_next_excluding(&ledger, None, None, None, "plan/index.yaml", &BTreeSet::new());
+        assert_eq!(plain.answer(), none.answer());
+        let hidden = answer_next_excluding(
+            &ledger,
+            None,
+            None,
+            None,
+            "plan/index.yaml",
+            &BTreeSet::from([top.clone()]),
+        );
+        assert!(
+            !hidden.answer().contains(&format!("{top}\t")),
+            "overlaid {top} still listed: {}",
+            hidden.answer()
+        );
+        assert!(hidden.answer().contains("(top 5 of 5 eligible)"), "{}", hidden.answer());
     }
 
     /// THE LOAD-BEARING RULE. Zero citations renders as `unsupported`, and no

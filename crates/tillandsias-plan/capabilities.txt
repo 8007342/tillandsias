@@ -34,6 +34,8 @@ check
 closure-evidence-check
 collect
 compact
+# coord: order 1826-gi8e — the fleet coordinator client (git-ledger fallback).
+coord
 corpus-coverage
 declared-closures
 declared-closures-check
