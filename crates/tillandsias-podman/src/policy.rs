@@ -177,6 +177,91 @@ fn option_takes_value(arg: &str) -> bool {
             | "--entrypoint"
             | "-p"
             | "-v"
+            // Order 1118-zzs4: every other value-taking `podman run` option the
+            // tree emits. Without these, the option's VALUE was read as the
+            // image, so the hardening flags after e.g. `--network-alias x`
+            // were never seen and a correctly hardened argv was refused (and a
+            // weakener after one would have been missed).
+            | "--network-alias"
+            | "--label"
+            | "-l"
+            | "--volume"
+            | "-e"
+            | "--env-file"
+            | "--add-host"
+            | "--secret"
+            | "--workdir"
+            | "-w"
+            | "--user"
+            | "-u"
+            | "--publish"
+            | "--memory"
+            | "-m"
+            | "--cpus"
+            | "--shm-size"
+            | "--ulimit"
+            | "--dns"
+            | "--dns-search"
+            | "--dns-option"
+            | "--ip"
+            | "--log-driver"
+            | "--log-opt"
+            | "--restart"
+            | "--stop-signal"
+            | "--stop-timeout"
+            | "--timeout"
+            | "--health-cmd"
+            | "--health-interval"
+            | "--health-retries"
+            | "--health-timeout"
+            | "--health-start-period"
+            | "--group-add"
+            | "--annotation"
+            | "--pull"
+            | "--platform"
+            | "--arch"
+            | "--os"
+            | "--cgroupns"
+            | "--ipc"
+            | "--pid"
+            | "--uts"
+            | "--uidmap"
+            | "--gidmap"
+            | "--subuidname"
+            | "--subgidname"
+            | "--init-path"
+            | "--cidfile"
+            | "--pidfile"
+            | "--conmon-pidfile"
+            | "--hooks-dir"
+            | "--mac-address"
+            | "--userns-uid-map"
+            | "--detach-keys"
+            | "--sdnotify"
+            | "--systemd"
+            | "--umask"
+            | "--expose"
+            | "--attach"
+            | "-a"
+            | "--chrootdirs"
+            | "--passwd-entry"
+            | "--group-entry"
+            | "--cgroup-parent"
+            | "--cgroups"
+            | "--blkio-weight"
+            | "--cpu-shares"
+            | "--cpuset-cpus"
+            | "--memory-swap"
+            | "--requires"
+            | "--pod"
+            | "--image-volume"
+            | "--label-file"
+            | "--device-cgroup-rule"
+            | "--gpus"
+            | "--sysctl"
+            | "--tz"
+            | "--variant"
+            | "--volumes-from"
     )
 }
 
@@ -232,6 +317,40 @@ mod tests {
             "--security-opt=label=disable".into(),
             "example:v1".into(),
         ]
+    }
+
+    /// Order 1118-zzs4: a value-taking option the parser did not know made its
+    /// VALUE the "image", hiding every hardening flag after it. The git-mirror
+    /// argv (`--network-alias <id>` before `--cap-drop=ALL`) was refused.
+    #[test]
+    fn launch_validation_skips_values_of_alias_label_and_volume_options() {
+        let argv: Vec<String> = [
+            "run",
+            "--detach",
+            "--network-alias",
+            "git-alpha",
+            "--label",
+            "k=v",
+            "--volume",
+            "a:/b",
+            "-e",
+            "X=1",
+            "--add-host",
+            "h:1.2.3.4",
+            "--userns=keep-id",
+            "--cap-drop=ALL",
+            "--security-opt=no-new-privileges",
+            "--security-opt=label=disable",
+            "example:v1",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect();
+        assert_eq!(validate_launch_argv(&argv), Ok(()));
+
+        let mut weakened = argv.clone();
+        weakened.insert(5, "--privileged".into());
+        assert!(validate_launch_argv(&weakened).is_err());
     }
 
     #[test]

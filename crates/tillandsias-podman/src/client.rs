@@ -1021,6 +1021,15 @@ impl PodmanClient {
     /// diagnostics on failure.
     ///
     /// @trace spec:podman-idiomatic-patterns, spec:runtime-diagnostics-stream
+    ///
+    /// The argv (with the `run` this client prepends) must pass
+    /// [`crate::policy::validate_launch_argv`] or no podman process is spawned
+    /// (order 1118-zzs4): the stack launches (proxy, git mirror, router,
+    /// inference, observatorium, browser, status/web forge, ssh-lane sidecar)
+    /// built raw argvs, so the envelope held only while every builder happened
+    /// to keep it. A launch that cannot carry the envelope goes through
+    /// [`Self::run_container_observed_exempt`] and names why.
+    // @trace order:1118-zzs4, spec:podman-orchestration, spec:security-privacy-isolation
     pub async fn run_container_observed(
         &self,
         stage: &str,
@@ -1028,6 +1037,40 @@ impl PodmanClient {
         args: &[String],
         debug_enabled: bool,
     ) -> Result<String, String> {
+        let mut full = Vec::with_capacity(args.len() + 1);
+        full.push("run".to_string());
+        full.extend_from_slice(args);
+        if let Err(err) = crate::policy::validate_launch_argv(&full) {
+            let detail = format!(
+                "[security] refusing to launch {container_name}: {err}; the launch argv \
+                 lost part of the immutable hardening envelope \
+                 (crates/tillandsias-podman/src/policy.rs MANDATORY_HARDENING_FLAGS)"
+            );
+            emit_launch_event(
+                debug_enabled,
+                stage,
+                container_name,
+                "failed",
+                Some(summary_line(&detail)),
+            );
+            return Err(detail);
+        }
+        self.run_container_observed_exempt(stage, container_name, args, debug_enabled, "")
+            .await
+    }
+
+    /// [`Self::run_container_observed`] WITHOUT the hardening-envelope check.
+    /// `exemption` is the caller's stated reason; it exists so every exempt
+    /// site is greppable and reviewed, not to be read at runtime.
+    pub async fn run_container_observed_exempt(
+        &self,
+        stage: &str,
+        container_name: &str,
+        args: &[String],
+        debug_enabled: bool,
+        exemption: &str,
+    ) -> Result<String, String> {
+        let _ = exemption;
         emit_launch_event(debug_enabled, stage, container_name, "starting", None);
         match self.run_container(args).await {
             Ok(output) => {
