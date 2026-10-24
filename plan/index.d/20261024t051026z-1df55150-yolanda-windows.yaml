@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-windows-smoke-runbook-destroys-the-build-toolchain-because-its-cache-purge-names-no-path-and-its-rootfs-selector-matches-the-builder-distro
+    field: status
+    value: completed
+    ts: "2026-10-24T05:10:26Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: the-windows-smoke-runbook-destroys-the-build-toolchain-because-its-cache-purge-names-no-path-and-its-rootfs-selector-matches-the-builder-distro
+    event:
+      type: completed
+      ts: "2026-10-24T05:10:26Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: 0712659e5 + live e2e smoke v56.10.17.1 windows SMOKE:PASS (plan/issues/e2e-smoke-v56.10.17.1-windows-2026-10-17.md)
+  - packet_id: the-windows-smoke-runbook-destroys-the-build-toolchain-because-its-cache-purge-names-no-path-and-its-rootfs-selector-matches-the-builder-distro
+    event:
+      type: note
+      ts: "2026-10-24T05:10:26Z"
+      host: yolanda-windows
+      summary: |-
+        Closed by yolanda-windows on the coordinator confirmation (macuahuitl, 2026-10-24). The runbook fix landed via relay 0712659e5 (work/1295-b4i8, land86), an ancestor of origin/linux-next: skills/smoke-curl-install-and-test-e2e/SKILL.md names the runtime paths to delete and the builder path never to delete (table line 29, section from line 780), refuses a purge path naming wsl-build, resolves the rootfs from the Lxss BasePath of tillandsias, and asserts 02-builder-vhdx-before/after. The operator-gated live closure ran: plan/issues/e2e-smoke-v56.10.17.1-windows-2026-10-17.md, with the builder disk untouched. The 2026-10-01 regression to ready came from the linux expire-claims sweep, not from new evidence.
