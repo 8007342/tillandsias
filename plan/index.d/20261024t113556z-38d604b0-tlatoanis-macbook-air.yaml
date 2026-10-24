@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: tillandsias-plan-coordinator-client-with-rate-limit-adaptive-heartbeat-busy-backoff-batching-and-offline-fallback-to-the-git-ledger-plus-mcp-tool
+    event:
+      type: claimed
+      ts: "2026-10-24T11:35:56Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |-
+        claimed by macbook-air claude; assigned by macuahuitl coordinator 2026-10-24 (pickup_role linux, assigned cross-role); ref work/1826-gi8e; builds on #638 Worker contract and #640's QueueClient seam
