@@ -120,6 +120,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "parked-blocks",
     "pipeline",
     "ask",
+    "coord",
     "predicate",
     "query",
     "ready",
@@ -392,6 +393,10 @@ const USAGE: &str = concat!(
     "                                     answer envelope: cited, or the typed unsupported:\n",
     "                                     refusal — never raw model prose. Same function as\n",
     "                                     expert-serve (one pipeline, two front-ends).\n",
+    "           coord <join|send|recv|overview get|put|claim-overlay|release|claims|next|heartbeat> [--ns NS]\n",
+    "                                     ORDER 1826-gi8e. The fleet coordinator client: budgeted,\n",
+    "                                     batched, adaptive heartbeat. Every answer carries source;\n",
+    "                                     `coord next` falls back to the git ledger when offline.\n",
     "           ask [--root D] [--domain D] [--] <query...>\n",
     "                                     ORDER 1823-4kwh. THE expert client entry for shell\n",
     "                                     front-ends (forge-plan.sh spec_answer, tellme): the\n",
@@ -779,6 +784,221 @@ fn unknown_subcommand(name: &str) -> ! {
 /// the ledger, and `ledger.skipped_fragments()` for the plan corpus. Every call
 /// site states it explicitly so a new one has to decide rather than inherit
 /// silence, which is the exact failure this order exists to fix.
+/// `coord …` (order 1826-gi8e): the fleet coordinator client. Every line it
+/// prints carries `source`, so a reader can always tell a coordinator answer
+/// from a git-ledger one. An unreachable coordinator is not an error: `next`
+/// answers from the ledger, and the other verbs say why they could not ask.
+fn cmd_coord(args: &[String], index: &Path, ledger: &Ledger) {
+    use serde_json::{Value, json};
+    use tillandsias_plan::coordinator_client as cc;
+
+    let root = root_for(index);
+    let mut ns: Option<String> = None;
+    let mut since: Option<u64> = None;
+    let mut ttl: Option<u64> = None;
+    let mut once = false;
+    let mut pos: Vec<String> = Vec::new();
+    let mut i = 2;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--ns" => {
+                i += 1;
+                ns = args.get(i).cloned();
+            }
+            "--since" | "--ttl" => {
+                let flag = args[i].clone();
+                i += 1;
+                let Some(n) = args.get(i).and_then(|v| v.parse::<u64>().ok()) else {
+                    eprintln!("error: {flag} takes a non-negative integer");
+                    std::process::exit(2);
+                };
+                if flag == "--since" {
+                    since = Some(n)
+                } else {
+                    ttl = Some(n)
+                }
+            }
+            "--once" => once = true,
+            other if other.starts_with("--") => {
+                eprintln!(
+                    "error: unknown option {other:?} for `coord` (known: --ns, --since, --ttl, --once)"
+                );
+                std::process::exit(2);
+            }
+            other => pos.push(other.to_string()),
+        }
+        i += 1;
+    }
+    let git = |a: &[&str]| {
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(a)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+    };
+    let ns = ns.unwrap_or_else(|| {
+        let dir = root
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        cc::namespace_for(
+            git(&["config", "--get", "remote.origin.url"]).as_deref(),
+            &dir,
+        )
+    });
+    let mut client = cc::Config::from_env()
+        .map(|c| cc::Client::new(cc::HttpTransport::new(c), cc::DEFAULT_BUDGET_PER_MIN));
+    let mut ask = |op: Value| match client.as_mut() {
+        Some(c) => c.op(op),
+        None => Err(cc::Offline::Unconfigured),
+    };
+    let print = |v: Value| println!("{}", serde_json::to_string_pretty(&v).unwrap_or_default());
+    let need = |n: usize, usage: &str| {
+        if pos.len() < n {
+            eprintln!("usage: tillandsias-plan coord {usage}");
+            std::process::exit(2);
+        }
+    };
+
+    let sub = args.get(1).map(String::as_str).unwrap_or("");
+    let op = match sub {
+        "join" | "claims" => json!({ "op": sub, "ns": ns }),
+        "send" => {
+            need(1, "send <body> [--ttl S] [--ns NS]");
+            let mut o =
+                json!({ "op": "send", "ns": ns, "body": pos[0], "provider": "tillandsias-plan" });
+            if let Some(t) = ttl {
+                o["ttl_s"] = json!(t)
+            }
+            o
+        }
+        "recv" => json!({ "op": "recv", "ns": ns, "since": since.unwrap_or(0) }),
+        "overview" => match pos.first().map(String::as_str) {
+            Some("get") => {
+                json!({ "op": "overview.get", "ns": ns, "client_head": git(&["rev-parse", "HEAD"]) })
+            }
+            Some("put") => {
+                need(2, "overview put <json-file> [--ns NS]");
+                let text = std::fs::read_to_string(&pos[1]).unwrap_or_else(|e| {
+                    eprintln!("error: read {}: {e}", pos[1]);
+                    std::process::exit(2);
+                });
+                let overview: Value = serde_json::from_str(&text).unwrap_or_else(|e| {
+                    eprintln!("error: {} is not JSON: {e}", pos[1]);
+                    std::process::exit(2);
+                });
+                json!({ "op": "overview.put", "ns": ns, "overview": overview, "sha": git(&["rev-parse", "HEAD"]) })
+            }
+            _ => {
+                eprintln!("usage: tillandsias-plan coord overview get|put <json-file>");
+                std::process::exit(2);
+            }
+        },
+        "claim-overlay" => {
+            need(1, "claim-overlay <order> [--ttl S] [--ns NS]");
+            let mut o = json!({ "op": "claim", "ns": ns, "order": pos[0] });
+            if let Some(t) = ttl {
+                o["ttl_s"] = json!(t)
+            }
+            o
+        }
+        "release" => {
+            need(2, "release <order> <token> [--ns NS]");
+            json!({ "op": "release", "ns": ns, "order": pos[0], "token": pos[1] })
+        }
+        "next" => {
+            // The overlay only hides rows other hosts hold right now; the
+            // ledger fold is the answer either way.
+            let (overlaid, source, reason) = match ask(json!({ "op": "claims", "ns": ns })) {
+                Ok(r) => {
+                    let set: std::collections::BTreeSet<String> = r["claims"]
+                        .as_array()
+                        .map(|cs| {
+                            cs.iter()
+                                .filter_map(|c| c["order"].as_str().map(str::to_string))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    (set, "coordinator+git-ledger", None)
+                }
+                Err(e) => (Default::default(), "git-ledger", Some(e.reason())),
+            };
+            let envelope = answer::answer_next_excluding(
+                ledger,
+                pos.first().map(String::as_str),
+                None,
+                None,
+                &citation_path(index, &root),
+                &overlaid,
+            );
+            let verified = stamp_frame(self_verified(envelope, &root), &root).with_skipped_sources(
+                ledger
+                    .skipped_fragments()
+                    .iter()
+                    .map(|p| citation_path(p, &root))
+                    .collect(),
+            );
+            let mut v = serde_json::to_value(&verified).unwrap_or(Value::Null);
+            v["source"] = json!(source);
+            v["overlaid"] = json!(overlaid);
+            if let Some(r) = reason {
+                v["coordinator"] = json!(r)
+            }
+            print(v);
+            return;
+        }
+        "heartbeat" => {
+            // One tick per call with --once; otherwise run until killed, and
+            // stand down entirely while the lane marker is held.
+            let marker = cc::lane_marker_dir(&root);
+            let mut hb = cc::Heartbeat::default();
+            loop {
+                let held = cc::lane_marker_held(&marker, std::time::SystemTime::now());
+                let started = std::time::Instant::now();
+                let tick = if held {
+                    json!({ "source": "local", "tick": "skipped", "reason": "lane-marker-held" })
+                } else {
+                    match ask(
+                        json!({ "op": "bump", "ns": ns, "head_sha": git(&["rev-parse", "HEAD"]) }),
+                    ) {
+                        Ok(r) => {
+                            json!({ "source": "coordinator", "tick": "sent", "freshness": r["freshness"] })
+                        }
+                        Err(e) => {
+                            json!({ "source": "local", "tick": "failed", "reason": e.reason() })
+                        }
+                    }
+                };
+                let next = hb.next(started.elapsed(), cc::host_busy(), held);
+                let mut tick = tick;
+                tick["next_s"] = json!(next.map(|d| d.as_secs()));
+                print(tick);
+                if once {
+                    return;
+                }
+                std::thread::sleep(next.unwrap_or(cc::HEARTBEAT_MAX));
+            }
+        }
+        _ => {
+            eprintln!(
+                "usage: tillandsias-plan coord <join|send|recv|overview get|overview put|claim-overlay|release|claims|next|heartbeat> [--ns NS]\n\
+                 configure with TILLANDSIAS_COORD_URL and an Access service token in TILLANDSIAS_COORD_CLIENT_ID / TILLANDSIAS_COORD_CLIENT_SECRET"
+            );
+            std::process::exit(2);
+        }
+    };
+    match ask(op) {
+        Ok(r) => print(json!({ "source": "coordinator", "ns": ns, "result": r })),
+        Err(e) => {
+            print(json!({ "source": "unavailable", "ns": ns, "reason": e.reason() }));
+            std::process::exit(3);
+        }
+    }
+}
+
 fn emit_verified_envelope(envelope: answer::Envelope, root: &Path, skipped: &[PathBuf]) {
     // Stamped AFTER self-verification: `self_verified` may replace the envelope
     // with a fresh refusal, and the corpus was still partial either way.
@@ -9044,6 +9264,7 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
             // this emit path's HEAD default — spec-envelope's 801-g9nn rule.
             emit_verified_envelope(envelope, &root, &[]);
         }
+        "coord" => cmd_coord(&args, &index, &ledger),
         "next" => {
             // ORDER 606-xu52. The cold-start selector: at most five cited,
             // release-aware, role-compatible, dependency-clear, unleased
