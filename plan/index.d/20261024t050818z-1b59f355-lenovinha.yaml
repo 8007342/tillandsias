@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: tillandsias-org-update-website-skill-runs-unattended-inside-a-forge-with-no-host-paths-and-delivers-through-the-mirror-as-a-pushed-branch
+    event:
+      type: progress
+      ts: "2026-10-24T05:08:18Z"
+      agent_id: linux-lenovinha-claude-20261024t050818z
+      host: lenovinha
+      summary: |-
+        Implemented in 8007342/tillandsias.org PR 1 (work/1848-c8kb, 3a98136, open for review, not merged): release-refresh.sh --unattended keeps clones and a bootstrapped full-history clone under var/unattended/ (no ~/.cache), writes only on website/update-<tag>, and auto-merges a clean run to main after a re-run checked build (operator decision 2026-10-24). Judgement items must be settled or filed (docs/audit/*-issues-*.md naming the target); filed items push the branch and never merge. AGENTS.md routing line and the SKILL description make an 'update the website to <tag>' request find the skill. Fixture test-release-refresh-unattended.sh: ok:unattended-refresh:15 case(s); checked build green.
