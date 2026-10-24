@@ -2843,6 +2843,59 @@ fn find_repo_root() -> Option<PathBuf> {
     }
 }
 
+/// ORDER 1745-ntuq. The checkout whose validator surface "current" means: the
+/// GATING checkout, not the one above the binary. With one shared
+/// CARGO_TARGET_DIR (1807-shtg) every worktree's binary lives under the MAIN
+/// checkout, so the exe walk hashed the main checkout's bytes whichever worktree
+/// was gating or pushing. Measured on lenovinha 2026-10-24: a binary built at
+/// trunk (surface e48e7014) read "stale, checkout=4cde5f77" from every worktree,
+/// because the main checkout sat on an Oct 14 branch.
+///
+/// Order: `TILLANDSIAS_SURFACE_ROOT` (an explicit root from a caller), then the
+/// nearest checkout above the cwd that holds the manifest, then the checkout
+/// this binary was BUILT from (a push from a scratch repo, as the pre-push
+/// fixtures make, has no manifest of its own), then the exe walk (an installed
+/// binary whose build checkout is gone).
+fn surface_root() -> Option<PathBuf> {
+    let built_in = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(2)
+        .map(std::path::Path::to_path_buf);
+    surface_root_from(
+        std::env::var_os("TILLANDSIAS_SURFACE_ROOT").map(PathBuf::from),
+        std::env::current_dir().ok(),
+        || {
+            built_in
+                .filter(|r| r.join(".git").exists())
+                .or_else(find_repo_root)
+        },
+    )
+}
+
+fn surface_root_from(
+    explicit: Option<PathBuf>,
+    cwd: Option<PathBuf>,
+    exe_walk: impl FnOnce() -> Option<PathBuf>,
+) -> Option<PathBuf> {
+    const MANIFEST: &str = "crates/tillandsias-plan/validator-surface.manifest";
+    let is_surface_root =
+        |d: &std::path::Path| d.join(".git").exists() && d.join(MANIFEST).is_file();
+    if let Some(root) = explicit.filter(|r| is_surface_root(r)) {
+        return Some(root);
+    }
+    if let Some(mut dir) = cwd {
+        loop {
+            if is_surface_root(&dir) {
+                return Some(dir);
+            }
+            if !dir.pop() {
+                break;
+            }
+        }
+    }
+    exe_walk()
+}
+
 /// ORDER 1287-h6qn. The hash of the validator surface this binary was BUILT
 /// from, embedded by build.rs. Empty when the build could not compute one.
 fn embedded_validator_surface() -> &'static str {
@@ -2855,7 +2908,7 @@ fn embedded_validator_surface() -> &'static str {
 /// checkout above it (find_repo_root -> None), or a manifest that names nothing.
 /// "Cannot ask" is never "fresh"; the callers say so in their own words.
 fn validator_surface_drift() -> Option<(String, String)> {
-    let root = find_repo_root()?;
+    let root = surface_root()?;
     let current = validator_surface::validator_surface_hash(&root)?;
     let embedded = embedded_validator_surface();
     if embedded.is_empty() || embedded != current {
@@ -5899,7 +5952,7 @@ fn main() {
     if args[0] == "validator-surface-hash" {
         let want_current = args.iter().any(|a| a == "--current");
         let want_check = args.iter().any(|a| a == "--check");
-        let current = find_repo_root().and_then(|r| validator_surface::validator_surface_hash(&r));
+        let current = surface_root().and_then(|r| validator_surface::validator_surface_hash(&r));
         if want_check {
             match current {
                 None => {
@@ -11529,6 +11582,48 @@ fn read_prose_source(path: &str) -> std::io::Result<String> {
 #[cfg(test)]
 mod tests {
     use super::role_satisfies;
+
+    /// ORDER 1745-ntuq. A binary under checkout A's target, run from worktree B,
+    /// must measure B's surface. Before the fix the root came from the exe walk
+    /// alone, so it answered A — the shared-target red on every gate in B.
+    #[test]
+    fn surface_root_is_the_gating_checkout_not_the_one_above_the_binary() {
+        let manifest = "crates/tillandsias-plan/validator-surface.manifest";
+        let mk = |d: &std::path::Path| {
+            std::fs::create_dir_all(d.join(".git")).unwrap();
+            std::fs::create_dir_all(d.join("crates/tillandsias-plan")).unwrap();
+            std::fs::write(d.join(manifest), "file x\n").unwrap();
+        };
+        let t = tempfile::tempdir().unwrap();
+        let a = t.path().join("main");
+        let b = t.path().join("main/target/work/wt-b");
+        mk(&a);
+        mk(&b);
+        let exe_walk = || Some(a.clone());
+
+        // from inside B (any depth): B, not A
+        let deep = b.join("crates/tillandsias-plan");
+        assert_eq!(
+            super::surface_root_from(None, Some(deep), exe_walk),
+            Some(b.clone())
+        );
+        // an explicit root wins over the cwd
+        assert_eq!(
+            super::surface_root_from(Some(a.clone()), Some(b.clone()), || None),
+            Some(a.clone())
+        );
+        // an explicit root that is not a checkout is ignored
+        assert_eq!(
+            super::surface_root_from(Some(t.path().join("nope")), Some(b.clone()), || None),
+            Some(b.clone())
+        );
+        // outside any checkout: the exe walk, as before
+        let outside = tempfile::tempdir().unwrap();
+        assert_eq!(
+            super::surface_root_from(None, Some(outside.path().to_path_buf()), || Some(a.clone())),
+            Some(a.clone())
+        );
+    }
 
     /// ORDER 1115-yvrq. THE DEFECT, as a test: an immutable host must not be
     /// offered work that requires a mutable one. Before the fix the matcher
