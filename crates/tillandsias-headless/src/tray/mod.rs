@@ -340,10 +340,6 @@ struct TrayUiState {
     version: String,
     status_text: String,
     tray_icon_state: TrayIconState,
-    // 776-jcf3: no longer seeded from a ~/src scan (always empty); read only
-    // by the retained rebuild-guard hash and test builders.
-    #[allow(dead_code)]
-    projects: Vec<ProjectEntry>,
     /// Cloud-side projects (e.g. GitHub repos) the user can attach to.
     /// Populated by [`cloud::refresh_cloud_projects_if_stale`] which shells
     /// out to `gh` with a 5-minute TTL.
@@ -409,9 +405,6 @@ struct TrayUiState {
     cloudflare_login: shared_menu::CloudflareLoginState,
     enclave_status: EnclaveStatus,
     revision: u32,
-    /// Hash of projects list to detect when menu needs rebuild.
-    #[allow(dead_code)] // retained for the project-list rebuild guard contract
-    projects_hash: u64,
 }
 
 type IconPixmap = (i32, i32, Vec<u8>);
@@ -1456,16 +1449,13 @@ struct DbusMenuIface(Arc<TrayService>);
 
 impl TrayUiState {
     #[allow(dead_code)] // retained for the cloud.rs unit-test fixture
-    fn new(root: PathBuf, version: String, projects: Vec<ProjectEntry>) -> Self {
-        Self::new_with_debug(root, version, projects, false)
+    fn new(root: PathBuf, version: String) -> Self {
+        Self::new_with_debug(root, version, false)
     }
 
-    fn new_with_debug(
-        root: PathBuf,
-        version: String,
-        projects: Vec<ProjectEntry>,
-        debug: bool,
-    ) -> Self {
+    // 776-jcf3: the always-empty local `projects` list (and its rebuild-guard
+    // hash) is gone; cloud_projects is the only project list the tray holds.
+    fn new_with_debug(root: PathBuf, version: String, debug: bool) -> Self {
         let podman_available = podman_available();
         let selected_agent = config::load_global_config().agent.selected;
         let forge_image = format!("tillandsias-forge:v{version}");
@@ -1488,9 +1478,6 @@ impl TrayUiState {
             status_label(&enclave_status_to_stage(enclave_status))
         };
 
-        // Compute hash of projects list for change detection
-        let projects_hash = Self::hash_projects(&projects);
-
         // @trace spec:tillandsias-vault, spec:tray-minimal-ux
         // Default to false at launch — a background probe (spawned in
         // run_tray_mode_with_debug) asynchronously checks Vault and bumps
@@ -1503,7 +1490,6 @@ impl TrayUiState {
             version,
             status_text,
             tray_icon_state,
-            projects,
             cloud_projects: Vec::new(),
             last_fetched: None,
             cloud_refresh_in_flight: false,
@@ -1520,30 +1506,12 @@ impl TrayUiState {
             cloudflare_login: shared_menu::CloudflareLoginState::Unknown,
             enclave_status,
             revision: 1,
-            projects_hash,
         }
     }
 
     fn bump_revision(&mut self) -> u32 {
         self.revision = self.revision.saturating_add(1);
         self.revision
-    }
-
-    /// Simple hash of projects list for detecting menu-relevant changes
-    fn hash_projects(projects: &[ProjectEntry]) -> u64 {
-        let mut hash = 0u64;
-        for (i, project) in projects.iter().enumerate() {
-            hash = hash
-                .wrapping_mul(31)
-                .wrapping_add((i as u64) ^ (project.name.len() as u64));
-        }
-        hash
-    }
-
-    /// Check if projects list has changed since last menu build
-    #[allow(dead_code)] // retained for the project-list rebuild guard contract
-    fn projects_changed(&self, new_projects: &[ProjectEntry]) -> bool {
-        Self::hash_projects(new_projects) != self.projects_hash
     }
 }
 
@@ -3918,7 +3886,7 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
     ensure_desktop_icon();
     let version = super::VERSION.trim().to_string();
     let root = super::resolve_runtime_asset_root(&version, debug)?;
-    let state = TrayUiState::new_with_debug(root.clone(), version.clone(), Vec::new(), debug);
+    let state = TrayUiState::new_with_debug(root.clone(), version.clone(), debug);
     let service = Arc::new(TrayService::new(state));
 
     // Install SIGTERM/SIGINT handlers BEFORE binding the control socket
@@ -5249,10 +5217,8 @@ mod tests {
         ));
         let _ = std::fs::create_dir_all(&dir);
         let cache = dir.join("known-cloud-projects");
-        let prev_root = std::env::var_os(crate::local_projects::HOST_PROJECT_ROOT_ENV);
         let prev_cache = std::env::var_os(crate::local_projects::CLOUD_LABEL_CACHE_ENV);
         unsafe {
-            std::env::set_var(crate::local_projects::HOST_PROJECT_ROOT_ENV, &dir);
             std::env::set_var(crate::local_projects::CLOUD_LABEL_CACHE_ENV, &cache);
         }
         // `alpha` alongside `demo` because the forged-environ test attributes to
@@ -5262,10 +5228,6 @@ mod tests {
             crate::local_projects::persist_cloud_labels(&["demo".to_string(), "alpha".to_string()]);
         let out = f();
         unsafe {
-            match prev_root {
-                Some(v) => std::env::set_var(crate::local_projects::HOST_PROJECT_ROOT_ENV, v),
-                None => std::env::remove_var(crate::local_projects::HOST_PROJECT_ROOT_ENV),
-            }
             match prev_cache {
                 Some(v) => std::env::set_var(crate::local_projects::CLOUD_LABEL_CACHE_ENV, v),
                 None => std::env::remove_var(crate::local_projects::CLOUD_LABEL_CACHE_ENV),
@@ -5285,18 +5247,12 @@ mod tests {
         let _ = std::fs::create_dir_all(&dir);
         let cache = dir.join("absent-cache");
         let _ = std::fs::remove_file(&cache);
-        let prev_root = std::env::var_os(crate::local_projects::HOST_PROJECT_ROOT_ENV);
         let prev_cache = std::env::var_os(crate::local_projects::CLOUD_LABEL_CACHE_ENV);
         unsafe {
-            std::env::set_var(crate::local_projects::HOST_PROJECT_ROOT_ENV, &dir);
             std::env::set_var(crate::local_projects::CLOUD_LABEL_CACHE_ENV, &cache);
         }
         let out = f();
         unsafe {
-            match prev_root {
-                Some(v) => std::env::set_var(crate::local_projects::HOST_PROJECT_ROOT_ENV, v),
-                None => std::env::remove_var(crate::local_projects::HOST_PROJECT_ROOT_ENV),
-            }
             match prev_cache {
                 Some(v) => std::env::set_var(crate::local_projects::CLOUD_LABEL_CACHE_ENV, v),
                 None => std::env::remove_var(crate::local_projects::CLOUD_LABEL_CACHE_ENV),
@@ -6155,12 +6111,6 @@ mod tests {
         } else {
             EnclaveStatus::Verifying
         };
-        let projects = vec![ProjectEntry {
-            name: "alpha".to_string(),
-            path: PathBuf::from("/tmp/alpha"),
-            full_name: None,
-        }];
-        let projects_hash = TrayUiState::hash_projects(&projects);
         TrayUiState {
             root: PathBuf::from("/tmp/tillandsias-test-root"),
             version: "0.1.260506.6".to_string(),
@@ -6170,7 +6120,6 @@ mod tests {
             } else {
                 TrayIconState::Pup
             },
-            projects,
             cloud_projects: Vec::new(),
             last_fetched: None,
             cloud_refresh_in_flight: false,
@@ -6189,7 +6138,6 @@ mod tests {
             cloudflare_login: shared_menu::CloudflareLoginState::Unknown,
             enclave_status,
             revision: 1,
-            projects_hash,
         }
     }
 
@@ -6242,7 +6190,6 @@ mod tests {
         login_observed: bool,
         login_in_progress: bool,
         enclave_status: EnclaveStatus,
-        projects: Vec<ProjectEntry>,
         cloud_projects: Vec<ProjectEntry>,
         last_fetched: Option<Instant>,
     }
@@ -6260,11 +6207,6 @@ mod tests {
                 login_observed: true,
                 login_in_progress: false,
                 enclave_status: EnclaveStatus::Verifying,
-                projects: vec![ProjectEntry {
-                    name: "test-project".to_string(),
-                    path: std::path::PathBuf::from("/tmp/test-project"),
-                    full_name: None,
-                }],
                 cloud_projects: Vec::new(),
                 last_fetched: None,
             }
@@ -6277,11 +6219,6 @@ mod tests {
 
         fn enclave_status(mut self, status: EnclaveStatus) -> Self {
             self.enclave_status = status;
-            self
-        }
-
-        fn projects(mut self, projects: Vec<ProjectEntry>) -> Self {
-            self.projects = projects;
             self
         }
 
@@ -6324,7 +6261,6 @@ mod tests {
             } else {
                 status_label(&TrayStatusStage::PodmanMissing)
             };
-            let projects_hash = TrayUiState::hash_projects(&self.projects);
             // @trace spec:tray-icon-lifecycle
             // Icon should reflect enclave status, not just forge_available
             let tray_icon_state = enclave_status_to_icon(self.enclave_status);
@@ -6333,7 +6269,6 @@ mod tests {
                 version: "0.1.260506.6".to_string(),
                 status_text,
                 tray_icon_state,
-                projects: self.projects,
                 cloud_projects: self.cloud_projects,
                 last_fetched: self.last_fetched,
                 cloud_refresh_in_flight: false,
@@ -6351,7 +6286,6 @@ mod tests {
                 cloudflare_login: shared_menu::CloudflareLoginState::Unknown,
                 enclave_status: self.enclave_status,
                 revision: 1,
-                projects_hash,
             }
         }
     }
@@ -6865,11 +6799,6 @@ mod tests {
             .forge_available(true)
             .enclave_status(EnclaveStatus::AllHealthy)
             .authenticated(true)
-            .projects(vec![ProjectEntry {
-                name: "tillandsias".to_string(),
-                path: PathBuf::from("/home/x/src/tillandsias"),
-                full_name: None,
-            }])
             .cloud_projects(vec![ProjectEntry {
                 name: "tillandsias".to_string(),
                 path: PathBuf::new(),
@@ -7141,7 +7070,6 @@ mod tests {
             .forge_available(true)
             .authenticated(true)
             .enclave_status(EnclaveStatus::AllHealthy)
-            .projects(vec![project.clone()])
             .build();
         let submenu = build_project_submenu(&state, &project, ProjectScope::Cloud);
 
@@ -7172,7 +7100,6 @@ mod tests {
             .podman_available(false)
             .authenticated(true)
             .enclave_status(EnclaveStatus::Failed)
-            .projects(vec![project.clone()])
             .build();
         let submenu = build_project_submenu(&state, &project, ProjectScope::Cloud);
 
@@ -7447,11 +7374,6 @@ mod tests {
             .forge_available(false)
             .enclave_status(EnclaveStatus::Verifying)
             .authenticated(false)
-            .projects(vec![ProjectEntry {
-                name: "project-alpha".to_string(),
-                path: PathBuf::from("/tmp/project-alpha"),
-                full_name: None,
-            }])
             .build();
 
         let menu = build_menu(&state);
@@ -7474,11 +7396,6 @@ mod tests {
             .forge_available(true)
             .enclave_status(EnclaveStatus::Failed)
             .authenticated(true)
-            .projects(vec![ProjectEntry {
-                name: "project-beta".to_string(),
-                path: PathBuf::from("/tmp/project-beta"),
-                full_name: None,
-            }])
             .build();
 
         let menu = build_menu(&state);
@@ -7514,11 +7431,6 @@ mod tests {
             .forge_available(true)
             .enclave_status(EnclaveStatus::AllHealthy)
             .authenticated(true)
-            .projects(vec![ProjectEntry {
-                name: "test-proj".to_string(),
-                path: PathBuf::from("/tmp/test-proj"),
-                full_name: None,
-            }])
             .build();
 
         let menu = build_menu(&state);

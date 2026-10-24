@@ -5,13 +5,13 @@
 //! 776-jcf3 (operator yes, 2026-10-23): the host `~/src` checkout is retired.
 //! Nothing here scans `~/src` (or `TILLANDSIAS_HOST_PROJECT_ROOT`) any more;
 //! the known set is the confirmed cloud labels plus the lanes this process
-//! launched. `host_project_root` survives only as the per-project config
-//! lookup path the MCP socket reads, which is a no-op when the dir is absent.
+//! launched. 776-jcf3 (operator, 2026-10-24): positional host-checkout
+//! launches are retired too, so the only launched lanes are cloud lanes.
 
 #[cfg(feature = "host-services")]
 use std::env;
 #[cfg(feature = "host-services")]
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// A per-lane bounded tmpfs volume, never a disk-backed source volume. Hash the
 /// tuple (not a concatenated label) so project/instance hyphens cannot alias.
@@ -20,22 +20,6 @@ pub(crate) fn ram_workspace_volume(project: &str, instance: &str) -> String {
     use sha2::Digest;
     let digest = sha2::Sha256::digest(format!("{project}\0{instance}"));
     format!("tillandsias-source-{:x}", digest)
-}
-
-#[cfg(feature = "host-services")]
-pub const HOST_PROJECT_ROOT_ENV: &str = "TILLANDSIAS_HOST_PROJECT_ROOT";
-
-#[cfg(feature = "host-services")]
-pub fn host_project_root() -> PathBuf {
-    if let Ok(v) = env::var(HOST_PROJECT_ROOT_ENV) {
-        return PathBuf::from(v);
-    }
-    if let Some(mut d) = dirs::home_dir() {
-        d.push("src");
-        d
-    } else {
-        PathBuf::from("/nonexistent")
-    }
 }
 
 // ===========================================================================
@@ -148,64 +132,11 @@ pub fn known_project_labels() -> std::collections::BTreeSet<String> {
     read_cloud_labels().into_iter().collect()
 }
 
-/// 1626-r4xm: the local projects THIS process launched a lane for, each bound
-/// to the canonical path it was launched from. The lane listener runs in the
-/// launching process, so the binding lives exactly as long as the lane.
-#[cfg(feature = "host-services")]
-fn launched_bindings() -> std::sync::MutexGuard<'static, std::collections::BTreeMap<String, PathBuf>>
-{
-    static BINDINGS: std::sync::OnceLock<
-        std::sync::Mutex<std::collections::BTreeMap<String, PathBuf>>,
-    > = std::sync::OnceLock::new();
-    BINDINGS
-        .get_or_init(Default::default)
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-}
-
-/// A binding holds while its path is still a directory that canonicalizes to
-/// itself. A project moved, deleted or swapped for a symlink stops admitting.
-#[cfg(feature = "host-services")]
-fn binding_holds(path: &Path) -> bool {
-    path.is_dir() && path.canonicalize().ok().as_deref() == Some(path)
-}
-
-/// 1626-r4xm: admit the one project a lane was launched for, wherever it lives
-/// (e.g. `~/claudia/<x>`, outside the host project root), with nothing for the
-/// operator to set. `canonical` must already be canonical and `label` must be
-/// its last component, so the label names exactly the launched directory.
-///
-/// Refuses to rebind a label that still holds a DIFFERENT path: two projects
-/// with one label would make the lane's identity ambiguous.
-#[cfg(feature = "host-services")]
-pub fn bind_launched_project(label: &str, canonical: &Path) -> Result<(), String> {
-    if canonical.file_name().and_then(|n| n.to_str()) != Some(label) || !binding_holds(canonical) {
-        return Err(format!(
-            "cannot bind lane '{label}' to {}: the label must be the last component \
-             of the project's canonical directory",
-            canonical.display()
-        ));
-    }
-    let mut bindings = launched_bindings();
-    if let Some(bound) = bindings.get(label)
-        && bound != canonical
-        && binding_holds(bound)
-    {
-        return Err(format!(
-            "lane '{label}' is already bound to {}; refusing to bind it to {} as well",
-            bound.display(),
-            canonical.display()
-        ));
-    }
-    bindings.insert(label.to_string(), canonical.to_path_buf());
-    Ok(())
-}
-
 /// 1713-1dnx: the cloud projects THIS process launched a lane for. In the
 /// macOS/Windows VM a forge is launched by a per-attach child that never runs
 /// the tray's cloud refresh, so the label cache that order 505 reads is empty
 /// there and every MCP call would be refused. The child admits the one cloud
-/// label it launched, the cloud counterpart of [`bind_launched_project`].
+/// label it launched.
 #[cfg(feature = "host-services")]
 fn launched_cloud_labels() -> std::sync::MutexGuard<'static, std::collections::BTreeSet<String>> {
     static LABELS: std::sync::OnceLock<std::sync::Mutex<std::collections::BTreeSet<String>>> =
@@ -235,18 +166,10 @@ pub fn bind_launched_cloud_label(label: &str) -> Result<(), String> {
 /// FAILS CLOSED. An empty set denies, which is the defect this replaces.
 /// Never sanitizes: the label is either known verbatim or refused.
 ///
-/// 1626-r4xm: the known set also holds the projects this process launched a
-/// lane for ([`bind_launched_project`]), while their bound path holds, and
-/// (1713-1dnx) the cloud labels it launched ([`bind_launched_cloud_label`]).
-/// Every other label outside the root is still refused.
+/// 1713-1dnx: the known set also holds the cloud labels this process launched
+/// a lane for ([`bind_launched_cloud_label`]). Every other label is refused.
 #[cfg(feature = "host-services")]
 pub fn validate_project_label(label: &str) -> Result<(), String> {
-    if launched_bindings()
-        .get(label)
-        .is_some_and(|bound| binding_holds(bound))
-    {
-        return Ok(());
-    }
     if launched_cloud_labels().contains(label) {
         return Ok(());
     }
@@ -270,9 +193,9 @@ pub fn validate_project_label(label: &str) -> Result<(), String> {
         // A forge agent that hits this cannot see the host; this sentence is
         // what it can relay to the operator.
         Err(format!(
-            "Project '{label}' is not a known project on this host: a local project \
-             is admitted only by the lane launched for it (`tillandsias <path>`), and \
-             cloud projects come from the confirmed list at {}",
+            "Project '{label}' is not a known project on this host: projects are \
+             admitted only from the confirmed cloud list at {} or by the cloud lane \
+             launched for them (`tillandsias --cloud <owner>/<repo>`)",
             cloud_label_cache_path().display()
         ))
     }
@@ -297,7 +220,6 @@ mod tests {
     impl Drop for EnvScope {
         fn drop(&mut self) {
             unsafe {
-                std::env::remove_var(super::HOST_PROJECT_ROOT_ENV);
                 std::env::remove_var(super::CLOUD_LABEL_CACHE_ENV);
             }
             let _ = std::fs::remove_dir_all(&self._tmp);
@@ -323,7 +245,6 @@ mod tests {
         }
         let cache = tmp.join("known-cloud-projects");
         unsafe {
-            std::env::set_var(super::HOST_PROJECT_ROOT_ENV, &root);
             std::env::set_var(super::CLOUD_LABEL_CACHE_ENV, &cache);
         }
         if let Some(c) = cloud {
@@ -396,72 +317,10 @@ mod tests {
         let err = super::validate_project_label("src-checkout-776").unwrap_err();
         assert!(err.contains("is not a known project"), "{err}");
         assert!(
-            !err.contains(super::HOST_PROJECT_ROOT_ENV),
-            "the refusal must not tell the operator to move a project into ~/src: {err}"
+            !err.contains("tillandsias <path>"),
+            "the refusal must not advertise the retired positional launch: {err}"
         );
         assert!(super::validate_project_label("cloud-only").is_ok());
-    }
-
-    /// 1626-r4xm: a project outside the root is refused until a lane is
-    /// launched for it (red), then admitted bound to its canonical path
-    /// (green). Another outside label is still refused, and the binding stops
-    /// admitting once its directory is gone.
-    #[cfg(feature = "host-services")]
-    #[test]
-    fn launched_project_outside_the_root_is_admitted_and_no_other() {
-        let _s = scoped(&[], Some(&["known-project"]));
-        let elsewhere = tempfile::tempdir().expect("tempdir");
-        std::fs::create_dir_all(elsewhere.path().join("r4xm-launched")).unwrap();
-        std::fs::create_dir_all(elsewhere.path().join("r4xm-other")).unwrap();
-        let launched = elsewhere
-            .path()
-            .join("r4xm-launched")
-            .canonicalize()
-            .unwrap();
-
-        let before = super::validate_project_label("r4xm-launched");
-        assert!(
-            before.is_err(),
-            "RED: refused before its lane is launched: {before:?}"
-        );
-
-        super::bind_launched_project("r4xm-launched", &launched).expect("bind");
-        assert!(
-            super::validate_project_label("r4xm-launched").is_ok(),
-            "GREEN: the launched project is admitted outside the root"
-        );
-        let other = super::validate_project_label("r4xm-other").unwrap_err();
-        assert!(
-            other.contains("is not a known project"),
-            "NEGATIVE: {other}"
-        );
-
-        std::fs::remove_dir(&launched).unwrap();
-        assert!(
-            super::validate_project_label("r4xm-launched").is_err(),
-            "a binding follows its directory: gone means refused"
-        );
-    }
-
-    /// 1626-r4xm: a binding names exactly the launched directory. A label that
-    /// is not the path's last component is refused, and a label that still
-    /// holds one path cannot be rebound to another.
-    #[cfg(feature = "host-services")]
-    #[test]
-    fn launched_binding_refuses_a_mismatched_label_and_a_second_path() {
-        let elsewhere = tempfile::tempdir().expect("tempdir");
-        let first = elsewhere.path().join("a").join("r4xm-twin");
-        let second = elsewhere.path().join("b").join("r4xm-twin");
-        std::fs::create_dir_all(&first).unwrap();
-        std::fs::create_dir_all(&second).unwrap();
-        let first = first.canonicalize().unwrap();
-        let second = second.canonicalize().unwrap();
-
-        assert!(super::bind_launched_project("not-the-name", &first).is_err());
-        super::bind_launched_project("r4xm-twin", &first).expect("first bind");
-        super::bind_launched_project("r4xm-twin", &first).expect("same path rebinds");
-        let err = super::bind_launched_project("r4xm-twin", &second).unwrap_err();
-        assert!(err.contains("already bound"), "{err}");
     }
 
     /// 731-eupn's constraint, expressed as data: a cache written from a

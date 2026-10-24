@@ -10,11 +10,18 @@ Define the interactive CLI contract for the shipped Tillandsias binary. The bina
 ## Requirements
 ### Requirement: CLI mode launches container from terminal
 <!-- req-id: f4fe0179 -->
-Running `tillandsias <path>` SHALL launch an interactive container for the project at the given path, with user-friendly terminal output.
+Running `tillandsias --cloud <owner>/<repo> <lane>` SHALL launch an interactive forge for the cloud project, seeded from an ephemeral git mirror of the upstream remote into an ephemeral forge, with user-friendly terminal output. No host checkout is resolved, bound, read or mounted.
 
-#### Scenario: Launch with project path
-- **WHEN** the user runs `tillandsias ~/src/my-project`
-- **THEN** the image SHALL be checked/built, a container SHALL start with the project mounted, and the terminal SHALL pass through to the container
+776-jcf3 (operator, 2026-10-24): positional host-path launches (`tillandsias <path> <lane>`) are retired. A lane flag given with a positional path and no `--cloud` SHALL refuse before any container starts, exit 2, and print the cloud launch form. The path is NOT mapped to its origin remote (an ssh-aliased or non-GitHub origin, unpushed commits or a dirty tree would launch something other than what the operator sees).
+
+#### Scenario: Launch a cloud project
+- **WHEN** the user runs `tillandsias --cloud owner/my-project --opencode`
+- **THEN** the image SHALL be checked/built, the mirror SHALL seed from `https://github.com/owner/my-project.git`, the forge SHALL clone from the mirror into tmpfs, and the terminal SHALL pass through to the forge
+
+#### Scenario: A positional host path refuses
+- **WHEN** the user runs `tillandsias ~/src/my-project --opencode`
+- **THEN** the process SHALL print `Error: launching from a local checkout ('~/src/my-project') is no longer supported: ...` followed by `tillandsias --cloud <owner>/<repo> --opencode`
+- **AND** SHALL exit 2 without starting a container or reading the directory
 
 #### Scenario: No arguments starts tray mode
 - **WHEN** the user runs `tillandsias` with no arguments
@@ -54,6 +61,13 @@ On Linux desktop sessions, these runtime paths MUST run under the current user's
 ### Requirement: Observatorium project view
 <!-- req-id: 3baa1b06 -->
 The binary MUST accept `--observatorium <project>` as a user-facing launcher for the project Observatorium viewer. The runtime MUST launch the web container, router route, and safe browser directly from compiled Rust, without invoking the repo-local dev wrapper during normal runtime operation.
+
+> **776-jcf3 (operator, 2026-10-24): SUSPENDED.** Observatorium bind-mounted
+> a host checkout read-only at `/var/www/source`; with host checkouts retired
+> it has no source. `--observatorium <path>` refuses with the cloud form, and
+> cloud-mode `--observatorium` refuses (1119-w2rj) until `/var/www/source`
+> can be seeded from the git mirror. The scenario below is the pre-retirement
+> contract, kept for that successor.
 
 #### Scenario: Observatorium launch alias
 - **WHEN** the user runs `tillandsias --observatorium ~/src/my-project`
@@ -136,15 +150,15 @@ CLI mode SHALL use the same security hardening flags as tray mode.
 ### Requirement: CLI modes are tray-aware
 <!-- req-id: 059231be -->
 
-`tillandsias --debug` and `tillandsias <path>` SHALL spawn the tray icon in addition to their CLI behaviour when `desktop_env::has_graphical_session()` returns `true`. Other CLI subcommands (`--init`, `--update`, `--clean`, `--stats`, `--uninstall`, `--version`, `--help`, `--github-login`) MUST retain their current single-purpose behaviour with no tray spawn.
+`tillandsias --debug` and `tillandsias --cloud <owner>/<repo> <lane>` SHALL spawn the tray icon in addition to their CLI behaviour when `desktop_env::has_graphical_session()` returns `true`. Other CLI subcommands (`--init`, `--update`, `--clean`, `--stats`, `--uninstall`, `--version`, `--help`, `--github-login`) MUST retain their current single-purpose behaviour with no tray spawn.
 
 #### Scenario: Debug mode spawns tray
 - **WHEN** the user runs `tillandsias --debug` in a graphical session
 - **THEN** the tray icon SHALL appear
 - **AND** logs SHALL continue to print to the terminal
 
-#### Scenario: Path attach spawns tray and runs foreground
-- **WHEN** the user runs `tillandsias /some/path --opencode` in a graphical session
+#### Scenario: Cloud attach spawns tray and runs foreground
+- **WHEN** the user runs `tillandsias --cloud owner/repo --opencode` in a graphical session
 - **THEN** the tray icon SHALL appear
 - **AND** the full enclave stack SHALL launch, including proxy, git mirror, and inference
 - **AND** the OpenCode TUI SHALL run in the terminal foreground

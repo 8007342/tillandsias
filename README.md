@@ -170,10 +170,10 @@ Tillandsias v0.3.0 introduced the "Fedora Pivot" architecture:
 
 ## OpenCode: Analyze Code with LLM
 
-Analyze a project with local LLM inference (no cloud, no credentials sent):
+Analyze a GitHub project with local LLM inference (the repo is cloned into an ephemeral forge; prompts stay on local inference):
 
 ```bash
-tillandsias /path/to/project --opencode --prompt "What is the main purpose?"
+tillandsias --cloud owner/repo --opencode --prompt "What is the main purpose?"
 ```
 
 ## Platform support

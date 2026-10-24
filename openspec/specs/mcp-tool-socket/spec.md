@@ -66,12 +66,19 @@ connection SHALL be closed — deny loudly, then fail closed.
 
 A project label that is not in the host's known project set SHALL be refused
 the same way. The known set is the cloud project labels last confirmed by a
-successful fetch plus the lanes this process launched; it SHALL NOT be read
-from a scan of `~/src` (or `TILLANDSIAS_HOST_PROJECT_ROOT`) — 776-jcf3. At
+successful fetch plus the cloud lanes this process launched; it SHALL NOT be
+read from a scan of `~/src` (or `TILLANDSIAS_HOST_PROJECT_ROOT`) and no host
+path is ever bound into it, because positional host-path launches are retired
+(776-jcf3, operator 2026-10-24). At
 startup the tray binds only the `default` lane's socket; a launched lane binds
 its own. Labels SHALL be compared by EQUALITY, never sanitized into validity.
 
 @trace spec:mcp-tool-socket, spec:tray-host-control-socket
+
+`browser.open` with no `device` SHALL emulate desktop. The lane SHALL NOT
+read a host checkout's `.tillandsias/config.toml` for a `[browser] device`
+default (776-jcf3): a cloud project's config exists only inside its ephemeral
+forge, which is where a device would have to be named.
 
 #### Scenario: A directory under ~/src is not a known project
 

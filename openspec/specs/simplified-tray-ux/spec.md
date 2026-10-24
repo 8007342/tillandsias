@@ -235,10 +235,14 @@ The tray on every platform (Linux, macOS, Windows) SHALL show a `Cloudflare Logi
 ### Requirement: CLI Behavior Unchanged
 <!-- req-id: 64550e22 -->
 
-Command-line invocation (`tillandsias <path>`) MUST preserve current defaults:
+> **776-jcf3 (operator, 2026-10-24):** positional host-path launches are
+> retired; the command-line form is `tillandsias --cloud <owner>/<repo> <lane>`
+> (see cli-mode). `tillandsias <path> <lane>` refuses with that form.
 
-- Default action MUST be to drop into an interactive shell (via `entrypoint-terminal.sh`)
-- `tillandsias <path> --opencode` flag SHOULD force OpenCode TUI
+Command-line invocation (`tillandsias --cloud <owner>/<repo>`) MUST preserve current defaults:
+
+- `--bash` MUST drop into an interactive shell (via `entrypoint-terminal.sh`)
+- `--opencode` flag SHOULD force OpenCode TUI
 - This is intentionally different from tray default (tray launches OpenCode Web in browser)
 
 ## Sources of Truth
