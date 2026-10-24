@@ -1,0 +1,62 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: delete-the-host-checkout-code-left-unreachable-by-positional-retirement-and-move-forge-argv-tests-onto-the-production-builder
+    order: 1851-rug4
+    status: ready
+    kind: cleanup
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [rust, cleanup, forge, podman]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      Delete the host-checkout code PR #636 left unreachable — the forge gitdir facade staged from a host checkout (read_host_project_origin_url's remaining caller), the TILLANDSIAS_FORGE_HOST_MOUNT escape hatch, the host-branch read in resolve_project_default_branch, and the canonical_path host-path plumbing in the three lane runners — and move the ~18 forge-argv property tests off the #[cfg(test)] build_forge_agent_run_args/_argv onto the production argv builder, then delete those helpers
+    context: |
+      PR #636 (776-jcf3) "Left for a follow-up" lists exactly these four
+      unreachable sites, and notes build_forge_agent_run_args and
+      build_forge_agent_run_argv became #[cfg(test)] because about 18
+      forge-argv property tests still go through them. Tests that exercise a
+      test-only builder prove nothing about the argv production launches use
+      (a green-on-a-twin risk); moving them onto the production builder is
+      the substantive half of this packet.
+      OVERLAP WITH 1118-zzs4 (status ready, not landed as of 2026-10-24):
+      1118 routes the forge-agent launch (and proxy, git, observatorium,
+      browser) through ContainerSpec::build_run_argv(). If 1118 lands first,
+      "the production argv builder" IS build_run_argv and the tests move
+      there; if this lands first, 1118 inherits tests already on the
+      production path. Same file, same functions: do not run both
+      concurrently — whichever starts second rebases onto the first.
+    exit_criteria:
+      - 'grep over crates/ for TILLANDSIAS_FORGE_HOST_MOUNT, read_host_project_origin_url, build_forge_agent_run_args and build_forge_agent_run_argv returns no matches (pre-fix result: FAILS — all four present after #636)'
+      - 'the ~18 forge-argv property tests still exist by name and pass, each calling the production argv builder (pre-fix result: FAILS — they call the #[cfg(test)] helpers)'
+      - 'resolve_project_default_branch takes no host path and the three lane runners carry no canonical_path host argument (pre-fix result: FAILS — present)'
+      - 'cargo test -p tillandsias-headless and ./build.sh --check pass (pre-fix result: PASSES — regression guard, recorded so it is known not to discriminate)'
+    unscoreable: |
+      deletion-shaped: the discriminating checks are the grep absences and the
+      test call-site move above, read from the diff; no litmus scores an
+      absence better than the grep does.
+    depends_on:
+      - retire-host-src-checkout-behind-proven-transparent-push
+      - container-launch-argv-hardening-envelope-coverage
+    related: [776-jcf3, 1118-zzs4, 1850-ribb]
+    next_action: >
+      Nothing is done. Blocked until PR #636 lands (gh pr view 636 --json
+      state) and, per the coordinator, until 1118-zzs4 lands — check
+      tillandsias-plan status 1118-zzs4; if 1118 is still unclaimed when
+      #636 lands, ask the coordinator whether to drop that dependency rather
+      than wait. Then delete the four sites, and move each forge-argv test
+      onto the production builder before deleting the helpers, so a test
+      that cannot be moved shows up as a compile error, not a silent loss.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+    provenance: |
+      Filed by macuahuitl (claude subagent) at coordinator request 2026-10-24, from PR #636's "Left for a follow-up".
+    events:
+      - type: filed
+        ts: "2026-10-24T04:41:30Z"
+        host: macuahuitl
+        summary: |-
+          p2 cleanup: delete host-checkout code unreachable after #636; move forge-argv tests to the production builder.
