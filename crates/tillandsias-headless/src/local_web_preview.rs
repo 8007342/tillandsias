@@ -3480,7 +3480,9 @@ mod tests {
         .unwrap();
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).unwrap();
-        std::fs::create_dir(temp.path().join("proj")).unwrap();
+        // 776-jcf3: a directory under the project root no longer makes a label
+        // known; the fixture admits "proj" as a confirmed cloud label instead.
+        std::fs::write(temp.path().join("cloud-cache"), "proj\n").unwrap();
         struct Restore(Vec<(&'static str, Option<std::ffi::OsString>)>);
         impl Drop for Restore {
             fn drop(&mut self) {

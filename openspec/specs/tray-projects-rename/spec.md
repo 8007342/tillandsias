@@ -16,6 +16,12 @@ Improve project submenu labels with explicit source cues and temporarily disable
 ### Requirement: Project List Label Updates
 <!-- req-id: 27fb3ebf -->
 
+> **RETIRED by 776-jcf3 (operator yes, 2026-10-23).** The host `~/src` checkout
+> is retired: the Linux tray no longer scans `~/src` for menu entries or MCP
+> sockets. Cloud launches (`--cloud`: ephemeral mirror + ephemeral forge) are
+> the path. The `🏠 ~/src` part of this requirement is kept for history and SHALL NOT be reintroduced.
+
+
 The tray MUST update the top-level project submenu labels to include source cues: @trace spec:tray-projects-rename
 
 - **Local projects submenu**: `🏠 ~/src` (instead of `Projects`)

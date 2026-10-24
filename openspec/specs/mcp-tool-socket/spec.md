@@ -64,11 +64,20 @@ A connection that cannot be attributed SHALL receive exactly one JSON-RPC
 error (`-32000`) naming the attribution requirement, after which the
 connection SHALL be closed — deny loudly, then fail closed.
 
-A project label that is not among the host's enumerated local projects SHALL
-be refused the same way. Labels SHALL be compared by EQUALITY, never
-sanitized into validity.
+A project label that is not in the host's known project set SHALL be refused
+the same way. The known set is the cloud project labels last confirmed by a
+successful fetch plus the lanes this process launched; it SHALL NOT be read
+from a scan of `~/src` (or `TILLANDSIAS_HOST_PROJECT_ROOT`) — 776-jcf3. At
+startup the tray binds only the `default` lane's socket; a launched lane binds
+its own. Labels SHALL be compared by EQUALITY, never sanitized into validity.
 
 @trace spec:mcp-tool-socket, spec:tray-host-control-socket
+
+#### Scenario: A directory under ~/src is not a known project
+
+- **WHEN** `~/src/foo` exists, no lane was launched for `foo`, and `foo` is not a confirmed cloud label
+- **THEN** a connection attributed to `foo` is refused with `-32000`
+- **AND** the tray binds no socket for `foo` at startup
 
 #### Scenario: An unattributable peer is denied and closed
 

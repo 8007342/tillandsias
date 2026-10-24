@@ -17942,10 +17942,6 @@ impl ForgeAgentMode {
             ForgeAgentMode::Maintenance => "terminal",
         }
     }
-
-    fn window_title(self, project_name: &str) -> String {
-        format!("Tillandsias — {} — {}", project_name, self.slug())
-    }
 }
 
 /// ORDER 828-h7kw. The line the hold prints, and the pure half of the hold
@@ -18062,6 +18058,8 @@ pub(crate) fn run_hold_window(args: &[String]) -> i32 {
 }
 
 /// The argv prefix that runs a lane under [`run_hold_window`] (828-h7kw).
+// 776-jcf3: the tray is the only caller left.
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
 pub(crate) fn hold_window_prefix() -> Vec<String> {
     let exe = std::env::current_exe()
         .map(|p| p.display().to_string())
@@ -18082,7 +18080,9 @@ pub(crate) fn hold_window_prefix() -> Vec<String> {
 /// Returns a hard error if nothing is found so the tray can surface the
 /// problem to the user instead of silently failing.
 /// @trace spec:forge-as-only-runtime
-#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+// 776-jcf3: its only production caller (the tray-local `launch_forge_agent`)
+// was deleted; kept for the argv/terminal tests until a follow-up retires it.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn detect_host_terminal() -> Result<Vec<String>, String> {
     // Note: `$TERM` is the terminfo identifier (e.g. xterm-256color), NOT
     // the path to the terminal binary — it cannot be used here. The closest
@@ -18210,7 +18210,7 @@ fn executable_on_path(name: &str) -> bool {
 
 /// Bring the per-project enclave (proxy + git + inference) online and return
 /// the certs directory. Shared by `run_opencode_web_mode` (web) and
-/// `launch_forge_agent` (Claude/Codex/OpenCode/Maintenance terminal launches).
+/// the CLI forge launches (the tray-local `launch_forge_agent` was deleted, 776-jcf3).
 ///
 /// `project_path` is the host's canonical project path. It is read with `git
 /// -C <path> config remote.origin.url` so the mirror's post-receive hook
@@ -19095,6 +19095,9 @@ fn forge_spec_index_volume(project_name: &str) -> String {
 // `host_mount`, which crosses clippy's threshold — taking the value as an
 // argument is the point of that order, since reading it from the process env
 // inside the builder is exactly the shared state being removed.
+// 776-jcf3: its only production caller (the tray-local `launch_forge_agent`)
+// was deleted; kept for the argv/terminal tests until a follow-up retires it.
+#[cfg_attr(not(test), allow(dead_code))]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn build_forge_agent_run_args(
     project_path: &Path,
@@ -19642,11 +19645,13 @@ fn build_forge_agent_run_args_with_vault(
 }
 
 /// Build the full host-terminal command for an interactive tray launch.
-#[cfg_attr(not(feature = "tray"), allow(dead_code))]
 // ORDER 1021-hf9e, second pass. Same reason the sibling builders carry this:
 // `host_mount` crosses clippy's threshold, and taking it as an argument is the
 // entire point — reading it from the process env in here is the shared state
 // being removed.
+// 776-jcf3: its only production caller (the tray-local `launch_forge_agent`)
+// was deleted; kept for the argv/terminal tests until a follow-up retires it.
+#[cfg_attr(not(test), allow(dead_code))]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn build_forge_agent_run_argv(
     project_path: &Path,
@@ -19956,152 +19961,6 @@ fn run_forge_agent_cli_mode(
     })
 }
 
-/// Launch a per-project forge agent (Claude/Codex/OpenCode/Maintenance) in
-/// the host's default terminal emulator.
-///
-/// Flow:
-/// 1. Resolve project name + canonical path.
-/// 2. Credential-capable agents re-exec the CLI lane in the terminal so their
-///    scoped Vault lease lives for the attached session. Maintenance builds
-///    the forge `podman run` argv directly after bringing up the enclave.
-/// 3. Detect host terminal, spawn it detached with the argv appended.
-///
-/// The terminal window is the user-facing surface. When the user closes it,
-/// `podman run --rm` tears the container down.
-/// @trace spec:forge-as-only-runtime
-#[cfg_attr(not(feature = "tray"), allow(dead_code))]
-pub(crate) fn launch_forge_agent(
-    project_name: &str,
-    project_path: &Path,
-    mode: ForgeAgentMode,
-    debug: bool,
-) -> Result<(), String> {
-    if !project_path.exists() {
-        return Err(format!("Project not found: {}", project_path.display()));
-    }
-
-    let canonical = project_path
-        .canonicalize()
-        .unwrap_or_else(|_| project_path.to_path_buf());
-
-    if debug {
-        eprintln!(
-            "[tillandsias] launch_forge_agent: project={project_name} mode={} path={}",
-            mode.slug(),
-            canonical.display()
-        );
-    }
-
-    // Credential-capable agents delegate to the CLI
-    // lane inside the popup terminal: the tray process has no TTY, so the
-    // ensure_provider_auth ladder (vault check -> device-code login in an
-    // ephemeral container -> vault write -> forge launch with injection)
-    // must run where the user can read the device code and copy the URL.
-    // Flow specified by The Tlatoāni 2026-07-15 (order 303 lineage).
-    let argv = if matches!(
-        mode,
-        ForgeAgentMode::Codex
-            | ForgeAgentMode::Claude
-            | ForgeAgentMode::OpenCode
-            | ForgeAgentMode::Antigravity
-    ) {
-        eprintln!(
-            "[tillandsias] launch_forge_agent: opening the {} terminal for '{project_name}'; the CLI lane prepares the enclave and scoped credential lease",
-            mode.slug()
-        );
-        let current_exe = std::env::current_exe()
-            .map_err(|e| format!("failed to resolve Tillandsias executable: {e}"))?;
-        let mut argv = vec![
-            current_exe.display().to_string(),
-            format!("--{}", mode.slug()),
-            canonical.display().to_string(),
-        ];
-        if debug {
-            argv.push("--debug".to_string());
-        }
-        argv
-    } else {
-        // Unconditional progress receipt: bringing the enclave online can take
-        // several seconds (and minutes on the first run). Without this line a
-        // menu click looks idle until the terminal opens.
-        eprintln!(
-            "[tillandsias] launch_forge_agent: preparing enclave for '{project_name}' ({} agent); the terminal opens once it's ready…",
-            mode.slug()
-        );
-        // Order 443 slice 3: mark the launch in flight across the enclave
-        // bring-up. Residual window (accepted): this guard drops when the
-        // tray helper returns, BEFORE the spawned terminal's `podman run`
-        // creates the forge container — the tray terminal lane holding its
-        // own marker is the separate, not-yet-filed terminal-isolation
-        // concern from the slice-2 progress note. Credentialed modes are
-        // covered: they re-exec the CLI lane, which holds its own marker.
-        let (launch_marker, _launch_guard) = acquire_launch_in_flight_marker(project_name, debug)?;
-        let (certs_dir, mirror_identity) = ensure_enclave_for_project(
-            project_name,
-            Some(&canonical),
-            Some(&launch_marker),
-            debug,
-        )?;
-        build_forge_agent_run_argv(
-            &canonical,
-            project_name,
-            mirror_identity.as_deref(),
-            &certs_dir,
-            VERSION.trim(),
-            mode,
-            debug,
-            // ORDER 1021-hf9e: the process env is read HERE, in the production
-            // launcher, and nowhere a test can reach concurrently.
-            forge_uses_host_mount(),
-            &tillandsias_core::cache_root::cache_root(),
-        )
-    };
-
-    let mut term = detect_host_terminal()?;
-    if debug {
-        eprintln!(
-            "[tillandsias] launch_forge_agent: terminal={:?} argv={:?}",
-            term, argv
-        );
-    }
-
-    let executable = term.remove(0);
-    let mut child = Command::new(&executable);
-    child.args(&term);
-    // 828-h7kw: the terminal runs the hold wrapper, which runs the lane, so the
-    // window survives the lane's exit (clean or failed) until Enter.
-    child.args(hold_window_prefix());
-    child.args(&argv);
-    // Some terminal emulators (ptyxis on Fedora Silverblue 44 in particular)
-    // refuse to launch when the parent process cwd is `/` — which is the
-    // default for tray processes started from a .desktop entry. Anchor cwd to
-    // the project workspace so the spawned terminal has a sane starting
-    // directory and inherits the same cwd semantics as the CLI lane.
-    // @trace spec:tray-ux, spec:browser-isolation-tray-integration
-    child.current_dir(&canonical);
-    // Decouple stdio — the terminal owns the TTY, we don't want podman's
-    // chatter mixed into the tray service log.
-    child.stdin(Stdio::null());
-    child.stdout(Stdio::null());
-    child.stderr(Stdio::null());
-
-    // Window title hint for terminals that honor it via env (e.g. foot).
-    child.env("TILLANDSIAS_WINDOW_TITLE", mode.window_title(project_name));
-
-    // Order 385: spawn on a detached thread that waits() so the fast-exiting
-    // Ptyxis GApplication client is reaped instead of leaking a <defunct>
-    // zombie under the tray process. Log spawn intent up-front (single line,
-    // not gated on debug) so silent menu clicks stay distinguishable from
-    // silent failures. @trace spec:tray-ux
-    eprintln!(
-        "[tillandsias] launch_forge_agent: spawned {} for project '{}' via {}",
-        mode.slug(),
-        project_name,
-        executable
-    );
-    crate::spawn_terminal_and_reap(child)
-}
-
 // Module declarations for Phase 4+
 mod metrics_server;
 
@@ -20149,9 +20008,10 @@ mod toolchain_exec;
 /// `std::process::Child` does NOT reap on `Drop` — so a bare `.spawn()`-and-drop
 /// leaks a `<defunct>` zombie parented to the tray process, one per terminal
 /// launch. Move the `Child` into a detached thread that calls `wait()` so the
-/// OS reclaims it. Both terminal-launch sites (`launch_forge_agent` here and
-/// `launch_in_terminal` in `tray/mod.rs`) route through this helper. Defined
-/// ungated (binary root) so the non-`tray`-feature build still links.
+/// OS reclaims it. The terminal-launch site (`launch_in_terminal` in
+/// `tray/mod.rs`; the tray-local `launch_forge_agent` was deleted, 776-jcf3)
+/// routes through this helper. Defined ungated (binary root).
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
 pub(crate) fn spawn_terminal_and_reap(mut child: Command) -> Result<(), String> {
     match child.spawn() {
         Ok(handle) => {
@@ -25881,42 +25741,6 @@ mod tests {
         );
     }
 
-    // @trace spec:tray-ux, spec:browser-isolation-tray-integration
-    // Regression: on Fedora Silverblue tray clicks silently failed because
-    // (a) `launch_forge_agent` inherited cwd=`/` from the desktop-spawned
-    // tray (ptyxis refuses to start there), and (b) successful spawns
-    // produced no log trail, indistinguishable from silent failures. Pin
-    // both: the function MUST set `current_dir(canonical)` and MUST emit a
-    // single "spawned <mode> for project ..." stderr line ungated on debug.
-    #[test]
-    fn launch_forge_agent_sets_cwd_and_logs_spawn_outcome() {
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-
-        // Find the launch_forge_agent body and assert both invariants live
-        // inside the same function — not just somewhere in the file.
-        let start = source
-            .find("pub(crate) fn launch_forge_agent(")
-            .expect("launch_forge_agent function must exist");
-        // The next top-level `fn run_headless(` follows in this file, so
-        // bound the body to keep the assertions scoped.
-        let end = source[start..]
-            .find("\nfn run_headless(")
-            .map(|offset| start + offset)
-            .unwrap_or(source.len());
-        let body = &source[start..end];
-
-        assert!(
-            body.contains("child.current_dir(&canonical);"),
-            "launch_forge_agent must anchor cwd to the project workspace so \
-             terminals like ptyxis don't refuse to start from cwd=/"
-        );
-        assert!(
-            body.contains("[tillandsias] launch_forge_agent: spawned"),
-            "launch_forge_agent must log spawn success ungated on debug so \
-             silent failures are distinguishable from silent successes"
-        );
-    }
-
     #[test]
     fn launch_forge_agent_does_not_mount_user_home() {
         let _pseam = podman_false_seam();
@@ -27785,22 +27609,6 @@ mod tests {
         assert_eq!(spec.vault_path, "secret/antigravity/oauth");
         assert_eq!(spec.vault_field, "credentials_b64");
         assert_eq!(ProviderId::Antigravity.secret_field(), "credentials_b64");
-    }
-
-    #[test]
-    fn tray_credentialed_agents_delegate_to_cli_lane_for_tty_login() {
-        // The tray process has no TTY; Claude/Codex/OpenCode/Antigravity clicks must
-        // route through the CLI lane (ensure_provider_auth ladder) inside
-        // the popup terminal instead of a bare podman argv.
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-        let start = source
-            .find("pub(crate) fn launch_forge_agent(")
-            .expect("launch_forge_agent must exist");
-        let window = &source[start..start + 3000];
-        let normalized = window.split_whitespace().collect::<Vec<_>>().join(" ");
-        assert!(normalized.contains(
-            "ForgeAgentMode::Codex | ForgeAgentMode::Claude | ForgeAgentMode::OpenCode | ForgeAgentMode::Antigravity"
-        ));
     }
 
     /// Order 620-duta: the startup preflight must distinguish a kernel that
@@ -30943,22 +30751,6 @@ esac
         );
     }
 
-    #[test]
-    fn tray_codex_launch_reexecs_cli_for_lease_lifetime() {
-        // Extended 2026-07-15: the CLI-lane delegation now covers ALL
-        // credentialed agents (Claude/Codex/OpenCode/Antigravity), same reasoning —
-        // the tray has no TTY for the device-code login.
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-        let body = source_window(source, "pub(crate) fn launch_forge_agent(");
-        let normalized = body.split_whitespace().collect::<Vec<_>>().join(" ");
-        assert!(normalized.contains(
-            "ForgeAgentMode::Codex | ForgeAgentMode::Claude | ForgeAgentMode::OpenCode | ForgeAgentMode::Antigravity"
-        ));
-        assert!(body.contains("std::env::current_exe()"));
-        assert!(body.contains("format!(\"--{}\", mode.slug())"));
-        assert!(body.contains("canonical.display().to_string()"));
-    }
-
     /// Order 570: the variable consumed by forge-local expert routing must
     /// identify the harness selected by the launcher. Cover both launch
     /// builders and every direct agent lane; checking the built argv pins the
@@ -32964,7 +32756,12 @@ esac
         }
         let err = crate::local_projects::validate_project_label("r4xm-never-launched")
             .expect_err("NEGATIVE: an outside label no lane was launched for stays refused");
-        assert!(err.contains("is not a known project"), "{err}");
+        // 776-jcf3: ~/src is no longer scanned, so with no cloud cache the set is
+        // empty and the refusal takes its "knows of no projects" wording.
+        assert!(
+            err.contains("is not a known project") || err.contains("knows of no projects"),
+            "{err}"
+        );
     }
 
     /// The flip side: is_cloud=true must resolve cloud even with the env var

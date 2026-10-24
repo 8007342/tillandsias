@@ -70,6 +70,12 @@ The version line (e.g., `v0.1.168.224`) and the signature `— by Tlatoāni` app
 ### Requirement: Home Menu ([<home> ~/src/ >])
 <!-- req-id: 3063c50d -->
 
+> **RETIRED by 776-jcf3 (operator yes, 2026-10-23).** The host `~/src` checkout
+> is retired: the Linux tray no longer scans `~/src` for menu entries or MCP
+> sockets. Cloud launches (`--cloud`: ephemeral mirror + ephemeral forge) are
+> the path. This requirement is kept for history and SHALL NOT be reintroduced.
+
+
 @trace spec:simplified-tray-ux
 
 When authenticated, MUST show all local projects found in `~/.tillandsias/watch/` (or configured watch path), alphabetically sorted. Each project MUST display exactly 7 tools:
