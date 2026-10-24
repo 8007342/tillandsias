@@ -35,6 +35,12 @@ Cross-references:
 
 ### Requirement: Host filesystem scanner enumerates `~/src/` projects
 <!-- req-id: 9641c39c -->
+
+> **RETIRED by 776-jcf3 (operator yes, 2026-10-23).** The host `~/src` checkout
+> is retired: the Linux tray no longer scans `~/src` for menu entries or MCP
+> sockets. Cloud launches (`--cloud`: ephemeral mirror + ephemeral forge) are
+> the path. This requirement is kept for history and SHALL NOT be reintroduced.
+
 - **ID**: host-shell-architecture.scanner.local-project-discovery@v1
 - **Modality**: MUST
 - **Measurable**: true

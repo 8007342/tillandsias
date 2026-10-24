@@ -99,7 +99,7 @@ podman images | grep chromium
 podman inspect tillandsias-forge:v0.1.160.203 | grep tray.sock
 
 # Test OpenCode Web session
-tillandsias /path/to/project --opencode
+tillandsias --cloud owner/repo --opencode
 # Then in OpenCode Web, click a link → should open in Chromium container
 ```
 
@@ -150,6 +150,6 @@ If links open in your native browser:
 
 | Mode | Browser | Isolation |
 |------|---------|-----------|
-| `tillandsias <path> --opencode` | Host terminal (TTY) | None (CLI only) |
-| `tillandsias <path> --opencode-web` | Container (Chromium) | Full (browser in container) |
-| `tillandsias <path> --claude` | Host terminal (TTY) | None (CLI only) |
+| `tillandsias --cloud <owner>/<repo> --opencode` | Host terminal (TTY) | None (CLI only) |
+| `tillandsias --cloud <owner>/<repo> --opencode-web` | Container (Chromium) | Full (browser in container) |
+| `tillandsias --cloud <owner>/<repo> --claude` | Host terminal (TTY) | None (CLI only) |
