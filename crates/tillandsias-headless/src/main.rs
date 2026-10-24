@@ -5645,6 +5645,30 @@ fn mirror_upgrade_skew(aliases: &[String], expected: &str) -> bool {
 /// journal read during a login. The long-running git service keeps its check.
 const LOGIN_CONTAINER_RUN_PREFIX: [&str; 4] = ["run", "--detach", "--rm", "--no-healthcheck"];
 
+/// The provider-login helper's hardening flags (order 1118-zzs4). The helper
+/// carried three of the four mandatory flags — `--security-opt=label=disable`
+/// was missing — and was spawned with no `validate_launch_argv` check, so the
+/// gap was invisible. Both feature branches of `run_provider_login` use this.
+// @trace order:1118-zzs4, spec:security-privacy-isolation
+const LOGIN_CONTAINER_HARDENING: [&str; 4] = [
+    "--cap-drop=ALL",
+    "--security-opt=no-new-privileges",
+    "--security-opt=label=disable",
+    "--userns=keep-id",
+];
+
+/// Refuse a `podman run` argv (leading `run` included) that violates the
+/// immutable hardening envelope, before any process is spawned.
+// @trace order:1118-zzs4, spec:podman-orchestration
+fn refuse_unhardened_launch(argv: &[String], container_name: &str) -> Result<(), String> {
+    tillandsias_podman::policy::validate_launch_argv(argv).map_err(|err| {
+        format!(
+            "[security] refusing to launch {container_name}: {err}; the launch argv lost \
+             part of the immutable hardening envelope (crates/tillandsias-podman/src/policy.rs)"
+        )
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 fn build_git_run_args(
     project_name: &str,
@@ -6496,11 +6520,16 @@ async fn try_start_vsock_forwarder(client: &tillandsias_podman::PodmanClient, de
     // than racing it.
     let _ = client.remove_container("tillandsias-inference").await;
     match client
-        .run_container_observed(
+        // Order 1118-zzs4: EXEMPT from the envelope check, reviewed. The relay
+        // carries --cap-drop=ALL and no-new-privileges but a custom seccomp
+        // profile and no --userns=keep-id / label=disable; adding them is
+        // unmeasured on the VM-boundary guests this runs on.
+        .run_container_observed_exempt(
             "vsock-forwarder",
             VSOCK_FORWARDER_NAME,
             &build_vsock_forwarder_run_args(image, &profile, target),
             debug,
+            "vsock relay: custom seccomp, userns/label unmeasured (1118-zzs4)",
         )
         .await
     {
@@ -13464,62 +13493,65 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             "type=bind,source={},target=/etc/tillandsias/ca.crt,relabel=shared,readonly=true",
             certs_dir.join("intermediate.crt").display()
         );
-        let mut run = podman_command();
-        run.args(LOGIN_CONTAINER_RUN_PREFIX);
-        run.args([
-            "--name",
-            &container,
-            "--network",
-            ENCLAVE_ONLY_NET,
-            "--volume",
-            &crate::vault_bootstrap::runtime_secret_volume(
-                vault_lease.secret_name(),
-                GIT_VAULT_TOKEN_SECRET_OPTS,
-            ),
-            "--cap-drop=ALL",
-            "--security-opt=no-new-privileges",
-            "--userns=keep-id",
-            "--mount",
-            &ca_mount,
-        ]);
+        let secret_volume = crate::vault_bootstrap::runtime_secret_volume(
+            vault_lease.secret_name(),
+            GIT_VAULT_TOKEN_SECRET_OPTS,
+        );
+        let mut argv: Vec<String> = LOGIN_CONTAINER_RUN_PREFIX.map(String::from).to_vec();
+        argv.extend(
+            ["--name", &container, "--network", ENCLAVE_ONLY_NET]
+                .into_iter()
+                .chain(["--volume", secret_volume.as_str()])
+                .chain(LOGIN_CONTAINER_HARDENING)
+                .chain(["--mount", ca_mount.as_str()])
+                .map(String::from),
+        );
         if let Some(mount) = tool_cache_mount.as_deref() {
-            run.args(["--volume", mount]);
+            argv.extend(["--volume".to_string(), mount.to_string()]);
         }
-        run.args(proxy_env_args());
-        run.args([
-            "--entrypoint",
-            "/bin/sh",
-            &image,
-            "-c",
-            "trap 'exit 0' TERM INT; while :; do sleep 3600 & wait $!; done",
-        ]);
+        argv.extend(proxy_env_args());
+        argv.extend(
+            [
+                "--entrypoint",
+                "/bin/sh",
+                &image,
+                "-c",
+                "trap 'exit 0' TERM INT; while :; do sleep 3600 & wait $!; done",
+            ]
+            .map(String::from),
+        );
+        refuse_unhardened_launch(&argv, &container)?;
+        let mut run = podman_command();
+        run.args(&argv);
         run_podman_command_silent(run, debug)?;
     }
 
     #[cfg(not(feature = "vault"))]
     {
-        let mut run = podman_command();
-        run.args(LOGIN_CONTAINER_RUN_PREFIX);
-        run.args([
-            "--name",
-            &container,
-            "--network",
-            ENCLAVE_ONLY_NET,
-            "--cap-drop=ALL",
-            "--security-opt=no-new-privileges",
-            "--userns=keep-id",
-        ]);
+        let mut argv: Vec<String> = LOGIN_CONTAINER_RUN_PREFIX.map(String::from).to_vec();
+        argv.extend(
+            ["--name", &container, "--network", ENCLAVE_ONLY_NET]
+                .into_iter()
+                .chain(LOGIN_CONTAINER_HARDENING)
+                .map(String::from),
+        );
         if let Some(mount) = tool_cache_mount.as_deref() {
-            run.args(["--volume", mount]);
+            argv.extend(["--volume".to_string(), mount.to_string()]);
         }
-        run.args(proxy_env_args());
-        run.args([
-            "--entrypoint",
-            "/bin/sh",
-            &image,
-            "-c",
-            "trap 'exit 0' TERM INT; while :; do sleep 3600 & wait $!; done",
-        ]);
+        argv.extend(proxy_env_args());
+        argv.extend(
+            [
+                "--entrypoint",
+                "/bin/sh",
+                &image,
+                "-c",
+                "trap 'exit 0' TERM INT; while :; do sleep 3600 & wait $!; done",
+            ]
+            .map(String::from),
+        );
+        refuse_unhardened_launch(&argv, &container)?;
+        let mut run = podman_command();
+        run.args(&argv);
         run_command_silent(run, debug)?;
     }
 
@@ -22227,6 +22259,114 @@ mod tests {
     /// nothing).
     #[test]
     // @trace order:986-ahnc, order:972-6vaj, spec:security-privacy-isolation
+    fn every_stack_launch_argv_satisfies_the_hardening_envelope() {
+        // Order 1118-zzs4: these argvs reach podman through
+        // run_container_observed, which now REFUSES one that fails the
+        // envelope, so a builder that drops a flag must fail here, not at a
+        // launch. git/router/inference were refused by the validator itself
+        // before the fix (it misread `--network-alias <v>` as the image).
+        let certs = PathBuf::from("/tmp/ca");
+        let sites: Vec<(&str, Vec<String>)> = vec![
+            ("proxy", build_proxy_run_args(&certs, "p:v1")),
+            (
+                "git",
+                build_git_run_args("alpha", None, &certs, "g:v1", None, None, None, None),
+            ),
+            ("inference", build_inference_run_args(&certs, "i:v1", false)),
+            ("router", build_router_run_args(&certs, "r:v1", 8080)),
+            (
+                "observatorium",
+                build_observatorium_web_args(
+                    std::path::Path::new("/tmp/p"),
+                    "alpha",
+                    std::path::Path::new("/tmp/a"),
+                    "o:v1",
+                ),
+            ),
+            (
+                "ssh-lane",
+                build_ssh_lane_sidecar_run_args("alpha", "m1", &certs, "s:v1", "sec"),
+            ),
+            (
+                "forge-agent",
+                build_forge_agent_run_argv(
+                    &PathBuf::from("/tmp/project"),
+                    "alpha",
+                    None,
+                    &certs,
+                    "1.2.3",
+                    ForgeAgentMode::Claude,
+                    false,
+                    false,
+                    &PathBuf::from("/tmp/cr"),
+                )[2..]
+                    .to_vec(),
+            ),
+        ];
+        for (name, args) in sites {
+            let mut full = vec!["run".to_string()];
+            full.extend(args);
+            assert_eq!(
+                tillandsias_podman::policy::validate_launch_argv(&full),
+                Ok(()),
+                "{name} launch argv must satisfy the envelope: {full:?}"
+            );
+        }
+    }
+
+    /// Order 1118-zzs4: the provider-login helper was the one production
+    /// launch missing `--security-opt=label=disable`, spawned unvalidated.
+    #[test]
+    fn provider_login_argv_carries_the_mandatory_hardening_and_is_validated() {
+        let mut argv: Vec<String> = LOGIN_CONTAINER_RUN_PREFIX.map(String::from).to_vec();
+        argv.extend(LOGIN_CONTAINER_HARDENING.map(String::from));
+        argv.extend(["--network".into(), ENCLAVE_ONLY_NET.into(), "img:v1".into()]);
+        assert_eq!(refuse_unhardened_launch(&argv, "login"), Ok(()));
+        let stripped: Vec<String> = argv
+            .iter()
+            .filter(|a| *a != "--security-opt=label=disable")
+            .cloned()
+            .collect();
+        assert!(refuse_unhardened_launch(&stripped, "login").is_err());
+
+        let source = std::fs::read_to_string(
+            std::path::Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("src/main.rs"),
+        )
+        .unwrap();
+        let source = source.as_str();
+        let window = source_window(
+            source,
+            "fn run_provider_login(config: &ProviderLoginConfig, debug: bool)",
+        );
+        assert_eq!(
+            window
+                .matches("refuse_unhardened_launch(&argv, &container)?")
+                .count(),
+            2,
+            "both run_provider_login branches must validate before spawning"
+        );
+        assert_eq!(
+            window.matches(".chain(LOGIN_CONTAINER_HARDENING)").count(),
+            2
+        );
+    }
+
+    /// Order 1118-zzs4: the only headless launch allowed past the envelope
+    /// check is the reviewed vsock relay.
+    #[test]
+    fn only_the_vsock_relay_is_exempt_from_the_envelope_check() {
+        let source = std::fs::read_to_string(
+            std::path::Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("src/main.rs"),
+        )
+        .unwrap();
+        let source = source.as_str();
+        let needle = [".run_container_observed", "_exempt("].concat();
+        assert_eq!(source.matches(needle.as_str()).count(), 1);
+        let idx = source.find(needle.as_str()).unwrap();
+        assert!(source[idx..idx + 200].contains("\"vsock-forwarder\""));
+    }
+
+    #[test]
     fn the_live_forge_argv_satisfies_the_hardening_envelope() {
         let argv = build_opencode_forge_args(
             std::path::Path::new("/tmp/probe-project"),
@@ -26996,7 +27136,8 @@ mod tests {
         );
         assert_eq!(
             login_window
-                .matches("run.args([\"--volume\", mount])")
+                // 1118-zzs4: the login argv is now a validated Vec<String>.
+                .matches("argv.extend([\"--volume\".to_string(), mount.to_string()])")
                 .count(),
             2,
             "vault and no-vault login builders must both mount the provider cache"
