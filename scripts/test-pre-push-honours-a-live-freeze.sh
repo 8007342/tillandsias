@@ -87,6 +87,10 @@ chmod +x .git/hooks/pre-push
 # PATH). Exporting the resolved path makes the dependency explicit; when none
 # resolves, ARM 3b says so by name instead of failing.
 _validator="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || _validator=""
+# 1745-ntuq: the lane asks that binary whether it is current. Its scratch repo
+# holds no validator-surface manifest, so name the checkout the binary is
+# measured against: this one, not whichever checkout happens to sit above it.
+export TILLANDSIAS_SURFACE_ROOT="$ROOT"
 case "$_validator" in ./*) _validator="$ROOT/${_validator#./}" ;; esac
 # Decide on _validator, never on TILLANDSIAS_PLAN_BIN: the probe honours that
 # variable on EXISTENCE alone (1060-wxdh), so an inherited but broken value

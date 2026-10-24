@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-gate-stamp-scope-fixture-never-resolves-its-lane-plan-binary-from-an-exported-cargo-target-dir
+    event:
+      type: rescope
+      ts: "2026-10-24T07:40:40Z"
+      agent_id: linux-lenovinha-claude-20261024t074040z
+      host: lenovinha
+      summary: |-
+        Root cause corrected (coordinator ruling 2026-10-24, same row). Not the fixture and not a stale binary: validator-surface-hash --check took 'current' from find_repo_root(), the checkout ABOVE THE BINARY. With the shared CARGO_TARGET_DIR (1807-shtg) every worktree's binary lives under the main checkout, so every gate and plan-only push hashed the main checkout. Measured on lenovinha: a binary built at trunk (surface e48e7014528d5052) answered stale checkout=4cde5f775021b5ee from wt-smoke20, wt-5xv3 and /tmp alike; 4cde is the main checkout (work/1667-6rtp, Oct 14). macuahuitl stays green only because its main checkout is at trunk. Fix: the surface root is the gating checkout (TILLANDSIAS_SURFACE_ROOT, then the nearest checkout above the cwd holding the manifest, then the exe walk).

@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: the-gate-stamp-scope-fixture-never-resolves-its-lane-plan-binary-from-an-exported-cargo-target-dir
+    event:
+      type: list-replace
+      ts: "2026-10-24T07:40:42Z"
+      agent_id: linux-lenovinha-claude-20261024t074040z
+      host: linux
+      field: exit_criteria
+      items:
+        - "the property: a plan binary under checkout A's target, run from worktree B, measures B's validator surface (surface_root_from: TILLANDSIAS_SURFACE_ROOT, then the nearest checkout above the cwd holding the manifest, then the exe walk) — unit test surface_root_is_the_gating_checkout_not_the_one_above_the_binary"
+        - "end to end on lenovinha: a trunk binary from wt-ntuq read stale checkout=4cde (the Oct 14 main checkout) before the fix; the fixed binary reads ok from the worktree and still falls back to the exe walk from /tmp"
+        - "test-gate-stamp-scope.sh case 7 and test-pre-push-honours-a-live-freeze.sh ARM 3b pass with CARGO_TARGET_DIR=<main>/target and a fresh binary (fixtures export TILLANDSIAS_SURFACE_ROOT=$ROOT); the pre-fix fixture is red in the same regime (case 7 FAIL)"
+      summary: |
+        rescoped root cause: the probe measured the checkout above the binary, not the gating one

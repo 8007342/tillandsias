@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-gate-stamp-scope-fixture-never-resolves-its-lane-plan-binary-from-an-exported-cargo-target-dir
+    field: context
+    value: |-
+      MEASURED on yoga 2026-10-16, same tree (work/1237-f9dy and trunk afa566d67 both), bare `bash scripts/test-gate-stamp-scope.sh`:
+        CARGO_TARGET_DIR=/var/home/tlatoani/claudia/tillandsias/target  -> rc=1, case 7 FAIL
+        CARGO_TARGET_DIR unset                                          -> rc=0
+      The case-7 push output names the cause: "plan-only lane: REFUSED — the resolved plan binary is STALE ... resolved: <CARGO_TARGET_DIR>/release/tillandsias-plan ... built-from=<real tree> checkout=4cde5f775021b5ee". The checkout hash is the fixture's own temp repo, so ANY real binary is stale against it; rebuilding the binary changed built-from and not the verdict.
+      Inside ./build.sh --check the fixture runs with whatever CARGO_TARGET_DIR the caller exported, so on such a host the whole check is red with "the gate-stamp scope fixture regressed — what the stamp covers is unproven", which points at stamp scope and not at the environment. Trunk's bare --check reproduced it in a linked worktree on yoga.
+      The fixture's LANE_PLAN_BIN comes from resolve_plan_binary in $ROOT (scripts/test-gate-stamp-scope.sh:33), and that resolver honours CARGO_TARGET_DIR.
+
+
+      [2026-10-16T01:45:22Z yoga] CORRECTION (yoga, 2026-10-16, same filer): the sentence above calling checkout=4cde5f775021b5ee "the fixture's own temp repo" is UNVERIFIED and probably wrong. Minutes later the MAIN checkout's own pre-push lane (tree 222b6911e) reported the identical checkout=4cde5f775021b5ee, so that hash is most likely the main checkout's validator surface, and the fixture's nested lane may be computing its surface from the main checkout rather than its temp repo. Re-measure which tree the nested lane hashes before choosing the fix. The measured property is unchanged: rc=1 with CARGO_TARGET_DIR exported, rc=0 without it, same tree.
+
+      [2026-10-24T07:40:42Z lenovinha] RESCOPED 2026-10-24 (lenovinha, coordinator ruling): the freshness probe validator-surface-hash --check hashed the checkout above the binary (find_repo_root walks up from current_exe). Under the shared target dir every binary sits under the main checkout, so --check and plan-only pushes from any worktree went STALE whenever the main checkout was not at trunk; test-gate-stamp-scope case 7 and test-pre-push-honours-a-live-freeze ARM 3b were the first visible reds.
+    ts: "2026-10-24T07:40:42Z"
+    host: lenovinha
