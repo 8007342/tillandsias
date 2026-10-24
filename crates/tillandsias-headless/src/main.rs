@@ -7879,6 +7879,30 @@ reverse_proxy {upstream_host}:{port}\n    \
 }}\n\
 }}\n"
         ));
+        // 1802-9xix: the same auth-gated site over the router's TLS listener,
+        // with the project's preview leaf, for the app window, which reaches
+        // the router only from its confined network and only over TLS (a
+        // plaintext Host header cannot be bound to a project, 1651-5t7n).
+        if route.preview_tls {
+            let preview_project = subdomain
+                .split_once('.')
+                .map_or(project_label, |(_, project)| project);
+            routes.push_str(&format!(
+                "https://{subdomain}.localhost:8443 {{\n    \
+tls /etc/tillandsias/preview/{preview_project}.crt /etc/tillandsias/preview/{preview_project}.key\n    \
+handle /_auth/login {{\n        \
+reverse_proxy localhost:9090\n    \
+}}\n    \
+handle {{\n        \
+forward_auth localhost:9090 {{\n            \
+uri /validate?project={project_label}\n            \
+copy_headers Cookie\n        \
+}}\n        \
+reverse_proxy {upstream_host}:{port}\n    \
+}}\n\
+}}\n\n"
+            ));
+        }
     }
     routes
 }
@@ -16896,6 +16920,7 @@ impl BrowserDisplayContext {
     }
 }
 
+#[cfg_attr(feature = "host-services", allow(dead_code))]
 fn build_opencode_web_browser_spec(
     app_url: &str,
     version: &str,
@@ -17364,16 +17389,34 @@ fn launch_opencode_web_browser(
     // `"<project>"`), otherwise `/validate` and `/_auth/login` both 401.
     let project_label = router_host_label(project_name);
     let otp = tillandsias_otp::issue_session(&project_label);
-    let login_url = tillandsias_otp::build_login_data_url(&url, &otp);
-    let spec = build_opencode_web_browser_spec(
+    // 1802-9xix: the window signs in over the router's TLS site, the only
+    // route it can reach from its confined network; the host-side probes
+    // below keep the plaintext loopback route.
+    #[cfg(feature = "host-services")]
+    let window_url = format!(
+        "https://opencode.{project_label}.localhost:{}/",
+        crate::local_web_preview::tls_port()?
+    );
+    #[cfg(not(feature = "host-services"))]
+    let window_url = url.clone();
+    // Land on the checked-out project, not OpenCode's "add project" page:
+    // the forge mounts it at /home/forge/src/<project> (see find_project_dir
+    // in lib-common.sh) and `opencode serve` runs from there.
+    let landing =
+        tillandsias_otp::opencode_project_landing(&format!("/home/forge/src/{project_name}"));
+    let login_url = tillandsias_otp::build_login_data_url_landing(&window_url, &landing, &otp);
+    #[cfg(not(feature = "host-services"))]
+    let args = build_opencode_web_browser_spec(
         &login_url,
         version,
         &profile_path,
         certs_dir,
         &display,
         project_name,
-    )?;
-    let args = spec.build_run_args();
+    )?
+    .build_run_args();
+    #[cfg(feature = "host-services")]
+    let _ = (version, &display, certs_dir);
 
     // @trace spec:opencode-web-session-otp, spec:tray-host-control-socket
     // Notify the router (via the tray's control socket) of the new session
@@ -17397,6 +17440,14 @@ fn launch_opencode_web_browser(
 
     emit_opencode_web_event(project_name, "browser", "launch", Some("podman-run"))?;
     let container_name = format!("tillandsias-browser-{project_name}");
+    #[cfg(feature = "host-services")]
+    let (result, window) = match crate::browser_open::TrayBrowserContainers::new(debug)
+        .start_app_window(&project_label, &login_url, &container_name, &profile_path)
+    {
+        Ok(handle) => (Ok(()), Some(handle)),
+        Err(e) => (Err(e), None),
+    };
+    #[cfg(not(feature = "host-services"))]
     let result = rt_block_on_podman_run(args, &container_name, "browser", debug);
     if result.is_ok() {
         emit_opencode_web_event(project_name, "browser", "launched", Some("gui"))?;
@@ -17416,6 +17467,12 @@ fn launch_opencode_web_browser(
             };
             if let Err(e) = rt.block_on(monitor_and_cleanup_browser(&container_name, debug)) {
                 eprintln!("[tillandsias] Browser cleanup error: {e}");
+            }
+            // 1802-9xix: the window's forwarder and network go with it.
+            #[cfg(feature = "host-services")]
+            if let Some(handle) = window {
+                use tillandsias_browser_mcp::launcher::BrowserContainers as _;
+                crate::browser_open::TrayBrowserContainers::new(debug).stop(&handle);
             }
             let _ = std::fs::remove_dir_all(&profile_cleanup_path);
         });
@@ -17828,11 +17885,19 @@ pub(crate) fn run_opencode_web_mode(
         // The forge image's opencode-web entrypoint runs `opencode serve --hostname 0.0.0.0
         // --port 4096` (see images/default/entrypoint-forge-opencode-web.sh:142), so the
         // router upstream must target 4096 — not 8080, which is the router's own listener.
-        let route = RouterRoute::new(
+        #[allow(unused_mut)]
+        let mut route = RouterRoute::new(
             format!("opencode.{}", router_host_label(project_name)),
             forge_container_name(project_name),
             4096u16,
         );
+        // 1802-9xix: the app window reaches OpenCode over the router's TLS
+        // listener, so the project's preview leaf must exist first.
+        #[cfg(feature = "host-services")]
+        {
+            crate::local_web_preview::ensure_preview_leaf(project_name)?;
+            route.preview_tls = true;
+        }
         upsert_router_route(route, debug)?;
 
         // @trace spec:subdomain-routing-via-reverse-proxy

@@ -867,6 +867,7 @@ specs:
   litmus_tests:
   - litmus:credential-isolation
   - litmus:opencode-web-session-otp-shape
+  - litmus:opencode-web-window-reaches-the-app
   coverage_ratio: 75
   last_verified: '2026-05-30'
 - spec_id: overlay-mount-cache

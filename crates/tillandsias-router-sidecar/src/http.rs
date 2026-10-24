@@ -20,7 +20,9 @@
 
 use std::time::Duration;
 
-use tillandsias_otp::{OtpStore, format_set_cookie_header, parse_cookie_value};
+use tillandsias_otp::{
+    OtpStore, format_set_cookie_header, is_safe_landing_path, parse_cookie_value,
+};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{debug, info, warn};
@@ -346,11 +348,20 @@ async fn dispatch_login(
         return Response::status(401);
     }
 
-    // Match — issue the canonical session cookie and redirect to the app
-    // root. `format_set_cookie_header` builds the entire `Set-Cookie:` value
-    // (cookie name, base64url-encoded token, Path, HttpOnly, SameSite, Max-Age).
+    // Match — issue the canonical session cookie and redirect to the form's
+    // `next` landing (order 1802-9xix: the tray lands on the project's
+    // session view), or the app root when it is absent or not a plain
+    // same-origin path. `format_set_cookie_header` builds the entire
+    // `Set-Cookie:` value (cookie name, base64url-encoded token, Path,
+    // HttpOnly, SameSite, Max-Age).
     // @trace spec:opencode-web-session-otp
-    Response::redirect_with_cookie("/", format_set_cookie_header(&cookie_bytes, &project_label))
+    let landing = parse_form_field(&body, "next")
+        .filter(|next| is_safe_landing_path(next))
+        .unwrap_or_else(|| "/".to_string());
+    Response::redirect_with_cookie(
+        landing,
+        format_set_cookie_header(&cookie_bytes, &project_label),
+    )
 }
 
 /// Find a header by name (case-insensitive). Returns the trimmed value, or
@@ -1035,9 +1046,43 @@ mod tests {
             "expected HttpOnly cookie attribute, got: {resp}"
         );
         assert!(
-            resp.contains("SameSite=Strict"),
-            "expected SameSite=Strict, got: {resp}"
+            // Lax, not Strict: the cookie must survive the 302 out of the
+            // data: login form (see format_set_cookie_header).
+            resp.contains("SameSite=Lax"),
+            "expected SameSite=Lax, got: {resp}"
         );
+    }
+
+    #[tokio::test]
+    async fn login_endpoint_lands_on_a_safe_next_path_and_refuses_an_offsite_one() {
+        // @trace spec:opencode-web-session-otp
+        // Order 1802-9xix: the tray's form carries `next` so the window opens
+        // the checked-out project; anything but a plain same-origin path
+        // lands on `/`.
+        let store: &'static OtpStore = Box::leak(Box::new(OtpStore::new()));
+        let port = spawn_serve(store).await;
+        for (next, expected) in [
+            (
+                "%2FL2hvbWUvZm9yZ2Uvc3JjL2RldnhzZA%2Fsession",
+                "/L2hvbWUvZm9yZ2Uvc3JjL2RldnhzZA/session",
+            ),
+            ("%2F%2Fevil.example%2F", "/"),
+            ("https%3A%2F%2Fevil.example%2F", "/"),
+            ("%2Fa%0D%0ASet-Cookie%3A+x", "/"),
+        ] {
+            let token = generate_session_token();
+            store.push("demo", token);
+            let body = format!("otp={}&next={next}", format_cookie_value(&token));
+            let resp = post_form(port, "/_auth/login", "opencode.demo.localhost:8080", &body).await;
+            assert!(
+                resp.starts_with("HTTP/1.1 302"),
+                "expected 302 for {next}, got: {resp}"
+            );
+            assert!(
+                resp.contains(&format!("Location: {expected}\r\n")),
+                "expected Location: {expected} for {next}, got: {resp}"
+            );
+        }
     }
 
     #[tokio::test]
