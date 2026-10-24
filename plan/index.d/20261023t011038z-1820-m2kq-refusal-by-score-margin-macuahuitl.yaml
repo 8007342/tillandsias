@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Phase 1 child (1g) of 1813-54df; operator-approved redesign 2026-10-23.
+packets:
+  - packet_id: expert-refusal-decides-by-score-margin-over-the-top-k-median-plus-lexical-overlap-calibrated-on-the-refusal-corpus
+    order: 1820-m2kq
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: linux
+    capability_tags: [experts, inference, rust, calibration, refusal]
+    estimated_hours: 5
+    owned_files:
+      - crates/tillandsias-plan/src/pipeline.rs
+      - scripts/refusal-calibration/measure-margin-bands.sh
+    title: |
+      The grounded pipeline refuses out-of-coverage questions by a score MARGIN (best − median of top-k) plus a lexical-overlap check between query and best chunk, with thresholds calibrated on scripts/refusal-calibration/* corpora, instead of an absolute cosine floor/band alone
+    context: |
+      Today refusal is an absolute-score floor and mid band (pipeline.rs
+      tests below_floor_retrieval_refuses_out_of_coverage,
+      mid_band_score_refuses_out_of_coverage). 824-6qxh
+      (spec-expert-refusal-threshold-fleet-decision) measured that absolute
+      bands are a property of (embedder, corpus, prefix), so they move with
+      every corpus change; a margin over the top-k median is corpus-relative
+      and travels between hosts. The lexical-overlap check catches the
+      near-miss where an embedding is close but no query content word occurs
+      in the chunk. Calibration corpora already exist:
+      scripts/refusal-calibration/questions-wide-579.jsonl,
+      negatives-declined-alternatives.jsonl, labels-true-near-miss-33.txt,
+      with measure-bands.sh / analyze-bands.sh as the band instruments.
+    exit_criteria:
+      - 'a margin-band measurement over questions-wide-579 + negatives-declined-alternatives reports in-corpus false-refusal and out-of-corpus false-answer rates for the margin rule and for the current floor rule on the same index; the margin rule is adopted only if its out-of-corpus false-answer rate is ≤ the floor rule''s at equal or lower false-refusal (pre-fix result: no margin measurement exists)'
+      - 'a unit test with a synthetic top-k where the best score is high but equal to the median (flat) refuses, and one with a clear margin answers (pre-fix result: FAILS — the flat high set answers under the absolute floor)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: scripts/refusal-calibration/measure-margin-bands.sh
+      (new) prints the two rules' rates on the live index; cargo test
+      -p tillandsias-plan margin_refusal_flat_topk_refuses pins the rule.
+    depends_on: []
+    related: [824-6qxh, 1813-54df]
+    next_action: >
+      Write measure-margin-bands.sh beside measure-bands.sh; run it on
+      macuahuitl's live index; pick margin + overlap thresholds; implement
+      in the refusal branch of run_grounded; keep the floor as a hard lower
+      bound; post the measurement on 824-6qxh with its regime.
+    notes: |
+      size: M
+      implementer_tier: opus
+    provenance: |
+      Filed by macuahuitl (claude subagent, operator-approved redesign 2026-10-23).
+    events:
+      - type: filed
+        ts: "2026-10-23T01:10:38Z"
+        host: macuahuitl
+        summary: |-
+          p2 1g: refusal by score margin + lexical overlap, calibrated on the refusal corpora (relates 824-6qxh).

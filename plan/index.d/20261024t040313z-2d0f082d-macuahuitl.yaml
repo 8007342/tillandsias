@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: tillandsias-org-update-website-skill-runs-unattended-inside-a-forge-with-no-host-paths-and-delivers-through-the-mirror-as-a-pushed-branch
+    event:
+      type: list-replace
+      ts: "2026-10-24T04:03:13Z"
+      agent_id: linux-macuahuitl-claude-20261024t040257z
+      host: macuahuitl
+      field: owned_files
+      items:
+        - "tillandsias.org:skills/update-website/SKILL.md"
+        - "tillandsias.org:skills/update-website/scripts/release-refresh.sh"
+        - "tillandsias.org:skills/update-website/scripts/test-release-refresh-unattended.sh"
+        - "tillandsias.org:AGENTS.md"
+      summary: |-
+        revised: operator flow correction 2026-10-24 (in-session, macuahuitl via coordinator) — plain queue message, orchestrator-launched headless one-shot non-Claude forge, agent self-selects the skill, forge lifetime = agent lifetime, timeout backstop

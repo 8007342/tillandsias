@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: ghost-trace-ratchet-runs-only-at-the-end-of-the-full-gate-so-a-one-line-annotation-defect-costs-an-hour-long-eviction
+    field: status
+    value: completed
+    ts: "2026-10-23T17:59:18Z"
+    host: macuahuitl
+
+events:
+  - packet_id: ghost-trace-ratchet-runs-only-at-the-end-of-the-full-gate-so-a-one-line-annotation-defect-costs-an-hour-long-eviction
+    event:
+      type: completed
+      ts: "2026-10-23T17:59:18Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: e0c029966 land(630): scripts/lua/check-ghost-traces.lua runs scripts/trace-coverage.sh --gate in the preflight fast lane (0.26 s), refusing violation:ghost-traces naming the spec; fixture scripts/lua/test-check-ghost-traces.lua 4/4 (pre-fix no-subject). Fixture gate-binding pending a darwin record (macbookair asked)
+  - packet_id: ghost-trace-ratchet-runs-only-at-the-end-of-the-full-gate-so-a-one-line-annotation-defect-costs-an-hour-long-eviction
+    event:
+      type: note
+      ts: "2026-10-23T17:59:18Z"
+      host: macuahuitl
+      summary: |-
+        closed: preflight refuses a new ghost trace

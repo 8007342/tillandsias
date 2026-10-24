@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Phase 1 child (1a) of 1813-54df; operator-approved redesign 2026-10-23.
+packets:
+  - packet_id: tellme-howto-and-freeform-about-route-to-expert-serve-grounded-pipeline-and-the-keyword-grep-path-becomes-a-fallback-without-the-general-knowledge-prompt
+    order: 1814-x78v
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: any
+    capability_tags: [experts, inference, forge, cli, bash]
+    estimated_hours: 2
+    owned_files:
+      - images/default/cli/tellme
+      - scripts/test-tellme-routes-to-expert-serve.sh
+    title: |
+      tellme howto and free-form about route to expert-serve (127.0.0.1:11436, OpenAI-shaped, model id cheatsheet|all) when the port answers; the INDEX.md keyword-grep + raw /api/generate path survives only as the fallback, without the "use your general knowledge" sentence, and honours TILLANDSIAS_INFERENCE_MODEL
+    context: |
+      SOURCE READ (macuahuitl, linux-next 438282806): images/default/cli/tellme
+      keyword-greps $cheatsheets_dir/INDEX.md, picks qwen2.5:0.5b or
+      llama3.2:3b by a hardcoded list, posts to ${INFERENCE_URL}/api/generate,
+      and its prompt says "If the context does not contain the answer, use
+      your general knowledge of Linux, Docker/Podman, containers…". When no
+      cheatsheet matches it prints "[RAG Context: no matching cheatsheets,
+      using general knowledge]". In a forge this recommended docker. The
+      grounded pipeline (pipeline.rs `run_grounded`, served by expert_serve.rs)
+      cites retrieved chunks and refuses below threshold; tellme never calls it.
+    exit_criteria:
+      - 'with a stub expert-serve listening on 127.0.0.1:11436, `tellme howto <q>` sends one OpenAI-shaped /v1/chat/completions request with model cheatsheet (or all for about) and prints its answer (pre-fix result: FAILS — tellme posts to /api/generate and never contacts 11436)'
+      - 'with the port closed, tellme falls back to the grep path and its prompt contains no "general knowledge" text (pre-fix result: FAILS — the sentence is present)'
+      - 'with TILLANDSIAS_INFERENCE_MODEL=llama3.2:3b set, the fallback request names that model (pre-fix result: FAILS — the hardcoded qwen2.5:0.5b-first list wins)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: scripts/test-tellme-routes-to-expert-serve.sh
+      (written with the change) stands up a netcat/bash stub on a free port
+      via a TELLME_EXPERT_URL override, asserts the request path and model id,
+      asserts the fallback prompt lacks "general knowledge", and asserts the
+      model env var is honoured; it is bound to a gate step by the claimer.
+    depends_on: []
+    related: [1813-54df]
+    next_action: >
+      Add an expert-serve probe (curl -m1 127.0.0.1:11436/v1/models) at the
+      top of the howto/about branches; on success post chat/completions and
+      print; else the existing grep path with the sentence deleted and model
+      selection reading TILLANDSIAS_INFERENCE_MODEL first. Write the fixture.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    provenance: |
+      Filed by macuahuitl (claude subagent, operator-approved redesign 2026-10-23); field finding: tellme recommended docker inside a forge.
+    events:
+      - type: filed
+        ts: "2026-10-23T01:08:31Z"
+        host: macuahuitl
+        summary: |-
+          p1 1a: tellme routes to expert-serve; grep path is fallback without the general-knowledge prompt.

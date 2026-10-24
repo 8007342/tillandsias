@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Phase 1 child (1b) of 1813-54df; operator-approved redesign 2026-10-23.
+packets:
+  - packet_id: a-generated-size-bounded-expert-context-pack-built-at-forge-launch-from-the-projects-own-declarations-leads-every-synthesis-prompt-byte-identical
+    order: 1815-tei4
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: any
+    capability_tags: [experts, inference, ollama, forge, rust, bash]
+    estimated_hours: 5
+    owned_files:
+      - images/default/lib-common.sh
+      - crates/tillandsias-plan/src/pipeline.rs
+      - images/default/cli/tellme
+      - scripts/test-expert-context-pack.sh
+    title: |
+      A generated expert CONTEXT PACK (≤ ~1.2k tokens) is written at forge launch beside .forge-startup-context.md (.forge-expert-context.md) from the project's OWN declarations plus universal forge constraints, and is placed FIRST and byte-identical in every synthesis system prompt (domain_synthesis_prompt and tellme) so ollama reuses the prefix cache; retrieved chunks follow it
+    context: |
+      No synthesis prompt carries forge context today: pipeline.rs
+      `domain_synthesis_prompt` builds from the domain, retrieved chunks and
+      source keys only; tellme's prompt is its own string. The startup
+      context writer `inject_startup_context` (images/default/lib-common.sh)
+      already runs at forge launch and is the natural place to write the pack.
+      OPERATOR CONSTRAINT (2026-10-23): forges run NON-Tillandsias projects
+      with different rules and branch-discipline levels. The pack is built
+      from (a) universal forge constraints, always (rootless podman, no
+      docker / no nested daemon, tmpfs workspace, proxy egress, inference at
+      inference:11434, push via the mirror — the 1c cheatsheet's summary);
+      (b) the project's own declarations: its branch-discipline level via
+      project-discipline (`tillandsias-plan discipline`), its CLAUDE.md /
+      AGENTS.md if present (bounded excerpt), its methodology if any, the
+      current branch, remote and detected toolchain; (c) Tillandsias-specific
+      rules ONLY when the project is Tillandsias. Byte-identical prefix
+      across every synthesis call is the cache-reuse condition: no
+      timestamps or per-query text inside the pack.
+    exit_criteria:
+      - 'after forge-launch generation on a fixture NON-Tillandsias project (discipline level 0, an AGENTS.md, no methodology), .forge-expert-context.md exists, is ≤ 4800 bytes, names the level-0 discipline and contains no Tillandsias-specific rule string (e.g. "linux-next", "work/<order>") (pre-fix result: FAILS — no pack is written)'
+      - 'on a fixture Tillandsias checkout the pack additionally names the Tillandsias branch rules (pre-fix result: FAILS — no pack)'
+      - 'domain_synthesis_prompt for two different queries/domains returns system prompts whose first len(pack) bytes are identical and equal to the pack; tellme''s prompt starts with the same bytes (pre-fix result: FAILS — no prompt contains the pack)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: scripts/test-expert-context-pack.sh
+      (written with the change) builds the pack for a temp non-Tillandsias
+      repo and a Tillandsias fixture, asserts the size bound, the presence /
+      absence of Tillandsias rule strings, and prefix identity across two
+      prompts; plus a cargo unit test in pipeline.rs asserting the prefix.
+    depends_on: [cheatsheet-runtime-forge-constraints-states-rootless-podman-no-docker-tmpfs-workspace-proxy-egress-inference-host-and-mirror-push-and-is-retrievable]
+    related: [1813-54df, 1814-x78v]
+    next_action: >
+      Write a pack builder (shell in lib-common.sh, called from
+      inject_startup_context) with hard byte cap; teach pipeline.rs to read
+      the pack (path from env, default beside the startup context) and
+      prepend it in domain_synthesis_prompt; have tellme prepend it too.
+    notes: |
+      size: M
+      implementer_tier: opus
+    provenance: |
+      Filed by macuahuitl (claude subagent, operator-approved redesign 2026-10-23).
+    events:
+      - type: filed
+        ts: "2026-10-23T01:08:49Z"
+        host: macuahuitl
+        summary: |-
+          p1 1b: project-derived expert context pack, first and byte-identical in every synthesis prompt.

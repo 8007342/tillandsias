@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Phase 2 child (2c) of fleet-coordinator-warm-cache-milestone (1824-58bm).
+packets:
+  - packet_id: tillandsias-plan-coordinator-client-with-rate-limit-adaptive-heartbeat-busy-backoff-batching-and-offline-fallback-to-the-git-ledger-plus-mcp-tool
+    order: 1826-gi8e
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    release_target: fleet-coordinator-warm-cache-milestone
+    pickup_role: linux
+    capability_tags: [rust, plan-tool, coordinator, mcp, cloudflare]
+    estimated_hours: 10
+    owned_files:
+      - crates/tillandsias-plan/src/coordinator_client.rs
+      - crates/tillandsias-plan/src/main.rs
+      - images/default/config-overlay/mcp/forge-plan.sh
+    title: |
+      `tillandsias-plan coord` (join, send, recv, overview get/put, claim-overlay, heartbeat) plus a forge-plan MCP tool: a coordinator client with a client-side rate limit, a self-measured adaptive heartbeat ≤ 2 min that backs off when the host is busy and stops during gates and agent turns, request batching, and an offline fallback that answers from the git ledger with an explicit `source: git-ledger` marker
+    context: |
+      Binding design: fleet-coordinator-warm-cache-milestone context. The
+      client is where "no fixed polling" is enforced: calls happen on demand
+      (forge start, after push, idle seeking work); the heartbeat interval is
+      measured (round-trip + host load) and only grows when the host is busy;
+      it is suspended while a build.sh gate or an agent turn holds the lane
+      marker. The Access service token is read from the vault (1824-58bm's
+      vault child) and sent as CF-Access-Client-Id / CF-Access-Client-Secret;
+      it is never written to disk in plaintext (operator ruling: no plaintext
+      credentials at rest). Offline or 429 → the answer comes from the local
+      fold (`next`, `status`) and says so. Relation to the existing lane
+      messaging (msg_store.rs, 1506-nvqt, receipts and acks): the
+      coordinator queue is the cross-host best-effort tier with NO receipts;
+      the client must not reuse the ack/receipt vocabulary for it.
+    exit_criteria:
+      - 'against the 2b Worker running under wrangler dev, `coord join <ns>`, `send`, `recv` round-trip; `coord claim-overlay <order>` makes `coord next` on a second client omit that row (pre-fix result: FAILS — no coord verb)'
+      - 'with the coordinator unreachable, `coord next` exits 0 and prints the git-ledger answer with source: git-ledger (pre-fix result: FAILS — no verb)'
+      - 'a unit test of the heartbeat scheduler: interval never exceeds 120 s, doubles under a busy signal, and emits no tick while the gate/turn marker is held; the client rate limiter refuses a burst past its budget without a network call (pre-fix result: FAILS — no scheduler)'
+      - 'no `jq` or `python` is introduced (pre-fix result: n/a)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: cargo test -p tillandsias-plan
+      coordinator_client (unit: scheduler, limiter, offline fallback) and
+      scripts/test-coordinator-client-against-worker.sh (new; wrangler dev +
+      two clients) assert the arms above.
+    depends_on: [coordinator-worker-and-sqlite-durable-object-store-and-return-project-queues-claims-and-overviews-with-local-miniflare-tests-no-deploy]
+    related: [1824-58bm, 1506-nvqt]
+    next_action: >
+      Code against the HTTP contract in the OpenSpec change; unit-test the
+      scheduler and limiter first (no network); then the wrangler-dev
+      round-trip fixture once 2b has a runnable Worker.
+    notes: |
+      size: L
+      implementer_tier: opus
+    provenance: |
+      Filed by macuahuitl (claude subagent, operator-approved redesign 2026-10-23).
+    events:
+      - type: filed
+        ts: "2026-10-23T01:12:55Z"
+        host: macuahuitl
+        summary: |-
+          Phase 2 2c: coordinator client with adaptive heartbeat, limits, batching, git-ledger fallback, MCP tool.

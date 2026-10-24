@@ -37,14 +37,18 @@ JUDGE_MODEL="${TILLANDSIAS_JUDGE_MODEL:-qwen2.5:7b}"
 K="${TILLANDSIAS_RECALL_K:-5}"
 INDEX_DIR=""
 QUESTIONS=""
+HYBRID=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --index-dir) INDEX_DIR="$2"; shift 2 ;;
         --questions) QUESTIONS="$2"; shift 2 ;;
         --k) K="$2"; shift 2 ;;
+        # ORDER 1822-dmwz: retrieve with the hybrid ranking (dense + BM25 over
+        # the question text, fused by RRF) instead of dense-only.
+        --hybrid) HYBRID=1; shift ;;
         --help | -h)
-            echo "usage: measure-recall-at-k.sh --index-dir <dir> --questions <tsv: band<TAB>question> [--k N]"
+            echo "usage: measure-recall-at-k.sh --index-dir <dir> --questions <tsv: band<TAB>question> [--k N] [--hybrid]"
             exit 0
             ;;
         *) echo "error: unknown argument $1" >&2; exit 2 ;;
@@ -75,7 +79,9 @@ while IFS=$'\t' read -r band question; do
         -d "$(jq -nc --arg m "$EMBED_MODEL" --arg i "$question" '{model:$m,input:$i}')" 2>/dev/null \
         | jq -c '.data[0].embedding' > "$TMP/qv.json"
     [ -s "$TMP/qv.json" ] && [ "$(cat "$TMP/qv.json")" != null ] || continue
-    "$PLAN" spec-retrieve --index-dir "$INDEX_DIR" --query-vec "$TMP/qv.json" --k "$K" \
+    qt=()
+    [ "$HYBRID" = 1 ] && qt=(--query-text "$question")
+    "$PLAN" spec-retrieve --index-dir "$INDEX_DIR" --query-vec "$TMP/qv.json" --k "$K" "${qt[@]}" \
         2>/dev/null > "$TMP/hits.json" || continue
     jq -c --arg b "$band" --arg q "$question" \
         '{band:$b, q:$q, hits:[.[] | {path, text: (.text[0:1200]), score}]}' \

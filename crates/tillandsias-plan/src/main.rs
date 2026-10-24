@@ -91,6 +91,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "decompose",
     "discipline",
     "policy",
+    "expert-context-pack",
     "expert-serve",
     "expire-claims",
     "plan-events",
@@ -118,6 +119,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "validator-surface-hash",
     "parked-blocks",
     "pipeline",
+    "ask",
     "predicate",
     "query",
     "ready",
@@ -130,6 +132,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "score-checks",
     "spec-floor",
     "spec-index",
+    "spec-refusal-calibrate",
     "spec-retrieve",
     "status",
     "time",
@@ -389,6 +392,20 @@ const USAGE: &str = concat!(
     "                                     answer envelope: cited, or the typed unsupported:\n",
     "                                     refusal — never raw model prose. Same function as\n",
     "                                     expert-serve (one pipeline, two front-ends).\n",
+    "           ask [--root D] [--domain D] [--] <query...>\n",
+    "                                     ORDER 1823-4kwh. THE expert client entry for shell\n",
+    "                                     front-ends (forge-plan.sh spec_answer, tellme): the\n",
+    "                                     same run_grounded as `pipeline` and expert-serve, so\n",
+    "                                     pack, budget, refusal and model choice live in one\n",
+    "                                     place. --root names the checkout citations are\n",
+    "                                     validated against (default: the --index checkout).\n",
+    "           expert-context-pack [--root D] [--out F | --print]\n",
+    "                                     ORDER 1815-tei4. Write the deterministic expert\n",
+    "                                     context pack (<= 4800 bytes; default\n",
+    "                                     <root>/.forge-expert-context.md): forge constraints,\n",
+    "                                     the project's own identity, discipline and\n",
+    "                                     CLAUDE.md/AGENTS.md excerpts. Leads every synthesis\n",
+    "                                     prompt byte-identically (prefix-cache reuse).\n",
     "           expert-serve [--port N] [--root D]\n",
     "                                     ORDER 920-pxg6. OpenAI-compatible loopback front-end\n",
     "                                     over the SAME grounded pipeline: 127.0.0.1:11436 by\n",
@@ -501,7 +518,7 @@ const USAGE: &str = concat!(
     "                                     exit 2 = the harness could not run at all.\n",
     "           spec-index --out <dir> [--root D]\n",
     "                                     ORDER 547. Chunk the whole-spec corpus into <dir>/chunks.jsonl\n",
-    "           spec-retrieve --index-dir <dir> --query-vec <f> [--k N]\n",
+    "           spec-retrieve --index-dir <dir> --query-vec <f> [--query-text Q] [--k N]\n",
     "                                     network-free cosine top-k over caller-supplied embeddings\n",
     "           score-checks\n",
     "                                     ORDER 977-j6qu. THE centicolon scorer. Reads\n",
@@ -514,7 +531,17 @@ const USAGE: &str = concat!(
     "                                     because a bare number cannot say which side it is on.\n",
     "                                     A malformed line REFUSES rather than scoring a partial\n",
     "                                     denominator, which would raise the percentage.\n",
-    "           spec-floor --chunks-json <f>\n",
+    "           spec-refusal-calibrate --index-dir D --questions F [--k N]\n",
+    "                                     ORDER 1820-m2kq. Embed a labelled question set\n",
+    "                                     (JSONL {band,corpus,q} or a measure-bands TSV) against\n",
+    "                                     the index and print the refusal signals (best, median,\n",
+    "                                     margin, lexical overlap) with the floor-only and the\n",
+    "                                     current rule's verdicts, one TSV row per question\n",
+    "           spec-floor --chunks-json <f> [--query TEXT]\n",
+    "                                     ORDER 1820-m2kq: also refuses a flat top-k\n",
+    "                                     (TILLANDSIAS_RETRIEVE_MARGIN_FLOOR on best - median) and,\n",
+    "                                     with --query, a zero-overlap best chunk\n",
+    "                                     (TILLANDSIAS_RETRIEVE_LEXICAL_FLOOR).\n",
     "                                     ORDER 821-73es. Apply the grounded pipeline's retrieval\n",
     "                                     floors (TILLANDSIAS_RETRIEVE_REFUSAL_FLOOR on the best\n",
     "                                     score, TILLANDSIAS_RETRIEVE_MIN_SCORE per chunk) to a\n",
@@ -1384,6 +1411,8 @@ struct QueryOptions {
     claimable_by: Option<String>,
     release: Option<String>,
     tags: Vec<String>,
+    // ORDER 1832-5a9z: select-rows only — exact implementer_tier (untagged = opus).
+    implementer_tier: Option<String>,
     limit: usize,
     json: bool,
 }
@@ -1396,6 +1425,7 @@ impl Default for QueryOptions {
             claimable_by: None,
             release: None,
             tags: Vec::new(),
+            implementer_tier: None,
             limit: 20,
             json: false,
         }
@@ -1460,6 +1490,16 @@ fn parse_query_options(args: &[String]) -> Result<QueryOptions, String> {
             }
             "--tag" => {
                 options.tags.push(value_after(i)?);
+                i += 2;
+            }
+            "--implementer-tier" => {
+                let v = value_after(i)?;
+                if !["local", "haiku", "sonnet", "opus"].contains(&v.as_str()) {
+                    return Err(format!(
+                        "--implementer-tier: unknown tier {v:?} (want local|haiku|sonnet|opus)"
+                    ));
+                }
+                options.implementer_tier = Some(v);
                 i += 2;
             }
             "--limit" => {
@@ -4595,6 +4635,8 @@ fn run_run_verb(args: &[String]) -> ! {
              \x20 WITHOUT --json the verb mirrors the child's exit code, so a refusal (1) and a child's own exit 1\n\
              \x20 cannot be told apart by the code: a caller that must tell them apart uses --json.\n\
              \x20 --timeout-ms defaults to 300000 (300 s); a long run (a full gate) MUST pass its own, or 0 for none.\n\
+             \x20 The child env is scrubbed: passed (when set) PATH HOME TMPDIR CARGO_TARGET_DIR XDG_RUNTIME_DIR\n\
+             \x20 DBUS_SESSION_BUS_ADDRESS TILLANDSIAS_*; fixed LC_ALL=C LANG=C TZ=UTC; all else dropped (use --env K=V).\n\
              \x20 --caller names the door in the audit log: run (default) or mcp (project-info run_command).\n\
              \x20 A child the verb kills (the deadline) is timed_out on every locus. {}: on Windows a child\n\
              \x20 killed from OUTSIDE (MSYS kill) reads as exited with the MSYS code (2304 for SIGKILL), undecoded.",
@@ -5659,6 +5701,60 @@ fn main() {
         std::process::exit(run_grade(&args[1..], &index));
     }
 
+    // ORDER 1815-tei4. `expert-context-pack [--root D] [--out F | --print]`
+    // runs BEFORE the ledger load: it describes ANY project in a forge, most of
+    // which have no plan ledger at all.
+    if args[0] == "expert-context-pack" {
+        use tillandsias_plan::context_pack as cp;
+        let mut root: Option<PathBuf> = None;
+        let mut out: Option<PathBuf> = None;
+        let mut print = false;
+        let mut i = 1;
+        while i < args.len() {
+            match (args[i].as_str(), args.get(i + 1)) {
+                ("--root", Some(v)) => {
+                    root = Some(PathBuf::from(v));
+                    i += 2;
+                }
+                ("--out", Some(v)) => {
+                    out = Some(PathBuf::from(v));
+                    i += 2;
+                }
+                ("--print", _) => {
+                    print = true;
+                    i += 1;
+                }
+                (other, _) => {
+                    eprintln!(
+                        "usage: tillandsias-plan expert-context-pack [--root <dir>] [--out <file> | --print] (got {other:?})"
+                    );
+                    std::process::exit(2);
+                }
+            }
+        }
+        let root = root
+            .or_else(|| std::env::current_dir().ok())
+            .unwrap_or_else(|| PathBuf::from("."));
+        if print {
+            print!("{}", cp::build_pack(&root));
+            std::process::exit(0);
+        }
+        let out = out.unwrap_or_else(|| root.join(cp::PACK_FILE));
+        match cp::write_pack(&root, &out) {
+            Ok(n) => {
+                println!("expert-context-pack: wrote {} ({n} bytes)", out.display());
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!(
+                    "expert-context-pack: could not write {}: {e}",
+                    out.display()
+                );
+                std::process::exit(1);
+            }
+        }
+    }
+
     // ORDER 920-pxg6. `expert-serve` runs BEFORE the ledger load for the same
     // reason `verify-answer` does: it serves the SPEC-INDEX corpus, not the
     // plan ledger, and a long-lived endpoint must come up in a checkout whose
@@ -5932,8 +6028,15 @@ fn main() {
         let mut out: Option<PathBuf> = None;
         let mut index_dir: Option<PathBuf> = None;
         let mut query_vec: Option<PathBuf> = None;
+        // The question's words, one value for two readers: ORDER 1822-dmwz
+        // feeds it to spec-retrieve's BM25 channel (--query-text; absent =
+        // dense-only, byte-identical to before), and @trace order:1820-m2kq
+        // feeds it to spec-floor's lexical-overlap signal (--query).
+        let mut query_text: Option<String> = None;
         let mut chunks_json: Option<PathBuf> = None;
         let mut answer_file: Option<PathBuf> = None;
+        // @trace order:1820-m2kq — a labelled question set (spec-refusal-calibrate).
+        let mut questions: Option<PathBuf> = None;
         // ORDER 801-g9nn — the commit the INDEX was built at, which for a
         // retrieved answer is the frame the spans were read in and is NOT this
         // process's HEAD. A shared, mirror-backed index (801-a2by) is routinely
@@ -5963,6 +6066,10 @@ fn main() {
                     i += 1;
                     query_vec = args.get(i).map(PathBuf::from);
                 }
+                "--query-text" => {
+                    i += 1;
+                    query_text = args.get(i).cloned();
+                }
                 "--chunks-json" => {
                     i += 1;
                     chunks_json = args.get(i).map(PathBuf::from);
@@ -5970,6 +6077,14 @@ fn main() {
                 "--answer-file" => {
                     i += 1;
                     answer_file = args.get(i).map(PathBuf::from);
+                }
+                "--query" => {
+                    i += 1;
+                    query_text = args.get(i).cloned();
+                }
+                "--questions" => {
+                    i += 1;
+                    questions = args.get(i).map(PathBuf::from);
                 }
                 "--corpus-commit" => {
                     i += 1;
@@ -6045,7 +6160,16 @@ fn main() {
                     std::process::exit(1);
                 }
                 let query = read_query_vec(&qv);
-                let top = spec::top_k(&query, &vectors, k);
+                // ORDER 1822-dmwz: with --query-text, the pipeline's hybrid
+                // ranking (dense + BM25 fused by RRF; scores stay cosine).
+                let top = match query_text.as_deref() {
+                    Some(text) => {
+                        let lexical = spec::Bm25::from_chunks(&chunks);
+                        let all: Vec<usize> = (0..vectors.len()).collect();
+                        spec::hybrid_top_k(text, &query, &vectors, &lexical, &all, k)
+                    }
+                    None => spec::top_k(&query, &vectors, k),
+                };
                 // ORDER 821-73es. The score used to be dropped here, which is
                 // why nothing downstream could tell "the corpus covers this"
                 // from "the corpus was searched": cosine top-k always returns
@@ -6084,9 +6208,11 @@ fn main() {
                     std::process::exit(2);
                 };
                 let scored = read_scored_chunks_array(&cj);
-                let min_score = spec::retrieve_min_score();
-                let refusal = spec::refusal_floor();
-                match spec::apply_retrieval_floors(scored, min_score, refusal) {
+                // @trace order:1820-m2kq — all four thresholds; --query
+                // (optional) arms the lexical-overlap check.
+                let t = spec::RefusalThresholds::from_env();
+                let (min_score, refusal) = (t.min_score, t.refusal);
+                match spec::apply_refusal_rule(scored, query_text.as_deref(), &t) {
                     spec::FloorDecision::Keep(kept) => match serde_json::to_string_pretty(&kept) {
                         Ok(s) => println!("{s}"),
                         Err(e) => {
@@ -6094,17 +6220,167 @@ fn main() {
                             std::process::exit(1);
                         }
                     },
-                    spec::FloorDecision::OutOfCoverage { best } => {
+                    spec::FloorDecision::OutOfCoverage { best, rule } => {
                         let refused = serde_json::json!({
                             "refused": "out-of-coverage",
+                            "rule": rule.as_str(),
                             "best": best,
                             "refusal_floor": refusal,
                             "min_score": min_score,
-                            "reason": spec::out_of_coverage_reason("full", best, refusal),
+                            "margin_floor": t.margin,
+                            "lexical_floor": t.lexical,
+                            "reason": spec::refusal_reason("full", best, rule, &t),
                         });
                         println!("{refused}");
                     }
                 }
+                return;
+            }
+            "spec-refusal-calibrate" => {
+                // ORDER 1820-m2kq. Calibration instrument for the refusal
+                // rule: embed every labelled question against the live
+                // index (ONE index load, not one per question), and emit the
+                // signals plus the verdict of the floor-only rule and the
+                // current (env/default) rule, one TSV row per question.
+                // scripts/refusal-calibration/measure-margin-bands.sh drives
+                // it and reduces the rows to confusion counts.
+                let (Some(dir), Some(qf)) = (index_dir, questions) else {
+                    eprintln!(
+                        "error: spec-refusal-calibrate requires --index-dir <dir> --questions <file.jsonl|file.tsv>"
+                    );
+                    std::process::exit(2);
+                };
+                let chunks = read_chunks(&dir.join("chunks.jsonl"));
+                let vectors = read_vectors(&dir.join("vectors.jsonl"));
+                if chunks.len() != vectors.len() || chunks.is_empty() {
+                    eprintln!(
+                        "error: index is inconsistent — {} chunks but {} vectors",
+                        chunks.len(),
+                        vectors.len()
+                    );
+                    std::process::exit(1);
+                }
+                let marker = |name: &str| {
+                    std::fs::read_to_string(dir.join(name))
+                        .ok()
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                };
+                let model = std::env::var("TILLANDSIAS_EMBED_MODEL")
+                    .ok()
+                    .filter(|s| !s.is_empty())
+                    .or_else(|| marker(".model"))
+                    .unwrap_or_else(|| "nomic-embed-text".to_string());
+                let query_prefix = if marker(".prefix").is_some() {
+                    "search_query: "
+                } else {
+                    ""
+                };
+                let base = std::env::var("TILLANDSIAS_EMBED_ENDPOINT")
+                    .ok()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| "http://127.0.0.1:11434/v1".to_string());
+                let text = std::fs::read_to_string(&qf).unwrap_or_else(|e| {
+                    eprintln!("error: read {}: {e}", qf.display());
+                    std::process::exit(1);
+                });
+                // (band, corpus, question). A .tsv is a measure-bands result
+                // (band first, question last — the relabelled-561 ground
+                // truth); anything else is the {band,corpus,q} JSONL.
+                let is_tsv = qf.extension().is_some_and(|e| e == "tsv");
+                let mut rows: Vec<(String, String, String)> = Vec::new();
+                for (n, line) in text.lines().enumerate() {
+                    if line.trim().is_empty() {
+                        continue;
+                    }
+                    if is_tsv {
+                        if n == 0 && line.starts_with("band\t") {
+                            continue;
+                        }
+                        let cols: Vec<&str> = line.split('\t').collect();
+                        if cols.len() < 3 {
+                            continue;
+                        }
+                        rows.push((
+                            cols[0].to_string(),
+                            cols[1].to_string(),
+                            cols[cols.len() - 1].to_string(),
+                        ));
+                    } else {
+                        match serde_json::from_str::<serde_json::Value>(line) {
+                            Ok(v) => {
+                                let s = |key: &str| {
+                                    v.get(key)
+                                        .and_then(|x| x.as_str())
+                                        .unwrap_or("")
+                                        .to_string()
+                                };
+                                rows.push((s("band"), s("corpus"), s("q")));
+                            }
+                            Err(e) => {
+                                eprintln!("error: {}:{}: {e}", qf.display(), n + 1);
+                                std::process::exit(1);
+                            }
+                        }
+                    }
+                }
+                let rule_t = spec::RefusalThresholds::from_env();
+                let floor_only = rule_t.floor_only();
+                let verdict = |d: spec::FloorDecision| match d {
+                    spec::FloorDecision::Keep(_) => "answer".to_string(),
+                    spec::FloorDecision::OutOfCoverage { rule, .. } => {
+                        format!("refuse:{}", rule.as_str())
+                    }
+                };
+                let fmt = |o: Option<f32>| o.map(|x| format!("{x:.4}")).unwrap_or_default();
+                println!(
+                    "band\tcorpus\tbest\tmedian\tmargin\tlexical\tterms\ttop1_kind\ttop1_path\tfloor_rule\tnew_rule\tquestion"
+                );
+                let mut measured = 0usize;
+                for (band, corpus, q) in &rows {
+                    let input = format!("{query_prefix}{q}");
+                    let Some(qv) = tillandsias_plan::pipeline::embed_query(
+                        &base,
+                        &model,
+                        &input,
+                        std::time::Duration::from_secs(60),
+                    ) else {
+                        eprintln!("EMBED-FAIL\t{corpus}\t{q}");
+                        continue;
+                    };
+                    let scored: Vec<spec::ScoredChunk> = spec::top_k(&qv, &vectors, k)
+                        .iter()
+                        .map(|(idx, score)| spec::ScoredChunk {
+                            chunk: chunks[*idx].clone(),
+                            score: *score,
+                        })
+                        .collect();
+                    let sig = spec::refusal_signals(&scored, Some(q));
+                    let (kind, path) = scored
+                        .first()
+                        .map(|sc| (sc.chunk.kind.clone(), sc.chunk.path.clone()))
+                        .unwrap_or_default();
+                    let old = verdict(spec::apply_refusal_rule(
+                        scored.clone(),
+                        Some(q),
+                        &floor_only,
+                    ));
+                    let new = verdict(spec::apply_refusal_rule(scored, Some(q), &rule_t));
+                    println!(
+                        "{band}\t{corpus}\t{:.4}\t{}\t{}\t{}\t{}\t{kind}\t{path}\t{old}\t{new}\t{q}",
+                        sig.best,
+                        fmt(sig.median),
+                        fmt(sig.margin),
+                        fmt(sig.lexical),
+                        sig.query_terms
+                    );
+                    measured += 1;
+                }
+                eprintln!(
+                    "spec-refusal-calibrate: measured {measured}/{} questions with {model} (k={k}, prefix={query_prefix:?}) over {} chunks via {base}",
+                    rows.len(),
+                    chunks.len()
+                );
                 return;
             }
             "spec-envelope" => {
@@ -8358,10 +8634,26 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 options.claimable_by.as_deref(),
                 options.release.as_deref(),
                 &options.tags,
-                options.limit,
+                if options.implementer_tier.is_some() {
+                    usize::MAX
+                } else {
+                    options.limit
+                },
             );
 
+            let mut emitted_rows = 0usize;
             for p in matched {
+                // ORDER 1832-5a9z: exact-tier pool (untagged = opus, the 1437 ruling).
+                if let Some(want) = options.implementer_tier.as_deref() {
+                    let have = tillandsias_plan::tier_field(p, "implementer_tier")
+                        .unwrap_or_else(|| "opus".to_string());
+                    if have != want {
+                        continue;
+                    }
+                    if emitted_rows >= options.limit {
+                        break;
+                    }
+                }
                 let id = ledger.id_of(p).to_string();
                 let deps: Vec<String> = p
                     .get("depends_on")
@@ -8419,6 +8711,7 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 emit(&format!(
                     "{rank}\t{epic}\t{order}\t{id}\t{display}\t{release}"
                 ));
+                emitted_rows += 1;
             }
         }
         "query" => {
@@ -8623,7 +8916,7 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 }
             }
         }
-        "pipeline" => {
+        "pipeline" | "ask" => {
             // ORDER 920-pxg6. The grounded pipeline's CLI front-end — the
             // SAME `run_grounded` expert-serve calls (one pipeline, two
             // front-ends). Emits the ratified envelope: cited, or the typed
@@ -8633,12 +8926,22 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
             // as the frame of an index it never read — is deleted; freshness
             // now comes from the resolved index entry itself (801-g9nn).
             // --domain <name> filters retrieval to one corpus domain.
+            // ORDER 1823-4kwh: `ask` is the same arm under the name the shell
+            // front-ends call, plus --root (their checkout) and `--` (a
+            // question that starts with a dash stays a question).
             let mut domain: Option<String> = None;
+            let mut root_override: Option<PathBuf> = None;
             let mut query_parts = Vec::new();
             let mut i = 1;
             while i < args.len() {
-                if args[i] == "--domain" && i + 1 < args.len() {
+                if args[i] == "--" {
+                    query_parts.extend(args[i + 1..].iter().cloned());
+                    break;
+                } else if args[i] == "--domain" && i + 1 < args.len() {
                     domain = Some(args[i + 1].clone());
+                    i += 2;
+                } else if args[i] == "--root" && i + 1 < args.len() {
+                    root_override = Some(PathBuf::from(&args[i + 1]));
                     i += 2;
                 } else {
                     query_parts.push(args[i].clone());
@@ -8649,7 +8952,10 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
             if query.trim().is_empty() {
                 usage();
             }
-            let root = root_for(&index);
+            let root = match root_override {
+                Some(r) => r.canonicalize().unwrap_or(r),
+                None => root_for(&index),
+            };
             // EXIT 0 EVEN WHEN UNSUPPORTED, like `answer`: the MCP wrapper
             // runs under `set -e` and the envelope IS the signal. Only the
             // runtime substrate failing to come up is a hard error.

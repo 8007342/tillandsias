@@ -52,6 +52,16 @@
 
 set -uo pipefail
 
+# --tool-call (order 1835-v7vx): run the tool-call round-trip arm instead of
+# the throughput sweep. Models come from BENCH_MODELS as usual.
+TOOL_CALL=0
+for _a in "$@"; do
+    case "$_a" in
+        --tool-call) TOOL_CALL=1 ;;
+        *) echo "bench: ERROR unknown argument: $_a" >&2; exit 2 ;;
+    esac
+done
+
 # THIS HARNESS EMITS MACHINE-READABLE NUMBERS, so it must not emit them in the
 # operator's number format. awk's "%.2f" honours LC_NUMERIC, and on a host whose
 # locale uses a comma decimal separator it prints 100,00 rather than 100.00.
@@ -324,6 +334,94 @@ bench_embed() {
     fi
 }
 
+# ---- TOOL-CALL ROUND-TRIP ARM (order 1835-v7vx) ------------------------------
+# @trace order:1835-v7vx
+# Throughput says nothing about whether a model can DRIVE a tool loop, which is
+# what local delegation needs. This arm speaks the OpenAI-compatible
+# /v1/chat/completions dialect with one tool definition and asserts, per trial:
+#   turn 1  the reply carries a well-formed tool call (right function name,
+#           arguments that parse and carry project=tillandsias);
+#   turn 2  after the tool result is handed back, the final answer USES it (the
+#           trial-unique build number appears in the text). A number that varies
+#           per trial cannot be guessed from the prompt, so a model that ignores
+#           the tool result cannot pass by luck.
+# Grammar (one line per trial, then one summary line per model):
+#   toolcall: model=<n> trial=<N> tool_call_roundtrip=ok|malformed|none \
+#        final=used|ignored|empty|skipped turn1_ms=<N> turn2_ms=<N> total_ms=<N>
+#   toolcall_summary: model=<n> trials=<N> ok=<N> malformed=<N> none=<N> pass_rate=<F>
+# Enable with `--tool-call`; it replaces the throughput sweep for that run.
+BENCH_TOOLCALL_TRIALS="${BENCH_TOOLCALL_TRIALS:-5}"
+
+_tc_tools='[{"type":"function","function":{"name":"get_build_number","description":"Return the current build number of a named project.","parameters":{"type":"object","properties":{"project":{"type":"string","description":"project name"}},"required":["project"]}}}]'
+_tc_user='What is the current build number of the project tillandsias? Use the tool.'
+
+# Simple field reads go through `tillandsias-plan json get` when this host has a
+# runnable binary (1375-tsfu adoption), else jq. Same argument order either way.
+_tc_json_cmd=(jq)
+_tc_probe="$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
+if [ -r "$_tc_probe" ]; then
+    # shellcheck source=scripts/plan-binary-probe.sh
+    . "$_tc_probe"
+    _tc_plan="$(resolve_plan_binary 2>/dev/null)" || _tc_plan=""
+    if [ -n "$_tc_plan" ] && "$_tc_plan" json get --parse-only . >/dev/null 2>&1; then
+        _tc_json_cmd=("$_tc_plan" json get)
+    fi
+fi
+_tc_json() { "${_tc_json_cmd[@]}" "$@"; }
+
+bench_tool_call() {
+    local model="$1" trial ok=0 bad=0 none=0 t0 t1 t2 r1 r2 msg num verdict final ms1 ms2 req name args proj id
+    # Request bodies are assembled with printf, not a JSON tool: every dynamic
+    # piece is either a model id (refused below unless it is plain tag
+    # characters), a number, a constant, or a message object that the server
+    # itself produced. Reads go through _tc_json.
+    case "$model" in
+        '' | *[!A-Za-z0-9:._/-]*)
+            echo "toolcall: model=$model ERROR=model-id-has-characters-this-arm-will-not-embed-in-json"
+            return ;;
+    esac
+    for trial in $(seq 1 "$BENCH_TOOLCALL_TRIALS"); do
+        num=$((48200 + trial * 7))
+        req=$(printf '{"model":"%s","temperature":0,"max_tokens":400,"tools":%s,"messages":[{"role":"user","content":"%s"}]}' \
+              "$model" "$_tc_tools" "$_tc_user")
+        t0=$(_bench_now_ns)
+        r1=$(curl -fsS -m 900 "$EP/v1/chat/completions" -d "$req" 2>/dev/null) || r1=""
+        t1=$(_bench_now_ns)
+        ms1=$(( (t1 - t0) / 1000000 ))
+        verdict=none; final=skipped; ms2=0
+        # Absent tool call => "none"; present but unusable => "malformed".
+        name=$(_tc_json -r '.choices[0].message.tool_calls[0].function.name // ""' <<<"$r1" 2>/dev/null) || name=""
+        if [ -n "$name" ]; then
+            verdict=malformed
+            args=$(_tc_json -r '.choices[0].message.tool_calls[0].function.arguments // ""' <<<"$r1" 2>/dev/null) || args=""
+            proj=$(_tc_json -r '.project // ""' <<<"$args" 2>/dev/null) || proj=""
+            id=$(_tc_json -r '.choices[0].message.tool_calls[0].id // "call_1"' <<<"$r1" 2>/dev/null) || id=""
+            proj=$(printf '%s' "$proj" | tr 'A-Z' 'a-z')
+            case "$id" in '' | *[!A-Za-z0-9_.-]*) id="" ;; esac
+            if [ "$name" = get_build_number ] && [ "$proj" = tillandsias ] && [ -n "$id" ]; then
+                verdict=ok
+            fi
+        fi
+        if [ "$verdict" = ok ]; then
+            msg=$(_tc_json -c '.choices[0].message' <<<"$r1")
+            req=$(printf '{"model":"%s","temperature":0,"max_tokens":400,"tools":%s,"messages":[{"role":"user","content":"%s"},%s,{"role":"tool","tool_call_id":"%s","content":"build %s"}]}' \
+                  "$model" "$_tc_tools" "$_tc_user" "$msg" "$id" "$num")
+            t1=$(_bench_now_ns)
+            r2=$(curl -fsS -m 900 "$EP/v1/chat/completions" -d "$req" 2>/dev/null) || r2=""
+            t2=$(_bench_now_ns)
+            ms2=$(( (t2 - t1) / 1000000 ))
+            msg=$(_tc_json -r '.choices[0].message.content // ""' <<<"$r2" 2>/dev/null) || msg=""
+            if [ -z "$msg" ]; then final=empty
+            elif grep -q "$num" <<<"$msg"; then final=used
+            else final=ignored; fi
+            [ "$final" = used ] || verdict=malformed
+        fi
+        case "$verdict" in ok) ok=$((ok + 1)) ;; malformed) bad=$((bad + 1)) ;; *) none=$((none + 1)) ;; esac
+        echo "toolcall: model=$model trial=$trial tool_call_roundtrip=$verdict final=$final turn1_ms=$ms1 turn2_ms=$ms2 total_ms=$((ms1 + ms2))"
+    done
+    awk -v m="$model" -v n="$BENCH_TOOLCALL_TRIALS" -v o="$ok" -v b="$bad" -v z="$none" \
+        'BEGIN{printf "toolcall_summary: model=%s trials=%d ok=%d malformed=%d none=%d pass_rate=%.2f\n", m, n, o, b, z, (n>0 ? o/n : 0)}'
+}
 
 # ---- ENGINE CPU DISPATCH GATE (order 861-n7f5) -----------------------------
 # A build that ignores the vector features this host advertises is a
@@ -377,7 +475,11 @@ for spec in $BENCH_MODELS; do
     label="${spec##*=}"
     [ -n "$model" ] || continue
     [ "$label" = "$spec" ] && label="-"
-    bench_model "$model" "$label"
+    if [ "$TOOL_CALL" = 1 ]; then
+        bench_tool_call "$model"
+    else
+        bench_model "$model" "$label"
+    fi
 done
 
-bench_embed
+[ "$TOOL_CALL" = 1 ] || bench_embed

@@ -26,6 +26,8 @@
 #   reconcile --id ID
 #   sweep [--dry-run]        # reconcile every registered run; file silent deaths
 #   token ID DISPOSITION     # print the exact ledger token a delegate must emit
+#   local-record --model M --quant Q --order O --disposition accepted|rejected|reverted
+#                [--tokens-avoided N] [--retries N] [--harness-verdict LINE] [--dry-run]  (1834-ujsf)
 #
 # State dir (durable, overridable for tests):
 #   $TILLANDSIAS_DELEGATE_STATE  (default: ${XDG_STATE_HOME:-$HOME/.local/state}/tillandsias/delegate-runs)
@@ -48,6 +50,58 @@ rec_get() { # rec_get <file> <key>
 cmd_token() { # token <id> <disposition>
   [ $# -eq 2 ] || die "usage: token <id> <disposition>"
   printf 'delegate-outcome:%s:%s\n' "$1" "$2"
+}
+
+# ORDER 1834-ujsf. local-record: append a local-delegate outcome event whose
+# summary carries exactly the token
+#   local-delegate:<model>:<quant>:<order>:<accepted|rejected|reverted>:<avoided>:<retries>
+# The grammar lives in scripts/lua/local-delegate-ladder.lua (one definition,
+# shared with the aggregator); this only resolves the binary and appends. The
+# delegate-outcome:<id>:<disposition> token above is untouched.
+# --harness-verdict takes the local-delegate.sh verdict line: retries default
+# to rounds-1 from its rounds=N, and a non-ok harness verdict cannot be
+# recorded as accepted (the frontier session decides, never over a red closure).
+cmd_local_record() {
+  local model="" quant="" order="" disp="" avoided="" retries="" hv="" dry="" agent="" host="" rounds=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --model) model="$2"; shift 2;;
+      --quant) quant="$2"; shift 2;;
+      --order) order="$2"; shift 2;;
+      --disposition) disp="$2"; shift 2;;
+      --tokens-avoided) avoided="$2"; shift 2;;
+      --retries) retries="$2"; shift 2;;
+      --harness-verdict) hv="$2"; shift 2;;
+      --agent) agent="$2"; shift 2;;
+      --host) host="$2"; shift 2;;
+      --dry-run) dry=1; shift;;
+      *) die "local-record: unknown arg $1";;
+    esac
+  done
+  case "$hv" in
+    "") ;;
+    ok:*)
+      rounds="$(printf '%s\n' "$hv" | sed -n 's/.*:rounds=\([0-9][0-9]*\).*/\1/p')"
+      if [ -z "$retries" ] && [ -n "$rounds" ]; then retries=$((rounds > 0 ? rounds - 1 : 0)); fi;;
+    *) [ "$disp" != "accepted" ] || die "local-record: harness verdict is not ok ($hv); it cannot be recorded as accepted";;
+  esac
+  local here pbin out token sf rc
+  here="$(dirname "${BASH_SOURCE[0]}")"
+  . "$here/plan-binary-probe.sh"
+  pbin="$(cd "$here/.." && resolve_plan_binary)" || die "local-record: no plan binary (cargo build --release -p tillandsias-plan)"
+  case "$pbin" in ./*) pbin="$here/../${pbin#./}";; esac
+  out="$("$pbin" script run "$here/lua/local-delegate-ladder.lua" -- token \
+    "$model" "$quant" "$order" "$disp" "${avoided:-0}" "${retries:-0}" 2>&1)" || { printf '%s\n' "$out" >&2; exit 1; }
+  token="$(printf '%s\n' "$out" | sed -n '1p')"
+  if [ -n "$dry" ]; then printf '%s\n' "$token"; return 0; fi
+  sf="$(mktemp "${TMPDIR:-/tmp}/local-record.XXXXXX")"
+  printf 'local-delegate outcome %s\n' "$token" > "$sf"
+  rc=0
+  "$pbin" append-event "$order" local-delegate-outcome --summary-file "$sf" --ts "$(now_iso)" \
+    --agent "${agent:-${TILLANDSIAS_AGENT_ID:-frontier-session}}" ${host:+--host "$host"} || rc=$?
+  rm -f "$sf"
+  [ "$rc" -eq 0 ] || return "$rc"
+  printf '%s\n' "$token"
 }
 
 cmd_register() {
@@ -301,12 +355,13 @@ cmd_sweep() {
   [ "$any" = 1 ] || echo "sweep:no-registered-runs"
 }
 
-[ $# -ge 1 ] || die "usage: {register|reconcile|sweep|token} ..."
+[ $# -ge 1 ] || die "usage: {register|reconcile|sweep|token|local-record} ..."
 sub="$1"; shift
 case "$sub" in
   register)  cmd_register "$@";;
   reconcile) cmd_reconcile "$@";;
   sweep)     cmd_sweep "$@";;
   token)     cmd_token "$@";;
+  local-record) cmd_local_record "$@";;
   *) die "unknown subcommand: $sub";;
 esac

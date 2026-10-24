@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Phase 2 child (2b) of fleet-coordinator-warm-cache-milestone (1824-58bm).
+packets:
+  - packet_id: coordinator-worker-and-sqlite-durable-object-store-and-return-project-queues-claims-and-overviews-with-local-miniflare-tests-no-deploy
+    order: 1825-v37w
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    release_target: fleet-coordinator-warm-cache-milestone
+    pickup_role: any
+    capability_tags: [cloudflare, typescript, coordinator, workers, durable-objects]
+    estimated_hours: 10
+    owned_files:
+      - cloud/coordinator/
+    title: |
+      cloud/coordinator/ — a TypeScript Cloudflare Worker plus one SQLite-backed Durable Object that verifies the Access JWT, and stores and returns per-namespace messages (TTL 6 h default, 24 h max), plan overviews with freshness metadata, head-SHA/staleness bumps and short-TTL claim overlays, with server-side rate limits and batched requests; tested locally under wrangler dev / miniflare (vitest-pool-workers); NO deploy
+    context: |
+      Binding design: see fleet-coordinator-warm-cache-milestone context
+      (decisions 1–7). Store-and-return only: no folding, no AI, no outbound
+      fetch except Access certs. JWT verification against the team domain's
+      public certs (Cf-Access-Jwt-Assertion header, aud = the Access app
+      AUD tag, both from wrangler vars — no secret). There is NO endpoint
+      that lists namespaces. Joining a nonexistent namespace creates it.
+      Messages carry sender identity (Access subject / service-token client
+      id) and provider label; no receipts. Claim overlay rows expire by TTL
+      and are never authoritative. Overview reads return {synced_sha,
+      synced_at, age_s, might_be_outdated}. One batch endpoint takes N
+      operations so a client turn costs one request. Free-tier budget: keep
+      every request O(1) DO calls and the DO's storage bounded by TTL sweeps
+      (DO alarms). wrangler.toml declares the DO binding and migration but
+      no route/custom domain — deploy is 1824-58bm's operator-gated child.
+      Toolchain: node + wrangler are available in the forge's web-wrangler
+      image; no global installs on hosts.
+    exit_criteria:
+      - 'vitest under @cloudflare/vitest-pool-workers (or miniflare) runs green in cloud/coordinator and covers: a request without a valid Access JWT is 401/403; join creates a namespace; send/recv round-trip; a message past TTL is not returned; TTL > 24 h is clamped; no route lists namespaces (a GET on any list-like path is 404); claim overlay hides a row then vanishes after TTL; overview read returns freshness fields; the rate limiter returns 429 past its budget (pre-fix result: FAILS — cloud/coordinator does not exist)'
+      - 'grep of cloud/coordinator/wrangler.toml finds no routes, custom_domain or secret bindings (pre-fix result: no file)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: cloud/coordinator/test/*.spec.ts run
+      by `npm test` in cloud/coordinator (written with the change); a gate step
+      wrapping it (scripts/test-coordinator-worker.sh, new) is bound by the
+      claimer once node is present in the gate toolbox.
+    depends_on: []
+    related: [1824-58bm]
+    next_action: >
+      Write the HTTP contract from openspec/changes/fleet-coordinator-warm-cache
+      first (the client child codes against it), then the DO schema
+      (namespaces, messages, overviews, claims) and Worker routing, then the
+      tests. Do NOT run wrangler deploy.
+    notes: |
+      size: L
+      implementer_tier: opus
+    provenance: |
+      Filed by macuahuitl (claude subagent, operator-approved redesign 2026-10-23).
+    events:
+      - type: filed
+        ts: "2026-10-23T01:12:37Z"
+        host: macuahuitl
+        summary: |-
+          Phase 2 2b: coordinator Worker + SQLite DO, local tests, no deploy.

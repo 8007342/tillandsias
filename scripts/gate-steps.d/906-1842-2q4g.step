@@ -1,0 +1,10 @@
+# Gate step 1842-2q4g — the ghost-trace gate refuses a NEW reference to a spec
+# that does not exist, passes a clean or an existing one, and stays bound in
+# build.sh by a literal _run_lua_decider.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the ghost-trace gate (1842-2q4g)"
+STEP_LUA="scripts/lua/test-check-ghost-traces.lua"
+STEP_ERROR="the ghost-trace gate no longer refuses a new reference to a missing spec, or lost its build.sh binding (1842-2q4g) — see the arm lines above"
+STEP_OK="Ghost-trace gate fixture passed"
+STEP_SECOND_REGIME="macbookair 2026-10-23 darwin ok:ghost-traces-fixture:4 arms"

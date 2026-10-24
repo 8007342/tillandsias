@@ -181,6 +181,14 @@ pub const PROC_RUN_BASE_ENV_PASSTHROUGH: &[&str] = &[
     // A path, not a secret; deciders that pass --target-dir explicitly
     // (check-cross-target-build.lua, 958-w4kq) now agree with the inherited one.
     "CARGO_TARGET_DIR",
+    // ORDER 1838-nwyn. The caller's user-session handles, passed only when the
+    // caller has them (an unset key is never invented). `toolbox run` and
+    // rootless podman locate the user runtime dir and session bus through
+    // these; scrubbed, `toolbox run --container tillandsias-builder true` fails
+    // "failed to initialize container" under the run door and the land queue
+    // evicted three candidates (2026-10-23). Paths/sockets, not secrets.
+    "XDG_RUNTIME_DIR",
+    "DBUS_SESSION_BUS_ADDRESS",
 ];
 
 /// Fixed values every child gets, so a verdict cannot depend on the caller's

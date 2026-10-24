@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-forge-started-for-a-project-with-a-pending-coordinator-task-runs-it-with-a-non-claude-headless-agent-and-that-projects-named-skill-to-completion-reports-back-and-exits
+    field: next_action
+    value: 'REVISED 2026-10-24 per operator flow; ignore the earlier skill-run-task design. Nothing is built. Step 1: on a real host, run the existing `tillandsias --cloud <repo> --opencode --prompt "echo done and exit"` headless and record whether the launcher returns and the container is gone when the agent exits — that decides whether (a) is reuse or new work. Step 2: add the generic default prompt and the wall-clock backstop with its failed:timeout queue post. Step 3: add the completion-report instruction to the forge start context (1828''s step). Blocked on 1828 and 1826 landing for the queue arms.'
+    ts: "2026-10-24T04:03:03Z"
+    host: macuahuitl
+    replaces_sha256: "8da7cd6aee11952359f5d0338d63c51b6f30cd8b15604adada2fcfdd8ae13550"
+
+events:
+  - packet_id: a-forge-started-for-a-project-with-a-pending-coordinator-task-runs-it-with-a-non-claude-headless-agent-and-that-projects-named-skill-to-completion-reports-back-and-exits
+    event:
+      type: note
+      ts: "2026-10-24T04:03:03Z"
+      host: macuahuitl
+      summary: |-
+        revised: operator flow correction 2026-10-24 (in-session, macuahuitl via coordinator) — plain queue message, orchestrator-launched headless one-shot non-Claude forge, agent self-selects the skill, forge lifetime = agent lifetime, timeout backstop

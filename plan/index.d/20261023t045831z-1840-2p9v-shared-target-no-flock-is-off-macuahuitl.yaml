@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: shared-target-without-flock-turns-the-shared-dir-off-instead-of-refusing-so-a-stock-macos-preflight-is-not-red
+    order: 1840-2p9v
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [build, instrument, macos, fleet]
+    estimated_hours: 1
+    owned_files:
+      - scripts/shared-target.sh
+      - scripts/test-shared-target.sh
+    title: |
+      scripts/shared-target.sh refuses when flock(1) is absent; stock macOS ships none, so since 1807-shtg every Mac preflight is red (test-gate-step-host-state-retry 0/4, test-script-run-verb ARM 5)
+    context: |
+      Reported by macbookair-macos (tlatoanis-macbook-air, Apple M5) 2026-10-23
+      during the coordinator's Mac batch: preflight on trunk 5b8ee4d0b refuses
+      both guards with "shared-target: REFUSED, no flock on PATH". The shared
+      CARGO_TARGET_DIR is a cache; shared_target_enter already answers "off"
+      for no canonical dir, a preset CARGO_TARGET_DIR and the operator switch.
+      Without a lock the dir cannot be shared safely, so "off" (the checkout
+      keeps its own target/) is the correct degraded state, not a refusal, and
+      no host package needs installing.
+    exit_criteria:
+      - 'shared_target_enter on a PATH without flock returns 0, prints "shared-target: off (no flock …)" and leaves CARGO_TARGET_DIR unset (pre-fix result: FAILS — rc 1, "REFUSED, no flock on PATH"; ARM 8 of scripts/test-shared-target.sh, measured macuahuitl 2026-10-23)'
+      - 'a darwin preflight no longer refuses test-gate-step-host-state-retry or test-script-run-verb on this cause (macbookair re-run after landing)'
+    verifiable_closure: |
+      scripts/test-shared-target.sh ARM 8 passes (pre-fix FAIL measured on macuahuitl 2026-10-23), and a darwin ./build.sh --preflight shows refused=0 for test-gate-step-host-state-retry and test-script-run-verb.
+    provenance: |
+      Filed by macuahuitl (claude, coordinator) 2026-10-23 from macbookair-macos's Mac batch report.
+    events:
+      - type: filed
+        ts: "2026-10-23T05:10:00Z"
+        host: macuahuitl
+        summary: |-
+          p1: no flock on stock macOS made shared-target refuse; every Mac preflight red since 1807-shtg; fix = degrade to off.

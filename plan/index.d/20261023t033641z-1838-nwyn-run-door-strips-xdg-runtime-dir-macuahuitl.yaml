@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-tillandsias-plan-run-door-strips-xdg-runtime-dir-and-the-session-bus-so-a-toolbox-gate-detached-through-it-fails-to-initialize-the-builder
+    order: 1838-nwyn
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [instrument, gate, toolbox, fleet]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/run_verb.rs
+    title: |
+      A gate detached the way skills/advance-work-from-plan §5 prescribes (tillandsias-plan run --json -- bash <script>) cannot start the toolbox builder: the door's child sees no XDG_RUNTIME_DIR or DBUS_SESSION_BUS_ADDRESS, toolbox run fails "failed to initialize container tillandsias-builder", and the land queue evicts every candidate at preflight
+    context: |
+      MEASURED macuahuitl 2026-10-23. The land queue launched through the door
+      evicted #602, #603 and #604 at preflight with
+        [tillandsias-builder] Initializing 'tillandsias-builder' with build tools...
+          [dnf] Error: failed to initialize container tillandsias-builder
+      while toolbox run --container tillandsias-builder true returned 0 from the
+      agent shell. Positive control: one probe script (print XDG_RUNTIME_DIR,
+      DBUS_SESSION_BUS_ADDRESS, then toolbox run ... command -v musl-gcc ...) run
+      directly printed both variables and probe_rc=0; the same script through
+      `tillandsias-plan run --json --timeout-ms 60000 -- bash probe.sh` printed
+      only HOME and PATH, probe_rc=1, stderr "Error: failed to initialize
+      container tillandsias-builder". With XDG_RUNTIME_DIR unset, toolbox also
+      created a stray toolbox/ directory (migrate.lock, pkcs11) in the CWD, i.e.
+      inside the checkout. Relaunching the queue with plain setsid nohup bash
+      landed #603, #604, #605. run_verb.rs builds the child with .env_clear();
+      the allowlist it re-adds omits both variables.
+    exit_criteria:
+      - 'a script run through tillandsias-plan run sees XDG_RUNTIME_DIR and DBUS_SESSION_BUS_ADDRESS when the caller had them, and `toolbox run --container tillandsias-builder true` exits 0 under the door (pre-fix result: FAILS — probe_rc=1, "failed to initialize container")'
+      - 'whatever env the door still scrubs is named in its own --help or module doc, with the reason, so a caller can tell a scrubbed variable from an absent one'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the pin is a Rust test in the door module
+      that runs a child through the door with XDG_RUNTIME_DIR and
+      DBUS_SESSION_BUS_ADDRESS set and asserts the child sees both (pre-fix:
+      FAILS). The claimer writes it in the same commit as the fix.
+    provenance: |
+      Filed by macuahuitl (claude, operator-prompted drain) 2026-10-23 from the land-queue evictions of #602-#604.
+    events:
+      - type: filed
+        ts: "2026-10-23T03:36:41Z"
+        host: macuahuitl
+        summary: |-
+          p1: the run door strips XDG_RUNTIME_DIR and the session bus; toolbox gates detached through it fail and the land queue evicts every candidate.

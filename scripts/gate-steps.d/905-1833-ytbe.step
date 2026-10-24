@@ -1,0 +1,7 @@
+# Gate step 1833-ytbe — the local delegate runs a packet's closure, feeds a red
+# back for a second round, leaves the tree clean, and uses no jq or python.
+STEP_DESC="Checking the local delegate (1833-ytbe)"
+STEP_SCRIPT="scripts/test-local-delegate.sh"
+STEP_ERROR="the local delegate no longer behaves as pinned (1833-ytbe) — see the FAIL lines above"
+STEP_OK="Local delegate fixture passed"
+STEP_SECOND_REGIME="macbookair 2026-10-23 darwin ok:test-local-delegate:5"

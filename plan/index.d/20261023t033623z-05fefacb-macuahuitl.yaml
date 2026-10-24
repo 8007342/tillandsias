@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: warm-the-tier-model-at-forge-lifecycle-start
+    event:
+      type: progress
+      ts: "2026-10-23T03:36:23Z"
+      agent_id: linux-macuahuitl-claude-20261023t033620z
+      host: macuahuitl
+      summary: |
+        PR #603 landed at cb083fc71 (land(603)): the lifecycle warm exports the warmed model as TILLANDSIAS_INFERENCE_MODEL to expert-serve; CPU floor order 0.5b,3b. Criterion 1 is addressed by 1817-wq7y (PR #608, not yet landed). Criteria 2 (expert-serve refuses fast when warm_state != warm) and 3 (second-regime 14b-vs-7b) remain.

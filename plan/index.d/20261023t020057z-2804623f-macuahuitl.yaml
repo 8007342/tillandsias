@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-generated-size-bounded-expert-context-pack-built-at-forge-launch-from-the-projects-own-declarations-leads-every-synthesis-prompt-byte-identical
+    field: next_action
+    value: 'PR #610 (work/1815-tei4, 129282bca; contains #606 and #607) implements this: do not reimplement. Measured macuahuitl RTX A5000 qwen2.5:7b warm: prompt eval 316 ms first request, 18 ms second with the same pack, 310 ms control with one byte changed. Land it, then close with the landed SHA. Unproven: write_expert_context_pack in a real forge launch (needs an image rebuild).'
+    ts: "2026-10-23T02:00:57Z"
+    host: macuahuitl
+    replaces_sha256: "717ce6c1f4086555be8ce4d29fba359f02a4a724f17bf14bdb2930c8ea37b946"
+
+events:
+  - packet_id: a-generated-size-bounded-expert-context-pack-built-at-forge-launch-from-the-projects-own-declarations-leads-every-synthesis-prompt-byte-identical
+    event:
+      type: note
+      ts: "2026-10-23T02:00:57Z"
+      host: macuahuitl
+      summary: |-
+        handoff

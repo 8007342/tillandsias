@@ -3,6 +3,7 @@
 //!
 //! @trace spec:expert-serve-grounded-pipeline
 //! @trace order:920-pxg6
+//! @trace order:1819-njan
 //!
 //! Hand-rolled HTTP/1.1 on a tokio `TcpListener` bound 127.0.0.1 — the
 //! `crates/tillandsias-static-server` precedent, no new dependencies. The
@@ -59,8 +60,135 @@ struct CachedEntry {
     entry: Arc<SpecIndexEntry>,
 }
 
+/// Default answer-cache cap (entries). Orientation questions repeat; a long
+/// lived server must not grow without bound.
+///
+/// @trace order:1819-njan
+pub const ANSWER_CACHE_CAP: usize = 64;
+
+/// The identity of the index an answer was computed against. An answer is
+/// only ever served under the revision that produced it, so its freshness
+/// frame can never claim a newer index than it was computed on.
+#[derive(Clone, PartialEq, Eq, Debug)]
+struct IndexRevision {
+    dir: PathBuf,
+    mtime: Option<SystemTime>,
+    commit: Option<String>,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+struct AnswerKey {
+    /// Model id = retrieval domain.
+    model: String,
+    query: String,
+    /// Digest of the context pack when one exists (0 = none).
+    pack: u64,
+}
+
+/// Lowercase, collapse whitespace, strip trailing punctuation.
+pub fn normalize_query(q: &str) -> String {
+    let joined = q
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase();
+    joined
+        .trim_end_matches(|c: char| c.is_ascii_punctuation() || c.is_whitespace())
+        .to_string()
+}
+
+/// Whether an envelope is a deterministic outcome worth caching: any answer
+/// (grounded or a cited retrieval-only digest), or a refusal that is a
+/// property of the corpus/query. Refusals carry only a pinned
+/// `unsupported: <reason>` rendering (no typed code), so classification is an
+/// ALLOWLIST of the two corpus-bound reasons (`spec::out_of_coverage_reason`
+/// and the empty-domain refusal in `pipeline::run_grounded`); every other
+/// refusal (embed endpoint unreachable, synthesis/decompose timeout, model
+/// not loaded, Lua or producer error) is treated as transient and never
+/// cached, so a failure cannot outlive the condition that caused it.
+///
+/// @trace order:1819-njan
+fn is_deterministic(env: &Envelope) -> bool {
+    if env.confidence() != crate::answer::Confidence::Unsupported {
+        return true;
+    }
+    let a = env.answer();
+    (a.starts_with("unsupported: nothing in the ")
+        && a.contains(" corpus is similar enough to this question"))
+        || (a.contains(" holds no chunks in domain ")
+            && a.contains("retrieval cannot ground an answer"))
+}
+
+/// Digest of `<root>/.forge-expert-context.md` (the context pack), 0 when absent.
+fn pack_digest(root: &std::path::Path) -> u64 {
+    use std::hash::{Hash, Hasher};
+    match std::fs::read(root.join(".forge-expert-context.md")) {
+        Ok(bytes) => {
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            bytes.hash(&mut h);
+            h.finish()
+        }
+        Err(_) => 0,
+    }
+}
+
+/// Bounded LRU of finished envelopes, valid for exactly one [`IndexRevision`];
+/// a different revision clears it wholesale. Refusals are cached (they are
+/// answers).
+struct AnswerCache {
+    cap: usize,
+    revision: Option<IndexRevision>,
+    map: std::collections::HashMap<AnswerKey, Envelope>,
+    /// Least recently used first.
+    order: std::collections::VecDeque<AnswerKey>,
+}
+
+impl AnswerCache {
+    fn new(cap: usize) -> Self {
+        Self {
+            cap,
+            revision: None,
+            map: Default::default(),
+            order: Default::default(),
+        }
+    }
+
+    fn adopt(&mut self, rev: &IndexRevision) {
+        if self.revision.as_ref() != Some(rev) {
+            self.map.clear();
+            self.order.clear();
+            self.revision = Some(rev.clone());
+        }
+    }
+
+    fn get(&mut self, rev: &IndexRevision, key: &AnswerKey) -> Option<Envelope> {
+        self.adopt(rev);
+        let hit = self.map.get(key).cloned()?;
+        self.order.retain(|k| k != key);
+        self.order.push_back(key.clone());
+        Some(hit)
+    }
+
+    fn put(&mut self, rev: &IndexRevision, key: AnswerKey, env: Envelope) {
+        self.adopt(rev);
+        if self.cap == 0 {
+            return;
+        }
+        self.order.retain(|k| k != &key);
+        self.map.insert(key.clone(), env);
+        self.order.push_back(key);
+        while self.order.len() > self.cap {
+            if let Some(old) = self.order.pop_front() {
+                self.map.remove(&old);
+            }
+        }
+    }
+}
+
 struct ServerState {
     cfg: ServeConfig,
+    /// Bounded answer cache (1819-njan); see [`AnswerCache`].
+    answers: tokio::sync::Mutex<AnswerCache>,
     /// None when the Lua scripts failed to load; every request then refuses
     /// typed with the recorded reason (fail-soft, still OpenAI-shaped).
     lua: Option<SharedLuaRuntime>,
@@ -74,7 +202,7 @@ struct ServerState {
 impl ServerState {
     /// Re-resolve and (re)load the served entry. Cheap when nothing moved:
     /// the cache is keyed on the resolved dir + chunks.jsonl mtime.
-    async fn entry(&self) -> Result<Arc<SpecIndexEntry>, String> {
+    async fn entry(&self) -> Result<(Arc<SpecIndexEntry>, IndexRevision), String> {
         let dir = match &self.cfg.index_dir {
             Some(d) => d.clone(),
             None => PathBuf::from(crate::spec_index::resolve_dir().ok_or_else(|| {
@@ -90,15 +218,57 @@ impl ServerState {
             && c.dir == dir
             && c.mtime == mtime
         {
-            return Ok(c.entry.clone());
+            let rev = IndexRevision {
+                dir: c.dir.clone(),
+                mtime: c.mtime,
+                commit: c.entry.commit.clone(),
+            };
+            return Ok((c.entry.clone(), rev));
         }
         let entry = Arc::new(SpecIndexEntry::load_dir(&dir)?);
+        let rev = IndexRevision {
+            dir: dir.clone(),
+            mtime,
+            commit: entry.commit.clone(),
+        };
         *cache = Some(CachedEntry {
             dir,
             mtime,
             entry: entry.clone(),
         });
-        Ok(entry)
+        Ok((entry, rev))
+    }
+
+    /// Answer-cache seam: a hit returns the stored envelope without calling
+    /// `compute` (no embed, decompose or synthesis); a miss computes and
+    /// stores. Two concurrent identical misses may both compute — correct,
+    /// merely not deduplicated.
+    ///
+    /// @trace order:1819-njan
+    async fn cached_answer<F, Fut>(
+        &self,
+        rev: &IndexRevision,
+        model: &str,
+        query: &str,
+        compute: F,
+    ) -> Envelope
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Envelope>,
+    {
+        let key = AnswerKey {
+            model: model.to_string(),
+            query: normalize_query(query),
+            pack: pack_digest(&self.cfg.root),
+        };
+        if let Some(hit) = self.answers.lock().await.get(rev, &key) {
+            return hit;
+        }
+        let env = compute().await;
+        if is_deterministic(&env) {
+            self.answers.lock().await.put(rev, key, env.clone());
+        }
+        env
     }
 }
 
@@ -371,7 +541,7 @@ async fn answer_query(state: &ServerState, model: &str, query: &str) -> Envelope
             unknown(),
         );
     };
-    let entry = match state.entry().await {
+    let (entry, rev) = match state.entry().await {
         Ok(e) => e,
         Err(e) => return Envelope::unsupported(e, unknown()),
     };
@@ -381,7 +551,11 @@ async fn answer_query(state: &ServerState, model: &str, query: &str) -> Envelope
     } else {
         Some(model.to_string())
     };
-    pipeline::run_grounded(lua, &entry, &cfg, query).await
+    state
+        .cached_answer(&rev, model, query, || {
+            pipeline::run_grounded(lua, &entry, &cfg, query)
+        })
+        .await
 }
 
 /// Serve until `shutdown` fires. `bound` (when supplied) receives the port
@@ -421,6 +595,7 @@ pub async fn serve(
         lua,
         lua_error,
         entry_cache: tokio::sync::Mutex::new(None),
+        answers: tokio::sync::Mutex::new(AnswerCache::new(ANSWER_CACHE_CAP)),
         counter: AtomicU64::new(0),
     });
 
@@ -565,6 +740,162 @@ mod tests {
             last_user_content(&serde_json::json!({"messages": []})),
             None
         );
+    }
+
+    // ── answer cache (1819-njan) ────────────────────────────────────────────
+
+    fn cache_state(cap: usize) -> ServerState {
+        ServerState {
+            cfg: ServeConfig {
+                port: 0,
+                root: std::env::temp_dir().join("tilland-no-pack-root"),
+                grounded: GroundedConfig {
+                    inference: InferenceConfig {
+                        synth_base: "http://127.0.0.1:9/v1".to_string(),
+                        embed_base: None,
+                        model: "stub".to_string(),
+                        embed_model: None,
+                        timeout: Duration::from_millis(100),
+                        domain: None,
+                    },
+                    root: std::env::temp_dir(),
+                    synth_budget_override_ms: None,
+                },
+                index_dir: None,
+            },
+            answers: tokio::sync::Mutex::new(AnswerCache::new(cap)),
+            lua: None,
+            lua_error: None,
+            entry_cache: tokio::sync::Mutex::new(None),
+            counter: AtomicU64::new(0),
+        }
+    }
+
+    fn rev(commit: &str) -> IndexRevision {
+        IndexRevision {
+            dir: PathBuf::from("/idx"),
+            mtime: None,
+            commit: Some(commit.to_string()),
+        }
+    }
+
+    /// Counting stand-in for run_grounded (embed + synthesis).
+    async fn ask(
+        st: &ServerState,
+        r: &IndexRevision,
+        model: &str,
+        q: &str,
+        calls: &std::sync::atomic::AtomicUsize,
+    ) -> Envelope {
+        st.cached_answer(r, model, q, || async {
+            calls.fetch_add(1, Ordering::SeqCst);
+            sample_envelope()
+        })
+        .await
+    }
+
+    #[test]
+    fn expert_serve_answer_cache_hits_then_invalidates_on_revision_change() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let st = cache_state(8);
+            let calls = std::sync::atomic::AtomicUsize::new(0);
+            let r1 = rev("aaaa");
+            let first = ask(&st, &r1, "spec", "What governs the forge?", &calls).await;
+            // Same question, normalised differently: a hit, one synthesis.
+            let second = ask(&st, &r1, "spec", "  what  governs the FORGE?? ", &calls).await;
+            assert_eq!(calls.load(Ordering::SeqCst), 1, "identical query must hit");
+            assert_eq!(first, second);
+            // The index moved: never serve the old answer.
+            ask(&st, &rev("bbbb"), "spec", "what governs the forge?", &calls).await;
+            assert_eq!(calls.load(Ordering::SeqCst), 2, "revision change must miss");
+            // mtime-only change also invalidates.
+            let mut r3 = rev("bbbb");
+            r3.mtime = Some(SystemTime::UNIX_EPOCH + Duration::from_secs(5));
+            ask(&st, &r3, "spec", "what governs the forge?", &calls).await;
+            assert_eq!(calls.load(Ordering::SeqCst), 3);
+        });
+    }
+
+    #[test]
+    fn expert_serve_answer_cache_misses_on_other_domain_or_query() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let st = cache_state(8);
+            let calls = std::sync::atomic::AtomicUsize::new(0);
+            let r = rev("aaaa");
+            ask(&st, &r, "spec", "q one", &calls).await;
+            ask(&st, &r, "code", "q one", &calls).await;
+            ask(&st, &r, "spec", "q two", &calls).await;
+            assert_eq!(calls.load(Ordering::SeqCst), 3);
+            ask(&st, &r, "code", "q one", &calls).await;
+            assert_eq!(calls.load(Ordering::SeqCst), 3);
+        });
+    }
+
+    #[test]
+    fn expert_serve_answer_cache_is_capped_lru() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let st = cache_state(2);
+            let calls = std::sync::atomic::AtomicUsize::new(0);
+            let r = rev("aaaa");
+            ask(&st, &r, "all", "a", &calls).await;
+            ask(&st, &r, "all", "b", &calls).await;
+            ask(&st, &r, "all", "a", &calls).await; // touch a; b is now LRU
+            ask(&st, &r, "all", "c", &calls).await; // evicts b
+            assert_eq!(st.answers.lock().await.map.len(), 2, "cap holds");
+            assert_eq!(calls.load(Ordering::SeqCst), 3);
+            ask(&st, &r, "all", "a", &calls).await; // still cached
+            assert_eq!(calls.load(Ordering::SeqCst), 3);
+            ask(&st, &r, "all", "b", &calls).await; // evicted -> recompute
+            assert_eq!(calls.load(Ordering::SeqCst), 4);
+            assert!(st.answers.lock().await.map.len() <= 2);
+        });
+    }
+
+    #[test]
+    fn expert_serve_answer_cache_never_pins_a_transient_refusal() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let st = cache_state(8);
+            let r = rev("aaaa");
+            let fresh = || Freshness::new("abcdef".to_string(), "t".to_string());
+            let calls = std::sync::atomic::AtomicUsize::new(0);
+            // Transient: embed endpoint down, then healthy.
+            for transient in [
+                "the embedding endpoint http://x/v1 did not answer for model m — the grounded pipeline cannot retrieve",
+                "the grounded pipeline produced no cited answer: synthesis timed out",
+            ] {
+                let q = transient;
+                let first = st
+                    .cached_answer(&r, "spec", q, || async {
+                        calls.fetch_add(1, Ordering::SeqCst);
+                        Envelope::unsupported(transient, fresh())
+                    })
+                    .await;
+                assert!(first.answer().starts_with("unsupported: "));
+                let second = ask(&st, &r, "spec", q, &calls).await;
+                assert_eq!(second.answer(), "the-key answer", "healthy call must answer");
+            }
+            assert_eq!(calls.load(Ordering::SeqCst), 4, "each pair computes twice");
+            // Corpus-bound refusals ARE cached.
+            let cov = crate::spec::out_of_coverage_reason("spec", 0.1, 0.3);
+            let n = std::sync::atomic::AtomicUsize::new(0);
+            for _ in 0..2 {
+                st.cached_answer(&r, "spec", "far afield", || async {
+                    n.fetch_add(1, Ordering::SeqCst);
+                    Envelope::unsupported(&cov, fresh())
+                })
+                .await;
+            }
+            assert_eq!(n.load(Ordering::SeqCst), 1, "out-of-coverage is deterministic");
+        });
+    }
+
+    #[test]
+    fn expert_serve_answer_cache_normalizes_queries() {
+        assert_eq!(normalize_query("  Hello\n  World?! "), "hello world");
     }
 
     // ── integration on port 0 ───────────────────────────────────────────────

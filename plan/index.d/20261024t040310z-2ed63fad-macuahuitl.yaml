@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: a-forge-started-for-a-project-with-a-pending-coordinator-task-runs-it-with-a-non-claude-headless-agent-and-that-projects-named-skill-to-completion-reports-back-and-exits
+    event:
+      type: list-replace
+      ts: "2026-10-24T04:03:10Z"
+      agent_id: linux-macuahuitl-claude-20261024t040257z
+      host: macuahuitl
+      field: owned_files
+      items:
+        - "crates/tillandsias-headless/src/main.rs"
+        - "images/default/lib-common.sh"
+        - "scripts/test-headless-cloud-one-shot.sh"
+      summary: |-
+        revised: operator flow correction 2026-10-24 (in-session, macuahuitl via coordinator) — plain queue message, orchestrator-launched headless one-shot non-Claude forge, agent self-selects the skill, forge lifetime = agent lifetime, timeout backstop

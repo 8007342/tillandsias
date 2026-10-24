@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Phase 1 child (1d) of 1813-54df; operator ruling 2026-10-23 resolving
+# 965-hz3f criterion 1.
+packets:
+  - packet_id: quick-tier-grounded-answers-skip-query-decomposition-like-immediate-while-fine-keeps-it
+    order: 1817-wq7y
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: any
+    capability_tags: [experts, inference, rust, latency]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-plan/src/pipeline.rs
+    title: |
+      run_grounded skips the adversarial decomposition round-trip on the Quick tier exactly as it does on Immediate; Fine keeps decomposition — the operator's 2026-10-23 ruling on 965-hz3f criterion 1
+    context: |
+      MEASURED on macuahuitl (RTX A5000) and recorded on 965-hz3f
+      (warm-the-tier-model-at-forge-lifecycle-start): warm 7b/14b Quick
+      queries take 3960–4051 ms against the 3000 ms Quick budget, because
+      939-jxgz moved decomposition inside the Quick deadline. OPERATOR RULING
+      (The Tlatoāni, 2026-10-23): Quick skips decomposition like Immediate;
+      the budget is not re-based. In pipeline.rs `run_grounded` the
+      decompose branch is `if tier == LatencyTier::Immediate { original_only }
+      else { decompose… }`; the change makes the condition Immediate OR Quick.
+      RELATION: closes the open ruling on 965-hz3f criterion 1 (that row's
+      re-measure is its own claimer's step); keeps 939-jxgz's socket-deadline
+      cancellation intact for Fine.
+    exit_criteria:
+      - 'a cargo unit test drives run_grounded at LatencyTier::Quick with a mock inference that counts decompose calls and asserts zero; at LatencyTier::Fine it asserts one (pre-fix result: FAILS — Quick issues one decompose call)'
+      - 'on macuahuitl a warm 7b Quick query through expert-serve completes under 3000 ms, recorded as an event on 965-hz3f with the regime (pre-fix result: 3960–4051 ms)'
+    verifiable_closure: |
+      cargo test -p tillandsias-plan quick_tier_skips_decompose passes (the
+      test is written with the change; it fails on the pre-fix branch).
+    depends_on: []
+    related: [965-hz3f, 939-jxgz, 1813-54df]
+    next_action: >
+      Change the decompose condition in run_grounded to match Immediate | Quick,
+      update its comment, add the counting-mock unit test, then re-measure
+      warm Quick on macuahuitl and post the number to 965-hz3f.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    provenance: |
+      Filed by macuahuitl (claude subagent) from the operator's 2026-10-23 ruling on 965-hz3f criterion 1.
+    events:
+      - type: filed
+        ts: "2026-10-23T01:09:26Z"
+        host: macuahuitl
+        summary: |-
+          p1 1d: Quick skips decomposition (operator ruling on 965-hz3f criterion 1).

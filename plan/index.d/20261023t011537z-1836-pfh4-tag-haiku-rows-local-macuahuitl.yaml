@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Phase 3 child (3e) of 1831-74sf; operator-approved redesign 2026-10-23.
+packets:
+  - packet_id: tag-qualifying-haiku-tier-ready-rows-implementer-tier-local-once-the-local-floor-lands
+    order: 1836-pfh4
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: any
+    capability_tags: [plan-tool, delegation, triage]
+    estimated_hours: 1.5
+    owned_files:
+      - plan/index.d/
+    title: |
+      Once `implementer_tier: local` is accepted, re-tag the ready rows that qualify — size S, implementer_tier haiku, owned_files declared, a runnable closure command, no credential/security/release scope — as `implementer_tier: local` by set-field correction fragments, and record the count
+    context: |
+      Rows are corrected by append-only set-field fragments, never by editing
+      their filing fragment. Qualification is mechanical so the selection is
+      a query, not a judgment: size S AND implementer_tier haiku AND
+      owned_files non-empty AND (verifiable_closure names a script, cargo test
+      or litmus) AND capability_tags exclude vault, credentials, security,
+      release. A row that later fails in the local delegate falls back to
+      haiku by the 3a rule; no re-tag back is needed.
+    exit_criteria:
+      - 'a printed selection (order list) from the folded ledger with the qualification query, and one set-field fragment per selected row; `tillandsias-plan check` ok (pre-fix result: FAILS — set-field refuses local until 3a lands)'
+      - 'an event on 1831-74sf recording the count tagged and the query used'
+    unscoreable: "a one-time ledger re-tag: closes by the recorded selection and the set-field fragments, verified by tillandsias-plan check"
+    depends_on: [implementer-tier-local-is-a-routing-floor-below-haiku-in-model-tier-routing-and-the-batch-selector]
+    related: [1831-74sf]
+    next_action: >
+      After 3a lands: run the qualification query with select-rows, review
+      the list for security scope by eye, then write the set-field fragments.
+    notes: |
+      size: S
+      implementer_tier: haiku
+    provenance: |
+      Filed by macuahuitl (claude subagent, operator-approved redesign 2026-10-23).
+    events:
+      - type: filed
+        ts: "2026-10-23T01:15:37Z"
+        host: macuahuitl
+        summary: |-
+          Phase 3 3e: re-tag qualifying haiku rows as local once 3a lands.

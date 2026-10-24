@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: quick-tier-grounded-answers-skip-query-decomposition-like-immediate-while-fine-keeps-it
+    field: next_action
+    value: 'PR #608 (work/1817-wq7y, 6bb27e353) implements this: do not reimplement. Land it, then close with the landed SHA; measurement recorded on 965-hz3f (7b warm Quick 1734-2406 ms).'
+    ts: "2026-10-23T01:43:38Z"
+    host: macuahuitl
+    replaces_sha256: "4ad9e411d1a7acdfdd9c1e5e1347c343fb33c734fc8e28ca04798e4355137304"
+
+events:
+  - packet_id: quick-tier-grounded-answers-skip-query-decomposition-like-immediate-while-fine-keeps-it
+    event:
+      type: note
+      ts: "2026-10-23T01:43:38Z"
+      host: macuahuitl
+      summary: |-
+        handoff

@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: vault-bootstrap-rotation-tests-race-a-parallel-test-that-repoints-xdg-runtime-dir-at-a-scratch-dir-and-deletes-it
+    order: 1845-8iqu
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [rust, testing, flaky, gate]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-headless/src/vault_bootstrap.rs
+      - crates/tillandsias-headless/src/resource_lock.rs
+    title: |
+      The github/cloudflare token-rotation tests resolve their resource-lock dir from XDG_RUNTIME_DIR without env_lock, while a_runtime_secret_is_written_replaced_and_removed_on_tmpfs repoints that var at /run/user/<uid>/fqf2-<pid> and deletes it; the rotation tests then fail "No such file or directory" at random
+    context: |
+      MEASURED macuahuitl 2026-10-23, land-queue run 8: #622 (a gate-step file
+      only) was evicted with new-red
+        vault_bootstrap::tests::github_token_auto_rotation_needs_no_session_and_refuses_in_a_forge
+        vault_bootstrap::tests::github_token_auto_rotation_rejected_refresh_keeps_the_old_pair
+      both panicking "github-token-rotation-failed:lock:resource-lock: open
+      /run/user/1000/fqf2-3753031/tillandsias-locks/resource-gh-rotation-test-arm4-3753031.lock:
+      No such file or directory". resource_lock.rs reads XDG_RUNTIME_DIR for
+      tillandsias-locks/; 18 tests set_var XDG_RUNTIME_DIR under
+      test_support::env_lock, and the 18 rotation-test call sites using
+      test_lock(..) do not take env_lock. A parallel test thread can resolve
+      the lock dir while the scratch value is live and open it after removal.
+    exit_criteria:
+      - 'rotation tests cannot observe another test''s XDG_RUNTIME_DIR: either they hold test_support::env_lock for their whole body, or the lock dir they use is injected/explicit instead of read from the process env'
+      - 'a stress run (e.g. cargo test -p tillandsias-headless vault_bootstrap -- --test-threads=16, repeated 20x) shows zero ENOENT lock failures (pre-fix result: reproducible under that stress, or state that it was not reproducible and why the fix is still sound)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the evidence is the stress run plus
+      the land queue no longer evicting on this pair; a deterministic
+      reproduction may need a test-only hook that holds the scratch value while
+      a rotation test resolves its lock dir.
+    provenance: |
+      Filed by macuahuitl (claude, coordinator) 2026-10-23 from the #622 eviction.
+    events:
+      - type: filed
+        ts: "2026-10-23T13:39:46Z"
+        host: macuahuitl
+        summary: |-
+          p1: token-rotation tests race a test that repoints XDG_RUNTIME_DIR and deletes it; flaky gate reds.

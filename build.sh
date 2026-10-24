@@ -24,6 +24,15 @@
 
 set -euo pipefail
 export TILLANDSIAS_NO_SINGLETON=1
+# ORDER 1844-92bz — cargo's CARGO_INCREMENTAL does not cross into the builder
+# toolbox (only TILLANDSIAS_* and a few others are forwarded), so a caller that
+# needs non-incremental builds says so through this name. The land queue sets
+# 0: its gates on macuahuitl (2026-10-23) left tillandsias-plan's incremental
+# cache holding codegen units from two sessions, and four candidates failed to
+# link ("undefined hidden symbol … .llvm.<hash>") on trees that link cleanly.
+if [ -n "${TILLANDSIAS_CARGO_INCREMENTAL:-}" ]; then
+    export CARGO_INCREMENTAL="$TILLANDSIAS_CARGO_INCREMENTAL"
+fi
 
 # ORDER 936-kdev. A SIGTERM used to kill this script SILENTLY: two ci-full
 # runs died rc=143 with every check green, and even naming the phase that was
@@ -130,6 +139,41 @@ fi
 if [[ -d "$HOME/.cargo/bin" ]]; then
     export PATH="$HOME/.cargo/bin:$PATH"
 fi
+
+# ORDER 1804-sccl — EVERY rustc UNIT THE GATE COMPILES GOES THROUGH sccache
+# WHEN ONE RESOLVES. Each worktree under target/work/<name> has its own
+# target/, so every new worktree recompiles the ~280 registry units from
+# nothing. sccache keys a unit by its inputs, flags and compiler, so the
+# second worktree at the same toolchain gets them from the local cache.
+# Measured on macuahuitl 2026-10-20 (20 cores, cache on the NVMe RAID0):
+# cargo build --release -p tillandsias-plan in a fresh target dir, no
+# wrapper 68 s; with the cache warm the numbers are in row 1804-sccl.
+# Workspace crates in the dev/test profile are incremental and sccache
+# passes them straight through (not cacheable), so a gate's own crates are
+# untouched: this buys back the dependency build, nothing else.
+# Opt out with TILLANDSIAS_NO_SCCACHE=1; an explicit RUSTC_WRAPPER wins.
+# The cache dir is a fixed, bind-mountable path so the operator can put it
+# on the fast build root without any env change (1805-relo).
+# BEGIN-SCCACHE
+_sccache_bin=""
+if [[ -z "${TILLANDSIAS_NO_SCCACHE:-}" && -z "${RUSTC_WRAPPER:-}" ]]; then
+    _sccache_bin="$(command -v sccache 2>/dev/null || true)"
+fi
+if [[ -n "$_sccache_bin" ]]; then
+    export TILLANDSIAS_SCCACHE_BIN="$_sccache_bin"
+    export RUSTC_WRAPPER="$SCRIPT_DIR/scripts/sccache-wrapper.sh"
+    export SCCACHE_DIR="${SCCACHE_DIR:-$HOME/.cache/tillandsias/sccache}"
+    export SCCACHE_CACHE_SIZE="${SCCACHE_CACHE_SIZE:-20G}"
+    echo "sccache: on wrapper=$_sccache_bin dir=$SCCACHE_DIR size=$SCCACHE_CACHE_SIZE" >&2
+else
+    _sccache_why="no sccache on PATH; install one into ~/.cargo/bin"
+    [[ -n "${TILLANDSIAS_NO_SCCACHE:-}" ]] && _sccache_why="TILLANDSIAS_NO_SCCACHE set"
+    [[ -n "${RUSTC_WRAPPER:-}" ]] && _sccache_why="RUSTC_WRAPPER already set to $RUSTC_WRAPPER"
+    echo "sccache: off ($_sccache_why)" >&2
+    unset _sccache_why
+fi
+unset _sccache_bin
+# END-SCCACHE
 
 # ORDER 1803-pcap — THE GATE'S PLAN-CACHE SNAPSHOTS LIVE UNDER target/. The
 # plan binary keys its folded-ledger snapshot by the index's absolute path,
@@ -1376,6 +1420,17 @@ _freeze_gate_diff_base() {
 # END-GATE-DIFF-BASE
 # --preflight fetches first, so it freezes after its own fetch.
 if [[ "$FLAG_PREFLIGHT" != true ]]; then _freeze_gate_diff_base || exit 1; fi
+
+# ORDER 1807-shtg — ONE SHARED, LOCKED CARGO_TARGET_DIR FOR ALL WORKTREES, so
+# sccache (key includes the absolute target dir) hits across them. Takes the
+# flock and touches the tree when another checkout built last; see
+# scripts/shared-target.sh for the hazard it guards (1590-j20f, 1599-egzz).
+# BEGIN-SHARED-TARGET
+if [[ "$FLAG_PREFLIGHT" != true ]]; then
+    # shellcheck source=scripts/shared-target.sh
+    source "$SCRIPT_DIR/scripts/shared-target.sh" && shared_target_enter "$SCRIPT_DIR" || exit 1
+fi
+# END-SHARED-TARGET
 
 # ORDER 1599-egzz — EVERY GATE TOUCHES THE GATING CHECKOUT'S TRACKED FILES.
 #
@@ -3528,6 +3583,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
+    # Order 1842-2q4g: the ghost-trace ratchet, asked in the fast lane so the
+    # preflight door (source 5 of _preflight_roster) refuses a @trace naming an
+    # absent spec in seconds. It used to run only at the end of the full gate:
+    # #607 lost ~64 minutes to `spec:forge-container`. Measured 0.3 s.
+    if ! _run_lua_decider "scripts/lua/check-ghost-traces.lua" 2>&1; then
+        _error "a @trace names a spec that does not exist, or the ghost baseline is stale (1842-2q4g) — see the spec named above"
+        exit 1
+    fi
+
     # NOT HERE: check-declared-closures-added.sh (885-92iu). It was hoisted in
     # the first cut of 1009-gccx and that was WRONG — caught by yoga, confirmed
     # by measurement here. It resolves a built `tillandsias-plan` and, when the
@@ -4515,8 +4579,27 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # production `script run` CLI for every retained case. Keep it unfiltered:
     # a selected count of zero would otherwise certify no production decision.
     _step "Running Lua source-agreement production integration (1484-uf29)..."
-    if ! _run cargo test -p tillandsias-plan --test lua_source_agreements \
-        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 2>&1; then
+    # ORDER 1843-idfv — ONE RETRY, ONLY ON THE INCREMENTAL-LINK SIGNATURE. This
+    # target relinks the tillandsias-plan bin in the shared incremental cache,
+    # and that cache can hold codegen units from two compilations: rust-lld then
+    # fails "undefined hidden symbol … .llvm.<hash>" on a tree that links
+    # cleanly from scratch. Land-queue run 4 (macuahuitl 2026-10-23) evicted
+    # #608, #612, #613 and #614 this way; the same tree linked once the crate's
+    # cache was cleared. 1803-pcap met the same signature and retries without
+    # incremental; that is the remedy here. Any OTHER failure stays red.
+    _lsa_log="$(mktemp "${TMPDIR:-/tmp}/lua-source-agreements.XXXXXX")"
+    _lsa_rc=0
+    _run cargo test -p tillandsias-plan --test lua_source_agreements \
+        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 >"$_lsa_log" 2>&1 || _lsa_rc=$?
+    cat "$_lsa_log"
+    if [ "$_lsa_rc" -ne 0 ] && grep -qE 'undefined hidden symbol|collect2: error: ld returned' "$_lsa_log"; then
+        _info "retry:lua_source_agreements:incremental-link — the shared incremental cache produced a link failure; rebuilding this target once with CARGO_INCREMENTAL=0 (1843-idfv)"
+        _lsa_rc=0
+        CARGO_INCREMENTAL=0 _run cargo test -p tillandsias-plan --test lua_source_agreements \
+            --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 2>&1 || _lsa_rc=$?
+    fi
+    rm -f "$_lsa_log"
+    if [ "$_lsa_rc" -ne 0 ]; then
         _error "the Lua source-agreement production integration target failed (1484-uf29)"
         exit 1
     fi
@@ -6362,8 +6445,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # human grepping for the fixture name. A binding nobody can find is the
     # defect this packet is about, so the compact form was the wrong form.
     _step "Checking test-build-sh-forge-check-only (1063-nraf; 18ms)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-build-sh-forge-check-only.sh" 2>&1; then
-        _error "scripts/test-build-sh-forge-check-only.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+    if ! _run_lua_decider "scripts/lua/test-build-sh-forge-check-only.lua" 2>&1; then
+        _error "scripts/lua/test-build-sh-forge-check-only.lua failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
         exit 1
     fi
     _step "Checking test-check-engine-cpu-dispatch (1063-nraf; 206ms)..."
