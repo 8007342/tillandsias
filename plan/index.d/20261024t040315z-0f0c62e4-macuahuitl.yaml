@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: tillandsias-org-update-website-skill-runs-unattended-inside-a-forge-with-no-host-paths-and-delivers-through-the-mirror-as-a-pushed-branch
+    event:
+      type: list-replace
+      ts: "2026-10-24T04:03:15Z"
+      agent_id: linux-macuahuitl-claude-20261024t040257z
+      host: macuahuitl
+      field: exit_criteria
+      items:
+        - "in a fixture with HOME pointed at an empty dir and no ~/.cache, `release-refresh.sh --tag <fixture-tag> --unattended` creates its clone + full history under the project scratch dir and reaches a last line in its grammar (pre-fix result: FAILS — blocked: on missing history clone / host-path default)"
+        - "--unattended never runs git push to main: a stub git on PATH records argv and the only push target is website/update-<tag> (pre-fix result: FAILS — flag absent)"
+        - "a fixture producing ask:judgement leaves either a re-cited footnote passing checked-build or a file-findings record per item; zero items silently dropped (pre-fix result: FAILS — unattended path absent)"
+        - "AGENTS.md has a routing line mapping \"update the website to <tag>\" / \"website update\" requests to skills/update-website, and the SKILL.md description contains that phrase; a grep-level check in the site suite asserts both (pre-fix result: FAILS — description says \"A Tillandsias release happened…\" with no message phrasing; no AGENTS.md route)"
+      summary: |-
+        revised: operator flow correction 2026-10-24 (in-session, macuahuitl via coordinator) — plain queue message, orchestrator-launched headless one-shot non-Claude forge, agent self-selects the skill, forge lifetime = agent lifetime, timeout backstop

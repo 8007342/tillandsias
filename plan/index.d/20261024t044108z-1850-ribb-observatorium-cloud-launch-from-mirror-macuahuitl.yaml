@@ -1,0 +1,62 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: observatorium-has-no-working-launch-after-positional-retirement-feed-var-www-source-from-the-project-mirror-or-ephemeral-clone-so-cloud-observatorium-works
+    order: 1850-ribb
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [rust, observatorium, cloud, mirror, podman]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - scripts/test-cloud-observatorium-serves-source.sh
+    title: |
+      Observatorium cannot be launched at all once PR #636 lands: `--observatorium <path>` refuses (positional retirement) and cloud-mode Observatorium already refused (1119-w2rj); make `tillandsias --cloud <owner/repo> --observatorium` work by populating /var/www/source from the project's git mirror (or its ephemeral clone) instead of a host bind mount
+    context: |
+      PR #636 (776-jcf3, "retire positional launches; cloud is the only
+      launch") states in its Removed list: "`--observatorium <path>` refuses,
+      so nothing is mounted read-only at /var/www/source. Cloud-mode
+      observatorium already refused (1119-w2rj), so Observatorium has no
+      working launch now." This packet restores the one remaining form.
+      Source of truth for the tree: the per-project git mirror the cloud
+      launch already seeds (776-jcf3 2026-10-18 event: "mirror seeded"), or
+      the ephemeral clone `--cloud` resolves ("host disk untouched"). No host
+      path may be read or mounted — the 2026-08-16 directive and #636's
+      refusal stay intact. A read-only checkout (git worktree/clone of the
+      mirror's default branch into a volume or tmpfs mounted at
+      /var/www/source) is the expected shape; the implementer picks the
+      smallest one that keeps Observatorium's container read-only.
+      Overlap: 1118-zzs4 migrates the observatorium launch to
+      ContainerSpec::build_run_argv(); build the new mount through that
+      builder if 1118 has landed, or keep the change local and note it there.
+    exit_criteria:
+      - '`tillandsias --cloud <fixture-or-real owner/repo> --observatorium` starts the observatorium container and GET of a file known to be in the repo''s default branch (e.g. README) through the observatorium returns its content (pre-fix result: FAILS — cloud observatorium refuses per 1119-w2rj; with #636 the positional form refuses too)'
+      - 'the observatorium container''s mounts contain no host path under $HOME or the operator''s checkout: podman inspect lists /var/www/source sourced from a volume/tmpfs/mirror-derived path only (pre-fix result: n/a — no container starts)'
+      - '`tillandsias --observatorium <path>` without --cloud still exits 2 with the #636 cloud-form refusal (pre-fix result: PASSES after #636 — regression guard)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: scripts/test-cloud-observatorium-serves-source.sh
+      (new) — launches against a local bare fixture repo served as the
+      mirror and curls a known file; written in the same PR as the fix.
+    depends_on: [retire-host-src-checkout-behind-proven-transparent-push]
+    related: [776-jcf3, 1119-w2rj, 1118-zzs4]
+    next_action: >
+      Nothing is built. Wait for PR #636 (776-jcf3) to land on linux-next —
+      check with gh pr view 636 --json state; while it is open, branch from
+      it, not trunk. Read 1119-w2rj's closure to see why cloud observatorium
+      refused (it bound a relative name), then find the observatorium launch
+      in tillandsias-headless main.rs and replace the /var/www/source host
+      bind with a mirror-derived read-only checkout. Check 1118-zzs4's status
+      first; if it landed, use build_run_argv.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+    provenance: |
+      Filed by macuahuitl (claude subagent) at coordinator request 2026-10-24, from PR #636's description.
+    events:
+      - type: filed
+        ts: "2026-10-24T04:41:08Z"
+        host: macuahuitl
+        summary: |-
+          p1: Observatorium has no working launch after #636; feed /var/www/source from the mirror for --cloud.

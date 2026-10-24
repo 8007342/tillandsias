@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-forge-started-for-a-project-with-a-pending-coordinator-task-runs-it-with-a-non-claude-headless-agent-and-that-projects-named-skill-to-completion-reports-back-and-exits
+    field: title
+    value: 'Headless one-shot forge for --cloud + a non-Claude lane: `tillandsias --cloud <owner/repo> --opencode` run headless gets the generic start prompt "read your queue messages and complete what they ask", the forge lives exactly as long as the agent process, a launcher wall-clock timeout posts failed:timeout to the queue and tears the forge down, and the agent posts a done/failed completion report with evidence to the queue before exiting'
+    ts: "2026-10-24T04:03:00Z"
+    host: macuahuitl
+    replaces_sha256: "1c72bdf918bc506bfde4cbdda87791c5a4068e2cf24170241752c5f2134d2a93"
+
+events:
+  - packet_id: a-forge-started-for-a-project-with-a-pending-coordinator-task-runs-it-with-a-non-claude-headless-agent-and-that-projects-named-skill-to-completion-reports-back-and-exits
+    event:
+      type: note
+      ts: "2026-10-24T04:03:00Z"
+      host: macuahuitl
+      summary: |-
+        revised: operator flow correction 2026-10-24 (in-session, macuahuitl via coordinator) — plain queue message, orchestrator-launched headless one-shot non-Claude forge, agent self-selects the skill, forge lifetime = agent lifetime, timeout backstop

@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-release-carries-a-website-update-trailer-and-stable-promotion-enqueues-a-website-update-task-on-the-tillandsias-org-coordinator-namespace
+    field: context
+    value: |-
+      Operator request 2026-10-24 (macuahuitl, in-session), revised by the
+      operator's flow correction the same day: some releases need a website
+      update; the first is the release that retires local (host-checkout)
+      launches, because tillandsias.org lists local launches as a main feature.
+      THE INTERFACE IS A MESSAGE: an ordinary coordinator queue message to the
+      8007342/tillandsias.org namespace whose body is "update the website to
+      <tag>" followed by the tag and the Website-Update reasons. A human or a
+      coordinator may send the same message by hand; this packet adds one
+      automatic sender of it. There is no special task type.
+      MARKER (least new machinery): a git commit trailer, read with
+      `git log --format='%(trailers:key=Website-Update,valueonly)'
+      <prev-stable>..<tag>`. No new file, no VERSION-adjacent state; the trailer
+      travels with the change that caused it.
+      EXISTING CAPABILITY REUSED: promote-stable.sh step 4
+      (scripts/advance-deploy-ref.sh, 1798-khw6) is a post-flip side effect with
+      a falsifiable `verified:` line; step 5 sends the message in the same shape,
+      using the 1826 client's ordinary send-message verb, not a new HTTP path.
+      A failed send (no token, coordinator unreachable) prints
+      `website-update:deferred:<tag>:<why>` and does NOT fail the promotion; the
+      marker is recomputable from git, so a re-run sends it.
+      Website rule: the message carries only tag + trailer reasons, no host or
+      fleet detail.
+    ts: "2026-10-24T04:04:43Z"
+    host: macuahuitl
+    replaces_sha256: "9007c284292894cdd9a564f55a37015bb15395cfb1601f26ba46ee68de25e375"
+
+events:
+  - packet_id: a-release-carries-a-website-update-trailer-and-stable-promotion-enqueues-a-website-update-task-on-the-tillandsias-org-coordinator-namespace
+    event:
+      type: note
+      ts: "2026-10-24T04:04:43Z"
+      host: macuahuitl
+      summary: |-
+        revised: operator flow correction 2026-10-24 — stale task/enqueue wording replaced by message wording; 1847 unscoreable names the new fixture
