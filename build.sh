@@ -3227,6 +3227,12 @@ if [[ "$FLAG_CHECK" == true ]]; then
     timing_emit build-preamble check "${_PREAMBLE_T0:-$(timing_now_ms)}" 0 || true
     _CHECK_T0="$(timing_now_ms)"
     trap 'timing_emit build-check check "$_CHECK_T0" $?' EXIT
+    # 1826-gi8e: hold the coordinator lane marker while the gate runs, so the
+    # `coord heartbeat` stands down. The reader checks the pid, so an aborted
+    # gate leaves a marker that no longer holds anything, and the EXIT trap
+    # above stays untouched. Best-effort: it can never fail the gate.
+    _LANE_MARKER="$SCRIPT_DIR/.cache/lane-markers/gate-$$"
+    { mkdir -p "$SCRIPT_DIR/.cache/lane-markers" && printf '%s\n' "$$" > "$_LANE_MARKER"; } 2>/dev/null || true
 
     # ── Stamp memoization (order 765-tkq2) ────────────────────────────────
     #
@@ -6714,6 +6720,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # Normal completion: cancel the abort-trap and emit exactly one success
     # record for the whole gate. (packet 682-emvg)
     trap - EXIT
+    rm -f "${_LANE_MARKER:-/nonexistent}" 2>/dev/null || true
     _phase_report
     # 765-dfry: flush per-phase records AFTER the printed report (report reads
     # the same log; the flush consumes it).

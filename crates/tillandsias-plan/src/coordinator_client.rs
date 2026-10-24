@@ -137,14 +137,45 @@ pub fn lane_marker_held(dir: &Path, now: SystemTime) -> bool {
         return false;
     };
     entries.flatten().any(|e| {
-        e.metadata()
+        let fresh = e
+            .metadata()
             .and_then(|m| m.modified())
             .ok()
             // A marker stamped after `now` (clock skew, or written mid-check)
             // is as fresh as it gets, not absent.
             .map(|t| now.duration_since(t).unwrap_or(Duration::ZERO))
-            .is_some_and(|age| age < MARKER_STALE_AFTER)
+            .is_some_and(|age| age < MARKER_STALE_AFTER);
+        // A marker holding a pid is held only while that process lives, so a
+        // gate that finished or was killed never needs to clean up after
+        // itself (build.sh writes one and leaves the EXIT trap alone).
+        let holder_alive = std::fs::read_to_string(e.path())
+            .ok()
+            .and_then(|s| s.trim().parse::<u32>().ok())
+            .is_none_or(pid_alive);
+        fresh && holder_alive
     })
+}
+
+/// Does a process with this pid exist? Signal 0 checks without sending; EPERM
+/// means it exists under another user.
+fn pid_alive(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        let Ok(pid) = libc::pid_t::try_from(pid) else {
+            return false;
+        };
+        if pid <= 0 {
+            return false;
+        }
+        // SAFETY: kill with signal 0 performs only the permission/existence check.
+        let rc = unsafe { libc::kill(pid, 0) };
+        rc == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = pid;
+        true
+    }
 }
 
 /// Why the coordinator was not (successfully) asked.
@@ -424,6 +455,24 @@ mod tests {
         let mut hb = Heartbeat::default();
         assert_eq!(hb.next(Duration::from_millis(10), false, true), None);
         assert_eq!(hb.next(Duration::from_millis(10), true, true), None);
+    }
+
+    #[test]
+    fn a_pid_marker_is_held_only_while_its_process_lives() {
+        let dir = tempfile::tempdir().unwrap();
+        let now = SystemTime::now();
+        std::fs::write(dir.path().join("gate-self"), std::process::id().to_string()).unwrap();
+        assert!(lane_marker_held(dir.path(), now), "our own pid is alive");
+        std::fs::remove_file(dir.path().join("gate-self")).unwrap();
+        // A child that has exited and been reaped: its pid names no process.
+        let mut child = std::process::Command::new("true").spawn().unwrap();
+        let dead = child.id();
+        child.wait().unwrap();
+        std::fs::write(dir.path().join("gate-dead"), format!("{dead}\n")).unwrap();
+        assert!(
+            !lane_marker_held(dir.path(), now),
+            "a finished gate's marker must not hold the lane"
+        );
     }
 
     #[test]
