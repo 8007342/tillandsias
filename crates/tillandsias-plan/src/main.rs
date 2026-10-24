@@ -2852,13 +2852,23 @@ fn find_repo_root() -> Option<PathBuf> {
 /// because the main checkout sat on an Oct 14 branch.
 ///
 /// Order: `TILLANDSIAS_SURFACE_ROOT` (an explicit root from a caller), then the
-/// nearest checkout above the cwd that holds the manifest, then the exe walk
-/// (an installed binary run outside any checkout).
+/// nearest checkout above the cwd that holds the manifest, then the checkout
+/// this binary was BUILT from (a push from a scratch repo, as the pre-push
+/// fixtures make, has no manifest of its own), then the exe walk (an installed
+/// binary whose build checkout is gone).
 fn surface_root() -> Option<PathBuf> {
+    let built_in = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(2)
+        .map(std::path::Path::to_path_buf);
     surface_root_from(
         std::env::var_os("TILLANDSIAS_SURFACE_ROOT").map(PathBuf::from),
         std::env::current_dir().ok(),
-        find_repo_root,
+        || {
+            built_in
+                .filter(|r| r.join(".git").exists())
+                .or_else(find_repo_root)
+        },
     )
 }
 
