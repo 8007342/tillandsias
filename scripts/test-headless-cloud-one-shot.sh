@@ -29,7 +29,7 @@ bad() { echo "FAIL: $1"; fail=$((fail+1)); }
 MAIN="$ROOT/crates/tillandsias-headless/src/main.rs"
 
 out="$(cd "$ROOT" && cargo test -q -p tillandsias-headless --bin tillandsias --features tray,listen-vsock one_shot:: 2>&1)"
-if printf '%s\n' "$out" | grep -qE '^test result: ok\. [1-9][0-9]* passed'; then
+if grep -qE '^test result: ok\. [1-9][0-9]* passed' <<<"$out"; then
     ok "1-3 one_shot unit tests pass ($(printf '%s\n' "$out" | grep -oE '[0-9]+ passed' | tail -1))"
 else
     printf '%s\n' "$out" | tail -20
