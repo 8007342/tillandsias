@@ -16709,6 +16709,55 @@ fn wait_for_opencode_web_route(project_name: &str, url: &str, debug: bool) -> Re
     ))
 }
 
+/// 1802-9xix: how long the app wait lasts while the forge is still running. A
+/// cold first launch clones, then starts the server (42 s on the operator's
+/// post-reset run) before the route answers; the old fixed 30 s gave up on it.
+const OPENCODE_WEB_APP_WAIT: Duration = Duration::from_secs(180);
+
+/// Why the app wait stopped without a session.
+#[derive(Debug, PartialEq, Eq)]
+enum AppWaitFailure {
+    TimedOut { last_outcome: String },
+    ForgeExited { last_outcome: String },
+}
+
+/// The app wait's loop, over seams so a fake clock can drive it. `probe`
+/// returns Ok(()) once the app answers with the session, else the outcome to
+/// report; `forge_running` is Some(false) only when podman says the forge is
+/// gone (None, podman did not answer, keeps waiting); `progress` gets one line
+/// per newly elapsed 10 s.
+fn wait_for_app_ready(
+    timeout: Duration,
+    mut probe: impl FnMut() -> Result<(), String>,
+    mut forge_running: impl FnMut() -> Option<bool>,
+    mut elapsed: impl FnMut() -> Duration,
+    mut sleep: impl FnMut(Duration),
+    mut progress: impl FnMut(Duration, &str),
+) -> Result<(), AppWaitFailure> {
+    let mut backoff = Duration::from_millis(100);
+    let max_backoff = Duration::from_secs(2);
+    let mut reported = Duration::ZERO;
+    loop {
+        let last_outcome = match probe() {
+            Ok(()) => return Ok(()),
+            Err(outcome) => outcome,
+        };
+        if forge_running() == Some(false) {
+            return Err(AppWaitFailure::ForgeExited { last_outcome });
+        }
+        let now = elapsed();
+        if now >= timeout {
+            return Err(AppWaitFailure::TimedOut { last_outcome });
+        }
+        if now >= reported + Duration::from_secs(10) {
+            reported = now;
+            progress(now, &last_outcome);
+        }
+        sleep(backoff);
+        backoff = (backoff * 2).min(max_backoff);
+    }
+}
+
 fn wait_for_authenticated_opencode_web(
     project_name: &str,
     url: &str,
@@ -16720,51 +16769,57 @@ fn wait_for_authenticated_opencode_web(
         tillandsias_otp::COOKIE_NAME,
         tillandsias_otp::format_cookie_value(cookie_value)
     );
-
-    let mut last_outcome = String::from("no HTTP probe attempted");
-    let mut backoff = Duration::from_millis(100);
-    let max_backoff = Duration::from_secs(2);
+    let forge_container = forge_container_name(project_name);
     let start = std::time::Instant::now();
-    let timeout = Duration::from_secs(30);
     let mut attempt = 1;
 
-    while start.elapsed() < timeout {
-        match opencode_web_http_status(url, Some(cookie_header.clone())) {
-            Ok(code) if (200..400).contains(&code) => return Ok(()),
-            Ok(502) => {
-                last_outcome = String::from("status 502 (starting)");
-                if debug {
-                    eprintln!(
-                        "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt} ({last_outcome})"
-                    );
-                }
+    let waited = wait_for_app_ready(
+        OPENCODE_WEB_APP_WAIT,
+        || {
+            let outcome = match opencode_web_http_status(url, Some(cookie_header.clone())) {
+                Ok(code) if (200..400).contains(&code) => return Ok(()),
+                Ok(502) => String::from("status 502 (starting)"),
+                Ok(code) => format!("status {code}"),
+                Err(err) => err,
+            };
+            if debug {
+                eprintln!(
+                    "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt} ({outcome})"
+                );
             }
-            Ok(code) => {
-                last_outcome = format!("status {code}");
-                if debug {
-                    eprintln!(
-                        "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt} ({last_outcome})"
-                    );
-                }
-            }
-            Err(err) => {
-                last_outcome = err;
-                if debug {
-                    eprintln!(
-                        "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt} ({last_outcome})"
-                    );
-                }
-            }
-        }
-        std::thread::sleep(backoff);
-        backoff = (backoff * 2).min(max_backoff);
-        attempt += 1;
-    }
+            attempt += 1;
+            Err(outcome)
+        },
+        || crate::vault_bootstrap::container_running_answer(&forge_container),
+        || start.elapsed(),
+        std::thread::sleep,
+        |waited, _| {
+            eprintln!(
+                "[tillandsias] OpenCode Web is still starting ({}s; a first launch clones the project and starts the server)",
+                waited.as_secs()
+            );
+        },
+    );
 
-    let forge_container = forge_container_name(project_name);
+    let (headline, last_outcome) = match waited {
+        Ok(()) => return Ok(()),
+        Err(AppWaitFailure::TimedOut { last_outcome }) => (
+            format!(
+                "OpenCode Web app did not become reachable with a registered session in {}s.",
+                OPENCODE_WEB_APP_WAIT.as_secs()
+            ),
+            last_outcome,
+        ),
+        Err(AppWaitFailure::ForgeExited { last_outcome }) => (
+            format!(
+                "OpenCode Web app never came up: the forge container {forge_container} exited while it was starting."
+            ),
+            last_outcome,
+        ),
+    };
     let logs_tail = container_logs_tail(&forge_container, 50);
     Err(format!(
-        "OpenCode Web app did not become reachable with a registered session in 30s.\n\
+        "{headline}\n\
          URL: {url}\n\
          Last outcome: {last_outcome}\n\
          Forge container logs (last ≤50 lines):\n{logs_tail}\n\
@@ -16772,6 +16827,74 @@ fn wait_for_authenticated_opencode_web(
          full transcript, then verify the enclave network + router are\n\
          healthy via `tillandsias --status`."
     ))
+}
+
+#[cfg(test)]
+mod app_wait_tests {
+    use super::*;
+    use std::cell::Cell;
+
+    /// Drive the loop on a fake clock: the server answers once `ready_at`
+    /// has passed, and the forge dies at `dies_at` if given.
+    fn run(
+        timeout: Duration,
+        ready_at: Duration,
+        dies_at: Option<Duration>,
+    ) -> (Result<(), AppWaitFailure>, usize) {
+        let now = Cell::new(Duration::ZERO);
+        let lines = Cell::new(0);
+        let r = wait_for_app_ready(
+            timeout,
+            || {
+                if now.get() >= ready_at {
+                    Ok(())
+                } else {
+                    Err("status 502 (starting)".into())
+                }
+            },
+            || Some(dies_at.is_none_or(|d| now.get() < d)),
+            || now.get(),
+            |d| now.set(now.get() + d),
+            |_, _| lines.set(lines.get() + 1),
+        );
+        (r, lines.get())
+    }
+
+    #[test]
+    fn a_cold_first_launch_with_a_60s_server_start_reaches_the_session() {
+        let (r, lines) = run(OPENCODE_WEB_APP_WAIT, Duration::from_secs(60), None);
+        assert_eq!(r, Ok(()));
+        assert!(
+            lines >= 5,
+            "the operator sees progress while waiting, got {lines} lines"
+        );
+    }
+
+    #[test]
+    fn the_pre_fix_30s_wait_fails_the_same_cold_launch() {
+        let (r, _) = run(Duration::from_secs(30), Duration::from_secs(60), None);
+        assert!(matches!(r, Err(AppWaitFailure::TimedOut { .. })), "{r:?}");
+    }
+
+    #[test]
+    fn a_forge_that_exits_fails_the_wait_at_once() {
+        let (r, lines) = run(
+            OPENCODE_WEB_APP_WAIT,
+            Duration::from_secs(600),
+            Some(Duration::from_secs(5)),
+        );
+        assert!(
+            matches!(r, Err(AppWaitFailure::ForgeExited { .. })),
+            "{r:?}"
+        );
+        assert_eq!(lines, 0, "it stops before the first progress line");
+    }
+
+    #[test]
+    fn a_forge_still_running_at_the_limit_times_out() {
+        let (r, _) = run(OPENCODE_WEB_APP_WAIT, Duration::from_secs(600), None);
+        assert!(matches!(r, Err(AppWaitFailure::TimedOut { .. })), "{r:?}");
+    }
 }
 
 #[cfg(test)]
