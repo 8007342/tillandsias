@@ -15352,7 +15352,10 @@ fn launch_observatorium_browser(
     let profile_path = profile_dir.keep();
 
     let project_label = router_host_label(project_name);
-    let otp = tillandsias_otp::issue_session(&project_label);
+    let otp = wait_for_authenticated_opencode_web(project_name, &project_label, &app_url, debug)
+        .map_err(|err| {
+            format!("Observatorium app did not become reachable with a registered session: {err}")
+        })?;
     let origin_url = observatorium_origin_url(project_name, router_host_port);
     let login_url = tillandsias_otp::build_login_data_url(&origin_url, &otp);
     let browser_container_name = format!("tillandsias-browser-observatorium-{project_name}");
@@ -15365,14 +15368,6 @@ fn launch_observatorium_browser(
         &browser_container_name,
     )?;
     let args = spec.build_run_args();
-
-    send_issue_web_session(&project_label, &otp)
-        .map_err(|e| format!("Failed to register Observatorium session with router: {e}"))?;
-    if let Err(err) = wait_for_authenticated_opencode_web(project_name, &app_url, &otp, debug) {
-        return Err(format!(
-            "Observatorium app did not become reachable with a registered session: {err}"
-        ));
-    }
 
     let result = rt_block_on_podman_run(args, &browser_container_name, "browser", debug);
     if result.is_ok() {
@@ -16817,17 +16812,54 @@ fn wait_for_app_ready(
     }
 }
 
+/// 1802-axsp: one readiness probe's verdict. A 401 means the router holds no
+/// session for the cookie: the OTP was minted before a cold forge's server
+/// listened and expired unredeemed (TTL about 60 s; the operator's run at
+/// fc4433979 waited the full 180 s on it). `reissue` mints and registers a
+/// fresh one so the next probe can see the upstream.
+fn app_probe_verdict(
+    status: Result<u16, String>,
+    reissue: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    match status {
+        Ok(code) if (200..400).contains(&code) => Ok(()),
+        Ok(502) => Err(String::from("status 502 (starting)")),
+        Ok(401) => match reissue() {
+            Ok(()) => Err(String::from("status 401 (session expired; re-issued)")),
+            Err(e) => Err(format!("status 401; re-issuing the session failed: {e}")),
+        },
+        Ok(code) => Err(format!("status {code}")),
+        Err(err) => Err(err),
+    }
+}
+
+/// Mint a session for `project_label` and register it with the router.
+/// `send_issue_web_session` blocks until the tray's `IssueAck`, so the
+/// sidecar's `OtpStore` holds the cookie before anything presents it.
+fn issue_registered_session(
+    project_label: &str,
+) -> Result<[u8; tillandsias_otp::COOKIE_LEN], String> {
+    let otp = tillandsias_otp::issue_session(project_label);
+    send_issue_web_session(project_label, &otp)?;
+    Ok(otp)
+}
+
+/// Wait for the app behind the router, then return a FRESH registered session
+/// for the window to redeem: the probe's own session may be near its TTL.
 fn wait_for_authenticated_opencode_web(
     project_name: &str,
+    project_label: &str,
     url: &str,
-    cookie_value: &[u8; tillandsias_otp::COOKIE_LEN],
     debug: bool,
-) -> Result<(), String> {
-    let cookie_header = format!(
-        "{}={}",
-        tillandsias_otp::COOKIE_NAME,
-        tillandsias_otp::format_cookie_value(cookie_value)
-    );
+) -> Result<[u8; tillandsias_otp::COOKIE_LEN], String> {
+    let cookie_header_for = |otp: &[u8; tillandsias_otp::COOKIE_LEN]| {
+        format!(
+            "{}={}",
+            tillandsias_otp::COOKIE_NAME,
+            tillandsias_otp::format_cookie_value(otp)
+        )
+    };
+    let mut cookie_header = cookie_header_for(&issue_registered_session(project_label)?);
     let forge_container = forge_container_name(project_name);
     let start = std::time::Instant::now();
     let mut attempt = 1;
@@ -16835,11 +16867,13 @@ fn wait_for_authenticated_opencode_web(
     let waited = wait_for_app_ready(
         OPENCODE_WEB_APP_WAIT,
         || {
-            let outcome = match opencode_web_http_status(url, Some(cookie_header.clone())) {
-                Ok(code) if (200..400).contains(&code) => return Ok(()),
-                Ok(502) => String::from("status 502 (starting)"),
-                Ok(code) => format!("status {code}"),
-                Err(err) => err,
+            let status = opencode_web_http_status(url, Some(cookie_header.clone()));
+            let outcome = match app_probe_verdict(status, || {
+                cookie_header = cookie_header_for(&issue_registered_session(project_label)?);
+                Ok(())
+            }) {
+                Ok(()) => return Ok(()),
+                Err(outcome) => outcome,
             };
             if debug {
                 eprintln!(
@@ -16861,7 +16895,7 @@ fn wait_for_authenticated_opencode_web(
     );
 
     let (headline, last_outcome) = match waited {
-        Ok(()) => return Ok(()),
+        Ok(()) => return issue_registered_session(project_label),
         Err(AppWaitFailure::TimedOut { last_outcome }) => (
             format!(
                 "OpenCode Web app did not become reachable with a registered session in {}s.",
@@ -16917,6 +16951,55 @@ mod app_wait_tests {
             |_, _| lines.set(lines.get() + 1),
         );
         (r, lines.get())
+    }
+
+    /// A fake router whose session expires after `ttl` and whose upstream
+    /// listens at `listens_at`; `reissue` says whether a 401 mints a new one
+    /// (fc4433979 never did).
+    fn run_with_ttl(
+        ttl: Duration,
+        listens_at: Duration,
+        reissue: bool,
+    ) -> Result<(), AppWaitFailure> {
+        let now = Cell::new(Duration::ZERO);
+        let issued = Cell::new(Duration::ZERO);
+        wait_for_app_ready(
+            OPENCODE_WEB_APP_WAIT,
+            || {
+                let status = if now.get() >= issued.get() + ttl {
+                    Ok(401)
+                } else if now.get() < listens_at {
+                    Ok(502)
+                } else {
+                    Ok(200)
+                };
+                app_probe_verdict(status, || {
+                    if reissue {
+                        issued.set(now.get());
+                    }
+                    Ok(())
+                })
+            },
+            || Some(true),
+            || now.get(),
+            |d| now.set(now.get() + d),
+            |_, _| {},
+        )
+    }
+
+    #[test]
+    fn a_server_slower_than_the_session_ttl_still_reaches_a_registered_session() {
+        let r = run_with_ttl(Duration::from_secs(60), Duration::from_secs(90), true);
+        assert_eq!(r, Ok(()));
+    }
+
+    #[test]
+    fn without_reissue_the_expired_session_fails_the_wait_as_fc4433979_did() {
+        let r = run_with_ttl(Duration::from_secs(60), Duration::from_secs(90), false);
+        assert!(
+            matches!(&r, Err(AppWaitFailure::TimedOut { last_outcome }) if last_outcome.contains("401")),
+            "{r:?}"
+        );
     }
 
     #[test]
@@ -17570,7 +17653,16 @@ fn launch_opencode_web_browser(
     // header (`extract_project_label("opencode.<project>.localhost")` →
     // `"<project>"`), otherwise `/validate` and `/_auth/login` both 401.
     let project_label = router_host_label(project_name);
-    let otp = tillandsias_otp::issue_session(&project_label);
+    // 1802-axsp: wait for the app FIRST, then mint the session the window
+    // redeems; an OTP minted before a cold forge's server listened expired
+    // unredeemed and the wait could never succeed.
+    let otp = match wait_for_authenticated_opencode_web(project_name, &project_label, &url, debug) {
+        Ok(otp) => otp,
+        Err(err) => {
+            emit_opencode_web_event(project_name, "browser", "session_probe_failed", Some(&err))?;
+            return Err(err);
+        }
+    };
     // 1802-9xix: the window signs in over the router's TLS site, the only
     // route it can reach from its confined network; the host-side probes
     // below keep the plaintext loopback route.
@@ -17600,24 +17692,6 @@ fn launch_opencode_web_browser(
     #[cfg(feature = "host-services")]
     let _ = (version, &display, certs_dir);
 
-    // @trace spec:opencode-web-session-otp, spec:tray-host-control-socket
-    // Notify the router (via the tray's control socket) of the new session
-    // BEFORE launching the browser. `send_issue_web_session` blocks until the
-    // tray returns `IssueAck`, which proves the broadcast bytes are already
-    // queued on the sidecar's socket — so by the time chromium POSTs to
-    // `/_auth/login`, the sidecar's `OtpStore` definitely contains the
-    // cookie. If the handshake fails (no tray, wrong reply, timeout) we
-    // refuse to launch the browser to prevent the "unauthorised" landing
-    // page that used to result from the race.
-    send_issue_web_session(&project_label, &otp).map_err(|e| {
-        let _ =
-            emit_opencode_web_event(project_name, "browser", "session_register_failed", Some(&e));
-        format!("Failed to register web session with router: {e}")
-    })?;
-    if let Err(err) = wait_for_authenticated_opencode_web(project_name, &url, &otp, debug) {
-        emit_opencode_web_event(project_name, "browser", "session_probe_failed", Some(&err))?;
-        return Err(err);
-    }
     emit_opencode_web_event(project_name, "browser", "session_ready", Some(&url))?;
 
     emit_opencode_web_event(project_name, "browser", "launch", Some("podman-run"))?;
