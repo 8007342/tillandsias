@@ -3,10 +3,11 @@
 ### Requirement: the dialog shows Mācron doing the action
 
 The approval dialog SHALL be a small window at normal stacking level showing
-Mācron, drawn to the character canon in the macron.dev repository, performing
-the action being approved in a small workshop among tillandsias, with one
-illustration per action kind, plus the curated sentences and two buttons:
-Approve and Not now. Approve SHALL hand off to the OS verification prompt.
+Mācron, drawn to the macron.dev character canon, doing the action in a small
+workshop among tillandsias, one illustration per action kind, with the curated
+sentences and the approval-grants scope choices. Approving SHALL hand off to
+the OS prompt. Art SHALL come from the project's own image generation and ship
+only after operator approval.
 
 #### Scenario: each action kind has its own illustration
 

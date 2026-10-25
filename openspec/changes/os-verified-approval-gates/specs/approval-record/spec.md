@@ -26,24 +26,26 @@ trailer naming who approved and how, without a hash.
 - **WHEN** `git log --notes=tillandsias/approvals` shows an approved merge
 - **THEN** the first note line is a sentence with no hexadecimal hash
 
-### Requirement: the mirror refuses an unapproved update of an integration branch
+### Requirement: the mirror verifies grants for gated promotions
 
-The git-mirror `pre-receive` hook SHALL require, for each update of the
-integration or default branch named by the branch-discipline seed, an
-unexpired note for the new revision in the same push whose statement matches
-the update and whose signature `ssh-keygen -Y verify` accepts. Under `enforced`
-it SHALL refuse before relaying; under `warn` it SHALL accept with a warning.
+For each ref update that matches a promotion marked approval-required in the
+branch-discipline seed, the git-mirror `pre-receive` hook SHALL find a grant
+covering it and check that grant's signature with `ssh-keygen -Y verify` and
+its expiry. In `enforced` mode it SHALL refuse before relaying. In `present`
+and `allow` modes it SHALL accept and journal the result.
 
-#### Scenario: an unapproved push to the integration branch is refused
+#### Scenario: an unapproved gated promotion is refused when enforced
 
-- **WHEN** a push updates `linux-next` with no approval note
+- **WHEN** a push matches a required promotion with no valid grant on an
+  `enforced` host
 - **THEN** the push is refused, nothing is relayed upstream, and the message
   says in one sentence how to ask for approval
 
-#### Scenario: an approved push is relayed
+#### Scenario: a standing grant is honoured
 
-- **WHEN** the push carries a valid, unexpired, matching approval note
-- **THEN** the hook relays it and accepts it
+- **WHEN** a push matches a required promotion and a valid signed standing
+  grant covers it
+- **THEN** the hook relays and accepts it
 
 #### Scenario: work refs are not gated
 

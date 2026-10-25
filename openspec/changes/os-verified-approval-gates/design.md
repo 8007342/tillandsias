@@ -247,3 +247,118 @@ PR #650's change, split into **needed** (forge and web images) and **removable**
 ## Open Questions
 
 See the tasks file section 9; summarised in the PR body.
+
+## Operator rulings, 2026-10-25 (second round)
+
+These rulings supersede D3 to D6 where they conflict.
+
+### R1. Grants, with four choices in the window
+
+The dialog offers **Approve this time**, **Approve for 10 minutes**,
+**Approve for 2 hours** and **Approve this session**, plus Not now. A grant is
+per action class and target (for example `workflow-dispatch` on
+`release.yml@main`, or `cloudflare-deploy` on Worker `macron-dev`), never
+global. A covered request proceeds with no prompt. "This session" ends when the
+tray exits. A standing grant ("don't ask me again for this") has no expiry and
+is offered only from the tray's grant list, not the dialog, so it is never a
+reflex click.
+
+Grant statement (signed by the device key as SSHSIG, D2):
+
+```
+tillandsias-grant v1
+action: workflow-dispatch
+target: 8007342/tillandsias release.yml@main
+scope: once | 10m | 2h | session:<tray boot id> | standing
+host: <hostname>
+strength: hardware-biometric | hardware-pin | hardware-presence | software-password
+issued: 2026-10-25T14:02:11Z
+expires: 2026-10-25T14:12:11Z      (absent for standing)
+nonce: <broker-issued>
+```
+
+A `once` grant is consumed by its single use: the broker records the nonce as
+spent.
+
+### R2. Grants live in Vault, and the signature is what counts
+
+Grants are stored at `secret/tillandsias/approvals/grants/<host>/<action>/<target-hash>`.
+Vault policy: only the approval broker's role may write. Only the named
+service roles may read: `git-mirror-hook`, `mcp-gate`, `release-tooling`.
+The Vault file audit device is on. Verifiers check the signature against the
+enrolled allowed-signers and check the expiry. Being present in Vault proves
+nothing, so a Vault compromise cannot forge a grant: the device key never
+enters Vault. A missing or invalid grant, for example after a Vault wipe (per
+the vault-is-thrown-away ruling), means the system asks again and stores a new
+grant. Standing grants are verified by the git-mirror hook against the
+allowed-signers file kept in mirror state, which only the host writes.
+
+Each grant record carries `last_authorized` (the issue time of its latest
+signature) and `scope`, so the tray grant list can say "approved 2 hours ago,
+for 2 hours".
+
+On Linux hosts with SELinux enforcing, a policy module labels the broker
+binary and its socket, so only the broker domain can connect to the grant
+store's local endpoint and read its Vault token file. Forge containers
+(`container_t`) are denied both.
+
+### R3. Trail: signed append-only journal plus the Vault audit log
+
+**Recommendation: keep both, with the signed journal authoritative.** The
+Vault audit log alone is not enough:
+
+- it is lost when the vault is wiped and rebuilt, which is the standing remedy;
+- it records requests with HMAC'd values, so it shows that something was
+  written, not what the operator approved;
+- the same administrative position that can tamper with Vault can disable an
+  audit device;
+- it is not signed by the device key, so it does not prove a human approved.
+
+The journal is a hash-chained, append-only sequence of the signed grant and
+use statements, kept as git notes under `refs/notes/tillandsias/approvals` in
+the mirror. The mirror's pre-receive hook refuses non-fast-forward updates of
+that ref. It survives Vault wipes, every entry verifies on its own, and the
+chain shows deletions. The Vault audit log stays on as the access trail:
+which service read which grant, and when.
+
+### R4. Rollout modes per host
+
+Each host has one explicit mode, shown in the tray menu ("Approvals: present",
+for example) and in `tillandsias --diagnose`:
+
+- `present`: the host has enrolled approval hardware (macOS Touch ID, Windows
+  Hello fingerprint, which is the Windows test platform, or a FIDO2 key).
+  Gated actions show the dialog, and a declined action does not run.
+- `allow`: no approval hardware. Gated actions run, and each is journaled as
+  "not enforced: no approval hardware". macuahuitl is in `allow`.
+- `enforced`: later, by explicit operator decision only, once macuahuitl-like
+  hosts have a YubiKey or an equivalent path. A missing grant is refused.
+
+The mode is host state written by the broker from the operator's tray action.
+No agent can change it, and no gate silently falls back to a weaker mode.
+
+### R5. Budgets: routine work needs no approval
+
+The budget policy covers the daily build, N optional extra builds per day
+(default 3) and the daily promotion to stable. It is not gated. Only
+out-of-band actions are gated: over-budget releases and cloud actions outside
+the policy. The policy and its counters live in Vault under
+`secret/tillandsias/approvals/budget`, writable only by the broker and
+release tooling, never by agents. Counters reset at 00:00 UTC.
+
+### R6. Promotions in branch discipline
+
+Merges and PRs are promotions in the production chain. The branch-discipline
+seed (`.tillandsias/branch-discipline.yaml`) gains an optional
+`promotions:` list. Each entry has `from`, `to` and `approval: required | none`,
+for example `research/* -> linux-next: required`. The pre-receive hook gates
+only the promotions marked required. Nothing is gated by default, and this
+supersedes D5's blanket integration-branch gate.
+
+### R7. Art
+
+The dialog's Mācron illustrations are generated by the project's own
+image-generation infrastructure (change `local-image-generation`, tool
+`image.generate`, order 1874-kkrc). Generated assets are staged and need
+operator approval before they ship. The approval flow is an ordinary gated
+action of class `publish-asset`.

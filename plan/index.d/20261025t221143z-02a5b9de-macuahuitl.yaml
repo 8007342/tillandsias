@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: handle-mcp-jsonrpc-consults-a-gate-table-and-returns-awaiting-approval-for-every-cost-bearing-tool-without-contacting-the-cloud
+    field: context
+    value: |-
+      Design D6 of openspec/changes/os-verified-approval-gates. A static gate table in tillandsias-headless lists cost-bearing actions (workflow dispatch, integration-branch merge or PR, remote worker creation, any Cloudflare create/refresh including 1853-qr4h's ensure_github_cloudflare_worker). handle_mcp_jsonrpc checks it before dispatch and returns state awaiting_approval with approval_id and retry_after_s; agent-supplied approval arguments are ignored. Host scripts and skills that run `gh workflow run` call `tillandsias approval request` first.
+
+      [2026-10-25T22:11:43Z macuahuitl] AMENDED by operator rulings 2026-10-25 (design R5): budgeted routine runs (daily build, a few optional extra builds per day, daily promotion to stable) are NOT gated; only out-of-band (over-budget) releases and cloud actions outside the policy are. The gate consults the budget counters of 1890-wvs7 and the grants of 1890-yc53, and honours the host mode of 1890-ri3y.
+    ts: "2026-10-25T22:11:43Z"
+    host: macuahuitl
+
+events:
+  - packet_id: handle-mcp-jsonrpc-consults-a-gate-table-and-returns-awaiting-approval-for-every-cost-bearing-tool-without-contacting-the-cloud
+    event:
+      type: note
+      ts: "2026-10-25T22:11:43Z"
+      host: macuahuitl
+      summary: |-
+        operator-rulings-2026-10-25

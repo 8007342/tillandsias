@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl from operator rulings 2026-10-25. Code is cited by symbol, never by line.
+packets:
+- packet_id: approval-grants-are-device-signed-statements-in-a-vault-kv-path-only-the-broker-writes-and-verifiers-check-the-signature-not-presence
+  order: 1890-yc53
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - approval
+  - security
+  - cost-gate
+  estimated_hours: 6
+  depends_on:
+  - approval-broker-signs-an-action-bound-statement-after-an-os-verified-check-and-records-it-as-a-git-note
+  related: []
+  title: Approval grants are stored in Vault as device-signed statements, and verifiers trust the signature, not the storage
+  context: 'Design R1-R3 of openspec/changes/os-verified-approval-gates. Grant path secret/tillandsias/approvals/grants/<host>/<action>/<target-hash>; Vault policy: approval-broker role writes, git-mirror-hook, mcp-gate and release-tooling roles read; file audit device on. Verifiers check SSHSIG and expiry against allowed-signers; a missing or invalid grant (e.g. after a vault wipe) re-prompts. Records carry last_authorized and scope. Trail: hash-chained signed journal in refs/notes/tillandsias/approvals is authoritative; Vault audit is the access trail.'
+  exit_criteria:
+  - 'A fixture against a dev Vault asserts: the broker role writes a grant and the mcp-gate role reads it; a forge or agent token is denied the write and the denial appears in the audit device; a grant record with a tampered signature placed by the root token is treated as ungranted; after wiping the KV path the next request prompts and stores a new grant; the record shows last_authorized and scope. Pre-fix result: FAILS, no grant path, policy or verifier exists.'
+  verifiable_closure: 'A fixture against a dev Vault asserts: the broker role writes a grant and the mcp-gate role reads it; a forge or agent token is denied the write and the denial appears in the audit device; a grant record with a tampered signature placed by the root token is treated as ungranted; after wiping the KV path the next request prompts and stores a new grant; the record shows last_authorized and scope. Pre-fix result: FAILS, no grant path, policy or verifier exists.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+
+    '
+  next_action: 'Nothing is done. Write the check named in the exit criterion first and watch it fail on today''s code, then implement per openspec/changes/os-verified-approval-gates.
+
+    '
+  provenance: 'Filed from the operator rulings on PR #651, 2026-10-25.
+
+    '
+  events:
+  - type: filed
+    ts: '2026-10-25T22:20:00Z'
+    host: macuahuitl
+    summary: filed from the operator rulings of 2026-10-25

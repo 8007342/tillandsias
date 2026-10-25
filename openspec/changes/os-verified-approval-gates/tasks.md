@@ -47,10 +47,19 @@
 - [ ] 8.3 Windows: measure Hello signature padding; KeyCredentialManager signer or WebAuthn fallback; SSHSIG envelope; dialog
 - [ ] 8.4 Windows: splash and download window (GetDiskFreeSpaceExW)
 
-## 9. Open questions for the operator
+## 9. Operator rulings 2026-10-25 (second round)
 
-- [ ] 9.1 Should one approval cover a batch (for example a land-queue run of several PRs), or one approval per push?
-- [ ] 9.2 Should GitHub-side rules (required signed approvals, workflow_dispatch restricted to the operator) close the raw-`gh` door for host agents?
-- [ ] 9.3 Software fallback on a Linux host without a YubiKey: allow with a `software-password` label, or refuse cost-bearing actions there?
-- [ ] 9.4 Are daily autonomous cuts (standing ruling) still autonomous, or does each release dispatch now need a touch?
-- [ ] 9.5 PR #650's change does not yet define a download manifest by name; confirm it will, or which change owns it
+- [ ] 9.1 Grants in Vault, signed, four scopes plus standing; Vault policy and audit device [1890-yc53]
+- [ ] 9.2 SELinux policy module confining the broker and grant credential [1890-dv7j]
+- [ ] 9.3 Budget policy and counters for daily, extra and stable-promotion runs [1890-wvs7]
+- [ ] 9.4 Per-host rollout mode (present, allow, enforced), visible in the tray and in --diagnose; macuahuitl in allow [1890-ri3y]
+- [ ] 9.5 Branch-discipline `promotions:` with approval-required entries in the seed and the hook [1890-jk4j]
+- [ ] 9.6 Generated Mācron art through image.generate (1874-kkrc), approved by the operator before shipping [1890-hjk5]
+- [ ] 9.7 macron.dev lessons-learned post (low priority) [1890-zbmt]
+
+## 10. Open questions for the operator
+
+- [ ] 10.1 Default number of optional extra builds per day (the design assumes 3)?
+- [ ] 10.2 Should standing grants be offered for Cloudflare deploys at all, or only for workflow dispatch and promotions?
+- [ ] 10.3 Does the download manifest belong to PR #650's change, or which change owns it?
+- [ ] 10.4 Windows Hello signature padding: to be measured in 1888-e3yh
