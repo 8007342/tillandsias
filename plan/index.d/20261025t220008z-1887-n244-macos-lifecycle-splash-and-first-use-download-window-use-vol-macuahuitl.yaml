@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+- packet_id: macos-lifecycle-splash-and-first-use-download-window-use-volume-resource-values
+  order: 1887-n244
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags:
+  - approval
+  - security
+  - cost-gate
+  - macos
+  estimated_hours: 6
+  depends_on:
+  - startup-and-shutdown-splash-advances-only-on-tray-lifecycle-stages-and-stalls-visibly-when-a-stage-hangs
+  - linux-first-use-download-window-states-the-size-and-shows-a-statvfs-storage-bar-with-tillandsias-needed-and-removable-share
+  - macos-approval-key-is-a-secure-enclave-p256-key-behind-touch-id-emitting-sshsig-verifiable-by-ssh-keygen
+  title: On a Mac, the startup splash and the large-download window, with storage figures from macOS
+  context: Design D7/D9 of openspec/changes/os-verified-approval-gates. Port the splash state machine from 1884-ptnt to an AppKit window at normal level, fed by the macOS tray's lifecycle stages. Download window storage bar from URL resource values volumeTotalCapacity and volumeAvailableCapacityForImportantUsage (counts purgeable space); system/apps/backups segments only where macOS reports them.
+  exit_criteria:
+  - 'A test feeds the macOS stage sequence and asserts the same Stalled and Failed behaviour as 1884-ptnt, and the window level is NSNormalWindowLevel; the download model on a test volume reports available capacity equal to volumeAvailableCapacityForImportantUsage. Pre-fix result: FAILS, the macOS tray has no splash or download window.'
+  verifiable_closure: 'A test feeds the macOS stage sequence and asserts the same Stalled and Failed behaviour as 1884-ptnt, and the window level is NSNormalWindowLevel; the download model on a test volume reports available capacity equal to volumeAvailableCapacityForImportantUsage. Pre-fix result: FAILS, the macOS tray has no splash or download window.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+
+    '
+  next_action: 'Nothing is done. Write the check named in the exit criterion first and watch it fail on today''s code, then implement per openspec/changes/os-verified-approval-gates.
+
+    '
+  provenance: 'Filed at operator request 2026-10-25 (OS-verified approval gates direction).
+
+    '
+  events:
+  - type: filed
+    ts: '2026-10-25T22:00:00Z'
+    host: macuahuitl
+    summary: filed ready from the operator request of 2026-10-25

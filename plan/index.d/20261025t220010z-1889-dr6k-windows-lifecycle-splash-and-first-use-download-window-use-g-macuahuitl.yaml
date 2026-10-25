@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+- packet_id: windows-lifecycle-splash-and-first-use-download-window-use-getdiskfreespaceexw
+  order: 1889-dr6k
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: windows
+  capability_tags:
+  - approval
+  - security
+  - cost-gate
+  - windows
+  estimated_hours: 6
+  depends_on:
+  - startup-and-shutdown-splash-advances-only-on-tray-lifecycle-stages-and-stalls-visibly-when-a-stage-hangs
+  - linux-first-use-download-window-states-the-size-and-shows-a-statvfs-storage-bar-with-tillandsias-needed-and-removable-share
+  - windows-approval-key-is-a-windows-hello-key-credential-emitting-sshsig-after-measuring-the-signature-padding
+  title: On Windows, the startup splash and the large-download window, with storage figures from Windows
+  context: Design D7/D9 of openspec/changes/os-verified-approval-gates. Port the splash state machine from 1884-ptnt to a Win32 window, not topmost, fed by the Windows tray's WSL lifecycle stages. Download window storage bar from GetDiskFreeSpaceExW on the WSL storage volume; backups (shadow copy storage) only where the query is permitted.
+  exit_criteria:
+  - 'A test feeds the Windows stage sequence and asserts the same Stalled and Failed behaviour as 1884-ptnt and that the window lacks WS_EX_TOPMOST; the download model''s free bytes equal GetDiskFreeSpaceExW on the test volume. Pre-fix result: FAILS, the Windows tray has no splash or download window.'
+  verifiable_closure: 'A test feeds the Windows stage sequence and asserts the same Stalled and Failed behaviour as 1884-ptnt and that the window lacks WS_EX_TOPMOST; the download model''s free bytes equal GetDiskFreeSpaceExW on the test volume. Pre-fix result: FAILS, the Windows tray has no splash or download window.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+
+    '
+  next_action: 'Nothing is done. Write the check named in the exit criterion first and watch it fail on today''s code, then implement per openspec/changes/os-verified-approval-gates.
+
+    '
+  provenance: 'Filed at operator request 2026-10-25 (OS-verified approval gates direction).
+
+    '
+  events:
+  - type: filed
+    ts: '2026-10-25T22:00:00Z'
+    host: macuahuitl
+    summary: filed ready from the operator request of 2026-10-25

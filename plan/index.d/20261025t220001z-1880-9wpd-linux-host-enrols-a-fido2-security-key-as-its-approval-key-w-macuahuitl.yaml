@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+- packet_id: linux-host-enrols-a-fido2-security-key-as-its-approval-key-with-an-honestly-labelled-polkit-software-fallback
+  order: 1880-9wpd
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - approval
+  - security
+  - cost-gate
+  - linux
+  estimated_hours: 6
+  depends_on:
+  - approval-broker-signs-an-action-bound-statement-after-an-os-verified-check-and-records-it-as-a-git-note
+  title: A Linux host enrols a YubiKey as its approval key, or a clearly labelled password fallback when it has none
+  context: 'Design D1 of openspec/changes/os-verified-approval-gates. Enrol `ssh-keygen -t ed25519-sk -O verify-required` (libfido2; touch plus PIN) from the tray and write the public key to the mirror''s allowed-signers state. Without a FIDO2 key, a host ed25519 key sealed in Vault is released only after a polkit action org.tillandsias.approve with auth_self (password, or fprintd where a reader exists), and statements say strength: software-password. The operator''s desktop has no fingerprint reader and will get a YubiKey.'
+  exit_criteria:
+  - 'A fixture with a fake FIDO2 authenticator (libfido2 test device or a stub sk-provider) enrols, signs, and asserts the allowed-signers line is sk-ssh-ed25519 and the statement says hardware-pin; with no authenticator and polkit stubbed to allow, the statement says software-password; with polkit stubbed to deny, no signature is produced. Pre-fix result: FAILS, there is no enrolment command and no polkit action file.'
+  verifiable_closure: 'A fixture with a fake FIDO2 authenticator (libfido2 test device or a stub sk-provider) enrols, signs, and asserts the allowed-signers line is sk-ssh-ed25519 and the statement says hardware-pin; with no authenticator and polkit stubbed to allow, the statement says software-password; with polkit stubbed to deny, no signature is produced. Pre-fix result: FAILS, there is no enrolment command and no polkit action file.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+
+    '
+  next_action: 'Nothing is done. Write the check named in the exit criterion first and watch it fail on today''s code, then implement per openspec/changes/os-verified-approval-gates.
+
+    '
+  provenance: 'Filed at operator request 2026-10-25 (OS-verified approval gates direction).
+
+    '
+  events:
+  - type: filed
+    ts: '2026-10-25T22:00:00Z'
+    host: macuahuitl
+    summary: filed ready from the operator request of 2026-10-25
