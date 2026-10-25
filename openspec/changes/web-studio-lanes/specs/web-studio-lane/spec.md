@@ -61,13 +61,57 @@ When the agent writes a file, the open studio SHALL reload it. When the user sav
 
 The registry SHALL contain these lanes:
 - GrapesJS: static HTML, saved through the shared endpoint as the remote storage;
-- Silex: static HTML, saved through the FS connector;
 - Decap CMS: markdown SSGs, via `local_backend` and decap-server bound to loopback;
 - TinaCMS: React/Next and markdown, via `tinacms dev` local mode;
-- Puck: React, with `onPublish` routed to the shared endpoint;
-- Onlook: Next.js with Tailwind, listed and marked "needs cloud account" until its offline run is proven.
+- Puck: React, with `onChange`/`onPublish` routed to the shared endpoint;
+- Onlook: Next.js with Tailwind, marked "needs cloud account" until proven offline.
 
 #### Scenario: registry completeness
 
 - **WHEN** `studio_options` is asked for any project
-- **THEN** all six studios are listed with a brief each
+- **THEN** all five studios are listed with a brief each
+
+### Requirement: Silex is not offered
+
+The registry SHALL NOT contain a Silex lane (operator ruling 2026-10-25: no mixed-licensing questions now).
+
+#### Scenario: options for a static HTML site
+
+- **WHEN** `studio_options` is asked for a static HTML project
+- **THEN** Silex is absent and GrapesJS carries `[Recommended]`
+
+### Requirement: every studio and agent change is committed
+
+Each accepted studio save and each agent edit through the co-edit channel SHALL be committed to the working branch, attributed to the user or the agent. Concurrent edits SHALL be ordered by commit; the system SHALL NOT resolve them by last-write-wins with a notice.
+
+#### Scenario: user and agent edit the same file
+
+- **WHEN** the user saves `index.html` in the studio and the agent then edits it
+- **THEN** two commits exist in order, and `studio_changes` reports both SHAs
+
+### Requirement: each studio uses its own auto-save and repo practice
+
+Each lane SHALL wire its studio's native auto-save mechanism and repo conventions (init/config files, save adapters, hooks) automatically for the project and the running agent, as listed in design.md, scaffolding any missing config file without overwriting an existing one.
+
+#### Scenario: first open of a Decap project
+
+- **WHEN** the Decap lane opens a Hugo project without `admin/config.yml`
+- **THEN** the lane scaffolds it, auto-save writes go through decap-server, and each save is committed
+
+### Requirement: studio windows open in the dev Chromium framework browser
+
+Studio windows SHALL open in the dev Chromium framework browser, so the user and the agent co-edit the same live page.
+
+#### Scenario: opening a studio
+
+- **WHEN** a studio is opened
+- **THEN** the window is a dev Chromium framework browser window on `studio.<label>`
+
+### Requirement: Puck runs as a separate editor app
+
+The Puck lane SHALL run as a separate editor app that imports the site's component config, and SHALL NOT inject an editor route into the user's application.
+
+#### Scenario: Puck on a Next.js site
+
+- **WHEN** the Puck lane opens on a Next.js project
+- **THEN** the user's app routes are unchanged and the editor app renders the site's components

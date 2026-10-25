@@ -23,13 +23,13 @@ Star counts and release dates came mostly from model memory. Packet 1861-nmpp re
 | Studio | License | Sites it edits | Writes back via | Runs as | Container fit |
 |---|---|---|---|---|---|
 | GrapesJS | BSD-3 | static HTML/CSS (React/Vue wrappers exist) | storage manager `remote` type: load/store HTTP endpoints we provide | JS library in a static page we host | good: tiny, no account; needs our save endpoint |
-| Silex | AGPL-3.0 | static HTML (built on GrapesJS) | pluggable storage/hosting connectors; FS connector | Node/Express, one port | good; AGPL is fine unmodified, internal only |
 | Decap CMS | MIT | markdown SSGs (Hugo, Jekyll, Astro, 11ty) | `local_backend: true` + `decap-server` proxy to the filesystem | static `/admin` page + node proxy (:8081) | very good; proxy has no auth, so it binds loopback behind the OTP router |
 | TinaCMS | Apache-2.0 | Next.js first, also Astro/Hugo; md/mdx/json | `tinacms dev` local GraphQL (:4001) writes files | node dev server | ok; local mode needs no Tina Cloud |
-| Puck | MIT | React (Next, Remix) | `onPublish` JSON; we persist it via a route | library inside the site's React app | good for React sites; edits component JSON, not arbitrary HTML |
+| Puck | MIT | React (Next, Remix) | `onPublish` JSON; we persist it via a route | separate editor app importing the site's components | good for React sites; edits component JSON, not arbitrary HTML |
 | Onlook | Apache-2.0 | Next.js + Tailwind | edits code in the repo directly | Bun/Node app; web edition leans on hosted sandboxes/Supabase | questionable until offline viability is proven (1865-dn5h) |
 | Webstudio | AGPL-3.0 | own Remix output | its own Postgres | node + Postgres | excluded: no write-back to checkout |
 | Plasmic | MIT | React codegen | Plasmic server + `plasmic sync` | hosted studio | excluded: needs the vendor backend |
+| Silex | AGPL-3.0 | static HTML | FS connector | Node/Express | excluded: operator ruling 2026-10-25, no mixed-licensing questions now |
 
 Default recommendation per detected framework:
 - plain HTML: GrapesJS;
@@ -44,7 +44,7 @@ These came out of building the lanes side by side. Each one becomes one service 
 1. **Option choice.** Detect the framework, then rank and recommend (the `launch-option-choice` capability).
 2. **Image on first use.** Each studio is a `LaunchSite::Studio(id)` with its own image stacked on the forge base. It is built only when chosen and cached like any versioned image. It never joins the default prebuilt set.
 3. **Route + OTP + window.** Reuse `RouterRoute`, `tillandsias_otp`, and the browser spec builder under the label `studio.<label>`. One session cookie covers both the editor and the live-site iframe origin.
-4. **Write-back service.** A project-scoped HTTP save endpoint (GrapesJS remote storage, Puck `onPublish`, Silex FS connector). Decap and Tina bring their own writers, but every write still goes through the same path guard:
+4. **Write-back service.** A project-scoped HTTP save endpoint (GrapesJS remote storage, Puck `onPublish`). Decap and Tina bring their own writers, but every write still goes through the same path guard:
    - the canonicalized target must sit under the checkout;
    - it must not touch `.git/`;
    - it must match the lane's allowlist globs.
@@ -64,12 +64,26 @@ The Lua side owns the registry: studio id, brief, detector, image, entry command
 
 - The studio runs inside the forge's network posture, not as a separate app network. It must write to the checkout, and the forge already owns the checkout.
 - No studio receives credentials. Publish is a request to the host tool and never runs wrangler in the forge.
-- A save writes files only. A commit stays an agent or user action, so the user can review diffs before publishing.
+- Every save is COMMITTED (operator ruling 2026-10-25). Commits are cheap and disposable: a studio save and an agent edit each become a commit on the working branch, attributed to the user or the agent. Concurrent edits are ordered by commit, never by "last write wins with a notice"; a rejected or unwanted change is reverted or dropped like any commit. Publish still moves only the deploy branch, on explicit request.
+- Studio windows open in the dev Chromium framework browser, so the user and the agent see and co-edit the same live page.
+- The project's studio choice is committed to `.tillandsias/config.toml` (`[studio] id = "..."`).
+- Puck runs as a separate editor app that imports the site's component config; it never injects a route into the user's app.
+
+## Per-studio auto-save and repo practice
+
+Each lane wires its studio's own save mechanism and repo conventions automatically, for the project and for the running agent. Packets re-verify each item against the studio's current docs before implementing.
+
+| Studio | Auto-save mechanism | Repo practice wired by the lane |
+|---|---|---|
+| GrapesJS | `storageManager` with `type: 'remote'`, `autosave: true`, `stepsBeforeSave: 1`, store/load URLs on the shared endpoint | project data JSON plus exported HTML/CSS under an allowlisted dir; a lane init file holding the editor config |
+| Decap CMS | `local_backend: true` with `decap-server` writing the filesystem on every Publish/save in the UI | `admin/config.yml` and `admin/index.html` scaffolded if absent; collections derived from the SSG content dirs |
+| TinaCMS | `tinacms dev` local mode writes content files directly on save | `tina/config.{ts,js}` scaffolded if absent; generated `tina/__generated__` ignored via `.gitignore` |
+| Puck | `onChange` debounced to the shared endpoint for auto-save; `onPublish` for an explicit save | an editor app dir (e.g. `.tillandsias/studio/puck/`) importing the site's `puck.config`; page data JSON under an allowlisted dir |
+| Onlook | edits code in the repo directly | as measured by 1865-dn5h |
+
+After every accepted write the lane commits the changed paths with a `studio(<id>): save <paths>` message, and the agent's `studio_changes` feed reports the commit SHA.
+
 
 ## Open questions
 
-- Is Silex's AGPL acceptable when we ship it unmodified in an on-demand image? (A legal note is needed.)
 - Can Onlook's web edition run with no Supabase or hosted sandbox? 1865-dn5h answers this. If it cannot, Onlook stays listed but marked "needs cloud account" and is never recommended.
-- Should a Puck lane inject an editor route into the user's React app, or host a sidecar app that imports the user's component config?
-- Concurrent edits: the agent and the user save the same file. Last-write-wins plus a conflict event, or a merge?
-- Does a studio choice persist in the project (committed) or in host state only?

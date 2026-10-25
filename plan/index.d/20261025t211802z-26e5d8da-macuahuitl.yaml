@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: puck-studio-lane-for-react-sites
+    field: title
+    value: A Puck studio lane for React sites, run as a separate editor app that imports the site's components, auto-saving via onChange/onPublish to the shared write-back endpoint and committing each save
+    ts: "2026-10-25T21:18:02Z"
+    host: macuahuitl
+    replaces_sha256: "b6e8d294adde2aecf3c3c6fd41006a15a5d181a66907050224cef27ea65e9291"
+
+events:
+  - packet_id: puck-studio-lane-for-react-sites
+    event:
+      type: note
+      ts: "2026-10-25T21:18:02Z"
+      host: macuahuitl
+      summary: |-
+        operator ruling 2026-10-25: Puck as separate editor app

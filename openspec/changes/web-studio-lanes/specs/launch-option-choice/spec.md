@@ -20,11 +20,12 @@ When a launch has two or more viable options, the agent and the tray SHALL prese
 - **WHEN** only one option is viable
 - **THEN** no prompt is shown and the launch proceeds
 
-### Requirement: the choice is remembered per project and can be changed
+### Requirement: the choice is committed to the project config and can be changed
 
-The chosen option SHALL be recorded in host state, keyed by project and launch kind. Later launches SHALL reuse it without asking. A `change` action from the tray or the agent SHALL show the prompt again.
+The chosen option SHALL be committed to the project's `.tillandsias/config.toml`, keyed by launch kind (for studios, `[studio] id`). Later launches SHALL reuse it without asking. A `change` action from the tray or the agent SHALL show the prompt again.
 
 #### Scenario: second launch
 
 - **WHEN** the user chose GrapesJS and launches the studio again
 - **THEN** GrapesJS opens without a prompt
+- **AND** `.tillandsias/config.toml` in the checkout records `grapesjs` in a commit
