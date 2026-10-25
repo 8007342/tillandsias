@@ -18,6 +18,7 @@ size: instant
 preconditions:
   - workspace contains crates/tillandsias-headless/src/browser_open.rs
   - workspace contains crates/tillandsias-router-sidecar/src/http.rs
+  - Node.js on the host, or the localhost/tillandsias-forge:latest image (it carries node)
 
 critical_path:
   - step: "Req: confined window network, TLS router site, and a safe project landing"
@@ -29,6 +30,11 @@ critical_path:
     command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; TILLANDSIAS_PLAN_BIN=\"$P\" \"$P\" script run scripts/lua/test-opencode-web-window.lua 2>&1"
     timeout_ms: 30000
     success_pattern: "ok:opencode-web-window-fixture:5"
+
+  - step: "Req: the sse-keepalive proxy seeds the forge's checkout into the web app's project list and lands / on it (node tests; host node, else the forge image's)"
+    command: "set -u; F=images/default/sse-keepalive-proxy.test.js; if command -v node >/dev/null 2>&1; then node --test \"$F\" 2>&1; else T=target/litmus-sse-keepalive; rm -rf \"$T\"; mkdir -p \"$T\"; cp images/default/sse-keepalive-proxy.js \"$F\" \"$T\"/; podman run --rm --network none -v \"$PWD/$T:/t:ro,Z\" --entrypoint node localhost/tillandsias-forge:latest --test /t/sse-keepalive-proxy.test.js 2>&1; rc=$?; rm -rf \"$T\"; exit $rc; fi"
+    timeout_ms: 60000
+    success_pattern: "# fail 0"
 
 observability:
   traces:

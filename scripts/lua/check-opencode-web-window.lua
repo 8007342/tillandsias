@@ -74,9 +74,12 @@ need(has(site, "forward_auth localhost:9090") and has(site, "handle /_auth/login
 
 -- landing: the window signs in over TLS and lands on the project.
 need(has(src.main, '"https://opencode.{project_label}.localhost:{}/"'), "the window URL is the router's TLS OpenCode site")
-need(has(src.main, 'opencode_project_landing(&format!("/home/forge/src/{project_name}"))'),
-    "the landing is the checked-out project's session view")
-need(has(src.main, "build_login_data_url_landing(&window_url, &landing, &otp)"), "the login form carries that landing")
+-- The window lands on "/": the forge's sse-keepalive proxy seeds the checkout
+-- into the web app's project list and redirects / to its route (its node tests
+-- are this litmus's own step), so no forge path is derived from a host name.
+need(has(src.main, 'const OPENCODE_WEB_WINDOW_LANDING: &str = "/";'),
+    "the landing is the bare root the forge's proxy redirects to the checkout")
+need(has(src.main, "OPENCODE_WEB_WINDOW_LANDING,\n        &otp,"), "the login form carries that landing")
 local login = src.http:find('parse_form_field(&body, "next")', 1, true)
 need(login ~= nil and src.http:sub(login, login + 120):find("is_safe_landing_path", 1, true) ~= nil,
     "the sidecar follows next only through is_safe_landing_path")
