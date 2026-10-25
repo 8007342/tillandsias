@@ -219,6 +219,9 @@ pub struct SpecIndexEntry {
     pub commit: Option<String>,
     pub model: Option<String>,
     pub prefix: Option<String>,
+    /// ORDER 1822-dmwz: the BM25 index over `chunks`, built on first use and
+    /// then reused for the life of the entry (expert-serve caches entries).
+    lexical: std::sync::OnceLock<crate::spec::Bm25>,
 }
 
 fn read_marker(dir: &Path, name: &str) -> Option<String> {
@@ -293,7 +296,15 @@ impl SpecIndexEntry {
             commit,
             model,
             prefix,
+            lexical: std::sync::OnceLock::new(),
         })
+    }
+
+    /// The entry's BM25 index (order 1822-dmwz), index-aligned with
+    /// `chunks` and therefore with `vectors`.
+    pub fn lexical(&self) -> &crate::spec::Bm25 {
+        self.lexical
+            .get_or_init(|| crate::spec::Bm25::from_chunks(&self.chunks))
     }
 
     /// The FRAME this entry serves answers from (D2 / 801-g9nn): its own

@@ -37,6 +37,12 @@ pub mod branch_discipline;
 /// Order 1443-isrk: the command policy evaluator (allow | deny | consent for an
 /// argv) behind `policy eval` and proc.run / sh.run.
 pub mod command_policy;
+/// ORDER 1815-tei4 — the project-derived expert context pack that leads every
+/// synthesis prompt byte-identically.
+pub mod context_pack;
+/// ORDER 1826-gi8e — the fleet coordinator client: budgeted, batched, with an
+/// adaptive heartbeat and a git-ledger fallback.
+pub mod coordinator_client;
 pub mod discipline_hooks;
 /// ORDER 920-pxg6 — the OpenAI-compatible loopback front-end over
 /// `pipeline::run_grounded`. One grounded pipeline, two front-ends.
@@ -231,7 +237,7 @@ pub fn str_field<'a>(packet: &'a Value, key: &str) -> Option<&'a str> {
 /// (1437-vdz5), never by a refusal.
 pub const TIER_FIELDS: [(&str, &[&str]); 2] = [
     ("size", &["S", "M", "L"]),
-    ("implementer_tier", &["haiku", "sonnet", "opus"]),
+    ("implementer_tier", &["local", "haiku", "sonnet", "opus"]),
 ];
 
 /// ORDER 1437-khnx — a tier field's value: the top-level scalar when present,

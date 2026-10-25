@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-land-queue-discards-its-own-push-output-so-a-green-candidate-whose-push-is-refused-after-a-plan-only-adopt-is-requeued-with-no-cause
+    event:
+      type: progress
+      ts: "2026-10-23T04:04:52Z"
+      agent_id: linux-macuahuitl-claude-20261023t040449z
+      host: macuahuitl
+      summary: |
+        Falsification of this row's second hypothesis: in land-queue run 3 (macuahuitl 2026-10-23) #602 again adopted over a plan-only move (adopt:land-queue:602:plan-only-move:gated-on=dd9cb374a) and its push LANDED (land:602 merge=5bb7520cd). So the pre-push hook does accept an adopted plan-only merge; run 2's refusal was most likely a race with a further plan push between the adopt's fetch and the push. Criterion 1 (capture and report the push's own output) stands unchanged — it is what would have told these apart. Criterion 2 should be re-read as: the queue re-fetches and re-adopts when the push is refused non-fast-forward by a plan-only move, instead of re-queueing for a full re-gate.

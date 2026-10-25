@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tillandsias-org-update-website-skill-runs-unattended-inside-a-forge-with-no-host-paths-and-delivers-through-the-mirror-as-a-pushed-branch
+    field: title
+    value: 'The tillandsias.org update-website skill runs unattended inside a headless forge (no host paths, self-bootstrapped full-history clone, judgement items settled via audit-site-claims or filed, delivery only as a branch push through the mirror) and is discoverable: its description and AGENTS.md routing send a plain "update the website to <tag>" queue message to it without naming the skill'
+    ts: "2026-10-24T04:03:04Z"
+    host: macuahuitl
+    replaces_sha256: "fdc50ea9f68fbbe0b832460b2829d2c4182fcda85e605e6d35da0ed26b14b123"
+
+events:
+  - packet_id: tillandsias-org-update-website-skill-runs-unattended-inside-a-forge-with-no-host-paths-and-delivers-through-the-mirror-as-a-pushed-branch
+    event:
+      type: note
+      ts: "2026-10-24T04:03:04Z"
+      host: macuahuitl
+      summary: |-
+        revised: operator flow correction 2026-10-24 (in-session, macuahuitl via coordinator) — plain queue message, orchestrator-launched headless one-shot non-Claude forge, agent self-selects the skill, forge lifetime = agent lifetime, timeout backstop

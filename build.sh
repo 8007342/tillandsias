@@ -24,6 +24,15 @@
 
 set -euo pipefail
 export TILLANDSIAS_NO_SINGLETON=1
+# ORDER 1844-92bz — cargo's CARGO_INCREMENTAL does not cross into the builder
+# toolbox (only TILLANDSIAS_* and a few others are forwarded), so a caller that
+# needs non-incremental builds says so through this name. The land queue sets
+# 0: its gates on macuahuitl (2026-10-23) left tillandsias-plan's incremental
+# cache holding codegen units from two sessions, and four candidates failed to
+# link ("undefined hidden symbol … .llvm.<hash>") on trees that link cleanly.
+if [ -n "${TILLANDSIAS_CARGO_INCREMENTAL:-}" ]; then
+    export CARGO_INCREMENTAL="$TILLANDSIAS_CARGO_INCREMENTAL"
+fi
 
 # ORDER 936-kdev. A SIGTERM used to kill this script SILENTLY: two ci-full
 # runs died rc=143 with every check green, and even naming the phase that was
@@ -3574,6 +3583,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
+    # Order 1842-2q4g: the ghost-trace ratchet, asked in the fast lane so the
+    # preflight door (source 5 of _preflight_roster) refuses a @trace naming an
+    # absent spec in seconds. It used to run only at the end of the full gate:
+    # #607 lost ~64 minutes to `spec:forge-container`. Measured 0.3 s.
+    if ! _run_lua_decider "scripts/lua/check-ghost-traces.lua" 2>&1; then
+        _error "a @trace names a spec that does not exist, or the ghost baseline is stale (1842-2q4g) — see the spec named above"
+        exit 1
+    fi
+
     # NOT HERE: check-declared-closures-added.sh (885-92iu). It was hoisted in
     # the first cut of 1009-gccx and that was WRONG — caught by yoga, confirmed
     # by measurement here. It resolves a built `tillandsias-plan` and, when the
@@ -4561,8 +4579,27 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # production `script run` CLI for every retained case. Keep it unfiltered:
     # a selected count of zero would otherwise certify no production decision.
     _step "Running Lua source-agreement production integration (1484-uf29)..."
-    if ! _run cargo test -p tillandsias-plan --test lua_source_agreements \
-        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 2>&1; then
+    # ORDER 1843-idfv — ONE RETRY, ONLY ON THE INCREMENTAL-LINK SIGNATURE. This
+    # target relinks the tillandsias-plan bin in the shared incremental cache,
+    # and that cache can hold codegen units from two compilations: rust-lld then
+    # fails "undefined hidden symbol … .llvm.<hash>" on a tree that links
+    # cleanly from scratch. Land-queue run 4 (macuahuitl 2026-10-23) evicted
+    # #608, #612, #613 and #614 this way; the same tree linked once the crate's
+    # cache was cleared. 1803-pcap met the same signature and retries without
+    # incremental; that is the remedy here. Any OTHER failure stays red.
+    _lsa_log="$(mktemp "${TMPDIR:-/tmp}/lua-source-agreements.XXXXXX")"
+    _lsa_rc=0
+    _run cargo test -p tillandsias-plan --test lua_source_agreements \
+        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 >"$_lsa_log" 2>&1 || _lsa_rc=$?
+    cat "$_lsa_log"
+    if [ "$_lsa_rc" -ne 0 ] && grep -qE 'undefined hidden symbol|collect2: error: ld returned' "$_lsa_log"; then
+        _info "retry:lua_source_agreements:incremental-link — the shared incremental cache produced a link failure; rebuilding this target once with CARGO_INCREMENTAL=0 (1843-idfv)"
+        _lsa_rc=0
+        CARGO_INCREMENTAL=0 _run cargo test -p tillandsias-plan --test lua_source_agreements \
+            --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 2>&1 || _lsa_rc=$?
+    fi
+    rm -f "$_lsa_log"
+    if [ "$_lsa_rc" -ne 0 ]; then
         _error "the Lua source-agreement production integration target failed (1484-uf29)"
         exit 1
     fi

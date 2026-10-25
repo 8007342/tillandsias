@@ -1,0 +1,16 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: tillandsias-org-update-website-skill-runs-unattended-inside-a-forge-with-no-host-paths-and-delivers-through-the-mirror-as-a-pushed-branch
+    event:
+      type: decision
+      ts: "2026-10-24T05:05:02Z"
+      host: macuahuitl
+      summary: |-
+        OPERATOR DECISION (in-session, macuahuitl, 2026-10-24: "Auto merge, let's start with full automation of this process"). The unattended update-website run delivers by AUTO-MERGE: the forge agent's website/update-<tag> change merges into tillandsias.org main (which deploys) without operator review, once the skill's own checks pass (last line ok:refreshed and the pre-commit build check). The PR-and-wait default in next_action is superseded. A run ending ask:judgement or blocked: does not merge; it reports failed with the reason to the queue.
+  - packet_id: the-local-launch-retirement-release-is-the-first-website-update-marked-release-and-its-tillandsias-org-rewording-is-done-end-to-end-by-a-non-claude-forge-agent-from-the-coordinator-queue
+    event:
+      type: decision
+      ts: "2026-10-24T05:05:02Z"
+      host: macuahuitl
+      summary: |-
+        OPERATOR DECISION (2026-10-24): auto-merge, no human review in the loop. The end-to-end criterion is met only when the site change reached tillandsias.org main by the forge agent's own merge and the live site serves it. This is the first fully automated process; others follow progressively.

@@ -1,0 +1,91 @@
+# ORDER 1821-xcwc — forge-awareness cases that are RED TODAY, kept OUT of the
+# default glob on purpose.
+#
+# @trace spec:forge-environment-discoverability
+# @trace order:1821-xcwc, order:1814-x78v, order:1815-tei4, order:1816-iyyc
+#
+# Why a subdirectory: scripts/test-groundtruth-corpus-declaration.sh (and any
+# `grade openspec/litmus-tests/groundtruth/*.yaml`) requires fail=0 over every
+# top-level set, so one known-red case there would red every gate in the fleet.
+# This directory is NOT matched by that glob. litmus:expert-groundtruth-harness
+# grades this file explicitly through a RATCHET step: each case must be listed
+# as KNOWN_RED there, and a listed case that starts passing FAILS the step until
+# it is removed from the list AND moved into
+# ../expert-groundtruth-forge-awareness.yaml (the gated file). That move is the
+# closure of this defect.
+#
+# Measured 2026-10-23 on macuahuitl with 1816-iyyc merged: cheatsheet.ask cites
+# the forge-constraints TITLE chunk (lines 18-23) for the docker question — the
+# right sheet, but not the rule text — and cites unrelated sheets
+# (nix-flake-caching, container-health-checks) for the image-build and dockerd
+# questions. Before 1816 (no sheet at all) the first case is red too.
+#
+# ORDER 1822-dmwz moved the docker case (forge-run-container-here-no-docker)
+# into the gated file: the forge-constraints title card now folds into its
+# Summary chunk and cheatsheet.ask fuses its heuristic with BM25 by RRF, so the
+# rule text is cited. The two left here are NOT lexical misses: the image-build
+# question is a strong legitimate match for cheatsheets/build/ (only the forge
+# context says otherwise — the context-pack fix), and "dockerd" shares no word
+# with "nested container daemon" (a semantic match, not a lexical one).
+#
+# The negatives are recommendation-only phrasings: the sheet itself quotes
+# `docker run` in order to forbid it, so excluding the bare command would red
+# the CORRECT answer (a guard cannot tell mention from use).
+
+version: 1
+name: expert-groundtruth-forge-awareness-pending
+description: >
+  Container questions asked inside a forge must be answered from
+  cheatsheets/runtime/forge-constraints.md and never recommend docker or a
+  nested container. Known red until the retrieval/pipeline fixes land.
+
+cases:
+
+  - id: forge-build-image-in-forge-no-nested-podman
+    engine: cheatsheet.ask
+    query: "how do I build an image in the forge with docker or podman?"
+    why: >
+      Same defect through the build door: an image build is a nested
+      container. The rule says container work happens on the host, never from
+      inside the forge.
+    expect:
+      confidence: exact
+      citation_kind: cheatsheet
+      min_citations: 1
+      max_citations: 1
+      citations_include:
+        - path: cheatsheets/runtime/forge-constraints.md
+          kind: cheatsheet
+          span_contains:
+            - "podman-in-podman"
+            - "Container work is done on the host"
+      answer_contains:
+        - "Container work is done on the host"
+      answer_excludes:
+        - "docker build -t"
+        - "podman build -t"
+        - "docker pull"
+        - "dnf install podman"
+
+  - id: forge-start-dockerd-is-refused-by-the-rule
+    engine: cheatsheet.ask
+    query: "can I start dockerd in the forge?"
+    why: >
+      A daemon question. The cited rule must say there is no nested container
+      daemon; an answer that tells the agent how to start one is the defect.
+    expect:
+      confidence: exact
+      citation_kind: cheatsheet
+      min_citations: 1
+      max_citations: 1
+      citations_include:
+        - path: cheatsheets/runtime/forge-constraints.md
+          kind: cheatsheet
+          span_contains:
+            - "NO nested container daemon"
+      answer_contains:
+        - "NO nested container daemon"
+      answer_excludes:
+        - "sudo dockerd"
+        - "systemctl start docker"
+        - "dockerd &"

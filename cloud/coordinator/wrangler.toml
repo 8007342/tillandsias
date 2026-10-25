@@ -1,0 +1,23 @@
+# @trace order:1825-v37w
+#
+# The Durable Object binding and its migration only. There are no routes, no
+# custom domain and no secrets here. Deploying is 1830-hzsc, which needs the
+# operator's go. The two Access values are public identifiers, not secrets.
+name = "tillandsias-coordinator"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+workers_dev = false
+
+[vars]
+ACCESS_TEAM_DOMAIN = ""
+ACCESS_AUD = ""
+RATE_LIMIT_PER_MIN = "120"
+STALE_AFTER_S = "900"
+
+[[durable_objects.bindings]]
+name = "COORD"
+class_name = "Coordinator"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Coordinator"]

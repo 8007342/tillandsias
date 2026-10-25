@@ -14,6 +14,13 @@
 //! the caller's --env additions; nothing else is inherited, so a token the
 //! caller happens to export does not reach the child.
 //!
+//! PASSED (only when the caller has them): PATH, HOME, TMPDIR, TEMP/TMP and the
+//! Windows system set, CARGO_TARGET_DIR, XDG_RUNTIME_DIR and
+//! DBUS_SESSION_BUS_ADDRESS (1838-nwyn: toolbox/podman need the user runtime
+//! dir and session bus), and every TILLANDSIAS_*. FIXED: LC_ALL=C, LANG=C,
+//! TZ=UTC, GIT_TERMINAL_PROMPT=0. SCRUBBED: everything else (GH_TOKEN,
+//! SSH_AUTH_SOCK, ...); a caller that needs one passes --env K=V.
+//!
 //! Every decision is audited (1443-w9hf): a refusal with no run_id, a spawn
 //! with the executor's run identity.
 

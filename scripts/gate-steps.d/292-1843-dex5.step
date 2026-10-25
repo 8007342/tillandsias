@@ -1,0 +1,14 @@
+# Gate step 1843-dex5 — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. with-tillandsias-builder.sh decides whether to `toolbox
+# create` from _toolbox_exists. When `toolbox list` failed once, it answered
+# "absent" for a builder that had been up 43 h, ran create, and died "already
+# exists" — evicting #612 from the land queue (macuahuitl 2026-10-23). The
+# fixture extracts the function and drives it with stub toolbox/podman.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the builder does not mistake a failed toolbox list for an absent container (1843-dex5)"
+STEP_SCRIPT="scripts/test-builder-toolbox-exists.sh"
+STEP_ERROR="with-tillandsias-builder.sh can again read a transient toolbox-list failure as an absent builder and try to recreate it (1843-dex5); see which arm failed above"
+STEP_OK="builder existence check survives a failed toolbox list"
+STEP_SECOND_REGIME="macuahuitl 2026-10-23 darwin skip:linux-only — toolbox and with-tillandsias-builder.sh are the Linux build path; darwin builds natively and never calls _toolbox_exists (1843-dex5)"

@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: groundtruth-forge-awareness-cases-pin-no-docker-recommendations-and-no-tillandsias-rules-on-a-foreign-project
+    field: next_action
+    value: 'PR #612 (work/1821-xcwc, 03f274bc5; contains #607) implements this: do not reimplement. Foreign-project case passes; three container cases are KNOWN_RED in openspec/litmus-tests/groundtruth/pending/ (retrieval returns the forge-constraints title chunk or other sheets, not the rule text) under a ratchet step in litmus-expert-groundtruth-harness. Land it, then close with the landed SHA; the red cases close with 1822-dmwz retrieval work.'
+    ts: "2026-10-23T03:36:22Z"
+    host: macuahuitl
+    replaces_sha256: "a6a46ed8b07fb3afcc0c42006cda2630e579ebe66ed22c3350d13e83e6f1daee"
+
+events:
+  - packet_id: groundtruth-forge-awareness-cases-pin-no-docker-recommendations-and-no-tillandsias-rules-on-a-foreign-project
+    event:
+      type: note
+      ts: "2026-10-23T03:36:22Z"
+      host: macuahuitl
+      summary: |-
+        handoff

@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-24. Code is cited by symbol, never by line.
+packets:
+  - packet_id: service-logs-show-the-previous-generation-after-a-failed-replacement-instead-of-the-failure
+    order: 1855-z5ch
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, web, mcp, observability]
+    estimated_hours: 4
+    title: "After a failed preview replacement, service_logs shows the old server's logs instead of why the new one failed"
+    context: |
+      Field report: after a failed replacement service_status exposed the failure but service_logs (the MCP tool handled in mcp_socket, backed by the local web preview service in local_web_preview) returned the previous static server's logs, hiding the startup failure. Key logs by generation or candidate, keep the failed candidate's logs, let the caller address a generation explicitly, and default to the newest attempt. Source: forge field report FORGE_DIAGNOSTICS.md in 8007342/arabiya.
+    exit_criteria:
+      - "A fixture replaces a running preview with one that fails at startup and asserts service_logs for the failed generation returns its startup error while the running generation still returns the old server's output. Pre-fix result: FAILS, service_logs returns only the previous generation's lines."
+    verifiable_closure: "A fixture replaces a running preview with one that fails at startup and asserts service_logs for the failed generation returns its startup error while the running generation still returns the old server's output. Pre-fix result: FAILS, service_logs returns only the previous generation's lines."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the fixture named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-24.
+    events:
+      - type: filed
+        ts: "2026-10-24T15:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator request of 2026-10-24"

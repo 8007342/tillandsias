@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: expert-serve-caches-answers-keyed-by-index-revision-domain-and-normalized-query
+    field: next_action
+    value: 'PR #614 (work/1819-njan, f089d1e07) implements this: do not reimplement. Caches only deterministic outcomes (allowlist of two corpus-bound refusal reasons; transient refusals never cached); tests 10 passed. Land it, then close with the landed SHA.'
+    ts: "2026-10-23T04:04:50Z"
+    host: macuahuitl
+    replaces_sha256: "f989ed493d451656415bf9a3b840765b51d20ed7936ba228d7f66e28b622ba08"
+
+events:
+  - packet_id: expert-serve-caches-answers-keyed-by-index-revision-domain-and-normalized-query
+    event:
+      type: note
+      ts: "2026-10-23T04:04:50Z"
+      host: macuahuitl
+      summary: |-
+        handoff

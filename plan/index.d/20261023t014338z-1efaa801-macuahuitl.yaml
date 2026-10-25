@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: warm-the-tier-model-at-forge-lifecycle-start
+    event:
+      type: progress
+      ts: "2026-10-23T01:43:38Z"
+      agent_id: linux-macuahuitl-claude-20261023t014338z
+      host: macuahuitl
+      summary: |
+        Measured 2026-10-23 on macuahuitl (RTX A5000, host ollama, release expert-serve, model already loaded) for 1817-wq7y (PR #608, 6bb27e353): Quick no longer decomposes. Query "how does the spec index resolve its directory ladder?" (tier=quick), per request after one warm-up: qwen2.5:7b 3038-3143 ms before -> 1734-2406 ms after (inside the 3000 ms Quick budget, criterion 1 met for 7b through expert-serve); qwen2.5:14b 3037-3947 ms before -> ~3027 ms after (synthesis alone exceeds Quick; returns the cited retrieval-only digest). The one-shot pipeline CLI adds ~1.5 s process start + index load, so the budget claim holds for expert-serve, not the CLI.

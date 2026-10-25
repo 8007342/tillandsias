@@ -6,6 +6,7 @@
 # ARM 1 (control)  bare sccache, long TMPDIR, dead server: FAILS (reproduces defect)
 # ARM 2            scripts/sccache-wrapper.sh, same conditions: rustc -vV succeeds
 # ARM 3            sccache that always fails (rc 254): wrapper falls back, rc 0
+# ARM 4            server started under a short TMPDIR that is then deleted: next compile ok (1812-bztj)
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SC="$(command -v sccache 2>/dev/null || true)"
@@ -23,4 +24,27 @@ if grep -q '^rustc ' <<<"$o2"; then ok "arm2 wrapper survives a long TMPDIR with
 printf '#!/bin/sh\nexit 254\n' > "$W/badsc"; chmod +x "$W/badsc"
 o3="$(TILLANDSIAS_SCCACHE_BIN="$W/badsc" "$ROOT/scripts/sccache-wrapper.sh" rustc -vV 2>/dev/null)"
 if grep -q '^rustc ' <<<"$o3"; then ok "arm3 broken sccache falls back to the bare compiler"; else bad "arm3 broken sccache redded the build"; fi
+# ARM 4 (1812-bztj): a SHORT caller TMPDIR that the caller then deletes (the
+# door's pf-guard dir) must not become the shared server's TMPDIR. Driven by
+# cargo with CARGO_INCREMENTAL=0, because an incremental or hand-rolled rustc
+# call is non-cacheable and never reaches
+# the server's temp dir (an arm that cannot fail pre-fix proves nothing).
+"$SC" --stop-server >/dev/null 2>&1
+EPH="$W/eph"; P="$W/p"; mkdir -p "$EPH" "$P/src"
+printf '[package]\nname = "sclt"\nversion = "0.0.0"\nedition = "2021"\n[workspace]\n' > "$P/Cargo.toml"
+printf 'pub fn a() -> u8 { 1 }\n' > "$P/src/lib.rs"
+( cd "$P" && TMPDIR="$EPH" CARGO_INCREMENTAL=0 RUSTC_WRAPPER="$ROOT/scripts/sccache-wrapper.sh" TILLANDSIAS_SCCACHE_BIN="$SC" CARGO_TARGET_DIR="$W/t" cargo build -q --offline ) >/dev/null 2>&1
+rm -rf "$EPH"
+printf 'pub fn b() -> u8 { 2 }\n' > "$P/src/lib.rs"
+if ( cd "$P" && TMPDIR=/tmp CARGO_INCREMENTAL=0 RUSTC_WRAPPER="$ROOT/scripts/sccache-wrapper.sh" TILLANDSIAS_SCCACHE_BIN="$SC" CARGO_TARGET_DIR="$W/t" cargo build -q --offline ) >/dev/null 2>"$W/arm4.err"; then ok "arm4 server survives its starter's deleted TMPDIR"; else bad "arm4 compile failed after the starter's TMPDIR was deleted: $(head -c 300 "$W/arm4.err")"; fi
+# ARM 5 (1841-7pvs): a HUNG sccache (never exits, never answers) must not hang the
+# build. The arm is itself bounded by timeout, so pre-fix it FAILS instead of hanging.
+if command -v timeout >/dev/null 2>&1; then
+    printf '#!/bin/sh\nexec sleep 3600\n' > "$W/hungsc"; chmod +x "$W/hungsc"
+    o5="$(TILLANDSIAS_SCCACHE_PROBE_SECS=2 TILLANDSIAS_SCCACHE_BIN="$W/hungsc" timeout 60 "$ROOT/scripts/sccache-wrapper.sh" rustc -vV 2>/dev/null)"
+    if grep -q '^rustc ' <<<"$o5"; then ok "arm5 hung sccache falls back to the bare compiler within a bound"; else bad "arm5 hung sccache hung or redded the build"; fi
+else
+    echo "skip:arm5:no-timeout"
+fi
+# @trace order:1841-7pvs
 exit $fail

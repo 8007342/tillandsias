@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tillandsias-org-update-website-skill-runs-unattended-inside-a-forge-with-no-host-paths-and-delivers-through-the-mirror-as-a-pushed-branch
+    field: status
+    value: completed
+    ts: "2026-10-24T05:13:22Z"
+    host: lenovinha
+
+events:
+  - packet_id: tillandsias-org-update-website-skill-runs-unattended-inside-a-forge-with-no-host-paths-and-delivers-through-the-mirror-as-a-pushed-branch
+    event:
+      type: completed
+      ts: "2026-10-24T05:13:22Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: 8007342/tillandsias.org@3160dd2 skills/update-website/scripts/test-release-refresh-unattended.sh ok:unattended-refresh:15
+  - packet_id: tillandsias-org-update-website-skill-runs-unattended-inside-a-forge-with-no-host-paths-and-delivers-through-the-mirror-as-a-pushed-branch
+    event:
+      type: note
+      ts: "2026-10-24T05:13:22Z"
+      host: lenovinha
+      summary: |-
+        merged as tillandsias.org 3160dd2

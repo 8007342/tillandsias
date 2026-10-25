@@ -1,0 +1,73 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Story child (a) of website-update-by-dogfood (milestone packet 4 of this story).
+packets:
+  - packet_id: a-release-carries-a-website-update-trailer-and-stable-promotion-enqueues-a-website-update-task-on-the-tillandsias-org-coordinator-namespace
+    order: 1846-dykd
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    release_target: fleet-coordinator-warm-cache-milestone
+    pickup_role: linux
+    capability_tags: [release, coordinator, bash, git]
+    estimated_hours: 3
+    owned_files:
+      - scripts/promote-stable.sh
+      - scripts/release-website-marker.sh
+      - scripts/test-promote-stable-enqueues-website-update.sh
+    title: |
+      A commit trailer "Website-Update: <one-line reason>" anywhere in the range previous-stable..tag marks the release as needing a website update, and promote-stable.sh, after the stable tag lands, enqueues one website-update task (tag, reasons) on the 8007342/tillandsias.org coordinator namespace — idempotent per tag, never blocking promotion
+    context: |
+      Operator request 2026-10-24 (macuahuitl, in-session): some releases need
+      a website update; the first is the release that retires local
+      (host-checkout) launches, because tillandsias.org lists local launches
+      as a main feature.
+      MECHANISM CHOSEN (least new machinery): a git commit trailer, read with
+      `git log --format='%(trailers:key=Website-Update,valueonly)'
+      <prev-stable>..<tag>`. No new file, no VERSION-adjacent state, no
+      release-notes parsing: the range previous-stable..tag already exists in
+      promote-stable.sh's world (the `stable` tag is moved by step 3), and the
+      trailer travels with the change that caused it, so the author of the
+      local-launch retirement PR states it once.
+      EXISTING CAPABILITY REUSED: promote-stable.sh already has a post-flip
+      side-effect step (step 4, scripts/advance-deploy-ref.sh, 1798-khw6) with
+      a falsifiable `verified:` line grammar; the enqueue is a step 5 of the
+      same shape. The queue call is the 1826 client, not a new HTTP path.
+      The namespace is the site project's (owner/repo normalised per 1828's
+      derivation), so the task is picked up by whichever forge opens that
+      project. Enqueue failure (no token, coordinator unreachable) prints
+      `website-update:deferred:<tag>:<why>` and does NOT fail the promotion;
+      the marker is recomputable from git, so a later re-run enqueues.
+      Website rule: the task payload carries only tag + trailer reasons, no
+      host or fleet detail — the site stays about architecture.
+    exit_criteria:
+      - 'fixture repo with a Website-Update trailer between two stable tags + stub coordinator client: promote-stable step 5 calls `enqueue` exactly once with namespace=8007342/tillandsias.org, tag and the reason text; a second run for the same tag makes no second enqueue (pre-fix result: FAILS — no step 5, zero client calls)'
+      - 'fixture range with no trailer: zero client calls and no website-update line (pre-fix result: PASSES vacuously — recorded so the arm is known not to discriminate alone)'
+      - 'stub client exits non-zero: promotion still prints promoted:<tag> and the last-but-one line is website-update:deferred:<tag>:<why> (pre-fix result: FAILS — line absent)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: scripts/test-promote-stable-enqueues-website-update.sh
+      (new) builds a throwaway repo in a fixture dir, stubs gh and the
+      coordinator client on PATH recording argv, and runs promote-stable's
+      step-5 function only.
+    depends_on:
+      - tillandsias-plan-coordinator-client-with-rate-limit-adaptive-heartbeat-busy-backoff-batching-and-offline-fallback-to-the-git-ledger-plus-mcp-tool
+      - coordinator-worker-and-sqlite-durable-object-store-and-return-project-queues-claims-and-overviews-with-local-miniflare-tests-no-deploy
+    related: [1824-58bm, 776-jcf3, 1798-khw6]
+    next_action: >
+      Nothing is built yet. Write scripts/release-website-marker.sh <prev> <tag>
+      printing one reason per line from the trailer (empty = no update), then
+      add step 5 to promote-stable.sh after the verified:deploy-ref line,
+      calling the 1826 client's enqueue verb (check its real verb name in the
+      client before coding — 1826 may not have landed; if not, stop: this is
+      blocked, do not invent a curl). Idempotency key = tag.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    provenance: |
+      Filed by macuahuitl (claude subagent) from operator request 2026-10-24 in-session.
+    events:
+      - type: filed
+        ts: "2026-10-24T03:47:57Z"
+        host: macuahuitl
+        summary: |-
+          Website-update story (a): commit trailer marks the release; stable promotion enqueues a task on the site's coordinator namespace.

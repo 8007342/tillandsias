@@ -89,7 +89,9 @@ local settings = fs.read(SETTINGS)
 local cmd = settings:match('"command"%s*:%s*"([^"]+)"')
 local cf = fs.read(CONTAINERFILE)
 local hook_src = fs.read(HOOK)
-local hook_mode = text.trim(proc.run({ argv = { "stat", "-c", "%a", ROOT .. "/" .. HOOK }, timeout_ms = 10000 }).stdout or "")
+-- The mode git records is the mode the image build copies, and unlike
+-- `stat -c` (GNU only; BSD stat has -f) it reads the same on every host.
+local hook_mode = (text.trim(proc.run({ argv = { "git", "-C", ROOT, "ls-files", "-s", "--", HOOK }, timeout_ms = 10000 }).stdout or "")):match("^1007(%d%d)") or ""
 arm("1 SHIPPED settings.json names an absolute path the Containerfile installs from an executable image file, and policy-bin/ lands where the hook looks",
     cmd ~= nil and cmd:sub(1, 1) == "/"
     and cf:find("COPY bash-policy-hook " .. cmd, 1, true) ~= nil

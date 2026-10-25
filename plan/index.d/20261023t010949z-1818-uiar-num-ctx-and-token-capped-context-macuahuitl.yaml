@@ -1,0 +1,54 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Phase 1 child (1e) of 1813-54df; operator-approved redesign 2026-10-23.
+packets:
+  - packet_id: synthesis-requests-set-num-ctx-per-model-size-and-cap-retrieved-context-by-tokens-not-chunk-count
+    order: 1818-uiar
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: any
+    capability_tags: [experts, inference, ollama, rust]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-plan/src/pipeline.rs
+    title: |
+      Synthesis requests set the context window explicitly per model size (≥ 8192 on ≥ 7b, smaller on 0.5b/3b) and the retrieved context is capped by a token budget, not a chunk count — pack + ≤ 4 chunks on 0.5b/3b, pack + ≤ 8 on 7b/14b
+    context: |
+      pipeline.rs retrieves a fixed `RETRIEVE_K` (8) chunks for every model
+      and never states a context window, so ollama's default window silently
+      truncates the head of a long prompt — which, once the context pack
+      (1815-tei4) is first, is exactly the pack. All synthesis goes through
+      the one client `pipeline::chat_completion` over the OpenAI-compatible
+      `/v1/chat/completions`; ollama's OpenAI endpoint does not take
+      `options.num_ctx`, so the implementer chooses and records one of: the
+      native `/api/chat` body with options.num_ctx for synthesis only, or a
+      per-model context length set where the inference container loads the
+      model (OLLAMA_CONTEXT_LENGTH / Modelfile). Either way the window is a
+      function of the model size class and is visible in the request or the
+      model's `/api/show` output.
+    exit_criteria:
+      - 'a unit test asserts the synthesis budget for a 0.5b/3b model id admits the pack plus at most 4 chunks and for a 7b/14b id at most 8, by a token estimate, and that an over-long chunk set is cut at the budget (pre-fix result: FAILS — 8 chunks for every model, no budget)'
+      - 'a synthesis request (or the loaded model, by /api/show) for a 7b model reports a context window ≥ 8192 (pre-fix result: FAILS — no window is set; ollama default applies)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: cargo test -p tillandsias-plan
+      synth_context_budget_by_model_size (written with the change) asserts
+      the per-size chunk/token caps and the window the request carries.
+    depends_on: [a-generated-size-bounded-expert-context-pack-built-at-forge-launch-from-the-projects-own-declarations-leads-every-synthesis-prompt-byte-identical]
+    related: [1813-54df, 1815-tei4]
+    next_action: >
+      Add a model-size classifier from the model id, a token estimator
+      (chars/4 is enough), and a budget that trims retrieved chunks after the
+      pack; pick and record the num_ctx mechanism; write the unit test.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    provenance: |
+      Filed by macuahuitl (claude subagent, operator-approved redesign 2026-10-23).
+    events:
+      - type: filed
+        ts: "2026-10-23T01:09:49Z"
+        host: macuahuitl
+        summary: |-
+          p2 1e: explicit context window per model size; token-budgeted retrieval.

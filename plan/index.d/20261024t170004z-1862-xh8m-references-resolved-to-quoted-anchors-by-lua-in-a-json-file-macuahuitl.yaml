@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-24. Code is cited by symbol, never by line.
+packets:
+  - packet_id: lua-resolves-each-reference-to-a-quoted-anchor-at-update-time-into-a-json-references-file-and-sites-only-render-links
+    order: 1862-xh8m
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, traces, citations, expert-system, website]
+    estimated_hours: 4
+    depends_on:
+      - audit-inventory-of-every-place-where-correctness-depends-on-a-line-number-or-a-raw-grep
+    title: "References are resolved to quoted text by a Lua script into one JSON file, and pages only draw links from it"
+    context: |
+      Operator direction: move the mechanisms inventoried by 1861-sf3p to Lua; the local expert system resolves each reference to a quoted anchor at update time and writes it to a JSON references file; sites only pretty-print those references as clickable links. Depends on the audit packet. Operator packet relayed by the coordinator 2026-10-24.
+    exit_criteria:
+      - "Moving or inserting lines above a cited span leaves every reference resolving to the same quoted text via the JSON references file, and a reference whose quote no longer exists fails the check; a site page renders its links only from the file. Pre-fix result: FAILS, correctness depends on line numbers and raw grep."
+    verifiable_closure: "Moving or inserting lines above a cited span leaves every reference resolving to the same quoted text via the JSON references file, and a reference whose quote no longer exists fails the check; a site page renders its links only from the file. Pre-fix result: FAILS, correctness depends on line numbers and raw grep."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-24.
+    events:
+      - type: filed
+        ts: "2026-10-24T17:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator request of 2026-10-24"

@@ -5,9 +5,9 @@
 # worker COPIES AND RUNS. Until 1356-u6xe that command interpolated the bare
 # project name — `tillandsias --bash tillandsias` — and the binary answered
 # `Error: Project not found: tillandsias` with rc=1, because it resolves a
-# CHECKOUT PATH there, not a name. This fixture pins the property that makes
-# the affordance worth printing: the argument after `--bash` is a directory
-# that exists on this host, and the project root is its parent.
+# CHECKOUT PATH there, not a name. 776-jcf3 then retired path launches, so
+# this fixture now pins the cloud form: `tillandsias --cloud <owner>/<repo>
+# --bash`, which is the only launch the binary accepts.
 #
 # It asserts the SHAPE of the printed command, never the binary's behaviour:
 # it runs no lane and starts no container, so it is safe on a host with no
@@ -40,21 +40,24 @@ esac
 
 cmd="${line#todo:initialize-bare-metal-host:mirror:}"
 
-# The path is the token after --bash.
-path="${cmd##*--bash }"
-[ -n "$path" ] || fail "no-argument-after---bash:$cmd"
-
-case "$path" in
-    /*) ;;
-    *) fail "argument-after---bash-is-not-a-path:$path" ;;
+# 776-jcf3: the lane command is the cloud form, `tillandsias --cloud
+# <owner>/<repo> --bash`, with no positional host path and no
+# TILLANDSIAS_HOST_PROJECT_ROOT (both retired).
+case "$cmd" in
+    *TILLANDSIAS_HOST_PROJECT_ROOT*) fail "names-retired-project-root:$cmd" ;;
 esac
-[ -d "$path" ] || fail "argument-after---bash-is-not-a-directory:$path"
+case "$cmd" in
+    "tillandsias --cloud "*" --bash") ;;
+    *) fail "not-the-cloud-lane-form:$cmd" ;;
+esac
+nwo="${cmd#tillandsias --cloud }"
+nwo="${nwo% --bash}"
+case "$nwo" in
+    */*) ;;
+    *) fail "cloud-argument-is-not-owner-repo:$nwo" ;;
+esac
+case "$nwo" in
+    /*|*/*/*|*" "*) fail "cloud-argument-is-a-path:$nwo" ;;
+esac
 
-# The project root must be the PARENT of that checkout, since the binary scans
-# the root for projects.
-root_kv="${cmd%% tillandsias --bash*}"
-root="${root_kv#TILLANDSIAS_HOST_PROJECT_ROOT=}"
-[ -d "$root" ] || fail "project-root-is-not-a-directory:$root"
-[ "$root" = "$(dirname "$path")" ] || fail "project-root-is-not-the-parent:root=$root path=$path"
-
-echo "ok:bare-metal-lane-command-is-runnable:root=$root path=$path"
+echo "ok:bare-metal-lane-command-is-runnable:cloud=$nwo"

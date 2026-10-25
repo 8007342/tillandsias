@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-land-queue-discards-its-own-push-output-so-a-green-candidate-whose-push-is-refused-after-a-plan-only-adopt-is-requeued-with-no-cause
+    field: status
+    value: completed
+    ts: "2026-10-23T17:33:10Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-land-queue-discards-its-own-push-output-so-a-green-candidate-whose-push-is-refused-after-a-plan-only-adopt-is-requeued-with-no-cause
+    event:
+      type: completed
+      ts: "2026-10-23T17:33:10Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: abae07e68 land(632) + scripts/test-land-queue.sh 40/40 (pre-fix 36/40: arms 20a push refusal lines in output and PR comment, 20b plan-only move between gate and push still lands, 20c evicted gate log kept at the named path, 20c2 bounded retention)
+  - packet_id: the-land-queue-discards-its-own-push-output-so-a-green-candidate-whose-push-is-refused-after-a-plan-only-adopt-is-requeued-with-no-cause
+    event:
+      type: note
+      ts: "2026-10-23T17:33:10Z"
+      host: macuahuitl
+      summary: |-
+        closed: push output reported, plan-only push race re-adopted (3 attempts), evicted gate logs kept under target/land-queue-logs

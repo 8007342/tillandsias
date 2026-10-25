@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Phase 3 child (3a) of 1831-74sf; operator-approved redesign 2026-10-23.
+packets:
+  - packet_id: implementer-tier-local-is-a-routing-floor-below-haiku-in-model-tier-routing-and-the-batch-selector
+    order: 1832-5a9z
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: linux
+    capability_tags: [methodology, plan-tool, selection, rust, delegation]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/lib.rs
+      - methodology/distributed-work.yaml
+      - scripts/select-work-batch.sh
+      - scripts/test-packet-tier-fields.sh
+    title: |
+      `implementer_tier: local` is accepted as a fourth tier below haiku — by the field vocabulary, by methodology model_tier_routing and by select-work-batch.sh, which routes a local row to the local delegate when an inference endpoint is reachable and otherwise demotes it to haiku
+    context: |
+      The vocabulary is closed today: crates/tillandsias-plan/src/lib.rs
+      lists ("implementer_tier", ["haiku", "sonnet", "opus"]) and
+      scripts/test-packet-tier-fields.sh asserts set-field refuses an unknown
+      tier, so `set-field <order> implementer_tier local` is refused.
+      methodology/distributed-work.yaml cycle_batch_triage.model_tier_routing
+      names three tiers. The rule to add: local is a FLOOR — a local row is
+      offered to scripts/local-delegate.sh (1831-74sf child 3b) when
+      TILLANDSIAS_INFERENCE_ENDPOINT answers; when it does not, or the
+      delegate's result is rejected, the row falls back to haiku. The frontier
+      session always verifies and commits.
+    exit_criteria:
+      - '`tillandsias-plan set-field <order> implementer_tier local` on a fixture ledger succeeds and `gpt` is still refused (pre-fix result: FAILS — local is refused)'
+      - 'select-work-batch.sh on a fixture ledger with a local row prints tier=local when a stub endpoint answers and tier=haiku when it does not (pre-fix result: FAILS — local is not a known tier)'
+      - 'model_tier_routing in methodology names local, its floor/fallback rule and its promotion ladder pointer (pre-fix result: three tiers only)'
+    verifiable_closure: |
+      scripts/test-packet-tier-fields.sh passes with a new arm for local
+      (fails pre-fix: set-field refuses local); cargo test -p tillandsias-plan
+      passes.
+    depends_on: []
+    related: [1831-74sf, 1437-62g8]
+    next_action: >
+      Add local to the vocabulary, add the fixture arm (red first), add the
+      selector routing with the endpoint probe, update methodology.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    provenance: |
+      Filed by macuahuitl (claude subagent, operator-approved redesign 2026-10-23).
+    events:
+      - type: filed
+        ts: "2026-10-23T01:14:39Z"
+        host: macuahuitl
+        summary: |-
+          Phase 3 3a: implementer_tier local as a floor below haiku.

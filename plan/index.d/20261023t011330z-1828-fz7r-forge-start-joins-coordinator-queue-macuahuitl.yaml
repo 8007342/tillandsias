@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Phase 2 child (2e) of fleet-coordinator-warm-cache-milestone (1824-58bm).
+packets:
+  - packet_id: forge-start-joins-the-project-coordinator-queue-pushes-an-initial-client-folded-overview-when-creating-it-and-asks-whats-next
+    order: 1828-fz7r
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    release_target: fleet-coordinator-warm-cache-milestone
+    pickup_role: linux
+    capability_tags: [forge, coordinator, bash, plan-tool]
+    estimated_hours: 3
+    owned_files:
+      - images/default/lib-common.sh
+      - scripts/test-forge-start-joins-coordinator.sh
+    title: |
+      At forge start the forge joins its project's coordinator namespace (creating it if it is the first subscriber), pushes an initial client-folded plan overview when it created the queue, and asks "what's next" once — and when no coordinator is configured or reachable it proceeds silently from the git ledger
+    context: |
+      Milestone decisions 3, 4 and 6: the creator pushes the initial
+      overview (no server folding); forge start is one of the on-demand call
+      points. The namespace is derived from the project's remote (owner/repo
+      normalised) or its directory name when there is no remote; a project
+      may declare related namespaces (a file in the project, e.g.
+      .tillandsias/coordinator-namespaces) and the global one is opt-in.
+      The overview is produced by the plan tool when the project has a plan
+      ledger; a project with no plan pushes only {head_sha}. Non-Tillandsias
+      projects participate the same way (the queue is per project). Start
+      must not block on the network: one bounded call, backgrounded.
+    exit_criteria:
+      - 'with a stub coordinator, a fixture forge start for a fresh namespace performs join → overview put → next in that order; for an existing namespace it performs join → next with no overview put (pre-fix result: FAILS — no coordinator calls at start)'
+      - 'with no token configured, forge start makes no network call and adds < 50 ms (pre-fix result: n/a — measured baseline recorded)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: scripts/test-forge-start-joins-coordinator.sh
+      (new) sources the start function with a stub client on PATH that
+      records its argv, and asserts the call sequences above.
+    depends_on: [tillandsias-plan-coordinator-client-with-rate-limit-adaptive-heartbeat-busy-backoff-batching-and-offline-fallback-to-the-git-ledger-plus-mcp-tool]
+    related: [1824-58bm]
+    next_action: >
+      Add a backgrounded coordinator_join_at_start step after
+      inject_startup_context; namespace derivation as a pure function with
+      its own fixture arm.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    provenance: |
+      Filed by macuahuitl (claude subagent, operator-approved redesign 2026-10-23).
+    events:
+      - type: filed
+        ts: "2026-10-23T01:13:30Z"
+        host: macuahuitl
+        summary: |-
+          Phase 2 2e: forge start joins the project queue, seeds the overview when creating, asks what's next.

@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: scripts-local-delegate-implements-a-packet-against-the-local-inference-endpoint-bounded-to-owned-files-and-runs-its-closure-without-committing
+    field: next_action
+    value: 'PR #611 (work/1833-ytbe, 1ef55a67f; contains #609) implements scripts/local-delegate.sh + scripts/lua/local-delegate.lua: do not reimplement. Fixture scripts/test-local-delegate.sh pre 0/5 post 5/5; live qwen2.5:7b ok rounds=1 3.3 s, 14b 5.3 s (macuahuitl A5000). Land it, then close with the landed SHA. Left: gate-bind the fixture (needs darwin STEP_SECOND_REGIME); idiom retrieval.'
+    ts: "2026-10-23T03:36:21Z"
+    host: macuahuitl
+    replaces_sha256: "ddf9a7f4fe0f78fbb6f32b3c59a5e962ac7b88a15110f68297f883ca4138fa98"
+
+events:
+  - packet_id: scripts-local-delegate-implements-a-packet-against-the-local-inference-endpoint-bounded-to-owned-files-and-runs-its-closure-without-committing
+    event:
+      type: note
+      ts: "2026-10-23T03:36:21Z"
+      host: macuahuitl
+      summary: |-
+        handoff

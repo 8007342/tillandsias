@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tag-qualifying-haiku-tier-ready-rows-implementer-tier-local-once-the-local-floor-lands
+    field: status
+    value: completed
+    ts: "2026-10-23T12:24:11Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: tag-qualifying-haiku-tier-ready-rows-implementer-tier-local-once-the-local-floor-lands
+    event:
+      type: completed
+      ts: "2026-10-23T12:24:11Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: Selection recorded on 1831-74sf at 2026-10-23T12:24:11Z: 5 set-field corrections to implementer_tier local (1437-3ynw, 1437-wcn9, 1478-9r6f, 1604-c5a5, 1816-iyyc); tillandsias-plan check ok, 1943 packets.

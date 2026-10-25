@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: expert-refusal-decides-by-score-margin-over-the-top-k-median-plus-lexical-overlap-calibrated-on-the-refusal-corpus
+    field: status
+    value: completed
+    ts: "2026-10-23T12:14:10Z"
+    host: macuahuitl
+
+events:
+  - packet_id: expert-refusal-decides-by-score-margin-over-the-top-k-median-plus-lexical-overlap-calibrated-on-the-refusal-corpus
+    event:
+      type: completed
+      ts: "2026-10-23T12:14:10Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: f3fd7532a land(616) + results-margin-561-nomic-20261023-macuahuitl.tsv (floor: 450/458 answered, 4/33 near-miss refused; adopted: 450/458, 5/33) + apply_refusal_rule unit tests. NOTE criterion 2 as built: a flat high top-k refuses only when lexical overlap is also below 0.05 — the calibration showed margin alone loses in-corpus answers before it gains near-miss refusals
+  - packet_id: expert-refusal-decides-by-score-margin-over-the-top-k-median-plus-lexical-overlap-calibrated-on-the-refusal-corpus
+    event:
+      type: note
+      ts: "2026-10-23T12:14:10Z"
+      host: macuahuitl
+      summary: |-
+        closed: refusal by margin AND lexical overlap, calibrated; margin-alone knob available but off

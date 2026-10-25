@@ -158,7 +158,7 @@ impl std::error::Error for ProjectNameRefused {}
 /// which the guest then ran through `/bin/bash -lc`. Until 2026-08-17 that
 /// interpolation had no escaping and no validation, and for LOCAL projects the
 /// name is a directory name read verbatim off disk by
-/// `tillandsias_headless::local_projects::scan_project_root` (`file_name()`).
+/// the `~/src` scanner (`scan_project_root`, since deleted by 776-jcf3).
 /// A directory literally named `a'b` closed the quote and everything after it
 /// was bash source. Order 823-u5zf removed that layer: project launches now
 /// emit a verbatim argv VECTOR, so the quote-breakout is structurally gone.

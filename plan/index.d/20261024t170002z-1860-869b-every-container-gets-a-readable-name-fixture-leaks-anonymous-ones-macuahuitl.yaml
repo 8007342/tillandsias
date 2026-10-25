@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-24. Code is cited by symbol, never by line.
+packets:
+  - packet_id: mirror-healthcheck-fixture-leaves-anonymous-created-containers-when-killed-and-every-container-must-have-a-readable-name
+    order: 1860-869b
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [podman, fixtures, naming, cleanup]
+    estimated_hours: 4
+    title: "Test and runtime containers all get a readable name, and the mirror health-check test cleans up after itself when killed"
+    context: |
+      Seven anonymous Created containers (names like awesome_franklin, image tillandsias-git, cmd /hc/inner.sh) were found 2026-10-24 after a gate was killed. The fixture scripts/test-mirror-healthcheck-quiet.sh runs podman run --rm without --name. Fix: --name tillandsias-test-<fixture>-$$ and a trap that removes it; audit every other fixture and runtime call site for unnamed podman run/create. Rule: every container the runtime or dev machinery creates has a name an end user can read. Operator packet relayed by the coordinator 2026-10-24.
+    exit_criteria:
+      - "A guard greps the runtime and scripts/ for podman run or create without --name and fails on any hit not on an allowlist; scripts/test-mirror-healthcheck-quiet.sh is killed mid-run and afterwards no container remains. Pre-fix result: FAILS, the fixture runs podman run --rm with no --name and leaves Created containers."
+    verifiable_closure: "A guard greps the runtime and scripts/ for podman run or create without --name and fails on any hit not on an allowlist; scripts/test-mirror-healthcheck-quiet.sh is killed mid-run and afterwards no container remains. Pre-fix result: FAILS, the fixture runs podman run --rm with no --name and leaves Created containers."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-24.
+    events:
+      - type: filed
+        ts: "2026-10-24T17:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator request of 2026-10-24"

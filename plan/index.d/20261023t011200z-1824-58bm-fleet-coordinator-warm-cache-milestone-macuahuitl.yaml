@@ -1,0 +1,84 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Phase 2 milestone and umbrella; operator-approved redesign (The Tlatoāni,
+# 2026-10-23). Change: openspec/changes/fleet-coordinator-warm-cache/.
+packets:
+  - packet_id: fleet-coordinator-warm-cache-milestone
+    order: 1824-58bm
+    status: ready
+    kind: milestone
+    priority: p2
+    desired_release: v0.5
+    multi_cycle: true
+    pickup_role: any
+    capability_tags: [milestone, cloudflare, coordinator, fleet, plan-tool]
+    estimated_hours: 1
+    deliverable: plan/index.d (criteria holder; children carry the work) + openspec/changes/fleet-coordinator-warm-cache/
+    owned_files:
+      - openspec/changes/fleet-coordinator-warm-cache/
+    title: |
+      MILESTONE: coordinator.tillandsias.org — a personal-fleet warm cache on Cloudflare's free tier (Worker + one SQLite Durable Object behind Cloudflare Access) for per-project message queues, plan overviews with freshness metadata, and short-TTL claim overlays; git stays the source of truth
+    context: |
+      DESIGN DECISIONS (operator-approved 2026-10-23; binding on every child):
+      1. PERSONAL FLEET ONLY. Cloudflare Access sits in front (the operator's
+         account; app/device login for people; Access service tokens for
+         hosts and forges, held CLIENT-SIDE in the vault, provisioned from
+         `--cloudflare-login`). The Worker verifies the Access JWT against
+         Cloudflare's public certs (the team domain's /cdn-cgi/access/certs).
+         NO secret is stored on Cloudflare. Not a public API.
+      2. NEAR-ZERO COMPUTE. One Worker + one SQLite-backed Durable Object;
+         store and return only — no plan folding, no AI in the request path.
+      3. GIT IS THE SOURCE OF TRUTH; the coordinator is a WARM CACHE. No
+         server-side plan folding: the forge that creates a project's queue
+         pushes an initial CLIENT-folded plan overview; the git-mirror
+         post-push hook (credentials injected from the vault) pushes the new
+         head SHA + a staleness bump (+ optional refreshed overview) after a
+         successful push to GitHub. Every read returns freshness metadata
+         (synced SHA, age, might-be-outdated). No GitHub webhook.
+      4. PROJECT MESSAGE QUEUES keyed by project namespace; joining a
+         nonexistent queue creates it (first subscriber); agents from
+         different providers share it (as the logging engine groups by
+         project). An agent may subscribe to several namespaces: its project,
+         related-project groups (e.g. tillandsias + tillandsias.org +
+         observatorium.tillandsias.org; tlatoani.net/*), and a global one.
+         Namespaces are NEVER listed or published — there is no list
+         endpoint.
+      5. BEST-EFFORT MESSAGES: no read guarantee within any time or at all;
+         bounded TTL (default 6 h, max 24 h); no receipts.
+      6. NO FIXED POLLING: calls on demand (forge start, after push, idle
+         seeking work); a self-measured adaptive heartbeat ≤ 2 min that backs
+         off when the host is busy and stops during gates and agent turns;
+         client- and server-side rate limits; request batching.
+      7. CLAIM OVERLAY: short-TTL claims hide a ready row across the fleet in
+         seconds; real claims still flip status in git; an expired overlay
+         claim vanishes.
+      CHILDREN (by packet_id, filed in this pass):
+        coordinator-worker-and-sqlite-durable-object-store-and-return-project-queues-claims-and-overviews-with-local-miniflare-tests-no-deploy
+        tillandsias-plan-coordinator-client-with-rate-limit-adaptive-heartbeat-busy-backoff-batching-and-offline-fallback-to-the-git-ledger-plus-mcp-tool
+        git-mirror-post-push-hook-sends-the-new-head-sha-staleness-bump-and-optional-overview-to-the-coordinator-after-a-github-push
+        forge-start-joins-the-project-coordinator-queue-pushes-an-initial-client-folded-overview-when-creating-it-and-asks-whats-next
+        vault-provisions-cloudflare-access-service-tokens-for-hosts-and-forges-from-cloudflare-login
+        operator-gated-deploy-of-the-coordinator-worker-to-coordinator-tillandsias-org-behind-a-cloudflare-access-application
+      RELATED: 1505-sm2j (cloudflare-login-and-fleet-vpn) supplies
+      `--cloudflare-login`; this milestone uses Access, not the fleet VPN.
+    exit_criteria:
+      - 'openspec/changes/fleet-coordinator-warm-cache/ exists with proposal, design, tasks and spec delta and passes `openspec validate` (pre-fix result: FAILS — no change)'
+      - 'every child is closed with evidence (pre-fix result: none exist)'
+      - 'LIVE (after the operator-gated deploy): two hosts in one project namespace — a message sent by one is received by the other within its heartbeat, an overlay claim by one hides the row from the other''s `next` within seconds, and a read after a mirror push reports the new SHA with age < 60 s; an unauthenticated request is refused by Access (pre-fix result: FAILS — no coordinator)'
+    unscoreable: "a milestone row: closes when its children close and the live arm is recorded as an event"
+    depends_on: []
+    related: [1505-sm2j]
+    next_action: >
+      The Worker+DO child and the client child can proceed in parallel
+      against the spec's HTTP contract; the vault and hook children follow
+      the client; deploy is last and operator-gated.
+    notes: |
+      size: S
+      implementer_tier: opus
+    provenance: |
+      Filed by macuahuitl (claude subagent, operator-approved redesign 2026-10-23).
+    events:
+      - type: filed
+        ts: "2026-10-23T01:12:00Z"
+        host: macuahuitl
+        summary: |-
+          Phase 2 milestone: coordinator.tillandsias.org warm cache; design decisions recorded; six children filed in the same pass.

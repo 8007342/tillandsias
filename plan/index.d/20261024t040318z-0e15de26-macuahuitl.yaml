@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: the-local-launch-retirement-release-is-the-first-website-update-marked-release-and-its-tillandsias-org-rewording-is-done-end-to-end-by-a-non-claude-forge-agent-from-the-coordinator-queue
+    event:
+      type: list-replace
+      ts: "2026-10-24T04:03:18Z"
+      agent_id: linux-macuahuitl-claude-20261024t040257z
+      host: macuahuitl
+      field: depends_on
+      items:
+        - "a-release-carries-a-website-update-trailer-and-stable-promotion-enqueues-a-website-update-task-on-the-tillandsias-org-coordinator-namespace"
+        - "a-forge-started-for-a-project-with-a-pending-coordinator-task-runs-it-with-a-non-claude-headless-agent-and-that-projects-named-skill-to-completion-reports-back-and-exits"
+        - "tillandsias-org-update-website-skill-runs-unattended-inside-a-forge-with-no-host-paths-and-delivers-through-the-mirror-as-a-pushed-branch"
+        - "forge-start-joins-the-project-coordinator-queue-pushes-an-initial-client-folded-overview-when-creating-it-and-asks-whats-next"
+        - "operator-gated-deploy-of-the-coordinator-worker-to-coordinator-tillandsias-org-behind-a-cloudflare-access-application"
+        - "retire-host-src-checkout-behind-proven-transparent-push"
+      summary: |-
+        revised: operator flow correction 2026-10-24 (in-session, macuahuitl via coordinator) — plain queue message, orchestrator-launched headless one-shot non-Claude forge, agent self-selects the skill, forge lifetime = agent lifetime, timeout backstop

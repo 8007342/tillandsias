@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: local-experts-phase-1-grounded-forge-aware-answers-tellme-through-expert-serve-context-pack-and-retrieval-quality-story
+    event:
+      type: progress
+      ts: "2026-10-23T03:36:24Z"
+      agent_id: linux-macuahuitl-claude-20261023t033620z
+      host: macuahuitl
+      summary: |
+        Spec PR #605 landed at 69e0a8ef4 (land(605)): openspec changes local-experts-grounded-tellme-and-context-pack, fleet-coordinator-warm-cache, local-coding-experts-delegation-ladder. Children in flight as PRs: #606 1814-x78v, #607 1816-iyyc, #608 1817-wq7y, #609 1832-5a9z, #610 1815-tei4, #611 1833-ytbe, #612 1821-xcwc, #613 1835-v7vx.

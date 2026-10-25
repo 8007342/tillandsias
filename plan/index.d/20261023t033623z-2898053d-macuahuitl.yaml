@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-shared-sccache-daemon-inherits-a-preflight-guards-tmpdir-and-reds-every-later-compile-once-it-is-deleted
+    field: next_action
+    value: 'Fix LANDED at 2695a8578 (land(604)). Remaining criterion: run bash scripts/test-sccache-long-tmpdir.sh on a darwin or msys host and write gate step scripts/gate-steps.d/<NNN>-1812-bztj.step (STEP_SCRIPT=scripts/test-sccache-long-tmpdir.sh) with that run as STEP_SECOND_REGIME; then close.'
+    ts: "2026-10-23T03:36:23Z"
+    host: macuahuitl
+    replaces_sha256: "37d7de97ff0302c2af89d0846b4a47b3e60b577e09cd8e46008ad3caa968bcf8"
+
+events:
+  - packet_id: the-shared-sccache-daemon-inherits-a-preflight-guards-tmpdir-and-reds-every-later-compile-once-it-is-deleted
+    event:
+      type: note
+      ts: "2026-10-23T03:36:23Z"
+      host: macuahuitl
+      summary: |-
+        landed

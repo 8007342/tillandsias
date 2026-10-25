@@ -1,0 +1,93 @@
+# ORDER 1821-xcwc — GROUND TRUTH for forge awareness.
+#
+# @trace spec:forge-environment-discoverability
+# @trace order:1821-xcwc, order:1816-iyyc
+#
+# Graded by `tillandsias-plan grade` (crates/tillandsias-plan/src/groundtruth.rs)
+# and run by litmus:expert-groundtruth-harness, step "forge-awareness set".
+#
+#   tillandsias-plan grade --root . \
+#     openspec/litmus-tests/groundtruth/expert-groundtruth-forge-awareness.yaml
+#
+# THE FIELD FAILURE (container questions asked in a forge answered with
+# `docker run`) was pinned by three cases that were RED and therefore live
+# in pending/expert-groundtruth-forge-awareness-pending.yaml, outside the glob
+# every gate requires fail=0 over. They are graded by a ratchet step in the
+# litmus; when they pass they MOVE INTO THIS FILE. See that file's header. 1822-dmwz moved the
+# docker case here; two remain pending.
+#
+# `answer_excludes` already expressed negatives; no harness change was needed
+# for them. The harness change of this order is `project:` below.
+#
+# THE FOREIGN-PROJECT CASE. Forges also run other people's projects, which
+# have their own discipline. `project:` (harness extension of this order)
+# scopes a cheatsheet.ask case to a committed fixture project instead of this
+# checkout. The answer must be that project's own flow and must not leak
+# Tillandsias rules (linux-next, work/ refs, the plan ledger, @trace).
+
+version: 1
+name: expert-groundtruth-forge-awareness
+description: >
+  Forge awareness: container questions must be answered from the forge
+  constraints cheatsheet and never recommend docker or a nested container;
+  a non-Tillandsias project question must be answered from that project's
+  own declared flow, with no Tillandsias branch or ledger rules.
+
+cases:
+
+  - id: foreign-project-push-uses-its-own-flow-not-tillandsias-rules
+    engine: cheatsheet.ask
+    project: openspec/litmus-tests/groundtruth/fixtures/foreign-project
+    query: "how should I push my change?"
+    why: >
+      NON-Tillandsias project. The fixture project declares branch discipline
+      level 0 (push straight to main). The answer must be that flow and must
+      not apply Tillandsias-specific rules.
+    expect:
+      confidence: exact
+      citation_kind: cheatsheet
+      min_citations: 1
+      max_citations: 1
+      citations_include:
+        - path: openspec/litmus-tests/groundtruth/fixtures/foreign-project/docs/cheatsheets/pushing-changes.md
+          kind: cheatsheet
+          span_contains:
+            - "git push origin main"
+      answer_contains:
+        - "git push origin main"
+      answer_excludes:
+        - "linux-next"
+        - "work/"
+        - "plan ledger"
+        - "@trace"
+        - "OpenSpec"
+
+  # ORDER 1822-dmwz: moved from pending/ when it went green (title-card fold +
+  # BM25/RRF in cheatsheet.ask). It started RED there; the ratchet required this move.
+  - id: forge-run-container-here-no-docker
+    engine: cheatsheet.ask
+    query: "how do I run a container or docker here in the forge?"
+    why: >
+      The field failure. The answer must be the forge-constraints rule (no
+      docker, no nested container daemon) cited to the right lines, and must
+      not carry a recommending phrasing.
+    expect:
+      confidence: exact
+      citation_kind: cheatsheet
+      min_citations: 1
+      max_citations: 1
+      citations_include:
+        - path: cheatsheets/runtime/forge-constraints.md
+          kind: cheatsheet
+          span_contains:
+            - "NO docker"
+            - "nested container daemon"
+      answer_contains:
+        - "NO docker"
+      answer_excludes:
+        - "docker pull"
+        - "docker-compose up"
+        - "apt install docker"
+        - "dnf install docker"
+        - "systemctl start docker"
+
