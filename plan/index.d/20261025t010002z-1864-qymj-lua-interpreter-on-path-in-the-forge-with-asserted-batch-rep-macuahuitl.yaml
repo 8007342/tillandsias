@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+  - packet_id: lua-interpreter-on-path-in-the-forge-with-asserted-batch-replace-and-conflict-hunk-helpers
+    order: 1864-qymj
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, lua, tooling, images]
+    estimated_hours: 4
+    title: "A Lua interpreter is on the forge PATH, listed in the startup context, with helpers for safe multi-edit and merge-conflict resolution"
+    context: |
+      HIGH RANK: this is the forge side of the operator's move-to-Lua direction. Agents fell back to about two dozen ad-hoc python3 heredocs in one session (about 12 multi-site asserted edits, 5 conflict resolutions, 5 doc rewrites). Expose lua on PATH and in the startup context, add a tellme lua topic, and ship small helpers: batched asserted replace, conflict-hunk resolution (ours, theirs, both), frontmatter edit. Standard library plus lfs and lpeg were suggested by the reporter. Source: forge field report FORGE_DIAGNOSTICS.md in 8007342/ranitas (2026-10-25), relayed by the coordinator.
+    exit_criteria:
+      - "A forge fixture asserts lua is on PATH and prints a version, the startup context's Tooling actually present list names it, a batched replace helper fails unless every old string occurs exactly once (and changes nothing on failure), and a conflict helper resolves a hunk as ours, theirs or both. Pre-fix result: FAILS, only lua-libs (liblua-5.4.so) is installed, with no lua binary, shim, or mention in startup context or tellme."
+    verifiable_closure: "A forge fixture asserts lua is on PATH and prints a version, the startup context's Tooling actually present list names it, a batched replace helper fails unless every old string occurs exactly once (and changes nothing on failure), and a conflict helper resolves a hunk as ours, theirs or both. Pre-fix result: FAILS, only lua-libs (liblua-5.4.so) is installed, with no lua binary, shim, or mention in startup context or tellme."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-25.
+    events:
+      - type: filed
+        ts: "2026-10-25T01:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator request of 2026-10-25"

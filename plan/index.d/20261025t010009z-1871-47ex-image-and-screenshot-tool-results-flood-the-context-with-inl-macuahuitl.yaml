@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+  - packet_id: image-and-screenshot-tool-results-flood-the-context-with-inline-base64
+    order: 1871-47ex
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, mcp, imagegen, browser, context]
+    estimated_hours: 4
+    title: "Image and screenshot results return a saved file path and size, never inline base64"
+    context: |
+      Define one documented image-result schema shared by imagegen and browser screenshots: saved path, width and height, alpha flag, small thumbnail. No base64 in text results. Source: forge field report FORGE_DIAGNOSTICS.md in 8007342/ranitas (2026-10-25), relayed by the coordinator.
+    exit_criteria:
+      - "A contract test calls the screenshot tool and the image generation path and asserts the text result matches one documented schema (saved path, dimensions, alpha, thumbnail) and contains no base64 run longer than 256 characters. Pre-fix result: FAILS, results carry inline base64."
+    verifiable_closure: "A contract test calls the screenshot tool and the image generation path and asserts the text result matches one documented schema (saved path, dimensions, alpha, thumbnail) and contains no base64 run longer than 256 characters. Pre-fix result: FAILS, results carry inline base64."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-25.
+    events:
+      - type: filed
+        ts: "2026-10-25T01:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator request of 2026-10-25"
