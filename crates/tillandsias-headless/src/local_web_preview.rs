@@ -3638,7 +3638,23 @@ mod tests {
             std::fs::create_dir_all(root.join("preview-tls")).unwrap();
             std::fs::write(root.join("preview-tls-port"), "18443").unwrap();
             let args = crate::build_router_run_args(Path::new("/ca"), "managed-router", 18080);
-            assert!(args.contains(&"127.0.0.1:18443:8443".into()));
+            // Rootful hosts (uid 0) omit the publish by design (1794-rf3a);
+            // the live args must agree with whichever branch this uid takes.
+            assert_eq!(
+                args.contains(&"127.0.0.1:18443:8443".into()),
+                !crate::running_as_root()
+            );
+            // Both branches, independent of the uid the gate runs as.
+            let leaf = Path::new("/leaf");
+            let rootless = crate::preview_listener_args(false, 18443, leaf);
+            assert!(rootless.contains(&"-p".into()));
+            assert!(rootless.contains(&"127.0.0.1:18443:8443".into()));
+            let rootful = crate::preview_listener_args(true, 18443, leaf);
+            assert!(!rootful.contains(&"-p".into()));
+            assert!(!rootful.iter().any(|a| a.contains("18443:8443")));
+            for set in [&rootless, &rootful, &args] {
+                assert!(!set.iter().any(|a| a.contains("0.0.0.0")));
+            }
             assert!(!args.iter().any(|a| a.contains("0.0.0.0:")
                 || a.ends_with(":2019")
                 || a.contains("intermediate.key")));
