@@ -65,6 +65,10 @@ chrono = { workspace = true }
 redb = { workspace = true }
 regex = { workspace = true }
 sha2 = { workspace = true }
+# Order 1826-gi8e: the fleet coordinator client speaks HTTPS to a Cloudflare
+# Worker. Workspace reqwest (rustls, no default features) is already linked by
+# headless, vault-client and vm-layer, so no new third-party code enters the tree.
+reqwest = { workspace = true }
 
 # ORDER 1443-9f5w: gethostname(2) binds a consent token to its host without
 # spawning `hostname` (already in the lockfile through tillandsias-exec).

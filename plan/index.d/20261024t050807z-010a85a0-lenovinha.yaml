@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-forge-started-for-a-project-with-a-pending-coordinator-task-runs-it-with-a-non-claude-headless-agent-and-that-projects-named-skill-to-completion-reports-back-and-exits
+    event:
+      type: progress
+      ts: "2026-10-24T05:08:07Z"
+      agent_id: linux-lenovinha-claude-20261024t050807z
+      host: lenovinha
+      summary: |-
+        Step 1 measurement on lenovinha (no tray running, release v56.10.20.1): tillandsias --cloud 8007342/tillandsias.org --opencode --prompt 'Print the repository top-level file names, then reply with the single line done:list and stop' ran 05:04:18Z-05:05:25Z (67s) and exited 0. The agent printed done:list; the launcher logged 'no active lane containers; cleaning project + shared stack (lane-scoped: tillandsias-inference; keeping application-lifetime: vault, proxy, router, nix-cache)'. podman ps -a after: no forge, git or lane container left; vault, proxy and router Up (started by the run), the pre-existing dev-inference Up. No MCP socket collision (no tray was running). Conclusion: a headless one-shot exits and removes its forge; only the application-lifetime stack stays, by design.

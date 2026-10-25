@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+  - packet_id: source-tmpfs-fills-with-parallel-subagent-worktrees-so-the-startup-context-names-its-size-and-finished-agent-worktrees-are-pruned
+    order: 1866-ubtc
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, tmpfs, worktrees, startup-context]
+    estimated_hours: 3
+    title: "The 1.5 GB source disk filled up with subagent worktrees; show its size and remove finished ones automatically"
+    context: |
+      /home/forge/src is a 1.5 GB tmpfs. Six subagent worktrees (100 to 400 MB each) reached 99 percent with 25 MB free and ENOSPC mid-test. Put size and threshold in the startup context and auto-prune .claude/worktrees/agent-* only when their commits are verified on origin. Never remove one with unpushed work. Source: forge field report FORGE_DIAGNOSTICS.md in 8007342/ranitas (2026-10-25), relayed by the coordinator.
+    exit_criteria:
+      - "A fixture fills a scratch source tmpfs with fake .claude/worktrees/agent-* checkouts whose commits are on origin and asserts they are pruned past the threshold while one with an unpushed commit is kept; the startup context line names the tmpfs size and warning threshold. Pre-fix result: FAILS, nothing prunes and no size is shown."
+    verifiable_closure: "A fixture fills a scratch source tmpfs with fake .claude/worktrees/agent-* checkouts whose commits are on origin and asserts they are pruned past the threshold while one with an unpushed commit is kept; the startup context line names the tmpfs size and warning threshold. Pre-fix result: FAILS, nothing prunes and no size is shown."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-25.
+    events:
+      - type: filed
+        ts: "2026-10-25T01:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator request of 2026-10-25"

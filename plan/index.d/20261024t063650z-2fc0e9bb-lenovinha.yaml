@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-gate-stamp-scope-fixture-never-resolves-its-lane-plan-binary-from-an-exported-cargo-target-dir
+    event:
+      type: progress
+      ts: "2026-10-24T06:36:50Z"
+      agent_id: linux-lenovinha-claude-20261024t063650z
+      host: lenovinha
+      summary: |-
+        Evidence 2026-10-24. lenovinha: ./build.sh --check on work/1847-5xv3 (trunk + an unrelated diff) is red at case 7 on every run since the shared target dir (1807-shtg) set CARGO_TARGET_DIR=<main>/target: 'plan-only lane: REFUSED, STALE, built-from=e48e7014528d5052 checkout=4cde5f775021b5ee'. Bare runs: CARGO_TARGET_DIR=<main>/target red; unset green 17/17 only because the probe falls back to ~/.local/bin (an Oct 17 binary with no embedded surface hash). test-pre-push-honours-a-live-freeze.sh ARM 3b behaves the same (20/21 vs 21/21). macuahuitl (coordinator): its <main>/target binary (build-id 0.1.0+ed91fa15a64a87aa, surface e48e7014528d5052) passes cases 6-8 with the same CARGO_TARGET_DIR, so the same built-from hash is green there and red here; the difference is not yet explained and is the first thing to pin.

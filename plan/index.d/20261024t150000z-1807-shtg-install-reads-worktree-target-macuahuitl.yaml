@@ -1,0 +1,9 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: every-worktree-builds-into-one-canonical-flock-serialized-cargo-target-dir-whose-owner-change-forces-a-re-fingerprint-so-sccache-hits-across-worktrees-and-no-gate-runs-another-checkouts-binaries
+    event:
+      type: note
+      ts: "2026-10-24T15:00:00Z"
+      host: macuahuitl
+      summary: |-
+        DEFECT IN THIS ROW'S FIX, seen 2026-10-24 in target/work/wt-601: build.sh --install under the shared CARGO_TARGET_DIR builds the musl launcher into the shared target, but the install step still reads RELEASE_BIN from the checkout-relative target/x86_64-unknown-linux-musl/release/tillandsias, fails with "Portable headless launcher not found" and installs nothing. New exit criterion: with CARGO_TARGET_DIR pointing outside the checkout, build.sh --install finds the binary in the effective cargo target dir and installs it. Pre-fix result: FAILS (error "Portable headless launcher not found", exit 1, nothing installed). Fix: resolve the binary from the effective target dir in the install block that builds the portable launcher, and add an arm to scripts/test-shared-target.sh. The operator asked for this under this order id as a ready packet; the row already exists (in_progress), so the criterion is recorded as an event rather than a duplicate row.

@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-24. Code is cited by symbol, never by line.
+packets:
+  - packet_id: agy-rerun-in-a-forge-asks-to-trust-the-source-folder-again-although-credentials-were-reused
+    order: 1852-9r4h
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, agents, antigravity, ux]
+    estimated_hours: 4
+    title: "Re-running the Antigravity agent in a forge asks again whether to trust the source folder, although its credentials were reused"
+    context: |
+      Operator report 2026-10-24: on the second Antigravity launch credential reuse worked but the folder-trust prompt reappeared. Earlier row: 1447-nmq3 (first-launch trust seeding). seed_agy_workspace_trust writes trustedWorkspaces into the agy settings file under the forge HOME on every launch, yet the prompt returned, so either agy records trust somewhere seed_agy_workspace_trust does not write, or the seeded entry is rewritten or dropped (path differs from the checked-out project dir, or apply_antigravity_config_overlay replaces the settings file). First step: in a scratch HOME find where agy stores the trust it records itself. Then persist that state with the agent's other persisted config, the way credentials are, scoped to the checked-out project path only.
+    exit_criteria:
+      - "A fixture launches the antigravity entrypoint twice against the same persistent state and asserts the second launch finds the project path already trusted in the state agy actually reads, with no trust prompt. Pre-fix result: FAILS, the trust decision lives in the ephemeral forge HOME and is gone on the second launch."
+    verifiable_closure: "A fixture launches the antigravity entrypoint twice against the same persistent state and asserts the second launch finds the project path already trusted in the state agy actually reads, with no trust prompt. Pre-fix result: FAILS, the trust decision lives in the ephemeral forge HOME and is gone on the second launch."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the fixture named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-24.
+    events:
+      - type: filed
+        ts: "2026-10-24T15:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator request of 2026-10-24"

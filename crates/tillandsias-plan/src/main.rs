@@ -120,6 +120,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "parked-blocks",
     "pipeline",
     "ask",
+    "coord",
     "predicate",
     "query",
     "ready",
@@ -392,6 +393,10 @@ const USAGE: &str = concat!(
     "                                     answer envelope: cited, or the typed unsupported:\n",
     "                                     refusal — never raw model prose. Same function as\n",
     "                                     expert-serve (one pipeline, two front-ends).\n",
+    "           coord <join|send|recv|overview get|put|claim-overlay|release|claims|next|heartbeat> [--ns NS]\n",
+    "                                     ORDER 1826-gi8e. The fleet coordinator client: budgeted,\n",
+    "                                     batched, adaptive heartbeat. Every answer carries source;\n",
+    "                                     `coord next` falls back to the git ledger when offline.\n",
     "           ask [--root D] [--domain D] [--] <query...>\n",
     "                                     ORDER 1823-4kwh. THE expert client entry for shell\n",
     "                                     front-ends (forge-plan.sh spec_answer, tellme): the\n",
@@ -779,6 +784,304 @@ fn unknown_subcommand(name: &str) -> ! {
 /// the ledger, and `ledger.skipped_fragments()` for the plan corpus. Every call
 /// site states it explicitly so a new one has to decide rather than inherit
 /// silence, which is the exact failure this order exists to fix.
+/// `coord …` (order 1826-gi8e): the fleet coordinator client. Every line it
+/// prints carries `source`, so a reader can always tell a coordinator answer
+/// from a git-ledger one. An unreachable coordinator is not an error: `next`
+/// answers from the ledger, and the other verbs say why they could not ask.
+fn cmd_coord(args: &[String], index: &Path, ledger: &Ledger) {
+    use serde_json::{Value, json};
+    use tillandsias_plan::coordinator_client as cc;
+
+    // The forge-plan MCP tool hands its arguments object over verbatim, so
+    // the shell side needs no jq: the closed schema is checked here, and a
+    // violation exits 2 with the reason, which the wrapper maps to -32602.
+    if args.get(1).map(String::as_str) == Some("--mcp-args") {
+        match coord_argv_from_mcp(args.get(2).map(String::as_str).unwrap_or("")) {
+            Ok(argv) => return cmd_coord(&argv, index, ledger),
+            Err(why) => {
+                eprintln!("invalid coord arguments: {why}");
+                std::process::exit(2);
+            }
+        }
+    }
+    let root = root_for(index);
+    let mut ns: Option<String> = None;
+    let mut since: Option<u64> = None;
+    let mut ttl: Option<u64> = None;
+    let mut once = false;
+    let mut pos: Vec<String> = Vec::new();
+    let mut i = 2;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--ns" => {
+                i += 1;
+                ns = args.get(i).cloned();
+            }
+            "--since" | "--ttl" => {
+                let flag = args[i].clone();
+                i += 1;
+                let Some(n) = args.get(i).and_then(|v| v.parse::<u64>().ok()) else {
+                    eprintln!("error: {flag} takes a non-negative integer");
+                    std::process::exit(2);
+                };
+                if flag == "--since" {
+                    since = Some(n)
+                } else {
+                    ttl = Some(n)
+                }
+            }
+            "--once" => once = true,
+            other if other.starts_with("--") => {
+                eprintln!(
+                    "error: unknown option {other:?} for `coord` (known: --ns, --since, --ttl, --once)"
+                );
+                std::process::exit(2);
+            }
+            other => pos.push(other.to_string()),
+        }
+        i += 1;
+    }
+    let git = |a: &[&str]| {
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(a)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+    };
+    let ns = ns.unwrap_or_else(|| {
+        let dir = root
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        cc::namespace_for(
+            git(&["config", "--get", "remote.origin.url"]).as_deref(),
+            &dir,
+        )
+    });
+    let mut client = cc::Config::from_env()
+        .map(|c| cc::Client::new(cc::HttpTransport::new(c), cc::DEFAULT_BUDGET_PER_MIN));
+    let mut ask = |op: Value| match client.as_mut() {
+        Some(c) => c.op(op),
+        None => Err(cc::Offline::Unconfigured),
+    };
+    let print = |v: Value| println!("{}", serde_json::to_string_pretty(&v).unwrap_or_default());
+    let need = |n: usize, usage: &str| {
+        if pos.len() < n {
+            eprintln!("usage: tillandsias-plan coord {usage}");
+            std::process::exit(2);
+        }
+    };
+
+    let sub = args.get(1).map(String::as_str).unwrap_or("");
+    let op = match sub {
+        "join" | "claims" => json!({ "op": sub, "ns": ns }),
+        "send" => {
+            need(1, "send <body> [--ttl S] [--ns NS]");
+            let mut o =
+                json!({ "op": "send", "ns": ns, "body": pos[0], "provider": "tillandsias-plan" });
+            if let Some(t) = ttl {
+                o["ttl_s"] = json!(t)
+            }
+            o
+        }
+        "recv" => json!({ "op": "recv", "ns": ns, "since": since.unwrap_or(0) }),
+        "overview" => match pos.first().map(String::as_str) {
+            Some("get") => {
+                json!({ "op": "overview.get", "ns": ns, "client_head": git(&["rev-parse", "HEAD"]) })
+            }
+            Some("put") => {
+                need(2, "overview put <json-file> [--ns NS]");
+                let text = std::fs::read_to_string(&pos[1]).unwrap_or_else(|e| {
+                    eprintln!("error: read {}: {e}", pos[1]);
+                    std::process::exit(2);
+                });
+                let overview: Value = serde_json::from_str(&text).unwrap_or_else(|e| {
+                    eprintln!("error: {} is not JSON: {e}", pos[1]);
+                    std::process::exit(2);
+                });
+                json!({ "op": "overview.put", "ns": ns, "overview": overview, "sha": git(&["rev-parse", "HEAD"]) })
+            }
+            _ => {
+                eprintln!("usage: tillandsias-plan coord overview get|put <json-file>");
+                std::process::exit(2);
+            }
+        },
+        "claim-overlay" => {
+            need(1, "claim-overlay <order> [--ttl S] [--ns NS]");
+            let mut o = json!({ "op": "claim", "ns": ns, "order": pos[0] });
+            if let Some(t) = ttl {
+                o["ttl_s"] = json!(t)
+            }
+            o
+        }
+        "release" => {
+            need(2, "release <order> <token> [--ns NS]");
+            json!({ "op": "release", "ns": ns, "order": pos[0], "token": pos[1] })
+        }
+        "next" => {
+            // The overlay only hides rows other hosts hold right now; the
+            // ledger fold is the answer either way.
+            let (overlaid, source, reason) = match ask(json!({ "op": "claims", "ns": ns })) {
+                Ok(r) => {
+                    let set: std::collections::BTreeSet<String> = r["claims"]
+                        .as_array()
+                        .map(|cs| {
+                            cs.iter()
+                                .filter_map(|c| c["order"].as_str().map(str::to_string))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    (set, "coordinator+git-ledger", None)
+                }
+                Err(e) => (Default::default(), "git-ledger", Some(e.reason())),
+            };
+            let envelope = answer::answer_next_excluding(
+                ledger,
+                pos.first().map(String::as_str),
+                None,
+                None,
+                &citation_path(index, &root),
+                &overlaid,
+            );
+            let verified = stamp_frame(self_verified(envelope, &root), &root).with_skipped_sources(
+                ledger
+                    .skipped_fragments()
+                    .iter()
+                    .map(|p| citation_path(p, &root))
+                    .collect(),
+            );
+            let mut v = serde_json::to_value(&verified).unwrap_or(Value::Null);
+            v["source"] = json!(source);
+            v["overlaid"] = json!(overlaid);
+            if let Some(r) = reason {
+                v["coordinator"] = json!(r)
+            }
+            print(v);
+            return;
+        }
+        "heartbeat" => {
+            // One tick per call with --once; otherwise run until killed, and
+            // stand down entirely while the lane marker is held.
+            let marker = cc::lane_marker_dir(&root);
+            let mut hb = cc::Heartbeat::default();
+            loop {
+                let held = cc::lane_marker_held(&marker, std::time::SystemTime::now());
+                let started = std::time::Instant::now();
+                let tick = if held {
+                    json!({ "source": "local", "tick": "skipped", "reason": "lane-marker-held" })
+                } else {
+                    match ask(
+                        json!({ "op": "bump", "ns": ns, "head_sha": git(&["rev-parse", "HEAD"]) }),
+                    ) {
+                        Ok(r) => {
+                            json!({ "source": "coordinator", "tick": "sent", "freshness": r["freshness"] })
+                        }
+                        Err(e) => {
+                            json!({ "source": "local", "tick": "failed", "reason": e.reason() })
+                        }
+                    }
+                };
+                let next = hb.next(started.elapsed(), cc::host_busy(), held);
+                let mut tick = tick;
+                tick["next_s"] = json!(next.map(|d| d.as_secs()));
+                print(tick);
+                if once {
+                    return;
+                }
+                std::thread::sleep(next.unwrap_or(cc::HEARTBEAT_MAX));
+            }
+        }
+        _ => {
+            eprintln!(
+                "usage: tillandsias-plan coord <join|send|recv|overview get|overview put|claim-overlay|release|claims|next|heartbeat> [--ns NS]\n\
+                 configure with TILLANDSIAS_COORD_URL and an Access service token in TILLANDSIAS_COORD_CLIENT_ID / TILLANDSIAS_COORD_CLIENT_SECRET"
+            );
+            std::process::exit(2);
+        }
+    };
+    match ask(op) {
+        Ok(r) => print(json!({ "source": "coordinator", "ns": ns, "result": r })),
+        Err(e) => {
+            print(json!({ "source": "unavailable", "ns": ns, "reason": e.reason() }));
+            std::process::exit(3);
+        }
+    }
+}
+
+/// The forge-plan `coord` tool's closed schema, mapped onto `coord` argv.
+/// Heartbeat is not offered (an MCP call is one request, never a loop), and
+/// `overview put` is not offered (it reads a file the caller names).
+fn coord_argv_from_mcp(raw: &str) -> Result<Vec<String>, String> {
+    use serde_json::Value;
+    let v: Value = serde_json::from_str(raw).map_err(|e| format!("not a JSON object: {e}"))?;
+    let obj = v.as_object().ok_or("not a JSON object")?;
+    const KEYS: &[&str] = &[
+        "action",
+        "ns",
+        "body",
+        "order",
+        "token",
+        "since",
+        "ttl_s",
+        "pickup_role",
+    ];
+    if let Some(k) = obj.keys().find(|k| !KEYS.contains(&k.as_str())) {
+        return Err(format!("unknown field {k:?} (known: {})", KEYS.join(", ")));
+    }
+    let s = |k: &str| -> Result<Option<String>, String> {
+        match obj.get(k) {
+            None => Ok(None),
+            Some(Value::String(s)) if !s.is_empty() => Ok(Some(s.clone())),
+            Some(_) => Err(format!("{k} must be a non-empty string")),
+        }
+    };
+    let n = |k: &str| -> Result<Option<u64>, String> {
+        match obj.get(k) {
+            None => Ok(None),
+            Some(v) => v
+                .as_u64()
+                .map(Some)
+                .ok_or(format!("{k} must be a non-negative integer")),
+        }
+    };
+    let req = |k: &str, action: &str| s(k)?.ok_or(format!("{action} needs {k}"));
+    let action = s("action")?.ok_or("action is required")?;
+    let mut argv = vec!["coord".to_string()];
+    match action.as_str() {
+        "join" | "claims" | "recv" => argv.push(action.clone()),
+        "overview_get" => argv.extend(["overview".into(), "get".into()]),
+        "send" => argv.extend(["send".into(), req("body", "send")?]),
+        "claim_overlay" => argv.extend(["claim-overlay".into(), req("order", "claim_overlay")?]),
+        "release" => argv.extend([
+            "release".into(),
+            req("order", "release")?,
+            req("token", "release")?,
+        ]),
+        "next" => {
+            argv.push("next".into());
+            argv.extend(s("pickup_role")?);
+        }
+        other => {
+            return Err(format!(
+                "unknown action {other:?} (known: join, send, recv, overview_get, claim_overlay, release, claims, next)"
+            ));
+        }
+    }
+    if let Some(ns) = s("ns")? {
+        argv.extend(["--ns".into(), ns]);
+    }
+    if let Some(x) = n("since")? {
+        argv.extend(["--since".into(), x.to_string()]);
+    }
+    if let Some(x) = n("ttl_s")? {
+        argv.extend(["--ttl".into(), x.to_string()]);
+    }
+    Ok(argv)
+}
+
 fn emit_verified_envelope(envelope: answer::Envelope, root: &Path, skipped: &[PathBuf]) {
     // Stamped AFTER self-verification: `self_verified` may replace the envelope
     // with a fresh refusal, and the corpus was still partial either way.
@@ -2843,6 +3146,59 @@ fn find_repo_root() -> Option<PathBuf> {
     }
 }
 
+/// ORDER 1745-ntuq. The checkout whose validator surface "current" means: the
+/// GATING checkout, not the one above the binary. With one shared
+/// CARGO_TARGET_DIR (1807-shtg) every worktree's binary lives under the MAIN
+/// checkout, so the exe walk hashed the main checkout's bytes whichever worktree
+/// was gating or pushing. Measured on lenovinha 2026-10-24: a binary built at
+/// trunk (surface e48e7014) read "stale, checkout=4cde5f77" from every worktree,
+/// because the main checkout sat on an Oct 14 branch.
+///
+/// Order: `TILLANDSIAS_SURFACE_ROOT` (an explicit root from a caller), then the
+/// nearest checkout above the cwd that holds the manifest, then the checkout
+/// this binary was BUILT from (a push from a scratch repo, as the pre-push
+/// fixtures make, has no manifest of its own), then the exe walk (an installed
+/// binary whose build checkout is gone).
+fn surface_root() -> Option<PathBuf> {
+    let built_in = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(2)
+        .map(std::path::Path::to_path_buf);
+    surface_root_from(
+        std::env::var_os("TILLANDSIAS_SURFACE_ROOT").map(PathBuf::from),
+        std::env::current_dir().ok(),
+        || {
+            built_in
+                .filter(|r| r.join(".git").exists())
+                .or_else(find_repo_root)
+        },
+    )
+}
+
+fn surface_root_from(
+    explicit: Option<PathBuf>,
+    cwd: Option<PathBuf>,
+    exe_walk: impl FnOnce() -> Option<PathBuf>,
+) -> Option<PathBuf> {
+    const MANIFEST: &str = "crates/tillandsias-plan/validator-surface.manifest";
+    let is_surface_root =
+        |d: &std::path::Path| d.join(".git").exists() && d.join(MANIFEST).is_file();
+    if let Some(root) = explicit.filter(|r| is_surface_root(r)) {
+        return Some(root);
+    }
+    if let Some(mut dir) = cwd {
+        loop {
+            if is_surface_root(&dir) {
+                return Some(dir);
+            }
+            if !dir.pop() {
+                break;
+            }
+        }
+    }
+    exe_walk()
+}
+
 /// ORDER 1287-h6qn. The hash of the validator surface this binary was BUILT
 /// from, embedded by build.rs. Empty when the build could not compute one.
 fn embedded_validator_surface() -> &'static str {
@@ -2855,7 +3211,7 @@ fn embedded_validator_surface() -> &'static str {
 /// checkout above it (find_repo_root -> None), or a manifest that names nothing.
 /// "Cannot ask" is never "fresh"; the callers say so in their own words.
 fn validator_surface_drift() -> Option<(String, String)> {
-    let root = find_repo_root()?;
+    let root = surface_root()?;
     let current = validator_surface::validator_surface_hash(&root)?;
     let embedded = embedded_validator_surface();
     if embedded.is_empty() || embedded != current {
@@ -5899,7 +6255,7 @@ fn main() {
     if args[0] == "validator-surface-hash" {
         let want_current = args.iter().any(|a| a == "--current");
         let want_check = args.iter().any(|a| a == "--check");
-        let current = find_repo_root().and_then(|r| validator_surface::validator_surface_hash(&r));
+        let current = surface_root().and_then(|r| validator_surface::validator_surface_hash(&r));
         if want_check {
             match current {
                 None => {
@@ -8991,6 +9347,7 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
             // this emit path's HEAD default — spec-envelope's 801-g9nn rule.
             emit_verified_envelope(envelope, &root, &[]);
         }
+        "coord" => cmd_coord(&args, &index, &ledger),
         "next" => {
             // ORDER 606-xu52. The cold-start selector: at most five cited,
             // release-aware, role-compatible, dependency-clear, unleased
@@ -11530,6 +11887,48 @@ fn read_prose_source(path: &str) -> std::io::Result<String> {
 mod tests {
     use super::role_satisfies;
 
+    /// ORDER 1745-ntuq. A binary under checkout A's target, run from worktree B,
+    /// must measure B's surface. Before the fix the root came from the exe walk
+    /// alone, so it answered A — the shared-target red on every gate in B.
+    #[test]
+    fn surface_root_is_the_gating_checkout_not_the_one_above_the_binary() {
+        let manifest = "crates/tillandsias-plan/validator-surface.manifest";
+        let mk = |d: &std::path::Path| {
+            std::fs::create_dir_all(d.join(".git")).unwrap();
+            std::fs::create_dir_all(d.join("crates/tillandsias-plan")).unwrap();
+            std::fs::write(d.join(manifest), "file x\n").unwrap();
+        };
+        let t = tempfile::tempdir().unwrap();
+        let a = t.path().join("main");
+        let b = t.path().join("main/target/work/wt-b");
+        mk(&a);
+        mk(&b);
+        let exe_walk = || Some(a.clone());
+
+        // from inside B (any depth): B, not A
+        let deep = b.join("crates/tillandsias-plan");
+        assert_eq!(
+            super::surface_root_from(None, Some(deep), exe_walk),
+            Some(b.clone())
+        );
+        // an explicit root wins over the cwd
+        assert_eq!(
+            super::surface_root_from(Some(a.clone()), Some(b.clone()), || None),
+            Some(a.clone())
+        );
+        // an explicit root that is not a checkout is ignored
+        assert_eq!(
+            super::surface_root_from(Some(t.path().join("nope")), Some(b.clone()), || None),
+            Some(b.clone())
+        );
+        // outside any checkout: the exe walk, as before
+        let outside = tempfile::tempdir().unwrap();
+        assert_eq!(
+            super::surface_root_from(None, Some(outside.path().to_path_buf()), || Some(a.clone())),
+            Some(a.clone())
+        );
+    }
+
     /// ORDER 1115-yvrq. THE DEFECT, as a test: an immutable host must not be
     /// offered work that requires a mutable one. Before the fix the matcher
     /// asked whether the requirement CONTAINED the host role, so "linux" was a
@@ -12409,6 +12808,46 @@ mod tests {
     /// ORDER 583-dv9n. Every DISPATCH arm must be documented in usage too, so
     /// the `main` dispatch, the manifest, and the help text cannot each carry a
     /// different story. This is the arm-side half of the same pin above.
+    /// ORDER 1826-gi8e — the forge-plan `coord` tool's closed schema: every
+    /// action maps onto the CLI argv, and anything outside it is refused
+    /// before any request is made.
+    #[test]
+    fn coord_mcp_args_map_to_argv_and_refuse_outside_the_schema() {
+        let ok = |j: &str| coord_argv_from_mcp(j).unwrap().join(" ");
+        assert_eq!(ok(r#"{"action":"join","ns":"a/b"}"#), "coord join --ns a/b");
+        assert_eq!(
+            ok(r#"{"action":"send","body":"hi","ttl_s":60}"#),
+            "coord send hi --ttl 60"
+        );
+        assert_eq!(ok(r#"{"action":"recv","since":4}"#), "coord recv --since 4");
+        assert_eq!(ok(r#"{"action":"overview_get"}"#), "coord overview get");
+        assert_eq!(
+            ok(r#"{"action":"claim_overlay","order":"1826-gi8e"}"#),
+            "coord claim-overlay 1826-gi8e"
+        );
+        assert_eq!(
+            ok(r#"{"action":"release","order":"o","token":"t"}"#),
+            "coord release o t"
+        );
+        assert_eq!(
+            ok(r#"{"action":"next","pickup_role":"linux"}"#),
+            "coord next linux"
+        );
+        for bad in [
+            "",
+            "[]",
+            r#"{}"#,
+            r#"{"action":"heartbeat"}"#,
+            r#"{"action":"send"}"#,
+            r#"{"action":"release","order":"o"}"#,
+            r#"{"action":"join","extra":1}"#,
+            r#"{"action":"recv","since":-1}"#,
+            r#"{"action":"join","ns":""}"#,
+        ] {
+            assert!(coord_argv_from_mcp(bad).is_err(), "accepted {bad:?}");
+        }
+    }
+
     #[test]
     fn every_dispatch_arm_is_documented_in_usage() {
         for arm in DISPATCH_ARMS {

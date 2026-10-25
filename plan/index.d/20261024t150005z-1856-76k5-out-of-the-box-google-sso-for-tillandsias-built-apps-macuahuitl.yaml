@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-24. Code is cited by symbol, never by line.
+packets:
+  - packet_id: tillandsias-built-apps-get-google-sign-in-with-google-two-factor-working-out-of-the-box-in-a-forge-preview
+    order: 1856-76k5
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, google, sso, browser, skills, security]
+    estimated_hours: 4
+    title: "Apps built in a forge can sign in with Google (including Google's two-factor) in the preview without the user setting anything up"
+    context: |
+      Field report plus operator direction: the operator created a Google OAuth app for arabiya.tlatoani.net as the learning project. Needed pieces: (1) a stable real-domain HTTPS test origin, for example test.<app>.<domain>, with trusted HTTPS and routing, published as machine-readable config, with the one external OAuth-origin registration prerequisite reported once; (2) a scoped browser policy allowing accounts.google.com and gsi, popup, FedCM and frames, plus Worker JWKS egress; (3) a user-visible login handoff where the user types credentials and MFA privately and agents never read passwords or token values; (4) a forge skill teaching agents to wire Google ID-token login (no client secret needed) for any app; (5) reachability from a physical phone through forge-managed routing. Split into slices when claimed. Source: forge field report FORGE_DIAGNOSTICS.md in 8007342/arabiya.
+    exit_criteria:
+      - "An end-to-end check on the learning project (arabiya.tlatoani.net): a forge preview served at a real-domain HTTPS test origin loads accounts.google.com and the gsi client, the Worker fetches Google JWKS, and a user-typed login completes with the agent seeing only the app result. Pre-fix result: FAILS, browser fetches to accounts.google.com/gsi/client and the googleapis oauth2 certs fail and the browser tool is limited to project routes."
+    verifiable_closure: "An end-to-end check on the learning project (arabiya.tlatoani.net): a forge preview served at a real-domain HTTPS test origin loads accounts.google.com and the gsi client, the Worker fetches Google JWKS, and a user-typed login completes with the agent seeing only the app result. Pre-fix result: FAILS, browser fetches to accounts.google.com/gsi/client and the googleapis oauth2 certs fail and the browser tool is limited to project routes."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the fixture named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-24.
+    events:
+      - type: filed
+        ts: "2026-10-24T15:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator request of 2026-10-24"

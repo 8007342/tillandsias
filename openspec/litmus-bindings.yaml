@@ -277,6 +277,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:cli-mode-shape
+  - litmus:headless-cloud-one-shot-backstop
   - litmus:podman-idiomatic-launch-routing
   coverage_ratio: 67
   last_verified: '2026-05-16'

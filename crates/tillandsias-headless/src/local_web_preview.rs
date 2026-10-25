@@ -3480,7 +3480,9 @@ mod tests {
         .unwrap();
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).unwrap();
-        std::fs::create_dir(temp.path().join("proj")).unwrap();
+        // 776-jcf3: a directory under the project root no longer makes a label
+        // known; the fixture admits "proj" as a confirmed cloud label instead.
+        std::fs::write(temp.path().join("cloud-cache"), "proj\n").unwrap();
         struct Restore(Vec<(&'static str, Option<std::ffi::OsString>)>);
         impl Drop for Restore {
             fn drop(&mut self) {
@@ -3496,7 +3498,6 @@ mod tests {
         }
         let vars = [
             "TILLANDSIAS_PODMAN_BIN",
-            crate::local_projects::HOST_PROJECT_ROOT_ENV,
             crate::local_projects::CLOUD_LABEL_CACHE_ENV,
             "XDG_RUNTIME_DIR",
         ];
@@ -3507,7 +3508,6 @@ mod tests {
         );
         unsafe {
             std::env::set_var("TILLANDSIAS_PODMAN_BIN", &stub);
-            std::env::set_var(crate::local_projects::HOST_PROJECT_ROOT_ENV, temp.path());
             std::env::set_var(
                 crate::local_projects::CLOUD_LABEL_CACHE_ENV,
                 temp.path().join("cloud-cache"),
@@ -3517,22 +3517,17 @@ mod tests {
         test(&log)
     }
 
-    /// 1626-r4xm: the preview's validation sites (validate_identity behind
-    /// publish/status/stop, and unique_live_instance) admit the project a lane
-    /// was launched for outside the root, and still refuse any other outside
-    /// label before Podman is asked anything.
+    /// 1626-r4xm / 1713-1dnx: the preview's validation sites (validate_identity
+    /// behind publish/status/stop, and unique_live_instance) admit the cloud
+    /// project a lane was launched for, and still refuse any other label
+    /// before Podman is asked anything (776-jcf3: no host-path lanes remain).
     #[test]
     fn preview_admits_the_launched_outside_project_and_no_other() {
-        let elsewhere = tempfile::tempdir().unwrap();
-        let launched = elsewhere.path().join("r4xm-preview");
-        std::fs::create_dir_all(&launched).unwrap();
-        std::fs::create_dir_all(elsewhere.path().join("r4xm-preview-other")).unwrap();
-        let launched = launched.canonicalize().unwrap();
         with_stub("exit 0", |log| {
             let refused = validate_identity("r4xm-preview", "default").unwrap_err();
             assert!(refused.contains("is not a known project"), "RED: {refused}");
 
-            crate::local_projects::bind_launched_project("r4xm-preview", &launched).unwrap();
+            crate::local_projects::bind_launched_cloud_label("r4xm-preview").unwrap();
             validate_identity("r4xm-preview", "default").expect("GREEN: admitted");
             let rt = tokio::runtime::Runtime::new().unwrap();
             assert_eq!(
