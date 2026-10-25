@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+  - packet_id: mirror-pre-receive-yaml-validator-refuses-unquoted-dates-that-openspec-new-change-writes
+    order: 1863-mqiw
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [git-mirror, yaml, openspec]
+    estimated_hours: 2
+    title: "The mirror rejects a whole push because its YAML check refuses the plain date that openspec itself writes"
+    context: |
+      The pre-receive hook validates YAML with Ruby Psych.safe_load, which refuses Date. Make it agree with yq: pass permitted_classes: [Date] (and aliases as yq allows), or validate with yq. Two forge-endorsed tools must not disagree about what valid YAML is. Source: forge field report FORGE_DIAGNOSTICS.md in 8007342/ranitas (2026-10-25), relayed by the coordinator.
+    exit_criteria:
+      - "A fixture pushes a change file containing the line created: 2026-10-25 (as openspec new change writes it) through the mirror pre-receive hook and asserts the push is accepted and that the validator and yq agree on it. Pre-fix result: FAILS, Psych::DisallowedClass Date rejects the push."
+    verifiable_closure: "A fixture pushes a change file containing the line created: 2026-10-25 (as openspec new change writes it) through the mirror pre-receive hook and asserts the push is accepted and that the validator and yq agree on it. Pre-fix result: FAILS, Psych::DisallowedClass Date rejects the push."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-25.
+    events:
+      - type: filed
+        ts: "2026-10-25T01:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator request of 2026-10-25"

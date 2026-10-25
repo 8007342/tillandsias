@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+  - packet_id: tellme-prints-requested-dir-opt-cheatsheets-lacks-index-md-on-every-call
+    order: 1870-imye
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, tellme, cheatsheets]
+    estimated_hours: 1
+    title: "tellme complains about a missing cheatsheet index on every call"
+    context: |
+      tellme (images/default/cli/tellme) builds a serving_note when TILLANDSIAS_CHEATSHEETS or /opt/cheatsheets lacks INDEX.md. Either populate the INDEX at that path or point the default at the real location, and keep the note only for genuine fallbacks. Source: forge field report FORGE_DIAGNOSTICS.md in 8007342/ranitas (2026-10-25), relayed by the coordinator.
+    exit_criteria:
+      - "A fixture runs tellme in a normal forge and asserts its output has no lacks INDEX.md note. Pre-fix result: FAILS, the note prints on every call before falling back to the image bundle."
+    verifiable_closure: "A fixture runs tellme in a normal forge and asserts its output has no lacks INDEX.md note. Pre-fix result: FAILS, the note prints on every call before falling back to the image bundle."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-25.
+    events:
+      - type: filed
+        ts: "2026-10-25T01:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator request of 2026-10-25"

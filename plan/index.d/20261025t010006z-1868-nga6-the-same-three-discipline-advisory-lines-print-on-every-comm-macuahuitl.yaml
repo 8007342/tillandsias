@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+  - packet_id: the-same-three-discipline-advisory-lines-print-on-every-commit-merge-and-push
+    order: 1868-nga6
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [git, hooks, discipline, ux]
+    estimated_hours: 2
+    title: "The same three advisory lines print on every commit, merge and push; show them once per session or when state changes"
+    context: |
+      Lines like 4 committer identities... could use an integration branch... repeat on every git operation. Print once per session or on change. Source: forge field report FORGE_DIAGNOSTICS.md in 8007342/ranitas (2026-10-25), relayed by the coordinator.
+    exit_criteria:
+      - "A fixture runs three commits and a push in one session and asserts the advisory text appears once, and again after the underlying state changes. Pre-fix result: FAILS, it prints every time."
+    verifiable_closure: "A fixture runs three commits and a push in one session and asserts the advisory text appears once, and again after the underlying state changes. Pre-fix result: FAILS, it prints every time."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-25.
+    events:
+      - type: filed
+        ts: "2026-10-25T01:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator request of 2026-10-25"
