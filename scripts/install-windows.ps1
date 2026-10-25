@@ -236,7 +236,7 @@ if ($PSVersionTable.PSVersion.Major -lt 5) {
     Die "PowerShell 5+ is required. Please update via Windows Update."
 }
 if (-not [System.Environment]::Is64BitOperatingSystem) {
-    Die "Tillandsias requires a 64-bit Windows installation."
+    Die "Tillandsias requires a 64-bit Windows installation. Please install it on a 64-bit PC."
 }
 
 # -- WSL platform preflight (order 324; mirrors the order-323 tray classifier) -
@@ -787,7 +787,7 @@ try {
                 Select-Object -First 1 | ForEach-Object { ($_ -split '\s+')[1] }).Trim()
     if (-not $ZipName) {
         Log "No tillandsias-tray-*-windows-x64.zip entry in $SumsUrl"
-        Die "This Tillandsias release is incomplete, so nothing was installed. Details: $InstallLog"
+        Die "This Tillandsias release is incomplete, so nothing was installed. Please try again in an hour, when the release is complete. Details: $InstallLog"
     }
     Log "Asset: $ZipName"
 
@@ -910,7 +910,7 @@ try {
     Remove-Item $VerTmp -ErrorAction SilentlyContinue
     if ($VerExit -ne 0 -or -not $VerLine) {
         Log "tillandsias-tray --version failed (exit $VerExit)."
-        Die "The downloaded Tillandsias does not start (exit $VerExit). Details: $InstallLog"
+        Die "The downloaded Tillandsias does not start, so it was not set up. Restart Windows and run the installer again. Details: $InstallLog"
     }
     Log "tillandsias-tray --version: $VerLine"
 
@@ -956,7 +956,7 @@ try {
     Remove-Item $DiagTmp -ErrorAction SilentlyContinue
     if ($DiagExit -eq 1) {
         Log "tillandsias-tray --diagnose --json hard-failed (exit $DiagExit)."
-        Die "The downloaded Tillandsias failed its self-check (exit $DiagExit). Details: $InstallLog"
+        Die "The downloaded Tillandsias failed its self-check. Restart Windows and run the installer again. Details: $InstallLog"
     }
     if ($DiagJson) {
         try {
@@ -1058,7 +1058,8 @@ try {
         Remove-Item $ResetLog -Force -ErrorAction SilentlyContinue
         SayWn "Tillandsias is installed. Restart it from the Start menu to finish setting up."
     } elseif ($ResetExit -ne 0) {
-        Die "Tillandsias could not finish setting up (exit $ResetExit). Details: $ResetLog"
+        Log "tillandsias-tray --reset-state failed (exit $ResetExit)."
+        Die "Tillandsias is installed but could not finish setting up. Restart Windows, then open Tillandsias from the Start menu. Details: $ResetLog"
     } else {
         Remove-Item $ResetLog -Force -ErrorAction SilentlyContinue
         SayOk "Tillandsias is ready."
