@@ -52,6 +52,26 @@ reusable cache without bound; (2) the overlay upper dir is unbounded and
 unaccounted. macOS and Windows peers must re-run this check, because in a
 VM guest the "disk" behind the overlay may itself be RAM or a sparse image.
 
+### D6. Download manifest
+
+Every large Tillandsias download is listed in one manifest with its
+approximate size and class:
+
+| Class | Examples | Rule |
+|---|---|---|
+| non-negotiable | forge image, web image, base images | required to run; never deleted while installed |
+| hot-deletable | models, L2 caches, studio images | may be deleted at any time; recreated on demand |
+
+The manifest is data the tray reads; a later UX shows it in a disk bar.
+
+### D7. Mount intent is stated where agents read it
+
+The forge's affordances, docs, startup context and tooling SHALL say each
+mount's intent and limits, so agents put things in the right place:
+`/home/forge/src` is RAM (small, source only); scratch is wiped on forge
+teardown; the project cache survives restarts and is wiped on corruption,
+never repaired; only pushed commits are durable.
+
 ## Goals / Non-Goals
 
 **Goals:** one findable, deletable root per host; explicit forge layers with
@@ -63,20 +83,19 @@ cryptography; relocating installed binaries.
 
 ## Decisions
 
-### D1. Linux root: `${TILLANDSIAS_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/tillandsias}`
+### D1. Linux root: `${TILLANDSIAS_HOME:-$HOME/.tillandsias}` (operator ruling 2026-10-25)
 
 XDG splits cache/config/state/data across four trees; that is the opposite of
-"find it and delete it". The XDG base-dir spec allows an application to keep
-one tree under `XDG_DATA_HOME`. We pick that one tree and lay XDG's categories
-out *inside* it:
+"find it and delete it". The operator ruled the root visible and easy to
+find: `~/.tillandsias`. XDG's categories are laid out *inside* it:
 
 ```
 $TILLANDSIAS_HOME/
   config/        installation-uuid, host-push, dev-host-experts
-  state/         ca/, preview-ca/, msg/, attached-sessions/, known-cloud-projects, vault/ (data+audit)
+  state/         ca/, preview-ca/, msg/, attached-sessions/, known-cloud-projects, vault/ (data+audit)  -- vault and CA moved out of cache, wiped not migrated
   logs/          image-build-*.log, setup.log, *.jsonl event logs (rotated, capped)
   cache/         CACHEDIR.TAG; sccache, models, packages, recipe-cache, plan-cache, openspec-pinned, nix-cache
-  podman/        graphroot + volumepath for all tillandsias containers/volumes (storage.conf override)
+  podman/        Tillandsias' OWN rootless store: graphroot/, runroot/, volumes (replaces both stores used today)
   forges/<lane>/ scratch/ (per-forge disk layer, deleted with the forge)
   projects/<p>/  cache/ (reusable layer, was tillandsias-forge-cache-<p>)
 ```
@@ -85,22 +104,29 @@ $TILLANDSIAS_HOME/
   at rest — ruling 2026-10-19). It is exempt because it dies with the session.
 - Exempt installed artifacts: `~/.local/bin/tillandsias*`, the `.desktop`
   entry, the opt-in swap file (root-owned; `swap_cmd::removal_paths`).
-- `~/.config/containers/containers.conf` edits are replaced by a
-  `CONTAINERS_STORAGE_CONF`/`--root`/`--runroot` scoped to the root, so the
-  user's own podman config is untouched.
+- Own podman store (ruling 2026-10-25): every Tillandsias podman call runs
+  rootless with its own `--root <root>/podman/graphroot` and `--runroot`
+  (runroot under `<root>/podman/runroot`, or a per-user tmpfs subdir if podman
+  requires it) via a scoped `CONTAINERS_STORAGE_CONF`. Tillandsias containers,
+  images and volumes never appear in, or collide with, the user's own
+  `podman ps`/`podman images`. It replaces both stores used today
+  (`~/.local/share/containers/storage` and the vfs graphroot under
+  `~/.local/share/tillandsias/podman`); `~/.config/containers/containers.conf`
+  edits stop. Cost: one rebuild of every image on the first launch after the
+  move.
 - Silverblue/immutable: `/home` is `/var/home`, writable and preserved by
   rpm-ostree; nothing goes in `/usr` or `/etc`. On btrfs, `cache/`, `podman/`
   and `forges/` SHOULD be a nested subvolume (excluded from snapshots, and
   `nodatacow` for swap and VM images) — recorded as a research task.
 - Discoverability: the tray menu gets "Open storage folder" and "Storage
-  report" (per-subtree size). A `~/.tillandsias` symlink is an open question.
+  report" (per-subtree size).
 
 ### D2. Layer table (inside a forge)
 
 | Layer | Mount | Backing | Size rule | Lifetime | On corruption | Contents |
 |---|---|---|---|---|---|---|
 | L0 ram | `/home/forge/src`, `/tmp`, `/run/user/1000`, `/dev/shm` | tmpfs, counted in forge `memory.max` | src: `compute_source_budget`; `/tmp` 256 MiB | forge | wipe | source checkout + worktrees, sockets, tiny temp |
-| L1 scratch | `/home/forge/scratch` (`TMPDIR=/home/forge/scratch/tmp`) | per-forge podman volume under `forges/<lane>/scratch` on disk | capped at a fraction of host free space at create | deleted when the forge is removed; never reused | n/a | temporary tool downloads, framework tarballs, build dirs that overflow L0 |
+| L1 scratch | `/home/forge/scratch` (`TMPDIR=/home/forge/scratch/tmp`) | per-forge podman volume under `forges/<lane>/scratch` on disk | generous: sized from host free disk at create (fraction of free), with a floor; refuse to create below the floor | deleted when the forge is removed; never reused | n/a | temporary tool downloads, framework tarballs, build dirs that overflow L0 |
 | L2 reusable cache | `/home/forge/.cache/tillandsias-project` | `projects/<p>/cache` on disk, stamped with an image/toolchain version | soft cap + LRU eviction report | survives forge restart | **wipe and recreate, never repair** | flutter/pub, go mod/build, ruby gems, brew cache+cellar shims, npm/pnpm, cargo registry, models, studio images |
 | L3 source of truth | git mirror / remote | host | — | durable | — | commits; a worktree is evictable once its commits are on the remote |
 
@@ -108,14 +134,18 @@ Rules: L0 MUST overflow to swap (D3); anything an agent downloads that is not
 source MUST go to L1 or L2, never L0; `GOPATH`, `GOMODCACHE`, `GEM_HOME`,
 `BUNDLE_PATH`, `PUB_CACHE` move to L2; `TMPDIR` moves from L2 to L1.
 
-### D3. Swap policy
+### D3. Swap policy: mandatory (operator ruling 2026-10-25)
 
 tmpfs pages are swappable; zram swap is compressed RAM and does not add
-capacity under real pressure. The expectation: a disk-backed swap device of
-at least `sum(L0 caps of running forges)` (floor 8 GiB) is active. The
-existing `tillandsias --swap on` (`swap_cmd`) is the remedy. When absent, the
-tray shows a persistent warning status line and icon state (not a log line),
-naming the one-line remedy; forge launch is not blocked.
+capacity under real pressure. Disk-backed swap is MANDATORY: at least
+`sum(L0 caps of running forges)` (floor 8 GiB).
+
+- Linux: the tray refuses to start without active disk swap (zram alone does
+  not count) and shows plain instructions to enable it, naming the one-line
+  remedy `tillandsias --swap on` (`swap_cmd`).
+- macOS VM and Windows WSL: Tillandsias owns the guest, so it forces the swap
+  configuration known to work (guest swap file; `.wslconfig` `swap=`), on
+  every host including floor-tier hosts (esme, macneo), which benefit most.
 
 ### D4. Worktree eviction rule
 
@@ -142,8 +172,10 @@ host disk free %.
 
 ## Risks / Trade-offs
 
-- Moving the podman graphroot strands existing images → rebuild (reset is the
-  baseline); first launch after upgrade is slow.
+- The own podman store strands existing images: one rebuild of every image
+  (reset is the baseline); first launch after upgrade is slow.
+- Mandatory swap blocks the Linux tray on hosts without disk swap until the
+  user follows the shown instructions.
 - vault data moves path; per ruling the vault is wiped and rebuilt, not migrated.
 - An L1 volume per forge costs a podman volume create per launch (cheap).
 

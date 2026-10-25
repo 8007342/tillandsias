@@ -28,7 +28,23 @@ SHALL invoke the disk preflight, and the forge startup context SHALL report
 L0 size/used/threshold, L1 and L2 free space, swap state, host free percent
 and the count of evictable worktrees.
 
+#### Scenario: mount intent is stated
+
+- **WHEN** a forge agent reads its startup context or forge docs
+- **THEN** each mount names its intent and limits: src is RAM, scratch is wiped on teardown, cache survives and is wiped on corruption
+
 #### Scenario: startup context
 
 - **WHEN** a forge agent session starts
 - **THEN** the startup context contains a disk line with each of those values
+
+### Requirement: Download manifest
+
+Tillandsias SHALL keep a manifest of every large download with its size and
+class: non-negotiable (forge and web images) or hot-deletable and recreated
+on demand (models, caches).
+
+#### Scenario: every large fetch is listed
+
+- **WHEN** Tillandsias fetches an image or model
+- **THEN** that artifact appears in the manifest with a size and a class

@@ -2,7 +2,7 @@
 
 - [ ] 1.1 Add a scoped-HOME fixture that runs init + one forge launch/remove and lists Tillandsias-created paths outside `<root>` and the exempt list; watch it fail on today's code
 - [ ] 1.2 Introduce `TILLANDSIAS_HOME` resolution and the subtree layout from design D1
-- [ ] 1.3 Scope podman (graphroot, runroot, volume path) to `<root>/podman` without editing `~/.config/containers`
+- [ ] 1.3 Give Tillandsias its own rootless podman store (graphroot, runroot, volume path) under `<root>/podman`, replacing both current stores, without editing `~/.config/containers`; one rebuild of every image
 - [ ] 1.4 Move `~/.cache|.local/state|.config/tillandsias` writers; old paths wiped, not migrated (vault rebuilt)
 - [ ] 1.5 Tray "Open storage folder" and storage report
 
@@ -18,10 +18,10 @@
 - [ ] 3.2 Export the paths; per-subtree stamp; wipe-on-mismatch
 - [ ] 3.3 Relate to 1865-wv58 (ruby shim) — no duplicate fix
 
-## 4. Swap warning in the tray — order 1877-maph
+## 4. Mandatory swap — order 1877-maph
 
-- [ ] 4.1 Fixture: a `/proc/swaps` with only zram (and with none) yields the swap warning status line; disk swap ≥ threshold clears it
-- [ ] 4.2 Tray status line + icon state; remedy `tillandsias --swap on`
+- [ ] 4.1 Fixture: a `/proc/swaps` with only zram (and with none) makes the Linux tray refuse to start with plain enable instructions; disk swap ≥ threshold starts
+- [ ] 4.2 Refuse-to-start + instructions naming `tillandsias --swap on`; macOS VM and WSL force the known-good swap config
 
 ## 5. Worktree eviction and disk-aware skills — order 1878-2cwt
 
@@ -51,10 +51,18 @@
 
 - [ ] 8.1 Each platform's peer returns: root path, inventory table, layer mapping, swap recommendation, free-space probe — in the shape of design.md tables
 
-## 9. Open questions (operator)
+## 9. Download manifest — order 1891-dlmf
 
-- [ ] 9.1 Root on Linux: `~/.local/share/tillandsias` (XDG-compliant, hidden) or a visible `~/.tillandsias` (or a symlink from one to the other)?
-- [ ] 9.2 Two podman stores exist today (`~/.local/share/containers/storage` holds live forge volumes; `~/.local/share/tillandsias/podman` is a vfs graphroot). Confirm the single scoped store replaces both.
-- [ ] 9.3 Vault data and CA keys currently sit in `~/.cache/tillandsias`; moving them to `state/` changes their backup semantics. Confirm wipe-and-rebuild on move.
-- [ ] 9.4 Should the swap warning become blocking on floor-tier hosts (esme, macneo)?
-- [ ] 9.5 L1 cap: fixed GiB or a fraction of host free space at forge create?
+- [ ] 9.1 Manifest of every large download with size and class (non-negotiable vs hot-deletable); fixture asserts every image/model fetch site is listed
+
+## 10. Mount-intent audit — order 1892-mtau
+
+- [ ] 10.1 Reword forge affordances, docs, startup context and tooling so every mount states its intent and limits
+
+## 11. Operator rulings 2026-10-25 (resolved)
+
+- [x] 11.1 Root on Linux: visible `~/.tillandsias`
+- [x] 11.2 Own rootless podman store replaces both current stores; one image rebuild
+- [x] 11.3 Vault and CA move out of cache; wiped, not migrated
+- [x] 11.4 Swap is mandatory: Linux tray refuses to start; macOS/WSL forced config, floor tiers included
+- [x] 11.5 L1 cap: generous, sized from free disk at create, with a floor

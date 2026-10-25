@@ -25,17 +25,31 @@ and SHALL be overridable with `TILLANDSIAS_HOME`.
 
 ### Requirement: Linux root layout
 
-On Linux the root SHALL be `${TILLANDSIAS_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/tillandsias}`
+On Linux the root SHALL be `${TILLANDSIAS_HOME:-$HOME/.tillandsias}`
 with subtrees `config/`, `state/`, `logs/`, `cache/` (carrying a `CACHEDIR.TAG`),
-`podman/` (graphroot and volume path for all Tillandsias containers),
+`podman/` (Tillandsias' own rootless podman store),
 `forges/<lane>/` and `projects/<project>/`. The user's own podman configuration
-SHALL NOT be modified.
+SHALL NOT be modified. Vault data and CA keys SHALL live under `state/`, not
+`cache/`; existing ones SHALL be wiped, not migrated.
 
 #### Scenario: podman storage is scoped to the root
 
 - **WHEN** Tillandsias creates a forge container or volume
 - **THEN** its storage resolves under `<root>/podman`
 - **AND** `~/.local/share/containers/storage` gains no Tillandsias volume
+
+### Requirement: Tillandsias has its own podman store
+
+Tillandsias SHALL run podman rootless with its own graphroot and runroot
+under `<root>/podman`, separate from the user's store, replacing both stores
+used before this change. Moving to it costs one rebuild of every image.
+
+#### Scenario: no collision with the user's containers
+
+- **GIVEN** the user has their own podman containers and images
+- **WHEN** Tillandsias launches a forge
+- **THEN** the user's `podman ps -a` and `podman images` list no Tillandsias container or image
+- **AND** Tillandsias never lists, stops or removes a user container
 
 ### Requirement: Storage is discoverable
 

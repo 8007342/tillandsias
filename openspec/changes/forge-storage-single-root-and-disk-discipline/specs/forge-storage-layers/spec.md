@@ -5,7 +5,8 @@
 A forge SHALL expose four storage layers: L0 ram (tmpfs source workspace and
 small temp), L1 per-forge disk scratch, L2 reusable per-project cache, L3
 durable source of truth (git remote). Each layer SHALL have a declared
-mount, size rule, lifetime and corruption rule.
+mount, size rule, lifetime and corruption rule. L1 scratch SHALL be
+generous: sized from host free disk at creation, with a floor.
 
 #### Scenario: L1 scratch is truly ephemeral
 
@@ -41,15 +42,22 @@ empty; no repair SHALL be attempted.
 - **WHEN** the forge starts
 - **THEN** the subtree is recreated empty and the event is logged once
 
-### Requirement: Swap backs the ram layer
+### Requirement: Swap is mandatory
 
 The host SHALL have an active disk-backed swap device at least the sum of
 the L0 caps of running forges (floor 8 GiB). zram alone SHALL NOT satisfy
-this. When unmet, the tray SHALL show a persistent warning naming the
-remedy `tillandsias --swap on`; forge launch SHALL NOT be blocked.
+this. On Linux the tray SHALL refuse to start when unmet and SHALL show
+plain instructions naming `tillandsias --swap on`. On macOS VMs and Windows
+WSL, Tillandsias SHALL force its known-good swap configuration on every
+host, floor-tier hosts included.
 
 #### Scenario: zram only
 
 - **GIVEN** `/proc/swaps` lists only a zram device
-- **WHEN** the tray computes its status
-- **THEN** a swap warning status line is shown until disk swap is active
+- **WHEN** the Linux tray starts
+- **THEN** it refuses to start and shows instructions to enable disk swap
+
+#### Scenario: WSL swap forced
+
+- **WHEN** Tillandsias provisions its WSL distro
+- **THEN** `.wslconfig` carries the known-good `swap=` setting
