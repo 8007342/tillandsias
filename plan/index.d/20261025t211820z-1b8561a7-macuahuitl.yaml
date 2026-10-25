@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-quality-long-or-large-download-image-run-returns-consent-required-with-a-host-minted-single-use-token
+    field: context
+    value: 'Operator ruling 2026-10-25 replaces the 120 s / 2 GB consent text. Flow in design.md section 5: always start at I0; offer only the next tier up to the host ceiling; curated ask sentences ("there are bigger models but they''ll be slower, want to try?"; "we only download the big files if you''re OK waiting longer for better results"); no raw sizes or time figures in user-facing text. A later packet may gate large downloads with the OS approval dialog (sizes + disk bar), spec os-verified-approval-gates, written in parallel; not a dependency. Forge overlays for Claude, OpenCode and Codex say the ask goes to the user verbatim.'
+    ts: "2026-10-25T21:18:20Z"
+    host: macuahuitl
+    replaces_sha256: "2bbe4f1cf4c0834ddb82fb3f520facf6afc6e046bddd45cb5e18557eba0968f2"
+
+events:
+  - packet_id: a-quality-long-or-large-download-image-run-returns-consent-required-with-a-host-minted-single-use-token
+    event:
+      type: note
+      ts: "2026-10-25T21:18:20Z"
+      host: macuahuitl
+      summary: |-
+        operator-rulings-2026-10-25

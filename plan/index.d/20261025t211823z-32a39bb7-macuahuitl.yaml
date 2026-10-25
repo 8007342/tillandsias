@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: imagegen-models-are-fetched-on-first-use-into-the-reusable-cache-by-pinned-url-and-sha256
+    field: context
+    value: Pin URL, sha256, size and licence per model; re-verify each licence on the model card before pinning and refuse any non-commercial or revenue-capped licence (operator ruling 2026-10-25). Prove sd.cpp loads the I0 model (SDXS-512-0.9); if not, pin segmind/tiny-sd or SD1.5 (CreativeML OpenRAIL-M). Sizes are recorded for the download manifest and approval dialog, never shown in the tool's user text. Per-model flock. tillandsias_core::cache_root fn cache_root.
+    ts: "2026-10-25T21:18:23Z"
+    host: macuahuitl
+    replaces_sha256: "f21602013435085063e3ba6bf88567b38ec5e0da81da04e5c3c2157e0187c88d"
+
+events:
+  - packet_id: imagegen-models-are-fetched-on-first-use-into-the-reusable-cache-by-pinned-url-and-sha256
+    event:
+      type: note
+      ts: "2026-10-25T21:18:23Z"
+      host: macuahuitl
+      summary: |-
+        operator-rulings-2026-10-25

@@ -6,13 +6,13 @@ criteria, written red against today's code first.
 ## 1. Engine and data
 
 - [ ] 1.1 `images/imagegen` built on first use from a pinned sd.cpp tag, Vulkan+CPU (CUDA variant) [1874-b9tg]
-- [ ] 1.2 `images/imagegen/tiers.tsv` I0–I3 and the classifier over the accel envelope [1874-bair]
+- [ ] 1.2 `images/imagegen/tiers.tsv` I0–I3 ladder (permissive licences only) and the ceiling classifier [1874-bair]
 - [ ] 1.3 Pinned model fetch into `cache_root()/models/imagegen` with sha256 and licence [1874-h9ns]
 
 ## 2. Tool
 
-- [ ] 2.1 `image.generate` on the host MCP socket, 1871-47ex result schema [1874-kkrc]
-- [ ] 2.2 Consent handshake for quality / long / large-download runs [1874-p8w7]
+- [ ] 2.1 `image.generate` on the host MCP socket, exact requested size, output in shared `/work/tmp/imagegen/` [1874-kkrc]
+- [ ] 2.2 Smallest-first, one-tier-up offer with curated sentences and a host-minted token [1874-p8w7]
 
 ## 3. Substrates
 
@@ -21,4 +21,4 @@ criteria, written red against today's code first.
 
 ## 4. Studio
 
-- [ ] 4.1 Optional ComfyUI `imagegen-studio` image, off by default [1874-zry8]
+- [ ] 4.1 (later) Optional ComfyUI `imagegen-studio` image, off by default [1874-zry8]
