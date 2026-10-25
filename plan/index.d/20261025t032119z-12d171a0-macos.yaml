@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: host-side-ensure-github-connected-cloudflare-worker-service-tool-so-agents-never-hold-cloudflare-credentials
+    event:
+      type: list-replace
+      ts: "2026-10-25T03:21:19Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: macos
+      field: exit_criteria
+      items:
+        - "A fixture drives the tool against a fake Cloudflare API and asserts: the Worker is created or found and the repo connected once with auto-build on push disabled; a push to main or to any work branch triggers ZERO cloud builds; a build happens only on an explicit request for a named revision from the deploy branch; status and logs are returned; and no credential appears in any forge-visible output or env. Pre-fix result: FAILS, no such tool exists; the forge scope probe exposes read-only Workers and Builds tools only."
+        - "Creating the Worker and connecting the repo together cost at most ONE cloud build, and the connect step triggers none of its own (asserted in the fake-Cloudflare fixture)."
+      summary: |-
+        coordinator added exit check 2026-10-24

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: host-side-ensure-github-connected-cloudflare-worker-service-tool-so-agents-never-hold-cloudflare-credentials
+    field: open_questions
+    value: 'external_script_id: the Workers Builds trigger needs the Worker''s tag; no documented source. Do not guess an API; resolve by a live probe with the operator present.'
+    ts: "2026-10-25T03:21:11Z"
+    host: macos
+
+events:
+  - packet_id: host-side-ensure-github-connected-cloudflare-worker-service-tool-so-agents-never-hold-cloudflare-credentials
+    event:
+      type: progress
+      ts: "2026-10-25T03:21:11Z"
+      host: macos
+      summary: |-
+        status 'external_script_id: the Workers Builds trigger needs the Worker's tag; no documented source. Do not guess an API; resolve by a live probe with the operator present.' (not terminal) with evidence_refs: Cloudflare Builds API docs carry no source for external_script_id
+  - packet_id: host-side-ensure-github-connected-cloudflare-worker-service-tool-so-agents-never-hold-cloudflare-credentials
+    event:
+      type: note
+      ts: "2026-10-25T03:21:11Z"
+      host: macos
+      summary: |-
+        coordinator ruling 2026-10-24
