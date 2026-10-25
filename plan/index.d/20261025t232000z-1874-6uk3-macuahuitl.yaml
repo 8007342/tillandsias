@@ -12,6 +12,6 @@ packets:
       Fix is test-only: assert both rootful and rootless branches of
       preview_listener_args explicitly; no production change.
     verifiable_closure: |-
-      cargo test -p tillandsias-headless local_web_preview passes both as a
+      cargo test -p tillandsias-headless --features host-services --bin tillandsias source_tuple passes both as a
       normal user and as uid 0 (podman unshare), including
       source_tuple_names_do_not_alias_and_tls_publish_is_loopback_only.
