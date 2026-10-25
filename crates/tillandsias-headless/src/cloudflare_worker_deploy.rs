@@ -16,7 +16,11 @@
 //!   from building. So the ONE trigger this module creates includes only
 //!   `deploy/<worker>`: a push to main or a work
 //!   branch matches nothing and builds nothing. The deploy branch moves only
-//!   on purpose, and a deploy is a manual build of a named commit on it.
+//!   on purpose: a deploy fast-forwards it to a named commit (the
+//!   one intentional act, operator ruling 2026-10-24) and follows the ONE build
+//!   that push starts. Nothing here requests a build. Deploys are throttled
+//!   per Worker ([`Throttle`]) because build minutes are metered; agents
+//!   work on integration branches and deploy only when the user asks.
 //! - Creating the Worker uploads a placeholder script (no build), and
 //!   connecting the repo creates the connection and the trigger (no build).
 //! - Results and errors pass through [`redact`] with the bearer token.
@@ -41,7 +45,7 @@ pub(crate) enum Op {
     TriggersList,
     RepoConnect,
     TriggerCreate,
-    ManualBuild,
+    WorkerBuilds,
     BuildGet,
     BuildLogs,
 }
@@ -49,9 +53,13 @@ pub(crate) enum Op {
 impl Op {
     pub(crate) fn method(self) -> &'static str {
         match self {
-            Op::ScriptsList | Op::TriggersList | Op::BuildGet | Op::BuildLogs => "GET",
+            Op::ScriptsList
+            | Op::TriggersList
+            | Op::WorkerBuilds
+            | Op::BuildGet
+            | Op::BuildLogs => "GET",
             Op::ScriptUpload | Op::RepoConnect => "PUT",
-            Op::TriggerCreate | Op::ManualBuild => "POST",
+            Op::TriggerCreate => "POST",
         }
     }
 
@@ -62,7 +70,7 @@ impl Op {
             Op::TriggersList => "/accounts/{account}/builds/workers/{tag}/triggers",
             Op::RepoConnect => "/accounts/{account}/builds/repos/connections",
             Op::TriggerCreate => "/accounts/{account}/builds/triggers",
-            Op::ManualBuild => "/accounts/{account}/builds/triggers/{trigger}/builds",
+            Op::WorkerBuilds => "/accounts/{account}/builds/workers/{tag}/builds",
             Op::BuildGet => "/accounts/{account}/builds/builds/{build}",
             Op::BuildLogs => "/accounts/{account}/builds/builds/{build}/logs",
         }
@@ -240,6 +248,7 @@ pub(crate) struct Ensured {
     pub trigger: &'static str,
     pub trigger_uuid: String,
     pub deploy_branch: String,
+    pub tag: String,
 }
 
 fn ensure_inner(wire: &dyn Wire, s: &Session, spec: &Spec) -> Result<Ensured, String> {
@@ -288,6 +297,7 @@ fn ensure_inner(wire: &dyn Wire, s: &Session, spec: &Spec) -> Result<Ensured, St
             trigger: "found",
             trigger_uuid: uuid.to_string(),
             deploy_branch: branch,
+            tag,
         });
     }
     if !triggers.is_empty() {
@@ -340,6 +350,7 @@ fn ensure_inner(wire: &dyn Wire, s: &Session, spec: &Spec) -> Result<Ensured, St
         trigger: "created",
         trigger_uuid: uuid.to_string(),
         deploy_branch: branch,
+        tag,
     })
 }
 
@@ -385,38 +396,116 @@ fn sha_ok(s: &str) -> bool {
             .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
 }
 
-/// Build and deploy `revision`, which must be the deploy branch's head as the
-/// host sees it (`deploy_head`). Nothing else starts a build.
+/// The host's handle on the repo's deploy branch. The GitHub credential stays
+/// behind it, host-side.
+pub(crate) trait DeployRef {
+    /// The branch's head, `None` when it does not exist yet.
+    fn head(&self, branch: &str) -> Result<Option<String>, String>;
+    /// Move `branch` to `sha`, fast-forward only (or create it). A
+    /// non-fast-forward is refused, never forced.
+    fn fast_forward(&self, branch: &str, sha: &str) -> Result<(), String>;
+}
+
+/// Cloud build minutes are metered, so deploys are throttled per Worker:
+/// at least `min_interval_s` apart and at most `daily_cap` per rolling day.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Throttle {
+    pub min_interval_s: u64,
+    pub daily_cap: usize,
+}
+
+pub(crate) const THROTTLE_DEFAULT: Throttle = Throttle {
+    min_interval_s: 600,
+    daily_cap: 6,
+};
+
+/// Admit a deploy at `now` given the Worker's earlier deploy times. `Ok` is
+/// the allowance left after this one; `Err` is (retry_after_s, remaining).
+pub(crate) fn admit(t: Throttle, history: &[u64], now: u64) -> Result<usize, (u64, usize)> {
+    let day: Vec<u64> = history
+        .iter()
+        .copied()
+        .filter(|h| now.saturating_sub(*h) < 86_400)
+        .collect();
+    let remaining = t.daily_cap.saturating_sub(day.len());
+    if remaining == 0 {
+        let oldest = day.iter().min().copied().unwrap_or(now);
+        return Err(((oldest + 86_400).saturating_sub(now).max(1), 0));
+    }
+    if let Some(last) = day.iter().max()
+        && now.saturating_sub(*last) < t.min_interval_s
+    {
+        return Err((t.min_interval_s - now.saturating_sub(*last), remaining));
+    }
+    Ok(remaining - 1)
+}
+
+/// How many times to look for the build the push started.
+const FIND_BUILD_TRIES: u32 = 5;
+
+/// Deploy `revision`: fast-forward `deploy/<worker>` to it, which is the one
+/// intentional act, then find the ONE build that push started and report it.
+/// Never requests a build of its own. Agents call this only when the user
+/// asks for a deploy; work goes to integration branches.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn deploy(
     wire: &dyn Wire,
     s: &Session,
     spec: &Spec,
     revision: &str,
-    deploy_head: &dyn Fn(&str) -> Result<String, String>,
+    git: &dyn DeployRef,
+    throttle: Throttle,
+    history: &[u64],
+    now: u64,
+    wait: &dyn Fn(u32),
 ) -> Result<serde_json::Value, String> {
     let r = (|| {
         if !sha_ok(revision) {
             return Err("invalid-argument:revision".to_string());
         }
         let branch = spec.deploy_branch();
-        if deploy_head(&branch)? != revision {
-            return Err("revision-not-deploy-branch-head".into());
+        if git.head(&branch)?.as_deref() == Some(revision) {
+            return Err("already-at-revision".into());
         }
+        let remaining = match admit(throttle, history, now) {
+            Ok(r) => r,
+            Err((retry, left)) => {
+                return Ok(serde_json::json!({
+                    "deployed": false,
+                    "reason": "throttled",
+                    "retry_after_s": retry,
+                    "remaining_today": left,
+                }));
+            }
+        };
         let e = ensure_inner(wire, s, spec)?;
-        let b = call(
-            wire,
-            s,
-            Op::ManualBuild,
-            &[("trigger", &e.trigger_uuid)],
-            None,
-            json_body(serde_json::json!({"branch": branch, "commit_hash": revision})),
-        )?;
-        let id = b["build_uuid"].as_str().ok_or("response-unusable")?;
+        let tag = e.tag.clone();
+        git.fast_forward(&branch, revision)?;
+        for attempt in 0..FIND_BUILD_TRIES {
+            let builds = call(wire, s, Op::WorkerBuilds, &[("tag", &tag)], None, None)?;
+            let hit = builds.as_array().into_iter().flatten().find(|b| {
+                b["commit_hash"].as_str() == Some(revision)
+                    && b["trigger"].as_str() == Some(e.trigger_uuid.as_str())
+            });
+            if let Some(b) = hit {
+                return Ok(serde_json::json!({
+                    "deployed": true,
+                    "build_uuid": b["build_uuid"],
+                    "status": b["status"],
+                    "branch": branch,
+                    "commit_hash": revision,
+                    "remaining_today": remaining,
+                }));
+            }
+            wait(attempt);
+        }
         Ok(serde_json::json!({
-            "build_uuid": id,
-            "status": b["status"],
+            "deployed": true,
+            "build_uuid": null,
+            "status": "not-yet-listed",
             "branch": branch,
             "commit_hash": revision,
+            "remaining_today": remaining,
         }))
     })();
     out(r, s, |v| v)
@@ -624,6 +713,19 @@ mod tests {
                     f.builds.push(b.clone());
                     ok(b)
                 }
+                ("GET", ["accounts", ACCT, "builds", "workers", tag, "builds"]) => {
+                    let mine: Vec<String> = f
+                        .triggers
+                        .iter()
+                        .filter(|t| t["external_script_id"] == *tag)
+                        .map(|t| t["trigger_uuid"].as_str().unwrap().to_string())
+                        .collect();
+                    ok(f.builds
+                        .iter()
+                        .filter(|b| mine.iter().any(|m| b["trigger"] == m.as_str()))
+                        .cloned()
+                        .collect())
+                }
                 ("GET", ["accounts", ACCT, "builds", "builds", id]) => {
                     match f.builds.iter().find(|b| b["build_uuid"] == *id) {
                         Some(b) => ok(
@@ -662,6 +764,47 @@ mod tests {
         }
     }
 
+    /// The repo's deploy branch over a linear history. A fast-forward is
+    /// GitHub delivering a push, so it reaches the fake API's triggers.
+    struct Git<'a> {
+        api: &'a Api,
+        history: Vec<&'static str>,
+        heads: RefCell<std::collections::HashMap<String, String>>,
+        moves: RefCell<usize>,
+    }
+
+    impl<'a> Git<'a> {
+        fn new(api: &'a Api) -> Self {
+            Git {
+                api,
+                history: vec![SHA0, SHA, SHA2],
+                heads: RefCell::default(),
+                moves: RefCell::new(0),
+            }
+        }
+    }
+
+    impl DeployRef for Git<'_> {
+        fn head(&self, branch: &str) -> Result<Option<String>, String> {
+            Ok(self.heads.borrow().get(branch).cloned())
+        }
+        fn fast_forward(&self, branch: &str, sha: &str) -> Result<(), String> {
+            let pos = |x: &str| self.history.iter().position(|h| *h == x);
+            let to = pos(sha).ok_or("unknown-revision")?;
+            if let Some(cur) = self.heads.borrow().get(branch)
+                && pos(cur).is_none_or(|c| c > to)
+            {
+                return Err("not-fast-forward".into());
+            }
+            self.heads.borrow_mut().insert(branch.into(), sha.into());
+            *self.moves.borrow_mut() += 1;
+            self.api.push(branch, sha);
+            Ok(())
+        }
+    }
+
+    const NOW: u64 = 1_800_000_000;
+
     fn spec() -> Spec {
         Spec {
             worker: "observatorium".into(),
@@ -676,7 +819,9 @@ mod tests {
         }
     }
 
+    const SHA0: &str = "00000000000000000000000000000000000000aa";
     const SHA: &str = "0123456789abcdef0123456789abcdef01234567";
+    const SHA2: &str = "fedcba9876543210fedcba9876543210fedcba98";
 
     #[test]
     fn ensure_connects_once_and_no_push_outside_the_deploy_branch_builds() {
@@ -718,40 +863,87 @@ mod tests {
             "pushes off the deploy branch must build nothing"
         );
         // Control: the fake's filter is live, so the zero above is a verdict.
-        // (A push to the deploy branch builds; whether a deploy should move
-        // the branch AND request a build is the row's open double-build
-        // question.)
         api.push("deploy/observatorium", SHA);
         assert_eq!(api.builds(), 1);
     }
 
     #[test]
-    fn a_build_happens_only_on_an_explicit_named_revision_from_the_deploy_branch() {
+    fn one_deploy_moves_the_deploy_branch_and_yields_exactly_one_build() {
         let api = Api::new();
         let s = session();
+        let git = Git::new(&api);
+        let none = |_: u32| {};
         ensure(&api, &s, &spec()).unwrap();
-        let head = |b: &str| -> Result<String, String> {
-            assert_eq!(b, "deploy/observatorium");
-            Ok(SHA.to_string())
-        };
-        let other = "fedcba9876543210fedcba9876543210fedcba98";
-        let e = deploy(&api, &s, &spec(), other, &head).unwrap_err();
-        assert!(e.contains("revision-not-deploy-branch-head"), "{e}");
         assert!(
-            deploy(&api, &s, &spec(), "main", &head)
-                .unwrap_err()
-                .contains("invalid-argument:revision")
+            deploy(
+                &api,
+                &s,
+                &spec(),
+                "main",
+                &git,
+                THROTTLE_DEFAULT,
+                &[],
+                NOW,
+                &none
+            )
+            .unwrap_err()
+            .contains("invalid-argument:revision")
         );
         assert_eq!(api.builds(), 0);
 
-        let d = deploy(&api, &s, &spec(), SHA, &head).unwrap();
-        assert_eq!(api.builds(), 1);
+        let d = deploy(
+            &api,
+            &s,
+            &spec(),
+            SHA,
+            &git,
+            THROTTLE_DEFAULT,
+            &[],
+            NOW,
+            &none,
+        )
+        .unwrap();
+        assert_eq!(api.builds(), 1, "one deploy is exactly one build");
+        assert_eq!(*git.moves.borrow(), 1);
+        assert_eq!(d["deployed"], true);
         assert_eq!(d["branch"], "deploy/observatorium");
         assert_eq!(d["commit_hash"], SHA);
+        assert_eq!(d["build_uuid"], "build-0");
+        assert_eq!(d["remaining_today"], THROTTLE_DEFAULT.daily_cap - 1);
         let b = api.0.borrow().builds[0].clone();
-        assert_eq!(b["source"], "manual");
-        // The deploy reused the existing trigger rather than making another.
+        assert_eq!(b["source"], "push_event");
         assert_eq!(api.0.borrow().triggers.len(), 1);
+
+        // The same revision again moves nothing and builds nothing.
+        let later = NOW + 3600;
+        let e = deploy(
+            &api,
+            &s,
+            &spec(),
+            SHA,
+            &git,
+            THROTTLE_DEFAULT,
+            &[NOW],
+            later,
+            &none,
+        )
+        .unwrap_err();
+        assert!(e.contains("already-at-revision"), "{e}");
+        // Moving backwards is refused, never forced.
+        let e = deploy(
+            &api,
+            &s,
+            &spec(),
+            SHA0,
+            &git,
+            THROTTLE_DEFAULT,
+            &[NOW],
+            later,
+            &none,
+        )
+        .unwrap_err();
+        assert!(e.contains("not-fast-forward"), "{e}");
+        assert_eq!(api.builds(), 1);
 
         let id = d["build_uuid"].as_str().unwrap();
         let st = status(&api, &s, id).unwrap();
@@ -760,6 +952,45 @@ mod tests {
         let lg = logs(&api, &s, id).unwrap();
         assert_eq!(lg["lines"].as_array().unwrap().len(), 2);
         assert_eq!(lg["truncated"], false);
+    }
+
+    #[test]
+    fn the_throttle_refuses_with_retry_after_and_the_days_allowance() {
+        let api = Api::new();
+        let s = session();
+        let git = Git::new(&api);
+        let none = |_: u32| {};
+        let t = Throttle {
+            min_interval_s: 600,
+            daily_cap: 2,
+        };
+        // Too soon after the last deploy.
+        let d = deploy(&api, &s, &spec(), SHA, &git, t, &[NOW - 100], NOW, &none).unwrap();
+        assert_eq!(d["deployed"], false);
+        assert_eq!(d["reason"], "throttled");
+        assert_eq!(d["retry_after_s"], 500);
+        assert_eq!(d["remaining_today"], 1);
+        // The day's allowance is spent.
+        let d = deploy(
+            &api,
+            &s,
+            &spec(),
+            SHA,
+            &git,
+            t,
+            &[NOW - 7200, NOW - 3600],
+            NOW,
+            &none,
+        )
+        .unwrap();
+        assert_eq!(d["reason"], "throttled");
+        assert_eq!(d["remaining_today"], 0);
+        assert_eq!(d["retry_after_s"], 86_400 - 7200);
+        assert_eq!(api.builds(), 0);
+        assert_eq!(*git.moves.borrow(), 0, "a throttled deploy moves nothing");
+        assert!(api.writes().is_empty(), "a throttled deploy writes nothing");
+        // A deploy older than a day no longer counts.
+        assert_eq!(admit(t, &[NOW - 90_000, NOW - 89_000], NOW), Ok(1));
     }
 
     #[test]
@@ -793,9 +1024,19 @@ mod tests {
         let api = Api::new();
         let mut outputs = vec![ensure(&api, &s, &spec()).unwrap().to_string()];
         outputs.push(
-            deploy(&api, &s, &spec(), SHA, &|_| Ok(SHA.into()))
-                .unwrap()
-                .to_string(),
+            deploy(
+                &api,
+                &s,
+                &spec(),
+                SHA,
+                &Git::new(&api),
+                THROTTLE_DEFAULT,
+                &[],
+                NOW,
+                &|_| {},
+            )
+            .unwrap()
+            .to_string(),
         );
         outputs.push(logs(&api, &s, "build-0").unwrap().to_string());
         outputs.push(ensure(&Echo, &s, &spec()).unwrap_err());
