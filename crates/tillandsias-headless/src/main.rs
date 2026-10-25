@@ -16844,6 +16844,15 @@ fn issue_registered_session(
     Ok(otp)
 }
 
+/// Where the OpenCode Web window lands after login (order 1802-9xix): the
+/// bare root. The forge's proxy redirects a page load of `/` to the route of
+/// the directory `opencode serve` runs in and seeds that checkout into the
+/// web app's project list, so the window opens on the project without the
+/// launcher deriving a forge path from a host-side name (a dotted name, an
+/// owner/repo clone or a case change used to name a directory that did not
+/// exist).
+const OPENCODE_WEB_WINDOW_LANDING: &str = "/";
+
 /// Wait for the app behind the router, then return a FRESH registered session
 /// for the window to redeem: the probe's own session may be near its TTL.
 fn wait_for_authenticated_opencode_web(
@@ -17673,12 +17682,11 @@ fn launch_opencode_web_browser(
     );
     #[cfg(not(feature = "host-services"))]
     let window_url = url.clone();
-    // Land on the checked-out project, not OpenCode's "add project" page:
-    // the forge mounts it at /home/forge/src/<project> (see find_project_dir
-    // in lib-common.sh) and `opencode serve` runs from there.
-    let landing =
-        tillandsias_otp::opencode_project_landing(&format!("/home/forge/src/{project_name}"));
-    let login_url = tillandsias_otp::build_login_data_url_landing(&window_url, &landing, &otp);
+    let login_url = tillandsias_otp::build_login_data_url_landing(
+        &window_url,
+        OPENCODE_WEB_WINDOW_LANDING,
+        &otp,
+    );
     #[cfg(not(feature = "host-services"))]
     let args = build_opencode_web_browser_spec(
         &login_url,

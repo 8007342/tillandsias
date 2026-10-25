@@ -50,7 +50,54 @@ const PWA_KILL_PATHS = new Set([
 //     grants; any monkey-patching pollutes the console and hides bugs.
 //   - UTF-8 body bytes are hashed exactly; whitespace matters for the
 //     sha256 computation that feeds the CSP.
-const BOOTSTRAP_SCRIPT = ";(function(){try{if(!localStorage.getItem('opencode-color-scheme')){localStorage.setItem('opencode-color-scheme','dark');}}catch(_){}})();";
+// Order 1802-9xix: the bootstrap ALSO opens the forge's checkout as a
+// project. OpenCode 1.19's web layout keeps its project list in the
+// browser (`opencode.global.dat:server` → projects.local); the window runs
+// in a fresh incognito profile, so that list starts empty and the
+// new-session view showed "New project" with nothing open even on the
+// project's own route. Seeding the checkout here (merge, never replace)
+// makes the draft land on it. The directory is this process's cwd, which
+// the entrypoint shares with `opencode serve`, so the browser can never
+// name a directory the server does not run in (dotted names, owner/repo
+// clones and case changes included).
+const PROJECT_DIR = normalizeProjectDir(
+    process.env.TILLANDSIAS_OPENCODE_PROJECT_DIR || process.cwd()
+);
+
+function normalizeProjectDir(dir) {
+    const trimmed = String(dir || '').replace(/\/+$/, '');
+    return trimmed === '' ? '/' : trimmed;
+}
+
+// The web app's own project route: `/<base64url(dir), unpadded>/session`.
+function projectRoute(dir) {
+    return `/${Buffer.from(dir, 'utf8').toString('base64url')}/session`;
+}
+
+function buildBootstrapScript(dir) {
+    // JSON with `<` escaped so a directory can never close the <script>.
+    const lit = JSON.stringify(dir).replace(/</g, '\\u003c');
+    return ";(function(){try{if(!localStorage.getItem('opencode-color-scheme')){localStorage.setItem('opencode-color-scheme','dark');}}catch(_){}" +
+        "try{var d=" + lit + ",k='opencode.global.dat:server',s=null;try{s=JSON.parse(localStorage.getItem(k)||'null');}catch(_){}" +
+        "if(!s||typeof s!=='object')s={list:[],projects:{},lastProject:{},recentlyClosed:{}};" +
+        "if(!s.projects||typeof s.projects!=='object')s.projects={};" +
+        "var p=Array.isArray(s.projects.local)?s.projects.local:[];" +
+        "if(!p.some(function(x){return x&&x.worktree===d;}))p.unshift({worktree:d,expanded:true});" +
+        "s.projects.local=p;if(!s.lastProject||typeof s.lastProject!=='object')s.lastProject={};" +
+        "if(!s.lastProject.local)s.lastProject.local=d;localStorage.setItem(k,JSON.stringify(s));}catch(_){}})();";
+}
+
+const BOOTSTRAP_SCRIPT = buildBootstrapScript(PROJECT_DIR);
+
+// A top-level page load of the bare root opens the checkout's route, so the
+// launcher never has to derive the forge path from a host-side name.
+function rootRedirectTarget(method, url, accept, dir) {
+    if (method !== 'GET' && method !== 'HEAD') return null;
+    const [path, query] = String(url).split(/\?(.*)/s);
+    if (path !== '/') return null;
+    if (!String(accept || '').includes('text/html')) return null;
+    return projectRoute(dir) + (query ? `?${query}` : '');
+}
 
 // @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
 // CSP-hash injector for opencode's index.html. Upstream opencode ships a
@@ -129,7 +176,8 @@ function log(level, msg, extra) {
     process.stderr.write(line + '\n');
 }
 
-const server = http.createServer((req, res) => {
+function createServer() {
+return http.createServer((req, res) => {
     // @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
     // PWA-kill short-circuit: 404 the manifest and service-worker entry
     // points BEFORE forwarding upstream. Avoids any chance of the browser
@@ -142,6 +190,12 @@ const server = http.createServer((req, res) => {
     }
 
     const accept = req.headers['accept'] || '';
+    const landing = rootRedirectTarget(req.method, req.url, accept, PROJECT_DIR);
+    if (landing) {
+        res.writeHead(302, { location: landing, 'cache-control': 'no-store' });
+        res.end();
+        return;
+    }
     const sse = SSE_PATHS.has(req.url) || accept.includes('text/event-stream');
 
     const headers = { ...req.headers, host: `${UP_HOST}:${UP_PORT}` };
@@ -278,6 +332,13 @@ const server = http.createServer((req, res) => {
 
     req.pipe(upReq);
 });
+}
+
+module.exports = { buildBootstrapScript, projectRoute, rootRedirectTarget, normalizeProjectDir, rewriteHtmlBody };
+
+if (require.main !== module) return;
+
+const server = createServer();
 
 server.on('clientError', (err, socket) => {
     try { socket.end('HTTP/1.1 400 Bad Request\r\n\r\n'); } catch (_) {}

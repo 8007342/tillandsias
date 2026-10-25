@@ -50,6 +50,11 @@ if accepts_no_sandbox "$CHROMIUM_BIN"; then
     # 21 ("no usable sandbox") without this flag. The container itself remains
     # locked down via userns, dropped caps, no-new-privileges, and tmpfs mounts.
     ARGS+=("--no-sandbox")
+    # Order 1802-9xix: Chromium answers --no-sandbox with a yellow
+    # "unsupported command-line flag" bar across the top of every window.
+    # --test-type is the switch Chromium itself checks to skip that bar;
+    # the sandboxing above is the container's, not the flag's.
+    ARGS+=("--test-type")
 fi
 
 exec "$CHROMIUM_BIN" "${ARGS[@]}"
