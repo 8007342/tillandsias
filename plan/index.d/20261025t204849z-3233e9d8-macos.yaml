@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: host-side-ensure-github-connected-cloudflare-worker-service-tool-so-agents-never-hold-cloudflare-credentials
+    field: open_questions
+    value: '(1) external_script_id: read as the scripts-list tag, as the 1772-irs3 tools do; unverified, no documented source; resolve by live probe with the operator present. (2) build_token_uuid: caller-supplied; no documented lookup. Double-build question RESOLVED by operator ruling 2026-10-24: deploy fast-forwards deploy/<worker> and follows the one push build, never requests a second; throttled per Worker (retry_after + remaining_today on refusal).'
+    ts: "2026-10-25T20:48:49Z"
+    host: macos
+
+events:
+  - packet_id: host-side-ensure-github-connected-cloudflare-worker-service-tool-so-agents-never-hold-cloudflare-credentials
+    event:
+      type: progress
+      ts: "2026-10-25T20:48:49Z"
+      host: macos
+      summary: |-
+        status '(1) external_script_id: read as the scripts-list tag, as the 1772-irs3 tools do; unverified, no documented source; resolve by live probe with the operator present. (2) build_token_uuid: caller-supplied; no documented lookup. Double-build question RESOLVED by operator ruling 2026-10-24: deploy fast-forwards deploy/<worker> and follows the one push build, never requests a second; throttled per Worker (retry_after + remaining_today on refusal).' (not terminal) with evidence_refs: work/1853-cfw1 fixture: one deploy = exactly 1 build; manual-build sabotage red
+  - packet_id: host-side-ensure-github-connected-cloudflare-worker-service-tool-so-agents-never-hold-cloudflare-credentials
+    event:
+      type: note
+      ts: "2026-10-25T20:48:49Z"
+      host: macos
+      summary: |-
+        coordinator + operator ruling 2026-10-24
