@@ -1,0 +1,43 @@
+# @trace spec:mcp-tool-socket
+name: litmus:lane-socket-survives-launcher-exit
+spec: mcp-tool-socket
+phase: pre-build
+status: active
+description: >
+  Order 1863-eckw. A web-mode forge outlives the CLI that launched it, and a
+  lane MCP listener bound in that CLI died with it: the socket file stayed and
+  refused every connection, so publish_local, browser.open and flutter were dead
+  for the session. The launcher now hands such a lane to the tray (the
+  tray-owned marker), the tray's adoption tick binds it and rebinds it after any
+  owner dies, and the forge names a stale socket (host_lane=stale) in its
+  startup context, its host-browser bridge and its flutter shim. The fixture
+  reproduces the refusing socket and proves one tray tick makes it answer.
+severity: high
+size: instant
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/mcp_socket.rs
+  - python3 on the host
+critical_path:
+  - step: "Req: a marked lane whose launcher exited answers after one tray tick; a live owner, an unmarked lane and a spoofed marker are left alone (pre-fix: connect() is refused)"
+    command: "cargo test -q -p tillandsias-headless --bin tillandsias --features tray,listen-vsock lane_adoption_tests 2>&1"
+    timeout_ms: 600000
+    success_pattern: "test result: ok. 5 passed"
+  - step: "Req: the forge reports the lane as ready, stale, absent or unset, and the flutter shim names a stale lane (a missing socket is not called stale)"
+    command: "python3 -I scripts/test-lane-socket-state.py images/default/lib-common.sh 2>&1"
+    timeout_ms: 10000
+    success_pattern: "ok:lane-socket-state:6"
+observability:
+  traces:
+    - "@trace spec:mcp-tool-socket"
+  expected_log: "a stale lane socket is re-served by the tray and named by the forge"
+  log_fields:
+    spec: "mcp-tool-socket"
+    test: "lane-socket-survives-launcher-exit"
+rollback:
+  on_failure: >
+    A lane whose forge outlives its launcher is again served by the launcher,
+    or the tray stopped adopting marked lanes, or the forge stopped naming a
+    stale socket. Restore serve_forge_lane in main.rs, adopt_marked_lanes in
+    mcp_socket.rs, spawn_lane_adoption in tray/mod.rs, and lane_socket_state in
+    lib-common.sh.
+  command: "cargo test -q -p tillandsias-headless --bin tillandsias --features tray,listen-vsock lane_adoption_tests"

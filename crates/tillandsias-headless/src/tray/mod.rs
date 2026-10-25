@@ -1025,7 +1025,26 @@ pub fn start_mcp_socket_server() -> Result<(), String> {
     for (project, instance) in startup_lanes(reserved.as_ref()) {
         let _ = start_mcp_socket_server_for_lane(&project, &instance);
     }
+    spawn_lane_adoption();
     Ok(())
+}
+
+/// 1863-eckw: the tray binds every lane a launcher handed it (a web-mode
+/// forge outlives its CLI) and rebinds one whose owner died, so a forge's
+/// lane socket answers for the forge's whole life, across tray restarts too.
+fn spawn_lane_adoption() {
+    static STARTED: std::sync::Once = std::sync::Once::new();
+    STARTED.call_once(|| {
+        crate::mcp_socket::adopt_marked_lanes();
+        let _ = std::thread::Builder::new()
+            .name("lane-adoption".into())
+            .spawn(|| {
+                loop {
+                    std::thread::sleep(crate::mcp_socket::LANE_ADOPT_TICK);
+                    crate::mcp_socket::adopt_marked_lanes();
+                }
+            });
+    });
 }
 
 /// The lanes a tray binds at startup: the `default` lane only (776-jcf3: no
