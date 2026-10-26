@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: in-forge-dot-localhost-name-resolution-goes-through-squid-to-proxy-port-80-which-refuses-while-the-router-listens-on-8080
+    event:
+      type: note
+      ts: "2026-10-26T04:57:45Z"
+      agent_id: linux-lenovinha-opus5-20261026t045745z
+      host: lenovinha
+      summary: |-
+        Fix carried by PR 658 (work/1863-4knc); released to ready to free a WIP slot, closes on land.

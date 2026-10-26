@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue (opus5) at the coordinator's request; follow-up to 1874-pn3s.
+packets:
+  - packet_id: the-forge-flutter-sdk-cache-is-populated-on-first-use-so-flutter-works-offline-when-the-host-lane-is-down
+    order: 1902-m6tq
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, flutter, cache, storage]
+    size: M
+    implementer_tier: sonnet
+    title: "flutter fills $TILLANDSIAS_PROJECT_CACHE/flutter-sdk on first use (from the host image when the lane is up, else a download with an honest notice), so a later flutter runs offline with the lane down"
+    context: |
+      1874-pn3s (work/1874-pn3s) made images/default/cli/flutter fall back to
+      $TILLANDSIAS_PROJECT_CACHE/flutter-sdk/bin/flutter when the host lane is
+      down, else refuse typed. Nothing fills that cache, so the fallback helps
+      only if an SDK is placed there by hand.
+      Required (coordinator 2026-10-26):
+      - Populate on first use: copy from the shared tillandsias-flutter host
+        image over the lane when it is up; otherwise download on first use.
+      - The download notice is curated and honest about what is happening and
+        why; never raw byte sizes.
+      - It lives in the reusable cache layer per the storage direction (PR 650),
+        never on the src tmpfs; a disk-space check runs first.
+      - A corrupt cache (failed verification or a broken tree) is wiped and
+        recreated, never half-used.
+    exit_criteria:
+      - "A fixture with the lane down and an empty project cache runs flutter --version twice: the first run populates $TILLANDSIAS_PROJECT_CACHE/flutter-sdk (from a stubbed download source) after a disk check, printing the curated notice with no raw byte size; the second run succeeds with the network cut off. A corrupted cache is wiped and recreated on the next run, and no SDK file is ever written under the src tmpfs. Pre-fix result: FAILS, the second run refuses with refused:flutter:lane-stale."
+    verifiable_closure: "The fixture in the exit criterion passes, red on the 1874-pn3s shim first."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds litmus-flutter-sdk-cache-populated-on-first-use.yaml in the same commit as the change (1136-n8sh).
+    next_action: >
+      Write the fixture first on top of work/1874-pn3s (lane down, empty cache, stubbed download, network cut on the second run) and watch it fail; then add the populate step to the flutter front.
+    provenance: |
+      Coordinator-assigned 2026-10-26 as the follow-up to 1874-pn3s.
+    events:
+      - type: filed
+        ts: "2026-10-26T06:16:08Z"
+        host: lenovinha
+        summary: "filed ready by lenovinha-silverblue (opus5); WIP is full, not claimed"

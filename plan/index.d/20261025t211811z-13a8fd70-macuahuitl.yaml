@@ -1,0 +1,17 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: launch-option-choice-prompt-we-have-n-options-with-one-recommended
+    event:
+      type: list-replace
+      ts: "2026-10-25T21:18:11Z"
+      agent_id: linux-macuahuitl-claude-20261025t211810z
+      host: macuahuitl
+      field: exit_criteria
+      items:
+        - "A fixture asks for a studio on a Hugo fixture and asserts the prompt header, one line per option, exactly one [Recommended] (Decap CMS); after choosing, .tillandsias/config.toml in the checkout records the choice in a commit and a second launch opens without a prompt. Pre-fix result: FAILS, no choice prompt exists."
+      summary: |-
+        operator ruling 2026-10-25

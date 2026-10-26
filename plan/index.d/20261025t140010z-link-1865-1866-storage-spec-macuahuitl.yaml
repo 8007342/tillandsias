@@ -1,0 +1,17 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Links existing rows to openspec/changes/forge-storage-single-root-and-disk-discipline; no fields change.
+events:
+  - packet_id: source-tmpfs-fills-with-parallel-subagent-worktrees-so-the-startup-context-names-its-size-and-finished-agent-worktrees-are-pruned
+    event:
+      type: note
+      ts: "2026-10-25T14:00:10Z"
+      host: macuahuitl
+      summary: |-
+        Linked to openspec/changes/forge-storage-single-root-and-disk-discipline (layer L0 and rule D4). The shared disk preflight is 1878-2cwt; this row keeps the in-forge agent-worktree pruning and the source tmpfs startup-context line.
+  - packet_id: ruby-brew-shim-installs-60-megabytes-then-fails-and-contradicts-the-startup-context-saying-ruby-is-absent
+    event:
+      type: note
+      ts: "2026-10-25T14:00:10Z"
+      host: macuahuitl
+      summary: |-
+        Linked to openspec/changes/forge-storage-single-root-and-disk-discipline. Audit 2026-10-25: on Linux brew downloads land in HOMEBREW_CACHE on the disk cache volume and install into the container overlay, not the ramdisk. Gem and Go paths move to the reusable cache in 1876-ajcs; this row keeps the shim timeout bug and the startup-context contradiction.

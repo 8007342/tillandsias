@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl from operator rulings 2026-10-25. Code is cited by symbol, never by line.
+packets:
+- packet_id: macron-dev-lessons-learned-post-on-os-verified-approvals-for-cloud-spend
+  order: 1890-zbmt
+  status: ready
+  kind: feature
+  priority: p4
+  desired_release: v0.6
+  pickup_role: any
+  capability_tags:
+  - approval
+  - security
+  - cost-gate
+  estimated_hours: 2
+  depends_on: []
+  related:
+  - 1879-5jkt
+  title: 'Later: a macron.dev lessons-learned post on gating cloud spend with OS-verified approvals'
+  context: Low priority, after the Linux and one other platform's approvals are present. A short comic-led post for macron.dev on why agents must not approve their own cloud spend, the budget versus out-of-band split, and why the signature, not the vault, is the trust root. The website update goes through the forge dogfood flow.
+  exit_criteria:
+  - 'A macron.dev post exists that is linked from the site index and covers the three lessons named in the context. Pre-fix result: FAILS, no such post exists.'
+  verifiable_closure: 'A macron.dev post exists that is linked from the site index and covers the three lessons named in the context. Pre-fix result: FAILS, no such post exists.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+
+    '
+  next_action: 'Nothing is done. Write the check named in the exit criterion first and watch it fail on today''s code, then implement per openspec/changes/os-verified-approval-gates.
+
+    '
+  provenance: 'Filed from the operator rulings on PR #651, 2026-10-25.
+
+    '
+  events:
+  - type: filed
+    ts: '2026-10-25T22:20:00Z'
+    host: macuahuitl
+    summary: filed from the operator rulings of 2026-10-25

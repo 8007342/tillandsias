@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl from operator rulings 2026-10-25. Code is cited by symbol, never by line.
+packets:
+- packet_id: budget-policy-exempts-the-daily-build-extra-builds-and-stable-promotion-from-approval-with-counters-agents-cannot-write
+  order: 1890-wvs7
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - approval
+  - security
+  - cost-gate
+  estimated_hours: 5
+  depends_on:
+  - approval-broker-signs-an-action-bound-statement-after-an-os-verified-check-and-records-it-as-a-git-note
+  related: []
+  title: Routine daily builds and the daily stable promotion run without approval; only over-budget runs ask
+  context: Design R5 of openspec/changes/os-verified-approval-gates. Budget policy and counters in Vault under secret/tillandsias/approvals/budget (broker and release-tooling roles write; agents cannot), reset 00:00 UTC; daily build, N optional extra builds (default 3, open question) and the daily promotion are in budget; anything over is gated.
+  exit_criteria:
+  - 'A fixture with a fake clock and fake gh asserts: the daily build and three extra builds dispatch without a prompt and increment the counter; the fifth asks for approval; the daily promotion does not ask; an agent-held token cannot write the counter; the counter resets after 00:00 UTC. Pre-fix result: FAILS, there is no budget policy or counter.'
+  verifiable_closure: 'A fixture with a fake clock and fake gh asserts: the daily build and three extra builds dispatch without a prompt and increment the counter; the fifth asks for approval; the daily promotion does not ask; an agent-held token cannot write the counter; the counter resets after 00:00 UTC. Pre-fix result: FAILS, there is no budget policy or counter.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+
+    '
+  next_action: 'Nothing is done. Write the check named in the exit criterion first and watch it fail on today''s code, then implement per openspec/changes/os-verified-approval-gates.
+
+    '
+  provenance: 'Filed from the operator rulings on PR #651, 2026-10-25.
+
+    '
+  events:
+  - type: filed
+    ts: '2026-10-25T22:20:00Z'
+    host: macuahuitl
+    summary: filed from the operator rulings of 2026-10-25

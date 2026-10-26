@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25 (web studio lanes). Code is cited by symbol, never by line.
+packets:
+  - packet_id: tinacms-studio-lane-local-mode
+    order: 1863-dmke
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, browser, studio]
+    estimated_hours: 6
+    depends_on: [studio-lane-contract-registry-generic-launcher-write-guard-front-and-mcp-coedit]
+    title: "A TinaCMS studio lane in local mode (tinacms dev), with no Tina Cloud account"
+    context: |
+      Operator direction 2026-10-25: "I want to author this website interactively" opens a visual web studio window on the live site, with live saves into the forge checkout and the agent co-editing; every studio is offered as a choice with one [Recommended]. Publishing goes through the 1853-qr4h deploy tool, deploy branch only, on explicit request; no build on push. Spec: openspec/changes/web-studio-lanes. Reuses run_opencode_web_mode plumbing (RouterRoute, tillandsias_otp::issue_session, send_issue_web_session, launch_opencode_web_browser, ensure_versioned_images, sse-keepalive-proxy.js, local_web_preview::publish).
+    exit_criteria:
+      - "A fixture launches the Tina lane on a Next.js markdown fixture, saves a document through the local GraphQL endpoint and asserts that the file changed in the checkout, with zero egress to tina.io during the run. Pre-fix result: FAILS, no Tina lane exists."
+    verifiable_closure: "A fixture launches the Tina lane on a Next.js markdown fixture, saves a document through the local GraphQL endpoint and asserts that the file changed in the checkout, with zero egress to tina.io during the run. Pre-fix result: FAILS, no Tina lane exists."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the fixture named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-25.
+    events:
+      - type: filed
+        ts: "2026-10-25T16:00:04Z"
+        host: macuahuitl
+        summary: "filed ready from the operator direction of 2026-10-25"

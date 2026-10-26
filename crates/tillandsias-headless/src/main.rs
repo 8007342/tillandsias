@@ -2500,7 +2500,14 @@ pub(crate) fn init_cache_dir() -> Result<PathBuf, String> {
 }
 
 fn cache_dir_is_writable(cache_dir: &Path) -> bool {
-    let probe = cache_dir.join(".writable-probe");
+    // 1900-tm9v: the probe name is unique per call. A fixed `.writable-probe`
+    // under create_new made a concurrent caller (or a probe a killed process
+    // left) read a writable dir as unwritable, and init_cache_dir then fell
+    // through to $HOME/.cache/tillandsias: a test's run_cache_clear deleted
+    // the operator's real init-build-state.json and cache_version.
+    static PROBE_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let seq = PROBE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let probe = cache_dir.join(format!(".writable-probe-{}-{seq}", std::process::id()));
     match fs::OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -11489,6 +11496,38 @@ mod failed_build_marker_reset_tests {
         assert!(!dir.exists());
     }
 
+    /// 1900-tm9v: a probe file another caller holds (or a killed process
+    /// left) must not make the XDG cache dir read as unwritable — the next
+    /// candidate is the operator's real $HOME/.cache/tillandsias.
+    #[test]
+    fn a_held_writable_probe_does_not_divert_the_cache_dir_to_home() {
+        let _g = crate::test_support::env_lock();
+        let scratch = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        let prev_xdg = std::env::var_os("XDG_CACHE_HOME");
+        let prev_home = std::env::var_os("HOME");
+        let want = scratch.path().join("tillandsias");
+        std::fs::create_dir_all(&want).unwrap();
+        std::fs::write(want.join(".writable-probe"), b"").unwrap();
+        // SAFETY: serialised by env_lock.
+        unsafe {
+            std::env::set_var("XDG_CACHE_HOME", scratch.path());
+            std::env::set_var("HOME", home.path());
+        }
+        let got = init_cache_dir();
+        unsafe {
+            match prev_xdg {
+                Some(v) => std::env::set_var("XDG_CACHE_HOME", v),
+                None => std::env::remove_var("XDG_CACHE_HOME"),
+            }
+            match prev_home {
+                Some(v) => std::env::set_var("HOME", v),
+                None => std::env::remove_var("HOME"),
+            }
+        }
+        assert_eq!(got.unwrap(), want, "a held probe diverted the cache dir");
+    }
+
     /// 1793-wggq: the marker names the log the build actually wrote. The
     /// helper's log is passed in by its parent; outside a helper the per-image
     /// log is named only when it exists (v56.10.18.1 named
@@ -18166,72 +18205,6 @@ pub(crate) fn hold_window_prefix() -> Vec<String> {
         .map(|p| p.display().to_string())
         .unwrap_or_else(|_| "tillandsias".to_string());
     vec![exe, "--hold-window".to_string(), "--".to_string()]
-}
-
-/// Query GNOME's `gsettings` for the user's chosen default terminal. Returns
-/// `None` if gsettings isn't available, the schema isn't installed, or the
-/// value is empty.
-#[cfg_attr(not(feature = "tray"), allow(dead_code))]
-fn gnome_default_terminal() -> Option<String> {
-    let out = std::process::Command::new("gsettings")
-        .args([
-            "get",
-            "org.gnome.desktop.default-applications.terminal",
-            "exec",
-        ])
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    let raw = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    let trimmed = raw.trim_matches(|c: char| c == '\'' || c == '"' || c.is_whitespace());
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
-    }
-}
-
-/// Build the argv prefix for a terminal binary. Most terminals follow the
-/// `<bin> -e <cmd>` convention; gnome-terminal/ptyxis/wezterm use `--`.
-#[cfg_attr(not(feature = "tray"), allow(dead_code))]
-fn argv_prefix_for(name: &str) -> Vec<String> {
-    let prefix: &[&str] = match name {
-        "ptyxis" => &["ptyxis", "--new-window", "--"],
-        "gnome-terminal" => &["gnome-terminal", "--"],
-        "wezterm" => &["wezterm", "start", "--"],
-        "foot" => &["foot"],
-        "blackbox-terminal" => &["blackbox-terminal", "-c"],
-        // konsole / kitty / alacritty / tilix / xfce4-terminal / terminator
-        // / xterm all accept `-e <cmd>`.
-        _ => &[name, "-e"],
-    };
-    prefix.iter().map(|s| s.to_string()).collect()
-}
-
-#[cfg_attr(not(feature = "tray"), allow(dead_code))]
-fn executable_on_path(name: &str) -> bool {
-    let Some(path) = std::env::var_os("PATH") else {
-        return false;
-    };
-    for dir in std::env::split_paths(&path) {
-        let candidate = dir.join(name);
-        if !candidate.exists() {
-            continue;
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            if let Ok(metadata) = std::fs::metadata(&candidate)
-                && metadata.permissions().mode() & 0o111 == 0
-            {
-                continue;
-            }
-        }
-        return true;
-    }
-    false
 }
 
 /// Bring the per-project enclave (proxy + git + inference) online and return

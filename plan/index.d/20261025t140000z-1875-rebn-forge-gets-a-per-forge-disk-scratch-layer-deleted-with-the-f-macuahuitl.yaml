@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+  - packet_id: forge-gets-a-per-forge-disk-scratch-layer-deleted-with-the-forge-and-tmpdir-points-there
+    order: 1875-rebn
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, storage-layers, tmpdir, podman]
+    estimated_hours: 4
+    title: "Each forge gets its own large disk scratch folder that is deleted with the forge"
+    context: |
+      Layer L1 of openspec/changes/forge-storage-single-root-and-disk-discipline design D2. Today TMPDIR=$PROJECT_CACHE/tmp in lib-common.sh, so build scratch lives in the restart-surviving cache volume tillandsias-forge-cache-<project> and grows without bound. Add a per-lane volume mounted at /home/forge/scratch, created beside prepare_forge_ram_workspace and removed beside remove_source_volume_if_present; move TMPDIR to it.
+    exit_criteria:
+      - "A test over the forge create argv asserts a per-lane scratch volume mounted at /home/forge/scratch, that forge removal deletes it, and that the agent-shell TMPDIR resolves under /home/forge/scratch. Pre-fix result: FAILS, no such mount exists and TMPDIR is /home/forge/.cache/tillandsias-project/tmp."
+    verifiable_closure: "A test over the forge create argv asserts a per-lane scratch volume mounted at /home/forge/scratch, that forge removal deletes it, and that the agent-shell TMPDIR resolves under /home/forge/scratch. Pre-fix result: FAILS, no such mount exists and TMPDIR is /home/forge/.cache/tillandsias-project/tmp."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then implement per openspec/changes/forge-storage-single-root-and-disk-discipline.
+    provenance: |
+      Filed at operator request 2026-10-25 (single-root containment and disk discipline); spec openspec/changes/forge-storage-single-root-and-disk-discipline.
+    events:
+      - type: filed
+        ts: "2026-10-25T14:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator request of 2026-10-25"

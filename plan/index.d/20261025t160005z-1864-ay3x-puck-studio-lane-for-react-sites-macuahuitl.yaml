@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25 (web studio lanes). Code is cited by symbol, never by line.
+packets:
+  - packet_id: puck-studio-lane-for-react-sites
+    order: 1864-ay3x
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, browser, studio, react]
+    estimated_hours: 6
+    depends_on: [studio-lane-contract-registry-generic-launcher-write-guard-front-and-mcp-coedit]
+    title: "A Puck studio lane for React sites, routing onPublish JSON to the shared write-back endpoint"
+    context: |
+      Operator direction 2026-10-25: "I want to author this website interactively" opens a visual web studio window on the live site, with live saves into the forge checkout and the agent co-editing; every studio is offered as a choice with one [Recommended]. Publishing goes through the 1853-qr4h deploy tool, deploy branch only, on explicit request; no build on push. Spec: openspec/changes/web-studio-lanes. Reuses run_opencode_web_mode plumbing (RouterRoute, tillandsias_otp::issue_session, send_issue_web_session, launch_opencode_web_browser, ensure_versioned_images, sse-keepalive-proxy.js, local_web_preview::publish).
+    exit_criteria:
+      - "A fixture launches the Puck lane on a React fixture, triggers onPublish and asserts that the page data JSON was written under the lane allowlist and that a write outside it is refused. Pre-fix result: FAILS, no Puck lane exists."
+    verifiable_closure: "A fixture launches the Puck lane on a React fixture, triggers onPublish and asserts that the page data JSON was written under the lane allowlist and that a write outside it is refused. Pre-fix result: FAILS, no Puck lane exists."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the fixture named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-25.
+    events:
+      - type: filed
+        ts: "2026-10-25T16:00:05Z"
+        host: macuahuitl
+        summary: "filed ready from the operator direction of 2026-10-25"
