@@ -165,6 +165,13 @@ fn main() {
     println!("cargo:rustc-env=TILLANDSIAS_GUEST_DIGEST_AARCH64_MUSL={guest_digest_aarch64}");
     println!("cargo:rustc-env=TILLANDSIAS_GUEST_DIGEST_X86_64_MUSL={guest_digest_x86_64}");
 
+    // ORDER 1886-hf9j: the Secure Enclave signer is CryptoKit, which only
+    // Swift can call. Compiled here into a static library for macOS targets
+    // only; the Linux and Windows stub builds never see it.
+    if target_os == "macos" {
+        build_approval_signer();
+    }
+
     // Re-run when HEAD moves so the embedded SHA stays accurate across
     // commits/branch switches. 765-uti9 quick win (velocity audit F6.1):
     // .git/index is deliberately NOT tracked — its mtime moves on every
@@ -233,4 +240,60 @@ fn git_rerun_paths(manifest_dir: &std::path::Path) -> Vec<std::path::PathBuf> {
         paths.push(packed);
     }
     paths
+}
+
+/// ORDER 1886-hf9j. `swift/approval_signer.swift` → `libtla_approval_signer.a`
+/// in OUT_DIR, linked with the frameworks it uses and the Swift runtime paths
+/// `swiftc -print-target-info` reports (the OS copy in /usr/lib/swift, and the
+/// toolchain's compatibility shims). A missing swiftc fails the build naming
+/// it, rather than producing a tray whose approval command cannot link.
+fn build_approval_signer() {
+    let src = "swift/approval_signer.swift";
+    println!("cargo:rerun-if-changed={src}");
+    let out_dir = std::path::PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR"));
+    let arch = match std::env::var("CARGO_CFG_TARGET_ARCH").as_deref() {
+        Ok("aarch64") => "arm64",
+        Ok("x86_64") => "x86_64",
+        other => panic!("approval signer: unsupported macOS arch {other:?}"),
+    };
+    // LSMinimumSystemVersion (Info.plist.template) is 14.0.
+    let target = format!("{arch}-apple-macosx14.0");
+    let lib = out_dir.join("libtla_approval_signer.a");
+    let status = Command::new("swiftc")
+        .args([
+            "-emit-library",
+            "-static",
+            "-parse-as-library",
+            "-O",
+            "-module-name",
+            "TlaApprovalSigner",
+            "-target",
+            &target,
+            src,
+            "-o",
+        ])
+        .arg(&lib)
+        .status()
+        .unwrap_or_else(|e| {
+            panic!("approval signer: swiftc is required to build the macOS tray: {e}")
+        });
+    assert!(status.success(), "approval signer: swiftc failed on {src}");
+    println!("cargo:rustc-link-search=native={}", out_dir.display());
+    println!("cargo:rustc-link-lib=static=tla_approval_signer");
+    for fw in ["CryptoKit", "LocalAuthentication", "Security", "Foundation"] {
+        println!("cargo:rustc-link-lib=framework={fw}");
+    }
+    let info = Command::new("swiftc")
+        .args(["-print-target-info", "-target", &target])
+        .output()
+        .expect("approval signer: swiftc -print-target-info");
+    let info = String::from_utf8_lossy(&info.stdout);
+    // The paths are the quoted strings inside "runtimeLibraryPaths": [ ... ].
+    if let Some(start) = info.find("\"runtimeLibraryPaths\"") {
+        let rest = &info[start..];
+        let block = &rest[rest.find('[').unwrap_or(0)..rest.find(']').unwrap_or(rest.len())];
+        for path in block.split('"').skip(1).step_by(2) {
+            println!("cargo:rustc-link-search=native={path}");
+        }
+    }
 }

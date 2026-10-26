@@ -20,6 +20,8 @@ mod action_host;
 #[cfg(target_os = "macos")]
 mod app_delegate;
 #[cfg(target_os = "macos")]
+mod approval_signer;
+#[cfg(target_os = "macos")]
 mod diagnose;
 #[cfg(target_os = "macos")]
 mod guest_binary;
@@ -305,6 +307,19 @@ fn main() {
     // main dispatch queue from its calling thread) — exec_guest_main uses a
     // current-thread runtime for exactly that. See
     // plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md.
+    // Order 1886-hf9j: the approval key. Enrol prints the allowed-signers
+    // line; sign asks for Touch ID and prints the SSHSIG. Neither touches the
+    // VM, so neither needs the tray quit.
+    if args.iter().any(|a| a == "--approval-enrol") {
+        std::process::exit(approval_signer::enrol_main());
+    }
+    if let Some(idx) = args.iter().position(|a| a == "--approval-sign") {
+        let Some(file) = args.get(idx + 1) else {
+            eprintln!("usage: --approval-sign <statement-file>");
+            std::process::exit(2);
+        };
+        std::process::exit(approval_signer::sign_main(file));
+    }
     if let Some(idx) = args.iter().position(|a| a == "--exec-guest") {
         require_no_live_tray("--exec-guest");
         // 795-zshi: the guest allowlist now has TWO arms, so this call site
