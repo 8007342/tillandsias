@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed from forge field report plan/diagnostics/forge-tillandsias-opencode-web-2026-10-25.md (related: 1863-eckw). Code cited by symbol, never by line.
+packets:
+  - packet_id: tillandsias-doctor-one-in-forge-command-reporting-every-lane-and-mcp-fault
+    order: 1874-6p63
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, doctor,diagnostics]
+    estimated_hours: 5
+    related: [1863-eckw]
+    title: "tillandsias-doctor reports lane, MCP, router, toolchain and cache health in one in-forge command"
+    context: |
+      One dead socket produced four unrelated-looking symptoms and cost 12+ calls. Add tillandsias-doctor (plus --json) reporting: lane socket connect(), each MCP server ok/failed with reason, router reachability direct and via proxy, flutter toolchain, /opt/cheatsheets populated, tmpfs/cache free, and an explicit line saying there is no in-forge renderer. The startup context points to it. Source: plan/diagnostics/forge-tillandsias-opencode-web-2026-10-25.md (related 1863-eckw).
+    exit_criteria:
+      - "A fixture runs tillandsias-doctor --json against a stubbed dead lane socket and asserts the lane and host-browser rows are failed with a reason, the no-in-forge-renderer line is present, and the startup context names the command. Pre-fix result: FAILS on today's code."
+    verifiable_closure: "A fixture runs tillandsias-doctor --json against a stubbed dead lane socket and asserts the lane and host-browser rows are failed with a reason, the no-in-forge-renderer line is present, and the startup context names the command. Pre-fix result: FAILS on today's code."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the check named in the exit criterion first, watch it fail on today's code, then fix.
+    provenance: |
+      Filed 2026-10-25 from the forge field report (section 3.1-3.2).
+    events:
+      - type: filed
+        ts: "2026-10-25T23:59:00Z"
+        host: macuahuitl
+        summary: "filed ready from forge field report 1863-eckw"

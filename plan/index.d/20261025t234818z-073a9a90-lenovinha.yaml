@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: in-forge-dot-localhost-name-resolution-goes-through-squid-to-proxy-port-80-which-refuses-while-the-router-listens-on-8080
+    event:
+      type: list-replace
+      ts: "2026-10-25T23:48:18Z"
+      agent_id: linux-lenovinha-opus5-20261025t234817z
+      host: lenovinha
+      field: exit_criteria
+      items:
+        - "From inside a forge, the documented self-test `curl -sS -x http://proxy:3128 http://<name>.<project>.localhost/` reaches the router and returns the router's own response (its 401 gate for opencode, its no-route body for an unrouted name), not a connection refusal and not a Squid 502; litmus:in-forge-localhost-reaches-the-router step 2 is red against the v56.10.20.1 proxy (502)"
+        - "web-services.md names the proxy explicitly, because the forge's no_proxy entry localhost also matches every *.localhost name in curl, and says how to read each router answer"
+      summary: |
+        The coordinator allowed fixing the docs instead of the upstream for the bare form: no_proxy=localhost must stay (it covers the forge's own loopback), and curl applies it to *.localhost too.

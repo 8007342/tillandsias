@@ -1,0 +1,17 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: every-file-tillandsias-creates-on-a-linux-host-lives-under-one-root
+    event:
+      type: list-replace
+      ts: "2026-10-25T21:18:37Z"
+      agent_id: linux-macuahuitl-claude-20261025t211837z
+      host: macuahuitl
+      field: exit_criteria
+      items:
+        - "A fixture runs tillandsias init plus one forge launch and removal for a scratch user and lists every created path; it asserts none lies outside ~/.tillandsias or the exempt list (installed binaries, .desktop entry, $XDG_RUNTIME_DIR/tillandsias, opt-in swap), and that the user's own podman ps -a and podman images list no Tillandsias container or image. Pre-fix result: FAILS, ~/.cache/tillandsias, ~/.local/state/tillandsias, ~/.config/tillandsias and tillandsias-* volumes in ~/.local/share/containers/storage are listed."
+      summary: |-
+        operator rulings 2026-10-25 (PR 650 amendment)

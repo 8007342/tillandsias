@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-declarative-imagegen-tier-table-maps-the-accel-envelope-to-a-default-and-a-quality-model-with-licences
+    field: context
+    value: 'Operator ruling 2026-10-25: no Stability Community Licence (SD-Turbo, SD3.5 removed); only permissive/open licences with no revenue cap. I0 floor is SDXS-512-0.9 (OpenRAIL++-M, verified on https://huggingface.co/IDKiro/sdxs-512-0.9), fallback segmind/tiny-sd (CreativeML OpenRAIL-M). I1 SDXL-Lightning (OpenRAIL++-M), I2/I3 FLUX.1-schnell (Apache-2.0). Every request starts at I0; the classifier computes only the ceiling. images/imagegen/tiers.tsv read like images/inference/tiers/tier-table.tsv; consumes the accel_class envelope from accel_probe.rs (no second probe). Table in design.md section 3.'
+    ts: "2026-10-25T21:18:21Z"
+    host: macuahuitl
+    replaces_sha256: "1573632d4f8ac326bfb9eacd9e47c680aba0879715d763f00c19df0c8e9e74fe"
+
+events:
+  - packet_id: a-declarative-imagegen-tier-table-maps-the-accel-envelope-to-a-default-and-a-quality-model-with-licences
+    event:
+      type: note
+      ts: "2026-10-25T21:18:21Z"
+      host: macuahuitl
+      summary: |-
+        operator-rulings-2026-10-25

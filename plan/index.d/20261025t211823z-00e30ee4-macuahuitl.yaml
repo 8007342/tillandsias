@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: image-generate-on-the-host-mcp-socket-returns-a-saved-path-and-metadata-for-claude-opencode-and-codex
+    field: context
+    value: 'Operator ruling 2026-10-25: output goes to a SHARED /work/tmp/imagegen/ mounted into both the imagegen container and the forge, destroyed on forge teardown; the tool description and every result (ephemeral: true) say so plainly; agents decide what to commit or keep; .tillandsias/generated is no longer the default. Width, height, steps, seed and count are honoured exactly as asked. Add the tool to fn handle_mcp_jsonrpc''s tools/list and dispatch beside publish_local; decode sd-server''s b64_json on the host. Design section 4. Only free Cloudflare and free GitHub may be recommended as metered services.'
+    ts: "2026-10-25T21:18:23Z"
+    host: macuahuitl
+    replaces_sha256: "300d9670069877cdee69a30b5df1632d39032366908511354690ba042c47e281"
+
+events:
+  - packet_id: image-generate-on-the-host-mcp-socket-returns-a-saved-path-and-metadata-for-claude-opencode-and-codex
+    event:
+      type: note
+      ts: "2026-10-25T21:18:23Z"
+      host: macuahuitl
+      summary: |-
+        operator-rulings-2026-10-25

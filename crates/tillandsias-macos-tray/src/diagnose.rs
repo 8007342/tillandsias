@@ -1781,25 +1781,89 @@ pub fn exec_guest_main(argv: Vec<String>, required_cap: Option<&'static str>) ->
             }
         };
         let _ = vz.stop(Duration::from_secs(10)).await;
+        report_exec(result)
+    })
+}
 
-        match result {
-            Ok(out) => {
-                let signal = out
-                    .exit
-                    .signal
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "null".to_string());
-                eprintln!(
-                    "{{\"status\":\"ok\",\"exit_code\":{},\"signal\":{}}}",
-                    out.exit.code, signal,
-                );
-                out.exit.code
-            }
-            Err(e) => {
-                eprintln!("{{\"error\":\"exec: {e}\"}}");
-                1
-            }
+/// The exit line both `--exec-guest` paths print, and the exit code.
+fn report_exec(result: Result<tillandsias_vm_layer::vsock_exec::ExecOutput, String>) -> i32 {
+    match result {
+        Ok(out) => {
+            let signal = out
+                .exit
+                .signal
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "null".to_string());
+            eprintln!(
+                "{{\"status\":\"ok\",\"exit_code\":{},\"signal\":{}}}",
+                out.exit.code, signal,
+            );
+            out.exit.code
         }
+        Err(e) => {
+            eprintln!("{{\"error\":\"exec: {e}\"}}");
+            1
+        }
+    }
+}
+
+/// Order 1897-y7j2: `--exec-guest` while a tray owns the VM. The command goes
+/// through the tray's guest-exec relay (`guest_exec_relay`) over the tray's
+/// own secure channel, so the same exec protocol and the same guest allowlist
+/// apply; nothing boots or stops. `None` when the relay cannot be reached, so
+/// the caller keeps order 277's refusal.
+pub fn exec_guest_via_tray(argv: Vec<String>, required_cap: Option<&'static str>) -> Option<i32> {
+    if argv.is_empty() {
+        eprintln!("--exec-guest requires a command, e.g. --exec-guest /bin/echo HELLO");
+        return Some(2);
+    }
+    let path = crate::guest_exec_relay::socket_path_in(&crate::guest_exec_relay::socket_dir());
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .ok()?;
+    let stdin_bytes: Vec<u8> = read_piped_stdin_bounded(STDIN_FORWARD_TIMEOUT);
+    rt.block_on(async move {
+        let stream = match tokio::net::UnixStream::connect(&path).await {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!(
+                    "[exec-guest] the tray's guest-exec relay at {} is not reachable: {e}",
+                    path.display()
+                );
+                return None;
+            }
+        };
+        let argv_ref: Vec<&str> = argv.iter().map(|s| s.as_str()).collect();
+        eprintln!("[exec-guest] running through the tray: {argv_ref:?}");
+        let on_chunk = |chunk: &[u8]| {
+            use std::io::Write;
+            let mut out = std::io::stdout().lock();
+            let _ = out.write_all(chunk);
+            let _ = out.flush();
+        };
+        let result = match required_cap {
+            Some(cap) => {
+                tillandsias_vm_layer::vsock_exec::exec_over_stream_with_input_streaming_requiring(
+                    stream,
+                    &argv_ref,
+                    &stdin_bytes,
+                    cap,
+                    on_chunk,
+                )
+                .await
+            }
+            None => {
+                tillandsias_vm_layer::vsock_exec::exec_over_stream_with_input_streaming(
+                    stream,
+                    &argv_ref,
+                    &stdin_bytes,
+                    on_chunk,
+                )
+                .await
+            }
+        };
+        Some(report_exec(result))
     })
 }
 

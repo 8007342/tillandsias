@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: image-generate-on-the-host-mcp-socket-returns-a-saved-path-and-metadata-for-claude-opencode-and-codex
+    field: title
+    value: image.generate on the host MCP socket honours the agent's requested size and writes to a shared scratch dir (imagegen + forge) destroyed on teardown, returning a path and metadata (1871-47ex schema) to Claude, OpenCode and Codex alike
+    ts: "2026-10-25T21:18:22Z"
+    host: macuahuitl
+    replaces_sha256: "498e4f658770ac4e2547c2046348af8b3b0a757d352093a24515aaf76a17df1c"
+
+events:
+  - packet_id: image-generate-on-the-host-mcp-socket-returns-a-saved-path-and-metadata-for-claude-opencode-and-codex
+    event:
+      type: note
+      ts: "2026-10-25T21:18:22Z"
+      host: macuahuitl
+      summary: |-
+        operator-rulings-2026-10-25

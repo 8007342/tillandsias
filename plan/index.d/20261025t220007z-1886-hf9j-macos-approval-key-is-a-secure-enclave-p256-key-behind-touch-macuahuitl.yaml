@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+- packet_id: macos-approval-key-is-a-secure-enclave-p256-key-behind-touch-id-emitting-sshsig-verifiable-by-ssh-keygen
+  order: 1886-hf9j
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags:
+  - approval
+  - security
+  - cost-gate
+  - macos
+  estimated_hours: 8
+  depends_on:
+  - approval-broker-signs-an-action-bound-statement-after-an-os-verified-check-and-records-it-as-a-git-note
+  title: On a Mac, approvals are signed by a Secure Enclave key after Touch ID, in a Mācron dialog
+  context: 'Design D1/D2/D7 of openspec/changes/os-verified-approval-gates. In tillandsias-macos-tray: CryptoKit SecureEnclave.P256.Signing.PrivateKey with access control privateKeyUsage + biometryCurrentSet (userPresence when no Touch ID), stored as its wrapped dataRepresentation (no keychain entitlement needed); LAContext prompt with the curated sentence as localizedReason; SSHSIG ecdsa-sha2-nistp256 envelope built in Rust; AppKit NSPanel dialog at normal level with the shared Mācron art and sentence table.'
+  exit_criteria:
+  - 'On a Mac with Touch ID, an approval signed through the tray verifies with `ssh-keygen -Y verify -n tillandsias-approval@v1` against the enrolled allowed-signers line, a one-byte change fails verification, and two approvals in a row show two Touch ID prompts. Pre-fix result: FAILS, the macOS tray has no Secure Enclave signer and no approval command.'
+  verifiable_closure: 'On a Mac with Touch ID, an approval signed through the tray verifies with `ssh-keygen -Y verify -n tillandsias-approval@v1` against the enrolled allowed-signers line, a one-byte change fails verification, and two approvals in a row show two Touch ID prompts. Pre-fix result: FAILS, the macOS tray has no Secure Enclave signer and no approval command.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+
+    '
+  next_action: 'Nothing is done. Write the check named in the exit criterion first and watch it fail on today''s code, then implement per openspec/changes/os-verified-approval-gates.
+
+    '
+  provenance: 'Filed at operator request 2026-10-25 (OS-verified approval gates direction).
+
+    '
+  events:
+  - type: filed
+    ts: '2026-10-25T22:00:00Z'
+    host: macuahuitl
+    summary: filed ready from the operator request of 2026-10-25

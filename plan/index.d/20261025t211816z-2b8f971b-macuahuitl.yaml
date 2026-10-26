@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tray-warns-loudly-when-the-host-has-no-disk-backed-swap-for-the-forge-ram-layers
+    field: title
+    value: The Linux tray refuses to start without disk swap and shows plain instructions to enable it; macOS and Windows force a known-good swap
+    ts: "2026-10-25T21:18:16Z"
+    host: macuahuitl
+    replaces_sha256: "221ecd688542bcf201e79ad58ca60917dcdc33325a5412696c0bfc467a119858"
+
+events:
+  - packet_id: tray-warns-loudly-when-the-host-has-no-disk-backed-swap-for-the-forge-ram-layers
+    event:
+      type: note
+      ts: "2026-10-25T21:18:16Z"
+      host: macuahuitl
+      summary: |-
+        operator rulings 2026-10-25 (PR 650 amendment)
