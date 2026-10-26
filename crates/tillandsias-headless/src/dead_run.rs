@@ -22,18 +22,22 @@
 //!
 //! @trace spec:graceful-shutdown, spec:app-lifecycle
 
+#[cfg(feature = "tray")]
 use std::path::{Path, PathBuf};
-
+#[cfg(feature = "tray")]
 use tillandsias_podman::{OperationKind, PodmanClient};
+#[cfg(feature = "tray")]
 use tracing::{info, warn};
 
 /// The env var a tray run exports so the forges it launches can be labelled.
 pub(crate) const RUN_ENV: &str = "TILLANDSIAS_TRAY_RUN";
 /// The container and volume label naming the tray run that launched it.
 pub(crate) const RUN_LABEL: &str = "tillandsias.tray-run";
+#[cfg(feature = "tray")]
 /// Seconds a dead run's container gets between SIGTERM and SIGKILL.
 pub(crate) const REAP_STOP_SECS: u32 = 10;
 
+#[cfg(feature = "tray")]
 /// One tray run, as its marker records it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RunMarker {
@@ -43,6 +47,7 @@ pub(crate) struct RunMarker {
     pub(crate) boot: String,
 }
 
+#[cfg(feature = "tray")]
 impl RunMarker {
     /// This process, under run id `id`.
     pub(crate) fn current(id: &str) -> Option<Self> {
@@ -88,6 +93,7 @@ impl RunMarker {
     }
 }
 
+#[cfg(feature = "tray")]
 /// Field 22 of /proc/<pid>/stat: the process start time in clock ticks since
 /// boot. The comm field may hold spaces and parens, so count from the last ')'.
 fn proc_start_time(pid: u32) -> Option<u64> {
@@ -96,6 +102,7 @@ fn proc_start_time(pid: u32) -> Option<u64> {
     rest.split_whitespace().nth(19)?.parse().ok()
 }
 
+#[cfg(feature = "tray")]
 fn boot_id() -> Option<String> {
     std::fs::read_to_string("/proc/sys/kernel/random/boot_id")
         .ok()
@@ -103,10 +110,12 @@ fn boot_id() -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
+#[cfg(feature = "tray")]
 pub(crate) fn marker_path() -> PathBuf {
     tillandsias_core::config::state_dir().join("tray-run")
 }
 
+#[cfg(feature = "tray")]
 /// Mint this run's id and export it as [`RUN_ENV`]. Call before the tray
 /// starts any thread: the env is process-wide.
 pub(crate) fn mint_run_id() -> String {
@@ -120,6 +129,7 @@ pub(crate) fn mint_run_id() -> String {
     id
 }
 
+#[cfg(feature = "tray")]
 /// Record `me` as the current run and return the id of the previous run when
 /// it died without its graceful exit. A previous run that is still live is
 /// another tray: its marker is left in place and nothing is reaped.
@@ -148,6 +158,7 @@ pub(crate) fn claim_run(path: &Path, me: &RunMarker) -> Option<String> {
     previous.filter(|prev| prev.id != me.id).map(|prev| prev.id)
 }
 
+#[cfg(feature = "tray")]
 /// A graceful exit drops the marker, but only its own.
 pub(crate) fn release_run(path: &Path, id: &str) {
     let ours = std::fs::read_to_string(path)
@@ -172,6 +183,7 @@ pub(crate) fn run_label_value() -> Option<String> {
         .filter(|id| !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'))
 }
 
+#[cfg(feature = "tray")]
 /// What a reap did, for the log and the tests.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct ReapReport {
@@ -180,6 +192,7 @@ pub(crate) struct ReapReport {
     pub(crate) volumes: Vec<String>,
 }
 
+#[cfg(feature = "tray")]
 /// Stop, then remove, every container labelled with `run`; then its volumes.
 pub(crate) async fn reap_dead_run(client: &PodmanClient, run: &str) -> ReapReport {
     let filter = format!("label={RUN_LABEL}={run}");
@@ -266,7 +279,7 @@ pub(crate) async fn reap_dead_run(client: &PodmanClient, run: &str) -> ReapRepor
     report
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "tray"))]
 mod tests {
     use super::*;
 
