@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-local-launch-retirement-release-is-the-first-website-update-marked-release-and-its-tillandsias-org-rewording-is-done-end-to-end-by-a-non-claude-forge-agent-from-the-coordinator-queue
+    field: next_action
+    value: 'REVISED 2026-10-24 per operator flow. Nothing has run. Early, easy-to-miss: the 776-jcf3 implementation PR (or its follow-up) should carry "Website-Update: local (host-checkout) launches retired" before it lands — or the orchestrator sends the message by hand; either satisfies criterion 1. If 776-jcf3 ships before 1846/1847/1848/1828 and the deployed coordinator (1830) exist, do NOT reword the site by hand to close this; ask the operator whether to hold. OPEN QUESTION FOR THE OPERATOR: auto-merge the forge''s site PR (push to main deploys) or keep review — criterion 3 accepts either a merged PR or an open PR whose diff is the rewording.'
+    ts: "2026-10-24T04:03:09Z"
+    host: macuahuitl
+    replaces_sha256: "2ac42b70f65855a011b6504548f521076a95e045e73ab81983c32c1234198031"
+
+events:
+  - packet_id: the-local-launch-retirement-release-is-the-first-website-update-marked-release-and-its-tillandsias-org-rewording-is-done-end-to-end-by-a-non-claude-forge-agent-from-the-coordinator-queue
+    event:
+      type: note
+      ts: "2026-10-24T04:03:09Z"
+      host: macuahuitl
+      summary: |-
+        revised: operator flow correction 2026-10-24 (in-session, macuahuitl via coordinator) — plain queue message, orchestrator-launched headless one-shot non-Claude forge, agent self-selects the skill, forge lifetime = agent lifetime, timeout backstop

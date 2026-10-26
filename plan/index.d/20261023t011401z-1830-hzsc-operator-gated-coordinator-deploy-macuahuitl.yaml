@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Phase 2 child (2g) of fleet-coordinator-warm-cache-milestone (1824-58bm).
+# OPERATOR-GATED: no agent deploys this without the operator's explicit go.
+packets:
+  - packet_id: operator-gated-deploy-of-the-coordinator-worker-to-coordinator-tillandsias-org-behind-a-cloudflare-access-application
+    order: 1830-hzsc
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    release_target: fleet-coordinator-warm-cache-milestone
+    pickup_role: linux
+    capability_tags: [cloudflare, deploy, operator, coordinator]
+    estimated_hours: 1.5
+    owned_files:
+      - cloud/coordinator/wrangler.toml
+    title: |
+      OPERATOR ACTION — deploy cloud/coordinator to coordinator.tillandsias.org on the operator's Cloudflare account and configure the Access application (people: operator login; hosts/forges: the vault-provisioned service tokens), then record the live arm on the milestone
+    context: |
+      Deploy is deliberately separated from the code (2b) so no agent run
+      ever publishes the Worker. Steps the operator approves and runs (or
+      explicitly delegates in the session): add the route/custom domain
+      coordinator.tillandsias.org, `wrangler deploy`, create the Access
+      application for that hostname with an Allow policy for the operator's
+      identity and a Service Auth policy for the tillandsias-<host> service
+      tokens, set the Worker vars (team domain, AUD tag — not secrets). Then
+      run the milestone's live arm from two hosts. Free tier only.
+    exit_criteria:
+      - 'curl https://coordinator.tillandsias.org/ without credentials is redirected/refused by Access (pre-fix result: FAILS — hostname does not resolve to a Worker)'
+      - 'the milestone live arm (two hosts, message round-trip, overlay claim, post-push freshness) is recorded as an event on fleet-coordinator-warm-cache-milestone'
+    unscoreable: "operator-gated deploy: closes on the operator's recorded live verification, not on a fixture"
+    depends_on: [coordinator-worker-and-sqlite-durable-object-store-and-return-project-queues-claims-and-overviews-with-local-miniflare-tests-no-deploy, vault-provisions-cloudflare-access-service-tokens-for-hosts-and-forges-from-cloudflare-login]
+    related: [1824-58bm]
+    next_action: >
+      Wait for 2b and 2f to close; then put one plain ask in the operator
+      queue: "approve deploying the coordinator Worker to
+      coordinator.tillandsias.org behind Access".
+    notes: |
+      size: S
+      implementer_tier: sonnet
+      operator action: deploy and Access configuration need the operator's explicit approval; no agent deploys on its own.
+    provenance: |
+      Filed by macuahuitl (claude subagent, operator-approved redesign 2026-10-23).
+    events:
+      - type: filed
+        ts: "2026-10-23T01:14:01Z"
+        host: macuahuitl
+        summary: |-
+          Phase 2 2g: operator-gated deploy of the coordinator and its Access application.

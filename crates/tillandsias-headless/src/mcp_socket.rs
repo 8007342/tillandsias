@@ -665,18 +665,11 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
         )),
         false,
     );
-    // Order 1655-urz9: a window emulates the project's `[browser] device`
-    // when browser.open names none, else desktop. The label is the
-    // listener's (validated, order 505), so the path is the project's own.
-    let browser = match tillandsias_core::config::load_project_config(
-        &crate::local_projects::host_project_root().join(&project_label),
-    )
-    .browser
-    .and_then(|b| b.device)
-    {
-        Some(device) => browser.with_default_device(device),
-        None => browser,
-    };
+    // Order 1655-urz9 + 776-jcf3 (operator, 2026-10-24): browser.open with no
+    // device names desktop. The per-project `[browser] device` used to be read
+    // from the host checkout's `.tillandsias/config.toml`; there is no host
+    // checkout any more, and a cloud project's config lives only inside its
+    // ephemeral forge, so the host-side default is desktop.
 
     loop {
         let mut raw = String::new();

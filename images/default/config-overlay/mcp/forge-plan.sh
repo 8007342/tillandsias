@@ -962,6 +962,24 @@ spec_answer_envelope() {
         unsupported_envelope "the spec expert needs the tillandsias-plan binary (spec-retrieve/spec-envelope) — experts state: $(experts_state_line)"
         return 0
     fi
+    # ORDER 1823-4kwh. ONE expert client: a binary that reports `ask` answers
+    # through the same run_grounded as expert-serve, so the context pack, the
+    # num_ctx budget on /api/chat, the margin + lexical refusal and the model
+    # choice are decided once. The shell chain below is the fallback for a
+    # staged binary that predates `ask`; it is not where fixes go.
+    if [ -z "$(capability_gap "ask")" ]; then
+        # The spec expert's own model override wins; unset leaves the
+        # pipeline's TILLANDSIAS_INFERENCE_MODEL default in charge.
+        if [ -n "${TILLANDSIAS_SPEC_EXPERT_MODEL:-}" ]; then
+            TILLANDSIAS_INFERENCE_MODEL="$TILLANDSIAS_SPEC_EXPERT_MODEL" \
+                "$PLAN_BIN" ask --root "${TILLANDSIAS_REPO_ROOT:-.}" -- "$question" 2>/dev/null \
+                || unsupported_envelope "tillandsias-plan ask exited non-zero — experts state: $(experts_state_line)"
+        else
+            "$PLAN_BIN" ask --root "${TILLANDSIAS_REPO_ROOT:-.}" -- "$question" 2>/dev/null \
+                || unsupported_envelope "tillandsias-plan ask exited non-zero — experts state: $(experts_state_line)"
+        fi
+        return 0
+    fi
     # ORDER 569. spec-retrieve/spec-envelope arrived with order 547; anything
     # older cannot serve them. Refuse before spending an embedding round-trip on
     # a binary that will answer with usage.
@@ -1059,7 +1077,10 @@ spec_answer_envelope() {
     if [ -z "$(capability_gap "spec-floor")" ]; then
         local floored floor_verdict
         floored="$work/floored.json"
-        if "$PLAN_BIN" spec-floor --chunks-json "$top" > "$floored" 2>/dev/null && [ -s "$floored" ]; then
+        # --query arms the lexical-overlap rule (1820-m2kq); a binary from
+        # before that flag gets the score-only floor rather than none.
+        if { "$PLAN_BIN" spec-floor --chunks-json "$top" --query "$question" > "$floored" 2>/dev/null \
+             || "$PLAN_BIN" spec-floor --chunks-json "$top" > "$floored" 2>/dev/null; } && [ -s "$floored" ]; then
             floor_verdict="$(jq -r 'if type == "object" then .refused // empty else "kept" end' "$floored" 2>/dev/null)"
             if [ "$floor_verdict" = "out-of-coverage" ]; then
                 local floor_reason
@@ -1375,6 +1396,7 @@ while IFS= read -r line; do
                 {"name":"msg_send","description":"FLEET MESSAGING (order 1506-ssb5). Send a message from this lane to one or more <host>/<lane> addresses or @groups, wrapping `tillandsias-plan msg send`. The body travels as a JSON-RPC argument, never as a CLI argv token — it is piped to the CLI on stdin. Prints the stable receipt id at once (`ok:msg:queued:<id>`); msg_status answers whether it was delivered. Refused, with why + remedy, when the body is over the 600-byte/8-line KIND-first budget, looks secret-shaped (a GitHub/Vault/AWS token, a private key, a bearer/JWT-shaped string, …), the TTL is out of 60..604800 bounds, or the reply target is unknown or a broadcast. THERE IS NO msg_ack TOOL: an ack means the destination mailbox durably accepted the message and is written by the infrastructure alone, never by an agent (operator ruling 2026-09-29) — read it with msg_status.","inputSchema":{"type":"object","properties":{"to":{"type":"array","items":{"type":"string","minLength":1},"description":"one or more <host>/<lane> addresses (ask the recipient for msg_recv's whoami line), or @group / @all-hosts / @<host>/*"},"body":{"type":"string","description":"KIND on line 1 (HEADS-UP, ACK, LANDED, BLOCKED, ASK, FYI), at most 8 lines and 600 bytes total"},"kind":{"type":"string","description":"must agree with the KIND on line 1 of body when both are given"},"row":{"type":"string","description":"a ledger order token this message is about, e.g. 1506-ssb5"},"in_reply_to":{"type":"string","description":"an id this lane received or sent; refused when that id named a broadcast"},"ttl":{"type":"integer","minimum":60,"maximum":604800,"description":"seconds before an unread message is dropped; default 86400"},"id":{"type":"string","minLength":1,"description":"an idempotent id; a repeated id is skip:msg:duplicate:<id> rather than a second send"}},"required":["to","body"],"additionalProperties":false}},
                 {"name":"msg_recv","description":"FLEET MESSAGING (order 1506-ssb5). List this lane's inbox (new then cur, ordered by from/seq), wrapping `tillandsias-plan msg recv`. Reading is LOCAL bookkeeping only and is NEVER reported back to the sender — there is no read receipt. `keep:true` leaves inbox/new untouched instead of moving read messages to cur (what a session start uses, so it can never silently consume mail); the default moves them. A seq gap since the last recv in this lane is printed with a `gap:` prefix. Messages past their TTL are dropped and not printed.","inputSchema":{"type":"object","properties":{"keep":{"type":"boolean","description":"leave inbox/new untouched instead of moving read messages to inbox/cur"},"wait":{"type":"integer","minimum":0,"maximum":3600,"description":"block up to this many seconds for a new message to arrive"}},"additionalProperties":false}},
                 {"name":"msg_list","description":"FLEET MESSAGING (order 1506-ssb5). List envelope headers in this lane's inbox, outbox and/or dead boxes (id, from, to, kind, ts), wrapping `tillandsias-plan msg list`. Unlike msg_recv this never moves anything and never drops expired messages.","inputSchema":{"type":"object","properties":{"box":{"type":"string","enum":["inbox","outbox","dead"],"description":"omit to list all three"}},"additionalProperties":false}},
+                {"name":"coord","description":"FLEET COORDINATOR (order 1826-gi8e). A best-effort warm cache in front of the git ledger, wrapping `tillandsias-plan coord`. Every answer carries `source`. action next: the ledger's next work minus orders other hosts hold live overlays on (source coordinator+git-ledger); when the coordinator is unconfigured or unreachable it still answers from the git ledger (source git-ledger). Other actions: join, send (body), recv (since), overview_get, claim_overlay (order), release (order, token), claims; offline they return source unavailable with the reason. An overlay is never authoritative: the git claim event still flips status. No receipts or acks.","inputSchema":{"type":"object","properties":{"action":{"type":"string","enum":["join","send","recv","overview_get","claim_overlay","release","claims","next"]},"ns":{"type":"string","minLength":1},"body":{"type":"string","minLength":1},"order":{"type":"string","minLength":1},"token":{"type":"string","minLength":1},"since":{"type":"integer","minimum":0},"ttl_s":{"type":"integer","minimum":1},"pickup_role":{"type":"string","minLength":1}},"required":["action"],"additionalProperties":false}},
                 {"name":"msg_status","description":"FLEET MESSAGING (order 1506-ssb5). Read one message's receipt by the id msg_send returned, wrapping `tillandsias-plan msg status`: `pending` | `acked:<host>/<lane>@<ts>` then `via:<rung>` | `undelivered:<reason>`; a broadcast prints `broadcast:<n>` then one line per recipient. THERE IS NO msg_ack TOOL — this is the only way to learn whether a send was delivered; the ack itself is written by the infrastructure, never by an agent (operator ruling 2026-09-29).","inputSchema":{"type":"object","properties":{"id":{"type":"string","minLength":1,"description":"the id msg_send printed after ok:msg:queued:"}},"required":["id"],"additionalProperties":false}}
 ]
 TOOLS_JSON
@@ -1703,6 +1725,28 @@ TOOLS_JSON
                     else
                         _mst_id=$(printf '%s' "$args" | jq -r '.id')
                         result=$(msg_query status "$_mst_id")
+                    fi
+                    ;;
+                "coord")
+                    # Order 1826-gi8e. The arguments object goes to the plan
+                    # binary verbatim, which checks the closed schema itself
+                    # (exit 2 = invalid -> -32602), so this arm adds no jq.
+                    # Every other outcome, offline included, is a result that
+                    # names its own source.
+                    [ -n "$PLAN_BIN" ] || PLAN_BIN="$(resolve_plan_bin)"
+                    [ -n "$PLAN_INDEX" ] || PLAN_INDEX="$(resolve_plan_index)"
+                    _co_gap=""
+                    [ -n "$PLAN_BIN" ] && _co_gap="$(capability_gap "coord")"
+                    if [ -z "$PLAN_BIN" ] || [ -n "$_co_gap" ] || [ -z "$PLAN_INDEX" ]; then
+                        result='{"source":"unavailable","reason":"the plan binary, its coord capability, or plan/index.yaml is missing in this forge"}'
+                    else
+                        _co_rc=0
+                        result=$("$PLAN_BIN" --index "$PLAN_INDEX" coord --mcp-args "$args" 2>&1) || _co_rc=$?
+                        if [ "$_co_rc" = "2" ]; then
+                            invalid_params=1
+                            invalid_message="$result"
+                            result=""
+                        fi
                     fi
                     ;;
                 *)

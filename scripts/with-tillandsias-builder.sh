@@ -234,6 +234,12 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/podman-neutralize-proxy.sh
 # ── Helper: exact-match the CONTAINER NAME column (list output is columned,
 #    so a whole-line grep -x can never match) ──────────────────────────────
 _toolbox_exists() {
+    # @trace order:1843-dex5 — ask podman first. `toolbox list` can fail
+    # transiently (its stderr is discarded here), and a false "absent" sends
+    # the caller into `toolbox create`, which then dies "container
+    # tillandsias-builder already exists" (land queue, macuahuitl 2026-10-23,
+    # #612 evicted with the builder up 43 h).
+    podman container exists "$TOOLBOX_NAME" 2>/dev/null && return 0
     toolbox list --containers 2>/dev/null | awk 'NR > 1 { print $2 }' | grep -qxF "$TOOLBOX_NAME"
 }
 

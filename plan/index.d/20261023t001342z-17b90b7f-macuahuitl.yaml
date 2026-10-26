@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: warm-the-tier-model-at-forge-lifecycle-start
+    field: next_action
+    value: 'PR #603 (9272f655d) fixes the hand-off: the warm now exports TILLANDSIAS_INFERENCE_MODEL to expert-serve; CPU floor order 0.5b,3b. NEEDS AN OPERATOR/COORDINATOR RULING on criterion 1: measured macuahuitl RTX A5000, warm 7b/14b Quick queries still 3960-4051ms > 3000ms because 939-jxgz moved decomposition inside the Quick deadline -- either Quick skips decomposition like Immediate, or the criterion is re-based. Also left: expert-serve should refuse fast when warm_state != warm (criterion 2); 14b-vs-7b re-measure on a second regime, yoga ROCm (criterion 3).'
+    ts: "2026-10-23T00:13:42Z"
+    host: macuahuitl
+
+events:
+  - packet_id: warm-the-tier-model-at-forge-lifecycle-start
+    event:
+      type: note
+      ts: "2026-10-23T00:13:42Z"
+      host: macuahuitl
+      summary: |-
+        cycle end 2026-10-23 macuahuitl

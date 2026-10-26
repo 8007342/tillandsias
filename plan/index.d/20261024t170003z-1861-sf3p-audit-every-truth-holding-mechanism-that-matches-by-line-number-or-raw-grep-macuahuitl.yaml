@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-24. Code is cited by symbol, never by line.
+packets:
+  - packet_id: audit-inventory-of-every-place-where-correctness-depends-on-a-line-number-or-a-raw-grep
+    order: 1861-sf3p
+    status: ready
+    kind: audit
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [audit, traces, citations, litmus, website, lua]
+    estimated_hours: 4
+    title: "List every place in the project where being right depends on a line number or a plain text search"
+    context: |
+      Prompted by https://macron.dev/lessons/cite-by-quote-not-line-number. Inventory every place where correctness depends on a line number or a raw grep: site references, @trace, plan/issues citations, litmus bindings, website pages. Output feeds 1862-xh8m implementation. Cite code by symbol. Operator packet relayed by the coordinator 2026-10-24.
+    exit_criteria:
+      - "The audit produces an inventory file listing each mechanism (site references, @trace annotations, plan/issues citations, litmus bindings, website pages) with how it matches, what breaks when code moves, and a recommendation; a check fails if any of the five categories is missing. Pre-fix result: FAILS, no inventory exists."
+    verifiable_closure: "The audit produces an inventory file listing each mechanism (site references, @trace annotations, plan/issues citations, litmus bindings, website pages) with how it matches, what breaks when code moves, and a recommendation; a check fails if any of the five categories is missing. Pre-fix result: FAILS, no inventory exists."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-24.
+    events:
+      - type: filed
+        ts: "2026-10-24T17:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator request of 2026-10-24"

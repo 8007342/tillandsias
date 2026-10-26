@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: quick-tier-grounded-answers-skip-query-decomposition-like-immediate-while-fine-keeps-it
+    field: status
+    value: completed
+    ts: "2026-10-23T07:34:30Z"
+    host: macuahuitl
+
+events:
+  - packet_id: quick-tier-grounded-answers-skip-query-decomposition-like-immediate-while-fine-keeps-it
+    event:
+      type: completed
+      ts: "2026-10-23T07:34:30Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: ce7144b6c land(608) + pipeline::tests::quick_tier_skips_decompose_fine_keeps_it (pre-fix 0 passed 1 failed; post 1 passed); warm 7b Quick 1734-2406 ms through expert-serve, recorded on 965-hz3f (macuahuitl RTX A5000)
+  - packet_id: quick-tier-grounded-answers-skip-query-decomposition-like-immediate-while-fine-keeps-it
+    event:
+      type: note
+      ts: "2026-10-23T07:34:30Z"
+      host: macuahuitl
+      summary: |-
+        closed: Quick skips decomposition like Immediate, Fine keeps it

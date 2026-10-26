@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+- packet_id: linux-approval-dialog-shows-macron-doing-the-action-with-curated-calm-sentences-before-the-os-check
+  order: 1883-c8xr
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - approval
+  - security
+  - cost-gate
+  - linux
+  estimated_hours: 8
+  depends_on:
+  - approval-broker-signs-an-action-bound-statement-after-an-os-verified-check-and-records-it-as-a-git-note
+  title: A calm approval window on Linux shows Mācron doing the action and says plainly what it costs
+  context: Design D7/D8 of openspec/changes/os-verified-approval-gates. A GTK4 tillandsias-approval-dialog binary launched argv-only by the broker, normal window level, Approve and Not now; Approve hands off to the polkit agent or the security-key prompt. One Mācron SVG pose per action kind in a workshop scene framed by assets/icons tillandsia SVGs, drawn to the canon in the macron.dev repository (assets/Tlatoāni + Mācron cannon guidelines.md). A fixed sentence pair (what happens, what it costs) per gate-table action.
+  exit_criteria:
+  - 'A test iterates the gate table and asserts each action kind has an illustration file and a sentence pair, and a lint test fails on any sentence with an exclamation mark, an all-caps word, or the words warning/danger/critical; a headless render test produces one PNG per action kind. Pre-fix result: FAILS, no sentence table, no illustrations and no dialog binary exist.'
+  verifiable_closure: 'A test iterates the gate table and asserts each action kind has an illustration file and a sentence pair, and a lint test fails on any sentence with an exclamation mark, an all-caps word, or the words warning/danger/critical; a headless render test produces one PNG per action kind. Pre-fix result: FAILS, no sentence table, no illustrations and no dialog binary exist.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+
+    '
+  next_action: 'Nothing is done. Write the check named in the exit criterion first and watch it fail on today''s code, then implement per openspec/changes/os-verified-approval-gates.
+
+    '
+  provenance: 'Filed at operator request 2026-10-25 (OS-verified approval gates direction).
+
+    '
+  events:
+  - type: filed
+    ts: '2026-10-25T22:00:00Z'
+    host: macuahuitl
+    summary: filed ready from the operator request of 2026-10-25

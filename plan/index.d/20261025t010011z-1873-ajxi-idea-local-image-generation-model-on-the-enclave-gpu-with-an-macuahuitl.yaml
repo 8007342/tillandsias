@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+  - packet_id: idea-local-image-generation-model-on-the-enclave-gpu-with-an-asset-handoff-convention
+    order: 1873-ajxi
+    status: ready
+    kind: idea
+    priority: p4
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, gpu, rocm, imagegen, ollama, idea]
+    estimated_hours: 6
+    title: "Idea: generate images from a local model on the host GPU next to the text models, with a standard asset request file"
+    context: |
+      The host reports a usable Radeon GPU (ROCm tier). Note: Codex's built-in image generation already worked without credentials in the same project, so this is about enclave-local, credential-free, offline generation. Asset hand-off convention: art/ASSET_REQUESTS.md. Source: forge field report FORGE_DIAGNOSTICS.md in 8007342/ranitas (2026-10-25), relayed by the coordinator.
+    exit_criteria:
+      - "IDEA, lower priority. If taken up: an enclave endpoint generates an image from a prompt on the ROCm GPU and saves it in the project, and art/ASSET_REQUESTS.md requests are fulfillable from it. Pre-fix result: FAILS, the inference endpoint serves only text and embedding models."
+    verifiable_closure: "IDEA, lower priority. If taken up: an enclave endpoint generates an image from a prompt on the ROCm GPU and saves it in the project, and art/ASSET_REQUESTS.md requests are fulfillable from it. Pre-fix result: FAILS, the inference endpoint serves only text and embedding models."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-25.
+    events:
+      - type: filed
+        ts: "2026-10-25T01:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator request of 2026-10-25"

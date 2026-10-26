@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl, 2026-10-20. Code is cited by symbol, never by line.
+packets:
+  - packet_id: lenovinha-consumes-macuahuitls-sccache-over-the-1gbe-segment-through-an-authenticated-tls-endpoint-whose-credential-comes-from-the-vault-at-build-time-and-the-hit-rate-on-lenovinha-is-read-from-sccache-itself-with-an-unenrolled-host-refused-as-the-negative-control
+    order: 1806-lanc
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.6
+    parent: 1800-p47s
+    pickup_role: linux
+    capability_tags: [fleet, build, lan, sccache, measurement, vault]
+    estimated_hours: 8
+    size: M
+    related: [1287-w9s4, 1804-sccl, 1800-6pku, 1800-54yy, 1802-fbld]
+    depends_on:
+      - the-tray-announces-and-browses-tillandsias-tcp-on-the-lan-and-trusts-a-peers-service-record-only-after-it-proves-the-same-cloudflare-login-identity-ignoring-and-counting-every-other-record
+    owned_files:
+      - build.sh
+      - scripts/lua/sccache-endpoint.lua
+    title: |
+      lenovinha's build.sh points sccache at macuahuitl's cache over the 1GbE segment (an authenticated, TLS WebDAV endpoint on macuahuitl's LAN address, served from /srv/fastbuild, the credential fetched from the vault at build time and never written to disk) once discovery (1800-54yy) has trusted the peer; the row closes on the hit rate sccache reports ON LENOVINHA for a commit macuahuitl populated, and an unenrolled host is refused
+    context: |
+      WHY NOT BUILT IN THE 1804-sccl SLICE. sccache's shared backends are
+      S3/WebDAV/Redis/memcached with a token or key; design §8 trusts a
+      peer only after the Cloudflare-login identity proof (1800-54yy, not
+      built), and the standing rule is no plaintext credentials at rest. A
+      LAN endpoint today would need either an unauthenticated share or a
+      token in a file. So this is the next slice, not a quick win.
+      THE PARTITIONING FINDING THAT SHAPES IT (1804-sccl, macuahuitl
+      2026-10-20): sccache's Rust key includes the absolute target
+      directory — the same commit built into a different CARGO_TARGET_DIR
+      got 0 of 244 hits; into the same path, 276 of 276. So cross-host
+      reuse requires the SAME absolute target path on both hosts (the
+      checkout's target/ at /home/tlatoani/claudia/tillandsias/target on
+      both, or one canonical path) and the same toolchain and RUSTFLAGS;
+      1287-w9s4 step 3 must compare the target path first, before the
+      toolchain. Workspace crates in the dev/test profile are incremental
+      and never cached, so the win is the dependency build and the release
+      profile only; report it as a fraction of gate time.
+    exit_criteria:
+      - "on lenovinha, after macuahuitl built the same commit at the same target path: cargo build --release -p tillandsias-plan into a fresh target dir, then sccache --show-stats prints Cache location naming macuahuitl's endpoint and Cache hits (Rust) > 0; pre-fix result: FAILS (no endpoint; Cache location is Local disk)"
+      - "NEGATIVE CONTROL: a host without the vault credential gets sccache: off with the reason named, and a request to the endpoint without the credential is answered 401; pre-fix result: FAILS (no endpoint exists to refuse)"
+      - "tillandsias-plan script run scripts/lua/test-sccache-endpoint.lua: the decider prints the endpoint only for a trusted discovery record and `off` for an untrusted one; pre-fix result: FAILS (no decider exists)"
+    verifiable_closure: "tillandsias-plan script run scripts/lua/test-sccache-endpoint.lua (red on linux-next before the decider exists) plus the two live arms recorded as events with the hit rate"
+    unscoreable: "unpinnable-until-the-guard-exists: the fixture scripts/lua/test-sccache-endpoint.lua is this row's own deliverable and is written in the same commit as the decider; until then the live arms above are host measurements"
+    next_action: >
+      After 1800-54yy lands: serve /srv/fastbuild/tillandsias/sccache
+      read-write over TLS WebDAV on the LAN address (the fleet CA from
+      1548-u5wv's sshd slice, or the nix-cache's cert, whichever lands
+      first); the decider renders SCCACHE_WEBDAV_ENDPOINT from the trusted
+      record; build.sh fetches the token from the vault into the process
+      env only; then the two live arms, and 1287-w9s4 closes on the same
+      numbers.
+    events:
+      - type: filed
+        ts: "2026-10-20T04:30:00Z"
+        host: macuahuitl
+        summary: |-
+          filed as the LAN slice after 1804-sccl found the target-path partitioning; not built because the trust slice and a credential channel are missing.

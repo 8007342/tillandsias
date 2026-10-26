@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-local-launch-retirement-release-is-the-first-website-update-marked-release-and-its-tillandsias-org-rewording-is-done-end-to-end-by-a-non-claude-forge-agent-from-the-coordinator-queue
+    field: title
+    value: 'End-to-end dogfood for the local-launch retirement release (776-jcf3): an "update the website to <tag>" message is on the 8007342/tillandsias.org queue, the orchestrator launches a headless `tillandsias --cloud 8007342/tillandsias.org --opencode` one-shot forge, the non-Claude agent updates the site (local-launch claim reworded), its completion report is on the queue, and the forge is gone — no human or Claude edit to site text in between'
+    ts: "2026-10-24T04:03:07Z"
+    host: macuahuitl
+    replaces_sha256: "4f926bda6d7215fc99decb12cb39abd64640e8c561657f6957899644716c1b21"
+
+events:
+  - packet_id: the-local-launch-retirement-release-is-the-first-website-update-marked-release-and-its-tillandsias-org-rewording-is-done-end-to-end-by-a-non-claude-forge-agent-from-the-coordinator-queue
+    event:
+      type: note
+      ts: "2026-10-24T04:03:07Z"
+      host: macuahuitl
+      summary: |-
+        revised: operator flow correction 2026-10-24 (in-session, macuahuitl via coordinator) — plain queue message, orchestrator-launched headless one-shot non-Claude forge, agent self-selects the skill, forge lifetime = agent lifetime, timeout backstop

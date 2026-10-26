@@ -1,0 +1,54 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Phase 1 child (1h) of 1813-54df; operator-approved redesign 2026-10-23.
+packets:
+  - packet_id: groundtruth-forge-awareness-cases-pin-no-docker-recommendations-and-no-tillandsias-rules-on-a-foreign-project
+    order: 1821-xcwc
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: any
+    capability_tags: [experts, groundtruth, litmus, forge]
+    estimated_hours: 3
+    owned_files:
+      - openspec/litmus-tests/groundtruth/expert-groundtruth-forge-awareness.yaml
+      - openspec/litmus-tests/groundtruth/fixtures/foreign-project/
+    title: |
+      Groundtruth forge-awareness cases graded by `tillandsias-plan grade`: container questions must cite forge-constraints and must not recommend docker; a NON-Tillandsias project fixture's answer must not apply Tillandsias branch rules
+    context: |
+      The groundtruth harness (openspec/litmus-tests/groundtruth/*, graded by
+      crates/tillandsias-plan/src/groundtruth.rs, run by
+      litmus-expert-groundtruth-harness) checks envelope properties —
+      confidence, citations, cited-span text, answer text — and has no case
+      about the forge itself. The field failure (tellme recommending docker)
+      and the operator constraint (forges run foreign projects with their own
+      discipline) both need a machine-checkable pin. Cases: (1) "how do I run
+      a postgres container here" → cites cheatsheets/runtime/forge-constraints.md,
+      answer_not_contains "docker run"; (2) "can I start dockerd" → refuses or
+      says no nested daemon; (3) on a fixture foreign project at discipline
+      level 0 with an AGENTS.md, "how should I push my change" → answer_not_contains
+      "linux-next" and "work/", and names the project's own declared flow.
+      The corpus declaration guard (scripts/test-groundtruth-corpus-declaration.sh)
+      applies to the new file.
+    exit_criteria:
+      - 'tillandsias-plan grade over expert-groundtruth-forge-awareness.yaml against the pre-fix pipeline/tellme reports case 1 FAIL (no forge-constraints chunk exists) — recorded as the pre-fix result'
+      - 'after 1816-iyyc, 1815-tei4 and 1814-x78v land, the same grade passes every case; the file is bound to litmus:expert-groundtruth-harness'
+    verifiable_closure: |
+      litmus:expert-groundtruth-harness grades the new file green; scripts/test-groundtruth-corpus-declaration.sh passes.
+    depends_on: [cheatsheet-runtime-forge-constraints-states-rootless-podman-no-docker-tmpfs-workspace-proxy-egress-inference-host-and-mirror-push-and-is-retrievable]
+    related: [1813-54df, 1814-x78v, 1815-tei4, 1816-iyyc]
+    next_action: >
+      Write the cases and the foreign-project fixture first (they should FAIL
+      on today's tree — record it), then wire the file into the harness litmus.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    provenance: |
+      Filed by macuahuitl (claude subagent, operator-approved redesign 2026-10-23).
+    events:
+      - type: filed
+        ts: "2026-10-23T01:10:58Z"
+        host: macuahuitl
+        summary: |-
+          p1 1h: groundtruth forge-awareness cases incl. a non-Tillandsias project fixture.

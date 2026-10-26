@@ -92,6 +92,8 @@ mod forge_swap;
 // RAM-only source-volume identity is needed by default CLI launchers too.
 mod launch_images;
 mod local_projects;
+// 1847-5xv3: headless one-shot of a non-Claude lane on a --cloud project.
+mod one_shot;
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
 pub mod remote_projects;
 mod runtime_assets;
@@ -120,6 +122,7 @@ compile_error!(
      ships with no Vault bootstrap (701-iu9b)."
 );
 
+mod ca_key_store;
 #[cfg(feature = "vault")]
 // @trace spec:tillandsias-vault — Phase 6 default bootstrap (was Phase 3 opt-in).
 mod vault_bootstrap;
@@ -1370,13 +1373,45 @@ fn main() {
         _ => config_path,
     };
 
+    // 776-jcf3 (operator, 2026-10-24): a lane launched from a positional host
+    // path refuses before anything starts; --cloud owner/repo is the only form.
+    if !is_cloud
+        && let Some(path) = config_path.as_deref()
+        && let Some(flag) = [
+            (opencode, "--opencode"),
+            (opencode_web, "--opencode-web"),
+            (observatorium, "--observatorium"),
+            (codex, "--codex"),
+            (claude, "--claude"),
+            (antigravity, "--antigravity"),
+            (bash, "--bash"),
+        ]
+        .into_iter()
+        .find_map(|(on, flag)| on.then_some(flag))
+    {
+        eprintln!("Error: {}", positional_launch_refusal(path, Some(flag)));
+        std::process::exit(2);
+    }
+
+    // 1847-5xv3: a --cloud non-Claude lane with no terminal is a one-shot. It
+    // runs the queue prompt when none was given, under a wall-clock backstop.
+    let one_shot = one_shot::is_one_shot(is_cloud, opencode || codex, io::stdin().is_terminal());
+    let prompt = one_shot::effective_prompt(prompt, one_shot);
+    if one_shot && let Some(project_path) = config_path.as_deref() {
+        arm_one_shot_backstop(project_path, codex);
+    }
+
     if opencode {
         let reserved_lane = cli_reserved_lane(config_path.as_deref(), is_cloud);
         maybe_spawn_detached_tray_for_cli(tray, reserved_lane.as_deref(), debug);
         if let Some(project_path) = config_path {
-            if let Err(e) = run_cli_with_vault_credential_cleanup(debug, || {
+            let result = run_cli_with_vault_credential_cleanup(debug, || {
                 run_opencode_mode(&project_path, is_cloud, prompt.as_deref(), debug)
-            }) {
+            });
+            if one_shot::timed_out() {
+                std::process::exit(one_shot::TIMEOUT_EXIT);
+            }
+            if let Err(e) = result {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
@@ -1400,7 +1435,7 @@ fn main() {
             (ForgeAgentMode::Maintenance, "--bash")
         };
         if let Some(project_path) = config_path {
-            if let Err(e) = run_cli_with_vault_credential_cleanup(debug, || {
+            let result = run_cli_with_vault_credential_cleanup(debug, || {
                 run_forge_agent_cli_mode(
                     &project_path,
                     is_cloud,
@@ -1409,7 +1444,11 @@ fn main() {
                     prompt.as_deref(),
                     debug,
                 )
-            }) {
+            });
+            if one_shot::timed_out() {
+                std::process::exit(one_shot::TIMEOUT_EXIT);
+            }
+            if let Err(e) = result {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
@@ -2461,7 +2500,14 @@ pub(crate) fn init_cache_dir() -> Result<PathBuf, String> {
 }
 
 fn cache_dir_is_writable(cache_dir: &Path) -> bool {
-    let probe = cache_dir.join(".writable-probe");
+    // 1900-tm9v: the probe name is unique per call. A fixed `.writable-probe`
+    // under create_new made a concurrent caller (or a probe a killed process
+    // left) read a writable dir as unwritable, and init_cache_dir then fell
+    // through to $HOME/.cache/tillandsias: a test's run_cache_clear deleted
+    // the operator's real init-build-state.json and cache_version.
+    static PROBE_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let seq = PROBE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let probe = cache_dir.join(format!(".writable-probe-{}-{seq}", std::process::id()));
     match fs::OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -4211,6 +4257,10 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     std::fs::create_dir_all(&certs_dir)
         .map_err(|e| format!("Failed to create CA directory: {e}"))?;
 
+    // 1118-fqfk slice 2b: the key path is a link into tmpfs. Plaintext is
+    // deleted and a dangling link is refilled from the keyring, before the
+    // usable check below decides whether to mint.
+    ca_key_store::materialize(&key, &crt, true);
     let should_refresh = ca_bundle_needs_refresh(&crt, &key);
 
     if should_refresh {
@@ -4260,7 +4310,7 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
             chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
         );
         let tmp_crt = certs_dir.join(format!("intermediate.crt.{unique}.tmp"));
-        let tmp_key = certs_dir.join(format!("intermediate.key.{unique}.tmp"));
+        let tmp_key = ca_key_store::staging_path(&key, &unique);
         let mut command = Command::new("openssl");
         command.args([
             "req",
@@ -4330,7 +4380,9 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
             })?;
         }
 
-        std::fs::rename(&tmp_key, &key)
+        let crt_bytes = std::fs::read(&tmp_crt)
+            .map_err(|e| format!("Failed to read the minted CA cert: {e}"))?;
+        ca_key_store::seal(&tmp_key, &key, &crt_bytes, true)
             .map_err(|e| format!("Failed to atomically publish CA key: {e}"))?;
         std::fs::rename(&tmp_crt, &crt)
             .map_err(|e| format!("Failed to atomically publish CA cert: {e}"))?;
@@ -5638,6 +5690,30 @@ fn mirror_upgrade_skew(aliases: &[String], expected: &str) -> bool {
 /// journal read during a login. The long-running git service keeps its check.
 const LOGIN_CONTAINER_RUN_PREFIX: [&str; 4] = ["run", "--detach", "--rm", "--no-healthcheck"];
 
+/// The provider-login helper's hardening flags (order 1118-zzs4). The helper
+/// carried three of the four mandatory flags — `--security-opt=label=disable`
+/// was missing — and was spawned with no `validate_launch_argv` check, so the
+/// gap was invisible. Both feature branches of `run_provider_login` use this.
+// @trace order:1118-zzs4, spec:security-privacy-isolation
+const LOGIN_CONTAINER_HARDENING: [&str; 4] = [
+    "--cap-drop=ALL",
+    "--security-opt=no-new-privileges",
+    "--security-opt=label=disable",
+    "--userns=keep-id",
+];
+
+/// Refuse a `podman run` argv (leading `run` included) that violates the
+/// immutable hardening envelope, before any process is spawned.
+// @trace order:1118-zzs4, spec:podman-orchestration
+fn refuse_unhardened_launch(argv: &[String], container_name: &str) -> Result<(), String> {
+    tillandsias_podman::policy::validate_launch_argv(argv).map_err(|err| {
+        format!(
+            "[security] refusing to launch {container_name}: {err}; the launch argv lost \
+             part of the immutable hardening envelope (crates/tillandsias-podman/src/policy.rs)"
+        )
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 fn build_git_run_args(
     project_name: &str,
@@ -6489,11 +6565,16 @@ async fn try_start_vsock_forwarder(client: &tillandsias_podman::PodmanClient, de
     // than racing it.
     let _ = client.remove_container("tillandsias-inference").await;
     match client
-        .run_container_observed(
+        // Order 1118-zzs4: EXEMPT from the envelope check, reviewed. The relay
+        // carries --cap-drop=ALL and no-new-privileges but a custom seccomp
+        // profile and no --userns=keep-id / label=disable; adding them is
+        // unmeasured on the VM-boundary guests this runs on.
+        .run_container_observed_exempt(
             "vsock-forwarder",
             VSOCK_FORWARDER_NAME,
             &build_vsock_forwarder_run_args(image, &profile, target),
             debug,
+            "vsock relay: custom seccomp, userns/label unmeasured (1118-zzs4)",
         )
         .await
     {
@@ -7166,6 +7247,28 @@ fn mcp_socket_host_dir(project_name: &str, instance: Option<&str>) -> PathBuf {
         .join(format!("{project_name}-{instance}"))
 }
 
+/// Where the router reads the preview leaves (bind-mounted read-only).
+pub(crate) const PREVIEW_LEAF_MOUNT: &str = "/etc/tillandsias/preview";
+
+/// The router's preview-listener arguments (order 1794-rf3a (b)). The leaf
+/// mount always; the loopback publish only under rootless podman. A rootful
+/// guest's host browser arrives through the tray's loopback listener and the
+/// vsock relay instead.
+pub(crate) fn preview_listener_args(rootful: bool, port: u16, leaf_dir: &Path) -> Vec<String> {
+    let mut args = Vec::new();
+    if !rootful {
+        args.extend(["-p".into(), format!("127.0.0.1:{port}:8443")]);
+    }
+    args.extend([
+        "--mount".into(),
+        format!(
+            "type=bind,source={},target={PREVIEW_LEAF_MOUNT},readonly=true",
+            leaf_dir.display()
+        ),
+    ]);
+    args
+}
+
 /// Build `podman run` args for the Caddy reverse-proxy router container.
 ///
 /// The router runs on the enclave network with DNS alias `router` so Squid's
@@ -7261,15 +7364,11 @@ fn build_router_run_args(certs_dir: &Path, image: &str, host_port: u16) -> Vec<S
         && let Ok(port) = text.trim().parse::<u16>()
         && port >= 1024
     {
-        args.extend([
-            "-p".into(),
-            format!("127.0.0.1:{port}:8443"),
-            "--mount".into(),
-            format!(
-                "type=bind,source={},target=/etc/tillandsias/preview,readonly=true",
-                dyn_dir.join("preview-tls").display()
-            ),
-        ]);
+        args.extend(preview_listener_args(
+            running_as_root(),
+            port,
+            &dyn_dir.join("preview-tls"),
+        ));
     }
     args.push(image.into());
     args
@@ -8188,41 +8287,33 @@ fn resolve_cloud_project_checkout(_nwo: &str, _debug: bool) -> Result<String, St
 fn resolve_launch_project_identity(
     project_path: &str,
     is_cloud: bool,
-    fallback_name: &str,
+    _fallback_name: &str,
 ) -> Result<(String, Option<PathBuf>), String> {
-    let project = Path::new(project_path);
-    if project.exists() && !is_cloud {
-        let canonical = project
-            .canonicalize()
-            .unwrap_or_else(|_| project.to_path_buf());
-        let name = canonical
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or(fallback_name)
-            .to_string();
-        // 1626-r4xm: THE LANE ADMITS THE PROJECT IT WAS LAUNCHED FOR. Every
-        // lane that resolves here starts a per-lane MCP listener in this
-        // process (tray builds), and that listener admits a project only
-        // through validate_project_label, the order-505 equality guard
-        // (1031-q4pb). A path outside the host project root used to launch and
-        // then have EVERY MCP call refused as "not a known project" (measured
-        // on lenovinha 2026-10-12). Binding the label to this canonical path
-        // admits exactly this project; every other outside label stays refused.
-        #[cfg(feature = "host-services")]
-        crate::local_projects::bind_launched_project(&name, &canonical)
-            .map_err(|reason| format!("refusing to launch '{}': {reason}", canonical.display()))?;
-        Ok((name, Some(canonical)))
-    } else if is_cloud {
-        // 1713-1dnx: the cloud half of the same rule. In the VM the launching
-        // process is a per-attach child that never ran a cloud refresh, so
-        // nothing else admits this label to its own lane's listener.
-        #[cfg(feature = "host-services")]
-        crate::local_projects::bind_launched_cloud_label(project_path)
-            .map_err(|reason| format!("refusing to launch cloud project: {reason}"))?;
-        Ok((project_path.to_string(), None))
-    } else {
-        Err(format!("Project not found: {}", project_path))
+    if !is_cloud {
+        // 776-jcf3 (operator, 2026-10-24): a host checkout is never resolved,
+        // bound, read or mounted. The cloud launch is the only launch.
+        return Err(positional_launch_refusal(project_path, None));
     }
+    // 1713-1dnx: in the VM the launching process is a per-attach child that
+    // never ran a cloud refresh, so nothing else admits this label to its
+    // own lane's listener.
+    #[cfg(feature = "host-services")]
+    crate::local_projects::bind_launched_cloud_label(project_path)
+        .map_err(|reason| format!("refusing to launch cloud project: {reason}"))?;
+    Ok((project_path.to_string(), None))
+}
+
+/// 776-jcf3 (operator, 2026-10-24): the one refusal text for a positional
+/// (host checkout) launch. Mapping a path to its origin remote was rejected as
+/// ambiguous: a non-GitHub or ssh-aliased origin, unpushed commits and dirty
+/// trees would all launch something other than what the operator is looking at.
+pub(crate) fn positional_launch_refusal(project_path: &str, flag: Option<&str>) -> String {
+    let flag = flag.unwrap_or("--opencode");
+    format!(
+        "launching from a local checkout ('{project_path}') is no longer supported: \
+         Tillandsias does not mount or read a host checkout. Push the project to GitHub \
+         and launch it from the cloud instead:\n    tillandsias --cloud <owner>/<repo> {flag}"
+    )
 }
 
 /// 1119-w2rj (HIGH): `--observatorium`'s project identity decision. Unlike
@@ -8237,23 +8328,16 @@ fn resolve_observatorium_project_identity(
     project_path: &str,
     is_cloud: bool,
 ) -> Result<(String, PathBuf), String> {
-    let project = Path::new(project_path);
-    if project.exists() && !is_cloud {
-        if !project.is_dir() {
-            return Err(format!("Project path is not a directory: {project_path}"));
-        }
-        let resolved = project
-            .canonicalize()
-            .unwrap_or_else(|_| PathBuf::from(project_path));
-        let name = project_label_from_path(&resolved, "observatorium-project");
-        Ok((name, resolved))
-    } else if is_cloud {
-        Err(format!(
-            "cloud-mode --observatorium has no host checkout to bind; source would be relative '{project_path}' (1119-w2rj)"
-        ))
-    } else {
-        Err(format!("Project not found: {project_path}"))
+    if !is_cloud {
+        // 776-jcf3: no read-only mount of a host checkout at /var/www/source.
+        return Err(positional_launch_refusal(
+            project_path,
+            Some("--observatorium"),
+        ));
     }
+    Err(format!(
+        "cloud-mode --observatorium has no host checkout to bind; source would be relative '{project_path}' (1119-w2rj)"
+    ))
 }
 
 /// 1119-w2rj (MEDIUM): resolve the upstream remote URL fed to the git-mirror
@@ -8268,13 +8352,12 @@ fn resolve_project_remote_url(
     host_checkout: Option<&Path>,
     cloud_remote_url: Option<&str>,
 ) -> Option<String> {
-    host_checkout
-        .and_then(read_host_project_origin_url)
-        .or_else(|| {
-            cloud_remote_url
-                .map(str::to_string)
-                .filter(|s| !s.is_empty())
-        })
+    // 776-jcf3: a host checkout's remote.origin.url never seeds the mirror;
+    // only the cloud resolution's own remote does.
+    let _ = host_checkout;
+    cloud_remote_url
+        .map(str::to_string)
+        .filter(|s| !s.is_empty())
 }
 
 /// 1119-w2rj (MEDIUM): resolve the host checkout's current branch fed to the
@@ -11371,6 +11454,38 @@ mod failed_build_marker_reset_tests {
         assert!(!dir.exists());
     }
 
+    /// 1900-tm9v: a probe file another caller holds (or a killed process
+    /// left) must not make the XDG cache dir read as unwritable — the next
+    /// candidate is the operator's real $HOME/.cache/tillandsias.
+    #[test]
+    fn a_held_writable_probe_does_not_divert_the_cache_dir_to_home() {
+        let _g = crate::test_support::env_lock();
+        let scratch = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        let prev_xdg = std::env::var_os("XDG_CACHE_HOME");
+        let prev_home = std::env::var_os("HOME");
+        let want = scratch.path().join("tillandsias");
+        std::fs::create_dir_all(&want).unwrap();
+        std::fs::write(want.join(".writable-probe"), b"").unwrap();
+        // SAFETY: serialised by env_lock.
+        unsafe {
+            std::env::set_var("XDG_CACHE_HOME", scratch.path());
+            std::env::set_var("HOME", home.path());
+        }
+        let got = init_cache_dir();
+        unsafe {
+            match prev_xdg {
+                Some(v) => std::env::set_var("XDG_CACHE_HOME", v),
+                None => std::env::remove_var("XDG_CACHE_HOME"),
+            }
+            match prev_home {
+                Some(v) => std::env::set_var("HOME", v),
+                None => std::env::remove_var("HOME"),
+            }
+        }
+        assert_eq!(got.unwrap(), want, "a held probe diverted the cache dir");
+    }
+
     /// 1793-wggq: the marker names the log the build actually wrote. The
     /// helper's log is passed in by its parent; outside a helper the per-image
     /// log is named only when it exists (v56.10.18.1 named
@@ -12040,7 +12155,7 @@ fn run_sync_project(project: &str, branch: &str, debug: bool) -> Result<(), Stri
         return Err(format!(
             "blocked:sync:mirror-not-running:{container}\n  \
              bring this host's mirror up, then re-run:\n    \
-             TILLANDSIAS_HOST_PROJECT_ROOT=$(dirname \"$PWD\") tillandsias --bash \"$PWD\""
+             tillandsias --cloud <owner>/{project} --bash"
         ));
     }
 
@@ -13439,62 +13554,65 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             "type=bind,source={},target=/etc/tillandsias/ca.crt,relabel=shared,readonly=true",
             certs_dir.join("intermediate.crt").display()
         );
-        let mut run = podman_command();
-        run.args(LOGIN_CONTAINER_RUN_PREFIX);
-        run.args([
-            "--name",
-            &container,
-            "--network",
-            ENCLAVE_ONLY_NET,
-            "--volume",
-            &crate::vault_bootstrap::runtime_secret_volume(
-                vault_lease.secret_name(),
-                GIT_VAULT_TOKEN_SECRET_OPTS,
-            ),
-            "--cap-drop=ALL",
-            "--security-opt=no-new-privileges",
-            "--userns=keep-id",
-            "--mount",
-            &ca_mount,
-        ]);
+        let secret_volume = crate::vault_bootstrap::runtime_secret_volume(
+            vault_lease.secret_name(),
+            GIT_VAULT_TOKEN_SECRET_OPTS,
+        );
+        let mut argv: Vec<String> = LOGIN_CONTAINER_RUN_PREFIX.map(String::from).to_vec();
+        argv.extend(
+            ["--name", &container, "--network", ENCLAVE_ONLY_NET]
+                .into_iter()
+                .chain(["--volume", secret_volume.as_str()])
+                .chain(LOGIN_CONTAINER_HARDENING)
+                .chain(["--mount", ca_mount.as_str()])
+                .map(String::from),
+        );
         if let Some(mount) = tool_cache_mount.as_deref() {
-            run.args(["--volume", mount]);
+            argv.extend(["--volume".to_string(), mount.to_string()]);
         }
-        run.args(proxy_env_args());
-        run.args([
-            "--entrypoint",
-            "/bin/sh",
-            &image,
-            "-c",
-            "trap 'exit 0' TERM INT; while :; do sleep 3600 & wait $!; done",
-        ]);
+        argv.extend(proxy_env_args());
+        argv.extend(
+            [
+                "--entrypoint",
+                "/bin/sh",
+                &image,
+                "-c",
+                "trap 'exit 0' TERM INT; while :; do sleep 3600 & wait $!; done",
+            ]
+            .map(String::from),
+        );
+        refuse_unhardened_launch(&argv, &container)?;
+        let mut run = podman_command();
+        run.args(&argv);
         run_podman_command_silent(run, debug)?;
     }
 
     #[cfg(not(feature = "vault"))]
     {
-        let mut run = podman_command();
-        run.args(LOGIN_CONTAINER_RUN_PREFIX);
-        run.args([
-            "--name",
-            &container,
-            "--network",
-            ENCLAVE_ONLY_NET,
-            "--cap-drop=ALL",
-            "--security-opt=no-new-privileges",
-            "--userns=keep-id",
-        ]);
+        let mut argv: Vec<String> = LOGIN_CONTAINER_RUN_PREFIX.map(String::from).to_vec();
+        argv.extend(
+            ["--name", &container, "--network", ENCLAVE_ONLY_NET]
+                .into_iter()
+                .chain(LOGIN_CONTAINER_HARDENING)
+                .map(String::from),
+        );
         if let Some(mount) = tool_cache_mount.as_deref() {
-            run.args(["--volume", mount]);
+            argv.extend(["--volume".to_string(), mount.to_string()]);
         }
-        run.args(proxy_env_args());
-        run.args([
-            "--entrypoint",
-            "/bin/sh",
-            &image,
-            "-c",
-            "trap 'exit 0' TERM INT; while :; do sleep 3600 & wait $!; done",
-        ]);
+        argv.extend(proxy_env_args());
+        argv.extend(
+            [
+                "--entrypoint",
+                "/bin/sh",
+                &image,
+                "-c",
+                "trap 'exit 0' TERM INT; while :; do sleep 3600 & wait $!; done",
+            ]
+            .map(String::from),
+        );
+        refuse_unhardened_launch(&argv, &container)?;
+        let mut run = podman_command();
+        run.args(&argv);
         run_command_silent(run, debug)?;
     }
 
@@ -15087,6 +15205,43 @@ fn tray_companion_command(exe: &Path, reserved_lane: Option<&str>) -> Command {
 /// will serve, named the way [`resolve_launch_project_identity`] names it
 /// (the canonical basename of a local checkout, the bare label in cloud
 /// mode) but with no side effects. `None` when there is no project yet.
+/// Arm 1847-5xv3's wall-clock backstop for a one-shot's forge. The queue
+/// report is a no-op until 1826's coordinator client lands.
+fn arm_one_shot_backstop(project_path: &str, codex: bool) {
+    let Ok((name, _)) = resolve_launch_project_identity(project_path, true, "opencode-project")
+    else {
+        return;
+    };
+    let container = if codex {
+        forge_container_name_for_mode(&name, ForgeAgentMode::Codex)
+    } else {
+        forge_container_name(&name)
+    };
+    let budget = one_shot::budget(std::env::var(one_shot::MAX_MINUTES_ENV).ok().as_deref());
+    one_shot::arm_timeout(
+        budget,
+        one_shot::GRACE,
+        container,
+        Box::new(one_shot::NoQueue),
+        Box::new(PodmanTeardown),
+    );
+}
+
+struct PodmanTeardown;
+
+impl one_shot::Teardown for PodmanTeardown {
+    fn remove_forge(&self, container: &str) {
+        let mut rm = podman_command();
+        rm.args(["rm", "--force", "--time", "10", container]);
+        if let Err(e) = podman_command_output(rm, false) {
+            eprintln!("[tillandsias] one-shot: removing {container} failed: {e}");
+        }
+    }
+    fn exit(&self, code: i32) {
+        std::process::exit(code);
+    }
+}
+
 fn cli_reserved_lane(project_path: Option<&str>, is_cloud: bool) -> Option<String> {
     let project_path = project_path?;
     let name = if is_cloud {
@@ -15148,38 +15303,6 @@ fn launch_tray_mode(_config_path: Option<String>, _debug: bool) -> Result<(), St
 
 fn observatorium_container_name(project_name: &str) -> String {
     format!("tillandsias-observatorium-{project_name}")
-}
-
-fn project_label_from_path(path: &Path, fallback: &str) -> String {
-    let raw = path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .filter(|name| !name.trim().is_empty())
-        .unwrap_or(fallback);
-
-    let mut label = String::new();
-    let mut previous_dash = false;
-    for ch in raw.chars() {
-        if ch.is_ascii_alphanumeric() {
-            label.push(ch.to_ascii_lowercase());
-            previous_dash = false;
-        } else if ch == '-' {
-            if !previous_dash {
-                label.push('-');
-                previous_dash = true;
-            }
-        } else if !previous_dash {
-            label.push('-');
-            previous_dash = true;
-        }
-    }
-
-    let label = label.trim_matches('-');
-    if label.is_empty() {
-        fallback.to_string()
-    } else {
-        label.to_string()
-    }
 }
 
 fn build_observatorium_web_args(
@@ -17917,10 +18040,6 @@ impl ForgeAgentMode {
             ForgeAgentMode::Maintenance => "terminal",
         }
     }
-
-    fn window_title(self, project_name: &str) -> String {
-        format!("Tillandsias — {} — {}", project_name, self.slug())
-    }
 }
 
 /// ORDER 828-h7kw. The line the hold prints, and the pure half of the hold
@@ -18037,6 +18156,8 @@ pub(crate) fn run_hold_window(args: &[String]) -> i32 {
 }
 
 /// The argv prefix that runs a lane under [`run_hold_window`] (828-h7kw).
+// 776-jcf3: the tray is the only caller left.
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
 pub(crate) fn hold_window_prefix() -> Vec<String> {
     let exe = std::env::current_exe()
         .map(|p| p.display().to_string())
@@ -18044,148 +18165,9 @@ pub(crate) fn hold_window_prefix() -> Vec<String> {
     vec![exe, "--hold-window".to_string(), "--".to_string()]
 }
 
-/// Resolve the host's default terminal emulator into an argv prefix that
-/// expects the command and its args appended verbatim.
-///
-/// Resolution order (first match wins):
-/// 1. `$TERMINAL` env var — split on whitespace, used as-is.
-/// 2. `xdg-terminal-exec` — modern xdg-utils 1.2+ shim; takes the command
-///    directly as positional args, no `-e` separator needed.
-/// 3. Hard-coded probe in PATH: `gnome-terminal`, `konsole`, `kitty`,
-///    `alacritty`, `foot`, `xterm`. Each gets the right `-e` / `--` flag.
-///
-/// Returns a hard error if nothing is found so the tray can surface the
-/// problem to the user instead of silently failing.
-/// @trace spec:forge-as-only-runtime
-#[cfg_attr(not(feature = "tray"), allow(dead_code))]
-pub(crate) fn detect_host_terminal() -> Result<Vec<String>, String> {
-    // Note: `$TERM` is the terminfo identifier (e.g. xterm-256color), NOT
-    // the path to the terminal binary — it cannot be used here. The closest
-    // env-var convention is `$TERMINAL` (i3/sway/dwm/etc.).
-    if let Ok(value) = std::env::var("TERMINAL")
-        && !value.trim().is_empty()
-    {
-        let parts: Vec<String> = value.split_whitespace().map(|s| s.to_string()).collect();
-        if !parts.is_empty() {
-            return Ok(parts);
-        }
-    }
-
-    if executable_on_path("xdg-terminal-exec") {
-        return Ok(vec!["xdg-terminal-exec".to_string()]);
-    }
-
-    // GNOME exposes the user's chosen terminal via gsettings — honor it
-    // before falling back to a hard-coded probe list. The output is a
-    // single-quoted string, e.g. "'ptyxis'" or "'gnome-terminal'".
-    if let Some(name) = gnome_default_terminal()
-        && executable_on_path(&name)
-    {
-        return Ok(argv_prefix_for(&name));
-    }
-
-    // (name, argv-prefix-once-resolved) — the prefix accepts a command + args.
-    // ptyxis is GNOME's new default starting Fedora 41; gnome-terminal is the
-    // pre-41 default. Order roughly matches "most likely to be installed on
-    // a desktop Linux distro in 2026".
-    let candidates: &[(&str, &[&str])] = &[
-        ("ptyxis", &["ptyxis", "--new-window", "--"]),
-        ("gnome-terminal", &["gnome-terminal", "--"]),
-        ("konsole", &["konsole", "-e"]),
-        ("kitty", &["kitty", "-e"]),
-        ("alacritty", &["alacritty", "-e"]),
-        ("wezterm", &["wezterm", "start", "--"]),
-        ("foot", &["foot"]),
-        ("tilix", &["tilix", "-e"]),
-        ("xfce4-terminal", &["xfce4-terminal", "-e"]),
-        ("terminator", &["terminator", "-e"]),
-        ("blackbox-terminal", &["blackbox-terminal", "-c"]),
-        ("xterm", &["xterm", "-e"]),
-    ];
-
-    for (name, prefix) in candidates {
-        if executable_on_path(name) {
-            return Ok(prefix.iter().map(|s| s.to_string()).collect());
-        }
-    }
-
-    Err(
-        "Could not find a terminal emulator on PATH. Set $TERMINAL or \
-         install one of: ptyxis/gnome-terminal/konsole/kitty/alacritty/\
-         wezterm/foot/tilix/xfce4-terminal/terminator/blackbox-terminal/xterm"
-            .to_string(),
-    )
-}
-
-/// Query GNOME's `gsettings` for the user's chosen default terminal. Returns
-/// `None` if gsettings isn't available, the schema isn't installed, or the
-/// value is empty.
-#[cfg_attr(not(feature = "tray"), allow(dead_code))]
-fn gnome_default_terminal() -> Option<String> {
-    let out = std::process::Command::new("gsettings")
-        .args([
-            "get",
-            "org.gnome.desktop.default-applications.terminal",
-            "exec",
-        ])
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    let raw = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    let trimmed = raw.trim_matches(|c: char| c == '\'' || c == '"' || c.is_whitespace());
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
-    }
-}
-
-/// Build the argv prefix for a terminal binary. Most terminals follow the
-/// `<bin> -e <cmd>` convention; gnome-terminal/ptyxis/wezterm use `--`.
-#[cfg_attr(not(feature = "tray"), allow(dead_code))]
-fn argv_prefix_for(name: &str) -> Vec<String> {
-    let prefix: &[&str] = match name {
-        "ptyxis" => &["ptyxis", "--new-window", "--"],
-        "gnome-terminal" => &["gnome-terminal", "--"],
-        "wezterm" => &["wezterm", "start", "--"],
-        "foot" => &["foot"],
-        "blackbox-terminal" => &["blackbox-terminal", "-c"],
-        // konsole / kitty / alacritty / tilix / xfce4-terminal / terminator
-        // / xterm all accept `-e <cmd>`.
-        _ => &[name, "-e"],
-    };
-    prefix.iter().map(|s| s.to_string()).collect()
-}
-
-#[cfg_attr(not(feature = "tray"), allow(dead_code))]
-fn executable_on_path(name: &str) -> bool {
-    let Some(path) = std::env::var_os("PATH") else {
-        return false;
-    };
-    for dir in std::env::split_paths(&path) {
-        let candidate = dir.join(name);
-        if !candidate.exists() {
-            continue;
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            if let Ok(metadata) = std::fs::metadata(&candidate)
-                && metadata.permissions().mode() & 0o111 == 0
-            {
-                continue;
-            }
-        }
-        return true;
-    }
-    false
-}
-
 /// Bring the per-project enclave (proxy + git + inference) online and return
 /// the certs directory. Shared by `run_opencode_web_mode` (web) and
-/// `launch_forge_agent` (Claude/Codex/OpenCode/Maintenance terminal launches).
+/// the CLI forge launches (the tray-local `launch_forge_agent` was deleted, 776-jcf3).
 ///
 /// `project_path` is the host's canonical project path. It is read with `git
 /// -C <path> config remote.origin.url` so the mirror's post-receive hook
@@ -18256,13 +18238,11 @@ pub(crate) fn ensure_enclave_for_project(
         debug,
     )?;
 
-    let project_remote_url = project_path
-        .and_then(read_host_project_origin_url)
-        .or_else(|| {
-            std::env::var("TILLANDSIAS_PROJECT_REMOTE_URL")
-                .ok()
-                .filter(|s| !s.is_empty())
-        });
+    // 776-jcf3: the mirror seeds from the cloud remote only, never from a
+    // host checkout's remote.origin.url.
+    let project_remote_url = std::env::var("TILLANDSIAS_PROJECT_REMOTE_URL")
+        .ok()
+        .filter(|s| !s.is_empty());
     if debug {
         match &project_remote_url {
             Some(url) => eprintln!("[tillandsias] [forge-launch] Project remote URL: {url}"),
@@ -19070,6 +19050,10 @@ fn forge_spec_index_volume(project_name: &str) -> String {
 // `host_mount`, which crosses clippy's threshold — taking the value as an
 // argument is the point of that order, since reading it from the process env
 // inside the builder is exactly the shared state being removed.
+// 776-jcf3: no production caller remains (local launches are retired), so it
+// is compiled for tests only. Its tests pin forge argv properties through it;
+// porting them onto build_forge_agent_run_args_with_vault retires it fully.
+#[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn build_forge_agent_run_args(
     project_path: &Path,
@@ -19617,11 +19601,14 @@ fn build_forge_agent_run_args_with_vault(
 }
 
 /// Build the full host-terminal command for an interactive tray launch.
-#[cfg_attr(not(feature = "tray"), allow(dead_code))]
 // ORDER 1021-hf9e, second pass. Same reason the sibling builders carry this:
 // `host_mount` crosses clippy's threshold, and taking it as an argument is the
 // entire point — reading it from the process env in here is the shared state
 // being removed.
+// 776-jcf3: no production caller remains (local launches are retired), so it
+// is compiled for tests only. Its tests pin forge argv properties through it;
+// porting them onto build_forge_agent_run_args_with_vault retires it fully.
+#[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn build_forge_agent_run_argv(
     project_path: &Path,
@@ -19931,152 +19918,6 @@ fn run_forge_agent_cli_mode(
     })
 }
 
-/// Launch a per-project forge agent (Claude/Codex/OpenCode/Maintenance) in
-/// the host's default terminal emulator.
-///
-/// Flow:
-/// 1. Resolve project name + canonical path.
-/// 2. Credential-capable agents re-exec the CLI lane in the terminal so their
-///    scoped Vault lease lives for the attached session. Maintenance builds
-///    the forge `podman run` argv directly after bringing up the enclave.
-/// 3. Detect host terminal, spawn it detached with the argv appended.
-///
-/// The terminal window is the user-facing surface. When the user closes it,
-/// `podman run --rm` tears the container down.
-/// @trace spec:forge-as-only-runtime
-#[cfg_attr(not(feature = "tray"), allow(dead_code))]
-pub(crate) fn launch_forge_agent(
-    project_name: &str,
-    project_path: &Path,
-    mode: ForgeAgentMode,
-    debug: bool,
-) -> Result<(), String> {
-    if !project_path.exists() {
-        return Err(format!("Project not found: {}", project_path.display()));
-    }
-
-    let canonical = project_path
-        .canonicalize()
-        .unwrap_or_else(|_| project_path.to_path_buf());
-
-    if debug {
-        eprintln!(
-            "[tillandsias] launch_forge_agent: project={project_name} mode={} path={}",
-            mode.slug(),
-            canonical.display()
-        );
-    }
-
-    // Credential-capable agents delegate to the CLI
-    // lane inside the popup terminal: the tray process has no TTY, so the
-    // ensure_provider_auth ladder (vault check -> device-code login in an
-    // ephemeral container -> vault write -> forge launch with injection)
-    // must run where the user can read the device code and copy the URL.
-    // Flow specified by The Tlatoāni 2026-07-15 (order 303 lineage).
-    let argv = if matches!(
-        mode,
-        ForgeAgentMode::Codex
-            | ForgeAgentMode::Claude
-            | ForgeAgentMode::OpenCode
-            | ForgeAgentMode::Antigravity
-    ) {
-        eprintln!(
-            "[tillandsias] launch_forge_agent: opening the {} terminal for '{project_name}'; the CLI lane prepares the enclave and scoped credential lease",
-            mode.slug()
-        );
-        let current_exe = std::env::current_exe()
-            .map_err(|e| format!("failed to resolve Tillandsias executable: {e}"))?;
-        let mut argv = vec![
-            current_exe.display().to_string(),
-            format!("--{}", mode.slug()),
-            canonical.display().to_string(),
-        ];
-        if debug {
-            argv.push("--debug".to_string());
-        }
-        argv
-    } else {
-        // Unconditional progress receipt: bringing the enclave online can take
-        // several seconds (and minutes on the first run). Without this line a
-        // menu click looks idle until the terminal opens.
-        eprintln!(
-            "[tillandsias] launch_forge_agent: preparing enclave for '{project_name}' ({} agent); the terminal opens once it's ready…",
-            mode.slug()
-        );
-        // Order 443 slice 3: mark the launch in flight across the enclave
-        // bring-up. Residual window (accepted): this guard drops when the
-        // tray helper returns, BEFORE the spawned terminal's `podman run`
-        // creates the forge container — the tray terminal lane holding its
-        // own marker is the separate, not-yet-filed terminal-isolation
-        // concern from the slice-2 progress note. Credentialed modes are
-        // covered: they re-exec the CLI lane, which holds its own marker.
-        let (launch_marker, _launch_guard) = acquire_launch_in_flight_marker(project_name, debug)?;
-        let (certs_dir, mirror_identity) = ensure_enclave_for_project(
-            project_name,
-            Some(&canonical),
-            Some(&launch_marker),
-            debug,
-        )?;
-        build_forge_agent_run_argv(
-            &canonical,
-            project_name,
-            mirror_identity.as_deref(),
-            &certs_dir,
-            VERSION.trim(),
-            mode,
-            debug,
-            // ORDER 1021-hf9e: the process env is read HERE, in the production
-            // launcher, and nowhere a test can reach concurrently.
-            forge_uses_host_mount(),
-            &tillandsias_core::cache_root::cache_root(),
-        )
-    };
-
-    let mut term = detect_host_terminal()?;
-    if debug {
-        eprintln!(
-            "[tillandsias] launch_forge_agent: terminal={:?} argv={:?}",
-            term, argv
-        );
-    }
-
-    let executable = term.remove(0);
-    let mut child = Command::new(&executable);
-    child.args(&term);
-    // 828-h7kw: the terminal runs the hold wrapper, which runs the lane, so the
-    // window survives the lane's exit (clean or failed) until Enter.
-    child.args(hold_window_prefix());
-    child.args(&argv);
-    // Some terminal emulators (ptyxis on Fedora Silverblue 44 in particular)
-    // refuse to launch when the parent process cwd is `/` — which is the
-    // default for tray processes started from a .desktop entry. Anchor cwd to
-    // the project workspace so the spawned terminal has a sane starting
-    // directory and inherits the same cwd semantics as the CLI lane.
-    // @trace spec:tray-ux, spec:browser-isolation-tray-integration
-    child.current_dir(&canonical);
-    // Decouple stdio — the terminal owns the TTY, we don't want podman's
-    // chatter mixed into the tray service log.
-    child.stdin(Stdio::null());
-    child.stdout(Stdio::null());
-    child.stderr(Stdio::null());
-
-    // Window title hint for terminals that honor it via env (e.g. foot).
-    child.env("TILLANDSIAS_WINDOW_TITLE", mode.window_title(project_name));
-
-    // Order 385: spawn on a detached thread that waits() so the fast-exiting
-    // Ptyxis GApplication client is reaped instead of leaking a <defunct>
-    // zombie under the tray process. Log spawn intent up-front (single line,
-    // not gated on debug) so silent menu clicks stay distinguishable from
-    // silent failures. @trace spec:tray-ux
-    eprintln!(
-        "[tillandsias] launch_forge_agent: spawned {} for project '{}' via {}",
-        mode.slug(),
-        project_name,
-        executable
-    );
-    crate::spawn_terminal_and_reap(child)
-}
-
 // Module declarations for Phase 4+
 mod metrics_server;
 
@@ -20124,9 +19965,10 @@ mod toolchain_exec;
 /// `std::process::Child` does NOT reap on `Drop` — so a bare `.spawn()`-and-drop
 /// leaks a `<defunct>` zombie parented to the tray process, one per terminal
 /// launch. Move the `Child` into a detached thread that calls `wait()` so the
-/// OS reclaims it. Both terminal-launch sites (`launch_forge_agent` here and
-/// `launch_in_terminal` in `tray/mod.rs`) route through this helper. Defined
-/// ungated (binary root) so the non-`tray`-feature build still links.
+/// OS reclaims it. The terminal-launch site (`launch_in_terminal` in
+/// `tray/mod.rs`; the tray-local `launch_forge_agent` was deleted, 776-jcf3)
+/// routes through this helper. Defined ungated (binary root).
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
 pub(crate) fn spawn_terminal_and_reap(mut child: Command) -> Result<(), String> {
     match child.spawn() {
         Ok(handle) => {
@@ -20688,6 +20530,17 @@ fn maybe_spawn_vsock_listener(
                         udp_state.set_last_event(msg.to_string());
                     }
                 }
+            }
+        });
+
+        // Order 1794-rf3a (b): the host browser's way to a preview.
+        let relay_shutdown = shutdown.clone();
+        let _preview_relay = tokio::spawn(async move {
+            let relay_port = tillandsias_control_wire::transport::PREVIEW_RELAY_VSOCK_PORT;
+            if let Err(err) =
+                vsock_server::run_preview_relay_listener(relay_port, relay_shutdown).await
+            {
+                eprintln!("[tillandsias] preview relay on port {relay_port} failed: {err}");
             }
         });
 
@@ -22191,6 +22044,114 @@ mod tests {
     /// nothing).
     #[test]
     // @trace order:986-ahnc, order:972-6vaj, spec:security-privacy-isolation
+    fn every_stack_launch_argv_satisfies_the_hardening_envelope() {
+        // Order 1118-zzs4: these argvs reach podman through
+        // run_container_observed, which now REFUSES one that fails the
+        // envelope, so a builder that drops a flag must fail here, not at a
+        // launch. git/router/inference were refused by the validator itself
+        // before the fix (it misread `--network-alias <v>` as the image).
+        let certs = PathBuf::from("/tmp/ca");
+        let sites: Vec<(&str, Vec<String>)> = vec![
+            ("proxy", build_proxy_run_args(&certs, "p:v1")),
+            (
+                "git",
+                build_git_run_args("alpha", None, &certs, "g:v1", None, None, None, None),
+            ),
+            ("inference", build_inference_run_args(&certs, "i:v1", false)),
+            ("router", build_router_run_args(&certs, "r:v1", 8080)),
+            (
+                "observatorium",
+                build_observatorium_web_args(
+                    std::path::Path::new("/tmp/p"),
+                    "alpha",
+                    std::path::Path::new("/tmp/a"),
+                    "o:v1",
+                ),
+            ),
+            (
+                "ssh-lane",
+                build_ssh_lane_sidecar_run_args("alpha", "m1", &certs, "s:v1", "sec"),
+            ),
+            (
+                "forge-agent",
+                build_forge_agent_run_argv(
+                    &PathBuf::from("/tmp/project"),
+                    "alpha",
+                    None,
+                    &certs,
+                    "1.2.3",
+                    ForgeAgentMode::Claude,
+                    false,
+                    false,
+                    &PathBuf::from("/tmp/cr"),
+                )[2..]
+                    .to_vec(),
+            ),
+        ];
+        for (name, args) in sites {
+            let mut full = vec!["run".to_string()];
+            full.extend(args);
+            assert_eq!(
+                tillandsias_podman::policy::validate_launch_argv(&full),
+                Ok(()),
+                "{name} launch argv must satisfy the envelope: {full:?}"
+            );
+        }
+    }
+
+    /// Order 1118-zzs4: the provider-login helper was the one production
+    /// launch missing `--security-opt=label=disable`, spawned unvalidated.
+    #[test]
+    fn provider_login_argv_carries_the_mandatory_hardening_and_is_validated() {
+        let mut argv: Vec<String> = LOGIN_CONTAINER_RUN_PREFIX.map(String::from).to_vec();
+        argv.extend(LOGIN_CONTAINER_HARDENING.map(String::from));
+        argv.extend(["--network".into(), ENCLAVE_ONLY_NET.into(), "img:v1".into()]);
+        assert_eq!(refuse_unhardened_launch(&argv, "login"), Ok(()));
+        let stripped: Vec<String> = argv
+            .iter()
+            .filter(|a| *a != "--security-opt=label=disable")
+            .cloned()
+            .collect();
+        assert!(refuse_unhardened_launch(&stripped, "login").is_err());
+
+        let source = std::fs::read_to_string(
+            std::path::Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("src/main.rs"),
+        )
+        .unwrap();
+        let source = source.as_str();
+        let window = source_window(
+            source,
+            "fn run_provider_login(config: &ProviderLoginConfig, debug: bool)",
+        );
+        assert_eq!(
+            window
+                .matches("refuse_unhardened_launch(&argv, &container)?")
+                .count(),
+            2,
+            "both run_provider_login branches must validate before spawning"
+        );
+        assert_eq!(
+            window.matches(".chain(LOGIN_CONTAINER_HARDENING)").count(),
+            2
+        );
+    }
+
+    /// Order 1118-zzs4: the only headless launch allowed past the envelope
+    /// check is the reviewed vsock relay.
+    #[test]
+    fn only_the_vsock_relay_is_exempt_from_the_envelope_check() {
+        let source = std::fs::read_to_string(
+            std::path::Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("src/main.rs"),
+        )
+        .unwrap();
+        let source = source.as_str();
+        let needle = [".run_container_observed", "_exempt("].concat();
+        assert_eq!(source.matches(needle.as_str()).count(), 1);
+        let idx = source.find(needle.as_str()).unwrap();
+        assert!(source[idx..idx + 200].contains("\"vsock-forwarder\""));
+    }
+
+    #[test]
     fn the_live_forge_argv_satisfies_the_hardening_envelope() {
         let argv = build_opencode_forge_args(
             std::path::Path::new("/tmp/probe-project"),
@@ -25303,69 +25264,6 @@ mod tests {
     // ─────────────────────────────────────────────────────────
 
     #[test]
-    fn detect_host_terminal_prefers_env_var() {
-        let _guard = env_lock();
-        let prev = std::env::var_os("TERMINAL");
-        // SAFETY: env_lock() guarantees this test holds the only
-        // environment-mutating handle during the assertion window.
-        unsafe { std::env::set_var("TERMINAL", "foo bar") };
-
-        let result = detect_host_terminal();
-
-        // Restore env before asserting so a failure doesn't poison siblings.
-        unsafe {
-            match prev {
-                Some(v) => std::env::set_var("TERMINAL", v),
-                None => std::env::remove_var("TERMINAL"),
-            }
-        }
-        let argv = result.expect("detect_host_terminal should honor $TERMINAL");
-        assert_eq!(argv, vec!["foo".to_string(), "bar".to_string()]);
-    }
-
-    #[test]
-    fn detect_host_terminal_falls_back_to_xdg_then_probe() {
-        let _guard = env_lock();
-        // Build a tmp PATH that exposes ONLY `xterm` so the probe loop is the
-        // path actually exercised. xdg-terminal-exec must NOT be present.
-        let scratch = tempfile::tempdir().expect("tempdir");
-        let bin = scratch.path().join("bin");
-        std::fs::create_dir_all(&bin).expect("mkdir bin");
-        let xterm = bin.join("xterm");
-        std::fs::write(&xterm, "#!/bin/sh\nexit 0\n").expect("write xterm");
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mut perms = std::fs::metadata(&xterm).unwrap().permissions();
-            perms.set_mode(0o755);
-            std::fs::set_permissions(&xterm, perms).unwrap();
-        }
-
-        let prev_path = std::env::var_os("PATH");
-        let prev_term = std::env::var_os("TERMINAL");
-        // SAFETY: env_lock held; serialized.
-        unsafe {
-            std::env::remove_var("TERMINAL");
-            std::env::set_var("PATH", bin.as_os_str());
-        }
-
-        let result = detect_host_terminal();
-
-        // Restore before asserting.
-        unsafe {
-            match prev_path {
-                Some(v) => std::env::set_var("PATH", v),
-                None => std::env::remove_var("PATH"),
-            }
-            if let Some(v) = prev_term {
-                std::env::set_var("TERMINAL", v);
-            }
-        }
-        let argv = result.expect("detect_host_terminal should fall back to xterm");
-        assert_eq!(argv, vec!["xterm".to_string(), "-e".to_string()]);
-    }
-
-    #[test]
     fn launch_forge_agent_maintenance_uses_terminal_entrypoint() {
         // The forge image does not (yet) ship `entrypoint-forge-bash.sh`;
         // Maintenance maps to the existing `entrypoint-terminal.sh` which is
@@ -25842,42 +25740,6 @@ mod tests {
             launch.contains("RefusedRunning"),
             "the shared launch path must WAIT OUT a running holder rather than \
              replacing it (order 494, 873-vgyg)"
-        );
-    }
-
-    // @trace spec:tray-ux, spec:browser-isolation-tray-integration
-    // Regression: on Fedora Silverblue tray clicks silently failed because
-    // (a) `launch_forge_agent` inherited cwd=`/` from the desktop-spawned
-    // tray (ptyxis refuses to start there), and (b) successful spawns
-    // produced no log trail, indistinguishable from silent failures. Pin
-    // both: the function MUST set `current_dir(canonical)` and MUST emit a
-    // single "spawned <mode> for project ..." stderr line ungated on debug.
-    #[test]
-    fn launch_forge_agent_sets_cwd_and_logs_spawn_outcome() {
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-
-        // Find the launch_forge_agent body and assert both invariants live
-        // inside the same function — not just somewhere in the file.
-        let start = source
-            .find("pub(crate) fn launch_forge_agent(")
-            .expect("launch_forge_agent function must exist");
-        // The next top-level `fn run_headless(` follows in this file, so
-        // bound the body to keep the assertions scoped.
-        let end = source[start..]
-            .find("\nfn run_headless(")
-            .map(|offset| start + offset)
-            .unwrap_or(source.len());
-        let body = &source[start..end];
-
-        assert!(
-            body.contains("child.current_dir(&canonical);"),
-            "launch_forge_agent must anchor cwd to the project workspace so \
-             terminals like ptyxis don't refuse to start from cwd=/"
-        );
-        assert!(
-            body.contains("[tillandsias] launch_forge_agent: spawned"),
-            "launch_forge_agent must log spawn success ungated on debug so \
-             silent failures are distinguishable from silent successes"
         );
     }
 
@@ -26960,7 +26822,8 @@ mod tests {
         );
         assert_eq!(
             login_window
-                .matches("run.args([\"--volume\", mount])")
+                // 1118-zzs4: the login argv is now a validated Vec<String>.
+                .matches("argv.extend([\"--volume\".to_string(), mount.to_string()])")
                 .count(),
             2,
             "vault and no-vault login builders must both mount the provider cache"
@@ -27749,22 +27612,6 @@ mod tests {
         assert_eq!(spec.vault_path, "secret/antigravity/oauth");
         assert_eq!(spec.vault_field, "credentials_b64");
         assert_eq!(ProviderId::Antigravity.secret_field(), "credentials_b64");
-    }
-
-    #[test]
-    fn tray_credentialed_agents_delegate_to_cli_lane_for_tty_login() {
-        // The tray process has no TTY; Claude/Codex/OpenCode/Antigravity clicks must
-        // route through the CLI lane (ensure_provider_auth ladder) inside
-        // the popup terminal instead of a bare podman argv.
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-        let start = source
-            .find("pub(crate) fn launch_forge_agent(")
-            .expect("launch_forge_agent must exist");
-        let window = &source[start..start + 3000];
-        let normalized = window.split_whitespace().collect::<Vec<_>>().join(" ");
-        assert!(normalized.contains(
-            "ForgeAgentMode::Codex | ForgeAgentMode::Claude | ForgeAgentMode::OpenCode | ForgeAgentMode::Antigravity"
-        ));
     }
 
     /// Order 620-duta: the startup preflight must distinguish a kernel that
@@ -30907,22 +30754,6 @@ esac
         );
     }
 
-    #[test]
-    fn tray_codex_launch_reexecs_cli_for_lease_lifetime() {
-        // Extended 2026-07-15: the CLI-lane delegation now covers ALL
-        // credentialed agents (Claude/Codex/OpenCode/Antigravity), same reasoning —
-        // the tray has no TTY for the device-code login.
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-        let body = source_window(source, "pub(crate) fn launch_forge_agent(");
-        let normalized = body.split_whitespace().collect::<Vec<_>>().join(" ");
-        assert!(normalized.contains(
-            "ForgeAgentMode::Codex | ForgeAgentMode::Claude | ForgeAgentMode::OpenCode | ForgeAgentMode::Antigravity"
-        ));
-        assert!(body.contains("std::env::current_exe()"));
-        assert!(body.contains("format!(\"--{}\", mode.slug())"));
-        assert!(body.contains("canonical.display().to_string()"));
-    }
-
     /// Order 570: the variable consumed by forge-local expert routing must
     /// identify the harness selected by the launcher. Cover both launch
     /// builders and every direct agent lane; checking the built argv pins the
@@ -32752,183 +32583,62 @@ esac
     // (--opencode, --opencode-web, --<agent> CLI, --observatorium) now share
     // or call, so no podman/desktop-session is needed.
 
-    /// Lane: --opencode. A stale TILLANDSIAS_PROJECT_REMOTE_URL in the
-    /// process environment (e.g. left over from an earlier --github-login)
-    /// must NOT divert a plain local launch into the cloud arm.
-    /// 1626-r4xm: a local launch must be inside the host project root, as the
-    /// lane's MCP socket requires. These env names are captured by each test
-    /// that resolves a temp project, so its root is the temp dir.
-    const PROJECT_ROOT_ENVS: [&str; 3] = [
+    /// 776-jcf3 (operator, 2026-10-24): a positional host path launches no
+    /// lane. Pre-fix an existing directory resolved locally (and was bound
+    /// into the lane socket's known set); now every lane refuses it with the
+    /// cloud launch form, a stale TILLANDSIAS_PROJECT_REMOTE_URL included,
+    /// and the directory's label is never admitted.
+    const PROJECT_ROOT_ENVS: [&str; 2] = [
         "TILLANDSIAS_PROJECT_REMOTE_URL",
-        "TILLANDSIAS_HOST_PROJECT_ROOT",
         "TILLANDSIAS_CLOUD_PROJECT_CACHE",
     ];
-    fn admit_temp_project_root(restore: &TestEnvRestore, root: &Path) {
-        restore.set("TILLANDSIAS_HOST_PROJECT_ROOT", root);
+
+    #[test]
+    fn positional_host_path_launch_refuses_with_the_cloud_form() {
+        let _guard = env_lock();
+        let restore = TestEnvRestore::capture(&PROJECT_ROOT_ENVS);
+        restore.set(
+            "TILLANDSIAS_PROJECT_REMOTE_URL",
+            "https://github.com/stale/leftover.git",
+        );
+        let temp = tempfile::tempdir().expect("tempdir");
         restore.set(
             "TILLANDSIAS_CLOUD_PROJECT_CACHE",
-            root.join("no-cloud-cache"),
+            temp.path().join("no-cloud-cache"),
         );
-    }
-
-    #[test]
-    fn cloud_mode_opencode_decision_ignores_stale_env_var() {
-        let _guard = env_lock();
-        let restore = TestEnvRestore::capture(&PROJECT_ROOT_ENVS);
-        restore.set(
-            "TILLANDSIAS_PROJECT_REMOTE_URL",
-            "https://github.com/stale/leftover.git",
-        );
-
-        let temp = tempfile::tempdir().expect("tempdir");
-        let project_dir = temp.path().join("myproject");
+        let project_dir = temp.path().join("jcf3-local-checkout");
         std::fs::create_dir_all(&project_dir).expect("mkdir");
-        admit_temp_project_root(&restore, temp.path());
         let path_str = project_dir.display().to_string();
 
-        let (name, canonical) =
-            resolve_launch_project_identity(&path_str, false, "opencode-project")
-                .expect("an existing local dir with is_cloud=false must resolve locally");
-        assert_eq!(
-            name, "myproject",
-            "local decision must name the project from the real directory, \
-             not be diverted by the stale env var"
-        );
-        assert!(
-            canonical.is_some(),
-            "local decision must return a real host checkout path even though \
-             TILLANDSIAS_PROJECT_REMOTE_URL is set: {canonical:?}"
-        );
-    }
-
-    /// Lane: --opencode-web. Same contract as the CLI lane above — it shares
-    /// `resolve_launch_project_identity`, but is exercised here with its own
-    /// fallback name to pin the call site.
-    #[test]
-    fn cloud_mode_opencode_web_decision_ignores_stale_env_var() {
-        let _guard = env_lock();
-        let restore = TestEnvRestore::capture(&PROJECT_ROOT_ENVS);
-        restore.set(
-            "TILLANDSIAS_PROJECT_REMOTE_URL",
-            "https://github.com/stale/leftover.git",
-        );
-
-        let temp = tempfile::tempdir().expect("tempdir");
-        let project_dir = temp.path().join("webproject");
-        std::fs::create_dir_all(&project_dir).expect("mkdir");
-        admit_temp_project_root(&restore, temp.path());
-        let path_str = project_dir.display().to_string();
-
-        let (name, canonical) =
-            resolve_launch_project_identity(&path_str, false, "opencode-project")
-                .expect("an existing local dir with is_cloud=false must resolve locally");
-        assert_eq!(name, "webproject");
-        assert!(
-            canonical.is_some(),
-            "opencode-web's local decision must not be diverted by the stale env var"
-        );
-    }
-
-    /// Lane: --claude / --codex / --antigravity / --bash (the forge-agent CLI
-    /// lane). `tillandsias . --opencode`-shaped repro from the packet: a "."
-    /// project path with the env var stale-set must still resolve as local,
-    /// never as a cloud project literally named ".".
-    #[test]
-    fn cloud_mode_forge_agent_cli_decision_ignores_stale_env_var() {
-        let _guard = env_lock();
-        let restore = TestEnvRestore::capture(&PROJECT_ROOT_ENVS);
-        restore.set(
-            "TILLANDSIAS_PROJECT_REMOTE_URL",
-            "https://github.com/stale/leftover.git",
-        );
-
-        let temp = tempfile::tempdir().expect("tempdir");
-        let project_dir = temp.path().join("dotproject");
-        std::fs::create_dir_all(&project_dir).expect("mkdir");
-        admit_temp_project_root(&restore, temp.path());
-        let path_str = project_dir.display().to_string();
-
-        let (name, canonical) = resolve_launch_project_identity(&path_str, false, "forge-project")
-            .expect("an existing local dir with is_cloud=false must resolve locally");
-        assert_eq!(name, "dotproject");
-        assert!(
-            canonical.is_some(),
-            "forge-agent CLI lane's local decision must not be diverted by the \
-             stale env var"
-        );
-    }
-
-    /// 1626-r4xm, criterion 1: a git project OUTSIDE the host project root
-    /// (the operator's ~/claudia/<x>, with nothing set) launches, and its lane's
-    /// MCP socket admits it. Measured on lenovinha before this: the lane
-    /// launched, and its MCP socket refused every call. RED first: the socket
-    /// refuses the label until the launch binds it.
-    #[cfg(feature = "tray")]
-    #[test]
-    fn launch_outside_host_project_root_is_admitted_by_its_lane() {
-        let _guard = env_lock();
-        let restore = TestEnvRestore::capture(&PROJECT_ROOT_ENVS);
-        restore.remove("TILLANDSIAS_PROJECT_REMOTE_URL");
-        let temp = tempfile::tempdir().expect("tempdir");
-        let root = temp.path().join("src");
-        std::fs::create_dir_all(root.join("some-other-project")).expect("mkdir");
-        let outside = temp.path().join("claudia").join("r4xm-claudia-project");
-        std::fs::create_dir_all(&outside).expect("mkdir");
-        let _ = std::process::Command::new("git")
-            .args(["init", "-q"])
-            .arg(&outside)
-            .status();
-        admit_temp_project_root(&restore, &root);
-
-        let before = crate::local_projects::validate_project_label("r4xm-claudia-project");
-        assert!(
-            before.is_err(),
-            "RED: the socket refuses it before launch: {before:?}"
-        );
-
-        let (name, canonical) =
-            resolve_launch_project_identity(&outside.display().to_string(), false, "forge-project")
-                .expect("a project outside the host project root launches");
-        assert_eq!(name, "r4xm-claudia-project");
-        assert_eq!(canonical, Some(outside.canonicalize().unwrap()));
-        crate::local_projects::validate_project_label(&name)
-            .expect("GREEN: the lane's socket admits the project it was launched for");
-    }
-
-    /// 1626-r4xm: LAUNCH AND THE LANE'S MCP SOCKET AGREE. The socket admits a
-    /// lane only through validate_project_label (order 505), so every project
-    /// that launches is admitted by its socket: never "launch ok, then every
-    /// MCP call refused". The guard is not opened wider than that: an outside
-    /// project no lane was launched for is still refused.
-    #[cfg(feature = "tray")]
-    #[test]
-    fn launch_admits_exactly_what_the_lane_socket_admits() {
-        let _guard = env_lock();
-        let restore = TestEnvRestore::capture(&PROJECT_ROOT_ENVS);
-        restore.remove("TILLANDSIAS_PROJECT_REMOTE_URL");
-        let temp = tempfile::tempdir().expect("tempdir");
-        let root = temp.path().join("src");
-        let inside = root.join("inside-project");
-        let outside = temp.path().join("elsewhere").join("outside-project");
-        let never = temp.path().join("elsewhere").join("r4xm-never-launched");
-        std::fs::create_dir_all(&inside).expect("mkdir");
-        std::fs::create_dir_all(&outside).expect("mkdir");
-        std::fs::create_dir_all(&never).expect("mkdir");
-        admit_temp_project_root(&restore, &root);
-
-        for (dir, label) in [(&inside, "inside-project"), (&outside, "outside-project")] {
-            let launched =
-                resolve_launch_project_identity(&dir.display().to_string(), false, "forge-project");
-            let socket = crate::local_projects::validate_project_label(label);
-            assert!(launched.is_ok(), "{label}: {launched:?}");
-            assert!(
-                socket.is_ok(),
-                "{label}: launch {launched:?} but the lane socket {socket:?}"
-            );
+        for fallback in ["opencode-project", "forge-project"] {
+            let err = resolve_launch_project_identity(&path_str, false, fallback)
+                .expect_err("a positional host path must not resolve to a lane");
+            assert!(err.contains("no longer supported"), "{err}");
+            assert!(err.contains("tillandsias --cloud <owner>/<repo>"), "{err}");
+            assert!(err.contains(&path_str), "the refusal names the path: {err}");
         }
-        let err = crate::local_projects::validate_project_label("r4xm-never-launched")
-            .expect_err("NEGATIVE: an outside label no lane was launched for stays refused");
-        assert!(err.contains("is not a known project"), "{err}");
+        #[cfg(feature = "host-services")]
+        assert!(
+            crate::local_projects::validate_project_label("jcf3-local-checkout").is_err(),
+            "a refused positional launch admits nothing to the lane socket"
+        );
+
+        let obs = resolve_observatorium_project_identity(&path_str, false)
+            .expect_err("--observatorium must not mount a host checkout");
+        assert!(
+            obs.contains("tillandsias --cloud <owner>/<repo> --observatorium"),
+            "{obs}"
+        );
+    }
+
+    #[test]
+    fn positional_refusal_names_the_lane_flag() {
+        let msg = positional_launch_refusal(".", Some("--claude"));
+        assert!(msg.contains("('.')"), "{msg}");
+        assert!(
+            msg.ends_with("tillandsias --cloud <owner>/<repo> --claude"),
+            "{msg}"
+        );
     }
 
     /// The flip side: is_cloud=true must resolve cloud even with the env var
@@ -32947,31 +32657,6 @@ esac
         assert!(
             canonical.is_none(),
             "cloud decision must never invent a host checkout path: {canonical:?}"
-        );
-    }
-
-    /// Lane: --observatorium. Same stale-env-var contract, using the
-    /// observatorium-specific decision helper; also pins that the local
-    /// bind source is always an absolute path.
-    #[test]
-    fn cloud_mode_observatorium_decision_ignores_stale_env_var_and_local_source_is_absolute() {
-        let _guard = env_lock();
-        let restore = TestEnvRestore::capture(&["TILLANDSIAS_PROJECT_REMOTE_URL"]);
-        restore.set(
-            "TILLANDSIAS_PROJECT_REMOTE_URL",
-            "https://github.com/stale/leftover.git",
-        );
-
-        let temp = tempfile::tempdir().expect("tempdir");
-        let project_dir = temp.path().join("obsproject");
-        std::fs::create_dir_all(&project_dir).expect("mkdir");
-        let path_str = project_dir.display().to_string();
-
-        let (_name, resolved) = resolve_observatorium_project_identity(&path_str, false)
-            .expect("an existing local dir with is_cloud=false must resolve locally");
-        assert!(
-            resolved.is_absolute(),
-            "a local observatorium bind source must always be absolute: {resolved:?}"
         );
     }
 
@@ -33138,11 +32823,11 @@ esac
         );
     }
 
-    /// Local mode still reads the real host checkout via `git -C`, and a
-    /// cloud fallback value passed alongside it (which should never happen
-    /// in practice, but proves the precedence) must be ignored.
+    /// 776-jcf3: even handed a real host checkout with an origin, the mirror
+    /// seed comes from the cloud remote. Fails on the pre-fix code, which
+    /// preferred the checkout's origin.
     #[test]
-    fn cloud_mode_opencode_local_origin_and_branch_still_read_host_checkout() {
+    fn host_checkout_origin_never_seeds_the_mirror() {
         let temp = tempfile::tempdir().expect("tempdir");
         let repo = temp.path().join("localproj");
         std::fs::create_dir_all(&repo).expect("mkdir");
@@ -33153,9 +32838,7 @@ esac
             .map(|s| s.success())
             .unwrap_or(false);
         if !init_ok {
-            eprintln!(
-                "skipping cloud_mode_opencode_local_origin_and_branch_still_read_host_checkout: git unavailable"
-            );
+            eprintln!("skipping host_checkout_origin_never_seeds_the_mirror: git unavailable");
             return;
         }
         let remote_added = std::process::Command::new("git")
@@ -33171,20 +32854,21 @@ esac
             .unwrap_or(false);
         if !remote_added {
             eprintln!(
-                "skipping cloud_mode_opencode_local_origin_and_branch_still_read_host_checkout: git remote add failed"
+                "skipping host_checkout_origin_never_seeds_the_mirror: git remote add failed"
             );
             return;
         }
 
         let remote = resolve_project_remote_url(
             Some(repo.as_path()),
-            Some("https://should-not-be-used.example/x.git"),
+            Some("https://github.com/example/cloud-repo.git"),
         );
+        // 776-jcf3 (operator, 2026-10-24): a host checkout's remote.origin.url
+        // never seeds the mirror; only the cloud resolution's remote does.
         assert_eq!(
             remote.as_deref(),
-            Some("https://github.com/example/local-repo.git"),
-            "local mode must read the host checkout's real origin, ignoring \
-             any cloud fallback value"
+            Some("https://github.com/example/cloud-repo.git"),
+            "the host checkout's origin must not be read"
         );
     }
 
@@ -33848,18 +33532,6 @@ esac
                 .count(),
             2,
             "both session labels (OpenCode Web and the observatorium) use the host label"
-        );
-    }
-
-    #[test]
-    fn project_label_from_path_normalizes_for_localhost_hostnames() {
-        assert_eq!(
-            project_label_from_path(Path::new("/tmp/My Project_v2"), "fallback"),
-            "my-project-v2"
-        );
-        assert_eq!(
-            project_label_from_path(Path::new("/tmp/---"), "fallback"),
-            "fallback"
         );
     }
 
@@ -34766,19 +34438,6 @@ esac
     #[ignore = "e2e: drives the live host podman/vault stack; run with --ignored on a healthy stack (order-463 host-endpoint class)"]
     fn publish_local_service_starts_container_and_returns_url() {
         let _env = env_lock();
-        use std::sync::Once;
-        static INIT: Once = Once::new();
-        INIT.call_once(|| {
-            let _ = std::fs::create_dir_all(
-                crate::local_projects::host_project_root().join("test-publish-e2e"),
-            );
-            std::fs::write(
-                crate::local_projects::host_project_root().join("test-publish-e2e/index.html"),
-                b"<html><body>e2e</body></html>",
-            )
-            .ok();
-        });
-
         let rt = tokio::runtime::Runtime::new().unwrap();
         let url = rt
             .block_on(publish_local_service("test-publish-e2e", "WEB", false))
@@ -34880,7 +34539,6 @@ esac
         let restore = TestEnvRestore::capture(&[
             "TILLANDSIAS_FORGE_INSTANCE",
             "XDG_RUNTIME_DIR",
-            crate::local_projects::HOST_PROJECT_ROOT_ENV,
             crate::local_projects::CLOUD_LABEL_CACHE_ENV,
         ]);
         // A short root: macOS caps sun_path at 104 bytes (1581-sunl).
@@ -34891,10 +34549,6 @@ esac
         let projects = tempfile::tempdir().expect("project root");
         restore.remove("TILLANDSIAS_FORGE_INSTANCE");
         restore.set("XDG_RUNTIME_DIR", runtime.path());
-        restore.set(
-            crate::local_projects::HOST_PROJECT_ROOT_ENV,
-            projects.path(),
-        );
         restore.set(
             crate::local_projects::CLOUD_LABEL_CACHE_ENV,
             projects.path().join("known-cloud-projects"),

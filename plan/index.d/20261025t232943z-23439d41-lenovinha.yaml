@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-gate-stamp-scope-fixture-never-resolves-its-lane-plan-binary-from-an-exported-cargo-target-dir
+    field: status
+    value: completed
+    ts: "2026-10-25T23:29:43Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-gate-stamp-scope-fixture-never-resolves-its-lane-plan-binary-from-an-exported-cargo-target-dir
+    event:
+      type: completed
+      ts: "2026-10-25T23:29:43Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: PR 641 merge 7e411f97c; scripts/test-gate-stamp-scope.sh 17/17, test-pre-push-honours-a-live-freeze 21/21, plan-lane-fails-closed 6/6, build.sh --check green with the shared target on
+  - packet_id: the-gate-stamp-scope-fixture-never-resolves-its-lane-plan-binary-from-an-exported-cargo-target-dir
+    event:
+      type: note
+      ts: "2026-10-25T23:29:43Z"
+      host: lenovinha
+      summary: |-
+        PR 641 landed on linux-next as 7e411f97c: tillandsias-plan resolves the surface root from the gating checkout, not the binary's location

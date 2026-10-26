@@ -128,6 +128,13 @@ cd "$ROOT" || exit 1
 # can drive the script; every default is the production value.
 GH="${TILLANDSIAS_LAND_QUEUE_GH:-gh}"
 GATE="${TILLANDSIAS_LAND_QUEUE_GATE:-./build.sh --check}"
+# ORDER 1844-92bz: queue gates build WITHOUT incremental compilation. A
+# candidate's verdict must not depend on what an earlier gate left in the
+# shared incremental cache; four candidates in one night were evicted at link
+# by a mixed cache (see build.sh). Non-incremental units are also cacheable by
+# sccache, so consecutive candidates share compiled dependencies. A caller can
+# still set it to 1.
+export TILLANDSIAS_CARGO_INCREMENTAL="${TILLANDSIAS_CARGO_INCREMENTAL:-0}"
 # ORDER 1765-q7rg: the ~1-min decider door run on the merge result BEFORE the
 # ~21-min gate. Set to the empty string to disable (the fixture's default).
 PREFLIGHT="${TILLANDSIAS_LAND_QUEUE_PREFLIGHT-./build.sh --preflight}"
@@ -231,6 +238,22 @@ gate_failed_comment() {
     printf '```\n%s\n```\n\nThe queue continued with the next candidate. Fix and the queue will pick it up again.\n' "$tail5"
 }
 
+# delta_plan_only <from> <to> — 0 when every path changed between the two commits
+# classifies as plan-ledger (a move that cannot invalidate a gate verdict). Sets
+# _delta_classes. An empty or unreadable answer is NOT plan-only (re-queue).
+# Shared by the first adopt and the post-refusal push retry (1839-fuvg).
+delta_plan_only() {
+    local _c
+    _delta_classes="$(git diff --name-only "$1" "$2" 2>/dev/null \
+                      | bash "$_SELF_DIR/gate-stamp.sh" classify 2>/dev/null)"
+    [ -n "$_delta_classes" ] || return 1
+    while IFS= read -r _c; do
+        [ -n "$_c" ] || continue
+        [ "$_c" = "plan-ledger" ] || return 1
+    done <<< "$_delta_classes"
+    return 0
+}
+
 # ── THE WORKING TREE MUST BE CLEAN ───────────────────────────────────────────
 # This script checks out and rewrites HEAD. Doing that over uncommitted work
 # destroys it, and `git checkout` would happily carry the changes across.
@@ -270,6 +293,20 @@ cleanup() {
     rm -rf "$LOCKDIR"
 }
 trap cleanup EXIT INT TERM
+
+# ── ORDER 1839-fuvg: GATE LOGS OF EVICTED CANDIDATES ARE KEPT ────────────────
+# Every eviction used to be diagnosed from a 5-line excerpt because the gate log
+# was a temp file deleted on the way out. They now live in a per-run directory
+# under the checkout's (gitignored) target/, and the evict line and PR comment
+# name the path. Retention is bounded: only the newest N run directories stay.
+# @trace order:1839-fuvg
+_LOGROOT="${TILLANDSIAS_LAND_QUEUE_LOGDIR:-$ROOT/target/land-queue-logs}"
+_LOGKEEP="${TILLANDSIAS_LAND_QUEUE_LOG_KEEP:-10}"
+_RUNDIR="$_LOGROOT/$(date -u +%Y%m%dT%H%M%SZ)-$$"
+mkdir -p "$_RUNDIR" 2>/dev/null || _RUNDIR="$(mktemp -d "${TMPDIR:-/tmp}/land-queue-logs.XXXXXX")"
+{ ls -1d "$_LOGROOT"/*/ 2>/dev/null | sort | awk -v k="$_LOGKEEP" '{a[NR]=$0} END{for(i=1;i<=NR-k;i++)print a[i]}' | while IFS= read -r _old; do
+    [ "${_old%/}" = "$_RUNDIR" ] || rm -rf "${_old%/}"
+  done; } 2>/dev/null || true
 
 # ── READ THE QUEUE ───────────────────────────────────────────────────────────
 # From the remote, every run. `gh` writing nothing is NOT an empty queue: an
@@ -374,7 +411,7 @@ while IFS=$'\t' read -r num head <&3; do
     _last_reason="$(marker_field "$_last" reason)"
     if [ -n "$_last" ] && [ "$_last_head" = "$head_sha" ]; then
         case "$_last_reason" in
-            gate-failed|preflight-failed|carried-*)
+            gate-failed|preflight-failed|carried-*|native-lint-*)
                 # An allow-list: a conflict, a flaky or aborted gate, or any reason a
                 # later change adds is re-gated, never skipped.
                 _sdelta=""; _sclasses=""; _stale=0
@@ -526,6 +563,63 @@ The queue continued with the next candidate.$(evict_marker "$num" "$head_sha" "$
         say "advisory:land-queue:$num:carried-unjudged:rc=$_crc:${_cverdict:-no-verdict} — no Carried trailer on this landing"
     fi
 
+    # ── A CFG-GATED PLATFORM CRATE NEEDS A NATIVE LINT (1235-rfub) ───────────
+    # The gate below compiles crates/tillandsias-macos-tray as STUBS on this
+    # host and cannot lint it, so a macOS-only clippy hard error passes it
+    # (d44909353 reddened trunk for every Mac that way). The relay tool has
+    # refused such a change since 2026-09-28, but every landing now comes
+    # through THIS queue, which never asked: on 2026-10-21 land(594) put a new
+    # tray source on trunk with no Native-Lint attestation in its range.
+    # Asked of the merge against the gated base, so the range is exactly the
+    # candidate's commits. The env override is STRIPPED: one exported reason
+    # would excuse every candidate in the run. The per-candidate override is a
+    # `Native-Lint-Unattested: <reason>` trailer on the work ref, and the debt
+    # is repeated on the land commit so a first-parent log tallies it.
+    if [ -f "$_SELF_DIR/check-native-lint-attested.sh" ]; then
+        _nlout="$(mktemp "${TMPDIR:-/tmp}/land-queue-native-lint.XXXXXX")"; _nlerr="$(mktemp "${TMPDIR:-/tmp}/land-queue-native-lint.XXXXXX")"
+        env -u TILLANDSIAS_NATIVE_LINT_UNATTESTED -u TILLANDSIAS_NATIVE_LINT_BASE \
+            bash "$_SELF_DIR/check-native-lint-attested.sh" --base "$base_sha" \
+            < /dev/null > "$_nlout" 2> "$_nlerr"
+        _nlrc=$?
+        _nlverdict="$(head -n 1 "$_nlout")"
+        _nlwhy="$(cat "$_nlerr")"
+        _nldebt="$(sed -n 's/^override:native-lint:unattested://p' "$_nlout")"
+        rm -f "$_nlout" "$_nlerr"
+        if [ "$_nlrc" -ne 0 ]; then
+            # refused:native-lint:<unattested|stale>:<pkg>
+            _nlkind="$(printf '%s' "$_nlverdict" | cut -d: -f3)"
+            _nlpkg="$(printf '%s' "$_nlverdict" | cut -d: -f4)"
+            say "evict:land-queue:$num:native-lint-${_nlkind:-unjudged}:${_nlpkg:-rc=$_nlrc}"
+            say "  accountable: the AUTHORING darwin host — run scripts/attest-native-lint.sh on $head there and push it"
+            pr_comment "$num" "Evicted from the landing queue: \`$head\` changes a cfg-gated platform crate that this gate compiles as stubs and cannot lint, and no host attested a native lint of exactly this content (\`${_nlverdict:-no verdict, rc=$_nlrc}\`, order 1235-rfub).
+
+**Accountable: the authoring host of the crate's platform (darwin for \`tillandsias-macos-tray\`).** On that host, check out \`$head\`, run \`scripts/attest-native-lint.sh\` (it runs \`cargo clippy -p <crate> --all-targets -- -D warnings\` and commits a \`Native-Lint:\` trailer only if it passes), and push. The queue picks the new head up.
+
+With no such host available the land waits, or add this line to the LAST paragraph of a commit message on \`$head\` to land it as recorded, unlinted debt:
+
+\`\`\`
+Native-Lint-Unattested: <reason>
+\`\`\`
+
+\`\`\`
+$_nlwhy
+\`\`\`$(evict_marker "$num" "$head_sha" "$base_sha" "native-lint-${_nlkind:-unjudged}:${_nlpkg:-rc=$_nlrc}")"
+            evicted=$((evicted + 1))
+            continue
+        fi
+        if [ -n "$_nldebt" ]; then
+            _nltr=()
+            while IFS= read -r _d; do
+                [ -n "$_d" ] && _nltr+=(--trailer "Native-Lint-Unattested: $_d")
+            done <<< "$_nldebt"
+            git -c user.name=land-queue -c user.email=land-queue@localhost \
+                commit -q --amend --no-edit "${_nltr[@]}" >/dev/null 2>&1 \
+                || say "advisory:land-queue:$num:native-lint-debt-trailer-not-written — the candidate's own trailer still records it"
+            merge_sha="$(git rev-parse HEAD)"
+            say "debt:land-queue:$num:native-lint-unattested:$(printf '%s' "$_nldebt" | head -n 1) — lands UNLINTED on the candidate's named reason"
+        fi
+    fi
+
     # ── GATE THE MERGE RESULT ────────────────────────────────────────────────
     if [ "$DRY_RUN" -eq 1 ]; then
         say "dry-run: would gate ${merge_sha:0:9} then push to $TRUNK"
@@ -538,14 +632,15 @@ The queue continued with the next candidate.$(evict_marker "$num" "$head_sha" "$
     # candidate, and any other code is the door failing to run: both go on to
     # the full gate, which decides as it always did.
     if [ -n "$PREFLIGHT" ]; then
-        _plog="$(mktemp "${TMPDIR:-/tmp}/land-queue-preflight.XXXXXX")"
+        _plog="$_RUNDIR/pr-$num-preflight.log"
         ( eval "$PREFLIGHT" ) < /dev/null > "$_plog" 2>&1
         _prc_pf=$?
         if [ "$_prc_pf" -eq 1 ] && ! grep -q 'refused:preflight:stale-plan-binary' "$_plog"; then
-            say "evict:land-queue:$num:preflight-failed:rc=1"
-            pr_comment "$num" "$(gate_failed_comment "$_plog" 1 "$head" "$TRUNK" "$base_sha" | sed '1s/the gate failed/the preflight door (`build.sh --preflight`) refused/')$(evict_marker "$num" "$head_sha" "$base_sha" preflight-failed)"
+            say "evict:land-queue:$num:preflight-failed:rc=1 — full log kept at $_plog"
+            pr_comment "$num" "$(gate_failed_comment "$_plog" 1 "$head" "$TRUNK" "$base_sha" | sed '1s/the gate failed/the preflight door (`build.sh --preflight`) refused/')
+
+Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" "$head_sha" "$base_sha" preflight-failed)"
             evicted=$((evicted + 1))
-            rm -f "$_plog"
             continue
         elif [ "$_prc_pf" -ne 0 ]; then
             say "advisory:land-queue:$num:preflight-not-decisive:rc=$_prc_pf — running the full gate"
@@ -553,7 +648,7 @@ The queue continued with the next candidate.$(evict_marker "$num" "$head_sha" "$
         rm -f "$_plog"
     fi
 
-    _glog="$(mktemp)"
+    _glog="$_RUNDIR/pr-$num-gate.log"
     # No pipeline: a `$GATE | tee` would hand us tee's status, which is the
     # 859-4jny bug one layer over.
     ( eval "$GATE" ) < /dev/null > "$_glog" 2>&1
@@ -571,16 +666,17 @@ The queue continued with the next candidate.$(evict_marker "$num" "$head_sha" "$
             rm -f "$_glog"
             continue
         fi
-        say "evict:land-queue:$num:gate-failed:rc=$_grc${_flaky:+:$_flaky}"
+        say "evict:land-queue:$num:gate-failed:rc=$_grc${_flaky:+:$_flaky} — full gate log kept at $_glog"
         # Only rc=1 is the gate's verdict on the tree. Any other code (255 is a host
         # going down mid-run, 137 a kill) says nothing about the candidate, so it
         # is recorded as gate-aborted, which the stale-head skip never acts on.
         if [ -n "$_flaky" ]; then _greason=flaky
         elif [ "$_grc" -eq 1 ]; then _greason=gate-failed
         else _greason="gate-aborted:rc=$_grc"; fi
-        pr_comment "$num" "$(gate_failed_comment "$_glog" "$_grc" "$head" "$TRUNK" "$base_sha")$(evict_marker "$num" "$head_sha" "$base_sha" "$_greason")"
+        pr_comment "$num" "$(gate_failed_comment "$_glog" "$_grc" "$head" "$TRUNK" "$base_sha")
+
+Full gate log kept on the landing host at \`$_glog\`.$(evict_marker "$num" "$head_sha" "$base_sha" "$_greason")"
         evicted=$((evicted + 1))
-        rm -f "$_glog"
         continue
     fi
     rm -f "$_glog"
@@ -612,17 +708,8 @@ The queue continued with the next candidate.$(evict_marker "$num" "$head_sha" "$
         # — a script, a spec, a crate, an unreadable answer — re-queues. The
         # failure direction is the same one the whole row family uses: an
         # uncertainty runs the gate again rather than skipping it.
-        _delta_classes="$(git diff --name-only "$base_sha" "$base_now" 2>/dev/null \
-                          | bash "$_SELF_DIR/gate-stamp.sh" classify 2>/dev/null)"
         _adoptable=1
-        if [ -z "$_delta_classes" ]; then
-            _adoptable=0          # empty answer is not "no classes"; re-queue
-        else
-            while IFS= read -r _c; do
-                [ -n "$_c" ] || continue
-                [ "$_c" = "plan-ledger" ] || { _adoptable=0; break; }
-            done <<< "$_delta_classes"
-        fi
+        delta_plan_only "$base_sha" "$base_now" || _adoptable=0
 
         if [ "$_adoptable" -eq 1 ]; then
             # Re-merge onto the moved target. The gate's verdict still describes
@@ -664,16 +751,44 @@ The queue continued with the next candidate.$(evict_marker "$num" "$head_sha" "$
     fi
 
     # ── PUSH, AND PROVE IT LANDED BY ASKING THE REMOTE ───────────────────────
-    git push "$REMOTE" "HEAD:refs/heads/$TRUNK" >/dev/null 2>&1
-    _prc=$?
-    git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null || true
-    if git merge-base --is-ancestor "$merge_sha" "$REMOTE/$TRUNK" 2>/dev/null; then
+    # ORDER 1839-fuvg: the push's own output is KEPT (it was >/dev/null, so a
+    # hook refusal and a lost race both read "push-did-not-land:rc=1"), and a
+    # push refused because the remote moved by ledger fragments alone is
+    # re-fetched, re-adopted and retried (bounded) instead of re-gated.
+    _pushtry=1; _pushmax=3; _landed_ok=0; _pout=""
+    while :; do
+        _pout="$(git push "$REMOTE" "HEAD:refs/heads/$TRUNK" 2>&1)"
+        _prc=$?
+        git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null || true
+        if git merge-base --is-ancestor "$merge_sha" "$REMOTE/$TRUNK" 2>/dev/null; then
+            _landed_ok=1; break
+        fi
+        [ "$_pushtry" -lt "$_pushmax" ] || break
+        _base_again="$(git rev-parse "$REMOTE/$TRUNK" 2>/dev/null)" || break
+        [ "$_base_again" != "$base_sha" ] || break          # not a race: a real refusal
+        delta_plan_only "$base_sha" "$_base_again" || break # moved by more than the ledger
+        git merge --no-ff -q -m "land($num): $head into $TRUNK (adopted over a plan-only move)" \
+            "$_base_again" >/dev/null 2>&1 || { git merge --abort 2>/dev/null || true; break; }
+        merge_sha="$(git rev-parse HEAD)"
+        base_sha="$_base_again"
+        _pushtry=$((_pushtry + 1))
+        say "adopt:land-queue:$num:plan-only-move-at-push:attempt=$_pushtry gated-on=${base_sha:0:9} — push refused while $TRUNK moved by ledger fragments only; re-adopted and retrying"
+    done
+    if [ "$_landed_ok" -eq 1 ]; then
         say "land:$num tier=full gate=green base=${base_sha:0:9} head=${head_sha:0:9} merge=${merge_sha:0:9}"
         say "  not-run: nothing — tier=full runs the whole gate"
         landed=$((landed + 1))
         continue
     fi
     say "requeue:land-queue:$num:push-did-not-land:rc=$_prc — the remote does not have ${merge_sha:0:9}"
+    printf '%s\n' "$_pout" | tail -n 20 | sed 's/^/  push-output: /'
+    pr_comment "$num" "Re-queued, not landed: the push of \`${merge_sha:0:9}\` to \`$TRUNK\` was refused (rc=$_prc) after a green gate. The push command said:
+
+\`\`\`
+$(printf '%s\n' "$_pout" | tail -n 20)
+\`\`\`
+
+The queue will re-gate on its next pass."
     requeued=$((requeued + 1))
 done 3<<< "$_cands"
 done

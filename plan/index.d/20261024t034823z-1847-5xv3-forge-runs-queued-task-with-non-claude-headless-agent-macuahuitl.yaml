@@ -1,0 +1,73 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Story child (b) of the website-update-by-dogfood story.
+packets:
+  - packet_id: a-forge-started-for-a-project-with-a-pending-coordinator-task-runs-it-with-a-non-claude-headless-agent-and-that-projects-named-skill-to-completion-reports-back-and-exits
+    order: 1847-5xv3
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    release_target: fleet-coordinator-warm-cache-milestone
+    pickup_role: linux
+    capability_tags: [forge, coordinator, opencode, bash]
+    estimated_hours: 5
+    owned_files:
+      - images/default/lib-common.sh
+      - scripts/forge-run-queued-task.sh
+      - scripts/test-forge-run-queued-task.sh
+    title: |
+      When the 1828 "what's next" answer at forge start is a queued task addressed to an agent lane (payload names skill + args, lane=opencode), the forge claims it, runs that lane headless with a prompt naming the project's skill, waits to completion, reports done/failed with the agent's last line back to the queue, and the forge exits so the launcher closes it — and an unclaimable or absent task changes nothing about an interactive start
+    context: |
+      Operator request 2026-10-24: the website update is a dogfood test, so
+      the agent doing it must be NON-CLAUDE (the forge's OpenCode lane or
+      another model), launched with an ephemeral checkout, run to completion,
+      then the forge closed.
+      EXISTING CAPABILITY REUSED, do not rebuild:
+        - ephemeral checkout: `tillandsias --cloud <owner/repo>` already
+          resolves an ephemeral project with host disk untouched (exercised in
+          776-jcf3's 2026-10-18 progress event).
+        - headless prompting: `--opencode --prompt "<text>"` is parsed by
+          crates/tillandsias-headless (the `--prompt` argv handling) and is
+          what smoke-curl-install-and-test-e2e and
+          scripts/litmus-opencode-e2e-launch.sh already drive.
+        - claim/report: the 1826 client's claim and done verbs; the start hook
+          is 1828's coordinator_join_at_start.
+      New is only the glue: a task payload {kind: skill-run, skill, args,
+      lane} → claim → exec the lane with prompt "Use the /<skill> skill
+      <args>; finish with its last-line grammar" → report → exit status.
+      A non-Claude lane is enforced: payload lane must be opencode (or a
+      future non-claude lane); lane=claude is refused with
+      refused:task-lane-must-be-non-claude so the dogfood cannot silently
+      fall back. Timeouts bound the run (payload max_minutes, default 90);
+      a timeout reports failed:timeout and still exits.
+    exit_criteria:
+      - 'stub coordinator returns a skill-run task (lane=opencode, skill=update-website), stub opencode on PATH records argv and prints ok:refreshed:v1: the script claims, invokes opencode with a prompt containing "/update-website", reports done with "ok:refreshed:v1", and exits 0 (pre-fix result: FAILS — script absent, no claim)'
+      - 'same task with lane=claude: no agent exec, report failed with refused:task-lane-must-be-non-claude (pre-fix result: FAILS — script absent)'
+      - 'stub agent sleeps past max_minutes (scaled for test): report failed:timeout, exit non-zero, no orphan child (pre-fix result: FAILS)'
+      - 'next returns no task: script exits 0 printing no-task and the interactive start path is unchanged (pre-fix result: PASSES vacuously — recorded)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: scripts/test-forge-run-queued-task.sh
+      (new) with stub client + stub agent on PATH; real-forge proof belongs to
+      the milestone packet of this story, not here.
+    depends_on:
+      - forge-start-joins-the-project-coordinator-queue-pushes-an-initial-client-folded-overview-when-creating-it-and-asks-whats-next
+      - tillandsias-plan-coordinator-client-with-rate-limit-adaptive-heartbeat-busy-backoff-batching-and-offline-fallback-to-the-git-ledger-plus-mcp-tool
+    related: [1824-58bm, 1846-dykd]
+    next_action: >
+      Nothing is built. First confirm 1828 and 1826 have landed (plan_status);
+      if not, this is blocked — do not stub a real coordinator into the forge.
+      Then write scripts/forge-run-queued-task.sh against the 1826 verbs and
+      call it from 1828's start step only when the next answer is a skill-run
+      task. Read how scripts/litmus-opencode-e2e-launch.sh drives opencode
+      headless before choosing argv; reuse it.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+    provenance: |
+      Filed by macuahuitl (claude subagent) from operator request 2026-10-24 in-session.
+    events:
+      - type: filed
+        ts: "2026-10-24T03:48:23Z"
+        host: macuahuitl
+        summary: |-
+          Website-update story (b): forge runs a queued skill task with a non-Claude headless lane to completion, reports, exits.

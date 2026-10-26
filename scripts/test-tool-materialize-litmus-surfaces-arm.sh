@@ -92,8 +92,12 @@ elif _tms_skip="$(printf '%s' "$(sed -n 's/.*\(arms 4-7 need [^"]*\)/\1/p' "$TMP
     # every forge gate. Bare metal is where a missing toolbox is an anomaly worth
     # refusing. /run/.containerenv is absent on bare metal and present inside the
     # builder (yoga verified); TILLANDSIAS_HOST_KIND is the forge's own variable.
+    # The Windows build distro (tillandsias-build, a WSL2 kernel) IS the builder
+    # rather than a host that carries one, and ships no toolbox: same named skip
+    # as a forge (667-kfyn, measured yolanda 2026-10-17: ARM 0 red there).
     if [ "$(uname -s)" = "Linux" ] \
        && [ ! -e /run/.containerenv ] && [ ! -e /.dockerenv ] \
+       && ! grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null \
        && [ "${TILLANDSIAS_HOST_KIND:-}" != "forge" ]; then
         bad "ARM 0: on BARE-METAL LINUX the subject skipped its toolbox arms ($_tms_skip) — that is an anomaly, not a platform fact: this host is expected to have a working tillandsias-builder carrying jq, and without it step 414 would go green while guarding nothing"
     else

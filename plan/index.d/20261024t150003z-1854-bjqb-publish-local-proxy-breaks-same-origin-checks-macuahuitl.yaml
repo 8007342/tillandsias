@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-24. Code is cited by symbol, never by line.
+packets:
+  - packet_id: publish-local-proxy-rewrites-the-external-origin-so-apps-same-origin-checks-reject-post-with-403
+    order: 1854-bjqb
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, web, router, wrangler]
+    estimated_hours: 4
+    title: "A previewed web app rejects every POST with 403 because the preview proxy changes the address the app sees"
+    context: |
+      Field report: from https://www.arabiya.localhost:18443 real browser JSON POSTs returned 403 same-origin required, because the app compares Origin to the origin of request.url and the proxy path makes them disagree. Fix: the router and runtime path behind publish_local must preserve the external scheme, hostname and port in the URL the app sees, and log both values in forge-owned logs so a host, scheme or port rewrite is distinguishable. Never bypass CSRF validation or trust arbitrary client-supplied forwarded headers. Keep Secure, HttpOnly and SameSite cookies. Also expose readiness and generation so a transient 503 worker-restarted-mid-request is distinguishable from an application error. Source: forge field report FORGE_DIAGNOSTICS.md in 8007342/arabiya.
+    exit_criteria:
+      - "A fixture serves an app that compares the request Origin header to the origin of request.url behind the publish_local route (https www.<project>.localhost on a non-default port) and asserts a same-origin JSON POST returns 2xx and that multiple Set-Cookie headers survive. Pre-fix result: FAILS with 403 Same-origin request required."
+    verifiable_closure: "A fixture serves an app that compares the request Origin header to the origin of request.url behind the publish_local route (https www.<project>.localhost on a non-default port) and asserts a same-origin JSON POST returns 2xx and that multiple Set-Cookie headers survive. Pre-fix result: FAILS with 403 Same-origin request required."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the fixture named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-24.
+    events:
+      - type: filed
+        ts: "2026-10-24T15:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator request of 2026-10-24"

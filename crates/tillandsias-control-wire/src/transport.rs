@@ -32,6 +32,23 @@ use tokio::net::{UnixListener, UnixStream};
 /// @trace spec:vsock-transport
 pub const CONTROL_WIRE_VSOCK_PORT: u32 = 42420;
 
+/// Order 1794-rf3a (b): the guest's preview relay. Each connection runs the
+/// control wire's handshake, then carries the host browser's TLS bytes to the
+/// router's preview listener. Rootful podman does not forward a `-p` publish
+/// into the `--internal` enclave, and the VM's NAT does not reach the host's
+/// loopback, so a host browser has no other way in.
+///
+/// @trace spec:vsock-transport, spec:local-web-preview
+pub const PREVIEW_RELAY_VSOCK_PORT: u32 = 42430;
+
+/// Order 1794-rf3a (b): the host loopback port a VM guest's preview is
+/// served on. The tray binds `127.0.0.1` at this port and relays to
+/// [`PREVIEW_RELAY_VSOCK_PORT`]; the guest names it in every preview URL, so
+/// both ends must use the same number.
+///
+/// @trace spec:local-web-preview
+pub const VM_HOST_PREVIEW_TLS_PORT: u16 = 18443;
+
 /// Where to reach the control wire.
 #[derive(Debug, Clone)]
 pub enum Transport {

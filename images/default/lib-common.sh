@@ -1867,9 +1867,19 @@ _tillandsias_select_warm_model() {
     # a fleet rule here — it is a preference order over what is present, so a
     # host with only 7b still warms 7b. yoga's ROCm replication (824-6qxh) is
     # what would make it a rule.
+    #
+    # CPU FLOOR IS 0.5b FIRST, AND NEVER 7b. The selected model is now also the
+    # model expert-serve SYNTHESISES with (see the export in
+    # warm_tier_model_fail_soft), so this order is a serving decision, not just
+    # a warm-up one. 0.5b is the inference image's baked default (always
+    # present), the pipeline's own default, lib-dev-env.sh's CPU tier, and the
+    # model 927-2q4w measured inside the Quick budget on the CPU floor
+    # (927-2885ms, lenovinha). The earlier order (3b, 7b, 0.5b) picked 7b on a
+    # 16GB-RAM CPU host whose inference container background-pulls T2 — a
+    # multi-GB model the floor cannot serve inside any tier budget.
     case "$_wm_class" in
         workstation-gpu|hybrid-gpu-npu) _wm_order="qwen2.5:14b qwen2.5:7b qwen2.5:3b" ;;
-        *)                              _wm_order="qwen2.5:3b qwen2.5:7b qwen2.5:0.5b" ;;
+        *)                              _wm_order="qwen2.5:0.5b qwen2.5:3b" ;;
     esac
     for _wm_cand in $_wm_order; do
         case ",${_wm_available}," in
@@ -1910,6 +1920,15 @@ warm_tier_model_fail_soft() {
     state_dir="${FORGE_EXPERTS_STATE_DIR:-/dev/shm/tillandsias-experts}"
     mkdir -p "$state_dir" 2>/dev/null || true
     _warm_state() { printf '%s\n' "$1" >"$state_dir/model-warm" 2>/dev/null || true; }
+    # Milliseconds since the epoch. GNU date has %N; BSD date prints a literal
+    # N, which made the arithmetic below abort under set -e (darwin gate). Fall
+    # back to whole seconds rather than a non-number.
+    _warm_ms() {
+        local t
+        t="$(date +%s%3N 2>/dev/null)" || t=""
+        case "$t" in '' | *[!0-9]*) t="$(( $(date +%s) * 1000 ))" ;; esac
+        printf '%s' "$t"
+    }
 
     ep="${TILLANDSIAS_INFERENCE_ENDPOINT:-http://inference:11434}"
     ep="${ep%/}"
@@ -1942,18 +1961,27 @@ warm_tier_model_fail_soft() {
         return 0
     fi
 
+    # HAND THE SELECTION TO THE SERVER THAT USES IT. expert-serve, started next
+    # in this same lane, synthesises with TILLANDSIAS_INFERENCE_MODEL and falls
+    # back to qwen2.5:0.5b when it is unset — and nothing in the lane set it.
+    # So a GPU forge warmed 14b and then answered every query with a cold 0.5b:
+    # the warm never reached the consumer. Exported (not a subshell) so
+    # start_expert_serve_fail_soft inherits it; an operator value was already
+    # taken as `model` above, so this never overrides one.
+    export TILLANDSIAS_INFERENCE_MODEL="$model"
+
     # ONE minimal completion. The point is the VRAM load, not the answer, so
     # ask for as few tokens as the server will emit.
-    started="$(date +%s%3N 2>/dev/null || echo 0)"
+    started="$(_warm_ms)"
     if curl -fsS -m 300 -o /dev/null \
         -H 'Content-Type: application/json' \
         -d "{\"model\":\"$model\",\"max_tokens\":1,\"messages\":[{\"role\":\"user\",\"content\":\"warm\"}]}" \
         "$ep/v1/chat/completions" 2>/dev/null; then
-        elapsed="$(( $(date +%s%3N 2>/dev/null || echo 0) - started ))"
+        elapsed="$(( $(_warm_ms) - started ))"
         _warm_state "model_warm=$model warm_state=warm warm_reason=- load_ms=$elapsed"
         echo "[warm] $model loaded in ${elapsed}ms — tier budgets now measure inference, not model load (965-hz3f)"
     else
-        elapsed="$(( $(date +%s%3N 2>/dev/null || echo 0) - started ))"
+        elapsed="$(( $(_warm_ms) - started ))"
         _warm_state "model_warm=$model warm_state=failed warm_reason=request-failed load_ms=$elapsed"
         echo "[warm] warming $model failed after ${elapsed}ms (non-fatal; first real query pays the load)" >&2
     fi
@@ -4802,6 +4830,43 @@ export_ssh_env() {
     return 1
 }
 
+# ── Expert context pack (order 1815-tei4) ───────────────────
+# @trace order:1815-tei4, spec:expert-serve-grounded-pipeline
+# Writes <project>/.forge-expert-context.md: a deterministic pack of at most
+# 4800 bytes (universal forge constraints, then the project's OWN identity,
+# branch-discipline level and CLAUDE.md/AGENTS.md excerpts, then Tillandsias
+# rules only for a Tillandsias checkout). Every synthesis prompt — pipeline.rs
+# domain_synthesis_prompt via expert-serve, and tellme's tellme_context_pack —
+# starts with its exact bytes so the inference server reuses the prompt-prefix
+# cache. The generator is `tillandsias-plan expert-context-pack`
+# (crates/tillandsias-plan/src/context_pack.rs build_pack), where it is
+# unit-tested for a Tillandsias and a non-Tillandsias project.
+# FAIL-SOFT: no binary, a pre-1815 binary or a failed write leaves no pack,
+# and every prompt is then exactly what it was before. Never blocks startup:
+# the generator reads only the checkout and runs under a 10 s timeout.
+write_expert_context_pack() {
+    local project_dir="${1:-$PROJECT_DIR}" bin out
+    [[ -n "$project_dir" && -d "$project_dir" ]] || return 0
+    out="$project_dir/.forge-expert-context.md"
+    bin="$(command -v tillandsias-plan 2>/dev/null || true)"
+    [[ -n "$bin" ]] || bin="${FORGE_EXPERTS_BIN_DIR:-$HOME/.local/bin}/tillandsias-plan"
+    if [[ ! -x "$bin" ]]; then
+        trace_lifecycle "expert-context-pack" "skipped (no-binary): prompts carry no pack" || true
+        return 0
+    fi
+    if timeout 10 "$bin" expert-context-pack --root "$project_dir" --out "$out" >/dev/null 2>&1; then
+        export TILLANDSIAS_EXPERT_CONTEXT_PACK="$out"
+        local gitignore="$project_dir/.gitignore"
+        if [[ -f "$gitignore" ]] && ! grep -qxF '.forge-expert-context.md' "$gitignore"; then
+            echo '.forge-expert-context.md' >> "$gitignore"
+        fi
+        trace_lifecycle "expert-context-pack" "written to $out ($(wc -c < "$out" 2>/dev/null | tr -d ' ') bytes)" || true
+    else
+        trace_lifecycle "expert-context-pack" "skipped (generator-failed or pre-1815 binary): prompts carry no pack" || true
+    fi
+    return 0
+}
+
 # ── Forge startup context injection ─────────────────────────
 # @trace spec:project-bootstrap-readme, spec:forge-environment-discoverability
 # Writes .forge-startup-context.md into the project workspace so agents know
@@ -5358,6 +5423,9 @@ CONTEXT_EOF
     if [[ -f "$gitignore" ]] && ! grep -qxF '.forge-startup-context.md' "$gitignore"; then
         echo '.forge-startup-context.md' >> "$gitignore"
     fi
+
+    # Order 1815-tei4: the expert context pack beside this file. Fail-soft.
+    write_expert_context_pack "$project_dir" || true
 
     export FORGE_STARTUP_CONTEXT_FILE="$ctx_file"
     trace_lifecycle "startup-context" "written to $ctx_file (branch=${branch}, version=${version})"

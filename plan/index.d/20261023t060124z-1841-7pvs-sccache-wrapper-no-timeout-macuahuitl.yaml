@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-sccache-wrapper-waits-forever-on-a-hung-sccache-server-so-a-gate-blocks-for-an-hour-with-no-output
+    order: 1841-7pvs
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [instrument, gate, build, fleet]
+    estimated_hours: 2
+    owned_files:
+      - scripts/sccache-wrapper.sh
+      - scripts/test-sccache-long-tmpdir.sh
+    title: |
+      scripts/sccache-wrapper.sh waits forever on a hung sccache server; a gate blocked 46 minutes on three rustc calls before anyone looked
+    context: |
+      MEASURED macuahuitl 2026-10-23: during #607's gate three sccache clients
+      sat in wait_woken for 46 min on a server started by hand with
+      SCCACHE_IDLE_TIMEOUT=0; load average 1.8. Killing the server let a fresh
+      one start and the gate resumed. The wrapper's fallback fires only when
+      sccache exits 2 or 254; a hung server never exits.
+    exit_criteria:
+      - 'a compile through the wrapper against a server that accepts but never answers falls back to the bare compiler within a bounded time (pre-fix result: FAILS — hangs indefinitely)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: a new ARM in
+      scripts/test-sccache-long-tmpdir.sh with a stub sccache that sleeps
+      forever; the wrapper must return a compiled result under a timeout
+      (pre-fix: hangs).
+    provenance: |
+      Filed by macuahuitl (claude, coordinator) 2026-10-23 during land-queue run 3.
+    events:
+      - type: filed
+        ts: "2026-10-23T06:01:24Z"
+        host: macuahuitl
+        summary: |-
+          p2: the sccache wrapper has no timeout; a hung server blocked a gate 46 min.

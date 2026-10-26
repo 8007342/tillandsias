@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+  - packet_id: branch-grammar-warns-on-work-slug-for-projects-with-no-plan-ledger
+    order: 1867-vjcu
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [git-mirror, branches, discipline]
+    estimated_hours: 2
+    title: "Projects without a plan ledger get a warning for work/<name> branches; accept or document that form"
+    context: |
+      The mirror expects work/<order>; for ledger-less projects work/<slug> is natural and undocumented. Accept it there, or document the mapping. Source: forge field report FORGE_DIAGNOSTICS.md in 8007342/ranitas (2026-10-25), relayed by the coordinator.
+    exit_criteria:
+      - "A fixture pushes work/visual-envelope to a mirror for a project with no plan ledger and asserts no grammar warning, while a project with a ledger still gets it for a non-order name. Pre-fix result: FAILS, the push is warned."
+    verifiable_closure: "A fixture pushes work/visual-envelope to a mirror for a project with no plan ledger and asserts no grammar warning, while a project with a ledger still gets it for a non-order name. Pre-fix result: FAILS, the push is warned."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-25.
+    events:
+      - type: filed
+        ts: "2026-10-25T01:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator request of 2026-10-25"

@@ -1,0 +1,8 @@
+# Gate step 1814-x78v — `tellme` routes free-form questions to expert-serve,
+# keeps slug lookups as index reads, labels a no-server answer UNGROUNDED, and
+# names the fallback model.
+STEP_DESC="Checking tellme routes to expert-serve (1814-x78v)"
+STEP_SCRIPT="scripts/test-tellme-routes-to-expert-serve.sh"
+STEP_ERROR="tellme no longer routes to expert-serve as pinned (1814-x78v) — see the FAIL lines above"
+STEP_OK="tellme routing fixture passed"
+STEP_SECOND_REGIME="macbookair 2026-10-23 darwin ok:tellme-routes-to-expert-serve:5/5"

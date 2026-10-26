@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: affordance-slice-windows-installer-fatal-messages-say-what-the-user-can-do-next
+    event:
+      type: list-replace
+      ts: "2026-10-25T23:34:07Z"
+      agent_id: windows-yolanda-opus5-20261025t233407z
+      host: yolanda-windows
+      field: exit_criteria
+      items:
+        - "every Die call in scripts/install-windows.ps1 carries a next step a user can take; a Lua fixture over the source fails on today's bare sites (pre-fix: FAILS at :239, :790, :913, :959, :1061)"
+        - "check-installer-end-user-output.lua stays green: no internal tokens, branch names or developer commands enter the user-facing text"
+        - "NEGATIVE CONTROL (1247-amcu criterion 5, corrected 2026-10-25 to the coordinator's end-user rule): each next step is ONE PLAIN SENTENCE a non-developer can act on (e.g. 'Restart Windows and run the installer again'); the fixture REFUSES a next step naming wsl, podman, a --flag, $env:, %VAR%, TILLANDSIAS_ or any variable, and self-checks that refusal on samples. The original wording (name --diagnose or the TILLANDSIAS_VERSION pin) contradicted check-installer-end-user-output and is withdrawn"
+      summary: |-
+        coordinator 2026-10-24: end-user next steps carry no commands, flags or env vars; criterion 3 named --diagnose and an env pin

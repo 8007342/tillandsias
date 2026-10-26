@@ -71,7 +71,13 @@ local function run(argv, stdin, extra)
     local e = { PATH = "/usr/bin:/bin", HOME = HOME, TMPDIR = W, TILLANDSIAS_HOST_KIND = "forge",
         TILLANDSIAS_POLICY_AUDIT_LOG = W .. "/audit.jsonl",
         -- the runner passes its declared @env through; none may name a binary here
-        TILLANDSIAS_PLAN_BIN = "", TILLANDSIAS_SCRIPT_RUNNER_BIN = "" }
+        TILLANDSIAS_PLAN_BIN = "", TILLANDSIAS_SCRIPT_RUNNER_BIN = "",
+        -- shared-target (1807-shtg) exports CARGO_TARGET_DIR at the main
+        -- checkout's built target; the probe honours it, so it must be blank
+        -- nor the base env's CARGO_TARGET_DIR (1593-1ny6): under
+        -- with-wsl2-builder.sh it is absolute and holds a real plan binary,
+        -- which the probe tries first, so arm 6's bridge found one (667-kfyn)
+        CARGO_TARGET_DIR = "" }
     for k, v in pairs(extra or {}) do e[k] = v end
     local r = proc.run({ argv = argv, stdin = stdin, env = e, cwd = HOME, timeout_ms = 60000 })
     return r.code or -1, r.stdout or "", r.stderr or ""
@@ -83,7 +89,9 @@ local settings = fs.read(SETTINGS)
 local cmd = settings:match('"command"%s*:%s*"([^"]+)"')
 local cf = fs.read(CONTAINERFILE)
 local hook_src = fs.read(HOOK)
-local hook_mode = text.trim(proc.run({ argv = { "stat", "-c", "%a", ROOT .. "/" .. HOOK }, timeout_ms = 10000 }).stdout or "")
+-- The mode git records is the mode the image build copies, and unlike
+-- `stat -c` (GNU only; BSD stat has -f) it reads the same on every host.
+local hook_mode = (text.trim(proc.run({ argv = { "git", "-C", ROOT, "ls-files", "-s", "--", HOOK }, timeout_ms = 10000 }).stdout or "")):match("^1007(%d%d)") or ""
 arm("1 SHIPPED settings.json names an absolute path the Containerfile installs from an executable image file, and policy-bin/ lands where the hook looks",
     cmd ~= nil and cmd:sub(1, 1) == "/"
     and cf:find("COPY bash-policy-hook " .. cmd, 1, true) ~= nil

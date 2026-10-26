@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-forge-started-for-a-project-with-a-pending-coordinator-task-runs-it-with-a-non-claude-headless-agent-and-that-projects-named-skill-to-completion-reports-back-and-exits
+    field: context
+    value: |-
+      REVISED 2026-10-24 by operator correction of the flow. The launcher does NOT
+      claim a "skill-run task" or inject a skill prompt. Flow: (1) an orchestrator
+      sends an ordinary message to the project's coordinator queue; (2) the
+      orchestrator runs `tillandsias --cloud 8007342/tillandsias.org --opencode`
+      headless, one-shot; (3) inside, the agent's natural unattended start (1828:
+      join, ask what's next) reads its messages, decides itself which project
+      skill fits, runs it, and posts a completion report; (4) termination: forge
+      lifetime = agent process lifetime; agent exit ends and cleans the forge;
+      the launcher's wall-clock timeout is the only backstop and it posts
+      failed:timeout. The agent never kills its own container.
+      EXISTING CAPABILITY TO REUSE (check before building):
+        - `--cloud <owner/repo>` ephemeral project (776-jcf3 2026-10-18 event).
+        - `--prompt <text>` parse in crates/tillandsias-headless main (the
+          user_args position of "--prompt"), driven today by
+          scripts/litmus-opencode-e2e-launch.sh and the smoke-curl skill.
+        - foreground one-shot lanes already return when the agent exits and drain
+          credentials via run_cli_with_vault_credential_cleanup, with refcounted
+          cleanup_shared_stack_if_no_running_forge teardown — exit-on-agent-exit
+          likely exists; prove it for --cloud + --opencode + --prompt rather than
+          rebuilding it.
+      New is likely only: a default generic prompt for headless --cloud with no
+      --prompt, a --max-minutes (or env) wall-clock backstop that reports to the
+      queue, a refusal of a Claude lane in this dogfood mode only if the operator
+      wants it enforced (not assumed), and the completion-report convention the
+      agent follows (a forge-side instruction, e.g. in the start context).
+    ts: "2026-10-24T04:03:01Z"
+    host: macuahuitl
+    replaces_sha256: "c837da5055cd888b56bf56975b9b6ea02930b807936057aab8152f202e0c4bd4"
+
+events:
+  - packet_id: a-forge-started-for-a-project-with-a-pending-coordinator-task-runs-it-with-a-non-claude-headless-agent-and-that-projects-named-skill-to-completion-reports-back-and-exits
+    event:
+      type: note
+      ts: "2026-10-24T04:03:01Z"
+      host: macuahuitl
+      summary: |-
+        revised: operator flow correction 2026-10-24 (in-session, macuahuitl via coordinator) — plain queue message, orchestrator-launched headless one-shot non-Claude forge, agent self-selects the skill, forge lifetime = agent lifetime, timeout backstop

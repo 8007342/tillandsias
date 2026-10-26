@@ -31,6 +31,10 @@ trap 'rm -rf "$WORK"' EXIT
 # from inside the temp repo.
 . "$ROOT/scripts/plan-binary-probe.sh"
 LANE_PLAN_BIN="$(cd "$ROOT" && resolve_plan_binary 2>/dev/null || true)"
+# 1745-ntuq: the lane asks that binary whether it is current. Its scratch repo
+# holds no validator-surface manifest, so name the checkout the binary is
+# measured against: this one, not whichever checkout happens to sit above it.
+export TILLANDSIAS_SURFACE_ROOT="$ROOT"
 case "$LANE_PLAN_BIN" in
     "") ;;
     /*) ;;

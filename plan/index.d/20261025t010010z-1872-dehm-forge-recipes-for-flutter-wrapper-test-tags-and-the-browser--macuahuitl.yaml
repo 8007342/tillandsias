@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+  - packet_id: forge-recipes-for-flutter-wrapper-test-tags-and-the-browser-preview-one-liner-plus-bounded-motion-capture
+    order: 1872-dehm
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, tellme, flutter, browser, docs]
+    estimated_hours: 3
+    title: "tellme explains the Flutter wrapper, fast and soak test tags, and the preview-then-screenshot one-liner; browser can capture a short frame sequence"
+    context: |
+      Recipes for the Flutter wrapper behaviour, fast and soak test tags, and the publish_local to browser_open to screenshot/console/network one-liner. Add a bounded frame-sequence or video capture in the host browser for reviewing motion. Source: forge field report FORGE_DIAGNOSTICS.md in 8007342/ranitas (2026-10-25), relayed by the coordinator.
+    exit_criteria:
+      - "tellme has topics for the Flutter wrapper, test tags, and the publish_local, browser_open, screenshot, console, network sequence, each verified by a fixture; a bounded frame-sequence or video capture tool returns at most N frames or seconds. Pre-fix result: FAILS, no such topics and no motion capture."
+    verifiable_closure: "tellme has topics for the Flutter wrapper, test tags, and the publish_local, browser_open, screenshot, console, network sequence, each verified by a fixture; a bounded frame-sequence or video capture tool returns at most N frames or seconds. Pre-fix result: FAILS, no such topics and no motion capture."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-25.
+    events:
+      - type: filed
+        ts: "2026-10-25T01:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator request of 2026-10-25"

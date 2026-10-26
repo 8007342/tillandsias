@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: retire-host-src-checkout-behind-proven-transparent-push
+    event:
+      type: decision
+      ts: "2026-10-24T01:35:05Z"
+      host: macuahuitl
+      summary: |-
+        OPERATOR YES (in-session, macuahuitl, 2026-10-23: "776-jcf3 I approve"), answering the three operator items of lenovinha's 2026-10-18 reconciliation.
+        3d CUTOVER PLAN APPROVED, resolved toward the 2026-08-16 directive (~/src/<project> removed and never touched again): the tray's ~/src scanning (home submenu, order-505 MCP sockets) is REMOVED, not kept as transitional observability; the local-launch handlers kept as #[allow(dead_code)] are DELETED. Implementation is ordinary agent work on a work ref.
+        GAP AUTHORIZED: the no-~/src verifiable_closure run is approved. On macuahuitl ~/src/tillandsias is already absent (ls: No such file or directory, 2026-10-23), so the run needs no move-aside here.
+        CRITERION 4: satisfied on macuahuitl by the absence above; other hosts delete by hand, never automated.

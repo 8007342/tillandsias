@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue (opus5) at the coordinator's request.
+packets:
+  - packet_id: check-no-python-scripts-misses-an-interpreter-invoked-inside-a-litmus-command-line
+    order: 1899-gqk6
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [policy, litmus, gate]
+    size: S
+    implementer_tier: sonnet
+    title: "check-no-python-scripts passes a litmus command like python3 -I x.py and a .py file without a shebang, so a Python fixture reaches a PR green"
+    context: |
+      Found 2026-10-26 on PR 659 (1899-p8yj). scripts/test-lane-socket-state.py
+      had no shebang, and its litmus step ran it as
+      command: "python3 -I scripts/test-lane-socket-state.py ...". The gate's
+      check-no-python-scripts (tillandsias-policy, inspect_file) flags a python
+      shebang or a LINE THAT BEGINS WITH python; a YAML line begins with
+      command:, so both escaped and ./build.sh --check was green. The same gate
+      refused scripts/test-inference-supervise.py on 1859-v5iv only because
+      that file had a shebang. Both were ported to Lua by hand.
+    exit_criteria:
+      - "check-no-python-scripts refuses (a) a litmus command whose argv invokes python, python3 or pythonN.M anywhere on the line, including after a quote, env, timeout or a path prefix, and (b) any *.py file under scripts/ regardless of shebang; a fixture shows both red on today's tillandsias-policy and green after, and a negative control (the word python in a comment or a non-command string) stays ok."
+    verifiable_closure: "check-no-python-scripts refuses a litmus command that runs python3 and a shebang-less .py under scripts/, shown red on today's binary first."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds litmus-no-python-in-litmus-commands.yaml in the same commit as the guard change (1136-n8sh).

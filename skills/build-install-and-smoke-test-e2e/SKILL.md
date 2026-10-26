@@ -482,7 +482,7 @@ findings.
 [ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh/fish expand it empty'; exit 2; }
 TILLANDSIAS_SMOKE_LOCK_LOG="$LOG_DIR/00-smoke-lock.log" \
   scripts/with-smoke-lock.sh --name build-install-smoke-e2e -- \
-  env TILLANDSIAS_NO_TRAY=1 tillandsias . --opencode \
+  env TILLANDSIAS_NO_TRAY=1 tillandsias --cloud 8007342/tillandsias --opencode \
   --prompt "Use the /meta-orchestration skill" 2>&1 \
   | tee "$LOG_DIR/04-meta-orchestration.log"
 FORGE_RC=${PIPESTATUS[0]}; printf 'forge_exit=%s\n' "$FORGE_RC" | tee "$LOG_DIR/04-forge-exit.txt"

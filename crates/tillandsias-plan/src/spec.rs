@@ -18,8 +18,8 @@
 
 use crate::answer::{Citation, CitationKind, Confidence, Envelope, Freshness};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::{BTreeMap, HashMap};
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
@@ -87,14 +87,288 @@ pub fn refusal_floor() -> f32 {
         .unwrap_or(0.62)
 }
 
+// ── ORDER 1820-m2kq: margin + lexical-overlap refusal, calibrated ───────────
+//
+// CALIBRATION (scripts/refusal-calibration/measure-margin-bands.sh, macuahuitl
+// 2026-10-23, nomic-embed-text no prefix, live index generation at commit
+// 2c19c076 — 32,251 chunks, k=8, relabelled-561 ground truth in=458 near=33
+// far=70). Band means: margin (best − median of top-8) in 0.042 / near 0.030 /
+// far 0.024; lexical overlap in 0.50 / near 0.34 / far 0.09.
+//
+//   floor-only (0.62)               in answered 450/458  near refused 4/33  far 59/70
+//   + flat AND lexically silent     in answered 450/458  near refused 5/33  far 59/70
+//
+// THE MARGIN ALONE IS DOMINATED and stays off by default: every solo margin
+// floor > 0 costs in-corpus answers before it refuses one more near miss
+// (0.005: 447 in / 5 near; 0.010: 430 / 8), and at matched false-refusal a
+// raised absolute floor refuses MORE out-of-corpus questions (margin 0.020 →
+// 359 in / 26 out-of-corpus answered; floor 0.685 → 356 / 19). In-corpus top-k
+// are often flat too — near-duplicate chunks — so flatness alone is not a
+// near-miss signature. Lexical overlap alone is no better (zero-overlap:
+// 444 in / 35 out vs floor 0.625: 445 / 36). Their CONJUNCTION is the one
+// operating point that is no worse than the floor at equal false refusal: a
+// flat top-k (margin < 0.015) whose best chunk shares none of the query's
+// content words (overlap < 0.05). The gain is ONE near miss on n=33 — thin,
+// recorded as such; the rule's value is that it moves no in-corpus answer.
+
+/// Solo margin floor on best − median(top-k): 0 = off (measured dominated,
+/// see the calibration block above). TILLANDSIAS_RETRIEVE_MARGIN_FLOOR.
+pub const DEFAULT_MARGIN_FLOOR: f32 = 0.0;
+
+/// The margin under which a lexically silent best chunk refuses
+/// (TILLANDSIAS_RETRIEVE_LEXICAL_MARGIN). Calibrated: 0.015 is the widest
+/// value that keeps in-corpus answered at the floor rule's 450/458.
+pub const DEFAULT_LEXICAL_MARGIN: f32 = 0.015;
+
+/// The lexical-overlap floor (TILLANDSIAS_RETRIEVE_LEXICAL_FLOOR): fraction of
+/// query content terms found in the best chunk. 0.05 means "none matched" for
+/// any query of up to 20 content terms.
+pub const DEFAULT_LEXICAL_FLOOR: f32 = 0.05;
+
+/// The margin is undefined on a top-k too short to have a field: with fewer
+/// scores than this the margin rule abstains (the absolute floor still holds).
+pub const MARGIN_MIN_K: usize = 4;
+
+/// @trace order:1820-m2kq. The margin floor on best − median(top-k). Tune
+/// per-host with TILLANDSIAS_RETRIEVE_MARGIN_FLOOR (0 disables; an
+/// unparseable value falls back, like the sibling floors).
+pub fn retrieve_margin_floor() -> f32 {
+    std::env::var("TILLANDSIAS_RETRIEVE_MARGIN_FLOOR")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(DEFAULT_MARGIN_FLOOR)
+}
+
+/// @trace order:1820-m2kq. The lexical-overlap floor: the fraction of the
+/// query's content terms that occur in the best chunk. Tune per-host with
+/// TILLANDSIAS_RETRIEVE_LEXICAL_FLOOR (0 disables).
+pub fn retrieve_lexical_floor() -> f32 {
+    std::env::var("TILLANDSIAS_RETRIEVE_LEXICAL_FLOOR")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(DEFAULT_LEXICAL_FLOOR)
+}
+
+/// @trace order:1820-m2kq. The margin under which a lexically silent best
+/// chunk refuses. Tune per-host with TILLANDSIAS_RETRIEVE_LEXICAL_MARGIN
+/// (0 disables the conjunctive rule).
+pub fn retrieve_lexical_margin() -> f32 {
+    std::env::var("TILLANDSIAS_RETRIEVE_LEXICAL_MARGIN")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(DEFAULT_LEXICAL_MARGIN)
+}
+
+/// The refusal thresholds, read together so the pipeline and the
+/// `spec-floor` arm cannot disagree about which knobs are live.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RefusalThresholds {
+    /// Per-chunk citation floor (TILLANDSIAS_RETRIEVE_MIN_SCORE).
+    pub min_score: f32,
+    /// Absolute floor on the best score — the OUTER bound
+    /// (TILLANDSIAS_RETRIEVE_REFUSAL_FLOOR).
+    pub refusal: f32,
+    /// Solo floor on best − median(top-k) (TILLANDSIAS_RETRIEVE_MARGIN_FLOOR).
+    pub margin: f32,
+    /// Floor on query-term overlap with the best chunk
+    /// (TILLANDSIAS_RETRIEVE_LEXICAL_FLOOR) — applies only under
+    /// `lexical_margin`.
+    pub lexical: f32,
+    /// The margin under which the lexical floor applies
+    /// (TILLANDSIAS_RETRIEVE_LEXICAL_MARGIN).
+    pub lexical_margin: f32,
+}
+
+impl RefusalThresholds {
+    pub fn from_env() -> Self {
+        RefusalThresholds {
+            min_score: retrieve_min_score(),
+            refusal: refusal_floor(),
+            margin: retrieve_margin_floor(),
+            lexical: retrieve_lexical_floor(),
+            lexical_margin: retrieve_lexical_margin(),
+        }
+    }
+
+    /// The two absolute floors with the calibrated margin/lexical defaults.
+    pub fn with_floors(min_score: f32, refusal: f32) -> Self {
+        RefusalThresholds {
+            min_score,
+            refusal,
+            margin: DEFAULT_MARGIN_FLOOR,
+            lexical: DEFAULT_LEXICAL_FLOOR,
+            lexical_margin: DEFAULT_LEXICAL_MARGIN,
+        }
+    }
+
+    /// Only the absolute floors — the pre-1820 rule, the calibration baseline.
+    pub fn floor_only(self) -> Self {
+        RefusalThresholds {
+            margin: 0.0,
+            lexical: 0.0,
+            lexical_margin: 0.0,
+            ..self
+        }
+    }
+}
+
+/// Which rule refused a retrieval — named in the refusal reason so an operator
+/// knows which knob to turn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RefusalRule {
+    /// The best score is under the absolute refusal floor (or nothing came back).
+    BelowFloor,
+    /// The best score does not stand out of its own top-k: a flat neighbourhood.
+    FlatMargin,
+    /// The top-k is flat (margin under `lexical_margin`) AND the best chunk
+    /// shares (almost) none of the query's content words.
+    NoLexicalOverlap,
+    /// The per-chunk floor left nothing citation-worthy.
+    Starved,
+}
+
+impl RefusalRule {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            RefusalRule::BelowFloor => "below-floor",
+            RefusalRule::FlatMargin => "flat-margin",
+            RefusalRule::NoLexicalOverlap => "no-lexical-overlap",
+            RefusalRule::Starved => "starved",
+        }
+    }
+}
+
 /// The typed outcome of applying the retrieval floors to ONE retrieval.
 #[derive(Debug, Clone)]
 pub enum FloorDecision {
     /// Covered: the citation-worthy chunks that survive the per-chunk floor.
     Keep(Vec<ScoredChunk>),
     /// Out of coverage: `best` is the highest score seen (0.0 when the
-    /// retrieval was empty), for the refusal message.
-    OutOfCoverage { best: f32 },
+    /// retrieval was empty), for the refusal message; `rule` names which
+    /// signal refused.
+    OutOfCoverage { best: f32, rule: RefusalRule },
+}
+
+/// The signals the refusal rule reads off one retrieval (order 1820-m2kq).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RefusalSignals {
+    pub best: f32,
+    /// Median of the top-k scores (None below [`MARGIN_MIN_K`]).
+    pub median: Option<f32>,
+    /// best − median (None below [`MARGIN_MIN_K`]).
+    pub margin: Option<f32>,
+    /// Fraction of the query's content terms found in the best chunk (None
+    /// when there is no query, or it has no content terms).
+    pub lexical: Option<f32>,
+    /// How many content terms the query has.
+    pub query_terms: usize,
+}
+
+/// Query words that carry no topic, skipped by [`query_content_terms`] (one
+/// whitespace-separated string so rustfmt keeps the list compact).
+const STOPWORDS: &str = "\
+    a about after all also am an and any are as at be been before being between both but \
+    by can could did do does doing each else for from get gets got had has have having \
+    here how i if in into is it its just like may me might more most must my need no not \
+    of on one only or other our out over should so some something such than that the their \
+    them then there these they this those to under up us use used uses using via want was \
+    way we were what when where whether which while who why will with without would you \
+    your tillandsias project actually anything there's what's it's don't doesn't";
+
+fn word_tokens(s: &str) -> impl Iterator<Item = String> + '_ {
+    s.split(|c: char| !(c.is_alphanumeric() || c == '\''))
+        .map(|w| w.trim_matches('\'').to_lowercase())
+        .filter(|w| !w.is_empty())
+}
+
+/// A crude, deterministic stem: enough to make "rollbacks"/"rollback" and
+/// "caching"/"cache" meet, not a linguistic claim.
+fn stem(w: &str) -> &str {
+    for suf in ["ing", "ies", "es", "ed", "s"] {
+        if w.len() > suf.len() + 3
+            && let Some(base) = w.strip_suffix(suf)
+        {
+            return base;
+        }
+    }
+    w
+}
+
+/// The query's content terms: lowercased words of 3+ characters that are not
+/// stopwords, stemmed, deduplicated in first-seen order.
+pub fn query_content_terms(query: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for w in word_tokens(query) {
+        if w.chars().count() < 3 || STOPWORDS.split_whitespace().any(|s| s == w) {
+            continue;
+        }
+        let s = stem(&w).to_string();
+        if !out.contains(&s) {
+            out.push(s);
+        }
+    }
+    out
+}
+
+/// Fraction of `query`'s content terms that occur in `chunk` (text, key and
+/// path). A term matches a chunk word that starts with its stem. None when the
+/// query has no content terms — an empty set cannot be "zero overlap".
+pub fn lexical_overlap(query: &str, chunk: &Chunk) -> Option<f32> {
+    let terms = query_content_terms(query);
+    if terms.is_empty() {
+        return None;
+    }
+    let hay: std::collections::BTreeSet<String> = word_tokens(&chunk.text)
+        .chain(word_tokens(&chunk.key))
+        .chain(word_tokens(&chunk.path))
+        .collect();
+    let matched = terms
+        .iter()
+        .filter(|t| hay.iter().any(|w| w.starts_with(t.as_str())))
+        .count();
+    Some(matched as f32 / terms.len() as f32)
+}
+
+/// Median of a score slice (mean of the two middle values for even n).
+fn median(scores: &[f32]) -> f32 {
+    let mut v: Vec<f32> = scores.to_vec();
+    v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let n = v.len();
+    if n % 2 == 1 {
+        v[n / 2]
+    } else {
+        (v[n / 2 - 1] + v[n / 2]) / 2.0
+    }
+}
+
+/// Read the refusal signals off one retrieval. `scored` is the raw top-k
+/// (before the per-chunk floor), in any order.
+pub fn refusal_signals(scored: &[ScoredChunk], query: Option<&str>) -> RefusalSignals {
+    let top = scored.iter().max_by(|a, b| {
+        a.score
+            .partial_cmp(&b.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let best = top.map(|sc| sc.score).unwrap_or(0.0);
+    let (median, margin) = if scored.len() >= MARGIN_MIN_K {
+        let scores: Vec<f32> = scored.iter().map(|sc| sc.score).collect();
+        let m = median(&scores);
+        (Some(m), Some(best - m))
+    } else {
+        (None, None)
+    };
+    let query_terms = query.map(|q| query_content_terms(q).len()).unwrap_or(0);
+    let lexical = match (query, top) {
+        (Some(q), Some(sc)) => lexical_overlap(q, &sc.chunk),
+        _ => None,
+    };
+    RefusalSignals {
+        best,
+        median,
+        margin,
+        lexical,
+        query_terms,
+    }
 }
 
 /// ORDER 821-73es — the ONE coverage decision, shared by the grounded
@@ -114,20 +388,59 @@ pub fn apply_retrieval_floors(
     min_score: f32,
     refusal: f32,
 ) -> FloorDecision {
-    let best = scored
-        .iter()
-        .map(|sc| sc.score)
-        .reduce(f32::max)
-        .unwrap_or(0.0);
-    if best < refusal {
-        return FloorDecision::OutOfCoverage { best };
+    apply_refusal_rule(
+        scored,
+        None,
+        &RefusalThresholds::with_floors(min_score, refusal),
+    )
+}
+
+/// ORDER 1820-m2kq — the coverage decision with the margin and lexical
+/// signals. The absolute floor stays the OUTER bound (checked first, so a far
+/// question is refused exactly as before); the margin and lexical checks only
+/// ever ADD refusals inside it. `query` is optional: without it the lexical
+/// check abstains (the `spec-floor` arm called with no `--query`).
+pub fn apply_refusal_rule(
+    scored: Vec<ScoredChunk>,
+    query: Option<&str>,
+    t: &RefusalThresholds,
+) -> FloorDecision {
+    let sig = refusal_signals(&scored, query);
+    let best = sig.best;
+    if scored.is_empty() || best < t.refusal {
+        return FloorDecision::OutOfCoverage {
+            best,
+            rule: RefusalRule::BelowFloor,
+        };
+    }
+    if let Some(m) = sig.margin
+        && m < t.margin
+    {
+        return FloorDecision::OutOfCoverage {
+            best,
+            rule: RefusalRule::FlatMargin,
+        };
+    }
+    // Flat AND lexically silent: both weak signals together (calibrated; see
+    // the block above DEFAULT_MARGIN_FLOOR). Either alone abstains.
+    if let (Some(m), Some(l)) = (sig.margin, sig.lexical)
+        && m < t.lexical_margin
+        && l < t.lexical
+    {
+        return FloorDecision::OutOfCoverage {
+            best,
+            rule: RefusalRule::NoLexicalOverlap,
+        };
     }
     let kept: Vec<ScoredChunk> = scored
         .into_iter()
-        .filter(|sc| sc.score >= min_score)
+        .filter(|sc| sc.score >= t.min_score)
         .collect();
     if kept.is_empty() {
-        return FloorDecision::OutOfCoverage { best };
+        return FloorDecision::OutOfCoverage {
+            best,
+            rule: RefusalRule::Starved,
+        };
     }
     FloorDecision::Keep(kept)
 }
@@ -139,6 +452,25 @@ pub fn out_of_coverage_reason(domain: &str, best: f32, refusal: f32) -> String {
     format!(
         "nothing in the {domain} corpus is similar enough to this question (best score {best:.2} < refusal floor {refusal:.2}) — likely out of coverage; TILLANDSIAS_RETRIEVE_REFUSAL_FLOOR (coverage) and TILLANDSIAS_RETRIEVE_MIN_SCORE (per-chunk) tune the floors"
     )
+}
+
+/// ORDER 1820-m2kq — the refusal reason for whichever rule fired. The
+/// absolute-floor and starved cases keep [`out_of_coverage_reason`]'s exact
+/// string; the margin and lexical cases name their own knob.
+pub fn refusal_reason(domain: &str, best: f32, rule: RefusalRule, t: &RefusalThresholds) -> String {
+    match rule {
+        RefusalRule::BelowFloor | RefusalRule::Starved => {
+            out_of_coverage_reason(domain, best, t.refusal)
+        }
+        RefusalRule::FlatMargin => format!(
+            "the best {domain}-corpus match (score {best:.2}) does not stand out of its own top-k (margin over the median < {:.2}) — a flat neighbourhood, likely a near miss out of coverage; TILLANDSIAS_RETRIEVE_MARGIN_FLOOR tunes it (0 disables)",
+            t.margin
+        ),
+        RefusalRule::NoLexicalOverlap => format!(
+            "the best {domain}-corpus match (score {best:.2}) shares none of the question's content words (overlap < {:.2}) inside a flat top-k (margin < {:.2}) — topically close, specifically silent, likely a near miss out of coverage; TILLANDSIAS_RETRIEVE_LEXICAL_FLOOR and TILLANDSIAS_RETRIEVE_LEXICAL_MARGIN tune it (0 disables)",
+            t.lexical, t.lexical_margin
+        ),
+    }
 }
 
 /// A dependency-free, non-cryptographic content hash for change detection.
@@ -486,34 +818,218 @@ fn md_heading(line: &str) -> Option<&str> {
     if h.is_empty() { None } else { Some(h) }
 }
 
+/// The first line of every YAML chunk's `text` (order 1822-dmwz).
+///
+/// A chunk cut out of the middle of a document loses what it is ABOUT: a
+/// nested YAML `rule:` never says whose rule. Both rankers — the embedder and
+/// BM25 — then score the passage without its subject. The breadcrumb restores
+/// it: `§ <path> > <top key> > <sub key>`.
+///
+/// It lives IN `text`, not in a new field, so the embedding producer
+/// (scripts/spec-index-ensure.sh embeds `.text`) picks it up with no change,
+/// and `line_start..line_end` still addresses exactly the file span — the
+/// breadcrumb is a label, never a citation. [`Chunk::body`] strips it.
+///
+/// MARKDOWN CHUNKS CARRY NONE, AND THAT WAS MEASURED, NOT ASSUMED. Two
+/// variants were embedded with nomic-embed-text on macuahuitl 2026-10-23 —
+/// the full `§ path > H1 > H2 > H3` chain, and the last two headings only —
+/// and BOTH turned the gated join case `spec-forge-isolation-and-egress`
+/// (openspec/litmus-tests/groundtruth/spec-rung1.yaml) red under dense-only
+/// retrieval: on a short `#### Scenario:` chunk the breadcrumb is half the
+/// text, the embedding moves toward the boilerplate (`… Specification >
+/// Requirements > Requirement: …`) and the scenario that carries the rule
+/// drops out of the top 12. With no markdown breadcrumb the case stays
+/// green; the YAML breadcrumbs (the exit criterion) cost it nothing.
+pub const BREADCRUMB_MARK: &str = "§ ";
+
+/// A breadcrumb longer than this is cut: it is a label, and a label that eats
+/// the YAML budget would starve the span it labels.
+const MAX_BREADCRUMB_CHARS: usize = 200;
+
+fn breadcrumb(rel_path: &str, parts: &[&str]) -> String {
+    let mut s = format!("{BREADCRUMB_MARK}{rel_path}");
+    for p in parts {
+        s.push_str(" > ");
+        s.push_str(p);
+    }
+    if s.chars().count() > MAX_BREADCRUMB_CHARS {
+        s = s.chars().take(MAX_BREADCRUMB_CHARS).collect();
+    }
+    s
+}
+
+impl Chunk {
+    /// The passage without its breadcrumb line — the bytes of the cited span.
+    /// Chunks that carry no breadcrumb (code) are returned whole.
+    pub fn body(&self) -> &str {
+        if self.text.starts_with(BREADCRUMB_MARK) {
+            self.text.split_once('\n').map(|(_, b)| b).unwrap_or("")
+        } else {
+            &self.text
+        }
+    }
+}
+
+/// Per-file markdown structure: which lines are REAL headings (a `#` line
+/// inside a fenced code block is a shell comment, not a heading — before
+/// 1822-dmwz every `# install deps` in a ```bash block opened a chunk keyed on
+/// the comment, splitting the code block away from the prose that explains it).
+struct MdOutline {
+    heading: Vec<bool>,
+}
+
+fn md_outline(lines: &[&str]) -> MdOutline {
+    let mut heading = vec![false; lines.len()];
+    let mut fence: Option<&str> = None;
+    // YAML front matter (`---` … `---` at the top) is metadata: its `# …`
+    // lines are YAML comments. Measured: a front-matter comment in
+    // cheatsheets/runtime/macos-vz-guest-boot-baseline.md ("# bundled,
+    // following the crdt-ledger-fragments precedent") became a one-line H1
+    // chunk that out-ranked the CRDT sheet itself for a CRDT question.
+    let front_matter_end = if lines.first().is_some_and(|l| l.trim() == "---") {
+        lines
+            .iter()
+            .skip(1)
+            .position(|l| l.trim() == "---")
+            .map(|p| p + 1)
+    } else {
+        None
+    };
+    for (i, l) in lines.iter().enumerate() {
+        if front_matter_end.is_some_and(|end| i <= end) {
+            continue;
+        }
+        let t = l.trim_start();
+        let marker = if t.starts_with("```") {
+            Some("```")
+        } else if t.starts_with("~~~") {
+            Some("~~~")
+        } else {
+            None
+        };
+        if let Some(m) = marker {
+            match fence {
+                None => fence = Some(m),
+                Some(open) if open == m => fence = None,
+                Some(_) => {}
+            }
+            continue;
+        }
+        if fence.is_some() {
+            continue;
+        }
+        if md_heading(l).is_some() {
+            heading[i] = true;
+        }
+    }
+    MdOutline { heading }
+}
+
+/// An H1 whose own body is at most this many characters of real prose is a
+/// TITLE CARD, not a section.
+const TITLE_CARD_MAX_CHARS: usize = 400;
+
+/// ORDER 1822-dmwz. Drop the section boundary right after a TITLE CARD — an
+/// H1 whose body (blank and `@trace` lines aside) is a short lead and which is
+/// followed directly by a deeper heading — so the title travels with the
+/// document's first real section instead of standing alone.
+///
+/// Measured symptom: for "how do I run docker in the forge", retrieval cited
+/// cheatsheets/runtime/forge-constraints.md lines 18-23 — the title and its
+/// "Use when" line, which repeat the question's words and state no rule —
+/// while the rule ("There is NO docker and NO nested container daemon") sat
+/// alone in the next chunk with none of the title's vocabulary. The title
+/// card is what both rankers match; the first section is what the reader
+/// needs. Folding gives one chunk that is both. H1 only, so the many
+/// `## Requirements` / `### Requirement:` pairs in specs keep their spans.
+///
+/// Returns `(section start, key line)`. A folded chunk is KEYED on its first
+/// real section's heading, not the title: the key is what a citation names
+/// and what the cheatsheet scorer's key bonus reads, and "The three primitives
+/// you actually need" is the thing cited, not "Concurrent Git".
+fn fold_title_cards(heads: &[usize], lines: &[&str]) -> Vec<(usize, usize)> {
+    let depth = |i: usize| {
+        lines[i]
+            .trim_start()
+            .chars()
+            .take_while(|c| *c == '#')
+            .count()
+    };
+    let mut out = Vec::with_capacity(heads.len());
+    let mut skip_next = false;
+    for (n, &h) in heads.iter().enumerate() {
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
+        out.push((h, h));
+        let Some(&next) = heads.get(n + 1) else {
+            continue;
+        };
+        if depth(h) != 1 || depth(next) <= 1 {
+            continue;
+        }
+        let body: usize = lines[h + 1..next]
+            .iter()
+            .map(|l| l.trim())
+            .filter(|l| !l.is_empty() && !l.starts_with("@trace"))
+            .map(str::len)
+            .sum();
+        if body <= TITLE_CARD_MAX_CHARS {
+            skip_next = true;
+            if let Some(last) = out.last_mut() {
+                last.1 = next;
+            }
+        }
+    }
+    out
+}
+
 /// Section chunker for Markdown: each chunk spans a heading line to the line
 /// before the next heading (or EOF). Content before the first heading becomes a
 /// preamble chunk keyed on the first non-empty line. `key` is always a literal
-/// substring of the chunk span.
+/// substring of the chunk span. No breadcrumb (see [`BREADCRUMB_MARK`]).
 pub fn chunk_markdown(rel_path: &str, kind: &str, text: &str) -> Vec<Chunk> {
     let lines: Vec<&str> = text.lines().collect();
     if lines.is_empty() {
         return Vec::new();
     }
+    let outline = md_outline(&lines);
     // Boundary line indices (0-based) where a new section starts.
-    let mut starts: Vec<usize> = Vec::new();
-    for (i, l) in lines.iter().enumerate() {
-        if md_heading(l).is_some() {
-            starts.push(i);
-        }
-    }
+    let heads: Vec<usize> = (0..lines.len()).filter(|&i| outline.heading[i]).collect();
+    let starts = fold_title_cards(&heads, &lines);
     let mut chunks = Vec::new();
     // Preamble (before the first heading), if it has any non-blank content.
-    let first_heading = starts.first().copied().unwrap_or(lines.len());
+    let first_heading = starts.first().map(|s| s.0).unwrap_or(lines.len());
     if first_heading > 0
         && let Some(k) = lines[..first_heading].iter().find(|l| !l.trim().is_empty())
     {
         let key = distinctive_key(k.trim());
         push_chunk(&mut chunks, rel_path, kind, 1, first_heading, &key, &lines);
     }
-    for (idx, &s) in starts.iter().enumerate() {
-        let end = starts.get(idx + 1).copied().unwrap_or(lines.len());
-        let key = md_heading(lines[s]).unwrap_or("section").to_string();
+    for (idx, &(s, key_line)) in starts.iter().enumerate() {
+        let end = starts.get(idx + 1).map(|n| n.0).unwrap_or(lines.len());
+        let key = md_heading(lines[key_line]).unwrap_or("section").to_string();
+        if key_line != s {
+            let len: usize = lines[s..end].iter().map(|l| l.len() + 1).sum();
+            if len > MAX_YAML_CHUNK_CHARS {
+                // Too big to travel together: unfold, so the budget split
+                // never strands the section's key outside the title's span.
+                let title = md_heading(lines[s]).unwrap_or("section").to_string();
+                push_chunk(&mut chunks, rel_path, kind, s + 1, key_line, &title, &lines);
+                push_md_span(
+                    &mut chunks,
+                    rel_path,
+                    kind,
+                    key_line + 1,
+                    end,
+                    &key,
+                    &lines,
+                    &outline,
+                );
+                continue;
+            }
+        }
         // s is 0-based; citation lines are 1-indexed inclusive.
         //
         // ORDER 797-qv4z, third and last path. A markdown section between two
@@ -527,7 +1043,16 @@ pub fn chunk_markdown(rel_path: &str, kind: &str, text: &str) -> Vec<Chunk> {
         // 9,357 markdown chunks — 0.1%, not 20,000. A budget only splits what
         // exceeds it, which I asserted without checking. The cost was three
         // orders of magnitude smaller than the number I refused on.
-        push_md_span(&mut chunks, rel_path, kind, s + 1, end, &key, &lines);
+        push_md_span(
+            &mut chunks,
+            rel_path,
+            kind,
+            s + 1,
+            end,
+            &key,
+            &lines,
+            &outline,
+        );
     }
     chunks
 }
@@ -539,6 +1064,7 @@ pub fn chunk_markdown(rel_path: &str, kind: &str, text: &str) -> Vec<Chunk> {
 /// its citation still names something a reader recognises. Only a section with
 /// no inner heading falls back to line windows — that is genuinely
 /// undifferentiated prose, and prose has no better seam.
+#[allow(clippy::too_many_arguments)]
 fn push_md_span(
     out: &mut Vec<Chunk>,
     rel_path: &str,
@@ -547,6 +1073,7 @@ fn push_md_span(
     line_end: usize,
     key: &str,
     lines: &[&str],
+    outline: &MdOutline,
 ) {
     if line_end < line_start {
         return;
@@ -569,7 +1096,7 @@ fn push_md_span(
     let cuts: Vec<usize> = (line_start..line_end)
         .filter(|&i| {
             let d = lines[i].chars().take_while(|c| *c == '#').count();
-            d > own_depth && md_heading(lines[i]).is_some()
+            d > own_depth && outline.heading[i]
         })
         .collect();
 
@@ -581,7 +1108,7 @@ fn push_md_span(
         for (n, &c) in cuts.iter().enumerate() {
             let end = cuts.get(n + 1).copied().unwrap_or(line_end);
             let sub = md_heading(lines[c]).unwrap_or("section").to_string();
-            push_md_span(out, rel_path, kind, c + 1, end, &sub, lines);
+            push_md_span(out, rel_path, kind, c + 1, end, &sub, lines, outline);
         }
         return;
     }
@@ -604,7 +1131,8 @@ fn push_md_span(
 
 /// Section chunker for YAML: each chunk spans a top-level (column-0) key to the
 /// line before the next top-level key. `key` is the top-level key name, a
-/// literal substring of the span.
+/// literal substring of the span. `text` leads with the key breadcrumb and the
+/// whole text fits [`MAX_YAML_CHUNK_CHARS_BREADCRUMBED`].
 pub fn chunk_yaml(rel_path: &str, kind: &str, text: &str) -> Vec<Chunk> {
     let lines: Vec<&str> = text.lines().collect();
     let mut starts: Vec<usize> = Vec::new();
@@ -614,18 +1142,19 @@ pub fn chunk_yaml(rel_path: &str, kind: &str, text: &str) -> Vec<Chunk> {
         }
     }
     if starts.is_empty() {
-        // A yaml file with no column-0 key: one whole-file chunk keyed on the
-        // first non-blank line, so nothing is silently dropped.
+        // A yaml file with no column-0 key: keyed on the first non-blank line,
+        // so nothing is silently dropped.
         if let Some(k) = lines.iter().find(|l| !l.trim().is_empty()) {
             let key = distinctive_key(k.trim());
             let mut chunks = Vec::new();
-            push_chunk(
+            push_yaml_span(
                 &mut chunks,
                 rel_path,
                 kind,
                 1,
                 lines.len().max(1),
                 &key,
+                &[],
                 &lines,
             );
             return chunks;
@@ -636,12 +1165,21 @@ pub fn chunk_yaml(rel_path: &str, kind: &str, text: &str) -> Vec<Chunk> {
     for (idx, &s) in starts.iter().enumerate() {
         let end = starts.get(idx + 1).copied().unwrap_or(lines.len());
         let key = top_level_key_name(lines[s]);
-        push_yaml_span(&mut chunks, rel_path, kind, s + 1, end, &key, &lines);
+        push_yaml_span(
+            &mut chunks,
+            rel_path,
+            kind,
+            s + 1,
+            end,
+            &key,
+            std::slice::from_ref(&key),
+            &lines,
+        );
     }
     chunks
 }
 
-/// The largest chunk this indexer will emit, in characters.
+/// The largest markdown chunk this indexer will emit, in characters.
 ///
 /// ORDER 797-qv4z. It exists because the EMBEDDER truncates and says nothing.
 /// scripts/spec-index-ensure.sh feeds the embedding endpoint
@@ -659,10 +1197,22 @@ pub fn chunk_yaml(rel_path: &str, kind: &str, text: &str) -> Vec<Chunk> {
 ///
 /// 4000, not 6000, so a chunk that grows slightly between index builds does not
 /// silently cross the embedder's cut. The margin is the point.
+///
+/// YAML chunks now use the tighter [`MAX_YAML_CHUNK_CHARS_BREADCRUMBED`]; the
+/// name is historical and the markdown path still reads it.
 const MAX_YAML_CHUNK_CHARS: usize = 4000;
 
+/// ORDER 1822-dmwz. Every YAML chunk — breadcrumb INCLUDED — fits this.
+///
+/// 4000 characters of methodology YAML is a dozen sibling rules in one vector,
+/// and a small embedder averages them into a direction none of them points in;
+/// the measured symptom is a flat score distribution where the right rule and
+/// its neighbours tie. ~800–1200 characters is one rule with its context, and
+/// the breadcrumb carries the context the cut removed.
+pub const MAX_YAML_CHUNK_CHARS_BREADCRUMBED: usize = 1200;
+
 /// Emit `[start, end]` as chunks, subdividing at deeper indentation until each
-/// fits [`MAX_YAML_CHUNK_CHARS`].
+/// fits [`MAX_YAML_CHUNK_CHARS_BREADCRUMBED`] with its breadcrumb.
 ///
 /// WHY THE OLD CODE UNDER-SPLIT: `chunk_yaml` cuts at COLUMN-0 keys only.
 /// A methodology file has a handful of them, so everything beneath one becomes
@@ -675,6 +1225,7 @@ const MAX_YAML_CHUNK_CHARS: usize = 4000;
 /// a nested key and its block travel together, which is what makes a citation
 /// worth reading. The line-window fallback is last and deliberately crude — a
 /// block with no inner keys is prose, and prose has no better seam.
+#[allow(clippy::too_many_arguments)]
 fn push_yaml_span(
     out: &mut Vec<Chunk>,
     rel_path: &str,
@@ -682,24 +1233,39 @@ fn push_yaml_span(
     line_start: usize,
     line_end: usize,
     key: &str,
+    path_keys: &[String],
     lines: &[&str],
 ) {
     if line_end < line_start {
         return;
     }
+    let parts: Vec<&str> = path_keys.iter().map(String::as_str).collect();
+    let crumb = breadcrumb(rel_path, &parts);
+    // The span budget is what the breadcrumb (and its newline) leave.
+    let budget = MAX_YAML_CHUNK_CHARS_BREADCRUMBED.saturating_sub(crumb.len() + 1);
     let len: usize = lines[line_start - 1..line_end]
         .iter()
         .map(|l| l.len() + 1)
-        .sum();
-    if len <= MAX_YAML_CHUNK_CHARS {
-        push_chunk(out, rel_path, kind, line_start, line_end, key, lines);
+        .sum::<usize>()
+        .saturating_sub(1);
+    if len <= budget {
+        push_chunk_with(
+            out,
+            rel_path,
+            kind,
+            line_start,
+            line_end,
+            key,
+            lines,
+            Some(&crumb),
+        );
         return;
     }
 
     // Find the shallowest indentation INSIDE this span that yields more than
     // one key. Shallowest first keeps the pieces as large — and as coherent —
     // as the budget allows.
-    for indent in [2usize, 4, 6, 8] {
+    for indent in [2usize, 4, 6, 8, 10, 12] {
         let mut cuts: Vec<usize> = Vec::new();
         for (i, &l) in lines.iter().enumerate().take(line_end).skip(line_start) {
             let trimmed = l.trim_start();
@@ -710,20 +1276,25 @@ fn push_yaml_span(
                 cuts.push(i);
             }
         }
-        if cuts.len() < 2 {
+        if cuts.is_empty() {
             continue;
         }
         // The head — the parent key line and anything before the first cut —
         // stays with the parent so the block is not orphaned from its name.
         let first = cuts[0];
         if first > line_start - 1 {
-            push_chunk(out, rel_path, kind, line_start, first, key, lines);
+            push_yaml_span(
+                out, rel_path, kind, line_start, first, key, path_keys, lines,
+            );
         }
         for (n, &c) in cuts.iter().enumerate() {
             let end = cuts.get(n + 1).copied().unwrap_or(line_end);
             let sub = lines[c].trim().trim_end_matches(':');
-            let sub_key = format!("{key}.{}", sub.split(':').next().unwrap_or(sub).trim());
-            push_yaml_span(out, rel_path, kind, c + 1, end, &sub_key, lines);
+            let sub = sub.split(':').next().unwrap_or(sub).trim();
+            let sub_key = format!("{key}.{sub}");
+            let mut sub_path = path_keys.to_vec();
+            sub_path.push(sub.to_string());
+            push_yaml_span(out, rel_path, kind, c + 1, end, &sub_key, &sub_path, lines);
         }
         return;
     }
@@ -734,14 +1305,35 @@ fn push_yaml_span(
     while s <= line_end {
         let mut e = s;
         let mut acc = 0usize;
-        while e <= line_end && acc + lines[e - 1].len() < MAX_YAML_CHUNK_CHARS {
+        while e <= line_end && acc + lines[e - 1].len() <= budget {
             acc += lines[e - 1].len() + 1;
             e += 1;
         }
         if e == s {
-            e = s + 1; // one line longer than the budget: emit it alone
+            // One line longer than the whole budget: emit it in character
+            // pieces, each citing that one line, so no chunk breaks the budget.
+            let line: Vec<char> = lines[s - 1].chars().collect();
+            for piece in line.chunks(budget.max(1)) {
+                let body: String = piece.iter().collect();
+                if body.trim().is_empty() {
+                    continue;
+                }
+                let text = format!("{crumb}\n{body}");
+                out.push(Chunk {
+                    id: 0,
+                    path: rel_path.to_string(),
+                    line_start: s,
+                    line_end: s,
+                    kind: kind.to_string(),
+                    key: key.to_string(),
+                    content_hash: hash_hex(&text),
+                    text,
+                });
+            }
+            s += 1;
+            continue;
         }
-        push_chunk(out, rel_path, kind, s, e - 1, key, lines);
+        push_chunk_with(out, rel_path, kind, s, e - 1, key, lines, Some(&crumb));
         s = e;
     }
 }
@@ -1122,6 +1714,22 @@ fn push_chunk(
     key: &str,
     lines: &[&str],
 ) {
+    push_chunk_with(out, rel_path, kind, line_start, line_end, key, lines, None);
+}
+
+/// [`push_chunk`] with an optional breadcrumb line prefixed to `text` (order
+/// 1822-dmwz). The line range — the citation — is the span alone.
+#[allow(clippy::too_many_arguments)]
+fn push_chunk_with(
+    out: &mut Vec<Chunk>,
+    rel_path: &str,
+    kind: &str,
+    line_start: usize,
+    line_end: usize,
+    key: &str,
+    lines: &[&str],
+    crumb: Option<&str>,
+) {
     if line_end < line_start {
         return;
     }
@@ -1129,6 +1737,10 @@ fn push_chunk(
     if span.trim().is_empty() {
         return;
     }
+    let span = match crumb {
+        Some(c) => format!("{c}\n{span}"),
+        None => span,
+    };
     out.push(Chunk {
         id: 0, // assigned by chunk_corpus
         path: rel_path.to_string(),
@@ -1175,6 +1787,409 @@ pub fn top_k(query: &[f32], vectors: &[Vec<f32>], k: usize) -> Vec<(usize, f32)>
     scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     scored.truncate(k);
     scored
+}
+
+// ── lexical channel + fusion (order 1822-dmwz) ──────────────────────────────
+//
+// @trace order:1822-dmwz
+//
+// Dense cosine alone has two measured weaknesses on this corpus. Its score
+// distribution is FLAT (the right chunk and its neighbours tie within a few
+// hundredths), and it BLURS exact identifiers — order tokens, script names,
+// env vars, `docker` — which are precisely what agents ask with. BM25 recovers
+// exact terms; reciprocal-rank fusion combines the two lists by RANK, so no
+// score calibration between a cosine and a BM25 number is ever needed.
+//
+// Hand-rolled on purpose: the corpus is a few tens of thousands of chunks, an
+// inverted index over it builds in well under a second, and the workspace
+// carries no search engine dependency worth adding for that.
+
+/// Words that carry no retrieval signal. The cheatsheet scorer's list, plus a
+/// few pronouns and fillers.
+const LEXICAL_STOP_WORDS: &[&str] = &[
+    "what", "which", "where", "when", "why", "how", "is", "are", "was", "were", "do", "does",
+    "did", "the", "a", "an", "and", "or", "in", "on", "to", "of", "for", "with", "by", "from",
+    "at", "about", "can", "i", "you", "we", "my", "your", "it", "its", "this", "that", "be", "as",
+    "if", "so", "there", "here", "into", "then", "than", "me", "our", "us",
+];
+
+/// Lower-cased retrieval tokens. A compound identifier is kept WHOLE
+/// (`spec-index-ensure.sh`, `tillandsias_embed_model`, `1822-dmwz`) and also
+/// split into its parts, so both an exact-identifier question and a
+/// plain-words question match it. Path segments are tokens of their own.
+pub fn lexical_tokens(s: &str) -> Vec<String> {
+    fn keep(t: &str) -> bool {
+        t.len() >= 2 && !LEXICAL_STOP_WORDS.contains(&t)
+    }
+    let mut out = Vec::new();
+    let lower = s.to_lowercase();
+    for raw in lower.split(|c: char| !(c.is_alphanumeric() || matches!(c, '-' | '_' | '.' | '/'))) {
+        for seg in raw.split('/') {
+            let seg = seg.trim_matches(|c: char| !c.is_alphanumeric());
+            if seg.is_empty() {
+                continue;
+            }
+            if keep(seg) {
+                out.push(seg.to_string());
+            }
+            let parts: Vec<&str> = seg
+                .split(['-', '_', '.'])
+                .filter(|p| !p.is_empty())
+                .collect();
+            if parts.len() > 1 {
+                for p in parts {
+                    if keep(p) {
+                        out.push(p.to_string());
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+const BM25_K1: f32 = 1.2;
+const BM25_B: f32 = 0.75;
+
+/// A BM25 inverted index over a fixed document list (index-aligned with the
+/// chunks it was built from).
+#[derive(Debug, Default)]
+pub struct Bm25 {
+    postings: HashMap<String, Vec<(u32, u32)>>,
+    doc_len: Vec<f32>,
+    avgdl: f32,
+    legacy_chunks: bool,
+}
+
+impl Bm25 {
+    pub fn build(docs: &[&str]) -> Self {
+        let mut postings: HashMap<String, Vec<(u32, u32)>> = HashMap::new();
+        let mut doc_len = Vec::with_capacity(docs.len());
+        for (i, d) in docs.iter().enumerate() {
+            let toks = lexical_tokens(d);
+            doc_len.push(toks.len() as f32);
+            let mut tf: BTreeMap<String, u32> = BTreeMap::new();
+            for t in toks {
+                *tf.entry(t).or_default() += 1;
+            }
+            for (t, n) in tf {
+                postings.entry(t).or_default().push((i as u32, n));
+            }
+        }
+        let avgdl = if doc_len.is_empty() {
+            0.0
+        } else {
+            doc_len.iter().sum::<f32>() / doc_len.len() as f32
+        };
+        Bm25 {
+            postings,
+            doc_len,
+            avgdl,
+            legacy_chunks: false,
+        }
+    }
+
+    /// Index chunks by their breadcrumbed text. A chunk with no breadcrumb
+    /// (code) gets its path prepended, so `pipeline.rs` is a findable term.
+    pub fn from_chunks(chunks: &[Chunk]) -> Self {
+        let docs: Vec<String> = chunks
+            .iter()
+            .map(|c| {
+                if c.text.starts_with(BREADCRUMB_MARK) {
+                    c.text.clone()
+                } else {
+                    format!("{}\n{}", c.path, c.text)
+                }
+            })
+            .collect();
+        let refs: Vec<&str> = docs.iter().map(String::as_str).collect();
+        let mut bm = Self::build(&refs);
+        // A vocabulary probe, not an mtime: an index whose methodology chunks
+        // carry no breadcrumb was chunked BEFORE 1822-dmwz (see
+        // `hybrid_top_k` for why that matters).
+        let has_yaml = chunks.iter().any(|c| c.kind == "methodology");
+        bm.legacy_chunks = has_yaml
+            && !chunks
+                .iter()
+                .any(|c| c.kind == "methodology" && c.text.starts_with(BREADCRUMB_MARK));
+        bm
+    }
+
+    /// True when built from an index chunked before 1822-dmwz.
+    pub fn legacy_chunks(&self) -> bool {
+        self.legacy_chunks
+    }
+
+    pub fn len(&self) -> usize {
+        self.doc_len.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.doc_len.is_empty()
+    }
+
+    /// The query's weighted terms: each distinct token at weight 1.0, plus
+    /// indexed VARIANTS of it at 0.5 — a term sharing a ≥5-character prefix and
+    /// differing by at most three trailing characters (`dockerd` ↔ `docker`,
+    /// `images` ↔ `image`). A crude stemmer, but one that cannot invent a word
+    /// the corpus does not contain. Sorted, so scoring is order-stable.
+    fn query_terms(&self, query: &str) -> Vec<(String, f32)> {
+        let mut base: Vec<String> = lexical_tokens(query);
+        base.sort();
+        base.dedup();
+        let mut terms: BTreeMap<String, f32> = BTreeMap::new();
+        for q in &base {
+            terms.insert(q.clone(), 1.0);
+        }
+        for q in &base {
+            if q.len() < 5 || q.contains(['-', '_', '.']) {
+                continue;
+            }
+            for t in self.postings.keys() {
+                if t == q || terms.contains_key(t) {
+                    continue;
+                }
+                let (short, long) = if t.len() < q.len() { (t, q) } else { (q, t) };
+                if short.len() >= 5
+                    && long.len() - short.len() <= 3
+                    && long.starts_with(short.as_str())
+                {
+                    terms.entry(t.clone()).or_insert(0.5);
+                }
+            }
+        }
+        terms.into_iter().collect()
+    }
+
+    /// The top `k` documents by BM25 for `query`, restricted to `selected`
+    /// when given. Only documents sharing at least one term are returned.
+    /// Sorted by descending score; ties break on the smaller index.
+    pub fn rank(&self, query: &str, selected: Option<&[usize]>, k: usize) -> Vec<(usize, f32)> {
+        let n = self.doc_len.len();
+        if n == 0 || k == 0 {
+            return Vec::new();
+        }
+        let mut scores = vec![0.0f32; n];
+        for (term, weight) in self.query_terms(query) {
+            let Some(post) = self.postings.get(&term) else {
+                continue;
+            };
+            let df = post.len() as f32;
+            let idf = (1.0 + (n as f32 - df + 0.5) / (df + 0.5)).ln();
+            for &(d, tf) in post {
+                let tf = tf as f32;
+                let dl = self.doc_len[d as usize];
+                let norm = BM25_K1 * (1.0 - BM25_B + BM25_B * dl / self.avgdl.max(1.0));
+                scores[d as usize] += weight * idf * tf * (BM25_K1 + 1.0) / (tf + norm);
+            }
+        }
+        let mut out: Vec<(usize, f32)> = match selected {
+            Some(sel) => sel
+                .iter()
+                .filter(|&&i| i < n && scores[i] > 0.0)
+                .map(|&i| (i, scores[i]))
+                .collect(),
+            None => scores
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| **s > 0.0)
+                .map(|(i, s)| (i, *s))
+                .collect(),
+        };
+        out.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then(a.0.cmp(&b.0))
+        });
+        out.truncate(k);
+        out
+    }
+}
+
+/// The RRF constant from Cormack et al. (2009). Large enough that rank 1 and
+/// rank 2 of one list do not dominate agreement between lists.
+pub const RRF_K: f32 = 60.0;
+
+/// How deep each channel's ranking goes into the fusion. Past ~50 a chunk's
+/// RRF contribution (1/(60+50)) cannot lift it into a top-8 on its own.
+pub const HYBRID_DEPTH: usize = 50;
+
+/// Reciprocal-rank fusion: `score(d) = Σ 1 / (k + rank_i(d))`, ranks 1-based.
+/// Deterministic: ties break on the better single-list rank, then on the
+/// smaller index — never on hash or input-list order.
+pub fn rrf_fuse(rankings: &[Vec<usize>], k: f32) -> Vec<(usize, f32)> {
+    let ranked: Vec<Vec<(usize, usize)>> = rankings
+        .iter()
+        .map(|l| l.iter().enumerate().map(|(r, &id)| (id, r)).collect())
+        .collect();
+    rrf_fuse_ranked(&ranked, k)
+}
+
+/// Competition ranks (0-based) for a score-sorted list: equal scores share
+/// the better rank, so a TIE in one channel carries no order into the fusion
+/// and the other channel decides it. Without this, a dense tie would be
+/// broken by corpus order and RRF would treat that accident as evidence.
+pub fn tied_ranks(sorted: &[(usize, f32)]) -> Vec<(usize, usize)> {
+    let mut out = Vec::with_capacity(sorted.len());
+    for (pos, &(id, s)) in sorted.iter().enumerate() {
+        let r = match (pos, out.last()) {
+            (p, Some(&(_, prev_r))) if p > 0 && sorted[p - 1].1 == s => prev_r,
+            _ => pos,
+        };
+        out.push((id, r));
+    }
+    out
+}
+
+/// [`rrf_fuse`] over explicit `(id, 0-based rank)` lists, so tied items can
+/// share a rank (see [`tied_ranks`]).
+pub fn rrf_fuse_ranked(rankings: &[Vec<(usize, usize)>], k: f32) -> Vec<(usize, f32)> {
+    let mut acc: BTreeMap<usize, (f32, usize)> = BTreeMap::new();
+    for list in rankings {
+        for &(id, r) in list {
+            let e = acc.entry(id).or_insert((0.0, usize::MAX));
+            e.0 += 1.0 / (k + (r + 1) as f32);
+            e.1 = e.1.min(r);
+        }
+    }
+    let mut out: Vec<(usize, f32, usize)> = acc.into_iter().map(|(i, (s, b))| (i, s, b)).collect();
+    out.sort_by(|a, b| {
+        b.1.partial_cmp(&a.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.2.cmp(&b.2))
+            .then(a.0.cmp(&b.0))
+    });
+    out.into_iter().map(|(i, s, _)| (i, s)).collect()
+}
+
+/// The operational kill switch: `TILLANDSIAS_RETRIEVE_LEXICAL=0` turns the
+/// BM25 channel off and [`hybrid_top_k`] returns the dense ranking unchanged —
+/// a rollback that needs no rebuild, and the A/B control for measuring it.
+pub fn lexical_channel_enabled() -> bool {
+    std::env::var("TILLANDSIAS_RETRIEVE_LEXICAL")
+        .ok()
+        .as_deref()
+        != Some("0")
+}
+
+/// Does the question carry an EXACT IDENTIFIER — the thing BM25 recovers and
+/// a small embedder blurs? A token with an internal `-` `_` `/` `.` or `:`
+/// (`spec-index-ensure.sh`, `1822-dmwz`, `TILLANDSIAS_EMBED_MODEL`,
+/// `crates/x`), a token mixing letters and digits (`v0.5`, `k8s`), an
+/// all-digit token of 3+ (`11434`), a camelCase token (`GetLayout`), or a
+/// `backticked` span.
+///
+/// THE GATE APPLIES ONLY ON A LEGACY INDEX. Measured on spec-rung1 with the
+/// index every host already has (chunked before this order): for the prose
+/// join question "how does the forge stay isolated from the host and control
+/// outbound network access?", fusing BM25 displaced dense #7
+/// (openspec/specs/forge-offline/spec.md, the governing requirement) and the
+/// gated case went red. On an index rebuilt with this order's chunker the
+/// same fusion is green and lifts in-corpus recall, so it is ungated there.
+/// A legacy index (detected by [`Bm25::legacy_chunks`], a vocabulary probe)
+/// fuses only for identifier questions — so a host grading before its index
+/// is rebuilt keeps every prose question byte-identical to dense-only.
+pub fn query_has_identifier(query: &str) -> bool {
+    if query.contains('`') {
+        return true;
+    }
+    query.split_whitespace().any(|raw| {
+        let t = raw.trim_matches(|c: char| !c.is_alphanumeric());
+        if t.len() < 2 {
+            return false;
+        }
+        let internal_sep = t
+            .char_indices()
+            .any(|(i, c)| i > 0 && i + 1 < t.len() && matches!(c, '-' | '_' | '/' | '.' | ':'));
+        let has_digit = t.chars().any(|c| c.is_ascii_digit());
+        let has_alpha = t.chars().any(|c| c.is_alphabetic());
+        let all_digit_long = t.len() >= 3 && t.chars().all(|c| c.is_ascii_digit());
+        let camel = t
+            .chars()
+            .zip(t.chars().skip(1))
+            .any(|(a, b)| a.is_lowercase() && b.is_uppercase());
+        internal_sep || (has_digit && has_alpha) || all_digit_long || camel
+    })
+}
+
+/// Hybrid top-k over `selected`: dense cosine and BM25 rankings, each
+/// [`HYBRID_DEPTH`] deep, fused by [`rrf_fuse`]. Returns `(index, COSINE)` in
+/// FUSED order (with the dense head protected — see the body) — the score carried out is the cosine, so the calibrated
+/// refusal floors ([`apply_retrieval_floors`]) keep their meaning; RRF decides
+/// only which chunks and in what order. With no lexical hit at all the result
+/// is exactly the dense ranking.
+pub fn hybrid_top_k(
+    query_text: &str,
+    query_vec: &[f32],
+    vectors: &[Vec<f32>],
+    lexical: &Bm25,
+    selected: &[usize],
+    k: usize,
+) -> Vec<(usize, f32)> {
+    let mut dense: Vec<(usize, f32)> = selected
+        .iter()
+        .filter(|&&i| i < vectors.len())
+        .map(|&i| (i, cosine(query_vec, &vectors[i])))
+        .collect();
+    dense.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let lex = if lexical.len() == vectors.len()
+        && lexical_channel_enabled()
+        && (!lexical.legacy_chunks() || query_has_identifier(query_text))
+    {
+        lexical.rank(query_text, Some(selected), HYBRID_DEPTH)
+    } else {
+        // A lexical index that is not aligned with the vectors would fuse
+        // indices from two different corpora — refuse the channel, keep dense.
+        Vec::new()
+    };
+    if lex.is_empty() {
+        dense.truncate(k);
+        return dense;
+    }
+    let cos: HashMap<usize, f32> = dense.iter().copied().collect();
+    let depth = HYBRID_DEPTH.min(dense.len());
+    let dense_ranked = tied_ranks(&dense[..depth]);
+    let lex_ranked = tied_ranks(&lex);
+    let fused = rrf_fuse_ranked(&[dense_ranked, lex_ranked], RRF_K);
+
+    // THE DENSE HEAD IS PROTECTED. Plain RRF over a 50-deep lexical list
+    // favours any chunk that appears in BOTH lists over a chunk that is
+    // dense-only, however high it ranks densely. Measured on spec-rung1:
+    // the code chunk holding `fn effective_inference_tier` is dense #4 and
+    // absent from the BM25 top-50 (a 120-line span is long, and BM25
+    // normalises by length), so plain RRF dropped it out of the top-8 in
+    // favour of spec prose that merely repeats the question's words. The
+    // packet's adoption rule is that recall must not drop, so the first
+    // `k - slots` dense chunks are kept unconditionally and the lexical
+    // channel competes, by fused rank, for the remaining `slots` only.
+    let slots = lexical_slots(k);
+    let mut chosen: Vec<usize> = dense.iter().take(k - slots).map(|d| d.0).collect();
+    for (i, _) in &fused {
+        if chosen.len() >= k {
+            break;
+        }
+        if !chosen.contains(i) {
+            chosen.push(*i);
+        }
+    }
+    // Present the chosen set in FUSED order, so an exact-identifier hit that
+    // both channels agree on leads.
+    let rank_of: HashMap<usize, usize> = fused
+        .iter()
+        .enumerate()
+        .map(|(r, (i, _))| (*i, r))
+        .collect();
+    chosen.sort_by_key(|i| rank_of.get(i).copied().unwrap_or(usize::MAX));
+    chosen
+        .into_iter()
+        .map(|i| (i, cos.get(&i).copied().unwrap_or(0.0)))
+        .collect()
+}
+
+/// How many of a top-`k` the lexical channel may claim beyond the protected
+/// dense head: a quarter, at least one (k=8 → 2, k=5 → 1).
+pub fn lexical_slots(k: usize) -> usize {
+    (k / 4).max(1).min(k)
 }
 
 // ── envelope construction (verifiable) ──────────────────────────────────────
@@ -1314,10 +2329,20 @@ pub fn answer_cheatsheet_query(root: &Path, chunks: &[Chunk], query: &str) -> En
         .iter()
         .map(|&c| {
             let mut score = 0usize;
-            let key_lower = c.key.to_ascii_lowercase();
+            // 1822-dmwz: a chunk whose span opens on an H1 that is NOT its
+            // key is a folded title card (see `fold_title_cards`): it is
+            // content, so it keeps the section bonus, and its title counts
+            // as heading text alongside the key.
+            let first = c.body().trim_start().lines().next().unwrap_or("");
+            let h1 = first.starts_with("# ").then(|| md_heading(first)).flatten();
+            let folded_title = h1.filter(|h| *h != c.key);
+            let key_lower = match folded_title {
+                Some(t) => format!("{} {}", c.key, t).to_ascii_lowercase(),
+                None => c.key.to_ascii_lowercase(),
+            };
             let path_lower = c.path.to_ascii_lowercase();
             let text_lower = c.text.to_ascii_lowercase();
-            let is_main_title = c.text.trim_start().starts_with("# ");
+            let is_main_title = h1.is_some() && folded_title.is_none();
 
             let mut key_hits = 0usize;
             let mut text_hits = 0usize;
@@ -1352,9 +2377,36 @@ pub fn answer_cheatsheet_query(root: &Path, chunks: &[Chunk], query: &str) -> En
 
     scored.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.path.cmp(&b.0.path)));
 
-    if let Some(&(best_chunk, score)) = scored.first()
-        && score >= 35
-    {
+    // ORDER 1822-dmwz. The heuristic above still decides WHETHER the corpus
+    // answers (a chunk must reach 35), but no longer alone WHICH chunk: among
+    // the chunks that pass that gate, its ranking is fused by RRF with a BM25
+    // ranking, which weighs a term by its rarity and a chunk by its length —
+    // the two things the flat +25/+10 scheme cannot see, and the reason a
+    // short title chunk that repeats the question's words outranked the rule.
+    // IDF is taken over the WHOLE cheatsheet corpus (a term's rarity is a
+    // corpus property); only the gated chunks are ranked.
+    let gated: Vec<(&Chunk, usize)> = scored.iter().copied().filter(|s| s.1 >= 35).collect();
+    let pick = if gated.len() > 1 {
+        let owned: Vec<Chunk> = cheatsheet_chunks.iter().map(|c| (*c).clone()).collect();
+        let bm = Bm25::from_chunks(&owned);
+        let pos: HashMap<*const Chunk, usize> = cheatsheet_chunks
+            .iter()
+            .enumerate()
+            .map(|(i, c)| (*c as *const Chunk, i))
+            .collect();
+        let heur: Vec<(usize, f32)> = gated
+            .iter()
+            .map(|(c, s)| (pos[&(*c as *const Chunk)], *s as f32))
+            .collect();
+        let sel: Vec<usize> = heur.iter().map(|h| h.0).collect();
+        let lex = bm.rank(query, Some(&sel), sel.len());
+        let fused = rrf_fuse_ranked(&[tied_ranks(&heur), tied_ranks(&lex)], RRF_K);
+        fused.first().map(|(i, _)| (cheatsheet_chunks[*i], 0usize))
+    } else {
+        gated.first().copied()
+    };
+
+    if let Some((best_chunk, _score)) = pick {
         let answer = format!("Section: {}\n\n{}", best_chunk.key, best_chunk.text);
         let mut authority = BTreeMap::new();
         authority.insert("key".to_string(), best_chunk.key.clone());
@@ -1504,7 +2556,7 @@ mod tests {
                 assert_eq!(kept.len(), 2, "the 0.30 chunk must be dropped");
                 assert!(kept.iter().all(|sc| sc.score >= 0.45));
             }
-            FloorDecision::OutOfCoverage { best } => {
+            FloorDecision::OutOfCoverage { best, .. } => {
                 panic!("a 0.80 best is covered, got OutOfCoverage {{ best: {best} }}")
             }
         }
@@ -1517,7 +2569,7 @@ mod tests {
     fn floors_refuse_when_best_is_under_the_refusal_floor() {
         let scored = vec![floor_chunk(0, 0.57), floor_chunk(1, 0.55)];
         match apply_retrieval_floors(scored, 0.45, 0.62) {
-            FloorDecision::OutOfCoverage { best } => {
+            FloorDecision::OutOfCoverage { best, .. } => {
                 assert!(
                     (best - 0.57).abs() < 1e-6,
                     "best must be reported, got {best}"
@@ -1534,7 +2586,7 @@ mod tests {
     #[test]
     fn floors_refuse_empty_retrieval_with_best_zero() {
         match apply_retrieval_floors(Vec::new(), 0.45, 0.62) {
-            FloorDecision::OutOfCoverage { best } => assert_eq!(best, 0.0),
+            FloorDecision::OutOfCoverage { best, .. } => assert_eq!(best, 0.0),
             FloorDecision::Keep(_) => panic!("an empty retrieval must refuse"),
         }
     }
@@ -1546,9 +2598,148 @@ mod tests {
     fn floors_refuse_when_min_score_starves_a_covered_retrieval() {
         let scored = vec![floor_chunk(0, 0.70)];
         match apply_retrieval_floors(scored, 0.90, 0.62) {
-            FloorDecision::OutOfCoverage { best } => assert!((best - 0.70).abs() < 1e-6),
+            FloorDecision::OutOfCoverage { best, .. } => assert!((best - 0.70).abs() < 1e-6),
             FloorDecision::Keep(_) => panic!("a starved retrieval must refuse"),
         }
+    }
+
+    fn topk(scores: &[f32]) -> Vec<ScoredChunk> {
+        scores
+            .iter()
+            .enumerate()
+            .map(|(i, s)| floor_chunk(i, *s))
+            .collect()
+    }
+
+    const FLAT: [f32; 8] = [0.700, 0.698, 0.697, 0.695, 0.694, 0.692, 0.690, 0.689];
+    const PEAKED: [f32; 8] = [0.800, 0.720, 0.690, 0.670, 0.660, 0.650, 0.640, 0.630];
+    /// A measured near miss (relabelled-561): none of its content words occur
+    /// in a `floor_chunk`.
+    const SILENT_Q: &str = "When is v1.0 scheduled to ship?";
+    /// Shares "spec", "requirement" and "body" with every `floor_chunk`.
+    const OVERLAP_Q: &str = "What does the spec requirement body say?";
+
+    fn defaults() -> RefusalThresholds {
+        RefusalThresholds::with_floors(0.45, 0.62)
+    }
+
+    /// @trace order:1820-m2kq. A FLAT top-k — best well above the absolute
+    /// floor (0.700 ≥ 0.62) but no higher than its own field (median 0.6945)
+    /// — whose best chunk shares none of the question's words is the
+    /// near-miss shape: topically close to a neighbourhood, specifically
+    /// answered by none of it. Refused; the absolute floor alone answered it.
+    #[test]
+    fn margin_refusal_flat_topk_refuses() {
+        let d = apply_refusal_rule(topk(&FLAT), Some(SILENT_Q), &defaults());
+        assert!(
+            matches!(
+                d,
+                FloorDecision::OutOfCoverage {
+                    rule: RefusalRule::NoLexicalOverlap,
+                    ..
+                }
+            ),
+            "flat top-k + lexically silent best chunk must refuse, got {d:?}"
+        );
+        // ... and the floor-only rule (the pre-1820 behaviour) answered it.
+        let old = apply_refusal_rule(topk(&FLAT), Some(SILENT_Q), &defaults().floor_only());
+        assert!(matches!(old, FloorDecision::Keep(_)), "{old:?}");
+    }
+
+    /// @trace order:1820-m2kq. A PEAKED top-k — one chunk clearly ahead of the
+    /// field (margin 0.135) — is the in-corpus shape and answers even when the
+    /// wording shares nothing: dense retrieval legitimately matches synonyms.
+    #[test]
+    fn margin_refusal_peaked_topk_answers() {
+        match apply_refusal_rule(topk(&PEAKED), Some(SILENT_Q), &defaults()) {
+            FloorDecision::Keep(kept) => assert_eq!(kept.len(), 8),
+            other => panic!("a peaked top-k must answer, got {other:?}"),
+        }
+    }
+
+    /// @trace order:1820-m2kq. Flatness ALONE does not refuse by default —
+    /// calibration measured a solo margin floor dominated (in-corpus top-k
+    /// are often flat over near-duplicate chunks). A flat top-k whose best
+    /// chunk carries the question's words answers.
+    #[test]
+    fn margin_refusal_flat_topk_with_lexical_overlap_answers() {
+        let d = apply_refusal_rule(topk(&FLAT), Some(OVERLAP_Q), &defaults());
+        assert!(matches!(d, FloorDecision::Keep(_)), "{d:?}");
+        // No query (the spec-floor arm without --query): lexical abstains.
+        let d = apply_retrieval_floors(topk(&FLAT), 0.45, 0.62);
+        assert!(matches!(d, FloorDecision::Keep(_)), "{d:?}");
+    }
+
+    /// @trace order:1820-m2kq. The solo margin knob, when an operator sets
+    /// it, refuses a flat top-k with no query at all.
+    #[test]
+    fn margin_refusal_solo_margin_knob_refuses_flat() {
+        let t = RefusalThresholds {
+            margin: 0.02,
+            ..defaults()
+        };
+        let d = apply_refusal_rule(topk(&FLAT), None, &t);
+        assert!(
+            matches!(
+                d,
+                FloorDecision::OutOfCoverage {
+                    rule: RefusalRule::FlatMargin,
+                    ..
+                }
+            ),
+            "{d:?}"
+        );
+    }
+
+    /// @trace order:1820-m2kq. The absolute floor stays the OUTER bound and is
+    /// checked first: a far question refuses as below-floor whatever its
+    /// margin or overlap.
+    #[test]
+    fn margin_refusal_keeps_the_absolute_floor_outermost() {
+        let far = topk(&[0.60, 0.40, 0.39, 0.38, 0.37]);
+        match apply_refusal_rule(far, Some(OVERLAP_Q), &defaults()) {
+            FloorDecision::OutOfCoverage { best, rule } => {
+                assert_eq!(rule, RefusalRule::BelowFloor);
+                assert!((best - 0.60).abs() < 1e-6);
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    /// @trace order:1820-m2kq. Zero lexical overlap is FLAGGED as Some(0.0) —
+    /// distinct from None (a query with no content terms cannot be "zero
+    /// overlap"), and the signals carry the margin over the median.
+    #[test]
+    fn lexical_overlap_zero_is_flagged_and_signals_carry_the_margin() {
+        let c = floor_chunk(0, 0.7).chunk;
+        assert_eq!(lexical_overlap(SILENT_Q, &c), Some(0.0));
+        assert_eq!(lexical_overlap(OVERLAP_Q, &c), Some(0.75));
+        assert_eq!(lexical_overlap("what is it?", &c), None);
+        assert_eq!(
+            query_content_terms("Rollbacks of the rollback"),
+            vec!["rollback"]
+        );
+        let sig = refusal_signals(&topk(&FLAT), Some(SILENT_Q));
+        assert_eq!(sig.lexical, Some(0.0));
+        assert_eq!(sig.query_terms, 2);
+        let m = sig.margin.expect("k=8 has a margin");
+        assert!((m - (0.700 - 0.6945)).abs() < 1e-4, "{m}");
+        // Below MARGIN_MIN_K the margin abstains.
+        let short = refusal_signals(&topk(&[0.7, 0.7, 0.7]), Some(SILENT_Q));
+        assert_eq!(short.margin, None);
+    }
+
+    /// @trace order:1820-m2kq. Each rule names its own knob in the reason.
+    #[test]
+    fn refusal_reason_names_the_rule_that_fired() {
+        let t = defaults();
+        let r = refusal_reason("full", 0.70, RefusalRule::NoLexicalOverlap, &t);
+        assert!(r.contains("TILLANDSIAS_RETRIEVE_LEXICAL_FLOOR"), "{r}");
+        assert!(r.contains("TILLANDSIAS_RETRIEVE_LEXICAL_MARGIN"), "{r}");
+        let r = refusal_reason("full", 0.70, RefusalRule::FlatMargin, &t);
+        assert!(r.contains("TILLANDSIAS_RETRIEVE_MARGIN_FLOOR"), "{r}");
+        let r = refusal_reason("full", 0.57, RefusalRule::BelowFloor, &t);
+        assert_eq!(r, out_of_coverage_reason("full", 0.57, 0.62));
     }
 
     /// The refusal reason names both tuning knobs and the two scores — it is
@@ -2229,5 +3420,273 @@ mod tests {
             2,
             "retrieval-only keeps all citations"
         );
+    }
+}
+
+/// ORDER 1822-dmwz — hybrid retrieval and chunk hygiene. The packet's guard is
+/// `cargo test -p tillandsias-plan hybrid_rrf_and_chunk_breadcrumbs`; every
+/// test here was written against the pre-fix code and failed there.
+/// @trace order:1822-dmwz
+#[cfg(test)]
+mod hybrid_rrf_and_chunk_breadcrumbs {
+    use super::*;
+
+    fn chunk(id: usize, path: &str, text: &str) -> Chunk {
+        Chunk {
+            id,
+            path: path.to_string(),
+            line_start: 1,
+            line_end: 1,
+            kind: "cheatsheet".to_string(),
+            key: "k".to_string(),
+            content_hash: String::new(),
+            text: text.to_string(),
+        }
+    }
+
+    #[test]
+    fn bm25_ranks_the_exact_identifier_first() {
+        let chunks = vec![
+            chunk(
+                0,
+                "a.md",
+                "how the index is built and published for experts",
+            ),
+            chunk(1, "b.md", "the spec index lives in a durable podman volume"),
+            chunk(2, "c.md", "run scripts/spec-index-ensure.sh to rebuild it"),
+        ];
+        let bm = Bm25::from_chunks(&chunks);
+        let top = bm.rank("what does spec-index-ensure.sh do", None, 3);
+        assert_eq!(
+            top.first().map(|t| t.0),
+            Some(2),
+            "the chunk carrying the exact identifier must rank first: {top:?}"
+        );
+    }
+
+    #[test]
+    fn hybrid_breaks_a_dense_tie_with_the_lexical_channel() {
+        // Dense cannot tell these apart (identical vectors) — the flat score
+        // distribution the packet measured. Dense-only keeps corpus order and
+        // puts chunk 0 first; the lexical channel must lift the chunk that
+        // actually names the env var.
+        let chunks = vec![
+            chunk(
+                0,
+                "a.md",
+                "the embedder model is chosen at index build time",
+            ),
+            chunk(1, "b.md", "a model marker is written beside the vectors"),
+            chunk(
+                2,
+                "c.md",
+                "TILLANDSIAS_EMBED_MODEL overrides the embedder model",
+            ),
+        ];
+        let vectors = vec![vec![1.0f32, 0.0]; 3];
+        let bm = Bm25::from_chunks(&chunks);
+        let dense = top_k(&[1.0, 0.0], &vectors, 3);
+        assert_eq!(
+            dense[0].0, 0,
+            "precondition: dense alone ties and keeps corpus order"
+        );
+        let all: Vec<usize> = (0..3).collect();
+        let hybrid = hybrid_top_k(
+            "what does TILLANDSIAS_EMBED_MODEL set",
+            &[1.0, 0.0],
+            &vectors,
+            &bm,
+            &all,
+            3,
+        );
+        assert_eq!(
+            hybrid[0].0, 2,
+            "lexical channel must break the tie: {hybrid:?}"
+        );
+        // The score carried out is still the COSINE, so the refusal floors
+        // keep their calibrated meaning.
+        assert!((hybrid[0].1 - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_prose_question_is_served_dense_only() {
+        for q in [
+            "how does the forge stay isolated from the host and control outbound network access?",
+            "how is the inference accelerator tier selected, and what makes it fall back to CPU?",
+        ] {
+            assert!(!query_has_identifier(q), "{q}");
+        }
+        for q in [
+            "what does spec-index-ensure.sh do",
+            "status of 1822-dmwz",
+            "what is TILLANDSIAS_EMBED_MODEL",
+            "why does GetLayout freeze",
+            "is v0.5 cut",
+            "what listens on 11434",
+            "what does `plan_next` return",
+        ] {
+            assert!(query_has_identifier(q), "{q}");
+        }
+        // On a LEGACY index (methodology chunks without breadcrumbs) a prose
+        // question's hybrid IS the dense ranking, even where BM25 disagrees.
+        let mut legacy_yaml = chunk(2, "methodology/m.yaml", "rule: keep it terse");
+        legacy_yaml.kind = "methodology".to_string();
+        let mut chunks = vec![
+            chunk(0, "a.md", "unrelated words entirely"),
+            chunk(1, "b.md", "forge isolation network access host"),
+            legacy_yaml,
+        ];
+        let vectors = vec![vec![1.0f32, 0.0], vec![0.6, 0.8], vec![0.0, 1.0]];
+        let q = "how does the forge isolate network access from the host";
+        let bm = Bm25::from_chunks(&chunks);
+        assert!(bm.legacy_chunks());
+        let hybrid = hybrid_top_k(q, &[1.0, 0.0], &vectors, &bm, &[0, 1, 2], 2);
+        assert_eq!(hybrid, top_k(&[1.0, 0.0], &vectors, 2));
+        // The same corpus chunked by this order's chunker fuses: the chunk BM25
+        // prefers leads.
+        chunks[2].text = format!("{BREADCRUMB_MARK}methodology/m.yaml > rule\nrule: keep it terse");
+        let bm = Bm25::from_chunks(&chunks);
+        assert!(!bm.legacy_chunks());
+        let hybrid = hybrid_top_k(q, &[1.0, 0.0], &vectors, &bm, &[0, 1, 2], 2);
+        assert_eq!(hybrid[0].0, 1, "{hybrid:?}");
+    }
+
+    #[test]
+    fn rrf_combines_two_rankings_deterministically() {
+        let fused = rrf_fuse(&[vec![0, 1, 2], vec![2, 0, 3]], RRF_K);
+        let order: Vec<usize> = fused.iter().map(|f| f.0).collect();
+        assert_eq!(order, vec![0, 2, 1, 3]);
+        let expect0 = 1.0 / (RRF_K + 1.0) + 1.0 / (RRF_K + 2.0);
+        assert!((fused[0].1 - expect0).abs() < 1e-6);
+        // A perfect tie resolves the same way whichever list comes first.
+        let a = rrf_fuse(&[vec![5, 7], vec![7, 5]], RRF_K);
+        let b = rrf_fuse(&[vec![7, 5], vec![5, 7]], RRF_K);
+        assert_eq!(a, b);
+        assert_eq!(a[0].0, 5, "ties break on the smaller index");
+    }
+
+    #[test]
+    fn markdown_splits_under_headings_and_ignores_fenced_comments() {
+        // The H1 body is long enough to be a real section, not a title card.
+        let intro = "intro words that make a real lead section. ".repeat(12);
+        let text = format!(
+            "# Forge constraints\n\n{intro}\n\n## Summary\n\nThere is NO docker here.\n\n### Detail\n\nmore text\n\n```bash\n# not a heading, a shell comment\necho hi\n```\n\n## Pitfalls\n\n- x\n"
+        );
+        let text = text.as_str();
+        let chunks = chunk_markdown("cheatsheets/runtime/x.md", "cheatsheet", text);
+        let keys: Vec<&str> = chunks.iter().map(|c| c.key.as_str()).collect();
+        assert_eq!(
+            keys,
+            vec!["Forge constraints", "Summary", "Detail", "Pitfalls"],
+            "one chunk per real heading; a `#` comment inside a fence is not one"
+        );
+        let detail = chunks.iter().find(|c| c.key == "Detail").expect("Detail");
+        assert!(
+            detail.text.contains("echo hi") && detail.text.contains("more text"),
+            "the code block stays with the prose that explains it"
+        );
+        // Markdown text is exactly the cited span (no breadcrumb: measured to
+        // regress dense retrieval — see BREADCRUMB_MARK).
+        let lines: Vec<&str> = text.lines().collect();
+        for c in &chunks {
+            let span = lines[c.line_start - 1..c.line_end].join("\n");
+            assert!(span.contains(&c.key), "{c:?}");
+            assert_eq!(c.text, span);
+        }
+    }
+
+    #[test]
+    fn a_title_card_travels_with_the_first_section() {
+        // The forge-constraints shape: H1, a trace line, a one-line lead, then
+        // the rule paragraph under an H2.
+        let text = "# Forge hard constraints (can I run docker here?)\n\n@trace spec:forge-offline\n\n**Use when**: you wonder whether you can run docker.\n\n## Summary\n\nThere is NO docker and NO nested container daemon.\n\n## Provenance\n\n- x\n";
+        let chunks = chunk_markdown("cheatsheets/runtime/f.md", "cheatsheet", text);
+        let first = &chunks[0];
+        assert_eq!(first.line_start, 1);
+        assert!(
+            first.text.contains("can I run docker here?") && first.text.contains("NO docker"),
+            "the title and the rule must be ONE chunk: {chunks:#?}"
+        );
+        assert_eq!(first.key, "Summary", "keyed on the section, not the title");
+        assert_eq!(chunks.len(), 2, "title+Summary, Provenance: {chunks:#?}");
+        assert!(
+            chunks.iter().any(|c| c.key == "Provenance"),
+            "later sections stay split"
+        );
+        // The cheatsheet expert cites the folded chunk for the docker question.
+        let root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").expect("cargo")).join("../..");
+        let env = answer_cheatsheet_query(&root, &chunks, "can I run docker in the forge?");
+        assert_eq!(env.confidence(), Confidence::Exact);
+        assert_eq!(env.citations()[0].line_start(), 1);
+    }
+
+    #[test]
+    fn front_matter_comments_are_not_headings() {
+        let text = "---\ntags: [x]\n# a yaml comment, not a title\nstatus: current\n---\n\n# Real title\n\nlong enough lead paragraph. ".to_string()
+            + &"words ".repeat(90)
+            + "\n\n## Section\n\nbody\n";
+        let chunks = chunk_markdown("cheatsheets/x.md", "cheatsheet", &text);
+        assert!(
+            !chunks.iter().any(|c| c.key.contains("yaml comment")),
+            "{:?}",
+            chunks.iter().map(|c| &c.key).collect::<Vec<_>>()
+        );
+        assert!(chunks.iter().any(|c| c.key == "Real title"));
+    }
+
+    #[test]
+    fn yaml_chunks_fit_the_budget_and_lead_with_their_breadcrumb() {
+        let mut text = String::from("order_id_allocation:\n  rule: >\n");
+        for i in 0..80 {
+            text.push_str(&format!(
+                "    line {i} of a long folded rule about order ids\n"
+            ));
+        }
+        text.push_str("  examples:\n");
+        for i in 0..40 {
+            text.push_str(&format!("    - example {i} with some padding words\n"));
+        }
+        text.push_str("other: 1\n");
+        let path = "methodology/distributed-work.yaml";
+        let chunks = chunk_yaml(path, "methodology", &text);
+        assert!(
+            chunks.len() > 2,
+            "the oversized key must split: {}",
+            chunks.len()
+        );
+        for c in &chunks {
+            assert!(
+                c.text.chars().count() <= MAX_YAML_CHUNK_CHARS_BREADCRUMBED,
+                "{} chars",
+                c.text.len()
+            );
+            let first = c.text.lines().next().unwrap_or("");
+            assert!(first.starts_with(&format!("§ {path} > ")), "{first:?}");
+        }
+        assert!(
+            chunks.iter().any(|c| c
+                .text
+                .starts_with("§ methodology/distributed-work.yaml > order_id_allocation > rule\n")),
+            "nested key appears in the breadcrumb"
+        );
+    }
+
+    #[test]
+    fn every_methodology_chunk_in_the_real_corpus_fits_and_is_breadcrumbed() {
+        let root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").expect("cargo")).join("../..");
+        let chunks = chunk_corpus(&root);
+        let yaml: Vec<&Chunk> = chunks.iter().filter(|c| c.kind == "methodology").collect();
+        assert!(yaml.len() > 100, "corpus present");
+        for c in yaml {
+            assert!(
+                c.text.chars().count() <= MAX_YAML_CHUNK_CHARS_BREADCRUMBED,
+                "{}:{}-{} is {} chars",
+                c.path,
+                c.line_start,
+                c.line_end,
+                c.text.chars().count()
+            );
+            assert!(c.text.starts_with(&format!("§ {}", c.path)), "{}", c.path);
+        }
     }
 }

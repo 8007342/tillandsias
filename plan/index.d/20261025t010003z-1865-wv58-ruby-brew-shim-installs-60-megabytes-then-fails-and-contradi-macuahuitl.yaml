@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+  - packet_id: ruby-brew-shim-installs-60-megabytes-then-fails-and-contradicts-the-startup-context-saying-ruby-is-absent
+    order: 1865-wv58
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, shims, ruby, startup-context]
+    estimated_hours: 2
+    title: "The ruby command in the forge downloads 60 MB and then crashes, while the startup context says ruby is absent"
+    context: |
+      Fix the shim's timeout argument handling or remove the shim, and make the startup context's tool list match the shim list. Source: forge field report FORGE_DIAGNOSTICS.md in 8007342/ranitas (2026-10-25), relayed by the coordinator.
+    exit_criteria:
+      - "A fixture runs ruby -e 'puts 1' in the forge and asserts either it prints 1 without installing anything at run time, or the shim is absent and the startup context agrees. Pre-fix result: FAILS, a Homebrew install of about 60 MB runs and then LoadError No such file or directory -- timeout, because the shim passes its timeout wrapper to ruby as the script."
+    verifiable_closure: "A fixture runs ruby -e 'puts 1' in the forge and asserts either it prints 1 without installing anything at run time, or the shim is absent and the startup context agrees. Pre-fix result: FAILS, a Homebrew install of about 60 MB runs and then LoadError No such file or directory -- timeout, because the shim passes its timeout wrapper to ruby as the script."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-25.
+    events:
+      - type: filed
+        ts: "2026-10-25T01:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator request of 2026-10-25"
