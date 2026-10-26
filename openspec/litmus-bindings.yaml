@@ -442,6 +442,7 @@ specs:
 - spec_id: forge-environment-discoverability
   status: active
   litmus_tests:
+  - litmus:tillandsias-doctor-names-every-fault
   - litmus:mcp-plan-resolver-pinning-shape
   - litmus:forge-environment-discoverability-shape
   - litmus:forge-entrypoints-source-agent-profile

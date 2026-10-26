@@ -3,7 +3,7 @@
 --
 -- test-lane-socket-state.lua — the forge names a stale lane socket (1863-eckw).
 --
--- lane_socket_state (images/default/lib-common.sh) reports the lane MCP socket
+-- lane_socket_state (images/default/lib-lane.sh) reports the lane MCP socket
 -- at $TILLANDSIAS_CONTROL_SOCKET as one of four states, and the startup
 -- context and the host-browser bridge print it, so a dead lane is named
 -- instead of surfacing as a bare ECONNREFUSED:
@@ -13,14 +13,14 @@
 --   3 ABSENT  no socket file — NEGATIVE CONTROL: a missing socket is not
 --             called stale
 --   4 UNSET   no TILLANDSIAS_CONTROL_SOCKET at all
--- The function is cut from lib-common.sh and run by bash under each socket.
+-- The function is cut from lib-lane.sh and run by bash under each socket.
 -- The stale socket is made the way the field made it: bound, hard-linked,
 -- and the listener closed, which unlinks the bound name and leaves the link
 -- as a socket inode nothing accepts on.
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-lane-socket-state.lua
 
-local LIB = "images/default/lib-common.sh"
+local LIB = "images/default/lib-lane.sh"
 local lib = fs.read(LIB)
 if not lib then
     verdict.emit("violation:lane-socket-state:no-subject", 1, LIB .. " does not exist")
