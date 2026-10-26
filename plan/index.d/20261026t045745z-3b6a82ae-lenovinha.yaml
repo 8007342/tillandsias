@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 699-usxc).
+#
+# in-forge-dot-localhost-name-resolution-goes-through-squid-to-proxy-port-80-which-refuses-while-the-router-listens-on-8080.status was ALREADY 'ready', so no field changed — but the caller
+# supplied a note, and discarding it silently is what this packet is about.
+events:
+  - packet_id: in-forge-dot-localhost-name-resolution-goes-through-squid-to-proxy-port-80-which-refuses-while-the-router-listens-on-8080
+    event:
+      type: note
+      ts: "2026-10-26T04:57:45Z"
+      host: lenovinha
+      summary: |-
+        released: PR 658 (work/1863-4knc) carries the fix and closes this order when it lands
