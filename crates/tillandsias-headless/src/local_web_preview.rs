@@ -3530,7 +3530,7 @@ mod tests {
     }
 
     /// Order 1901-bnif. The preview leaf key never rests unencrypted on disk.
-    /// The runtime dir is pointed at a directory on DISK (the checkout's
+    /// The runtime dir is pointed at a directory on DISK (under the crate
     /// target/, which is not tmpfs), the shared-memory root at a tmpfs
     /// scratch, and a real leaf is minted with the real openssl and a real
     /// preview CA: no file under the disk dir may hold a PEM private key, and
@@ -3552,12 +3552,12 @@ mod tests {
             }
         };
 
-        let target = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target");
-        std::fs::create_dir_all(&target).unwrap();
+        // cargo runs tests in the crate directory, on the checkout's disk.
+        let target = std::env::current_dir().unwrap();
         let disk = tempfile::tempdir_in(&target).unwrap();
         if crate::on_tmpfs(disk.path()) {
             restore();
-            eprintln!("SKIP: the checkout's target/ is tmpfs here; no disk dir to test against");
+            eprintln!("SKIP: the crate directory is tmpfs here; no disk dir to test against");
             return;
         }
         let shm = tempfile::tempdir_in("/dev/shm").expect("tmpfs scratch");
