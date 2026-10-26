@@ -2500,7 +2500,14 @@ pub(crate) fn init_cache_dir() -> Result<PathBuf, String> {
 }
 
 fn cache_dir_is_writable(cache_dir: &Path) -> bool {
-    let probe = cache_dir.join(".writable-probe");
+    // 1900-tm9v: the probe name is unique per call. A fixed `.writable-probe`
+    // under create_new made a concurrent caller (or a probe a killed process
+    // left) read a writable dir as unwritable, and init_cache_dir then fell
+    // through to $HOME/.cache/tillandsias: a test's run_cache_clear deleted
+    // the operator's real init-build-state.json and cache_version.
+    static PROBE_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let seq = PROBE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let probe = cache_dir.join(format!(".writable-probe-{}-{seq}", std::process::id()));
     match fs::OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -11445,6 +11452,38 @@ mod failed_build_marker_reset_tests {
         cleared.unwrap();
         assert!(after.is_none(), "the marker survived the cache clear");
         assert!(!dir.exists());
+    }
+
+    /// 1900-tm9v: a probe file another caller holds (or a killed process
+    /// left) must not make the XDG cache dir read as unwritable — the next
+    /// candidate is the operator's real $HOME/.cache/tillandsias.
+    #[test]
+    fn a_held_writable_probe_does_not_divert_the_cache_dir_to_home() {
+        let _g = crate::test_support::env_lock();
+        let scratch = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        let prev_xdg = std::env::var_os("XDG_CACHE_HOME");
+        let prev_home = std::env::var_os("HOME");
+        let want = scratch.path().join("tillandsias");
+        std::fs::create_dir_all(&want).unwrap();
+        std::fs::write(want.join(".writable-probe"), b"").unwrap();
+        // SAFETY: serialised by env_lock.
+        unsafe {
+            std::env::set_var("XDG_CACHE_HOME", scratch.path());
+            std::env::set_var("HOME", home.path());
+        }
+        let got = init_cache_dir();
+        unsafe {
+            match prev_xdg {
+                Some(v) => std::env::set_var("XDG_CACHE_HOME", v),
+                None => std::env::remove_var("XDG_CACHE_HOME"),
+            }
+            match prev_home {
+                Some(v) => std::env::set_var("HOME", v),
+                None => std::env::remove_var("HOME"),
+            }
+        }
+        assert_eq!(got.unwrap(), want, "a held probe diverted the cache dir");
     }
 
     /// 1793-wggq: the marker names the log the build actually wrote. The
