@@ -9222,6 +9222,40 @@ fn env_or(name: &str, fallback: &str) -> String {
         .unwrap_or_else(|| fallback.to_string())
 }
 
+/// Serve a forge's lane MCP socket before the forge (and its agent's MCP
+/// client) starts. 1863-eckw: a web-mode forge outlives the CLI that launches
+/// it, and a listener bound here died with the CLI, so the agent's
+/// host-browser and toolchain calls were refused for the whole session. Such
+/// a lane is handed to the tray, and this waits until the tray accepts on it;
+/// a CLI-mode lane lives and dies with this process and binds here.
+#[cfg(feature = "host-services")]
+fn serve_forge_lane(project: &str, instance: &str, outlives_launcher: bool, debug: bool) {
+    #[cfg(not(test))]
+    if outlives_launcher {
+        match mcp_socket::mark_lane_tray_owned(project, instance) {
+            Ok(()) => {
+                let deadline = Instant::now() + Duration::from_secs(5);
+                while Instant::now() < deadline {
+                    if mcp_socket::lane_accepting(project, instance) {
+                        if debug {
+                            eprintln!("[tillandsias] the tray serves lane {project}-{instance}");
+                        }
+                        return;
+                    }
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+                eprintln!(
+                    "[tillandsias] Warning: the tray did not take lane {project}-{instance} within 5s; \
+                     serving it from this launch, so host-browser tools stop when it exits"
+                );
+            }
+            Err(e) => eprintln!("[tillandsias] Warning: could not hand the lane to the tray: {e}"),
+        }
+    }
+    let _ = (outlives_launcher, debug);
+    let _ = mcp_socket::start_mcp_socket_server_for_lane(project, instance);
+}
+
 #[allow(clippy::too_many_arguments)]
 fn build_opencode_forge_args(
     project_path: &Path,
@@ -9565,12 +9599,12 @@ fn build_opencode_forge_args(
         // guest's `listen-vsock` build enables too; it was `tray`, so every
         // macOS VM forge got exactly that empty dir.
         #[cfg(feature = "host-services")]
-        {
-            let _ = mcp_socket::start_mcp_socket_server_for_lane(
-                project_name,
-                raw_instance.as_deref().unwrap_or("default"),
-            );
-        }
+        serve_forge_lane(
+            project_name,
+            raw_instance.as_deref().unwrap_or("default"),
+            matches!(mode, ForgeMode::Web),
+            debug,
+        );
         args.extend([
             "--mount".into(),
             format!(
