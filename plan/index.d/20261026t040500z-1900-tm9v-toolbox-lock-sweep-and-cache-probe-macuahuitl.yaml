@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora (opus5) at the coordinator's request.
+packets:
+  - packet_id: door-lock-sweep-reads-a-mirror-git-daemon-as-a-holder-and-a-fixed-cache-probe-diverts-to-home
+    order: 1900-tm9v
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [gate, build, headless, test]
+    size: S
+    implementer_tier: sonnet
+    title: "Inside the builder toolbox the door keeps every swept index.lock because a mirror container's git daemon has unreadable fds; and a fixed .writable-probe name diverts init_cache_dir to the operator's real HOME cache"
+    context: |
+      Found 2026-10-25 on macuahuitl. (1) PRs 645-650 were requeued as flaky on
+      test-door-index-lock-sweep.lua arms 2 POST-FIX and 3 KILLED. The test is
+      green on bare metal and red inside tillandsias-builder: _pf_index_lock_held
+      treats any process whose /proc/PID/fd links it cannot read and whose comm
+      starts with git as a possible holder. From the toolbox's user namespace the
+      fd links of git daemon (comm git and git-daemon) in the
+      tillandsias-git-tillandsias mirror container are Permission denied, so
+      every lock reads held. The daemon serves bare repositories under
+      /srv/git and never holds a worktree index.lock; the door now skips it.
+      (2) PR 651's gate failed failed_build_marker_reset_tests::
+      a_cache_clear_removes_the_failed_build_markers: run_cache_clear printed
+      that it removed init-build-state.json and cache_version, which do not
+      exist in the test's scratch dir. cache_dir_is_writable probed with
+      create_new on the fixed name .writable-probe, so a concurrent caller or a
+      leftover probe made the XDG dir read unwritable and init_cache_dir fell
+      through to $HOME/.cache/tillandsias. The operator's real
+      init-build-state.json and cache_version are gone from that dir. The probe
+      name is now unique per call.
+    exit_criteria:
+      - "Inside tillandsias-builder, while the git mirror container's git daemon runs, tillandsias-plan script run scripts/lua/test-door-index-lock-sweep.lua prints ok:door-index-lock-sweep:8 arms; on today's linux-next build.sh it prints violation:door-index-lock-sweep:2-failed (arms 2 and 3 report kept:index-lock)."
+      - "cargo test -p tillandsias-headless --bin tillandsias a_held_writable_probe_does_not_divert_the_cache_dir_to_home passes; with the fixed .writable-probe name restored it fails with 'a held probe diverted the cache dir'."
+    verifiable_closure: "The lock-sweep test is 8 arms green inside the builder toolbox with the mirror daemon up, and a pre-existing .writable-probe no longer moves init_cache_dir to HOME; both shown red on linux-next first."
+    unscoreable: |
+      host-conditioned: criterion 1 needs a running git mirror container visible from the toolbox's PID namespace; criterion 2 is a hermetic cargo test.
