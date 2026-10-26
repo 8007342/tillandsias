@@ -59,14 +59,14 @@ critical_path:
   - step: "Req: each lane gets its own socket dir, bind-mounted at /run/host/tillandsias-mcp, with TILLANDSIAS_CONTROL_SOCKET at its mcp.sock"
     # ORDER 1900-5tmr. Was two greps of tray/mod.rs; order 776-jcf3 moved the
     # lane launch into main.rs and both went red on linux-next while the
-    # wiring itself was intact. Now the forge-spec test that builds the real
-    # podman args and asserts the mount and the env together.
-    # NEGATIVE CONTROL (2026-10-26): pointing the container spec's
-    # TILLANDSIAS_CONTROL_SOCKET at /nope fails the test. It does not cover
-    # the CLI forge-args builder's copy of the same env line.
-    command: "cargo test -q -p tillandsias-headless --bin tillandsias --features tray,listen-vsock forge_container_spec_mounts_only_per_lane_mcp_dir 2>&1"
+    # wiring itself was intact. Now the two tests that build the real lane
+    # launch -- the container spec and the CLI forge-args builder, which each
+    # carry their own copy of the mount and env -- and assert both together.
+    # NEGATIVE CONTROL (2026-10-26): pointing EITHER copy of
+    # TILLANDSIAS_CONTROL_SOCKET at /nope fails its test.
+    command: "cargo test -q -p tillandsias-headless --bin tillandsias --features tray,listen-vsock mounts_only_per_lane_mcp_dir 2>&1"
     timeout_ms: 600000
-    success_pattern: "test result: ok. 1 passed"
+    success_pattern: "test result: ok. 2 passed"
 
   - step: "Req: the bridge reads the lane socket from TILLANDSIAS_CONTROL_SOCKET"
     command: "grep -F 'TILLANDSIAS_CONTROL_SOCKET' images/default/config-overlay/mcp/host-browser.sh >/dev/null && echo 'ok: bridge and launcher agree on the lane socket'"
