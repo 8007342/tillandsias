@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 699-usxc).
+#
+# opencode-web-session-loses-its-lane-mcp-socket-when-the-launching-process-exits.status was ALREADY 'ready', so no field changed — but the caller
+# supplied a note, and discarding it silently is what this packet is about.
+events:
+  - packet_id: opencode-web-session-loses-its-lane-mcp-socket-when-the-launching-process-exits
+    event:
+      type: note
+      ts: "2026-10-26T02:52:41Z"
+      host: lenovinha
+      summary: |-
+        released to ready: 1899-p8yj (PR 659) carries the fix and closes this order when it lands
