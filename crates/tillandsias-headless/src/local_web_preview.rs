@@ -3542,7 +3542,7 @@ mod tests {
     fn the_preview_leaf_key_is_never_written_to_disk() {
         let _env = crate::test_support::env_lock();
         let names = ["XDG_RUNTIME_DIR", "TILLANDSIAS_TEST_PREVIEW_TLS_SHM"];
-        let saved: Vec<_> = names.iter().map(|n| std::env::var_os(n)).collect();
+        let saved: Vec<_> = names.iter().map(std::env::var_os).collect();
         let restore = || unsafe {
             for (name, value) in names.iter().zip(&saved) {
                 match value {
