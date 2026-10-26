@@ -108,6 +108,8 @@ pub struct ContainerSpec {
     /// environment at run time, and sets nothing when the name is unset there
     /// (measured, 1457-r8yi). The builder never reads the process env.
     env_passthrough: Vec<String>,
+    /// `--label key=value` (order 1859-v5iv: the tray run that launched it).
+    labels: Vec<(String, String)>,
     secrets: Vec<String>,
     mounts: Vec<MountSpec>,
     tmpfs: Vec<String>,
@@ -148,6 +150,7 @@ impl ContainerSpec {
             network: None,
             env: Vec::new(),
             env_passthrough: Vec::new(),
+            labels: Vec::new(),
             secrets: Vec::new(),
             mounts: Vec::new(),
             tmpfs: Vec::new(),
@@ -220,6 +223,11 @@ impl ContainerSpec {
 
     pub fn env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.env.push((key.into(), value.into()));
+        self
+    }
+
+    pub fn label(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.labels.push((key.into(), value.into()));
         self
     }
 
@@ -404,6 +412,10 @@ impl ContainerSpec {
         for key in &self.env_passthrough {
             args.push("--env".to_string());
             args.push(key.clone());
+        }
+        for (key, value) in &self.labels {
+            args.push("--label".to_string());
+            args.push(format!("{key}={value}"));
         }
 
         for secret in &self.secrets {

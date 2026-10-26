@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: every-file-tillandsias-creates-on-a-linux-host-lives-under-one-root
+    field: verifiable_closure
+    value: 'A fixture runs tillandsias init plus one forge launch and removal for a scratch user and lists every created path; it asserts none lies outside ~/.tillandsias or the exempt list (installed binaries, .desktop entry, $XDG_RUNTIME_DIR/tillandsias, opt-in swap), and that the user''s own podman ps -a and podman images list no Tillandsias container or image. Pre-fix result: FAILS, ~/.cache/tillandsias, ~/.local/state/tillandsias, ~/.config/tillandsias and tillandsias-* volumes in ~/.local/share/containers/storage are listed.'
+    ts: "2026-10-25T21:18:15Z"
+    host: macuahuitl
+    replaces_sha256: "d9f200612f0782cfb24c37122ef007caddc0daa3295a7c3e0968a6a4b7659530"
+
+events:
+  - packet_id: every-file-tillandsias-creates-on-a-linux-host-lives-under-one-root
+    event:
+      type: note
+      ts: "2026-10-25T21:18:15Z"
+      host: macuahuitl
+      summary: |-
+        operator rulings 2026-10-25 (PR 650 amendment)

@@ -1014,5 +1014,9 @@ elif [ -r /usr/local/bin/tillandsias-decode-floor-pin.sh ]; then
     fi
 fi
 
-# Hand off to ollama as the foreground process for signal handling.
-wait $OLLAMA_PID
+# Wait on ollama as PID 1 and pass SIGTERM/SIGINT on to it and every
+# background job (order 1859-v5iv: a bare `wait` here ignored `podman stop`
+# and the container was SIGKILLed with 137). See supervise.sh.
+# shellcheck source=supervise.sh
+. /usr/local/bin/tillandsias-supervise.sh
+tillandsias_supervise "$OLLAMA_PID"

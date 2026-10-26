@@ -1055,12 +1055,14 @@ specs:
   status: active
   litmus_tests:
   - litmus:browser-isolation-e2e
+  - litmus:in-forge-localhost-reaches-the-router
   coverage_ratio: 60
   last_verified: '2026-05-14'
 - spec_id: local-web-preview
   status: draft
   litmus_tests:
   - litmus:flutter-shim-falls-back-or-refuses-typed
+  - litmus:preview-leaf-key-only-on-tmpfs
   - litmus:local-web-preview
   - litmus:cold-start-acceptance-shape
   - litmus:cold-start-acceptance-e2e
@@ -1294,6 +1296,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:binary-e2e-smoke
+  - litmus:dead-tray-run-is-reaped
   coverage_ratio: 100
   last_verified: '2026-05-15'
 - spec_id: ephemeral-guarantee

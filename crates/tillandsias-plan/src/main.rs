@@ -273,7 +273,12 @@ const USAGE: &str = concat!(
     "                                     for the reader. Exit 0 with overlaps (ADVISORY, bar in\n",
     "                                     scripts/check-arrival-routing.sh), 3 on a named fragment\n",
     "                                     the fold could not read.\n",
-    "           next-order [prefix]       mint a COLLISION-FREE order token for a new packet\n",
+    "           next-order [prefix] [--quiet]\n",
+    "                                     mint a COLLISION-FREE order token for a new packet.\n",
+    "                                     The token prints first; --quiet prints only the token.\n",
+    "                                     The suffix differs on every call (1874-4sqt).\n",
+    "           MCP tool names are accepted as aliases: plan_status = status, plan_next = next,\n",
+    "                                     methodology_ask = methodology-ask (1874-4sqt).\n",
     "           validator-surface-hash    what this binary was BUILT from; --current what the\n",
     "                                     checkout holds now; --check compares them (0 same,\n",
     "                                     3 different, 4 cannot ask) — 1287-h6qn\n",
@@ -5747,6 +5752,19 @@ fn replace_ack_sha256(replaced: &str) -> String {
         .unwrap_or_default()
 }
 
+/// ORDER 1874-4sqt: the CLI subcommand an MCP tool name stands for, or None.
+/// `plan_` is dropped and `_` becomes `-`; only a name that then matches a
+/// dispatch arm is an alias, so an unknown name still fails as unknown.
+fn mcp_tool_alias(name: &str) -> Option<String> {
+    if !name.contains('_') {
+        return None;
+    }
+    let candidate = name.strip_prefix("plan_").unwrap_or(name).replace('_', "-");
+    DISPATCH_ARMS
+        .contains(&candidate.as_str())
+        .then_some(candidate)
+}
+
 fn main() {
     let start_time = std::time::Instant::now();
     let mut args: Vec<String> = std::env::args().skip(1).collect();
@@ -5762,6 +5780,11 @@ fn main() {
     }
     if args.is_empty() {
         usage();
+    }
+    // ORDER 1874-4sqt: an agent that knows the MCP tool (`plan_status`,
+    // `plan_next`, `methodology_ask`) can type that name here too.
+    if let Some(canonical) = mcp_tool_alias(&args[0]) {
+        args[0] = canonical;
     }
     let subcommand = args.first().cloned().unwrap_or_else(|| "none".to_string());
 
@@ -7598,6 +7621,10 @@ fn main() {
                         i += 2; // the flag and its value
                         continue;
                     }
+                    if args[i] == "--quiet" {
+                        i += 1;
+                        continue;
+                    }
                     out.push(&args[i]);
                     i += 1;
                 }
@@ -7666,70 +7693,9 @@ fn main() {
             // When this host has filed nothing the fold remembers, there is no
             // "since" to speak of and the report says exactly that rather than
             // listing the whole ledger or silently choosing zero.
-            let since_flag = args
-                .iter()
-                .position(|a| a == "--since")
-                .and_then(|i| args.get(i + 1))
-                .and_then(|v| {
-                    let digits: String = v.chars().take_while(char::is_ascii_digit).collect();
-                    digits.parse::<u64>().ok()
-                });
-            // THE CALLER IS A WORKSTATION, NOT A PLATFORM, and getting this
-            // wrong makes the report confidently too narrow. resolve_writer_host
-            // falls back to std::env::consts::OS, so on every Linux host it
-            // answers "linux" — and a segment match on "linux" then matches
-            // EVERY linux host's rows, making the baseline "the highest order
-            // any linux host filed". Measured while writing this: the default
-            // baseline came back 1182, a row macuahuitl filed, so yoga would
-            // never have been told about anything lenovinha filed after it. A
-            // baseline that silently includes other hosts' filings is the same
-            // shape as the duplicate this row exists to prevent. With the
-            // workstation it reads 1150, yoga's own last, and 37 rows to read.
-            let me = std::env::var("TILLANDSIAS_WORKSTATION")
-                .ok()
-                .filter(|v| !v.trim().is_empty())
-                .or_else(|| {
-                    std::process::Command::new("hostname")
-                        .arg("-s")
-                        .output()
-                        .ok()
-                        .filter(|o| o.status.success())
-                        .and_then(|o| String::from_utf8(o.stdout).ok())
-                        .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty())
-                })
-                .unwrap_or_else(resolve_writer_host);
-            let since = since_flag.or_else(|| {
-                ledger
-                    .packets
-                    .iter()
-                    .filter(|p| packet_filed_by(p, &me))
-                    .filter_map(order_prefix_of_value)
-                    .max()
-            });
-            match since {
-                None => eprintln!(
-                    "next-order: no row in the fold records {me} as its filer, so there is no \"since\" to report (1163-3krg). Pass --since <order> to get one."
-                ),
-                Some(base) => {
-                    let newer = rows_filed_since(&ledger.packets, base);
-                    if newer.is_empty() {
-                        eprintln!("next-order: nothing filed since {base} (1163-3krg)");
-                    } else {
-                        eprintln!(
-                            "next-order: {} row(s) filed since {base} — READ THESE BEFORE FILING (1163-3krg):",
-                            newer.len()
-                        );
-                        for (_, token, title) in &newer {
-                            eprintln!("  {token}  {title}");
-                        }
-                        eprintln!(
-                            "  A duplicate is filed by not looking, not by choosing the wrong number."
-                        );
-                    }
-                }
-            }
-
+            // ORDER 1874-4sqt: the token comes FIRST. It used to print after
+            // the report below, so in a terminal it was the last line under a
+            // list of rows; `--quiet` drops the report and leaves the token.
             match tillandsias_plan::allocate::mint_batch(&ledger, prefix, count) {
                 Ok(tokens) => {
                     for t in tokens {
@@ -7739,6 +7705,76 @@ fn main() {
                 Err(e) => {
                     eprintln!("error: {e}");
                     std::process::exit(1);
+                }
+            }
+            if !args.iter().any(|a| a == "--quiet") {
+                eprintln!(
+                    "next-order: the suffix is random on every call, so repeated calls \
+                 return different suffixes for the same prefix; that is expected. \
+                 Use one token per packet (1874-4sqt)."
+                );
+                let since_flag = args
+                    .iter()
+                    .position(|a| a == "--since")
+                    .and_then(|i| args.get(i + 1))
+                    .and_then(|v| {
+                        let digits: String = v.chars().take_while(char::is_ascii_digit).collect();
+                        digits.parse::<u64>().ok()
+                    });
+                // THE CALLER IS A WORKSTATION, NOT A PLATFORM, and getting this
+                // wrong makes the report confidently too narrow. resolve_writer_host
+                // falls back to std::env::consts::OS, so on every Linux host it
+                // answers "linux" — and a segment match on "linux" then matches
+                // EVERY linux host's rows, making the baseline "the highest order
+                // any linux host filed". Measured while writing this: the default
+                // baseline came back 1182, a row macuahuitl filed, so yoga would
+                // never have been told about anything lenovinha filed after it. A
+                // baseline that silently includes other hosts' filings is the same
+                // shape as the duplicate this row exists to prevent. With the
+                // workstation it reads 1150, yoga's own last, and 37 rows to read.
+                let me = std::env::var("TILLANDSIAS_WORKSTATION")
+                    .ok()
+                    .filter(|v| !v.trim().is_empty())
+                    .or_else(|| {
+                        std::process::Command::new("hostname")
+                            .arg("-s")
+                            .output()
+                            .ok()
+                            .filter(|o| o.status.success())
+                            .and_then(|o| String::from_utf8(o.stdout).ok())
+                            .map(|s| s.trim().to_string())
+                            .filter(|s| !s.is_empty())
+                    })
+                    .unwrap_or_else(resolve_writer_host);
+                let since = since_flag.or_else(|| {
+                    ledger
+                        .packets
+                        .iter()
+                        .filter(|p| packet_filed_by(p, &me))
+                        .filter_map(order_prefix_of_value)
+                        .max()
+                });
+                match since {
+                    None => eprintln!(
+                        "next-order: no row in the fold records {me} as its filer, so there is no \"since\" to report (1163-3krg). Pass --since <order> to get one."
+                    ),
+                    Some(base) => {
+                        let newer = rows_filed_since(&ledger.packets, base);
+                        if newer.is_empty() {
+                            eprintln!("next-order: nothing filed since {base} (1163-3krg)");
+                        } else {
+                            eprintln!(
+                                "next-order: {} row(s) filed since {base} — READ THESE BEFORE FILING (1163-3krg):",
+                                newer.len()
+                            );
+                            for (_, token, title) in &newer {
+                                eprintln!("  {token}  {title}");
+                            }
+                            eprintln!(
+                                "  A duplicate is filed by not looking, not by choosing the wrong number."
+                            );
+                        }
+                    }
                 }
             }
         }

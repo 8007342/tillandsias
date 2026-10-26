@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+  - packet_id: forge-affordances-docs-startup-context-and-tooling-state-each-mounts-intent-and-limits
+    order: 1892-mtau
+    status: ready
+    kind: audit
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, storage-layers, startup-context, docs]
+    estimated_hours: 4
+    title: "Everything a forge agent reads says what each folder is for and when it is wiped"
+    context: |
+      Design D7 of openspec/changes/forge-storage-single-root-and-disk-discipline, operator ruling 2026-10-25. Audit and reword the forge's affordances, docs, cheatsheets, startup context and tooling help so every mount states its intent and limits: /home/forge/src is RAM (small, source only); scratch is wiped on forge teardown; the project cache survives restarts and is wiped on corruption, never repaired; only pushed commits are durable. Agents then put each thing in the right place.
+    exit_criteria:
+      - "A check reads the forge startup context and the forge storage cheatsheet and asserts each of /home/forge/src, /home/forge/scratch and /home/forge/.cache/tillandsias-project is named with its intent and its wipe rule (RAM; wiped on teardown; survives, wiped on corruption). Pre-fix result: FAILS, no scratch mount is named and no wipe rule is stated."
+    verifiable_closure: "A check reads the forge startup context and the forge storage cheatsheet and asserts each of /home/forge/src, /home/forge/scratch and /home/forge/.cache/tillandsias-project is named with its intent and its wipe rule (RAM; wiped on teardown; survives, wiped on corruption). Pre-fix result: FAILS, no scratch mount is named and no wipe rule is stated."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Lands after 1875-rebn creates the scratch mount. Write the check named in the exit criterion first and watch it fail, then reword per design D7.
+    provenance: |
+      Filed at operator request 2026-10-25 (PR 650 amendment); spec openspec/changes/forge-storage-single-root-and-disk-discipline.
+    events:
+      - type: filed
+        ts: "2026-10-25T21:20:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator rulings of 2026-10-25"

@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tray-warns-loudly-when-the-host-has-no-disk-backed-swap-for-the-forge-ram-layers
+    field: context
+    value: 'Swap policy D3 of openspec/changes/forge-storage-single-root-and-disk-discipline, operator ruling 2026-10-25: swap is MANDATORY. tmpfs (source workspace, /tmp) needs a disk swap to overflow into; zram is compressed RAM and does not count. macuahuitl today has only 8 GiB zram. On Linux the tray refuses to start when disk swap is below max(8 GiB, sum of running forge L0 caps) and shows plain instructions naming ''tillandsias --swap on'' (swap_cmd). On macOS VMs and Windows WSL, Tillandsias forces the swap configuration known to work (guest swap file, .wslconfig swap=), floor-tier hosts included.'
+    ts: "2026-10-25T21:18:17Z"
+    host: macuahuitl
+    replaces_sha256: "a1f210b6dda1ab090539eab160fcdf8009d6d77505c179bf9c2b9c6664d5c92e"
+
+events:
+  - packet_id: tray-warns-loudly-when-the-host-has-no-disk-backed-swap-for-the-forge-ram-layers
+    event:
+      type: note
+      ts: "2026-10-25T21:18:17Z"
+      host: macuahuitl
+      summary: |-
+        operator rulings 2026-10-25 (PR 650 amendment)
