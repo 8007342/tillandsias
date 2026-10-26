@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-no-python-scripts-misses-an-interpreter-invoked-inside-a-litmus-command-line
+    event:
+      type: note
+      ts: "2026-10-26T07:23:53Z"
+      agent_id: linux-lenovinha-opus5-20261026t072353z
+      host: lenovinha
+      summary: |-
+        Second gap (coordinator 2026-10-26): a file-level @tombstone exempts the WHOLE file from check-no-python-scripts (inspect_file: content.contains(@tombstone)), so lib-common.sh, a live file, runs python3 unflagged; the same probe was refused once moved to lib-lane.sh (1874-6p63). The exemption should cover only tombstoned spans, not whole files.
