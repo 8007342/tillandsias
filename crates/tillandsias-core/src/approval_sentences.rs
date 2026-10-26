@@ -80,18 +80,35 @@ pub struct GrantButton {
 
 /// The four grant scopes plus the refusal, in window order.
 pub const GRANT_BUTTONS: &[GrantButton] = &[
-    GrantButton { scope: "once", label: "Approve this time" },
-    GrantButton { scope: "10m", label: "Approve for 10 minutes" },
-    GrantButton { scope: "2h", label: "Approve for 2 hours" },
-    GrantButton { scope: "session", label: "Approve until the tray quits" },
-    GrantButton { scope: "decline", label: "Not now" },
+    GrantButton {
+        scope: "once",
+        label: "Approve this time",
+    },
+    GrantButton {
+        scope: "10m",
+        label: "Approve for 10 minutes",
+    },
+    GrantButton {
+        scope: "2h",
+        label: "Approve for 2 hours",
+    },
+    GrantButton {
+        scope: "session",
+        label: "Approve until the tray quits",
+    },
+    GrantButton {
+        scope: "decline",
+        label: "Not now",
+    },
 ];
 
 /// The line the operating system shows in its own check, per mechanism.
 /// macOS appends it to "Tillandsias is trying to"; it must read on its own too.
 pub const REASON_TOUCH_ID: &str = "approve the action shown in the Tillandsias window";
-pub const REASON_WINDOWS_HELLO: &str = "Confirm it's you to approve the action shown in the Tillandsias window.";
-pub const REASON_FIDO: &str = "Touch your security key to approve the action shown in the Tillandsias window.";
+pub const REASON_WINDOWS_HELLO: &str =
+    "Confirm it's you to approve the action shown in the Tillandsias window.";
+pub const REASON_FIDO: &str =
+    "Touch your security key to approve the action shown in the Tillandsias window.";
 
 /// Look up an action's sentences by gate-table key.
 pub fn sentences(kind: &str) -> Option<&'static ActionSentences> {
@@ -143,7 +160,14 @@ mod tests {
             return Err(format!("exclamation mark: {s}"));
         }
         let lower = s.to_lowercase();
-        for w in ["warning", "danger", "critical", "irreversible", "urgent", "immediately"] {
+        for w in [
+            "warning",
+            "danger",
+            "critical",
+            "irreversible",
+            "urgent",
+            "immediately",
+        ] {
             if lower.contains(w) {
                 return Err(format!("alarm word {w}: {s}"));
             }
@@ -175,9 +199,19 @@ mod tests {
         for a in ACTIONS {
             let c = a.costs.to_lowercase();
             assert!(
-                ["cancel", "undo", "revert", "close", "stop", "roll back", "remove", "earlier", "not affected"]
-                    .iter()
-                    .any(|w| c.contains(w)),
+                [
+                    "cancel",
+                    "undo",
+                    "revert",
+                    "close",
+                    "stop",
+                    "roll back",
+                    "remove",
+                    "earlier",
+                    "not affected"
+                ]
+                .iter()
+                .any(|w| c.contains(w)),
                 "{}: no way back in {:?}",
                 a.kind,
                 a.costs
