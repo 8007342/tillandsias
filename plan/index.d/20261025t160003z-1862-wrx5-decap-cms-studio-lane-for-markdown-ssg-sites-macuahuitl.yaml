@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25 (web studio lanes). Code is cited by symbol, never by line.
+packets:
+  - packet_id: decap-cms-studio-lane-for-markdown-ssg-sites
+    order: 1862-wrx5
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, browser, studio]
+    estimated_hours: 5
+    depends_on: [studio-lane-contract-registry-generic-launcher-write-guard-front-and-mcp-coedit]
+    title: "A Decap CMS studio lane for markdown static-site generators, using local_backend with decap-server bound to loopback behind the OTP router"
+    context: |
+      Operator direction 2026-10-25: "I want to author this website interactively" opens a visual web studio window on the live site, with live saves into the forge checkout and the agent co-editing; every studio is offered as a choice with one [Recommended]. Publishing goes through the 1853-qr4h deploy tool, deploy branch only, on explicit request; no build on push. Spec: openspec/changes/web-studio-lanes. Reuses run_opencode_web_mode plumbing (RouterRoute, tillandsias_otp::issue_session, send_issue_web_session, launch_opencode_web_browser, ensure_versioned_images, sse-keepalive-proxy.js, local_web_preview::publish).
+    exit_criteria:
+      - "A fixture launches the Decap lane on a Hugo fixture project, edits an entry through the decap-server API and asserts that the markdown file changed in the checkout; decap-server is unreachable except through the authenticated route; and the detector recommends Decap for Hugo. Pre-fix result: FAILS, no Decap lane exists."
+    verifiable_closure: "A fixture launches the Decap lane on a Hugo fixture project, edits an entry through the decap-server API and asserts that the markdown file changed in the checkout; decap-server is unreachable except through the authenticated route; and the detector recommends Decap for Hugo. Pre-fix result: FAILS, no Decap lane exists."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the fixture named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-25.
+    events:
+      - type: filed
+        ts: "2026-10-25T16:00:03Z"
+        host: macuahuitl
+        summary: "filed ready from the operator direction of 2026-10-25"

@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: studio-publish-handoff-to-cloudflare-deploy-tool-explicit-only
+    field: context
+    value: |-
+      Operator direction 2026-10-25: "I want to author this website interactively" opens a visual web studio window on the live site, with live saves into the forge checkout and the agent co-editing; every studio is offered as a choice with one [Recommended]. Publishing goes through the 1853-qr4h deploy tool, deploy branch only, on explicit request; no build on push. Spec: openspec/changes/web-studio-lanes. Reuses run_opencode_web_mode plumbing (RouterRoute, tillandsias_otp::issue_session, send_issue_web_session, launch_opencode_web_browser, ensure_versioned_images, sse-keepalive-proxy.js, local_web_preview::publish).
+
+
+      [2026-10-25T21:18:06Z macuahuitl] Operator rulings 2026-10-25: every studio save and agent edit is committed; each lane wires its studio's native auto-save and repo practice (init files, save adapters, hooks) automatically; studio windows open in the dev Chromium framework browser. Spec: openspec/changes/web-studio-lanes design.md "Per-studio auto-save and repo practice".
+    ts: "2026-10-25T21:18:06Z"
+    host: macuahuitl
+
+events:
+  - packet_id: studio-publish-handoff-to-cloudflare-deploy-tool-explicit-only
+    event:
+      type: note
+      ts: "2026-10-25T21:18:06Z"
+      host: macuahuitl
+      summary: |-
+        operator ruling 2026-10-25
