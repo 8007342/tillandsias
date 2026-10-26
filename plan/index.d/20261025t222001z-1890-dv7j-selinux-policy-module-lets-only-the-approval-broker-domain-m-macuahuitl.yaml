@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl from operator rulings 2026-10-25. Code is cited by symbol, never by line.
+packets:
+- packet_id: selinux-policy-module-lets-only-the-approval-broker-domain-mint-grants-and-read-the-grant-credential-and-denies-container-domains
+  order: 1890-dv7j
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - approval
+  - security
+  - cost-gate
+  estimated_hours: 5
+  depends_on:
+  - approval-grants-are-device-signed-statements-in-a-vault-kv-path-only-the-broker-writes-and-verifiers-check-the-signature-not-presence
+  related: []
+  title: On Linux with SELinux, only the approval broker can mint grants or read their credential
+  context: Design R2 of openspec/changes/os-verified-approval-gates. A policy module labels the broker binary, its socket and its Vault token file; only the broker domain may connect and read; container_t is denied. Ships as an optional module installed where SELinux is enforcing (Silverblue).
+  exit_criteria:
+  - 'On an SELinux-enforcing host, a test running as container_t (podman run with the default label) fails to open the broker''s token file and socket with an AVC logged, while the broker reads it. Pre-fix result: FAILS, no policy module exists and the file carries a generic user label any same-uid process can read.'
+  verifiable_closure: 'On an SELinux-enforcing host, a test running as container_t (podman run with the default label) fails to open the broker''s token file and socket with an AVC logged, while the broker reads it. Pre-fix result: FAILS, no policy module exists and the file carries a generic user label any same-uid process can read.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+
+    '
+  next_action: 'Nothing is done. Write the check named in the exit criterion first and watch it fail on today''s code, then implement per openspec/changes/os-verified-approval-gates.
+
+    '
+  provenance: 'Filed from the operator rulings on PR #651, 2026-10-25.
+
+    '
+  events:
+  - type: filed
+    ts: '2026-10-25T22:20:00Z'
+    host: macuahuitl
+    summary: filed from the operator rulings of 2026-10-25

@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: git-mirror-pre-receive-refuses-an-integration-or-default-branch-update-without-a-verified-approval-note-in-the-same-push
+    field: context
+    value: |-
+      Design D5 of openspec/changes/os-verified-approval-gates. In images/git/pre-receive-hook.sh, for refs equal to DISC_INTEGRATION or DISC_DEFAULT (from discipline_parse, never a constant), read the note for NEWSHA from the pushed refs/notes/tillandsias/approvals tip, match target/from/to/project and expiry, and verify with ssh-keygen -Y verify against allowed-signers kept in mirror state. Enforcement follows the seed word (warn, enforced); refuse before the relay. work/* refs are never gated.
+
+      [2026-10-25T22:11:43Z macuahuitl] AMENDED by operator rulings 2026-10-25 (design R6): the blanket integration-branch gate is superseded. The hook gates only promotions marked approval: required in the seed's new promotions list (1890-jk4j), verifies grants by signature and expiry (presence in Vault proves nothing), honours standing grants, and follows the host mode (allow: log-only).
+    ts: "2026-10-25T22:11:43Z"
+    host: macuahuitl
+
+events:
+  - packet_id: git-mirror-pre-receive-refuses-an-integration-or-default-branch-update-without-a-verified-approval-note-in-the-same-push
+    event:
+      type: note
+      ts: "2026-10-25T22:11:43Z"
+      host: macuahuitl
+      summary: |-
+        operator-rulings-2026-10-25

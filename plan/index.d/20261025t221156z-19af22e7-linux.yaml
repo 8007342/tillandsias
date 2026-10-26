@@ -1,0 +1,17 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: git-mirror-pre-receive-refuses-an-integration-or-default-branch-update-without-a-verified-approval-note-in-the-same-push
+    event:
+      type: list-replace
+      ts: "2026-10-25T22:11:56Z"
+      agent_id: linux-macuahuitl-claude-20261025t221156z
+      host: linux
+      field: exit_criteria
+      items:
+        - "A fixture seeds `promotions: [{from: research/*, to: linux-next, approval: required}]` and asserts: on an enforced-mode host, a research promotion into linux-next with no grant, with an expired grant, or with a grant whose signature fails is REFUSED and nothing is relayed; with a valid signed grant (including a standing one) it is ACCEPTED; in allow mode it is ACCEPTED and journaled \"not enforced: no approval hardware\"; a work/<order> land into linux-next with no matching promotion needs no grant; a non-fast-forward update of refs/notes/tillandsias/approvals is REFUSED. Pre-fix result: FAILS, the hook reads no promotions and accepts every update, and accepts rewrites of the notes ref."
+      summary: |-
+        operator-rulings-2026-10-25
