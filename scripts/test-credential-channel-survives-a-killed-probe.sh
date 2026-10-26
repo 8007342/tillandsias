@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# 1903-djsq: never reach the operator's session bus or gnome-keyring-daemon.
+. "$(cd "$(dirname "$0")" && pwd)/test-support/private-session-bus.sh"
 # @trace spec:ci-release, plan 1347-r9g8
 #
 # test-credential-channel-survives-a-killed-probe.sh
@@ -42,7 +44,10 @@ bad() { echo "  FAIL  $*"; fail=$((fail + 1)); }
 [ -f "$GUARD" ] || { echo "FAIL: $GUARD absent"; exit 2; }
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/killed-probe.XXXXXX")" || exit 2
-trap 'rm -rf "$W"' EXIT
+# 1903-djsq: the guard ABANDONS a hung keyring client instead of killing it, so
+# arm 3's hanging gh stub outlives the guard; reap it here (it is ours: its
+# command line carries this fixture's own mktemp dir).
+trap 'pkill -f "$W/b3/gh" 2>/dev/null; rm -rf "$W"' EXIT
 
 # One grammar line, and ONLY one. Anchored at the start so a diagnostic
 # sentence that happens to contain a verdict word is not counted as a verdict.
@@ -198,7 +203,7 @@ if [ -z "$_BOUND" ]; then
 else
 mkdir -p "$W/b3"
 printf '#!/usr/bin/env bash\necho "NAME PID"\necho "org.freedesktop.secrets 1 gnome-keyring"\nexit 0\n' > "$W/b3/busctl"
-printf '#!/usr/bin/env bash\nsleep 3600\n' > "$W/b3/gh"
+printf '#!/usr/bin/env bash\nexec -a "$0" sleep 3600\n' > "$W/b3/gh"
 chmod +x "$W/b3/busctl" "$W/b3/gh"
 t0=$(date +%s); _run_guard "$W/b3"; t1=$(date +%s)
 elapsed=$((t1 - t0))
