@@ -70,8 +70,10 @@ pub(crate) fn ensure_in(dir: &Path, margin_secs: u64) -> Result<bool, String> {
             "ec",
             "-pkeyopt",
             "ec_paramgen_curve:prime256v1",
-            "-nodes",
         ])
+        // 1898-hyhf: `-nodes` only onto the tmpfs store; elsewhere encrypted.
+        .args(crate::ca_key_store::key_out_args())
+        .envs(crate::ca_key_store::pass_env())
         .arg("-keyout")
         .arg(&key)
         .arg("-out")
@@ -172,6 +174,8 @@ mod tests {
                 .arg(dir.join(CRT))
                 .arg("-CAkey")
                 .arg(dir.join(KEY))
+                .args(crate::ca_key_store::key_in_args())
+                .envs(crate::ca_key_store::pass_env())
                 .arg("-extfile")
                 .arg(&ext)
                 .arg("-out")
