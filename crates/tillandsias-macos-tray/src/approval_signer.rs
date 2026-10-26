@@ -14,7 +14,7 @@
 //! Slice 1 presents and logs only: nothing verifies or enforces these
 //! signatures yet (operator ruling R4, `present` mode).
 //!
-//! @trace spec:os-verified-approval-gates
+//! Design: openspec/changes/os-verified-approval-gates (approval-attestation).
 
 use std::path::{Path, PathBuf};
 

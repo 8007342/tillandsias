@@ -11,7 +11,7 @@
 // Every function returns 0 on success and a negative code on failure, and
 // writes only into buffers the caller owns.
 //
-// @trace spec:os-verified-approval-gates
+// Design: openspec/changes/os-verified-approval-gates (approval-attestation).
 
 import CryptoKit
 import Foundation
