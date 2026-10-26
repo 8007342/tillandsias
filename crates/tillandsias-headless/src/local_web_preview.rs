@@ -1317,8 +1317,12 @@ fn preview_san(project: &str) -> String {
 
 fn prepare_tls(project: &str, ca: &Path) -> Result<(), String> {
     let root = router_dir();
-    let tls = root.join("preview-tls");
+    // Order 1901-bnif: the leaf key is minted, staged and published only on
+    // tmpfs; with none, the preview refuses by name.
+    let tls = crate::preview_tls_dir()?;
     std::fs::create_dir_all(&tls).map_err(|_| "router_not_ready: TLS directory unavailable")?;
+    // The port file stays in the router dir, which may no longer hold the leaves.
+    std::fs::create_dir_all(&root).map_err(|_| "router_not_ready: router directory unavailable")?;
     let temporary =
         tempfile::tempdir_in(&tls).map_err(|_| "router_not_ready: TLS staging unavailable")?;
     let host = format!("{}.localhost", subdomain("www", project));
@@ -1472,7 +1476,7 @@ pub(crate) fn preview_leaves_due(tls_dir: &Path, ca_dir: &Path, margin_secs: u64
 #[cfg(feature = "tray")]
 pub(crate) fn renew_expiring_preview_leaves(margin_secs: u64) -> Result<Vec<String>, String> {
     let ca = crate::preview_ca::ensure(0)?;
-    let due = preview_leaves_due(&router_dir().join("preview-tls"), &ca, margin_secs);
+    let due = preview_leaves_due(&crate::preview_tls_dir()?, &ca, margin_secs);
     if due.is_empty() {
         return Ok(due);
     }
@@ -2533,7 +2537,12 @@ mod tests {
     async fn the_probe_client_verifies_the_preview_leaf_at_the_dialed_address() {
         let ca = tempfile::tempdir().unwrap();
         crate::preview_ca::ensure_in(ca.path(), 0).unwrap();
-        let work = tempfile::tempdir().unwrap();
+        // 1901-bnif: a real leaf key, so only on tmpfs; a host without one
+        // cannot run this without resting a key on disk, and skips.
+        let Ok(work) = tempfile::tempdir_in("/dev/shm") else {
+            eprintln!("SKIP: no /dev/shm tmpfs for the leaf key");
+            return;
+        };
         let (crt, key, csr, ext) = (
             work.path().join("leaf.crt"),
             work.path().join("leaf.key"),
@@ -3500,6 +3509,7 @@ mod tests {
             "TILLANDSIAS_PODMAN_BIN",
             crate::local_projects::CLOUD_LABEL_CACHE_ENV,
             "XDG_RUNTIME_DIR",
+            "TILLANDSIAS_TEST_PREVIEW_TLS_SHM",
         ];
         let _restore = Restore(
             vars.into_iter()
@@ -3513,8 +3523,94 @@ mod tests {
                 temp.path().join("cloud-cache"),
             );
             std::env::set_var("XDG_RUNTIME_DIR", temp.path());
+            // 1901-bnif: never the real /dev/shm from a test.
+            std::env::set_var("TILLANDSIAS_TEST_PREVIEW_TLS_SHM", temp.path());
         }
         test(&log)
+    }
+
+    /// Order 1901-bnif. The preview leaf key never rests unencrypted on disk.
+    /// The runtime dir is pointed at a directory on DISK (under the crate
+    /// target/, which is not tmpfs), the shared-memory root at a tmpfs
+    /// scratch, and a real leaf is minted with the real openssl and a real
+    /// preview CA: no file under the disk dir may hold a PEM private key, and
+    /// the key must be on tmpfs. With no tmpfs at all the mint refuses by name
+    /// and still writes no key. Red before 1901-bnif: prepare_tls renamed
+    /// the key into <runtime dir>/tillandsias/router/preview-tls on disk.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn the_preview_leaf_key_is_never_written_to_disk() {
+        let _env = crate::test_support::env_lock();
+        let names = ["XDG_RUNTIME_DIR", "TILLANDSIAS_TEST_PREVIEW_TLS_SHM"];
+        let saved: Vec<_> = names.iter().map(std::env::var_os).collect();
+        let restore = || unsafe {
+            for (name, value) in names.iter().zip(&saved) {
+                match value {
+                    Some(v) => std::env::set_var(name, v),
+                    None => std::env::remove_var(name),
+                }
+            }
+        };
+
+        // cargo runs tests in the crate directory, on the checkout's disk.
+        let target = std::env::current_dir().unwrap();
+        let disk = tempfile::tempdir_in(&target).unwrap();
+        if crate::on_tmpfs(disk.path()) {
+            restore();
+            eprintln!("SKIP: the crate directory is tmpfs here; no disk dir to test against");
+            return;
+        }
+        let shm = tempfile::tempdir_in("/dev/shm").expect("tmpfs scratch");
+        let ca = tempfile::tempdir_in("/dev/shm").expect("tmpfs CA scratch");
+        crate::preview_ca::ensure_in(ca.path(), 0).unwrap();
+
+        let holds_key = |root: &Path| -> Vec<PathBuf> {
+            let mut found = Vec::new();
+            let mut stack = vec![root.to_path_buf()];
+            while let Some(dir) = stack.pop() {
+                for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        stack.push(path);
+                    } else if std::fs::read(&path)
+                        .is_ok_and(|b| String::from_utf8_lossy(&b).contains("PRIVATE KEY-----"))
+                    {
+                        found.push(path);
+                    }
+                }
+            }
+            found
+        };
+
+        unsafe {
+            std::env::set_var("XDG_RUNTIME_DIR", disk.path());
+            std::env::set_var("TILLANDSIAS_TEST_PREVIEW_TLS_SHM", shm.path());
+        }
+        let minted = prepare_tls("bnif-smoke", ca.path());
+        let on_disk = holds_key(disk.path());
+        let on_tmpfs = holds_key(shm.path());
+
+        // No tmpfs at all: the shared-memory root on disk too.
+        let disk2 = tempfile::tempdir_in(&target).unwrap();
+        unsafe {
+            std::env::set_var("XDG_RUNTIME_DIR", disk2.path());
+            std::env::set_var("TILLANDSIAS_TEST_PREVIEW_TLS_SHM", disk2.path());
+        }
+        let refused = prepare_tls("bnif-smoke", ca.path());
+        let on_disk2 = holds_key(disk2.path());
+        restore();
+
+        assert!(minted.is_ok(), "the mint itself works: {minted:?}");
+        assert!(
+            on_disk.is_empty(),
+            "a PEM private key rests on disk: {on_disk:?}"
+        );
+        assert_eq!(on_tmpfs.len(), 1, "the leaf key is on tmpfs: {on_tmpfs:?}");
+        assert!(
+            refused.as_ref().is_err_and(|e| e.contains("no tmpfs")),
+            "with no tmpfs the mint refuses by name: {refused:?}"
+        );
+        assert!(on_disk2.is_empty(), "and writes no key: {on_disk2:?}");
     }
 
     /// 1626-r4xm / 1713-1dnx: the preview's validation sites (validate_identity

@@ -442,6 +442,7 @@ specs:
 - spec_id: forge-environment-discoverability
   status: active
   litmus_tests:
+  - litmus:tillandsias-doctor-names-every-fault
   - litmus:mcp-plan-resolver-pinning-shape
   - litmus:forge-environment-discoverability-shape
   - litmus:forge-entrypoints-source-agent-profile
@@ -1060,6 +1061,7 @@ specs:
 - spec_id: local-web-preview
   status: draft
   litmus_tests:
+  - litmus:preview-leaf-key-only-on-tmpfs
   - litmus:local-web-preview
   - litmus:cold-start-acceptance-shape
   - litmus:cold-start-acceptance-e2e
@@ -1293,6 +1295,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:binary-e2e-smoke
+  - litmus:dead-tray-run-is-reaped
   coverage_ratio: 100
   last_verified: '2026-05-15'
 - spec_id: ephemeral-guarantee

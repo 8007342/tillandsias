@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: opencode-web-session-loses-its-lane-mcp-socket-when-the-launching-process-exits
+    field: status
+    value: ready
+    ts: "2026-10-26T05:16:25Z"
+    host: lenovinha
+
+events:
+  - packet_id: opencode-web-session-loses-its-lane-mcp-socket-when-the-launching-process-exits
+    event:
+      type: note
+      ts: "2026-10-26T05:16:25Z"
+      host: lenovinha
+      summary: |-
+        already ready on linux-next; 1899-p8yj (PR 659) carries the fix
