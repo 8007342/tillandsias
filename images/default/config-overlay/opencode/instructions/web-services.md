@@ -148,14 +148,27 @@ If you want to verify the server is up before telling the user, use
 `curl` from inside the forge:
 
 ```bash
-curl -fsS http://flutter.$TILLANDSIAS_PROJECT.localhost/
+curl -sS -x http://proxy:3128 http://flutter.$TILLANDSIAS_PROJECT.localhost/
 ```
 
-The forge has `HTTP_PROXY=http://proxy:3128` set, and the proxy
-recognises `*.localhost` as enclave-internal traffic. The request goes
-through the proxy to the router and back to the right container. You
-do not need to do anything special — `curl` and friends pick up the
-proxy automatically.
+Name the proxy with `-x`. The forge's `no_proxy` lists `localhost`, and
+curl matches that entry against every `*.localhost` name too, so a bare
+`curl http://flutter.$TILLANDSIAS_PROJECT.localhost/` skips the proxy
+and fails with "connection refused" (the forge has no resolver for
+`.localhost`). Through the proxy, the request goes to the router and on
+to the right container.
+
+What comes back is the ROUTER's own answer, so read it before blaming
+the app (order 1863-4knc):
+
+- your app's page — the server is up and routed;
+- `tillandsias-router: no route for ...` — the router is fine but has no
+  route for that name: call `publish_local` (or check the name);
+- the router's `unauthorised — open this project from the Tillandsias
+  tray` page (a 401) — the route exists behind the browser sign-in;
+  that is expected for `opencode.<project>.localhost`;
+- a Squid error page (`Server: squid`, a 502 or 503) — the proxy could
+  not reach the router; that is an enclave fault, not your app.
 
 ## Things you must NOT do
 

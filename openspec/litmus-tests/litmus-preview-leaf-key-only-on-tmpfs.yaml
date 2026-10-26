@@ -1,0 +1,37 @@
+# @trace spec:local-web-preview
+name: litmus:preview-leaf-key-only-on-tmpfs
+spec: local-web-preview
+phase: pre-build
+status: active
+description: >
+  Order 1901-bnif, the leaf-key follow-up to 1898-hyhf. The web-preview TLS
+  leaf key the router serves is an unencrypted PEM. It was renamed into the
+  router dir, which falls back to the temp dir when XDG_RUNTIME_DIR is unset
+  and was never checked for tmpfs, so on such a host the key rested on disk.
+  preview_tls_dir() now picks the router dir only when it is tmpfs, else a
+  private 0700 directory under /dev/shm, else refuses by name; the writer and
+  the router's mount both use it. The fixture mints a real leaf with a disk
+  runtime dir and asserts no PEM private key is left on disk.
+severity: high
+size: quick
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/local_web_preview.rs
+  - openssl on the host
+critical_path:
+  - step: "Req: a leaf minted with the runtime dir on disk leaves no PEM private key on disk, the key is on tmpfs, and with no tmpfs the mint refuses by name and writes nothing (pre-fix: the key rests under the disk runtime dir)"
+    command: "cargo test -q -p tillandsias-headless --bin tillandsias --features tray,listen-vsock the_preview_leaf_key_is_never_written_to_disk 2>&1"
+    timeout_ms: 600000
+    success_pattern: "test result: ok. 1 passed"
+observability:
+  traces:
+    - "@trace spec:local-web-preview"
+  expected_log: "router_not_ready: no tmpfs to hold the preview leaf key"
+  log_fields:
+    spec: "local-web-preview"
+    test: "preview-leaf-key-only-on-tmpfs"
+rollback:
+  on_failure: >
+    The preview leaf key can again rest unencrypted on disk. Restore
+    preview_tls_dir in main.rs and its use in prepare_tls,
+    renew_expiring_preview_leaves and build_router_run_args.
+  command: "cargo test -q -p tillandsias-headless --bin tillandsias --features tray,listen-vsock the_preview_leaf_key_is_never_written_to_disk"

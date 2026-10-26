@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: in-forge-dot-localhost-name-resolution-goes-through-squid-to-proxy-port-80-which-refuses-while-the-router-listens-on-8080
+    field: context
+    value: |-
+      Observed in forge-tillandsias on 2026-10-25.
+
+      The router is healthy: `curl -H 'Host: opencode.tillandsias.localhost'
+      http://10.0.42.38:8080/` returns the router's own 401 gate
+      ("unauthorised — open this project from the Tillandsias tray"), and an
+      unrouted name returns `tillandsias-router: no route for ...`.
+
+      Every in-forge attempt at the documented form fails:
+      - `curl http://opencode.tillandsias.localhost/` -> connection refused (no
+        in-forge resolver for .localhost, expected without a proxy).
+      - `curl -x http://proxy:3128 http://opencode.tillandsias.localhost/` ->
+        502 from `Server: squid/6.12` with `X-Squid-Error: ERR_READ_ERROR`;
+        the proxy host (10.0.42.32) refuses connections on port 80.
+
+      So Squid's .localhost forwarding still points at port 80 of the proxy
+      host rather than at the router on 8080, and the documented fallback in
+      .forge-startup-context.md ("curl -fsS http://<service>.<project>.localhost/")
+      cannot work inside a forge. The host-browser path is unaffected because it
+      reaches the router over host loopback, which is why this hides: the only
+      caller of the in-forge form is a diagnosing agent, and it is told a
+      connection failure that looks like the router is down when the router is
+      fine.
+
+
+      [2026-10-25T23:48:09Z lenovinha] Root cause, measured 2026-10-25 on lenovinha: images/proxy/squid.conf set dns_nameservers 1.1.1.1 8.8.8.8, which replaces the container's aardvark resolver, so the cache_peer router never resolved (log: DNS lookup for tillandsias-router failed) and every .localhost request ended HIER_NONE with a 502. A scratch squid with the same peer: 502 with the line, FIRSTUP_PARENT and the router's answer without it; github.com still resolves through aardvark because the proxy is also on the egress network. Separately, the forge's no_proxy lists localhost, and curl matches that against every *.localhost name, so the bare documented curl skips the proxy; web-services.md now names the proxy with -x.
+    ts: "2026-10-25T23:48:09Z"
+    host: lenovinha
+
+events:
+  - packet_id: in-forge-dot-localhost-name-resolution-goes-through-squid-to-proxy-port-80-which-refuses-while-the-router-listens-on-8080
+    event:
+      type: note
+      ts: "2026-10-25T23:48:09Z"
+      host: lenovinha
+      summary: |-
+        root cause found

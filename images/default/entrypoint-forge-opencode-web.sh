@@ -117,6 +117,12 @@ trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 ensure_openspec_pinned "$PROJECT_DIR"
 openspec_init_if_absent "$PROJECT_DIR" opencode
 
+# ── Host lane before the agent (order 1863-eckw) ────────────
+# OpenCode spawns its host-browser MCP client once, at serve start, and never
+# retries; wait for the lane socket so that one attempt meets a listener, and
+# record the verdict in the startup context below.
+wait_for_lane_socket 10
+
 # ── Startup context injection ───────────────────────────────
 # @trace spec:project-bootstrap-readme
 inject_startup_context "$PROJECT_DIR"

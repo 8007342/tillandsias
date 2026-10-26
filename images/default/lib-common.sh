@@ -4867,6 +4867,21 @@ write_expert_context_pack() {
     return 0
 }
 
+# ── Host lane socket state (order 1863-eckw) ────────────────
+# lane_socket_state and wait_for_lane_socket live in lib-lane.sh so that
+# tillandsias-doctor can use them without sourcing this file (1874-6p63).
+_tlc_lane_lib="${BASH_SOURCE[0]%/*}/lib-lane.sh"
+[ -r "$_tlc_lane_lib" ] || _tlc_lane_lib=/usr/local/lib/tillandsias/lib-lane.sh
+if [ -r "$_tlc_lane_lib" ]; then
+    # shellcheck source=lib-lane.sh
+    source "$_tlc_lane_lib"
+else
+    # Fail soft: a copy of this file sourced away from its directory still
+    # starts, and names the lane `unknown` rather than dying on a missing name.
+    lane_socket_state() { echo unknown; }
+    wait_for_lane_socket() { return 0; }
+fi
+
 # ── Forge startup context injection ─────────────────────────
 # @trace spec:project-bootstrap-readme, spec:forge-environment-discoverability
 # Writes .forge-startup-context.md into the project workspace so agents know
@@ -4927,6 +4942,8 @@ inject_startup_context() {
         || _model_warm_line="model_warm=- warm_state=pending warm_reason=lifecycle-not-reached load_ms=-"
     # Order 969-nhh7: whether THIS checkout carries the guards, read live
     # rather than assumed from the fact that the installer exists.
+    local _lane_state
+    _lane_state="$(lane_socket_state)"
     local _hook_line
     _hook_line="$(forge_hook_state_line "$project_dir" 2>/dev/null)"
     [[ -n "$_hook_line" ]] || _hook_line="hooks: pre_push=unknown pre_commit=unknown dir=unresolved"
@@ -5215,6 +5232,9 @@ inject_startup_context() {
   - Local inference is OPTIONAL: a \`not-ready\` endpoint never blocks this session. Use cloud models, or pull one yourself (\`curl http://inference:11434/api/pull -d '{"name":"qwen2.5:0.5b"}'\`).
   - Machine-readable MODEL WARM-UP (order 965-hz3f — branch on this, do not parse the prose): \`${_model_warm_line}\`
   - This is a SEPARATE line from the tier verdicts on purpose. A tier budget is a promise about INFERENCE latency, and a cold model charges a VRAM load against it: measured on an RTX A5000, qwen2.5:7b took 23353ms cold and 938ms warm, 14b 9996ms then 1474ms — both warm figures inside the Quick tier's 3000ms, both cold ones far outside. Folding the load into a tier verdict makes "loading" and "slow" indistinguishable, which is exactly how a cold-start was once read as a model-size floor and nearly answered by raising the budget. \`warm_state\` is \`warm\` (loaded, and \`load_ms\` is what the load cost), \`failed\` (the request errored — the first real query pays the load), or \`skipped\` with a named \`warm_reason\`: \`no-curl\`, \`endpoint-unreachable\`, \`no-candidate-present\`. The budget is NOT raised to accommodate a cold model; \`TILLANDSIAS_SYNTH_BUDGET_MS\` remains the operator escape hatch for a genuinely slow lane.
+- **Host lane** — machine-readable (order 1863-eckw — branch on this, do not parse the prose): \`host_lane=${_lane_state} socket=${TILLANDSIAS_CONTROL_SOCKET:-none}\`
+  - \`publish_local\`, \`browser.open\`, the \`service_*\` tools and the host toolchains (\`flutter\`) all go over this one socket. \`ready\` means they can work. \`stale\` means the socket file exists but nothing on the host accepts on it: the process that served this lane is gone, every one of those tools fails, and an MCP server reported as failed at startup stays failed. Quit nothing; tell the operator \`host_lane=stale\`, and a running tray re-serves the lane within a second, after which a new session of the agent reconnects. \`absent\`/\`unset\` mean this forge was launched with no lane at all.
+- **Diagnose** — run \`tillandsias-doctor\` (or \`tillandsias-doctor --json\`) when a tool, the router or \`flutter\` fails: one call reports the lane socket, every MCP server with its reason, the router direct and through the proxy, the flutter toolchain, the cheatsheets and free space (order 1874-6p63). There is no in-forge renderer; previews open in the host browser.
 - **Git guards** — machine-readable (order 969-nhh7 — branch on this, do not parse the prose): \`${_hook_line}\`
   - \`pre_push=present\` means this checkout has the composed pre-push gate, so a push with no \`./build.sh --check\` stamp is REFUSED. \`pre_push=absent\` means it is not: push CI no longer exists on any working branch, so the local gate is the ONLY automated trunk protection, and without it nothing but your own discipline is checking what reaches the trunk. Run \`scripts/install-hooks.sh\` if you see \`absent\`, and treat every push until then as unguarded. This line exists because a forge carried exactly two hooks — neither a guard — for long enough that a cycle ran the gate, got a REFUSAL, and pushed anyway with nothing to stop it; the gap was found by accident while checking something else, and an unobservable guard is indistinguishable from a missing one.
 - **Experts** — \`experts: ${_experts_status}\`. An expert is a CITED RETRIEVAL SURFACE behind an MCP tool, not a model; the plan expert runs NO inference. Query it through the \`forge-plan\` MCP server (\`plan_answer\`, \`plan_next\`, \`methodology_ask\`, \`spec_answer\`, \`plan_check\`, \`plan_status\`, \`plan_ready\`, \`plan_blocked_by\`, \`plan_closure\`, \`plan_burndown\`; \`expert_capability\` when any answer is \`unsupported\`) instead of grepping \`plan/index.yaml\`.

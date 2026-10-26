@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue (opus5): the land carrier for the 1863-eckw fix
+# (the work/1863-eckw ref holds the forge's field report, so the fix lands here).
+packets:
+  - packet_id: tray-adopts-orphaned-web-forge-lane-sockets-and-forge-names-a-stale-lane
+    order: 1899-p8yj
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [mcp, host-browser, tray, forge]
+    size: M
+    implementer_tier: sonnet
+    depends_on: [opencode-web-session-loses-its-lane-mcp-socket-when-the-launching-process-exits]
+    title: "The tray adopts a web forge's lane MCP socket when its launcher exits, and the forge names a stale lane in its startup context and tool errors"
+    context: |
+      Implementation of 1863-eckw (PR #657, re-pushed under this order so the
+      land queue can take it). A web-mode launch marks its lane tray-owned;
+      the tray re-binds any marked lane that stops accepting; lib-common
+      reports host_lane=ready|stale|absent|unset at startup and the flutter
+      shim and host-browser bridge name a stale lane.
+    exit_criteria:
+      - "litmus:lane-socket-survives-launcher-exit passes: the adoption tests and the lane-state probe, both red on the pre-fix code."
+    verifiable_closure: "litmus:lane-socket-survives-launcher-exit"
