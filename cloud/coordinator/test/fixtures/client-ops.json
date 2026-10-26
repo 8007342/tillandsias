@@ -1,0 +1,16 @@
+{
+  "_about": "1826-gi8e criterion (b): the exact request bodies tillandsias-plan's coordinator client sends (crates/tillandsias-plan/src/coordinator_client.rs ops::*), pinned on BOTH sides. The Rust test client_ops_fixture_matches_the_builders asserts each request equals its builder's output; test/client-wire.spec.ts replays the steps through the Worker and asserts every field the client reads is present with its type. NS, HEAD_SHA and {{claim.token}} are substituted by both readers.",
+  "steps": [
+    { "name": "join", "who": "host-a", "request": { "op": "join", "ns": "NS" }, "status": 200, "reads": { "freshness": "object" } },
+    { "name": "send", "who": "host-a", "request": { "op": "send", "ns": "NS", "body": "hello fleet", "provider": "tillandsias-plan", "ttl_s": 60 }, "status": 200, "reads": { "seq": "number", "expires_at": "number" } },
+    { "name": "recv", "who": "host-b", "request": { "op": "recv", "ns": "NS", "since": 0 }, "status": 200, "reads": { "msgs": "array", "next": "number", "freshness": "object" } },
+    { "name": "overview_put", "who": "host-a", "request": { "op": "overview.put", "ns": "NS", "overview": { "rows": 1 }, "sha": "HEAD_SHA" }, "status": 200, "reads": { "freshness": "object" } },
+    { "name": "overview_get", "who": "host-b", "request": { "op": "overview.get", "ns": "NS", "client_head": "HEAD_SHA" }, "status": 200, "reads": { "overview": "object", "freshness": "object" } },
+    { "name": "bump", "who": "host-a", "request": { "op": "bump", "ns": "NS", "head_sha": "HEAD_SHA" }, "status": 200, "reads": { "freshness": "object" } },
+    { "name": "claim", "who": "host-a", "request": { "op": "claim", "ns": "NS", "order": "1826-gi8e", "ttl_s": 600 }, "status": 200, "reads": { "token": "string", "until": "number" } },
+    { "name": "claim_contested", "who": "host-b", "request": { "op": "claim", "ns": "NS", "order": "1826-gi8e" }, "status": 409, "reads": { "holder": "string", "until": "number" } },
+    { "name": "claims", "who": "host-b", "request": { "op": "claims", "ns": "NS" }, "status": 200, "reads": { "claims": "array", "claims.0.order": "string" }, "orders": ["1826-gi8e"] },
+    { "name": "release", "who": "host-a", "request": { "op": "release", "ns": "NS", "order": "1826-gi8e", "token": "{{claim.token}}" }, "status": 200, "reads": { "released": "boolean" } },
+    { "name": "claims_after_release", "who": "host-b", "request": { "op": "claims", "ns": "NS" }, "status": 200, "reads": { "claims": "array" }, "orders": [] }
+  ]
+}
