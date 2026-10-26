@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: grapesjs-and-silex-studio-lanes-for-static-html
+    field: verifiable_closure
+    value: 'A fixture opens a static HTML project in the GrapesJS lane in the dev Chromium framework browser, lets storageManager remote autosave post to the shared endpoint, and asserts that index.html in the checkout changed AND a new commit exists for it; studio_options lists no Silex lane. It also re-verifies the GrapesJS license and latest release and records them in the registry. Pre-fix result: FAILS, no studio registry entry or image exists.'
+    ts: "2026-10-25T21:17:56Z"
+    host: macuahuitl
+    replaces_sha256: "81f626d870d05984894dad4070d5ba90980f1a1bb1760c4f72ef394b21e1be50"
+
+events:
+  - packet_id: grapesjs-and-silex-studio-lanes-for-static-html
+    event:
+      type: note
+      ts: "2026-10-25T21:17:56Z"
+      host: macuahuitl
+      summary: |-
+        operator ruling 2026-10-25

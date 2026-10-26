@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: launch-option-choice-prompt-we-have-n-options-with-one-recommended
+    field: title
+    value: Launch-option choice prompt ("we have N options for this:" with one [Recommended]), with the choice committed to the project's .tillandsias/config.toml
+    ts: "2026-10-25T21:18:03Z"
+    host: macuahuitl
+    replaces_sha256: "45e292f0e21ce078eb37d4685818dd01925e8831095277dd4a4f36cc75af163d"
+
+events:
+  - packet_id: launch-option-choice-prompt-we-have-n-options-with-one-recommended
+    event:
+      type: note
+      ts: "2026-10-25T21:18:03Z"
+      host: macuahuitl
+      summary: |-
+        operator ruling 2026-10-25: choice committed to project config
