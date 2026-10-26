@@ -587,6 +587,11 @@ _pf_index_lock_held() {  # $1 = absolute lock path, $2 = scratch prefix; 0 = hel
             _pid="${_e#*/proc/}"; _pid="${_pid%%/*}"
             case "$_pid" in ''|*[!0-9]*) continue ;; esac
             _c="$(cat "/proc/$_pid/comm" 2>/dev/null)" || _c=""
+            # a git daemon (a mirror container's, whose fds a toolbox in
+            # another user namespace cannot readlink) serves bare repositories
+            # and never holds a worktree index.lock (1900-tm9v)
+            case "$_c" in git-daemon|git-upload-pa*|git-receive-pa*) continue ;; esac
+            case "$(tr '\0' ' ' < "/proc/$_pid/cmdline" 2>/dev/null)" in "git daemon "*) continue ;; esac
             case "$_c" in git*) rm -f "$2.lockscan"; return 0 ;; esac
         done < "$2.lockscan"
         rm -f "$2.lockscan"
@@ -3227,6 +3232,12 @@ if [[ "$FLAG_CHECK" == true ]]; then
     timing_emit build-preamble check "${_PREAMBLE_T0:-$(timing_now_ms)}" 0 || true
     _CHECK_T0="$(timing_now_ms)"
     trap 'timing_emit build-check check "$_CHECK_T0" $?' EXIT
+    # 1826-gi8e: hold the coordinator lane marker while the gate runs, so the
+    # `coord heartbeat` stands down. The reader checks the pid, so an aborted
+    # gate leaves a marker that no longer holds anything, and the EXIT trap
+    # above stays untouched. Best-effort: it can never fail the gate.
+    _LANE_MARKER="$SCRIPT_DIR/.cache/lane-markers/gate-$$"
+    { mkdir -p "$SCRIPT_DIR/.cache/lane-markers" && printf '%s\n' "$$" > "$_LANE_MARKER"; } 2>/dev/null || true
 
     # ── Stamp memoization (order 765-tkq2) ────────────────────────────────
     #
@@ -6714,6 +6725,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # Normal completion: cancel the abort-trap and emit exactly one success
     # record for the whole gate. (packet 682-emvg)
     trap - EXIT
+    rm -f "${_LANE_MARKER:-/nonexistent}" 2>/dev/null || true
     _phase_report
     # 765-dfry: flush per-phase records AFTER the printed report (report reads
     # the same log; the flush consumes it).

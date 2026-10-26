@@ -1,0 +1,133 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# macOS storage research findings (section 6). Code cited by symbol.
+packets:
+  - packet_id: macos-guest-root-disk-is-in-time-machine-backups
+    order: 1893-6crj
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, storage, vm]
+    estimated_hours: 3
+    title: "The macOS guest root disk (20-50 GiB sparse rootfs.img) is in Time Machine backups; only the swap image is excluded"
+    context: |
+      [M] tmutil isexcluded rootfs.img = Included; vm-swap.img = Excluded. [S] vz.rs boot::exclude_from_time_machine is applied only to the swap image. rootfs.img churns with every guest write, so each backup can re-copy gigabytes. Also rootfs.qcow2 (528 MB download) is kept after conversion (vz.rs fetch_fedora_cloud_image / convert_qcow2_to_raw). vm-identity.img is backed up on purpose and must stay so.
+    exit_criteria:
+      - "A fixture over the image-root setup asserts rootfs.img (and rootfs.qcow2 or its removal) is passed to the Time Machine exclusion and vm-identity.img is not. Pre-fix: FAILS, only vm-swap.img is excluded."
+    verifiable_closure: "A fixture over the image-root setup asserts rootfs.img (and rootfs.qcow2 or its removal) is passed to the Time Machine exclusion and vm-identity.img is not. Pre-fix: FAILS, only vm-swap.img is excluded."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Write the fixture named in the exit criterion first and watch it fail, then fix.
+    provenance: |
+      macOS research for openspec change forge-storage-single-root-and-disk-discipline tasks.md section 6 (PR #650), tlatoanis-macbook-air 2026-10-25, coordinator-assigned. [M]=measured on this host, [S]=source-read, [U]=unverified.
+    events:
+      - type: filed
+        ts: "2026-10-26T00:18:12Z"
+        host: tlatoanis-macbook-air
+        summary: "filed ready from the macOS storage research (section 6)"
+  - packet_id: macos-guest-deletes-never-return-space-to-the-host-no-discard
+    order: 1894-r3r4
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, storage, vm]
+    estimated_hours: 3
+    title: "Space freed inside the macOS guest never returns to APFS: no discard/TRIM through virtio-blk"
+    context: |
+      [S] every VZDiskImageStorageDeviceAttachment uses initWithURL:readOnly:error: defaults (vz.rs boot::build_vm_configuration); the guest has no fstrim timer or discard mount option (vz.rs provision_user_data). [M] rootfs.img is sparse on APFS (20 GiB apparent, ~2 GB allocated). [U] whether Virtualization.framework virtio-blk passes discard to punch holes in the sparse file. This blocks the L1/L2 layers (forge-storage-layers): a deleted forge scratch dir would not shrink the host image.
+    exit_criteria:
+      - "Probe first: in the guest write 1 GiB, delete it, run fstrim -v /, and compare host du of rootfs.img before and after. If reclaim works, enable fstrim (timer or discard) and pin with a fixture asserting the guest config carries it; if not, record the platform limit in design.md and size L1/L2 accordingly."
+    verifiable_closure: "Probe first: in the guest write 1 GiB, delete it, run fstrim -v /, and compare host du of rootfs.img before and after. If reclaim works, enable fstrim (timer or discard) and pin with a fixture asserting the guest config carries it; if not, record the platform limit in design.md and size L1/L2 accordingly."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Write the fixture named in the exit criterion first and watch it fail, then fix.
+    provenance: |
+      macOS research for openspec change forge-storage-single-root-and-disk-discipline tasks.md section 6 (PR #650), tlatoanis-macbook-air 2026-10-25, coordinator-assigned. [M]=measured on this host, [S]=source-read, [U]=unverified.
+    events:
+      - type: filed
+        ts: "2026-10-26T00:18:12Z"
+        host: tlatoanis-macbook-air
+        summary: "filed ready from the macOS storage research (section 6)"
+  - packet_id: macos-console-log-rotates-only-at-vm-boot
+    order: 1895-5vtt
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, storage, vm]
+    estimated_hours: 3
+    title: "The macOS guest console.log rotates only when the VM boots, so a long-running VM grows it without bound"
+    context: |
+      [M] console.log reached 126 MB after 3 days of uptime (boot 2026-10-22). [S] vz.rs VzRuntime::rotate_console_log_if_oversized runs only from the boot path (rename to console.log.prev when over CONSOLE_LOG_MAX_BYTES); nothing checks it while the VM runs.
+    exit_criteria:
+      - "A fixture drives console output past CONSOLE_LOG_MAX_BYTES on a running VM (or the writer seam) and asserts the file stays bounded without a reboot. Pre-fix: FAILS, size grows until the next boot."
+    verifiable_closure: "A fixture drives console output past CONSOLE_LOG_MAX_BYTES on a running VM (or the writer seam) and asserts the file stays bounded without a reboot. Pre-fix: FAILS, size grows until the next boot."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Write the fixture named in the exit criterion first and watch it fail, then fix.
+    provenance: |
+      macOS research for openspec change forge-storage-single-root-and-disk-discipline tasks.md section 6 (PR #650), tlatoanis-macbook-air 2026-10-25, coordinator-assigned. [M]=measured on this host, [S]=source-read, [U]=unverified.
+    events:
+      - type: filed
+        ts: "2026-10-26T00:18:12Z"
+        host: tlatoanis-macbook-air
+        summary: "filed ready from the macOS storage research (section 6)"
+  - packet_id: plaintext-private-keys-at-rest-under-macos-cache-and-state-dirs
+    order: 1896-hp3f
+    status: ready
+    kind: security
+    priority: p1
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, storage, vm]
+    estimated_hours: 3
+    title: "Plaintext private keys sit at rest on the macOS host: ~/.cache/tillandsias/ca-key.pem and ~/.local/state/tillandsias/ca/{intermediate,vault}.key"
+    context: |
+      [M] ~/.cache/tillandsias/ca-key.pem (2026-07-06), ~/.local/state/tillandsias/ca/intermediate.key (2026-10-17) and vault.key (2026-10-18), all mode 0600, unencrypted PEM. Writer NOT yet identified: may be the tray, the headless host services, or builder tooling run on this host. Ruling 11.3 (Vault and CA move out of cache; wiped, not migrated) covers the destination. Nothing was deleted or read beyond ls -la. Operator decision needed before any wipe.
+    exit_criteria:
+      - "Identify the writer symbol for each file; a fixture asserts no private key is written unencrypted under any cache or state dir on macOS (keychain or Vault instead). Pre-fix: FAILS, the three files exist."
+    verifiable_closure: "Identify the writer symbol for each file; a fixture asserts no private key is written unencrypted under any cache or state dir on macOS (keychain or Vault instead). Pre-fix: FAILS, the three files exist."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Write the fixture named in the exit criterion first and watch it fail, then fix.
+    provenance: |
+      macOS research for openspec change forge-storage-single-root-and-disk-discipline tasks.md section 6 (PR #650), tlatoanis-macbook-air 2026-10-25, coordinator-assigned. [M]=measured on this host, [S]=source-read, [U]=unverified.
+    events:
+      - type: filed
+        ts: "2026-10-26T00:18:12Z"
+        host: tlatoanis-macbook-air
+        summary: "filed ready from the macOS storage research (section 6)"
+  - packet_id: macos-no-read-only-guest-exec-while-the-tray-owns-the-vm
+    order: 1897-y7j2
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, storage, vm]
+    estimated_hours: 3
+    title: "No read-only way to run a guest command on macOS while the operator's tray owns the VM"
+    context: |
+      [M] tillandsias-tray --exec-guest refuses: "needs to boot the VM, but a running Tillandsias tray owns it". So storage task 6.5 (df -hT on /home/forge/src, /tmp, overlay, HOMEBREW_CACHE, TMPDIR inside the guest) could not be run without quitting the tray, which agents must not do. [S] HOMEBREW_CACHE is set only in images/default/brew-shim-exec.sh; TMPDIR is unset in VM provisioning; forge containers get --tmpfs /tmp:size=256m (container_profile.rs).
+    exit_criteria:
+      - "--exec-guest (or a tray-routed equivalent) runs a command in the already-running guest via the owning tray, and the 6.5 df check is recorded. Pre-fix: FAILS with the owns-the-VM refusal."
+    verifiable_closure: "--exec-guest (or a tray-routed equivalent) runs a command in the already-running guest via the owning tray, and the 6.5 df check is recorded. Pre-fix: FAILS with the owns-the-VM refusal."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Write the fixture named in the exit criterion first and watch it fail, then fix.
+    provenance: |
+      macOS research for openspec change forge-storage-single-root-and-disk-discipline tasks.md section 6 (PR #650), tlatoanis-macbook-air 2026-10-25, coordinator-assigned. [M]=measured on this host, [S]=source-read, [U]=unverified.
+    events:
+      - type: filed
+        ts: "2026-10-26T00:18:12Z"
+        host: tlatoanis-macbook-air
+        summary: "filed ready from the macOS storage research (section 6)"

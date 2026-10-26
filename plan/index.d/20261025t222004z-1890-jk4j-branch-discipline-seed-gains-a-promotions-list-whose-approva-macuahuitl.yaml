@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl from operator rulings 2026-10-25. Code is cited by symbol, never by line.
+packets:
+- packet_id: branch-discipline-seed-gains-a-promotions-list-whose-approval-required-entries-the-mirror-hook-gates
+  order: 1890-jk4j
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - approval
+  - security
+  - cost-gate
+  estimated_hours: 4
+  depends_on: []
+  related:
+  - 1881-ynjn
+  title: A project's branch rules can mark some promotions, such as research to integration, as needing approval
+  context: 'Design R6 of openspec/changes/os-verified-approval-gates. Merges and PRs are promotions in the production chain. Add an optional promotions: list (from, to, approval: required|none) to .tillandsias/branch-discipline.yaml and to the methodology branch-discipline schema and the /project-discipline skill; discipline_parse emits it for the pre-receive hook. Nothing is gated by default.'
+  exit_criteria:
+  - 'A fixture seed with promotions [{from: research/*, to: linux-next, approval: required}] is parsed by discipline_parse into a promotion line, the methodology schema check accepts it and rejects an approval value other than required|none, and a seed without the list yields no promotion lines. Pre-fix result: FAILS, discipline_parse ignores promotions and the schema has no such key.'
+  verifiable_closure: 'A fixture seed with promotions [{from: research/*, to: linux-next, approval: required}] is parsed by discipline_parse into a promotion line, the methodology schema check accepts it and rejects an approval value other than required|none, and a seed without the list yields no promotion lines. Pre-fix result: FAILS, discipline_parse ignores promotions and the schema has no such key.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+
+    '
+  next_action: 'Nothing is done. Write the check named in the exit criterion first and watch it fail on today''s code, then implement per openspec/changes/os-verified-approval-gates.
+
+    '
+  provenance: 'Filed from the operator rulings on PR #651, 2026-10-25.
+
+    '
+  events:
+  - type: filed
+    ts: '2026-10-25T22:20:00Z'
+    host: macuahuitl
+    summary: filed from the operator rulings of 2026-10-25

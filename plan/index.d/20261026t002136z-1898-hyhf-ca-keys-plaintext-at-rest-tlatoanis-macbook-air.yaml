@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# 1896-hp3f investigation result: the writer, and the fix. Code cited by symbol.
+packets:
+  - packet_id: ca-and-vault-tls-keys-never-written-unencrypted-where-the-tmpfs-key-store-is-inactive-including-under-cargo-test
+    order: 1898-hyhf
+    status: ready
+    kind: security
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [security, vault, ca, macos, windows]
+    estimated_hours: 4
+    title: "CA and Vault TLS private keys are never written unencrypted to disk: not on macOS or Windows hosts, not off tmpfs, and not by the gate's own unit tests"
+    context: |
+      Investigation of 1896-hp3f (tlatoanis-macbook-air, 2026-10-26). [M]=measured, [S]=source-read.
+      WRITER: main.rs ensure_ca_bundle mints intermediate.key into tillandsias_core::ca_path::ca_dir() = ${HOME}/.local/state/tillandsias/ca; vault_bootstrap.rs ensure_vault_tls_leaf (via tls_material_dir -> ensure_ca_bundle, from vault_client / ensure_vault_running) writes vault.key beside it. The 1118-fqfk slice 2b protection (ca_key_store.rs: key bytes on a 0700 tmpfs, durable copy in the OS keyring, legacy plaintext deleted) is active ONLY when the runtime dir is tmpfs and never under cfg(test) (ca_key_store::session). macOS has no tmpfs and Windows has no runtime dir, so there every mint leaves the key in plaintext (mode 0600 only).
+      MEASURED WRITER ON EVERY HOST: the gate's unit test main.rs tests::source_built_init_and_status_check_smoke_uses_fake_podman calls ensure_ca_bundle(false) with the real HOME. [M] Run with HOME=<scratch>, it created <scratch>/.local/state/tillandsias/ca/intermediate.key holding an unencrypted -----BEGIN PRIVATE KEY-----. So every ./build.sh --check on any host mints a plaintext CA key into the operator's real home; on Linux the next real launch deletes it as legacy plaintext, on macOS nothing ever does.
+      AGES on tlatoanis-macbook-air [M]: intermediate.key 2026-10-17 06:48 and vault.key 2026-10-18 15:26, both after the 1118 slice 2b code and before the installed tray (2026-10-20 15:14), so they are current-code writes, consistent with gate runs on this host (vault.key's exact caller unidentified: a test or host command reaching ensure_vault_running/vault_client). ~/.cache/tillandsias/ca-key.pem (2026-07-06) is a LEFTOVER: no current code names ca-key.pem (git log -S: added 2026-05-03..05, since removed).
+      STANDING RULE (operator 2026-10-19): no plaintext credentials at rest; a lost credential beats an unencrypted one. Existing files are NOT to be touched by agents; the wipe is with the operator (coordinator raised it 2026-10-26).
+    exit_criteria:
+      - "A fixture runs the CA mint (ensure_ca_bundle) and the Vault leaf mint with HOME and the runtime dir pointed at scratch, on a host where the tmpfs key store is inactive (forced off, as on macOS or Windows), and asserts that no file under the scratch HOME or cache contains an unencrypted PEM private key. The keys must live only in the OS keychain/Vault, or encrypted at rest, or the mint must refuse. Pre-fix result: FAILS. HOME=scratch with source_built_init_and_status_check_smoke_uses_fake_podman leaves .local/state/tillandsias/ca/intermediate.key in plaintext."
+      - "No unit test reaches the operator's real HOME for CA material: the smoke test above uses a scratch CA dir seam, pinned by a test that asserts ca_dir() is not the real HOME during cfg(test)."
+    verifiable_closure: "The fixture in the first exit criterion passes, and HOME=scratch ./build.sh --check-equivalent test run leaves no BEGIN PRIVATE KEY under scratch HOME."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Write the fixture first (HOME=scratch, store forced inactive, grep for an unencrypted PEM key) and watch it fail; then give the test a scratch CA dir and make the non-tmpfs path keychain-only or refuse.
+    provenance: |
+      Filed from 1896-hp3f's investigation, coordinator-assigned 2026-10-26.
+    events:
+      - type: filed
+        ts: "2026-10-26T00:21:36Z"
+        host: tlatoanis-macbook-air
+        summary: "filed ready from the 1896-hp3f writer investigation"

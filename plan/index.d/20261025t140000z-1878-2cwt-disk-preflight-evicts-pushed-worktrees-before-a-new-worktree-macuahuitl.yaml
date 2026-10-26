@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+  - packet_id: disk-preflight-evicts-pushed-worktrees-before-a-new-worktree-and-skills-call-it
+    order: 1878-2cwt
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [disk, worktrees, skills, startup-context]
+    estimated_hours: 6
+    title: "Before making a new worktree, check free space and remove finished, already-pushed worktrees; skills use this check"
+    context: |
+      Rules D4 and D5 of openspec/changes/forge-storage-single-root-and-disk-discipline. A full disk is the likeliest overnight forge crash. One binary subcommand (no new shell script) reads free space of the target filesystem, lists worktrees, evicts clean ones whose HEAD is contained in a remote ref oldest first, never evicts unpushed or dirty ones, and refuses with refused:disk-low:<path>:<free> when the threshold (host max(2 GiB,15%); forge L0 25%) cannot be reached. Wire it into the skills listed in design D5 and add the startup-context disk line. 1866-ubtc owns the in-forge source tmpfs pruning of .claude/worktrees/agent-*; this packet provides the shared preflight it can call.
+    exit_criteria:
+      - "A fixture builds a scratch repo with one clean pushed worktree, one with an unpushed commit and one dirty, sets a threshold above free space, and runs the preflight: only the pushed worktree is removed and the run ends with refused:disk-low; a grep over the D5 skill files finds the preflight call in each. Pre-fix result: FAILS, no preflight command exists and no skill references one."
+    verifiable_closure: "A fixture builds a scratch repo with one clean pushed worktree, one with an unpushed commit and one dirty, sets a threshold above free space, and runs the preflight: only the pushed worktree is removed and the run ends with refused:disk-low; a grep over the D5 skill files finds the preflight call in each. Pre-fix result: FAILS, no preflight command exists and no skill references one."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then implement per openspec/changes/forge-storage-single-root-and-disk-discipline.
+    provenance: |
+      Filed at operator request 2026-10-25 (single-root containment and disk discipline); spec openspec/changes/forge-storage-single-root-and-disk-discipline.
+    events:
+      - type: filed
+        ts: "2026-10-25T14:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator request of 2026-10-25"

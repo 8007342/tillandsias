@@ -1,0 +1,17 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: puck-studio-lane-for-react-sites
+    event:
+      type: list-replace
+      ts: "2026-10-25T21:18:10Z"
+      agent_id: linux-macuahuitl-claude-20261025t211810z
+      host: macuahuitl
+      field: exit_criteria
+      items:
+        - "A fixture launches the Puck lane as a separate editor app on a React fixture, triggers onPublish and asserts that the page data JSON was written under the lane allowlist and committed, that the user's app routes are unchanged, and that a write outside the allowlist is refused. Pre-fix result: FAILS, no Puck lane exists."
+      summary: |-
+        operator ruling 2026-10-25

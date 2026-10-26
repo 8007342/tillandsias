@@ -882,21 +882,15 @@ fn cmd_coord(args: &[String], index: &Path, ledger: &Ledger) {
 
     let sub = args.get(1).map(String::as_str).unwrap_or("");
     let op = match sub {
-        "join" | "claims" => json!({ "op": sub, "ns": ns }),
+        "join" => cc::ops::join(&ns),
+        "claims" => cc::ops::claims(&ns),
         "send" => {
             need(1, "send <body> [--ttl S] [--ns NS]");
-            let mut o =
-                json!({ "op": "send", "ns": ns, "body": pos[0], "provider": "tillandsias-plan" });
-            if let Some(t) = ttl {
-                o["ttl_s"] = json!(t)
-            }
-            o
+            cc::ops::send(&ns, &pos[0], ttl)
         }
-        "recv" => json!({ "op": "recv", "ns": ns, "since": since.unwrap_or(0) }),
+        "recv" => cc::ops::recv(&ns, since.unwrap_or(0)),
         "overview" => match pos.first().map(String::as_str) {
-            Some("get") => {
-                json!({ "op": "overview.get", "ns": ns, "client_head": git(&["rev-parse", "HEAD"]) })
-            }
+            Some("get") => cc::ops::overview_get(&ns, git(&["rev-parse", "HEAD"]).as_deref()),
             Some("put") => {
                 need(2, "overview put <json-file> [--ns NS]");
                 let text = std::fs::read_to_string(&pos[1]).unwrap_or_else(|e| {
@@ -907,7 +901,7 @@ fn cmd_coord(args: &[String], index: &Path, ledger: &Ledger) {
                     eprintln!("error: {} is not JSON: {e}", pos[1]);
                     std::process::exit(2);
                 });
-                json!({ "op": "overview.put", "ns": ns, "overview": overview, "sha": git(&["rev-parse", "HEAD"]) })
+                cc::ops::overview_put(&ns, overview, git(&["rev-parse", "HEAD"]).as_deref())
             }
             _ => {
                 eprintln!("usage: tillandsias-plan coord overview get|put <json-file>");
@@ -916,31 +910,17 @@ fn cmd_coord(args: &[String], index: &Path, ledger: &Ledger) {
         },
         "claim-overlay" => {
             need(1, "claim-overlay <order> [--ttl S] [--ns NS]");
-            let mut o = json!({ "op": "claim", "ns": ns, "order": pos[0] });
-            if let Some(t) = ttl {
-                o["ttl_s"] = json!(t)
-            }
-            o
+            cc::ops::claim(&ns, &pos[0], ttl)
         }
         "release" => {
             need(2, "release <order> <token> [--ns NS]");
-            json!({ "op": "release", "ns": ns, "order": pos[0], "token": pos[1] })
+            cc::ops::release(&ns, &pos[0], &pos[1])
         }
         "next" => {
             // The overlay only hides rows other hosts hold right now; the
             // ledger fold is the answer either way.
-            let (overlaid, source, reason) = match ask(json!({ "op": "claims", "ns": ns })) {
-                Ok(r) => {
-                    let set: std::collections::BTreeSet<String> = r["claims"]
-                        .as_array()
-                        .map(|cs| {
-                            cs.iter()
-                                .filter_map(|c| c["order"].as_str().map(str::to_string))
-                                .collect()
-                        })
-                        .unwrap_or_default();
-                    (set, "coordinator+git-ledger", None)
-                }
+            let (overlaid, source, reason) = match ask(cc::ops::claims(&ns)) {
+                Ok(r) => (cc::orders_in_claims(&r), "coordinator+git-ledger", None),
                 Err(e) => (Default::default(), "git-ledger", Some(e.reason())),
             };
             let envelope = answer::answer_next_excluding(
@@ -978,9 +958,7 @@ fn cmd_coord(args: &[String], index: &Path, ledger: &Ledger) {
                 let tick = if held {
                     json!({ "source": "local", "tick": "skipped", "reason": "lane-marker-held" })
                 } else {
-                    match ask(
-                        json!({ "op": "bump", "ns": ns, "head_sha": git(&["rev-parse", "HEAD"]) }),
-                    ) {
+                    match ask(cc::ops::bump(&ns, git(&["rev-parse", "HEAD"]).as_deref())) {
                         Ok(r) => {
                             json!({ "source": "coordinator", "tick": "sent", "freshness": r["freshness"] })
                         }
