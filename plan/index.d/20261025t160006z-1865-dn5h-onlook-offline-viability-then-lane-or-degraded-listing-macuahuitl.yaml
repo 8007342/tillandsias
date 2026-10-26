@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25 (web studio lanes). Code is cited by symbol, never by line.
+packets:
+  - packet_id: onlook-offline-viability-then-lane-or-degraded-listing
+    order: 1865-dn5h
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, browser, studio, research]
+    estimated_hours: 4
+    depends_on: [studio-lane-contract-registry-generic-launcher-write-guard-front-and-mcp-coedit]
+    title: "Measure whether Onlook runs fully offline in a forge; then ship its lane, or list it as needing a cloud account and never recommended"
+    context: |
+      Operator direction 2026-10-25: "I want to author this website interactively" opens a visual web studio window on the live site, with live saves into the forge checkout and the agent co-editing; every studio is offered as a choice with one [Recommended]. Publishing goes through the 1853-qr4h deploy tool, deploy branch only, on explicit request; no build on push. Spec: openspec/changes/web-studio-lanes. Reuses run_opencode_web_mode plumbing (RouterRoute, tillandsias_otp::issue_session, send_issue_web_session, launch_opencode_web_browser, ensure_versioned_images, sse-keepalive-proxy.js, local_web_preview::publish).
+    exit_criteria:
+      - "A recorded measurement runs Onlook in a forge with egress=none on a Next.js+Tailwind fixture and records whether an edit lands in the checkout; the registry entry matches the result, and the choice fixture asserts that Onlook is never [Recommended] while degraded. Pre-fix result: FAILS, no measurement and no registry entry exist."
+    verifiable_closure: "A recorded measurement runs Onlook in a forge with egress=none on a Next.js+Tailwind fixture and records whether an edit lands in the checkout; the registry entry matches the result, and the choice fixture asserts that Onlook is never [Recommended] while degraded. Pre-fix result: FAILS, no measurement and no registry entry exist."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the fixture named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-25.
+    events:
+      - type: filed
+        ts: "2026-10-25T16:00:06Z"
+        host: macuahuitl
+        summary: "filed ready from the operator direction of 2026-10-25"

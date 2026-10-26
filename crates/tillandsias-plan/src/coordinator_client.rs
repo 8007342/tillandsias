@@ -137,14 +137,45 @@ pub fn lane_marker_held(dir: &Path, now: SystemTime) -> bool {
         return false;
     };
     entries.flatten().any(|e| {
-        e.metadata()
+        let fresh = e
+            .metadata()
             .and_then(|m| m.modified())
             .ok()
             // A marker stamped after `now` (clock skew, or written mid-check)
             // is as fresh as it gets, not absent.
             .map(|t| now.duration_since(t).unwrap_or(Duration::ZERO))
-            .is_some_and(|age| age < MARKER_STALE_AFTER)
+            .is_some_and(|age| age < MARKER_STALE_AFTER);
+        // A marker holding a pid is held only while that process lives, so a
+        // gate that finished or was killed never needs to clean up after
+        // itself (build.sh writes one and leaves the EXIT trap alone).
+        let holder_alive = std::fs::read_to_string(e.path())
+            .ok()
+            .and_then(|s| s.trim().parse::<u32>().ok())
+            .is_none_or(pid_alive);
+        fresh && holder_alive
     })
+}
+
+/// Does a process with this pid exist? Signal 0 checks without sending; EPERM
+/// means it exists under another user.
+fn pid_alive(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        let Ok(pid) = libc::pid_t::try_from(pid) else {
+            return false;
+        };
+        if pid <= 0 {
+            return false;
+        }
+        // SAFETY: kill with signal 0 performs only the permission/existence check.
+        let rc = unsafe { libc::kill(pid, 0) };
+        rc == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = pid;
+        true
+    }
 }
 
 /// Why the coordinator was not (successfully) asked.
@@ -314,16 +345,21 @@ impl<T: Transport> Client<T> {
         &mut self,
         ns: &str,
     ) -> Result<std::collections::BTreeSet<String>, Offline> {
-        let r = self.op(json!({ "op": "claims", "ns": ns }))?;
-        Ok(r.get("claims")
-            .and_then(Value::as_array)
-            .map(|cs| {
-                cs.iter()
-                    .filter_map(|c| c.get("order").and_then(Value::as_str).map(str::to_string))
-                    .collect()
-            })
-            .unwrap_or_default())
+        Ok(orders_in_claims(&self.op(ops::claims(ns))?))
     }
+}
+
+/// The orders in a `claims` answer: `{claims: [{order, holder, until}]}`.
+pub fn orders_in_claims(answer: &Value) -> std::collections::BTreeSet<String> {
+    answer
+        .get("claims")
+        .and_then(Value::as_array)
+        .map(|cs| {
+            cs.iter()
+                .filter_map(|c| c.get("order").and_then(Value::as_str).map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn classify(status: u16, body: Value) -> Result<Value, Offline> {
@@ -345,6 +381,52 @@ fn classify(status: u16, body: Value) -> Result<Value, Offline> {
                 .take(120)
                 .collect(),
         }),
+    }
+}
+
+/// The request bodies this client sends, one builder per op. `coord` and the
+/// MCP tool build every request here, and the shared wire fixture
+/// (`cloud/coordinator/test/fixtures/client-ops.json`) pins them against the
+/// Worker's own test suite (1826-gi8e criterion (b)).
+pub mod ops {
+    use serde_json::{Value, json};
+
+    pub const PROVIDER: &str = "tillandsias-plan";
+
+    pub fn join(ns: &str) -> Value {
+        json!({ "op": "join", "ns": ns })
+    }
+    pub fn claims(ns: &str) -> Value {
+        json!({ "op": "claims", "ns": ns })
+    }
+    pub fn send(ns: &str, body: &str, ttl_s: Option<u64>) -> Value {
+        let mut o = json!({ "op": "send", "ns": ns, "body": body, "provider": PROVIDER });
+        if let Some(t) = ttl_s {
+            o["ttl_s"] = json!(t);
+        }
+        o
+    }
+    pub fn recv(ns: &str, since: u64) -> Value {
+        json!({ "op": "recv", "ns": ns, "since": since })
+    }
+    pub fn overview_get(ns: &str, client_head: Option<&str>) -> Value {
+        json!({ "op": "overview.get", "ns": ns, "client_head": client_head })
+    }
+    pub fn overview_put(ns: &str, overview: Value, sha: Option<&str>) -> Value {
+        json!({ "op": "overview.put", "ns": ns, "overview": overview, "sha": sha })
+    }
+    pub fn claim(ns: &str, order: &str, ttl_s: Option<u64>) -> Value {
+        let mut o = json!({ "op": "claim", "ns": ns, "order": order });
+        if let Some(t) = ttl_s {
+            o["ttl_s"] = json!(t);
+        }
+        o
+    }
+    pub fn release(ns: &str, order: &str, token: &str) -> Value {
+        json!({ "op": "release", "ns": ns, "order": order, "token": token })
+    }
+    pub fn bump(ns: &str, head_sha: Option<&str>) -> Value {
+        json!({ "op": "bump", "ns": ns, "head_sha": head_sha })
     }
 }
 
@@ -424,6 +506,24 @@ mod tests {
         let mut hb = Heartbeat::default();
         assert_eq!(hb.next(Duration::from_millis(10), false, true), None);
         assert_eq!(hb.next(Duration::from_millis(10), true, true), None);
+    }
+
+    #[test]
+    fn a_pid_marker_is_held_only_while_its_process_lives() {
+        let dir = tempfile::tempdir().unwrap();
+        let now = SystemTime::now();
+        std::fs::write(dir.path().join("gate-self"), std::process::id().to_string()).unwrap();
+        assert!(lane_marker_held(dir.path(), now), "our own pid is alive");
+        std::fs::remove_file(dir.path().join("gate-self")).unwrap();
+        // A child that has exited and been reaped: its pid names no process.
+        let mut child = std::process::Command::new("true").spawn().unwrap();
+        let dead = child.id();
+        child.wait().unwrap();
+        std::fs::write(dir.path().join("gate-dead"), format!("{dead}\n")).unwrap();
+        assert!(
+            !lane_marker_held(dir.path(), now),
+            "a finished gate's marker must not hold the lane"
+        );
     }
 
     #[test]
@@ -567,6 +667,47 @@ mod tests {
             !s.contains("ID-VALUE") && !s.contains("SECRET-VALUE") && !s.contains("JWT-VALUE"),
             "{s}"
         );
+    }
+
+    /// Criterion (b): the shared wire fixture's requests are exactly what the
+    /// builders send. The Worker's suite replays the same file, so a builder
+    /// that drifts from the contract fails here, and a Worker that drifts
+    /// fails there.
+    #[test]
+    fn client_ops_fixture_matches_the_builders() {
+        let fixture: Value = serde_json::from_str(include_str!(
+            "../../../cloud/coordinator/test/fixtures/client-ops.json"
+        ))
+        .expect("fixture is JSON");
+        let steps = fixture["steps"].as_array().expect("steps");
+        let (ns, head) = ("NS", Some("HEAD_SHA"));
+        let mut seen = 0;
+        for s in steps {
+            let built = match s["name"].as_str().unwrap() {
+                "join" => ops::join(ns),
+                "send" => ops::send(ns, "hello fleet", Some(60)),
+                "recv" => ops::recv(ns, 0),
+                "overview_put" => ops::overview_put(ns, json!({ "rows": 1 }), head),
+                "overview_get" => ops::overview_get(ns, head),
+                "bump" => ops::bump(ns, head),
+                "claim" => ops::claim(ns, "1826-gi8e", Some(600)),
+                "claim_contested" => ops::claim(ns, "1826-gi8e", None),
+                "claims" | "claims_after_release" => ops::claims(ns),
+                "release" => ops::release(ns, "1826-gi8e", "{{claim.token}}"),
+                other => panic!("fixture step {other:?} has no builder"),
+            };
+            assert_eq!(built, s["request"], "step {}", s["name"]);
+            if let Some(want) = s.get("orders") {
+                let reply = json!({ "claims": want.as_array().unwrap().iter().map(|o| json!({ "order": o })).collect::<Vec<_>>() });
+                let got: Vec<Value> = orders_in_claims(&reply)
+                    .into_iter()
+                    .map(Value::from)
+                    .collect();
+                assert_eq!(&Value::from(got), want);
+            }
+            seen += 1;
+        }
+        assert_eq!(seen, 11);
     }
 
     #[test]
