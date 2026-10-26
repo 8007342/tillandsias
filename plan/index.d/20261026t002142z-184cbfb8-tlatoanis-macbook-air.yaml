@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: plaintext-private-keys-at-rest-under-macos-cache-and-state-dirs
+    event:
+      type: investigated
+      ts: "2026-10-26T00:21:42Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |-
+        writer found: ensure_ca_bundle / ensure_vault_tls_leaf outside the tmpfs key store, incl. the gate's unit test source_built_init_and_status_check_smoke_uses_fake_podman (measured with HOME=scratch); ca-key.pem is a pre-2026-06 leftover. Fix filed as 1898-hyhf.

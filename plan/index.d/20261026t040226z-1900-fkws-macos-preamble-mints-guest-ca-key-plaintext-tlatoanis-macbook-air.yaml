@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Follow-up of 1898-hyhf (#656) for the macOS tray. Code cited by symbol.
+packets:
+  - packet_id: macos-tray-proxy-preamble-never-mints-the-guest-ca-private-key-in-plaintext
+    order: 1900-fkws
+    status: in_progress
+    kind: security
+    priority: p1
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [security, ca, macos]
+    estimated_hours: 1
+    blocked_by: [1898-hyhf]
+    title: "The macOS tray's guest exec preamble no longer mints the guest CA private key with openssl -nodes"
+    context: |
+      [S] diagnose.rs proxy_exec_preamble (used by the tray's --github-login and --list-cloud-projects guest execs) ran, when ${HOME}/.local/state/tillandsias/ca/intermediate.key was absent, `openssl req -x509 -newkey rsa:2048 -keyout .../intermediate.key ... -nodes`: an unencrypted CA private key at rest in the guest (operator 2026-10-19: no plaintext credentials at rest; a lost credential beats an unencrypted one).
+      [S] The mint is redundant: both headless subcommands reach ensure_ca_bundle before the proxy needs the CA (run_provider_login -> ensure_proxy_running / ensure_ca_bundle; run_list_cloud_projects -> container_deps::ensure_git_login -> Service::Proxy -> ensure_proxy_running). Since 1898-hyhf that mint is encrypted where the tmpfs store is inactive, so removing the shell mint leaves headless as the only minter. Before 1898-hyhf lands, headless still mints with -nodes, hence blocked_by.
+      AUDIT of other macOS-tray key paths [S]: host side, the Vault Shamir share and root token go only to the Keychain (installation_uuid.rs capture_vault_handover / write_credential_string_in), and the control-wire PSK is derived in memory (channel_psk_for_guest). No other tray path mints or copies a private key to disk. Guest side outside the tray: images/git/sshd-identity.sh mints an ssh host key with `ssh-keygen -N ''` under /tmp/tillandsias-sshd inside the git container (shared Linux image, container-lifetime), reported to the coordinator rather than filed here.
+      Existing key files are left untouched; the wipe is the operator's.
+    exit_criteria:
+      - "diagnose.rs test the_preamble_never_mints_a_private_key: the built preamble for --github-login and --list-cloud-projects contains none of openssl, -nodes, -keyout, genrsa, genpkey. Pre-fix result: FAILS (measured: panics on \"openssl\" against the unfixed preamble)."
+    verifiable_closure: "cargo test -p tillandsias-macos-tray the_preamble_never_mints_a_private_key passes, and 1898-hyhf has landed."
+    next_action: >
+      Land work/1900-fkws after 1898-hyhf; live check via the next published release.
+    provenance: |
+      Coordinator assignment (macuahuitl-fedora) 2026-10-26, follow-up of 1898-hyhf.
+    events:
+      - type: filed
+        ts: "2026-10-26T04:02:26Z"
+        host: tlatoanis-macbook-air
+        summary: "filed and claimed; fix on work/1900-fkws"

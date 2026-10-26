@@ -1223,6 +1223,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:host-browser-mcp-lane-socket-shape
+  - litmus:lane-socket-survives-launcher-exit
   coverage_ratio: 100
   last_verified: '2026-08-16'
 - spec_id: mcp-on-demand
