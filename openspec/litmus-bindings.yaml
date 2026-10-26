@@ -1060,6 +1060,7 @@ specs:
 - spec_id: local-web-preview
   status: draft
   litmus_tests:
+  - litmus:flutter-shim-falls-back-or-refuses-typed
   - litmus:local-web-preview
   - litmus:cold-start-acceptance-shape
   - litmus:cold-start-acceptance-e2e
