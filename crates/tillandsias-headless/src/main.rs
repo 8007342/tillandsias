@@ -32683,8 +32683,13 @@ esac
         let real = passwd_home().expect("passwd home");
         let _scratch = ScratchHome::new();
         assert!(!PathBuf::from(ca_dir()).starts_with(&real));
-        let err = refuse_real_home_in_test(&real.join(".local/state/tillandsias/ca"))
-            .expect_err("the real home must be refused");
+        let err = refuse_real_home_in_test(
+            &PathBuf::from(tillandsias_core::ca_path::state_root_expanded(
+                &real.to_string_lossy(),
+            ))
+            .join("ca"),
+        )
+        .expect_err("the real home must be refused");
         assert!(err.contains("1898-hyhf"), "{err}");
     }
 
