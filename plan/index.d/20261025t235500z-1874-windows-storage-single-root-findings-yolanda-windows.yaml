@@ -1,0 +1,135 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yolanda-windows: research for openspec change
+# forge-storage-single-root-and-disk-discipline (PR #650) tasks.md section 7,
+# requested by the coordinator (macuahuitl-fedora, 2026-10-25). Measured live on
+# yolanda (Windows 11 26300, WSL 2.7.13.0, NTFS C: 155 GB free) on 2026-10-25.
+packets:
+  - packet_id: windows-storage-root-is-localappdata-tillandsias-with-one-shared-constant-and-no-temp-leaks
+    order: 1874-a8nr
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    size: M
+    pickup_role: windows
+    capability_tags: [storage, windows, single-root, installer, tray, purge]
+    related: [1776-d5k2]
+    depends_on: []
+    title: |
+      Windows single storage root (section 7.1/7.2): %LOCALAPPDATA%\tillandsias is the root, already holding both distros' ext4.vhdx, the swap VHDX, cache, logs and state; make it ONE shared constant and pull the remaining %TEMP% writes and purge gaps under it
+    context: |
+      7.1 ROOT: pick %LOCALAPPDATA%\tillandsias (not %USERPROFILE%\.tillandsias). It is where the data already is (137 GB on yolanda), it is excluded from roaming profiles and from OneDrive Known-Folder backup (a 100+ GB VHDX under %USERPROFILE% can be swept into OneDrive sync), and wsl --import already places ext4.vhdx under it (wsl_lifecycle.rs install_root :602 gives <root>\wsl; the builder distro tillandsias-build lives at <root>\wsl-build, 131.7 GB). NTFS is case-insensitive, so \tillandsias and \Tillandsias are one directory.
+      EXEMPT (cannot live under the root, by Windows convention): the install dir %LOCALAPPDATA%\Programs\Tillandsias (and its .bak), the Start-menu and Startup .lnk under %APPDATA%\Microsoft\Windows\Start Menu, the WSL per-distro Start-menu folders, %USERPROFILE%\.wslconfig (WSL reads only that path; the tray edits keys and the swapFile VALUE points under the root), HKCU registry (Uninstall\Tillandsias, Software\Tillandsias, Control Panel\NotifyIconSettings), the elevated-only HKLM EventLog source, Credential Manager targets (tillandsias-vm-uuid, vault-shamir-share-v1, vault-root-token-v1), and the HvSocket control port 42420 (no named pipes exist).
+      7.2 INVENTORY (tray): <root>\wsl\{ext4.vhdx, drain.lock, .import-complete, crashloop.state}, <root>\cache\rootfs\fedora-44-wsl-<sha12>.{oci.tar.xz,rootfs.tar} (247 MB), <root>\state\{guest-wiring.json, guest-ready.json}, <root>\logs\{tray.log, tray.log.bak, launch-failure-diagnostics.json}, <root>\wsl-swap.vhdx (3.7 GB), <root>\tray-windows.lock. The root is rebuilt from LOCALAPPDATA independently in four places: wsl_lifecycle.rs local_app_data :209, notify_icon.rs log_dir :990 (falls back to std::env::temp_dir), wslconfig_ensure.rs :309, install-windows.ps1 :116.
+      OUTSIDE THE ROOT TODAY (fixable): installer %TEMP%\tillandsias-install.log (:100), %TEMP%\tillandsias-install-<guid>\ downloads (:757), %TEMP%\tillandsias-ver-<guid>.txt (:906), %TEMP%\tillandsias-install-diag-<guid>.json (:952), %TEMP%\tillandsias-setup.log (:1050); the tray log fallback to %TEMP%; headless unit tests leave 94 empty %TEMP%\tillandsias-test-cache-<pid>-<n> dirs per native run (main.rs:21777). PURGE GAP: install-windows.ps1 -Purge (:207) removes cache, logs and wsl but leaves state\ and wsl-swap.vhdx, so our own purge does not delete the root.
+    exit_criteria:
+      - "1 ONE CONSTANT: a single fn in the tray resolves the root and every tray write site uses it; a source fixture fails if LOCALAPPDATA is read outside that fn (pre-fix: 3 sites)"
+      - "2 NO TEMP: the installer keeps its log, downloads and probe files under <root> (logs and cache); a fixture over install-windows.ps1 fails on any TEMP write (pre-fix: 5 sites)"
+      - "3 PURGE IS WHOLE: -Purge leaves no root directory once the distros are unregistered; the fixture runs the purge block against a scratch root (pre-fix: state and wsl-swap.vhdx survive)"
+      - "NEGATIVE CONTROL: the exempt list above is named in the fixture and nothing on it is moved"
+    verifiable_closure: |
+      litmus:windows-storage-single-root runs the three fixtures, which pass, and FAIL against today's tray and installer.
+    unscoreable: "unpinnable-until-the-guard-exists: litmus:windows-storage-single-root is written red first in the same change"
+    next_action: >
+      Add the shared root fn, then move the installer temp writes, then close the purge gap.
+    events:
+      - type: filed
+        ts: "2026-10-25T23:55:00Z"
+        host: yolanda-windows
+        summary: |-
+          Windows storage root research (PR #650 section 7.1/7.2): the root is %LOCALAPPDATA%\tillandsias; three gaps (no shared constant, five installer TEMP writes, purge leaves state and swap).
+
+  - packet_id: windows-existing-distro-vhdx-is-made-sparse-so-freed-ext4-space-returns-to-ntfs
+    order: 1874-pb2h
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: S
+    pickup_role: windows
+    capability_tags: [storage, windows, wsl, vhdx, sparse, disk]
+    related: [1339-r9xv]
+    depends_on: []
+    title: |
+      sparseVhd=true in .wslconfig does not make an EXISTING distro's ext4.vhdx sparse: on yolanda the tillandsias-build VHDX is 131.7 GB on NTFS holding 98 GB of ext4 data (34 GB stranded), and the sparse attribute is off on all three Tillandsias VHDX files
+    context: |
+      7.3 measurement, 2026-10-25: .wslconfig carries [experimental] sparseVhd=true (written by the installer, 1339-r9xv), yet Get-Item attributes show SparseFile=False on <root>\wsl-build\ext4.vhdx (131.7 GB file, df inside = 98 GB used), <root>\wsl\ext4.vhdx (1.6 GB) and <root>\wsl-swap.vhdx (3.7 GB). sparseVhd applies to VHDs CREATED after it is set; a distro imported before stays fixed-growth. WSL 2.x has wsl --manage DISTRO --set-sparse true for existing distros, with the distro stopped. Without it, L1/L2 wipes inside the guest never return space to Windows, and NTFS free space only ever falls.
+    exit_criteria:
+      - "1 the tray, after import and on each start while the distro is stopped, ensures the tillandsias distro VHDX is sparse (wsl --manage tillandsias --set-sparse true when SparseFile is off), logged once; a fixture against a stubbed wsl.exe asserts the call is made only when the attribute is off (pre-fix: never called)"
+      - "2 measured on yolanda after the fix: deleting N GB inside the guest followed by fstrim reduces the VHDX file size on NTFS (before and after numbers in the closing event)"
+      - "NEGATIVE CONTROL: a running distro is never given --set-sparse (WSL refuses it); the fixture asserts no call while running"
+    verifiable_closure: |
+      litmus:windows-distro-vhdx-sparse runs the stubbed-wsl fixture, which passes, and FAILS against today's tray.
+    unscoreable: "unpinnable-until-the-guard-exists: written red first in the same change"
+    next_action: >
+      Add the sparse ensure beside wslconfig_ensure.rs; the builder distro is the operator's and is reported, not changed.
+    events:
+      - type: filed
+        ts: "2026-10-25T23:55:01Z"
+        host: yolanda-windows
+        summary: |-
+          Existing WSL VHDX files are not sparse despite sparseVhd=true: 34 GB stranded in the builder VHDX on yolanda; the tray should make its own distro sparse.
+
+  - packet_id: windows-free-space-gates-read-ntfs-under-the-vhdx-not-the-ext4-virtual-size
+    order: 1874-kama
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    size: M
+    pickup_role: any
+    capability_tags: [storage, windows, wsl, disk, eviction, free-space]
+    related: [1776-d5k2]
+    depends_on: []
+    title: |
+      On WSL every guest free-space check reads a fiction: ext4 inside the VHDX reports a 1007 GB virtual size (859-955 GB available) while the NTFS volume under it has 155 GB free; eviction and build gates must use min(NTFS free under the VHDX, ext4 free)
+    context: |
+      7.6 measurement, 2026-10-25: df -h / in the tillandsias distro shows 1007G size and 955G avail; in tillandsias-build 1007G and 859G; C: (NTFS, holding both VHDX files) has 155 GB free. A dynamic VHDX grows on demand, so ext4 free is an upper bound the host disk cannot honour; filling past NTFS free makes VHDX writes fail and can corrupt the guest. Today evaluate_guest_root_headroom (crates/tillandsias-vm-layer/src/wsl.rs:353) gates provisioning on guest df (32 GiB floor, 240 GiB warning) and always passes on a 1 TB virtual disk; 1776-d5k2 plans a podman graph-root free-space check that would read the same fiction; evaluate_host_import_headroom (materialize/wsl.rs:113) reads NTFS correctly but only at import. No free-space-driven eviction exists yet.
+      ANSWER to 7.6: gate on the MINIMUM of the two. NTFS free under the root (fs2::available_space on the VHDX directory, host side) is the binding constraint on WSL; ext4 free still matters when the VHDX reaches its virtual cap. The host must push NTFS free to the guest over the control wire, because the guest cannot see NTFS.
+    exit_criteria:
+      - "1 the tray publishes host free bytes under the root to the guest over the control wire; the guest's effective free = min(host, ext4) and evaluate_guest_root_headroom uses it (unit test: host 10 GiB, ext4 955 GiB is refused below the 32 GiB floor; pre-fix: passes)"
+      - "2 1776-d5k2 and any worktree or cache eviction read the same effective free value (cross-reference recorded on 1776-d5k2)"
+      - "NEGATIVE CONTROL: on Linux and macOS hosts (no VHDX), effective free equals the local statvfs value unchanged"
+    verifiable_closure: |
+      litmus:wsl-effective-free-space runs the unit tests, which pass, and FAIL against today's evaluate_guest_root_headroom.
+    unscoreable: "unpinnable-until-the-guard-exists: written red first in the same change"
+    next_action: >
+      Add the host free-bytes field to the status push; then switch the headroom check to the min.
+    events:
+      - type: filed
+        ts: "2026-10-25T23:55:02Z"
+        host: yolanda-windows
+        summary: |-
+          WSL guest free-space checks read a 1 TB virtual ext4 size; NTFS under the VHDX is the binding limit. Gate on min(NTFS, ext4).
+
+  - packet_id: windows-forge-l0-l1-l2-and-swap-mapping-onto-wsl2-research-record
+    order: 1874-xxka
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.5
+    size: S
+    pickup_role: any
+    capability_tags: [storage, windows, wsl, tmpfs, swap, forge, research]
+    related: [1874-a8nr, 1874-pb2h, 1874-kama, 1339-r9xv]
+    depends_on: []
+    title: |
+      Record for PR #650 section 7.3-7.5: how L0/L1/L2 and swap map onto WSL2, measured on yolanda, to be folded into the openspec change's design.md
+    context: |
+      7.3 L0 tmpfs: guest tmpfs (/tmp 3.9G, /dev/shm 3.9G, half of memory=8GB) is bounded by the .wslconfig memory= cap, not host RAM; tmpfs pages are swappable, so L0 overflow lands in the swap VHDX under the root. Recommend L0 at most 25% of memory= per forge. L1 per-forge scratch and L2 cache: keep both in the SAME distro VHDX (podman storage /var/lib/containers/storage; no storage.conf override exists). A second attached VHDX (wsl --mount --vhd) needs elevation on each boot and does not survive wsl --shutdown, so it buys isolation at the cost of the tray's no-admin rule. Wipe-and-recreate for L2 corruption is a podman volume rm and recreate inside the one VHDX; the space returns to NTFS only if the VHDX is sparse (1874-pb2h).
+      7.4 SWAP: already forced on (installer and tray write swap= and swapFile=<root>\wsl-swap.vhdx; swapon shows 8G active in the guest). Recommend keeping it forced, sized max(8 GB, memory=) and capped by NTFS free (the installer's 8/16/24 GB ladder fits). The tray should warn when it reads swap=0 that it did not replace (a user-managed file it declined to edit), not only when the key is missing. The swap VHDX is not sparse either (1874-pb2h).
+      7.5 DOWNLOADS: inside the forge, shim, brew, npm and cargo download caches are NOT on tmpfs. HOMEBREW_CACHE, CARGO_HOME and npm_config_cache live in the per-project named volume tillandsias-forge-cache-PROJECT (main.rs:18723, mounted at /home/forge/.cache/tillandsias-project; images/default/lib-common.sh:2253-2331, brew-shim-exec.sh:93), which is L2 on disk. The brew prefix /home/linuxbrew is in the container overlay (L1, lost on --rm). Only the web-preview container puts XDG_CACHE_HOME=/tmp/cache on tmpfs (local_web_preview.rs:731). The forge /tmp tmpfs is 256m (main.rs:9366), so a large download that ignores the cache variables fails there instead of overflowing.
+      7.6 is filed as 1874-kama. Podman store: the distro has its own store (graphroot /var/lib/containers/storage on the distro ext4, confirmed with podman info); nothing shares a store with the host.
+    exit_criteria:
+      - "the openspec change forge-storage-single-root-and-disk-discipline design.md carries this mapping for Windows (7.3-7.5) and cites this row"
+    verifiable_closure: |
+      litmus:openspec-change-cites-research-rows confirms design.md names 1874-xxka.
+    unscoreable: "research record: closes when folded into the openspec change"
+    next_action: >
+      The coordinator folds this into PR #650 design.md.
+    events:
+      - type: filed
+        ts: "2026-10-25T23:55:03Z"
+        host: yolanda-windows
+        summary: |-
+          Windows L0/L1/L2 and swap mapping onto WSL2 for PR #650: tmpfs bounded by memory=, one VHDX for L1 and L2, swap already forced, forge download caches on disk.
