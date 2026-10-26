@@ -7187,6 +7187,92 @@ fn router_dynamic_caddyfile_host_path() -> PathBuf {
     base.join("router")
 }
 
+/// Where the web-preview TLS leaves (key and chain) live, as the router reads
+/// them through its `preview-tls` mount (order 1901-bnif).
+///
+/// The leaf key is an unencrypted PEM: it may rest only on tmpfs (operator
+/// rule 2026-10-19, no plaintext credential at rest). The router dir is used
+/// when it is tmpfs (the systemd runtime dir); otherwise a private 0700
+/// directory under /dev/shm; with neither, the preview refuses by name rather
+/// than write the key to disk. The router dir used to be taken as given, and
+/// its fallback, the temp dir when XDG_RUNTIME_DIR is unset (a rootful VM
+/// guest, a service lane), is disk wherever /tmp is.
+pub(crate) fn preview_tls_dir() -> Result<PathBuf, String> {
+    preview_tls_dir_in(
+        &router_dynamic_caddyfile_host_path(),
+        &preview_tls_shm_root(),
+    )
+}
+
+/// /dev/shm, or under cfg(test) the scratch a test names, so a test never
+/// writes into the real one.
+fn preview_tls_shm_root() -> PathBuf {
+    #[cfg(test)]
+    if let Some(root) = std::env::var_os("TILLANDSIAS_TEST_PREVIEW_TLS_SHM") {
+        return PathBuf::from(root);
+    }
+    PathBuf::from("/dev/shm")
+}
+
+#[cfg(unix)]
+fn preview_tls_dir_in(router: &Path, shm: &Path) -> Result<PathBuf, String> {
+    if on_tmpfs(router) {
+        return Ok(router.join("preview-tls"));
+    }
+    if on_tmpfs(shm) {
+        use std::os::unix::fs::{DirBuilderExt, MetadataExt};
+        let uid = unsafe { libc::getuid() };
+        let private = shm.join(format!("tillandsias-{uid}"));
+        let _ = std::fs::DirBuilder::new().mode(0o700).create(&private);
+        // /dev/shm is shared: use the directory only if it is a real directory
+        // (not a symlink) that this user owns and nobody else can enter.
+        let meta = std::fs::symlink_metadata(&private)
+            .map_err(|_| "router_not_ready: preview TLS directory unavailable".to_string())?;
+        if !meta.is_dir() || meta.uid() != uid || meta.mode() & 0o077 != 0 {
+            return Err(format!(
+                "router_not_ready: {} is not a private directory of this user; refusing to put the preview leaf key there (1901-bnif)",
+                private.display()
+            ));
+        }
+        return Ok(private.join("preview-tls"));
+    }
+    Err("router_not_ready: no tmpfs to hold the preview leaf key; it is never written to disk (1901-bnif)".into())
+}
+
+#[cfg(not(unix))]
+fn preview_tls_dir_in(_router: &Path, _shm: &Path) -> Result<PathBuf, String> {
+    Err("router_not_ready: no tmpfs to hold the preview leaf key; it is never written to disk (1901-bnif)".into())
+}
+
+/// Is `path`, or its nearest existing ancestor, on tmpfs? Linux only; off
+/// Linux nothing can be asked, so nothing is.
+#[cfg(unix)]
+fn on_tmpfs(path: &Path) -> bool {
+    let mut probe = path;
+    while !probe.exists() {
+        match probe.parent() {
+            Some(parent) => probe = parent,
+            None => return false,
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        const TMPFS_MAGIC: i64 = 0x0102_1994;
+        let Ok(c) = std::ffi::CString::new(probe.as_os_str().as_bytes()) else {
+            return false;
+        };
+        let mut st: libc::statfs = unsafe { std::mem::zeroed() };
+        // SAFETY: a NUL-terminated path and a zeroed out-struct of the right type.
+        let rc = unsafe { libc::statfs(c.as_ptr(), &mut st) };
+        rc == 0 && st.f_type as i64 == TMPFS_MAGIC
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        false
+    }
+}
+
 fn control_socket_host_dir() -> PathBuf {
     control_socket_host_dir_from(std::env::var("XDG_RUNTIME_DIR").ok())
 }
@@ -7363,12 +7449,11 @@ fn build_router_run_args(certs_dir: &Path, image: &str, host_port: u16) -> Vec<S
     if let Ok(text) = std::fs::read_to_string(dyn_dir.join("preview-tls-port"))
         && let Ok(port) = text.trim().parse::<u16>()
         && port >= 1024
+        // Order 1901-bnif: the leaves are mounted from the tmpfs dir they
+        // were written to; with none, there is no preview listener.
+        && let Ok(leaves) = preview_tls_dir()
     {
-        args.extend(preview_listener_args(
-            running_as_root(),
-            port,
-            &dyn_dir.join("preview-tls"),
-        ));
+        args.extend(preview_listener_args(running_as_root(), port, &leaves));
     }
     args.push(image.into());
     args
