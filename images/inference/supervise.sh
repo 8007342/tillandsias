@@ -18,7 +18,7 @@
 # An engine that ends on its own exits the container with its own status.
 #
 # Sourced by entrypoint.sh; runnable with a stub engine for the fixture
-# (scripts/test-inference-supervise.py).
+# (scripts/lua/test-inference-supervise.lua).
 
 tillandsias_supervise() {
     _tsv_main=$1
