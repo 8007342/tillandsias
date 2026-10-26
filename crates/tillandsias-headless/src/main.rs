@@ -7229,6 +7229,92 @@ fn router_dynamic_caddyfile_host_path() -> PathBuf {
     base.join("router")
 }
 
+/// Where the web-preview TLS leaves (key and chain) live, as the router reads
+/// them through its `preview-tls` mount (order 1901-bnif).
+///
+/// The leaf key is an unencrypted PEM: it may rest only on tmpfs (operator
+/// rule 2026-10-19, no plaintext credential at rest). The router dir is used
+/// when it is tmpfs (the systemd runtime dir); otherwise a private 0700
+/// directory under /dev/shm; with neither, the preview refuses by name rather
+/// than write the key to disk. The router dir used to be taken as given, and
+/// its fallback, the temp dir when XDG_RUNTIME_DIR is unset (a rootful VM
+/// guest, a service lane), is disk wherever /tmp is.
+pub(crate) fn preview_tls_dir() -> Result<PathBuf, String> {
+    preview_tls_dir_in(
+        &router_dynamic_caddyfile_host_path(),
+        &preview_tls_shm_root(),
+    )
+}
+
+/// /dev/shm, or under cfg(test) the scratch a test names, so a test never
+/// writes into the real one.
+fn preview_tls_shm_root() -> PathBuf {
+    #[cfg(test)]
+    if let Some(root) = std::env::var_os("TILLANDSIAS_TEST_PREVIEW_TLS_SHM") {
+        return PathBuf::from(root);
+    }
+    PathBuf::from("/dev/shm")
+}
+
+#[cfg(unix)]
+fn preview_tls_dir_in(router: &Path, shm: &Path) -> Result<PathBuf, String> {
+    if on_tmpfs(router) {
+        return Ok(router.join("preview-tls"));
+    }
+    if on_tmpfs(shm) {
+        use std::os::unix::fs::{DirBuilderExt, MetadataExt};
+        let uid = unsafe { libc::getuid() };
+        let private = shm.join(format!("tillandsias-{uid}"));
+        let _ = std::fs::DirBuilder::new().mode(0o700).create(&private);
+        // /dev/shm is shared: use the directory only if it is a real directory
+        // (not a symlink) that this user owns and nobody else can enter.
+        let meta = std::fs::symlink_metadata(&private)
+            .map_err(|_| "router_not_ready: preview TLS directory unavailable".to_string())?;
+        if !meta.is_dir() || meta.uid() != uid || meta.mode() & 0o077 != 0 {
+            return Err(format!(
+                "router_not_ready: {} is not a private directory of this user; refusing to put the preview leaf key there (1901-bnif)",
+                private.display()
+            ));
+        }
+        return Ok(private.join("preview-tls"));
+    }
+    Err("router_not_ready: no tmpfs to hold the preview leaf key; it is never written to disk (1901-bnif)".into())
+}
+
+#[cfg(not(unix))]
+fn preview_tls_dir_in(_router: &Path, _shm: &Path) -> Result<PathBuf, String> {
+    Err("router_not_ready: no tmpfs to hold the preview leaf key; it is never written to disk (1901-bnif)".into())
+}
+
+/// Is `path`, or its nearest existing ancestor, on tmpfs? Linux only; off
+/// Linux nothing can be asked, so nothing is.
+#[cfg(unix)]
+fn on_tmpfs(path: &Path) -> bool {
+    let mut probe = path;
+    while !probe.exists() {
+        match probe.parent() {
+            Some(parent) => probe = parent,
+            None => return false,
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        const TMPFS_MAGIC: i64 = 0x0102_1994;
+        let Ok(c) = std::ffi::CString::new(probe.as_os_str().as_bytes()) else {
+            return false;
+        };
+        let mut st: libc::statfs = unsafe { std::mem::zeroed() };
+        // SAFETY: a NUL-terminated path and a zeroed out-struct of the right type.
+        let rc = unsafe { libc::statfs(c.as_ptr(), &mut st) };
+        rc == 0 && st.f_type as i64 == TMPFS_MAGIC
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        false
+    }
+}
+
 fn control_socket_host_dir() -> PathBuf {
     control_socket_host_dir_from(std::env::var("XDG_RUNTIME_DIR").ok())
 }
@@ -7405,12 +7491,11 @@ fn build_router_run_args(certs_dir: &Path, image: &str, host_port: u16) -> Vec<S
     if let Ok(text) = std::fs::read_to_string(dyn_dir.join("preview-tls-port"))
         && let Ok(port) = text.trim().parse::<u16>()
         && port >= 1024
+        // Order 1901-bnif: the leaves are mounted from the tmpfs dir they
+        // were written to; with none, there is no preview listener.
+        && let Ok(leaves) = preview_tls_dir()
     {
-        args.extend(preview_listener_args(
-            running_as_root(),
-            port,
-            &dyn_dir.join("preview-tls"),
-        ));
+        args.extend(preview_listener_args(running_as_root(), port, &leaves));
     }
     args.push(image.into());
     args
@@ -9264,6 +9349,40 @@ fn env_or(name: &str, fallback: &str) -> String {
         .unwrap_or_else(|| fallback.to_string())
 }
 
+/// Serve a forge's lane MCP socket before the forge (and its agent's MCP
+/// client) starts. 1863-eckw: a web-mode forge outlives the CLI that launches
+/// it, and a listener bound here died with the CLI, so the agent's
+/// host-browser and toolchain calls were refused for the whole session. Such
+/// a lane is handed to the tray, and this waits until the tray accepts on it;
+/// a CLI-mode lane lives and dies with this process and binds here.
+#[cfg(feature = "host-services")]
+fn serve_forge_lane(project: &str, instance: &str, outlives_launcher: bool, debug: bool) {
+    #[cfg(not(test))]
+    if outlives_launcher {
+        match mcp_socket::mark_lane_tray_owned(project, instance) {
+            Ok(()) => {
+                let deadline = Instant::now() + Duration::from_secs(5);
+                while Instant::now() < deadline {
+                    if mcp_socket::lane_accepting(project, instance) {
+                        if debug {
+                            eprintln!("[tillandsias] the tray serves lane {project}-{instance}");
+                        }
+                        return;
+                    }
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+                eprintln!(
+                    "[tillandsias] Warning: the tray did not take lane {project}-{instance} within 5s; \
+                     serving it from this launch, so host-browser tools stop when it exits"
+                );
+            }
+            Err(e) => eprintln!("[tillandsias] Warning: could not hand the lane to the tray: {e}"),
+        }
+    }
+    let _ = (outlives_launcher, debug);
+    let _ = mcp_socket::start_mcp_socket_server_for_lane(project, instance);
+}
+
 #[allow(clippy::too_many_arguments)]
 fn build_opencode_forge_args(
     project_path: &Path,
@@ -9607,12 +9726,12 @@ fn build_opencode_forge_args(
         // guest's `listen-vsock` build enables too; it was `tray`, so every
         // macOS VM forge got exactly that empty dir.
         #[cfg(feature = "host-services")]
-        {
-            let _ = mcp_socket::start_mcp_socket_server_for_lane(
-                project_name,
-                raw_instance.as_deref().unwrap_or("default"),
-            );
-        }
+        serve_forge_lane(
+            project_name,
+            raw_instance.as_deref().unwrap_or("default"),
+            matches!(mode, ForgeMode::Web),
+            debug,
+        );
         args.extend([
             "--mount".into(),
             format!(
@@ -9623,6 +9742,9 @@ fn build_opencode_forge_args(
             "TILLANDSIAS_CONTROL_SOCKET=/run/host/tillandsias-mcp/mcp.sock".into(),
         ]);
     }
+    // Order 1859-v5iv: the tray run that launched this forge, so a tray start
+    // after that run died reaps it (dead_run.rs).
+    args.extend(dead_run::run_label_args());
     // ORDER 1506-q7ab: beside the MCP socket, this lane's MAILBOX — its own
     // lane directory ($XDG_STATE_HOME/tillandsias/msg/lanes/<project>-<instance>)
     // read-write at /run/host/tillandsias-msg, and only that directory, with
@@ -18893,6 +19015,8 @@ fn prepare_forge_ram_workspace(
                 chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
             ),
         ]);
+        // Order 1859-v5iv: a dead tray run's source volumes go with its forges.
+        create.args(dead_run::run_label_args());
         create.args(["--label", "tillandsias.source=ram-only", &volume]);
         run_podman_command_silent(create, debug)?;
     }
@@ -19492,6 +19616,10 @@ fn build_forge_agent_run_args_with_vault(
                 "/run/host/tillandsias-mcp/mcp.sock",
             );
     }
+    // Order 1859-v5iv: labelled with the launching tray run (dead_run.rs).
+    if let Some(run) = dead_run::run_label_value() {
+        spec = spec.label(dead_run::RUN_LABEL, run);
+    }
     // ORDER 1506-q7ab: beside the MCP socket, this lane's MAILBOX, read-write
     // at /run/host/tillandsias-msg (only its own lane directory), with the lane
     // and host labels the in-forge `tillandsias-plan msg` names itself by.
@@ -19968,6 +20096,7 @@ mod tray;
 
 // @trace spec:mcp-tool-socket (order 1713-1dnx: host-services, so the VM
 // guest's forges get a listener too)
+mod dead_run;
 #[cfg(feature = "host-services")]
 mod mcp_socket;
 
@@ -19976,6 +20105,8 @@ mod mcp_socket;
 // bound to the tray. Needs the store, so `vault` as well.
 #[cfg(all(feature = "host-services", feature = "vault"))]
 mod cloudflare_mcp;
+#[cfg(all(feature = "host-services", feature = "vault"))]
+mod cloudflare_worker_deploy;
 
 // @trace spec:local-web-preview
 #[cfg(feature = "host-services")]
@@ -34916,6 +35047,51 @@ esac
         assert!(
             !args_str.contains("control.sock"),
             "OpenCode lane argv must NEVER mount control.sock; args: {args_str}"
+        );
+    }
+
+    /// Order 1859-v5iv: a forge launched under a tray run carries that run's
+    /// label, so the next tray start can reap it if the run dies; outside a
+    /// tray run it carries none.
+    #[test]
+    fn opencode_lane_builder_labels_the_launching_tray_run() {
+        let _seam = podman_false_seam();
+        let _env = env_lock();
+        let prev = std::env::var_os(dead_run::RUN_ENV);
+        let build = || {
+            build_opencode_forge_args(
+                &PathBuf::from("/tmp/project"),
+                Some(&PathBuf::from("/tmp/project")),
+                None,
+                "alpha",
+                None,
+                None,
+                &PathBuf::from("/tmp/ca"),
+                "1.2.3",
+                ForgeMode::Cli,
+                None,
+                false,
+                false,
+            )
+        };
+        unsafe { std::env::set_var(dead_run::RUN_ENV, "4242-run") };
+        let labelled = build();
+        unsafe { std::env::remove_var(dead_run::RUN_ENV) };
+        let bare = build();
+        unsafe {
+            if let Some(v) = prev {
+                std::env::set_var(dead_run::RUN_ENV, v);
+            }
+        }
+        assert!(
+            labelled
+                .windows(2)
+                .any(|w| w[0] == "--label" && w[1] == "tillandsias.tray-run=4242-run"),
+            "a tray-run forge must carry its run label; args: {labelled:?}"
+        );
+        assert!(
+            !bare.iter().any(|a| a.starts_with("tillandsias.tray-run=")),
+            "outside a tray run no run label is stamped; args: {bare:?}"
         );
     }
 
