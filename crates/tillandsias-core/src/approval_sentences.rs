@@ -6,8 +6,19 @@
 //! generated text. `{name}` placeholders are filled from the request; a
 //! placeholder with no value is a caller bug, not something to paper over.
 //!
-//! DRAFT WORDING: awaiting the operator's approval (relayed through the
-//! coordinator). No dialog may show these until that approval is recorded.
+//! Operator rulings 2026-10-26 (relayed by the coordinator):
+//! - "session" means the FORGE instance, not the tray. Every window shows
+//!   [`METADATA_LINE`] and [`SCOPE_NOTICE`], and every grant is keyed to that
+//!   one forge instance. Wider grants come later.
+//! - Metered providers always bill, even at $0 on a free tier. A cost line
+//!   says the use is metered against the operator's account. The
+//!   [`FREE_TIER_BADGE`] shows only when the action is known to fit the free
+//!   tier. The default is restrictive: an unknown fit shows no badge.
+//! - Durations are honest ranges ("usually 2–10 minutes"), never a point
+//!   value.
+//! - The nine kinds below are approved as the starting set.
+//!
+//! The rest of the wording is still a DRAFT awaiting the operator's approval.
 //!
 //! Design: openspec/changes/os-verified-approval-gates (D8, approval-dialog).
 
@@ -27,22 +38,22 @@ pub const ACTIONS: &[ActionSentences] = &[
     ActionSentences {
         kind: "workflow-dispatch",
         happens: "GitHub will run the {workflow} workflow on {branch}.",
-        costs: "This uses about {minutes} minutes of your GitHub Actions time. You can cancel the run on GitHub while it runs.",
+        costs: "This usually takes {min_minutes}–{max_minutes} minutes of GitHub Actions time, metered against your GitHub account. You can cancel the run on GitHub while it runs.",
     },
     ActionSentences {
         kind: "push-integration",
         happens: "Your changes on {source} will be sent to {branch} on GitHub.",
-        costs: "This starts the checks for {branch}, about {minutes} minutes of GitHub Actions time. A later commit can undo the change.",
+        costs: "This starts the checks for {branch}, which usually take {min_minutes}–{max_minutes} minutes of GitHub Actions time, metered against your GitHub account. A later commit can undo the change.",
     },
     ActionSentences {
         kind: "merge-integration",
         happens: "{source} will be merged into {branch}.",
-        costs: "This starts the checks for {branch}, about {minutes} minutes of GitHub Actions time. The merge can be reverted with a later commit.",
+        costs: "This starts the checks for {branch}, which usually take {min_minutes}–{max_minutes} minutes of GitHub Actions time, metered against your GitHub account. The merge can be reverted with a later commit.",
     },
     ActionSentences {
         kind: "open-pull-request",
         happens: "A pull request from {source} into {branch} will be opened on GitHub.",
-        costs: "This starts its checks, about {minutes} minutes of GitHub Actions time. You can close the pull request at any time.",
+        costs: "This starts its checks, which usually take {min_minutes}–{max_minutes} minutes of GitHub Actions time, metered against your GitHub account. You can close the pull request at any time.",
     },
     ActionSentences {
         kind: "promote-stable",
@@ -52,24 +63,34 @@ pub const ACTIONS: &[ActionSentences] = &[
     ActionSentences {
         kind: "extra-build",
         happens: "Tillandsias will run one more build today than your daily allowance.",
-        costs: "This uses about {minutes} minutes of GitHub Actions time beyond the {allowance} builds you set. Tomorrow's allowance is not affected.",
+        costs: "It usually takes {min_minutes}–{max_minutes} minutes of GitHub Actions time beyond the {allowance} builds you set, metered against your GitHub account. Tomorrow's allowance is not affected.",
     },
     ActionSentences {
         kind: "remote-worker",
         happens: "A remote worker named {name} will start on {provider}.",
-        costs: "It is billed by {provider} while it runs. You can stop it from the tray, and billing stops when it does.",
+        costs: "{provider} meters it against your account for as long as it runs, and charges once your plan's thresholds are passed. You can stop it from the tray, and metering stops when it does.",
     },
     ActionSentences {
         kind: "cloudflare-resource",
         happens: "Tillandsias will create or update {resource} in your Cloudflare account.",
-        costs: "This may count against your Cloudflare plan's limits. You can remove it from the Cloudflare dashboard.",
+        costs: "Cloudflare meters its use against your account, and charges once your plan's thresholds are passed. You can remove it from the Cloudflare dashboard.",
     },
     ActionSentences {
         kind: "cloudflare-deploy",
         happens: "Version {revision} of {worker} will go live on Cloudflare.",
-        costs: "Visitors see the new version within a minute. You can roll back to the previous version from the Cloudflare dashboard.",
+        costs: "Visitors usually see the new version within 2–10 minutes, and Cloudflare meters its requests against your account. You can roll back to the previous version from the Cloudflare dashboard.",
     },
 ];
+
+/// The window's metadata line, naming the one forge instance it speaks for.
+/// `{launched}` is `YYYY-MM-DD HH:MM` in the operator's local time.
+pub const METADATA_LINE: &str = "{agent}/{project}/Launched at {launched}";
+
+/// Shown in every window, under the metadata line.
+pub const SCOPE_NOTICE: &str = "Approvals here apply only to this forge.";
+
+/// Shown only when the action is known to fit the provider's free tier.
+pub const FREE_TIER_BADGE: &str = "Free tier is enough";
 
 /// One button in the approval window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,7 +99,8 @@ pub struct GrantButton {
     pub label: &'static str,
 }
 
-/// The four grant scopes plus the refusal, in window order.
+/// The four grant scopes plus the refusal, in window order. Every grant is
+/// keyed to the forge instance named in [`METADATA_LINE`].
 pub const GRANT_BUTTONS: &[GrantButton] = &[
     GrantButton {
         scope: "once",
@@ -94,7 +116,7 @@ pub const GRANT_BUTTONS: &[GrantButton] = &[
     },
     GrantButton {
         scope: "session",
-        label: "Approve until the tray quits",
+        label: "Approve this session",
     },
     GrantButton {
         scope: "decline",
@@ -119,6 +141,7 @@ pub fn sentences(kind: &str) -> Option<&'static ActionSentences> {
 pub fn all_text() -> Vec<&'static str> {
     let mut v: Vec<&'static str> = ACTIONS.iter().flat_map(|a| [a.happens, a.costs]).collect();
     v.extend(GRANT_BUTTONS.iter().map(|b| b.label));
+    v.extend([METADATA_LINE, SCOPE_NOTICE, FREE_TIER_BADGE]);
     v.extend([REASON_TOUCH_ID, REASON_WINDOWS_HELLO, REASON_FIDO]);
     v
 }
@@ -217,5 +240,48 @@ mod tests {
                 a.costs
             );
         }
+    }
+
+    #[test]
+    fn durations_are_ranges_not_points() {
+        for s in all_text() {
+            assert!(!s.contains("{minutes}"), "point duration: {s}");
+            assert!(!s.contains("within a minute"), "point duration: {s}");
+        }
+        assert!(
+            sentences("cloudflare-deploy")
+                .unwrap()
+                .costs
+                .contains("usually see the new version within 2–10 minutes")
+        );
+    }
+
+    #[test]
+    fn metered_providers_say_metered_never_billed_loosely() {
+        for k in [
+            "workflow-dispatch",
+            "push-integration",
+            "merge-integration",
+            "open-pull-request",
+            "extra-build",
+            "remote-worker",
+            "cloudflare-resource",
+            "cloudflare-deploy",
+        ] {
+            let c = sentences(k).unwrap().costs;
+            assert!(c.contains("meter"), "{k} does not say it is metered: {c}");
+        }
+        for s in all_text() {
+            assert!(!s.contains("billed by"), "loose billing claim: {s}");
+        }
+    }
+
+    #[test]
+    fn the_window_names_its_forge_and_scopes_grants_to_it() {
+        for p in ["{agent}", "{project}", "{launched}"] {
+            assert!(METADATA_LINE.contains(p), "{p}");
+        }
+        assert_eq!(SCOPE_NOTICE, "Approvals here apply only to this forge.");
+        assert_eq!(GRANT_BUTTONS[3].label, "Approve this session");
     }
 }
