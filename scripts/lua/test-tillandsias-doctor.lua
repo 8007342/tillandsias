@@ -63,7 +63,11 @@ bound:close()
 fs.mkdir(REL .. "/bin")
 fs.mkdir(REL .. "/sheets")
 fs.write(REL .. "/sheets/one.md", "# a cheatsheet\n")
-fs.write(REL .. "/bin/curl", "#!/bin/sh\necho 'curl: (6) Could not resolve host: router' >&2\nexit 6\n")
+-- The stub fakes an unreachable router; the lane probe (--unix-socket) goes to
+-- the real curl so the lane's state is measured, not stubbed.
+-- The stub is first on PATH; for --unix-socket it drops itself and runs the real curl.
+fs.write(REL .. "/bin/curl", "#!/bin/sh\ncase \"$*\" in *--unix-socket*) PATH=\"${PATH#*:}\" exec curl \"$@\" ;; esac\n" ..
+    "echo 'curl: (6) Could not resolve host: router' >&2\nexit 6\n")
 fs.write(REL .. "/bin/flutter", "#!/bin/sh\necho 'host_lane=stale: the host toolchain service is not reachable' >&2\nexit 69\n")
 fs.write(REL .. "/bin/good-mcp", "#!/bin/sh\nread -r _\necho '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\n")
 proc.run({ argv = { "chmod", "+x", DIR .. "/bin/curl", DIR .. "/bin/flutter", DIR .. "/bin/good-mcp" }, timeout_ms = 10000 })
