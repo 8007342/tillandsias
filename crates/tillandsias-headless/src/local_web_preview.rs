@@ -1221,6 +1221,7 @@ fn host_command(args: &[String]) -> Result<(), String> {
     let deadline = Instant::now() + command_budget(Duration::from_secs(15))?;
     let mut child = std::process::Command::new("openssl")
         .args(args)
+        .envs(crate::ca_key_store::pass_env())
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -1285,7 +1286,11 @@ fn certificate_args(
             ext.display().to_string(),
             "-out".into(),
             crt.display().to_string(),
-        ],
+        ]
+        .into_iter()
+        // 1898-hyhf: the preview CA key may rest encrypted.
+        .chain(crate::ca_key_store::key_in_args())
+        .collect(),
     ]
 }
 
@@ -2546,6 +2551,7 @@ mod tests {
             assert!(
                 std::process::Command::new("openssl")
                     .args(&args)
+                    .envs(crate::ca_key_store::pass_env())
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null())
                     .status()

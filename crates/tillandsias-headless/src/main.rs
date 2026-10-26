@@ -4215,6 +4215,44 @@ fn enforce_ca_key_mode(_key: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// The passwd home of this user, which HOME cannot fake.
+#[cfg(all(test, unix))]
+fn passwd_home() -> Option<PathBuf> {
+    // SAFETY: getpwuid returns a pointer into static storage or null; it is
+    // read at once, under env_lock in every test caller.
+    unsafe {
+        let pw = libc::getpwuid(libc::getuid());
+        if pw.is_null() || (*pw).pw_dir.is_null() {
+            return None;
+        }
+        Some(PathBuf::from(
+            std::ffi::CStr::from_ptr((*pw).pw_dir)
+                .to_string_lossy()
+                .into_owned(),
+        ))
+    }
+}
+
+/// 1898-hyhf: a unit test never mints CA material into the operator's real
+/// home. `cargo test` with the real HOME left plaintext CA keys there on every
+/// host; a test points HOME at scratch first (tests::ScratchHome).
+#[cfg(test)]
+fn refuse_real_home_in_test(certs_dir: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    if let Some(home) = passwd_home().filter(|h| h.as_os_str().len() > 1)
+        && certs_dir.starts_with(&home)
+    {
+        return Err(format!(
+            "1898-hyhf: a test reached the real home for CA material ({}); \
+             point HOME at a scratch dir first",
+            certs_dir.display()
+        ));
+    }
+    #[cfg(not(unix))]
+    let _ = certs_dir;
+    Ok(())
+}
+
 fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     // @trace spec:secret-rotation, spec:reverse-proxy-internal
     let certs_dir = PathBuf::from(ca_dir());
@@ -4242,6 +4280,8 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         // the tool instead of dying eleven minutes in naming an errno.
         return Ok(certs_dir);
     }
+    #[cfg(test)]
+    refuse_real_home_in_test(&certs_dir)?;
     let crt = certs_dir.join("intermediate.crt");
     let key = certs_dir.join("intermediate.key");
     // Order 472 slice 3: the generation before any refresh, so a mint or a
@@ -4320,10 +4360,12 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
                 .ok_or_else(|| "CA cert path contains invalid UTF-8".to_string())?,
             "-days",
             CA_VALIDITY_DAYS,
-            "-nodes",
             "-subj",
             "/C=US/ST=Privacy/L=Local/O=Tillandsias/CN=Tillandsias CA",
         ]);
+        // 1898-hyhf: `-nodes` only onto the tmpfs store; elsewhere encrypted.
+        command.args(ca_key_store::key_out_args());
+        command.envs(ca_key_store::pass_env());
         command.stdout(Stdio::null()).stderr(Stdio::null());
 
         if let Err(e) = run_command_silent(command, debug) {
@@ -32530,10 +32572,155 @@ esac
         );
     }
 
+    /// Points HOME and XDG_RUNTIME_DIR at a scratch root for one test and puts
+    /// them back on drop. Under cfg(test) the tmpfs key store is inactive
+    /// (ca_key_store::session), which is the macOS/Windows regime.
+    struct ScratchHome {
+        root: tempfile::TempDir,
+        saved: Vec<(&'static str, Option<std::ffi::OsString>)>,
+    }
+
+    impl ScratchHome {
+        fn new() -> Self {
+            let root = tempfile::tempdir().expect("scratch home");
+            let run = root.path().join("run");
+            std::fs::create_dir_all(&run).expect("scratch runtime dir");
+            let saved = ["HOME", "XDG_RUNTIME_DIR", "TILLANDSIAS_HOST_KIND"]
+                .into_iter()
+                .map(|k| (k, std::env::var_os(k)))
+                .collect();
+            // SAFETY: serialised by env_lock in every caller.
+            unsafe {
+                std::env::set_var("HOME", root.path());
+                std::env::set_var("XDG_RUNTIME_DIR", &run);
+                std::env::remove_var("TILLANDSIAS_HOST_KIND");
+            }
+            Self { root, saved }
+        }
+
+        fn path(&self) -> &Path {
+            self.root.path()
+        }
+    }
+
+    impl Drop for ScratchHome {
+        fn drop(&mut self) {
+            for (k, v) in self.saved.drain(..) {
+                // SAFETY: serialised by env_lock in every caller.
+                unsafe {
+                    match v {
+                        Some(v) => std::env::set_var(k, v),
+                        None => std::env::remove_var(k),
+                    }
+                }
+            }
+        }
+    }
+
+    /// Every unencrypted PEM private key under `root`, and every symlink that
+    /// leaves it, one line each.
+    fn plaintext_keys_and_escaping_links(root: &Path) -> Vec<String> {
+        let mut found = Vec::new();
+        let mut stack = vec![root.to_path_buf()];
+        while let Some(dir) = stack.pop() {
+            let Ok(entries) = std::fs::read_dir(&dir) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let Ok(meta) = std::fs::symlink_metadata(&path) else {
+                    continue;
+                };
+                if meta.file_type().is_symlink() {
+                    let target = std::fs::read_link(&path).unwrap_or_default();
+                    let target = if target.is_absolute() {
+                        target
+                    } else {
+                        path.parent().unwrap().join(target)
+                    };
+                    if !target.starts_with(root) {
+                        found.push(format!("link {} -> {}", path.display(), target.display()));
+                    }
+                } else if meta.is_dir() {
+                    stack.push(path);
+                } else if let Ok(bytes) = std::fs::read(&path) {
+                    let text = String::from_utf8_lossy(&bytes);
+                    for marker in [
+                        "-----BEGIN PRIVATE KEY-----",
+                        "-----BEGIN RSA PRIVATE KEY-----",
+                        "-----BEGIN EC PRIVATE KEY-----",
+                    ] {
+                        if text.contains(marker) {
+                            found.push(format!("plaintext {} ({marker})", path.display()));
+                        }
+                    }
+                }
+            }
+        }
+        found
+    }
+
+    /// 1898-hyhf exit criterion 1: with HOME and the runtime dir on scratch
+    /// and the tmpfs key store inactive (as on macOS and Windows), the CA mint
+    /// and the Vault leaf mint leave no unencrypted private key under HOME and
+    /// no symlink out of it.
+    #[test]
+    #[cfg(feature = "vault")]
+    fn ca_and_vault_leaf_mints_leave_no_plaintext_key_where_the_store_is_inactive() {
+        let _pseam_lock = podman_seam_lock();
+        let _guard = env_lock();
+        let home = ScratchHome::new();
+        let certs_dir = ensure_ca_bundle(false).expect("ensure_ca_bundle");
+        assert!(
+            certs_dir.starts_with(home.path()),
+            "{}",
+            certs_dir.display()
+        );
+        crate::vault_bootstrap::ensure_vault_tls_leaf(&certs_dir, false)
+            .expect("ensure_vault_tls_leaf");
+        assert!(certs_dir.join("intermediate.key").is_file());
+        assert!(certs_dir.join("vault.key").is_file());
+        let found = plaintext_keys_and_escaping_links(home.path());
+        assert!(found.is_empty(), "1898-hyhf: {found:#?}");
+        // The keys are usable: each decrypts in memory to a PEM key.
+        for name in ["intermediate.key", "vault.key"] {
+            let pem = crate::ca_key_store::read_key(&certs_dir.join(name)).expect(name);
+            assert!(
+                String::from_utf8_lossy(&pem).contains("-----BEGIN PRIVATE KEY-----"),
+                "{name} must decrypt for this session"
+            );
+        }
+        // A second ensure in the same session reuses the CA.
+        let crt_before = std::fs::read(certs_dir.join("intermediate.crt")).unwrap();
+        ensure_ca_bundle(false).expect("second ensure_ca_bundle");
+        assert_eq!(
+            crt_before,
+            std::fs::read(certs_dir.join("intermediate.crt")).unwrap()
+        );
+    }
+
+    /// 1898-hyhf exit criterion 2: under cfg(test) the CA mint refuses the
+    /// operator's real home, so a test that forgets ScratchHome fails loudly
+    /// instead of writing key material there.
+    #[test]
+    #[cfg(unix)]
+    fn ca_mint_refuses_the_real_home_under_test() {
+        let _pseam_lock = podman_seam_lock();
+        let _guard = env_lock();
+        let real = passwd_home().expect("passwd home");
+        let _scratch = ScratchHome::new();
+        assert!(!PathBuf::from(ca_dir()).starts_with(&real));
+        let err = refuse_real_home_in_test(&real.join(".local/state/tillandsias/ca"))
+            .expect_err("the real home must be refused");
+        assert!(err.contains("1898-hyhf"), "{err}");
+    }
+
     #[test]
     fn source_built_init_and_status_check_smoke_uses_fake_podman() {
         let _pseam_lock = podman_seam_lock();
         let _guard = env_lock();
+        // 1898-hyhf: the CA below lands in scratch, never the real home.
+        let _home = ScratchHome::new();
 
         let root = find_checkout_root().expect("repo root");
         let version = VERSION.trim();
