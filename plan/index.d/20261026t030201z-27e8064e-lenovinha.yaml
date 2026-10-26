@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: exiting-tillandsias-stops-every-ephemeral-service-gracefully-then-forcibly-and-a-tray-start-after-an-unclean-exit-reaps-leftovers-before-launching
+    field: context
+    value: |-
+      Evidence 2026-10-24 on macuahuitl: tillandsias-inference ignored SIGTERM and exited 137 after a 10 s stop; after crashed Codex, OpenCode Web and OpenCode lanes no further forge would launch (bad configs left live); the podman store wedged, podman volume ls and podman system reset hung, with veth unregistering in the kernel log. Required: (1) Exit stops every ephemeral service the runtime started, SIGTERM with a timeout first then forced kill, per podman best practice; (2) on tray start after an unclean exit, leftover runtime containers, networks and volumes get the same graceful-then-forced treatment before anything launches; (3) the inference service handles SIGTERM. Investigate whether the wedge is caused by forced removal racing network teardown. Operator packet relayed by the coordinator 2026-10-24.
+
+
+      [2026-10-26T03:02:01Z lenovinha] 1859-v5iv implementation (lenovinha 2026-10-26). Each tray run mints an id exported as TILLANDSIAS_TRAY_RUN; forges launched under it (CLI forge args and the container spec) and their ram-only source volumes carry the label tillandsias.tray-run=<id>. A marker in the state dir records id, pid, process start time and boot id. On tray start, a previous marker with no live matching process is a dead run: its labelled containers are stopped with podman stop -t 10 (SIGTERM then SIGKILL), only then removed, then its labelled volumes. A live marker is another tray and is left alone. Graceful exit removes its own marker. The shared stack and CLI-only forges carry no run label and are never reaped. Inference: entrypoint.sh ends in tillandsias_supervise (supervise.sh), which traps TERM/INT as PID 1, forwards to every job, and exits with the engine status. Fixtures: dead_run unit tests against a fake podman (order: stop before remove before volume rm; label filter), a forge-args label test, and scripts/test-inference-supervise.py (child and PID-1 regimes, with a bare-wait control that stays red). NOT automated: a live kill -9 tray restart, and network cleanup (shared networks are reused by the next launch). Exit-path stop-then-kill was already in graceful_shutdown_async and is unchanged.
+    ts: "2026-10-26T03:02:01Z"
+    host: lenovinha
+
+events:
+  - packet_id: exiting-tillandsias-stops-every-ephemeral-service-gracefully-then-forcibly-and-a-tray-start-after-an-unclean-exit-reaps-leftovers-before-launching
+    event:
+      type: note
+      ts: "2026-10-26T03:02:01Z"
+      host: lenovinha
+      summary: |-
+        record scope and coverage

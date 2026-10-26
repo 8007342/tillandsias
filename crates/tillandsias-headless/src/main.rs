@@ -9574,6 +9574,9 @@ fn build_opencode_forge_args(
             "TILLANDSIAS_CONTROL_SOCKET=/run/host/tillandsias-mcp/mcp.sock".into(),
         ]);
     }
+    // Order 1859-v5iv: the tray run that launched this forge, so a tray start
+    // after that run died reaps it (dead_run.rs).
+    args.extend(dead_run::run_label_args());
     // ORDER 1506-q7ab: beside the MCP socket, this lane's MAILBOX — its own
     // lane directory ($XDG_STATE_HOME/tillandsias/msg/lanes/<project>-<instance>)
     // read-write at /run/host/tillandsias-msg, and only that directory, with
@@ -18878,6 +18881,8 @@ fn prepare_forge_ram_workspace(
                 chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
             ),
         ]);
+        // Order 1859-v5iv: a dead tray run's source volumes go with its forges.
+        create.args(dead_run::run_label_args());
         create.args(["--label", "tillandsias.source=ram-only", &volume]);
         run_podman_command_silent(create, debug)?;
     }
@@ -19477,6 +19482,10 @@ fn build_forge_agent_run_args_with_vault(
                 "/run/host/tillandsias-mcp/mcp.sock",
             );
     }
+    // Order 1859-v5iv: labelled with the launching tray run (dead_run.rs).
+    if let Some(run) = dead_run::run_label_value() {
+        spec = spec.label(dead_run::RUN_LABEL, run);
+    }
     // ORDER 1506-q7ab: beside the MCP socket, this lane's MAILBOX, read-write
     // at /run/host/tillandsias-msg (only its own lane directory), with the lane
     // and host labels the in-forge `tillandsias-plan msg` names itself by.
@@ -19953,6 +19962,7 @@ mod tray;
 
 // @trace spec:mcp-tool-socket (order 1713-1dnx: host-services, so the VM
 // guest's forges get a listener too)
+mod dead_run;
 #[cfg(feature = "host-services")]
 mod mcp_socket;
 
@@ -34751,6 +34761,51 @@ esac
         assert!(
             !args_str.contains("control.sock"),
             "OpenCode lane argv must NEVER mount control.sock; args: {args_str}"
+        );
+    }
+
+    /// Order 1859-v5iv: a forge launched under a tray run carries that run's
+    /// label, so the next tray start can reap it if the run dies; outside a
+    /// tray run it carries none.
+    #[test]
+    fn opencode_lane_builder_labels_the_launching_tray_run() {
+        let _seam = podman_false_seam();
+        let _env = env_lock();
+        let prev = std::env::var_os(dead_run::RUN_ENV);
+        let build = || {
+            build_opencode_forge_args(
+                &PathBuf::from("/tmp/project"),
+                Some(&PathBuf::from("/tmp/project")),
+                None,
+                "alpha",
+                None,
+                None,
+                &PathBuf::from("/tmp/ca"),
+                "1.2.3",
+                ForgeMode::Cli,
+                None,
+                false,
+                false,
+            )
+        };
+        unsafe { std::env::set_var(dead_run::RUN_ENV, "4242-run") };
+        let labelled = build();
+        unsafe { std::env::remove_var(dead_run::RUN_ENV) };
+        let bare = build();
+        unsafe {
+            if let Some(v) = prev {
+                std::env::set_var(dead_run::RUN_ENV, v);
+            }
+        }
+        assert!(
+            labelled
+                .windows(2)
+                .any(|w| w[0] == "--label" && w[1] == "tillandsias.tray-run=4242-run"),
+            "a tray-run forge must carry its run label; args: {labelled:?}"
+        );
+        assert!(
+            !bare.iter().any(|a| a.starts_with("tillandsias.tray-run=")),
+            "outside a tray run no run label is stamped; args: {bare:?}"
         );
     }
 

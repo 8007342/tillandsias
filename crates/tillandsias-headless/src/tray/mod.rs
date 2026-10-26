@@ -3828,6 +3828,37 @@ async fn register_with_watcher(connection: &Connection, service_name: &str) {
     }
 }
 
+/// Claim the run marker and, when the previous tray run died uncleanly, stop
+/// and remove what it launched (order 1859-v5iv). Bounded by the reap's stop
+/// timeout; a failure here never blocks the tray from starting.
+fn reap_previous_run_if_dead(run_id: &str) {
+    let Some(me) = crate::dead_run::RunMarker::current(run_id) else {
+        return;
+    };
+    let Some(dead) = crate::dead_run::claim_run(&crate::dead_run::marker_path(), &me) else {
+        return;
+    };
+    info!(spec = "graceful-shutdown", run = %dead, "previous tray run exited uncleanly; reaping it");
+    let reaped = std::thread::spawn(move || {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map(|rt| {
+                rt.block_on(crate::dead_run::reap_dead_run(
+                    &tillandsias_podman::PodmanClient::new(),
+                    &dead,
+                ))
+            })
+    })
+    .join();
+    if !matches!(reaped, Ok(Ok(_))) {
+        warn!(
+            spec = "graceful-shutdown",
+            "reaping the dead tray run failed; continuing"
+        );
+    }
+}
+
 /// Run native tray mode using a pure D-Bus StatusNotifierItem path.
 ///
 /// @trace spec:tray-app, spec:tray-ux, spec:tray-progress-and-icon-states, spec:tray-icon-lifecycle
@@ -3883,6 +3914,11 @@ fn ensure_desktop_icon() {
 }
 
 pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Result<(), String> {
+    // Order 1859-v5iv: mint and export this run's id before any thread exists
+    // (forges launched under it carry it as a label), then reap the previous
+    // run if it died without its graceful exit — before anything launches.
+    let run_id = crate::dead_run::mint_run_id();
+    reap_previous_run_if_dead(&run_id);
     ensure_desktop_icon();
     let version = super::VERSION.trim().to_string();
     let root = super::resolve_runtime_asset_root(&version, debug)?;
@@ -4134,6 +4170,10 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
             Ok(Ok(())) => {}
             Ok(Err(e)) => warn!("graceful shutdown failed: {e}"),
             Err(_) => warn!("graceful shutdown timed out; exiting forcefully"),
+        }
+        // Order 1859-v5iv: a clean exit leaves no run for the next start to reap.
+        if let Some(run) = crate::dead_run::run_label_value() {
+            crate::dead_run::release_run(&crate::dead_run::marker_path(), &run);
         }
 
         // @trace spec:tillandsias-vault — revoke per-container AppRole

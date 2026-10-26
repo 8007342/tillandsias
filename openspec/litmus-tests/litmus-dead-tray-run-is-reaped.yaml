@@ -1,0 +1,43 @@
+# @trace spec:graceful-shutdown, spec:inference-container
+name: litmus:dead-tray-run-is-reaped
+spec: graceful-shutdown
+phase: pre-build
+status: active
+description: >
+  Order 1859-v5iv. A tray that died without its graceful exit left its forges
+  running with no owner, and on macuahuitl 2026-10-24 no further forge would
+  launch; the inference container ignored SIGTERM and was SIGKILLed with 137.
+  Each tray run now labels the forges and source volumes it launches, records
+  itself in a run marker, and a tray start that finds the previous run dead
+  stops that run's containers (SIGTERM, then SIGKILL after the timeout), only
+  then removes them, then its volumes. The inference entrypoint, PID 1 in its
+  container, forwards SIGTERM to ollama and exits with its status.
+severity: high
+size: quick
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/dead_run.rs
+  - workspace contains images/inference/supervise.sh
+  - python3 on the host
+critical_path:
+  - step: "Req: a dead run is detected (gone pid, reused pid, other boot) and a live one is left alone; its labelled containers are stopped before any is removed, then its volumes; a tray-run forge carries the run label"
+    command: "cargo test -q -p tillandsias-headless --bin tillandsias --features tray,listen-vsock -- dead_run opencode_lane_builder_labels_the_launching_tray_run 2>&1"
+    timeout_ms: 600000
+    success_pattern: "test result: ok. 5 passed"
+  - step: "Req: the inference entrypoint passes SIGTERM on to the engine and every background job, as a child and as PID 1, and a bare wait (the old line) does not"
+    command: "python3 -I scripts/test-inference-supervise.py 2>&1"
+    timeout_ms: 60000
+    success_pattern: "ok:inference-supervise:"
+observability:
+  traces:
+    - "@trace spec:graceful-shutdown"
+  expected_log: "reaped the dead tray run"
+  log_fields:
+    spec: "graceful-shutdown"
+    test: "dead-tray-run-is-reaped"
+rollback:
+  on_failure: >
+    A tray start after an unclean exit again leaves the dead run's forges, or
+    reaps a live run's, or removes before stopping; or the inference entrypoint
+    again ignores SIGTERM. Restore dead_run.rs, reap_previous_run_if_dead in
+    tray/mod.rs, the run label in the forge builders, and supervise.sh.
+  command: "python3 -I scripts/test-inference-supervise.py"
