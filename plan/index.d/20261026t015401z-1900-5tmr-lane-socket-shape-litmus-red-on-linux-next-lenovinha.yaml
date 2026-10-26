@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue (opus5) at the coordinator's request.
+packets:
+  - packet_id: host-browser-mcp-lane-socket-shape-litmus-greps-a-file-the-lane-launch-left
+    order: 1900-5tmr
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [litmus, mcp, host-browser]
+    size: S
+    implementer_tier: sonnet
+    title: "litmus:host-browser-mcp-lane-socket-shape steps 3 and 4 are red on linux-next: they grep tray/mod.rs for lane wiring that 776-jcf3 moved to main.rs"
+    context: |
+      Steps 3 and 4 grep crates/tillandsias-headless/src/tray/mod.rs for
+      the strings /run/host/tillandsias-mcp and its mcp.sock. Commit
+      36100531a (776-jcf3) retired the tray's local-launch handlers, and the
+      lane mount plus TILLANDSIAS_CONTROL_SOCKET env now live in main.rs
+      (forge args and the VM container spec). The wiring is intact and
+      covered by the test forge_container_spec_mounts_only_per_lane_mcp_dir;
+      only the litmus text pins went stale. A red trunk litmus evicts
+      unrelated PRs.
+    exit_criteria:
+      - "litmus:host-browser-mcp-lane-socket-shape passes on linux-next, and its lane-mount step fails when the forge spec stops mounting /run/host/tillandsias-mcp or setting TILLANDSIAS_CONTROL_SOCKET."
+    verifiable_closure: "litmus:host-browser-mcp-lane-socket-shape"
