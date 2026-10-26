@@ -49,7 +49,7 @@ case "$lane" in
     stale)  row lane failed "host_lane=stale: ${TILLANDSIAS_CONTROL_SOCKET} exists but nothing on the host accepts (connect refused); publish_local, browser.open and flutter all fail until the tray re-serves the lane" ;;
     absent) row lane failed "host_lane=absent: no socket at ${TILLANDSIAS_CONTROL_SOCKET}; this forge was launched without a lane" ;;
     unset)  row lane skip "host_lane=unset: TILLANDSIAS_CONTROL_SOCKET is not set; this forge has no host lane" ;;
-    *)      row lane failed "host_lane=unknown: lib-lane.sh not found in $LIB_DIR" ;;
+    *)      row lane failed "host_lane=unknown: the lane could not be judged (lib-lane.sh missing from $LIB_DIR, or no curl)" ;;
 esac
 
 # ── MCP servers ───────────────────────────────────────────────

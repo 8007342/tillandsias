@@ -16,10 +16,18 @@ lane_socket_state() {
     local sock="${TILLANDSIAS_CONTROL_SOCKET:-}"
     [[ -n "$sock" ]] || { echo unset; return 0; }
     [[ -S "$sock" ]] || { echo absent; return 0; }
-    if python3 -c 'import socket,sys; s=socket.socket(socket.AF_UNIX); s.settimeout(1); s.connect(sys.argv[1])' "$sock" 2>/dev/null; then
-        echo ready
-    else
+    # connect() is the whole question. curl speaks to a unix socket and exits
+    # 7 when the connection is refused (nothing accepts: stale); any other
+    # outcome means a listener took the connection, whatever it then said.
+    local rc
+    curl -s -o /dev/null --max-time 1 --unix-socket "$sock" http://lane/ 2>/dev/null
+    rc=$?
+    if [ "$rc" -eq 7 ]; then
         echo stale
+    elif [ "$rc" -eq 127 ]; then
+        echo unknown
+    else
+        echo ready
     fi
 }
 
