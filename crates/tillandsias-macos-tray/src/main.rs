@@ -24,6 +24,8 @@ mod diagnose;
 #[cfg(target_os = "macos")]
 mod guest_binary;
 #[cfg(target_os = "macos")]
+mod guest_exec_relay;
+#[cfg(target_os = "macos")]
 mod installation_uuid;
 #[cfg(target_os = "macos")]
 mod main_thread;
@@ -306,7 +308,9 @@ fn main() {
     // current-thread runtime for exactly that. See
     // plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md.
     if let Some(idx) = args.iter().position(|a| a == "--exec-guest") {
-        require_no_live_tray("--exec-guest");
+        // 1897-y7j2: a running tray relays the command instead of refusing.
+        // The tray is asked only after the request is classified below.
+        let tray_owns_vm = live_tray_holds_singleton();
         // 795-zshi: the guest allowlist now has TWO arms, so this call site
         // DISCRIMINATES instead of flattening everything. An absolute argv[0]
         // with no shell metacharacters anywhere is sent as a verbatim argv
@@ -335,6 +339,13 @@ fn main() {
                 (vec!["/bin/bash".to_string(), "-lc".to_string(), cmd], None)
             }
         };
+        if tray_owns_vm {
+            match diagnose::exec_guest_via_tray(guest_argv, required_cap) {
+                Some(code) => std::process::exit(code),
+                None => require_no_live_tray("--exec-guest"),
+            }
+            std::process::exit(3);
+        }
         std::process::exit(diagnose::exec_guest_main(guest_argv, required_cap));
     }
     // Shared GuestTransport conformance fixtures (order 128) against the live
