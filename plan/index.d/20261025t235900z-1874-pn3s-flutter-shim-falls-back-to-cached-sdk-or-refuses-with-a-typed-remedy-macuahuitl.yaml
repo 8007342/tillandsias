@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed from forge field report plan/diagnostics/forge-tillandsias-opencode-web-2026-10-25.md (related: 1863-eckw). Code cited by symbol, never by line.
+packets:
+  - packet_id: flutter-shim-falls-back-to-cached-sdk-or-refuses-with-a-typed-remedy
+    order: 1874-pn3s
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, flutter,shim]
+    estimated_hours: 3
+    related: [1863-eckw]
+    title: "The flutter shim falls back to a cached SDK or refuses with a typed remedy instead of bare exit 69"
+    context: |
+      When the host toolchain lane is down the shim exits 69. Fall back to a cached SDK in the durable project cache (never the src tmpfs); otherwise emit a typed refusal naming the remedy. Source: plan/diagnostics/forge-tillandsias-opencode-web-2026-10-25.md (related 1863-eckw).
+    exit_criteria:
+      - "A fixture runs the flutter shim with the lane down and no cache and asserts a typed refusal naming the remedy (not bare exit 69), and with a cached SDK asserts the fallback runs from the durable cache path. Pre-fix result: FAILS on today's code."
+    verifiable_closure: "A fixture runs the flutter shim with the lane down and no cache and asserts a typed refusal naming the remedy (not bare exit 69), and with a cached SDK asserts the fallback runs from the durable cache path. Pre-fix result: FAILS on today's code."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the check named in the exit criterion first, watch it fail on today's code, then fix.
+    provenance: |
+      Filed 2026-10-25 from the forge field report (section 4.2).
+    events:
+      - type: filed
+        ts: "2026-10-25T23:59:00Z"
+        host: macuahuitl
+        summary: "filed ready from forge field report 1863-eckw"
