@@ -38,6 +38,13 @@ def connect():
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
         s.connect(SOCKET)
+    except ConnectionRefusedError:
+        # Order 1863-eckw: a socket file nobody accepts on is a stale lane.
+        die(
+            f"host_lane=stale: {SOCKET} exists but nothing on the host accepts on it "
+            "(the process that served this forge's lane exited). A running tray "
+            "re-serves the lane within a second; retry, and tell the operator if it persists."
+        )
     except OSError:
         die(
             f"the host toolchain service is not reachable at {SOCKET}. "
