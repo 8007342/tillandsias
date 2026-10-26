@@ -19934,6 +19934,8 @@ mod mcp_socket;
 // bound to the tray. Needs the store, so `vault` as well.
 #[cfg(all(feature = "host-services", feature = "vault"))]
 mod cloudflare_mcp;
+#[cfg(all(feature = "host-services", feature = "vault"))]
+mod cloudflare_worker_deploy;
 
 // @trace spec:local-web-preview
 #[cfg(feature = "host-services")]
