@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: exiting-tillandsias-stops-every-ephemeral-service-gracefully-then-forcibly-and-a-tray-start-after-an-unclean-exit-reaps-leftovers-before-launching
+    field: next_action
+    value: 'live kill -9 arm awaits the next stable release with #662'
+    ts: "2026-10-27T09:16:21Z"
+    host: lenovinha
+    replaces_sha256: "bf7e8b5dec98963e4250ed925d0d2907853f461b6b1dbffcb91e4c1623ec2df0"
+
+events:
+  - packet_id: exiting-tillandsias-stops-every-ephemeral-service-gracefully-then-forcibly-and-a-tray-start-after-an-unclean-exit-reaps-leftovers-before-launching
+    event:
+      type: note
+      ts: "2026-10-27T09:16:21Z"
+      host: lenovinha
+      summary: |-
+        coordinator ruling 2026-10-27
