@@ -1,0 +1,4 @@
+[W] auto-fit: no GPU devices; using the default backend --- backend_fit.cpp:444
+[V] model manager prepared params backend buffers (626.35 MB, 358 tensors, 1 blocks, RAM) on CPU --- model_manager.cpp:490
+[V] model manager prepared params backend buffers (649.98 MB, 280 tensors, 1 blocks, RAM) on CPU --- model_manager.cpp:490
+[V] model manager prepared params backend buffers (  2.34 MB, 67 tensors, 1 blocks, RAM) on CPU --- model_manager.cpp:490
