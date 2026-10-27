@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+- packet_id: startup-and-shutdown-splash-advances-only-on-tray-lifecycle-stages-and-stalls-visibly-when-a-stage-hangs
+  order: 1884-ptnt
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - approval
+  - security
+  - cost-gate
+  - linux
+  estimated_hours: 6
+  depends_on: []
+  title: A startup and shutdown splash on Linux whose Mācron animation follows the tray's real progress and visibly stalls when stuck
+  context: Design D7 of openspec/changes/os-verified-approval-gates. Map each TrayStatusStage (PreLaunch through AllReady, ShuttingDown, Failed) to one scene step; animation advances only on stage events; a per-stage expected duration stops the idle loop and shows a calm 'taking longer than usual' line naming the step. Normal window level, never always-on-top, closable without affecting the tray. Replaces the operator's habit of clicking the tray icon while waiting.
+  exit_criteria:
+  - 'A test drives the splash state machine with a scripted stage sequence and asserts: the step equals the last stage received regardless of elapsed time; with no event for longer than the stage budget the state becomes Stalled naming that stage; a Failed stage holds the window open; the window''s type hint is not above/keep-above. Pre-fix result: FAILS, no splash state machine exists and stages reach only the menu label via status_label.'
+  verifiable_closure: 'A test drives the splash state machine with a scripted stage sequence and asserts: the step equals the last stage received regardless of elapsed time; with no event for longer than the stage budget the state becomes Stalled naming that stage; a Failed stage holds the window open; the window''s type hint is not above/keep-above. Pre-fix result: FAILS, no splash state machine exists and stages reach only the menu label via status_label.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+
+    '
+  next_action: 'Nothing is done. Write the check named in the exit criterion first and watch it fail on today''s code, then implement per openspec/changes/os-verified-approval-gates.
+
+    '
+  provenance: 'Filed at operator request 2026-10-25 (OS-verified approval gates direction).
+
+    '
+  events:
+  - type: filed
+    ts: '2026-10-25T22:00:00Z'
+    host: macuahuitl
+    summary: filed ready from the operator request of 2026-10-25

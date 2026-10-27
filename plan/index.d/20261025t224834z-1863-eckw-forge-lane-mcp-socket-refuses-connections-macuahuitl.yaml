@@ -1,0 +1,135 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by big-pickle (agent) in forge-tillandsias at operator-facing request
+# 2026-10-25: "start a sibling container and load it locally in a dev browser"
+# could not be done. Code is cited by symbol, never by line.
+packets:
+  - packet_id: opencode-web-session-loses-its-lane-mcp-socket-when-the-launching-process-exits
+    order: 1863-eckw
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [mcp, host-browser, tray, forge, flutter]
+    size: M
+    implementer_tier: sonnet
+    title: "A web-mode forge keeps a lane MCP socket that refuses every connection once its launcher exits, so publish_local, browser.open and the Flutter toolchain are dead for the whole session"
+    context: |
+      Observed in forge-tillandsias on 2026-10-25 (~22:0xZ) while trying to
+      serve observatorium/ to a dev browser.
+
+      FACTS, all verified rather than inferred:
+      - `ss -ltn` inside the forge shows only 0.0.0.0:4096 (the opencode SSE
+        proxy), 127.0.0.1:4097 (opencode serve) and 127.0.0.1:11436
+        (expert-serve). Nothing listens on the lane.
+      - The lane socket path `/run/host/tillandsias-mcp/mcp.sock` EXISTS as an
+        inode, but connect() returns `ConnectionRefusedError [Errno 111]`: a
+        socket file with no listener behind it.
+      - `publish_local` and `browser.open` (through
+        images/default/config-overlay/mcp/host-browser.sh, an NDJSON passthrough
+        to that socket) therefore cannot start a sibling preview container or a
+        host browser.
+      - Every Flutter command fails the same way: /usr/local/sbin/flutter
+        resolves to /opt/agents/tillandsias-cli/bin/flutter, a shim that asks the
+        host toolchain service over the same socket and exits 69 ("the host
+        toolchain service is not reachable at ..."). So `npm run build` in
+        observatorium/ reaches `flutter pub get` and dies.
+      - The documented in-forge self-test cannot separate this from a router
+        fault; see the sibling packet on .localhost forwarding.
+
+      CANDIDATE CAUSES, read from the launch path but not yet instrumented:
+      the listener is bound inside the process that launched the forge.
+      `maybe_spawn_detached_tray_for_cli` spawns a detached tray companion and
+      passes TILLANDSIAS_TRAY_RESERVED_LANE=tillandsias/default; the companion's
+      `startup_lanes` binds only the ("default","default") lane, so it
+      deliberately skips the reserved one. `run_opencode_web_mode` then returns
+      and the launching CLI exits, orphaning the bound listener. A tray exit
+      would do the same. Nothing adopts or rebinds an orphaned lane, and
+      `lane_socket_foreign_owner` treats a socket that refuses connection as
+      unowned, so a later launcher would not notice the stale inode either.
+
+      OPERATOR IMPACT: package-preview and dev-browser work is impossible in
+      such a session, and there is no in-session recovery — the only remedy is
+      relaunching the forge from the tray, which destroys the ephemeral
+      workspace the agent was told to build in. Any build produced before the
+      relaunch is also thrown away (build/web is gitignored).
+    exit_criteria:
+      - "A web-mode forge's lane socket answers for the whole life of the session: after the launching CLI has exited, `publish_local` returns a URL, `browser.open` opens a window, and a Flutter command runs; the same holds after the launcher is SIGKILLed. Pre-fix: connect() on /run/host/tillandsias-mcp/mcp.sock is refused."
+      - "A stale lane socket (file present, no listener) is named as the cause when publish_local or a toolchain call fails, instead of surfacing as an opaque ECONNREFUSED or exit 69."
+    verifiable_closure: "A web-mode forge's lane socket answers for the whole life of the session, including after the launcher exits or is SIGKILLed, and a stale socket is reported by name; both are shown red on today's code first (litmus: scripts/test-lane-socket-survives-launcher-exit.sh)."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the litmus named in the
+      exit criterion — scripts/test-lane-socket-survives-launcher-exit.sh — in
+      the same commit (1136-n8sh); nothing defines it today.
+    next_action: >
+      Write the failing test first: start the MCP-socket server plus the
+      detached tray companion in a fixture, let the launching process exit, then
+      assert connect() on the lane socket succeeds and publish_local answers.
+      Today it is refused.
+    provenance: |
+      Filed by agent big-pickle in forge-tillandsias 2026-10-25. Not re-filed:
+      the ledger was searched for the stale-lane symptom before minting order
+      1863-eckw. Related but distinct rows: 1859-v5iv (quitting stops everything
+      it started; starting after a crash cleans up), 1581-sunl
+      (mcp_listener_failed_start_rolls_back_registry).
+    events:
+      - type: filed
+        ts: "2026-10-25T22:48:34Z"
+        host: macuahuitl
+        summary: "filed ready from an observed dead lane socket that blocked publish_local/browser.open/flutter for a whole web session"
+
+  - packet_id: in-forge-dot-localhost-name-resolution-goes-through-squid-to-proxy-port-80-which-refuses-while-the-router-listens-on-8080
+    order: 1863-4knc
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, networking, proxy, router, e2e]
+    size: S
+    implementer_tier: haiku
+    title: "Inside a forge, fetching a .localhost service name goes through Squid to proxy port 80, which refuses, although the router answers on 8080"
+    context: |
+      Observed in forge-tillandsias on 2026-10-25.
+
+      The router is healthy: `curl -H 'Host: opencode.tillandsias.localhost'
+      http://10.0.42.38:8080/` returns the router's own 401 gate
+      ("unauthorised — open this project from the Tillandsias tray"), and an
+      unrouted name returns `tillandsias-router: no route for ...`.
+
+      Every in-forge attempt at the documented form fails:
+      - `curl http://opencode.tillandsias.localhost/` -> connection refused (no
+        in-forge resolver for .localhost, expected without a proxy).
+      - `curl -x http://proxy:3128 http://opencode.tillandsias.localhost/` ->
+        502 from `Server: squid/6.12` with `X-Squid-Error: ERR_READ_ERROR`;
+        the proxy host (10.0.42.32) refuses connections on port 80.
+
+      So Squid's .localhost forwarding still points at port 80 of the proxy
+      host rather than at the router on 8080, and the documented fallback in
+      .forge-startup-context.md ("curl -fsS http://<service>.<project>.localhost/")
+      cannot work inside a forge. The host-browser path is unaffected because it
+      reaches the router over host loopback, which is why this hides: the only
+      caller of the in-forge form is a diagnosing agent, and it is told a
+      connection failure that looks like the router is down when the router is
+      fine.
+    exit_criteria:
+      - "From inside a forge, `curl -fsS http://opencode.<project>.localhost/` reaches the router and returns the router's own response (its 401 gate for opencode), not a connection refusal and not a Squid 502; an unrouted name returns the router's `no route` body."
+    verifiable_closure: "From inside a forge, the documented self-test reaches the router and returns the router's own response, shown red on today's image first (litmus: scripts/test-in-forge-dot-localhost-probe.sh)."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the litmus named in the
+      exit criterion — scripts/test-in-forge-dot-localhost-probe.sh — in the
+      same commit (1136-n8sh); the probe needs a live forge network, which the
+      suite has no fixture for today.
+    next_action: >
+      Add the one-curl in-forge probe to the e2e smoke and make it pass: point
+      Squid's .localhost forwarding at the router's 8080 (or give the forge a
+      resolver that reaches the router) and delete the stale proxy:80 path.
+    provenance: |
+      Filed by agent big-pickle in forge-tillandsias 2026-10-25 alongside
+      1863-eckw, while that packet's symptom was being misattributed to the
+      router.
+    events:
+      - type: filed
+        ts: "2026-10-25T22:48:34Z"
+        host: macuahuitl
+        summary: "filed ready: Squid answers .localhost with a 502 while the router answers on 8080"

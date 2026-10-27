@@ -1,237 +1,60 @@
-#!/usr/bin/env python3
-# @trace spec:local-web-preview, order:1637-5765
-"""flutter: run Flutter for this forge's project in the shared toolchain image.
+#!/usr/bin/env bash
+# flutter — run Flutter for this forge's project.
+#
+# The forge image carries no Flutter SDK (2.5 GB unpacked). The usual path is
+# the host: over the lane's MCP socket, flutter-lane asks the host to run
+# `flutter <args>` in the shared tillandsias-flutter image (1637-5765).
+#
+# When the host cannot (order 1874-pn3s), in order:
+#   1 a cached SDK in the durable project cache,
+#     $TILLANDSIAS_PROJECT_CACHE/flutter-sdk/bin/flutter (the cache volume,
+#     never the ~/src tmpfs, which is lost with the forge), runs instead;
+#   2 otherwise a typed refusal names why and the remedy:
+#       refused:flutter:<reason> remedy=<what to do>
+#     with exit 69 (EX_UNAVAILABLE), where the bare `exit 69` used to be.
+#
+# @trace spec:local-web-preview, order:1637-5765, order:1874-pn3s
 
-The forge image carries no Flutter SDK (2.5 GB unpacked). This command asks the
-host, over the lane's own MCP socket, to prepare the shared `tillandsias-flutter`
-image once, then runs `flutter <args>` there against this project's files,
-streaming the output back. Interactive commands work: `flutter run -d
-web-server` takes `r`/`R` for hot reload and Ctrl-C to stop.
+LIB_DIR="${TILLANDSIAS_FLUTTER_LIB_DIR:-/usr/local/lib/tillandsias}"
+LANE_CLIENT="${TILLANDSIAS_FLUTTER_LANE_CLIENT:-/opt/agents/tillandsias-cli/libexec/flutter-lane}"
+CACHE="${TILLANDSIAS_PROJECT_CACHE:-/home/forge/.cache/tillandsias-project}"
+SRC="${TILLANDSIAS_FLUTTER_SRC_DIR:-/home/forge/src}"
+UNAVAILABLE=69
 
-Stdin reaches flutter only in an interactive session: a terminal, or `flutter
-run` (which reads r/R/q). Every other command gets an empty stdin, so a script
-piped into a shell is never swallowed by a `flutter` line inside it (1637-5765).
+# shellcheck source=../lib-lane.sh
+source "$LIB_DIR/lib-lane.sh" 2>/dev/null || lane_socket_state() { echo unknown; }
 
-Exit codes: flutter's own, or 69 when the host cannot run it (no lane socket,
-the image failed to build, the project is not attached).
-"""
-import base64
-import json
-import os
-import select
-import signal
-import socket
-import sys
-import time
+lane="$(lane_socket_state)"
+why=""
+if [ "$lane" = ready ]; then
+    "$LANE_CLIENT" "$@"
+    rc=$?
+    # 69 is the client's own "the host cannot run it"; any other code is
+    # flutter's, and is the answer.
+    [ "$rc" -ne "$UNAVAILABLE" ] && exit "$rc"
+    why="host-toolchain-unavailable"
+else
+    why="lane-$lane"
+fi
 
-SOCKET = os.environ.get("TILLANDSIAS_CONTROL_SOCKET", "/run/host/tillandsias-mcp/mcp.sock")
-PROJECT = os.environ.get("TILLANDSIAS_PROJECT", "")
-UNAVAILABLE = 69
+sdk="$CACHE/flutter-sdk/bin/flutter"
+case "$CACHE/" in
+    "$SRC"/*) sdk="" ;; # a cache on the src tmpfs is no cache
+esac
+if [ -n "$sdk" ] && [ -x "$sdk" ]; then
+    echo "flutter (tillandsias): host toolchain unavailable ($why); using the cached SDK at $sdk" >&2
+    exec "$sdk" "$@"
+fi
 
-
-def die(msg):
-    sys.stderr.write(f"flutter (tillandsias): {msg}\n")
-    sys.exit(UNAVAILABLE)
-
-
-def connect():
-    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    try:
-        s.connect(SOCKET)
-    except OSError:
-        die(
-            f"the host toolchain service is not reachable at {SOCKET}. "
-            "Flutter runs in a shared sibling image that the Tillandsias tray "
-            "provides to this forge; launch the forge from the tray."
-        )
-    return s
-
-
-def call(method, params, req_id=1):
-    """One request/response exchange on a fresh connection."""
-    s = connect()
-    with s:
-        s.sendall((json.dumps({"jsonrpc": "2.0", "id": req_id, "method": method, "params": params}) + "\n").encode())
-        buf = b""
-        while b"\n" not in buf:
-            chunk = s.recv(65536)
-            if not chunk:
-                die("the host closed the connection without answering")
-            buf += chunk
-    return json.loads(buf.split(b"\n", 1)[0])
-
-
-def prepare():
-    """Poll toolchain_prepare until the image is ready, showing progress."""
-    shown = False
-    tty = sys.stderr.isatty()
-    while True:
-        resp = call("tools/call", {"name": "toolchain_prepare", "arguments": {"toolchain": "flutter"}})
-        if "error" in resp:
-            die(resp["error"].get("message", "toolchain_prepare failed"))
-        # A CallToolResult (1696-gz2y): the payload is structuredContent.
-        result = resp.get("result", {})
-        state = result.get("structuredContent", result)
-        if state.get("state") == "ready":
-            if shown:
-                sys.stderr.write(("\r" if tty else "") + "Flutter is ready." + (" " * 40) + "\n")
-            return
-        if state.get("state") == "failed":
-            if shown:
-                sys.stderr.write("\n")
-            die(state.get("reason", "preparing Flutter failed"))
-        # 1776-v1t4: the host says how long to wait. A wait past a minute
-        # means the image is not coming soon (the operator's ruling: busy,
-        # try again later, never an error): say so and exit EX_TEMPFAIL (75)
-        # rather than hold the caller for many minutes.
-        retry_after = int(state.get("retry_after_s", 3) or 3)
-        if retry_after > 60:
-            if shown:
-                sys.stderr.write("\n")
-            sys.stderr.write(state.get("message") or f"Flutter is not ready yet; try again in {-(-retry_after // 60)} min.")
-            sys.stderr.write("\n")
-            sys.exit(75)
-        line = "Preparing Flutter (one time, a few minutes)"
-        if "step" in state and "total" in state:
-            line += f": step {state['step']}/{state['total']}"
-        line += f", {state.get('elapsed_s', 0)} s"
-        if tty:
-            sys.stderr.write("\r" + line + "   ")
-        elif not shown or int(state.get("elapsed_s", 0)) % 30 < 3:
-            sys.stderr.write(line + "\n")
-        sys.stderr.flush()
-        shown = True
-        time.sleep(min(max(retry_after, 1), 10))
-
-
-def project_cwd():
-    # TILLANDSIAS_PROJECT_ROOT is a test seam; in a forge the root is fixed.
-    root = os.environ.get("TILLANDSIAS_PROJECT_ROOT") or (f"/home/forge/src/{PROJECT}" if PROJECT else "")
-    if not root or not os.path.isdir(root):
-        die("no project is attached to this forge (TILLANDSIAS_PROJECT is unset or missing)")
-    here = os.path.realpath(os.getcwd())
-    root = os.path.realpath(root)
-    if here != root and not here.startswith(root + "/"):
-        die(f"run flutter inside the project, under {root}")
-    return os.path.relpath(here, root) if here != root else ""
-
-
-def reads_stdin(argv, tty):
-    """Whether this session forwards stdin: a terminal, or `flutter run`."""
-    if tty:
-        return True
-    command = next((a for a in argv if not a.startswith("-")), "")
-    return command == "run"
-
-
-def run(argv):
-    tty = sys.stdin.isatty() and sys.stdout.isatty()
-    rows, cols = 24, 80
-    if tty:
-        try:
-            cols, rows = os.get_terminal_size(sys.stdout.fileno())
-        except OSError:
-            pass
-    s = connect()
-    params = {"toolchain": "flutter", "argv": argv, "cwd": project_cwd(), "tty": tty, "rows": rows, "cols": cols}
-    s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tillandsias/exec", "params": params}) + "\n").encode())
-
-    buf = b""
-
-    def frames():
-        nonlocal buf
-        while b"\n" in buf:
-            line, buf = buf.split(b"\n", 1)
-            if line.strip():
-                yield json.loads(line)
-
-    # The first line is the JSON-RPC answer: an error, or the session result.
-    while b"\n" not in buf:
-        chunk = s.recv(65536)
-        if not chunk:
-            die("the host closed the connection before the session started")
-        buf += chunk
-    first = next(frames())
-    if "error" in first:
-        die(first["error"].get("message", "the host refused the session"))
-
-    def send(frame):
-        try:
-            s.sendall((json.dumps(frame) + "\n").encode())
-        except OSError:
-            pass
-
-    saved = None
-    if tty:
-        import termios
-        import tty as ttymod
-
-        saved = termios.tcgetattr(sys.stdin.fileno())
-        ttymod.setraw(sys.stdin.fileno())
-
-        def on_winch(*_):
-            try:
-                c, r = os.get_terminal_size(sys.stdout.fileno())
-                send({"winch": [r, c]})
-            except OSError:
-                pass
-
-        signal.signal(signal.SIGWINCH, on_winch)
-    else:
-        # Without a terminal, signals travel as frames to the container.
-        for name in ("INT", "TERM", "HUP"):
-            signal.signal(getattr(signal, f"SIG{name}"), lambda *_ , n=name: send({"sig": n}))
-
-    code = 1
-    stdin_open = reads_stdin(argv, tty)
-    if not stdin_open:
-        # A one-shot command: stdin stays unread, for whoever reads it next.
-        send({"eof": True})
-    out = {1: sys.stdout.buffer, 2: sys.stderr.buffer}
-    try:
-        while True:
-            for frame in frames():
-                if "out" in frame:
-                    stream = out.get(frame.get("fd", 1), sys.stdout.buffer)
-                    stream.write(base64.b64decode(frame["out"]))
-                    stream.flush()
-                elif "notice" in frame:
-                    # Host notices go to stderr, so stdout stays flutter's.
-                    sys.stderr.write(("\r\n" if saved is not None else "") + frame["notice"] + ("\r\n" if saved is not None else "\n"))
-                    sys.stderr.flush()
-                elif "exit" in frame:
-                    code = int(frame["exit"])
-                    return code
-            watch = [s] + ([sys.stdin] if stdin_open else [])
-            try:
-                ready, _, _ = select.select(watch, [], [])
-            except InterruptedError:
-                continue
-            if s in ready:
-                chunk = s.recv(65536)
-                if not chunk:
-                    return code
-                buf += chunk
-            if stdin_open and sys.stdin in ready:
-                data = os.read(sys.stdin.fileno(), 65536)
-                if data:
-                    send({"in": base64.b64encode(data).decode()})
-                else:
-                    stdin_open = False
-                    send({"eof": True})
-    finally:
-        if saved is not None:
-            import termios
-
-            termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, saved)
-        s.close()
-
-
-def main():
-    argv = sys.argv[1:]
-    prepare()
-    sys.exit(run(argv))
-
-
-if __name__ == "__main__":
-    main()
+case "$why" in
+    lane-stale)
+        remedy="the lane socket exists but nothing on the host accepts; with the tray running it is re-served within a second, then retry (tillandsias-doctor shows host_lane)" ;;
+    lane-absent|lane-unset)
+        remedy="this forge was launched without a host lane; relaunch it from the tray, or place an SDK at $CACHE/flutter-sdk" ;;
+    host-toolchain-unavailable)
+        remedy="the host could not prepare the tillandsias-flutter image (see the message above); retry, or place an SDK at $CACHE/flutter-sdk" ;;
+    *)
+        remedy="lib-lane.sh is missing from $LIB_DIR, so the lane cannot be judged; run tillandsias-doctor" ;;
+esac
+echo "refused:flutter:$why remedy=$remedy" >&2
+exit "$UNAVAILABLE"

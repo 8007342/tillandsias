@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed from forge field report plan/diagnostics/forge-tillandsias-opencode-web-2026-10-25.md (related: 1863-eckw). Code cited by symbol, never by line.
+packets:
+  - packet_id: forge-opencode-permission-profile-must-beat-the-checkout-opencode-json
+    order: 1874-dt48
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, opencode,permissions]
+    estimated_hours: 4
+    related: [1863-eckw]
+    title: "Inside a forge the forge OpenCode permission profile wins over the checkout opencode.json"
+    context: |
+      The tracked opencode.json sets permission ask and, loading last, overrides the forge generated config allow: 48 prompts in 28 minutes and a disabled AutoApproval toggle. Fix: inside forges the profile wins via an OPENCODE_CONFIG_CONTENT or env override supplied by the launcher; host runs keep ask. Add a curated read-only allowlist for forge diagnostic paths: HOME/.config/opencode, HOME/.local/share/opencode/log, /opt/agents/tillandsias-cli, /opt/cheatsheets, /usr/local/share/tillandsias. Source: plan/diagnostics/forge-tillandsias-opencode-web-2026-10-25.md (related 1863-eckw).
+    exit_criteria:
+      - "A fixture resolves the effective OpenCode permission for a forge launch with the tracked opencode.json present and asserts allow plus the five read-only diagnostic paths, and asserts a host launch still resolves ask. Pre-fix result: FAILS on today's code."
+    verifiable_closure: "A fixture resolves the effective OpenCode permission for a forge launch with the tracked opencode.json present and asserts allow plus the five read-only diagnostic paths, and asserts a host launch still resolves ask. Pre-fix result: FAILS on today's code."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the check named in the exit criterion first, watch it fail on today's code, then fix.
+    provenance: |
+      Filed 2026-10-25 from the forge field report (section 5).
+    events:
+      - type: filed
+        ts: "2026-10-25T23:59:00Z"
+        host: macuahuitl
+        summary: "filed ready from forge field report 1863-eckw"

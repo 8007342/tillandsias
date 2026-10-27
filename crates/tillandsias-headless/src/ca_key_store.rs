@@ -83,7 +83,173 @@ pub(crate) enum Materialized {
 pub(crate) fn materialize(persisted: &Path, cert: &Path, keyring: bool) -> Materialized {
     match session() {
         Some(store) => store.materialize(persisted, cert, keyring),
-        None => Materialized::Inactive,
+        None => at_rest::materialize(persisted),
+    }
+}
+
+/// 1898-hyhf: where the tmpfs store is inactive (macOS and Windows hosts, a
+/// runtime dir on disk, VM guests, every `cargo test`), a key still never
+/// rests on disk in the clear. openssl writes it ENCRYPTED (PKCS#8, AES-256)
+/// under a passphrase that is itself never on durable disk:
+/// - the OS keyring (macOS Keychain, Secret Service) when it takes the entry,
+///   so the CA survives a restart;
+/// - else a 0600 file on a tmpfs runtime dir (a guest's /run), per boot;
+/// - else this process's memory only, so the next process cannot decrypt the
+///   key, deletes that ciphertext, and mints the CA again (an ephemeral CA:
+///   a lost key beats an unencrypted one, operator ruling 2026-10-19).
+///
+/// Under cfg(test) it is always process memory: a test never reaches the
+/// operator's keyring or runtime dir.
+mod at_rest {
+    use std::path::Path;
+    use std::process::{Command, Stdio};
+    use std::sync::OnceLock;
+
+    use super::Materialized;
+
+    /// The env var each openssl child reads the passphrase from (`env:`), set
+    /// on that child only, so it never appears in an argv.
+    pub(crate) const PASS_ENV: &str = "TILLANDSIAS_KEY_PASS";
+
+    #[cfg(all(unix, feature = "vault", not(test)))]
+    const KEYRING_USER: &str = "ca-key-pass:at-rest";
+
+    pub(super) fn pass() -> &'static str {
+        static PASS: OnceLock<String> = OnceLock::new();
+        PASS.get_or_init(|| durable().unwrap_or_else(fresh))
+    }
+
+    fn fresh() -> String {
+        let mut bytes = [0u8; 32];
+        getrandom::fill(&mut bytes).expect("ca_key_store: host CSPRNG unavailable");
+        bytes.iter().map(|b| format!("{b:02x}")).collect()
+    }
+
+    #[cfg(all(unix, feature = "vault", not(test)))]
+    fn durable() -> Option<String> {
+        if crate::vault_bootstrap::is_running_in_vm() {
+            // A guest has no keyring; a pass file on its tmpfs runtime dir
+            // lives exactly one boot.
+            let dir = crate::vault_bootstrap::runtime_dir_tillandsias();
+            let file = dir.join("ca-key-pass");
+            if let Ok(existing) = std::fs::read_to_string(&file) {
+                let existing = existing.trim().to_string();
+                if !existing.is_empty() {
+                    return Some(existing);
+                }
+            }
+            use std::os::unix::fs::DirBuilderExt;
+            std::fs::DirBuilder::new()
+                .recursive(true)
+                .mode(0o700)
+                .create(&dir)
+                .ok()?;
+            if !crate::vault_bootstrap::path_is_tmpfs(&dir) {
+                return None;
+            }
+            let value = fresh();
+            super::write_key(&file, value.as_bytes()).ok()?;
+            return Some(value);
+        }
+        if let Some(existing) = super::keyring_read(KEYRING_USER).filter(|v| !v.is_empty()) {
+            return Some(existing);
+        }
+        let value = fresh();
+        super::keyring_write(KEYRING_USER, &value).ok()?;
+        Some(value)
+    }
+
+    #[cfg(not(all(unix, feature = "vault", not(test))))]
+    fn durable() -> Option<String> {
+        None
+    }
+
+    pub(super) fn is_encrypted(bytes: &[u8]) -> bool {
+        bytes
+            .windows(b"ENCRYPTED PRIVATE KEY".len())
+            .any(|w| w == b"ENCRYPTED PRIVATE KEY")
+    }
+
+    /// Decrypt `path` in memory: the PEM on stdout, never a file.
+    pub(super) fn decrypt(path: &Path) -> Result<Vec<u8>, String> {
+        let out = Command::new("openssl")
+            .args(["pkey", "-passin", &format!("env:{PASS_ENV}"), "-in"])
+            .arg(path)
+            .env(PASS_ENV, pass())
+            .stdin(Stdio::null())
+            .stderr(Stdio::null())
+            .output()
+            .map_err(|e| format!("spawn openssl pkey for {}: {e}", path.display()))?;
+        if !out.status.success() {
+            return Err(format!(
+                "{}: the key does not decrypt under this session's passphrase",
+                path.display()
+            ));
+        }
+        Ok(out.stdout)
+    }
+
+    /// An encrypted key this session cannot decrypt is ciphertext under a
+    /// lost passphrase: it holds nothing recoverable, so it is removed and the
+    /// caller's missing-key check mints again. A plaintext key at the path
+    /// predates this fix and is left exactly as it is: the operator decides
+    /// about existing files (1898-hyhf).
+    pub(super) fn materialize(persisted: &Path) -> Materialized {
+        let Ok(bytes) = std::fs::read(persisted) else {
+            return Materialized::Inactive;
+        };
+        if is_encrypted(&bytes) && decrypt(persisted).is_err() {
+            let _ = std::fs::remove_file(persisted);
+            return Materialized::Gone;
+        }
+        Materialized::Inactive
+    }
+}
+
+/// Whether a mint must encrypt its key (the tmpfs store is inactive).
+fn encrypts_at_rest() -> bool {
+    session().is_none()
+}
+
+/// openssl arguments for a mint's key output: `-nodes` when the key lands on
+/// the tmpfs store, else an encrypted key under the at-rest passphrase. Pair
+/// with [`pass_env`] on the same Command.
+pub(crate) fn key_out_args() -> Vec<String> {
+    if encrypts_at_rest() {
+        vec!["-passout".into(), format!("env:{}", at_rest::PASS_ENV)]
+    } else {
+        vec!["-nodes".into()]
+    }
+}
+
+/// openssl arguments for reading a CA key (`-CAkey`, `-key`). A plaintext key
+/// ignores them. Pair with [`pass_env`].
+pub(crate) fn key_in_args() -> Vec<String> {
+    if encrypts_at_rest() {
+        vec!["-passin".into(), format!("env:{}", at_rest::PASS_ENV)]
+    } else {
+        Vec::new()
+    }
+}
+
+/// The passphrase env for an openssl child that takes [`key_out_args`] or
+/// [`key_in_args`].
+pub(crate) fn pass_env() -> Vec<(&'static str, &'static str)> {
+    if encrypts_at_rest() {
+        vec![(at_rest::PASS_ENV, at_rest::pass())]
+    } else {
+        Vec::new()
+    }
+}
+
+/// A key's PEM in memory, decrypted when it rests encrypted; any other file
+/// is returned as it is.
+pub(crate) fn read_key(path: &Path) -> Result<Vec<u8>, String> {
+    let bytes = std::fs::read(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    if at_rest::is_encrypted(&bytes) {
+        at_rest::decrypt(path)
+    } else {
+        Ok(bytes)
     }
 }
 

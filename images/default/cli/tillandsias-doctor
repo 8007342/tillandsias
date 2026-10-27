@@ -1,0 +1,183 @@
+#!/usr/bin/env bash
+# tillandsias-doctor — one command that says what in this forge works and why
+# not: the host lane socket, each MCP server, the router (direct and through
+# the proxy), the flutter toolchain, the cheatsheets, free space, and that
+# there is no in-forge renderer.
+#
+# Usage: tillandsias-doctor [--json]
+#
+# Exit 0 when every check is ok or skipped, 1 when any failed.
+#
+# WHY (order 1874-6p63). One dead lane socket showed up as four unrelated
+# faults (publish_local "not shipped", browser.open missing, flutter exit 69,
+# a router self-test that could not tell proxy from router) and cost an agent
+# more than twelve calls to localise. Each row here names its own reason.
+#
+# @trace spec:forge-environment-discoverability, spec:mcp-tool-socket
+# @cheatsheet runtime/forge-container.md
+
+set -uo pipefail
+
+JSON=0
+case "${1:-}" in
+    --json) JSON=1 ;;
+    -h|--help) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    "") ;;
+    *) echo "tillandsias-doctor: unknown arg '$1'" >&2
+       echo "usage: tillandsias-doctor [--json]" >&2; exit 2 ;;
+esac
+
+# Every input is an env seam so the fixture can run this outside the image.
+LIB_DIR="${TILLANDSIAS_DOCTOR_LIB_DIR:-/usr/local/lib/tillandsias}"
+MCP_CONFIG="${TILLANDSIAS_DOCTOR_MCP_CONFIG:-$HOME/.config/opencode/config.json}"
+CHEATSHEETS="${TILLANDSIAS_DOCTOR_CHEATSHEETS:-/opt/cheatsheets}"
+SRC_DIR="${TILLANDSIAS_DOCTOR_SRC_DIR:-$HOME/src}"
+CACHE_DIR="${TILLANDSIAS_DOCTOR_CACHE_DIR:-$HOME/.cache}"
+PROBE_SECS="${TILLANDSIAS_DOCTOR_PROBE_SECS:-5}"
+PROJECT="${TILLANDSIAS_PROJECT:-}"
+
+# shellcheck source=../lib-lane.sh
+source "$LIB_DIR/lib-lane.sh" 2>/dev/null || lane_socket_state() { echo unknown; }
+
+NAMES=() STATES=() DETAILS=()
+row() { NAMES+=("$1"); STATES+=("$2"); DETAILS+=("$3"); }
+
+# ── Lane socket ───────────────────────────────────────────────
+lane="$(lane_socket_state)"
+case "$lane" in
+    ready)  row lane ok "host_lane=ready socket=${TILLANDSIAS_CONTROL_SOCKET}" ;;
+    stale)  row lane failed "host_lane=stale: ${TILLANDSIAS_CONTROL_SOCKET} exists but nothing on the host accepts (connect refused); publish_local, browser.open and flutter all fail until the tray re-serves the lane" ;;
+    absent) row lane failed "host_lane=absent: no socket at ${TILLANDSIAS_CONTROL_SOCKET}; this forge was launched without a lane" ;;
+    unset)  row lane skip "host_lane=unset: TILLANDSIAS_CONTROL_SOCKET is not set; this forge has no host lane" ;;
+    *)      row lane failed "host_lane=unknown: the lane could not be judged (lib-lane.sh missing from $LIB_DIR, or no curl)" ;;
+esac
+
+# ── MCP servers ───────────────────────────────────────────────
+# Each server is started as OpenCode starts it, sent one JSON-RPC initialize,
+# and judged by its first line: a `result` is ok, an `error`, no answer or an
+# exit is failed, with the server's own words as the reason.
+mcp_probe() {
+    local name="$1"; shift
+    local out err rc
+    err="$(mktemp)"
+    out="$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"tillandsias-doctor","version":"1"}}}' \
+        | timeout "$PROBE_SECS" "$@" 2>"$err" | head -n 1)"
+    rc=$?
+    local why
+    why="$(tr '\n' ' ' <"$err" | sed 's/  */ /g; s/ $//' | cut -c1-240)"
+    rm -f "$err"
+    if [[ "$out" == *'"result"'* ]]; then
+        row "mcp:$name" ok "initialize answered"
+    elif [[ "$out" == *'"error"'* ]]; then
+        row "mcp:$name" failed "initialize refused: $(printf '%s' "$out" | cut -c1-240)"
+    elif [ -n "$why" ]; then
+        row "mcp:$name" failed "$why"
+    else
+        row "mcp:$name" failed "no answer to initialize within ${PROBE_SECS}s (rc=$rc)"
+    fi
+}
+
+if [ ! -r "$MCP_CONFIG" ]; then
+    row mcp failed "no MCP config at $MCP_CONFIG"
+elif ! command -v jq >/dev/null 2>&1; then
+    row mcp failed "jq is not on PATH; cannot read $MCP_CONFIG"
+else
+    while IFS=$'\t' read -r name enabled cmd; do
+        [ -n "$name" ] || continue
+        if [ "$enabled" = "false" ]; then
+            row "mcp:$name" skip "disabled in $MCP_CONFIG"
+            continue
+        fi
+        mapfile -t argv < <(printf '%s' "$cmd" | jq -r '.[]')
+        if [ "${#argv[@]}" -eq 0 ] || { [ ! -x "${argv[0]}" ] && ! command -v "${argv[0]}" >/dev/null 2>&1; }; then
+            row "mcp:$name" failed "command not found: ${argv[0]:-<empty>}"
+            continue
+        fi
+        mcp_probe "$name" "${argv[@]}"
+    done < <(jq -r '.mcp // {} | to_entries[] | select(.value.type != "remote") | [.key, ((.value.enabled // true)|tostring), (.value.command|tojson)] | @tsv' "$MCP_CONFIG" 2>/dev/null)
+fi
+
+# ── Router, direct and through the proxy ──────────────────────
+# An unrouted name answers with the router's own "no route" body, so either
+# path proves the router is there without depending on a running service.
+router_probe() {
+    local how="$1"; shift
+    local body rc
+    body="$(timeout "$PROBE_SECS" curl -sS --max-time "$PROBE_SECS" "$@" 2>&1)"
+    rc=$?
+    if [[ "$body" == *tillandsias-router* ]]; then
+        row "router:$how" ok "the router answered"
+    elif [ "$rc" -eq 0 ]; then
+        row "router:$how" failed "an answer, but not from the router: $(printf '%s' "$body" | tr '\n' ' ' | cut -c1-160)"
+    else
+        row "router:$how" failed "$(printf '%s' "$body" | tr '\n' ' ' | cut -c1-200) (curl rc=$rc)"
+    fi
+}
+if ! command -v curl >/dev/null 2>&1; then
+    row router failed "curl is not on PATH"
+else
+    probe_name="doctor-unrouted.${PROJECT:-forge}.localhost"
+    router_probe direct --noproxy '*' -H "Host: $probe_name" "http://router:8080/"
+    router_probe via-proxy -x "http://proxy:3128" "http://$probe_name/"
+fi
+
+# ── Flutter toolchain ─────────────────────────────────────────
+if ! command -v flutter >/dev/null 2>&1; then
+    row flutter skip "flutter is not on PATH in this forge"
+else
+    ferr="$(timeout 60 flutter --version 2>&1 >/dev/null)"
+    frc=$?
+    if [ "$frc" -eq 0 ]; then
+        row flutter ok "flutter --version ran"
+    else
+        row flutter failed "flutter --version exit $frc: $(printf '%s' "$ferr" | tr '\n' ' ' | cut -c1-200)"
+    fi
+fi
+
+# ── Cheatsheets ───────────────────────────────────────────────
+n_sheets="$(find "$CHEATSHEETS" -type f -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
+if [ "${n_sheets:-0}" -gt 0 ]; then
+    row cheatsheets ok "$n_sheets cheatsheets in $CHEATSHEETS"
+else
+    row cheatsheets failed "$CHEATSHEETS is empty or missing"
+fi
+
+# ── Free space ────────────────────────────────────────────────
+space() {
+    local name="$1" dir="$2" line avail use
+    line="$(df -Pk "$dir" 2>/dev/null | tail -n 1)"
+    if [ -z "$line" ]; then
+        row "space:$name" failed "$dir is not mounted"
+        return
+    fi
+    avail="$(printf '%s' "$line" | awk '{print $4}')"
+    use="$(printf '%s' "$line" | awk '{print $5}')"
+    if [ "${avail:-0}" -lt 102400 ]; then
+        row "space:$name" failed "$dir: $((avail / 1024)) MiB free ($use used)"
+    else
+        row "space:$name" ok "$dir: $((avail / 1024)) MiB free ($use used)"
+    fi
+}
+space workspace "$SRC_DIR"
+space cache "$CACHE_DIR"
+
+# ── Renderer ──────────────────────────────────────────────────
+row renderer info "no in-forge renderer: nothing here can display a page; open previews in the host browser with browser.open or publish_local, which need host_lane=ready"
+
+# ── Report ────────────────────────────────────────────────────
+failed=0
+for st in "${STATES[@]}"; do [ "$st" = failed ] && failed=1; done
+
+if [ "$JSON" -eq 1 ]; then
+    {
+        for i in "${!NAMES[@]}"; do
+            printf '%s\t%s\t%s\n' "${NAMES[$i]}" "${STATES[$i]}" "${DETAILS[$i]}"
+        done
+    } | jq -Rn --argjson failed "$failed" \
+        '{ok: ($failed == 0), checks: [inputs | split("\t") | {name: .[0], status: .[1], detail: .[2]}]}'
+else
+    for i in "${!NAMES[@]}"; do
+        printf '%-18s %-7s %s\n' "${NAMES[$i]}" "${STATES[$i]}" "${DETAILS[$i]}"
+    done
+fi
+exit "$failed"

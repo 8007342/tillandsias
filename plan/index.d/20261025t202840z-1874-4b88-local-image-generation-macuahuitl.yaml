@@ -1,0 +1,283 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl, 2026-10-25, from the operator's direction of the same
+# day: a local image-generation MCP tool on stable-diffusion.cpp for every
+# fleet device, model sized to the hardware, consent before a long run, one
+# contract for Claude/OpenCode/Codex, plus research on an optional ComfyUI
+# studio. Change: openspec/changes/local-image-generation/.
+# Code is cited by symbol, never by line.
+packets:
+  - packet_id: forge-agents-generate-images-locally-through-one-mcp-tool-on-stable-diffusion-cpp-sized-to-the-host
+    order: 1874-4b88
+    status: ready
+    kind: epic
+    priority: p2
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [imagegen, mcp, inference, forge, epic]
+    estimated_hours: 2
+    related: [1871-47ex]
+    owned_files:
+      - openspec/changes/local-image-generation/
+    title: "EPIC — forge agents generate images locally through one image.generate MCP tool on stable-diffusion.cpp, sized to the host, asking before long runs"
+    context: |
+      SOURCE READ (macuahuitl, 2026-10-25, trunk 054751d4e): no image
+      generation exists. The host MCP socket (`mcp_socket.rs`
+      `fn handle_mcp_jsonrpc`) is reached by Claude, OpenCode and Codex via
+      the host-browser bridge; images build on first use via
+      `fn ensure_image_exists`; `accel_probe.rs` publishes `accel_class`.
+      Design, tier table and consent flow: the change's design.md.
+    exit_criteria:
+      - "Every child row (1874-b9tg, 1874-bair, 1874-h9ns, 1874-kkrc, 1874-p8w7, 1874-qyfv, 1874-s2q3) is done, and a forge agent's tools/list on a fresh lane includes image.generate. Pre-fix result: FAILS, tools/list has no image.generate."
+    verifiable_closure: "Every child row is done, and a forge agent's tools/list on a fresh lane includes image.generate. Pre-fix result: FAILS, tools/list has no image.generate."
+    unscoreable: |
+      epic: closes on its children's fixtures and a live tools/list read; no single litmus scores an epic.
+    next_action: >
+      Nothing is built. Start with 1874-bair and 1874-b9tg (independent); 1874-kkrc needs both and 1871-47ex.
+    provenance: |
+      Operator direction 2026-10-25.
+    events:
+      - type: filed
+        ts: "2026-10-25T20:28:40Z"
+        host: macuahuitl
+        summary: "filed ready from the operator direction of 2026-10-25"
+
+  - packet_id: an-imagegen-image-built-on-first-use-runs-a-pinned-stable-diffusion-cpp-sd-server-with-vulkan-cuda-and-cpu-backends
+    order: 1874-b9tg
+    parent: 1874-4b88
+    depends_on: []
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [imagegen, images, podman, vulkan, cuda]
+    estimated_hours: 6
+    title: "An imagegen image, built on first use, runs a pinned stable-diffusion.cpp sd-server with Vulkan, CUDA and CPU backends and no egress"
+    context: |
+      Pin the upstream master-<n>-<sha> tag in images/image-pins.yaml. Reuse the inference image's Vulkan userspace (917-zkge) and the NVIDIA CDI path. Build only through `fn ensure_image_exists`, never at init. Design section 1-2.
+    exit_criteria:
+      - "A fixture asks the image-identity resolver (`fn ensure_image_identity`) for \"imagegen\" and asserts it resolves to images/imagegen with a pinned sd.cpp tag, and that init's image set does not include it. Pre-fix result: FAILS, imagegen is not a known image."
+    verifiable_closure: "A fixture asks the image-identity resolver for imagegen and asserts it resolves with a pinned sd.cpp tag and is absent from init's image set. Pre-fix result: FAILS, imagegen is not a known image."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the fixture first and watch it fail, then add images/imagegen.
+    provenance: |
+      Operator direction 2026-10-25.
+    events:
+      - type: filed
+        ts: "2026-10-25T20:28:40Z"
+        host: macuahuitl
+        summary: "filed ready from the operator direction of 2026-10-25"
+
+  - packet_id: a-declarative-imagegen-tier-table-maps-the-accel-envelope-to-a-default-and-a-quality-model-with-licences
+    order: 1874-bair
+    parent: 1874-4b88
+    depends_on: []
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [imagegen, accel, tiers]
+    estimated_hours: 4
+    title: "A declarative imagegen tier table (I0-I3) maps the accel envelope to a default and a quality model, each row naming its licence"
+    context: |
+      images/imagegen/tiers.tsv read like images/inference/tiers/tier-table.tsv; classifier consumes the `accel_class` envelope from accel_probe.rs (no second probe). Table in design.md section 3.
+    exit_criteria:
+      - "A fixture classifies four envelopes (cpu-only 8 GB RAM, cpu-only 32 GB RAM, 8 GB VRAM GPU, 24 GB VRAM GPU) and asserts tiers I0, I1, I2, I3, and asserts no row's licence is non-commercial. Pre-fix result: FAILS, no imagegen tier table or classifier exists."
+    verifiable_closure: "A fixture classifies four envelopes to I0..I3 and asserts no non-commercial licence in any row. Pre-fix result: FAILS, no imagegen tier table exists."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the four-envelope fixture first, then the table and classifier.
+    provenance: |
+      Operator direction 2026-10-25.
+    events:
+      - type: filed
+        ts: "2026-10-25T20:28:40Z"
+        host: macuahuitl
+        summary: "filed ready from the operator direction of 2026-10-25"
+
+  - packet_id: imagegen-models-are-fetched-on-first-use-into-the-reusable-cache-by-pinned-url-and-sha256
+    order: 1874-h9ns
+    parent: 1874-4b88
+    depends_on:
+      - a-declarative-imagegen-tier-table-maps-the-accel-envelope-to-a-default-and-a-quality-model-with-licences
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [imagegen, cache, models, licence]
+    estimated_hours: 4
+    title: "Imagegen models are fetched on first use into cache_root()/models/imagegen by pinned URL and sha256, never into an image or a ramdisk"
+    context: |
+      Pin URL, sha256, size and licence per model; re-verify each licence on the model card before pinning. Per-model flock. `tillandsias_core::cache_root` `fn cache_root`.
+    exit_criteria:
+      - "A fixture serves a model file whose sha256 differs from its pin and asserts the fetch is refused and nothing is left under the cache dir, and that the resolved cache dir is under cache_root()/models/imagegen and not on tmpfs. Pre-fix result: FAILS, no imagegen model fetcher exists."
+    verifiable_closure: "A fixture asserts a digest-mismatched model is refused and the cache dir is under cache_root()/models/imagegen, not tmpfs. Pre-fix result: FAILS, no fetcher exists."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the digest-mismatch fixture first, then the fetcher.
+    provenance: |
+      Operator direction 2026-10-25.
+    events:
+      - type: filed
+        ts: "2026-10-25T20:28:40Z"
+        host: macuahuitl
+        summary: "filed ready from the operator direction of 2026-10-25"
+
+  - packet_id: image-generate-on-the-host-mcp-socket-returns-a-saved-path-and-metadata-for-claude-opencode-and-codex
+    order: 1874-kkrc
+    parent: 1874-4b88
+    depends_on:
+      - an-imagegen-image-built-on-first-use-runs-a-pinned-stable-diffusion-cpp-sd-server-with-vulkan-cuda-and-cpu-backends
+      - a-declarative-imagegen-tier-table-maps-the-accel-envelope-to-a-default-and-a-quality-model-with-licences
+      - imagegen-models-are-fetched-on-first-use-into-the-reusable-cache-by-pinned-url-and-sha256
+      - image-and-screenshot-tool-results-flood-the-context-with-inline-base64
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [imagegen, mcp, forge]
+    estimated_hours: 6
+    title: "image.generate on the host MCP socket returns a saved path and metadata (1871-47ex schema) to Claude, OpenCode and Codex alike"
+    context: |
+      Add the tool to `fn handle_mcp_jsonrpc`'s tools/list and dispatch, beside publish_local. Decode sd-server's b64_json on the host, write PNG + thumbnail under the project's .tillandsias/generated/images/. Design section 4.
+    exit_criteria:
+      - "A fixture sends tools/list and a tools/call image.generate (engine stubbed) through `fn handle_mcp_jsonrpc` and asserts image.generate is listed and the result has path, width, height, has_alpha, thumbnail_path, model, licence, tier, backend and no base64 run over 256 characters. Pre-fix result: FAILS, image.generate is an unknown tool."
+    verifiable_closure: "A fixture asserts image.generate is listed and its result matches the schema with no base64 run over 256 characters. Pre-fix result: FAILS, unknown tool."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the dispatch fixture first, then the tool.
+    provenance: |
+      Operator direction 2026-10-25.
+    events:
+      - type: filed
+        ts: "2026-10-25T20:28:40Z"
+        host: macuahuitl
+        summary: "filed ready from the operator direction of 2026-10-25"
+
+  - packet_id: a-quality-long-or-large-download-image-run-returns-consent-required-with-a-host-minted-single-use-token
+    order: 1874-p8w7
+    parent: 1874-4b88
+    depends_on:
+      - image-generate-on-the-host-mcp-socket-returns-a-saved-path-and-metadata-for-claude-opencode-and-codex
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [imagegen, mcp, consent, ux]
+    estimated_hours: 4
+    title: "A quality, long (>120 s) or large-download (>2 GB) image run returns consent_required with a host-minted single-use token, and runs only when re-called with it"
+    context: |
+      Consent flow in design.md section 5. Forge instruction overlays for Claude, OpenCode and Codex state the ask sentence goes to the user verbatim.
+    exit_criteria:
+      - "A fixture calls image.generate with quality high and no token and asserts consent_required with estimate_s, download_gb, licence, ask and consent_token and that the engine was not invoked; then re-calls with the token (runs) and again with the same token (refused). Pre-fix result: FAILS, there is no consent path."
+    verifiable_closure: "A fixture asserts consent_required without a token, a run with it, and a refusal on reuse. Pre-fix result: FAILS, no consent path."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the three-call fixture first, then the token store.
+    provenance: |
+      Operator direction 2026-10-25.
+    events:
+      - type: filed
+        ts: "2026-10-25T20:28:40Z"
+        host: macuahuitl
+        summary: "filed ready from the operator direction of 2026-10-25"
+
+  - packet_id: on-macos-image-generate-runs-a-host-native-metal-sd-server-helper-the-vm-reaches-over-vsock
+    order: 1874-qyfv
+    parent: 1874-4b88
+    depends_on:
+      - image-generate-on-the-host-mcp-socket-returns-a-saved-path-and-metadata-for-claude-opencode-and-codex
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: macos
+    capability_tags: [imagegen, macos, metal, vsock]
+    estimated_hours: 6
+    title: "On macOS, image.generate runs a host-native Metal sd-server helper (pinned, sha256-checked, downloaded on first use) that the VM reaches over vsock"
+    context: |
+      The macOS VM has no Metal; the helper runs on the host as a tray child on loopback, reached by the same vsock path the MCP socket uses (order 1713-1dnx moved the listener under host-services). Design section 2.
+    exit_criteria:
+      - "On an Apple Silicon host, image.generate at the default tier returns a result whose backend is metal and elapsed_s is recorded in the row. Pre-fix result: FAILS, there is no image.generate and no Metal helper."
+    verifiable_closure: "On Apple Silicon, image.generate returns backend metal with elapsed_s recorded. Pre-fix result: FAILS, no tool or helper."
+    unscoreable: |
+      hardware-measurement: closes on a live run on an Apple Silicon host recorded in the row; Metal is not reachable from any CI or Linux gate.
+    next_action: >
+      Nothing is done. Blocked on 1874-kkrc; then pin the upstream Metal build and wire the helper launch.
+    provenance: |
+      Operator direction 2026-10-25.
+    events:
+      - type: filed
+        ts: "2026-10-25T20:28:40Z"
+        host: macuahuitl
+        summary: "filed ready from the operator direction of 2026-10-25"
+
+  - packet_id: image-generate-works-on-wsl2-vulkan-and-on-floor-tier-cpu-hosts-with-measured-times-in-the-tier-table
+    order: 1874-s2q3
+    parent: 1874-4b88
+    depends_on:
+      - image-generate-on-the-host-mcp-socket-returns-a-saved-path-and-metadata-for-claude-opencode-and-codex
+    status: ready
+    kind: measurement
+    priority: p2
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [imagegen, wsl2, vulkan, cpu, floor-tier]
+    estimated_hours: 4
+    title: "image.generate works on WSL2 (Vulkan when the probe proves a real device, else CPU) and on floor-tier CPU hosts, with measured seconds recorded in the tier table"
+    context: |
+      Reuse `fn wsl2_vulkan_verdict_from`'s verdict; llvmpipe is not a GPU. The consent estimator reads the measured seconds-per-step-per-megapixel from tiers.tsv. Floor hosts: esme, macneo.
+    exit_criteria:
+      - "tiers.tsv carries a measured sec-per-step column for I0 on a floor host and for the WSL2 lane, each citing the host and date, and a fixture asserts every row has a non-placeholder measurement. Pre-fix result: FAILS, no tiers.tsv exists."
+    verifiable_closure: "tiers.tsv carries measured sec-per-step for I0 (floor host) and WSL2, and a fixture asserts no placeholder measurements. Pre-fix result: FAILS, no tiers.tsv."
+    unscoreable: |
+      measurement-on-named-hardware: the deliverable is measured numbers from a floor host and a WSL2 host; the no-placeholder fixture lands with tiers.tsv in 1874-bair (1136-n8sh).
+    next_action: >
+      Nothing is done. Blocked on 1874-kkrc; then measure on a floor host and a WSL2 host.
+    provenance: |
+      Operator direction 2026-10-25.
+    events:
+      - type: filed
+        ts: "2026-10-25T20:28:40Z"
+        host: macuahuitl
+        summary: "filed ready from the operator direction of 2026-10-25"
+
+  - packet_id: an-optional-comfyui-imagegen-studio-image-shares-the-model-cache-and-is-never-built-unless-a-project-enables-it
+    order: 1874-zry8
+    parent: 1874-4b88
+    depends_on:
+      - imagegen-models-are-fetched-on-first-use-into-the-reusable-cache-by-pinned-url-and-sha256
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.7
+    pickup_role: linux
+    capability_tags: [imagegen, comfyui, studio, images]
+    estimated_hours: 8
+    title: "An optional ComfyUI imagegen-studio image (ComfyUI-Manager, Real-ESRGAN, rembg/BiRefNet, IP-Adapter) shares the model cache and is never built unless a project enables it"
+    context: |
+      Shortlist and licences in design.md section 7. Own Fedora-based image; community images are reference recipes only. No RMBG, InsightFace or FLUX.1-dev.
+    exit_criteria:
+      - "A fixture asserts a project without the studio flag starts a forge with no imagegen-studio build or container, and a project with it resolves images/imagegen-studio mounting cache_root()/models/imagegen. Pre-fix result: FAILS, imagegen-studio is not a known image."
+    verifiable_closure: "A fixture asserts the studio is absent by default and resolves with the shared cache when enabled. Pre-fix result: FAILS, unknown image."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Wait on the operator's answer to the studio-scope question, then write the fixture first.
+    provenance: |
+      Operator direction 2026-10-25.
+    events:
+      - type: filed
+        ts: "2026-10-25T20:28:40Z"
+        host: macuahuitl
+        summary: "filed ready from the operator direction of 2026-10-25"

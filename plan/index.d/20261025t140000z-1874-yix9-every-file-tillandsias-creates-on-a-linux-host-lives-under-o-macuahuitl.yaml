@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+  - packet_id: every-file-tillandsias-creates-on-a-linux-host-lives-under-one-root
+    order: 1874-yix9
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [host-storage, xdg, podman, linux]
+    estimated_hours: 8
+    title: "Everything Tillandsias writes on a Linux host lives under one folder the user can find and delete"
+    context: |
+      Today state is spread over ~/.cache/tillandsias, ~/.local/state/tillandsias, ~/.local/share/tillandsias, ~/.config/tillandsias and the default podman store ~/.local/share/containers/storage (forge volumes). Implement design D1 of openspec/changes/forge-storage-single-root-and-disk-discipline: root ${TILLANDSIAS_HOME:-$XDG_DATA_HOME/tillandsias} with config/ state/ logs/ cache/ podman/ forges/ projects/, podman scoped to <root>/podman without editing ~/.config/containers. Old paths are wiped, not migrated (vault rebuilt per 2026-10-19 ruling).
+    exit_criteria:
+      - "A fixture runs tillandsias init plus one forge launch and removal for a scratch user and lists every created path; it asserts none lies outside <root> or the exempt list (installed binaries, .desktop entry, $XDG_RUNTIME_DIR/tillandsias, opt-in swap). Pre-fix result: FAILS, ~/.cache/tillandsias, ~/.local/state/tillandsias, ~/.config/tillandsias and tillandsias-* volumes in ~/.local/share/containers/storage are listed."
+    verifiable_closure: "A fixture runs tillandsias init plus one forge launch and removal for a scratch user and lists every created path; it asserts none lies outside <root> or the exempt list (installed binaries, .desktop entry, $XDG_RUNTIME_DIR/tillandsias, opt-in swap). Pre-fix result: FAILS, ~/.cache/tillandsias, ~/.local/state/tillandsias, ~/.config/tillandsias and tillandsias-* volumes in ~/.local/share/containers/storage are listed."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then implement per openspec/changes/forge-storage-single-root-and-disk-discipline.
+    provenance: |
+      Filed at operator request 2026-10-25 (single-root containment and disk discipline); spec openspec/changes/forge-storage-single-root-and-disk-discipline.
+    events:
+      - type: filed
+        ts: "2026-10-25T14:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator request of 2026-10-25"

@@ -1231,7 +1231,7 @@ mod tests {
         let shim = std::path::PathBuf::from(
             std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
         )
-        .join("../../images/default/cli/flutter");
+        .join("../../images/default/cli/flutter-lane");
         let mut cmd = std::process::Command::new(python);
         cmd.arg(shim)
             .args(args)

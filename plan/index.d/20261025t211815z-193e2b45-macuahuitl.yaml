@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: every-file-tillandsias-creates-on-a-linux-host-lives-under-one-root
+    field: context
+    value: 'Today state is spread over ~/.cache/tillandsias, ~/.local/state/tillandsias, ~/.local/share/tillandsias, ~/.config/tillandsias and two podman stores (~/.local/share/containers/storage with forge volumes, and a vfs graphroot under ~/.local/share/tillandsias/podman). Implement design D1 of openspec/changes/forge-storage-single-root-and-disk-discipline per operator rulings 2026-10-25: root ${TILLANDSIAS_HOME:-$HOME/.tillandsias} (visible) with config/ state/ logs/ cache/ podman/ forges/ projects/. Tillandsias gets its OWN rootless podman store (graphroot and runroot under <root>/podman) replacing both stores, without editing ~/.config/containers; its containers never collide with the user''s. This costs one rebuild of every image. Vault and CA move from cache/ to state/ and are wiped, not migrated (the vault is thrown away, not recovered).'
+    ts: "2026-10-25T21:18:15Z"
+    host: macuahuitl
+    replaces_sha256: "4ddc94908bd129b7998a4963b34f878e15844b1f4d6581591e14cdce2566b9c5"
+
+events:
+  - packet_id: every-file-tillandsias-creates-on-a-linux-host-lives-under-one-root
+    event:
+      type: note
+      ts: "2026-10-25T21:18:15Z"
+      host: macuahuitl
+      summary: |-
+        operator rulings 2026-10-25 (PR 650 amendment)

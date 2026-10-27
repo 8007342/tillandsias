@@ -2500,7 +2500,14 @@ pub(crate) fn init_cache_dir() -> Result<PathBuf, String> {
 }
 
 fn cache_dir_is_writable(cache_dir: &Path) -> bool {
-    let probe = cache_dir.join(".writable-probe");
+    // 1900-tm9v: the probe name is unique per call. A fixed `.writable-probe`
+    // under create_new made a concurrent caller (or a probe a killed process
+    // left) read a writable dir as unwritable, and init_cache_dir then fell
+    // through to $HOME/.cache/tillandsias: a test's run_cache_clear deleted
+    // the operator's real init-build-state.json and cache_version.
+    static PROBE_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let seq = PROBE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let probe = cache_dir.join(format!(".writable-probe-{}-{seq}", std::process::id()));
     match fs::OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -4215,6 +4222,44 @@ fn enforce_ca_key_mode(_key: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// The passwd home of this user, which HOME cannot fake.
+#[cfg(all(test, unix))]
+fn passwd_home() -> Option<PathBuf> {
+    // SAFETY: getpwuid returns a pointer into static storage or null; it is
+    // read at once, under env_lock in every test caller.
+    unsafe {
+        let pw = libc::getpwuid(libc::getuid());
+        if pw.is_null() || (*pw).pw_dir.is_null() {
+            return None;
+        }
+        Some(PathBuf::from(
+            std::ffi::CStr::from_ptr((*pw).pw_dir)
+                .to_string_lossy()
+                .into_owned(),
+        ))
+    }
+}
+
+/// 1898-hyhf: a unit test never mints CA material into the operator's real
+/// home. `cargo test` with the real HOME left plaintext CA keys there on every
+/// host; a test points HOME at scratch first (tests::ScratchHome).
+#[cfg(test)]
+fn refuse_real_home_in_test(certs_dir: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    if let Some(home) = passwd_home().filter(|h| h.as_os_str().len() > 1)
+        && certs_dir.starts_with(&home)
+    {
+        return Err(format!(
+            "1898-hyhf: a test reached the real home for CA material ({}); \
+             point HOME at a scratch dir first",
+            certs_dir.display()
+        ));
+    }
+    #[cfg(not(unix))]
+    let _ = certs_dir;
+    Ok(())
+}
+
 fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     // @trace spec:secret-rotation, spec:reverse-proxy-internal
     let certs_dir = PathBuf::from(ca_dir());
@@ -4242,6 +4287,8 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         // the tool instead of dying eleven minutes in naming an errno.
         return Ok(certs_dir);
     }
+    #[cfg(test)]
+    refuse_real_home_in_test(&certs_dir)?;
     let crt = certs_dir.join("intermediate.crt");
     let key = certs_dir.join("intermediate.key");
     // Order 472 slice 3: the generation before any refresh, so a mint or a
@@ -4320,10 +4367,12 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
                 .ok_or_else(|| "CA cert path contains invalid UTF-8".to_string())?,
             "-days",
             CA_VALIDITY_DAYS,
-            "-nodes",
             "-subj",
             "/C=US/ST=Privacy/L=Local/O=Tillandsias/CN=Tillandsias CA",
         ]);
+        // 1898-hyhf: `-nodes` only onto the tmpfs store; elsewhere encrypted.
+        command.args(ca_key_store::key_out_args());
+        command.envs(ca_key_store::pass_env());
         command.stdout(Stdio::null()).stderr(Stdio::null());
 
         if let Err(e) = run_command_silent(command, debug) {
@@ -7180,6 +7229,92 @@ fn router_dynamic_caddyfile_host_path() -> PathBuf {
     base.join("router")
 }
 
+/// Where the web-preview TLS leaves (key and chain) live, as the router reads
+/// them through its `preview-tls` mount (order 1901-bnif).
+///
+/// The leaf key is an unencrypted PEM: it may rest only on tmpfs (operator
+/// rule 2026-10-19, no plaintext credential at rest). The router dir is used
+/// when it is tmpfs (the systemd runtime dir); otherwise a private 0700
+/// directory under /dev/shm; with neither, the preview refuses by name rather
+/// than write the key to disk. The router dir used to be taken as given, and
+/// its fallback, the temp dir when XDG_RUNTIME_DIR is unset (a rootful VM
+/// guest, a service lane), is disk wherever /tmp is.
+pub(crate) fn preview_tls_dir() -> Result<PathBuf, String> {
+    preview_tls_dir_in(
+        &router_dynamic_caddyfile_host_path(),
+        &preview_tls_shm_root(),
+    )
+}
+
+/// /dev/shm, or under cfg(test) the scratch a test names, so a test never
+/// writes into the real one.
+fn preview_tls_shm_root() -> PathBuf {
+    #[cfg(test)]
+    if let Some(root) = std::env::var_os("TILLANDSIAS_TEST_PREVIEW_TLS_SHM") {
+        return PathBuf::from(root);
+    }
+    PathBuf::from("/dev/shm")
+}
+
+#[cfg(unix)]
+fn preview_tls_dir_in(router: &Path, shm: &Path) -> Result<PathBuf, String> {
+    if on_tmpfs(router) {
+        return Ok(router.join("preview-tls"));
+    }
+    if on_tmpfs(shm) {
+        use std::os::unix::fs::{DirBuilderExt, MetadataExt};
+        let uid = unsafe { libc::getuid() };
+        let private = shm.join(format!("tillandsias-{uid}"));
+        let _ = std::fs::DirBuilder::new().mode(0o700).create(&private);
+        // /dev/shm is shared: use the directory only if it is a real directory
+        // (not a symlink) that this user owns and nobody else can enter.
+        let meta = std::fs::symlink_metadata(&private)
+            .map_err(|_| "router_not_ready: preview TLS directory unavailable".to_string())?;
+        if !meta.is_dir() || meta.uid() != uid || meta.mode() & 0o077 != 0 {
+            return Err(format!(
+                "router_not_ready: {} is not a private directory of this user; refusing to put the preview leaf key there (1901-bnif)",
+                private.display()
+            ));
+        }
+        return Ok(private.join("preview-tls"));
+    }
+    Err("router_not_ready: no tmpfs to hold the preview leaf key; it is never written to disk (1901-bnif)".into())
+}
+
+#[cfg(not(unix))]
+fn preview_tls_dir_in(_router: &Path, _shm: &Path) -> Result<PathBuf, String> {
+    Err("router_not_ready: no tmpfs to hold the preview leaf key; it is never written to disk (1901-bnif)".into())
+}
+
+/// Is `path`, or its nearest existing ancestor, on tmpfs? Linux only; off
+/// Linux nothing can be asked, so nothing is.
+#[cfg(unix)]
+fn on_tmpfs(path: &Path) -> bool {
+    let mut probe = path;
+    while !probe.exists() {
+        match probe.parent() {
+            Some(parent) => probe = parent,
+            None => return false,
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        const TMPFS_MAGIC: i64 = 0x0102_1994;
+        let Ok(c) = std::ffi::CString::new(probe.as_os_str().as_bytes()) else {
+            return false;
+        };
+        let mut st: libc::statfs = unsafe { std::mem::zeroed() };
+        // SAFETY: a NUL-terminated path and a zeroed out-struct of the right type.
+        let rc = unsafe { libc::statfs(c.as_ptr(), &mut st) };
+        rc == 0 && st.f_type as i64 == TMPFS_MAGIC
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        false
+    }
+}
+
 fn control_socket_host_dir() -> PathBuf {
     control_socket_host_dir_from(std::env::var("XDG_RUNTIME_DIR").ok())
 }
@@ -7356,12 +7491,11 @@ fn build_router_run_args(certs_dir: &Path, image: &str, host_port: u16) -> Vec<S
     if let Ok(text) = std::fs::read_to_string(dyn_dir.join("preview-tls-port"))
         && let Ok(port) = text.trim().parse::<u16>()
         && port >= 1024
+        // Order 1901-bnif: the leaves are mounted from the tmpfs dir they
+        // were written to; with none, there is no preview listener.
+        && let Ok(leaves) = preview_tls_dir()
     {
-        args.extend(preview_listener_args(
-            running_as_root(),
-            port,
-            &dyn_dir.join("preview-tls"),
-        ));
+        args.extend(preview_listener_args(running_as_root(), port, &leaves));
     }
     args.push(image.into());
     args
@@ -9215,6 +9349,40 @@ fn env_or(name: &str, fallback: &str) -> String {
         .unwrap_or_else(|| fallback.to_string())
 }
 
+/// Serve a forge's lane MCP socket before the forge (and its agent's MCP
+/// client) starts. 1863-eckw: a web-mode forge outlives the CLI that launches
+/// it, and a listener bound here died with the CLI, so the agent's
+/// host-browser and toolchain calls were refused for the whole session. Such
+/// a lane is handed to the tray, and this waits until the tray accepts on it;
+/// a CLI-mode lane lives and dies with this process and binds here.
+#[cfg(feature = "host-services")]
+fn serve_forge_lane(project: &str, instance: &str, outlives_launcher: bool, debug: bool) {
+    #[cfg(not(test))]
+    if outlives_launcher {
+        match mcp_socket::mark_lane_tray_owned(project, instance) {
+            Ok(()) => {
+                let deadline = Instant::now() + Duration::from_secs(5);
+                while Instant::now() < deadline {
+                    if mcp_socket::lane_accepting(project, instance) {
+                        if debug {
+                            eprintln!("[tillandsias] the tray serves lane {project}-{instance}");
+                        }
+                        return;
+                    }
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+                eprintln!(
+                    "[tillandsias] Warning: the tray did not take lane {project}-{instance} within 5s; \
+                     serving it from this launch, so host-browser tools stop when it exits"
+                );
+            }
+            Err(e) => eprintln!("[tillandsias] Warning: could not hand the lane to the tray: {e}"),
+        }
+    }
+    let _ = (outlives_launcher, debug);
+    let _ = mcp_socket::start_mcp_socket_server_for_lane(project, instance);
+}
+
 #[allow(clippy::too_many_arguments)]
 fn build_opencode_forge_args(
     project_path: &Path,
@@ -9558,12 +9726,12 @@ fn build_opencode_forge_args(
         // guest's `listen-vsock` build enables too; it was `tray`, so every
         // macOS VM forge got exactly that empty dir.
         #[cfg(feature = "host-services")]
-        {
-            let _ = mcp_socket::start_mcp_socket_server_for_lane(
-                project_name,
-                raw_instance.as_deref().unwrap_or("default"),
-            );
-        }
+        serve_forge_lane(
+            project_name,
+            raw_instance.as_deref().unwrap_or("default"),
+            matches!(mode, ForgeMode::Web),
+            debug,
+        );
         args.extend([
             "--mount".into(),
             format!(
@@ -9574,6 +9742,9 @@ fn build_opencode_forge_args(
             "TILLANDSIAS_CONTROL_SOCKET=/run/host/tillandsias-mcp/mcp.sock".into(),
         ]);
     }
+    // Order 1859-v5iv: the tray run that launched this forge, so a tray start
+    // after that run died reaps it (dead_run.rs).
+    args.extend(dead_run::run_label_args());
     // ORDER 1506-q7ab: beside the MCP socket, this lane's MAILBOX — its own
     // lane directory ($XDG_STATE_HOME/tillandsias/msg/lanes/<project>-<instance>)
     // read-write at /run/host/tillandsias-msg, and only that directory, with
@@ -11445,6 +11616,38 @@ mod failed_build_marker_reset_tests {
         cleared.unwrap();
         assert!(after.is_none(), "the marker survived the cache clear");
         assert!(!dir.exists());
+    }
+
+    /// 1900-tm9v: a probe file another caller holds (or a killed process
+    /// left) must not make the XDG cache dir read as unwritable — the next
+    /// candidate is the operator's real $HOME/.cache/tillandsias.
+    #[test]
+    fn a_held_writable_probe_does_not_divert_the_cache_dir_to_home() {
+        let _g = crate::test_support::env_lock();
+        let scratch = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        let prev_xdg = std::env::var_os("XDG_CACHE_HOME");
+        let prev_home = std::env::var_os("HOME");
+        let want = scratch.path().join("tillandsias");
+        std::fs::create_dir_all(&want).unwrap();
+        std::fs::write(want.join(".writable-probe"), b"").unwrap();
+        // SAFETY: serialised by env_lock.
+        unsafe {
+            std::env::set_var("XDG_CACHE_HOME", scratch.path());
+            std::env::set_var("HOME", home.path());
+        }
+        let got = init_cache_dir();
+        unsafe {
+            match prev_xdg {
+                Some(v) => std::env::set_var("XDG_CACHE_HOME", v),
+                None => std::env::remove_var("XDG_CACHE_HOME"),
+            }
+            match prev_home {
+                Some(v) => std::env::set_var("HOME", v),
+                None => std::env::remove_var("HOME"),
+            }
+        }
+        assert_eq!(got.unwrap(), want, "a held probe diverted the cache dir");
     }
 
     /// 1793-wggq: the marker names the log the build actually wrote. The
@@ -18126,72 +18329,6 @@ pub(crate) fn hold_window_prefix() -> Vec<String> {
     vec![exe, "--hold-window".to_string(), "--".to_string()]
 }
 
-/// Query GNOME's `gsettings` for the user's chosen default terminal. Returns
-/// `None` if gsettings isn't available, the schema isn't installed, or the
-/// value is empty.
-#[cfg_attr(not(feature = "tray"), allow(dead_code))]
-fn gnome_default_terminal() -> Option<String> {
-    let out = std::process::Command::new("gsettings")
-        .args([
-            "get",
-            "org.gnome.desktop.default-applications.terminal",
-            "exec",
-        ])
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    let raw = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    let trimmed = raw.trim_matches(|c: char| c == '\'' || c == '"' || c.is_whitespace());
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
-    }
-}
-
-/// Build the argv prefix for a terminal binary. Most terminals follow the
-/// `<bin> -e <cmd>` convention; gnome-terminal/ptyxis/wezterm use `--`.
-#[cfg_attr(not(feature = "tray"), allow(dead_code))]
-fn argv_prefix_for(name: &str) -> Vec<String> {
-    let prefix: &[&str] = match name {
-        "ptyxis" => &["ptyxis", "--new-window", "--"],
-        "gnome-terminal" => &["gnome-terminal", "--"],
-        "wezterm" => &["wezterm", "start", "--"],
-        "foot" => &["foot"],
-        "blackbox-terminal" => &["blackbox-terminal", "-c"],
-        // konsole / kitty / alacritty / tilix / xfce4-terminal / terminator
-        // / xterm all accept `-e <cmd>`.
-        _ => &[name, "-e"],
-    };
-    prefix.iter().map(|s| s.to_string()).collect()
-}
-
-#[cfg_attr(not(feature = "tray"), allow(dead_code))]
-fn executable_on_path(name: &str) -> bool {
-    let Some(path) = std::env::var_os("PATH") else {
-        return false;
-    };
-    for dir in std::env::split_paths(&path) {
-        let candidate = dir.join(name);
-        if !candidate.exists() {
-            continue;
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            if let Ok(metadata) = std::fs::metadata(&candidate)
-                && metadata.permissions().mode() & 0o111 == 0
-            {
-                continue;
-            }
-        }
-        return true;
-    }
-    false
-}
-
 /// Bring the per-project enclave (proxy + git + inference) online and return
 /// the certs directory. Shared by `run_opencode_web_mode` (web) and
 /// the CLI forge launches (the tray-local `launch_forge_agent` was deleted, 776-jcf3).
@@ -18878,6 +19015,8 @@ fn prepare_forge_ram_workspace(
                 chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
             ),
         ]);
+        // Order 1859-v5iv: a dead tray run's source volumes go with its forges.
+        create.args(dead_run::run_label_args());
         create.args(["--label", "tillandsias.source=ram-only", &volume]);
         run_podman_command_silent(create, debug)?;
     }
@@ -19477,6 +19616,10 @@ fn build_forge_agent_run_args_with_vault(
                 "/run/host/tillandsias-mcp/mcp.sock",
             );
     }
+    // Order 1859-v5iv: labelled with the launching tray run (dead_run.rs).
+    if let Some(run) = dead_run::run_label_value() {
+        spec = spec.label(dead_run::RUN_LABEL, run);
+    }
     // ORDER 1506-q7ab: beside the MCP socket, this lane's MAILBOX, read-write
     // at /run/host/tillandsias-msg (only its own lane directory), with the lane
     // and host labels the in-forge `tillandsias-plan msg` names itself by.
@@ -19953,6 +20096,7 @@ mod tray;
 
 // @trace spec:mcp-tool-socket (order 1713-1dnx: host-services, so the VM
 // guest's forges get a listener too)
+mod dead_run;
 #[cfg(feature = "host-services")]
 mod mcp_socket;
 
@@ -19961,6 +20105,8 @@ mod mcp_socket;
 // bound to the tray. Needs the store, so `vault` as well.
 #[cfg(all(feature = "host-services", feature = "vault"))]
 mod cloudflare_mcp;
+#[cfg(all(feature = "host-services", feature = "vault"))]
+mod cloudflare_worker_deploy;
 
 // @trace spec:local-web-preview
 #[cfg(feature = "host-services")]
@@ -32530,10 +32676,160 @@ esac
         );
     }
 
+    /// Points HOME and XDG_RUNTIME_DIR at a scratch root for one test and puts
+    /// them back on drop. Under cfg(test) the tmpfs key store is inactive
+    /// (ca_key_store::session), which is the macOS/Windows regime.
+    struct ScratchHome {
+        root: tempfile::TempDir,
+        saved: Vec<(&'static str, Option<std::ffi::OsString>)>,
+    }
+
+    impl ScratchHome {
+        fn new() -> Self {
+            let root = tempfile::tempdir().expect("scratch home");
+            let run = root.path().join("run");
+            std::fs::create_dir_all(&run).expect("scratch runtime dir");
+            let saved = ["HOME", "XDG_RUNTIME_DIR", "TILLANDSIAS_HOST_KIND"]
+                .into_iter()
+                .map(|k| (k, std::env::var_os(k)))
+                .collect();
+            // SAFETY: serialised by env_lock in every caller.
+            unsafe {
+                std::env::set_var("HOME", root.path());
+                std::env::set_var("XDG_RUNTIME_DIR", &run);
+                std::env::remove_var("TILLANDSIAS_HOST_KIND");
+            }
+            Self { root, saved }
+        }
+
+        fn path(&self) -> &Path {
+            self.root.path()
+        }
+    }
+
+    impl Drop for ScratchHome {
+        fn drop(&mut self) {
+            for (k, v) in self.saved.drain(..) {
+                // SAFETY: serialised by env_lock in every caller.
+                unsafe {
+                    match v {
+                        Some(v) => std::env::set_var(k, v),
+                        None => std::env::remove_var(k),
+                    }
+                }
+            }
+        }
+    }
+
+    /// Every unencrypted PEM private key under `root`, and every symlink that
+    /// leaves it, one line each.
+    fn plaintext_keys_and_escaping_links(root: &Path) -> Vec<String> {
+        let mut found = Vec::new();
+        let mut stack = vec![root.to_path_buf()];
+        while let Some(dir) = stack.pop() {
+            let Ok(entries) = std::fs::read_dir(&dir) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let Ok(meta) = std::fs::symlink_metadata(&path) else {
+                    continue;
+                };
+                if meta.file_type().is_symlink() {
+                    let target = std::fs::read_link(&path).unwrap_or_default();
+                    let target = if target.is_absolute() {
+                        target
+                    } else {
+                        path.parent().unwrap().join(target)
+                    };
+                    if !target.starts_with(root) {
+                        found.push(format!("link {} -> {}", path.display(), target.display()));
+                    }
+                } else if meta.is_dir() {
+                    stack.push(path);
+                } else if let Ok(bytes) = std::fs::read(&path) {
+                    let text = String::from_utf8_lossy(&bytes);
+                    for marker in [
+                        "-----BEGIN PRIVATE KEY-----",
+                        "-----BEGIN RSA PRIVATE KEY-----",
+                        "-----BEGIN EC PRIVATE KEY-----",
+                    ] {
+                        if text.contains(marker) {
+                            found.push(format!("plaintext {} ({marker})", path.display()));
+                        }
+                    }
+                }
+            }
+        }
+        found
+    }
+
+    /// 1898-hyhf exit criterion 1: with HOME and the runtime dir on scratch
+    /// and the tmpfs key store inactive (as on macOS and Windows), the CA mint
+    /// and the Vault leaf mint leave no unencrypted private key under HOME and
+    /// no symlink out of it.
+    #[test]
+    #[cfg(feature = "vault")]
+    fn ca_and_vault_leaf_mints_leave_no_plaintext_key_where_the_store_is_inactive() {
+        let _pseam_lock = podman_seam_lock();
+        let _guard = env_lock();
+        let home = ScratchHome::new();
+        let certs_dir = ensure_ca_bundle(false).expect("ensure_ca_bundle");
+        assert!(
+            certs_dir.starts_with(home.path()),
+            "{}",
+            certs_dir.display()
+        );
+        crate::vault_bootstrap::ensure_vault_tls_leaf(&certs_dir, false)
+            .expect("ensure_vault_tls_leaf");
+        assert!(certs_dir.join("intermediate.key").is_file());
+        assert!(certs_dir.join("vault.key").is_file());
+        let found = plaintext_keys_and_escaping_links(home.path());
+        assert!(found.is_empty(), "1898-hyhf: {found:#?}");
+        // The keys are usable: each decrypts in memory to a PEM key.
+        for name in ["intermediate.key", "vault.key"] {
+            let pem = crate::ca_key_store::read_key(&certs_dir.join(name)).expect(name);
+            assert!(
+                String::from_utf8_lossy(&pem).contains("-----BEGIN PRIVATE KEY-----"),
+                "{name} must decrypt for this session"
+            );
+        }
+        // A second ensure in the same session reuses the CA.
+        let crt_before = std::fs::read(certs_dir.join("intermediate.crt")).unwrap();
+        ensure_ca_bundle(false).expect("second ensure_ca_bundle");
+        assert_eq!(
+            crt_before,
+            std::fs::read(certs_dir.join("intermediate.crt")).unwrap()
+        );
+    }
+
+    /// 1898-hyhf exit criterion 2: under cfg(test) the CA mint refuses the
+    /// operator's real home, so a test that forgets ScratchHome fails loudly
+    /// instead of writing key material there.
+    #[test]
+    #[cfg(unix)]
+    fn ca_mint_refuses_the_real_home_under_test() {
+        let _pseam_lock = podman_seam_lock();
+        let _guard = env_lock();
+        let real = passwd_home().expect("passwd home");
+        let _scratch = ScratchHome::new();
+        assert!(!PathBuf::from(ca_dir()).starts_with(&real));
+        let err = refuse_real_home_in_test(
+            &PathBuf::from(tillandsias_core::ca_path::state_root_expanded(
+                &real.to_string_lossy(),
+            ))
+            .join("ca"),
+        )
+        .expect_err("the real home must be refused");
+        assert!(err.contains("1898-hyhf"), "{err}");
+    }
+
     #[test]
     fn source_built_init_and_status_check_smoke_uses_fake_podman() {
         let _pseam_lock = podman_seam_lock();
         let _guard = env_lock();
+        // 1898-hyhf: the CA below lands in scratch, never the real home.
+        let _home = ScratchHome::new();
 
         let root = find_checkout_root().expect("repo root");
         let version = VERSION.trim();
@@ -34751,6 +35047,51 @@ esac
         assert!(
             !args_str.contains("control.sock"),
             "OpenCode lane argv must NEVER mount control.sock; args: {args_str}"
+        );
+    }
+
+    /// Order 1859-v5iv: a forge launched under a tray run carries that run's
+    /// label, so the next tray start can reap it if the run dies; outside a
+    /// tray run it carries none.
+    #[test]
+    fn opencode_lane_builder_labels_the_launching_tray_run() {
+        let _seam = podman_false_seam();
+        let _env = env_lock();
+        let prev = std::env::var_os(dead_run::RUN_ENV);
+        let build = || {
+            build_opencode_forge_args(
+                &PathBuf::from("/tmp/project"),
+                Some(&PathBuf::from("/tmp/project")),
+                None,
+                "alpha",
+                None,
+                None,
+                &PathBuf::from("/tmp/ca"),
+                "1.2.3",
+                ForgeMode::Cli,
+                None,
+                false,
+                false,
+            )
+        };
+        unsafe { std::env::set_var(dead_run::RUN_ENV, "4242-run") };
+        let labelled = build();
+        unsafe { std::env::remove_var(dead_run::RUN_ENV) };
+        let bare = build();
+        unsafe {
+            if let Some(v) = prev {
+                std::env::set_var(dead_run::RUN_ENV, v);
+            }
+        }
+        assert!(
+            labelled
+                .windows(2)
+                .any(|w| w[0] == "--label" && w[1] == "tillandsias.tray-run=4242-run"),
+            "a tray-run forge must carry its run label; args: {labelled:?}"
+        );
+        assert!(
+            !bare.iter().any(|a| a.starts_with("tillandsias.tray-run=")),
+            "outside a tray run no run label is stamped; args: {bare:?}"
         );
     }
 

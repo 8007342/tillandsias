@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25 (web studio lanes). Code is cited by symbol, never by line.
+packets:
+  - packet_id: studio-lane-contract-registry-generic-launcher-write-guard-front-and-mcp-coedit
+    order: 1860-auhm
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, browser, router, otp, mcp, lua]
+    estimated_hours: 10
+    title: "One generic studio launcher driven by a Lua registry, reusing the OpenCode Web route, OTP and window, with a shared write-back path guard, a stream front and MCP co-edit tools"
+    context: |
+      Operator direction 2026-10-25: "I want to author this website interactively" opens a visual web studio window on the live site, with live saves into the forge checkout and the agent co-editing; every studio is offered as a choice with one [Recommended]. Publishing goes through the 1853-qr4h deploy tool, deploy branch only, on explicit request; no build on push. Spec: openspec/changes/web-studio-lanes. Reuses run_opencode_web_mode plumbing (RouterRoute, tillandsias_otp::issue_session, send_issue_web_session, launch_opencode_web_browser, ensure_versioned_images, sse-keepalive-proxy.js, local_web_preview::publish).
+    exit_criteria:
+      - "A fixture asserts: run_studio_mode with a stub studio upserts the route studio.<label> and opens the window only after an authenticated 2xx; LaunchSite::Studio images are absent from every default prebuilt set; a save to ../../etc/x or .git/config is refused and evented; and studio_changes returns a path saved by the user with its diff. Pre-fix result: FAILS, run_studio_mode, LaunchSite::Studio and the studio MCP tools do not exist."
+    verifiable_closure: "A fixture asserts: run_studio_mode with a stub studio upserts the route studio.<label> and opens the window only after an authenticated 2xx; LaunchSite::Studio images are absent from every default prebuilt set; a save to ../../etc/x or .git/config is refused and evented; and studio_changes returns a path saved by the user with its diff. Pre-fix result: FAILS, run_studio_mode, LaunchSite::Studio and the studio MCP tools do not exist."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the fixture named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-25.
+    events:
+      - type: filed
+        ts: "2026-10-25T16:00:01Z"
+        host: macuahuitl
+        summary: "filed ready from the operator direction of 2026-10-25"

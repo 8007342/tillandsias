@@ -1334,12 +1334,14 @@ pub(crate) fn request_graceful_quit(source: &str) -> bool {
                     Ok(()) => eprintln!("[tillandsias-tray] Quit: VM drained cleanly"),
                     Err(e) => eprintln!("[tillandsias-tray] Quit: drain failed: {e}"),
                 }
+                crate::guest_exec_relay::remove();
                 // Bypass AppKit cleanup: the VM drain is the only critical
                 // shutdown step; NSApplication owns nothing we must flush.
                 std::process::exit(0);
             });
         } else {
             eprintln!("[tillandsias-tray] Quit: no live VM, skipping drain");
+            crate::guest_exec_relay::remove();
             std::process::exit(0);
         }
     });
@@ -3903,6 +3905,20 @@ fn spawn_vm_status_poller(
                 &vz,
                 crate::preview_relay::PREVIEW_RELAY_VSOCK_PORT,
                 Duration::from_secs(10),
+            )
+            .await
+        }
+    });
+    // Order 1897-y7j2: `--exec-guest` reaches the guest through this tray
+    // instead of refusing while the tray owns the VM.
+    let exec_vz = vz.clone();
+    crate::guest_exec_relay::spawn(move || {
+        let vz = exec_vz.clone();
+        async move {
+            open_control_wire_stream(
+                &vz,
+                tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT,
+                Duration::from_secs(30),
             )
             .await
         }

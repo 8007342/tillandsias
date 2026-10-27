@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-agents-generate-images-locally-through-one-mcp-tool-on-stable-diffusion-cpp-sized-to-the-host
+    event:
+      type: progress
+      ts: "2026-10-27T07:10:00Z"
+      agent_id: linux-yoga-claude-20261027t070947z
+      host: yoga
+      summary: |
+        NPU (AMD XDNA, Krackan 1022:17F0, in-tree amdxdna) is OUT OF SCOPE for forge image-gen; no permissively licensed stack runs SD-class diffusion on it under Linux as of 2026-10-27 (research by yoga-silverblue; coordinator macuahuitl-fedora agreed).
+        Measured on yoga - amdxdna module loaded and /dev/accel/accel0 present (lsmod; /sys/class/accel/accel0/device/uevent). No NPU workload was run.
+        Sourced findings -
+        (1) the only Linux SD-on-NPU route is github.com/mcolsen/amd-npu-stable-diffusion-linux (MIT wrapper); it needs the EULA-licensed Ryzen AI SDK 1.7.1 onnxruntime, AMD precompiled models on Hugging Face (4 of 5 gated), and out-of-tree amd/xdna-driver+XRT; UNet+VAE on the NPU, text encoder on CPU; tested on Strix Halo only, not Krackan.
+        (2) Ryzen AI 1.7.1 on Linux supports KRK on Ubuntu 24.04 under the AMD EULA; its docs list no diffusion models - ryzenai.docs.amd.com/en/latest/linux.html and /licenses.html.
+        (3) the AMD+Stability SD3 NPU demo ships through Amuse, Windows only - techpowerup.com/339112, hothardware.com/news/amd-stable-diffusion-blockfp16-npu.
+        (4) Lemonade ryzenai-sd is an unmerged RFC shipping .exe/DLLs - github.com/lemonade-sdk/lemonade/discussions/3913.
+        (5) IREE and iree-amd-aie are Apache-2.0 and mlir-aie/Peano compile for AIE, but no diffusion UNet/DiT is shown running on them; porting one is research, not integration - phoronix.com/news/MLIR-AIE-1.3.
+        Not verified - the licence on AMD gated model weights; the mlir-aie/xdna-driver LICENSE files; whether stable-diffusion.cpp has NPU work (none found, no dedicated search).
+        Revisit only if the operator accepts the AMD EULA. Becomes a research/ record when #670 lands.
