@@ -6,6 +6,12 @@
 //! the SSHSIG envelope (OpenSSH PROTOCOL.sshsig) around the raw P-256
 //! signature, keeps the wrapped key, and prints the allowed-signers line.
 //!
+//! One key per (Mac, repo slug), so approvals cannot be linked across
+//! projects (operator 2026-10-27, notes on 1879-5jkt / 1880-9wpd /
+//! 1888-e3yh). The principal stays `operator`; the allowed-signers line names
+//! the key by its label `tillandsias-approval/<slug>` and nothing about the
+//! host (no hostname, no biometric type).
+//!
 //! The wrapped key is CryptoKit's `dataRepresentation`: only this Mac's
 //! Secure Enclave can use it, so the file holds no usable secret (operator
 //! 2026-10-19: no plaintext credentials at rest). Losing it means enrolling
@@ -89,11 +95,35 @@ fn ffi_error(what: &str, code: i32) -> String {
     format!("{what}: {why} (code {code})")
 }
 
-/// Where the wrapped key lives: beside the VM images.
-pub(crate) fn key_path() -> PathBuf {
-    crate::diagnose::resolve_image_root()
+/// A repo slug is `owner/name`, each part `[A-Za-z0-9._-]`, never `.`/`..`.
+pub(crate) fn check_slug(slug: &str) -> Result<(&str, &str), String> {
+    let ok = |p: &str| {
+        !p.is_empty()
+            && p != "."
+            && p != ".."
+            && p.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
+    };
+    match slug.split_once('/') {
+        Some((owner, name)) if ok(owner) && ok(name) => Ok((owner, name)),
+        _ => Err(format!("{slug:?} is not a repo slug (owner/name)")),
+    }
+}
+
+/// The key's label, recorded in the allowed-signers line and the grant.
+pub(crate) fn key_label(slug: &str) -> String {
+    format!("{NAMESPACE_LABEL}/{slug}")
+}
+const NAMESPACE_LABEL: &str = "tillandsias-approval";
+
+/// Where `slug`'s wrapped key lives: beside the VM images, one per repo.
+pub(crate) fn key_path(slug: &str) -> Result<PathBuf, String> {
+    let (owner, name) = check_slug(slug)?;
+    Ok(crate::diagnose::resolve_image_root()
         .0
-        .join("approval-key.se")
+        .join("approval-keys")
+        .join(owner)
+        .join(format!("{name}.se")))
 }
 
 /// An SSH wire `string`: u32 big-endian length, then the bytes.
@@ -128,11 +158,13 @@ pub(crate) fn public_key_blob(x963: &[u8]) -> Vec<u8> {
     b
 }
 
-/// `operator namespaces="tillandsias-approval@v1" ecdsa-sha2-nistp256 AAAA…`
-pub(crate) fn allowed_signers_line(x963: &[u8]) -> String {
+/// `operator namespaces="tillandsias-approval@v1" ecdsa-sha2-nistp256 AAAA…
+/// tillandsias-approval/<slug>`: the trailing comment says which key.
+pub(crate) fn allowed_signers_line(x963: &[u8], slug: &str) -> String {
     format!(
-        "{PRINCIPAL} namespaces=\"{NAMESPACE}\" {KEY_TYPE} {}",
-        base64::engine::general_purpose::STANDARD.encode(public_key_blob(x963))
+        "{PRINCIPAL} namespaces=\"{NAMESPACE}\" {KEY_TYPE} {} {}",
+        base64::engine::general_purpose::STANDARD.encode(public_key_blob(x963)),
+        key_label(slug)
     )
 }
 
@@ -281,12 +313,12 @@ pub(crate) fn sign(path: &Path, message: &[u8], reason: &str) -> Result<String, 
     armor(&x963, &sig[..n])
 }
 
-/// `--approval-enrol`: create the key if needed and print the allowed-signers
-/// line. Exit 0, or 1 with the reason on stderr.
-pub(crate) fn enrol_main() -> i32 {
-    match enrol(&key_path()) {
+/// `--approval-enrol <owner/name>`: create that repo's key if needed and
+/// print its allowed-signers line. Exit 0, or 1 with the reason on stderr.
+pub(crate) fn enrol_main(slug: &str) -> i32 {
+    match key_path(slug).and_then(|p| enrol(&p)) {
         Ok(x963) => {
-            println!("{}", allowed_signers_line(&x963));
+            println!("{}", allowed_signers_line(&x963, slug));
             0
         }
         Err(e) => {
@@ -296,9 +328,10 @@ pub(crate) fn enrol_main() -> i32 {
     }
 }
 
-/// `--approval-sign <file>`: sign the file's bytes after Touch ID and print
-/// the armored SSHSIG. Exit 0, or 1 with the reason on stderr.
-pub(crate) fn sign_main(file: &str) -> i32 {
+/// `--approval-sign <owner/name> <file>`: sign the file's bytes with that
+/// repo's key after Touch ID and print the armored SSHSIG. Exit 0, or 1 with
+/// the reason on stderr.
+pub(crate) fn sign_main(slug: &str, file: &str) -> i32 {
     let message = match std::fs::read(file) {
         Ok(m) => m,
         Err(e) => {
@@ -306,7 +339,7 @@ pub(crate) fn sign_main(file: &str) -> i32 {
             return 1;
         }
     };
-    match sign(&key_path(), &message, SIGN_REASON) {
+    match key_path(slug).and_then(|p| sign(&p, &message, SIGN_REASON)) {
         Ok(armored) => {
             print!("{armored}");
             0
@@ -326,7 +359,11 @@ mod tests {
     /// A software key's signature over [`signed_data`], through the same
     /// CryptoKit signing call the enclave key uses.
     fn sw_sign(message: &[u8]) -> (Vec<u8>, Vec<u8>) {
-        let raw = [0x42u8; 32];
+        sw_sign_with(0x42, message)
+    }
+
+    fn sw_sign_with(seed: u8, message: &[u8]) -> (Vec<u8>, Vec<u8>) {
+        let raw = [seed; 32];
         let data = signed_data(message);
         let (mut x963, mut sig) = ([0u8; 65], [0u8; 64]);
         let (mut pl, mut sl) = (0usize, 0usize);
@@ -350,9 +387,18 @@ mod tests {
     }
 
     fn verify(dir: &Path, x963: &[u8], armored: &str, message: &[u8]) -> bool {
+        verify_line(
+            dir,
+            &allowed_signers_line(x963, "8007342/tillandsias"),
+            armored,
+            message,
+        )
+    }
+
+    fn verify_line(dir: &Path, line: &str, armored: &str, message: &[u8]) -> bool {
         let signers = dir.join("allowed_signers");
         let sig = dir.join("msg.sig");
-        std::fs::write(&signers, format!("{}\n", allowed_signers_line(x963))).unwrap();
+        std::fs::write(&signers, format!("{line}\n")).unwrap();
         std::fs::write(&sig, armored).unwrap();
         let mut child = Command::new("ssh-keygen")
             .args(["-Y", "verify", "-n", NAMESPACE, "-I", PRINCIPAL, "-f"])
@@ -384,6 +430,40 @@ mod tests {
         let mut tampered = STATEMENT.to_vec();
         tampered[30] ^= 1;
         assert!(!verify(dir.path(), &x963, &armored, &tampered));
+    }
+
+    /// One key per repo: a signature made with repo A's key is refused when
+    /// presented against repo B's allowed-signers line, and each line names
+    /// its key by label and carries nothing about the host.
+    #[test]
+    fn a_signature_from_repo_a_is_refused_for_repo_b() {
+        let dir = tempfile::tempdir().unwrap();
+        let (a_pub, a_sig) = sw_sign_with(0x42, STATEMENT);
+        let (b_pub, _) = sw_sign_with(0x43, STATEMENT);
+        let armored = armor(&a_pub, &a_sig).unwrap();
+        let line_a = allowed_signers_line(&a_pub, "acme/repo-a");
+        let line_b = allowed_signers_line(&b_pub, "acme/repo-b");
+        assert!(
+            line_a.ends_with(" tillandsias-approval/acme/repo-a"),
+            "{line_a}"
+        );
+        assert!(line_a.starts_with("operator "), "{line_a}");
+        assert!(verify_line(dir.path(), &line_a, &armored, STATEMENT));
+        assert!(!verify_line(dir.path(), &line_b, &armored, STATEMENT));
+    }
+
+    /// Slugs map to one file each and cannot climb out of the key directory.
+    #[test]
+    fn slugs_are_owner_slash_name_and_never_traverse() {
+        assert_eq!(
+            check_slug("8007342/tillandsias"),
+            Ok(("8007342", "tillandsias"))
+        );
+        for bad in [
+            "", "a", "a/", "/b", "a/b/c", "../b", "a/..", "a/b c", "a\\b/c",
+        ] {
+            assert!(check_slug(bad).is_err(), "{bad:?}");
+        }
     }
 
     /// mpint drops leading zeros and adds one before a set top bit.

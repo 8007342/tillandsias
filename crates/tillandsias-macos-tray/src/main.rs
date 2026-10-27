@@ -312,15 +312,20 @@ fn main() {
     // Order 1886-hf9j: the approval key. Enrol prints the allowed-signers
     // line; sign asks for Touch ID and prints the SSHSIG. Neither touches the
     // VM, so neither needs the tray quit.
-    if args.iter().any(|a| a == "--approval-enrol") {
-        std::process::exit(approval_signer::enrol_main());
-    }
-    if let Some(idx) = args.iter().position(|a| a == "--approval-sign") {
-        let Some(file) = args.get(idx + 1) else {
-            eprintln!("usage: --approval-sign <statement-file>");
+    // One key per repo slug (operator 2026-10-27).
+    if let Some(idx) = args.iter().position(|a| a == "--approval-enrol") {
+        let Some(slug) = args.get(idx + 1) else {
+            eprintln!("usage: --approval-enrol <owner/name>");
             std::process::exit(2);
         };
-        std::process::exit(approval_signer::sign_main(file));
+        std::process::exit(approval_signer::enrol_main(slug));
+    }
+    if let Some(idx) = args.iter().position(|a| a == "--approval-sign") {
+        let (Some(slug), Some(file)) = (args.get(idx + 1), args.get(idx + 2)) else {
+            eprintln!("usage: --approval-sign <owner/name> <statement-file>");
+            std::process::exit(2);
+        };
+        std::process::exit(approval_signer::sign_main(slug, file));
     }
     if let Some(idx) = args.iter().position(|a| a == "--exec-guest") {
         // 1897-y7j2: a running tray relays the command instead of refusing.
