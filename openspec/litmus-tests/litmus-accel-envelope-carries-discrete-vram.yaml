@@ -1,0 +1,28 @@
+# @trace spec:accel-capability-probe, order:1903-6hkw
+name: litmus:accel-envelope-carries-discrete-vram
+spec: accel-capability-probe
+phase: pre-build
+description: The accel envelope appends accel_vram_gb for a discrete GPU only, '-' when unknown or integrated, never 0, and the 3070's envelope reaches the I2 imagegen ceiling
+severity: medium
+size: long
+
+preconditions:
+  - workspace contains crates/tillandsias-headless
+  - cargo is available in PATH
+
+critical_path:
+  - step: "an 8 GiB discrete card renders accel_vram_gb=8 as the last key; an iGPU carve-out and an unknown or 0 reading render '-'; the 3070 envelope reaches I2"
+    command: "cargo test -p tillandsias-headless --bin tillandsias -- accel_probe::tests::a_discrete_8_gib_card_renders_accel_vram_gb_8_as_the_last_key accel_probe::tests::an_integrated_gpus_carve_out_is_not_vram accel_probe::tests::an_unknown_or_zero_reading_is_absent_never_0 accel_probe::tests::the_3070_envelope_reaches_the_i2_imagegen_ceiling"
+    timeout_ms: 900000
+
+observability:
+  traces:
+    - "@trace spec:accel-capability-probe"
+  expected_log: "test result: ok. 4 passed"
+  log_fields:
+    spec: "accel-capability-probe"
+    test: "accel-envelope-carries-discrete-vram"
+
+rollback:
+  on_failure: "inspect discrete_vram_gb and the accel_vram_gb cell in crates/tillandsias-headless/src/accel_probe.rs"
+  command: "grep -n 'accel_vram_gb' crates/tillandsias-headless/src/accel_probe.rs"
