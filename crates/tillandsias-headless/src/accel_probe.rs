@@ -262,6 +262,15 @@ pub struct DeviceRecord {
     /// to pick one and be wrong about the other.
     #[serde(default)]
     pub memory_model: Option<String>,
+
+    /// A DISCRETE GPU's own memory in GiB (order 1903-6hkw): `nvidia-smi
+    /// --query-gpu=memory.total` on NVIDIA, `mem_info_vram_total` on amdgpu.
+    /// `None` when unknown, when the reading is 0, and for every device whose
+    /// `memory_model` is not `discrete`: an iGPU's carve-out is system RAM
+    /// with a VRAM label (yolanda's 860M: 512 MB), and a tier earned from it
+    /// would be offered to a card that cannot place it.
+    #[serde(default)]
+    pub vram_gb: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -1201,6 +1210,7 @@ fn enumerate_cpu() -> DeviceRecord {
             logical: logical_cores,
         }),
         system_ram_gb: ram_gb,
+        vram_gb: None,
         memory_model: None,
         name_source: Some(name_source),
     }
@@ -3422,6 +3432,60 @@ fn read_gpu_memory_evidence(pci_addr: &str) -> GpuMemoryEvidence {
     }
 }
 
+const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
+
+/// A device's own VRAM in GiB, or `None` (order 1903-6hkw).
+///
+/// Only a `discrete` device has VRAM of its own. An integrated part's
+/// `mem_info_vram_total` is a carve-out of system RAM (this host's Vega: 2 GiB;
+/// yolanda's 860M: 512 MB), so reporting it would let an iGPU earn a tier
+/// meant for a card with its own memory. A zero or missing reading is
+/// unknown, never 0.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub fn discrete_vram_gb(memory_model: Option<&str>, total_bytes: Option<u64>) -> Option<f64> {
+    if memory_model != Some("discrete") {
+        return None;
+    }
+    total_bytes.filter(|&b| b > 0).map(|b| b as f64 / GIB)
+}
+
+/// The first NVIDIA GPU's total memory in bytes, from
+/// `nvidia-smi --query-gpu=memory.total` (MiB), or `None`.
+#[cfg(target_os = "linux")]
+fn nvidia_memory_total_bytes() -> Option<u64> {
+    let out = Command::new("nvidia-smi")
+        .args(["--query-gpu=memory.total", "--format=csv,noheader,nounits"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())?;
+    parse_nvidia_memory_total_mib(&String::from_utf8_lossy(&out.stdout))
+        .map(|mib| mib * 1024 * 1024)
+}
+
+/// The first line of `nvidia-smi --query-gpu=memory.total
+/// --format=csv,noheader,nounits` ("8192"), or `None` for anything else
+/// (an "[N/A]", an empty answer).
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub fn parse_nvidia_memory_total_mib(stdout: &str) -> Option<u64> {
+    stdout
+        .lines()
+        .next()?
+        .trim()
+        .parse::<u64>()
+        .ok()
+        .filter(|&m| m > 0)
+}
+
+/// An envelope cell for a GiB figure: whole numbers bare ("8"), anything
+/// else to one decimal ("7.8").
+fn gb_cell(gb: f64) -> String {
+    if (gb - gb.round()).abs() < 0.05 {
+        format!("{}", gb.round() as u64)
+    } else {
+        format!("{gb:.1}")
+    }
+}
+
 /// The largest prefetchable BAR in a sysfs `resource` file, in bytes.
 ///
 /// Each line is `<start> <end> <flags>` in hex. A zero-sized BAR reads
@@ -3518,6 +3582,7 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
             // DRAM between CPU and GPU" is an architectural invariant of every
             // machine that can run it, not a measurement standing in for one.
             system_ram_gb: macos_system_ram_gb(),
+            vram_gb: None,
             memory_model: Some("unified".to_string()),
             // ORDER 1137-rgfm. "Apple Metal GPU" is a FAMILY literal, identical
             // on every Apple silicon Mac, so the fingerprint's
@@ -3587,6 +3652,10 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                 cpu_flags: None,
                 cpu_cores: None,
                 system_ram_gb: None,
+                vram_gb: discrete_vram_gb(
+                    nvidia_memory_model.as_deref(),
+                    nvidia_memory_total_bytes(),
+                ),
                 memory_model: nvidia_memory_model,
             });
         }
@@ -3612,8 +3681,9 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                     // ORDER 1011-zp59. Computed BEFORE the record is built so
                     // the memory model is read once and used for both the
                     // `memory_model` field and the integrated/discrete test.
-                    let this_mm = memory_model_from_evidence(&read_gpu_memory_evidence(&pci_addr))
-                        .map(|m| m.to_string());
+                    let this_evidence = read_gpu_memory_evidence(&pci_addr);
+                    let this_mm = memory_model_from_evidence(&this_evidence).map(|m| m.to_string());
+                    let this_vram = discrete_vram_gb(this_mm.as_deref(), this_evidence.vram_total);
                     // "Discrete AND schedulable" is read off the records the
                     // NVIDIA arm already pushed — usable, with at least one
                     // lane. A present-but-unusable discrete card deprioritises
@@ -3651,6 +3721,7 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                         cpu_flags: None,
                         cpu_cores: None,
                         system_ram_gb: None,
+                        vram_gb: this_vram,
                         memory_model: this_mm,
                     });
                 }
@@ -3688,6 +3759,7 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                         cpu_flags: None,
                         cpu_cores: None,
                         system_ram_gb: None,
+                        vram_gb: None,
                         memory_model: memory_model_from_evidence(&read_gpu_memory_evidence(
                             &pci_addr,
                         ))
@@ -3732,6 +3804,7 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                         cpu_flags: None,
                         cpu_cores: None,
                         system_ram_gb: None,
+                        vram_gb: None,
                         memory_model: memory_model_from_evidence(&read_gpu_memory_evidence(
                             &pci_addr,
                         ))
@@ -3889,6 +3962,7 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                 cpu_flags: None,
                 cpu_cores: None,
                 system_ram_gb: None,
+                vram_gb: None,
                 memory_model: None,
             });
         }
@@ -4001,6 +4075,7 @@ fn windows_gpus() -> Option<Vec<DeviceRecord>> {
                     cpu_flags: None,
                     cpu_cores: None,
                     system_ram_gb: None,
+                    vram_gb: None,
                     memory_model: None,
                 })
             })
@@ -4082,6 +4157,7 @@ fn windows_npus() -> Option<Vec<DeviceRecord>> {
                     cpu_flags: None,
                     cpu_cores: None,
                     system_ram_gb: None,
+                    vram_gb: None,
                     memory_model: None,
                 })
             })
@@ -4171,6 +4247,7 @@ fn enumerate_npus() -> Vec<DeviceRecord> {
                     cpu_flags: None,
                     cpu_cores: None,
                     system_ram_gb: None,
+                    vram_gb: None,
                     memory_model: None,
                 });
             }
@@ -4707,7 +4784,8 @@ pub fn accel_envelope(doc: &CapabilityDocument) -> String {
          accel_side={} accel_gpu_path={} accel_gpu_engine={} \
          accel_mem_model={} accel_mem_budget_gb={} \
          accel_prefill_dev={} accel_decode_dev={} accel_decode_crossover_b={} \
-         accel_source={} accel_decode_floor_b={} accel_decode_floor_source={}",
+         accel_source={} accel_decode_floor_b={} accel_decode_floor_source={} \
+         accel_vram_gb={}",
         class,
         gpu_state,
         gpu.map(|d| slug(&d.name))
@@ -4760,6 +4838,13 @@ pub fn accel_envelope(doc: &CapabilityDocument) -> String {
         // billion parameters decode on the GPU, smaller ones on the CPU.
         routing.floor_b,
         routing.floor_source,
+        // ORDER 1903-6hkw, APPENDED LAST for the same reason: a DISCRETE GPU's
+        // own memory, `-` when unknown or when the reported GPU is not
+        // discrete. The imagegen ceiling (1874-bair) offers GPU tiers on it.
+        gpu.and_then(|d| d.vram_gb)
+            .filter(|_| mem_model == "discrete")
+            .map(gb_cell)
+            .unwrap_or_else(|| "-".to_string()),
     )
 }
 
@@ -6373,6 +6458,7 @@ mod tests {
             cpu_flags: None,
             cpu_cores: None,
             system_ram_gb: None,
+            vram_gb: None,
             memory_model: None,
             // 1137-rgfm: None = this fixture states no provenance, so the
             // pre-field deny-list still judges it, exactly as before.
@@ -6918,6 +7004,95 @@ mod tests {
         assert!(env.contains("accel_gpu=usable"), "{env}");
     }
 
+    /// ORDER 1903-6hkw. A GPU with `memory_model` and `vram_gb` set as the
+    /// probe arms set them.
+    fn gpu_with_memory(mm: Option<&str>, total_bytes: Option<u64>) -> DeviceRecord {
+        let mut d = device(
+            "gpu",
+            "NVIDIA GeForce RTX 3070 Laptop GPU",
+            &["container", "host-native"],
+            None,
+        );
+        d.memory_model = mm.map(str::to_string);
+        d.vram_gb = discrete_vram_gb(mm, total_bytes);
+        d
+    }
+
+    fn vram_cell(env: &str) -> &str {
+        env.split_whitespace()
+            .find_map(|kv| kv.strip_prefix("accel_vram_gb="))
+            .expect("accel_vram_gb is in the envelope")
+    }
+
+    #[test]
+    fn a_discrete_8_gib_card_renders_accel_vram_gb_8_as_the_last_key() {
+        let mib = parse_nvidia_memory_total_mib("8192\n").unwrap();
+        let env = accel_envelope(&doc_with(vec![gpu_with_memory(
+            Some("discrete"),
+            Some(mib * 1024 * 1024),
+        )]));
+        assert_eq!(vram_cell(&env), "8", "{env}");
+        assert!(
+            env.split_whitespace()
+                .last()
+                .unwrap()
+                .starts_with("accel_vram_gb="),
+            "appended last, so every existing key keeps its position: {env}"
+        );
+    }
+
+    /// An iGPU's carve-out is system RAM, not VRAM (this host's Vega: 2 GiB;
+    /// yolanda's 860M: 512 MB).
+    #[test]
+    fn an_integrated_gpus_carve_out_is_not_vram() {
+        let env = accel_envelope(&doc_with(vec![gpu_with_memory(
+            Some("unified"),
+            Some(2 * 1024 * 1024 * 1024),
+        )]));
+        assert_eq!(vram_cell(&env), "-", "{env}");
+        assert_eq!(
+            discrete_vram_gb(Some("unified"), Some(512 * 1024 * 1024)),
+            None
+        );
+        assert_eq!(discrete_vram_gb(None, Some(2 * 1024 * 1024 * 1024)), None);
+    }
+
+    #[test]
+    fn an_unknown_or_zero_reading_is_absent_never_0() {
+        for total in [None, Some(0)] {
+            let env = accel_envelope(&doc_with(vec![gpu_with_memory(Some("discrete"), total)]));
+            assert_eq!(vram_cell(&env), "-", "{total:?}: {env}");
+        }
+        assert_eq!(parse_nvidia_memory_total_mib("[N/A]\n"), None);
+        assert_eq!(parse_nvidia_memory_total_mib(""), None);
+        assert_eq!(parse_nvidia_memory_total_mib("0\n"), None);
+        assert_eq!(gb_cell(7.8), "7.8");
+    }
+
+    /// The consumer: with the key, the 3070's envelope reaches the I2 ceiling
+    /// in the imagegen ladder; without it, it could earn only what RAM earns.
+    #[test]
+    fn the_3070_envelope_reaches_the_i2_imagegen_ceiling() {
+        let mut cpu = device(
+            "cpu",
+            "AMD Ryzen 7 5800H",
+            &["container", "host-native"],
+            None,
+        );
+        cpu.system_ram_gb = Some(16.0);
+        let d = doc_with(vec![
+            cpu,
+            gpu_with_memory(Some("discrete"), Some(8192 * 1024 * 1024)),
+        ]);
+        let env = accel_envelope(&d);
+        let ladder = crate::imagegen_tiers::ladder();
+        assert_eq!(
+            crate::imagegen_tiers::ceiling(&ladder, &env).tier,
+            "I2",
+            "{env}"
+        );
+    }
+
     #[test]
     // @trace spec:accel-capability-probe
     fn envelope_refuses_to_call_a_gpu_usable_when_only_the_host_lane_is_open() {
@@ -7082,6 +7257,7 @@ mod tests {
                 // Order 1647-fb52, appended last.
                 "accel_decode_floor_b",
                 "accel_decode_floor_source",
+                "accel_vram_gb",
             ],
             "every field must survive a hostile name: {env}"
         );
@@ -7698,6 +7874,7 @@ GPU1:
             cpu_flags: None,
             cpu_cores: None,
             system_ram_gb: None,
+            vram_gb: None,
             memory_model: None,
             // 1137-rgfm: None = this fixture states no provenance, so the
             // pre-field deny-list still judges it, exactly as before.
@@ -8304,6 +8481,7 @@ GPU1:
                 cpu_flags: None,
                 cpu_cores: None,
                 system_ram_gb: None,
+                vram_gb: None,
                 memory_model: Some(mm.to_string()),
                 // 1137-rgfm: None = this fixture states no provenance, so the
                 // pre-field deny-list still judges it, exactly as before.
