@@ -15,7 +15,7 @@
 //! fixture below refuses any row naming a revenue-capped or non-commercial
 //! licence, and any model on the never-shippable list.
 //!
-//! @trace spec:image-generation, order:1874-bair
+//! @trace order:1874-bair (spec: openspec/changes/local-image-generation, not yet archived)
 // The consumer (`image.generate`, 1874-kkrc) is not wired yet; until it is,
 // only the tests read this module.
 #![cfg_attr(not(test), allow(dead_code))]
