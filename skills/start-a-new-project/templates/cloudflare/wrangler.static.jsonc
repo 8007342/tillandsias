@@ -1,0 +1,10 @@
+// Cloudflare settings for {{NAME}}: a website served from ./public.
+// Preview it locally with: npx wrangler dev
+// Publishing happens only when you ask for it.
+{
+  "name": "{{SLUG}}",
+  "compatibility_date": "{{COMPAT_DATE}}",
+  "assets": {
+    "directory": "./public"
+  }
+}

@@ -68,6 +68,10 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - windows-wsl-hop.md                    — you run shell in a WSL guest (`tillandsias`, `tillandsias-build`) from Git Bash… [bundled, partial-verify]
 - yarn.md                               — an existing project chose yarn — otherwise npm/pnpm are usually preferred. [bundled, partial-verify]
 
+## cloud
+
+- cloudflare-workers-static-assets.md — ## Provenance [pull-on-demand: stub]
+
 ## concurrent-git
 
 - agent-handoff.md                   — you're an agent picking up work from `plan/`, you need to claim something, chec… [bundled, partial-verify]
