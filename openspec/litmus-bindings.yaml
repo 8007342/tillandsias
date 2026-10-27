@@ -938,6 +938,7 @@ specs:
   - litmus:project-bootstrap-readme-shape
   - litmus:skills-canonical-and-mcp-first-shape
   - litmus:onboarding-cold-start-discovery
+  - litmus:start-a-new-project-google-cloud-deploy-targets
   coverage_ratio: 75
   last_verified: '2026-05-14'
 - spec_id: project-summarizers

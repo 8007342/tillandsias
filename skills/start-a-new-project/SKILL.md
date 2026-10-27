@@ -63,6 +63,38 @@ It creates only what is missing and never overwrites the user's files:
 Then fill in the first spec together with the user: three to five
 requirements in their own words, each with one concrete example.
 
+## 4b. Choose where it will run (optional)
+
+For a web app, ask once whether they want it online, and offer:
+
+- **Cloudflare**: not available here yet; say so and offer Google Cloud or
+  "not now".
+- **Google Cloud (Dockerfile)**: Google builds the app from a Dockerfile in
+  the project and runs it on Cloud Run. Works for every kind of web app,
+  including Flutter web and plain websites.
+- **Google Cloud (Buildpacks)**: Google works out how to build the app from
+  its own files, with no Dockerfile. Works for Node.js, Python and Go
+  servers, not for Flutter web or plain websites.
+- **Not now**: nothing is added; they can choose later.
+
+Before setting up either Google Cloud option, say plainly: **Google Cloud
+needs a billing account with a payment method, even for its free allowance.
+Small apps usually stay inside the free monthly allowance, but anything beyond
+it is charged to that account.** Never create a Google Cloud project, link
+billing, or start a cloud build for them; they connect the repository in
+their own Google Cloud console.
+
+Then run the same setup script with the choice:
+
+```bash
+bash "<this skill's directory>/scaffold.sh" --name "<App Name>" --summary "<one sentence>" --deploy gcp-dockerfile|gcp-buildpacks [--runtime node|python|go|static] [--port 8080]
+```
+
+It adds the deploy files filled in with the app's name, port and kind, and
+never overwrites the user's own. Read `deploy-google-cloud.md` in this
+skill's directory for what each file does and how the user connects the
+repository.
+
 ## 5. Build the first version
 
 Start with the smallest version that runs. For Flutter:

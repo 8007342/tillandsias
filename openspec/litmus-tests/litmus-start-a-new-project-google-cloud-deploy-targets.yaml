@@ -1,0 +1,28 @@
+# @trace spec:project-bootstrap-readme, order:1906-md6q
+name: litmus:start-a-new-project-google-cloud-deploy-targets
+spec: project-bootstrap-readme
+phase: pre-build
+description: The new-project scaffold's Google Cloud targets (Dockerfile, Buildpacks) render filled-in files, refuse an impossible combination before writing anything, never overwrite, and the skill states the billing requirement
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains skills/start-a-new-project/scaffold.sh and scripts/test-start-a-new-project-gcp.sh
+
+critical_path:
+  - step: "gcp-dockerfile and gcp-buildpacks render their files with name, port and runtime filled; buildpacks for a static app exits 3 with nothing written; a user's Dockerfile is kept; the billing line is present"
+    command: "bash scripts/test-start-a-new-project-gcp.sh"
+    timeout_ms: 60000
+    expected_behavior: "ok:start-a-new-project-gcp:6"
+
+observability:
+  traces:
+    - "@trace order:1906-md6q"
+  expected_log: "ok:start-a-new-project-gcp:6"
+  log_fields:
+    spec: "project-bootstrap-readme"
+    test: "start-a-new-project-google-cloud-deploy-targets"
+
+rollback:
+  on_failure: "inspect skills/start-a-new-project/scaffold.sh and templates/gcp/"
+  command: "ls skills/start-a-new-project/templates/gcp"

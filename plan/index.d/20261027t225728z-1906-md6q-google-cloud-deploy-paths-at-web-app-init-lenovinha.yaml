@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue (opus5) on operator direction relayed by the coordinator 2026-10-27.
+packets:
+  - packet_id: a-new-web-app-can-be-set-up-for-google-cloud-run-by-dockerfile-or-buildpacks-from-sourced-cheatsheets-and-filled-in-templates
+    order: 1906-md6q
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [skills, cheatsheets, google-cloud, deploy]
+    size: M
+    title: "start-a-new-project offers Google Cloud (Dockerfile | Buildpacks) beside Cloudflare, from sourced cheatsheets and filled-in templates, and states the billing requirement"
+    context: |
+      Operator 2026-10-27 (relayed by the coordinator): research the Google
+      Cloud deploy paths seen in the console (GitHub via Cloud Build or
+      Developer Connect, then Dockerfile or Google Cloud's buildpacks, as
+      equals) and add forge init support beside Cloudflare (yolanda's side).
+      Research and templates only: no GCP resources, billing or cloud builds.
+      Google Cloud needs a billing account, unlike the free-only Cloudflare
+      and GitHub defaults; the skill and cheatsheets say so plainly.
+      Shared shape agreed with yolanda: one SKILL.md step, one --deploy
+      cloudflare|gcp-dockerfile|gcp-buildpacks|none flag, templates under
+      templates/<target>/, cheatsheets under cheatsheets/cloud/.
+    exit_criteria:
+      - "scripts/test-start-a-new-project-gcp.sh passes 6 arms: gcp-dockerfile renders five filled-in files; gcp-buildpacks renders project.toml and service.yaml; the runtime is read from the project; buildpacks for a static app exits 3 with nothing written; a user's Dockerfile is kept; the billing line is present and the scaffold runs no gcloud. Pre-fix result: FAILS, scaffold.sh has no --deploy flag."
+    verifiable_closure: "litmus:start-a-new-project-google-cloud-deploy-targets"
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the litmus named in verifiable_closure in the same commit (1136-n8sh).
+    next_action: >
+      Land work/1906-md6q; close completed with the land sha.
+    provenance: |
+      Operator direction relayed by the coordinator 2026-10-27.
+    events:
+      - type: filed
+        ts: "2026-10-27T22:57:28Z"
+        host: lenovinha
+        summary: "filed ready; work/1906-md6q; isolated-work rule while lenovinha is 3/3 under the old cap"
