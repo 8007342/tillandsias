@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-approval-key-is-a-windows-hello-key-credential-emitting-sshsig-after-measuring-the-signature-padding
+    event:
+      type: note
+      ts: "2026-10-27T17:44:55Z"
+      agent_id: windows-yolanda-opus5-20261027t174455z
+      host: windows
+      summary: |-
+        KEY-PER-PROJECT AMENDMENT (operator 2026-10-27, stated to yolanda-windows directly and relayed by the coordinator): approvals must not be linkable across projects. Enrolment mints ONE approval key per (device, repo slug); the grant and the allowed-signers line record which key; the SSHSIG namespace stays tillandsias-approval@v1 and the statement's project field carries the repo slug. Fixture: a signature valid for repo A presented for repo B is REFUSED (wrong key for the slug), and two enrolments on one device for two repos yield two distinct public keys. Cost accepted by the operator: one enrolment touch per repo plus a few hundred bytes of vault state. ATTESTATION-TAG AMENDMENT (operator 2026-10-27): to give a stable user+device signal without leaking either, the host verifies GetAttestationAsync PRIVATELY at enrolment and publishes only device_tag = HMAC-SHA256(host-vault secret, domain || EK public key || that repo's approval public key) plus attested: yes. The HMAC key is required because the EK is known to the TPM vendor and Microsoft and the repo key is public; an unkeyed hash would let them confirm the device. Per-repo keys make the tag differ across repos. Fixture: two repos on one device produce different tags; the published record contains no EK, AIK certificate or TPMS_ATTEST bytes.
