@@ -1352,10 +1352,45 @@ esac
 mod lane_adoption_tests {
     use super::*;
 
-    fn lane(tag: &str) -> LaneListenerKey {
-        (
+    /// ORDER 1901-8keq: each test runs under a SHORT `XDG_RUNTIME_DIR`, held
+    /// for its life under the env lock. Without it the lane socket lands under
+    /// macOS TMPDIR (/var/folders/<hash>/T/), past the 104-byte sun_path cap
+    /// ("path must be shorter than SUN_LEN"), and on Linux under the real
+    /// /run/user dir. Same remedy as 1581-sunl's short_runtime_root.
+    struct ShortRuntime {
+        _env: std::sync::MutexGuard<'static, ()>,
+        _root: tempfile::TempDir,
+        prior: Option<std::ffi::OsString>,
+    }
+
+    impl Drop for ShortRuntime {
+        fn drop(&mut self) {
+            match self.prior.take() {
+                Some(v) => unsafe { std::env::set_var("XDG_RUNTIME_DIR", v) },
+                None => unsafe { std::env::remove_var("XDG_RUNTIME_DIR") },
+            }
+        }
+    }
+
+    fn lane(tag: &str) -> (LaneListenerKey, ShortRuntime) {
+        let env = crate::test_support::env_lock();
+        let root = tempfile::Builder::new()
+            .prefix("tm")
+            .tempdir_in("/tmp")
+            .expect("short runtime root under /tmp");
+        let prior = std::env::var_os("XDG_RUNTIME_DIR");
+        unsafe { std::env::set_var("XDG_RUNTIME_DIR", root.path()) };
+        let key = (
             format!("eckw-{tag}-{}", std::process::id()),
             "w1".to_owned(),
+        );
+        (
+            key,
+            ShortRuntime {
+                _env: env,
+                _root: root,
+                prior,
+            },
         )
     }
 
@@ -1379,7 +1414,7 @@ mod lane_adoption_tests {
 
     #[test]
     fn a_marked_lane_whose_launcher_exited_answers_again_after_one_tray_tick() {
-        let key = lane("adopt");
+        let (key, _rt) = lane("adopt");
         let path = leave_stale_socket(&key);
         mark_lane_tray_owned(&key.0, &key.1).unwrap();
         // The marker's on-disk name is the contract between launcher and tray.
@@ -1395,7 +1430,7 @@ mod lane_adoption_tests {
 
     #[test]
     fn a_tick_leaves_a_lane_with_a_live_owner_alone() {
-        let key = lane("live");
+        let (key, _rt) = lane("live");
         let path = mcp_socket_path_for_lane(&key.0, &key.1);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         let _ = fs::remove_file(&path);
@@ -1409,7 +1444,7 @@ mod lane_adoption_tests {
 
     #[test]
     fn an_unmarked_stale_lane_is_not_adopted() {
-        let key = lane("unmarked");
+        let (key, _rt) = lane("unmarked");
         leave_stale_socket(&key);
         let adopted = adopt_marked_lanes_where(|l| *l == key);
         cleanup(&key);
@@ -1418,7 +1453,7 @@ mod lane_adoption_tests {
 
     #[test]
     fn a_marker_naming_another_lane_is_ignored() {
-        let key = lane("spoof");
+        let (key, _rt) = lane("spoof");
         let dir = mcp_socket_host_dir_for_lane(&key.0, &key.1);
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join(LANE_TRAY_MARKER), "default\ndefault\n").unwrap();
@@ -1429,7 +1464,7 @@ mod lane_adoption_tests {
 
     #[test]
     fn a_tray_owned_lane_is_not_refused_as_a_foreign_launcher() {
-        let key = lane("foreign");
+        let (key, _rt) = lane("foreign");
         let path = mcp_socket_path_for_lane(&key.0, &key.1);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         let _ = fs::remove_file(&path);
