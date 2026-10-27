@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-gets-a-per-forge-disk-scratch-layer-deleted-with-the-forge-and-tmpdir-points-there
+    field: context
+    value: 'Layer L1 of openspec/changes/forge-storage-single-root-and-disk-discipline design D2. Today TMPDIR=$PROJECT_CACHE/tmp in lib-common.sh, so build scratch lives in the restart-surviving cache volume tillandsias-forge-cache-<project> and grows without bound. Add a per-lane volume mounted at /home/forge/scratch, created beside prepare_forge_ram_workspace and removed beside remove_source_volume_if_present; move TMPDIR to it. Operator ruling 2026-10-25: scratch is generous, sized from host free disk at creation (a fraction of free space), with a floor; below the floor forge creation is refused with a named verdict.'
+    ts: "2026-10-25T21:18:16Z"
+    host: macuahuitl
+    replaces_sha256: "be4cb0a40e039fde00fa6fd3b6bc50c7e3306d4533deec8798fe303271ecfc56"
+
+events:
+  - packet_id: forge-gets-a-per-forge-disk-scratch-layer-deleted-with-the-forge-and-tmpdir-points-there
+    event:
+      type: note
+      ts: "2026-10-25T21:18:16Z"
+      host: macuahuitl
+      summary: |-
+        operator rulings 2026-10-25 (PR 650 amendment)

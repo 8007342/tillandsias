@@ -1,0 +1,17 @@
+packets:
+  - packet_id: preview-tls-publish-test-depends-on-host-uid
+    order: 1874-6uk3
+    status: ready
+    title: source_tuple_names_do_not_alias_and_tls_publish_is_loopback_only fails when the gate runs as root
+    related: [1809, 1794-rf3a]
+    summary: |-
+      The Windows host reported the test failing under a root WSL distro.
+      build_router_run_args calls preview_listener_args(running_as_root(), ...),
+      which by design (1794-rf3a) omits -p 127.0.0.1:{port}:8443 when rootful,
+      so the unconditional assert on that -p made the test depend on the uid.
+      Fix is test-only: assert both rootful and rootless branches of
+      preview_listener_args explicitly; no production change.
+    verifiable_closure: |-
+      cargo test -p tillandsias-headless --features host-services --bin tillandsias source_tuple passes both as a
+      normal user and as uid 0 (podman unshare), including
+      source_tuple_names_do_not_alias_and_tls_publish_is_loopback_only.

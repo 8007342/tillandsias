@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25 (web studio lanes). Code is cited by symbol, never by line.
+packets:
+  - packet_id: studio-publish-handoff-to-cloudflare-deploy-tool-explicit-only
+    order: 1866-9696
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [studio, cloudflare, deploy, security]
+    estimated_hours: 4
+    depends_on: [studio-lane-contract-registry-generic-launcher-write-guard-front-and-mcp-coedit, host-side-ensure-github-connected-cloudflare-worker-service-tool-so-agents-never-hold-cloudflare-credentials]
+    title: "A studio Publish control that hands a named revision to the 1853-qr4h deploy tool, only after explicit user confirmation, never building on save or push"
+    context: |
+      Operator direction 2026-10-25: "I want to author this website interactively" opens a visual web studio window on the live site, with live saves into the forge checkout and the agent co-editing; every studio is offered as a choice with one [Recommended]. Publishing goes through the 1853-qr4h deploy tool, deploy branch only, on explicit request; no build on push. Spec: openspec/changes/web-studio-lanes. Reuses run_opencode_web_mode plumbing (RouterRoute, tillandsias_otp::issue_session, send_issue_web_session, launch_opencode_web_browser, ensure_versioned_images, sse-keepalive-proxy.js, local_web_preview::publish).
+    exit_criteria:
+      - "A fixture against a fake deploy API asserts: studio_publish_request without user confirmation stays pending and calls nothing; fifty saves plus a work-branch push record zero builds; and a confirmed publish moves only the deploy branch to the named revision, with no credential in any forge-visible output. Pre-fix result: FAILS, no studio publish path exists."
+    verifiable_closure: "A fixture against a fake deploy API asserts: studio_publish_request without user confirmation stays pending and calls nothing; fifty saves plus a work-branch push record zero builds; and a confirmed publish moves only the deploy branch to the named revision, with no credential in any forge-visible output. Pre-fix result: FAILS, no studio publish path exists."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the fixture named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-25.
+    events:
+      - type: filed
+        ts: "2026-10-25T16:00:07Z"
+        host: macuahuitl
+        summary: "filed ready from the operator direction of 2026-10-25"

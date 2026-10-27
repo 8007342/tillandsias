@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+  - packet_id: tray-warns-loudly-when-the-host-has-no-disk-backed-swap-for-the-forge-ram-layers
+    order: 1877-maph
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [tray, swap, memory, linux]
+    estimated_hours: 3
+    title: "The tray shows a loud warning when the computer has no disk swap to back the forges' memory"
+    context: |
+      Swap policy D3 of openspec/changes/forge-storage-single-root-and-disk-discipline. tmpfs (source workspace, /tmp) needs a disk swap to overflow into; zram is compressed RAM and does not count. macuahuitl today has only 8 GiB zram. The tray has no swap status at all. Show a persistent warning status line and icon state naming 'tillandsias --swap on' (swap_cmd) when disk swap is below max(8 GiB, sum of running forge L0 caps). Never block launch.
+    exit_criteria:
+      - "A tray status test feeds a /proc/swaps with only /dev/zram0, and one with no swap, and asserts the swap warning line naming 'tillandsias --swap on'; a third arm with a 16 GiB file swap asserts no warning. Pre-fix result: FAILS, the tray computes no swap status."
+    verifiable_closure: "A tray status test feeds a /proc/swaps with only /dev/zram0, and one with no swap, and asserts the swap warning line naming 'tillandsias --swap on'; a third arm with a 16 GiB file swap asserts no warning. Pre-fix result: FAILS, the tray computes no swap status."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then implement per openspec/changes/forge-storage-single-root-and-disk-discipline.
+    provenance: |
+      Filed at operator request 2026-10-25 (single-root containment and disk discipline); spec openspec/changes/forge-storage-single-root-and-disk-discipline.
+    events:
+      - type: filed
+        ts: "2026-10-25T14:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator request of 2026-10-25"

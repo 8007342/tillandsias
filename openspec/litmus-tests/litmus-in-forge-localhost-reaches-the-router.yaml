@@ -1,0 +1,45 @@
+# @trace spec:subdomain-routing-via-reverse-proxy, spec:proxy-container
+# @trace order:1863-4knc
+#
+# Inside a forge, a *.localhost name fetched through the enclave proxy must come
+# back as the ROUTER's own answer. It came back as a Squid 502: squid.conf's
+# `dns_nameservers 1.1.1.1 8.8.8.8` replaced the container's aardvark resolver,
+# so the cache_peer `router` never resolved and every .localhost request ended
+# HIER_NONE. Measured 2026-10-25 on lenovinha against the live router: with the
+# line, 502; without it, FIRSTUP_PARENT/<router ip> and the router's answer.
+#
+# Step 1 pins the config (instant). Step 2 is the one-curl probe: from an
+# enclave container it asks the RUNNING proxy for an unrouted name and expects
+# the router's `no route` body. RUNTIME phase: it needs the live tillandsias-proxy
+# and tillandsias-router and the forge image; it SKIPS by name elsewhere.
+name: litmus:in-forge-localhost-reaches-the-router
+spec: subdomain-routing-via-reverse-proxy
+phase: runtime
+status: active
+description: A forge's *.localhost request through the proxy reaches the router and returns the router's own answer, not a Squid 502
+severity: medium
+size: quick
+preconditions:
+  - podman with running tillandsias-proxy and tillandsias-router containers on tillandsias-enclave, and the localhost/tillandsias-forge:latest image; any of them missing SKIPS step 2 by name
+critical_path:
+  - step: "Req: the proxy resolves through the container's own resolver (no dns_nameservers directive), so the router peer resolves"
+    command: "if grep -qE '^[[:space:]]*dns_nameservers' images/proxy/squid.conf; then echo 'FAIL: squid.conf sets dns_nameservers; the router peer will not resolve'; exit 1; fi; grep -qE '^cache_peer router parent 8080 ' images/proxy/squid.conf && echo ok:squid-router-peer-resolvable"
+    timeout_ms: 5000
+    success_pattern: "ok:squid-router-peer-resolvable"
+  - step: "One-curl probe: an unrouted .localhost name through the live proxy returns the router's no-route body"
+    command: "for c in tillandsias-proxy tillandsias-router; do podman container exists $c || { echo \"skip:in-forge-localhost:no-$c\"; exit 0; }; done; podman image exists localhost/tillandsias-forge:latest || { echo skip:in-forge-localhost:no-forge-image; exit 0; }; out=$(podman run --rm --network tillandsias-enclave --entrypoint curl localhost/tillandsias-forge:latest -sS -m 10 -x http://proxy:3128 http://litmus-unrouted.tillandsias.localhost/ 2>&1); case \"$out\" in *tillandsias-router*) echo ok:in-forge-localhost-reaches-router;; *) echo \"FAIL: the proxy did not reach the router: $out\" ; exit 1;; esac"
+    timeout_ms: 60000
+    success_pattern: "ok:in-forge-localhost-reaches-router|skip:in-forge-localhost"
+observability:
+  traces:
+    - "@trace spec:subdomain-routing-via-reverse-proxy"
+  expected_log: "a forge's .localhost request reaches the router"
+  log_fields:
+    spec: "subdomain-routing-via-reverse-proxy"
+    test: "in-forge-localhost-reaches-the-router"
+rollback:
+  on_failure: >
+    The proxy again resolves through fixed public nameservers, or the router
+    peer moved. Remove dns_nameservers from images/proxy/squid.conf and keep
+    `cache_peer router parent 8080`.
+  command: "grep -nE 'dns_nameservers|cache_peer router' images/proxy/squid.conf"

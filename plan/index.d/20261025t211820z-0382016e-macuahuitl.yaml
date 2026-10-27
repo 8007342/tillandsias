@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-quality-long-or-large-download-image-run-returns-consent-required-with-a-host-minted-single-use-token
+    field: title
+    value: Image runs start on the smallest tier; each result offers exactly one tier larger with a curated sentence (no sizes) and a host-minted single-use token, and a larger tier runs only when re-called with it
+    ts: "2026-10-25T21:18:20Z"
+    host: macuahuitl
+    replaces_sha256: "93684995c70a906c81469ea652d72bf0dbdec67ceddfa2084ae0c84100f731e1"
+
+events:
+  - packet_id: a-quality-long-or-large-download-image-run-returns-consent-required-with-a-host-minted-single-use-token
+    event:
+      type: note
+      ts: "2026-10-25T21:18:20Z"
+      host: macuahuitl
+      summary: |-
+        operator-rulings-2026-10-25

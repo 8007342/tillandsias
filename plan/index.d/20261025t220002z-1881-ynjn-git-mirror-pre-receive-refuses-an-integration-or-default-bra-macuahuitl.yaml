@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+- packet_id: git-mirror-pre-receive-refuses-an-integration-or-default-branch-update-without-a-verified-approval-note-in-the-same-push
+  order: 1881-ynjn
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - approval
+  - security
+  - cost-gate
+  - linux
+  estimated_hours: 5
+  depends_on:
+  - approval-broker-signs-an-action-bound-statement-after-an-os-verified-check-and-records-it-as-a-git-note
+  title: The git mirror refuses a push to an integration branch unless it carries a valid approval
+  context: Design D5 of openspec/changes/os-verified-approval-gates. In images/git/pre-receive-hook.sh, for refs equal to DISC_INTEGRATION or DISC_DEFAULT (from discipline_parse, never a constant), read the note for NEWSHA from the pushed refs/notes/tillandsias/approvals tip, match target/from/to/project and expiry, and verify with ssh-keygen -Y verify against allowed-signers kept in mirror state. Enforcement follows the seed word (warn, enforced); refuse before the relay. work/* refs are never gated.
+  exit_criteria:
+  - 'Extend scripts/test-pre-receive-yaml-gate.sh (or a sibling fixture) with arms: push to the seeded integration branch with no note is REFUSED and nothing reaches the fake upstream; with an expired note REFUSED; with a note for a different sha REFUSED; with a valid note ACCEPTED and relayed; push to work/<order> ACCEPTED with no note. Pre-fix result: FAILS, the unapproved integration push is accepted and relayed today.'
+  verifiable_closure: 'Extend scripts/test-pre-receive-yaml-gate.sh (or a sibling fixture) with arms: push to the seeded integration branch with no note is REFUSED and nothing reaches the fake upstream; with an expired note REFUSED; with a note for a different sha REFUSED; with a valid note ACCEPTED and relayed; push to work/<order> ACCEPTED with no note. Pre-fix result: FAILS, the unapproved integration push is accepted and relayed today.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+
+    '
+  next_action: 'Nothing is done. Write the check named in the exit criterion first and watch it fail on today''s code, then implement per openspec/changes/os-verified-approval-gates.
+
+    '
+  provenance: 'Filed at operator request 2026-10-25 (OS-verified approval gates direction).
+
+    '
+  events:
+  - type: filed
+    ts: '2026-10-25T22:00:00Z'
+    host: macuahuitl
+    summary: filed ready from the operator request of 2026-10-25

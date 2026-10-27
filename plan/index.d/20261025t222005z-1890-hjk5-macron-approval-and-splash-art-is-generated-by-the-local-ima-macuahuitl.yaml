@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl from operator rulings 2026-10-25. Code is cited by symbol, never by line.
+packets:
+- packet_id: macron-approval-and-splash-art-is-generated-by-the-local-image-generation-tool-and-ships-only-after-operator-approval
+  order: 1890-hjk5
+  status: blocked
+  kind: feature
+  priority: p3
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - approval
+  - security
+  - cost-gate
+  estimated_hours: 5
+  depends_on: []
+  related:
+  - 1874-kkrc
+  - 1883-c8xr
+  title: The Mācron art for approval and splash windows is made by our own image generator and ships only after the operator approves it
+  context: 'Design R7 of openspec/changes/os-verified-approval-gates. BLOCKED until 1874-kkrc (image.generate on the host MCP socket, change local-image-generation, PR #649) lands. One prompt per action kind and splash step, built from the macron.dev canon prompt kernel and negative prompts; outputs staged under a review directory; publishing an asset is a gated action of class publish-asset; approved assets are committed with their prompt and seed.'
+  exit_criteria:
+  - 'A test asserts every gate-table action kind and every splash step has a committed asset whose sidecar records the prompt, seed, model and an approval-journal reference, and that an asset without an approval reference is refused by the asset check. Pre-fix result: FAILS, no assets, sidecars or asset check exist.'
+  verifiable_closure: 'A test asserts every gate-table action kind and every splash step has a committed asset whose sidecar records the prompt, seed, model and an approval-journal reference, and that an asset without an approval reference is refused by the asset check. Pre-fix result: FAILS, no assets, sidecars or asset check exist.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+
+    '
+  next_action: 'Blocked on 1874-kkrc (image.generate). When it lands: write the asset check first and watch it fail, then generate.
+
+    '
+  provenance: 'Filed from the operator rulings on PR #651, 2026-10-25.
+
+    '
+  events:
+  - type: filed
+    ts: '2026-10-25T22:20:00Z'
+    host: macuahuitl
+    summary: filed from the operator rulings of 2026-10-25

@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: remove-launch-helpers-left-dead-by-776-jcf3
+    order: 1852-a2qj
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [rust, tray]
+    estimated_hours: 1
+    title: |
+      remove launch helpers left dead by 776-jcf3
+    context: |
+      After 776-jcf3 (PR 637) retired the local launch, gnome_default_terminal, argv_prefix_for and executable_on_path in crates/tillandsias-headless/src/main.rs lost their last caller, and clippy with --features tray,listen-vsock -D warnings fails on linux-next. The rest of the host-checkout cleanup stays with 1851-rug4.
+    exit_criteria:
+      - 'cargo clippy --features tray,listen-vsock -D warnings passes on the merge'
+    verifiable_closure: |
+      unscoreable: the deliverable is the clippy line above passing on the land merge.
+    provenance: |
+      Filed by lenovinha at the coordinator's direction, 2026-10-24.
+    events:
+      - type: filed
+        ts: "2026-10-24T21:08:58Z"
+        host: lenovinha
+        summary: |-
+          p1: trunk clippy red under the tray feature; remove the three launch helpers left dead by 776-jcf3.

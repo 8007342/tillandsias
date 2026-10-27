@@ -811,7 +811,10 @@ fn vault_tls_leaf_needs_refresh(
     }
 }
 
-fn ensure_vault_tls_leaf(certs_dir: &std::path::Path, debug: bool) -> Result<(), String> {
+pub(crate) fn ensure_vault_tls_leaf(
+    certs_dir: &std::path::Path,
+    debug: bool,
+) -> Result<(), String> {
     let ca_cert = certs_dir.join("intermediate.crt");
     let ca_key = certs_dir.join("intermediate.key");
     let cert = vault_tls_cert(certs_dir);
@@ -868,7 +871,11 @@ fn ensure_vault_tls_leaf(certs_dir: &std::path::Path, debug: bool) -> Result<(),
     }
 
     let req_status = Command::new("openssl")
-        .args(["req", "-newkey", "rsa:2048", "-nodes", "-keyout"])
+        .args(["req", "-newkey", "rsa:2048"])
+        // 1898-hyhf: `-nodes` only onto the tmpfs store; elsewhere encrypted.
+        .args(crate::ca_key_store::key_out_args())
+        .envs(crate::ca_key_store::pass_env())
+        .arg("-keyout")
         .arg(&tmp_key)
         .arg("-out")
         .arg(&csr)
@@ -894,6 +901,8 @@ fn ensure_vault_tls_leaf(certs_dir: &std::path::Path, debug: bool) -> Result<(),
         .arg(&ca_cert)
         .arg("-CAkey")
         .arg(&ca_key)
+        .args(crate::ca_key_store::key_in_args())
+        .envs(crate::ca_key_store::pass_env())
         .args([
             "-CAcreateserial",
             "-days",
@@ -4500,8 +4509,9 @@ pub(crate) fn create_file_runtime_secret(
     path: &std::path::Path,
     debug: bool,
 ) -> Result<(), String> {
-    let mut contents =
-        fs::read(path).map_err(|e| format!("read secret source {}: {e}", path.display()))?;
+    // 1898-hyhf: a key resting encrypted is decrypted in memory only.
+    let mut contents = crate::ca_key_store::read_key(path)
+        .map_err(|e| format!("read secret source {}: {e}", path.display()))?;
     if debug {
         eprintln!(
             "[tillandsias-vault] writing runtime secret {name} from {}",
