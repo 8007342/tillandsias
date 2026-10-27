@@ -1,6 +1,6 @@
-# @trace spec:image-generation, order:1874-bair
+# @trace spec:accel-capability-probe, order:1874-bair (rebind to image-generation when that change is archived)
 name: litmus:imagegen-tier-ladder-from-the-envelope
-spec: image-generation
+spec: accel-capability-probe
 phase: pre-build
 description: The imagegen ladder starts every host at I0, classifies four accel envelopes to ceilings I0..I3, and carries no non-permissive licence
 severity: medium
@@ -17,10 +17,10 @@ critical_path:
 
 observability:
   traces:
-    - "@trace spec:image-generation"
+    - "@trace spec:accel-capability-probe"
   expected_log: "test result: ok"
   log_fields:
-    spec: "image-generation"
+    spec: "accel-capability-probe"
     test: "imagegen-tier-ladder-from-the-envelope"
 
 rollback:
