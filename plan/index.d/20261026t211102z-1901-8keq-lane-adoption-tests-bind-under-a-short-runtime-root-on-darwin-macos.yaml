@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air at the coordinator's request 2026-10-26. Code is cited by symbol, never by line.
+packets:
+- packet_id: lane-adoption-tests-bind-under-a-short-runtime-root-on-darwin
+  order: 1901-8keq
+  status: in_progress
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags:
+  - tests
+  - darwin
+  - mcp-socket
+  estimated_hours: 1
+  related:
+  - 1863-eckw
+  - 1581-sunl
+  title: The lane adoption tests bind under a short runtime root, so they run on macOS
+  context: 'mcp_socket::lane_adoption_tests, added with 1863-eckw, never set XDG_RUNTIME_DIR. On darwin the lane socket landed under TMPDIR (/var/folders/<hash>/T/), past the 104-byte sun_path cap, and four tests panicked with "path must be shorter than SUN_LEN". This made every darwin full gate red (measured on work/1879-fi7q, 2026-10-26). On Linux the tests wrote under the real /run/user dir. The fix holds a short /tmp runtime root under the env lock for each test, the 1581-sunl remedy. It does not cfg-skip, so macOS keeps lane-adoption coverage.'
+  exit_criteria:
+  - 'cargo test -p tillandsias-headless --features tray,listen-vsock --bin tillandsias lane_adoption_tests passes on darwin and on Linux. Pre-fix result: FAILS on darwin, 4 of 5 tests panic with "path must be shorter than SUN_LEN".'
+  verifiable_closure: 'cargo test -p tillandsias-headless --features tray,listen-vsock --bin tillandsias lane_adoption_tests passes on darwin and on Linux. Pre-fix result: FAILS on darwin, 4 of 5 tests panic with "path must be shorter than SUN_LEN".'
+  provenance: 'Filed at the coordinator (macuahuitl-fedora) request 2026-10-26, after the darwin gate for #673 failed on trunk tests.'
+  events:
+  - type: filed
+    ts: '2026-10-26T21:11:02Z'
+    host: tlatoanis-macbook-air
+    summary: filed and claimed in_progress on work/1901-8keq; the darwin repro is the 1879-fi7q gate transcript

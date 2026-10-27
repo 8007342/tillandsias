@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: opencode-web-session-loses-its-lane-mcp-socket-when-the-launching-process-exits
+    field: verifiable_closure
+    value: litmus:lane-socket-survives-launcher-exit
+    ts: "2026-10-25T23:39:09Z"
+    host: lenovinha
+    replaces_sha256: "e32e8de7722e4256f90577fdea20517d5ecd14ffe50501f8682d1ad1a7252f62"
+
+events:
+  - packet_id: opencode-web-session-loses-its-lane-mcp-socket-when-the-launching-process-exits
+    event:
+      type: note
+      ts: "2026-10-25T23:39:09Z"
+      host: lenovinha
+      summary: |-
+        the fixture is a cargo test plus a python probe, not the shell script the filer named (shell-to-lua)

@@ -858,6 +858,101 @@ pub(crate) fn reserved_lane_from(value: Option<&str>) -> Option<LaneListenerKey>
     Some((project.to_owned(), instance.to_owned()))
 }
 
+/// 1863-eckw: the file in a lane's socket dir that hands the lane to the tray.
+/// A web-mode forge outlives the CLI that launched it, so a listener bound in
+/// that CLI died with it and left a socket that refused every connection for
+/// the rest of the session. A launcher whose forge outlives it writes this
+/// marker (`<project>\n<instance>\n`) instead of binding, and the tray's
+/// adoption tick binds the lane and rebinds it after any owner dies.
+pub(crate) const LANE_TRAY_MARKER: &str = "tray-owned";
+
+/// How often the tray's adoption tick looks for an unserved marked lane.
+#[cfg(feature = "tray")]
+pub(crate) const LANE_ADOPT_TICK: std::time::Duration = std::time::Duration::from_millis(500);
+
+/// Hand lane `(project, instance)` to the tray (see [`LANE_TRAY_MARKER`]).
+#[cfg_attr(any(test, not(feature = "host-services")), allow(dead_code))]
+pub(crate) fn mark_lane_tray_owned(project: &str, instance: &str) -> Result<(), String> {
+    let dir = mcp_socket_host_dir_for_lane(project, instance);
+    fs::create_dir_all(&dir).map_err(|e| format!("failed to create {}: {e}", dir.display()))?;
+    let marker = dir.join(LANE_TRAY_MARKER);
+    fs::write(&marker, format!("{project}\n{}\n", lane_instance(instance)))
+        .map_err(|e| format!("failed to write {}: {e}", marker.display()))?;
+    let _ = fs::set_permissions(&marker, fs::Permissions::from_mode(0o600));
+    Ok(())
+}
+
+fn lane_instance(instance: &str) -> &str {
+    if instance.trim().is_empty() {
+        "default"
+    } else {
+        instance.trim()
+    }
+}
+
+/// Whether something accepts on lane `(project, instance)`'s socket.
+pub(crate) fn lane_accepting(project: &str, instance: &str) -> bool {
+    UnixStream::connect(mcp_socket_path_for_lane(project, instance)).is_ok()
+}
+
+/// The lane a socket dir's marker names, when it names exactly the dir it
+/// sits in: a marker cannot point the tray at another lane's socket.
+fn marked_lane(dir: &std::path::Path) -> Option<LaneListenerKey> {
+    let text = fs::read_to_string(dir.join(LANE_TRAY_MARKER)).ok()?;
+    let mut lines = text.lines();
+    let (project, instance) = (lines.next()?.trim(), lines.next()?.trim());
+    if project.is_empty() || instance.is_empty() || lines.next().is_some() {
+        return None;
+    }
+    let plain = |c: &str| !c.contains('/') && c != "." && c != "..";
+    if !plain(project) || !plain(instance) || mcp_socket_host_dir_for_lane(project, instance) != dir
+    {
+        return None;
+    }
+    Some((project.to_owned(), instance.to_owned()))
+}
+
+/// One adoption tick: bind every marked lane that nothing accepts on (never
+/// bound, or its owner died and left a refusing socket). A lane with a live
+/// owner is left alone. Returns the lanes this tick bound.
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub(crate) fn adopt_marked_lanes() -> Vec<LaneListenerKey> {
+    adopt_marked_lanes_where(|_| true)
+}
+
+/// [`adopt_marked_lanes`] limited to the lanes `wanted` accepts, so a test
+/// adopts only its own lane and never a live session's.
+pub(crate) fn adopt_marked_lanes_where(
+    wanted: impl Fn(&LaneListenerKey) -> bool,
+) -> Vec<LaneListenerKey> {
+    let Ok(entries) = fs::read_dir(mcp_socket_base_dir()) else {
+        return Vec::new();
+    };
+    let mut adopted = Vec::new();
+    for entry in entries.flatten() {
+        let Some((project, instance)) = marked_lane(&entry.path()) else {
+            continue;
+        };
+        if !wanted(&(project.clone(), instance.clone())) {
+            continue;
+        }
+        if lane_accepting(&project, &instance) {
+            continue;
+        }
+        // A registry entry with a refusing socket is a listener this process
+        // lost; forget it so the bind below is attempted.
+        lane_listener_registry()
+            .lock()
+            .expect("lane registry lock")
+            .remove(&(project.clone(), instance.clone()));
+        match start_mcp_socket_server_for_lane(&project, &instance) {
+            Ok(()) => adopted.push((project, instance)),
+            Err(e) => warn!(project, instance, error = %e, "1863-eckw: lane adoption failed"),
+        }
+    }
+    adopted
+}
+
 /// 1783-k5hm: the lane's socket path when ANOTHER live process serves it,
 /// the exact case in which [`start_mcp_socket_server_for_lane`] refuses
 /// ("already has a live owner"). Asked before a launch touches podman, so
@@ -878,6 +973,11 @@ pub(crate) fn lane_socket_foreign_owner(project: &str, instance: &str) -> Option
         return None;
     }
     let path = mcp_socket_path_for_lane(project, instance);
+    // 1863-eckw: the tray serves a marked lane for whichever launcher marked
+    // it; that is not a second launcher holding the lane.
+    if marked_lane(path.parent()?).is_some() {
+        return None;
+    }
     UnixStream::connect(&path).ok().map(|_| path)
 }
 
@@ -1245,5 +1345,100 @@ esac
             );
             assert_eq!(refresh[0]["scope"], "global");
         }
+    }
+}
+
+#[cfg(test)]
+mod lane_adoption_tests {
+    use super::*;
+
+    fn lane(tag: &str) -> LaneListenerKey {
+        (
+            format!("eckw-{tag}-{}", std::process::id()),
+            "w1".to_owned(),
+        )
+    }
+
+    /// The state a web-mode session was left in on 2026-10-25: the launching
+    /// CLI bound the lane and exited, leaving a socket file nobody listens on.
+    fn leave_stale_socket((project, instance): &LaneListenerKey) -> PathBuf {
+        let path = mcp_socket_path_for_lane(project, instance);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let _ = fs::remove_file(&path);
+        drop(UnixListener::bind(&path).unwrap());
+        assert!(
+            matches!(UnixStream::connect(&path), Err(e) if e.kind() == std::io::ErrorKind::ConnectionRefused),
+            "the fixture must reproduce the refusing socket"
+        );
+        path
+    }
+
+    fn cleanup((project, instance): &LaneListenerKey) {
+        let _ = fs::remove_dir_all(mcp_socket_host_dir_for_lane(project, instance));
+    }
+
+    #[test]
+    fn a_marked_lane_whose_launcher_exited_answers_again_after_one_tray_tick() {
+        let key = lane("adopt");
+        let path = leave_stale_socket(&key);
+        mark_lane_tray_owned(&key.0, &key.1).unwrap();
+        // The marker's on-disk name is the contract between launcher and tray.
+        assert!(path.parent().unwrap().join("tray-owned").is_file());
+
+        let adopted = adopt_marked_lanes_where(|l| *l == key);
+
+        let answered = UnixStream::connect(&path).is_ok();
+        cleanup(&key);
+        assert_eq!(adopted, vec![key.clone()]);
+        assert!(answered, "pre-fix: connect() on the lane socket is refused");
+    }
+
+    #[test]
+    fn a_tick_leaves_a_lane_with_a_live_owner_alone() {
+        let key = lane("live");
+        let path = mcp_socket_path_for_lane(&key.0, &key.1);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let _ = fs::remove_file(&path);
+        let _owner = UnixListener::bind(&path).unwrap();
+        mark_lane_tray_owned(&key.0, &key.1).unwrap();
+
+        let adopted = adopt_marked_lanes_where(|l| *l == key);
+        cleanup(&key);
+        assert!(adopted.is_empty(), "{adopted:?}");
+    }
+
+    #[test]
+    fn an_unmarked_stale_lane_is_not_adopted() {
+        let key = lane("unmarked");
+        leave_stale_socket(&key);
+        let adopted = adopt_marked_lanes_where(|l| *l == key);
+        cleanup(&key);
+        assert!(adopted.is_empty(), "{adopted:?}");
+    }
+
+    #[test]
+    fn a_marker_naming_another_lane_is_ignored() {
+        let key = lane("spoof");
+        let dir = mcp_socket_host_dir_for_lane(&key.0, &key.1);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(LANE_TRAY_MARKER), "default\ndefault\n").unwrap();
+        let marked = marked_lane(&dir);
+        cleanup(&key);
+        assert_eq!(marked, None);
+    }
+
+    #[test]
+    fn a_tray_owned_lane_is_not_refused_as_a_foreign_launcher() {
+        let key = lane("foreign");
+        let path = mcp_socket_path_for_lane(&key.0, &key.1);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let _ = fs::remove_file(&path);
+        let _owner = UnixListener::bind(&path).unwrap();
+        let unmarked = lane_socket_foreign_owner(&key.0, &key.1);
+        mark_lane_tray_owned(&key.0, &key.1).unwrap();
+        let marked = lane_socket_foreign_owner(&key.0, &key.1);
+        cleanup(&key);
+        assert_eq!(unmarked, Some(path));
+        assert_eq!(marked, None);
     }
 }

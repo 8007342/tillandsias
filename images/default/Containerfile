@@ -100,6 +100,9 @@ COPY lib-inference-state.sh /usr/local/lib/tillandsias/lib-inference-state.sh
 # @trace order:1264-s4id — push capability (can this forge push to THIS repo?),
 # read from the mirror's verdict; sourced by lib-common.sh from its directory.
 COPY lib-push-capability.sh /usr/local/lib/tillandsias/lib-push-capability.sh
+# @trace order:1874-6p63 — the lane MCP socket's state, side-effect free.
+# Sourced by lib-common.sh from its own directory and by tillandsias-doctor.
+COPY lib-lane.sh /usr/local/lib/tillandsias/lib-lane.sh
 # @trace order:569 — expert capability skew (now vs after-relaunch vs blocked).
 # Sourced by BOTH lib-common.sh (from its own directory) and the forge-plan MCP
 # wrapper (which cannot source lib-common.sh: that file hard-fails on the vendor
@@ -233,14 +236,21 @@ COPY cli/tillandsias-models /opt/agents/tillandsias-cli/bin/tillandsias-models
 # adapter (images/inference/tiers/); tillandsias-models' tier_for reads them.
 COPY cli/tiers/ /opt/agents/tillandsias-cli/share/tiers/
 COPY cli/tellme /opt/agents/tillandsias-cli/bin/tellme
+# 1874-6p63: one command reporting lane, MCP, router, toolchain and cache health.
+COPY cli/tillandsias-doctor /opt/agents/tillandsias-cli/bin/tillandsias-doctor
 # 1637-5765: `flutter` runs in the shared tillandsias-flutter sibling image,
 # prepared on first use; this is only the client (python3, the lane socket).
 COPY cli/flutter /opt/agents/tillandsias-cli/bin/flutter
+# 1874-pn3s: `flutter` is now a shell front that runs this lane client when the
+# lane is ready, else a cached SDK from the project cache, else a typed refusal.
+COPY cli/flutter-lane /opt/agents/tillandsias-cli/libexec/flutter-lane
+RUN chmod +x /opt/agents/tillandsias-cli/libexec/flutter-lane
 RUN chmod +x /opt/agents/tillandsias-cli/bin/* \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-inventory /usr/local/bin/tillandsias-inventory \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-services /usr/local/bin/tillandsias-services \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-models /usr/local/bin/tillandsias-models \
     && ln -sf /opt/agents/tillandsias-cli/bin/tellme /usr/local/bin/tellme \
+    && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-doctor /usr/local/bin/tillandsias-doctor \
     && ln -sf /opt/agents/tillandsias-cli/bin/flutter /usr/local/bin/flutter
 
 # ── Skills mapping ─────────────────────────────────────────────
