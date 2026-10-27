@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tray-adopts-orphaned-web-forge-lane-sockets-and-forge-names-a-stale-lane
+    field: status
+    value: completed
+    ts: "2026-10-27T21:35:03Z"
+    host: lenovinha
+
+events:
+  - packet_id: tray-adopts-orphaned-web-forge-lane-sockets-and-forge-names-a-stale-lane
+    event:
+      type: completed
+      ts: "2026-10-27T21:35:03Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: 45be977bea9e584891bbabbd51e37a797da8ec36
+  - packet_id: tray-adopts-orphaned-web-forge-lane-sockets-and-forge-names-a-stale-lane
+    event:
+      type: note
+      ts: "2026-10-27T21:35:03Z"
+      host: lenovinha
+      summary: |-
+        landed-but-open triage 2026-10-27: litmus lane-socket-survives-launcher-exit on trunk with the Lua lane-state probe 45be977be plus adoption tests from 1863-eckw; landed via land 659
