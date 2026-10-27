@@ -1,4 +1,4 @@
-# @trace spec:local-image-generation, order:1874-bair
+# @trace spec:image-generation, order:1874-bair
 # THE I0-I3 IMAGEGEN LADDER. Declarative data: TAB-separated, read like
 # images/inference/tiers/tier-table.tsv, no interpreter.
 #
