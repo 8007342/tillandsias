@@ -34358,7 +34358,8 @@ esac
     /// and `--init` never builds it.
     #[test]
     fn imagegen_resolves_with_a_pinned_sd_cpp_tag_and_is_not_an_init_image() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let root = Path::new(&std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"))
+            .join("../..");
         let (containerfile, context) = image_specs(&root, "imagegen").expect("imagegen is known");
         assert!(
             context.ends_with("images/imagegen"),
