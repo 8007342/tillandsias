@@ -1345,6 +1345,31 @@ impl Ledger {
         out
     }
 
+    /// ORDER 1903-sj5t — an order token that names two distinct packet_ids.
+    /// `check_integrity` proves packet_ids unique, not orders, so a packet
+    /// filed under an order another packet already holds passed as "ids
+    /// unique" (lenovinha's 1874-4sqt misfile, 2026-10-27). One line per order:
+    /// `<order>: <id>, <id>[, …]`, ids sorted.
+    pub fn duplicate_order_tokens(&self) -> Vec<String> {
+        let mut by_order: std::collections::BTreeMap<&str, std::collections::BTreeSet<String>> =
+            std::collections::BTreeMap::new();
+        for p in &self.packets {
+            if let Some(order) = str_field(p, "order") {
+                by_order.entry(order).or_default().insert(self.id_of(p));
+            }
+        }
+        by_order
+            .into_iter()
+            .filter(|(_, ids)| ids.len() > 1)
+            .map(|(order, ids)| {
+                format!(
+                    "{order}: {}",
+                    ids.into_iter().collect::<Vec<_>>().join(", ")
+                )
+            })
+            .collect()
+    }
+
     pub fn validate_against_schema(&self, schema: &Schema) -> Vec<String> {
         let mut violations = Vec::new();
         for p in &self.packets {
