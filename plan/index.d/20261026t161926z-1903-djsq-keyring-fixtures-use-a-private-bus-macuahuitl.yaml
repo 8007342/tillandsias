@@ -1,0 +1,54 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl (opus5 sub-agent) at the coordinator's request.
+packets:
+  - packet_id: gate-keyring-fixtures-run-on-a-private-session-bus-and-the-live-guard-never-kills-a-keyring-client
+    order: 1903-djsq
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [credentials, keyring, gate, fixtures]
+    size: M
+    implementer_tier: opus
+    related: [1265-8qr6, 1347-r9g8]
+    title: "gate keyring fixtures run on a private session bus, and the credential guard abandons a hung keyring client instead of killing it"
+    context: |
+      EVIDENCE. gnome-keyring-daemon aborted during full gates (./build.sh --check):
+      macuahuitl 2026-10-25 20:36 and 20:51 PDT and 2026-10-26 02:01 PDT;
+      lenovinha 2026-10-26 01:03 PDT. Signature: "Bail out! gdbusconnection.c:4765
+      invoke_get_property_in_idle_cb (error != NULL)", the 1265-8qr6 shape. The
+      daemon restarts LOCKED, so gh hangs and pushes and land-queue pushes fail
+      until the operator unlocks.
+      MEASURED CAUSE. The credential fixtures stub with PATH="$stub:$PATH" and
+      inherited the operator's DBUS_SESSION_BUS_ADDRESS, so anything not stubbed
+      fell through to the real busctl/gh/secret-tool. Against a sentinel
+      dbus-daemon on origin/linux-next: test-check-credential-channel.sh,
+      test-credential-channel-survives-a-killed-probe.sh,
+      test-credential-cold-state-probe.sh and test-credential-channel-affordances.sh
+      all produced NameOwnerChanged events on
+      the bus they inherited (counts in the PR). The live guard also bounded
+      gh auth status, gh api user and git credential fill with timeout(1),
+      which SIGTERMs the client process group mid-call.
+      Rust: the only keyring::Entry is vault_bootstrap::keyring_entry, which is
+      the keyring mock under cfg(test); ca_key_store takes injected read/write
+      closures; secrets::read_github_token (gh auth token) has no test caller.
+    exit_criteria:
+      - "scripts/test-keyring-fixtures-use-a-private-bus.sh (build.sh --check, after the credential-channel fixture) runs every gate-reachable keyring fixture with DBUS_SESSION_BUS_ADDRESS pointed at a sentinel dbus-daemon and reports zero NameOwnerChanged events per fixture, with a control arm proving a bare busctl registers. Pre-fix result: FAILS (on origin/linux-next four fixtures reach the sentinel: test-check-credential-channel 38 events, test-credential-cold-state-probe 30, test-credential-channel-survives-a-killed-probe 4, test-credential-channel-affordances 4; all eight fail the static arm)."
+      - "check-credential-channel.sh never runs gh or git credential fill under timeout(1); a hung client is abandoned (rc 124) and test-credential-channel-survives-a-killed-probe.sh arm 3 still answers in bounded time with one verdict."
+    verifiable_closure: "The guard fixture above passes on the fix and fails on origin/linux-next; no gnome-keyring-daemon abort in the journal across the next three full gates on macuahuitl and lenovinha."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the deliverable is the guard itself, scripts/test-keyring-fixtures-use-a-private-bus.sh, bound into build.sh --check in the same commit (1136-n8sh); the journal half (no abort across three gates) is a host observation no litmus can score.
+    next_action: >
+      Land work/1903-djsq; then watch journalctl --user -u gnome-keyring-daemon
+      (or coredumpctl list gnome-keyring-daemon) across three full gates on
+      macuahuitl and lenovinha. A further abort means a gate path outside this
+      fixture list still reaches the real bus: run the sentinel guard with that
+      step's script added to FIXTURES.
+    provenance: |
+      Coordinator order 2026-10-26, implemented by a macuahuitl sub-agent on work/1903-djsq.
+    events:
+      - type: filed
+        ts: "2026-10-26T16:19:26Z"
+        host: macuahuitl
+        summary: "filed and implemented on work/1903-djsq; PR into linux-next"
