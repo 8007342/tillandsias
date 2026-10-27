@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yolanda-windows at operator request relayed by the coordinator, 2026-10-27.
+packets:
+- packet_id: a-new-web-app-gets-cloudflare-deploy-files-by-default-without-the-user-asking
+  order: 1907-xhpx
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - onboarding
+  - cloudflare
+  - web
+  estimated_hours: 6
+  title: A new web app, including a Flutter web build, gets its Cloudflare deploy files without the user asking
+  context: 'Operator 2026-10-27, from a session watched with a real user: OpenSpec initialised, but wrangler.jsonc appeared only after the user asked. skills/start-a-new-project scaffold.sh --stack web writes no Wrangler config and SKILL.md never mentions deploying. Shared shape agreed with lenovinha (1906-md6q, GCP): one SKILL.md step "Choose where it will run (optional)" and one flag --deploy cloudflare|gcp-dockerfile|gcp-buildpacks|none, defaulting to cloudflare for --stack web and the flutter web target, none otherwise; templates under skills/start-a-new-project/templates/cloudflare/, create-only. Deploys stay on the host via cloudflare_worker_deploy (1853-qr4h); no credentials, account ids or deploys in the forge. Free Cloudflare only; no real deploy or cloud build during this work.'
+  exit_criteria:
+  - 'A fixture runs scaffold.sh in a scratch dir with no prompt for --stack web and for the flutter stack, and asserts: wrangler.jsonc parses; name equals the sanitised repo slug; compatibility_date is set; web uses assets.directory ./public, flutter uses ./build/web with not_found_handling single-page-application; .dev.vars.example exists with placeholder names only and .dev.vars is gitignored; no account_id or token-shaped string in any created file; --deploy none writes none of them; an existing wrangler.jsonc is never overwritten. Pre-fix result: FAILS, scaffold.sh writes no wrangler.jsonc.'
+  - 'scripts/test-start-a-new-project-skill.sh stays green with its counts updated on purpose, and SKILL.md and created files carry no internal words (its ARM 6).'
+  - 'A cheatsheet with provenance for Workers static assets, SPA handling and free-plan limits.'
+  verifiable_closure: 'The scaffold fixture named in the first exit criterion passes in the gate, and failed before the change.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+
+    '
+  next_action: 'Write the fixture first and watch it fail on today''s scaffold.sh, then add the --deploy flag, the cloudflare templates and the SKILL.md step.
+
+    '
+  provenance: 'Operator ask 2026-10-27 relayed by macuahuitl-fedora; plan approved by the coordinator with the flutter-web addition.
+
+    '
+  events:
+  - type: filed
+    ts: '2026-10-27T21:00:00Z'
+    host: yolanda-windows
+    summary: filed ready from the operator ask of 2026-10-27
