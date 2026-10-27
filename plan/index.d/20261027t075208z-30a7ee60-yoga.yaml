@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-agents-generate-images-locally-through-one-mcp-tool-on-stable-diffusion-cpp-sized-to-the-host
+    event:
+      type: progress
+      ts: "2026-10-27T07:52:08Z"
+      agent_id: linux-yoga-claude-20261027t070947z
+      host: yoga
+      summary: |
+        iGPU result (yoga, AMD Radeon 840M gfx1152, Fedora Silverblue 44, Mesa 26.2.5 radv, rootless podman --device /dev/dri) - sd.cpp master-1015-e41fbcf with sdxs09 (sha256 2618f142ad9f3884785884216d41fdcc033fde529f30a180f50ea6a05de6a89c), 512x512, 1 step, cfg 1, seed 42, -t 12; 1 warm-up + 3 timed runs, a fresh podman run each time.
+        CPU generate_image 3.86/3.84/3.90/3.92 s (sampling ~2.1 s, TAE decode ~1.4 s).
+        Vulkan generate_image cold 1.46 s, warm 1.28/1.29/1.28 s (sampling 0.44 s, decode 0.51 s); container wall cold 2.76 s, warm ~2.0 s. Model load 0.20 s on both.
+        Placement verified by the ggml_vulkan device line (RADV KRACKAN1, uma 1, KHR_coopmat) and by params plus unet/clip/taesd compute buffers reported on Vulkan0. System GTT rose 38 MB to 1.90 GB. Per-process RSS was not measured (time wrapped the podman client).
+        Finding 1 - the radv cold start is cheap (about 0.2 s more than warm in generate_image; 5 MB mesa shader cache), so macuahuitl's 42-50 s fresh-process cost is the NVIDIA Vulkan shader compile, not something inherent to Vulkan.
+        Finding 2 - sd.cpp prints [W] auto-fit no GPU devices using the default backend (backend_fit.cpp) even while Vulkan0 is in use, so a placement assert must key on the ggml_vulkan device line or on-Vulkan0, never on the absence of that warning.
+        Caveat - 840M has 4 CUs vs yolanda's 860M with 8, so s/image across the two is indicative only; the radv-vs-dzn speed question stays open (no 860M Linux host).
