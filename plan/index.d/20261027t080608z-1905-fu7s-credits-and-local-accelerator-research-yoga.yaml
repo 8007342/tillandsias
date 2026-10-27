@@ -1,0 +1,368 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga (linux-yoga-claude-20261027t070947z), 2026-10-27, from the
+# operator's direction in the same session: (1) tillandsias.org gets a Credits
+# section that thanks the major software stacks Tillandsias uses, with logos,
+# links and a table of how each is used; (2) find out what each host's iGPU
+# and NPU are USABLE FOR from inside forge containers (not only images),
+# which services reach a container directly on Linux and which need a hop on
+# macOS and Windows, and whether the local expert system, the local coding
+# experts and speech-to-text can run on the NPU. Operator rulings that bind
+# every row: no sudo and no layering on a host, every runtime in a toolbox or
+# podman container; FastFlowLM attribution is acceptable ("Credits is
+# reasonable", recorded on 1904-8q5i below). Code is cited by symbol.
+packets:
+  - packet_id: an-upstream-stacks-inventory-names-every-major-project-tillandsias-uses-with-homepage-licence-logo-policy-and-how-we-use-it
+    order: 1905-fu7s
+    depends_on: []
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [website, credits, licence, docs]
+    estimated_hours: 3
+    size: M
+    implementer_tier: sonnet
+    owned_files:
+      - docs/credits/upstream-stacks.yaml
+      - scripts/check-upstream-stacks-inventory.sh
+    title: "An upstream-stacks inventory (docs/credits/upstream-stacks.yaml) names every major project Tillandsias uses, with homepage, licence, logo source, logo usage policy, and one line on how Tillandsias uses it"
+    context: |
+      Operator direction 2026-10-27: credits for "podman, fedora, rust, go,
+      brew, opencode, openspec, apache software, hashicorp, containers, etc".
+      Derive the list from what the tree really uses, not from memory: the
+      Containerfiles under images/, Cargo.toml workspace dependencies of
+      note, the toolchain shims, the forge agent harnesses (OpenCode, Claude
+      Code, Codex), HashiCorp Vault, Squid, nix, stable-diffusion.cpp/ggml,
+      ollama/llama.cpp, Mesa radv, FastFlowLM (its binary licence asks for
+      attribution), Cloudflare, GitHub. Logos are trademarks with their own
+      rules (Fedora's logo guidelines are strict; some projects allow use only
+      unmodified, or only to refer to the project), so each entry records the
+      policy URL and whether a credits-page use is permitted. When it is unclear,
+      the entry falls back to the project name as text with no logo.
+    exit_criteria:
+      - "scripts/check-upstream-stacks-inventory.sh validates docs/credits/upstream-stacks.yaml: every entry has name, homepage, licence, usage, logo_policy_url and logo_permitted (true/false/text-only); at least podman, fedora, rust, go, homebrew, opencode, openspec, apache, hashicorp-vault and fastflowlm are present; and the script refuses an entry with a missing field. Pre-fix result: FAILS, neither file exists."
+    verifiable_closure: "scripts/check-upstream-stacks-inventory.sh prints ok over the inventory and refuses a planted entry missing logo_policy_url. Pre-fix result: FAILS, the script does not exist."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the checker named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Enumerate the stacks from images/ and the workspace manifests first, then fill licences and logo policies from each project's own site.
+    provenance: |
+      Operator direction 2026-10-27 on yoga.
+    events:
+      - type: filed
+        ts: "2026-10-27T08:06:08Z"
+        host: yoga
+        summary: "filed ready from the operator direction of 2026-10-27 (website credits)"
+
+  - packet_id: tillandsias-org-has-a-credits-section-thanking-each-upstream-stack-with-its-logo-link-and-how-tillandsias-uses-it
+    order: 1905-irqr
+    depends_on:
+      - an-upstream-stacks-inventory-names-every-major-project-tillandsias-uses-with-homepage-licence-logo-policy-and-how-we-use-it
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [website, credits]
+    estimated_hours: 3
+    size: M
+    implementer_tier: sonnet
+    owned_files:
+      - plan/issues/tillandsias-org-credits-section-2026-10-27.md
+    title: "tillandsias.org has a Credits section, \"We provide special thanks to…\", rendering the upstream-stacks inventory as a table of large linked logos with how Tillandsias uses each"
+    context: |
+      The website lives in 8007342/tillandsias.org and is changed through its
+      own update flow (1846-dykd enqueues website tasks; 1848-c8kb is the
+      unattended update-website skill), never from this repo. This row hands that
+      flow the 1905-fu7s inventory. Layout per the operator: a heading with the
+      special-thanks sentence, then a responsive table/grid. Each row has a
+      large logo (or the name as text where logo_permitted is false) linking to
+      the homepage, the licence, and the one-line usage. It must work in both
+      themes and at phone width. Logos are served from the site itself,
+      unmodified, never hot-linked.
+    exit_criteria:
+      - "The published tillandsias.org page has a Credits section whose entries match docs/credits/upstream-stacks.yaml one for one (a fetch of the live page lists every inventory name and homepage link), and no logo is shown for an entry whose logo_permitted is not true. Pre-fix result: FAILS, the site has no Credits section."
+    unscoreable: "lives in the separate tillandsias.org repository and closes on the published page, not on a fixture in this tree"
+    next_action: >
+      Blocked on 1905-fu7s. Then enqueue a website-update task with the inventory, and record the page URL here.
+    provenance: |
+      Operator direction 2026-10-27 on yoga.
+    events:
+      - type: filed
+        ts: "2026-10-27T08:06:08Z"
+        host: yoga
+        summary: "filed ready from the operator direction of 2026-10-27 (website credits)"
+
+  - packet_id: an-accelerator-reachability-matrix-records-per-platform-which-igpu-and-npu-services-a-forge-container-reaches-directly-and-which-need-a-host-hop
+    order: 1905-zt65
+    related: [1874-4b88, 1904-2fze]
+    depends_on: []
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [accel, npu, igpu, research, cross-platform]
+    estimated_hours: 3
+    size: M
+    implementer_tier: opus
+    owned_files:
+      - plan/issues/research/accelerator-reachability-matrix-2026-10-27.md
+    title: "RESEARCH — an accelerator reachability matrix: per platform (Linux podman, Windows WSL2, macOS vz), which iGPU and NPU services a forge container reaches directly, and which need a host-side hop"
+    context: |
+      The collation row. Its three platform measurements are 1905-w47z (Linux,
+      yoga), 1905-r4ky (Windows, yolanda) and 1905-btc3 (macOS, a Mac), and
+      each records the same columns. Known on 2026-10-27: on Linux, radv Vulkan
+      on gfx1152 reaches a rootless container with --device /dev/dri (yoga,
+      1.28 s/image sdxs09, note on 1874-4b88); /dev/accel/accel0 exists on the
+      host. On Windows, WSL2 exposes the GPU via /dev/dxg (Dozen Vulkan, measured
+      2026-08-16 in plan/issues/research/wsl2-igpu-vulkan-over-dxg-measured-2026-08-16.md),
+      and whether the XDNA NPU reaches WSL at all is unknown. On macOS, the vz
+      guest has no GPU; 1874-qyfv already plans a host-native Metal helper.
+    exit_criteria:
+      - "plan/issues/research/accelerator-reachability-matrix-2026-10-27.md has one row per platform and accelerator (iGPU, NPU), with columns direct-from-container yes/no, device path or API, hop needed (none, host service, native helper), measured-on (host and command), and workloads verified. Every cell cites a measurement from 1905-w47z, 1905-r4ky or 1905-btc3, or says unmeasured. Pre-fix result: FAILS, no matrix exists."
+    unscoreable: "research collation; closes on the recorded matrix, not on a fixture"
+    next_action: >
+      Collate as the three platform rows report. Linux is first (yoga).
+    provenance: |
+      Operator direction 2026-10-27 on yoga.
+    events:
+      - type: filed
+        ts: "2026-10-27T08:06:08Z"
+        host: yoga
+        summary: "filed ready from the operator direction of 2026-10-27 (what are the iGPU/NPU usable for)"
+
+  - packet_id: on-linux-yoga-measures-which-workloads-the-igpu-and-npu-run-from-a-rootless-forge-shaped-container
+    order: 1905-w47z
+    parent: 1905-zt65
+    depends_on: []
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [accel, npu, igpu, research, linux]
+    estimated_hours: 4
+    size: M
+    implementer_tier: opus
+    owned_files:
+      - plan/issues/research/accelerator-linux-yoga-measured-2026-10-27.md
+    title: "LINUX (yoga) — measure from rootless podman which workloads run on the 840M iGPU (Vulkan) and the XDNA2 NPU: image, small-LLM, embedding and speech-to-text"
+    context: |
+      Container only, nothing on the host. iGPU uses --device /dev/dri. NPU
+      uses --device /dev/accel/accel0 --ulimit memlock=-1:-1; FastFlowLM is
+      allowed now (operator, attribution acceptable), with its kernels fetched
+      INSIDE the image, never into /opt on the host. For each workload, record the
+      device line or proof of placement, the wall time, and the CPU baseline.
+      Workloads: sd.cpp (done, 1874-4b88 note), ollama or llama.cpp Vulkan for
+      qwen2.5:0.5b and nomic-embed-text (the expert models), FLM for the same
+      on the NPU, and whisper (whisper.cpp Vulkan vs FLM whisper).
+    exit_criteria:
+      - "plan/issues/research/accelerator-linux-yoga-measured-2026-10-27.md records, for each workload (image, chat LLM, embedding, speech-to-text) on each of CPU, iGPU and NPU: the exact container command, proof of placement (device line), and the wall time or tokens/s; or the exact refusal. Pre-fix result: FAILS, only the image row exists."
+    unscoreable: "hardware measurement on XDNA2 plus gfx1152; closes on the recorded note"
+    next_action: >
+      Start with the expert models on iGPU Vulkan, then build an FLM image and repeat on the NPU.
+    provenance: |
+      Operator direction 2026-10-27 on yoga.
+    events:
+      - type: filed
+        ts: "2026-10-27T08:06:08Z"
+        host: yoga
+        summary: "filed ready; yoga takes it"
+
+  - packet_id: on-windows-yolanda-measures-whether-the-npu-and-igpu-reach-the-wsl2-guest-and-what-a-native-host-hop-costs
+    order: 1905-r4ky
+    parent: 1905-zt65
+    depends_on: []
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.6
+    pickup_role: windows
+    capability_tags: [accel, npu, igpu, research, windows, wsl]
+    estimated_hours: 4
+    size: M
+    implementer_tier: opus
+    owned_files:
+      - plan/issues/research/accelerator-windows-yolanda-measured-2026-10-27.md
+    title: "WINDOWS (yolanda) — measure whether the XDNA NPU reaches the WSL2 guest at all, what the 860M iGPU runs over Dozen, and what a native-Windows host service hop costs for the same workloads"
+    context: |
+      Same hardware family as yoga (Krackan, an 860M with 8 CUs vs yoga's 840M
+      with 4). Questions to answer: does any /dev/accel node or NPU path appear in
+      the WSL2 guest? (/dev/dxg is GPU-only as far as known.) If not, the NPU is
+      reachable only from native Windows (Ryzen AI / FastFlowLM / Lemonade
+      Windows builds), so the hop is a host service the forge calls over the
+      network. Measure it the same way as 1905-w47z (same workloads, same
+      models) so the matrix compares like for like.
+    exit_criteria:
+      - "plan/issues/research/accelerator-windows-yolanda-measured-2026-10-27.md records: the WSL2 guest's device listing for NPU and GPU; for each workload (image, chat LLM, embedding, speech-to-text) on CPU, iGPU over Dozen, and the NPU via a native host service, the command, proof of placement and wall time, or the exact refusal. Pre-fix result: FAILS, no Windows accelerator measurement beyond the 2026-08-16 ollama note exists."
+    unscoreable: "hardware measurement on yolanda; closes on the recorded note"
+    next_action: >
+      Yolanda — list the WSL2 guest's /dev for any accel node first; that one answer decides the NPU hop.
+    provenance: |
+      Operator direction 2026-10-27 on yoga.
+    events:
+      - type: filed
+        ts: "2026-10-27T08:06:08Z"
+        host: yoga
+        summary: "filed ready for yolanda"
+
+  - packet_id: on-macos-a-mac-measures-what-a-forge-reaches-of-the-gpu-and-neural-engine-and-what-the-host-native-hop-costs
+    order: 1905-btc3
+    parent: 1905-zt65
+    depends_on: []
+    status: ready
+    kind: research
+    priority: p3
+    desired_release: v0.6
+    pickup_role: macos
+    capability_tags: [accel, research, macos, metal, ane]
+    estimated_hours: 3
+    size: M
+    implementer_tier: opus
+    owned_files:
+      - plan/issues/research/accelerator-macos-measured-2026-10-27.md
+    title: "MACOS — measure what a forge in the vz guest reaches of the Apple GPU and Neural Engine (expected nothing), and what a host-native helper (Metal, Core ML) costs for the same workloads"
+    context: |
+      1874-qyfv already plans a host-native Metal sd-server helper for images.
+      This row covers the other workloads (chat LLM, embedding, speech-to-text,
+      with whisper.cpp Core ML/Metal) so the matrix has the macOS column. Same
+      models as 1905-w47z.
+    exit_criteria:
+      - "plan/issues/research/accelerator-macos-measured-2026-10-27.md records what the vz guest sees of the GPU and ANE, and for each workload on guest CPU and on a host-native helper (Metal or Core ML), the command, placement proof and wall time. Pre-fix result: FAILS, no such note exists."
+    unscoreable: "hardware measurement on a Mac; closes on the recorded note"
+    next_action: >
+      Check the guest for any GPU device first; then time whisper.cpp and llama.cpp Metal natively on the host.
+    provenance: |
+      Operator direction 2026-10-27 on yoga.
+    events:
+      - type: filed
+        ts: "2026-10-27T08:06:08Z"
+        host: yoga
+        summary: "filed ready for a Mac host"
+
+  - packet_id: the-local-expert-system-and-local-coding-experts-are-measured-on-the-npu-against-cpu-and-igpu-for-latency-quality-and-power
+    order: 1905-szea
+    parent: 1905-zt65
+    depends_on:
+      - on-linux-yoga-measures-which-workloads-the-igpu-and-npu-run-from-a-rootless-forge-shaped-container
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [npu, experts, local-delegate, research]
+    estimated_hours: 5
+    size: L
+    implementer_tier: opus
+    related: [1813-54df, 1831-74sf, 1835-v7vx]
+    owned_files:
+      - plan/issues/research/npu-for-local-experts-measured-2026-10-27.md
+    title: "RESEARCH — can the local expert system (expert-serve, embeddings plus qwen2.5:0.5b synthesis) and the local coding experts run on the NPU, measured against CPU and iGPU on latency, answer quality and power"
+    context: |
+      The host experts today use qwen2.5:0.5b and nomic-embed-text on
+      127.0.0.1:11434 (TILLANDSIAS_INFERENCE_MODEL / TILLANDSIAS_EMBED_MODEL).
+      1813-54df is the expert story and 1831-74sf adds the local coding tier;
+      1835-v7vx benches coding models on macuahuitl and a Mac, not on an NPU.
+      Measure the expert groundtruth cases (graded by `tillandsias-plan grade`,
+      1821-xcwc) with models FastFlowLM serves on the NPU (pick the nearest
+      supported equivalents, named exactly) vs ollama on CPU and Vulkan. Also
+      measure package power where readable without root (amd_pmf/hwmon) or
+      say unmeasured. Coding: one bounded local-delegate task on an
+      NPU-served coding model vs the iGPU, if FLM serves one.
+    exit_criteria:
+      - "plan/issues/research/npu-for-local-experts-measured-2026-10-27.md records, for the expert pipeline and for one coding task: the models, the backend, tokens/s, the groundtruth grade, and power or unmeasured, on CPU, iGPU and NPU; and ends with a recommendation of which backend the experts should default to on an XDNA2 host. Pre-fix result: FAILS, the experts have never run on an NPU."
+    unscoreable: "research measurement; closes on the recorded note with its recommendation"
+    next_action: >
+      Blocked on 1905-w47z for the FLM container. Then run the groundtruth grade on each backend.
+    provenance: |
+      Operator direction 2026-10-27 on yoga: "does the local expert system could run on the npu? … maybe the local coding experts might run on the npu well".
+    events:
+      - type: filed
+        ts: "2026-10-27T08:06:08Z"
+        host: yoga
+        summary: "filed ready from the operator direction of 2026-10-27"
+
+  - packet_id: a-speech-to-text-container-transcribes-on-the-best-local-accelerator-and-exposes-one-mcp-tool-to-forge-agents
+    order: 1905-4m92
+    depends_on:
+      - an-accelerator-reachability-matrix-records-per-platform-which-igpu-and-npu-services-a-forge-container-reaches-directly-and-which-need-a-host-hop
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.7
+    pickup_role: any
+    capability_tags: [speech-to-text, npu, mcp, container]
+    estimated_hours: 6
+    size: L
+    implementer_tier: opus
+    owned_files:
+      - images/speech/
+      - openspec/changes/local-speech-to-text/
+    title: "A speech-to-text container transcribes on the best local accelerator the matrix proved (NPU, iGPU or CPU) and exposes one transcribe MCP tool to forge agents"
+    context: |
+      Shaped like image.generate (1874-4b88): built on first use, model fetched
+      by pinned URL and sha256 into the reusable cache, and backend chosen from
+      the 1905-zt65 matrix, never assumed. Whisper candidates are FLM whisper
+      (NPU, attribution accepted) and whisper.cpp (Vulkan/CPU). Write the OpenSpec
+      change first; the implementation slices come out of it.
+    exit_criteria:
+      - "openspec/changes/local-speech-to-text/ has proposal, design and tasks naming the backend per platform from the 1905-zt65 matrix, and a fixture transcribes a bundled short public-domain clip in the container to the expected text. Pre-fix result: FAILS, neither exists."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fixture named in the exit criterion is added with the implementation (1136-n8sh).
+    next_action: >
+      Blocked on 1905-zt65. Draft the OpenSpec change once the matrix has the Linux and Windows rows.
+    provenance: |
+      Operator direction 2026-10-27 on yoga ("probably some speech-to-text plugins on those juicy NPUs").
+    events:
+      - type: filed
+        ts: "2026-10-27T08:06:08Z"
+        host: yoga
+        summary: "filed ready from the operator direction of 2026-10-27"
+
+  - packet_id: research-names-which-local-accelerator-workloads-future-website-authoring-and-scientific-research-containers-would-use
+    order: 1905-izy7
+    parent: 1905-zt65
+    depends_on: []
+    status: ready
+    kind: research
+    priority: p3
+    desired_release: v0.7
+    pickup_role: any
+    capability_tags: [accel, research, containers, roadmap]
+    estimated_hours: 3
+    size: M
+    implementer_tier: opus
+    related: [1860-auhm]
+    owned_files:
+      - plan/issues/research/accelerator-workloads-for-future-containers-2026-10-27.md
+    title: "RESEARCH — which local-accelerator workloads future website-authoring and scientific-research containers would use (image assets, alt-text/captioning, OCR, upscaling, embeddings search, notebook compute such as PyTorch on gfx1152 via ROCm or Vulkan), and where the NPU beats the iGPU"
+    context: |
+      Operator, 2026-10-27: "We want later containers for website authoring,
+      scientific research … I'm sure we could do so much more with them". The
+      studio launcher (1860-auhm) is the website-authoring vehicle. For each
+      candidate workload: the open stack, its licence, the accelerator it can
+      use on Linux/Windows/macOS today, and whether a measurement exists.
+      Flag where ROCm officially supports gfx1152 versus only Vulkan or
+      community builds.
+    exit_criteria:
+      - "plan/issues/research/accelerator-workloads-for-future-containers-2026-10-27.md lists at least eight candidate workloads, each with stack, licence, accelerator per platform, source URLs, and a ranked shortlist of the three worth a measurement row. Pre-fix result: FAILS, no such note exists."
+    unscoreable: "research note; closes on the recorded note"
+    next_action: >
+      Web research first; file measurement rows for the shortlist.
+    provenance: |
+      Operator direction 2026-10-27 on yoga.
+    events:
+      - type: filed
+        ts: "2026-10-27T08:06:08Z"
+        host: yoga
+        summary: "filed ready from the operator direction of 2026-10-27"
+
+events:
+  - packet_id: operator-decides-whether-the-fastflowlm-proprietary-npu-kernel-licence-is-acceptable-for-fleet-npu-workloads
+    event:
+      type: note
+      ts: "2026-10-27T08:06:08Z"
+      host: yoga
+      summary: "OPERATOR RULING 2026-10-27 (yoga session) — \"Credits is reasonable\": the FastFlowLM binary licence's attribution term is acceptable. FLM kernels may be fetched INSIDE containers only (never on a host; the operator also ruled out the host-layered fastflowlm). Attribution goes on the tillandsias.org Credits section (1905-fu7s, 1905-irqr). Unblocks the NPU measurements in 1905-w47z and 1905-szea."
