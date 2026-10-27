@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-web-preview-leaf-key-handed-to-the-router-lives-only-on-tmpfs-and-is-never-written-unencrypted-to-disk
+    field: status
+    value: completed
+    ts: "2026-10-27T21:35:01Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-web-preview-leaf-key-handed-to-the-router-lives-only-on-tmpfs-and-is-never-written-unencrypted-to-disk
+    event:
+      type: completed
+      ts: "2026-10-27T21:35:01Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: 0cd0ea66936bb3f035aa580e38dacbca08fe43f7
+  - packet_id: the-web-preview-leaf-key-handed-to-the-router-lives-only-on-tmpfs-and-is-never-written-unencrypted-to-disk
+    event:
+      type: note
+      ts: "2026-10-27T21:35:01Z"
+      host: lenovinha
+      summary: |-
+        landed-but-open triage 2026-10-27: 0cd0ea669 adds the_preview_leaf_key_is_never_written_to_disk and litmus preview-leaf-key-only-on-tmpfs; a18a456ec fixes its scratch; landed via land 664

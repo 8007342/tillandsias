@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: remove-launch-helpers-left-dead-by-776-jcf3
+    field: status
+    value: completed
+    ts: "2026-10-27T21:35:03Z"
+    host: lenovinha
+
+events:
+  - packet_id: remove-launch-helpers-left-dead-by-776-jcf3
+    event:
+      type: completed
+      ts: "2026-10-27T21:35:03Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: c275b6f22a46f1b2c055a772f6f9ea574fc560fa
+  - packet_id: remove-launch-helpers-left-dead-by-776-jcf3
+    event:
+      type: note
+      ts: "2026-10-27T21:35:03Z"
+      host: lenovinha
+      summary: |-
+        landed-but-open triage 2026-10-27: c275b6f22 removes the dead helpers; clippy --features tray,listen-vsock -D warnings passed in the land 645 gate
