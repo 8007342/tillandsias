@@ -15,7 +15,6 @@ specs:
   - litmus:accel-envelope-reaches-the-forge
   - litmus:accel-envelope-carries-discrete-vram
   - litmus:imagegen-tier-ladder-from-the-envelope
->>>>>>> work/1874-bair
   - litmus:capabilities-envelope-names-its-source
   - litmus:envelope-suite-resolves-the-redirected-artifact
   coverage_ratio: 100
