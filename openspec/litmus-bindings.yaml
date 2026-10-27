@@ -13,6 +13,7 @@ specs:
   litmus_tests:
   - litmus:accel-capability-probe-contract-shape
   - litmus:accel-envelope-reaches-the-forge
+  - litmus:imagegen-tier-ladder-from-the-envelope
   - litmus:capabilities-envelope-names-its-source
   - litmus:envelope-suite-resolves-the-redirected-artifact
   coverage_ratio: 100
@@ -1058,12 +1059,6 @@ specs:
   - litmus:in-forge-localhost-reaches-the-router
   coverage_ratio: 60
   last_verified: '2026-05-14'
-- spec_id: image-generation
-  status: draft
-  litmus_tests:
-  - litmus:imagegen-tier-ladder-from-the-envelope
-  coverage_ratio: 0
-  last_verified: null
 - spec_id: local-web-preview
   status: draft
   litmus_tests:
