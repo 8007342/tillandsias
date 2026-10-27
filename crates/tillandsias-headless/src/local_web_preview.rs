@@ -1221,6 +1221,7 @@ fn host_command(args: &[String]) -> Result<(), String> {
     let deadline = Instant::now() + command_budget(Duration::from_secs(15))?;
     let mut child = std::process::Command::new("openssl")
         .args(args)
+        .envs(crate::ca_key_store::pass_env())
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -1285,7 +1286,11 @@ fn certificate_args(
             ext.display().to_string(),
             "-out".into(),
             crt.display().to_string(),
-        ],
+        ]
+        .into_iter()
+        // 1898-hyhf: the preview CA key may rest encrypted.
+        .chain(crate::ca_key_store::key_in_args())
+        .collect(),
     ]
 }
 
@@ -2555,6 +2560,7 @@ mod tests {
             assert!(
                 std::process::Command::new("openssl")
                     .args(&args)
+                    .envs(crate::ca_key_store::pass_env())
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null())
                     .status()
@@ -4083,9 +4089,16 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let ca = tempfile::tempdir().unwrap();
         crate::preview_ca::ensure_in(ca.path(), 0).unwrap();
+        // 1898-hyhf: the CA key is encrypted at rest, so a -CAkey read takes
+        // the session passphrase exactly as production does.
         let run = |args: &[&str]| {
-            let status = std::process::Command::new("openssl")
-                .args(args)
+            let mut cmd = std::process::Command::new("openssl");
+            cmd.args(args);
+            if args.contains(&"-CAkey") {
+                cmd.args(crate::ca_key_store::key_in_args())
+                    .envs(crate::ca_key_store::pass_env());
+            }
+            let status = cmd
                 .current_dir(tmp.path())
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())

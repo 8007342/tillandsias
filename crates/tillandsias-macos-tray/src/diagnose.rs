@@ -1886,7 +1886,10 @@ pub fn exec_guest_via_tray(argv: Vec<String>, required_cap: Option<&'static str>
 ///     requires it to exist and be writable;
 ///   * `podman rm tillandsias-proxy` — redundant with `ensure_proxy_running`'s
 ///     own `rm --ignore`, and idempotent (`|| true`);
-///   * the openssl block — first-use CA generation, genuinely needed;
+///   * (no CA mint: ORDER 1900-fkws removed the shell `openssl -nodes` block,
+///     which wrote the guest CA key in the clear. `tillandsias-headless`
+///     mints it in `ensure_ca_bundle` on every path this preamble execs, and
+///     since 1898-hyhf mints it encrypted where the tmpfs store is inactive);
 ///   * the trailing unconditional `chmod 600` — redundant since the guest gained
 ///     `CAP_PROXY_CA_KEY_HEAL` (795-zshi slice 4), and idempotent.
 ///
@@ -1921,14 +1924,6 @@ fn proxy_exec_preamble(headless_arg: &str) -> String {
          export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
          install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
          podman rm tillandsias-proxy 2>/dev/null || true; \
-         if ! test -s {ca}/intermediate.key 2>/dev/null; then \
-           mkdir -p {ca} && \
-           openssl req -x509 -newkey rsa:2048 \
-             -keyout {ca}/intermediate.key \
-             -out {ca}/intermediate.crt \
-             -days 25 -nodes -subj '/CN=Tillandsias CA' 2>/dev/null && \
-           chmod 600 {ca}/intermediate.key || true; \
-         fi; \
          chmod 600 {ca}/intermediate.key 2>/dev/null || true; \
          exec /usr/local/bin/tillandsias-headless {headless_arg}"
     )
@@ -2975,8 +2970,8 @@ mod tests {
     /// Each is load-bearing for a reason recorded at `proxy_exec_preamble`: the
     /// control-wire exec env is CLEARED, so the three exports are the only way
     /// HOME / XDG_RUNTIME_DIR / the vault base URL reach the guest; the
-    /// `install -d` satisfies the DesktopUserSession gate; the openssl block is
-    /// first-use CA generation.
+    /// `install -d` satisfies the DesktopUserSession gate. There is no openssl
+    /// block: the CA is minted by the headless binary (1900-fkws).
     ///
     /// The two REDUNDANT lines (`podman rm`, the trailing `chmod 600`) are
     /// asserted present ON PURPOSE. Slice 5 was briefed to delete them behind
@@ -2985,6 +2980,23 @@ mod tests {
     /// workarounds, and removing them leaves the preamble a shell script
     /// regardless. If a later slice DOES delete them it must edit this test,
     /// which is the point: the deletion should be a decision, not a drift.
+    /// ORDER 1900-fkws: the guest CA private key is never minted by the
+    /// preamble. Its shell mint ran `openssl req ... -nodes`, an unencrypted
+    /// key at rest (operator: "a lost credential beats an unencrypted one");
+    /// the headless binary mints it instead, encrypted per 1898-hyhf.
+    #[test]
+    fn the_preamble_never_mints_a_private_key() {
+        for arg in ["--github-login", "--list-cloud-projects"] {
+            let p = super::proxy_exec_preamble(arg);
+            for mint in ["openssl", "-nodes", "-keyout", "genrsa", "genpkey"] {
+                assert!(
+                    !p.contains(mint),
+                    "{arg}: the preamble mints key material ({mint:?}): {p}"
+                );
+            }
+        }
+    }
+
     #[test]
     fn the_preamble_keeps_every_part_that_is_load_bearing() {
         let p = super::proxy_exec_preamble("--github-login");
@@ -2993,7 +3005,6 @@ mod tests {
             "export XDG_RUNTIME_DIR=/run/user/0",
             "export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200",
             "install -d -m 0700",
-            "openssl req -x509",
             "podman rm tillandsias-proxy",
         ] {
             assert!(p.contains(needle), "preamble lost {needle:?}: {p}");
@@ -3444,16 +3455,11 @@ mod tests {
                 preamble.contains(&format!("chmod 600 {key}")),
                 "{arg}: preflight must clamp the CA private key to 0600"
             );
-            // The heal must sit OUTSIDE the `test -s` guard: an existing 0644
-            // key never reaches the openssl block.
-            let guarded = preamble
-                .split("fi; ")
-                .next()
-                .expect("preamble must contain the test -s guard block");
-            let after_guard = &preamble[guarded.len()..];
+            // 1900-fkws removed the `test -s` guard with the shell mint, so
+            // the heal is unconditional by construction.
             assert!(
-                after_guard.contains(&format!("chmod 600 {key}")),
-                "{arg}: the heal-down must run unconditionally, after the guard"
+                !preamble.contains("fi; "),
+                "{arg}: the heal-down must not sit inside a guard"
             );
         }
 
