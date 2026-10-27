@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: plaintext-private-keys-at-rest-under-macos-cache-and-state-dirs
+    event:
+      type: note
+      ts: "2026-10-27T06:52:26Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: macos
+      summary: |
+        Operator-approved deletion (2026-10-26, "Yes, after #656 lands") of three plaintext CA private keys on tlatoanis-macbook-air. #656 (1898-hyhf) merged as 4c4773b5f, and headless was rebuilt from linux-next 6982370a2 first. Metadata before deletion (no content read):
+        - ~/.cache/tillandsias/ca-key.pem: mtime 2026-07-06T09:17:26-0700, 1704 bytes, 0600
+        - ~/.local/state/tillandsias/ca/intermediate.key: mtime 2026-10-17T06:48:27-0700, 1704 bytes, 0600
+        - ~/.local/state/tillandsias/ca/vault.key: mtime 2026-10-18T15:26:19-0700, 1704 bytes, 0600
+        Expect a vault rebuild and a re-login on the next launch.
