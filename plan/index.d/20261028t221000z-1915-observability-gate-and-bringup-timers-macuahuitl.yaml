@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora at the operator's request, 2026-10-28 (operator-approved 2026-10-28). Story: observability. Gate per-phase timing and runtime bring-up step timing, one story with two packets (operator: we need observability).
+packets:
+- packet_id: gate-per-phase-timing-reaches-the-timing-ledger
+  order: 1915-gtph
+  status: ready
+  kind: feature
+  priority: p0
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - build
+  - gate
+  - observability
+  estimated_hours: 2
+  title: Every build.sh --check phase writes its own row to the timing ledger, so the 21 unattributed gate minutes become visible
+  context: 'operator-approved 2026-10-28. Source: scratch/research/build-pipeline.md sections 2 and 5.2. Median build-check is 1,464 s over 62 rows, of which cargo and tests are under 4 min; about 21 min go to roughly 700 shell, Lua and litmus steps that nothing attributes. Per-phase timing exists (758-jw6v) but is quiet by default and never reaches .cache/metrics/tillandsias-timing.jsonl. Story observability, with 1915-brst. Speeds other work: 1916-gbct cannot choose what to cut without it.'
+  exit_criteria:
+  - After one ./build.sh --check, .cache/metrics/tillandsias-timing.jsonl carries at least 40 phase rows for that build-check run, each with phase name, wall ms and the run id; today it carries one row per run.
+  - A fixture runs a stub gate with three phases and asserts three phase rows plus the total row; it FAILS on today's code.
+  verifiable_closure: The phase-row fixture passes in ./build.sh --check and failed before the change.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: find where 758-jw6v measures phases and why it is quiet, make it append one ledger row per phase by default, write the stub-gate fixture first and record its red, then run one real gate and count the rows.'
+  provenance: 'operator-approved 2026-10-28; research report scratch/research/build-pipeline.md sections 2 and 5.2 (macuahuitl, 2026-10-28). Operator 2026-10-28: "Yes to fixing github actions and yes to adding timers and metrics to our build process and runtime, we need observability. I approve the work items from the reports. Triage them accordingly, since some of them moved ahead could speed up other work from the queue."'
+  events:
+  - type: filed
+    ts: '2026-10-28T22:10:00Z'
+    host: macuahuitl-fedora
+    summary: filed p0 from the operator-approved research report (operator-approved 2026-10-28)
+- packet_id: runtime-bringup-emits-one-step-timer-line-per-step
+  order: 1915-brst
+  status: ready
+  kind: feature
+  priority: p0
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - headless
+  - observability
+  - runtime
+  estimated_hours: 3
+  title: 'Runtime bring-up logs one bringup: step=<name> ms=<n> line for each of image ensure, mirror seed, vault health, model preload and forge start'
+  context: 'operator-approved 2026-10-28. Source: scratch/research/snapshot-warm-start.md sections 2 and 6.1. Nothing times bring-up steps today, so every snapshot-ladder saving in that report is an estimate. Story observability, with 1915-gtph. Speeds other work: 1918-wfrg, 1918-bmdl and 1918-ladr are only measurable with it.'
+  exit_criteria:
+  - 'An --init run''s log contains exactly one ''bringup: step=<name> ms=<n>'' line for each of image-ensure, mirror-seed, vault-health, model-preload and forge-start; a litmus greps all five and FAILS on today''s code, which emits none.'
+  - The same lines reach the timing ledger as rows, so two launches can be compared without reading logs.
+  verifiable_closure: A litmus step that runs --init and asserts the five bringup lines.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: write the litmus first and record its red, add a small step-timer helper in tillandsias-headless, wrap the five steps, and attach one measured cold and one warm launch with their regime (host, OS, cache state).'
+  provenance: 'operator-approved 2026-10-28; research report scratch/research/snapshot-warm-start.md sections 2 and 6.1 (macuahuitl, 2026-10-28). Operator 2026-10-28: "Yes to fixing github actions and yes to adding timers and metrics to our build process and runtime, we need observability. I approve the work items from the reports. Triage them accordingly, since some of them moved ahead could speed up other work from the queue."'
+  events:
+  - type: filed
+    ts: '2026-10-28T22:10:00Z'
+    host: macuahuitl-fedora
+    summary: filed p0 from the operator-approved research report (operator-approved 2026-10-28)
