@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-is-killed-by-systemd-oomd-and-its-session-cannot-be-rejoined
+    event:
+      type: progress
+      ts: "2026-10-28T19:26:06Z"
+      agent_id: linux-yoga-claude-20261027t070947z
+      host: yoga
+      summary: |
+        Pressure ranking on yoga (15 GiB RAM, 8 GiB zram), bash forge for a scratch project up with the full stack, idle, 2026-10-28; per-scope memory.current / anon / memory.pressure some avg10: tillandsias-inference 5225M / 4779M anon / some10 0.06 (the ONLY scope with non-zero pressure; no memory limit, HostConfig.Memory=0); forge 1109M / 392M (limit 6 GiB); vault 314M; git mirror 287M; proxy 149M; router 76M (all unlimited). The builder toolbox (developer tool, not product) fell from 4298M to 1614M of pure file cache as the stack came up, so its cache was reclaimed first: cheap. The inference container's anon is the largest product-owned consumer and the one an oomd pressure event will most likely trace to; criterion 2 starts there: memory.high on inference, browser windows, forwarders and web preview below the forge's, sized relative to host RAM and tier. Fleet note: the builder toolbox competes with forges on dev hosts and is the fleet's own pressure source; it is not budgeted in product code.

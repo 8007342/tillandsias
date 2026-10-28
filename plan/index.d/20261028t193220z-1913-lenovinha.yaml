@@ -1,0 +1,106 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue (opus5) at the operator's request, 2026-10-28: protect forges and browsers from systemd-oomd reaping, and give the forge an internal watchdog.
+packets:
+- packet_id: forge-memory-low-is-void-because-its-ancestors-protect-nothing
+  order: 1913-fh6l
+  status: ready
+  kind: bug
+  priority: p0
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - headless
+  - linux
+  estimated_hours: 4
+  title: The forge's 2G memory.low protects nothing, because every ancestor cgroup has memory.low 0
+  context: 'Evidence (lenovinha 2026-10-28, read-only): ForgeBudget sets --memory-reservation (memory.low 2G), memory.high, swap.max and pids (crates/tillandsias-core/src/forge_budget.rs:84-97). The user manager''s user.slice has MemoryLow=0 and MemoryMin=0, and user@1000.service has MemoryLow=0 (MemoryMin 250M from uresourced). The cgroup is mounted with memory_recursiveprot. cgroup v2 protection is hierarchical, so a child cannot be protected beyond its parent''s share. The 447M forge still scanned 216,646 pages in one oomd poll and read 687 GB from disk over 14h. Larger or pre-allocated chunks would not help: oomd ranks by reclaim (pgscan delta), not by allocation churn, and a bigger RSS makes a bigger target. Extends the forge cgroup budget work (1375-xxzj).'
+  exit_criteria:
+  - 'The protection chain holds: the user manager''s user.slice (systemctl --user set-property, no root) and, through an operator-run root drop-in, user@1000.service carry a MemoryLow at least the forge''s; tillandsias proposes rather than applies the root step.'
+  - 'A probe reads every ancestor''s memory.low for a running forge and reports the effective protection; it FAILS on today''s host (0).'
+  verifiable_closure: 'A litmus step that walks the forge cgroup''s ancestors and asserts a non-zero effective memory.low.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the ancestor-protection litmus lands with the fix.'
+  next_action: 'Write the ancestor-walk probe first and record today''s red, then decide the user-manager setting and the operator root drop-in.'
+  provenance: 'Fable research pass 2026-10-28 (lenovinha); systemd.resource-control docs; live cgroup reads.'
+  events:
+  - type: filed
+    ts: '2026-10-28T19:32:20Z'
+    host: lenovinha-silverblue
+    summary: filed urgent; the forge's memory protection is void through its ancestors
+- packet_id: forges-run-in-a-tillandsias-slice-that-oomd-avoids
+  order: 1913-ebv8
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - headless
+  - linux
+  estimated_hours: 6
+  title: Forges run in their own tillandsias.slice with its own oomd policy, marked ManagedOOMPreference=avoid
+  context: 'systemd 259 honours ManagedOOMPreference=avoid when the unit''s cgroup and the monitored ancestor have the same owner (systemd commit 652a4efb). Here user@1000.service/user.slice and every libpod scope belong to the user, so the user manager can set it. Caveats: the xattr is not recursive, and the oomd candidate is the container leaf under the scope, owned by a userns uid. Podman has no flag for unit properties (--cgroup-conf writes cgroup files, not xattrs), so the lever is a systemd-run --user --scope -p ManagedOOMPreference=avoid wrapper, or --cgroups=split. Do not use omit: it only shifts the kill to Chrome or a toolchain. A separate tillandsias.slice with its own ManagedOOMMemoryPressureLimit and duration stops Chrome''s pressure (6.1G in app.slice) from electing a forge. SELinux plays no part in choosing the victim; the 11:41 AVCs were domain-permissive for systemd_oomd_t and are only a note, not a policy change. Extends 1911-3dqo (its oomd-posture criterion).'
+  depends_on:
+  - forge-is-killed-by-systemd-oomd-and-its-session-cannot-be-rejoined
+  exit_criteria:
+  - 'oomctl lists tillandsias.slice as monitored with its own limit, and a launched forge''s candidate cgroup carries user.oomd_avoid; a fixture reads the xattr and FAILS on today''s code.'
+  - 'A measured pressure run shows that a sibling toolchain or browser is chosen before the forge.'
+  verifiable_closure: 'A litmus step that launches a forge and asserts getfattr -n user.oomd_avoid on its candidate cgroup.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the xattr litmus lands with the fix.'
+  next_action: 'Prove the systemd-run --user --scope wrapper sets the xattr on the leaf oomd actually ranks.'
+  provenance: 'Fable research pass 2026-10-28 (lenovinha), citing systemd.resource-control, systemd-oomd and oomd.conf.'
+  events:
+  - type: filed
+    ts: '2026-10-28T19:32:20Z'
+    host: lenovinha-silverblue
+    summary: filed; slice plus avoid posture for forges
+- packet_id: toolchain-and-browser-containers-carry-memory-high-and-swap-max
+  order: 1913-imcb
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - headless
+  - linux
+  estimated_hours: 3
+  title: Toolchain and browser containers run with no memory limit, so they push the forge into reclaim
+  context: 'Live read 2026-10-28: all 20 running tillandsias containers other than forges show memory.low=0, memory.min=0, memory.high=max and memory.max=max. The flutter toolchain sibling peaked at 1.7G; browser and toolchain containers each swapped 350-600M. With memory.high set, they throttle and reclaim first and become the top pgscan candidates, which is the intent. Chrome''s GPU crash (exit_code=512, app.slice) was a side effect of the same thrash, not an oomd kill (oomd killed exactly one cgroup). The browser forwarders are small socat processes (2-30M); the real browser is the host Chrome.'
+  exit_criteria:
+  - 'Every tillandsias toolchain, builder and browser container launches with memory.high and memory.swap.max below the forge budget; a fixture asserts the args and FAILS on today''s code.'
+  verifiable_closure: 'cargo test -p tillandsias-podman sibling_containers_carry_memory_high'
+  next_action: 'Add a SiblingBudget beside ForgeBudget and apply it in the toolchain and browser specs.'
+  provenance: 'Fable research pass 2026-10-28 (lenovinha); live cgroup reads.'
+  events:
+  - type: filed
+    ts: '2026-10-28T19:32:20Z'
+    host: lenovinha-silverblue
+    summary: filed; sibling containers are unbounded and push the forge into reclaim
+- packet_id: in-forge-supervisor-restarts-a-crashed-harness-with-resume
+  order: 1913-q2z4
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - forge
+  - headless
+  estimated_hours: 5
+  title: An in-forge watchdog relaunches a crashed agent harness inside the same forge before the host relaunches anything
+  context: 'Operator request 2026-10-28. images/default harness-supervisor.sh already emits fail:harness-crashed and crash evidence, but never restarts (767-nkkq, forge-pid1-crash-supervision). It is PID 1 only on prompted lanes; the interactive codex and claude paths exec the harness directly (entrypoint-forge-codex.sh:231, entrypoint-forge-claude.sh around 180). Design: a --restart mode. When the child exits with rc 128 or more and no forwarded TERM or INT, log the crash, back off 5, 30 and 120s, allow at most 3 restarts in 30 minutes, and re-exec with resume (codex resume --last, claude --continue; needs 1912-uj2f). It covers segfaults, aborts, panics and a kernel OOM kill of a single process. It cannot cover a systemd-oomd whole-cgroup kill, which kills the supervisor too; that is the host relaunch''s job (1912-rs3l), which fires only when the container itself dies.'
+  depends_on:
+  - forge-agent-sessions-survive-a-crash-for-every-agent
+  exit_criteria:
+  - 'The supervisor is PID 1 on interactive lanes as well, with the TTY passed through intact.'
+  - 'A fixture kills the harness with SIGSEGV; the container stays up and the harness restarts with its resume flag and a logged line. It FAILS on today''s code.'
+  - 'A fourth crash within the window stops restarting and leaves the verdict for the host classifier (1912-n2i8).'
+  verifiable_closure: 'A litmus step that runs the supervisor around a stub harness that segfaults once, asserting the restart and the resume argv.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the supervisor-restart litmus lands with the fix.'
+  next_action: 'Add the restart mode to harness-supervisor.sh behind a flag, then make it PID 1 on the interactive entrypoints.'
+  provenance: 'Operator request 2026-10-28 (lenovinha session); Fable research pass.'
+  events:
+  - type: filed
+    ts: '2026-10-28T19:32:20Z'
+    host: lenovinha-silverblue
+    summary: filed at the operator's request; in-forge harness watchdog before host relaunch
