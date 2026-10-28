@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: runtime-bringup-emits-one-step-timer-line-per-step
+    event:
+      type: list-replace
+      ts: "2026-10-28T22:32:50Z"
+      agent_id: windows-yolanda-claude-20261028t223250z
+      host: yolanda-windows
+      field: exit_criteria
+      items:
+        - "Launch bring-up (ensure_enclave_for_project through forge start) emits exactly one stderr line 'bringup: step=<name> ms=<n>' for each of proxy-ready, vault-health, image-ensure, mirror-seed, model-preload and forge-start; --init emits image-ensure and vault-health. A cargo test on the fake-podman launch harness asserts the launch lines and FAILS on today's code, which emits none; a litmus step runs it."
+        - "The same steps append rows {ts, host, step, phase: bringup, duration_ms, exit} to the timing ledger only where the metrics-log-path rule already enables it; rows carry no path, project name or username. Timestamps are taken at step boundaries only, with no new poll."
+        - "The Windows tray emits the same line and row for wsl-boot around ensure_wsl_platform; macOS VZ boot is a sibling packet (pickup_role macos)."
+      summary: |-
+        coordinator-approved 2026-10-28: --init runs only image-ensure and vault-health; the launch path carries the rest
