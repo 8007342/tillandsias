@@ -78,6 +78,8 @@ mod device_poll_view;
 mod flow_sink;
 mod image_build_progress;
 mod image_build_scope;
+// @trace order:1874-b9tg: where an sd.cpp run placed the model.
+mod imagegen_placement;
 mod imagegen_tiers;
 mod progress_sink;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
@@ -2589,6 +2591,9 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         // 1637-5765: the opt-in Flutter toolchain. Not an INIT image: built on
         // the forge's first `flutter` (toolchain_exec::prepare).
         "flutter" => "images/flutter",
+        // 1874-b9tg: local image generation. Not an INIT image: built on
+        // first use through ensure_image_exists.
+        "imagegen" => "images/imagegen",
         "vault" => "images/vault",
         other => {
             return Err(format!("Unknown image type: {other}"));
@@ -34347,6 +34352,47 @@ esac
 
         let tag = versioned_image_tag("chromium-framework", "0.2.100");
         assert_eq!(tag, "localhost/tillandsias-chromium-framework:v0.2.100");
+    }
+
+    /// ORDER 1874-b9tg. The imagegen image is a first-use image: the resolver
+    /// knows it, its Containerfile pins an upstream `master-<n>-<sha>` tag,
+    /// and `--init` never builds it.
+    #[test]
+    fn imagegen_resolves_with_a_pinned_sd_cpp_tag_and_is_not_an_init_image() {
+        let root = Path::new(&std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"))
+            .join("../..");
+        let (containerfile, context) = image_specs(&root, "imagegen").expect("imagegen is known");
+        assert!(
+            context.ends_with("images/imagegen"),
+            "{}",
+            context.display()
+        );
+        assert_eq!(
+            runtime_assets::image_context_rel("imagegen").expect("embedded context"),
+            "images/imagegen"
+        );
+        let (identity, _) =
+            ensure_image_identity(&root, "imagegen", "1.0.0").expect("imagegen identity");
+        assert!(identity.canonical_tag.contains("tillandsias-imagegen"));
+
+        let text = fs::read_to_string(&containerfile).expect("Containerfile");
+        let tag = text
+            .lines()
+            .find_map(|l| l.trim().strip_prefix("ARG SDCPP_TAG="))
+            .expect("Containerfile pins ARG SDCPP_TAG");
+        let parts: Vec<&str> = tag.splitn(3, '-').collect();
+        assert!(
+            parts.len() == 3
+                && parts[0] == "master"
+                && parts[1].parse::<u32>().is_ok()
+                && parts[2].len() >= 7
+                && parts[2].chars().all(|c| c.is_ascii_hexdigit()),
+            "SDCPP_TAG must be an upstream master-<n>-<sha> tag, got {tag}"
+        );
+        assert!(
+            !INIT_IMAGES.contains(&"imagegen"),
+            "imagegen is built on first use, never at init"
+        );
     }
 
     #[test]

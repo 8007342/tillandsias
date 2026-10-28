@@ -16,6 +16,7 @@ specs:
   - litmus:imagegen-tier-ladder-from-the-envelope
   - litmus:capabilities-envelope-names-its-source
   - litmus:envelope-suite-resolves-the-redirected-artifact
+  - litmus:imagegen-image-is-first-use-and-placement-is-read-from-the-log
   coverage_ratio: 100
   last_verified: '2026-07-31'
 - spec_id: agent-cheatsheets

@@ -1,0 +1,6 @@
+ggml_vulkan: 0 = NVIDIA GeForce RTX 3070 Laptop GPU (NVIDIA) | uma: 0 | fp16: 1 | bf16: 1 | fp4: 0 | warp size: 32 | shared memory: 49152 | int dot: 1 | matrix cores: NV_coopmat2
+[I] auto-fit plan: --- backend_fit.cpp:323
+[I] auto-fit: --backend "diffusion=Vulkan0,te=Vulkan0,vae=Vulkan0" --- backend_fit.cpp:474
+[V] model manager prepared params backend buffers (626.35 MB, 358 tensors, 1 blocks, VRAM) on Vulkan0 --- model_manager.cpp:490
+[V] model manager prepared params backend buffers (649.98 MB, 280 tensors, 1 blocks, VRAM) on Vulkan0 --- model_manager.cpp:490
+[V] model manager prepared params backend buffers (  2.34 MB, 67 tensors, 1 blocks, VRAM) on Vulkan0 --- model_manager.cpp:490

@@ -1,0 +1,6 @@
+# Models are mounted from the host cache at run time, never sent into the
+# build context (a 1.3 GB model was, before this file; 1874-b9tg).
+models/
+*.safetensors
+*.gguf
+*.ckpt
