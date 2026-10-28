@@ -5609,6 +5609,8 @@ fn shamir_share_candidates() -> Vec<(&'static str, String)> {
 /// sees the healed value.
 #[cfg(feature = "vault")]
 fn persist_healed_root_token(token: &str, share_b64: &str, debug: bool) -> Result<(), String> {
+    // Order 1919-keyc: the memoized token is the stale one being replaced.
+    root_token_memo_clear();
     if is_running_in_vm() {
         let cell = PENDING_HANDOVER.get_or_init(|| Mutex::new(None));
         if let Ok(mut guard) = cell.lock() {
@@ -5680,6 +5682,8 @@ fn heal_stale_root_token(
     base_url: &str,
     debug: bool,
 ) -> Result<String, String> {
+    // Order 1919-keyc: the vault rejected the token; never serve it again.
+    root_token_memo_clear();
     let candidates = shamir_share_candidates();
     if candidates.is_empty() {
         return Err(
@@ -5846,6 +5850,48 @@ fn validated_root_token(
 /// unseal the NEW volume ("cipher: message authentication failed", HTTP 400) —
 /// an unrecoverable brick. Capturing handover-first makes a fresh init always
 /// re-pair the keychain with the live volume.
+/// Order 1919-keyc: the root token read from the host keychain, kept for the
+/// life of this process so the up-to-18 Vault operations of one launch do not
+/// each spawn a keychain read (50 ms to several seconds each). Memory only:
+/// `Zeroizing` wipes the buffer when it is replaced or cleared, and nothing
+/// here writes it anywhere. Cleared whenever a heal mints a new token.
+#[cfg(feature = "vault")]
+static ROOT_TOKEN_MEMO: OnceLock<Mutex<Option<zeroize::Zeroizing<String>>>> = OnceLock::new();
+
+/// One "recovered root token" line per process, not one per Vault operation.
+#[cfg(feature = "vault")]
+static ROOT_TOKEN_RECOVERY_LOGGED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(feature = "vault")]
+fn root_token_memo_get() -> Option<String> {
+    let guard = ROOT_TOKEN_MEMO.get()?.lock().ok()?;
+    guard.as_ref().map(|t| t.as_str().to_string())
+}
+
+#[cfg(feature = "vault")]
+fn root_token_memo_set(token: &str) {
+    if let Ok(mut guard) = ROOT_TOKEN_MEMO.get_or_init(|| Mutex::new(None)).lock() {
+        *guard = Some(zeroize::Zeroizing::new(token.to_string()));
+    }
+}
+
+#[cfg(feature = "vault")]
+fn root_token_memo_clear() {
+    if let Some(cell) = ROOT_TOKEN_MEMO.get()
+        && let Ok(mut guard) = cell.lock()
+    {
+        *guard = None;
+    }
+}
+
+#[cfg(feature = "vault")]
+fn log_root_token_recovery(debug: bool, source: &str) {
+    if debug && !ROOT_TOKEN_RECOVERY_LOGGED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        eprintln!("[tillandsias-vault] recovered root token from {source}");
+    }
+}
+
 #[cfg(feature = "vault")]
 fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
     // 1. Fresh-init handover takes precedence over any stale keychain state.
@@ -5944,6 +5990,7 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
         } else {
             keychain_set_blocking("vault-root-token-v1", &token)?;
             keychain_set_blocking(VAULT_SHAMIR_SHARE_V1, &share_b64)?;
+            root_token_memo_set(&token);
         }
 
         // @trace spec:tillandsias-vault — Secure Artifact Cleanup
@@ -5978,17 +6025,20 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
     }
 
     // 2. Subsequent boot (no fresh handover): use the keychain root token.
+    // Order 1919-keyc: once per process on the keychain path; the in-VM path
+    // below already reads memory, and a host re-delivery must win there.
+    if !is_running_in_vm()
+        && let Some(token) = root_token_memo_get()
+    {
+        return Ok(token);
+    }
     if is_running_in_vm() {
         if let Some(cell) = IN_VM_CREDENTIALS.get()
             && let Ok(guard) = cell.lock()
             && let Some(creds) = &*guard
             && let Some(token) = &creds.root_token
         {
-            if debug {
-                eprintln!(
-                    "[tillandsias-vault] recovered root token from host-delivered credentials"
-                );
-            }
+            log_root_token_recovery(debug, "host-delivered credentials");
             return Ok(token.clone());
         }
         // Host didn't deliver a root token. Try the local fallback file
@@ -6002,9 +6052,7 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
             && let Ok(t) = fs::read_to_string(&fallback_file).map(|s| s.trim().to_string())
             && !t.is_empty()
         {
-            if debug {
-                eprintln!("[tillandsias-vault] recovered root token from VM fallback file");
-            }
+            log_root_token_recovery(debug, "VM fallback file");
             return Ok(t);
         }
         return Err("running in VM but no root token delivered from host".to_string());
@@ -6033,9 +6081,8 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
         }
     };
     if !token.is_empty() {
-        if debug {
-            eprintln!("[tillandsias-vault] recovered root token from host keychain or fallback");
-        }
+        log_root_token_recovery(debug, "host keychain or fallback");
+        root_token_memo_set(&token);
         return Ok(token);
     }
 
@@ -6909,6 +6956,45 @@ pub async fn ensure_mirror_identity_provisioned(
 
 #[cfg(test)]
 mod tests {
+
+    /// Order 1919-keyc: the root-token memo lives in memory only, wipes its
+    /// buffer when dropped, and a heal clears it.
+    #[cfg(feature = "vault")]
+    #[test]
+    fn root_token_memo_is_memory_only_and_zeroized_on_drop() {
+        // Compiles only while the memo holds `Zeroizing<String>`, whose Drop
+        // overwrites the buffer: replacing or clearing it wipes the token.
+        fn holds_zeroizing(_: &OnceLock<Mutex<Option<zeroize::Zeroizing<String>>>>) {}
+        holds_zeroizing(&ROOT_TOKEN_MEMO);
+
+        root_token_memo_set("shape-root-token");
+        assert_eq!(root_token_memo_get().as_deref(), Some("shape-root-token"));
+        root_token_memo_clear();
+        assert_eq!(root_token_memo_get(), None, "a heal must clear the memo");
+
+        // Never written to disk: the memo's own functions touch no file API.
+        // source-pin-ok: asserts the absence of persistence in the memo helpers
+        let source = std::fs::read_to_string(
+            std::path::Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap())
+                .join("src/vault_bootstrap.rs"),
+        )
+        .unwrap();
+        let start = source.find("fn root_token_memo_get()").unwrap();
+        let end = source[start..].find("fn log_root_token_recovery(").unwrap() + start;
+        let helpers = &source[start..end];
+        for api in [
+            "fs::",
+            "File",
+            "write_vm_credential",
+            "keychain_set",
+            "fallback",
+        ] {
+            assert!(
+                !helpers.contains(api),
+                "the root-token memo must stay in memory; its helpers use {api}"
+            );
+        }
+    }
 
     /// 1118-fqfk: a test must never reach the operator's real keyring.
     #[test]

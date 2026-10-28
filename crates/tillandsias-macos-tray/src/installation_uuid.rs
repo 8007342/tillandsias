@@ -260,10 +260,73 @@ pub(crate) fn delete_credential_string_in(service: &str, target: &str) -> std::i
 
 /// Connects to the in-VM agent, delivers the host Keychain-backed `vault-shamir-share-v1`
 /// and `tillandsias-vm-uuid` on connection startup, and retrieves any pending handover credentials.
+///
+/// Order 1919-keyc: the three status polls call this every tick, and each
+/// delivery spawned `security find-generic-password` twice. Once a delivery is
+/// accepted for the current VM boot, later ticks only ask for a pending
+/// handover, which reads no Keychain item. The flag is cached, never the
+/// secret. A new boot ([`note_vm_boot`]) or any failed exchange (the guest may
+/// have restarted) makes the next tick deliver again.
 pub async fn deliver_credentials_and_check_handover(
     client: &mut tillandsias_host_shell::vsock_client::Client,
 ) -> Result<(), String> {
-    deliver_and_handover_in(client, KEYCHAIN_SERVICE).await
+    deliver_once_per_boot_in(client, KEYCHAIN_SERVICE, &DELIVERY_MEMO).await
+}
+
+/// Which VM boot the host last delivered credentials to.
+pub(crate) struct DeliveryMemo {
+    boot: std::sync::atomic::AtomicU64,
+    delivered_for: std::sync::atomic::AtomicU64,
+}
+
+const NOT_DELIVERED: u64 = u64::MAX;
+
+impl DeliveryMemo {
+    pub(crate) const fn new() -> Self {
+        Self {
+            boot: std::sync::atomic::AtomicU64::new(0),
+            delivered_for: std::sync::atomic::AtomicU64::new(NOT_DELIVERED),
+        }
+    }
+    fn delivered(&self) -> bool {
+        use std::sync::atomic::Ordering::SeqCst;
+        self.delivered_for.load(SeqCst) == self.boot.load(SeqCst)
+    }
+    fn mark_delivered(&self) {
+        use std::sync::atomic::Ordering::SeqCst;
+        self.delivered_for.store(self.boot.load(SeqCst), SeqCst);
+    }
+    fn forget(&self) {
+        self.delivered_for
+            .store(NOT_DELIVERED, std::sync::atomic::Ordering::SeqCst);
+    }
+    pub(crate) fn note_boot(&self) {
+        self.boot.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+static DELIVERY_MEMO: DeliveryMemo = DeliveryMemo::new();
+
+/// Call when the tray boots the VM: the new guest has none of the credentials.
+pub fn note_vm_boot() {
+    DELIVERY_MEMO.note_boot();
+}
+
+pub(crate) async fn deliver_once_per_boot_in(
+    client: &mut tillandsias_host_shell::vsock_client::Client,
+    service: &str,
+    memo: &DeliveryMemo,
+) -> Result<(), String> {
+    let result = if memo.delivered() {
+        capture_vault_handover_in(client, service).await.map(|_| ())
+    } else {
+        deliver_and_handover_in(client, service).await
+    };
+    match &result {
+        Ok(()) => memo.mark_delivered(),
+        Err(_) => memo.forget(),
+    }
+    result
 }
 
 /// The delivery and handover against the Keychain service `service`.
@@ -863,6 +926,102 @@ pub(crate) mod tests {
         let result = deliver_and_handover_in(&mut client, service).await;
         drop(client);
         (result, guest.await.unwrap())
+    }
+
+    /// Order 1919-keyc: after one accepted delivery, later status ticks for
+    /// the same boot go straight to GetVaultHandover (no Keychain read); a
+    /// new boot delivers again. Pre-fix every tick sent DeliverCredentials.
+    #[tokio::test]
+    async fn status_ticks_deliver_once_per_vm_boot() {
+        use tillandsias_control_wire::ControlMessage;
+        let scratch = ScratchService::new();
+        let memo = DeliveryMemo::new();
+        // Answers one exchange and reports what the host asked first.
+        async fn tick(service: &str, memo: &DeliveryMemo) -> (Result<(), String>, &'static str) {
+            let (host, io) = tokio::io::duplex(1 << 16);
+            let guest = tokio::spawn(async move {
+                use futures_util::{SinkExt, StreamExt};
+                use tillandsias_control_wire::{ControlEnvelope, WIRE_VERSION};
+                type Io = tokio_util::codec::Framed<
+                    tokio::io::DuplexStream,
+                    tokio_util::codec::LengthDelimitedCodec,
+                >;
+                let mut io: Io = tokio_util::codec::Framed::new(
+                    io,
+                    tillandsias_control_wire::transport::control_frame_codec(),
+                );
+                async fn recv(io: &mut Io) -> Option<ControlEnvelope> {
+                    let frame = io.next().await?.ok()?;
+                    tillandsias_control_wire::decode(&frame).ok()
+                }
+                async fn send(io: &mut Io, seq: u64, body: ControlMessage) {
+                    let bytes = tillandsias_control_wire::encode(&ControlEnvelope {
+                        wire_version: WIRE_VERSION,
+                        seq,
+                        body,
+                    })
+                    .unwrap();
+                    io.send(bytes.into()).await.unwrap();
+                }
+                let mut first = "";
+                while let Some(env) = recv(&mut io).await {
+                    match env.body {
+                        ControlMessage::DeliverCredentials { seq, .. } => {
+                            if first.is_empty() {
+                                first = "deliver";
+                            }
+                            send(
+                                &mut io,
+                                env.seq,
+                                ControlMessage::DeliverCredentialsReply {
+                                    seq_in_reply_to: seq,
+                                    success: true,
+                                    outcome:
+                                        tillandsias_control_wire::DeliverCredentialsOutcome::Accepted,
+                                },
+                            )
+                            .await;
+                        }
+                        ControlMessage::GetVaultHandover { seq } => {
+                            if first.is_empty() {
+                                first = "handover";
+                            }
+                            send(
+                                &mut io,
+                                env.seq,
+                                ControlMessage::VaultHandoverReply {
+                                    seq_in_reply_to: seq,
+                                    unseal_share_b64: None,
+                                    root_token: None,
+                                },
+                            )
+                            .await;
+                        }
+                        other => panic!("unexpected {other:?}"),
+                    }
+                }
+                first
+            });
+            let mut client = tillandsias_host_shell::vsock_client::Client::from_stream(
+                Box::new(host),
+                tillandsias_control_wire::transport::Transport::Vsock { cid: 0, port: 0 },
+            );
+            let result = deliver_once_per_boot_in(&mut client, service, memo).await;
+            drop(client);
+            (result, guest.await.unwrap())
+        }
+        assert_eq!(tick(&scratch.0, &memo).await, (Ok(()), "deliver"));
+        assert_eq!(
+            tick(&scratch.0, &memo).await,
+            (Ok(()), "handover"),
+            "a second tick in the same boot must not deliver (no Keychain read)"
+        );
+        memo.note_boot();
+        assert_eq!(
+            tick(&scratch.0, &memo).await,
+            (Ok(()), "deliver"),
+            "a new VM boot must be delivered to again"
+        );
     }
 
     /// ORDER 1562-bqcm (child of 1562-bqcg), the macOS twin of #255's Windows
