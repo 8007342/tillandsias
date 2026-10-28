@@ -1363,7 +1363,8 @@ fn claim_story_of(
 /// (`packet_discipline.wip_limit`). Returned with where it came from, so a
 /// refusal on a scratch ledger that has no methodology says it used the default.
 fn wip_limit_of(index: &std::path::Path) -> (usize, String) {
-    const DEFAULT: usize = 3;
+    // 1906-8vxe: kept equal to methodology packet_discipline.wip_limit.
+    const DEFAULT: usize = 5;
     let rule = index
         .parent()
         .and_then(|plan| plan.parent())
