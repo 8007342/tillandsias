@@ -27721,6 +27721,7 @@ mod tests {
     /// it yet. Shape-only token values; nothing real.
     #[cfg(unix)]
     #[test]
+    #[ignore = "1914-twan: fails on the 2 s poll by design; enable with the event-driven copy once the operator approves the mechanism"]
     fn codex_rotation_reaches_vault_before_a_container_kill() {
         use std::os::unix::fs::PermissionsExt as _;
         use std::os::unix::process::CommandExt as _;

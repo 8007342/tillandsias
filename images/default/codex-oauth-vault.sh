@@ -63,7 +63,7 @@ harvest_with_retry() {
 
 watch_auth() {
     local child_pid="$1" initial_digest="${2:-}" poll_secs last current
-    poll_secs="${TILLANDSIAS_OAUTH_POLL_SECS:-0.5}"
+    poll_secs="${TILLANDSIAS_OAUTH_POLL_SECS:-2}"
     last="${initial_digest:-$(auth_digest)}"
     while kill -0 "$child_pid" 2>/dev/null; do
         sleep "$poll_secs"
