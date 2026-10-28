@@ -20,6 +20,8 @@ mod action_host;
 #[cfg(target_os = "macos")]
 mod app_delegate;
 #[cfg(target_os = "macos")]
+mod approval_signer;
+#[cfg(target_os = "macos")]
 mod diagnose;
 #[cfg(target_os = "macos")]
 mod guest_binary;
@@ -307,6 +309,24 @@ fn main() {
     // main dispatch queue from its calling thread) — exec_guest_main uses a
     // current-thread runtime for exactly that. See
     // plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md.
+    // Order 1886-hf9j: the approval key. Enrol prints the allowed-signers
+    // line; sign asks for Touch ID and prints the SSHSIG. Neither touches the
+    // VM, so neither needs the tray quit.
+    // One key per repo slug (operator 2026-10-27).
+    if let Some(idx) = args.iter().position(|a| a == "--approval-enrol") {
+        let Some(slug) = args.get(idx + 1) else {
+            eprintln!("usage: --approval-enrol <owner/name>");
+            std::process::exit(2);
+        };
+        std::process::exit(approval_signer::enrol_main(slug));
+    }
+    if let Some(idx) = args.iter().position(|a| a == "--approval-sign") {
+        let (Some(slug), Some(file)) = (args.get(idx + 1), args.get(idx + 2)) else {
+            eprintln!("usage: --approval-sign <owner/name> <statement-file>");
+            std::process::exit(2);
+        };
+        std::process::exit(approval_signer::sign_main(slug, file));
+    }
     if let Some(idx) = args.iter().position(|a| a == "--exec-guest") {
         // 1897-y7j2: a running tray relays the command instead of refusing.
         // The tray is asked only after the request is classified below.
