@@ -8,6 +8,7 @@ sources:
   - https://developers.cloudflare.com/workers/static-assets/routing/single-page-application/
   - https://developers.cloudflare.com/workers/platform/limits/
   - https://developers.cloudflare.com/workers/configuration/compatibility-dates/
+  - https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/
 authority: high
 status: current
 
@@ -29,6 +30,7 @@ pull_recipe: see-section-pull-on-demand
 - Cloudflare Docs, "Single Page Application (SPA)" (`assets.not_found_handling = "single-page-application"`): <https://developers.cloudflare.com/workers/static-assets/routing/single-page-application/>
 - Cloudflare Docs, "Limits" (Workers Free vs Paid account limits): <https://developers.cloudflare.com/workers/platform/limits/>
 - Cloudflare Docs, "Compatibility dates": <https://developers.cloudflare.com/workers/configuration/compatibility-dates/>
+- Cloudflare Docs, "Billing and limitations" ("Requests to static assets are free and unlimited."): <https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/>
 - **Last updated:** 2026-10-27
 
 ## The smallest config that serves a folder
@@ -65,9 +67,14 @@ move it forward deliberately.
 
 ## Free plan limits that matter for a starter site (Workers Free)
 
+An assets-only Worker (no `main`) never runs Worker code, so only the asset
+rows apply. Past the free daily request limit, Worker-code requests get
+429 instead of being billed.
+
 | Limit | Free | Paid |
 |---|---|---|
-| Requests | 100,000 per day | higher (see source) |
+| Requests to static assets | free and unlimited | free and unlimited |
+| Requests that run Worker code | 100,000 per day | higher (see source) |
 | CPU time per HTTP request | 10 ms | up to 5 min (default 30 s) |
 | Memory | 128 MB | 128 MB |
 | Static asset files per Worker version | 20,000 | 100,000 |
