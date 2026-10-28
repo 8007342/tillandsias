@@ -1,0 +1,7 @@
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 7893 MiB):
+  Device 0: NVIDIA GeForce RTX 3070 Laptop GPU, compute capability 8.6, VMM: yes, VRAM: 7893 MiB
+[I] auto-fit plan: --- backend_fit.cpp:323
+[I] auto-fit: --backend "diffusion=CUDA0,te=CUDA0,vae=CUDA0" --- backend_fit.cpp:474
+[V] model manager prepared params backend buffers (626.35 MB, 358 tensors, 1 blocks, VRAM) on CUDA0 --- model_manager.cpp:490
+[V] model manager prepared params backend buffers (649.98 MB, 280 tensors, 1 blocks, VRAM) on CUDA0 --- model_manager.cpp:490
+[V] model manager prepared params backend buffers (  2.34 MB, 67 tensors, 1 blocks, VRAM) on CUDA0 --- model_manager.cpp:490

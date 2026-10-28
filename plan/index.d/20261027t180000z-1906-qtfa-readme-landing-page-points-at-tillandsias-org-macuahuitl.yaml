@@ -1,0 +1,33 @@
+packets:
+- packet_id: readme-landing-page-points-install-at-tillandsias-org-and-summarises-the-architecture
+  order: 1906-qtfa
+  status: done
+  kind: docs
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - docs
+  estimated_hours: 1
+  depends_on: []
+  related: []
+  title: The GitHub README sends installers to tillandsias.org/#install and summarises the architecture instead of stale per-platform install steps
+  context: 'Operator request 2026-10-27. The README carried long, stale per-platform install instructions, a v0.3 "Fedora Pivot" section and a link to a missing README-ABOUT.md. Rewritten as a fleet-agnostic landing page: what Tillandsias is, Install pointing at https://tillandsias.org/#install (anchor confirmed in the live site, the "I want it!" page), a spec-cited architecture summary (tray, forge, enclave network, git mirror, proxy, vault, inference, per-platform substrate), short platform support, License. The RELEASE LEDGER section is kept byte-identical because the release skill appends rows to it, the smoke skill reads its rows, and scripts/check-ledger-distillation.sh counts them.'
+  exit_criteria:
+  - 'README.md links https://tillandsias.org/#install, has no curl install command, and scripts/check-ledger-distillation.sh still prints ok:ledger-distillation:10-rows.'
+  verifiable_closure: 'grep -c "tillandsias.org/#install" README.md is 1; grep -c "install.sh | bash" README.md is 0; scripts/check-ledger-distillation.sh prints ok:ledger-distillation:10-rows:threshold=10.'
+  unscoreable: 'docs-only landing page: no litmus test pins prose; the verifiable_closure greps are the check.'
+  next_action: 'Nothing is left. Follow-up for a human decision: the RELEASE LEDGER rows name fleet hosts; moving the ledger out of README would need the release skill, smoke skill and check-ledger-distillation.sh retargeted together.'
+  provenance: 'Operator request 2026-10-27.'
+  events:
+  - type: filed
+    ts: '2026-10-27T18:00:00Z'
+    host: macuahuitl
+    summary: filed and closed with the README rewrite on work/1906-qtfa
+  - type: completed
+    ts: '2026-10-27T18:00:00Z'
+    host: macuahuitl
+    summary: README rewritten; ledger distillation check ok:ledger-distillation:10-rows:threshold=10
+    evidence_refs:
+    - README.md
+    - 'scripts/check-ledger-distillation.sh: ok:ledger-distillation:10-rows:threshold=10'

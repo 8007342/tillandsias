@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-is-killed-by-systemd-oomd-and-its-session-cannot-be-rejoined
+    event:
+      type: progress
+      ts: "2026-10-28T19:20:44Z"
+      agent_id: linux-yoga-claude-20261027t070947z
+      host: yoga
+      summary: |
+        Measured on yoga (Fedora Silverblue 44, systemd user manager, rootless podman), 2026-10-28: a detached container's cgroup is /user.slice/user-1000.slice/user@1000.service/user.slice/libpod-<id>.scope/container. `systemctl --user show libpod-<id>.scope -p ManagedOOMPreference` reads none; `systemctl --user set-property --runtime libpod-<id>.scope ManagedOOMPreference=avoid` exits 0 and show then reads avoid. But no user.oomd_avoid xattr appeared on the scope's cgroup directory (getfattr: No such attribute), so whether systemd-oomd honours it for a user-owned scope is NOT shown yet. Next: read systemd's oomd preference rules for user-manager cgroups (trusted. vs user. xattr), then a pressure test on a scratch scope.

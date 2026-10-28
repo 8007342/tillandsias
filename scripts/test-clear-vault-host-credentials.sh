@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# 1903-djsq: never reach the operator's session bus or gnome-keyring-daemon.
+. "$(cd "$(dirname "$0")" && pwd)/test-support/private-session-bus.sh"
 # @trace order:900-z3kv, spec:tillandsias-vault
 #
 # Fixture for clear-vault-host-credentials.sh — criterion 3's BOTH directions.

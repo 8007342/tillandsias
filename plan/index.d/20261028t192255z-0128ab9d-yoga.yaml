@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-is-killed-by-systemd-oomd-and-its-session-cannot-be-rejoined
+    event:
+      type: progress
+      ts: "2026-10-28T19:22:55Z"
+      agent_id: linux-yoga-claude-20261027t070947z
+      host: yoga
+      summary: |
+        Criterion 1 recorded as NOT SETTABLE for a rootless scope (coordinator-approved). Evidence, yoga 2026-10-28: systemctl --user set-property --runtime libpod-<id>.scope ManagedOOMPreference=avoid exits 0 and reads back avoid, but the scope cgroup carries only security.selinux (getfattr -d -m -), no user.oomd_avoid, so systemd-oomd has nothing to honour; systemd.resource-control(5) also limits it to cgroups whose owner matches the monitored ancestor's. The lenovinha kill took the CONTAINER scope, so no attach/rejoin change would have saved that forge; push-often (1911-vwjx) and sibling memory budgets (criterion 2) are the work-loss fix. Open: whether lenovinha had disk swap at 11:41:10 (operator ruling: swap mandatory) — to be checked on lenovinha. Second measurement, yoga, scripts in the session scratchpad: a `podman run -it --rm` container stays running after its podman client is SIGKILLed and after its pty owner dies (state_after_kill9=running both times), so conmon already outlives the attach; criterion 3's real gap is the missing rejoin verb and whatever tillandsias' own exit path does to the container, and its fixture must drive the tillandsias launcher, not bare podman.

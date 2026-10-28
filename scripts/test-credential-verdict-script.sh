@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# 1903-djsq: never reach the operator's session bus or gnome-keyring-daemon.
+. "$(cd "$(dirname "$0")" && pwd)/test-support/private-session-bus.sh"
 # @trace order:995-srbf, spec:github-credential-health
 #
 # The verdict script is what distinguishes "this credential is bad" from "I

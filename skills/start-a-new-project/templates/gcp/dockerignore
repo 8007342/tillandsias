@@ -1,0 +1,6 @@
+.git
+.dart_tool
+node_modules
+__pycache__
+*.pyc
+.env

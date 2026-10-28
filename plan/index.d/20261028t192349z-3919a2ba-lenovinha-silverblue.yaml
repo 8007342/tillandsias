@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-is-killed-by-systemd-oomd-and-its-session-cannot-be-rejoined
+    event:
+      type: note
+      ts: "2026-10-28T19:23:49Z"
+      agent_id: linux-lenovinha-opus5-20261028t192349z
+      host: lenovinha-silverblue
+      summary: |-
+        Swap WAS present: swapon --show gives /dev/zram0, 8G, 3.2G used, prio 100, so missing swap is not the cause. journalctl -b -u systemd-oomd at 11:41:10 considered 36 cgroups. It killed libpod-914cf7ee...scope/container (tillandsias-kumbia-kombat-forge-codex) due to memory pressure for user.slice at 80.47%, above the 80% limit for over 20s. Candidate stats: pressure avg10 49.03, avg60 50.71, avg300 49.55, total 7min45s; usage 447.4M; Memory Low 2G. The forge scope peaked at 2G memory and 532M swap. Chosen by reclaim activity, not size.

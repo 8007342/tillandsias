@@ -1,0 +1,137 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue (opus5) at the operator's request, 2026-10-28: detect a forge crash, offer "forge crashed, relaunch? [ ] Continue" with Macron art, and later auto-relaunch and reconnect.
+packets:
+- packet_id: lane-end-classifier-tells-a-forge-crash-from-a-normal-exit
+  order: 1912-n2i8
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - headless
+  - linux
+  estimated_hours: 5
+  title: A lane classifies how its forge ended (clean, user quit, failed, signal, OOM, systemd-oomd, host shutdown) and records it
+  context: 'Today a crash looks like any other non-zero exit. run_container_attached_observed (crates/tillandsias-podman/src/client.rs:1108-1140) collapses the status, and hold_window_line (main.rs:18212-18227) prints only exit N or signal S. Podman oom and died events are already parsed (events.rs:457-463, 649-667) but nothing consumes them for the forge, and the emitter stops right after the attach returns (main.rs:16616-16625). --rm plus cleanup_forge_ram_workspace removes the container before it can be inspected. A systemd-oomd kill is a SIGKILL from outside the cgroup, not OOMKilled=true, so only the journal line naming the libpod scope separates oomd from the kernel OOM killer. When oomd kills the scope, the lane process can die with it (the operator saw signal 9), so the verdict must also be readable by run_hold_window.'
+  exit_criteria:
+  - 'A LaneEnd enum is computed between the attach returning and cleanup (main.rs:16607-16616) from the exit status, podman inspect or events, the harness-supervisor evidence, and the oomd journal within a few seconds.'
+  - 'The verdict is written to a sidecar next to attached-sessions/<container>.log; run_hold_window and the tray read it, and the hold window prints the kind.'
+  - 'A fixture feeding died exit 137 plus an oom event asserts Oom, and one with an oomd journal line asserts Oomd; it FAILS on today''s code (there is no type).'
+  verifiable_closure: 'cargo test -p tillandsias-headless lane_end_classifier'
+  next_action: 'Add the enum and its pure classifier with fixtures, then wire it before cleanup and add the sidecar.'
+  provenance: 'Fable research pass 2026-10-28 (lenovinha), after the Codex forge was killed by systemd-oomd (1911-3dqo).'
+  events:
+  - type: filed
+    ts: '2026-10-28T19:22:36Z'
+    host: lenovinha-silverblue
+    summary: filed at the operator's request; crash detection is the base for the relaunch prompt
+- packet_id: forge-agent-sessions-survive-a-crash-for-every-agent
+  order: 1912-uj2f
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - headless
+  - forge
+  estimated_hours: 4
+  title: Claude and OpenCode session history is lost with the container, so Continue has nothing to resume
+  context: 'Codex is fine: codex-safe-state.sh symlinks CODEX_HOME sessions and its SQLite into the per-project cache volume (main.rs:9571), which survives --rm, so codex resume --last works in a new forge. Check that the per-worker CODEX_HOME suffix (main.rs:8736) is stable across a relaunch. Claude keeps ~/.claude on a tmpfs home and vaults only its credentials (main.rs:13439, 17224), so claude --continue finds nothing. No persistence was found for OpenCode data (~/.local/share/opencode). The work tree /home/forge/src is a per-launch tmpfs removed by cleanup, so uncommitted work is lost; that is what push-often (1911-vwjx) and the durable session (1911-3dqo) address.'
+  exit_criteria:
+  - 'Claude project sessions and OpenCode session data live on the project cache volume (never credentials); a fixture asserts the mount and symlink layout and FAILS on today''s code.'
+  - 'A relaunch of each agent with its continue flag finds the prior session; the Codex worker suffix is proven stable.'
+  verifiable_closure: 'A litmus step that lists the forge''s persisted session dirs per agent.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the session-dir litmus lands with the fix.'
+  next_action: 'Mirror codex-safe-state.sh for claude and opencode, excluding credential files, and add the litmus.'
+  provenance: 'Fable research pass 2026-10-28 (lenovinha).'
+  events:
+  - type: filed
+    ts: '2026-10-28T19:22:36Z'
+    host: lenovinha-silverblue
+    summary: filed; Continue needs a session that survives the container
+- packet_id: forge-crash-offers-relaunch-with-a-continue-checkbox
+  order: 1912-zlaq
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - headless
+  - ux
+  estimated_hours: 5
+  title: After a forge crash the held window offers "Forge crashed, relaunch?" with a [ ] Continue checkbox
+  context: 'Operator request 2026-10-28. The hold window is already open after a crash, so it is the cheapest surface: a TUI prompt in run_hold_window (main.rs:18296-18320) that first resets terminal modes (1911-kk84). Continue relaunches the lane with the agent''s resume flag (codex resume --last, and claude or opencode once 1912-uj2f lands); without it, a fresh session starts. It appears only when the lane-end verdict (1912-n2i8) is a crash (Oom, Oomd, Signal, Failed), never on a clean exit or user quit. UX is gated: methodology.yaml:166 requires explicit operator approval, so a mock-up of the text and layout goes to the operator before it is built. Macron art is the GTK phase (1912-v2yp).'
+  depends_on:
+  - lane-end-classifier-tells-a-forge-crash-from-a-normal-exit
+  - hold-window-leaves-terminal-modes-on-after-a-signal-death
+  exit_criteria:
+  - 'The operator approves a mock-up of the prompt.'
+  - 'On a crash verdict the window shows the prompt; with Continue checked the relaunch argv carries the resume flag; a fixture drives stdin and asserts the argv. It FAILS on today''s code.'
+  - 'A clean exit or user quit shows no prompt.'
+  verifiable_closure: 'cargo test -p tillandsias-headless hold_window_offers_relaunch_after_crash'
+  next_action: 'Draft the mock-up for operator approval while 1912-n2i8 lands.'
+  provenance: 'Operator request 2026-10-28, relayed in the lenovinha session; design from the Fable research pass.'
+  events:
+  - type: filed
+    ts: '2026-10-28T19:22:36Z'
+    host: lenovinha-silverblue
+    summary: filed at the operator's request; terminal-surface relaunch prompt
+- packet_id: forge-crash-dialog-shows-macron-with-relaunch-and-continue
+  order: 1912-v2yp
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - ux
+  - linux
+  estimated_hours: 6
+  title: A Macron dialog says the forge crashed and offers Relaunch with a [ ] Continue checkbox
+  context: 'The operator asked for the crash window to use the Macron art. No Macron art exists in this repo yet: the canon lives in the macron.dev repo, art is generated through 1890-hjk5 and ships only after operator approval, and the GTK4 approval-dialog binary is 1883-c8xr (not built yet). The tray is StatusNotifier over zbus with no GTK. This row reuses that dialog for a crash notice raised by the tray when a lane-end sidecar reports a crash and no hold window is alive (for example, the terminal was closed or killed with the scope).'
+  depends_on:
+  - linux-approval-dialog-shows-macron-doing-the-action-with-curated-calm-sentences-before-the-os-check
+  - macron-approval-and-splash-art-is-generated-by-the-local-image-generation-tool-and-ships-only-after-operator-approval
+  - lane-end-classifier-tells-a-forge-crash-from-a-normal-exit
+  exit_criteria:
+  - 'The operator approves the dialog''s art and calm text.'
+  - 'A crash sidecar with no live hold window raises the dialog; Relaunch with Continue checked starts the lane with the resume flag; a fixture asserts the invocation.'
+  unscoreable: 'unpinnable-until-the-guard-exists: depends on the dialog binary from 1883-c8xr.'
+  next_action: 'Wait for 1883-c8xr and 1890-hjk5; spec the crash variant of the dialog.'
+  provenance: 'Operator request 2026-10-28 (lenovinha session); Fable research pass.'
+  events:
+  - type: filed
+    ts: '2026-10-28T19:22:36Z'
+    host: lenovinha-silverblue
+    summary: filed at the operator's request; GTK Macron crash dialog phase
+- packet_id: crashed-forge-auto-relaunches-and-reconnects-when-safe
+  order: 1912-rs3l
+  status: ready
+  kind: research
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - headless
+  - linux
+  estimated_hours: 6
+  title: A crashed forge relaunches and reconnects by itself when it is safe
+  context: 'The operator''s eventual goal. The proposed safety gates: the verdict is a crash (never a clean exit or user quit); memory pressure (/proc/pressure/memory) has stayed below the oomd threshold for at least 20s; the vault is unsealed; at most 3 attempts per container, backing off 10, 60 and 300s; the hold window is still open; and no live container holds the name (remove_container_unless_running, main.rs:16163). True reconnection needs the durable session and rejoin verb (1911-3dqo); until then, relaunch means a new container with Continue.'
+  depends_on:
+  - lane-end-classifier-tells-a-forge-crash-from-a-normal-exit
+  - forge-is-killed-by-systemd-oomd-and-its-session-cannot-be-rejoined
+  - forge-crash-offers-relaunch-with-a-continue-checkbox
+  exit_criteria:
+  - 'The gates are specified and each one has a fixture; three crashes in 60s make the fourth relaunch refused, which FAILS on today''s code.'
+  - 'With the durable session in place, a killed attach client reconnects automatically to the still-running agent.'
+  unscoreable: 'research row: closure is the gate spec plus its fixtures.'
+  next_action: 'Spec the gates and the attempt ledger after 1912-n2i8 and 1911-3dqo.'
+  provenance: 'Operator request 2026-10-28 (lenovinha session); Fable research pass.'
+  events:
+  - type: filed
+    ts: '2026-10-28T19:22:36Z'
+    host: lenovinha-silverblue
+    summary: filed at the operator's request; guarded auto-relaunch and reconnect

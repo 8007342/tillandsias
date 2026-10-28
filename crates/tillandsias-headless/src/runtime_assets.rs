@@ -265,6 +265,8 @@ pub(crate) fn image_context_rel(image_name: &str) -> Result<&'static str, String
         "webkit" => Ok("images/webkit"),
         // 1637-5765: the opt-in Flutter toolchain, built on first use.
         "flutter" => Ok("images/flutter"),
+        // 1874-b9tg: local image generation, built on first use.
+        "imagegen" => Ok("images/imagegen"),
         "vault" => Ok("images/vault"),
         other => Err(format!("Unknown image type: {other}")),
     }
@@ -436,6 +438,8 @@ mod tests {
             ("images/vault/Containerfile", "images/vault"),
             ("images/webkit/Containerfile", "images/webkit"),
             ("images/flutter/Containerfile", "images/flutter"),
+            ("images/imagegen/Containerfile", "images/imagegen"),
+            ("images/imagegen/Containerfile.cuda", "images/imagegen"),
         ];
 
         for (cf_rel_path, context_dir) in containerfiles {
