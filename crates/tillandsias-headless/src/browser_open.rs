@@ -112,6 +112,7 @@ fn router_upstream() -> Result<(String, String), String> {
 pub(crate) fn forwarder_spec(
     handle: &ContainerHandle,
     project: &str,
+    window_id: &str,
     router_ip: &str,
     extra_ports: &[u16],
 ) -> tillandsias_podman::ContainerSpec {
@@ -124,6 +125,9 @@ pub(crate) fn forwarder_spec(
     .read_only()
     .detached()
     .name(forwarder_name(handle))
+    // 1911-3gqy: the same label as the window network, so a sweep by label
+    // finds a leaked forwarder.
+    .label("tillandsias.browser-window", window_id)
     .network(format!("{}:alias=router", handle.network_name))
     .pids_limit(32)
     .tmpfs("/tmp:size=8m")
@@ -256,10 +260,15 @@ impl TrayBrowserContainers {
                 network_budget(),
             )?;
             let (router_network, router_ip) = router_upstream()?;
-            let forwarder =
-                forwarder_spec(&handle, request.project_label, &router_ip, &[preview_port])
-                    .build_run_argv()
-                    .map_err(|e| format!("forwarder argv refused: {e}"))?;
+            let forwarder = forwarder_spec(
+                &handle,
+                request.project_label,
+                request.window_id,
+                &router_ip,
+                &[preview_port],
+            )
+            .build_run_argv()
+            .map_err(|e| format!("forwarder argv refused: {e}"))?;
             let forwarder: Vec<&str> = forwarder.iter().map(String::as_str).collect();
             podman(&forwarder, RUN_BUDGET)?;
             podman(
@@ -298,6 +307,7 @@ impl TrayBrowserContainers {
             self.stop(&handle);
             return Err(LaunchError::Spawn(err));
         }
+        watch_window_exit(&handle, self.debug);
         Ok(handle)
     }
 }
@@ -887,9 +897,15 @@ impl BrowserContainers for TrayBrowserContainers {
                 network_budget(),
             )?;
             let (router_network, router_ip) = router_upstream()?;
-            let forwarder = forwarder_spec(&handle, request.project_label, &router_ip, &[])
-                .build_run_argv()
-                .map_err(|e| format!("forwarder argv refused: {e}"))?;
+            let forwarder = forwarder_spec(
+                &handle,
+                request.project_label,
+                request.window_id,
+                &router_ip,
+                &[],
+            )
+            .build_run_argv()
+            .map_err(|e| format!("forwarder argv refused: {e}"))?;
             let forwarder: Vec<&str> = forwarder.iter().map(String::as_str).collect();
             podman(&forwarder, RUN_BUDGET)?;
             podman(
@@ -923,28 +939,87 @@ impl BrowserContainers for TrayBrowserContainers {
             self.stop(&handle);
             return Err(LaunchError::Spawn(err));
         }
+        watch_window_exit(&handle, self.debug);
         Ok(add_audio(handle))
     }
 
     fn stop(&self, handle: &ContainerHandle) {
-        let forwarder = forwarder_name(handle);
-        let steps: [&[&str]; 3] = [
-            &["rm", "-f", "-t", "0", &handle.container_name],
-            &["rm", "-f", "-t", "0", &forwarder],
-            &["network", "rm", "-f", &handle.network_name],
-        ];
-        for args in steps {
-            if let Err(err) = podman(args, network_budget())
-                && self.debug
-            {
-                eprintln!("[tillandsias] browser.close: {err}");
-            }
-        }
-        let _ = std::fs::remove_dir_all(&handle.profile_dir);
-        if let Some(dir) = handle.cdp_socket.as_deref().and_then(Path::parent) {
-            let _ = std::fs::remove_dir_all(dir);
+        reap_window(handle, self.debug);
+    }
+}
+
+/// Remove everything a window made: its container, forwarder, network,
+/// profile dir and CDP dir. Idempotent, so a close and an exit watcher may
+/// both run it.
+fn reap_window(handle: &ContainerHandle, debug: bool) {
+    let forwarder = forwarder_name(handle);
+    let steps: [&[&str]; 3] = [
+        &["rm", "-f", "-t", "0", &handle.container_name],
+        &["rm", "-f", "-t", "0", &forwarder],
+        &["network", "rm", "-f", &handle.network_name],
+    ];
+    for args in steps {
+        if let Err(err) = podman(args, network_budget())
+            && debug
+        {
+            eprintln!("[tillandsias] browser.close: {err}");
         }
     }
+    let _ = std::fs::remove_dir_all(&handle.profile_dir);
+    if let Some(dir) = handle.cdp_socket.as_deref().and_then(Path::parent) {
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+/// How long the exit watcher's `podman wait` may block: a window can stay
+/// open for days, and the watcher only has to outlive it.
+const WINDOW_WAIT_BUDGET: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+
+/// Order 1911-3gqy. A window runs `--rm`, so closing it removes only the
+/// window; this watcher waits for that exit on its own thread and then reaps
+/// what the window left behind. `wait` blocks until the named container
+/// exits; `reap` removes the rest.
+fn reap_when_window_exits<W, R>(handle: ContainerHandle, wait: W, reap: R)
+where
+    W: FnOnce(&str) + Send + 'static,
+    R: FnOnce(&ContainerHandle) + Send + 'static,
+{
+    std::thread::spawn(move || {
+        wait(&handle.container_name);
+        reap(&handle);
+    });
+}
+
+/// The production exit watcher: `podman wait` on the window, then reap it.
+fn watch_window_exit(handle: &ContainerHandle, debug: bool) {
+    reap_when_window_exits(
+        handle.clone(),
+        |name: &str| {
+            // A failed `podman wait` is not an exit: reap only once the window
+            // is gone or no longer running, so a transient podman error never
+            // closes a live window.
+            loop {
+                let _ = crate::podman_command()
+                    .args(["wait", name])
+                    .output_bounded(WINDOW_WAIT_BUDGET);
+                let running = podman(
+                    &[
+                        "container",
+                        "inspect",
+                        "--format",
+                        "{{.State.Running}}",
+                        name,
+                    ],
+                    network_budget(),
+                );
+                if running.as_deref() != Ok("true") {
+                    return;
+                }
+                std::thread::sleep(Duration::from_secs(5));
+            }
+        },
+        move |h: &ContainerHandle| reap_window(h, debug),
+    );
 }
 
 #[cfg(test)]
@@ -1308,6 +1383,59 @@ mod tests {
         assert!(!rules.contains("8080"), "no plaintext mapping (1651-5t7n)");
     }
 
+    /// Order 1911-3gqy, red first. A window runs `--rm` and removes itself
+    /// when closed, but nothing watched it exit, so its forwarder, network and
+    /// profile dir leaked (11 forwarders and 12 networks live on lenovinha,
+    /// zero windows), and a leaked `-fwd-` counted as a live lane, so the
+    /// shared stack never tore down. The forwarder carries the window label,
+    /// a window exit reaps what the window made, and a forwarder alone is not
+    /// a lane.
+    #[test]
+    fn browser_window_exit_reaps_forwarder_and_network() {
+        let handle = ContainerHandle {
+            container_name: "tillandsias-browser-acme-0123456789ab".into(),
+            network_name: "tillandsias-browser-net-0123456789ab".into(),
+            profile_dir: PathBuf::from("/tmp/x"),
+            cdp_socket: None,
+            notice: None,
+        };
+        let joined = forwarder_spec(&handle, "acme", "w-0123456789ab", "10.0.42.7", &[])
+            .build_run_argv()
+            .unwrap()
+            .join(" ");
+        assert!(
+            joined.contains("--label tillandsias.browser-window=w-0123456789ab"),
+            "the forwarder must carry its window's label: {joined}"
+        );
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        let waited = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+        let seen = waited.clone();
+        reap_when_window_exits(
+            handle.clone(),
+            move |name: &str| *seen.lock().unwrap() = name.to_string(),
+            move |h: &ContainerHandle| {
+                tx.send((forwarder_name(h), h.network_name.clone()))
+                    .unwrap();
+            },
+        );
+        let (fwd, net) = rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("a window exit must reap its forwarder and network");
+        assert_eq!(*waited.lock().unwrap(), handle.container_name);
+        assert_eq!(fwd, "tillandsias-browser-fwd-0123456789ab");
+        assert_eq!(net, "tillandsias-browser-net-0123456789ab");
+
+        assert!(
+            !crate::is_active_lane_container("tillandsias-browser-fwd-0123456789ab", "running"),
+            "a forwarder alone must not hold the shared stack up"
+        );
+        assert!(crate::is_active_lane_container(
+            "tillandsias-browser-acme-0123456789ab",
+            "running"
+        ));
+    }
+
     /// Order 1651-5t7n: the forwarder answers as `router` on the window's
     /// network, dials the router by IP on the router's network, publishes
     /// nothing, and runs the shipped script.
@@ -1320,7 +1448,7 @@ mod tests {
             cdp_socket: None,
             notice: None,
         };
-        let argv = forwarder_spec(&handle, "acme", "10.0.42.7", &[])
+        let argv = forwarder_spec(&handle, "acme", "w-0123456789ab", "10.0.42.7", &[])
             .build_run_argv()
             .unwrap();
         let joined = argv.join(" ");
