@@ -1,0 +1,100 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue (opus5) at the operator's request, 2026-10-28, from the Codex forge death at 11:41:10 local.
+packets:
+- packet_id: forge-is-killed-by-systemd-oomd-and-its-session-cannot-be-rejoined
+  order: 1911-3dqo
+  status: ready
+  kind: bug
+  priority: p0
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - headless
+  - linux
+  estimated_hours: 8
+  title: systemd-oomd killed a 14-hour Codex forge for desktop-wide memory pressure, and nothing could rejoin or save the session
+  context: 'Evidence (journal, lenovinha 2026-10-28): at 11:41:10 systemd-oomd killed /user.slice/.../libpod-914cf7ee....scope/container (tillandsias-kumbia-kombat-forge-codex, up 14h19m) because user.slice memory pressure was 80.47% above the 80% limit for more than 20s. The forge was using 447M, with pressure avg10 49%; it was chosen for the highest reclaim activity, not the most memory. Healthchecks had been timing out since 11:34:49. Fedora default: user.slice ManagedOOMMemoryPressure=kill. Same second: a Chrome GPU-process crash (a casualty, not the cause). It was not a socket failure: a Linux lane is a plain podman run --rm -it attach (crates/tillandsias-podman/src/client.rs:1160-1205, main.rs:16083) with no vsock or codec layer. The forge already gets a ForgeBudget --memory limit (main.rs:9461); there is no ManagedOOMPreference on the scope. The agent lives inside the attach: PID 1 is codex-oauth-session.sh, and an outside kill loses all unpushed work. There is no rejoin verb.'
+  exit_criteria:
+  - 'A forge scope carries ManagedOOMPreference=avoid (or the reason it cannot), proven by systemctl --user show on a launched forge.'
+  - 'The browser and toolchain siblings of a forge carry memory budgets, so they come under pressure before the forge.'
+  - 'A forge outlives its terminal attach (detached run plus podman attach, or tmux in the forge), and tillandsias can rejoin a live forge; a fixture that kills the attach client asserts the agent process still runs. It FAILS on today''s code.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the attach-survival fixture lands with the fix.'
+  next_action: 'Decide the durable-session shape (podman detach+attach versus tmux in the forge) and the oomd posture; verify that ManagedOOMPreference is settable for a rootless libpod scope.'
+  provenance: 'Fable research pass 2026-10-28, verified by lenovinha against journalctl (the systemd-oomd kill lines).'
+  events:
+  - type: filed
+    ts: '2026-10-28T19:11:43Z'
+    host: lenovinha-silverblue
+    summary: filed urgent after the Codex forge was killed by systemd-oomd; no rejoin path exists
+- packet_id: hold-window-leaves-terminal-modes-on-after-a-signal-death
+  order: 1911-kk84
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - headless
+  estimated_hours: 1
+  title: After a forge dies by signal the held terminal keeps mouse tracking on and spills escape codes
+  context: 'Codex was SIGKILLed mid-frame (its last output ended mid-escape), so its own restore never ran. run_hold_window (crates/tillandsias-headless/src/main.rs:18296-18320) then prints "this session ended by signal 9" and waits for Enter without resetting terminal modes, so every mouse move printed escape codes.'
+  exit_criteria:
+  - 'When the lane ends by a signal, run_hold_window writes the reset sequences (mouse tracking 1000/1002/1003/1006 off, leave the alt screen, show the cursor) before its prompt; a unit test asserts the bytes. It FAILS on today''s code.'
+  verifiable_closure: 'cargo test -p tillandsias-headless hold_window_resets_terminal_modes_after_signal'
+  next_action: 'Add the reset write on status.signal().is_some() and the test.'
+  provenance: 'Fable research pass 2026-10-28 (lenovinha).'
+  events:
+  - type: filed
+    ts: '2026-10-28T19:11:43Z'
+    host: lenovinha-silverblue
+    summary: filed from the Codex forge death; terminal left in mouse-tracking mode
+- packet_id: browser-forwarders-and-networks-leak-and-pin-the-shared-stack
+  order: 1911-3gqy
+  status: ready
+  kind: bug
+  priority: p0
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - headless
+  - browser
+  estimated_hours: 6
+  title: Browser forwarder containers and networks are never reaped, and leaked forwarders keep the shared stack up forever
+  context: 'Live on lenovinha 2026-10-28: 11 tillandsias-browser-fwd-* running (up to 12h old), 12 tillandsias-browser-net-* networks, and zero window containers. Confirmed defects: (A) a window runs with --rm and removes itself when closed, but nothing watches it exit and LANE_WINDOWS (mcp_socket.rs:797) never evicts, so stop() (browser_open.rs:929-935) never removes the forwarder, network or profile dir. Forwarders carry no window label; networks do (browser_open.rs:876-885). (B) find_timed_out_windows (window_registry.rs:190, spec browser-window-timeout, 24h) has only test callers. (C) The forge-exit cleanup at main.rs:8981 removes tillandsias-browser-{project}, a name that no longer matches suffixed windows. (D) is_active_lane_container (main.rs:9119-9123) counts -fwd- as a live lane, so the last-lane teardown never runs. Tray Quit removes forwarders but never browser-net networks. Each network takes a /24 from the podman pool and its forwarder holds an enclave IP.'
+  exit_criteria:
+  - 'Forwarders carry the tillandsias.browser-window label; a window exit triggers close_window, removing the forwarder, network and profile dir; a fixture fails on today''s code.'
+  - 'An idle sweeper calls find_timed_out_windows with an agent-scale idle limit (about 1h), and a per-project window cap evicts the oldest window.'
+  - 'is_active_lane_container ignores -fwd-; tray start, Quit and reset sweep orphaned forwarders and networks by label.'
+  verifiable_closure: 'cargo test -p tillandsias-headless browser_window_exit_reaps_forwarder_and_network'
+  next_action: 'Label the forwarder, add the exit watcher, exclude -fwd- from the live-lane check, then the sweeper and cap.'
+  provenance: 'Junior inventory plus Fable verification 2026-10-28 (lenovinha); all four claims confirmed with file:line.'
+  events:
+  - type: filed
+    ts: '2026-10-28T19:11:43Z'
+    host: lenovinha-silverblue
+    summary: filed urgent; four confirmed reaping bugs and live leaked forwarders and networks
+- packet_id: forge-agents-push-every-commit-to-a-work-ref
+  order: 1911-vwjx
+  status: ready
+  kind: research
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - methodology
+  - git-mirror
+  estimated_hours: 3
+  title: Forge agents keep local commits; make pushing every commit to a disposable work ref the first rule they read
+  context: 'The permission exists (join-the-fleet SKILL.md:177, advance-work-from-plan SKILL.md:24, between-commits-work-discipline.yaml:103-110), but it is worded as optional, and forge-quick-intro SKILL.md:18 never names a work ref. Obstacles: advance-work-from-plan SKILL.md:1137 caps pushes at 2 commits per hour with a cooldown; the mirror pre-receive hook relays to GitHub synchronously before it accepts (images/git/pre-receive-hook.sh:6-8); the work/* pre-push deciders run in full (scripts/hooks/pre-push-local-gate.sh:152-170); and multi-host-development.yaml:1040 (merge trunk before every push) conflicts with join-the-fleet:177 (no trunk merge on a work ref). Related: the session-durability row 1911-3dqo.'
+  exit_criteria:
+  - 'forge-quick-intro and the forge opencode/codex instructions carry a concrete rule: after every commit, push HEAD to refs/heads/work/<order>.'
+  - 'pull_merge_cadence gains a maximum-unpushed-window key, and the 2-per-hour cap exempts work/*.'
+  - 'The merge-before-push conflict is resolved in one place; the cost of a work-ref push (mirror relay plus deciders) is measured, and an async-relay option is assessed.'
+  unscoreable: 'research row: closure is the instruction diff plus the measured push cost.'
+  next_action: 'Measure a work-ref push from a forge, then draft the instruction changes.'
+  provenance: 'Explore pass 2026-10-28 (lenovinha), at the operator''s request after the Codex forge death.'
+  events:
+  - type: filed
+    ts: '2026-10-28T19:11:43Z'
+    host: lenovinha-silverblue
+    summary: filed at the operator's request; push-often guidance is optional and contradicted
