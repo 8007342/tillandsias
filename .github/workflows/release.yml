@@ -586,6 +586,10 @@ jobs:
           # The macOS SHA256SUMS uses a distinct filename so it doesn't
           # collide with the Linux job's SHA256SUMS in the GitHub release.
           mv dist/SHA256SUMS release-artifacts/SHA256SUMS-macos
+          # Order 1360-34uw: name the installer in the macOS manifest, as the
+          # Linux (install.sh) and Windows (install-windows.ps1) lanes do.
+          (cd release-artifacts && shasum -a 256 install-macos.sh >> SHA256SUMS-macos)
+          grep -q ' install-macos.sh$' release-artifacts/SHA256SUMS-macos
           ls -la release-artifacts/
 
       - name: Install Cosign
