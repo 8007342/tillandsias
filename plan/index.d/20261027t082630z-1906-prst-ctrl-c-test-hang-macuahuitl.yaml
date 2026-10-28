@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl, 2026-10-27: the land-queue gate hung for 9 hours inside
+# toolchain_exec::tests::shim_forwards_ctrl_c_to_the_toolchain. Code is cited
+# by symbol.
+packets:
+  - packet_id: the-ctrl-c-forwarding-test-resets-the-fake-toolchain-signal-dispositions-and-fails-within-30-s-instead-of-hanging
+    order: 1906-prst
+    depends_on: []
+    status: done
+    kind: bug
+    priority: p0
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [tests, signals, land-queue]
+    estimated_hours: 1
+    size: S
+    implementer_tier: sonnet
+    owned_files:
+      - crates/tillandsias-headless/src/toolchain_exec.rs
+    title: "The Ctrl-C forwarding test gives its fake toolchain default signal dispositions and fails within 30 s instead of hanging the land-queue gate"
+    context: |
+      Root cause: the land-queue runs its gate in the background, so the test
+      binary inherits SIGINT as SIG_IGN; the fake host's `sh -c "trap ... INT"`
+      inherits it too, and POSIX forbids a non-interactive shell from trapping
+      a signal that was ignored on entry. The trap silently never fires, the
+      forwarded INT is discarded, and read_to_string waits forever. Not a race:
+      deterministic under an ignored SIGINT (200/200 hung), green otherwise.
+      Fix: fake_host's spawn closure resets INT/TERM/HUP to SIG_DFL in
+      pre_exec; the test arms a 30 s watchdog that SIGKILLs the shim and
+      panics with a clear message.
+    exit_criteria:
+      - "Run with SIGINT ignored (`trap '' INT`), shim_forwards_ctrl_c_to_the_toolchain passes 200/200 under a 4-core busy loop. Pre-fix result: FAILS, 200/200 hang."
+    verifiable_closure: "(trap '' INT; cargo test ... shim_forwards_ctrl_c_to_the_toolchain) passes in under 1 s. Pre-fix result: FAILS, it never returns."
+    unscoreable: |
+      pinned-by-its-own-rust-test: the scoring fixture is the cargo test shim_forwards_ctrl_c_to_the_toolchain itself, run under an ignored SIGINT; no litmus can host a background-signal regime.
+    next_action: >
+      Nothing is left once the PR lands into linux-next.
+    provenance: |
+      Coordinator dispatch on macuahuitl 2026-10-27 after a 9-hour land-queue hang.
+    events:
+      - type: filed
+        ts: "2026-10-27T08:26:30Z"
+        host: macuahuitl
+        summary: "filed and fixed on work/1906-prst"
+      - type: completed
+        ts: "2026-10-27T08:26:30Z"
+        host: macuahuitl
+        summary: "fake_host resets INT/TERM/HUP in pre_exec; 30 s watchdog. Ignored-SIGINT regime: before 200/200 hung, after 200/200 pass; deadline proven by disabling the reset (fails at 30.00 s)."
+        evidence_refs:
+          - "crates/tillandsias-headless/src/toolchain_exec.rs#shim_forwards_ctrl_c_to_the_toolchain"
