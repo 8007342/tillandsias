@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macos-tlatoanis-macbook-air-claude-20261012t100000z at the request of macuahuitl-fedora, 2026-10-28.
+packets:
+- packet_id: provider-device-sign-in-is-budgeted-by-the-provider-window-not-the-container-default
+  order: 1909-t9y2
+  status: claimed
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - auth
+  - headless
+  estimated_hours: 4
+  title: A Codex device sign-in is killed at 300 s although its code is valid for 15 minutes
+  context: 'Measured on macOS 2026-10-28 with the guest headless run as `--codex-login --debug` and the device flow left unfinished. At 03:58:07 the login container started, at 03:58:08 Codex printed "Enter this one-time code (expires in 15 minutes)", at 04:03:07 `podman rm -f tillandsias-codex-login-1415` ran (exactly 300 s), and at 04:03:08 the error was "Codex sign-in did not finish (it may have timed out)". The cause is that run_codex_device_login_with_qr passes OperationKind::Container.default_budget() (300 s) to a step that waits on a PERSON. The fix: budget the device step from the provider''s own window (Codex 15 min; Claude 300 s), make the message say honestly that the sign-in code expired, and show the remaining time while it waits. The operator''s 14.7 min tray case (23:06 to 23:20:53 on 2026-10-27) does not fit a 300 s kill, so it is traced as a separate item.'
+  exit_criteria:
+  - 'The Codex device step''s budget comes from the provider''s window, not OperationKind::Container.default_budget(); a fixture asserts the Codex budget is at least 15 min and FAILS on today''s code.'
+  - 'When the window expires the terminal line and the tray status say that the sign-in code expired and how to retry.'
+  - 'While waiting, the terminal shows the time left on the code.'
+  verifiable_closure: 'cargo test -p tillandsias-headless --features tray,listen-vsock codex_device_sign_in_budget_covers_the_code_window'
+  next_action: 'Implement after the running darwin gate ends, then open a PR into linux-next.'
+  provenance: 'Live measurement by macbookair-macos 2026-10-28; scope set by macuahuitl-fedora.'
+  events:
+  - type: filed
+    ts: '2026-10-28T04:04:19Z'
+    host: tlatoanis-macbook-air
+    summary: filed and claimed from a live measurement (300 s kill of a 15-minute Codex code)
+- packet_id: guest-vault-root-token-and-unseal-share-sit-in-plaintext-world-readable-files
+  order: 1909-aryk
+  status: ready
+  kind: security
+  priority: p0
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - vault
+  - security
+  - headless
+  estimated_hours: 6
+  title: The guest stores the Vault root token and its unseal share as plaintext 0644 files on the persistent identity disk
+  context: 'Verified read-only on macOS 2026-10-28 (local build 9140aae47, fresh VM provisioned 2026-10-27 22:57). No file content was printed or copied; the shape was tested with a match that reports only yes or no. /var/lib/tillandsias/identity/fallback_vault-root-token-v1: owner root:root, mode 644, 28 bytes, matches the plaintext `hvs.` Vault token shape. /var/lib/tillandsias/identity/fallback_vault-shamir-share-v1: root:root, mode 644, 44 bytes, beside it. Both were written 2026-10-27 22:57:22. Both live on /dev/vdc, mounted at /var/lib/tillandsias/identity, the disk that survives VM stop and a rootfs rebuild by design (1642-cc54). Writers in vault_bootstrap.rs: write_vm_credential_fallbacks (~3190) does a raw fs::write with NO chmod, which explains the 644; the heal path (~5637) writes and then sets 0600. Every Vault call reads them ("recovered root token from VM fallback file"). This breaks the standing operator rule of no plaintext credentials at rest ("a lost credential beats an unencrypted one"). The token and the share together open the whole store.'
+  exit_criteria:
+  - 'The operator rules on the fix shape (relayed by macuahuitl-fedora) before any change.'
+  - 'Afterwards, no guest file holds the Vault root token or the unseal share in plaintext, and a fixture fails on today''s code.'
+  verifiable_closure: 'A guest probe reports no plaintext hvs. token and no plaintext share file on any guest disk.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fix shape awaits an operator ruling, and the fixture lands with the fix (1136-n8sh).
+
+    '
+  next_action: 'Hold for the operator ruling via macuahuitl-fedora. Do not change it yet.'
+  provenance: 'Live read-only verification by macbookair-macos 2026-10-28.'
+  events:
+  - type: filed
+    ts: '2026-10-28T04:04:19Z'
+    host: tlatoanis-macbook-air
+    summary: filed ready (p0 security), held for the operator ruling
+- packet_id: login-container-runs-without-the-runtime-proxy-ca
+  order: 1909-8zzt
+  status: ready
+  kind: bug
+  priority: p3
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - auth
+  - proxy
+  estimated_hours: 2
+  title: The provider login container warns that the runtime proxy CA is not mounted
+  context: 'Seen on macOS 2026-10-28 in `--codex-login --debug`: "[trust] WARNING: runtime proxy CA is not mounted; using vendor roots only" right after `podman exec … codex-device-auth`. The login still reached the provider, so its egress is either not going through the TLS-inspecting proxy or not needing the CA. Determine which, and either mount the CA or document why the login lane does not need it.'
+  exit_criteria:
+  - 'Either the login container mounts the runtime proxy CA and the warning is gone, or a cited spec line says the login lane needs no proxy CA and the warning is downgraded.'
+  verifiable_closure: 'A --codex-login --debug run shows no proxy-CA warning, or a test pins the documented exemption.'
+  unscoreable: 'unpinnable-until-the-guard-exists: whether the CA is needed is undecided, so the fixture lands with the fix (1136-n8sh).
+
+    '
+  next_action: 'Read the login container argv against the forge argv for the CA mount.'
+  provenance: 'Live observation by macbookair-macos 2026-10-28.'
+  events:
+  - type: filed
+    ts: '2026-10-28T04:04:19Z'
+    host: tlatoanis-macbook-air
+    summary: filed ready (low priority)
