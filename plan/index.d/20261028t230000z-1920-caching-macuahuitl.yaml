@@ -1,0 +1,162 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora at the operator request, 2026-10-28 (operator-requested audit 2026-10-28). Story: caching.
+packets:
+- packet_id: gate-touch-skipped-when-shared-target-digest-unchanged
+  order: 1920-gtch
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - build
+  - gate
+  - cache
+  estimated_hours: 3
+  title: build.sh _touch_gating_checkout is skipped when the shared-target digest matches, instead of touching 13,192 files each gate
+  context: 'operator-requested audit 2026-10-28. Source: scratch/research/caching-audit.md row 1 and fix 1. Every --check/--test/--ci*/--release/--install touches every tracked file (git ls-files -z | xargs touch): +59 s per gate and a full workspace recompile, per land-queue candidate. Key: scripts/shared-target.sh shared_target_digest stored in $CARGO_TARGET_DIR/.shared-target-owner. 1915-gtph (gate timing) will show the saving; not duplicated here.'
+  exit_criteria:
+  - 'Two consecutive `./build.sh --check` with no tree change: the second prints no `note:gate-touch:` line and cargo reports `Fresh tillandsias-headless`; today the note prints every time and headless recompiles.'
+  verifiable_closure: Two-run transcript attached; a fixture asserts no note on the second run and failed before.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: skip the touch on digest match, keep it on mismatch, write the two-run fixture first.'
+  provenance: operator-requested audit 2026-10-28; research report scratch/research/caching-audit.md row 1 and fix 1 (macuahuitl, 2026-10-28). Operator asked for the audit; priorities set by the filing request.
+  blocked_by:
+  - 1915-gtph
+  events:
+  - type: filed
+    ts: '2026-10-28T23:00:00Z'
+    host: macuahuitl-fedora
+    summary: filed p1 from the operator-requested audit (2026-10-28)
+- packet_id: root-token-memo-reaches-linux-call-sites
+  order: 1920-vtok
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - headless
+  - vault
+  - cache
+  estimated_hours: 2
+  title: Linux headless call sites share the zeroized root-token memo built in 1919-keyc
+  context: 'operator-requested audit 2026-10-28. Source: scratch/research/caching-audit.md row 4 and fix 3. read_and_handover_root_token has 18 call sites with no memo; this packet is the cross-platform follow-through of 1919-keyc (which owns the memo type and macOS keychain). Memory only, zeroize, never disk.'
+  exit_criteria:
+  - '`tillandsias --debug` launch log has at most one `recovered root token` line per process on Linux; today one per Vault op.'
+  verifiable_closure: Log count attached.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: wait for the memo type, then route remaining call sites through it.'
+  provenance: operator-requested audit 2026-10-28; research report scratch/research/caching-audit.md row 4 and fix 3 (macuahuitl, 2026-10-28). Operator asked for the audit; priorities set by the filing request.
+  blocked_by:
+  - 1919-keyc
+  events:
+  - type: filed
+    ts: '2026-10-28T23:00:00Z'
+    host: macuahuitl-fedora
+    summary: filed p2 from the operator-requested audit (2026-10-28)
+- packet_id: plan-ledger-snapshot-updates-incrementally-on-fragment-writes
+  order: 1920-plsn
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - plan
+  - cache
+  estimated_hours: 6
+  title: Fragment writes (set-field, append-event) fold into the cached ledger instead of invalidating the whole snapshot
+  context: 'operator-requested audit 2026-10-28. Source: scratch/research/caching-audit.md rows 6-7, 10, 11 and fix 4. Each write forces a full 350 ms rebuild (13 set-field sites per gate); about 60-90 loads per --check. Also: the snapshot is JSON of 10-16 MB, readers (capabilities arm, forgotten.rs, cache-rebuild) bypass the cache, fingerprint stats 5,290 files.'
+  exit_criteria:
+  - '`TILLANDSIAS_PLAN_PROFILE=1 tillandsias-plan set-field ... && tillandsias-plan status X` shows the second command served from cache with no `YAML parse` stage; today it re-parses (350 ms).'
+  verifiable_closure: Profile output attached and a fixture asserts no parse stage.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: incremental fold on save (CRDT-merge), route bypassing readers through load_with_fragments, then consider a binary snapshot format.'
+  provenance: operator-requested audit 2026-10-28; research report scratch/research/caching-audit.md rows 6-7, 10, 11 and fix 4 (macuahuitl, 2026-10-28). Operator asked for the audit; priorities set by the filing request.
+  events:
+  - type: filed
+    ts: '2026-10-28T23:00:00Z'
+    host: macuahuitl-fedora
+    summary: filed p2 from the operator-requested audit (2026-10-28)
+- packet_id: hooks-and-mcp-use-one-plan-cache-dir
+  order: 1920-pcdr
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - plan
+  - hooks
+  - cache
+  - mcp
+  estimated_hours: 2
+  title: pre-push-local-gate.sh, local-ci.sh and forge-plan.sh export TILLANDSIAS_PLAN_CACHE_DIR like build.sh
+  context: 'operator-requested audit 2026-10-28. Source: scratch/research/caching-audit.md rows 8-9 and fix 5. Hooks (69 plan calls) and MCP wrappers fall back to the XDG dir while build.sh pins target/plan-cache, so their first call is a cold full parse. MCP forge-plan.sh and project-info.sh also start one cold process per tool call (a long-lived plan-serve is a later option).'
+  exit_criteria:
+  - After `build.sh --check` then the pre-push hook, the hook first plan call profiles as a cache hit; today a full load from the XDG dir.
+  verifiable_closure: Profile line attached.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: export the variable in the three scripts, add a check that the hook profile is a hit.'
+  provenance: operator-requested audit 2026-10-28; research report scratch/research/caching-audit.md rows 8-9 and fix 5 (macuahuitl, 2026-10-28). Operator asked for the audit; priorities set by the filing request.
+  events:
+  - type: filed
+    ts: '2026-10-28T23:00:00Z'
+    host: macuahuitl-fedora
+    summary: filed p2 from the operator-requested audit (2026-10-28)
+- packet_id: launch-path-memoizes-digests-podman-lookups-and-probes
+  order: 1920-lnch
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - headless
+  - cache
+  - podman
+  estimated_hours: 6
+  title: Launch memoizes embedded_manifest_digest, root_manifest_digest, image success stamps, podman path/queries and host-id
+  context: 'operator-requested audit 2026-10-28. Source: scratch/research/caching-audit.md rows 12-18. embedded_manifest_digest re-hashes ~20 MB x4 per launch (use OnceLock); root_manifest_digest walks the staged tree (compare digest first); image ensure hashes sources and spawns image_exists + image_inspect with only failure markers (add a success stamp); 15-30 redundant podman spawns per launch (per-launch memo); find_podman_path re-resolved per spawn; hostname then uname -n; accel_probe /api/ps needs a short TTL. The build.rs embedding refinement belongs to 1916-embd, not here.'
+  exit_criteria:
+  - '`tillandsias --debug --init` log shows embedded_manifest_digest computed once; today four times.'
+  - execsnoop of one warm forge launch shows fewer than 10 podman spawns; today 15-30.
+  verifiable_closure: Before/after counts attached.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: start with the OnceLock digest and podman path, then the image stamp, then the per-launch memo.'
+  provenance: operator-requested audit 2026-10-28; research report scratch/research/caching-audit.md rows 12-18 (macuahuitl, 2026-10-28). Operator asked for the audit; priorities set by the filing request.
+  blocked_by:
+  - 1916-embd
+  events:
+  - type: filed
+    ts: '2026-10-28T23:00:00Z'
+    host: macuahuitl-fedora
+    summary: filed p2 from the operator-requested audit (2026-10-28)
+- packet_id: ci-installs-cached-and-dead-caches-removed
+  order: 1920-cirm
+  status: ready
+  kind: enhancement
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - ci
+  - cache
+  - cleanup
+  estimated_hours: 3
+  title: CI tool installs are cached and dead caches are removed or fixed (redb packet cache, agent-target/, litmus cargo run)
+  context: 'operator-requested audit 2026-10-28. Source: scratch/research/caching-audit.md rows 3, 19, 20 and section "Caches to REMOVE". The Nix cache is 1916-nxcs and the build.rs rerun-if-changed fan-out is 1916-embd: this packet only points at them. New here: rust-cache on tag refs restores nothing (add save-if main; the audit places this with 1916-nxcs, check there first); cargo install cargo-zigbuild --locked costs 1-2 min per run (use taiki-e/install-action); run-litmus-test.sh runs cargo run per file (build once); the redb packet cache is reached only by cache-rebuild/cache-get (delete or wire status to it); agent-target/ is an empty orphan. The plaintext fallback_vault-root-token-v1 file belongs to the no-plaintext-credentials ruling.'
+  exit_criteria:
+  - '`test ! -e agent-target` succeeds and `grep -c ''cargo install cargo-zigbuild'' .github/workflows/release.yml` prints 0; today the directory exists and the grep prints 1.'
+  verifiable_closure: The two commands pass and a release dry-run shows the install step cached.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: delete agent-target, swap the zigbuild install, decide redb keep-or-delete, build the litmus binary once.'
+  provenance: operator-requested audit 2026-10-28; research report scratch/research/caching-audit.md rows 3, 19, 20 and section "Caches to REMOVE" (macuahuitl, 2026-10-28). Operator asked for the audit; priorities set by the filing request.
+  blocked_by:
+  - 1916-nxcs
+  events:
+  - type: filed
+    ts: '2026-10-28T23:00:00Z'
+    host: macuahuitl-fedora
+    summary: filed p2 from the operator-requested audit (2026-10-28)
