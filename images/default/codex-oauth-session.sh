@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # @trace spec:tillandsias-vault
 # Run an interactive agent in the FOREGROUND while a background watcher
-# harvests OAuth credential-file rotations to Vault, plus a final harvest on
+# harvests OAuth credential-file rotations to Vault (and once more if the
+# wrapper is killed), plus a final harvest on
 # exit. So a mid-session refresh-token rotation and the final document both
 # reach Vault, and the NEXT launch does not re-prompt.
 #

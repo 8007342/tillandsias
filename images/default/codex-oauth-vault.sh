@@ -46,18 +46,38 @@ auth_digest() {
     fi
 }
 
+# Order 1914-twan: Codex refresh tokens are single-use (its own
+# REFRESH_TOKEN_REUSED_MESSAGE: "your refresh token was already used"), so a
+# rotation Vault never receives leaves Vault holding a dead token. A failed
+# copy is retried and reported on the lifecycle log, never only warned about.
+harvest_with_retry() {
+    local attempt
+    for attempt in 1 2 3 4 5; do
+        harvest_auth 2>/dev/null && return 0
+        sleep "$attempt"
+    done
+    printf '%s\n' "[codex-oauth] blocked:codex-credential-copy-failed: Vault did not take the rotated Codex sign-in after 5 attempts; the next launch may need 'tillandsias --codex-login'" \
+        | tee -a "${TILLANDSIAS_LIFECYCLE_LOG:-/tmp/forge-lifecycle.log}" >&2
+    return 1
+}
+
 watch_auth() {
     local child_pid="$1" initial_digest="${2:-}" poll_secs last current
-    poll_secs="${TILLANDSIAS_OAUTH_POLL_SECS:-2}"
+    poll_secs="${TILLANDSIAS_OAUTH_POLL_SECS:-0.5}"
     last="${initial_digest:-$(auth_digest)}"
     while kill -0 "$child_pid" 2>/dev/null; do
         sleep "$poll_secs"
         current="$(auth_digest)"
         if [[ "$current" != "$last" && "$current" != missing ]]; then
-            harvest_auth
-            last="$current"
+            harvest_with_retry && last="$current"
         fi
     done
+    # The session ended, possibly by SIGKILL with no EXIT trap: copy a rotation
+    # made since the last poll, or it is lost and the vaulted token is dead.
+    current="$(auth_digest)"
+    if [[ "$current" != "$last" && "$current" != missing ]]; then
+        harvest_with_retry
+    fi
 }
 
 case "${1:-}" in
