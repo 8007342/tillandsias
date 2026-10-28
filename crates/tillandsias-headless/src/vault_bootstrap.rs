@@ -5098,6 +5098,9 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     if let Some(publish) = host_publish_arg {
         run_args.extend(["-p".into(), publish]);
     }
+    // 1919-hlth: the image probes every 30 s; a 2 s startup probe keeps
+    // wait_healthy below from stalling a full interval on a cold start.
+    run_args.extend(crate::startup_health_args(crate::VAULT_HEALTH_CMD));
     run_args.push(image_tag.to_string());
     let status = podman_cmd_sync()
         .args(&run_args)

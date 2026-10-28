@@ -42,11 +42,20 @@ COPY external-logs.yaml /etc/tillandsias/external-logs.yaml
 COPY entrypoint.sh /usr/local/bin/tillandsias-vault-entrypoint.sh
 RUN chmod +x /usr/local/bin/tillandsias-vault-entrypoint.sh
 
-USER vault
+# 1919-hlth: numeric, not a name. podman exec (and so every HEALTHCHECK run)
+# resolves a NAME against the rootfs as mounted in podman's own namespace; when that
+# mount is gone a long-running container fails every probe with "unable to find
+# user vault" (rc=125, measured 47 h on macuahuitl). uid 100 = vault, gid 1000 =
+# the vault group in the upstream image; the build fails if upstream renumbers.
+RUN test "$(id -u vault):$(id -g vault)" = "100:1000"
+USER 100:1000
 
 EXPOSE 8200
 
-HEALTHCHECK --interval=2s --timeout=5s --start-period=5s --retries=15 \
+# 1919-hlth: 30 s steady (operator-approved, 120 probes/h, was 1,800); the
+# launcher adds --health-startup-cmd with a 2 s startup interval so first-ready
+# is not delayed (vault_health_startup_args).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD curl --cacert /run/secrets/tillandsias-vault-tls-ca -fsS https://127.0.0.1:8200/v1/sys/health?standbyok=true || exit 1
 
 ENTRYPOINT ["/usr/local/bin/tillandsias-vault-entrypoint.sh"]
