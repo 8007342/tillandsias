@@ -27721,7 +27721,6 @@ mod tests {
     /// it yet. Shape-only token values; nothing real.
     #[cfg(unix)]
     #[test]
-    #[ignore = "1914-twan: fails on the 2 s poll by design; enable with the event-driven copy once the operator approves the mechanism"]
     fn codex_rotation_reaches_vault_before_a_container_kill() {
         use std::os::unix::fs::PermissionsExt as _;
         use std::os::unix::process::CommandExt as _;
@@ -27746,6 +27745,28 @@ mod tests {
                 vaulted.display()
             ),
         );
+        // A host without inotify-tools (macOS) gets a stand-in that prints
+        // the file name when its content changes, as inotifywait would; on a
+        // Linux gate host the real inotifywait is exercised.
+        let has_inotify = std::process::Command::new("sh")
+            .args(["-c", "command -v inotifywait"])
+            .stdout(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !has_inotify {
+            write_exec(
+                &bin.join("inotifywait"),
+                "for d; do :; done\n\
+                 sum() { cksum \"$d/auth.json\" 2>/dev/null; }\n\
+                 last=\"$(sum)\"\n\
+                 echo 'Watches established.'\n\
+                 while :; do now=\"$(sum)\"\n\
+                 [ \"$now\" != \"$last\" ] && echo auth.json && last=\"$now\"\n\
+                 sleep 0.05; done"
+                    .to_string(),
+            );
+        }
         let agent = dir.path().join("agent");
         write_exec(
             &agent,

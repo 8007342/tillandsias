@@ -32,6 +32,7 @@ RUN microdnf install -y --nogpgcheck --setopt=install_weak_deps=0 \
         gcc gcc-c++ make cmake pkgconfig unzip \
         diffutils patch file gettext diffstat \
         iproute iputils socat nmap-ncat sqlite \
+        inotify-tools \
     && git lfs install --system \
     && microdnf clean all \
     && rustc_v="$(rpm -q --qf '%{VERSION}-%{RELEASE}' rust)" \

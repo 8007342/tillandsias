@@ -61,23 +61,45 @@ harvest_with_retry() {
     return 1
 }
 
+# Copy only when the file is written. Operator approval 2026-10-28 (1914-twan):
+# an inotify event costs no idle wakeups, where the 2 s poll woke 1,800
+# times an hour for a rotation that happens once or twice. The poll remains
+# only for an image built before inotify-tools was in the forge base.
+copy_if_changed() {
+    current="$(auth_digest)"
+    if [[ "$current" != "$last" && "$current" != missing ]]; then
+        harvest_with_retry && last="$current"
+    fi
+}
+
 watch_auth() {
-    local child_pid="$1" initial_digest="${2:-}" poll_secs last current
-    poll_secs="${TILLANDSIAS_OAUTH_POLL_SECS:-2}"
+    local child_pid="$1" initial_digest="${2:-}" poll_secs last current auth_dir inw_pid name
     last="${initial_digest:-$(auth_digest)}"
+    auth_dir="$(dirname "$AUTH_FILE")"
+    if command -v inotifywait >/dev/null 2>&1 && [[ -d "$auth_dir" ]]; then
+        # Codex writes in place (close_write) or by rename (moved_to). The
+        # wrapper stops this watcher with TERM; take inotifywait down with it.
+        exec 3< <(exec inotifywait -m -e close_write,moved_to --format '%f' "$auth_dir" 2>&1)
+        inw_pid=$!
+        trap 'kill "$inw_pid" 2>/dev/null; exit 0' TERM INT
+        while read -r name <&3; do
+            case "$name" in
+                # Catch a write made before the watch existed; from here on
+                # every write is an event.
+                "Watches established.") copy_if_changed ;;
+                "$(basename "$AUTH_FILE")") copy_if_changed ;;
+            esac
+        done
+        return 0
+    fi
+    poll_secs="${TILLANDSIAS_OAUTH_POLL_SECS:-2}"
     while kill -0 "$child_pid" 2>/dev/null; do
         sleep "$poll_secs"
-        current="$(auth_digest)"
-        if [[ "$current" != "$last" && "$current" != missing ]]; then
-            harvest_with_retry && last="$current"
-        fi
+        copy_if_changed
     done
     # The session ended, possibly by SIGKILL with no EXIT trap: copy a rotation
     # made since the last poll, or it is lost and the vaulted token is dead.
-    current="$(auth_digest)"
-    if [[ "$current" != "$last" && "$current" != missing ]]; then
-        harvest_with_retry
-    fi
+    copy_if_changed
 }
 
 case "${1:-}" in
