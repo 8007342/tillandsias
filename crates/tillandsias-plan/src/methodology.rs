@@ -571,6 +571,33 @@ fn looks_like_a_yaml_path(question: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
 }
 
+/// ORDER 1908-9q4c. "What does <term> mean?" is answered from
+/// methodology/glossary.yaml as the exact path `glossary.terms.<term>`. This
+/// is a syntactic rewrite, not a route: the term is lifted out of one of a
+/// few fixed question shapes and either names a glossary key or the question
+/// falls through to the table, so it adds no ranking and no fuzzy match.
+fn glossary_term_path(question: &str) -> Option<String> {
+    let q = question.trim().trim_end_matches('?').trim().to_ascii_lowercase();
+    let term = q
+        .strip_prefix("what does ")
+        .and_then(|r| r.strip_suffix(" mean"))
+        .or_else(|| q.strip_prefix("what is meant by "))
+        .or_else(|| q.strip_prefix("meaning of "))
+        .or_else(|| q.strip_prefix("define "))?
+        .trim()
+        .trim_matches(|c| c == '"' || c == '\'' || c == '`');
+    let words: Vec<&str> = term.split_whitespace().collect();
+    if words.is_empty()
+        || words.len() > 3
+        || !words
+            .iter()
+            .all(|w| w.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'))
+    {
+        return None;
+    }
+    Some(format!("glossary.terms.{}", words.join("_").replace('-', "_")))
+}
+
 /// Answer a QUESTION: try it as a path when it is shaped like one, otherwise
 /// route it to a path and answer that. An unrouted question is `unsupported`
 /// and NAMES the tool that takes a path, so the agent can re-ask somewhere the
@@ -581,6 +608,12 @@ pub fn answer_question(corpus: &Corpus, question: &str, file_filter: Option<&str
         let direct = answer_path_query(corpus, question, file_filter);
         if direct.confidence() != Confidence::Unsupported {
             return direct;
+        }
+    }
+    if let Some(path) = glossary_term_path(question) {
+        let defined = answer_path_query(corpus, &path, file_filter);
+        if defined.confidence() != Confidence::Unsupported {
+            return defined;
         }
     }
     match route(question) {
@@ -1156,6 +1189,38 @@ mod tests {
             assert!(env.citations().is_empty());
             assert!(verify(&env, &repo_root()).is_empty());
         }
+    }
+
+    /// ORDER 1908-9q4c. A glossary term is answerable in prose from
+    /// methodology/glossary.yaml, multi-word terms included, and a word the
+    /// glossary does not define still refuses instead of guessing.
+    #[test]
+    fn a_glossary_term_is_answered_in_prose_and_an_undefined_word_refuses() {
+        let corpus = corpus();
+        let root = repo_root();
+        for (question, path) in [
+            ("what does lane mean?", "glossary.terms.lane"),
+            ("What does gate stamp mean", "glossary.terms.gate_stamp"),
+            ("define order-id", "glossary.terms.order_id"),
+        ] {
+            let env = answer_question(&corpus, question, None);
+            assert_eq!(
+                env.confidence(),
+                Confidence::Exact,
+                "{question:?} answered: {}",
+                env.answer()
+            );
+            assert!(verify(&env, &root).is_empty(), "{:#?}", verify(&env, &root));
+            assert!(
+                env.citations().iter().any(|c| {
+                    c.path() == "methodology/glossary.yaml"
+                        && c.authority().get("yaml_path").map(String::as_str) == Some(path)
+                }),
+                "{question:?} must cite {path}"
+            );
+        }
+        let env = answer_question(&corpus, "what does zzqx mean?", None);
+        assert_eq!(env.confidence(), Confidence::Unsupported, "{}", env.answer());
     }
 
     /// ORDER 777-amku. The toolbox-first rule must be reachable IN PROSE, not
