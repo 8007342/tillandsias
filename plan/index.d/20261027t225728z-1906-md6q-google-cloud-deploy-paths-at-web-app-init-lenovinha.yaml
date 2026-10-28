@@ -23,7 +23,7 @@ packets:
       cloudflare|gcp-dockerfile|gcp-buildpacks|none flag, templates under
       templates/<target>/, cheatsheets under cheatsheets/cloud/.
     exit_criteria:
-      - "scripts/test-start-a-new-project-gcp.sh passes 6 arms: gcp-dockerfile renders five filled-in files; gcp-buildpacks renders project.toml and service.yaml; the runtime is read from the project; buildpacks for a static app exits 3 with nothing written; a user's Dockerfile is kept; the billing line is present and the scaffold runs no gcloud. Pre-fix result: FAILS, scaffold.sh has no --deploy flag."
+      - "scripts/lua/test-start-a-new-project-gcp.lua passes 6 arms: gcp-dockerfile renders five filled-in files; gcp-buildpacks renders project.toml and service.yaml; the runtime is read from the project; buildpacks for a static app exits 3 with nothing written; a user's Dockerfile is kept; the billing line is present and the scaffold runs no gcloud. Pre-fix result: FAILS, scaffold.sh has no --deploy flag."
     verifiable_closure: "litmus:start-a-new-project-google-cloud-deploy-targets"
     unscoreable: |
       unpinnable-until-the-guard-exists: the fix adds the litmus named in verifiable_closure in the same commit (1136-n8sh).

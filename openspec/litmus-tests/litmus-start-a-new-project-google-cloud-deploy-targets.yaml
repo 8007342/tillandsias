@@ -7,11 +7,11 @@ severity: medium
 size: instant
 
 preconditions:
-  - workspace contains skills/start-a-new-project/scaffold.sh and scripts/test-start-a-new-project-gcp.sh
+  - workspace contains skills/start-a-new-project/scaffold.sh and scripts/lua/test-start-a-new-project-gcp.lua
 
 critical_path:
   - step: "gcp-dockerfile and gcp-buildpacks render their files with name, port and runtime filled; buildpacks for a static app exits 3 with nothing written; a user's Dockerfile is kept; the billing line is present"
-    command: "bash scripts/test-start-a-new-project-gcp.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-start-a-new-project-gcp.lua 2>&1"
     timeout_ms: 60000
     expected_behavior: "ok:start-a-new-project-gcp:6"
 
