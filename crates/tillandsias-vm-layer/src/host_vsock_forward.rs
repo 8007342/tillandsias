@@ -255,12 +255,22 @@ mod tests {
     /// hold it open. Holding it is what makes a dead backend look alive.
     #[test]
     fn an_unreachable_target_closes_the_guest_connection() {
-        // Bind then drop, so the port is almost certainly unbound.
-        let dead = {
-            let l = TcpListener::bind("127.0.0.1:0").expect("bind");
-            l.local_addr().expect("addr")
-        };
+        // Bind then drop, so the port is almost certainly unbound. A parallel
+        // test (echo_server) can win the same ephemeral port, making the target
+        // reachable so the relay never closes — the 14 h hang. Re-pick until a
+        // probe connect is actually refused.
+        let dead = (0..50)
+            .find_map(|_| {
+                let a = TcpListener::bind("127.0.0.1:0")
+                    .and_then(|l| l.local_addr())
+                    .expect("bind");
+                TcpStream::connect(a).is_err().then_some(a)
+            })
+            .expect("no unbound loopback port found");
         let (guest, mut peer) = UnixStream::pair().expect("socketpair");
+        // Bounded: fail by name instead of hanging if the guest is never closed.
+        peer.set_read_timeout(Some(std::time::Duration::from_secs(20)))
+            .expect("read timeout");
         let fd = OwnedFd::from(guest);
         assert!(
             relay_to(fd, dead).is_err(),
