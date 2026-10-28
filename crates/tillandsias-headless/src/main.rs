@@ -78,6 +78,7 @@ mod device_poll_view;
 mod flow_sink;
 mod image_build_progress;
 mod image_build_scope;
+mod imagegen_tiers;
 mod progress_sink;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
 // macOS and WSL2 VMs carry their own per-boot swap, design §9.2/§9.3).

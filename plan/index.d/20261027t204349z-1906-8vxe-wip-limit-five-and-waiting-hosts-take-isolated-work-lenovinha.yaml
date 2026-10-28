@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue (opus5) on operator direction 2026-10-27.
+packets:
+  - packet_id: the-wip-limit-is-five-and-a-host-whose-claims-all-wait-on-others-takes-isolated-maintenance-work
+    order: 1906-8vxe
+    status: ready
+    kind: process
+    priority: p1
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [methodology, plan, coordination]
+    size: S
+    title: "packet_discipline.wip_limit is 5, and a host whose claims all wait on others claims isolated maintenance work on its own branch"
+    context: |
+      Operator 2026-10-27: raise the 3-item limit to 5, make it a durable
+      decision other agents discover, and let hosts idling on long cooperative
+      work take extra isolated packets (maintenance, cleanup) on other work
+      branches. Recorded in methodology/distributed-work.yaml
+      packet_discipline: wip_limit 5, the WIP LIMIT prose, a new rule A
+      WAITING HOST TAKES ISOLATED WORK, and wip_limit_raise (authority quote,
+      observation, what is unchanged). tillandsias-plan's built-in DEFAULT
+      follows to 5. Filed ready, not claimed: lenovinha is at 3/3 under the
+      old cap until this lands.
+    exit_criteria:
+      - "litmus:claim-wip-limit-shape step 4 asserts methodology wip_limit, the WIP LIMIT prose and the binary's DEFAULT name one number, and reports 5. Pre-fix result: FAILS, the step does not exist and the number is 3."
+    verifiable_closure: "litmus:claim-wip-limit-shape"
+    next_action: >
+      Land work/1906-8vxe; close completed with the land sha.
+    provenance: |
+      Operator direction 2026-10-27, relayed to the coordinator.
+    events:
+      - type: filed
+        ts: "2026-10-27T20:43:49Z"
+        host: lenovinha
+        summary: "filed ready on operator direction; branch work/1906-8vxe"

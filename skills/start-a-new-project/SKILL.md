@@ -19,6 +19,33 @@ environment works behind the scenes; just help them build their app.
 Ask one short question: what is the app, and who is it for? If they already
 said, restate it in one sentence and confirm. Do not ask a list of questions.
 
+## 1b. Start with the research
+
+Before writing specs, look for research that applies to this kind of app and
+keep it next to the project. Nothing to explain to the user yet; one short
+sentence is enough ("I'm checking what's known about <games / forms /
+onboarding> first").
+
+```bash
+lib="${TILLANDSIAS_RESEARCH:-/opt/research}"
+[ -f "$lib/INDEX.md" ] || lib="research"
+rg -i '<two or three words for the app: game, form, loading, animation>' "$lib/INDEX.md"
+```
+
+Pull each relevant record into the project: copy
+`$lib/<domain>/<slug>.md` to `research/<domain>/<slug>.md` and change
+`origin: shared` to `origin: project`. For a game, that is at least
+`games/gameflow-sweetser-wyeth-2005` and
+`psychology/flow-nakamura-csikszentmihalyi-2014`; for anything with buttons
+and waits, `interaction/fitts-law-1954` and
+`interaction/response-time-limits-nielsen-1993`. If the library has nothing
+for this kind of app, use the `find-research` skill once the first spec names
+the behaviour that matters most.
+
+When you write the specs in step 2, cite what you pulled in ("as per
+research:<id>, ... because ...") — see the `cite-research` skill. Research
+goes in `research/`; the scaffold below creates its README.
+
 ## 2. Recommend spec-driven development
 
 Suggest writing down what the app should do before writing code, as short
@@ -58,6 +85,7 @@ It creates only what is missing and never overwrites the user's files:
 
 - `openspec/` with a first spec describing the app (unless `--no-specs`),
 - `plan/` with a `README.md` and a `roadmap.md` for work that spans sessions,
+- `research/` with a `README.md` saying how records are kept and cited,
 - `README.md` with the app's name and summary.
 
 Then fill in the first spec together with the user: three to five

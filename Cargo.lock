@@ -3466,6 +3466,7 @@ dependencies = [
 name = "tillandsias-macos-tray"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "block2",
  "futures-util",
  "libc",

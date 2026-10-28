@@ -59,9 +59,9 @@ out="$(PATH="$NOCLI" bash "$SKILL/scaffold.sh" --dir "$P" --name "Pong Party" \
     --summary "A two-player pong game for phones." --stack flutter-flame 2>&1)"; rc=$?
 if [ "$rc" -eq 0 ] && [ -f "$P/README.md" ] && [ -f "$P/openspec/project.md" ] \
     && [ -f "$P/openspec/specs/pong-party/spec.md" ] && [ -f "$P/plan/README.md" ] \
-    && [ -f "$P/plan/roadmap.md" ] && grep -q 'Flame' "$P/README.md" \
-    && grep -qx 'ok:scaffold:5' <<<"$out"; then
-    ok "ARM 3: an empty repo gains openspec/, plan/ and README.md (ok:scaffold:5)"
+    && [ -f "$P/plan/roadmap.md" ] && [ -f "$P/research/README.md" ] && grep -q 'Flame' "$P/README.md" \
+    && grep -qx 'ok:scaffold:6' <<<"$out"; then
+    ok "ARM 3: an empty repo gains openspec/, plan/, research/ and README.md (ok:scaffold:6)"
 else
     bad "ARM 3: rc=$rc out='$(tail -3 <<<"$out" | tr '\n' ' ')'"
 fi

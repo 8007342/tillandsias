@@ -17,7 +17,7 @@
 --   6 the skill states the billing requirement; the scaffold never calls gcloud
 --
 -- Asserts only its own files (the shared convention with the Cloudflare
--- target).
+-- target). Base scaffold files (README, plan, research) are 4 of the 9 in arm 1.
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-start-a-new-project-gcp.lua
 
@@ -67,7 +67,7 @@ arm("1 gcp-dockerfile renders five files for a Flutter web app, filled in, unpri
     and has(A .. "/service.yaml", "\n  name: pong-party\n") and has(A .. "/service.yaml", "containerPort: 8080")
     and has(A .. "/cloudbuild.yaml", "_SERVICE_NAME: pong-party")
     and has(A .. "/Dockerfile", "\nFROM docker.io/nginxinc/nginx-unprivileged:")
-    and has(A .. "/nginx.conf.template", "listen ${PORT};") and has_line(text.trim(o), "ok:scaffold:8"),
+    and has(A .. "/nginx.conf.template", "listen ${PORT};") and has_line(text.trim(o), "ok:scaffold:9"),
     "rc=" .. tostring(rc) .. " left=" .. tostring(left) .. " out=" .. o)
 
 -- 2

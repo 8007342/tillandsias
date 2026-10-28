@@ -100,6 +100,7 @@ $stack_line
 - \`openspec/\`: what the app should do, written as short specs. Change the
   specs first, then the code.
 - \`plan/\`: work that takes more than one session. Each line says what is left.
+- \`research/\`: what is known about how people use apps like this, with sources.
 EOF
 
 if [ "$specs" -eq 1 ]; then
@@ -151,6 +152,24 @@ write_new plan/roadmap.md <<EOF
 # Roadmap
 
 - [ ] Build the first version of $name that runs and shows its first screen.
+EOF
+
+# spec:research-records — the project's own research store, same format as
+# the shared library at \$TILLANDSIAS_RESEARCH (/opt/research).
+write_new research/README.md <<'EOF'
+# Research
+
+What is known about how people use things like this app, kept next to the
+code so decisions carry their reasons.
+
+- One file per finding: `research/<domain>/<slug>.md`, copied from the
+  shared library (`$TILLANDSIAS_RESEARCH`, `/opt/research`) or written with
+  the `find-research` skill from its `TEMPLATE.md`. Every file names its
+  source, an archived copy of it, and how strong the evidence is.
+- Cite a finding as `research:<domain>/<slug>` in specs, code comments and
+  commit trailers (`Research: <domain>/<slug>`); see the `cite-research`
+  skill.
+- Downloaded papers and pages do not live here; they go in the cache layer.
 EOF
 
 # render <template> <path> — fills {{NAME}} {{SLUG}} {{PORT}} {{RUNTIME}} and
