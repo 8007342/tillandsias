@@ -1,0 +1,28 @@
+# @trace spec:accel-capability-probe, order:1874-bair (rebind to image-generation when that change is archived)
+name: litmus:imagegen-tier-ladder-from-the-envelope
+spec: accel-capability-probe
+phase: pre-build
+description: The imagegen ladder starts every host at I0, classifies four accel envelopes to ceilings I0..I3, and carries no non-permissive licence
+severity: medium
+size: long
+
+preconditions:
+  - workspace contains crates/tillandsias-headless and images/imagegen/tiers.tsv
+  - cargo is available in PATH
+
+critical_path:
+  - step: "four envelopes (cpu 8 GB, cpu 32 GB, 8 GB VRAM, 24 GB VRAM) classify to I0, I1, I2, I3; every row's licence is permissive and no model is never-shippable; the negative control catches a non-commercial row"
+    command: "cargo test -p tillandsias-headless --bin tillandsias imagegen_tiers::tests"
+    timeout_ms: 900000
+
+observability:
+  traces:
+    - "@trace spec:accel-capability-probe"
+  expected_log: "test result: ok"
+  log_fields:
+    spec: "accel-capability-probe"
+    test: "imagegen-tier-ladder-from-the-envelope"
+
+rollback:
+  on_failure: "inspect images/imagegen/tiers.tsv and crates/tillandsias-headless/src/imagegen_tiers.rs"
+  command: "cat images/imagegen/tiers.tsv"
