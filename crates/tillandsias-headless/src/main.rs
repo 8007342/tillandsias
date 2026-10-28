@@ -13544,6 +13544,20 @@ fn provider_login_tool_cache_mount(provider: &ProviderId) -> Option<String> {
     None
 }
 
+/// ORDER 1909-t9y2. How long a device sign-in step may wait on the PERSON.
+/// Codex prints "expires in 15 minutes" for its one-time code, but the step
+/// ran under the 300 s container budget, so an unfinished sign-in was killed
+/// at minute 5 with ten minutes left on the code (measured 2026-10-28:
+/// exec 03:58:07, `podman rm -f` 04:03:07). The budget is the provider's
+/// window plus a minute, so the provider, not us, decides when it expired.
+fn device_sign_in_budget(provider: &ProviderId) -> std::time::Duration {
+    const SLACK: std::time::Duration = std::time::Duration::from_secs(60);
+    match provider {
+        ProviderId::Codex => std::time::Duration::from_secs(15 * 60) + SLACK,
+        _ => tillandsias_podman::OperationKind::Container.default_budget(),
+    }
+}
+
 /// Stream Codex's own device instructions byte-for-byte and add a QR only when
 /// the complete, code-free verification URI appears. The existing bounded
 /// Podman stream keeps the container PTY and its deadline; Codex needs no stdin
@@ -13562,7 +13576,7 @@ fn run_codex_device_login_with_qr(
     let status = login
         .status_bounded_with_stdin_streaming(
             &[],
-            tillandsias_podman::OperationKind::Container.default_budget(),
+            device_sign_in_budget(&ProviderId::Codex),
             move |chunk| {
                 let mut out = std::io::stdout().lock();
                 let _ = out.write_all(chunk);
@@ -26938,6 +26952,20 @@ mod tests {
                 assert!(seen.insert(e), "{e:?} is not unique");
             }
         }
+    }
+
+    /// ORDER 1909-t9y2. A Codex device code is valid for 15 minutes; the step
+    /// that waits on it must not be cut off sooner (it was 300 s).
+    #[test]
+    fn codex_device_sign_in_budget_covers_the_code_window() {
+        assert!(
+            device_sign_in_budget(&ProviderId::Codex) >= std::time::Duration::from_secs(15 * 60),
+            "the Codex sign-in step must outlive its 15-minute code"
+        );
+        assert!(
+            device_sign_in_budget(&ProviderId::Codex)
+                > tillandsias_podman::OperationKind::Container.default_budget()
+        );
     }
 
     /// ORDER 1571-lgex. The end-user line: one line, names the provider, says
