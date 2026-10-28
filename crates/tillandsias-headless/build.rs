@@ -59,6 +59,15 @@ fn main() {
         "images/default/skills",
         &mut assets,
     );
+    // Research library (spec:research-records): repo-root research/ is staged
+    // into images/default/research by build-image.sh, exactly like skills/.
+    collect_assets(
+        &repo_root.join("research"),
+        &repo_root.join("research"),
+        repo_root,
+        "images/default/research",
+        &mut assets,
+    );
 
     for rel in ["scripts/manage-cache.sh", "scripts/run-observatorium.sh"] {
         let path = repo_root.join(rel);
@@ -84,6 +93,10 @@ fn main() {
     println!(
         "cargo:rerun-if-changed={}",
         repo_root.join("skills").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        repo_root.join("research").display()
     );
     println!(
         "cargo:rerun-if-changed={}",
@@ -118,6 +131,7 @@ fn main() {
         "scripts/manage-cache.sh",
         "scripts/run-observatorium.sh",
         "skills/advance-work-from-plan/SKILL.md",
+        "research/INDEX.md",
     ];
     for rel in required {
         if !repo_root.join(rel).is_file() {
@@ -287,7 +301,11 @@ fn collect_assets(
             .replace('\\', "/");
 
         // Skip images/default/skills if we are collecting the images/ directory recursively.
-        if dest_prefix.is_empty() && rel_repo.starts_with("images/default/skills") {
+        // Same for images/default/research (staged copy of repo-root research/).
+        if dest_prefix.is_empty()
+            && (rel_repo.starts_with("images/default/skills")
+                || rel_repo.starts_with("images/default/research"))
+        {
             continue;
         }
 

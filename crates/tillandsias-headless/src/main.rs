@@ -80,6 +80,7 @@ mod image_build_progress;
 mod image_build_scope;
 // @trace order:1874-b9tg: where an sd.cpp run placed the model.
 mod imagegen_placement;
+mod imagegen_tiers;
 mod progress_sink;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
 // macOS and WSL2 VMs carry their own per-boot swap, design §9.2/§9.3).

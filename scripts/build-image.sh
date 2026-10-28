@@ -523,13 +523,15 @@ BUILD_PROGRESS_LOG="$ROOT/build-${IMAGE_NAME}-progress.jsonl"
 rm -f "$BUILD_LOG" "$BUILD_PROGRESS_LOG"
 if [[ "$IMAGE_NAME" == "forge" ]]; then
     _step "Refreshing cheatsheets and skills in build context..."
-    rm -rf "$IMAGE_DIR/cheatsheets" "$IMAGE_DIR/cheatsheet-sources" "$IMAGE_DIR/skills"
+    rm -rf "$IMAGE_DIR/cheatsheets" "$IMAGE_DIR/cheatsheet-sources" "$IMAGE_DIR/skills" "$IMAGE_DIR/research"
     # Cheatsheet staging lives in ONE place so the tree litmus:
     # cheatsheet-host-image-sync verifies is the tree the image receives
     # (order 448). Do not inline the copy here again.
     "$SCRIPT_DIR/stage-image-cheatsheets.sh" --stage >/dev/null
     cp -rp "$ROOT/cheatsheet-sources" "$IMAGE_DIR/cheatsheet-sources"
     cp -rp "$ROOT/skills" "$IMAGE_DIR/skills"
+    # Research library (spec:research-records) -> COPY research/ /opt/research/
+    cp -rp "$ROOT/research" "$IMAGE_DIR/research"
 fi
 # Log preservation: the build output is kept in $ROOT/build-*.log for agent iteration
 

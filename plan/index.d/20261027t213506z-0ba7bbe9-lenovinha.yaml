@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: on-macos-v56-10-18-1-publish-local-refuses-every-static-preview-with-router-not-ready-because-the-exact-hostname-ca-verified-https-probe-fails
+    field: status
+    value: implemented
+    ts: "2026-10-27T21:35:06Z"
+    host: lenovinha
+
+events:
+  - packet_id: on-macos-v56-10-18-1-publish-local-refuses-every-static-preview-with-router-not-ready-because-the-exact-hostname-ca-verified-https-probe-fails
+    event:
+      type: progress
+      ts: "2026-10-27T21:35:06Z"
+      host: lenovinha
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: 667572fc733e0e1e5bf893b1354256bc5c0b351d
+  - packet_id: on-macos-v56-10-18-1-publish-local-refuses-every-static-preview-with-router-not-ready-because-the-exact-hostname-ca-verified-https-probe-fails
+    event:
+      type: note
+      ts: "2026-10-27T21:35:06Z"
+      host: lenovinha
+      summary: |-
+        landed-but-open triage 2026-10-27: vsock relay and enclave-address probe landed (667572fc7, d4fe9d84a); remains: live publish_local 200s on a published macOS release and the probe-refusal/host_trust wording criteria

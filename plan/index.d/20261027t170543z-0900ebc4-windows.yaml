@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: approval-broker-signs-an-action-bound-statement-after-an-os-verified-check-and-records-it-as-a-git-note
+    event:
+      type: note
+      ts: "2026-10-27T17:05:43Z"
+      agent_id: windows-yolanda-opus5-20261027t170543z
+      host: windows
+      summary: |-
+        AMENDMENT (from 1888-e3yh measurement 2026-10-27): the approval-grant verifier accepts RSASSA-PKCS1-v1_5/SHA-256 over SPKI for Windows Hello signers and REFUSES PSS. The macOS Secure Enclave signer (#668) is ECDSA P-256, so the verifier selects ONE algorithm per platform; the algorithm is recorded on the grant at enrolment and a signature under any other algorithm is refused.

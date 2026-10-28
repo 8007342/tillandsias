@@ -13,6 +13,7 @@ specs:
   litmus_tests:
   - litmus:accel-capability-probe-contract-shape
   - litmus:accel-envelope-reaches-the-forge
+  - litmus:imagegen-tier-ladder-from-the-envelope
   - litmus:capabilities-envelope-names-its-source
   - litmus:envelope-suite-resolves-the-redirected-artifact
   - litmus:imagegen-image-is-first-use-and-placement-is-read-from-the-log
@@ -148,6 +149,12 @@ specs:
   - litmus:cheatsheet-host-image-sync
   coverage_ratio: 100
   last_verified: '2026-06-04'
+- spec_id: research-records
+  status: active
+  litmus_tests:
+  - litmus:research-records-shape
+  coverage_ratio: 80
+  last_verified: '2026-10-26'
 - spec_id: cheatsheets-license-tiered
   status: active
   litmus_tests:

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: plaintext-private-keys-at-rest-under-macos-cache-and-state-dirs
+    event:
+      type: note
+      ts: "2026-10-27T17:05:57Z"
+      agent_id: windows-yolanda-opus5-20261027t170557z
+      host: windows
+      summary: |-
+        yolanda-windows 2026-10-27: five plaintext CA private-key files found on this host were deleted on the operator's own approval (no key contents were read or copied). tillandsias distro: /root/.local/state/tillandsias/ca/intermediate.key and /root/.local/state/tillandsias/ca/vault.key (both mtime 2026-10-21 03:11). tillandsias-build distro: /root/.cache/tillandsias/ca-key.pem (mtime 2026-08-03 12:10), /root/.local/state/tillandsias/ca/intermediate.key (mtime 2026-10-17 14:00), /tmp/tillandsias-headless-init-status-check-home/.local/state/tillandsias/ca/intermediate.key (mtime 2026-10-10 16:11, a test-fixture home that leaked its key).

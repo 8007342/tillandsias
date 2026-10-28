@@ -38,3 +38,8 @@ critical_path:
     command: "grep -q '^    wip_limit: [0-9]' methodology/distributed-work.yaml && grep -q '\"wip_limit\"' crates/tillandsias-plan/src/main.rs && echo 'ok: wip-limit-read-from-methodology'"
     timeout_ms: 10000
     expected_behavior: "ok: wip-limit-read-from-methodology"
+
+  - step: "1906-8vxe: the prose rule, the binary's fallback and the key name one number, so a raise cannot leave a stale 3 for agents to read"
+    command: "n=$(sed -n 's/^    wip_limit: \\([0-9]*\\)$/\\1/p' methodology/distributed-work.yaml); [ -n \"$n\" ] && grep -q \"at most $n in_progress packets\" methodology/distributed-work.yaml && grep -q \"const DEFAULT: usize = $n;\" crates/tillandsias-plan/src/main.rs && echo \"ok: wip-limit-one-number=$n\" || { echo \"FAIL: wip_limit=$n disagrees with the WIP LIMIT prose or the built-in DEFAULT\"; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: wip-limit-one-number=5"

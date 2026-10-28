@@ -1628,7 +1628,9 @@ distributed_work:
   packet_discipline:
     # ORDER 1367-2sbc: read by tillandsias-plan set-field's claim path. The ONE
     # place the number lives; the WIP LIMIT rule below states it in prose.
-    wip_limit: 3
+    # ORDER 1906-8vxe: raised 3 -> 5 by operator direction 2026-10-27 (see
+    # wip_limit_raise below).
+    wip_limit: 5
     # ORDER 1588-27v3: the hosts a claim may name, read by the same claim path.
     # The cap counts claims per host STRING, so an unlisted string held nothing
     # and a `--host x` claim passed it. A new host is added here by a PR before
@@ -1664,7 +1666,7 @@ distributed_work:
       another claim; 21 of 177 landed orders were never closed.
     rules:
       - >
-        WIP LIMIT. A host holds at most 3 in_progress packets outside its
+        WIP LIMIT. A host holds at most 5 in_progress packets outside its
         current story. A story (the batch cycle_batch_triage selects) is
         claimed as one unit and counts as one.
       - >
@@ -1672,6 +1674,19 @@ distributed_work:
         reaches a terminal status, or is released to ready with a next_action
         saying what is LEFT, before the host claims a new story. The claim
         states this; a cycle's exit does not.
+      - >
+        A WAITING HOST TAKES ISOLATED WORK (1906-8vxe). A host whose claims
+        are all waiting on someone else (a PR in review or in the landing
+        queue, a peer's measurement, an operator's live test, a release) is
+        idle, not done. Under the WIP limit it claims an ISOLATED packet: one
+        that touches no file its waiting claims touch, needs no ruling to
+        start, and can land alone. Maintenance and cleanup qualify first:
+        deslop, shell-to-lua ports, stale-row closes (landed-but-open),
+        stranded-claim returns, flaky or slow fixture fixes, archive-ready
+        OpenSpec changes, litmus binding gaps. It goes on its own work branch
+        off the integration branch, never stacked on a waiting one. When the
+        host is at the limit and every claim is waiting, it asks the
+        coordinator which to release (never --over-wip).
       - >
         A FINDING MID-PACKET IS AN EVENT. Anything noticed while working a
         packet is recorded as an event on the row it belongs to, unless it is
@@ -1695,8 +1710,31 @@ distributed_work:
       - "1367-emjg: scripts/check-landed-but-open.sh lists landed orders whose rows are still open"
     status: >
       Rules 1 and 2 are guidance until 1367-2sbc lands; rule 4's sweep until
-      1367-emjg. The numbers above are one measurement, and the cap of 3 is a
-      starting value to revisit after a week, not a law.
+      1367-emjg. The numbers above are one measurement. The cap started at 3
+      and was raised to 5 on 2026-10-27 (wip_limit_raise); it is still a value
+      to revisit on measurement, not a law.
+    wip_limit_raise:
+      order: 1906-8vxe
+      authority: >
+        Operator direction 2026-10-27: "The fleet looks limited with that 3
+        work-items limits, can we raise it to 5? and make that a durable
+        decission in the codebase for other agents to discover later? Looks
+        like some long running tasks that require cooperation keep the hosts
+        idle for long periods, let's make sure that the can take a bit of
+        extra packets of isolated work when idling, I bet there's lots of
+        maintenance and other cleanup tasks that can be performed by waiting
+        hosts on other work branches."
+      observed: >
+        lenovinha 2026-10-27 held 3 claims, all waiting: 1874-bair (#678) and
+        1903-6hkw (#679) in the landing queue, 1859-v5iv on a live arm that
+        runs only from the next release. A fourth packet (1874-b9tg) needed a
+        coordinator ruling to release v5iv first; after b9tg (#681) the host
+        was again at 3/3 with nothing claimable.
+      unchanged: >
+        Stories still count as one unit; --over-wip still records a reason and
+        is not for routine use; FINISH THE STORY BEFORE THE NEXT and CLOSING
+        OUTRANKS FILING still hold. The raise adds room for isolated work, not
+        for scattering one subsystem across five claims.
   cycle_batch_triage:
     purpose: >
       Decide what ONE orchestration cycle takes, so that consecutive

@@ -7,6 +7,7 @@ FROM ${BASE_IMAGE}
 
 # ── Environment exports for diagnostics and agent discovery ─────
 ENV TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets \
+    TILLANDSIAS_RESEARCH=/opt/research \
     DART_ROOT=/opt/dart-sdk \
     FLUTTER_ROOT=/opt/flutter \
     NODE_USE_SYSTEM_CA=1
@@ -43,6 +44,11 @@ RUN mkdir -p /home/forge/src \
 # ── Cheatsheets ────────────────────────────────────────────────
 COPY cheatsheets/ /opt/cheatsheets-image/
 COPY cheatsheet-sources/ /opt/cheatsheet-sources/
+
+# ── Research library (spec:research-records) ───────────────────
+# Non-technical, provenance-backed research the cheatsheets do not hold.
+# Read-only in the forge; projects pull records into their own research/.
+COPY research/ /opt/research/
 
 # ── Shared library ─────────────────────────────────────────────
 RUN mkdir -p /usr/local/lib/tillandsias

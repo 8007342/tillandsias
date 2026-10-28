@@ -1,0 +1,38 @@
+# @trace order:1874-bair (spec: openspec/changes/local-image-generation, not yet archived)
+# THE I0-I3 IMAGEGEN LADDER. Declarative data: TAB-separated, read like
+# images/inference/tiers/tier-table.tsv, no interpreter.
+#
+# ORDER MATTERS, and it is the OPPOSITE of tier-table.tsv: rows are SMALLEST
+# FIRST. Every host STARTS at the first row (I0) whatever its hardware
+# (design.md section 3, operator 2026-10-25). The classifier
+# (crates/tillandsias-headless/src/imagegen_tiers.rs) walks down from I0 and
+# stops at the first row the host does not meet: that last met row is the
+# host's CEILING, the highest tier it may be OFFERED, one rung at a time
+# (section 5). No rung is skipped.
+#
+# LICENCES: permissive or open only (Apache-2.0, MIT, BSD, CreativeML
+# OpenRAIL-M, OpenRAIL++-M). No revenue cap, no non-commercial term. Never
+# shippable: SD-Turbo, SDXL-Turbo, SD3.5, FLUX.1-dev, RMBG-1.4/2.0. Every
+# row's licence is re-verified on its model card by 1874-h9ns before its
+# pinned files land; a row whose licence cannot be confirmed is not shipped.
+# I0 fallback if sd.cpp cannot load SDXS: segmind/tiny-sd
+# (creativeml-openrail-m), then SD1.5 (creativeml-openrail-m).
+#
+# Columns ('-' = this path does not earn the tier):
+#   tier            I0..I3
+#   min_vram_gb     a usable DISCRETE GPU with at least this much VRAM
+#   min_unified_gb  OR a usable UNIFIED-memory GPU with this budget (Apple)
+#   min_ram_gb      OR a host with at least this much RAM (CPU path)
+#   model           the model (and its text encoder, where separate)
+#   licence         licence id, from the permissive list above
+#   licence_source  the model card the licence was read from
+#   size            default square edge in px for the omitted-size case
+#   cpu_size        the same, when the run is on the CPU
+#   steps           default steps
+# A row with all three floors '-' is the floor every host meets (I0 only).
+# Byte sizes do not live here; the download manifest (1874-h9ns) carries them.
+#tier	min_vram_gb	min_unified_gb	min_ram_gb	model	licence	licence_source	size	cpu_size	steps
+I0	-	-	-	SDXS-512-0.9	openrail++	https://huggingface.co/IDKiro/sdxs-512-0.9	512	512	1
+I1	4	-	16	SDXL-Lightning-4step	openrail++	https://huggingface.co/ByteDance/SDXL-Lightning	1024	768	4
+I2	8	16	-	FLUX.1-schnell-q4_k+T5-XXL-q4	apache-2.0	https://huggingface.co/black-forest-labs/FLUX.1-schnell	1024	1024	4
+I3	16	32	-	FLUX.1-schnell-q8_0+T5-XXL-q8	apache-2.0	https://huggingface.co/black-forest-labs/FLUX.1-schnell	1024	1024	4
