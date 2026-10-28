@@ -947,6 +947,7 @@ specs:
   - litmus:skills-canonical-and-mcp-first-shape
   - litmus:onboarding-cold-start-discovery
   - litmus:start-a-new-project-google-cloud-deploy-targets
+  - litmus:start-a-new-project-cloudflare-by-default
   coverage_ratio: 75
   last_verified: '2026-05-14'
 - spec_id: project-summarizers
