@@ -1,0 +1,195 @@
+# Project glossary: one meaning per term (1908-9q4c).
+#
+# Binding: use these terms in new methodology, specs, skills, plan rows and
+# messages. Where the operator uses a word in conversation, the operator's
+# sense wins over the ledger's; the entries below already apply that rule
+# (tier, lane). A retired sense is not rewritten repo-wide; old lines stay,
+# new lines use the replacement. The phrases under retired_synonyms are what
+# scripts/check-glossary-retired-synonyms.sh flags on ADDED lines only.
+#
+# Evidence for every sense: plan/issues/glossary-vocabulary-audit-2026-10-28.md.
+# Idea credit: the vocabulary audit in fear-ai/codess (no licence; ideas only).
+glossary:
+  purpose: >
+    Give each recurring project word one meaning, and map each superseded
+    sense to the word that replaces it, so an agent reading a rule reads the
+    rule its author meant.
+  authority: >
+    This file is the canonical vocabulary. An earlier naming ruling stays in
+    force and is folded in here: 851-gpb5 ("local gate" means ./build.sh
+    --check; "pre-push gate" means pull_merge_cadence.pre_push_gate).
+  operator_sense_wins: >
+    When the operator uses a word in conversation or in a spec they approved,
+    that sense is canonical and a conflicting ledger sense is renamed.
+
+  terms:
+    packet:
+      meaning: One unit of plan work in the ledger, with exit criteria and a status.
+      say_instead_of: [work item, issue (for a ledger entry)]
+      note: A packet has a packet_id (the long slug) and an order id.
+    order_id:
+      meaning: The short identifier of a packet, such as 1908-9q4c; work refs are work/<order id>.
+      retired_senses:
+        - sense: sequencing ("merge order", "trace order")
+          say_instead: sequence
+        - sense: a ruling ("order 640-iujb ruling")
+          say_instead: ruling (cite the order id of the packet that holds it)
+      note: '"order" alone in new text names an operator request; cite its order id.'
+    row:
+      meaning: A row of a rendered table. Not a synonym for packet.
+      retired_senses:
+        - sense: a ledger entry ("the row", "ready rows")
+          say_instead: packet
+    epic:
+      meaning: A packet that groups child packets and closes when they do.
+    fragment:
+      meaning: One append-only YAML file under plan/index.d/ holding new packets or events.
+      retired_senses:
+        - sense: correction fragment
+          say_instead: erratum
+    claim:
+      meaning: A host's lease on a packet (status in_progress with a holder).
+      retired_senses:
+        - sense: an assertion ("convergence claim", "provenance claim")
+          say_instead: assertion
+    lane:
+      meaning: >
+        A way a forge runtime is launched or reached, always qualified: studio
+        lane, OpenCode Web lane, bash lane, WSL2 lane. This is the operator's
+        sense (openspec/changes/web-studio-lanes, 1874-4b88).
+      retired_senses:
+        - sense: a push or landing path to trunk ("plan-only lane", "relay lane", "fast lane")
+          say_instead: push route (plan-only push route, relay push route)
+        - sense: a storage pattern ("tmpfs-overlay lane")
+          say_instead: storage class
+        - sense: a platform team ("Linux lane")
+          say_instead: Linux hosts
+        - sense: a review track
+          say_instead: review track
+    push_route:
+      meaning: A path by which a commit reaches trunk; the plan-only push route carries fragment-only commits, the relay push route carries a work ref through the land queue.
+    trunk:
+      meaning: linux-next, the integration branch every work ref lands into.
+      retired_senses:
+        - sense: main
+          say_instead: main (the release branch)
+        - sense: packet trunk
+          say_instead: the ledger
+    work_ref:
+      meaning: A branch work/<order id>, started from origin/linux-next, carrying one packet's change.
+    platform_branch:
+      meaning: windows-next or osx-next, a platform's checkpoint branch.
+    land:
+      meaning: Integrate a work ref into trunk through the land queue; "landed" names the resulting commit.
+    relay:
+      meaning: The coordinator forwarding another host's work ref into the land queue.
+      retired_senses:
+        - sense: the git mirror's pre-receive forwarder
+          say_instead: mirror forwarder
+    cut:
+      meaning: Promoting trunk to main for a release.
+      retired_senses:
+        - sense: cut host
+          say_instead: land-queue host
+        - sense: cutover (a scheme migration)
+          say_instead: migration
+    gate:
+      meaning: >
+        A pass/fail check that blocks a push or a release, always qualified:
+        local gate (./build.sh --check), land gate, release gate. The
+        pre-push gate is pull_merge_cadence.pre_push_gate only (851-gpb5).
+      retired_senses:
+        - sense: an authentication step ("OTP gate", "session gate")
+          say_instead: auth check
+        - sense: an approval step ("approval gate")
+          say_instead: approval step
+        - sense: the verb ("gated on")
+          say_instead: conditional on
+    gate_stamp:
+      meaning: The recorded marker that the local gate passed for a given tree.
+      retired_senses:
+        - sense: build stamp (the same marker under another name)
+          say_instead: gate stamp
+        - sense: freshness stamp (a cert TTL)
+          say_instead: freshness timestamp
+    check_level:
+      meaning: How deep a CI run goes (instant, quick, release, ci-full).
+      say_instead_of: [quick tier, release tier, quick-tier]
+    tier:
+      meaning: >
+        Host tier (a host's capability class, as in "floor tier") or model
+        tier (a model size class, as in "one tier larger"). This is the
+        operator's sense.
+      retired_senses:
+        - sense: CI depth ("quick tier", "release tier")
+          say_instead: check level
+        - sense: storage temperature ("HOT tier", "COLD tier")
+          say_instead: storage class
+        - sense: execution role ("worker tier", "coordinator tier")
+          say_instead: role
+        - sense: log visibility ("log tier")
+          say_instead: log scope
+    storage_class:
+      meaning: Where and how data is kept (hot, cold, tmpfs overlay).
+    role:
+      meaning: An agent's execution role (worker, coordinator).
+    regime:
+      meaning: The guest context a component runs in (native host, WSL2, VZ guest).
+      retired_senses:
+        - sense: a command-policy scope ("fixture regime")
+          say_instead: fixture scope
+        - sense: a launch mode ("GUI regime")
+          say_instead: GUI launch mode
+    arm:
+      meaning: One branch of a test (positive, negative, sabotage, control arm).
+      retired_senses:
+        - sense: the verb for enabling a cron or hook ("arm the hooks")
+          say_instead: enable, or schedule
+    fixture:
+      meaning: A test harness or its input data.
+      retired_senses:
+        - sense: a CI check class
+          say_instead: fixture check
+    decider:
+      meaning: A fast check-*.sh script judged by its exit status.
+    litmus:
+      meaning: '"litmus test" is one test; "litmus chain" is an ordered set of them.'
+    forge:
+      meaning: The forge image, or a container started from it; say "forge image" or "forge container" when the difference matters.
+    enclave:
+      meaning: A project's container network and the services on it.
+    mirror:
+      meaning: The per-project git mirror service.
+      retired_senses:
+        - sense: the verb ("this mirrors X")
+          say_instead: matches
+    host:
+      meaning: A machine in the fleet (yoga, macuahuitl). Say "host side" for the layer outside a guest or container, and "bare metal" for not-in-a-forge.
+    cycle:
+      meaning: One run of a recurring loop such as meta-orchestration.
+
+  # Phrases the advisory check flags on added lines. Each phrase is specific
+  # enough that the canonical sense never contains it.
+  retired_synonyms:
+    - {phrase: build stamp, replacement: gate stamp}
+    - {phrase: plan-only lane, replacement: plan-only push route}
+    - {phrase: plan lane, replacement: plan-only push route}
+    - {phrase: relay lane, replacement: relay push route}
+    - {phrase: fast lane, replacement: fast push route}
+    - {phrase: tmpfs-overlay lane, replacement: tmpfs-overlay storage class}
+    - {phrase: quick tier, replacement: quick check level}
+    - {phrase: quick-tier, replacement: quick check level}
+    - {phrase: release tier, replacement: release check level}
+    - {phrase: worker tier, replacement: worker role}
+    - {phrase: coordinator tier, replacement: coordinator role}
+    - {phrase: HOT tier, replacement: hot storage class}
+    - {phrase: COLD tier, replacement: cold storage class}
+    - {phrase: convergence claim, replacement: convergence assertion}
+    - {phrase: provenance claim, replacement: provenance assertion}
+    - {phrase: correction fragment, replacement: erratum}
+    - {phrase: cut host, replacement: land-queue host}
+    - {phrase: packet trunk, replacement: the ledger}
+    - {phrase: fixture regime, replacement: fixture scope}
+    - {phrase: GUI regime, replacement: GUI launch mode}
+    - {phrase: approval gate, replacement: approval step}
+    - {phrase: ledger row, replacement: packet}
