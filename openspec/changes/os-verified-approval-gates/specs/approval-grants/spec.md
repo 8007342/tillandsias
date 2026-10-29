@@ -19,10 +19,42 @@ proceed without a prompt.
 - **WHEN** a grant scoped `once` has been used
 - **THEN** the next identical request prompts again
 
+### Requirement: every grant is bound to one forge instance
+
+Each grant SHALL carry `forge_instance`: the agent, the project, the launch
+timestamp and an instance id unique to that forge launch. A verifier SHALL
+refuse a grant presented by any other forge instance, even one with the same
+agent, project and target. A `session` grant SHALL expire when its forge
+instance stops. Grants wider than one forge instance are not offered (operator
+ruling 2026-10-26).
+
+#### Scenario: a second forge does not inherit a grant
+
+- **WHEN** the operator approves a workflow dispatch for 2 hours in one forge,
+  and a second forge on the same project with the same agent requests the same
+  dispatch
+- **THEN** the second forge is prompted, and its approval is a separate grant
+
+#### Scenario: a session grant ends with its forge
+
+- **WHEN** a forge holding a `session` grant stops, and a new forge on the same
+  project requests the same action
+- **THEN** the request is prompted again
+
+### Requirement: the window names the forge its approvals apply to
+
+The approval window SHALL show `<Agent>/<Project>/Launched at <YYYY-MM-DD HH:MM>`
+and the line "Approvals here apply only to this forge."
+
+#### Scenario: the metadata line is shown
+
+- **WHEN** the window opens for a request from a forge
+- **THEN** it shows that forge's agent, project and launch time, and the scope line
+
 ### Requirement: grants are signed statements stored in Vault
 
 Each grant SHALL be a statement signed by the device key, naming action,
-target, scope, issued time and expiry (standing grants have none), stored in a
+target, scope, forge instance, issued time and expiry (standing grants have none), stored in a
 Vault KV path. Only the approval broker SHALL be able to write it. Only the
 git-mirror hook, the MCP gate and release tooling SHALL be able to read it,
 with the Vault audit device enabled.

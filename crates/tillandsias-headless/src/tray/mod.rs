@@ -415,12 +415,23 @@ type GroupProperties = Vec<(i32, HashMap<String, OwnedValue>)>;
 // @trace gap:TR-005
 /// Async task executor for offloading long-running operations from the GTK event loop.
 /// Prevents UI blocking by spawning tasks in a dedicated thread pool.
+///
+/// 1919-exec: workers BLOCK in `recv()` and stop when the sender is dropped
+/// (`Disconnected`). They used to wake every 100 ms in `recv_timeout` to
+/// re-read an `is_running` flag — about 144,000 idle wakeups/h for 4 workers.
 #[derive(Debug)]
 struct AsyncTaskExecutor {
-    /// Send channel for queueing tasks
-    sender: mpsc::SyncSender<Box<dyn FnOnce() + Send>>,
-    /// Flag indicating if the executor thread is still running
-    is_running: Arc<AtomicBool>,
+    /// Send channel for queueing tasks. `None` once shut down: dropping it is
+    /// what wakes and stops the workers.
+    sender: Option<mpsc::SyncSender<Box<dyn FnOnce() + Send>>>,
+    /// Set before the sender is dropped, so a worker never STARTS a task that
+    /// was still queued at shutdown (the pre-1919-exec behaviour). Read only
+    /// after a task arrives — never polled.
+    shutting_down: Arc<AtomicBool>,
+    /// Worker threads, joinable by `shutdown_and_join`. Production never
+    /// joins (Drop must not block), so only tests read it.
+    #[cfg_attr(not(test), allow(dead_code))]
+    workers: Vec<std::thread::JoinHandle<()>>,
 }
 
 /// Number of worker threads draining the task queue. This MUST be > 1: a
@@ -439,39 +450,64 @@ impl AsyncTaskExecutor {
     /// @trace gap:TR-005
     fn new(queue_size: usize) -> Self {
         let (sender, receiver) = mpsc::sync_channel::<Box<dyn FnOnce() + Send>>(queue_size);
-        let is_running = Arc::new(AtomicBool::new(true));
+        let shutting_down = Arc::new(AtomicBool::new(false));
         // The receiver is shared across workers behind a mutex; each worker
-        // briefly locks to dequeue one task, then releases the lock *before*
-        // running it so peers can pick up the next task concurrently.
+        // locks to dequeue one task (the lock holder blocks in recv(), the
+        // others block on the lock — no thread wakes while idle), then
+        // releases the lock *before* running it so peers can pick up the next
+        // task concurrently.
         let receiver = Arc::new(Mutex::new(receiver));
 
-        for worker in 0..ASYNC_EXECUTOR_WORKERS {
-            let is_running_clone = is_running.clone();
-            let receiver = receiver.clone();
-            std::thread::spawn(move || {
-                let span = span!(Level::TRACE, "async_task_executor", worker);
-                let _guard = span.enter();
+        let workers = (0..ASYNC_EXECUTOR_WORKERS)
+            .map(|worker| {
+                let shutting_down = shutting_down.clone();
+                let receiver = receiver.clone();
+                std::thread::spawn(move || {
+                    let span = span!(Level::TRACE, "async_task_executor", worker);
+                    let _guard = span.enter();
 
-                while is_running_clone.load(Ordering::Relaxed) {
-                    let next = {
-                        let rx = match receiver.lock() {
-                            Ok(rx) => rx,
-                            Err(_) => break, // poisoned — bail this worker
+                    loop {
+                        let next = {
+                            let rx = match receiver.lock() {
+                                Ok(rx) => rx,
+                                Err(_) => break, // poisoned — bail this worker
+                            };
+                            rx.recv()
                         };
-                        rx.recv_timeout(std::time::Duration::from_millis(100))
-                    };
-                    match next {
-                        Ok(task) => {
-                            task();
+                        match next {
+                            // A task still queued at shutdown is dropped, not run.
+                            Ok(_) if shutting_down.load(Ordering::Acquire) => break,
+                            Ok(task) => task(),
+                            // Every sender is gone: the executor shut down.
+                            Err(mpsc::RecvError) => break,
                         }
-                        Err(mpsc::RecvTimeoutError::Timeout) => continue,
-                        Err(mpsc::RecvTimeoutError::Disconnected) => break,
                     }
-                }
-            });
-        }
+                })
+            })
+            .collect();
 
-        Self { sender, is_running }
+        Self {
+            sender: Some(sender),
+            shutting_down,
+            workers,
+        }
+    }
+
+    /// Stop the executor and wait for every worker to exit. Workers finish the
+    /// task they are running; queued tasks are dropped.
+    #[cfg(test)]
+    fn shutdown_and_join(mut self) {
+        self.shut_down();
+        for worker in std::mem::take(&mut self.workers) {
+            let _ = worker.join();
+        }
+    }
+
+    /// Flag shutdown, then drop the sender: the drop wakes every worker
+    /// blocked in `recv()` with `Disconnected`.
+    fn shut_down(&mut self) {
+        self.shutting_down.store(true, Ordering::Release);
+        self.sender = None;
     }
 
     /// Spawn a non-blocking task. Returns error if queue is full.
@@ -480,13 +516,18 @@ impl AsyncTaskExecutor {
     where
         F: FnOnce() + Send + 'static,
     {
-        self.sender.try_send(Box::new(task))
+        match &self.sender {
+            Some(sender) => sender.try_send(Box::new(task)),
+            None => Err(mpsc::TrySendError::Disconnected(Box::new(task))),
+        }
     }
 }
 
 impl Drop for AsyncTaskExecutor {
+    /// Non-blocking, as before: workers are told to stop but not joined, so a
+    /// long task (a 60 s cloud fetch) cannot stall whoever drops the executor.
     fn drop(&mut self) {
-        self.is_running.store(false, Ordering::Release);
+        self.shut_down();
     }
 }
 
@@ -7618,6 +7659,58 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// 1919-exec: shutdown is the sender drop. Every worker blocked in recv()
+    /// must wake on Disconnected and JOIN — no timeout is involved, so the
+    /// join returns well inside a bound the old 100 ms poll could also meet;
+    /// the assertion that matters is that the workers are joinable at all and
+    /// exit on the drop alone. A queued task is dropped, never run.
+    #[test]
+    fn async_executor_stops_by_dropping_the_sender_and_workers_join() {
+        let executor = AsyncTaskExecutor::new(10);
+        let ran = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let r = ran.clone();
+        executor
+            .spawn_task(move || {
+                r.fetch_add(1, Ordering::SeqCst);
+            })
+            .expect("queue accepts a task");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while ran.load(Ordering::SeqCst) == 0 && std::time::Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+        assert_eq!(ran.load(Ordering::SeqCst), 1, "the task ran");
+        assert_eq!(executor.workers.len(), ASYNC_EXECUTOR_WORKERS);
+
+        let (done_tx, done_rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            executor.shutdown_and_join();
+            let _ = done_tx.send(());
+        });
+        done_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("every worker joins once the sender is dropped");
+    }
+
+    /// 1919-exec structural arm: the executor's workers never poll. Fails on
+    /// the pre-fix `recv_timeout(100 ms)` loop over an `is_running` flag.
+    #[test]
+    fn async_executor_workers_block_instead_of_polling() {
+        let src = include_str!("mod.rs");
+        let start = src.find("impl AsyncTaskExecutor {").expect("executor impl");
+        let end = start + src[start..].find("type ControlSubscribers").expect("end");
+        let body = &src[start..end];
+        let poll = ["recv_", "timeout("].concat();
+        // source-pin-ok: the absence of a timed poll IS the contract (1919-exec); behaviour is pinned by the join test above
+        assert!(
+            !body.contains(&poll),
+            "AsyncTaskExecutor must not poll with {poll}"
+        );
+        // source-pin-ok: the blocking call is the subject of the structural arm
+        assert!(body.contains("rx.recv()"), "workers block in recv()");
+        let flag = ["is_", "running"].concat();
+        assert!(!body.contains(&flag), "no polled {flag} flag");
     }
 
     // @trace gap:TR-005: Unit tests for AsyncTaskExecutor non-blocking behavior

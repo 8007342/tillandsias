@@ -807,6 +807,16 @@ pub async fn run_vsock_listener(
     shutdown: Arc<AtomicBool>,
     state: VmStateHandle,
 ) -> io::Result<()> {
+    // 1909-aryk: an older guest left the Vault root token and unseal share in
+    // plaintext files. Delete them before the host can connect; the next
+    // delivery from the host's secure storage is the only source now.
+    #[cfg(feature = "vault")]
+    for path in crate::vault_bootstrap::purge_credential_fallbacks() {
+        eprintln!(
+            "[vsock] removed plaintext credential file {} (1909-aryk)",
+            path.display()
+        );
+    }
     let transport = Transport::Vsock {
         cid: vmaddr_cid_any(),
         port,

@@ -1,6 +1,6 @@
--- @env HOME TILLANDSIAS_CRED_SCAN_HOME TILLANDSIAS_CRED_SCAN_PODMAN
--- @read-env TILLANDSIAS_CRED_SCAN_HOME TILLANDSIAS_CRED_SCAN_PODMAN
--- @trace order:1118-fqfk, spec:tillandsias-vault
+-- @env HOME TILLANDSIAS_CRED_SCAN_HOME TILLANDSIAS_CRED_SCAN_PODMAN TILLANDSIAS_CRED_SCAN_IDENTITY
+-- @read-env TILLANDSIAS_CRED_SCAN_HOME TILLANDSIAS_CRED_SCAN_PODMAN TILLANDSIAS_CRED_SCAN_IDENTITY
+-- @trace order:1118-fqfk, order:1909-aryk, spec:tillandsias-vault
 --
 -- check-credentials-at-rest.lua — 1118-fqfk. Operator ruling 2026-10-19: no
 -- Vault unseal share, root token, installation anchor or CA private key is ever
@@ -9,7 +9,9 @@
 -- It judges NAMES and PATHS only and never reads a credential's contents.
 -- Sites it scans:
 --   1. fallback files (fallback_vault-shamir-share-v1, fallback_vault-root-token-v1,
---      installation_anchor) under the host's tillandsias cache, state and data dirs;
+--      installation_anchor) under the host's tillandsias cache, state and data dirs,
+--      and (1909-aryk) under a guest's persistent identity disk,
+--      TILLANDSIAS_CRED_SCAN_IDENTITY (default /var/lib/tillandsias/identity);
 --   2. any podman secret named tillandsias-* on the file driver, which keeps it
 --      in plaintext under the containers storage dir (slice 1: the unseal key;
 --      slice 2a: approle, token, CA and TLS keys);
@@ -28,6 +30,7 @@ if home == "" then
     verdict.emit("could-not-run:credentials-at-rest:no-home", 2)
 end
 local podman = env.get("TILLANDSIAS_CRED_SCAN_PODMAN") or "podman"
+local identity = env.get("TILLANDSIAS_CRED_SCAN_IDENTITY") or "/var/lib/tillandsias/identity"
 
 local FALLBACK_NAMES = {
     "fallback_vault-shamir-share-v1",
@@ -55,6 +58,9 @@ end
 
 for _, d in ipairs({ "/.cache/tillandsias", "/.local/state/tillandsias", "/.local/share/tillandsias" }) do
     find_names(home .. d, 3, FALLBACK_NAMES)
+end
+if fs.exists(identity) then
+    find_names(identity, 2, FALLBACK_NAMES)
 end
 find_names(home .. "/.local/share/containers/storage/overlay-containers", 4, { SECRET_GLOB })
 find_names(home .. "/.local/state/tillandsias", 2, KEY_NAMES)

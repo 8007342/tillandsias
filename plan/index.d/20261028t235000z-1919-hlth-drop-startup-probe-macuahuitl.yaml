@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: enclave-healthchecks-run-as-the-right-user-and-at-minute-intervals
+    event:
+      type: note
+      ts: "2026-10-28T23:50:00Z"
+      agent_id: linux-macuahuitl-claude-20261028t235000z
+      host: macuahuitl
+      summary: |
+        work/1919-hlth: the 2 s --health-startup-cmd probe is DROPPED per the operator ruling of 2026-10-28 (forges and launchers never poll siblings; readiness is an event). Kept: numeric USER for vault, proxy and mirror, and the 30 s steady interval on all four images. Removed: startup_health_args, the *_HEALTH_CMD constants and their two tests. Known cost until story 1922-rdyg lands: a cold vault start may sit "starting" for up to one 30 s interval before podman wait --condition=healthy returns. The exit criterion naming --health-startup-interval 2s is superseded; the event-driven readiness gate (1922-rdyg) replaces it.
