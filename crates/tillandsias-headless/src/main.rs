@@ -16587,6 +16587,21 @@ fn run_opencode_mode(
                 .map_err(|e| format!("[OpenCode] failed to start inference: {e}"))?;
         }
 
+        // Order 1910-a1m8: the same mirror readiness gate as
+        // ensure_enclave_for_project. Without it the forge cloned a mirror
+        // whose seed had not run yet and gave up after its ~40 s of clone
+        // retries (macOS cold cloud launch, 2026-10-28).
+        if project_remote_url.is_some() {
+            wait_for_git_mirror_ready(
+                &client,
+                &git_container_name,
+                project_name,
+                project_default_branch.as_deref(),
+                debug,
+            )
+            .await?;
+        }
+
         // The OpenCode CLI lane serves the interactive agent ATTACHED to THIS
         // terminal (run_container_attached_observed below). Tailing the SUPPORT
         // containers' logs (router/proxy/git/inference) into the same terminal
@@ -33287,6 +33302,24 @@ esac
                     .contains("launch_images::launch_images(launch_images::LaunchSite::Opencode)"),
             "OpenCode CLI lane must build the router image before ensure_router_running \
              (order-327 class; macOS cold-forge live repro 2026-07-15)"
+        );
+    }
+
+    #[test]
+    fn opencode_mode_waits_for_the_mirror_before_the_forge_clones() {
+        let manifest_dir = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        );
+        let source =
+            std::fs::read_to_string(manifest_dir.join("src/main.rs")).expect("main.rs is readable");
+        let window = source_window(&source, "fn run_opencode_mode(");
+        // source-pin-ok: the ORDER of the gate and the forge start is the contract (1910-a1m8).
+        let gate = window.find("wait_for_git_mirror_ready(");
+        let forge = window.find("run_agent_container_attached(");
+        assert!(
+            matches!((gate, forge), (Some(g), Some(f)) if g < f),
+            "the OpenCode lane must wait for a cloneable mirror before starting the \
+             forge, or a cold launch clones an unseeded mirror (1910-a1m8)"
         );
     }
 
