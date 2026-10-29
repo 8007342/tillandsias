@@ -21,7 +21,7 @@ severity: high
 size: quick
 
 # scripts/test-cloudflare-oauth-core.sh runs the five #[ignore]d tests in
-# crates/tillandsias-headless/src/cloudflare_oauth.rs's `loopback_tests`
+# crates/tillandsias-cloudflare-oauth/src/lib.rs's `loopback_tests`
 # module with --nocapture, so begin()'s eprintln! note reaches the script's
 # own captured log rather than libtest's normally-swallowed buffer. See the
 # script's own header for the full per-arm description.
@@ -31,7 +31,7 @@ size: quick
 # fails to compile ("cannot find `cloudflare_oauth`").
 
 preconditions:
-  - workspace contains crates/tillandsias-headless/src/cloudflare_oauth.rs
+  - workspace contains crates/tillandsias-cloudflare-oauth/src/lib.rs
   - workspace contains crates/tillandsias-headless/src/bin/tillandsias-fake-cloudflare.rs
   - workspace contains scripts/test-cloudflare-oauth-core.sh
   - cargo is available in PATH
@@ -51,7 +51,7 @@ observability:
   log_fields:
     spec: "ci-release"
     test: "cloudflare-oauth-core"
-    artifact: "crates/tillandsias-headless/src/cloudflare_oauth.rs"
+    artifact: "crates/tillandsias-cloudflare-oauth/src/lib.rs"
 
 rollback:
   on_failure: >

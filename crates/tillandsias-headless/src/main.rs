@@ -158,8 +158,9 @@ pub mod cloudflare_names;
 // revoke}: Authorization Code + PKCE (S256) as pure functions over an
 // injected HttpClient trait object, since Cloudflare has no device grant.
 // `pub` so the redirect-receiver packet (1505-kc5f) and the rotation
-// scheduler (siblings under 1505-sm2j) can reach it.
-pub mod cloudflare_oauth;
+// scheduler (siblings under 1505-sm2j) can reach it. Its own crate since
+// 1916-hspl slice 1, re-exported under the old path.
+pub use tillandsias_cloudflare_oauth as cloudflare_oauth;
 // @trace order:1505-kc5f — `--cloudflare-login [--via device|loopback|qr|paste]` and
 // `--cloudflare-logout`: the three redirect receivers over cloudflare_oauth,
 // storing through the 1505-iysn Vault functions. Needs Vault, so `vault`-gated.

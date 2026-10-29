@@ -853,6 +853,13 @@ pub fn device_poll(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // 1916-hspl: this crate's own test binary; the lock headless's tests share
+    // (crate::test_support::env_lock) is a different process.
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    }
     use std::cell::RefCell;
     use std::collections::HashMap;
 
@@ -1381,7 +1388,7 @@ mod tests {
     #[test]
     fn client_id_and_base_url_env_overrides() {
         // 1437-5czv: env-mutating tests serialize on the crate-wide lock.
-        let _guard = crate::test_support::env_lock();
+        let _guard = env_lock();
         let prev_base = std::env::var("TILLANDSIAS_CLOUDFLARE_BASE_URL").ok();
         let prev_client = std::env::var("TILLANDSIAS_CLOUDFLARE_CLIENT_ID").ok();
         unsafe {
@@ -1407,7 +1414,7 @@ mod tests {
 
     #[test]
     fn defaults_when_env_unset() {
-        let _guard = crate::test_support::env_lock();
+        let _guard = env_lock();
         let prev_base = std::env::var("TILLANDSIAS_CLOUDFLARE_BASE_URL").ok();
         let prev_client = std::env::var("TILLANDSIAS_CLOUDFLARE_CLIENT_ID").ok();
         unsafe {

@@ -13,6 +13,8 @@ path = "src/main.rs"
 
 [dependencies]
 tillandsias-core = { path = "../tillandsias-core" }
+# Order 1916-hspl slice 1: split out of src/cloudflare_oauth.rs.
+tillandsias-cloudflare-oauth = { path = "../tillandsias-cloudflare-oauth" }
 # Order 1916-embd: the embedded runtime assets, in their own crate so an asset
 # edit does not rerun this crate's build script.
 tillandsias-embed = { path = "../tillandsias-embed" }

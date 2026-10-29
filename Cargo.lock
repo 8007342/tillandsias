@@ -3302,6 +3302,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tillandsias-cloudflare-oauth"
+version = "56.10.20"
+dependencies = [
+ "base64 0.22.1",
+ "getrandom 0.4.2",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+]
+
+[[package]]
 name = "tillandsias-control-wire"
 version = "0.1.170"
 dependencies = [
@@ -3385,6 +3398,7 @@ dependencies = [
  "signal-hook",
  "tempfile",
  "tillandsias-browser-mcp",
+ "tillandsias-cloudflare-oauth",
  "tillandsias-control-wire",
  "tillandsias-core",
  "tillandsias-embed",

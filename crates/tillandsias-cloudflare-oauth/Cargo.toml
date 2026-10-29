@@ -1,0 +1,24 @@
+[package]
+name = "tillandsias-cloudflare-oauth"
+version = "56.10.20"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Cloudflare OAuth core (begin, exchange, refresh, revoke): Authorization Code + PKCE over an injected HttpClient"
+publish = false
+
+# ORDER 1916-hspl slice 1: the first module split out of tillandsias-headless,
+# so an edit here recompiles this crate and relinks headless, not headless's
+# 36k-line main.rs. headless re-exports it as crate::cloudflare_oauth.
+
+[dependencies]
+base64 = { workspace = true }
+getrandom = "0.4"
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = "1"
+sha2 = "0.10"
+tokio = { workspace = true }
+
+[lints]
+workspace = true

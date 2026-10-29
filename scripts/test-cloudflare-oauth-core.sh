@@ -15,7 +15,7 @@
 # so they only run when asked for by name, here.
 #
 # Each arm is a `#[test]` fn inside
-# crates/tillandsias-headless/src/cloudflare_oauth.rs (`mod loopback_tests`),
+# crates/tillandsias-cloudflare-oauth/src/lib.rs (`mod loopback_tests`),
 # not a separate binary this script writes. This script's job is: build both
 # binaries, point the harness at the fake it just built, run the five ignored
 # tests with --nocapture (so begin()'s eprintln! note reaches THIS script's
@@ -40,7 +40,7 @@
 #     line begin() actually printed to stderr.
 #
 # PRE-FIX RESULT: FAILS — before 1505-kyx8,
-# crates/tillandsias-headless/src/cloudflare_oauth.rs does not exist, so
+# crates/tillandsias-cloudflare-oauth/src/lib.rs does not exist, so
 # `cargo test ... cloudflare_oauth::loopback_tests` fails to compile
 # ("cannot find `cloudflare_oauth`").
 set -uo pipefail
@@ -63,16 +63,16 @@ if ! cargo build -p tillandsias-headless --bin tillandsias-fake-cloudflare >"$WO
     echo "fail:cloudflare-oauth-core:build-fake"
     exit 1
 fi
-FAKE_BIN="$ROOT/target/debug/tillandsias-fake-cloudflare"
+FAKE_BIN="${CARGO_TARGET_DIR:-$ROOT/target}/debug/tillandsias-fake-cloudflare"
 if [ ! -x "$FAKE_BIN" ]; then
     echo "fail:cloudflare-oauth-core:fake-binary-missing:$FAKE_BIN"
     exit 1
 fi
 
-echo "[cloudflare-oauth-core] running the loopback arms against it (this also builds the tillandsias test binary)..." >&2
+echo "[cloudflare-oauth-core] running the loopback arms against it (this also builds the tillandsias-cloudflare-oauth test binary; 1916-hspl moved the module into its own crate)..." >&2
 export TILLANDSIAS_FAKE_CLOUDFLARE_BIN="$FAKE_BIN"
 CARGO_RC=0
-cargo test -p tillandsias-headless --bin tillandsias cloudflare_oauth::loopback_tests -- \
+cargo test -p tillandsias-cloudflare-oauth --lib loopback_tests -- \
     --ignored --test-threads=1 --nocapture >"$LOG" 2>&1 || CARGO_RC=$?
 
 ARMS="
@@ -88,8 +88,8 @@ TOTAL=0
 for arm in $ARMS; do
     [ -n "$arm" ] || continue
     TOTAL=$((TOTAL + 1))
-    if grep -qF "test cloudflare_oauth::loopback_tests::${arm} " "$LOG" \
-        && ! grep -qE "^test cloudflare_oauth::loopback_tests::${arm} .*FAILED" "$LOG"; then
+    if grep -qF "test loopback_tests::${arm} " "$LOG" \
+        && ! grep -qE "^test loopback_tests::${arm} .*FAILED" "$LOG"; then
         echo "ok:   $arm"
         PASS=$((PASS + 1))
     else

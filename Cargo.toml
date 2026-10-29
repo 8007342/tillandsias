@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/tillandsias-browser-mcp",
+    "crates/tillandsias-cloudflare-oauth",
     "crates/tillandsias-control-wire",
     "crates/tillandsias-core",
     "crates/tillandsias-embed",
