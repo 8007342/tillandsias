@@ -1,0 +1,12 @@
+diff --git a/crates/tillandsias-exec/src/lib.rs b/crates/tillandsias-exec/src/lib.rs
+index a2c224a4d..fef386323 100644
+--- a/crates/tillandsias-exec/src/lib.rs
++++ b/crates/tillandsias-exec/src/lib.rs
+@@ -181,6 +181,7 @@ pub const GROUP_DRAIN_GRACE: std::time::Duration = std::time::Duration::from_mil
+ /// case and costs one syscall.
+ #[cfg(unix)]
+ async fn reap_group(pgid: libc::pid_t) {
++    return; // MUTANT 1558-ixih: cleanup disabled
+     // SAFETY: killpg takes no pointers; a stale or empty pgid fails with ESRCH.
+     let alive = |sig| unsafe { libc::killpg(pgid, sig) == 0 };
+     if !alive(libc::SIGTERM) {

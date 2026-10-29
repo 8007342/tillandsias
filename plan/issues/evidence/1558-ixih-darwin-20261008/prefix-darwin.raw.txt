@@ -1,0 +1,54 @@
+    Blocking waiting for file lock on build directory
+   Compiling serde_core v1.0.228
+   Compiling once_cell v1.21.4
+   Compiling syn v2.0.117
+   Compiling tempfile v3.27.0
+   Compiling uuid v1.23.1
+   Compiling tokio-macros v2.7.0
+   Compiling thiserror-impl v2.0.18
+   Compiling tokio v1.52.2
+   Compiling thiserror v2.0.18
+   Compiling tillandsias-exec v0.1.0 (/Users/tlatoani/claudia/wt-1558-ixih/crates/tillandsias-exec)
+warning: variants `Zombie` and `Unobservable` are never constructed
+  --> crates/tillandsias-exec/tests/group_exit.rs:16:5 <!-- cite-ok: raw compiler/test output, the location is part of the receipt -->
+   |
+14 | enum Liveness {
+   |      -------- variants in this enum
+15 |     Alive,
+16 |     Zombie,
+   |     ^^^^^^
+17 |     Gone,
+18 |     Unobservable(String),
+   |     ^^^^^^^^^^^^
+   |
+   = note: `Liveness` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `tillandsias-exec` (test "group_exit") generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 35s
+     Running tests/group_exit.rs (/Users/tlatoani/claudia/tillandsias/target/debug/deps/group_exit-9d28f738212dfffb)
+
+running 5 tests
+test a_failed_observation_of_a_live_process_is_not_reported_dead ... FAILED
+test liveness_sees_a_known_live_process_and_its_death ... ok
+test a_grandchild_holding_stdout_does_not_turn_success_into_a_timeout ... ok
+test the_leaders_status_is_reported_after_the_reap ... ok
+test a_detached_grandchild_does_not_outlive_the_run ... ok
+
+failures:
+
+---- a_failed_observation_of_a_live_process_is_not_reported_dead stdout ----
+
+thread 'a_failed_observation_of_a_live_process_is_not_reported_dead' (6616838) panicked at crates/tillandsias-exec/tests/group_exit.rs:79:5: <!-- cite-ok: raw compiler/test output, the location is part of the receipt -->
+assertion `left != right` failed: a live process 75253 was reported dead because its state could not be read
+  left: Gone
+ right: Gone
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    a_failed_observation_of_a_live_process_is_not_reported_dead
+
+test result: FAILED. 4 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+error: test failed, to rerun pass `-p tillandsias-exec --test group_exit`

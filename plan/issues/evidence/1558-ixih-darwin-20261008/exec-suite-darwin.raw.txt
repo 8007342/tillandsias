@@ -1,0 +1,82 @@
+   Compiling tillandsias-exec v0.1.0 (/Users/tlatoani/claudia/wt-1558-ixih/crates/tillandsias-exec)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.90s
+     Running unittests src/lib.rs (/Users/tlatoani/claudia/tillandsias/target/debug/deps/tillandsias_exec-dc711e5d52f7fd40)
+
+running 8 tests
+test managed::tests::completion_only_capture_is_bounded_without_line_queue_backpressure ... ok
+test managed::tests::silent_spawn_keeps_no_event_legacy_semantics ... ok
+test managed::tests::completion_only_accepts_newline_free_payload_beyond_stream_line_bound ... ok
+test managed::tests::full_streaming_keeps_unterminated_line_limit ... ok
+test managed::tests::a_kill_after_exit_with_undelivered_lines_is_not_a_whole_capture ... ok
+test managed::tests::a_scope_deadline_after_exit_keeps_the_exit_status_and_truncates ... ok
+test managed::tests::an_exited_child_is_not_timed_out_by_slow_line_delivery ... ok
+test managed::tests::a_slow_spawn_setup_is_latency_not_a_failure ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.59s
+
+     Running tests/capture_bound.rs (/Users/tlatoani/claudia/tillandsias/target/debug/deps/capture_bound-eca77f5a9f65faa8)
+
+running 4 tests
+test a_capture_under_the_cap_is_whole ... ok
+test the_default_cap_leaves_ordinary_output_whole ... ok
+test a_capture_past_the_cap_is_kept_to_the_cap_and_reported ... ok
+test both_fds_keep_draining_past_the_cap_without_deadlock ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+     Running tests/executor_contract.rs (/Users/tlatoani/claudia/tillandsias/target/debug/deps/executor_contract-cac3c059ed7e80db)
+
+running 12 tests
+test empty_argv_is_refused ... ok
+test one_argv_entry_arrives_unaltered ... ok
+test stderr_survives_when_only_stdout_is_read ... ok
+test two_runs_have_distinct_run_identities ... ok
+test dual_stream_megabyte_each_completes ... ok
+test managed_unterminated_line_has_an_explicit_bound ... ok
+test a_sigpipe_killed_producer_keeps_its_own_status ... ok
+test managed_cancel_reaps_when_delivery_or_stdin_is_blocked ... ok
+test timeout_on_a_sigterm_ignoring_child_reports_killed ... ok
+test managed_stream_is_live_ordered_byte_exact_and_capture_bounded ... ok
+test managed_launch_close_race_keeps_every_accepted_child_owned ... ok
+test sigpipe_inversion_does_not_occur_through_the_executor ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 18.84s
+
+     Running tests/group_exit.rs (/Users/tlatoani/claudia/tillandsias/target/debug/deps/group_exit-9d28f738212dfffb)
+
+running 5 tests
+test a_failed_observation_of_a_live_process_is_not_reported_dead ... ok
+test liveness_sees_a_known_live_process_and_its_death ... ok
+test a_grandchild_holding_stdout_does_not_turn_success_into_a_timeout ... ok
+test the_leaders_status_is_reported_after_the_reap ... ok
+test a_detached_grandchild_does_not_outlive_the_run ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s
+
+     Running tests/group_kill.rs (/Users/tlatoani/claudia/tillandsias/target/debug/deps/group_kill-454bd776919d1264)
+
+running 2 tests
+test a_grouped_deadline_kills_the_grandchild ... ok
+test control_an_ungrouped_deadline_leaves_the_grandchild_running ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.53s
+
+     Running tests/verbs.rs (/Users/tlatoani/claudia/tillandsias/target/debug/deps/verbs-ee21218417b2770d)
+
+running 7 tests
+test spawn_reports_still_running_then_reaps ... ok
+test stdin_bytes_reach_the_child ... ok
+test spawned_children_have_distinct_identities ... ok
+test a_child_that_ignores_stdin_is_not_an_error ... ok
+test a_failing_early_stage_is_visible_and_named ... ok
+test pipeline_feeds_each_stage ... ok
+test stdin_and_both_outputs_do_not_deadlock ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+   Doc-tests tillandsias_exec
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
