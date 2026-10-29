@@ -1,0 +1,113 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air (Claude) at the coordinator's relay of an
+# operator approval, 2026-10-29: libkrun/krunkit as the macOS VM provider,
+# with VZ as the fallback.
+packets:
+- packet_id: macos-vm-provider-krunkit-with-vz-fallback
+  order: 1921-kr7v
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags:
+  - macos
+  - vm
+  - gpu
+  estimated_hours: 16
+  title: Boot the macOS guest with libkrun/krunkit, falling back to Virtualization.framework
+  context: 'Operator approved libkrun/krunkit as the macOS VM provider on 2026-10-29 (relayed by macuahuitl). Goal: one unified backbone on every platform, accepting gaps in feature parity, with the backend swappable later. Measured 2026-10-28 (plan/issues/macos-gpu-isolation-2026-10-28.md): the VZ guest has no virtio-gpu, so a GPU is reachable only through libkrun. Measured on this host 2026-10-29: krunkit 1.3.2 is already at /opt/homebrew/bin/krunkit (Homebrew), and there is no /opt/podman. Whether the podman .pkg installer ships krunkit is not yet checked. Bundling krunkit in Tillandsias.app versus depending on it is decided in this packet, with no host installs beyond what krunkit itself needs. Sequenced after the CPU baseline (1921-sdv9).'
+  exit_criteria:
+  - 'A provider seam (VmProvider: Vz | Krunkit) selects krunkit when the binary is present and falls back to VZ with a status line naming why; a test asserts both selections, and it fails on today''s code (VZ only).'
+  - 'The bundle-versus-depend decision is recorded with evidence: whether the podman pkg ships krunkit and its libkrun-efi/MoltenVK dependencies, the size, and the signing and notarization impact.'
+  - 'The same guest image boots under krunkit with vsock control, virtiofs mounts and networking working; --diagnose --json reports provider=krunkit.'
+  verifiable_closure: 'cargo test -p tillandsias-macos-tray vm_provider_selects_krunkit_and_falls_back_to_vz'
+  next_action: 'Read how krunkit is packaged (Homebrew formula, podman pkg), map the VZ config (vsock, virtiofs, disks, net) onto krunkit flags, then write the provider-selection test first.'
+  provenance: 'Operator approval 2026-10-29 via macuahuitl; research PR #705.'
+  events:
+  - type: filed
+    ts: '2026-10-29T01:53:35Z'
+    host: tlatoanis-macbook-air
+    summary: filed the krunkit provider with VZ fallback (operator-approved)
+- packet_id: guest-vulkan-device-and-icd-under-krunkit
+  order: 1921-vk4i
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: macos
+  blocked_by:
+  - 1921-kr7v
+  capability_tags:
+  - macos
+  - gpu
+  - images
+  estimated_hours: 6
+  title: The krunkit guest exposes a Venus Vulkan device and ICD to forge containers
+  context: 'Today the VZ guest has no /dev/dri, no virtio-gpu (0x1050) and no Vulkan ICD (measured 2026-10-28). Under krunkit the guest needs Mesa Venus (virtio ICD) and /dev/dri/renderD128 passed into the containers that run inference.'
+  exit_criteria:
+  - 'A guest probe reports a virtio-gpu device, /dev/dri/renderD128 and a Venus ICD; `vulkaninfo --summary` inside an inference container names "Virtio-GPU Venus". The probe is a fixture that fails on today''s VZ guest.'
+  - 'The render node reaches only the containers that need it; the hardening-envelope validator still passes.'
+  verifiable_closure: 'guest probe output attached, plus the device-passthrough argv test'
+  unscoreable: 'unpinnable-until-the-guard-exists: the guest probe lands with the fix (1136-n8sh).'
+  next_action: 'Once 1921-kr7v boots, add mesa-vulkan-drivers (Venus) to the guest image and pass the render node to the inference containers.'
+  provenance: 'Operator approval 2026-10-29 via macuahuitl.'
+  events:
+  - type: filed
+    ts: '2026-10-29T01:53:35Z'
+    host: tlatoanis-macbook-air
+    summary: filed the guest Vulkan device and ICD under krunkit
+- packet_id: sdcpp-cpu-baseline-and-vulkan-timings-on-macos-guest
+  order: 1921-sdv9
+  status: ready
+  kind: research
+  priority: p1
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags:
+  - macos
+  - imagegen
+  - measurement
+  estimated_hours: 4
+  title: sd.cpp time per image at 512px, SDXS and SD1.5, CPU on VZ now and Vulkan on krunkit later
+  context: 'The CPU baseline comes first, after story 1921 (#704) lands; the Vulkan run follows 1921-vk4i. Same guest, same models, same prompt and seed. Record wakeups and memory as well. No published SD numbers for krunkit exist; the llama.cpp proxy was about 0.6x native Metal and about 3x CPU on prompt processing (llama.cpp discussion #12985).'
+  exit_criteria:
+  - 'CPU baseline: SDXS and SD1.5 512px time per image (median of 3), peak RSS and wakeups, on the VZ guest (8 vCPU, 8 GB).'
+  - 'Vulkan on the krunkit guest: the same measurements, plus an output check against the CPU image (sd.cpp issue #563 reports Vulkan output differing from CPU).'
+  - 'Both runs recorded in plan/issues/macos-gpu-isolation-2026-10-28.md with the exact sd.cpp commit, models and flags.'
+  verifiable_closure: 'timings table with commands attached to the research file'
+  unscoreable: 'measurement packet: the evidence is the recorded timing table, not a test.'
+  next_action: 'After #704 lands: build sd.cpp (CPU) in the guest, fetch SDXS and SD1.5, and time 3 runs each.'
+  provenance: 'Operator approval 2026-10-29 via macuahuitl.'
+  events:
+  - type: filed
+    ts: '2026-10-29T01:53:35Z'
+    host: tlatoanis-macbook-air
+    summary: filed sd.cpp CPU baseline then Vulkan timings
+- packet_id: guest-llamacpp-on-vulkan-tokens-per-second
+  order: 1921-llv2
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  blocked_by:
+  - 1921-vk4i
+  capability_tags:
+  - macos
+  - inference
+  - gpu
+  estimated_hours: 6
+  title: The guest's llama.cpp inference runs on Vulkan under krunkit, measured in tokens/s before and after
+  context: 'The macOS guest inference service runs llama.cpp on CPU today. Under krunkit with Venus it can use the Vulkan backend. Flash attention on Vulkan falls back to CPU on non-NVIDIA hardware (llama.cpp discussion #12985).'
+  exit_criteria:
+  - 'llama-bench pp512 and tg128 for the shipped model, CPU (VZ) before and Vulkan (krunkit) after, recorded with the build flags.'
+  - 'The inference service picks Vulkan when the device is present and CPU otherwise; a test asserts the selection and fails on today''s code (CPU only).'
+  verifiable_closure: 'cargo test for the backend selection, plus the llama-bench table'
+  next_action: 'Take the CPU llama-bench numbers now on VZ, then build the Vulkan variant once 1921-vk4i lands.'
+  provenance: 'Operator approval 2026-10-29 via macuahuitl.'
+  events:
+  - type: filed
+    ts: '2026-10-29T01:53:35Z'
+    host: tlatoanis-macbook-air
+    summary: filed llama.cpp Vulkan in the guest with before and after tokens/s

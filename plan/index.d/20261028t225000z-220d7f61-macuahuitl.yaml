@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: linux-tray-executor-blocks-on-recv-instead-of-100-ms-timeout
+    event:
+      type: note
+      ts: "2026-10-28T22:50:00Z"
+      agent_id: linux-macuahuitl-claude-20261028t223022z
+      host: macuahuitl
+      summary: |
+        work/1919-exec: AsyncTaskExecutor workers now block in recv(). Shutdown sets a shutting_down flag, which is read only after a task arrives and never polled, then drops the sender, which wakes every worker with Disconnected. Drop stays non-blocking. shutdown_and_join (test-only) joins the workers. A task still queued at shutdown is dropped, not run, as before. Tests: async_executor_stops_by_dropping_the_sender_and_workers_join (all 4 workers join within 5 s of the drop; this cannot compile against the pre-fix struct, which has no workers or join handles) and async_executor_workers_block_instead_of_polling (a structural arm: no recv_timeout( and no is_running in the executor impl; the pre-fix impl has both). The 6 async_executor tests pass under --features tray. Left: criterion 1, the 60 s strace futex ETIMEDOUT count on an idle tray, needs a tray built from this change and is not attached.
