@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: an-optional-comfyui-imagegen-studio-image-shares-the-model-cache-and-is-never-built-unless-a-project-enables-it
+    field: title
+    value: An optional ComfyUI imagegen-studio image (no ComfyUI-Manager; pinned nodes per 1921-7aa5; Real-ESRGAN, BiRefNet, IP-Adapter) shares the model cache and is never built unless a project enables it
+    ts: "2026-10-29T01:10:52Z"
+    host: macuahuitl
+    replaces_sha256: "a5fb63156e72becb733383dfbfb58bd43be3c74d521db4cfcdc14a04b1cb07f5"
+
+events:
+  - packet_id: an-optional-comfyui-imagegen-studio-image-shares-the-model-cache-and-is-never-built-unless-a-project-enables-it
+    event:
+      type: note
+      ts: "2026-10-29T01:10:52Z"
+      host: macuahuitl
+      summary: |-
+        media research 2026-10-28: Manager installs code at runtime; nodes come from the 1921-7aa5 manifest
