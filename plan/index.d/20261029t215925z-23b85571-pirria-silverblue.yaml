@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: acceptance-fixture-forge-never-starts-before-mirror-ready-and-counts-no-polls
+    field: next_action
+    value: 'Fixture pushed on work/1922-accp (df37c184d), red as required: refused:readiness-acceptance:forge-before-ready:polls=4 (cargo test -p tillandsias-headless --bin tillandsias readiness_acceptance -- --ignored). Left: land the ref; 1922-gate repoints the fixture at its ReadinessGate and drops #[ignore]; record the green run.'
+    ts: "2026-10-29T21:59:25Z"
+    host: pirria-silverblue
+    replaces_sha256: "e88c86b730bf5d88a5d1a0e603de6d476ac6acc1a2e15a9b3925fd704a55009f"
+
+events:
+  - packet_id: acceptance-fixture-forge-never-starts-before-mirror-ready-and-counts-no-polls
+    event:
+      type: note
+      ts: "2026-10-29T21:59:25Z"
+      host: pirria-silverblue
+      summary: |-
+        red run recorded
