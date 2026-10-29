@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: one-media-model-licence-register-refuses-non-commercial-revenue-capped-gated-or-unknown-weights-for-image-studio-vision-and-audio
+    field: next_action
+    value: 'Pushed on work/1921-h4gv (496a3f3ff): images/models/licence-register.tsv (10 rows for I0-I3, pinned revision+sha256), scripts/lua/check-model-licence-register.lua (offline, ok:model-licence-register:rows=10), fixture scripts/lua/test-model-licence-register.lua (ok:model-licence-register-fixture:17 arms; the eight deny-list rows each refused with a distinct reason, four allowed rows pass). Left: a gate step needs a darwin STEP_SECOND_REGIME run; the 1874-h9ns fetcher must call the check (fetcher not built yet).'
+    ts: "2026-10-29T22:17:21Z"
+    host: pirria-silverblue
+    replaces_sha256: "ac28b2913a12a7c338827b731a7109c55da21ac35691a7746aaabf4f73013d26"
+
+events:
+  - packet_id: one-media-model-licence-register-refuses-non-commercial-revenue-capped-gated-or-unknown-weights-for-image-studio-vision-and-audio
+    event:
+      type: note
+      ts: "2026-10-29T22:17:21Z"
+      host: pirria-silverblue
+      summary: |-
+        pushed
