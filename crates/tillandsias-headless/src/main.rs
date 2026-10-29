@@ -24143,6 +24143,75 @@ mod tests {
         );
     }
 
+    /// ORDER 1922-accp — acceptance fixture for the event-driven readiness gate
+    /// (operator ruling 2026-10-28: forges never wait on or poll siblings).
+    ///
+    /// The fixture owns the mirror's readiness: the fake podman reports the
+    /// mirror unready for two probes and seeded on the third, and the fixture's
+    /// event source emits the mirror READY event only AFTER the launch chain's
+    /// mirror gate returns. Two arms, both named in the output:
+    ///   forge-before-ready — the gate let the launch reach forge creation
+    ///                        before the READY event was emitted;
+    ///   polls=N            — the gate probed the sibling N > 0 times.
+    /// RED on linux-next as of 2026-10-28 (wait_for_git_mirror_ready polls
+    /// probe_git_mirror_seeded once a second and returns on a probe, not an
+    /// event). It goes green when 1922-gate and 1922-unwt land; 1922-gate
+    /// repoints the `gate` call below at its ReadinessGate and drops #[ignore].
+    /// Run: cargo test -p tillandsias-headless --bin tillandsias \
+    ///        readiness_acceptance -- --ignored --nocapture
+    #[tokio::test]
+    #[ignore = "1922-accp: red by design until 1922-gate and 1922-unwt land"]
+    async fn readiness_acceptance_forge_never_starts_before_mirror_ready_and_counts_no_polls() {
+        let backend = Arc::new(FakeBackend::default());
+        // Unready, unready, then seeded (HEAD + concrete branch).
+        backend.push(Err(fake_podman_failure(128)));
+        backend.push(Err(fake_podman_failure(128)));
+        backend.push(Ok(fake_podman_output(0, "resolved-head\n")));
+        backend.push(Ok(fake_podman_output(0, "")));
+        let client = PodmanClient::with_backend(backend.clone());
+
+        // The fake event source: the fixture holds the sender and emits READY
+        // only after the gate has returned. Today's chain never subscribes.
+        let (ready_tx, _ready_rx) = tokio::sync::watch::channel(false);
+
+        let gate = wait_for_git_mirror_ready(
+            &client,
+            "tillandsias-git-fixture",
+            "fixture",
+            Some("trunk"),
+            false,
+        )
+        .await;
+        // Reaching here with Ok is the point the launch chain creates the forge.
+        let forge_started = gate.is_ok();
+        let ready_emitted_before_forge = *ready_tx.borrow();
+        ready_tx.send_replace(true);
+
+        let polls = backend
+            .seen()
+            .iter()
+            .filter(|(_, argv)| {
+                argv.first().map(String::as_str) == Some("exec")
+                    && argv.iter().any(|a| a == "tillandsias-git-fixture")
+            })
+            .count();
+
+        let mut red = Vec::new();
+        if forge_started && !ready_emitted_before_forge {
+            red.push("forge-before-ready".to_string());
+        }
+        if polls > 0 {
+            red.push(format!("polls={polls}"));
+        }
+        let verdict = if red.is_empty() {
+            "ok:readiness-acceptance:forge-after-ready:polls=0".to_string()
+        } else {
+            format!("refused:readiness-acceptance:{}", red.join(":"))
+        };
+        println!("{verdict}");
+        assert!(red.is_empty(), "{verdict}");
+    }
+
     #[test]
     fn git_mirror_readiness_budget_covers_observed_cold_seed() {
         assert_eq!(
