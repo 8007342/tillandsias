@@ -64,4 +64,37 @@ watch_pid=$!
 # Foreground: the agent owns the controlling terminal — its stdin IS the tty,
 # and Ctrl-C / terminal-close (SIGHUP) reach it directly. The EXIT trap
 # harvests the final document after it returns.
-"$@"
+#
+# Order 1914-twan: an expired sign-in made Codex exit at bootstrap with
+# "account/read failed ... unauthorized (401)" and the lane simply ended; the
+# operator had to know to run --codex-login. Only STDERR is copied (stdin and
+# stdout stay the terminal, so the TUI is unaffected); on an unauthorized exit
+# the wrapper offers the same device sign-in in this window, then relaunches
+# once. The pipeline is used rather than >( ) so the copy is complete before
+# it is read, on any bash.
+RELOGIN_HELPER="${TILLANDSIAS_CODEX_RELOGIN_HELPER:-/usr/local/bin/codex-device-auth}"
+err_copy="$(mktemp "${TMPDIR:-/tmp}/codex-stderr.XXXXXX")"
+run_agent() {
+    : >"$err_copy"
+    { "$@" 2>&1 1>&3 3>&- | tee -a "$err_copy" >&2; } 3>&1
+    return "${PIPESTATUS[0]}"
+}
+run_agent "$@"
+agent_status=$?
+if [[ "$agent_status" -ne 0 ]] && grep -Eqi 'unauthorized|(^|[^0-9])401([^0-9]|$)' "$err_copy"; then
+    printf '\nCodex says your sign-in has expired. Sign in again now? [Y/n] ' >&2
+    answer=''
+    if read -r answer && [[ ! "$answer" =~ ^[Nn] ]]; then
+        if TILLANDSIAS_CODEX_BIN="$1" "$RELOGIN_HELPER"; then
+            echo "Signed in. Starting Codex again." >&2
+            run_agent "$@"
+            agent_status=$?
+        else
+            echo "Sign-in did not finish. Run 'tillandsias --codex-login' and launch again." >&2
+        fi
+    else
+        echo "Run 'tillandsias --codex-login' when ready, then launch again." >&2
+    fi
+fi
+rm -f "$err_copy"
+exit "$agent_status"

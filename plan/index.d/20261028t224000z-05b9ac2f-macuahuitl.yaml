@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: enclave-healthchecks-run-as-the-right-user-and-at-minute-intervals
+    event:
+      type: note
+      ts: "2026-10-28T22:40:00Z"
+      agent_id: linux-macuahuitl-claude-20261028t223022z
+      host: macuahuitl
+      summary: |
+        work/1919-hlth: root cause MEASURED on macuahuitl 2026-10-28. podman exec (and so every HEALTHCHECK) resolves a user NAME by reading /etc/passwd from the container rootfs as mounted in podman's own mount namespace. On the live vault, proxy and mirror containers that overlay is no longer mounted there: GraphDriver.Data has no MergedDir and the pause namespace holds 1 overlay mount, not the 4+ expected. The lookup finds no entries and fails rc=125 "unable to find user X", while the container processes keep running in their own namespace and /etc/passwd inside does list the user. Inference stayed healthy only because its USER was already numeric (1000:1000), and `podman exec --user 1000:1000 tillandsias-vault id` succeeds (rc=0) on the same broken container. Reproduced on throwaway containers: after `podman unshare umount -l <MergedDir>`, the unfixed localhost/tillandsias-proxy:v56.10.25.2 fails `podman healthcheck run` with rc=125 "unable to find user proxy", and the fixed image returns rc=0. WHAT unmounted the operator's overlays is not established. Fix: numeric USER (vault 100:1000, proxy 1000:1000, mirror 1000:1000), with a build-time `id` check that fails the build if a base image renumbers. Steady interval is 30 s for all four images (operator-approved). Podman ignores the Containerfile --start-interval (measured: a check that passes 5 s in became healthy at 31 s), so the launcher adds --health-startup-cmd=<the image's own command> --health-startup-interval=2s; with that flag, the same probe became healthy at 6 s. Exit criterion: on throwaway containers built from the fixed images, `podman healthcheck run` returned rc=0 for vault (healthy in 3 s), proxy (2 s) and mirror (0 s), and still returned rc=0 after the rootfs was unmounted. inspect shows Interval 30s. Unit tests enclave_healthcheck_tests (numeric user, 30-60 s interval) fail on the pre-fix Containerfiles: 2 of 4 arms are red. Left: verifiable_closure litmus (start the enclave, assert rc=0 and Interval >= 30 s) is not written; the operator's running containers need a restart onto the new images after release.
