@@ -27761,6 +27761,32 @@ mod tests {
         );
     }
 
+    /// The vault stubs store what they were sent (base64); decode it here so
+    /// the stub scripts carry no decode-to-file idiom.
+    #[cfg(unix)]
+    fn decode_vaulted(path: &std::path::Path) -> String {
+        let Ok(encoded) = std::fs::read(path) else {
+            return String::new();
+        };
+        let mut child = match std::process::Command::new("base64")
+            .arg("-d")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(_) => return String::new(),
+        };
+        {
+            use std::io::Write as _;
+            let _ = child.stdin.take().unwrap().write_all(&encoded);
+        }
+        child
+            .wait_with_output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+            .unwrap_or_default()
+    }
+
     /// Order 1914-twan: Codex refresh tokens are single-use. An oomd or
     /// `podman kill` takes the whole container, watcher included, so a
     /// rotation is lost unless it was copied before the kill. Kill the whole
@@ -27787,10 +27813,7 @@ mod tests {
         // Vault stub: keep the last document written, decoded.
         write_exec(
             &bin.join("vault-cli.sh"),
-            format!(
-                "base64 -d >'{}.tmp' && mv '{0}.tmp' '{0}'",
-                vaulted.display()
-            ),
+            format!("cat >'{}.tmp' && mv '{0}.tmp' '{0}'", vaulted.display()),
         );
         // A host without inotify-tools (macOS) gets a stand-in that prints
         // the file name when its content changes, as inotifywait would; on a
@@ -27864,7 +27887,7 @@ mod tests {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
         let mut held = String::new();
         while std::time::Instant::now() < deadline {
-            held = std::fs::read_to_string(&vaulted).unwrap_or_default();
+            held = decode_vaulted(&vaulted);
             if held.contains("shape-rotated") {
                 break;
             }
