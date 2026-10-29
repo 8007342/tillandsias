@@ -27757,6 +27757,71 @@ mod tests {
         );
     }
 
+    /// Order 1914-twan: a Codex lane whose agent exits on an expired sign-in
+    /// ("account/read failed ... unauthorized (401)") offers the device
+    /// sign-in in the same window and relaunches, instead of ending the lane.
+    /// Runs the real wrapper with a stub agent, vault helper and login helper.
+    #[cfg(unix)]
+    #[test]
+    fn codex_lane_offers_relogin_on_unauthorized() {
+        use std::io::Write as _;
+        use std::os::unix::fs::PermissionsExt as _;
+        let manifest = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let wrapper =
+            std::path::Path::new(&manifest).join("../../images/default/codex-oauth-session.sh");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let write_stub = |name: &str, body: &str| {
+            let path = dir.path().join(name);
+            std::fs::write(&path, format!("#!/usr/bin/env bash\n{body}\n")).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+            path
+        };
+        let marks = dir.path().join("marks");
+        let vault = write_stub("vault", "[ \"$1\" = digest ] && echo missing; exit 0");
+        let login = write_stub(
+            "login",
+            &format!("echo login >>'{}'; exit 0", marks.display()),
+        );
+        let agent = write_stub(
+            "agent",
+            &format!(
+                "echo run >>'{m}'\n\
+                 if [ \"$(grep -c run '{m}')\" = 1 ]; then\n\
+                 echo 'Error: account/read failed during TUI bootstrap: account/read failed: \
+                 workspace routing discovery unauthorized (401) (code -32603)' >&2; exit 1; fi\n\
+                 exit 0",
+                m = marks.display()
+            ),
+        );
+        let mut child = std::process::Command::new("bash")
+            .arg(&wrapper)
+            .arg("--")
+            .arg(&agent)
+            .env("TILLANDSIAS_CODEX_VAULT_HELPER", &vault)
+            .env("TILLANDSIAS_CODEX_STATE_HELPER", dir.path().join("absent"))
+            .env("TILLANDSIAS_CODEX_RELOGIN_HELPER", &login)
+            .env("TMPDIR", dir.path())
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .expect("spawn wrapper");
+        child.stdin.take().unwrap().write_all(b"\n").unwrap();
+        let out = child.wait_with_output().expect("wrapper output");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            stderr.contains("sign-in has expired. Sign in again now?"),
+            "the 401 exit must offer re-login; stderr was: {stderr}"
+        );
+        let marks = std::fs::read_to_string(&marks).unwrap_or_default();
+        assert_eq!(
+            marks.lines().collect::<Vec<_>>(),
+            ["run", "login", "run"],
+            "expected run, device login, relaunch"
+        );
+        assert!(out.status.success(), "the relaunched agent exited 0");
+    }
+
     #[test]
     fn codex_login_never_uses_generic_paste_token_script() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
