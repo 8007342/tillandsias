@@ -69,3 +69,8 @@ critical_path:
     expected_behavior: "ok: lane-cmd-cloud-form=1 bare-project=0"
     assert_exit: 0
     assert_output_contains: "bare-project=0"
+
+  - step: "NEGATIVE CONTROL: restoring the pre-1356 bare-name LANE_CMD must FAIL the source pin"
+    command: "T=$(mktemp -d); sed 's|^LANE_CMD=\"tillandsias --cloud ${_nwo} --bash\"|LANE_CMD=\"tillandsias --bash ${PROJECT}\"|' scripts/check-bare-metal-host-initialized.sh > \"$T/c.sh\"; if cmp -s scripts/check-bare-metal-host-initialized.sh \"$T/c.sh\"; then rm -rf \"$T\"; echo 'FAIL: the mutation did not reach the checker'; exit 1; fi; l=$(grep -cF 'LANE_CMD=\"tillandsias --cloud ${_nwo} --bash\"' \"$T/c.sh\" || true); b=$(grep -c 'LANE_CMD=.*--bash .\\{0,2\\}\\(PROJECT\\|ROOT\\)' \"$T/c.sh\" || true); rm -rf \"$T\"; if [ \"$l\" -eq 1 ] && [ \"$b\" -eq 0 ]; then echo 'FAIL: source pin blind to the pre-1356 bare-name line'; exit 1; fi; echo \"ok: source pin fails on the bare-name line (cloud=$l bare=$b)\""
+    timeout_ms: 10000
+    expected_behavior: "ok: source pin fails on the bare-name line"
