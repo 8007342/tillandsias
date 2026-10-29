@@ -9128,7 +9128,10 @@ fn is_active_lane_container(name: &str, state: &str) -> bool {
     alive
         && (name.contains("-forge")
             || name.contains("-login-")
-            || name.starts_with("tillandsias-browser-"))
+            || (name.starts_with("tillandsias-browser-")
+                // 1911-3gqy: a forwarder serves a window and is not a lane; a
+                // leaked one used to hold the shared stack up forever.
+                && !name.starts_with("tillandsias-browser-fwd-")))
 }
 
 /// Tear the shared stack down IFF this is the LAST forge anywhere and no
