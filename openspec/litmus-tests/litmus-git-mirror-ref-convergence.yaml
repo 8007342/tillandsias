@@ -36,7 +36,7 @@ critical_path:
     expected_behavior: "ok: safe reconcile refspec configured"
 
   - step: "entrypoint seeds empty mirrors with an explicit heads/tags refspec"
-    command: "grep -Fq \"fetch origin '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*'\" images/git/entrypoint.sh && echo 'ok: explicit empty-mirror seed'"
+    command: "grep -Fq \"fetch origin '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*'\" images/git/seed-mirror.sh && grep -qF 'FETCH_OUTPUT=\"$(\"$SEED_MIRROR\" \"$mirror\"' images/git/entrypoint.sh && echo 'ok: explicit empty-mirror seed'"
     timeout_ms: 10000
     expected_behavior: "ok: explicit empty-mirror seed"
 
