@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: an-opencode-web-cold-start-waits-for-the-app-while-its-forge-is-alive-instead-of-giving-up-after-30-seconds
+    event:
+      type: list-replace
+      ts: "2026-10-25T03:26:59Z"
+      agent_id: linux-lenovinha-opus5-20261025t032659z
+      host: lenovinha
+      field: exit_criteria
+      items:
+        - "RED FIRST: a fixture whose route answers 502 for 40 s, then 200, with the forge still running, reaches the window (fails today at 30 s)"
+        - "the wait continues while the forge container is running and stops at once, with a named verdict, when it exits; the tray status shows the wait with elapsed time"
+        - "an upper bound remains (for example 5 min) and its refusal says why and what to do"
+        - "a cold first launch whose server takes 60 s to start reaches the session, and the pre-fix 30 s wait fails the same launch (app_wait_tests, fake clock)"
+      summary: |
+        The coordinator relayed the operator's failed #601 window test after a podman reset: clone 03:21:48, server listening 03:22:30, route a minute later. Fix carried on #601's branch with a 60 s cold-start criterion.

@@ -783,6 +783,138 @@ impl TrayBrowserContainers {
     }
 }
 
+impl TrayBrowserContainers {
+    /// Order 1802-9xix: an app-mode window (no URL bar, no CDP) opening
+    /// `app_url` for `project_label`, on the same confined network as a
+    /// `browser.open` window: its own `--internal` network, the forwarder
+    /// aliased `router`, and resolver rules that map only
+    /// `*.<label>.localhost` to it, over TLS, with the preview CA pinned.
+    /// A window on podman's default network (pasta) sees `*.localhost` as
+    /// its own loopback and reaches nothing: the OpenCode Web window has
+    /// shown Chromium's proxy-error page since 63784ddb8 removed
+    /// `--network host`.
+    pub(crate) fn start_app_window(
+        &self,
+        project_label: &str,
+        app_url: &str,
+        container_name: &str,
+        profile_dir: &Path,
+    ) -> Result<ContainerHandle, String> {
+        let router = podman(
+            &[
+                "inspect",
+                "--format",
+                "{{.State.Running}}",
+                ROUTER_CONTAINER,
+            ],
+            tillandsias_podman::OperationKind::Inspect.default_budget(),
+        );
+        if router.as_deref() != Ok("true") {
+            return Err(format!("the router ({ROUTER_CONTAINER}) is not running"));
+        }
+        let pem = std::fs::read_to_string(crate::preview_ca::dir().join(crate::preview_ca::CRT))
+            .map_err(|e| format!("the preview CA certificate is unreadable: {e}"))?;
+        let ca_spki = spki_sha256_base64(&pem)?;
+        let display = crate::BrowserDisplayContext::from_env()?;
+        let (display, _audio) = with_output_audio(display, false);
+        let suffix = window_suffix(&format!("{:x}", Sha256::digest(container_name.as_bytes())));
+        let handle = ContainerHandle {
+            container_name: container_name.to_string(),
+            network_name: format!("tillandsias-browser-net-{suffix}"),
+            profile_dir: profile_dir.to_path_buf(),
+            cdp_socket: None,
+            notice: None,
+        };
+        // A window left by an earlier launch of this project holds the names;
+        // clear them, but not the profile dir this launch just made.
+        for args in [
+            ["rm", "-f", "-t", "0", handle.container_name.as_str()].as_slice(),
+            ["rm", "-f", "-t", "0", forwarder_name(&handle).as_str()].as_slice(),
+            ["network", "rm", "-f", handle.network_name.as_str()].as_slice(),
+        ] {
+            let _ = podman(args, network_budget());
+        }
+        let started = (|| {
+            let label = format!("tillandsias.browser-window={container_name}");
+            podman(
+                &[
+                    "network",
+                    "create",
+                    "--internal",
+                    "--label",
+                    &label,
+                    &handle.network_name,
+                ],
+                network_budget(),
+            )?;
+            let (router_network, router_ip) = router_upstream()?;
+            let forwarder = forwarder_spec(&handle, project_label, &router_ip, &[])
+                .build_run_argv()
+                .map_err(|e| format!("forwarder argv refused: {e}"))?;
+            let forwarder: Vec<&str> = forwarder.iter().map(String::as_str).collect();
+            podman(&forwarder, RUN_BUDGET)?;
+            podman(
+                &[
+                    "network",
+                    "connect",
+                    &router_network,
+                    &forwarder_name(&handle),
+                ],
+                network_budget(),
+            )?;
+            let argv = app_window_spec(
+                project_label,
+                app_url,
+                &handle,
+                &PathBuf::from(crate::ca_dir()),
+                &display,
+                &ca_spki,
+            )?
+            .build_run_argv()
+            .map_err(|e| format!("app window argv refused: {e}"))?;
+            let argv: Vec<&str> = argv.iter().map(String::as_str).collect();
+            podman(&argv, RUN_BUDGET)
+        })();
+        if let Err(err) = started {
+            if self.debug {
+                eprintln!("[tillandsias] app window: {err}; undoing the window");
+            }
+            self.stop(&handle);
+            return Err(err);
+        }
+        Ok(handle)
+    }
+}
+
+/// The app window's container (1802-9xix): the project browser spec in app
+/// mode on `app_url`, joined to the window's `--internal` network with the
+/// resolver rules and preview-CA pin of a `browser.open` window.
+pub(crate) fn app_window_spec(
+    project_label: &str,
+    app_url: &str,
+    handle: &ContainerHandle,
+    certs_dir: &Path,
+    display: &crate::BrowserDisplayContext,
+    ca_spki: &str,
+) -> Result<tillandsias_podman::ContainerSpec, String> {
+    Ok(crate::build_project_browser_spec_on(
+        app_url,
+        crate::VERSION.trim(),
+        &handle.profile_dir,
+        tillandsias_podman::MountMode::ReadWrite,
+        certs_dir,
+        crate::BrowserSurface::Window(display),
+        &handle.container_name,
+    )?
+    .network(&handle.network_name)
+    .disable_ipv6()
+    .arg(format!(
+        "--host-resolver-rules={}",
+        host_resolver_rules(project_label)
+    ))
+    .arg(format!("--ignore-certificate-errors-spki-list={ca_spki}")))
+}
+
 impl BrowserContainers for TrayBrowserContainers {
     fn preview_tls_port(&self) -> Option<u16> {
         crate::local_web_preview::tls_port().ok()
@@ -1581,7 +1713,9 @@ mod tests {
             [
                 "--add-host=www.acme.localhost:10.89.1.2",
                 // 1725-wkfl: every dev service the router serves, from its list.
-                "--add-host=flutter.acme.localhost:10.89.1.2"
+                "--add-host=flutter.acme.localhost:10.89.1.2",
+                // 1802-9xix: and the auth-gated OpenCode Web site.
+                "--add-host=opencode.acme.localhost:10.89.1.2"
             ]
         );
         assert!(

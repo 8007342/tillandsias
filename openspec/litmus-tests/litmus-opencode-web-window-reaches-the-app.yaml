@@ -1,0 +1,56 @@
+name: litmus:opencode-web-window-reaches-the-app
+spec: opencode-web-session-otp
+phase: pre-build
+description: >
+  Pin the tray's OpenCode Web window (order 1802-9xix). The window is an app
+  window on the same confined per-window network as browser.open: an
+  --internal network, a forwarder aliased router, resolver rules mapping only
+  *.<label>.localhost, and the preview-CA SPKI pin. It signs in over the
+  router's TLS site (https://opencode.<label>.localhost, the project's preview
+  leaf, the OTP login and forward_auth gate) and lands on the checked-out
+  project's session view; the sidecar follows the login form's next field only
+  when it is a plain same-origin path. The fixture proves each pin has teeth:
+  host networking, a plaintext window URL, an unfiltered next and a landing
+  check that accepts //host each fail.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/browser_open.rs
+  - workspace contains crates/tillandsias-router-sidecar/src/http.rs
+  - Node.js on the host, or the localhost/tillandsias-forge:latest image (it carries node)
+
+critical_path:
+  - step: "Req: confined window network, TLS router site, and a safe project landing"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/check-opencode-web-window.lua 2>&1"
+    timeout_ms: 10000
+    expected_behavior: "ok:opencode-web-window"
+
+  - step: "NEGATIVE CONTROL: host networking, a plaintext URL, an unfiltered next and a //host landing each fail"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; TILLANDSIAS_PLAN_BIN=\"$P\" \"$P\" script run scripts/lua/test-opencode-web-window.lua 2>&1"
+    timeout_ms: 30000
+    success_pattern: "ok:opencode-web-window-fixture:5"
+
+  - step: "Req: the sse-keepalive proxy seeds the forge's checkout into the web app's project list and lands / on it (node tests; host node, else the forge image's)"
+    command: "set -u; F=images/default/sse-keepalive-proxy.test.js; if command -v node >/dev/null 2>&1; then node --test \"$F\" 2>&1; else T=target/litmus-sse-keepalive; rm -rf \"$T\"; mkdir -p \"$T\"; cp images/default/sse-keepalive-proxy.js \"$F\" \"$T\"/; podman run --rm --network none -v \"$PWD/$T:/t:ro,Z\" --entrypoint node localhost/tillandsias-forge:latest --test /t/sse-keepalive-proxy.test.js 2>&1; rc=$?; rm -rf \"$T\"; exit $rc; fi"
+    timeout_ms: 60000
+    success_pattern: "# fail 0"
+
+observability:
+  traces:
+    - "@trace spec:opencode-web-session-otp"
+    - "@trace spec:browser-isolation-tray-integration"
+  expected_log: "the OpenCode Web window's network, TLS route and landing are pinned"
+  log_fields:
+    spec: "opencode-web-session-otp"
+    test: "opencode-web-window-reaches-the-app"
+    artifact: "scripts/lua/check-opencode-web-window.lua"
+
+rollback:
+  on_failure: >
+    The OpenCode Web window left the confined network, its route left the
+    router's TLS site, or its landing stopped going through
+    is_safe_landing_path. Restore start_app_window/app_window_spec in
+    browser_open.rs, the https://{subdomain}.localhost:8443 site in main.rs,
+    and the next filter in the router sidecar's login handler.
+  command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/check-opencode-web-window.lua 2>&1"

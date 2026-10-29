@@ -353,6 +353,21 @@ pub fn format_set_cookie_header(token: &[u8; COOKIE_LEN], host: &str) -> String 
 ///
 /// @trace spec:opencode-web-session-otp
 pub fn build_login_form_html(project_url: &str, otp_value: &str) -> String {
+    build_login_form_html_landing(project_url, "/", otp_value)
+}
+
+/// [`build_login_form_html`] that asks the router to land on `landing` (an
+/// absolute path such as `/<dir-slug>/session`) after sign-in instead of `/`.
+/// A landing that is not a plain same-origin path falls back to `/`; the
+/// router re-validates it (order 1802-9xix).
+///
+/// @trace spec:opencode-web-session-otp
+pub fn build_login_form_html_landing(project_url: &str, landing: &str, otp_value: &str) -> String {
+    let landing = if is_safe_landing_path(landing) {
+        landing
+    } else {
+        "/"
+    };
     let action = format!("{}/_auth/login", project_url.trim_end_matches('/'));
     // No <meta http-equiv="refresh"> — meta refresh issues a GET, which races
     // and almost always beats the JS POST below. The sidecar's /_auth/login
@@ -368,6 +383,7 @@ pub fn build_login_form_html(project_url: &str, otp_value: &str) -> String {
   <body>
     <form id="login" method="post" action="{action}">
       <input type="hidden" name="otp" value="{otp_value}">
+      <input type="hidden" name="next" value="{landing}">
       <noscript><button type="submit">Continue</button></noscript>
     </form>
     <script>
@@ -386,10 +402,46 @@ pub fn build_login_form_html(project_url: &str, otp_value: &str) -> String {
 ///
 /// @trace spec:opencode-web-session-otp
 pub fn build_login_data_url(project_url: &str, otp_token: &[u8; COOKIE_LEN]) -> String {
+    build_login_data_url_landing(project_url, "/", otp_token)
+}
+
+/// [`build_login_data_url`] that lands on `landing` after sign-in.
+///
+/// @trace spec:opencode-web-session-otp
+pub fn build_login_data_url_landing(
+    project_url: &str,
+    landing: &str,
+    otp_token: &[u8; COOKIE_LEN],
+) -> String {
     let otp_value = format_cookie_value(otp_token);
-    let html = build_login_form_html(project_url, &otp_value);
+    let html = build_login_form_html_landing(project_url, landing, &otp_value);
     let encoded = base64::engine::general_purpose::STANDARD.encode(html.as_bytes());
     format!("data:text/html;base64,{encoded}")
+}
+
+/// A post-login landing the router may redirect to: an absolute same-origin
+/// path (`/`, but not `//`) made only of URL path characters, so it can
+/// neither leave the origin nor break out of the form attribute or the
+/// `Location` header.
+///
+/// @trace spec:opencode-web-session-otp
+pub fn is_safe_landing_path(path: &str) -> bool {
+    path.len() <= 512
+        && path.starts_with('/')
+        && !path.starts_with("//")
+        && path
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"/-_.~".contains(&b))
+}
+
+/// The OpenCode Web route that opens `directory` as a project:
+/// `/<base64url(directory), unpadded>/session`, the encoding the web app
+/// itself uses for its project slugs.
+///
+/// @trace spec:opencode-web-session-otp
+pub fn opencode_project_landing(directory: &str) -> String {
+    let slug = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(directory.as_bytes());
+    format!("/{slug}/session")
 }
 
 /// Spawn a background task that evicts expired pending sessions every 1 s.
@@ -553,6 +605,46 @@ mod tests {
         assert!(html.contains("action=\"http://opencode.demo.localhost:8080/_auth/login\""));
         assert!(html.contains("name=\"otp\" value=\"abc123_OTP\""));
         assert!(html.contains("document.getElementById('login').submit();"));
+    }
+
+    #[test]
+    fn login_form_carries_a_safe_landing_and_drops_an_unsafe_one() {
+        // @trace spec:opencode-web-session-otp
+        let html = build_login_form_html_landing(
+            "https://opencode.demo.localhost:8443/",
+            "/L2hvbWUvZm9yZ2Uvc3JjL2RlbW8/session",
+            "abc123_OTP",
+        );
+        assert!(html.contains("action=\"https://opencode.demo.localhost:8443/_auth/login\""));
+        assert!(html.contains("name=\"next\" value=\"/L2hvbWUvZm9yZ2Uvc3JjL2RlbW8/session\""));
+        for unsafe_landing in [
+            "//evil.example/",
+            "https://evil.example/",
+            "/a\"><script>",
+            "",
+        ] {
+            let html = build_login_form_html_landing("https://x.localhost", unsafe_landing, "o");
+            assert!(
+                html.contains("name=\"next\" value=\"/\""),
+                "{unsafe_landing:?} not dropped"
+            );
+        }
+        assert!(
+            build_login_form_html("http://x.localhost", "o").contains("name=\"next\" value=\"/\"")
+        );
+    }
+
+    #[test]
+    fn opencode_project_landing_matches_the_web_apps_slug_encoding() {
+        // @trace spec:opencode-web-session-otp
+        // The web app's slug is btoa(utf8) with + -> -, / -> _ and = dropped.
+        assert_eq!(
+            opencode_project_landing("/home/forge/src/devxsd"),
+            "/L2hvbWUvZm9yZ2Uvc3JjL2RldnhzZA/session"
+        );
+        assert!(is_safe_landing_path(&opencode_project_landing(
+            "/home/forge/src/a b?ñ"
+        )));
     }
 
     #[test]

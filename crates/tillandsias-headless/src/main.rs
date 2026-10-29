@@ -8090,6 +8090,30 @@ reverse_proxy {upstream_host}:{port}\n    \
 }}\n\
 }}\n"
         ));
+        // 1802-9xix: the same auth-gated site over the router's TLS listener,
+        // with the project's preview leaf, for the app window, which reaches
+        // the router only from its confined network and only over TLS (a
+        // plaintext Host header cannot be bound to a project, 1651-5t7n).
+        if route.preview_tls {
+            let preview_project = subdomain
+                .split_once('.')
+                .map_or(project_label, |(_, project)| project);
+            routes.push_str(&format!(
+                "https://{subdomain}.localhost:8443 {{\n    \
+tls /etc/tillandsias/preview/{preview_project}.crt /etc/tillandsias/preview/{preview_project}.key\n    \
+handle /_auth/login {{\n        \
+reverse_proxy localhost:9090\n    \
+}}\n    \
+handle {{\n        \
+forward_auth localhost:9090 {{\n            \
+uri /validate?project={project_label}\n            \
+copy_headers Cookie\n        \
+}}\n        \
+reverse_proxy {upstream_host}:{port}\n    \
+}}\n\
+}}\n\n"
+            ));
+        }
     }
     routes
 }
@@ -15555,7 +15579,10 @@ fn launch_observatorium_browser(
     let profile_path = profile_dir.keep();
 
     let project_label = router_host_label(project_name);
-    let otp = tillandsias_otp::issue_session(&project_label);
+    let otp = wait_for_authenticated_opencode_web(project_name, &project_label, &app_url, debug)
+        .map_err(|err| {
+            format!("Observatorium app did not become reachable with a registered session: {err}")
+        })?;
     let origin_url = observatorium_origin_url(project_name, router_host_port);
     let login_url = tillandsias_otp::build_login_data_url(&origin_url, &otp);
     let browser_container_name = format!("tillandsias-browser-observatorium-{project_name}");
@@ -15568,14 +15595,6 @@ fn launch_observatorium_browser(
         &browser_container_name,
     )?;
     let args = spec.build_run_args();
-
-    send_issue_web_session(&project_label, &otp)
-        .map_err(|e| format!("Failed to register Observatorium session with router: {e}"))?;
-    if let Err(err) = wait_for_authenticated_opencode_web(project_name, &app_url, &otp, debug) {
-        return Err(format!(
-            "Observatorium app did not become reachable with a registered session: {err}"
-        ));
-    }
 
     let result = rt_block_on_podman_run(args, &browser_container_name, "browser", debug);
     if result.is_ok() {
@@ -16986,62 +17005,165 @@ fn wait_for_opencode_web_route(project_name: &str, url: &str, debug: bool) -> Re
     ))
 }
 
-fn wait_for_authenticated_opencode_web(
-    project_name: &str,
-    url: &str,
-    cookie_value: &[u8; tillandsias_otp::COOKIE_LEN],
-    debug: bool,
-) -> Result<(), String> {
-    let cookie_header = format!(
-        "{}={}",
-        tillandsias_otp::COOKIE_NAME,
-        tillandsias_otp::format_cookie_value(cookie_value)
-    );
+/// 1802-9xix: how long the app wait lasts while the forge is still running. A
+/// cold first launch clones, then starts the server (42 s on the operator's
+/// post-reset run) before the route answers; the old fixed 30 s gave up on it.
+const OPENCODE_WEB_APP_WAIT: Duration = Duration::from_secs(180);
 
-    let mut last_outcome = String::from("no HTTP probe attempted");
+/// Why the app wait stopped without a session.
+#[derive(Debug, PartialEq, Eq)]
+enum AppWaitFailure {
+    TimedOut { last_outcome: String },
+    ForgeExited { last_outcome: String },
+}
+
+/// The app wait's loop, over seams so a fake clock can drive it. `probe`
+/// returns Ok(()) once the app answers with the session, else the outcome to
+/// report; `forge_running` is Some(false) only when podman says the forge is
+/// gone (None, podman did not answer, keeps waiting); `progress` gets one line
+/// per newly elapsed 10 s.
+fn wait_for_app_ready(
+    timeout: Duration,
+    mut probe: impl FnMut() -> Result<(), String>,
+    mut forge_running: impl FnMut() -> Option<bool>,
+    mut elapsed: impl FnMut() -> Duration,
+    mut sleep: impl FnMut(Duration),
+    mut progress: impl FnMut(Duration, &str),
+) -> Result<(), AppWaitFailure> {
     let mut backoff = Duration::from_millis(100);
     let max_backoff = Duration::from_secs(2);
+    let mut reported = Duration::ZERO;
+    loop {
+        let last_outcome = match probe() {
+            Ok(()) => return Ok(()),
+            Err(outcome) => outcome,
+        };
+        if forge_running() == Some(false) {
+            return Err(AppWaitFailure::ForgeExited { last_outcome });
+        }
+        let now = elapsed();
+        if now >= timeout {
+            return Err(AppWaitFailure::TimedOut { last_outcome });
+        }
+        if now >= reported + Duration::from_secs(10) {
+            reported = now;
+            progress(now, &last_outcome);
+        }
+        sleep(backoff);
+        backoff = (backoff * 2).min(max_backoff);
+    }
+}
+
+/// 1802-axsp: one readiness probe's verdict. A 401 means the router holds no
+/// session for the cookie: the OTP was minted before a cold forge's server
+/// listened and expired unredeemed (TTL about 60 s; the operator's run at
+/// fc4433979 waited the full 180 s on it). `reissue` mints and registers a
+/// fresh one so the next probe can see the upstream.
+fn app_probe_verdict(
+    status: Result<u16, String>,
+    reissue: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    match status {
+        Ok(code) if (200..400).contains(&code) => Ok(()),
+        Ok(502) => Err(String::from("status 502 (starting)")),
+        Ok(401) => match reissue() {
+            Ok(()) => Err(String::from("status 401 (session expired; re-issued)")),
+            Err(e) => Err(format!("status 401; re-issuing the session failed: {e}")),
+        },
+        Ok(code) => Err(format!("status {code}")),
+        Err(err) => Err(err),
+    }
+}
+
+/// Mint a session for `project_label` and register it with the router.
+/// `send_issue_web_session` blocks until the tray's `IssueAck`, so the
+/// sidecar's `OtpStore` holds the cookie before anything presents it.
+fn issue_registered_session(
+    project_label: &str,
+) -> Result<[u8; tillandsias_otp::COOKIE_LEN], String> {
+    let otp = tillandsias_otp::issue_session(project_label);
+    send_issue_web_session(project_label, &otp)?;
+    Ok(otp)
+}
+
+/// Where the OpenCode Web window lands after login (order 1802-9xix): the
+/// bare root. The forge's proxy redirects a page load of `/` to the route of
+/// the directory `opencode serve` runs in and seeds that checkout into the
+/// web app's project list, so the window opens on the project without the
+/// launcher deriving a forge path from a host-side name (a dotted name, an
+/// owner/repo clone or a case change used to name a directory that did not
+/// exist).
+const OPENCODE_WEB_WINDOW_LANDING: &str = "/";
+
+/// Wait for the app behind the router, then return a FRESH registered session
+/// for the window to redeem: the probe's own session may be near its TTL.
+fn wait_for_authenticated_opencode_web(
+    project_name: &str,
+    project_label: &str,
+    url: &str,
+    debug: bool,
+) -> Result<[u8; tillandsias_otp::COOKIE_LEN], String> {
+    let cookie_header_for = |otp: &[u8; tillandsias_otp::COOKIE_LEN]| {
+        format!(
+            "{}={}",
+            tillandsias_otp::COOKIE_NAME,
+            tillandsias_otp::format_cookie_value(otp)
+        )
+    };
+    let mut cookie_header = cookie_header_for(&issue_registered_session(project_label)?);
+    let forge_container = forge_container_name(project_name);
     let start = std::time::Instant::now();
-    let timeout = Duration::from_secs(30);
     let mut attempt = 1;
 
-    while start.elapsed() < timeout {
-        match opencode_web_http_status(url, Some(cookie_header.clone())) {
-            Ok(code) if (200..400).contains(&code) => return Ok(()),
-            Ok(502) => {
-                last_outcome = String::from("status 502 (starting)");
-                if debug {
-                    eprintln!(
-                        "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt} ({last_outcome})"
-                    );
-                }
+    let waited = wait_for_app_ready(
+        OPENCODE_WEB_APP_WAIT,
+        || {
+            let status = opencode_web_http_status(url, Some(cookie_header.clone()));
+            let outcome = match app_probe_verdict(status, || {
+                cookie_header = cookie_header_for(&issue_registered_session(project_label)?);
+                Ok(())
+            }) {
+                Ok(()) => return Ok(()),
+                Err(outcome) => outcome,
+            };
+            if debug {
+                eprintln!(
+                    "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt} ({outcome})"
+                );
             }
-            Ok(code) => {
-                last_outcome = format!("status {code}");
-                if debug {
-                    eprintln!(
-                        "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt} ({last_outcome})"
-                    );
-                }
-            }
-            Err(err) => {
-                last_outcome = err;
-                if debug {
-                    eprintln!(
-                        "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt} ({last_outcome})"
-                    );
-                }
-            }
-        }
-        std::thread::sleep(backoff);
-        backoff = (backoff * 2).min(max_backoff);
-        attempt += 1;
-    }
+            attempt += 1;
+            Err(outcome)
+        },
+        || crate::vault_bootstrap::container_running_answer(&forge_container),
+        || start.elapsed(),
+        std::thread::sleep,
+        |waited, _| {
+            eprintln!(
+                "[tillandsias] OpenCode Web is still starting ({}s; a first launch clones the project and starts the server)",
+                waited.as_secs()
+            );
+        },
+    );
 
-    let forge_container = forge_container_name(project_name);
+    let (headline, last_outcome) = match waited {
+        Ok(()) => return issue_registered_session(project_label),
+        Err(AppWaitFailure::TimedOut { last_outcome }) => (
+            format!(
+                "OpenCode Web app did not become reachable with a registered session in {}s.",
+                OPENCODE_WEB_APP_WAIT.as_secs()
+            ),
+            last_outcome,
+        ),
+        Err(AppWaitFailure::ForgeExited { last_outcome }) => (
+            format!(
+                "OpenCode Web app never came up: the forge container {forge_container} exited while it was starting."
+            ),
+            last_outcome,
+        ),
+    };
     let logs_tail = container_logs_tail(&forge_container, 50);
     Err(format!(
-        "OpenCode Web app did not become reachable with a registered session in 30s.\n\
+        "{headline}\n\
          URL: {url}\n\
          Last outcome: {last_outcome}\n\
          Forge container logs (last ≤50 lines):\n{logs_tail}\n\
@@ -17049,6 +17171,123 @@ fn wait_for_authenticated_opencode_web(
          full transcript, then verify the enclave network + router are\n\
          healthy via `tillandsias --status`."
     ))
+}
+
+#[cfg(test)]
+mod app_wait_tests {
+    use super::*;
+    use std::cell::Cell;
+
+    /// Drive the loop on a fake clock: the server answers once `ready_at`
+    /// has passed, and the forge dies at `dies_at` if given.
+    fn run(
+        timeout: Duration,
+        ready_at: Duration,
+        dies_at: Option<Duration>,
+    ) -> (Result<(), AppWaitFailure>, usize) {
+        let now = Cell::new(Duration::ZERO);
+        let lines = Cell::new(0);
+        let r = wait_for_app_ready(
+            timeout,
+            || {
+                if now.get() >= ready_at {
+                    Ok(())
+                } else {
+                    Err("status 502 (starting)".into())
+                }
+            },
+            || Some(dies_at.is_none_or(|d| now.get() < d)),
+            || now.get(),
+            |d| now.set(now.get() + d),
+            |_, _| lines.set(lines.get() + 1),
+        );
+        (r, lines.get())
+    }
+
+    /// A fake router whose session expires after `ttl` and whose upstream
+    /// listens at `listens_at`; `reissue` says whether a 401 mints a new one
+    /// (fc4433979 never did).
+    fn run_with_ttl(
+        ttl: Duration,
+        listens_at: Duration,
+        reissue: bool,
+    ) -> Result<(), AppWaitFailure> {
+        let now = Cell::new(Duration::ZERO);
+        let issued = Cell::new(Duration::ZERO);
+        wait_for_app_ready(
+            OPENCODE_WEB_APP_WAIT,
+            || {
+                let status = if now.get() >= issued.get() + ttl {
+                    Ok(401)
+                } else if now.get() < listens_at {
+                    Ok(502)
+                } else {
+                    Ok(200)
+                };
+                app_probe_verdict(status, || {
+                    if reissue {
+                        issued.set(now.get());
+                    }
+                    Ok(())
+                })
+            },
+            || Some(true),
+            || now.get(),
+            |d| now.set(now.get() + d),
+            |_, _| {},
+        )
+    }
+
+    #[test]
+    fn a_server_slower_than_the_session_ttl_still_reaches_a_registered_session() {
+        let r = run_with_ttl(Duration::from_secs(60), Duration::from_secs(90), true);
+        assert_eq!(r, Ok(()));
+    }
+
+    #[test]
+    fn without_reissue_the_expired_session_fails_the_wait_as_fc4433979_did() {
+        let r = run_with_ttl(Duration::from_secs(60), Duration::from_secs(90), false);
+        assert!(
+            matches!(&r, Err(AppWaitFailure::TimedOut { last_outcome }) if last_outcome.contains("401")),
+            "{r:?}"
+        );
+    }
+
+    #[test]
+    fn a_cold_first_launch_with_a_60s_server_start_reaches_the_session() {
+        let (r, lines) = run(OPENCODE_WEB_APP_WAIT, Duration::from_secs(60), None);
+        assert_eq!(r, Ok(()));
+        assert!(
+            lines >= 5,
+            "the operator sees progress while waiting, got {lines} lines"
+        );
+    }
+
+    #[test]
+    fn the_pre_fix_30s_wait_fails_the_same_cold_launch() {
+        let (r, _) = run(Duration::from_secs(30), Duration::from_secs(60), None);
+        assert!(matches!(r, Err(AppWaitFailure::TimedOut { .. })), "{r:?}");
+    }
+
+    #[test]
+    fn a_forge_that_exits_fails_the_wait_at_once() {
+        let (r, lines) = run(
+            OPENCODE_WEB_APP_WAIT,
+            Duration::from_secs(600),
+            Some(Duration::from_secs(5)),
+        );
+        assert!(
+            matches!(r, Err(AppWaitFailure::ForgeExited { .. })),
+            "{r:?}"
+        );
+        assert_eq!(lines, 0, "it stops before the first progress line");
+    }
+
+    #[test]
+    fn a_forge_still_running_at_the_limit_times_out() {
+        let (r, _) = run(OPENCODE_WEB_APP_WAIT, Duration::from_secs(600), None);
+        assert!(matches!(r, Err(AppWaitFailure::TimedOut { .. })), "{r:?}");
+    }
 }
 
 #[cfg(test)]
@@ -17197,6 +17436,7 @@ impl BrowserDisplayContext {
     }
 }
 
+#[cfg_attr(feature = "host-services", allow(dead_code))]
 fn build_opencode_web_browser_spec(
     app_url: &str,
     version: &str,
@@ -17664,40 +17904,56 @@ fn launch_opencode_web_browser(
     // header (`extract_project_label("opencode.<project>.localhost")` →
     // `"<project>"`), otherwise `/validate` and `/_auth/login` both 401.
     let project_label = router_host_label(project_name);
-    let otp = tillandsias_otp::issue_session(&project_label);
-    let login_url = tillandsias_otp::build_login_data_url(&url, &otp);
-    let spec = build_opencode_web_browser_spec(
+    // 1802-axsp: wait for the app FIRST, then mint the session the window
+    // redeems; an OTP minted before a cold forge's server listened expired
+    // unredeemed and the wait could never succeed.
+    let otp = match wait_for_authenticated_opencode_web(project_name, &project_label, &url, debug) {
+        Ok(otp) => otp,
+        Err(err) => {
+            emit_opencode_web_event(project_name, "browser", "session_probe_failed", Some(&err))?;
+            return Err(err);
+        }
+    };
+    // 1802-9xix: the window signs in over the router's TLS site, the only
+    // route it can reach from its confined network; the host-side probes
+    // below keep the plaintext loopback route.
+    #[cfg(feature = "host-services")]
+    let window_url = format!(
+        "https://opencode.{project_label}.localhost:{}/",
+        crate::local_web_preview::tls_port()?
+    );
+    #[cfg(not(feature = "host-services"))]
+    let window_url = url.clone();
+    let login_url = tillandsias_otp::build_login_data_url_landing(
+        &window_url,
+        OPENCODE_WEB_WINDOW_LANDING,
+        &otp,
+    );
+    #[cfg(not(feature = "host-services"))]
+    let args = build_opencode_web_browser_spec(
         &login_url,
         version,
         &profile_path,
         certs_dir,
         &display,
         project_name,
-    )?;
-    let args = spec.build_run_args();
+    )?
+    .build_run_args();
+    #[cfg(feature = "host-services")]
+    let _ = (version, &display, certs_dir);
 
-    // @trace spec:opencode-web-session-otp, spec:tray-host-control-socket
-    // Notify the router (via the tray's control socket) of the new session
-    // BEFORE launching the browser. `send_issue_web_session` blocks until the
-    // tray returns `IssueAck`, which proves the broadcast bytes are already
-    // queued on the sidecar's socket — so by the time chromium POSTs to
-    // `/_auth/login`, the sidecar's `OtpStore` definitely contains the
-    // cookie. If the handshake fails (no tray, wrong reply, timeout) we
-    // refuse to launch the browser to prevent the "unauthorised" landing
-    // page that used to result from the race.
-    send_issue_web_session(&project_label, &otp).map_err(|e| {
-        let _ =
-            emit_opencode_web_event(project_name, "browser", "session_register_failed", Some(&e));
-        format!("Failed to register web session with router: {e}")
-    })?;
-    if let Err(err) = wait_for_authenticated_opencode_web(project_name, &url, &otp, debug) {
-        emit_opencode_web_event(project_name, "browser", "session_probe_failed", Some(&err))?;
-        return Err(err);
-    }
     emit_opencode_web_event(project_name, "browser", "session_ready", Some(&url))?;
 
     emit_opencode_web_event(project_name, "browser", "launch", Some("podman-run"))?;
     let container_name = format!("tillandsias-browser-{project_name}");
+    #[cfg(feature = "host-services")]
+    let (result, window) = match crate::browser_open::TrayBrowserContainers::new(debug)
+        .start_app_window(&project_label, &login_url, &container_name, &profile_path)
+    {
+        Ok(handle) => (Ok(()), Some(handle)),
+        Err(e) => (Err(e), None),
+    };
+    #[cfg(not(feature = "host-services"))]
     let result = rt_block_on_podman_run(args, &container_name, "browser", debug);
     if result.is_ok() {
         emit_opencode_web_event(project_name, "browser", "launched", Some("gui"))?;
@@ -17717,6 +17973,12 @@ fn launch_opencode_web_browser(
             };
             if let Err(e) = rt.block_on(monitor_and_cleanup_browser(&container_name, debug)) {
                 eprintln!("[tillandsias] Browser cleanup error: {e}");
+            }
+            // 1802-9xix: the window's forwarder and network go with it.
+            #[cfg(feature = "host-services")]
+            if let Some(handle) = window {
+                use tillandsias_browser_mcp::launcher::BrowserContainers as _;
+                crate::browser_open::TrayBrowserContainers::new(debug).stop(&handle);
             }
             let _ = std::fs::remove_dir_all(&profile_cleanup_path);
         });
@@ -18129,11 +18391,19 @@ pub(crate) fn run_opencode_web_mode(
         // The forge image's opencode-web entrypoint runs `opencode serve --hostname 0.0.0.0
         // --port 4096` (see images/default/entrypoint-forge-opencode-web.sh:142), so the
         // router upstream must target 4096 — not 8080, which is the router's own listener.
-        let route = RouterRoute::new(
+        #[allow(unused_mut)]
+        let mut route = RouterRoute::new(
             format!("opencode.{}", router_host_label(project_name)),
             forge_container_name(project_name),
             4096u16,
         );
+        // 1802-9xix: the app window reaches OpenCode over the router's TLS
+        // listener, so the project's preview leaf must exist first.
+        #[cfg(feature = "host-services")]
+        {
+            crate::local_web_preview::ensure_preview_leaf(project_name)?;
+            route.preview_tls = true;
+        }
         upsert_router_route(route, debug)?;
 
         // @trace spec:subdomain-routing-via-reverse-proxy

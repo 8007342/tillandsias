@@ -226,6 +226,20 @@ mod tests {
     const WEBKIT_LAUNCHER: &str = include_str!("../../../images/webkit/webkit-launch.sh");
     const WEBKIT_CONTAINERFILE: &str = include_str!("../../../images/webkit/Containerfile");
 
+    /// 1802-9xix: every window the launcher gives `--no-sandbox` must also get
+    /// `--test-type`, or Chromium paints its "unsupported command-line flag"
+    /// bar over the top of the OpenCode Web window.
+    #[test]
+    fn chromium_launcher_suppresses_the_unsupported_flag_bar() {
+        let sandbox_branch = CHROMIUM_LAUNCHER
+            .split("if accepts_no_sandbox")
+            .nth(1)
+            .and_then(|rest| rest.split("\nfi").next())
+            .expect("the launcher keeps its --no-sandbox branch");
+        assert!(sandbox_branch.contains("ARGS+=(\"--no-sandbox\")"), "{sandbox_branch}");
+        assert!(sandbox_branch.contains("ARGS+=(\"--test-type\")"), "{sandbox_branch}");
+    }
+
     /// The modules a PulseAudio script loads, with their arguments.
     fn loaded_modules(pa: &str) -> Vec<(&str, &str)> {
         pa.lines()

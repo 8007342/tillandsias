@@ -1410,6 +1410,21 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         archive_check_log "signal-handling" "fail" /tmp/signal-handling-check.log
     fi
 
+    # Router sidecar unit tests (order 1802-9xix). The sidecar's tests live in
+    # its unix-only binary, so a plain workspace `cargo test` never compiles
+    # them; a SameSite assertion sat red on trunk unseen until this line.
+    # @trace spec:opencode-web-session-otp
+    if [[ "$(uname -s)" != MINGW* && "$(uname -s)" != MSYS* ]]; then
+        if run_rust_test_on_host cargo test -p tillandsias-router-sidecar --features unix-only --no-fail-fast 2>&1 | tee /tmp/router-sidecar-check.log; then
+            log_pass "Router sidecar tests pass"
+            archive_check_log "router-sidecar-tests" "pass" /tmp/router-sidecar-check.log
+        else
+            log_fail_tracked "router-sidecar-tests" "Router sidecar tests failed (see /tmp/router-sidecar-check.log)"
+            [[ "$VERBOSE" == "1" ]] && cat /tmp/router-sidecar-check.log >&2
+            archive_check_log "router-sidecar-tests" "fail" /tmp/router-sidecar-check.log
+        fi
+    fi
+
     # ============================================================================
     # CHECK 6: Container base-image policy
     # ============================================================================
