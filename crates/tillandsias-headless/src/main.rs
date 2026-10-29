@@ -27899,6 +27899,95 @@ mod tests {
         );
     }
 
+    /// Order 1914-twan (operator approval 2026-10-28): the Claude approvals
+    /// watcher copies a config write to Vault on the write's event, well
+    /// inside the 3 s poll it replaces.
+    #[cfg(unix)]
+    #[test]
+    fn claude_approvals_reach_vault_on_the_write_event() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let manifest = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let script =
+            std::path::Path::new(&manifest).join("../../images/default/claude-approvals-vault.sh");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bin = dir.path().join("bin");
+        std::fs::create_dir(&bin).unwrap();
+        let cfg = dir.path().join("claude.json");
+        let vaulted = dir.path().join("vaulted");
+        std::fs::write(&cfg, "{\"theme\":\"dark\"}\n").unwrap();
+        let write_exec = |path: &std::path::Path, body: String| {
+            std::fs::write(path, format!("#!/usr/bin/env bash\n{body}\n")).unwrap();
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        };
+        let vault_cli = bin.join("vault-cli");
+        write_exec(
+            &vault_cli,
+            format!("cat >'{}.tmp' && mv '{0}.tmp' '{0}'", vaulted.display()),
+        );
+        let has_inotify = std::process::Command::new("sh")
+            .args(["-c", "command -v inotifywait"])
+            .stdout(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !has_inotify {
+            // macOS stand-in printing what inotifywait prints on a write.
+            write_exec(
+                &bin.join("inotifywait"),
+                "for d; do :; done\n\
+                 sum() { cksum \"$d/claude.json\" 2>/dev/null; }\n\
+                 last=\"$(sum)\"\n\
+                 echo 'Watches established.'\n\
+                 while :; do now=\"$(sum)\"\n\
+                 [ \"$now\" != \"$last\" ] && echo claude.json && last=\"$now\"\n\
+                 sleep 0.05; done"
+                    .to_string(),
+            );
+        }
+        let holder = std::process::Command::new("sleep")
+            .arg("30")
+            .spawn()
+            .expect("spawn holder");
+        let mut watcher = std::process::Command::new("bash")
+            .arg(&script)
+            .arg("watch")
+            .arg(holder.id().to_string())
+            .env(
+                "PATH",
+                format!(
+                    "{}:{}",
+                    bin.display(),
+                    std::env::var("PATH").unwrap_or_default()
+                ),
+            )
+            .env("CLAUDE_CONFIG_FILE", &cfg)
+            .env("TILLANDSIAS_VAULT_CLI", &vault_cli)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("spawn watcher");
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        std::fs::write(&cfg, "{\"theme\":\"light\"}\n").unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(1500);
+        let mut held = String::new();
+        while std::time::Instant::now() < deadline {
+            held = decode_vaulted(&vaulted);
+            if held.contains("light") {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        let _ = watcher.kill();
+        let _ = watcher.wait();
+        let mut holder = holder;
+        let _ = holder.kill();
+        let _ = holder.wait();
+        assert!(
+            held.contains("light"),
+            "the approval write must reach Vault within 1.5 s; Vault held {held:?}"
+        );
+    }
+
     /// Order 1914-twan: a Codex lane whose agent exits on an expired sign-in
     /// ("account/read failed ... unauthorized (401)") offers the device
     /// sign-in in the same window and relaunches, instead of ending the lane.
