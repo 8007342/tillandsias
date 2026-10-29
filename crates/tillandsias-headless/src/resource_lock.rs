@@ -410,7 +410,18 @@ mod tests {
             "held resource must probe as held from the same process"
         );
         drop(guard);
-        assert!(!is_held(&resource), "dropped guard must release the probe");
+        // A sibling test's Command::spawn can fork while our fd is open; the
+        // child holds the open-file-description until its exec closes the
+        // CLOEXEC fd, so the probe may read "held" for a few ms after drop.
+        let mut released = false;
+        for _ in 0..200 {
+            if !is_held(&resource) {
+                released = true;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        assert!(released, "dropped guard must release the probe");
     }
 
     /// The prefix scanner returns only currently-HELD resources matching the
